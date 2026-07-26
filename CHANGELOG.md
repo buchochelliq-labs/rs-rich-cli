@@ -8,6 +8,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Console capture + export** (`Console::capture` / `export_text`, port of
+  `Console.capture()` + `export_text(styles=False)`): run a closure with output
+  recorded to an internal segment buffer instead of stdout, returning either the
+  rendered ANSI (`capture`) or plain style-stripped text (`export_text`). Captures
+  nest. Byte-parity-tested against real rich 15.0.0. (HTML/SVG export deferred.)
 - **ANSI decoder** (`ansi.rs`, port of `rich/ansi.py`): `AnsiDecoder` tokenizes a
   terminal string and turns SGR sequences back into styled `Text` — attributes,
   16/256/truecolor foreground + background, lenient parsing, and cross-line style

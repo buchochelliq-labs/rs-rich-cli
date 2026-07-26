@@ -283,6 +283,16 @@ fn run_demo() {
         console.print(&Text::new("  output: ").append_text(&line));
     }
 
+    // Capture / export — record a rendering to a buffer, then strip its styles.
+    console.print(&Rule::new("capture · export_text"));
+    let plain = console.export_text(|c| {
+        c.print(&Panel::new(text("captured panel")).box_set(SQUARE));
+    });
+    console.print(&Text::new("  export_text (styles stripped):"));
+    for line in plain.lines() {
+        console.print(&Text::new(format!("    {line}")));
+    }
+
     // Spinners — a few frames of each built-in (animation needs a Live loop).
     console.print(&Rule::new("spinner (frames)"));
     for name in ["dots", "line", "arrow", "simpleDots"] {

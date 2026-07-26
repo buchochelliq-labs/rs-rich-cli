@@ -66,6 +66,10 @@ pub struct Console {
     theme: Theme,
     base_style: Style,
     highlighters: Vec<Box<dyn Highlighter>>,
+    /// While capturing, print paths append their segments here instead of
+    /// writing to stdout. Mirrors `Console._record_buffer` under `capture()`.
+    record_buffer: std::cell::RefCell<Vec<Segment>>,
+    capturing: std::cell::Cell<bool>,
 }
 
 impl Default for Console {
@@ -136,13 +140,35 @@ impl Console {
     /// renderable's measured width (matching upstream's measurement-fit for a
     /// bare top-level renderable).
     pub fn render_to_string(&self, renderable: &dyn Renderable) -> String {
+        let segments = self.render_segments(renderable);
+        self.segments_to_string(&segments)
+    }
+
+    /// Render a renderable to segments, applying top-level measurement-fit when
+    /// no explicit justify is set (shared by the string and print paths).
+    fn render_segments(&self, renderable: &dyn Renderable) -> Vec<Segment> {
         let mut options = self.options();
         if options.justify == Justify::Default {
             let measurement = renderable.measure(self, &options);
             options.max_width = measurement.maximum.min(options.max_width).max(1);
         }
-        let segments = renderable.rich_render(self, &options);
-        self.segments_to_string(&segments)
+        renderable.rich_render(self, &options)
+    }
+
+    /// Write (or, while capturing, record) a rendered segment stream, adding a
+    /// trailing newline. The single sink for every `print*` path.
+    fn emit(&self, segments: Vec<Segment>) {
+        if self.capturing.get() {
+            let mut buffer = self.record_buffer.borrow_mut();
+            buffer.extend(segments);
+            buffer.push(Segment::line());
+            return;
+        }
+        let mut output = self.segments_to_string(&segments);
+        output.push('\n');
+        let stdout = std::io::stdout();
+        let mut lock = stdout.lock();
+        let _ = write!(lock, "{output}");
     }
 
     /// Render a value into a list of lines, each a list of [`Segment`]s.
@@ -177,10 +203,8 @@ impl Console {
 
     /// Render a value and write it to stdout, followed by a newline.
     pub fn print(&self, renderable: &dyn Renderable) {
-        let output = self.render_to_string(renderable);
-        let stdout = std::io::stdout();
-        let mut lock = stdout.lock();
-        let _ = writeln!(lock, "{output}");
+        let segments = self.render_segments(renderable);
+        self.emit(segments);
     }
 
     /// Write a terminal control sequence to stdout.
@@ -212,6 +236,35 @@ impl Console {
     /// Ring the terminal bell. Port of `Console.bell`.
     pub fn bell(&self) {
         self.control(&crate::control::Control::bell());
+    }
+
+    /// Capture everything printed inside `f` instead of writing it to stdout,
+    /// returning it as a rendered (ANSI) string.
+    ///
+    /// The Rust analogue of upstream's `with console.capture() as capture:` —
+    /// the closure receives the same console, and captures nest correctly.
+    /// Equivalent to what would have been written to the terminal.
+    pub fn capture(&self, f: impl FnOnce(&Console)) -> String {
+        let segments = self.record(f);
+        self.segments_to_string(&segments)
+    }
+
+    /// Like [`capture`](Self::capture) but with all styles stripped, returning
+    /// plain text. Port of `Console.export_text(styles=False)`.
+    pub fn export_text(&self, f: impl FnOnce(&Console)) -> String {
+        let segments = self.record(f);
+        segments_to_plain(&segments)
+    }
+
+    /// Run `f` with output recorded to a fresh buffer, returning the captured
+    /// segments and restoring the previous capture state (so captures nest).
+    fn record(&self, f: impl FnOnce(&Console)) -> Vec<Segment> {
+        let previous = std::mem::take(&mut *self.record_buffer.borrow_mut());
+        let was_capturing = self.capturing.replace(true);
+        f(self);
+        let captured = std::mem::replace(&mut *self.record_buffer.borrow_mut(), previous);
+        self.capturing.set(was_capturing);
+        captured
     }
 
     /// Parse `content` as console markup, apply registered highlighters, and
@@ -249,10 +302,11 @@ impl Console {
     /// Parse `content` as markup and print it justified to the console width.
     /// This is the `console.print("...", justify=...)` path.
     pub fn print_justified(&self, content: &str, justify: Justify) {
-        let output = self.render_justified_to_string(content, justify);
-        let stdout = std::io::stdout();
-        let mut lock = stdout.lock();
-        let _ = writeln!(lock, "{output}");
+        let text = self.build_text(content);
+        let mut options = self.options();
+        options.justify = justify;
+        let segments = text.rich_render(self, &options);
+        self.emit(segments);
     }
 
     /// Same as [`Console::print_justified`] but returns the ANSI string.
@@ -284,6 +338,16 @@ impl Console {
         }
         out
     }
+}
+
+/// Join the visible text of a segment stream, dropping control codes. Port of
+/// `Console.export_text(styles=False)`'s join.
+fn segments_to_plain(segments: &[Segment]) -> String {
+    segments
+        .iter()
+        .filter(|s| !s.control)
+        .map(|s| s.text.as_str())
+        .collect()
 }
 
 impl Renderable for Text {
@@ -397,6 +461,8 @@ impl ConsoleBuilder {
             theme: self.theme.unwrap_or_else(Theme::default_theme),
             base_style: Style::new(),
             highlighters: Vec::new(),
+            record_buffer: std::cell::RefCell::new(Vec::new()),
+            capturing: std::cell::Cell::new(false),
         }
     }
 }
@@ -475,6 +541,40 @@ mod tests {
         assert_eq!(
             console.render_justified_to_string("hi", Justify::Right),
             "        hi"
+        );
+    }
+
+    #[test]
+    fn capture_records_ansi_instead_of_stdout() {
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(20)
+            .build();
+        // Captured from real rich 15.0.0 (Console.capture()).
+        let out = console.capture(|c| c.print_str("[bold red]hi[/] there"));
+        assert_eq!(out, "\x1b[1;31mhi\x1b[0m there\n");
+    }
+
+    #[test]
+    fn export_text_strips_styles() {
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(20)
+            .build();
+        // Captured from real rich 15.0.0 (Console.export_text(styles=False)).
+        let out = console.export_text(|c| c.print_str("[bold red]hi[/] there"));
+        assert_eq!(out, "hi there\n");
+    }
+
+    #[test]
+    fn capture_matches_direct_render() {
+        let console = test_console();
+        let panel = crate::panel::Panel::new(Box::new(Text::new("hi")));
+        assert_eq!(
+            console.capture(|c| c.print(&panel)),
+            console.render_export(&panel)
         );
     }
 
