@@ -3,10 +3,11 @@
 //! Port of upstream `rich/table.py` (core subset). A [`Table`] lays out columns
 //! and rows inside a box, sizing each column to its widest cell.
 //!
-//! Slice scope: headers, rows, box choice, per-cell padding, header styling, and
-//! multi-line/wrapped cells. Deferred (tracked in the Table issue): flexible /
-//! ratio column widths, shrinking to the console width, `expand`, per-column
-//! justify/style, row separators (`show_lines`), titles, and footers.
+//! Slice scope: headers, rows, box choice, per-cell padding, header styling,
+//! multi-line/wrapped cells, and **shrink-to-fit** column widths (the widest
+//! columns collapse + wrap when the table overflows the width). Deferred
+//! (tracked in the Table issue): `expand`, explicit `ratio`/`width`/min/max,
+//! `no_wrap`, per-column justify/style, `show_lines`, titles, and footers.
 
 use crate::cells::cell_len;
 use crate::console::{Console, ConsoleOptions};
@@ -79,7 +80,7 @@ impl Table {
     }
 
     /// The measured content width of each column (widest cell, header included).
-    fn column_widths(&self) -> Vec<usize> {
+    fn max_content_widths(&self) -> Vec<usize> {
         let mut widths = vec![0usize; self.columns.len()];
         for (index, column) in self.columns.iter().enumerate() {
             if self.show_header {
@@ -94,6 +95,26 @@ impl Table {
             }
         }
         widths
+    }
+
+    /// The rendered width (content + padding) of each column, shrinking the
+    /// widest columns to fit `available` when necessary. Port of the non-flexible
+    /// path of `Table._calculate_column_widths` + `_collapse_widths`.
+    fn column_widths(&self, available: usize) -> Vec<usize> {
+        let (_, pr, _, pl) = self.padding;
+        let padding = pl + pr;
+        let mut widths: Vec<i64> = self
+            .max_content_widths()
+            .into_iter()
+            .map(|w| (w + padding) as i64)
+            .collect();
+
+        let table_width: i64 = widths.iter().sum();
+        if table_width > available as i64 {
+            let wrapable = vec![true; widths.len()];
+            widths = collapse_widths(widths, &wrapable, available as i64);
+        }
+        widths.into_iter().map(|w| w.max(0) as usize).collect()
     }
 
     /// Render one table row (a list of cell strings) into visual lines.
@@ -172,13 +193,20 @@ impl Table {
 }
 
 impl Renderable for Table {
-    fn rich_render(&self, _console: &Console, _options: &ConsoleOptions) -> Vec<Segment> {
+    fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         if self.columns.is_empty() {
             return Vec::new();
         }
         let (_, pr, _, pl) = self.padding;
-        let content_widths = self.column_widths();
-        let rendered_widths: Vec<usize> = content_widths.iter().map(|w| w + pl + pr).collect();
+        // Borders occupy: 2 edges + (ncols - 1) dividers. Port of `_extra_width`.
+        let extra_width = 2 + self.columns.len().saturating_sub(1);
+        let available = options.max_width.saturating_sub(extra_width);
+
+        let rendered_widths = self.column_widths(available);
+        let content_widths: Vec<usize> = rendered_widths
+            .iter()
+            .map(|w| w.saturating_sub(pl + pr))
+            .collect();
         let border = Some(self.border_style.clone());
 
         let mut lines: Vec<Vec<Segment>> = Vec::new();
@@ -232,6 +260,89 @@ impl Renderable for Table {
         }
         segments
     }
+}
+
+/// Round half to even (banker's rounding), matching Python's `round`.
+fn round_half_even(value: f64) -> i64 {
+    let floor = value.floor();
+    let diff = value - floor;
+    if (diff - 0.5).abs() < 1e-9 {
+        let f = floor as i64;
+        if f % 2 == 0 {
+            f
+        } else {
+            f + 1
+        }
+    } else {
+        value.round() as i64
+    }
+}
+
+/// Reduce `values` by `total`, distributed across slots by `ratios` (capped by
+/// `maximums`). Direct port of `rich._ratio.ratio_reduce`.
+fn ratio_reduce(total: i64, ratios: &[i64], maximums: &[i64], values: &[i64]) -> Vec<i64> {
+    let ratios: Vec<i64> = ratios
+        .iter()
+        .zip(maximums)
+        .map(|(&r, &m)| if m != 0 { r } else { 0 })
+        .collect();
+    let mut total_ratio: i64 = ratios.iter().sum();
+    if total_ratio == 0 {
+        return values.to_vec();
+    }
+    let mut total_remaining = total;
+    let mut result = Vec::with_capacity(values.len());
+    for ((&ratio, &maximum), &value) in ratios.iter().zip(maximums).zip(values) {
+        if ratio != 0 && total_ratio > 0 {
+            let distributed = maximum.min(round_half_even(
+                ratio as f64 * total_remaining as f64 / total_ratio as f64,
+            ));
+            result.push(value - distributed);
+            total_remaining -= distributed;
+            total_ratio -= ratio;
+        } else {
+            result.push(value);
+        }
+    }
+    result
+}
+
+/// Reduce `widths` so their total is under `max_width`, shrinking the widest
+/// wrapable columns first. Direct port of `Table._collapse_widths`.
+fn collapse_widths(mut widths: Vec<i64>, wrapable: &[bool], max_width: i64) -> Vec<i64> {
+    let mut total_width: i64 = widths.iter().sum();
+    let mut excess_width = total_width - max_width;
+    if wrapable.iter().any(|&w| w) {
+        while total_width != 0 && excess_width > 0 {
+            let max_column = widths
+                .iter()
+                .zip(wrapable)
+                .filter(|(_, &w)| w)
+                .map(|(&x, _)| x)
+                .max()
+                .unwrap_or(0);
+            let second_max_column = widths
+                .iter()
+                .zip(wrapable)
+                .map(|(&x, &w)| if w && x != max_column { x } else { 0 })
+                .max()
+                .unwrap_or(0);
+            let column_difference = max_column - second_max_column;
+            let ratios: Vec<i64> = widths
+                .iter()
+                .zip(wrapable)
+                .map(|(&x, &w)| i64::from(x == max_column && w))
+                .collect();
+            if !ratios.iter().any(|&r| r != 0) || column_difference == 0 {
+                break;
+            }
+            let max_reduce = vec![excess_width.min(column_difference); widths.len()];
+            widths = ratio_reduce(excess_width, &ratios, &max_reduce, &widths);
+            total_width = widths.iter().sum();
+            excess_width = total_width - max_width;
+        }
+    }
+    widths
 }
 
 #[cfg(test)]

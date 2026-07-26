@@ -56,17 +56,16 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** port `Box.substitute` + the `legacy_windows`/`ascii` console flags
   with the Windows-console issue (#12).
 
-### 7. `Table` sizes columns to content only
-- **Differs:** each column is sized to its widest cell; upstream additionally
-  supports flexible/ratio widths, explicit `width`/`min_width`/`max_width`,
-  `expand`, and shrinking columns (with wrapping) when the table exceeds the
-  console width.
-- **Why:** the first `Table` slice targets byte-parity on the common
-  content-fits case; the width-distribution algorithm (`_ratio`) is a task of its
-  own.
-- **Remove:** port the ratio/flex width solver + console-width fitting with the
-  Table issue (#5). Also deferred there: per-column justify/style, `show_lines`
-  row separators, titles, and footers.
+### 7. `Table` supports content-sizing + shrink-to-fit, but not ratio/expand
+- **Differs:** columns are sized to their widest cell and **shrink+wrap to fit**
+  the console width when they overflow (port of `_calculate_column_widths` +
+  `_collapse_widths` + `ratio_reduce`). Not yet ported: `expand`, explicit
+  `ratio`/`width`/`min_width`/`max_width`, `no_wrap`, per-column justify/style,
+  `show_lines` row separators, titles, and footers.
+- **Why:** the shrink-to-fit path is the common overflow case; the remaining
+  options build on it.
+- **Remove:** port the expand/ratio distribution (`ratio_distribute`) and the
+  per-column options with the Table issue (#5).
 
 ### 8. `Json` does not escape non-ASCII (`ensure_ascii`)
 - **Differs:** Python's `json.dumps` defaults to `ensure_ascii=True`, escaping

@@ -44,6 +44,16 @@ fn sample_table(box_set: BoxSet) -> Table {
     table
 }
 
+/// A table whose wide column must shrink and wrap to fit.
+fn shrink_table() -> Table {
+    let mut table = Table::new().box_set(SQUARE);
+    table.add_column("Name");
+    table.add_column("Description");
+    table.add_row(&["Alice", "A software engineer who likes Rust"]);
+    table.add_row(&["Bob", "Short bio"]);
+    table
+}
+
 fn truecolor_console(width: usize) -> Console {
     Console::builder()
         .force_terminal(true)
@@ -111,6 +121,7 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "text_justify_bare" => Box::new(Text::new("hi").justify(Justify::Center)),
         "table_square" => Box::new(sample_table(SQUARE)),
         "table_default" => Box::new(sample_table(HEAVY_HEAD)),
+        "table_shrink" => Box::new(shrink_table()),
         "tree_nested" => Box::new(sample_tree()),
         "align_center" | "align_center_odd" => Box::new(Align::center(Box::new(Text::new("hi")))),
         "align_right" => Box::new(Align::right(Box::new(Text::new("hi")))),

@@ -56,6 +56,15 @@ def _table(box_set) -> Table:
     table.add_row("Bob", "7")
     return table
 
+
+def _shrink_table() -> Table:
+    table = Table(box=box.SQUARE)
+    table.add_column("Name")
+    table.add_column("Description")
+    table.add_row("Alice", "A software engineer who likes Rust")
+    table.add_row("Bob", "Short bio")
+    return table
+
 # (name, console-markup) — keep in sync with the Rust test's expectations.
 CASES: list[tuple[str, str]] = [
     ("bold_red", "[bold red]hello[/]"),
@@ -97,6 +106,7 @@ RENDERABLE_CASES = [
     ("text_justify_bare", 10, Text("hi", justify="center")),
     ("table_square", 40, _table(box.SQUARE)),
     ("table_default", 40, _table(box.HEAVY_HEAD)),
+    ("table_shrink", 30, _shrink_table()),
     ("tree_nested", 40, _tree()),
     ("align_center", 20, Align.center("hi")),
     ("align_right", 20, Align.right("hi")),

@@ -8,6 +8,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Table flexible widths**: when a table's natural width exceeds the console
+  width, the widest columns now shrink and their cells wrap to fit (port of
+  `Table._calculate_column_widths` + `_collapse_widths` + `_ratio.ratio_reduce`,
+  with banker's rounding). Byte-parity-tested against real rich 15.0.0.
 - **Measurement** (`Renderable::measure` + top-level measurement-fit): the print
   path now shrinks the width to a renderable's measured content width when no
   explicit justify is set. This makes a bare `Text::justify(...)` shrink to its
