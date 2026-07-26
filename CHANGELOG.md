@@ -8,6 +8,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Constrain** (`constrain.rs`, port of `rich/constrain.py`): render a child
+  within a reduced max width. Byte-parity-tested against real rich 15.0.0.
+- **filesize** (`filesize.rs`, port of `rich/filesize.py`): `decimal()` SI byte
+  formatting, unit-tested against real rich reference values.
 - **Align** (`align.rs`, port of `rich/align.py` horizontal axis): left/center/
   right alignment of a child within the available width. Byte-parity-tested
   against real rich 15.0.0.

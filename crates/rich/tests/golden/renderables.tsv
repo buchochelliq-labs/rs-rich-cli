@@ -23,3 +23,4 @@ tree_nested	40	root\n├── child A\n│   ├── leaf A1\n│   └──
 align_center	20	         hi         \n
 align_right	20	                  hi\n
 align_center_odd	21	         hi          \n
+constrain_panel	20	┌────────┐\n│ hi     │\n└────────┘\n

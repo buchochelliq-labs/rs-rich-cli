@@ -40,7 +40,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `padding.py` | `padding.rs` | 🟡 | ✅ |
 | `panel.py` | `panel.rs` | 🟡 | ✅ |
 | `align.py` | `align.rs` | 🟡 | ✅ |
-| `constrain.py` | `constrain.rs` | ⬜ | — |
+| `constrain.py` | `constrain.rs` | 🟡 | ✅ |
 | `table.py` | `table.rs` | 🟡 | ✅ |
 | `columns.py` | `columns.rs` | ⬜ | — |
 | `tree.py` | `tree.rs` | 🟡 | ✅ |
@@ -72,7 +72,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | upstream `rich/…` | rust file | status |
 |-------------------|-----------|:------:|
 | `emoji.py`, `_emoji_codes.py`, `_emoji_replace.py` | `emoji.rs` | ⬜ |
-| `filesize.py` | `filesize.rs` | ⬜ |
+| `filesize.py` | `filesize.rs` | 🟡 |
 | `prompt.py`, `pager.py`, `screen.py` | resp. | ⬜ |
 | `_unicode_data/` | `unicode_data/` | ⬜ |
 | `_windows.py`, `_win32_console.py`, `_windows_renderer.py` | `windows/` | ⬜ |

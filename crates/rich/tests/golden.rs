@@ -7,7 +7,9 @@
 //! guarantee described in AGENTS.md.
 
 use rich::r#box::{Box as BoxSet, HEAVY_HEAD, SQUARE};
-use rich::{Align, ColorSystem, Console, Padding, Panel, Renderable, Rule, Table, Text, Tree};
+use rich::{
+    Align, ColorSystem, Console, Constrain, Padding, Panel, Renderable, Rule, Table, Text, Tree,
+};
 
 /// The shared sample tree used by the `tree_*` fixtures.
 fn sample_tree() -> Tree {
@@ -64,6 +66,10 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "tree_nested" => Box::new(sample_tree()),
         "align_center" | "align_center_odd" => Box::new(Align::center(Box::new(Text::new("hi")))),
         "align_right" => Box::new(Align::right(Box::new(Text::new("hi")))),
+        "constrain_panel" => Box::new(Constrain::new(
+            Box::new(Panel::new(Box::new(Text::new("hi"))).box_set(SQUARE)),
+            Some(10),
+        )),
         other => panic!("no builder for renderable fixture {other:?}"),
     }
 }
