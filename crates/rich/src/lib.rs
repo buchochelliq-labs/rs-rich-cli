@@ -31,6 +31,7 @@ pub mod segment;
 pub mod style;
 pub mod text;
 pub mod theme;
+pub mod wrap;
 
 // A small, curated prelude mirroring the most-used names from `rich`'s top level.
 pub use crate::color::{Color, ColorSystem, ColorTriplet};

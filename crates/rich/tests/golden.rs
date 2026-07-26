@@ -34,6 +34,11 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "panel_square" => Box::new(Panel::new(Box::new(Text::new("hi"))).box_set(SQUARE)),
         "padding_1_2" => Box::new(Padding::new(Box::new(Text::new("hi")), (1, 2, 1, 2))),
         "padding_0_1" => Box::new(Padding::new(Box::new(Text::new("hi")), (0, 1, 0, 1))),
+        "wrap_words" => Box::new(Text::new("The quick brown fox")),
+        "wrap_fold" => Box::new(Text::new("abcdefghij")),
+        "panel_wrap" => {
+            Box::new(Panel::new(Box::new(Text::new("The quick brown fox"))).box_set(SQUARE))
+        }
         other => panic!("no builder for renderable fixture {other:?}"),
     }
 }

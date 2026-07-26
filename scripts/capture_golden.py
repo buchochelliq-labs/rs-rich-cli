@@ -23,6 +23,7 @@ from rich.console import Console
 from rich.padding import Padding
 from rich.panel import Panel
 from rich.rule import Rule
+from rich.text import Text
 
 # (name, console-markup) — keep in sync with the Rust test's expectations.
 CASES: list[tuple[str, str]] = [
@@ -46,6 +47,9 @@ RENDERABLE_CASES = [
     ("panel_square", 20, Panel("hi", box=box.SQUARE)),
     ("padding_1_2", 10, Padding("hi", (1, 2))),
     ("padding_0_1", 10, Padding("hi", (0, 1))),
+    ("wrap_words", 10, Text("The quick brown fox")),
+    ("wrap_fold", 6, Text("abcdefghij")),
+    ("panel_wrap", 14, Panel("The quick brown fox", box=box.SQUARE)),
 ]
 
 RENDERABLE_HEADER = """\

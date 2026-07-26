@@ -107,17 +107,88 @@ impl Text {
         self.style = style;
     }
 
-    /// Flatten into non-overlapping segments, combining `base_style`, this
-    /// text's base style, and every covering span. Port of the core of
-    /// `Text.render`.
+    /// Flatten into non-overlapping segments (newlines become [`Segment::line`]),
+    /// combining `base_style`, this text's base style, and every covering span.
+    /// Does **not** wrap. Port of the core of `Text.render`.
+    ///
+    /// `system` is accepted for API symmetry; the color system is applied later
+    /// by the [`Console`](crate::console::Console).
     pub fn render(&self, base_style: &Style, system: Option<ColorSystem>) -> Vec<Segment> {
-        let effective_base = base_style.combine(&self.style);
+        let _ = system;
+        self.render_joined(base_style, None)
+    }
 
-        // Collect the sorted, unique boundary offsets.
-        let mut points: Vec<usize> = vec![0, self.plain.len()];
+    /// Render into visual lines, wrapping each hard line to `width` cells when
+    /// `Some`. Port of the line-producing half of `Text.render`/`Text.wrap`.
+    pub fn render_lines(&self, base_style: &Style, width: Option<usize>) -> Vec<Vec<Segment>> {
+        let effective_base = base_style.combine(&self.style);
+        let mut lines: Vec<Vec<Segment>> = Vec::new();
+        for (start, end) in self.wrapped_ranges(width) {
+            lines.push(self.line_segments(start, end, &effective_base));
+        }
+        lines
+    }
+
+    /// Render into a flat segment stream with [`Segment::line`] between visual
+    /// lines (wrapping when `width` is `Some`).
+    fn render_joined(&self, base_style: &Style, width: Option<usize>) -> Vec<Segment> {
+        let lines = self.render_lines(base_style, width);
+        let mut segments = Vec::new();
+        let last = lines.len().saturating_sub(1);
+        for (index, line) in lines.into_iter().enumerate() {
+            segments.extend(line);
+            if index != last {
+                segments.push(Segment::line());
+            }
+        }
+        segments
+    }
+
+    /// The `(start_byte, end_byte)` range of each visual line: hard lines split
+    /// on `\n`, then wrapped to `width` cells when `Some`.
+    fn wrapped_ranges(&self, width: Option<usize>) -> Vec<(usize, usize)> {
+        let mut hard: Vec<(usize, usize)> = Vec::new();
+        let mut start = 0;
+        for (i, byte) in self.plain.bytes().enumerate() {
+            if byte == b'\n' {
+                hard.push((start, i));
+                start = i + 1;
+            }
+        }
+        hard.push((start, self.plain.len()));
+
+        let Some(width) = width else {
+            return hard;
+        };
+
+        let mut ranges: Vec<(usize, usize)> = Vec::new();
+        for (a, b) in hard {
+            let sub = &self.plain[a..b];
+            let breaks = crate::wrap::divide_line(sub, width, true);
+            let mut cuts = vec![a];
+            for char_offset in breaks {
+                cuts.push(a + char_to_byte(sub, char_offset));
+            }
+            cuts.push(b);
+            for window in cuts.windows(2) {
+                ranges.push((window[0], window[1]));
+            }
+        }
+        ranges
+    }
+
+    /// Combine `effective_base` with every span covering `[start, end)`,
+    /// producing non-overlapping segments for that byte range.
+    fn line_segments(&self, start: usize, end: usize, effective_base: &Style) -> Vec<Segment> {
+        if start >= end {
+            return Vec::new();
+        }
+        let mut points: Vec<usize> = vec![start, end];
         for span in &self.spans {
-            points.push(span.start.min(self.plain.len()));
-            points.push(span.end.min(self.plain.len()));
+            let span_start = span.start.clamp(start, end);
+            let span_end = span.end.clamp(start, end);
+            points.push(span_start);
+            points.push(span_end);
         }
         points.sort_unstable();
         points.dedup();
@@ -140,15 +211,22 @@ impl Text {
             }
             segments.push(Segment::new(slice, Some(style)));
         }
-
-        // If no styling applies at all, still emit the whole string once.
-        if segments.is_empty() && !self.plain.is_empty() {
-            segments.push(Segment::new(self.plain.clone(), Some(effective_base)));
-        }
-
-        let _ = system; // color-system application happens at the Console layer.
         segments
     }
+
+    /// Render wrapped to `width`, joined into a flat segment stream. Used by the
+    /// [`Console`](crate::console::Console) render path.
+    pub fn render_wrapped(&self, base_style: &Style, width: usize) -> Vec<Segment> {
+        self.render_joined(base_style, Some(width))
+    }
+}
+
+/// Byte offset of the `char_idx`-th char in `text` (clamped to `text.len()`).
+fn char_to_byte(text: &str, char_idx: usize) -> usize {
+    text.char_indices()
+        .nth(char_idx)
+        .map(|(byte, _)| byte)
+        .unwrap_or(text.len())
 }
 
 #[cfg(test)]

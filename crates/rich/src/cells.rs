@@ -17,6 +17,31 @@ pub fn char_cell_width(c: char) -> usize {
     UnicodeWidthChar::width(c).unwrap_or(0)
 }
 
+/// Split `text` into chunks, each at most `width` cells wide. Port of
+/// `cells.chop_cells` (cell-aware; a grapheme wider than `width` still gets its
+/// own chunk). Used to fold over-long words during wrapping.
+pub fn chop_cells(text: &str, width: usize) -> Vec<String> {
+    if width == 0 {
+        return vec![text.to_string()];
+    }
+    let mut lines: Vec<String> = Vec::new();
+    let mut line = String::new();
+    let mut size = 0usize;
+    for c in text.chars() {
+        let cw = char_cell_width(c);
+        if size + cw > width && !line.is_empty() {
+            lines.push(std::mem::take(&mut line));
+            size = 0;
+        }
+        line.push(c);
+        size += cw;
+    }
+    if !line.is_empty() {
+        lines.push(line);
+    }
+    lines
+}
+
 /// Crop `text` to at most `width` cells, never padding. Unlike [`set_cell_size`]
 /// this leaves shorter text unchanged. Mirrors `Text.truncate` at the cell level.
 pub fn truncate(text: &str, width: usize) -> String {

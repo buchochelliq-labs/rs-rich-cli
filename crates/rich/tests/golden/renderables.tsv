@@ -14,3 +14,6 @@ panel_title	20	╭─────── T ────────╮\n│ hello
 panel_square	20	┌──────────────────┐\n│ hi               │\n└──────────────────┘\n
 padding_1_2	10	          \n  hi      \n          \n
 padding_0_1	10	 hi       \n
+wrap_words	10	The quick \nbrown fox\n
+wrap_fold	6	abcdef\nghij\n
+panel_wrap	14	┌────────────┐\n│ The quick  │\n│ brown fox  │\n└────────────┘\n

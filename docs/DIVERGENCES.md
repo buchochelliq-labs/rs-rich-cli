@@ -39,15 +39,13 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** not planned unless a public API needs code-point indexing; if so,
   expose a char-index helper without changing the internal representation.
 
-### 5. No word-wrapping in `Text` yet
-- **Differs:** upstream wraps `Text` to the available width; our `Text` does not
-  yet wrap. Container renderables (`Panel`, `Padding`) pad/crop child lines to fit
-  via `Console::render_lines`, so boxes stay intact, but over-long content is
-  cropped rather than wrapped.
-- **Why:** the first layout slice targets byte-parity on fitting content; faithful
-  wrapping (`_wrap.py`) is a focused task of its own.
-- **Remove:** implement wrapping in `text.rs` (issue #2), then have `Text` honor
-  `options.max_width`.
+### 5. Wrapping folds by cell width, not full grapheme clusters
+- **Differs:** `Text` word-wrapping is implemented (port of `_wrap.divide_line`),
+  but the over-long-word fold (`cells.chop_cells`) breaks on cell boundaries per
+  `char`, whereas upstream splits on grapheme clusters for combining sequences.
+- **Why:** avoids vendoring the grapheme/`_unicode_data` tables for the first
+  wrapping slice; identical for non-combining text (the common case).
+- **Remove:** port grapheme segmentation with the `_unicode_data` utilities issue.
 
 ### 6. No platform box substitution
 - **Differs:** upstream's `Box.substitute` swaps box-drawing glyphs for ASCII (or

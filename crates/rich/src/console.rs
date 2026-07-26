@@ -209,12 +209,10 @@ impl Console {
 }
 
 impl Renderable for Text {
-    fn rich_render(&self, console: &Console, _options: &ConsoleOptions) -> Vec<Segment> {
-        // Styles are resolved into segments here; the color system is applied
-        // later by the console when turning segments into bytes. Word-wrapping
-        // to `options.max_width` is not yet implemented (tracked in issue #2);
-        // container renderables pad/crop child lines via `render_lines`.
-        self.render(console.base_style(), console.color_system())
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        // Wrap to the available width; styles are resolved into segments here and
+        // the color system is applied later when turning segments into bytes.
+        self.render_wrapped(console.base_style(), options.max_width)
     }
 }
 
