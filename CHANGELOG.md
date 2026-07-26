@@ -9,10 +9,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 - **Markdown** (`markdown.rs`, port of `rich/markdown.py` core): renders
-  paragraphs, ATX headings (h1–h6, centered h1), and inline strong/emphasis/code
-  via `pulldown-cmark`, as justified full-width blocks separated by blank lines.
-  Byte-parity-tested against real rich 15.0.0. (Lists, code blocks, quotes, links,
-  and tables deferred — DIVERGENCES #9.)
+  paragraphs, ATX headings (h1–h6, centered h1), **bullet + ordered lists**, and
+  inline strong/emphasis/code via `pulldown-cmark`, as justified full-width blocks
+  separated by blank lines. Byte-parity-tested against real rich 15.0.0. (Code
+  blocks, quotes, links, and tables deferred — DIVERGENCES #9.)
 - **Full spinner table**: all 73 built-in spinners are vendored
   (`spinner_data.rs`) from `_spinners.py`, replacing the curated subset.
 - **ReprHighlighter** (`highlighter.rs`, port of `rich/highlighter.py`): the

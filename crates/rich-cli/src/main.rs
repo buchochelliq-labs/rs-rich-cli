@@ -250,7 +250,7 @@ fn run_demo() {
     // Markdown — headings + inline styles.
     console.print(&Rule::new("markdown"));
     console.print(&Markdown::new(
-        "# Heading\n\nA paragraph with **bold**, *italic*, and `code`.",
+        "# Heading\n\nA paragraph with **bold**, *italic*, and `code`.\n\n- bullet item\n- another\n\n1. first\n2. second",
     ));
 
     // Spinners — a few frames of each built-in (animation needs a Live loop).
