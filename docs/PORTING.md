@@ -87,7 +87,8 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | upstream feature | rust `crates/rich-cli/src/…` | status |
 |------------------|------------------------------|:------:|
 | arg parsing, plain-file print, capability demo | `main.rs` | 🟡 |
-| `markdown` / `syntax` / `json` / `csv`/`tsv` / `rule` / `panel` / `ipynb` / URL fetch / HTML export | (tbd) | ⬜ |
+| `--print` / `--markdown` / `--json` / `--rule`, width + justify, stdin, extension auto-detect | `main.rs` | 🟡 |
+| `syntax` / `csv`/`tsv` / `panel` / `padding` / `ipynb` / URL fetch / HTML export | (tbd) | ⬜ |
 
 ---
 

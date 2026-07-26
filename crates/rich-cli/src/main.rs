@@ -1,10 +1,12 @@
 //! `rich` — a Rust port of the `rich-cli` terminal toolbox.
 //!
 //! This binary mirrors the upstream `rich-cli` command-line tool and is built on
-//! the [`rich`] library crate. The first slice implements argument handling, a
-//! plain-file printer, and a capability demo; the rich rendering subcommands
-//! (markdown, syntax, csv/json, …) are tracked as roadmap issues.
+//! the [`rich`] library crate. It implements a slice of upstream's rendering
+//! flags — `--print`, `--markdown`, `--json`, `--rule` — plus width/justify
+//! options, a plain-file printer (with extension auto-detection), and a
+//! capability demo. Syntax, CSV, and export flags are tracked as roadmap issues.
 
+use std::io::Read;
 use std::process::ExitCode;
 
 use rich::markdown::Markdown;
@@ -23,53 +25,193 @@ fn text(content: &str) -> Box<dyn Renderable> {
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// How to render the resource. Mirrors the mutually-exclusive rich-cli flags.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    /// No explicit flag: auto-detect by file extension, else print plain.
+    Auto,
+    /// `-p/--print`: interpret the resource as console markup.
+    Print,
+    /// `-m/--markdown`: render the resource as Markdown.
+    Markdown,
+    /// `-j/--json`: pretty-print the resource as JSON.
+    Json,
+    /// `--rule`: draw a horizontal rule (the resource, if any, is its title).
+    Rule,
+}
+
+/// Parsed command line.
+struct Cli {
+    mode: Mode,
+    resource: Option<String>,
+    width: Option<usize>,
+    justify: Option<Justify>,
+    no_color: bool,
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    match parse(&args) {
+        Ok(None) => ExitCode::SUCCESS, // help/version already printed
+        Ok(Some(cli)) => run(cli),
+        Err(message) => {
+            eprintln!("rich: {message} (try --help)");
+            ExitCode::FAILURE
+        }
+    }
+}
 
+/// Set the render mode, rejecting a second, conflicting mode flag.
+fn set_mode(current: &mut Mode, mode: Mode) -> Result<(), String> {
+    if *current != Mode::Auto && *current != mode {
+        return Err("only one of --print/--markdown/--json/--rule may be given".into());
+    }
+    *current = mode;
+    Ok(())
+}
+
+/// Parse args into a [`Cli`], or `Ok(None)` when `--help`/`--version` handled it.
+fn parse(args: &[String]) -> Result<Option<Cli>, String> {
+    let mut mode = Mode::Auto;
+    let mut resource = None;
+    let mut width = None;
+    let mut justify = None;
     let mut no_color = false;
-    let mut path: Option<String> = None;
 
-    for arg in &args {
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
         match arg.as_str() {
             "-h" | "--help" => {
                 print_help();
-                return ExitCode::SUCCESS;
+                return Ok(None);
             }
             "-V" | "--version" => {
                 println!("rich (rs-rich-cli) {VERSION}");
-                return ExitCode::SUCCESS;
+                return Ok(None);
             }
+            "-p" | "--print" => set_mode(&mut mode, Mode::Print)?,
+            "-m" | "--markdown" => set_mode(&mut mode, Mode::Markdown)?,
+            "-j" | "--json" => set_mode(&mut mode, Mode::Json)?,
+            "--rule" => set_mode(&mut mode, Mode::Rule)?,
+            "--left" => justify = Some(Justify::Left),
+            "--right" => justify = Some(Justify::Right),
+            "--center" => justify = Some(Justify::Center),
             "--no-color" => no_color = true,
-            other if other.starts_with('-') => {
-                eprintln!("rich: unknown option {other:?} (try --help)");
-                return ExitCode::FAILURE;
+            "-w" | "--width" => {
+                let value = iter.next().ok_or("--width requires a number")?;
+                width = Some(
+                    value
+                        .parse()
+                        .map_err(|_| format!("invalid width {value:?}"))?,
+                );
             }
-            other => path = Some(other.to_string()),
+            other if other.starts_with('-') && other != "-" => {
+                return Err(format!("unknown option {other:?}"));
+            }
+            other => {
+                if resource.is_some() {
+                    return Err("only one resource may be given".into());
+                }
+                resource = Some(other.to_string());
+            }
         }
     }
 
-    let mut console = Console::builder().no_color(no_color).build();
+    Ok(Some(Cli {
+        mode,
+        resource,
+        width,
+        justify,
+        no_color,
+    }))
+}
+
+/// Read a resource: `-` (or `None`) means stdin, otherwise a file path.
+fn read_resource(resource: Option<&str>) -> std::io::Result<String> {
+    match resource {
+        Some(path) if path != "-" => std::fs::read_to_string(path),
+        _ => {
+            let mut buffer = String::new();
+            std::io::stdin().read_to_string(&mut buffer)?;
+            Ok(buffer)
+        }
+    }
+}
+
+/// Resolve `Mode::Auto` to a concrete mode from the resource's file extension.
+fn detect_mode(resource: Option<&str>) -> Mode {
+    match resource.and_then(|r| r.rsplit_once('.').map(|(_, ext)| ext.to_ascii_lowercase())) {
+        Some(ext) if ext == "md" || ext == "markdown" => Mode::Markdown,
+        Some(ext) if ext == "json" => Mode::Json,
+        _ => Mode::Auto,
+    }
+}
+
+fn run(cli: Cli) -> ExitCode {
+    // With no flags and no resource, show the capability demo.
+    if cli.mode == Mode::Auto && cli.resource.is_none() {
+        run_demo();
+        return ExitCode::SUCCESS;
+    }
+
+    let mut builder = Console::builder().no_color(cli.no_color);
+    if let Some(width) = cli.width {
+        builder = builder.width(width);
+    }
+    let mut console = builder.build();
     console.install_extensions();
 
-    match path {
-        Some(path) => match std::fs::read_to_string(&path) {
-            Ok(contents) => {
-                console.print_str(&format!("[bold]── {path} ──[/]"));
-                // Print file contents as *plain* text (no markup interpretation),
-                // so arbitrary file bytes aren't treated as tags.
-                console.print(&Text::new(contents));
-                ExitCode::SUCCESS
-            }
+    let mode = match cli.mode {
+        Mode::Auto => detect_mode(cli.resource.as_deref()),
+        other => other,
+    };
+
+    // A rule takes its optional title from the resource string directly.
+    if mode == Mode::Rule {
+        match cli.resource.as_deref() {
+            Some(title) if title != "-" => console.print(&Rule::new(title)),
+            _ => console.print(&Rule::line()),
+        }
+        return ExitCode::SUCCESS;
+    }
+
+    // `--print` treats the resource as a literal markup string, not a file path
+    // (stdin when it's `-` or absent). Other modes read the resource as a file.
+    let content = if mode == Mode::Print && matches!(cli.resource.as_deref(), Some(r) if r != "-") {
+        cli.resource.clone().unwrap()
+    } else {
+        match read_resource(cli.resource.as_deref()) {
+            Ok(content) => content,
             Err(err) => {
-                eprintln!("rich: cannot read {path:?}: {err}");
-                ExitCode::FAILURE
+                eprintln!(
+                    "rich: cannot read {}: {err}",
+                    cli.resource.as_deref().unwrap_or("<stdin>")
+                );
+                return ExitCode::FAILURE;
+            }
+        }
+    };
+
+    match mode {
+        Mode::Markdown => console.print(&Markdown::new(&content)),
+        Mode::Json => match Json::new(content.trim()) {
+            Ok(json) => console.print(&json),
+            Err(err) => {
+                eprintln!("rich: invalid JSON: {err}");
+                return ExitCode::FAILURE;
             }
         },
-        None => {
-            run_demo();
-            ExitCode::SUCCESS
-        }
+        Mode::Print => match cli.justify {
+            Some(justify) => console.print_justified(&content, justify),
+            None => console.print_str(&content),
+        },
+        // Auto with no detected type: print the file as plain text.
+        _ => match cli.justify {
+            Some(justify) => console.print_justified(&content, justify),
+            None => console.print(&Text::new(content)),
+        },
     }
+    ExitCode::SUCCESS
 }
 
 fn print_help() {
@@ -77,17 +219,28 @@ fn print_help() {
         "rich {VERSION} — Rust port of the rich-cli terminal toolbox\n\
 \n\
 USAGE:\n\
-    rich [OPTIONS] [FILE]\n\
+    rich [OPTIONS] [RESOURCE]\n\
+\n\
+RESOURCE is a file path, or `-` for stdin.\n\
+\n\
+RENDER MODE (choose at most one; default auto-detects by extension):\n\
+    -p, --print      Interpret RESOURCE as console markup\n\
+    -m, --markdown   Render RESOURCE as Markdown\n\
+    -j, --json       Pretty-print RESOURCE as JSON\n\
+        --rule       Draw a horizontal rule (RESOURCE is its title)\n\
 \n\
 OPTIONS:\n\
+    -w, --width N    Set the output width\n\
+        --left       Left-justify output\n\
+        --center     Center output\n\
+        --right      Right-justify output\n\
+        --no-color   Disable colored output\n\
     -h, --help       Show this help\n\
     -V, --version    Show the version (mirrors upstream rich-cli)\n\
-        --no-color   Disable colored output\n\
 \n\
-With no FILE, a capability demo is shown.\n\
+With no RESOURCE and no mode flag, a capability demo is shown.\n\
 \n\
-PLANNED SUBCOMMANDS (tracked as roadmap issues, not yet implemented):\n\
-    markdown, syntax, json, csv/tsv, rule, panel, padding, ipynb, export-html\n"
+NOT YET PORTED (tracked as roadmap issues): syntax, csv/tsv, ipynb, export-html.\n"
     );
 }
 

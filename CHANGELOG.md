@@ -8,6 +8,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`rich-cli` render modes** (`crates/rich-cli`): the binary now implements a
+  slice of upstream rich-cli's flags — `-p/--print` (console markup),
+  `-m/--markdown`, `-j/--json`, and `--rule` — plus `-w/--width`,
+  `--left/--center/--right` justification, stdin (`-`), and file-extension
+  auto-detection (`.md`/`.json`). Covered by CLI integration tests. (Syntax, CSV,
+  panel, ipynb, URL fetch, and HTML export remain roadmap items.)
 - **Height-aware `Panel`** (+ `Console::render_lines` height handling): a `Panel`
   now consumes `options.height`, expanding its content to fill the imposed height
   (`child_height = height − 2 − padding`) so a `Panel` used as a `Layout` leaf
