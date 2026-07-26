@@ -52,6 +52,10 @@ golden parity tests. Read [AGENTS.md](../../../AGENTS.md) first.
   (🟡 partial / 🟢 complete; ✅ when golden-tested).
 - Note any unavoidable deviation in `docs/DIVERGENCES.md` (should be rare).
 - Tick the item in the module's roadmap issue.
+- **Showcase it in the demo.** If the new module is a user-visible renderable or
+  helper, add it to `run_demo` in `crates/rich-cli/src/main.rs` so
+  `cargo run -p rich-cli` always demonstrates every capability ported so far.
+  Verify with `COLUMNS=64 cargo run -p rich-cli`.
 
 ## 5. Gate
 

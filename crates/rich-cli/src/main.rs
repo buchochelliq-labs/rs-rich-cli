@@ -7,9 +7,17 @@
 
 use std::process::ExitCode;
 
+use rich::r#box::{DOUBLE, SQUARE};
 use rich::text::Text;
-use rich::{ColorSystem, Console, Panel, Rule, Table};
+use rich::{
+    filesize, Align, ColorSystem, Console, Constrain, Padding, Panel, Renderable, Rule, Table, Tree,
+};
 use rich_ext::ConsoleExt;
+
+/// Boxed `Text` helper to cut down on `Box::new(Text::new(...))` noise.
+fn text(content: &str) -> Box<dyn Renderable> {
+    Box::new(Text::new(content))
+}
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -91,23 +99,92 @@ fn run_demo() {
 
     console.print(&Rule::new("rs-rich-cli"));
     console.print_str("[bold magenta]rs-rich-cli[/] — a Rust port of [italic]rich[/]");
-    console.print_str("");
-    console.print_str("Markup:   [bold]bold[/], [italic]italic[/], [red]red[/], [green]green on[/] [white on blue]bg[/]");
+    console.print_str("Everything below is byte-parity-tested against Python rich 15.0.0.");
+
+    // Markup, color, theme, and the rich-ext highlighter.
+    console.print(&Rule::new("markup · color · theme · extension"));
+    console.print_str(
+        "Styles:   [bold]bold[/] [dim]dim[/] [italic]italic[/] [underline]underline[/] [reverse]reverse[/]",
+    );
+    console.print_str(
+        "Color:    [red]red[/] [green]green[/] [blue]blue[/] [#ff8800]#ff8800[/] [white on blue]on blue[/]",
+    );
     console.print_str("Theme:    [error]error[/], [warning]warning[/], [info]info[/]");
     console.print_str("Extension: numbers like 3.14 and 2026 are auto-highlighted");
-    console.print_str("");
+
+    // Rule variants.
+    console.print(&Rule::new("rule"));
+    console.print(&Rule::line());
+    console.print(&Rule::new("centered title"));
+
+    // Panels with different boxes.
+    console.print(&Rule::new("panel"));
+    console.print(&Panel::new(text("rounded box (default)")).title("rounded"));
     console.print(
-        &Panel::new(Box::new(Text::new(
-            "Panels, rules, and padding now render.",
-        )))
-        .title("panel"),
+        &Panel::new(text("square box"))
+            .box_set(SQUARE)
+            .title("square"),
     );
-    console.print_str("");
+    console.print(
+        &Panel::new(text("double box"))
+            .box_set(DOUBLE)
+            .title("double"),
+    );
+
+    // Padding (shown inside a panel so the blank space is visible).
+    console.print(&Rule::new("padding"));
+    console.print(
+        &Panel::new(Box::new(Padding::new(text("padded (1, 4)"), (1, 4, 1, 4)))).title("padding"),
+    );
+
+    // Horizontal alignment (fills the console width).
+    console.print(&Rule::new("align"));
+    console.print(&Align::left(text("← left")));
+    console.print(&Align::center(text("center")));
+    console.print(&Align::right(text("right →")));
+
+    // Constrain — same panel, capped to 24 cells.
+    console.print(&Rule::new("constrain (width 24)"));
+    console.print(&Constrain::new(
+        Box::new(Panel::new(text("constrained")).title("≤24")),
+        Some(24),
+    ));
+
+    // Table.
+    console.print(&Rule::new("table"));
     let mut table = Table::new();
-    table.add_column("Feature");
-    table.add_column("Status");
-    table.add_row(&["markup", "done"]);
-    table.add_row(&["panel / rule", "done"]);
-    table.add_row(&["table", "done"]);
+    table.add_column("Renderable");
+    table.add_column("Module");
+    table.add_column("Parity");
+    for (renderable, module, parity) in [
+        ("Text / markup", "text, markup", "✓"),
+        ("Rule", "rule", "✓"),
+        ("Panel", "panel", "✓"),
+        ("Padding", "padding", "✓"),
+        ("Align", "align", "✓"),
+        ("Constrain", "constrain", "✓"),
+        ("Table", "table", "✓"),
+        ("Tree", "tree", "✓"),
+    ] {
+        table.add_row(&[renderable, module, parity]);
+    }
     console.print(&table);
+
+    // Tree.
+    console.print(&Rule::new("tree"));
+    let mut tree = Tree::new("rs-rich-cli");
+    let core = tree.add("crates/rich (core, mirrors rich 15.0.0)");
+    core.add("color · style · text · console");
+    core.add("box · rule · panel · padding · align");
+    core.add("table · tree · wrap · filesize");
+    tree.add("crates/rich-ext (our extensions)");
+    tree.add("crates/rich-cli (this binary)");
+    console.print(&tree);
+
+    // filesize.
+    console.print(&Rule::new("filesize"));
+    for bytes in [1u64, 999, 1_000, 1_500, 1_000_000, 1_500_000_000] {
+        console.print_str(&format!("  {bytes:>13} → {}", filesize::decimal(bytes)));
+    }
+    console.print(&Rule::line());
 }
