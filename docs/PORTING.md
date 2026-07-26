@@ -44,7 +44,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `table.py` | `table.rs` | 🟡 | ✅ |
 | `columns.py` | `columns.rs` | 🟡 | ✅ |
 | `tree.py` | `tree.rs` | 🟡 | ✅ |
-| `layout.py` | `layout.rs` | ⬜ | — |
+| `layout.py` | `layout.rs` | 🟡 | ✅ |
 | `progress_bar.py` | `progress_bar.rs` | 🟡 |
 | `bar.py` | `bar.rs` | 🟡 | — |
 
@@ -78,7 +78,8 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `_unicode_data/` | `unicode_data/` | ⬜ |
 | `_windows.py`, `_win32_console.py`, `_windows_renderer.py` | `windows/` | ⬜ |
 | `jupyter.py`, `file_proxy.py`, `diagnose.py`, `_fileno.py`, `_null_file.py` | resp. | ⬜ |
-| `_loop.py`, `_pick.py`, `_ratio.py`, `_stack.py`, `_timer.py` | internal helpers | ⬜ |
+| `_ratio.py` (`ratio_resolve`) | `ratio.rs` | 🟡 | — |
+| `_loop.py`, `_pick.py`, `_stack.py`, `_timer.py` | internal helpers | ⬜ |
 | `_export_format.py` (HTML/SVG export) | `export.rs` | ⬜ |
 
 ## `rich-cli` (tool, versions separately — 1.8.1)

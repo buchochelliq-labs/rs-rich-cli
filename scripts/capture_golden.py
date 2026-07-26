@@ -27,6 +27,7 @@ from rich.console import Console
 from rich.constrain import Constrain
 from rich.control import Control
 from rich.json import JSON
+from rich.layout import Layout
 from rich.markdown import Markdown
 from rich.padding import Padding
 from rich.panel import Panel
@@ -45,6 +46,26 @@ from rich.tree import Tree
 def _ansi(text: str):
     """Decode an ANSI string into a single styled Text (fresh decoder)."""
     return AnsiDecoder().decode_line(text)
+
+
+def _layout_column() -> Layout:
+    layout = Layout()
+    layout.split_column(Layout(Text("top")), Layout(Text("bottom")))
+    return layout
+
+
+def _layout_row() -> Layout:
+    layout = Layout()
+    layout.split_row(Layout(Text("L")), Layout(Text("R")))
+    return layout
+
+
+def _layout_nested() -> Layout:
+    layout = Layout()
+    top = Layout()
+    top.split_row(Layout(Text("A")), Layout(Text("B")))
+    layout.split_column(top, Layout(Text("bottom"), size=1))
+    return layout
 
 
 def _tree() -> Tree:
@@ -188,6 +209,22 @@ RENDERABLE_CASES = [
     ("ansi_attrs", 20, _ansi("\x1b[3;4;9mstyled\x1b[0m")),
 ]
 
+# (name, width, height, layout) — layouts need an explicit console height.
+LAYOUT_CASES = [
+    ("layout_column", 24, 4, _layout_column()),
+    ("layout_row", 24, 4, _layout_row()),
+    ("layout_nested", 20, 4, _layout_nested()),
+]
+
+LAYOUT_HEADER = """\
+# Golden parity fixtures for LAYOUTS — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\\t<width>\\t<height>\\t<expected-ansi>
+# Console: force_terminal=True, color_system="truecolor", highlight=False,
+#          safe_box=False, legacy_windows=False, and an explicit height.
+"""
+
 RENDERABLE_HEADER = """\
 # Golden parity fixtures for RENDERABLES — captured from real Python `rich`.
 # Regenerate with: python scripts/capture_golden.py
@@ -267,6 +304,24 @@ def main() -> None:
         rlines.append(f"{name}\t{width}\t{escape(output)}")
     renderable_path.write_text("\n".join(rlines) + "\n", encoding="utf-8")
     print(f"wrote {len(RENDERABLE_CASES)} renderable cases to {renderable_path}")
+
+    layout_path = golden_dir() / "layout.tsv"
+    llines = [LAYOUT_HEADER.rstrip("\n")]
+    for name, width, height, layout in LAYOUT_CASES:
+        lconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=width,
+            height=height,
+            highlight=False,
+            safe_box=False,
+            legacy_windows=False,
+        )
+        with lconsole.capture() as capture:
+            lconsole.print(layout)
+        llines.append(f"{name}\t{width}\t{height}\t{escape(capture.get())}")
+    layout_path.write_text("\n".join(llines) + "\n", encoding="utf-8")
+    print(f"wrote {len(LAYOUT_CASES)} layout cases to {layout_path}")
 
 
 if __name__ == "__main__":

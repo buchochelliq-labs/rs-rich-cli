@@ -8,6 +8,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Layout** (`layout.rs` + `ratio.rs`, port of `rich/layout.py` +
+  `_ratio.ratio_resolve`): split a region into ratioed/sized rows (`split_row`)
+  and columns (`split_column`), recursively; each leaf is rendered to an exact
+  `(width, height)` block (`Segment.set_shape`) and tiled. Added console
+  `height` (builder + detection) and `ConsoleOptions::update_dimensions`.
+  Byte-parity-tested against real rich 15.0.0 (column/row/nested, incl. `size`).
+  (Empty-leaf placeholder renders blank; height-aware container leaves like
+  `Panel` don't yet expand to fill — DIVERGENCES #11.)
 - **Console capture + export** (`Console::capture` / `export_text`, port of
   `Console.capture()` + `export_text(styles=False)`): run a closure with output
   recorded to an internal segment buffer instead of stdout, returning either the

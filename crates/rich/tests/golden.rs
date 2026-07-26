@@ -10,8 +10,34 @@ use rich::markdown::Markdown;
 use rich::r#box::{Box as BoxSet, HEAVY_HEAD, SQUARE};
 use rich::{
     Align, AnsiDecoder, Bar, ColorSystem, Columns, Console, Constrain, Control, HorizontalAlign,
-    Json, Justify, Padding, Panel, ProgressBar, Renderable, Rule, Table, Text, Tree,
+    Json, Justify, Layout, Padding, Panel, ProgressBar, Renderable, Rule, Table, Text, Tree,
 };
+
+/// Build the layout matching a `layout_*` fixture name. Must stay in sync with
+/// `LAYOUT_CASES` in scripts/capture_golden.py.
+fn build_layout(name: &str) -> Layout {
+    let leaf = |s: &str| Layout::with_renderable(Box::new(Text::new(s)));
+    match name {
+        "layout_column" => {
+            let mut lay = Layout::new();
+            lay.split_column(vec![leaf("top"), leaf("bottom")]);
+            lay
+        }
+        "layout_row" => {
+            let mut lay = Layout::new();
+            lay.split_row(vec![leaf("L"), leaf("R")]);
+            lay
+        }
+        "layout_nested" => {
+            let mut top = Layout::new();
+            top.split_row(vec![leaf("A"), leaf("B")]);
+            let mut lay = Layout::new();
+            lay.split_column(vec![top, leaf("bottom").size(1)]);
+            lay
+        }
+        other => panic!("no builder for layout fixture {other:?}"),
+    }
+}
 
 fn justified_panel(justify: Justify) -> Panel {
     Panel::new(Box::new(Text::new("hi").justify(justify))).box_set(SQUARE)
@@ -269,4 +295,48 @@ fn renderables_parity() {
         checked += 1;
     }
     assert!(checked > 0, "no renderable cases were checked");
+}
+
+#[test]
+fn layout_parity() {
+    let data = include_str!("golden/layout.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(4, '\t');
+        let name = parts.next().unwrap_or("");
+        let width: usize = parts
+            .next()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or_else(|| panic!("line {}: bad width", index + 1));
+        let height: usize = parts
+            .next()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or_else(|| panic!("line {}: bad height", index + 1));
+        let expected = unescape(
+            parts
+                .next()
+                .unwrap_or_else(|| panic!("line {}: missing expected", index + 1)),
+        );
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(width)
+            .height(height)
+            .no_color(false)
+            .build();
+        let layout = build_layout(name);
+        let got = console.capture(|c| c.print(&layout));
+        assert_eq!(
+            got,
+            expected,
+            "layout case {name:?} (line {}) diverged from upstream rich",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert!(checked > 0, "no layout cases were checked");
 }

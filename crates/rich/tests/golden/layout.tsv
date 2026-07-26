@@ -1,0 +1,9 @@
+# Golden parity fixtures for LAYOUTS — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<width>\t<height>\t<expected-ansi>
+# Console: force_terminal=True, color_system="truecolor", highlight=False,
+#          safe_box=False, legacy_windows=False, and an explicit height.
+layout_column	24	4	top                     \n                        \nbottom                  \n                        \n
+layout_row	24	4	L           R           \n                        \n                        \n                        \n
+layout_nested	20	4	A         B         \n                    \n                    \nbottom              \n

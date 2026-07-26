@@ -12,7 +12,7 @@ use rich::r#box::{DOUBLE, SQUARE};
 use rich::text::Text;
 use rich::{
     filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, Control, HorizontalAlign, Json,
-    Justify, Padding, Panel, ProgressBar, Renderable, Rule, Spinner, Table, Tree,
+    Justify, Layout, Padding, Panel, ProgressBar, Renderable, Rule, Spinner, Table, Tree,
 };
 use rich_ext::ConsoleExt;
 
@@ -291,6 +291,23 @@ fn run_demo() {
     console.print(&Text::new("  export_text (styles stripped):"));
     for line in plain.lines() {
         console.print(&Text::new(format!("    {line}")));
+    }
+
+    // Layout — split a region into ratioed rows/columns (rendered at a fixed size).
+    console.print(&Rule::new("layout"));
+    let leaf = |s: &str| Layout::with_renderable(text(s));
+    let mut header = Layout::new();
+    header.split_row(vec![leaf("  ◧ left pane"), leaf("  ◨ right pane")]);
+    let mut root = Layout::new();
+    root.split_column(vec![header, leaf("  ▔ footer (fixed size 1)").size(1)]);
+    let grid = Console::builder()
+        .force_terminal(true)
+        .color_system(Some(ColorSystem::Truecolor))
+        .width(48)
+        .height(4)
+        .build();
+    for line in grid.export_text(|c| c.print(&root)).lines() {
+        console.print(&Text::new(line));
     }
 
     // Spinners — a few frames of each built-in (animation needs a Live loop).

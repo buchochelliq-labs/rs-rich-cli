@@ -15,6 +15,7 @@ use crate::text::Text;
 use crate::theme::Theme;
 
 const DEFAULT_WIDTH: usize = 80;
+const DEFAULT_HEIGHT: usize = 25;
 
 /// Horizontal justification of a renderable within its width.
 /// Mirrors `rich.console.JustifyMethod`.
@@ -52,6 +53,17 @@ impl ConsoleOptions {
             justify: self.justify,
         }
     }
+
+    /// Return a copy with both width and height pinned. Port of
+    /// `ConsoleOptions.update_dimensions`.
+    pub fn update_dimensions(&self, width: usize, height: usize) -> ConsoleOptions {
+        ConsoleOptions {
+            min_width: width,
+            max_width: width,
+            height: Some(height),
+            justify: self.justify,
+        }
+    }
 }
 
 /// The high-level interface for rendering to a terminal. Mirrors
@@ -59,6 +71,7 @@ impl ConsoleOptions {
 pub struct Console {
     color_system: Option<ColorSystem>,
     width: usize,
+    height: usize,
     is_terminal: bool,
     no_color: bool,
     emoji: bool,
@@ -101,6 +114,12 @@ impl Console {
     /// The detected (or configured) width in cells.
     pub fn width(&self) -> usize {
         self.width
+    }
+
+    /// The detected (or configured) height in rows. Used by height-aware
+    /// renderables such as [`Layout`](crate::layout::Layout).
+    pub fn height(&self) -> usize {
+        self.height
     }
 
     /// Whether output is going to a real terminal.
@@ -377,6 +396,7 @@ pub struct ConsoleBuilder {
     color_system: Option<ColorSystem>,
     color_system_set: bool,
     width: Option<usize>,
+    height: Option<usize>,
     no_color: Option<bool>,
     emoji: Option<bool>,
     highlight: Option<bool>,
@@ -390,6 +410,7 @@ impl ConsoleBuilder {
             color_system: None,
             color_system_set: false,
             width: None,
+            height: None,
             no_color: None,
             emoji: None,
             highlight: None,
@@ -411,6 +432,12 @@ impl ConsoleBuilder {
 
     pub fn width(mut self, width: usize) -> Self {
         self.width = Some(width);
+        self
+    }
+
+    /// Set the console height in rows (used by [`Layout`](crate::layout::Layout)).
+    pub fn height(mut self, height: usize) -> Self {
+        self.height = Some(height);
         self
     }
 
@@ -451,9 +478,11 @@ impl ConsoleBuilder {
             None
         };
         let width = self.width.unwrap_or_else(detect_width);
+        let height = self.height.unwrap_or_else(detect_height);
         Console {
             color_system,
             width,
+            height,
             is_terminal,
             no_color,
             emoji: self.emoji.unwrap_or(true),
@@ -498,6 +527,23 @@ fn detect_width() -> usize {
         }
     }
     DEFAULT_WIDTH
+}
+
+/// Detect the terminal height: `LINES`, then the real terminal, then a default.
+fn detect_height() -> usize {
+    if let Some(lines) = std::env::var_os("LINES") {
+        if let Ok(value) = lines.to_string_lossy().trim().parse::<usize>() {
+            if value > 0 {
+                return value;
+            }
+        }
+    }
+    if let Some((_, terminal_size::Height(h))) = terminal_size::terminal_size() {
+        if h > 0 {
+            return h as usize;
+        }
+    }
+    DEFAULT_HEIGHT
 }
 
 #[cfg(test)]
