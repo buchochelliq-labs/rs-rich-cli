@@ -25,6 +25,16 @@ from rich.panel import Panel
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
+from rich.tree import Tree
+
+
+def _tree() -> Tree:
+    tree = Tree("root")
+    child_a = tree.add("child A")
+    child_a.add("leaf A1")
+    child_a.add("leaf A2")
+    tree.add("child B")
+    return tree
 
 
 def _table(box_set) -> Table:
@@ -62,6 +72,7 @@ RENDERABLE_CASES = [
     ("panel_wrap", 14, Panel("The quick brown fox", box=box.SQUARE)),
     ("table_square", 40, _table(box.SQUARE)),
     ("table_default", 40, _table(box.HEAVY_HEAD)),
+    ("tree_nested", 40, _tree()),
 ]
 
 RENDERABLE_HEADER = """\

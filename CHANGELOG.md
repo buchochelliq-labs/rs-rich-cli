@@ -8,6 +8,8 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Tree** (`tree.rs`, port of `rich/tree.py`): renders a hierarchy with the
+  `├──`/`└──` guide lines. Byte-parity-tested against real rich 15.0.0.
 - **Table** (`table.rs`, port of `rich/table.py` core): columns, rows, box choice
   (default `HEAVY_HEAD`), per-cell padding, bold headers, and multi-line/wrapped
   cells. Byte-parity-tested against real rich 15.0.0 (SQUARE and HEAVY_HEAD).

@@ -32,6 +32,7 @@ pub mod style;
 pub mod table;
 pub mod text;
 pub mod theme;
+pub mod tree;
 pub mod wrap;
 
 // A small, curated prelude mirroring the most-used names from `rich`'s top level.
@@ -47,3 +48,4 @@ pub use crate::style::Style;
 pub use crate::table::Table;
 pub use crate::text::Text;
 pub use crate::theme::Theme;
+pub use crate::tree::Tree;

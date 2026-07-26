@@ -7,7 +7,17 @@
 //! guarantee described in AGENTS.md.
 
 use rich::r#box::{Box as BoxSet, HEAVY_HEAD, SQUARE};
-use rich::{ColorSystem, Console, Padding, Panel, Renderable, Rule, Table, Text};
+use rich::{ColorSystem, Console, Padding, Panel, Renderable, Rule, Table, Text, Tree};
+
+/// The shared sample tree used by the `tree_*` fixtures.
+fn sample_tree() -> Tree {
+    let mut tree = Tree::new("root");
+    let child_a = tree.add("child A");
+    child_a.add("leaf A1");
+    child_a.add("leaf A2");
+    tree.add("child B");
+    tree
+}
 
 /// The shared sample table used by the `table_*` fixtures.
 fn sample_table(box_set: BoxSet) -> Table {
@@ -51,6 +61,7 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         }
         "table_square" => Box::new(sample_table(SQUARE)),
         "table_default" => Box::new(sample_table(HEAVY_HEAD)),
+        "tree_nested" => Box::new(sample_tree()),
         other => panic!("no builder for renderable fixture {other:?}"),
     }
 }
