@@ -17,12 +17,18 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** only if a concrete codepoint mismatch is found — then vendor the
   upstream table into `cells.rs`. Tracked with the `cells` porting issue.
 
-### 2. Markup parser is lenient about unbalanced tags
-- **Differs:** upstream raises `MarkupError` on mismatched `[/]`; our slice parser
-  auto-closes open tags at end of input and ignores stray closes.
-- **Why:** keeps the first slice's demo/CLI robust on arbitrary input.
-- **Remove:** restore strict `MarkupError` behavior when `markup.py` is fully
-  ported; add golden/negative tests. Tracked with the markup/text porting issue.
+### 2. Markup: error is swallowed at the print boundary; partial backslash rules
+- **Differs:** `markup::render` now matches upstream — a `[…]` is only a tag when
+  it starts with `[a-z#/@]`, an unmatched closing tag returns `RichError::Markup`,
+  and unclosed *opening* tags auto-close (as upstream does). Two smaller gaps
+  remain: (a) the `Console` print path swallows a markup error and falls back to
+  printing the raw text, rather than propagating it; and (b) the parser handles
+  the common `\[` escape but not the full backslash-run doubling semantics of
+  `_parse` (the public `markup::escape` *does* implement the full rule).
+- **Why:** swallowing at the boundary keeps the demo/CLI robust on arbitrary
+  input; the exotic backslash-run cases are rare.
+- **Remove:** add a strict print variant that surfaces `MarkupError`, and port
+  the backslash-run branch of `_parse`, under the markup/text issue (#2).
 
 ### 3. Byte offsets in `Text` spans
 - **Differs:** upstream `Text` uses code-point offsets for spans; our `Text` uses

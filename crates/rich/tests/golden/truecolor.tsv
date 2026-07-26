@@ -18,3 +18,6 @@ emoji_full_table	deploy :ship: at :clock3: with :zap:	deploy 🚢 at 🕒 with �
 named_color_orange1	[orange1]sun[/]	\x1b[38;5;214msun\x1b[0m
 named_color_grey37	[grey37]dim[/]	\x1b[38;5;59mdim\x1b[0m
 named_on_named	[white on deep_sky_blue1]hi[/]	\x1b[37;48;5;39mhi\x1b[0m
+literal_bracket_upper	[Hello] world	[Hello] world
+literal_bracket_num	[42] items	[42] items
+meta_tag_no_style	[@handler]y[/]	y

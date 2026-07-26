@@ -8,6 +8,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Markup fidelity** (`markup.rs`, toward `rich/markup.py`): a `[…]` is now only
+  a tag when it starts with `[a-z#/@]` (so `[Hello]`/`[42]` are literal text),
+  unmatched closing tags return `RichError::Markup`, `@`-tags apply no visible
+  style, and a public `markup::escape` implements upstream's backslash-doubling
+  escape. Byte-parity-tested (literal brackets, meta tags) + negative tests for
+  the error cases. Narrows DIVERGENCES #2.
 - **`Styled`** (`styled.rs`, port of `rich/styled.py`) and **`Screen`**
   (`screen.rs`, port of `rich/screen.py`): `Styled` lays a `Style` under an
   entire renderable (each segment's own style still wins); `Screen` fills the

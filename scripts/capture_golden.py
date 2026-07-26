@@ -159,6 +159,10 @@ CASES: list[tuple[str, str]] = [
     ("named_color_orange1", "[orange1]sun[/]"),
     ("named_color_grey37", "[grey37]dim[/]"),
     ("named_on_named", "[white on deep_sky_blue1]hi[/]"),
+    # `[…]` is only a tag when it starts with [a-z#/@]; else it is literal.
+    ("literal_bracket_upper", "[Hello] world"),
+    ("literal_bracket_num", "[42] items"),
+    ("meta_tag_no_style", "[@handler]y[/]"),
 ]
 
 # (name, width, renderable) — the Rust test builds a matching renderable per name.
