@@ -10,7 +10,8 @@ use std::process::ExitCode;
 use rich::r#box::{DOUBLE, SQUARE};
 use rich::text::Text;
 use rich::{
-    filesize, Align, ColorSystem, Console, Constrain, Padding, Panel, Renderable, Rule, Table, Tree,
+    filesize, Align, ColorSystem, Columns, Console, Constrain, Padding, Panel, Renderable, Rule,
+    Table, Tree,
 };
 use rich_ext::ConsoleExt;
 
@@ -163,12 +164,33 @@ fn run_demo() {
         ("Padding", "padding", "✓"),
         ("Align", "align", "✓"),
         ("Constrain", "constrain", "✓"),
+        ("Columns", "columns", "✓"),
         ("Table", "table", "✓"),
         ("Tree", "tree", "✓"),
     ] {
         table.add_row(&[renderable, module, parity]);
     }
     console.print(&table);
+
+    // Columns — packs items into as many columns as fit the width.
+    console.print(&Rule::new("columns"));
+    let months = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ];
+    console.print(&Columns::new(
+        months.iter().map(|m| m.to_string()).collect(),
+    ));
 
     // Tree.
     console.print(&Rule::new("tree"));

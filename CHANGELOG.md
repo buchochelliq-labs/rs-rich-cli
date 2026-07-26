@@ -8,6 +8,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Columns** (`columns.rs`, port of `rich/columns.py`): packs items into as many
+  equal-gap columns as fit the width, filling row by row (ports the column-count
+  fitting algorithm). Byte-parity-tested against real rich 15.0.0.
 - **Constrain** (`constrain.rs`, port of `rich/constrain.py`): render a child
   within a reduced max width. Byte-parity-tested against real rich 15.0.0.
 - **filesize** (`filesize.rs`, port of `rich/filesize.py`): `decimal()` SI byte

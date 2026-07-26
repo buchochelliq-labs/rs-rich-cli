@@ -20,6 +20,7 @@ import pathlib
 
 from rich import box
 from rich.align import Align
+from rich.columns import Columns
 from rich.console import Console
 from rich.constrain import Constrain
 from rich.padding import Padding
@@ -79,6 +80,8 @@ RENDERABLE_CASES = [
     ("align_right", 20, Align.right("hi")),
     ("align_center_odd", 21, Align.center("hi")),
     ("constrain_panel", 20, Constrain(Panel("hi", box=box.SQUARE), width=10)),
+    ("columns_two_rows", 20, Columns(["one", "two", "three", "four", "five", "six"])),
+    ("columns_one_row", 30, Columns(["alpha", "beta", "gamma", "delta"])),
 ]
 
 RENDERABLE_HEADER = """\

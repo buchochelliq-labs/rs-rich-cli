@@ -8,8 +8,13 @@
 
 use rich::r#box::{Box as BoxSet, HEAVY_HEAD, SQUARE};
 use rich::{
-    Align, ColorSystem, Console, Constrain, Padding, Panel, Renderable, Rule, Table, Text, Tree,
+    Align, ColorSystem, Columns, Console, Constrain, Padding, Panel, Renderable, Rule, Table, Text,
+    Tree,
 };
+
+fn columns(items: &[&str]) -> Columns {
+    Columns::new(items.iter().map(|s| s.to_string()).collect())
+}
 
 /// The shared sample tree used by the `tree_*` fixtures.
 fn sample_tree() -> Tree {
@@ -70,6 +75,8 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
             Box::new(Panel::new(Box::new(Text::new("hi"))).box_set(SQUARE)),
             Some(10),
         )),
+        "columns_two_rows" => Box::new(columns(&["one", "two", "three", "four", "five", "six"])),
+        "columns_one_row" => Box::new(columns(&["alpha", "beta", "gamma", "delta"])),
         other => panic!("no builder for renderable fixture {other:?}"),
     }
 }

@@ -20,6 +20,7 @@ pub mod align;
 pub mod r#box;
 pub mod cells;
 pub mod color;
+pub mod columns;
 pub mod console;
 pub mod constrain;
 pub mod errors;
@@ -41,6 +42,7 @@ pub mod wrap;
 // A small, curated prelude mirroring the most-used names from `rich`'s top level.
 pub use crate::align::Align;
 pub use crate::color::{Color, ColorSystem, ColorTriplet};
+pub use crate::columns::Columns;
 pub use crate::console::{Console, ConsoleOptions, Justify};
 pub use crate::constrain::Constrain;
 pub use crate::errors::{Result, RichError};
