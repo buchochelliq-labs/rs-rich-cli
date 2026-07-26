@@ -40,7 +40,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `padding.py` | `padding.rs` | 🟡 | ✅ |
 | `panel.py` | `panel.rs` | 🟡 | ✅ |
 | `align.py`, `constrain.py` | resp. | ⬜ | — |
-| `table.py` | `table.rs` | ⬜ | — |
+| `table.py` | `table.rs` | 🟡 | ✅ |
 | `columns.py` | `columns.rs` | ⬜ | — |
 | `tree.py` | `tree.rs` | ⬜ | — |
 | `layout.py` | `layout.rs` | ⬜ | — |

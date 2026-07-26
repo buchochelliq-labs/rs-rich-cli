@@ -56,6 +56,18 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** port `Box.substitute` + the `legacy_windows`/`ascii` console flags
   with the Windows-console issue (#12).
 
+### 7. `Table` sizes columns to content only
+- **Differs:** each column is sized to its widest cell; upstream additionally
+  supports flexible/ratio widths, explicit `width`/`min_width`/`max_width`,
+  `expand`, and shrinking columns (with wrapping) when the table exceeds the
+  console width.
+- **Why:** the first `Table` slice targets byte-parity on the common
+  content-fits case; the width-distribution algorithm (`_ratio`) is a task of its
+  own.
+- **Remove:** port the ratio/flex width solver + console-width fitting with the
+  Table issue (#5). Also deferred there: per-column justify/style, `show_lines`
+  row separators, titles, and footers.
+
 ## Feature-flagged divergences
 
 *None yet.* If a future feature can only be built by changing core behavior, it

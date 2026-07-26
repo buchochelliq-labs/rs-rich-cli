@@ -8,6 +8,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Table** (`table.rs`, port of `rich/table.py` core): columns, rows, box choice
+  (default `HEAVY_HEAD`), per-cell padding, bold headers, and multi-line/wrapped
+  cells. Byte-parity-tested against real rich 15.0.0 (SQUARE and HEAVY_HEAD).
+  Added `Box::get_row`/`RowLevel`, `Segment::simplify`, and the `HEAVY_HEAD` box.
 - **Word wrapping** (`wrap.rs`, port of `_wrap.divide_line` + `cells.chop_cells`):
   `Text` now wraps to the available width — breaking on words and folding
   over-long words — so `Panel`/`Padding` reflow long content instead of cropping.

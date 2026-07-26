@@ -8,7 +8,7 @@
 use std::process::ExitCode;
 
 use rich::text::Text;
-use rich::{ColorSystem, Console, Panel, Rule};
+use rich::{ColorSystem, Console, Panel, Rule, Table};
 use rich_ext::ConsoleExt;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -102,4 +102,12 @@ fn run_demo() {
         )))
         .title("panel"),
     );
+    console.print_str("");
+    let mut table = Table::new();
+    table.add_column("Feature");
+    table.add_column("Status");
+    table.add_row(&["markup", "done"]);
+    table.add_row(&["panel / rule", "done"]);
+    table.add_row(&["table", "done"]);
+    console.print(&table);
 }

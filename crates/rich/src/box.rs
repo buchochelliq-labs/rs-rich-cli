@@ -8,6 +8,17 @@
 //! (`Box.substitute` for legacy Windows / ASCII terminals) is **not** yet
 //! implemented — see docs/DIVERGENCES.md.
 
+/// Which divider a [`Box::get_row`] draws.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RowLevel {
+    /// Separator below the header (`head_row_*`).
+    Head,
+    /// Separator between body rows (`row_*`).
+    Row,
+    /// Separator above the footer (`foot_row_*`).
+    Foot,
+}
+
 /// A set of box-drawing characters. Mirrors `rich.box.Box`.
 ///
 /// The field names match upstream's 8×4 grid:
@@ -125,6 +136,44 @@ impl Box {
         parts
     }
 
+    /// A horizontal divider row between columns at a given `level`.
+    /// Port of `Box.get_row` (with `edge = true`).
+    pub fn get_row(&self, widths: &[usize], level: RowLevel) -> String {
+        let (left, horizontal, cross, right) = match level {
+            RowLevel::Head => (
+                self.head_row_left,
+                self.head_row_horizontal,
+                self.head_row_cross,
+                self.head_row_right,
+            ),
+            RowLevel::Row => (
+                self.row_left,
+                self.row_horizontal,
+                self.row_cross,
+                self.row_right,
+            ),
+            RowLevel::Foot => (
+                self.foot_row_left,
+                self.foot_row_horizontal,
+                self.foot_row_cross,
+                self.foot_row_right,
+            ),
+        };
+        let mut parts = String::new();
+        parts.push(left);
+        let last = widths.len().saturating_sub(1);
+        for (index, &width) in widths.iter().enumerate() {
+            for _ in 0..width {
+                parts.push(horizontal);
+            }
+            if index != last {
+                parts.push(cross);
+            }
+        }
+        parts.push(right);
+        parts
+    }
+
     /// The bottom border for the given column `widths`. Port of `Box.get_bottom`.
     pub fn get_bottom(&self, widths: &[usize]) -> String {
         let mut parts = String::new();
@@ -208,6 +257,9 @@ pub const SQUARE: Box = Box::parse("┌─┬┐\n│ ││\n├─┼┤\n│ 
 pub const ROUNDED: Box = Box::parse("╭─┬╮\n│ ││\n├─┼┤\n│ ││\n├─┼┤\n├─┼┤\n│ ││\n╰─┴╯\n");
 
 pub const HEAVY: Box = Box::parse("┏━┳┓\n┃ ┃┃\n┣━╋┫\n┃ ┃┃\n┣━╋┫\n┣━╋┫\n┃ ┃┃\n┗━┻┛\n");
+
+/// The default `Table` box: heavy top border + head separator, light body.
+pub const HEAVY_HEAD: Box = Box::parse("┏━┳┓\n┃ ┃┃\n┡━╇┩\n│ ││\n├─┼┤\n├─┼┤\n│ ││\n└─┴┘\n");
 
 pub const DOUBLE: Box = Box::parse("╔═╦╗\n║ ║║\n╠═╬╣\n║ ║║\n╠═╬╣\n╠═╬╣\n║ ║║\n╚═╩╝\n");
 

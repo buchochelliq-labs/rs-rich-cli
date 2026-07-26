@@ -56,6 +56,21 @@ impl Segment {
         }
     }
 
+    /// Merge adjacent segments that share the same style and control flag.
+    /// Port of `Segment.simplify`.
+    pub fn simplify(segments: &[Segment]) -> Vec<Segment> {
+        let mut out: Vec<Segment> = Vec::with_capacity(segments.len());
+        for segment in segments {
+            match out.last_mut() {
+                Some(last) if last.style == segment.style && last.control == segment.control => {
+                    last.text.push_str(&segment.text);
+                }
+                _ => out.push(segment.clone()),
+            }
+        }
+        out
+    }
+
     /// Split a flat segment stream into lines, breaking on `\n`.
     ///
     /// Port of `Segment.split_lines`. Newline characters are consumed (not kept

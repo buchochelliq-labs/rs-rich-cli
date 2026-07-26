@@ -23,7 +23,17 @@ from rich.console import Console
 from rich.padding import Padding
 from rich.panel import Panel
 from rich.rule import Rule
+from rich.table import Table
 from rich.text import Text
+
+
+def _table(box_set) -> Table:
+    table = Table(box=box_set)
+    table.add_column("Name")
+    table.add_column("Age")
+    table.add_row("Alice", "30")
+    table.add_row("Bob", "7")
+    return table
 
 # (name, console-markup) — keep in sync with the Rust test's expectations.
 CASES: list[tuple[str, str]] = [
@@ -50,6 +60,8 @@ RENDERABLE_CASES = [
     ("wrap_words", 10, Text("The quick brown fox")),
     ("wrap_fold", 6, Text("abcdefghij")),
     ("panel_wrap", 14, Panel("The quick brown fox", box=box.SQUARE)),
+    ("table_square", 40, _table(box.SQUARE)),
+    ("table_default", 40, _table(box.HEAVY_HEAD)),
 ]
 
 RENDERABLE_HEADER = """\

@@ -6,8 +6,18 @@
 //! drift from upstream fails loudly. This is the backbone of the "stay in sync"
 //! guarantee described in AGENTS.md.
 
-use rich::r#box::SQUARE;
-use rich::{ColorSystem, Console, Padding, Panel, Renderable, Rule, Text};
+use rich::r#box::{Box as BoxSet, HEAVY_HEAD, SQUARE};
+use rich::{ColorSystem, Console, Padding, Panel, Renderable, Rule, Table, Text};
+
+/// The shared sample table used by the `table_*` fixtures.
+fn sample_table(box_set: BoxSet) -> Table {
+    let mut table = Table::new().box_set(box_set);
+    table.add_column("Name");
+    table.add_column("Age");
+    table.add_row(&["Alice", "30"]);
+    table.add_row(&["Bob", "7"]);
+    table
+}
 
 fn truecolor_console(width: usize) -> Console {
     Console::builder()
@@ -39,6 +49,8 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "panel_wrap" => {
             Box::new(Panel::new(Box::new(Text::new("The quick brown fox"))).box_set(SQUARE))
         }
+        "table_square" => Box::new(sample_table(SQUARE)),
+        "table_default" => Box::new(sample_table(HEAVY_HEAD)),
         other => panic!("no builder for renderable fixture {other:?}"),
     }
 }
