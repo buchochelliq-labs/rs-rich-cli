@@ -8,6 +8,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Spinner** (`spinner.rs`, port of `rich/spinner.py` + a subset of
+  `_spinners.py`): `Spinner::render(time)` picks the animation frame for an
+  elapsed time (dots/line/dots2/arrow/simpleDots). Frames verified against real
+  rich 15.0.0. (Live-loop animation deferred.)
 - **ProgressBar** (`progress_bar.rs`, port of `rich/progress_bar.py` static
   render): determinate bars with half-cell resolution and the default
   `bar.complete`/`bar.finished`/`bar.back` styles. Byte-parity-tested against

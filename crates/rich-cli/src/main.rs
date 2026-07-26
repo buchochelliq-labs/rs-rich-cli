@@ -11,7 +11,7 @@ use rich::r#box::{DOUBLE, SQUARE};
 use rich::text::Text;
 use rich::{
     filesize, Align, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Padding, Panel,
-    ProgressBar, Renderable, Rule, Table, Tree,
+    ProgressBar, Renderable, Rule, Spinner, Table, Tree,
 };
 use rich_ext::ConsoleExt;
 
@@ -210,6 +210,17 @@ fn run_demo() {
     console.print(&Rule::new("progress bar"));
     for pct in [0.0, 33.0, 66.0, 100.0] {
         console.print(&ProgressBar::new(100.0, pct).width(48));
+    }
+
+    // Spinners — a few frames of each built-in (animation needs a Live loop).
+    console.print(&Rule::new("spinner (frames)"));
+    for name in ["dots", "line", "arrow", "simpleDots"] {
+        let spinner = Spinner::new(name);
+        let frames: String = (0..6)
+            .map(|i| console.render_to_string(&spinner.render(i as f64 * 0.15)))
+            .collect::<Vec<_>>()
+            .join(" ");
+        console.print_str(&format!("  {name:>11}: {frames}"));
     }
 
     // filesize.
