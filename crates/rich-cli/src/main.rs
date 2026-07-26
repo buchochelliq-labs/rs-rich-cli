@@ -293,18 +293,31 @@ fn run_demo() {
         console.print(&Text::new(format!("    {line}")));
     }
 
-    // Layout — split a region into ratioed rows/columns (rendered at a fixed size).
+    // Layout — split a region into ratioed rows/columns; Panel leaves expand
+    // to fill their region (rendered here at a fixed size).
     console.print(&Rule::new("layout"));
-    let leaf = |s: &str| Layout::with_renderable(text(s));
+    let panel_leaf = |title: &str, body: &str| {
+        Layout::with_renderable(Box::new(
+            Panel::new(text(body))
+                .box_set(SQUARE)
+                .title(title.to_string()),
+        ))
+    };
     let mut header = Layout::new();
-    header.split_row(vec![leaf("  ◧ left pane"), leaf("  ◨ right pane")]);
+    header.split_row(vec![
+        panel_leaf("left", "pane A"),
+        panel_leaf("right", "pane B"),
+    ]);
     let mut root = Layout::new();
-    root.split_column(vec![header, leaf("  ▔ footer (fixed size 1)").size(1)]);
+    root.split_column(vec![
+        header,
+        Layout::with_renderable(text("footer (fixed size 3)")).size(3),
+    ]);
     let grid = Console::builder()
         .force_terminal(true)
         .color_system(Some(ColorSystem::Truecolor))
         .width(48)
-        .height(4)
+        .height(7)
         .build();
     for line in grid.export_text(|c| c.print(&root)).lines() {
         console.print(&Text::new(line));

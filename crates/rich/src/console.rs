@@ -208,6 +208,22 @@ impl Console {
                 *line = Segment::adjust_line_length(line, options.max_width, Some(Style::new()));
             }
         }
+        // Honor an explicit height by cropping/padding to exactly that many rows
+        // (matching `Console.render_lines`'s height handling — used by height-
+        // aware containers such as `Panel` inside a `Layout`).
+        if let Some(height) = options.height {
+            lines.truncate(height);
+            while lines.len() < height {
+                lines.push(if pad {
+                    vec![Segment::new(
+                        " ".repeat(options.max_width),
+                        Some(Style::new()),
+                    )]
+                } else {
+                    Vec::new()
+                });
+            }
+        }
         lines
     }
 

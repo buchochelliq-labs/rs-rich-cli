@@ -68,6 +68,20 @@ def _layout_nested() -> Layout:
     return layout
 
 
+def _layout_panel() -> Layout:
+    # A single Panel leaf expands to fill the region height.
+    return Layout(Panel("hi", box=box.SQUARE))
+
+
+def _layout_row_panels() -> Layout:
+    layout = Layout()
+    layout.split_row(
+        Layout(Panel("L", box=box.SQUARE)),
+        Layout(Panel("R", box=box.SQUARE)),
+    )
+    return layout
+
+
 def _tree() -> Tree:
     tree = Tree("root")
     child_a = tree.add("child A")
@@ -214,6 +228,8 @@ LAYOUT_CASES = [
     ("layout_column", 24, 4, _layout_column()),
     ("layout_row", 24, 4, _layout_row()),
     ("layout_nested", 20, 4, _layout_nested()),
+    ("layout_panel", 12, 4, _layout_panel()),
+    ("layout_row_panels", 20, 5, _layout_row_panels()),
 ]
 
 LAYOUT_HEADER = """\

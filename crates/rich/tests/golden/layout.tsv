@@ -7,3 +7,5 @@
 layout_column	24	4	top                     \n                        \nbottom                  \n                        \n
 layout_row	24	4	L           R           \n                        \n                        \n                        \n
 layout_nested	20	4	A         B         \n                    \n                    \nbottom              \n
+layout_panel	12	4	┌──────────┐\n│ hi       │\n│          │\n└──────────┘\n
+layout_row_panels	20	5	┌────────┐┌────────┐\n│ L      ││ R      │\n│        ││        │\n│        ││        │\n└────────┘└────────┘\n

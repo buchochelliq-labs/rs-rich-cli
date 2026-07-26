@@ -89,16 +89,15 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** attach the link once `Style` grows link support, under the
   Console/text-completeness issues (#1/#2).
 
-### 11. `Layout` — empty-leaf placeholder and height-aware leaves
+### 11. `Layout` — empty-leaf placeholder
 - **Differs:** an empty `Layout` leaf renders as blank space, not upstream's
-  interactive `_Placeholder` panel (which shows the layout name/size). And a
-  height-aware container leaf (e.g. `Panel`) is padded with blank rows to fill
-  its region rather than expanding its own content to fill the height, because
-  our `Panel`/containers don't yet consume `options.height`.
+  interactive `_Placeholder` panel (which shows the layout name/size).
 - **Why:** the split/sizing/tiling core is the valuable part; the placeholder is
-  a debugging aid and height-expansion is a per-renderable concern.
-- **Remove:** add a placeholder renderable, and thread `options.height` through
-  `Panel` (and other containers), under the Layout issue (#7).
+  a debugging aid.
+- **Remove:** add a placeholder renderable under the Layout issue (#7).
+- **Resolved:** height-aware leaves — `Panel` now consumes `options.height` and
+  expands to fill its region (byte-parity), via `Console::render_lines`'s height
+  handling. Other containers can adopt the same pattern as needed.
 
 ## Feature-flagged divergences
 

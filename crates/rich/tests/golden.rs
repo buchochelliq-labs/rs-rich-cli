@@ -35,6 +35,20 @@ fn build_layout(name: &str) -> Layout {
             lay.split_column(vec![top, leaf("bottom").size(1)]);
             lay
         }
+        "layout_panel" => {
+            let panel = Panel::new(Box::new(Text::new("hi"))).box_set(SQUARE);
+            Layout::with_renderable(Box::new(panel))
+        }
+        "layout_row_panels" => {
+            let panel = |s: &str| {
+                Layout::with_renderable(Box::new(
+                    Panel::new(Box::new(Text::new(s))).box_set(SQUARE),
+                ))
+            };
+            let mut lay = Layout::new();
+            lay.split_row(vec![panel("L"), panel("R")]);
+            lay
+        }
         other => panic!("no builder for layout fixture {other:?}"),
     }
 }

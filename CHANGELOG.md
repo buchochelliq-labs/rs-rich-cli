@@ -8,6 +8,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Height-aware `Panel`** (+ `Console::render_lines` height handling): a `Panel`
+  now consumes `options.height`, expanding its content to fill the imposed height
+  (`child_height = height − 2 − padding`) so a `Panel` used as a `Layout` leaf
+  fills its region instead of being blank-padded. `render_lines` crops/pads any
+  renderable to an explicit height. Byte-parity-tested against real rich 15.0.0
+  (Panel-in-layout goldens). Resolves the height half of DIVERGENCES #11.
 - **Layout** (`layout.rs` + `ratio.rs`, port of `rich/layout.py` +
   `_ratio.ratio_resolve`): split a region into ratioed/sized rows (`split_row`)
   and columns (`split_column`), recursively; each leaf is rendered to an exact

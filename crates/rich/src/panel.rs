@@ -128,7 +128,12 @@ impl Renderable for Panel {
         let (pt, pr, pb, pl) = self.padding;
         let child_width = inner_width.saturating_sub(pl).saturating_sub(pr);
 
-        let child_options = options.update_width(child_width);
+        let mut child_options = options.update_width(child_width);
+        // When a height is imposed (e.g. as a Layout leaf), the child fills the
+        // space left by the two borders and the top/bottom padding rows, so the
+        // panel expands to exactly `height` rows. Port of `Panel`'s
+        // `child_height = height - 2` (padding here lives outside the child).
+        child_options.height = options.height.map(|h| h.saturating_sub(2 + pt + pb));
         let child_lines = console.render_lines(self.child.as_ref(), &child_options, true);
 
         let border = Some(self.border_style.clone());
