@@ -8,6 +8,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **ProgressBar** (`progress_bar.rs`, port of `rich/progress_bar.py` static
+  render): determinate bars with half-cell resolution and the default
+  `bar.complete`/`bar.finished`/`bar.back` styles. Byte-parity-tested against
+  real rich 15.0.0. (Indeterminate "pulse" deferred.)
 - **Title alignment** for `Rule` and `Panel` (`HorizontalAlign::{Left,Center,Right}`,
   shared with `Align`): `Rule::align` and `Panel::title_align`. Byte-parity-tested
   against real rich 15.0.0.

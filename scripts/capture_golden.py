@@ -25,6 +25,7 @@ from rich.console import Console
 from rich.constrain import Constrain
 from rich.padding import Padding
 from rich.panel import Panel
+from rich.progress_bar import ProgressBar
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
@@ -86,6 +87,10 @@ RENDERABLE_CASES = [
     ("constrain_panel", 20, Constrain(Panel("hi", box=box.SQUARE), width=10)),
     ("columns_two_rows", 20, Columns(["one", "two", "three", "four", "five", "six"])),
     ("columns_one_row", 30, Columns(["alpha", "beta", "gamma", "delta"])),
+    ("bar_empty", 20, ProgressBar(total=100, completed=0, width=20)),
+    ("bar_half", 20, ProgressBar(total=100, completed=50, width=20)),
+    ("bar_third", 20, ProgressBar(total=100, completed=33, width=20)),
+    ("bar_full", 20, ProgressBar(total=100, completed=100, width=20)),
 ]
 
 RENDERABLE_HEADER = """\

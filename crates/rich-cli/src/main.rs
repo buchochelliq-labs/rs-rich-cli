@@ -11,7 +11,7 @@ use rich::r#box::{DOUBLE, SQUARE};
 use rich::text::Text;
 use rich::{
     filesize, Align, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Padding, Panel,
-    Renderable, Rule, Table, Tree,
+    ProgressBar, Renderable, Rule, Table, Tree,
 };
 use rich_ext::ConsoleExt;
 
@@ -169,6 +169,7 @@ fn run_demo() {
         ("Columns", "columns", "✓"),
         ("Table", "table", "✓"),
         ("Tree", "tree", "✓"),
+        ("ProgressBar", "progress_bar", "✓"),
     ] {
         table.add_row(&[renderable, module, parity]);
     }
@@ -204,6 +205,12 @@ fn run_demo() {
     tree.add("crates/rich-ext (our extensions)");
     tree.add("crates/rich-cli (this binary)");
     console.print(&tree);
+
+    // Progress bars at a few completion levels (0 → 100%).
+    console.print(&Rule::new("progress bar"));
+    for pct in [0.0, 33.0, 66.0, 100.0] {
+        console.print(&ProgressBar::new(100.0, pct).width(48));
+    }
 
     // filesize.
     console.print(&Rule::new("filesize"));

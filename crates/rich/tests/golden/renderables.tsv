@@ -30,3 +30,7 @@ align_center_odd	21	         hi          \n
 constrain_panel	20	┌────────┐\n│ hi     │\n└────────┘\n
 columns_two_rows	20	one  two three four\nfive six           \n
 columns_one_row	30	alpha beta gamma delta\n
+bar_empty	20	\x1b[38;5;237m━━━━━━━━━━━━━━━━━━━━\x1b[0m
+bar_half	20	\x1b[38;2;249;38;114m━━━━━━━━━━\x1b[0m\x1b[38;5;237m╺\x1b[0m\x1b[38;5;237m━━━━━━━━━\x1b[0m
+bar_third	20	\x1b[38;2;249;38;114m━━━━━━\x1b[0m\x1b[38;2;249;38;114m╸\x1b[0m\x1b[38;5;237m━━━━━━━━━━━━━\x1b[0m
+bar_full	20	\x1b[38;2;114;156;31m━━━━━━━━━━━━━━━━━━━━\x1b[0m

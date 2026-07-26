@@ -8,8 +8,8 @@
 
 use rich::r#box::{Box as BoxSet, HEAVY_HEAD, SQUARE};
 use rich::{
-    Align, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Padding, Panel, Renderable,
-    Rule, Table, Text, Tree,
+    Align, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Padding, Panel, ProgressBar,
+    Renderable, Rule, Table, Text, Tree,
 };
 
 fn columns(items: &[&str]) -> Columns {
@@ -91,6 +91,10 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         )),
         "columns_two_rows" => Box::new(columns(&["one", "two", "three", "four", "five", "six"])),
         "columns_one_row" => Box::new(columns(&["alpha", "beta", "gamma", "delta"])),
+        "bar_empty" => Box::new(ProgressBar::new(100.0, 0.0).width(20)),
+        "bar_half" => Box::new(ProgressBar::new(100.0, 50.0).width(20)),
+        "bar_third" => Box::new(ProgressBar::new(100.0, 33.0).width(20)),
+        "bar_full" => Box::new(ProgressBar::new(100.0, 100.0).width(20)),
         other => panic!("no builder for renderable fixture {other:?}"),
     }
 }
@@ -149,11 +153,13 @@ fn renderables_parity() {
                 .unwrap_or_else(|| panic!("line {}: missing expected", index + 1)),
         );
         let console = truecolor_console(width);
-        let got = console.render_export(build_renderable(name).as_ref());
-        assert_eq!(
-            got,
-            expected,
-            "renderable case {name:?} (line {}) diverged from upstream rich",
+        // Most renderables print with a trailing newline, but a few (e.g.
+        // ProgressBar) do not — accept either form.
+        let got = console.render_to_string(build_renderable(name).as_ref());
+        let matches = expected == got || expected == format!("{got}\n");
+        assert!(
+            matches,
+            "renderable case {name:?} (line {}) diverged from upstream rich\n got: {got:?}\n exp: {expected:?}",
             index + 1
         );
         checked += 1;
