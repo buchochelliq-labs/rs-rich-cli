@@ -8,6 +8,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Table title / caption / show_lines**: `Table::title` and `caption` render
+  centered above/below the table (italic / dim-italic), and `show_lines` draws a
+  separator between body rows. Byte-parity-tested against real rich 15.0.0.
 - **Table `expand` + per-column justify**: `Table::expand` fills the available
   width (distributing leftover space via `ratio_distribute`), and
   `Table::add_column_justify` justifies a column's cells left/center/right.

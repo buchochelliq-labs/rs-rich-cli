@@ -63,6 +63,27 @@ fn expand_table() -> Table {
     table
 }
 
+fn title_table() -> Table {
+    let mut table = Table::new()
+        .box_set(SQUARE)
+        .title("Users")
+        .caption("2 rows");
+    table.add_column("Name");
+    table.add_column("Age");
+    table.add_row(&["Alice", "30"]);
+    table.add_row(&["Bob", "7"]);
+    table
+}
+
+fn lines_table() -> Table {
+    let mut table = Table::new().box_set(SQUARE).show_lines(true);
+    table.add_column("Name");
+    table.add_column("Age");
+    table.add_row(&["Alice", "30"]);
+    table.add_row(&["Bob", "7"]);
+    table
+}
+
 fn justify_table() -> Table {
     let mut table = Table::new().box_set(SQUARE);
     table.add_column_justify("L", Justify::Left);
@@ -143,6 +164,8 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "table_shrink" => Box::new(shrink_table()),
         "table_expand" => Box::new(expand_table()),
         "table_justify" => Box::new(justify_table()),
+        "table_title" => Box::new(title_table()),
+        "table_lines" => Box::new(lines_table()),
         "tree_nested" => Box::new(sample_tree()),
         "align_center" | "align_center_odd" => Box::new(Align::center(Box::new(Text::new("hi")))),
         "align_right" => Box::new(Align::right(Box::new(Text::new("hi")))),

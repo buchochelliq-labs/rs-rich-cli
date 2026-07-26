@@ -167,7 +167,7 @@ fn run_demo() {
 
     // Table.
     console.print(&Rule::new("table"));
-    let mut table = Table::new();
+    let mut table = Table::new().title("ported renderables");
     table.add_column("Renderable");
     table.add_column("Module");
     table.add_column_justify("Parity", Justify::Center);

@@ -3,11 +3,11 @@
 //! Port of upstream `rich/table.py` (core subset). A [`Table`] lays out columns
 //! and rows inside a box, sizing each column to its widest cell.
 //!
-//! Slice scope: headers, rows, box choice, per-cell padding, header styling,
-//! multi-line/wrapped cells, and **shrink-to-fit** column widths (the widest
-//! columns collapse + wrap when the table overflows the width). Deferred
-//! (tracked in the Table issue): `expand`, explicit `ratio`/`width`/min/max,
-//! `no_wrap`, per-column justify/style, `show_lines`, titles, and footers.
+//! Scope: headers, rows, box choice, per-cell padding, header styling,
+//! multi-line/wrapped cells, **shrink-to-fit** + **expand** column widths,
+//! per-column justify, title, caption, and `show_lines`. Deferred (tracked in
+//! the Table issue): explicit `ratio`/`width`/min/max, `no_wrap`, and per-column
+//! style.
 
 use crate::cells::cell_len;
 use crate::console::{Console, ConsoleOptions, Justify};
@@ -29,7 +29,10 @@ pub struct Table {
     rows: Vec<Vec<String>>,
     box_set: BoxSet,
     show_header: bool,
+    show_lines: bool,
     expand: bool,
+    title: Option<String>,
+    caption: Option<String>,
     padding: (usize, usize, usize, usize),
     header_style: Style,
     border_style: Style,
@@ -42,7 +45,10 @@ impl Default for Table {
             rows: Vec::new(),
             box_set: HEAVY_HEAD,
             show_header: true,
+            show_lines: false,
             expand: false,
+            title: None,
+            caption: None,
             padding: (0, 1, 0, 1),
             header_style: Style::parse("bold").expect("valid built-in style"),
             border_style: Style::new(),
@@ -70,6 +76,24 @@ impl Table {
     /// Expand the table to fill the available width.
     pub fn expand(mut self, expand: bool) -> Self {
         self.expand = expand;
+        self
+    }
+
+    /// Draw a separator line between each body row.
+    pub fn show_lines(mut self, show: bool) -> Self {
+        self.show_lines = show;
+        self
+    }
+
+    /// A centered title rendered above the table.
+    pub fn title(mut self, title: impl Into<String>) -> Self {
+        self.title = Some(title.into());
+        self
+    }
+
+    /// A centered caption rendered below the table.
+    pub fn caption(mut self, caption: impl Into<String>) -> Self {
+        self.caption = Some(caption.into());
         self
     }
 
@@ -239,7 +263,17 @@ impl Renderable for Table {
             .collect();
         let border = Some(self.border_style.clone());
 
+        // Full table width (for centering title/caption): columns + borders.
+        let table_width: usize = rendered_widths.iter().sum::<usize>() + extra_width;
+
         let mut lines: Vec<Vec<Segment>> = Vec::new();
+
+        // Title, centered above the table.
+        if let Some(title) = &self.title {
+            let style = Style::parse("italic").expect("valid built-in style");
+            lines.push(vec![Segment::new(center(title, table_width), Some(style))]);
+        }
+
         lines.push(vec![Segment::new(
             self.box_set.get_top(&rendered_widths),
             border.clone(),
@@ -270,14 +304,30 @@ impl Renderable for Table {
             )]);
         }
 
-        for row in &self.rows {
+        let row_last = self.rows.len().saturating_sub(1);
+        for (index, row) in self.rows.iter().enumerate() {
             lines.extend(self.render_row(row, &content_widths, &Style::new(), body_edges));
+            if self.show_lines && index != row_last {
+                lines.push(vec![Segment::new(
+                    self.box_set.get_row(&rendered_widths, RowLevel::Row),
+                    border.clone(),
+                )]);
+            }
         }
 
         lines.push(vec![Segment::new(
             self.box_set.get_bottom(&rendered_widths),
             border.clone(),
         )]);
+
+        // Caption, centered below the table.
+        if let Some(caption) = &self.caption {
+            let style = Style::parse("dim italic").expect("valid built-in style");
+            lines.push(vec![Segment::new(
+                center(caption, table_width),
+                Some(style),
+            )]);
+        }
 
         // Join visual lines with newline segments (no trailing newline).
         let mut segments = Vec::new();
@@ -290,6 +340,14 @@ impl Renderable for Table {
         }
         segments
     }
+}
+
+/// Center `text` within `width` cells (floor-left), padding with spaces.
+fn center(text: &str, width: usize) -> String {
+    let excess = width.saturating_sub(cell_len(text));
+    let left = excess / 2;
+    let right = excess - left;
+    format!("{}{}{}", " ".repeat(left), text, " ".repeat(right))
 }
 
 /// Round half to even (banker's rounding), matching Python's `round`.

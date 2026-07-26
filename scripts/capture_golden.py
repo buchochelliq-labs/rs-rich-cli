@@ -75,6 +75,24 @@ def _expand_table() -> Table:
     return table
 
 
+def _title_table() -> Table:
+    table = Table(box=box.SQUARE, title="Users", caption="2 rows")
+    table.add_column("Name")
+    table.add_column("Age")
+    table.add_row("Alice", "30")
+    table.add_row("Bob", "7")
+    return table
+
+
+def _lines_table() -> Table:
+    table = Table(box=box.SQUARE, show_lines=True)
+    table.add_column("Name")
+    table.add_column("Age")
+    table.add_row("Alice", "30")
+    table.add_row("Bob", "7")
+    return table
+
+
 def _justify_table() -> Table:
     table = Table(box=box.SQUARE)
     table.add_column("L", justify="left")
@@ -128,6 +146,8 @@ RENDERABLE_CASES = [
     ("table_shrink", 30, _shrink_table()),
     ("table_expand", 30, _expand_table()),
     ("table_justify", 30, _justify_table()),
+    ("table_title", 30, _title_table()),
+    ("table_lines", 30, _lines_table()),
     ("tree_nested", 40, _tree()),
     ("align_center", 20, Align.center("hi")),
     ("align_right", 20, Align.right("hi")),
