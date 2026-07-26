@@ -19,6 +19,7 @@ use crate::text::Text;
 
 const CODE_STYLE: &str = "bold cyan on black"; // markdown.code
 const BULLET: &str = " \u{2022} "; // " • ", markdown.item.bullet = bold
+const QUOTE_PREFIX: &str = "\u{258c} "; // "▌ ", markdown.block_quote = magenta
 
 /// A parsed Markdown block.
 enum Block {
@@ -30,6 +31,10 @@ enum Block {
         start: u64,
         items: Vec<Text>,
     },
+    /// A block quote; each paragraph is a magenta, left-justified `Text`.
+    Quote(Vec<Text>),
+    /// A thematic break (horizontal rule).
+    Rule,
 }
 
 /// A rendered Markdown document. Mirrors `rich.markdown.Markdown`.
@@ -94,9 +99,18 @@ fn parse(source: &str) -> Vec<Block> {
     let mut emphasis = 0usize;
     // (ordered, start_number, items) while inside a list.
     let mut list: Option<(bool, u64, Vec<Text>)> = None;
+    // Collected quote paragraphs while inside a block quote.
+    let mut quote: Option<Vec<Text>> = None;
 
     for event in Parser::new(source) {
         match event {
+            Event::Rule => blocks.push(Block::Rule),
+            Event::Start(Tag::BlockQuote(_)) => quote = Some(Vec::new()),
+            Event::End(TagEnd::BlockQuote(_)) => {
+                if let Some(paragraphs) = quote.take() {
+                    blocks.push(Block::Quote(paragraphs));
+                }
+            }
             Event::Start(Tag::List(first)) => {
                 list = Some((first.is_some(), first.unwrap_or(1), Vec::new()))
             }
@@ -135,12 +149,19 @@ fn parse(source: &str) -> Vec<Block> {
             // In a list, the item text is finalized at End(Item) instead.
             Event::End(TagEnd::Paragraph) | Event::End(TagEnd::Heading(_)) if list.is_none() => {
                 if let Some(mut text) = current.take() {
-                    if let Some(style) = &heading_style {
-                        let end = text.plain().len();
-                        text.stylize(0, end, style.clone());
+                    if let Some(paragraphs) = quote.as_mut() {
+                        // Quote paragraph: magenta base so its padding is magenta too.
+                        text.set_base_style(Style::parse("magenta").expect("valid style"));
+                        text.set_justify(Justify::Left);
+                        paragraphs.push(text);
+                    } else {
+                        if let Some(style) = &heading_style {
+                            let end = text.plain().len();
+                            text.stylize(0, end, style.clone());
+                        }
+                        text.set_justify(justify);
+                        blocks.push(Block::Text(text));
                     }
-                    text.set_justify(justify);
-                    blocks.push(Block::Text(text));
                 }
                 strong = 0;
                 emphasis = 0;
@@ -182,8 +203,8 @@ impl Renderable for Markdown {
         let mut lines: Vec<Vec<Segment>> = Vec::new();
 
         for (index, block) in self.blocks.iter().enumerate() {
-            // A blank line precedes every non-first block, and every list.
-            if index > 0 || matches!(block, Block::List { .. }) {
+            // A blank line precedes every non-first block, and every list/quote.
+            if index > 0 || matches!(block, Block::List { .. } | Block::Quote(_)) {
                 lines.push(Vec::new());
             }
             match block {
@@ -219,6 +240,26 @@ impl Renderable for Markdown {
                             lines.push(row);
                         }
                     }
+                }
+                Block::Quote(paragraphs) => {
+                    let prefix_style = Style::parse("magenta").expect("valid style");
+                    // Upstream renders quote content at `max_width - 4`.
+                    let content_width = width.saturating_sub(4);
+                    for paragraph in paragraphs {
+                        let quote_lines = paragraph.render_lines(base, Some(content_width));
+                        for line in quote_lines {
+                            let mut row = vec![Segment::new(
+                                QUOTE_PREFIX.to_string(),
+                                Some(prefix_style.clone()),
+                            )];
+                            row.extend(line);
+                            lines.push(row);
+                        }
+                    }
+                }
+                Block::Rule => {
+                    let style = Style::parse("dim").expect("valid style");
+                    lines.push(vec![Segment::new("-".repeat(width), Some(style))]);
                 }
             }
         }
@@ -284,6 +325,22 @@ mod tests {
         assert_eq!(
             render("1. first\n2. second"),
             "\n\x1b[36m 1 \x1b[0mfirst            \n\x1b[36m 2 \x1b[0msecond           "
+        );
+    }
+
+    #[test]
+    fn block_quote() {
+        assert_eq!(
+            render("> quoted text"),
+            "\n\x1b[35m\u{258c} \x1b[0m\x1b[35mquoted text\x1b[0m\x1b[35m     \x1b[0m"
+        );
+    }
+
+    #[test]
+    fn thematic_break() {
+        assert_eq!(
+            render("a\n\n---\n\nb"),
+            "a                   \n\n\x1b[2m--------------------\x1b[0m\n\nb                   "
         );
     }
 }

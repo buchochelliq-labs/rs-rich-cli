@@ -167,6 +167,7 @@ RENDERABLE_CASES = [
     ("json_object", 40, JSON(JSON_SAMPLE)),
     ("markdown_doc", 24, Markdown("# Title\n\nHello **bold** and *italic* and `code`.")),
     ("markdown_list", 20, Markdown("Items:\n\n- one\n- two\n\n1. a\n2. b")),
+    ("markdown_quote_hr", 20, Markdown("Note:\n\n> important\n\n---\n\ndone")),
     ("hbar_full", 20, HBar(size=100, begin=0, end=100, width=20)),
     ("hbar_mid", 20, HBar(size=100, begin=25, end=75, width=20)),
     ("hbar_edge", 20, HBar(size=100, begin=0, end=33, width=20)),

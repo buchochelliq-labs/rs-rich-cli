@@ -71,9 +71,11 @@ Format: what differs · why · how to remove it (if temporary).
   reconcile float formatting, under the JSON issue (#10).
 
 ### 9. `Markdown` covers a subset of elements
-- **Differs:** paragraphs, ATX headings (h1–h6), bullet + ordered lists, and
-  inline strong/emphasis/code are rendered (byte-parity); code blocks, block
-  quotes, links, thematic breaks, and tables are not yet handled.
+- **Differs:** paragraphs, ATX headings (h1–h6), bullet + ordered lists, block
+  quotes, thematic breaks (hr), and inline strong/emphasis/code are rendered
+  (byte-parity); code blocks, links, and tables are not yet handled. Also, a
+  document that *ends* with a thematic break omits a trailing blank line that
+  upstream emits.
 - **Why:** these are the common elements; the rest each need their own renderer.
 - **Remove:** port the remaining `markdown.py` element types under the Markdown
   issue (#9).

@@ -185,6 +185,7 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
             "# Title\n\nHello **bold** and *italic* and `code`.",
         )),
         "markdown_list" => Box::new(Markdown::new("Items:\n\n- one\n- two\n\n1. a\n2. b")),
+        "markdown_quote_hr" => Box::new(Markdown::new("Note:\n\n> important\n\n---\n\ndone")),
         "hbar_full" => Box::new(Bar::new(100.0, 0.0, 100.0).width(20)),
         "hbar_mid" => Box::new(Bar::new(100.0, 25.0, 75.0).width(20)),
         "hbar_edge" => Box::new(Bar::new(100.0, 0.0, 33.0).width(20)),
