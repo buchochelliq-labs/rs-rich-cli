@@ -8,9 +8,13 @@
 
 use rich::r#box::{Box as BoxSet, HEAVY_HEAD, SQUARE};
 use rich::{
-    Align, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Padding, Panel, ProgressBar,
-    Renderable, Rule, Table, Text, Tree,
+    Align, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Json, Padding, Panel,
+    ProgressBar, Renderable, Rule, Table, Text, Tree,
 };
+
+/// Must match `JSON_SAMPLE` in scripts/capture_golden.py.
+const JSON_SAMPLE: &str =
+    r#"{"name": "Alice", "age": 30, "admin": true, "tags": ["a", "b"], "meta": null}"#;
 
 fn columns(items: &[&str]) -> Columns {
     Columns::new(items.iter().map(|s| s.to_string()).collect())
@@ -112,6 +116,7 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "bar_half" => Box::new(ProgressBar::new(100.0, 50.0).width(20)),
         "bar_third" => Box::new(ProgressBar::new(100.0, 33.0).width(20)),
         "bar_full" => Box::new(ProgressBar::new(100.0, 100.0).width(20)),
+        "json_object" => Box::new(Json::new(JSON_SAMPLE).expect("valid JSON")),
         other => panic!("no builder for renderable fixture {other:?}"),
     }
 }

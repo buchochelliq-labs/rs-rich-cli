@@ -10,8 +10,8 @@ use std::process::ExitCode;
 use rich::r#box::{DOUBLE, SQUARE};
 use rich::text::Text;
 use rich::{
-    filesize, Align, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Padding, Panel,
-    ProgressBar, Renderable, Rule, Spinner, Table, Tree,
+    filesize, Align, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Json, Padding,
+    Panel, ProgressBar, Renderable, Rule, Spinner, Table, Tree,
 };
 use rich_ext::ConsoleExt;
 
@@ -215,6 +215,14 @@ fn run_demo() {
     console.print(&Rule::new("progress bar"));
     for pct in [0.0, 33.0, 66.0, 100.0] {
         console.print(&ProgressBar::new(100.0, pct).width(48));
+    }
+
+    // JSON — pretty-printed and highlighted.
+    console.print(&Rule::new("json"));
+    if let Ok(json) = Json::new(
+        r#"{"port": "rich", "version": "15.0.0", "parity": true, "widgets": ["panel", "table", "tree"]}"#,
+    ) {
+        console.print(&json);
     }
 
     // Spinners — a few frames of each built-in (animation needs a Live loop).

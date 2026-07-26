@@ -20,6 +20,8 @@ rich-ext = { path = "crates/rich-ext", version = "0.1.0" }
 # Third-party (kept lean for the first slice)
 unicode-width = "0.2"
 terminal_size = "0.4"
+# preserve_order keeps object keys in input order, matching Python's json module.
+serde_json = { version = "1", features = ["preserve_order"] }
 
 # Core stays safe by default; the future Windows-console port may opt back in
 # per-item with an explicit `#[allow(unsafe_code)]` + justification.

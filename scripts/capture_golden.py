@@ -23,9 +23,15 @@ from rich.align import Align
 from rich.columns import Columns
 from rich.console import Console
 from rich.constrain import Constrain
+from rich.json import JSON
 from rich.padding import Padding
 from rich.panel import Panel
 from rich.progress_bar import ProgressBar
+
+JSON_SAMPLE = (
+    '{"name": "Alice", "age": 30, "admin": true, '
+    '"tags": ["a", "b"], "meta": null}'
+)
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
@@ -94,6 +100,7 @@ RENDERABLE_CASES = [
     ("bar_half", 20, ProgressBar(total=100, completed=50, width=20)),
     ("bar_third", 20, ProgressBar(total=100, completed=33, width=20)),
     ("bar_full", 20, ProgressBar(total=100, completed=100, width=20)),
+    ("json_object", 40, JSON(JSON_SAMPLE)),
 ]
 
 RENDERABLE_HEADER = """\

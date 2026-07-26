@@ -8,6 +8,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **JSON** (`json.rs`, port of `rich/json.py`): parses a JSON string (via
+  `serde_json` with `preserve_order`) and pretty-prints it with 2-space indent
+  and the default highlight colors (bold braces, bold-blue keys, green strings,
+  bold-cyan numbers, italic bools/null). Byte-parity-tested against real rich
+  15.0.0 for ASCII documents. First core third-party content dependency.
 - **Panel subtitle**: `Panel::subtitle` / `subtitle_align` (drawn into the bottom
   border, mirroring title alignment). Byte-parity-tested against real rich 15.0.0.
 - **Spinner** (`spinner.rs`, port of `rich/spinner.py` + a subset of

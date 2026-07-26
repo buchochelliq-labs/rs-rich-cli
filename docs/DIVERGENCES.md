@@ -68,6 +68,16 @@ Format: what differs · why · how to remove it (if temporary).
   Table issue (#5). Also deferred there: per-column justify/style, `show_lines`
   row separators, titles, and footers.
 
+### 8. `Json` does not escape non-ASCII (`ensure_ascii`)
+- **Differs:** Python's `json.dumps` defaults to `ensure_ascii=True`, escaping
+  non-ASCII as `\uXXXX`; our `Json` (via `serde_json`) emits UTF-8 directly.
+  Exotic float formatting may also differ from CPython's `repr`.
+- **Why:** the first `Json` slice targets byte-parity on ASCII documents (the
+  common case); matching CPython's escaping/float formatting exactly is a
+  follow-up.
+- **Remove:** post-process the serialized string to `\u`-escape non-ASCII, and
+  reconcile float formatting, under the JSON issue (#10).
+
 ## Feature-flagged divergences
 
 *None yet.* If a future feature can only be built by changing core behavior, it

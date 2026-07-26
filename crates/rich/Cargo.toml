@@ -20,3 +20,4 @@ workspace = true
 [dependencies]
 unicode-width.workspace = true
 terminal_size.workspace = true
+serde_json.workspace = true

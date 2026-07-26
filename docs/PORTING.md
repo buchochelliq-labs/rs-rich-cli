@@ -63,7 +63,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 |-------------------|-----------|:------:|-------|
 | `syntax.py` | `syntax.rs` | ⬜ | evaluate `syntect` for Pygments-equivalent |
 | `markdown.py` | `markdown.rs` | ⬜ | needs a CommonMark parser |
-| `json.py` | `json.rs` | ⬜ | |
+| `json.py` | `json.rs` | 🟡 | ✅ |
 | `pretty.py`, `repr.py`, `_inspect.py` | resp. | ⬜ | |
 | `traceback.py` | `traceback.rs` | ⬜ | |
 | `logging.py`, `_log_render.py` | resp. | ⬜ | |

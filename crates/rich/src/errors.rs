@@ -15,6 +15,8 @@ pub enum RichError {
     StyleSyntax(String),
     /// Console markup was malformed (`rich.errors.MarkupError`).
     Markup(String),
+    /// A JSON string could not be parsed (used by `rich.json.JSON`).
+    Json(String),
 }
 
 impl fmt::Display for RichError {
@@ -23,6 +25,7 @@ impl fmt::Display for RichError {
             RichError::ColorParse(msg) => write!(f, "color parse error: {msg}"),
             RichError::StyleSyntax(msg) => write!(f, "style syntax error: {msg}"),
             RichError::Markup(msg) => write!(f, "markup error: {msg}"),
+            RichError::Json(msg) => write!(f, "json parse error: {msg}"),
         }
     }
 }
