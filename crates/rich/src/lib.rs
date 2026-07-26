@@ -16,13 +16,17 @@
 //! The remaining modules are tracked as roadmap issues; see `docs/PORTING.md`
 //! for the module map and per-module parity status.
 
+pub mod r#box;
 pub mod cells;
 pub mod color;
 pub mod console;
 pub mod errors;
 pub mod markup;
 pub mod measure;
+pub mod padding;
+pub mod panel;
 pub mod protocol;
+pub mod rule;
 pub mod segment;
 pub mod style;
 pub mod text;
@@ -30,9 +34,12 @@ pub mod theme;
 
 // A small, curated prelude mirroring the most-used names from `rich`'s top level.
 pub use crate::color::{Color, ColorSystem, ColorTriplet};
-pub use crate::console::Console;
+pub use crate::console::{Console, ConsoleOptions, Justify};
 pub use crate::errors::{Result, RichError};
+pub use crate::padding::Padding;
+pub use crate::panel::Panel;
 pub use crate::protocol::{Highlighter, Renderable};
+pub use crate::rule::Rule;
 pub use crate::segment::Segment;
 pub use crate::style::Style;
 pub use crate::text::Text;

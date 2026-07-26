@@ -39,6 +39,25 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** not planned unless a public API needs code-point indexing; if so,
   expose a char-index helper without changing the internal representation.
 
+### 5. No word-wrapping in `Text` yet
+- **Differs:** upstream wraps `Text` to the available width; our `Text` does not
+  yet wrap. Container renderables (`Panel`, `Padding`) pad/crop child lines to fit
+  via `Console::render_lines`, so boxes stay intact, but over-long content is
+  cropped rather than wrapped.
+- **Why:** the first layout slice targets byte-parity on fitting content; faithful
+  wrapping (`_wrap.py`) is a focused task of its own.
+- **Remove:** implement wrapping in `text.rs` (issue #2), then have `Text` honor
+  `options.max_width`.
+
+### 6. No platform box substitution
+- **Differs:** upstream's `Box.substitute` swaps box-drawing glyphs for ASCII (or
+  a safe subset) on legacy Windows / non-UTF-8 terminals. We always emit the
+  requested glyphs.
+- **Why:** keeps output deterministic and platform-independent for the first
+  layout slice (and for golden fixtures, which are captured in UTF-8 mode).
+- **Remove:** port `Box.substitute` + the `legacy_windows`/`ascii` console flags
+  with the Windows-console issue (#12).
+
 ## Feature-flagged divergences
 
 *None yet.* If a future feature can only be built by changing core behavior, it

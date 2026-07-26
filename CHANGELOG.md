@@ -8,6 +8,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Layout primitives**: width-aware render model (`ConsoleOptions`,
+  `Console::render_lines`, `Segment::split_lines`/`adjust_line_length`) plus the
+  first composite renderables — `box` (ROUNDED/SQUARE/HEAVY/DOUBLE/MINIMAL/ASCII),
+  `Rule`, `Padding`, and `Panel` — all byte-parity-tested against real rich 15.0.0.
+- Golden harness extended with a renderables fixture (`renderables.tsv`), captured
+  in Python UTF-8 mode for deterministic box glyphs.
+
+### Foundation
 - **Workspace scaffold**: `rich` (core, mirroring upstream **15.0.0**),
   `rich-ext` (`0.1.0`), and `rich-cli` (mirroring upstream **1.8.1**).
 - **First vertical slice** of the `rich` core, parity-tested against real

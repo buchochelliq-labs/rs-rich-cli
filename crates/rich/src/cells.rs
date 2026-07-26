@@ -17,6 +17,16 @@ pub fn char_cell_width(c: char) -> usize {
     UnicodeWidthChar::width(c).unwrap_or(0)
 }
 
+/// Crop `text` to at most `width` cells, never padding. Unlike [`set_cell_size`]
+/// this leaves shorter text unchanged. Mirrors `Text.truncate` at the cell level.
+pub fn truncate(text: &str, width: usize) -> String {
+    if cell_len(text) <= width {
+        text.to_string()
+    } else {
+        set_cell_size(text, width)
+    }
+}
+
 /// Truncate or right-pad `text` (with spaces) so it occupies exactly `total`
 /// cells. Port of `set_cell_size`.
 pub fn set_cell_size(text: &str, total: usize) -> String {

@@ -1,0 +1,16 @@
+# Golden parity fixtures for RENDERABLES — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<width>\t<expected-ansi>
+# `\x1b` = ESC byte, `\n` = newline (both unescaped by the test).
+# Console: force_terminal=True, color_system="truecolor", highlight=False,
+#          safe_box=False, legacy_windows=False.
+# The Rust test builds the renderable matching each <name>; keep them in sync.
+rule_plain	20	\x1b[92m────────────────────\x1b[0m\n
+rule_title	20	\x1b[92m──────── \x1b[0mHi\x1b[92m ────────\x1b[0m\n
+rule_title_odd	21	\x1b[92m──────── \x1b[0mHi\x1b[92m ─────────\x1b[0m\n
+panel_plain	20	╭──────────────────╮\n│ hello            │\n╰──────────────────╯\n
+panel_title	20	╭─────── T ────────╮\n│ hello            │\n╰──────────────────╯\n
+panel_square	20	┌──────────────────┐\n│ hi               │\n└──────────────────┘\n
+padding_1_2	10	          \n  hi      \n          \n
+padding_0_1	10	 hi       \n

@@ -55,6 +55,71 @@ impl Segment {
             cell_len(&self.text)
         }
     }
+
+    /// Split a flat segment stream into lines, breaking on `\n`.
+    ///
+    /// Port of `Segment.split_lines`. Newline characters are consumed (not kept
+    /// in the output); a trailing newline yields a final empty line only if
+    /// there was content after the last break.
+    pub fn split_lines(segments: &[Segment]) -> Vec<Vec<Segment>> {
+        let mut lines: Vec<Vec<Segment>> = Vec::new();
+        let mut current: Vec<Segment> = Vec::new();
+        for segment in segments {
+            if segment.control || !segment.text.contains('\n') {
+                if !segment.text.is_empty() {
+                    current.push(segment.clone());
+                }
+                continue;
+            }
+            let mut parts = segment.text.split('\n').peekable();
+            while let Some(part) = parts.next() {
+                if !part.is_empty() {
+                    current.push(Segment::new(part, segment.style.clone()));
+                }
+                if parts.peek().is_some() {
+                    // The break between parts closes the current line.
+                    lines.push(std::mem::take(&mut current));
+                }
+            }
+        }
+        if !current.is_empty() {
+            lines.push(current);
+        }
+        lines
+    }
+
+    /// Pad (with a styled space run) or crop a single line to exactly `length`
+    /// cells. Port of `Segment.adjust_line_length`.
+    pub fn adjust_line_length(
+        line: &[Segment],
+        length: usize,
+        style: Option<Style>,
+    ) -> Vec<Segment> {
+        let line_length: usize = line.iter().map(Segment::cell_length).sum();
+        if line_length == length {
+            line.to_vec()
+        } else if line_length < length {
+            let mut new_line = line.to_vec();
+            new_line.push(Segment::new(" ".repeat(length - line_length), style));
+            new_line
+        } else {
+            // Crop from the left, honoring cell widths.
+            let mut new_line: Vec<Segment> = Vec::new();
+            let mut remaining = length;
+            for segment in line {
+                let seg_len = segment.cell_length();
+                if seg_len <= remaining {
+                    new_line.push(segment.clone());
+                    remaining -= seg_len;
+                } else {
+                    let cropped = crate::cells::set_cell_size(&segment.text, remaining);
+                    new_line.push(Segment::new(cropped, segment.style.clone()));
+                    break;
+                }
+            }
+            new_line
+        }
+    }
 }
 
 #[cfg(test)]

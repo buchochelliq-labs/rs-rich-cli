@@ -8,7 +8,7 @@
 use std::process::ExitCode;
 
 use rich::text::Text;
-use rich::{ColorSystem, Console};
+use rich::{ColorSystem, Console, Panel, Rule};
 use rich_ext::ConsoleExt;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -89,9 +89,17 @@ fn run_demo() {
         .build();
     console.install_extensions();
 
+    console.print(&Rule::new("rs-rich-cli"));
     console.print_str("[bold magenta]rs-rich-cli[/] — a Rust port of [italic]rich[/]");
     console.print_str("");
     console.print_str("Markup:   [bold]bold[/], [italic]italic[/], [red]red[/], [green]green on[/] [white on blue]bg[/]");
     console.print_str("Theme:    [error]error[/], [warning]warning[/], [info]info[/]");
     console.print_str("Extension: numbers like 3.14 and 2026 are auto-highlighted");
+    console.print_str("");
+    console.print(
+        &Panel::new(Box::new(Text::new(
+            "Panels, rules, and padding now render.",
+        )))
+        .title("panel"),
+    );
 }

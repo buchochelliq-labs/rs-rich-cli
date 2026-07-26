@@ -56,6 +56,8 @@ jobs:
           python -m pip install "rich==$version"
 
       - name: Regenerate golden fixtures from real rich
+        env:
+          PYTHONUTF8: "1" # deterministic UTF-8 box glyphs (no ASCII substitution)
         run: python scripts/capture_golden.py
 
       - name: Fail if our fixtures drifted from upstream

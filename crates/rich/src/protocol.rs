@@ -6,16 +6,19 @@
 //! the faithful core only ever ships upstream's built-in implementations. See
 //! docs/PLUGINS.md.
 
-use crate::console::Console;
+use crate::console::{Console, ConsoleOptions};
 use crate::segment::Segment;
 use crate::text::Text;
 
-/// Anything that can be rendered to a stream of [`Segment`]s.
+/// Anything that can be rendered to a stream of [`Segment`]s within a width.
 ///
-/// The Rust equivalent of upstream's `__rich_console__` protocol. Implement it
-/// to make a custom type printable by [`Console`].
+/// The Rust equivalent of upstream's `__rich_console__(console, options)`
+/// protocol. Implement it to make a custom type printable by [`Console`]. The
+/// `options` carry the available width (and, later, height/justify) the
+/// renderable must fit into. Newlines between lines are emitted as ordinary
+/// segments containing `\n`.
 pub trait Renderable {
-    fn rich_render(&self, console: &Console) -> Vec<Segment>;
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment>;
 }
 
 /// A transformer that adds style spans to [`Text`] (e.g. syntax/number/URL

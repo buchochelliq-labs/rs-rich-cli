@@ -21,7 +21,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `markup.py`                           | `markup.rs`              | 🟡 | ✅ |
 | `text.py`, `_wrap.py`                 | `text.rs`                | 🟡 | ✅ |
 | `theme.py`, `themes.py`, `default_styles.py`, `terminal_theme.py` | `theme.rs` | 🟡 | — |
-| `console.py`                          | `console.rs`             | 🟡 | ✅ |
+| `console.py` (+ `ConsoleOptions`, `render_lines`) | `console.rs`  | 🟡 | ✅ |
 | `protocol.py`, `abc.py`, `_extension.py` | `protocol.rs`         | 🟡 | — |
 | `measure.py`                          | `measure.rs`             | 🟡 | — |
 | `errors.py`                           | `errors.rs`              | 🟡 | — |
@@ -32,17 +32,18 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 
 ## Widgets & layout
 
-| upstream `rich/…` | rust file | status |
-|-------------------|-----------|:------:|
-| `box.py` | `box.rs` | ⬜ |
-| `rule.py` | `rule.rs` | ⬜ |
-| `align.py`, `padding.py`, `constrain.py` | resp. | ⬜ |
-| `panel.py` | `panel.rs` | ⬜ |
-| `table.py` | `table.rs` | ⬜ |
-| `columns.py` | `columns.rs` | ⬜ |
-| `tree.py` | `tree.rs` | ⬜ |
-| `layout.py` | `layout.rs` | ⬜ |
-| `bar.py`, `progress_bar.py` | resp. | ⬜ |
+| upstream `rich/…` | rust file | status | parity |
+|-------------------|-----------|:------:|:------:|
+| `box.py` | `box.rs` | 🟡 | — |
+| `rule.py` | `rule.rs` | 🟡 | ✅ |
+| `padding.py` | `padding.rs` | 🟡 | ✅ |
+| `panel.py` | `panel.rs` | 🟡 | ✅ |
+| `align.py`, `constrain.py` | resp. | ⬜ | — |
+| `table.py` | `table.rs` | ⬜ | — |
+| `columns.py` | `columns.rs` | ⬜ | — |
+| `tree.py` | `tree.rs` | ⬜ | — |
+| `layout.py` | `layout.rs` | ⬜ | — |
+| `bar.py`, `progress_bar.py` | resp. | ⬜ | — |
 
 ## Live & progress
 

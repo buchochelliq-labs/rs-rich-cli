@@ -16,6 +16,44 @@ use crate::theme::Theme;
 
 const DEFAULT_WIDTH: usize = 80;
 
+/// Horizontal justification of a renderable within its width.
+/// Mirrors `rich.console.JustifyMethod`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Justify {
+    /// Renderable-defined default (usually left, no padding).
+    #[default]
+    Default,
+    Left,
+    Center,
+    Right,
+    Full,
+}
+
+/// The options passed to a [`Renderable`] describing the space it must fit into.
+///
+/// Port of the core of `rich.console.ConsoleOptions`. Only the fields needed by
+/// the currently-ported renderables are present; more are added as widgets land.
+#[derive(Debug, Clone)]
+pub struct ConsoleOptions {
+    pub min_width: usize,
+    pub max_width: usize,
+    pub height: Option<usize>,
+    pub justify: Justify,
+}
+
+impl ConsoleOptions {
+    /// Return a copy with `max_width` (and a clamped `min_width`) updated.
+    /// Port of `ConsoleOptions.update_width`.
+    pub fn update_width(&self, width: usize) -> ConsoleOptions {
+        ConsoleOptions {
+            min_width: width,
+            max_width: width,
+            height: self.height,
+            justify: self.justify,
+        }
+    }
+}
+
 /// The high-level interface for rendering to a terminal. Mirrors
 /// `rich.console.Console`.
 pub struct Console {
@@ -79,11 +117,51 @@ impl Console {
         self.highlighters.push(highlighter);
     }
 
+    /// The default render options for this console (full width, no height).
+    pub fn options(&self) -> ConsoleOptions {
+        ConsoleOptions {
+            min_width: 1,
+            max_width: self.width,
+            height: None,
+            justify: Justify::Default,
+        }
+    }
+
     /// Render a value to an ANSI string (no trailing newline). Primarily for
-    /// tests and export.
+    /// tests and inline rendering.
     pub fn render_to_string(&self, renderable: &dyn Renderable) -> String {
-        let segments = renderable.rich_render(self);
+        let segments = renderable.rich_render(self, &self.options());
         self.segments_to_string(&segments)
+    }
+
+    /// Render a value into a list of lines, each a list of [`Segment`]s.
+    ///
+    /// Port of `Console.render_lines`. When `pad` is true, every line is padded
+    /// (or cropped) to `options.max_width` — this is what container renderables
+    /// such as `Panel`/`Padding` rely on to get uniform-width child rows.
+    pub fn render_lines(
+        &self,
+        renderable: &dyn Renderable,
+        options: &ConsoleOptions,
+        pad: bool,
+    ) -> Vec<Vec<Segment>> {
+        let segments = renderable.rich_render(self, options);
+        let mut lines = Segment::split_lines(&segments);
+        if pad {
+            for line in &mut lines {
+                *line = Segment::adjust_line_length(line, options.max_width, Some(Style::new()));
+            }
+        }
+        lines
+    }
+
+    /// Render a value exactly as [`print`](Console::print) would write it,
+    /// returning the string (including the single trailing newline). For tests
+    /// and export.
+    pub fn render_export(&self, renderable: &dyn Renderable) -> String {
+        let mut out = self.render_to_string(renderable);
+        out.push('\n');
+        out
     }
 
     /// Render a value and write it to stdout, followed by a newline.
@@ -131,9 +209,11 @@ impl Console {
 }
 
 impl Renderable for Text {
-    fn rich_render(&self, console: &Console) -> Vec<Segment> {
+    fn rich_render(&self, console: &Console, _options: &ConsoleOptions) -> Vec<Segment> {
         // Styles are resolved into segments here; the color system is applied
-        // later by the console when turning segments into bytes.
+        // later by the console when turning segments into bytes. Word-wrapping
+        // to `options.max_width` is not yet implemented (tracked in issue #2);
+        // container renderables pad/crop child lines via `render_lines`.
         self.render(console.base_style(), console.color_system())
     }
 }

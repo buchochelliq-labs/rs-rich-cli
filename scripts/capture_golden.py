@@ -18,7 +18,11 @@ from __future__ import annotations
 
 import pathlib
 
+from rich import box
 from rich.console import Console
+from rich.padding import Padding
+from rich.panel import Panel
+from rich.rule import Rule
 
 # (name, console-markup) — keep in sync with the Rust test's expectations.
 CASES: list[tuple[str, str]] = [
@@ -29,6 +33,31 @@ CASES: list[tuple[str, str]] = [
     ("hex_truecolor", "[#ff8800]x[/]"),
     ("plain_text", "no styles here"),
 ]
+
+# (name, width, renderable) — the Rust test builds a matching renderable per name.
+# `legacy_windows`/`safe_box` are pinned OFF for deterministic, platform-neutral
+# box glyphs (the port does not yet do platform box substitution).
+RENDERABLE_CASES = [
+    ("rule_plain", 20, Rule()),
+    ("rule_title", 20, Rule("Hi")),
+    ("rule_title_odd", 21, Rule("Hi")),
+    ("panel_plain", 20, Panel("hello")),
+    ("panel_title", 20, Panel("hello", title="T")),
+    ("panel_square", 20, Panel("hi", box=box.SQUARE)),
+    ("padding_1_2", 10, Padding("hi", (1, 2))),
+    ("padding_0_1", 10, Padding("hi", (0, 1))),
+]
+
+RENDERABLE_HEADER = """\
+# Golden parity fixtures for RENDERABLES — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\\t<width>\\t<expected-ansi>
+# `\\x1b` = ESC byte, `\\n` = newline (both unescaped by the test).
+# Console: force_terminal=True, color_system="truecolor", highlight=False,
+#          safe_box=False, legacy_windows=False.
+# The Rust test builds the renderable matching each <name>; keep them in sync.
+"""
 
 HEADER = """\
 # Golden parity fixtures — captured from the real Python `rich` library.
@@ -44,8 +73,18 @@ HEADER = """\
 
 
 def escape(text: str) -> str:
-    """Render the ESC byte as the literal marker the Rust test unescapes."""
-    return text.replace("\x1b", "\\x1b")
+    """Render ESC and newline as the literal markers the Rust test unescapes."""
+    return text.replace("\x1b", "\\x1b").replace("\n", "\\n")
+
+
+def golden_dir() -> pathlib.Path:
+    return (
+        pathlib.Path(__file__).resolve().parent.parent
+        / "crates"
+        / "rich"
+        / "tests"
+        / "golden"
+    )
 
 
 def main() -> None:
@@ -54,21 +93,40 @@ def main() -> None:
     console = Console(
         force_terminal=True, color_system="truecolor", width=80, highlight=False
     )
-    out_path = (
-        pathlib.Path(__file__).resolve().parent.parent
-        / "crates"
-        / "rich"
-        / "tests"
-        / "golden"
-        / "truecolor.tsv"
-    )
+    markup_path = golden_dir() / "truecolor.tsv"
     lines = [HEADER.rstrip("\n")]
     for name, markup in CASES:
         with console.capture() as capture:
             console.print(markup, end="")
         lines.append(f"{name}\t{markup}\t{escape(capture.get())}")
-    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"wrote {len(CASES)} cases to {out_path}")
+    markup_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"wrote {len(CASES)} markup cases to {markup_path}")
+
+    renderable_path = golden_dir() / "renderables.tsv"
+    rlines = [RENDERABLE_HEADER.rstrip("\n")]
+    for name, width, renderable in RENDERABLE_CASES:
+        rconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=width,
+            highlight=False,
+            safe_box=False,
+            legacy_windows=False,
+        )
+        with rconsole.capture() as capture:
+            rconsole.print(renderable)
+        output = capture.get()
+        # Guard: if the capture console's encoding isn't UTF-8, rich substitutes
+        # box-drawing glyphs with ASCII, producing non-deterministic fixtures.
+        # Fail loudly instead of writing a bad fixture.
+        if name == "rule_plain" and "─" not in output:
+            raise SystemExit(
+                "box glyphs were ASCII-substituted — run with UTF-8 mode:\n"
+                "    PYTHONUTF8=1 python scripts/capture_golden.py"
+            )
+        rlines.append(f"{name}\t{width}\t{escape(output)}")
+    renderable_path.write_text("\n".join(rlines) + "\n", encoding="utf-8")
+    print(f"wrote {len(RENDERABLE_CASES)} renderable cases to {renderable_path}")
 
 
 if __name__ == "__main__":
