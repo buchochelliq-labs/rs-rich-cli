@@ -112,6 +112,14 @@ fn run_demo() {
     );
     console.print_str("Theme:    [error]error[/], [warning]warning[/], [info]info[/]");
     console.print_str("Extension: numbers like 3.14 and 2026 are auto-highlighted");
+    // Built-in ReprHighlighter (highlight=true): auto-colors numbers, bools,
+    // strings, paths, calls, etc.
+    let hl = Console::builder()
+        .force_terminal(true)
+        .color_system(Some(ColorSystem::Truecolor))
+        .highlight(true)
+        .build();
+    hl.print_str("Highlight:  result = func(42, True, None, '/usr/bin')");
     console.print_str("Emoji:     :rocket: :fire: :sparkles: :thumbs_up: :snake: :coffee:");
 
     // Rule variants (title alignment).

@@ -62,6 +62,7 @@ pub struct Console {
     is_terminal: bool,
     no_color: bool,
     emoji: bool,
+    highlight: bool,
     theme: Theme,
     base_style: Style,
     highlighters: Vec<Box<dyn Highlighter>>,
@@ -208,6 +209,9 @@ impl Console {
         for highlighter in &self.highlighters {
             highlighter.highlight(&mut text);
         }
+        if self.highlight {
+            crate::highlighter::ReprHighlighter::new().highlight(&mut text);
+        }
         text
     }
 
@@ -275,6 +279,7 @@ pub struct ConsoleBuilder {
     width: Option<usize>,
     no_color: Option<bool>,
     emoji: Option<bool>,
+    highlight: Option<bool>,
     theme: Option<Theme>,
 }
 
@@ -287,6 +292,7 @@ impl ConsoleBuilder {
             width: None,
             no_color: None,
             emoji: None,
+            highlight: None,
             theme: None,
         }
     }
@@ -319,6 +325,12 @@ impl ConsoleBuilder {
         self
     }
 
+    /// Enable/disable automatic repr highlighting (default disabled).
+    pub fn highlight(mut self, value: bool) -> Self {
+        self.highlight = Some(value);
+        self
+    }
+
     pub fn theme(mut self, theme: Theme) -> Self {
         self.theme = Some(theme);
         self
@@ -345,6 +357,7 @@ impl ConsoleBuilder {
             is_terminal,
             no_color,
             emoji: self.emoji.unwrap_or(true),
+            highlight: self.highlight.unwrap_or(false),
             theme: self.theme.unwrap_or_else(Theme::default_theme),
             base_style: Style::new(),
             highlighters: Vec::new(),

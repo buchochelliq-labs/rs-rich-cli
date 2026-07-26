@@ -8,6 +8,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **ReprHighlighter** (`highlighter.rs`, port of `rich/highlighter.py`): the
+  built-in highlighter that auto-colors numbers, bools, `None`, strings, paths,
+  URLs, braces, calls, IPs, UUIDs, and tags. Patterns vendored verbatim
+  (`repr_patterns.rs`) and compiled with `fancy-regex`; enabled via
+  `ConsoleBuilder::highlight(true)`. Byte-parity-tested against real rich 15.0.0
+  across many pattern types.
 - **Full emoji table**: the complete ~3600-entry `_emoji_codes` table is vendored
   (`emoji_codes.rs`, binary-searched), so every `:shortcode:` resolves. Resolves
   the former curated-subset divergence.
