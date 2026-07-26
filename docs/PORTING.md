@@ -53,7 +53,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | upstream `rich/…` | rust file | status |
 |-------------------|-----------|:------:|
 | `progress.py` | `progress.rs` | ⬜ |
-| `spinner.py`, `_spinners.py` | `spinner.rs` | 🟡 |
+| `spinner.py`, `_spinners.py` (full table) | `spinner.rs` | 🟡 |
 | `status.py` | `status.rs` | ⬜ |
 | `live.py`, `live_render.py` | resp. | ⬜ |
 

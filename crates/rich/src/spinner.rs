@@ -5,7 +5,8 @@
 //! itself is driven by a `Live` loop (not yet ported); [`Spinner::render`] gives
 //! the frame at a point in time and is the testable surface.
 //!
-//! Slice scope: a handful of the built-in spinners and plain (unstyled) frames.
+//! Scope: all built-in spinners (vendored in `spinner_data.rs`) with plain
+//! (unstyled) frames. Styled frames land with the Live-loop work.
 
 use crate::console::{Console, ConsoleOptions};
 use crate::protocol::Renderable;
@@ -14,7 +15,7 @@ use crate::text::Text;
 
 /// A named terminal spinner. Mirrors `rich.spinner.Spinner`.
 pub struct Spinner {
-    frames: Vec<&'static str>,
+    frames: &'static [&'static str],
     /// Frame interval in milliseconds.
     interval: f64,
     text: String,
@@ -24,7 +25,9 @@ pub struct Spinner {
 impl Spinner {
     /// Look up a built-in spinner by name (falls back to `dots`).
     pub fn new(name: &str) -> Self {
-        let (interval, frames) = spinner_data(name);
+        let (interval, frames) = crate::spinner_data::spinner_data(name)
+            .or_else(|| crate::spinner_data::spinner_data("dots"))
+            .expect("dots spinner exists");
         Spinner {
             frames,
             interval,
@@ -69,19 +72,6 @@ impl Renderable for Spinner {
     }
 }
 
-/// `(interval_ms, frames)` for a built-in spinner. A representative subset of
-/// upstream `_spinners.py`; unknown names fall back to `dots`.
-fn spinner_data(name: &str) -> (f64, Vec<&'static str>) {
-    match name {
-        "line" => (130.0, vec!["-", "\\", "|", "/"]),
-        "dots2" => (80.0, vec!["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"]),
-        "simpleDots" => (400.0, vec![".  ", ".. ", "...", "   "]),
-        "arrow" => (100.0, vec!["←", "↖", "↑", "↗", "→", "↘", "↓", "↙"]),
-        // "dots" and any unknown name.
-        _ => (80.0, vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -109,6 +99,14 @@ mod tests {
         assert_eq!(frame_at("line", 0.0), "-");
         assert_eq!(frame_at("line", 0.1), "-");
         assert_eq!(frame_at("line", 0.25), "\\");
+    }
+
+    #[test]
+    fn full_table_covers_more_spinners() {
+        // "moon"/"bounce" weren't in the original curated subset. moon: 80ms.
+        assert_eq!(frame_at("moon", 0.0), "\u{1f311} ");
+        assert_eq!(frame_at("moon", 0.08), "\u{1f312} ");
+        assert_eq!(frame_at("bounce", 0.0), "\u{2801}");
     }
 
     #[test]

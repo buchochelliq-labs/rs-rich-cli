@@ -8,6 +8,8 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Full spinner table**: all 73 built-in spinners are vendored
+  (`spinner_data.rs`) from `_spinners.py`, replacing the curated subset.
 - **ReprHighlighter** (`highlighter.rs`, port of `rich/highlighter.py`): the
   built-in highlighter that auto-colors numbers, bools, `None`, strings, paths,
   URLs, braces, calls, IPs, UUIDs, and tags. Patterns vendored verbatim

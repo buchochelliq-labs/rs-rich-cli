@@ -41,6 +41,7 @@ mod repr_patterns;
 pub mod rule;
 pub mod segment;
 pub mod spinner;
+mod spinner_data;
 pub mod style;
 pub mod table;
 pub mod text;
