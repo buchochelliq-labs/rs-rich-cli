@@ -27,6 +27,7 @@ panel_wrap	14	┌────────────┐\n│ The quick  │\n�
 panel_just_center	14	┌────────────┐\n│     hi     │\n└────────────┘\n
 panel_just_right	14	┌────────────┐\n│         hi │\n└────────────┘\n
 panel_just_left	14	┌────────────┐\n│ hi         │\n└────────────┘\n
+text_justify_bare	10	hi\n
 table_square	40	┌───────┬─────┐\n│\x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mAge\x1b[0m\x1b[1m \x1b[0m│\n├───────┼─────┤\n│ Alice │ 30  │\n│ Bob   │ 7   │\n└───────┴─────┘\n
 table_default	40	┏━━━━━━━┳━━━━━┓\n┃\x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m┃\x1b[1m \x1b[0m\x1b[1mAge\x1b[0m\x1b[1m \x1b[0m┃\n┡━━━━━━━╇━━━━━┩\n│ Alice │ 30  │\n│ Bob   │ 7   │\n└───────┴─────┘\n
 tree_nested	40	root\n├── child A\n│   ├── leaf A1\n│   └── leaf A2\n└── child B\n

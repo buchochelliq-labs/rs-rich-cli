@@ -92,6 +92,9 @@ RENDERABLE_CASES = [
     ("panel_just_center", 14, Panel(Text("hi", justify="center"), box=box.SQUARE)),
     ("panel_just_right", 14, Panel(Text("hi", justify="right"), box=box.SQUARE)),
     ("panel_just_left", 14, Panel(Text("hi", justify="left"), box=box.SQUARE)),
+    # A bare justified Text is shrunk to its content width (measurement-fit),
+    # so it appears unpadded — the payoff of the Measurement port.
+    ("text_justify_bare", 10, Text("hi", justify="center")),
     ("table_square", 40, _table(box.SQUARE)),
     ("table_default", 40, _table(box.HEAVY_HEAD)),
     ("tree_nested", 40, _tree()),

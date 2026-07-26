@@ -130,8 +130,17 @@ impl Console {
 
     /// Render a value to an ANSI string (no trailing newline). Primarily for
     /// tests and inline rendering.
+    ///
+    /// When no explicit justify is requested, the width is first shrunk to the
+    /// renderable's measured width (matching upstream's measurement-fit for a
+    /// bare top-level renderable).
     pub fn render_to_string(&self, renderable: &dyn Renderable) -> String {
-        let segments = renderable.rich_render(self, &self.options());
+        let mut options = self.options();
+        if options.justify == Justify::Default {
+            let measurement = renderable.measure(self, &options);
+            options.max_width = measurement.maximum.min(options.max_width).max(1);
+        }
+        let segments = renderable.rich_render(self, &options);
         self.segments_to_string(&segments)
     }
 
@@ -205,16 +214,22 @@ impl Console {
     /// Parse `content` as markup and print it justified to the console width.
     /// This is the `console.print("...", justify=...)` path.
     pub fn print_justified(&self, content: &str, justify: Justify) {
-        let mut text = self.build_text(content);
-        text.set_justify(justify);
-        self.print(&text);
+        let output = self.render_justified_to_string(content, justify);
+        let stdout = std::io::stdout();
+        let mut lock = stdout.lock();
+        let _ = writeln!(lock, "{output}");
     }
 
     /// Same as [`Console::print_justified`] but returns the ANSI string.
+    ///
+    /// The justify is passed via `options.justify`, which — matching upstream —
+    /// disables the measurement-fit so the text pads to the full width.
     pub fn render_justified_to_string(&self, content: &str, justify: Justify) -> String {
-        let mut text = self.build_text(content);
-        text.set_justify(justify);
-        self.render_to_string(&text)
+        let text = self.build_text(content);
+        let mut options = self.options();
+        options.justify = justify;
+        let segments = text.rich_render(self, &options);
+        self.segments_to_string(&segments)
     }
 
     /// Convert rendered segments into a string, applying the color system.
@@ -233,9 +248,22 @@ impl Console {
 
 impl Renderable for Text {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        // Wrap to the available width; styles are resolved into segments here and
-        // the color system is applied later when turning segments into bytes.
-        self.render_wrapped(console.base_style(), options.max_width)
+        // Wrap to the available width; the effective justify is this text's own
+        // justify, falling back to the console options' justify.
+        let justify = if self.get_justify() != Justify::Default {
+            self.get_justify()
+        } else {
+            options.justify
+        };
+        self.render_joined_justified(console.base_style(), options.max_width, justify)
+    }
+
+    fn measure(&self, _console: &Console, options: &ConsoleOptions) -> crate::measure::Measurement {
+        let (minimum, maximum) = self.measurement();
+        crate::measure::Measurement::new(
+            minimum.min(options.max_width),
+            maximum.min(options.max_width),
+        )
     }
 }
 

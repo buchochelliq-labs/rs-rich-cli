@@ -8,6 +8,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Measurement** (`Renderable::measure` + top-level measurement-fit): the print
+  path now shrinks the width to a renderable's measured content width when no
+  explicit justify is set. This makes a bare `Text::justify(...)` shrink to its
+  content (matching upstream, resolving the former DIVERGENCES #9), while
+  `print(justify=…)` and container-embedded justify still pad to full width.
+  Byte-parity-tested against real rich 15.0.0.
 - **Bar** (`bar.rs`, port of `rich/bar.py`): a horizontal bar spanning
   `[begin, end]` within `[0, size]`, with eighth-block sub-cell edges. Byte-parity-
   tested against real rich 15.0.0.

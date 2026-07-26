@@ -108,6 +108,7 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "panel_just_center" => Box::new(justified_panel(Justify::Center)),
         "panel_just_right" => Box::new(justified_panel(Justify::Right)),
         "panel_just_left" => Box::new(justified_panel(Justify::Left)),
+        "text_justify_bare" => Box::new(Text::new("hi").justify(Justify::Center)),
         "table_square" => Box::new(sample_table(SQUARE)),
         "table_default" => Box::new(sample_table(HEAVY_HEAD)),
         "tree_nested" => Box::new(sample_tree()),

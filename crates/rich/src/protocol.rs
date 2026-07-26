@@ -7,6 +7,7 @@
 //! docs/PLUGINS.md.
 
 use crate::console::{Console, ConsoleOptions};
+use crate::measure::Measurement;
 use crate::segment::Segment;
 use crate::text::Text;
 
@@ -19,6 +20,14 @@ use crate::text::Text;
 /// segments containing `\n`.
 pub trait Renderable {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment>;
+
+    /// The `(minimum, maximum)` cell width this renderable wants. The default
+    /// assumes the renderable fills the available width (e.g. `Panel`, `Table`);
+    /// `Text` overrides it with its content width so the top-level print path can
+    /// shrink to fit. Port of `__rich_measure__` / `Measurement.get`.
+    fn measure(&self, _console: &Console, options: &ConsoleOptions) -> Measurement {
+        Measurement::new(options.max_width, options.max_width)
+    }
 }
 
 /// A transformer that adds style spans to [`Text`] (e.g. syntax/number/URL

@@ -66,6 +66,11 @@ impl Text {
         self.justify = justify;
     }
 
+    /// This text's own justify method.
+    pub fn get_justify(&self) -> Justify {
+        self.justify
+    }
+
     /// Build styled text from console markup, resolving tags against `theme`.
     /// Port of `Text.from_markup`.
     pub fn from_markup(markup_text: &str, theme: &Theme) -> Result<Text> {
@@ -134,30 +139,70 @@ impl Text {
         self.render_joined(base_style, None)
     }
 
+    /// The `(minimum, maximum)` cell width of this text: `maximum` is the widest
+    /// hard line, `minimum` the widest word. Port of `Text.__rich_measure__`.
+    pub fn measurement(&self) -> (usize, usize) {
+        let max_line = self.plain.split('\n').map(cell_len).max().unwrap_or(0);
+        let min_word = self
+            .plain
+            .split_whitespace()
+            .map(cell_len)
+            .max()
+            .unwrap_or(max_line);
+        (min_word, max_line)
+    }
+
     /// Render into visual lines, wrapping each hard line to `width` cells when
-    /// `Some`. Port of the line-producing half of `Text.render`/`Text.wrap`.
+    /// `Some`, and justifying per this text's own justify.
     pub fn render_lines(&self, base_style: &Style, width: Option<usize>) -> Vec<Vec<Segment>> {
+        self.render_lines_justified(base_style, width, self.justify)
+    }
+
+    /// Like [`render_lines`](Self::render_lines) but with an explicit `justify`
+    /// (used by the console to apply `options.justify`).
+    pub fn render_lines_justified(
+        &self,
+        base_style: &Style,
+        width: Option<usize>,
+        justify: Justify,
+    ) -> Vec<Vec<Segment>> {
         let effective_base = base_style.combine(&self.style);
         let mut lines: Vec<Vec<Segment>> = Vec::new();
         for (start, end) in self.wrapped_ranges(width) {
             lines.push(self.line_segments(start, end, &effective_base));
         }
-        // Justify each line to the render width, if requested. (Note: this pads
-        // to `width` unconditionally; upstream first shrinks `width` to the
-        // content via measurement for a *bare* top-level Text — see
-        // docs/DIVERGENCES.md.)
         if let Some(width) = width {
-            if self.justify != Justify::Default {
+            if justify != Justify::Default {
                 for line in &mut lines {
-                    *line = justify_line(line, width, self.justify, &effective_base);
+                    *line = justify_line(line, width, justify, &effective_base);
                 }
             }
         }
         lines
     }
 
+    /// Render into a flat segment stream (newlines between lines), justifying per
+    /// `justify`.
+    pub fn render_joined_justified(
+        &self,
+        base_style: &Style,
+        width: usize,
+        justify: Justify,
+    ) -> Vec<Segment> {
+        let lines = self.render_lines_justified(base_style, Some(width), justify);
+        let mut segments = Vec::new();
+        let last = lines.len().saturating_sub(1);
+        for (index, line) in lines.into_iter().enumerate() {
+            segments.extend(line);
+            if index != last {
+                segments.push(Segment::line());
+            }
+        }
+        segments
+    }
+
     /// Render into a flat segment stream with [`Segment::line`] between visual
-    /// lines (wrapping when `width` is `Some`).
+    /// lines (wrapping when `width` is `Some`), using this text's own justify.
     fn render_joined(&self, base_style: &Style, width: Option<usize>) -> Vec<Segment> {
         let lines = self.render_lines(base_style, width);
         let mut segments = Vec::new();

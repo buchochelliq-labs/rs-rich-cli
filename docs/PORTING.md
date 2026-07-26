@@ -24,7 +24,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `theme.py`, `themes.py`, `default_styles.py`, `terminal_theme.py` | `theme.rs` | 🟡 | — |
 | `console.py` (+ `ConsoleOptions`, `render_lines`) | `console.rs`  | 🟡 | ✅ |
 | `protocol.py`, `abc.py`, `_extension.py` | `protocol.rs`         | 🟡 | — |
-| `measure.py`                          | `measure.rs`             | 🟡 | — |
+| `measure.py` (+ `Renderable::measure`, fit) | `measure.rs`       | 🟡 | ✅ |
 | `errors.py`                           | `errors.rs`              | 🟡 | — |
 | `control.py`                          | `control.rs`             | ⬜ | — |
 | `ansi.py`                             | `ansi.rs`                | ⬜ | — |
