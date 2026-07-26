@@ -6,6 +6,7 @@
 //! Slice scope: center alignment (the default). `left`/`right` title alignment
 //! is deferred with the rest of `rule.py`.
 
+use crate::align::HorizontalAlign;
 use crate::cells::{cell_len, set_cell_size, truncate};
 use crate::console::{Console, ConsoleOptions};
 use crate::protocol::Renderable;
@@ -18,6 +19,7 @@ pub struct Rule {
     title: Option<String>,
     characters: String,
     style: Style,
+    align: HorizontalAlign,
 }
 
 impl Default for Rule {
@@ -27,6 +29,7 @@ impl Default for Rule {
             characters: "─".to_string(),
             // Upstream's `rule.line` default style.
             style: Style::parse("bright_green").expect("valid built-in style"),
+            align: HorizontalAlign::Center,
         }
     }
 }
@@ -57,6 +60,12 @@ impl Rule {
         self
     }
 
+    /// Set the title alignment (default center).
+    pub fn align(mut self, align: HorizontalAlign) -> Self {
+        self.align = align;
+        self
+    }
+
     /// Repeat `characters` to at least `width` cells, then crop to exactly `width`.
     fn fill(&self, width: usize) -> String {
         if width == 0 {
@@ -73,23 +82,43 @@ impl Rule {
             return Text::styled(self.fill(width), self.style.clone());
         };
 
-        // Title truncated (never padded) to leave room for the flanking spaces.
-        let title = truncate(title, width.saturating_sub(4));
-        let title_len = cell_len(&title);
+        match self.align {
+            HorizontalAlign::Center => {
+                // Title truncated (never padded) to leave room for the flanking spaces.
+                let title = truncate(title, width.saturating_sub(4));
+                let title_len = cell_len(&title);
 
-        let side_width = width.saturating_sub(title_len) / 2;
-        let left = self.fill(side_width.saturating_sub(1));
-        let right_length = width
-            .saturating_sub(title_len)
-            .saturating_sub(cell_len(&left))
-            .saturating_sub(2);
-        let right = self.fill(right_length);
+                let side_width = width.saturating_sub(title_len) / 2;
+                let left = self.fill(side_width.saturating_sub(1));
+                let right_length = width
+                    .saturating_sub(title_len)
+                    .saturating_sub(cell_len(&left))
+                    .saturating_sub(2);
+                let right = self.fill(right_length);
 
-        let mut text = Text::new("");
-        text.append(&format!("{left} "), Some(self.style.clone()));
-        text.append(&title, None);
-        text.append(&format!(" {right}"), Some(self.style.clone()));
-        text
+                let mut text = Text::new("");
+                text.append(&format!("{left} "), Some(self.style.clone()));
+                text.append(&title, None);
+                text.append(&format!(" {right}"), Some(self.style.clone()));
+                text
+            }
+            HorizontalAlign::Left => {
+                let title = truncate(title, width.saturating_sub(2));
+                let fill_len = width.saturating_sub(cell_len(&title)).saturating_sub(1);
+                let mut text = Text::new("");
+                text.append(&format!("{title} "), None);
+                text.append(&self.fill(fill_len), Some(self.style.clone()));
+                text
+            }
+            HorizontalAlign::Right => {
+                let title = truncate(title, width.saturating_sub(2));
+                let fill_len = width.saturating_sub(cell_len(&title)).saturating_sub(1);
+                let mut text = Text::new("");
+                text.append(&self.fill(fill_len), Some(self.style.clone()));
+                text.append(&format!(" {title}"), None);
+                text
+            }
+        }
     }
 }
 

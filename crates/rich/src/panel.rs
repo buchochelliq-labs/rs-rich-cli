@@ -6,6 +6,7 @@
 //! Slice scope: centered title, box + border style + padding, expand-to-width.
 //! Subtitle, `title_align`/`subtitle_align`, and `fit` sizing are deferred.
 
+use crate::align::HorizontalAlign;
 use crate::cells::{cell_len, truncate};
 use crate::console::{Console, ConsoleOptions};
 use crate::padding::join_rows;
@@ -19,6 +20,7 @@ pub struct Panel {
     child: Box<dyn Renderable>,
     box_set: BoxSet,
     title: Option<String>,
+    title_align: HorizontalAlign,
     padding: (usize, usize, usize, usize),
     border_style: Style,
     style: Style,
@@ -31,15 +33,22 @@ impl Panel {
             child,
             box_set: ROUNDED,
             title: None,
+            title_align: HorizontalAlign::Center,
             padding: (0, 1, 0, 1),
             border_style: Style::new(),
             style: Style::new(),
         }
     }
 
-    /// Set a centered title (drawn into the top border).
+    /// Set a title (drawn into the top border, centered by default).
     pub fn title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
+        self
+    }
+
+    /// Set the title alignment within the top border.
+    pub fn title_align(mut self, align: HorizontalAlign) -> Self {
+        self.title_align = align;
         self
     }
 
@@ -71,8 +80,12 @@ impl Panel {
         let padded = format!(" {title} ");
         let padded_len = cell_len(&padded);
         let fill = inner_width.saturating_sub(padded_len);
-        let left = fill / 2;
-        let right = fill - left;
+        let (left, right) = match self.title_align {
+            HorizontalAlign::Center => (fill / 2, fill - fill / 2),
+            // Left/right keep a single box-char offset on the near side.
+            HorizontalAlign::Left => (1.min(fill), fill.saturating_sub(1)),
+            HorizontalAlign::Right => (fill.saturating_sub(1), 1.min(fill)),
+        };
         let top = self.box_set.top;
         let mut border = String::new();
         border.push(self.box_set.top_left);

@@ -9,8 +9,12 @@
 rule_plain	20	\x1b[92m────────────────────\x1b[0m\n
 rule_title	20	\x1b[92m──────── \x1b[0mHi\x1b[92m ────────\x1b[0m\n
 rule_title_odd	21	\x1b[92m──────── \x1b[0mHi\x1b[92m ─────────\x1b[0m\n
+rule_left	20	Hi \x1b[92m─────────────────\x1b[0m\n
+rule_right	20	\x1b[92m─────────────────\x1b[0m Hi\n
 panel_plain	20	╭──────────────────╮\n│ hello            │\n╰──────────────────╯\n
 panel_title	20	╭─────── T ────────╮\n│ hello            │\n╰──────────────────╯\n
+panel_title_left	20	┌─ T ──────────────┐\n│ x                │\n└──────────────────┘\n
+panel_title_right	20	┌────────────── T ─┐\n│ x                │\n└──────────────────┘\n
 panel_square	20	┌──────────────────┐\n│ hi               │\n└──────────────────┘\n
 padding_1_2	10	          \n  hi      \n          \n
 padding_0_1	10	 hi       \n

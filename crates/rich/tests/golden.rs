@@ -8,8 +8,8 @@
 
 use rich::r#box::{Box as BoxSet, HEAVY_HEAD, SQUARE};
 use rich::{
-    Align, ColorSystem, Columns, Console, Constrain, Padding, Panel, Renderable, Rule, Table, Text,
-    Tree,
+    Align, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Padding, Panel, Renderable,
+    Rule, Table, Text, Tree,
 };
 
 fn columns(items: &[&str]) -> Columns {
@@ -56,8 +56,22 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
     match name {
         "rule_plain" => Box::new(Rule::line()),
         "rule_title" | "rule_title_odd" => Box::new(Rule::new("Hi")),
+        "rule_left" => Box::new(Rule::new("Hi").align(HorizontalAlign::Left)),
+        "rule_right" => Box::new(Rule::new("Hi").align(HorizontalAlign::Right)),
         "panel_plain" => Box::new(Panel::new(Box::new(Text::new("hello")))),
         "panel_title" => Box::new(Panel::new(Box::new(Text::new("hello"))).title("T")),
+        "panel_title_left" => Box::new(
+            Panel::new(Box::new(Text::new("x")))
+                .title("T")
+                .title_align(HorizontalAlign::Left)
+                .box_set(SQUARE),
+        ),
+        "panel_title_right" => Box::new(
+            Panel::new(Box::new(Text::new("x")))
+                .title("T")
+                .title_align(HorizontalAlign::Right)
+                .box_set(SQUARE),
+        ),
         "panel_square" => Box::new(Panel::new(Box::new(Text::new("hi"))).box_set(SQUARE)),
         "padding_1_2" => Box::new(Padding::new(Box::new(Text::new("hi")), (1, 2, 1, 2))),
         "padding_0_1" => Box::new(Padding::new(Box::new(Text::new("hi")), (0, 1, 0, 1))),

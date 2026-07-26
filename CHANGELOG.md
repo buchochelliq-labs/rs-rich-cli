@@ -8,6 +8,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Title alignment** for `Rule` and `Panel` (`HorizontalAlign::{Left,Center,Right}`,
+  shared with `Align`): `Rule::align` and `Panel::title_align`. Byte-parity-tested
+  against real rich 15.0.0.
 - **Columns** (`columns.rs`, port of `rich/columns.py`): packs items into as many
   equal-gap columns as fit the width, filling row by row (ports the column-count
   fitting algorithm). Byte-parity-tested against real rich 15.0.0.

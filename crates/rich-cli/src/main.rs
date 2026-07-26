@@ -10,8 +10,8 @@ use std::process::ExitCode;
 use rich::r#box::{DOUBLE, SQUARE};
 use rich::text::Text;
 use rich::{
-    filesize, Align, ColorSystem, Columns, Console, Constrain, Padding, Panel, Renderable, Rule,
-    Table, Tree,
+    filesize, Align, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Padding, Panel,
+    Renderable, Rule, Table, Tree,
 };
 use rich_ext::ConsoleExt;
 
@@ -113,10 +113,12 @@ fn run_demo() {
     console.print_str("Theme:    [error]error[/], [warning]warning[/], [info]info[/]");
     console.print_str("Extension: numbers like 3.14 and 2026 are auto-highlighted");
 
-    // Rule variants.
+    // Rule variants (title alignment).
     console.print(&Rule::new("rule"));
     console.print(&Rule::line());
-    console.print(&Rule::new("centered title"));
+    console.print(&Rule::new("centered"));
+    console.print(&Rule::new("left").align(HorizontalAlign::Left));
+    console.print(&Rule::new("right").align(HorizontalAlign::Right));
 
     // Panels with different boxes.
     console.print(&Rule::new("panel"));

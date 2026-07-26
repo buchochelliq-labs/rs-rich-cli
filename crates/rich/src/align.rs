@@ -11,10 +11,12 @@ use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::style::Style;
 
-/// Where to position the child within the available width.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum HorizontalAlign {
+/// Where to position content within an available width. Shared by [`Align`],
+/// `Rule` titles, and `Panel` titles.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HorizontalAlign {
     Left,
+    #[default]
     Center,
     Right,
 }
