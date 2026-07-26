@@ -13,3 +13,4 @@ fg_on_bg	[white on blue]bg[/]	\x1b[37;44mbg\x1b[0m
 nested_inner_wins	[red]a[blue]x[/]b[/]	\x1b[31ma\x1b[0m\x1b[34mx\x1b[0m\x1b[31mb\x1b[0m
 hex_truecolor	[#ff8800]x[/]	\x1b[38;2;255;136;0mx\x1b[0m
 plain_text	no styles here	no styles here
+emoji_rocket	:rocket: launch :fire:	🚀 launch 🔥

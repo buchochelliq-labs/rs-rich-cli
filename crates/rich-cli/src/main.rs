@@ -112,6 +112,7 @@ fn run_demo() {
     );
     console.print_str("Theme:    [error]error[/], [warning]warning[/], [info]info[/]");
     console.print_str("Extension: numbers like 3.14 and 2026 are auto-highlighted");
+    console.print_str("Emoji:     :rocket: :fire: :sparkles: :thumbs_up: :snake: :coffee:");
 
     // Rule variants (title alignment).
     console.print(&Rule::new("rule"));

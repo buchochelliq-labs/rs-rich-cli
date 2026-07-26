@@ -61,6 +61,7 @@ pub struct Console {
     width: usize,
     is_terminal: bool,
     no_color: bool,
+    emoji: bool,
     theme: Theme,
     base_style: Style,
     highlighters: Vec<Box<dyn Highlighter>>,
@@ -186,8 +187,15 @@ impl Console {
     }
 
     fn build_text(&self, content: &str) -> Text {
+        // Emoji shortcodes are expanded before markup parsing (matching upstream's
+        // default `emoji=True`); `:name:` and `[tag]` don't overlap.
+        let expanded = if self.emoji {
+            crate::emoji::replace(content)
+        } else {
+            content.to_string()
+        };
         let mut text =
-            Text::from_markup(content, &self.theme).unwrap_or_else(|_| Text::new(content));
+            Text::from_markup(&expanded, &self.theme).unwrap_or_else(|_| Text::new(&expanded));
         for highlighter in &self.highlighters {
             highlighter.highlight(&mut text);
         }
@@ -238,6 +246,7 @@ pub struct ConsoleBuilder {
     color_system_set: bool,
     width: Option<usize>,
     no_color: Option<bool>,
+    emoji: Option<bool>,
     theme: Option<Theme>,
 }
 
@@ -249,6 +258,7 @@ impl ConsoleBuilder {
             color_system_set: false,
             width: None,
             no_color: None,
+            emoji: None,
             theme: None,
         }
     }
@@ -272,6 +282,12 @@ impl ConsoleBuilder {
 
     pub fn no_color(mut self, value: bool) -> Self {
         self.no_color = Some(value);
+        self
+    }
+
+    /// Enable/disable `:emoji:` shortcode replacement (default enabled).
+    pub fn emoji(mut self, value: bool) -> Self {
+        self.emoji = Some(value);
         self
     }
 
@@ -300,6 +316,7 @@ impl ConsoleBuilder {
             width,
             is_terminal,
             no_color,
+            emoji: self.emoji.unwrap_or(true),
             theme: self.theme.unwrap_or_else(Theme::default_theme),
             base_style: Style::new(),
             highlighters: Vec::new(),

@@ -72,7 +72,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 
 | upstream `rich/…` | rust file | status |
 |-------------------|-----------|:------:|
-| `emoji.py`, `_emoji_codes.py`, `_emoji_replace.py` | `emoji.rs` | ⬜ |
+| `emoji.py`, `_emoji_codes.py`, `_emoji_replace.py` | `emoji.rs` | 🟡 |
 | `filesize.py` | `filesize.rs` | 🟡 |
 | `prompt.py`, `pager.py`, `screen.py` | resp. | ⬜ |
 | `_unicode_data/` | `unicode_data/` | ⬜ |

@@ -63,6 +63,7 @@ CASES: list[tuple[str, str]] = [
     ("nested_inner_wins", "[red]a[blue]x[/]b[/]"),
     ("hex_truecolor", "[#ff8800]x[/]"),
     ("plain_text", "no styles here"),
+    ("emoji_rocket", ":rocket: launch :fire:"),
 ]
 
 # (name, width, renderable) — the Rust test builds a matching renderable per name.

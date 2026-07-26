@@ -8,6 +8,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Emoji** (`emoji.rs`, port of `_emoji_replace` + a curated `_emoji_codes`
+  subset): `:name:` shortcodes (with `-emoji`/`-text` variants) expand in the
+  `Console` print path (default on, `ConsoleBuilder::emoji`). Byte-parity-tested
+  against real rich 15.0.0; replacement logic is complete, code table curated.
 - **Text justify** (`Text::justify` + `Console::print_justified`): left/center/
   right justification, padded to the render width. Byte-parity-tested against
   real rich 15.0.0 inside a `Panel` and via `print(justify=…)`. (Bare top-level

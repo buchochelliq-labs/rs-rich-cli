@@ -23,6 +23,7 @@ pub mod color;
 pub mod columns;
 pub mod console;
 pub mod constrain;
+pub mod emoji;
 pub mod errors;
 pub mod filesize;
 pub mod json;
