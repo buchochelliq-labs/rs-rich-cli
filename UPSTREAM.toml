@@ -1,0 +1,25 @@
+# Upstream pins.
+#
+# Each crate that MIRRORS an upstream project records the exact release it
+# currently reflects. An upstream sync is a diff between the pinned ref here and
+# the new release tag (see the `sync-upstream` skill). Update this file — and the
+# corresponding crate `version` — only as part of a sync.
+
+[rich]
+# Mirrored by: crates/rich
+upstream = "https://github.com/Textualize/rich"
+pypi = "rich"
+version = "15.0.0"
+git_tag = "v15.0.0"
+git_sha = "6ac483cbea39cab124dfd3483bba70ffafb71050"
+
+[rich-cli]
+# Mirrored by: crates/rich-cli
+upstream = "https://github.com/Textualize/rich-cli"
+pypi = "rich-cli"
+version = "1.8.1"
+git_tag = "v1.8.1"
+git_sha = "c45f6c9697f6c8c2ed278da0ce8c164a87f097b6"
+
+# NOTE: crates/rich-ext deliberately has NO upstream pin — it is our own code and
+# versions independently. See AGENTS.md → Versioning.

@@ -1,0 +1,29 @@
+//! Rendering & extension protocols.
+//!
+//! Port of upstream `rich/protocol.py` + `rich/abc.py` + the highlighter
+//! interface. **These traits are the sanctioned extension points of the port.**
+//! Extensions in `rich-ext` (and, later, third-party plugins) implement them;
+//! the faithful core only ever ships upstream's built-in implementations. See
+//! docs/PLUGINS.md.
+
+use crate::console::Console;
+use crate::segment::Segment;
+use crate::text::Text;
+
+/// Anything that can be rendered to a stream of [`Segment`]s.
+///
+/// The Rust equivalent of upstream's `__rich_console__` protocol. Implement it
+/// to make a custom type printable by [`Console`].
+pub trait Renderable {
+    fn rich_render(&self, console: &Console) -> Vec<Segment>;
+}
+
+/// A transformer that adds style spans to [`Text`] (e.g. syntax/number/URL
+/// highlighting). The Rust equivalent of upstream's `Highlighter` ABC.
+///
+/// This is the primary *plugin* seam for the first slice: `rich-ext` registers
+/// [`Highlighter`]s onto a [`Console`] without the core knowing they exist.
+pub trait Highlighter {
+    /// Inspect `text` and apply any style spans in place.
+    fn highlight(&self, text: &mut Text);
+}

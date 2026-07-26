@@ -1,0 +1,20 @@
+# crates/rich-ext — OUR additions on top of the faithful core.
+#
+# This crate carries an INDEPENDENT SemVer (starts at 0.1.0) and never mirrors
+# any upstream version. All local features + the internal plugin registry live
+# here so the core stays a clean mirror. See AGENTS.md.
+[package]
+name = "rich-ext"
+version = "0.1.0"
+description = "Extensions and the internal plugin registry for the `rich` Rust port"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+rich.workspace = true

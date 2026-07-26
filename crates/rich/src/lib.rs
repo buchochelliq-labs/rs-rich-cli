@@ -1,0 +1,39 @@
+//! # rich
+//!
+//! A **faithful** Rust port of the Python [`rich`](https://github.com/Textualize/rich)
+//! terminal-rendering library. This crate mirrors upstream module-for-module and
+//! its version tracks the upstream release it reflects (see `UPSTREAM.toml`).
+//!
+//! Local features and the plugin registry live in the separate `rich-ext` crate
+//! — do **not** add non-upstream behavior here. See `AGENTS.md`.
+//!
+//! ## Ported so far (the first vertical slice)
+//!
+//! [`color`] · [`style`] · [`cells`] · [`segment`] · [`markup`] · [`text`] ·
+//! [`theme`] · [`console`] · [`protocol`] (extension points) · [`measure`] ·
+//! [`errors`]
+//!
+//! The remaining modules are tracked as roadmap issues; see `docs/PORTING.md`
+//! for the module map and per-module parity status.
+
+pub mod cells;
+pub mod color;
+pub mod console;
+pub mod errors;
+pub mod markup;
+pub mod measure;
+pub mod protocol;
+pub mod segment;
+pub mod style;
+pub mod text;
+pub mod theme;
+
+// A small, curated prelude mirroring the most-used names from `rich`'s top level.
+pub use crate::color::{Color, ColorSystem, ColorTriplet};
+pub use crate::console::Console;
+pub use crate::errors::{Result, RichError};
+pub use crate::protocol::{Highlighter, Renderable};
+pub use crate::segment::Segment;
+pub use crate::style::Style;
+pub use crate::text::Text;
+pub use crate::theme::Theme;

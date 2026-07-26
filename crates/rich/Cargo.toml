@@ -1,0 +1,22 @@
+# crates/rich — FAITHFUL port of the Python `rich` library.
+#
+# ⚠️  VERSION POLICY: this crate's version mirrors the upstream `rich` release it
+# reflects (see UPSTREAM.toml). It is bumped ONLY when syncing a new upstream
+# release — never to ship one of our own features. Local features live in
+# `rich-ext`. See AGENTS.md.
+[package]
+name = "rich"
+version = "15.0.0"
+description = "A faithful Rust port of the Python `rich` terminal-rendering library"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+unicode-width.workspace = true
+terminal_size.workspace = true

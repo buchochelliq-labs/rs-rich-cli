@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: fmt · clippy · test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --all
+
+  parity:
+    name: golden parity vs upstream rich
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned upstream rich
+        run: |
+          version="$(grep -m1 -A2 '\[rich\]' UPSTREAM.toml | grep version | cut -d'"' -f2)"
+          echo "Pinned rich version: $version"
+          python -m pip install "rich==$version"
+
+      - name: Regenerate golden fixtures from real rich
+        run: python scripts/capture_golden.py
+
+      - name: Fail if our fixtures drifted from upstream
+        run: git diff --exit-code crates/rich/tests/golden
+
+      - name: Run parity tests
+        run: cargo test -p rich --test golden
