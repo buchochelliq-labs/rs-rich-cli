@@ -4,8 +4,8 @@
 //! optional [`Style`]. Everything renderable ultimately becomes a stream of
 //! segments, which the [`Console`](crate::console::Console) turns into bytes.
 //!
-//! Slice scope: control-code segments are modeled as a simple `control` flag;
-//! the full `ControlType` enum is deferred to the Console-completeness issue.
+//! Control-code segments carry a `control` flag; the typed control sequences
+//! that populate them live in [`control`](crate::control).
 
 use crate::cells::cell_len;
 use crate::style::Style;

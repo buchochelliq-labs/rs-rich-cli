@@ -183,6 +183,37 @@ impl Console {
         let _ = writeln!(lock, "{output}");
     }
 
+    /// Write a terminal control sequence to stdout.
+    ///
+    /// Port of `Console.control`. Control codes are only written when output is
+    /// a real terminal (they are meaningless when redirected to a file).
+    pub fn control(&self, control: &crate::control::Control) {
+        if !self.is_terminal {
+            return;
+        }
+        let text = control.as_str();
+        if !text.is_empty() {
+            let stdout = std::io::stdout();
+            let mut lock = stdout.lock();
+            let _ = write!(lock, "{text}");
+        }
+    }
+
+    /// Show or hide the cursor. Port of `Console.show_cursor`.
+    pub fn show_cursor(&self, show: bool) {
+        self.control(&crate::control::Control::show_cursor(show));
+    }
+
+    /// Clear the screen. Port of `Console.clear`.
+    pub fn clear(&self) {
+        self.control(&crate::control::Control::clear());
+    }
+
+    /// Ring the terminal bell. Port of `Console.bell`.
+    pub fn bell(&self) {
+        self.control(&crate::control::Control::bell());
+    }
+
     /// Parse `content` as console markup, apply registered highlighters, and
     /// print it. This is the `console.print("...")` path.
     pub fn print_str(&self, content: &str) {
@@ -241,6 +272,11 @@ impl Console {
         let system = self.color_system();
         let mut out = String::new();
         for segment in segments {
+            // Control codes are meaningless off a terminal — upstream's
+            // `_render_buffer` drops them when `not is_terminal`.
+            if segment.control && !self.is_terminal {
+                continue;
+            }
             match (&segment.style, system) {
                 (Some(style), Some(sys)) => out.push_str(&style.render(&segment.text, Some(sys))),
                 _ => out.push_str(&segment.text),

@@ -53,3 +53,7 @@ markdown_quote_hr	20	Note:               \n\n\x1b[35m▌ \x1b[0m\x1b[35mimportan
 hbar_full	20	\x1b[39;49m████████████████████\x1b[0m\n
 hbar_mid	20	\x1b[39;49m     ██████████     \x1b[0m\n
 hbar_edge	20	\x1b[39;49m██████▌             \x1b[0m\n
+control_clear	20	\x1b[2J
+control_move	20	\x1b[2C\x1b[1A
+control_move_to	20	\x1b[5;4H
+control_hide_cursor	20	\x1b[?25l

@@ -9,8 +9,8 @@
 use rich::markdown::Markdown;
 use rich::r#box::{Box as BoxSet, HEAVY_HEAD, SQUARE};
 use rich::{
-    Align, Bar, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Json, Justify, Padding,
-    Panel, ProgressBar, Renderable, Rule, Table, Text, Tree,
+    Align, Bar, ColorSystem, Columns, Console, Constrain, Control, HorizontalAlign, Json, Justify,
+    Padding, Panel, ProgressBar, Renderable, Rule, Table, Text, Tree,
 };
 
 fn justified_panel(justify: Justify) -> Panel {
@@ -189,6 +189,10 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "hbar_full" => Box::new(Bar::new(100.0, 0.0, 100.0).width(20)),
         "hbar_mid" => Box::new(Bar::new(100.0, 25.0, 75.0).width(20)),
         "hbar_edge" => Box::new(Bar::new(100.0, 0.0, 33.0).width(20)),
+        "control_clear" => Box::new(Control::clear()),
+        "control_move" => Box::new(Control::move_(2, -1)),
+        "control_move_to" => Box::new(Control::move_to(3, 4)),
+        "control_hide_cursor" => Box::new(Control::show_cursor(false)),
         other => panic!("no builder for renderable fixture {other:?}"),
     }
 }

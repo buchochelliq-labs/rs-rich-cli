@@ -8,6 +8,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Control codes** (`control.rs`, port of `rich/control.py` + `ControlType`):
+  the `Control` renderable and typed `ControlType` sequences — screen clear,
+  cursor home/move/move_to/move_to_column, show/hide cursor, alt-screen toggle,
+  bell, erase-in-line — plus `Console::control`/`clear`/`show_cursor`/`bell`.
+  Control segments are written only to a real terminal (matching upstream's
+  `_render_buffer`). Byte-parity-tested against real rich 15.0.0.
 - **Markdown** (`markdown.rs`, port of `rich/markdown.py` core): renders
   paragraphs, ATX headings (h1–h6, centered h1), **bullet + ordered lists**,
   **block quotes**, **thematic breaks (hr)**, and inline strong/emphasis/code via

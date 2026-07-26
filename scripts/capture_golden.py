@@ -24,6 +24,7 @@ from rich.bar import Bar as HBar
 from rich.columns import Columns
 from rich.console import Console
 from rich.constrain import Constrain
+from rich.control import Control
 from rich.json import JSON
 from rich.markdown import Markdown
 from rich.padding import Padding
@@ -171,6 +172,10 @@ RENDERABLE_CASES = [
     ("hbar_full", 20, HBar(size=100, begin=0, end=100, width=20)),
     ("hbar_mid", 20, HBar(size=100, begin=25, end=75, width=20)),
     ("hbar_edge", 20, HBar(size=100, begin=0, end=33, width=20)),
+    ("control_clear", 20, Control.clear()),
+    ("control_move", 20, Control.move(2, -1)),
+    ("control_move_to", 20, Control.move_to(3, 4)),
+    ("control_hide_cursor", 20, Control.show_cursor(False)),
 ]
 
 RENDERABLE_HEADER = """\

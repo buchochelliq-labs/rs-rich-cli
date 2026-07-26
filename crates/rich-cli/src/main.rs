@@ -11,8 +11,8 @@ use rich::markdown::Markdown;
 use rich::r#box::{DOUBLE, SQUARE};
 use rich::text::Text;
 use rich::{
-    filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Json, Justify,
-    Padding, Panel, ProgressBar, Renderable, Rule, Spinner, Table, Tree,
+    filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, Control, HorizontalAlign, Json,
+    Justify, Padding, Panel, ProgressBar, Renderable, Rule, Spinner, Table, Tree,
 };
 use rich_ext::ConsoleExt;
 
@@ -247,11 +247,28 @@ fn run_demo() {
         console.print(&Bar::new(100.0, begin, end).width(48));
     }
 
-    // Markdown — headings + inline styles.
+    // Markdown — headings, inline styles, lists, block quotes, and rules.
     console.print(&Rule::new("markdown"));
     console.print(&Markdown::new(
-        "# Heading\n\nA paragraph with **bold**, *italic*, and `code`.\n\n- bullet item\n- another\n\n1. first\n2. second",
+        "# Heading\n\nA paragraph with **bold**, *italic*, and `code`.\n\n- bullet item\n- another\n\n1. first\n2. second\n\n> a block quote\n\n---",
     ));
+
+    // Control codes — cursor/screen sequences (shown escaped, not executed).
+    console.print(&Rule::new("control codes"));
+    let show_escape = |label: &str, control: &Control| {
+        // Escaped so the sequence is visible (and its `[` isn't read as markup).
+        let escaped = control
+            .as_str()
+            .replace('\x1b', "\\x1b")
+            .replace('\x07', "\\a");
+        console.print(&Text::new(format!("  {label:>14}: {escaped}")));
+    };
+    show_escape("clear screen", &Control::clear());
+    show_escape("home", &Control::home());
+    show_escape("move (2,-1)", &Control::move_(2, -1));
+    show_escape("move_to (3,4)", &Control::move_to(3, 4));
+    show_escape("hide cursor", &Control::show_cursor(false));
+    show_escape("bell", &Control::bell());
 
     // Spinners — a few frames of each built-in (animation needs a Live loop).
     console.print(&Rule::new("spinner (frames)"));

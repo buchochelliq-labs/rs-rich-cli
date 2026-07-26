@@ -26,7 +26,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `protocol.py`, `abc.py`, `_extension.py` | `protocol.rs`         | 🟡 | — |
 | `measure.py` (+ `Renderable::measure`, fit) | `measure.rs`       | 🟡 | ✅ |
 | `errors.py`                           | `errors.rs`              | 🟡 | — |
-| `control.py`                          | `control.rs`             | ⬜ | — |
+| `control.py`                          | `control.rs`             | 🟢 | ✅ |
 | `ansi.py`                             | `ansi.rs`                | ⬜ | — |
 | `highlighter.py` (ReprHighlighter)    | `highlighter.rs`         | 🟡 | ✅ |
 | `scope.py`, `region.py`, `containers.py` | (tbd)                 | ⬜ | — |
