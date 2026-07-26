@@ -19,6 +19,7 @@ from __future__ import annotations
 import pathlib
 
 from rich import box
+from rich.align import Align
 from rich.console import Console
 from rich.padding import Padding
 from rich.panel import Panel
@@ -73,6 +74,9 @@ RENDERABLE_CASES = [
     ("table_square", 40, _table(box.SQUARE)),
     ("table_default", 40, _table(box.HEAVY_HEAD)),
     ("tree_nested", 40, _tree()),
+    ("align_center", 20, Align.center("hi")),
+    ("align_right", 20, Align.right("hi")),
+    ("align_center_odd", 21, Align.center("hi")),
 ]
 
 RENDERABLE_HEADER = """\

@@ -8,6 +8,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Align** (`align.rs`, port of `rich/align.py` horizontal axis): left/center/
+  right alignment of a child within the available width. Byte-parity-tested
+  against real rich 15.0.0.
 - **Tree** (`tree.rs`, port of `rich/tree.py`): renders a hierarchy with the
   `├──`/`└──` guide lines. Byte-parity-tested against real rich 15.0.0.
 - **Table** (`table.rs`, port of `rich/table.py` core): columns, rows, box choice

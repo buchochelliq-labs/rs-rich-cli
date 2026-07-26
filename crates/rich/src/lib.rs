@@ -16,6 +16,7 @@
 //! The remaining modules are tracked as roadmap issues; see `docs/PORTING.md`
 //! for the module map and per-module parity status.
 
+pub mod align;
 pub mod r#box;
 pub mod cells;
 pub mod color;
@@ -36,6 +37,7 @@ pub mod tree;
 pub mod wrap;
 
 // A small, curated prelude mirroring the most-used names from `rich`'s top level.
+pub use crate::align::Align;
 pub use crate::color::{Color, ColorSystem, ColorTriplet};
 pub use crate::console::{Console, ConsoleOptions, Justify};
 pub use crate::errors::{Result, RichError};
