@@ -8,6 +8,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Full emoji table**: the complete ~3600-entry `_emoji_codes` table is vendored
+  (`emoji_codes.rs`, binary-searched), so every `:shortcode:` resolves. Resolves
+  the former curated-subset divergence.
 - **Full 256-color names**: the complete `ANSI_COLOR_NAMES` table is vendored
   (`color_names.rs`), so markup/style names like `[orange1]`, `[grey37]`,
   `[deep_sky_blue1]` resolve to the correct 8-bit colors. Byte-parity-tested;

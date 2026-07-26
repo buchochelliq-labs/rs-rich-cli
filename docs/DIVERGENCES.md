@@ -70,15 +70,6 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** post-process the serialized string to `\u`-escape non-ASCII, and
   reconcile float formatting, under the JSON issue (#10).
 
-### 9. Emoji code table is a curated subset
-- **Differs:** `emoji.rs` ships ~40 common shortcodes; upstream `_emoji_codes`
-  has ~3600. Unknown `:codes:` are left untouched (same as upstream for unknown
-  names), so the only observable difference is which names resolve.
-- **Why:** vendoring the full generated table is deferred; the replacement logic
-  (`_emoji_replace`) is fully ported.
-- **Remove:** generate the complete `emoji_code` table from upstream
-  `_emoji_codes.py` under the utilities issue (#11).
-
 ## Feature-flagged divergences
 
 *None yet.* If a future feature can only be built by changing core behavior, it

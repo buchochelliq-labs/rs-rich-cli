@@ -14,6 +14,7 @@ nested_inner_wins	[red]a[blue]x[/]b[/]	\x1b[31ma\x1b[0m\x1b[34mx\x1b[0m\x1b[31mb
 hex_truecolor	[#ff8800]x[/]	\x1b[38;2;255;136;0mx\x1b[0m
 plain_text	no styles here	no styles here
 emoji_rocket	:rocket: launch :fire:	🚀 launch 🔥
+emoji_full_table	deploy :ship: at :clock3: with :zap:	deploy 🚢 at 🕒 with ⚡
 named_color_orange1	[orange1]sun[/]	\x1b[38;5;214msun\x1b[0m
 named_color_grey37	[grey37]dim[/]	\x1b[38;5;59mdim\x1b[0m
 named_on_named	[white on deep_sky_blue1]hi[/]	\x1b[37;48;5;39mhi\x1b[0m

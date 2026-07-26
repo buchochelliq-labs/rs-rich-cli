@@ -111,6 +111,7 @@ CASES: list[tuple[str, str]] = [
     ("hex_truecolor", "[#ff8800]x[/]"),
     ("plain_text", "no styles here"),
     ("emoji_rocket", ":rocket: launch :fire:"),
+    ("emoji_full_table", "deploy :ship: at :clock3: with :zap:"),
     ("named_color_orange1", "[orange1]sun[/]"),
     ("named_color_grey37", "[grey37]dim[/]"),
     ("named_on_named", "[white on deep_sky_blue1]hi[/]"),

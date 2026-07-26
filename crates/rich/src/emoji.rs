@@ -1,11 +1,9 @@
 //! Emoji shortcode replacement.
 //!
-//! Port of upstream `rich/_emoji_replace.py` + a curated subset of
-//! `rich/_emoji_codes.py`. [`replace`] turns `:name:` shortcodes into emoji,
-//! with optional `:name-emoji:` / `:name-text:` variant selectors.
-//!
-//! Slice scope: a curated subset of the ~3600 upstream codes. Unknown codes are
-//! left untouched (matching upstream). See docs/DIVERGENCES.md.
+//! Port of upstream `rich/_emoji_replace.py` + the full `rich/_emoji_codes.py`
+//! table (see `emoji_codes.rs`). [`replace`] turns `:name:` shortcodes into
+//! emoji, with optional `:name-emoji:` / `:name-text:` variant selectors.
+//! Unknown codes are left untouched (matching upstream).
 
 const VARIANT_EMOJI: &str = "\u{fe0f}";
 const VARIANT_TEXT: &str = "\u{fe0e}";
@@ -52,50 +50,9 @@ fn lookup(body: &str) -> Option<String> {
     emoji_code(name).map(|code| format!("{code}{variant}"))
 }
 
-/// A curated subset of `_emoji_codes.EMOJI`. Codepoints captured from real rich.
+/// Resolve an emoji name to its glyph(s) from the full vendored table.
 fn emoji_code(name: &str) -> Option<&'static str> {
-    Some(match name {
-        "rocket" => "\u{1f680}",
-        "fire" => "\u{1f525}",
-        "star" => "\u{2b50}",
-        "sparkles" => "\u{2728}",
-        "heart" => "\u{2764}",
-        "thumbs_up" => "\u{1f44d}",
-        "thumbs_down" => "\u{1f44e}",
-        "warning" => "\u{26a0}",
-        "white_check_mark" => "\u{2705}",
-        "cross_mark" | "x" => "\u{274c}",
-        "tada" => "\u{1f389}",
-        "eyes" => "\u{1f440}",
-        "bug" => "\u{1f41b}",
-        "snake" => "\u{1f40d}",
-        "crab" => "\u{1f980}",
-        "package" => "\u{1f4e6}",
-        "gear" => "\u{2699}",
-        "books" => "\u{1f4da}",
-        "memo" => "\u{1f4dd}",
-        "bulb" => "\u{1f4a1}",
-        "zap" => "\u{26a1}",
-        "lock" => "\u{1f512}",
-        "key" => "\u{1f511}",
-        "hammer" => "\u{1f528}",
-        "wrench" => "\u{1f527}",
-        "rainbow" => "\u{1f308}",
-        "sun" => "\u{2600}",
-        "moon" => "\u{1f314}",
-        "cloud" => "\u{2601}",
-        "snowflake" => "\u{2744}",
-        "coffee" => "\u{2615}",
-        "beer" => "\u{1f37a}",
-        "pizza" => "\u{1f355}",
-        "apple" => "\u{1f34e}",
-        "robot" => "\u{1f916}",
-        "alien" => "\u{1f47d}",
-        "ghost" => "\u{1f47b}",
-        "skull" => "\u{1f480}",
-        "100" => "\u{1f4af}",
-        _ => return None,
-    })
+    crate::emoji_codes::emoji_code(name)
 }
 
 #[cfg(test)]
