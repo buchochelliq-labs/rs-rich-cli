@@ -170,7 +170,7 @@ fn run_demo() {
     let mut table = Table::new();
     table.add_column("Renderable");
     table.add_column("Module");
-    table.add_column("Parity");
+    table.add_column_justify("Parity", Justify::Center);
     for (renderable, module, parity) in [
         ("Text / markup", "text, markup", "✓"),
         ("Rule", "rule", "✓"),

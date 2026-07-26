@@ -54,6 +54,25 @@ fn shrink_table() -> Table {
     table
 }
 
+fn expand_table() -> Table {
+    let mut table = Table::new().box_set(SQUARE).expand(true);
+    table.add_column("Name");
+    table.add_column("Age");
+    table.add_row(&["Alice", "30"]);
+    table.add_row(&["Bob", "7"]);
+    table
+}
+
+fn justify_table() -> Table {
+    let mut table = Table::new().box_set(SQUARE);
+    table.add_column_justify("L", Justify::Left);
+    table.add_column_justify("C", Justify::Center);
+    table.add_column_justify("R", Justify::Right);
+    table.add_row(&["a", "bb", "ccc"]);
+    table.add_row(&["xxxx", "y", "zz"]);
+    table
+}
+
 fn truecolor_console(width: usize) -> Console {
     Console::builder()
         .force_terminal(true)
@@ -122,6 +141,8 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "table_square" => Box::new(sample_table(SQUARE)),
         "table_default" => Box::new(sample_table(HEAVY_HEAD)),
         "table_shrink" => Box::new(shrink_table()),
+        "table_expand" => Box::new(expand_table()),
+        "table_justify" => Box::new(justify_table()),
         "tree_nested" => Box::new(sample_tree()),
         "align_center" | "align_center_odd" => Box::new(Align::center(Box::new(Text::new("hi")))),
         "align_right" => Box::new(Align::right(Box::new(Text::new("hi")))),

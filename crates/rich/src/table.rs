@@ -10,7 +10,7 @@
 //! `no_wrap`, per-column justify/style, `show_lines`, titles, and footers.
 
 use crate::cells::cell_len;
-use crate::console::{Console, ConsoleOptions};
+use crate::console::{Console, ConsoleOptions, Justify};
 use crate::protocol::Renderable;
 use crate::r#box::{Box as BoxSet, RowLevel, HEAVY_HEAD};
 use crate::segment::Segment;
@@ -20,6 +20,7 @@ use crate::text::Text;
 /// A single column definition. Mirrors the used subset of `rich.table.Column`.
 struct Column {
     header: String,
+    justify: Justify,
 }
 
 /// A grid of cells rendered inside a box. Mirrors `rich.table.Table`.
@@ -28,6 +29,7 @@ pub struct Table {
     rows: Vec<Vec<String>>,
     box_set: BoxSet,
     show_header: bool,
+    expand: bool,
     padding: (usize, usize, usize, usize),
     header_style: Style,
     border_style: Style,
@@ -40,6 +42,7 @@ impl Default for Table {
             rows: Vec::new(),
             box_set: HEAVY_HEAD,
             show_header: true,
+            expand: false,
             padding: (0, 1, 0, 1),
             header_style: Style::parse("bold").expect("valid built-in style"),
             border_style: Style::new(),
@@ -64,10 +67,22 @@ impl Table {
         self
     }
 
-    /// Add a column with the given header.
+    /// Expand the table to fill the available width.
+    pub fn expand(mut self, expand: bool) -> Self {
+        self.expand = expand;
+        self
+    }
+
+    /// Add a left-justified column with the given header.
     pub fn add_column(&mut self, header: impl Into<String>) -> &mut Self {
+        self.add_column_justify(header, Justify::Left)
+    }
+
+    /// Add a column with an explicit justification.
+    pub fn add_column_justify(&mut self, header: impl Into<String>, justify: Justify) -> &mut Self {
         self.columns.push(Column {
             header: header.into(),
+            justify,
         });
         self
     }
@@ -114,6 +129,16 @@ impl Table {
             let wrapable = vec![true; widths.len()];
             widths = collapse_widths(widths, &wrapable, available as i64);
         }
+
+        // Expand: distribute the leftover width proportionally. Port of the
+        // `expand` tail of `_calculate_column_widths` (via `ratio_distribute`).
+        let table_width: i64 = widths.iter().sum();
+        if self.expand && table_width < available as i64 && table_width > 0 {
+            let pad = ratio_distribute(available as i64 - table_width, &widths);
+            for (width, extra) in widths.iter_mut().zip(pad) {
+                *width += extra;
+            }
+        }
         widths.into_iter().map(|w| w.max(0) as usize).collect()
     }
 
@@ -136,7 +161,12 @@ impl Table {
         let mut height = 1;
         for (index, width) in content_widths.iter().enumerate() {
             let content = cells.get(index).map(String::as_str).unwrap_or("");
-            let text = Text::new(content);
+            let justify = self
+                .columns
+                .get(index)
+                .map(|column| column.justify)
+                .unwrap_or(Justify::Left);
+            let text = Text::new(content).justify(justify);
             let mut lines = text.render_lines(cell_style, Some(*width));
             if lines.is_empty() {
                 lines.push(Vec::new());
@@ -303,6 +333,27 @@ fn ratio_reduce(total: i64, ratios: &[i64], maximums: &[i64], values: &[i64]) ->
         } else {
             result.push(value);
         }
+    }
+    result
+}
+
+/// Divide `total` across slots proportionally to `ratios` (ceil each share).
+/// Port of `rich._ratio.ratio_distribute` (no minimums).
+fn ratio_distribute(total: i64, ratios: &[i64]) -> Vec<i64> {
+    let mut total_ratio: i64 = ratios.iter().sum();
+    let mut total_remaining = total;
+    let mut result = Vec::with_capacity(ratios.len());
+    for &ratio in ratios {
+        let distributed = if total_ratio > 0 {
+            // ceil(ratio * total_remaining / total_ratio) for positive values.
+            let numerator = ratio * total_remaining;
+            (numerator + total_ratio - 1) / total_ratio
+        } else {
+            total_remaining
+        };
+        result.push(distributed);
+        total_ratio -= ratio;
+        total_remaining -= distributed;
     }
     result
 }

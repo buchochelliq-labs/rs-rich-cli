@@ -8,6 +8,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Table `expand` + per-column justify**: `Table::expand` fills the available
+  width (distributing leftover space via `ratio_distribute`), and
+  `Table::add_column_justify` justifies a column's cells left/center/right.
+  Byte-parity-tested against real rich 15.0.0.
 - **Table flexible widths**: when a table's natural width exceeds the console
   width, the widest columns now shrink and their cells wrap to fit (port of
   `Table._calculate_column_widths` + `_collapse_widths` + `_ratio.ratio_reduce`,
