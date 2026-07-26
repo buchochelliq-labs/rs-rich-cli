@@ -7,6 +7,7 @@
 
 use std::process::ExitCode;
 
+use rich::markdown::Markdown;
 use rich::r#box::{DOUBLE, SQUARE};
 use rich::text::Text;
 use rich::{
@@ -245,6 +246,12 @@ fn run_demo() {
     for (begin, end) in [(0.0, 100.0), (0.0, 62.0), (20.0, 80.0), (55.0, 100.0)] {
         console.print(&Bar::new(100.0, begin, end).width(48));
     }
+
+    // Markdown — headings + inline styles.
+    console.print(&Rule::new("markdown"));
+    console.print(&Markdown::new(
+        "# Heading\n\nA paragraph with **bold**, *italic*, and `code`.",
+    ));
 
     // Spinners — a few frames of each built-in (animation needs a Live loop).
     console.print(&Rule::new("spinner (frames)"));

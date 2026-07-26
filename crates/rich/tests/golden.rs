@@ -6,6 +6,7 @@
 //! drift from upstream fails loudly. This is the backbone of the "stay in sync"
 //! guarantee described in AGENTS.md.
 
+use rich::markdown::Markdown;
 use rich::r#box::{Box as BoxSet, HEAVY_HEAD, SQUARE};
 use rich::{
     Align, Bar, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Json, Justify, Padding,
@@ -180,6 +181,9 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "bar_third" => Box::new(ProgressBar::new(100.0, 33.0).width(20)),
         "bar_full" => Box::new(ProgressBar::new(100.0, 100.0).width(20)),
         "json_object" => Box::new(Json::new(JSON_SAMPLE).expect("valid JSON")),
+        "markdown_doc" => Box::new(Markdown::new(
+            "# Title\n\nHello **bold** and *italic* and `code`.",
+        )),
         "hbar_full" => Box::new(Bar::new(100.0, 0.0, 100.0).width(20)),
         "hbar_mid" => Box::new(Bar::new(100.0, 25.0, 75.0).width(20)),
         "hbar_edge" => Box::new(Bar::new(100.0, 0.0, 33.0).width(20)),

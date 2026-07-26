@@ -70,6 +70,15 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** post-process the serialized string to `\u`-escape non-ASCII, and
   reconcile float formatting, under the JSON issue (#10).
 
+### 9. `Markdown` covers a subset of elements
+- **Differs:** paragraphs, ATX headings (h1–h6), and inline strong/emphasis/code
+  are rendered (byte-parity); lists, code blocks, block quotes, links, thematic
+  breaks, and tables are not yet handled (their source is currently skipped).
+- **Why:** the block/inline core is the common case; the remaining elements each
+  need their own renderer.
+- **Remove:** port the remaining `markdown.py` element types under the Markdown
+  issue (#9).
+
 ## Feature-flagged divergences
 
 *None yet.* If a future feature can only be built by changing core behavior, it

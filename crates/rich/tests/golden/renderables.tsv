@@ -47,6 +47,7 @@ bar_half	20	\x1b[38;2;249;38;114m━━━━━━━━━━\x1b[0m\x1b[38;5;
 bar_third	20	\x1b[38;2;249;38;114m━━━━━━\x1b[0m\x1b[38;2;249;38;114m╸\x1b[0m\x1b[38;5;237m━━━━━━━━━━━━━\x1b[0m
 bar_full	20	\x1b[38;2;114;156;31m━━━━━━━━━━━━━━━━━━━━\x1b[0m
 json_object	40	\x1b[1m{\x1b[0m\n  \x1b[1;34m"name"\x1b[0m: \x1b[32m"Alice"\x1b[0m,\n  \x1b[1;34m"age"\x1b[0m: \x1b[1;36m30\x1b[0m,\n  \x1b[1;34m"admin"\x1b[0m: \x1b[3;92mtrue\x1b[0m,\n  \x1b[1;34m"tags"\x1b[0m: \x1b[1m[\x1b[0m\n    \x1b[32m"a"\x1b[0m,\n    \x1b[32m"b"\x1b[0m\n  \x1b[1m]\x1b[0m,\n  \x1b[1;34m"meta"\x1b[0m: \x1b[3;35mnull\x1b[0m\n\x1b[1m}\x1b[0m\n
+markdown_doc	24	         \x1b[1;4mTitle\x1b[0m          \n\nHello \x1b[1mbold\x1b[0m and \x1b[3mitalic\x1b[0m   \nand \x1b[1;36;40mcode\x1b[0m.               \n
 hbar_full	20	\x1b[39;49m████████████████████\x1b[0m\n
 hbar_mid	20	\x1b[39;49m     ██████████     \x1b[0m\n
 hbar_edge	20	\x1b[39;49m██████▌             \x1b[0m\n

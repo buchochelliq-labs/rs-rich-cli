@@ -24,6 +24,8 @@ terminal_size = "0.4"
 serde_json = { version = "1", features = ["preserve_order"] }
 # fancy-regex supports the lookbehind/backreference features rich's ReprHighlighter uses.
 fancy-regex = "0.18"
+# CommonMark parser for the Markdown renderable.
+pulldown-cmark = { version = "0.12", default-features = false }
 
 # Core stays safe by default; the future Windows-console port may opt back in
 # per-item with an explicit `#[allow(unsafe_code)]` + justification.

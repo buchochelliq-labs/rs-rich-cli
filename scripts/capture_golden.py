@@ -25,6 +25,7 @@ from rich.columns import Columns
 from rich.console import Console
 from rich.constrain import Constrain
 from rich.json import JSON
+from rich.markdown import Markdown
 from rich.padding import Padding
 from rich.panel import Panel
 from rich.progress_bar import ProgressBar
@@ -164,6 +165,7 @@ RENDERABLE_CASES = [
     ("bar_third", 20, ProgressBar(total=100, completed=33, width=20)),
     ("bar_full", 20, ProgressBar(total=100, completed=100, width=20)),
     ("json_object", 40, JSON(JSON_SAMPLE)),
+    ("markdown_doc", 24, Markdown("# Title\n\nHello **bold** and *italic* and `code`.")),
     ("hbar_full", 20, HBar(size=100, begin=0, end=100, width=20)),
     ("hbar_mid", 20, HBar(size=100, begin=25, end=75, width=20)),
     ("hbar_edge", 20, HBar(size=100, begin=0, end=33, width=20)),

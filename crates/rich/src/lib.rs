@@ -31,6 +31,7 @@ pub mod errors;
 pub mod filesize;
 pub mod highlighter;
 pub mod json;
+pub mod markdown;
 pub mod markup;
 pub mod measure;
 pub mod padding;

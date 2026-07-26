@@ -301,7 +301,8 @@ fn char_to_byte(text: &str, char_idx: usize) -> usize {
         .unwrap_or(text.len())
 }
 
-/// Pad `line` to `width` cells according to `justify`, using `style` for the pad.
+/// Pad `line` to `width` cells according to `justify`, using `style` for the
+/// pad (so e.g. a styled table cell fills with its own style).
 fn justify_line(line: &[Segment], width: usize, justify: Justify, style: &Style) -> Vec<Segment> {
     let line_width: usize = line.iter().map(Segment::cell_length).sum();
     let excess = width.saturating_sub(line_width);
