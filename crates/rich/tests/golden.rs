@@ -72,6 +72,23 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
                 .title_align(HorizontalAlign::Right)
                 .box_set(SQUARE),
         ),
+        "panel_subtitle" => Box::new(
+            Panel::new(Box::new(Text::new("x")))
+                .subtitle("S")
+                .box_set(SQUARE),
+        ),
+        "panel_subtitle_left" => Box::new(
+            Panel::new(Box::new(Text::new("x")))
+                .subtitle("S")
+                .subtitle_align(HorizontalAlign::Left)
+                .box_set(SQUARE),
+        ),
+        "panel_title_and_sub" => Box::new(
+            Panel::new(Box::new(Text::new("x")))
+                .title("T")
+                .subtitle("S")
+                .box_set(SQUARE),
+        ),
         "panel_square" => Box::new(Panel::new(Box::new(Text::new("hi"))).box_set(SQUARE)),
         "padding_1_2" => Box::new(Padding::new(Box::new(Text::new("hi")), (1, 2, 1, 2))),
         "padding_0_1" => Box::new(Padding::new(Box::new(Text::new("hi")), (0, 1, 0, 1))),

@@ -8,6 +8,8 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Panel subtitle**: `Panel::subtitle` / `subtitle_align` (drawn into the bottom
+  border, mirroring title alignment). Byte-parity-tested against real rich 15.0.0.
 - **Spinner** (`spinner.rs`, port of `rich/spinner.py` + a subset of
   `_spinners.py`): `Spinner::render(time)` picks the animation frame for an
   elapsed time (dots/line/dots2/arrow/simpleDots). Frames verified against real

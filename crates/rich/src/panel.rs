@@ -3,8 +3,8 @@
 //! Port of upstream `rich/panel.py`. A [`Panel`] frames a child renderable with
 //! a box border, inner padding, and an optional centered title.
 //!
-//! Slice scope: centered title, box + border style + padding, expand-to-width.
-//! Subtitle, `title_align`/`subtitle_align`, and `fit` sizing are deferred.
+//! Slice scope: title + subtitle (with alignment), box + border style +
+//! padding, expand-to-width. `fit` (shrink-to-content) sizing is deferred.
 
 use crate::align::HorizontalAlign;
 use crate::cells::{cell_len, truncate};
@@ -21,6 +21,8 @@ pub struct Panel {
     box_set: BoxSet,
     title: Option<String>,
     title_align: HorizontalAlign,
+    subtitle: Option<String>,
+    subtitle_align: HorizontalAlign,
     padding: (usize, usize, usize, usize),
     border_style: Style,
     style: Style,
@@ -34,6 +36,8 @@ impl Panel {
             box_set: ROUNDED,
             title: None,
             title_align: HorizontalAlign::Center,
+            subtitle: None,
+            subtitle_align: HorizontalAlign::Center,
             padding: (0, 1, 0, 1),
             border_style: Style::new(),
             style: Style::new(),
@@ -49,6 +53,18 @@ impl Panel {
     /// Set the title alignment within the top border.
     pub fn title_align(mut self, align: HorizontalAlign) -> Self {
         self.title_align = align;
+        self
+    }
+
+    /// Set a subtitle (drawn into the bottom border, centered by default).
+    pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self {
+        self.subtitle = Some(subtitle.into());
+        self
+    }
+
+    /// Set the subtitle alignment within the bottom border.
+    pub fn subtitle_align(mut self, align: HorizontalAlign) -> Self {
+        self.subtitle_align = align;
         self
     }
 
@@ -70,29 +86,37 @@ impl Panel {
         self
     }
 
-    /// Build the (possibly titled) top border string for a given inner width.
-    fn top_border(&self, inner_width: usize) -> String {
-        let Some(title) = &self.title else {
-            return self.box_set.get_top(&[inner_width]);
-        };
-        // Truncate the title so it (plus its flanking spaces) fits.
-        let title = truncate(title, inner_width.saturating_sub(2));
-        let padded = format!(" {title} ");
-        let padded_len = cell_len(&padded);
-        let fill = inner_width.saturating_sub(padded_len);
-        let (left, right) = match self.title_align {
-            HorizontalAlign::Center => (fill / 2, fill - fill / 2),
-            // Left/right keep a single box-char offset on the near side.
-            HorizontalAlign::Left => (1.min(fill), fill.saturating_sub(1)),
-            HorizontalAlign::Right => (fill.saturating_sub(1), 1.min(fill)),
-        };
-        let top = self.box_set.top;
+    /// Build a top/bottom border, optionally embedding an aligned `label`.
+    fn border_line(
+        &self,
+        inner_width: usize,
+        left_corner: char,
+        fill_char: char,
+        right_corner: char,
+        label: Option<&String>,
+        align: HorizontalAlign,
+    ) -> String {
         let mut border = String::new();
-        border.push(self.box_set.top_left);
-        border.extend(std::iter::repeat(top).take(left));
-        border.push_str(&padded);
-        border.extend(std::iter::repeat(top).take(right));
-        border.push(self.box_set.top_right);
+        border.push(left_corner);
+        match label {
+            None => border.extend(std::iter::repeat(fill_char).take(inner_width)),
+            Some(label) => {
+                // Truncate the label so it (plus its flanking spaces) fits.
+                let label = truncate(label, inner_width.saturating_sub(2));
+                let padded = format!(" {label} ");
+                let fill = inner_width.saturating_sub(cell_len(&padded));
+                let (left, right) = match align {
+                    HorizontalAlign::Center => (fill / 2, fill - fill / 2),
+                    // Left/right keep a single box-char offset on the near side.
+                    HorizontalAlign::Left => (1.min(fill), fill.saturating_sub(1)),
+                    HorizontalAlign::Right => (fill.saturating_sub(1), 1.min(fill)),
+                };
+                border.extend(std::iter::repeat(fill_char).take(left));
+                border.push_str(&padded);
+                border.extend(std::iter::repeat(fill_char).take(right));
+            }
+        }
+        border.push(right_corner);
         border
     }
 }
@@ -117,7 +141,14 @@ impl Renderable for Panel {
 
         // Top border (with title if present).
         rows.push(vec![Segment::new(
-            self.top_border(inner_width),
+            self.border_line(
+                inner_width,
+                self.box_set.top_left,
+                self.box_set.top,
+                self.box_set.top_right,
+                self.title.as_ref(),
+                self.title_align,
+            ),
             border.clone(),
         )]);
 
@@ -145,9 +176,16 @@ impl Renderable for Panel {
             rows.push(vec![left_border(), blank_inner(), right_border()]);
         }
 
-        // Bottom border.
+        // Bottom border (with subtitle if present).
         rows.push(vec![Segment::new(
-            self.box_set.get_bottom(&[inner_width]),
+            self.border_line(
+                inner_width,
+                self.box_set.bottom_left,
+                self.box_set.bottom,
+                self.box_set.bottom_right,
+                self.subtitle.as_ref(),
+                self.subtitle_align,
+            ),
             border.clone(),
         )]);
 

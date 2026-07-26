@@ -133,6 +133,11 @@ fn run_demo() {
             .box_set(DOUBLE)
             .title("double"),
     );
+    console.print(
+        &Panel::new(text("title + subtitle"))
+            .title("top")
+            .subtitle("bottom"),
+    );
 
     // Padding (shown inside a panel so the blank space is visible).
     console.print(&Rule::new("padding"));

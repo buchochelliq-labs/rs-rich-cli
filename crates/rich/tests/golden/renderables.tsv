@@ -16,6 +16,9 @@ panel_title	20	╭─────── T ────────╮\n│ hello
 panel_title_left	20	┌─ T ──────────────┐\n│ x                │\n└──────────────────┘\n
 panel_title_right	20	┌────────────── T ─┐\n│ x                │\n└──────────────────┘\n
 panel_square	20	┌──────────────────┐\n│ hi               │\n└──────────────────┘\n
+panel_subtitle	20	┌──────────────────┐\n│ x                │\n└─────── S ────────┘\n
+panel_subtitle_left	20	┌──────────────────┐\n│ x                │\n└─ S ──────────────┘\n
+panel_title_and_sub	20	┌─────── T ────────┐\n│ x                │\n└─────── S ────────┘\n
 padding_1_2	10	          \n  hi      \n          \n
 padding_0_1	10	 hi       \n
 wrap_words	10	The quick \nbrown fox\n
