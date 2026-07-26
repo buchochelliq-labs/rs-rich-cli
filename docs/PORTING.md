@@ -45,6 +45,8 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `columns.py` | `columns.rs` | 🟡 | ✅ |
 | `tree.py` | `tree.rs` | 🟡 | ✅ |
 | `layout.py` | `layout.rs` | 🟡 | ✅ |
+| `styled.py` | `styled.rs` | 🟢 | ✅ |
+| `screen.py` | `screen.rs` | 🟡 | — |
 | `progress_bar.py` | `progress_bar.rs` | 🟡 |
 | `bar.py` | `bar.rs` | 🟡 | — |
 
@@ -74,7 +76,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 |-------------------|-----------|:------:|
 | `emoji.py`, `_emoji_codes.py`, `_emoji_replace.py` | `emoji.rs` | 🟡 |
 | `filesize.py` | `filesize.rs` | 🟡 |
-| `prompt.py`, `pager.py`, `screen.py` | resp. | ⬜ |
+| `prompt.py`, `pager.py` | resp. | ⬜ |
 | `_unicode_data/` | `unicode_data/` | ⬜ |
 | `_windows.py`, `_win32_console.py`, `_windows_renderer.py` | `windows/` | ⬜ |
 | `jupyter.py`, `file_proxy.py`, `diagnose.py`, `_fileno.py`, `_null_file.py` | resp. | ⬜ |

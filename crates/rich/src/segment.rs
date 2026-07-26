@@ -71,6 +71,34 @@ impl Segment {
         out
     }
 
+    /// Apply `style` as a base *under* each segment's own style (that segment's
+    /// style wins on top). Control segments are left untouched. Port of
+    /// `Segment.apply_style` (the `style`-only path).
+    ///
+    /// Line-break segments (`"\n"`) are also left unstyled: upstream's
+    /// line-oriented print pipeline re-emits row separators plain, so styling
+    /// them would add stray SGR runs around every newline.
+    pub fn apply_style(segments: &[Segment], style: &Style) -> Vec<Segment> {
+        segments
+            .iter()
+            .map(|segment| {
+                if segment.control || segment.text == "\n" {
+                    segment.clone()
+                } else {
+                    let combined = match &segment.style {
+                        Some(own) => style.combine(own),
+                        None => style.clone(),
+                    };
+                    Segment {
+                        text: segment.text.clone(),
+                        style: Some(combined),
+                        control: false,
+                    }
+                }
+            })
+            .collect()
+    }
+
     /// Split a flat segment stream into lines, breaking on `\n`.
     ///
     /// Port of `Segment.split_lines`. Newline characters are consumed (not kept
@@ -101,6 +129,21 @@ impl Segment {
             lines.push(current);
         }
         lines
+    }
+
+    /// Shape a set of lines into exactly `height` rows of `width` cells: crop
+    /// extra rows, pad each row to `width`, and append blank rows to reach
+    /// `height`. Port of `Segment.set_shape` (`style=None`, `new_lines=False`).
+    pub fn set_shape(lines: Vec<Vec<Segment>>, width: usize, height: usize) -> Vec<Vec<Segment>> {
+        let mut shaped: Vec<Vec<Segment>> = lines
+            .into_iter()
+            .take(height)
+            .map(|line| Segment::adjust_line_length(&line, width, None))
+            .collect();
+        while shaped.len() < height {
+            shaped.push(vec![Segment::new(" ".repeat(width), None)]);
+        }
+        shaped
     }
 
     /// Pad (with a styled space run) or crop a single line to exactly `length`

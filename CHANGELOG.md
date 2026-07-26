@@ -8,6 +8,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`Styled`** (`styled.rs`, port of `rich/styled.py`) and **`Screen`**
+  (`screen.rs`, port of `rich/screen.py`): `Styled` lays a `Style` under an
+  entire renderable (each segment's own style still wins); `Screen` fills the
+  console region (width × height) with a child, cropping/padding to an exact
+  rectangle with an optional background style. Added `Segment::apply_style` and
+  `Segment::set_shape` (now shared with `Layout`). `Styled` is byte-parity-tested
+  against real rich 15.0.0; `Screen` has a known trailing-newline edge
+  (DIVERGENCES #12).
 - **`rich-cli` render modes** (`crates/rich-cli`): the binary now implements a
   slice of upstream rich-cli's flags — `-p/--print` (console markup),
   `-m/--markdown`, `-j/--json`, and `--rule` — plus `-w/--width`,

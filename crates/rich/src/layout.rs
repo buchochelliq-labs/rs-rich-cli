@@ -15,7 +15,6 @@ use crate::console::{Console, ConsoleOptions, Justify};
 use crate::protocol::Renderable;
 use crate::ratio::{ratio_resolve, Edge};
 use crate::segment::Segment;
-use crate::style::Style;
 
 /// The axis along which a branch splits its children.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -139,7 +138,7 @@ impl Layout {
 
     /// Render a leaf renderable to a `(width, height)` block (blank if empty).
     fn render_leaf(&self, console: &Console, width: usize, height: usize) -> Vec<Vec<Segment>> {
-        let mut lines = match &self.renderable {
+        let lines = match &self.renderable {
             Some(renderable) => {
                 let mut options = console.options().update_dimensions(width, height);
                 options.justify = Justify::Default;
@@ -147,20 +146,7 @@ impl Layout {
             }
             None => Vec::new(),
         };
-        set_shape(&mut lines, width, height);
-        lines
-    }
-}
-
-/// Pad/crop `lines` to exactly `height` rows of `width` cells. Port of
-/// `Segment.set_shape`.
-fn set_shape(lines: &mut Vec<Vec<Segment>>, width: usize, height: usize) {
-    lines.truncate(height);
-    for line in lines.iter_mut() {
-        *line = Segment::adjust_line_length(line, width, Some(Style::new()));
-    }
-    while lines.len() < height {
-        lines.push(vec![Segment::new(" ".repeat(width), None)]);
+        Segment::set_shape(lines, width, height)
     }
 }
 

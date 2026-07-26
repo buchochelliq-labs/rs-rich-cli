@@ -10,7 +10,8 @@ use rich::markdown::Markdown;
 use rich::r#box::{Box as BoxSet, HEAVY_HEAD, SQUARE};
 use rich::{
     Align, AnsiDecoder, Bar, ColorSystem, Columns, Console, Constrain, Control, HorizontalAlign,
-    Json, Justify, Layout, Padding, Panel, ProgressBar, Renderable, Rule, Table, Text, Tree,
+    Json, Justify, Layout, Padding, Panel, ProgressBar, Renderable, Rule, Style, Styled, Table,
+    Text, Tree,
 };
 
 /// Build the layout matching a `layout_*` fixture name. Must stay in sync with
@@ -239,6 +240,14 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
             Box::new(AnsiDecoder::new().decode_line("\x1b[38;2;255;136;0mx\x1b[0m"))
         }
         "ansi_attrs" => Box::new(AnsiDecoder::new().decode_line("\x1b[3;4;9mstyled\x1b[0m")),
+        "styled_on_red" => Box::new(Styled::new(
+            Box::new(Text::new("hi")),
+            Style::parse("on red").unwrap(),
+        )),
+        "styled_panel" => Box::new(Styled::new(
+            Box::new(Panel::new(Box::new(Text::new("x"))).box_set(SQUARE)),
+            Style::parse("green").unwrap(),
+        )),
         other => panic!("no builder for renderable fixture {other:?}"),
     }
 }

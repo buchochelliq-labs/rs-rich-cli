@@ -14,7 +14,8 @@ use rich::r#box::{DOUBLE, SQUARE};
 use rich::text::Text;
 use rich::{
     filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, Control, HorizontalAlign, Json,
-    Justify, Layout, Padding, Panel, ProgressBar, Renderable, Rule, Spinner, Table, Tree,
+    Justify, Layout, Padding, Panel, ProgressBar, Renderable, Rule, Spinner, Style, Styled, Table,
+    Tree,
 };
 use rich_ext::ConsoleExt;
 
@@ -307,6 +308,13 @@ fn run_demo() {
     console.print(
         &Panel::new(Box::new(Padding::new(text("padded (1, 4)"), (1, 4, 1, 4)))).title("padding"),
     );
+
+    // Styled — lay one style under an entire renderable.
+    console.print(&Rule::new("styled"));
+    console.print(&Styled::new(
+        Box::new(Panel::new(text("green under the whole panel")).title("styled")),
+        Style::parse("green").unwrap(),
+    ));
 
     // Horizontal alignment (fills the console width).
     console.print(&Rule::new("align"));

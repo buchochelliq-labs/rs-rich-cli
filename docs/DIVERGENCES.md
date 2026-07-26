@@ -99,6 +99,17 @@ Format: what differs · why · how to remove it (if temporary).
   expands to fill its region (byte-parity), via `Console::render_lines`'s height
   handling. Other containers can adopt the same pattern as needed.
 
+### 12. `Screen` keeps its trailing row separator when printed
+- **Differs:** printing a full-height `Screen` emits a trailing newline after the
+  last row (like every other renderable in this port), whereas upstream's
+  line-oriented print pipeline omits the final separator for a `Screen` that
+  exactly fills the console height.
+- **Why:** our `print` uniformly appends one newline after a renderable; matching
+  upstream's per-renderable trailing-newline suppression is a print-pipeline
+  concern that would affect the shared path.
+- **Remove:** model upstream's line-based print (crop/emit rows without a trailing
+  separator when a renderable fills the height) under the Console issue (#1).
+
 ## Feature-flagged divergences
 
 *None yet.* If a future feature can only be built by changing core behavior, it

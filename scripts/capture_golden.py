@@ -38,6 +38,7 @@ JSON_SAMPLE = (
     '"tags": ["a", "b"], "meta": null}'
 )
 from rich.rule import Rule
+from rich.styled import Styled
 from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
@@ -221,6 +222,8 @@ RENDERABLE_CASES = [
     ("ansi_8bit", 20, _ansi("\x1b[38;5;214mx\x1b[0m")),
     ("ansi_truecolor", 20, _ansi("\x1b[38;2;255;136;0mx\x1b[0m")),
     ("ansi_attrs", 20, _ansi("\x1b[3;4;9mstyled\x1b[0m")),
+    ("styled_on_red", 20, Styled(Text("hi"), "on red")),
+    ("styled_panel", 8, Styled(Panel("x", box=box.SQUARE), "green")),
 ]
 
 # (name, width, height, layout) — layouts need an explicit console height.
