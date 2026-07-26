@@ -8,6 +8,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Bar** (`bar.rs`, port of `rich/bar.py`): a horizontal bar spanning
+  `[begin, end]` within `[0, size]`, with eighth-block sub-cell edges. Byte-parity-
+  tested against real rich 15.0.0.
 - **Emoji** (`emoji.rs`, port of `_emoji_replace` + a curated `_emoji_codes`
   subset): `:name:` shortcodes (with `-emoji`/`-text` variants) expand in the
   `Console` print path (default on, `ConsoleBuilder::emoji`). Byte-parity-tested

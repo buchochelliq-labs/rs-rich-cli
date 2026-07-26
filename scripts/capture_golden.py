@@ -20,6 +20,7 @@ import pathlib
 
 from rich import box
 from rich.align import Align
+from rich.bar import Bar as HBar
 from rich.columns import Columns
 from rich.console import Console
 from rich.constrain import Constrain
@@ -105,6 +106,9 @@ RENDERABLE_CASES = [
     ("bar_third", 20, ProgressBar(total=100, completed=33, width=20)),
     ("bar_full", 20, ProgressBar(total=100, completed=100, width=20)),
     ("json_object", 40, JSON(JSON_SAMPLE)),
+    ("hbar_full", 20, HBar(size=100, begin=0, end=100, width=20)),
+    ("hbar_mid", 20, HBar(size=100, begin=25, end=75, width=20)),
+    ("hbar_edge", 20, HBar(size=100, begin=0, end=33, width=20)),
 ]
 
 RENDERABLE_HEADER = """\

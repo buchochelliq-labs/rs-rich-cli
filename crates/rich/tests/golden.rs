@@ -8,7 +8,7 @@
 
 use rich::r#box::{Box as BoxSet, HEAVY_HEAD, SQUARE};
 use rich::{
-    Align, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Json, Justify, Padding,
+    Align, Bar, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Json, Justify, Padding,
     Panel, ProgressBar, Renderable, Rule, Table, Text, Tree,
 };
 
@@ -124,6 +124,9 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "bar_third" => Box::new(ProgressBar::new(100.0, 33.0).width(20)),
         "bar_full" => Box::new(ProgressBar::new(100.0, 100.0).width(20)),
         "json_object" => Box::new(Json::new(JSON_SAMPLE).expect("valid JSON")),
+        "hbar_full" => Box::new(Bar::new(100.0, 0.0, 100.0).width(20)),
+        "hbar_mid" => Box::new(Bar::new(100.0, 25.0, 75.0).width(20)),
+        "hbar_edge" => Box::new(Bar::new(100.0, 0.0, 33.0).width(20)),
         other => panic!("no builder for renderable fixture {other:?}"),
     }
 }

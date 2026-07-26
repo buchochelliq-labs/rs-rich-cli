@@ -46,7 +46,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `tree.py` | `tree.rs` | 🟡 | ✅ |
 | `layout.py` | `layout.rs` | ⬜ | — |
 | `progress_bar.py` | `progress_bar.rs` | 🟡 |
-| `bar.py` | `bar.rs` | ⬜ | — |
+| `bar.py` | `bar.rs` | 🟡 | — |
 
 ## Live & progress
 

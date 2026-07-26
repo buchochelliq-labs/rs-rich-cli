@@ -10,7 +10,7 @@ use std::process::ExitCode;
 use rich::r#box::{DOUBLE, SQUARE};
 use rich::text::Text;
 use rich::{
-    filesize, Align, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Json, Justify,
+    filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Json, Justify,
     Padding, Panel, ProgressBar, Renderable, Rule, Spinner, Table, Tree,
 };
 use rich_ext::ConsoleExt;
@@ -230,6 +230,12 @@ fn run_demo() {
         r#"{"port": "rich", "version": "15.0.0", "parity": true, "widgets": ["panel", "table", "tree"]}"#,
     ) {
         console.print(&json);
+    }
+
+    // Bar — a filled span within a range (eighth-block resolution).
+    console.print(&Rule::new("bar (range)"));
+    for (begin, end) in [(0.0, 100.0), (0.0, 62.0), (20.0, 80.0), (55.0, 100.0)] {
+        console.print(&Bar::new(100.0, begin, end).width(48));
     }
 
     // Spinners — a few frames of each built-in (animation needs a Live loop).
