@@ -99,6 +99,33 @@ impl Color {
         }
     }
 
+    /// A color from an 8-bit ANSI number (0–15 standard, 16–255 palette).
+    /// Port of `Color.from_ansi`.
+    pub fn from_ansi(number: u8) -> Self {
+        Color {
+            name: format!("color({number})"),
+            kind: if number < 16 {
+                ColorType::Standard
+            } else {
+                ColorType::EightBit
+            },
+            number: Some(number),
+            triplet: None,
+        }
+    }
+
+    /// A truecolor from explicit RGB channels. Port of `Color.from_rgb`
+    /// (via `from_triplet`): the name is the `#rrggbb` hex.
+    pub fn from_rgb(red: u8, green: u8, blue: u8) -> Self {
+        let triplet = ColorTriplet::new(red, green, blue);
+        Color {
+            name: triplet.hex(),
+            kind: ColorType::Truecolor,
+            number: None,
+            triplet: Some(triplet),
+        }
+    }
+
     /// Parse a color from a string spec.
     ///
     /// Accepts: a standard color name, `default`, `#rrggbb`, `rgb(r,g,b)`, and
@@ -146,9 +173,15 @@ impl Color {
                     "color number must be <= 255, not {n}"
                 )));
             }
+            // Numbers < 16 are standard SGR colors; the rest are 8-bit palette
+            // (matching `Color.parse`'s `color_8` branch).
             return Ok(Color {
                 name: original.to_string(),
-                kind: ColorType::EightBit,
+                kind: if n < 16 {
+                    ColorType::Standard
+                } else {
+                    ColorType::EightBit
+                },
                 number: Some(n as u8),
                 triplet: None,
             });

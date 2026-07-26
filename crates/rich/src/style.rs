@@ -65,6 +65,16 @@ impl Style {
         Style::default()
     }
 
+    /// A style carrying only a foreground and/or background color.
+    /// Port of `Style.from_color`.
+    pub fn from_color(color: Option<Color>, bgcolor: Option<Color>) -> Self {
+        Style {
+            color,
+            bgcolor,
+            attrs: [None; ATTR_COUNT],
+        }
+    }
+
     pub fn with_color(mut self, color: Color) -> Self {
         self.color = Some(color);
         self

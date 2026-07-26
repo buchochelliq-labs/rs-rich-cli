@@ -8,6 +8,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **ANSI decoder** (`ansi.rs`, port of `rich/ansi.py`): `AnsiDecoder` tokenizes a
+  terminal string and turns SGR sequences back into styled `Text` — attributes,
+  16/256/truecolor foreground + background, lenient parsing, and cross-line style
+  persistence. Byte-parity-tested against real rich 15.0.0 (re-render round-trip).
+  Added `Color::from_ansi`/`from_rgb` and `Style::from_color`. (OSC hyperlinks are
+  skipped, pending `Style` link support — DIVERGENCES #10.)
 - **Control codes** (`control.rs`, port of `rich/control.py` + `ControlType`):
   the `Control` renderable and typed `ControlType` sequences — screen clear,
   cursor home/move/move_to/move_to_column, show/hide cursor, alt-screen toggle,
@@ -107,6 +113,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `Rule`, `Padding`, and `Panel` — all byte-parity-tested against real rich 15.0.0.
 - Golden harness extended with a renderables fixture (`renderables.tsv`), captured
   in Python UTF-8 mode for deterministic box glyphs.
+
+### Fixed
+- **`Color::parse("color(N)")` for N < 16**: now returns a `Standard` color (SGR
+  30–37/90–97) instead of an 8-bit palette color, matching `Color.parse`. This
+  makes ANSI round-trips of the standard colors byte-identical to upstream.
 
 ### Foundation
 - **Workspace scaffold**: `rich` (core, mirroring upstream **15.0.0**),

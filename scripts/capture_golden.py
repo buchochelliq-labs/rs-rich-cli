@@ -20,6 +20,7 @@ import pathlib
 
 from rich import box
 from rich.align import Align
+from rich.ansi import AnsiDecoder
 from rich.bar import Bar as HBar
 from rich.columns import Columns
 from rich.console import Console
@@ -39,6 +40,11 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
+
+
+def _ansi(text: str):
+    """Decode an ANSI string into a single styled Text (fresh decoder)."""
+    return AnsiDecoder().decode_line(text)
 
 
 def _tree() -> Tree:
@@ -176,6 +182,10 @@ RENDERABLE_CASES = [
     ("control_move", 20, Control.move(2, -1)),
     ("control_move_to", 20, Control.move_to(3, 4)),
     ("control_hide_cursor", 20, Control.show_cursor(False)),
+    ("ansi_bold_red", 20, _ansi("\x1b[1;31mhi\x1b[0m")),
+    ("ansi_8bit", 20, _ansi("\x1b[38;5;214mx\x1b[0m")),
+    ("ansi_truecolor", 20, _ansi("\x1b[38;2;255;136;0mx\x1b[0m")),
+    ("ansi_attrs", 20, _ansi("\x1b[3;4;9mstyled\x1b[0m")),
 ]
 
 RENDERABLE_HEADER = """\

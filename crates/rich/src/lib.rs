@@ -17,6 +17,7 @@
 //! for the module map and per-module parity status.
 
 pub mod align;
+pub mod ansi;
 pub mod bar;
 pub mod r#box;
 pub mod cells;
@@ -53,6 +54,7 @@ pub mod wrap;
 
 // A small, curated prelude mirroring the most-used names from `rich`'s top level.
 pub use crate::align::{Align, HorizontalAlign};
+pub use crate::ansi::AnsiDecoder;
 pub use crate::bar::Bar;
 pub use crate::color::{Color, ColorSystem, ColorTriplet};
 pub use crate::columns::Columns;

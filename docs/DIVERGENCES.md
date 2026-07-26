@@ -80,6 +80,15 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** port the remaining `markdown.py` element types under the Markdown
   issue (#9).
 
+### 10. `AnsiDecoder` skips OSC hyperlinks
+- **Differs:** upstream's decoder reads OSC `8;…` sequences and attaches the URL
+  as a `Style` link; we recognize and skip the OSC string (the surrounding text
+  still decodes normally, just without the link).
+- **Why:** `Style` links/meta are not yet ported (see #3-adjacent notes); SGR
+  styling — the common case — is fully handled.
+- **Remove:** attach the link once `Style` grows link support, under the
+  Console/text-completeness issues (#1/#2).
+
 ## Feature-flagged divergences
 
 *None yet.* If a future feature can only be built by changing core behavior, it

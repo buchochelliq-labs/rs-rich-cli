@@ -270,6 +270,19 @@ fn run_demo() {
     show_escape("hide cursor", &Control::show_cursor(false));
     show_escape("bell", &Control::bell());
 
+    // ANSI decoder — parse a raw SGR string back into styled Text, then re-render.
+    console.print(&Rule::new("ansi decoder"));
+    let raw =
+        "\x1b[1;31mred bold\x1b[0m \x1b[38;5;214morange\x1b[0m \x1b[3;4mitalic underline\x1b[0m";
+    console.print(&Text::new(format!(
+        "  input:  {}",
+        raw.replace('\x1b', "\\x1b")
+    )));
+    let mut decoder = rich::AnsiDecoder::new();
+    for line in decoder.decode(raw) {
+        console.print(&Text::new("  output: ").append_text(&line));
+    }
+
     // Spinners — a few frames of each built-in (animation needs a Live loop).
     console.print(&Rule::new("spinner (frames)"));
     for name in ["dots", "line", "arrow", "simpleDots"] {

@@ -107,6 +107,30 @@ impl Text {
         }
     }
 
+    /// Append another `Text`, carrying over its base style (as a covering span)
+    /// and all of its spans, shifted to their new offsets. Port of
+    /// `Text.append_text`. Consumes `self` and returns it for chaining.
+    pub fn append_text(mut self, other: &Text) -> Text {
+        let offset = self.plain.len();
+        self.plain.push_str(&other.plain);
+        let end = self.plain.len();
+        if !other.style.is_null() {
+            self.spans.push(Span {
+                start: offset,
+                end,
+                style: other.style.clone(),
+            });
+        }
+        for span in &other.spans {
+            self.spans.push(Span {
+                start: span.start + offset,
+                end: span.end + offset,
+                style: span.style.clone(),
+            });
+        }
+        self
+    }
+
     /// Apply `style` to the byte range `[start, end)`. Port of `Text.stylize`
     /// (byte offsets; ASCII-only callers such as highlighters are unaffected by
     /// the char-vs-byte distinction).

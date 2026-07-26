@@ -9,8 +9,8 @@
 use rich::markdown::Markdown;
 use rich::r#box::{Box as BoxSet, HEAVY_HEAD, SQUARE};
 use rich::{
-    Align, Bar, ColorSystem, Columns, Console, Constrain, Control, HorizontalAlign, Json, Justify,
-    Padding, Panel, ProgressBar, Renderable, Rule, Table, Text, Tree,
+    Align, AnsiDecoder, Bar, ColorSystem, Columns, Console, Constrain, Control, HorizontalAlign,
+    Json, Justify, Padding, Panel, ProgressBar, Renderable, Rule, Table, Text, Tree,
 };
 
 fn justified_panel(justify: Justify) -> Panel {
@@ -193,6 +193,12 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "control_move" => Box::new(Control::move_(2, -1)),
         "control_move_to" => Box::new(Control::move_to(3, 4)),
         "control_hide_cursor" => Box::new(Control::show_cursor(false)),
+        "ansi_bold_red" => Box::new(AnsiDecoder::new().decode_line("\x1b[1;31mhi\x1b[0m")),
+        "ansi_8bit" => Box::new(AnsiDecoder::new().decode_line("\x1b[38;5;214mx\x1b[0m")),
+        "ansi_truecolor" => {
+            Box::new(AnsiDecoder::new().decode_line("\x1b[38;2;255;136;0mx\x1b[0m"))
+        }
+        "ansi_attrs" => Box::new(AnsiDecoder::new().decode_line("\x1b[3;4;9mstyled\x1b[0m")),
         other => panic!("no builder for renderable fixture {other:?}"),
     }
 }
