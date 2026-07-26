@@ -3,11 +3,9 @@
 //! Port of upstream `rich/color.py`, `rich/color_triplet.py` and the palette
 //! data from `rich/_palettes.py` / `rich/palette.py`.
 //!
-//! Slice scope: the 16 standard ANSI color names, `#rrggbb` hex, `rgb(r,g,b)`,
-//! and `color(N)` (0–255) are parsed; downgrade uses the redmean nearest-color
-//! search ported verbatim from `Palette.match_color`. The full 256 *named*
-//! color table (`ANSI_COLOR_NAMES`) is intentionally deferred — see
-//! docs/DIVERGENCES.md.
+//! Parses the full `ANSI_COLOR_NAMES` table (see `color_names.rs`), `#rrggbb`
+//! hex, `rgb(r,g,b)`, and `color(N)` (0–255). Downgrade uses the redmean
+//! nearest-color search ported verbatim from `Palette.match_color`.
 
 use crate::errors::{Result, RichError};
 
@@ -85,10 +83,17 @@ impl Color {
         }
     }
 
-    fn standard(name: &str, number: u8) -> Self {
+    /// A color from the `ANSI_COLOR_NAMES` table: numbers < 16 are standard SGR
+    /// colors, the rest are 8-bit palette colors. Mirrors `Color.parse`.
+    fn named(name: &str, number: u8) -> Self {
+        let kind = if number < 16 {
+            ColorType::Standard
+        } else {
+            ColorType::EightBit
+        };
         Color {
             name: name.to_string(),
-            kind: ColorType::Standard,
+            kind,
             number: Some(number),
             triplet: None,
         }
@@ -105,8 +110,8 @@ impl Color {
         if lower == "default" {
             return Ok(Color::default_color());
         }
-        if let Some(number) = ansi_color_number(&lower) {
-            return Ok(Color::standard(&lower, number));
+        if let Some(number) = crate::color_names::ansi_color_number(&lower) {
+            return Ok(Color::named(&lower, number));
         }
         if let Some(hex) = lower.strip_prefix('#') {
             let triplet = parse_hex(hex)
@@ -271,38 +276,6 @@ fn parse_rgb(inner: &str) -> Option<ColorTriplet> {
     Some(ColorTriplet::new(r, g, b))
 }
 
-/// The 16 standard ANSI color names, in SGR number order.
-const STANDARD_NAMES: [&str; 16] = [
-    "black",
-    "red",
-    "green",
-    "yellow",
-    "blue",
-    "magenta",
-    "cyan",
-    "white",
-    "bright_black",
-    "bright_red",
-    "bright_green",
-    "bright_yellow",
-    "bright_blue",
-    "bright_magenta",
-    "bright_cyan",
-    "bright_white",
-];
-
-fn ansi_color_number(name: &str) -> Option<u8> {
-    STANDARD_NAMES
-        .iter()
-        .position(|&n| n == name)
-        .map(|i| i as u8)
-        .or(match name {
-            // A couple of common aliases upstream also recognizes.
-            "grey" | "gray" => Some(8),
-            _ => None,
-        })
-}
-
 /// The canonical xterm RGB values for the 16 standard colors.
 pub const STANDARD_PALETTE: [ColorTriplet; 16] = [
     ColorTriplet::new(0, 0, 0),
@@ -406,6 +379,15 @@ mod tests {
         assert_eq!(c.number, Some(1));
         assert_eq!(c.ansi_codes(true), vec!["31"]);
         assert_eq!(c.ansi_codes(false), vec!["41"]);
+    }
+
+    #[test]
+    fn extended_name_is_eight_bit() {
+        // orange1 (214) is beyond the 16 standard colors → 8-bit palette.
+        let c = Color::parse("orange1").unwrap();
+        assert_eq!(c.kind, ColorType::EightBit);
+        assert_eq!(c.number, Some(214));
+        assert_eq!(c.ansi_codes(true), vec!["38", "5", "214"]);
     }
 
     #[test]

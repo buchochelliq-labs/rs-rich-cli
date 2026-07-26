@@ -24,13 +24,7 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** restore strict `MarkupError` behavior when `markup.py` is fully
   ported; add golden/negative tests. Tracked with the markup/text porting issue.
 
-### 3. Partial `ANSI_COLOR_NAMES`
-- **Differs:** only the 16 standard color names (+`grey`/`gray`) are recognized;
-  upstream knows all 256 named colors.
-- **Why:** the 256-name table is large and not needed for the first slice.
-- **Remove:** port the full table into `color.rs`. Tracked with the color issue.
-
-### 4. Byte offsets in `Text` spans
+### 3. Byte offsets in `Text` spans
 - **Differs:** upstream `Text` uses code-point offsets for spans; our `Text` uses
   byte offsets internally.
 - **Why:** simpler and faster in Rust; observable behavior is identical for the

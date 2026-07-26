@@ -8,6 +8,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Full 256-color names**: the complete `ANSI_COLOR_NAMES` table is vendored
+  (`color_names.rs`), so markup/style names like `[orange1]`, `[grey37]`,
+  `[deep_sky_blue1]` resolve to the correct 8-bit colors. Byte-parity-tested;
+  resolves the former partial-names divergence.
 - **Table title / caption / show_lines**: `Table::title` and `caption` render
   centered above/below the table (italic / dim-italic), and `show_lines` draws a
   separator between body rows. Byte-parity-tested against real rich 15.0.0.

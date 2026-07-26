@@ -21,6 +21,7 @@ pub mod bar;
 pub mod r#box;
 pub mod cells;
 pub mod color;
+mod color_names;
 pub mod columns;
 pub mod console;
 pub mod constrain;
