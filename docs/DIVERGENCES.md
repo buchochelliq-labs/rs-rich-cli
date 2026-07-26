@@ -78,6 +78,20 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** post-process the serialized string to `\u`-escape non-ASCII, and
   reconcile float formatting, under the JSON issue (#10).
 
+### 9. Justify pads without measurement-fit for a bare top-level `Text`
+- **Differs:** `Text::justify` pads each line to the render width. Upstream, a
+  *bare* top-level `Text` with its own `justify` is first shrunk to its content
+  width via measurement (`__rich_measure__`), so it appears unpadded; inside a
+  container (or via `print(justify=…)`) it pads to the full width. We match the
+  container and `print_justified` cases exactly, but a bare top-level
+  `Text::justify(...)` will pad to the console width instead of staying at
+  content width.
+- **Why:** the width-fit path needs the `Measurement` machinery, which isn't
+  ported yet.
+- **Remove:** add `Renderable::measure` + measurement-fit on the top-level print
+  path (with the `measure.py` issue), then skip padding when the width was fit
+  to content.
+
 ## Feature-flagged divergences
 
 *None yet.* If a future feature can only be built by changing core behavior, it

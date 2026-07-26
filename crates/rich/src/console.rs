@@ -194,6 +194,21 @@ impl Console {
         text
     }
 
+    /// Parse `content` as markup and print it justified to the console width.
+    /// This is the `console.print("...", justify=...)` path.
+    pub fn print_justified(&self, content: &str, justify: Justify) {
+        let mut text = self.build_text(content);
+        text.set_justify(justify);
+        self.print(&text);
+    }
+
+    /// Same as [`Console::print_justified`] but returns the ANSI string.
+    pub fn render_justified_to_string(&self, content: &str, justify: Justify) -> String {
+        let mut text = self.build_text(content);
+        text.set_justify(justify);
+        self.render_to_string(&text)
+    }
+
     /// Convert rendered segments into a string, applying the color system.
     fn segments_to_string(&self, segments: &[Segment]) -> String {
         let system = self.color_system();
@@ -344,6 +359,28 @@ mod tests {
         assert_eq!(
             console.render_str_to_string("[bold red]hi[/]"),
             "\x1b[1;31mhi\x1b[0m"
+        );
+    }
+
+    #[test]
+    fn print_justify_pads_to_width() {
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(10)
+            .build();
+        // Captured from real rich 15.0.0: console.print("hi", justify=...).
+        assert_eq!(
+            console.render_justified_to_string("hi", Justify::Left),
+            "hi        "
+        );
+        assert_eq!(
+            console.render_justified_to_string("hi", Justify::Center),
+            "    hi    "
+        );
+        assert_eq!(
+            console.render_justified_to_string("hi", Justify::Right),
+            "        hi"
         );
     }
 

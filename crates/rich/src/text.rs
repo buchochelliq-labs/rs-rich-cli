@@ -7,6 +7,7 @@
 
 use crate::cells::cell_len;
 use crate::color::ColorSystem;
+use crate::console::Justify;
 use crate::errors::Result;
 use crate::markup;
 use crate::segment::Segment;
@@ -29,6 +30,8 @@ pub struct Text {
     spans: Vec<Span>,
     /// A base style applied to the whole text.
     style: Style,
+    /// How lines are justified within the render width.
+    justify: Justify,
 }
 
 impl Text {
@@ -38,6 +41,7 @@ impl Text {
             plain: plain.into(),
             spans: Vec::new(),
             style: Style::new(),
+            justify: Justify::Default,
         }
     }
 
@@ -47,7 +51,19 @@ impl Text {
             plain: plain.into(),
             spans: Vec::new(),
             style,
+            justify: Justify::Default,
         }
+    }
+
+    /// Set how lines are justified within the render width (builder form).
+    pub fn justify(mut self, justify: Justify) -> Self {
+        self.justify = justify;
+        self
+    }
+
+    /// Set how lines are justified within the render width.
+    pub fn set_justify(&mut self, justify: Justify) {
+        self.justify = justify;
     }
 
     /// Build styled text from console markup, resolving tags against `theme`.
@@ -125,6 +141,17 @@ impl Text {
         let mut lines: Vec<Vec<Segment>> = Vec::new();
         for (start, end) in self.wrapped_ranges(width) {
             lines.push(self.line_segments(start, end, &effective_base));
+        }
+        // Justify each line to the render width, if requested. (Note: this pads
+        // to `width` unconditionally; upstream first shrinks `width` to the
+        // content via measurement for a *bare* top-level Text — see
+        // docs/DIVERGENCES.md.)
+        if let Some(width) = width {
+            if self.justify != Justify::Default {
+                for line in &mut lines {
+                    *line = justify_line(line, width, self.justify, &effective_base);
+                }
+            }
         }
         lines
     }
@@ -227,6 +254,27 @@ fn char_to_byte(text: &str, char_idx: usize) -> usize {
         .nth(char_idx)
         .map(|(byte, _)| byte)
         .unwrap_or(text.len())
+}
+
+/// Pad `line` to `width` cells according to `justify`, using `style` for the pad.
+fn justify_line(line: &[Segment], width: usize, justify: Justify, style: &Style) -> Vec<Segment> {
+    let line_width: usize = line.iter().map(Segment::cell_length).sum();
+    let excess = width.saturating_sub(line_width);
+    let (left, right) = match justify {
+        Justify::Right => (excess, 0),
+        Justify::Center => (excess / 2, excess - excess / 2),
+        // Left and (for now) Full pad on the right; Default never reaches here.
+        Justify::Left | Justify::Full | Justify::Default => (0, excess),
+    };
+    let mut out = Vec::with_capacity(line.len() + 2);
+    if left > 0 {
+        out.push(Segment::new(" ".repeat(left), Some(style.clone())));
+    }
+    out.extend(line.iter().cloned());
+    if right > 0 {
+        out.push(Segment::new(" ".repeat(right), Some(style.clone())));
+    }
+    out
 }
 
 #[cfg(test)]

@@ -8,9 +8,13 @@
 
 use rich::r#box::{Box as BoxSet, HEAVY_HEAD, SQUARE};
 use rich::{
-    Align, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Json, Padding, Panel,
-    ProgressBar, Renderable, Rule, Table, Text, Tree,
+    Align, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Json, Justify, Padding,
+    Panel, ProgressBar, Renderable, Rule, Table, Text, Tree,
 };
+
+fn justified_panel(justify: Justify) -> Panel {
+    Panel::new(Box::new(Text::new("hi").justify(justify))).box_set(SQUARE)
+}
 
 /// Must match `JSON_SAMPLE` in scripts/capture_golden.py.
 const JSON_SAMPLE: &str =
@@ -101,6 +105,9 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "panel_wrap" => {
             Box::new(Panel::new(Box::new(Text::new("The quick brown fox"))).box_set(SQUARE))
         }
+        "panel_just_center" => Box::new(justified_panel(Justify::Center)),
+        "panel_just_right" => Box::new(justified_panel(Justify::Right)),
+        "panel_just_left" => Box::new(justified_panel(Justify::Left)),
         "table_square" => Box::new(sample_table(SQUARE)),
         "table_default" => Box::new(sample_table(HEAVY_HEAD)),
         "tree_nested" => Box::new(sample_tree()),

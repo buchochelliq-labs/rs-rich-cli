@@ -10,8 +10,8 @@ use std::process::ExitCode;
 use rich::r#box::{DOUBLE, SQUARE};
 use rich::text::Text;
 use rich::{
-    filesize, Align, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Json, Padding,
-    Panel, ProgressBar, Renderable, Rule, Spinner, Table, Tree,
+    filesize, Align, ColorSystem, Columns, Console, Constrain, HorizontalAlign, Json, Justify,
+    Padding, Panel, ProgressBar, Renderable, Rule, Spinner, Table, Tree,
 };
 use rich_ext::ConsoleExt;
 
@@ -150,6 +150,12 @@ fn run_demo() {
     console.print(&Align::left(text("← left")));
     console.print(&Align::center(text("center")));
     console.print(&Align::right(text("right →")));
+
+    // Text justify (via print(justify=…)).
+    console.print(&Rule::new("justify"));
+    console.print_justified("left justified", Justify::Left);
+    console.print_justified("centered", Justify::Center);
+    console.print_justified("right justified", Justify::Right);
 
     // Constrain — same panel, capped to 24 cells.
     console.print(&Rule::new("constrain (width 24)"));

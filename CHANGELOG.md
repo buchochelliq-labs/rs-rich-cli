@@ -8,6 +8,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Text justify** (`Text::justify` + `Console::print_justified`): left/center/
+  right justification, padded to the render width. Byte-parity-tested against
+  real rich 15.0.0 inside a `Panel` and via `print(justify=…)`. (Bare top-level
+  measurement-fit is deferred — see DIVERGENCES #9.)
 - **JSON** (`json.rs`, port of `rich/json.py`): parses a JSON string (via
   `serde_json` with `preserve_order`) and pretty-prints it with 2-space indent
   and the default highlight colors (bold braces, bold-blue keys, green strings,
