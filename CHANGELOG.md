@@ -8,6 +8,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`ISO8601Highlighter` covers the full upstream pattern set** (`highlighter.rs`,
+  resolves DIVERGENCES #13): added compact/basic calendar dates (`20230615`),
+  ordinal dates, week dates, basic times, standalone timezones, and space-separated
+  date-times. Upstream's one PCRE-conditional pattern is rewritten as two
+  non-conditional alternatives (all-hyphen/colon + all-basic) that match the same
+  strings. Byte-parity with rich 15.0.0 (unit-tested); the extended forms are
+  unchanged.
 - **`AnsiDecoder` decodes OSC 8 hyperlinks** (`ansi.rs`, resolves DIVERGENCES
   #10): `\x1b]8;<params>;<url>\x1b\` sequences now attach the URL to the running
   `Style` (via the new `Style::update_link`), with the empty closing sequence

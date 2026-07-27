@@ -19,12 +19,41 @@ use crate::repr_patterns::REPR_PATTERNS;
 use crate::style::Style;
 use crate::text::Text;
 
-/// Standard ISO 8601 *extended* date/time patterns — the subset of upstream's
-/// `ISO8601Highlighter.highlights` that `fancy-regex` compiles. Exotic compact
-/// and conditional (`(?(hyphen)…)`) forms are omitted; see docs/DIVERGENCES.md.
+/// The full ISO 8601 pattern set from upstream's `ISO8601Highlighter.highlights`,
+/// in the same order (only `iso8601.date`/`time`/`timezone` carry a visible
+/// style; the sub-groups split segments but resolve to null, as upstream). The
+/// only rewrite: upstream's single conditional pattern (`(?(hyphen)…)`, which
+/// `fancy-regex` can't compile) is split into two non-conditional alternatives —
+/// the all-hyphen/colon form and the all-basic form — which together match
+/// exactly the same strings the conditional does.
 const ISO8601_PATTERNS: &[&str] = &[
+    // Year-month (no visible style: year/month resolve to null).
+    r"^(?P<year>[0-9]{4})-(?P<month>1[0-2]|0[1-9])$",
+    // Basic (compact) calendar date, e.g. 20230615.
+    r"^(?P<date>(?P<year>[0-9]{4})(?P<month>1[0-2]|0[1-9])(?P<day>3[01]|0[1-9]|[12][0-9]))$",
+    // Ordinal date, e.g. 2023-166 / 2023166.
+    r"^(?P<date>(?P<year>[0-9]{4})-?(?P<day>36[0-6]|3[0-5][0-9]|[12][0-9]{2}|0[1-9][0-9]|00[1-9]))$",
+    // Week date, e.g. 2023-W36 / 2023W36.
+    r"^(?P<date>(?P<year>[0-9]{4})-?W(?P<week>5[0-3]|[1-4][0-9]|0[1-9]))$",
+    // Week date with weekday, e.g. 2023-W36-7 / 2023W367.
+    r"^(?P<date>(?P<year>[0-9]{4})-?W(?P<week>5[0-3]|[1-4][0-9]|0[1-9])-?(?P<day>[1-7]))$",
+    // Basic/extended time hh[:]mm.
+    r"^(?P<time>(?P<hour>2[0-3]|[01][0-9]):?(?P<minute>[0-5][0-9]))$",
+    // Basic time hhmmss.
+    r"^(?P<time>(?P<hour>2[0-3]|[01][0-9])(?P<minute>[0-5][0-9])(?P<second>[0-5][0-9]))$",
+    // Timezone alone.
+    r"^(?P<timezone>(Z|[+-](?:2[0-3]|[01][0-9])(?::?(?:[0-5][0-9]))?))$",
+    // Basic time hhmmss with timezone.
+    r"^(?P<time>(?P<hour>2[0-3]|[01][0-9])(?P<minute>[0-5][0-9])(?P<second>[0-5][0-9]))(?P<timezone>Z|[+-](?:2[0-3]|[01][0-9])(?::?(?:[0-5][0-9]))?)$",
+    // Space-separated date + time — extended form (upstream conditional, part 1).
+    r"^(?P<date>(?P<year>[0-9]{4})-(?P<month>1[0-2]|0[1-9])-(?P<day>3[01]|0[1-9]|[12][0-9])) (?P<time>(?P<hour>2[0-3]|[01][0-9]):(?P<minute>[0-5][0-9]):(?P<second>[0-5][0-9]))$",
+    // Space-separated date + time — basic form (upstream conditional, part 2).
+    r"^(?P<date>(?P<year>[0-9]{4})(?P<month>1[0-2]|0[1-9])(?P<day>3[01]|0[1-9]|[12][0-9])) (?P<time>(?P<hour>2[0-3]|[01][0-9])(?P<minute>[0-5][0-9])(?P<second>[0-5][0-9]))$",
+    // Extended calendar date with optional timezone.
     r"^(?P<date>(?P<year>-?(?:[1-9][0-9]*)?[0-9]{4})-(?P<month>1[0-2]|0[1-9])-(?P<day>3[01]|0[1-9]|[12][0-9]))(?P<timezone>Z|[+-](?:2[0-3]|[01][0-9]):[0-5][0-9])?$",
+    // Extended clock time (with optional fraction) and timezone.
     r"^(?P<time>(?P<hour>2[0-3]|[01][0-9]):(?P<minute>[0-5][0-9]):(?P<second>[0-5][0-9])(?P<frac>\.[0-9]+)?)(?P<timezone>Z|[+-](?:2[0-3]|[01][0-9]):[0-5][0-9])?$",
+    // Full extended date-time (T-separated) with optional fraction and timezone.
     r"^(?P<date>(?P<year>-?(?:[1-9][0-9]*)?[0-9]{4})-(?P<month>1[0-2]|0[1-9])-(?P<day>3[01]|0[1-9]|[12][0-9]))T(?P<time>(?P<hour>2[0-3]|[01][0-9]):(?P<minute>[0-5][0-9]):(?P<second>[0-5][0-9])(?P<ms>\.[0-9]+)?)(?P<timezone>Z|[+-](?:2[0-3]|[01][0-9]):[0-5][0-9])?$",
 ];
 
@@ -250,5 +279,49 @@ mod tests {
              \x1b[35m13\x1b[0m\x1b[35m:\x1b[0m\x1b[35m45\x1b[0m\x1b[35m:\x1b[0m\x1b[35m30\x1b[0m\x1b[35m.123\x1b[0m\x1b[33m+02:00\x1b[0m"
         );
         assert_eq!(highlight_iso("not a date"), "not a date");
+    }
+
+    #[test]
+    fn iso8601_compact_and_basic_forms() {
+        // Compact/basic forms and the split of upstream's conditional pattern.
+        // All captured from real rich 15.0.0 ISO8601Highlighter.
+        assert_eq!(
+            highlight_iso("20230615"),
+            "\x1b[34m2023\x1b[0m\x1b[34m06\x1b[0m\x1b[34m15\x1b[0m"
+        );
+        assert_eq!(
+            highlight_iso("2023-166"),
+            "\x1b[34m2023\x1b[0m\x1b[34m-\x1b[0m\x1b[34m166\x1b[0m"
+        );
+        assert_eq!(
+            highlight_iso("2023-W36"),
+            "\x1b[34m2023\x1b[0m\x1b[34m-W\x1b[0m\x1b[34m36\x1b[0m"
+        );
+        assert_eq!(
+            highlight_iso("2023-W36-7"),
+            "\x1b[34m2023\x1b[0m\x1b[34m-W\x1b[0m\x1b[34m36\x1b[0m\x1b[34m-\x1b[0m\x1b[34m7\x1b[0m"
+        );
+        assert_eq!(highlight_iso("1345"), "\x1b[35m13\x1b[0m\x1b[35m45\x1b[0m");
+        assert_eq!(
+            highlight_iso("134530"),
+            "\x1b[35m13\x1b[0m\x1b[35m45\x1b[0m\x1b[35m30\x1b[0m"
+        );
+        assert_eq!(highlight_iso("Z"), "\x1b[33mZ\x1b[0m");
+        assert_eq!(highlight_iso("+02:00"), "\x1b[33m+02:00\x1b[0m");
+        assert_eq!(
+            highlight_iso("153000Z"),
+            "\x1b[35m15\x1b[0m\x1b[35m30\x1b[0m\x1b[35m00\x1b[0m\x1b[33mZ\x1b[0m"
+        );
+        // The split conditional pattern: extended and basic space-separated forms.
+        assert_eq!(
+            highlight_iso("2023-06-15 13:45:30"),
+            "\x1b[34m2023\x1b[0m\x1b[34m-\x1b[0m\x1b[34m06\x1b[0m\x1b[34m-\x1b[0m\x1b[34m15\x1b[0m \
+             \x1b[35m13\x1b[0m\x1b[35m:\x1b[0m\x1b[35m45\x1b[0m\x1b[35m:\x1b[0m\x1b[35m30\x1b[0m"
+        );
+        assert_eq!(
+            highlight_iso("20230615 134530"),
+            "\x1b[34m2023\x1b[0m\x1b[34m06\x1b[0m\x1b[34m15\x1b[0m \
+             \x1b[35m13\x1b[0m\x1b[35m45\x1b[0m\x1b[35m30\x1b[0m"
+        );
     }
 }

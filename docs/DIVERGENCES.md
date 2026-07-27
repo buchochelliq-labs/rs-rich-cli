@@ -158,16 +158,15 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** model upstream's line-based print (crop/emit rows without a trailing
   separator when a renderable fills the height) under the Console issue (#1).
 
-### 13. `ISO8601Highlighter` covers standard *extended* formats only
-- **Differs:** upstream ships ~13 ISO 8601 patterns, including compact/basic forms
-  and ones using PCRE conditionals (`(?(hyphen)…)`). `fancy-regex` doesn't support
-  conditionals, so we ship the 3 standard **extended** patterns — date, time, and
-  date-time, each with optional timezone. Compact forms (`20230615`, week dates,
-  ordinal dates) aren't highlighted.
-- **Why:** the extended `YYYY-MM-DDThh:mm:ss` family is the common case; the
-  conditional patterns can't compile as-is.
-- **Remove:** rewrite the compact/conditional patterns into fancy-regex-compatible
-  alternations under the highlighter/theme issue (#3).
+### 13. ~~`ISO8601Highlighter` covers standard *extended* formats only~~ (resolved)
+- **Resolved:** all of upstream's ISO 8601 patterns are now ported, in the same
+  order — compact/basic calendar dates (`20230615`), ordinal dates, week dates,
+  basic times, standalone timezones, and the space-separated date-time forms.
+  Upstream's single PCRE-conditional pattern (`(?(hyphen)…)`, which `fancy-regex`
+  can't compile) is rewritten as two non-conditional alternatives — the
+  all-hyphen/colon form and the all-basic form — which together match exactly the
+  same strings the conditional does. Byte-parity with real rich 15.0.0 across
+  compact/basic/ordinal/week/split forms (unit-tested).
 
 ### 14. Highlighting resolves to fixed styles, not theme-driven names
 - **Differs:** upstream stores highlight spans as style *names* (`repr.number`)
