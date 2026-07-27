@@ -14,9 +14,9 @@ use rich::r#box::{DOUBLE, SQUARE};
 use rich::text::Text;
 use rich::{
     filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, Control, Highlighter,
-    HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, Live, LiveRender, Padding, Panel,
-    Pretty, Progress, ProgressBar, Renderable, Rule, Spinner, Status, Style, Styled, Syntax, Table,
-    Traceback, Tree, DEFAULT_TERMINAL_THEME,
+    HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, Live, LiveRender, LogLevel,
+    LogRender, Padding, Panel, Pretty, Progress, ProgressBar, Renderable, Rule, Spinner, Status,
+    Style, Styled, Syntax, Table, Traceback, Tree, DEFAULT_TERMINAL_THEME,
 };
 use rich_ext::ConsoleExt;
 
@@ -467,6 +467,21 @@ fn run_demo() {
     console.print(&Rule::new("pretty"));
     let value = vec![("panel", 1u32), ("table", 2), ("tree", 3)];
     console.print(&Pretty::new(&value));
+
+    // Log records — a severity-colored line per record (Rust-native rich.logging).
+    console.print(&Rule::new("log"));
+    for (level, message) in [
+        (LogLevel::Info, "server started on port 8080"),
+        (LogLevel::Debug, "cache warm: 128 entries"),
+        (LogLevel::Warn, "disk usage at 85%"),
+        (LogLevel::Error, "connection reset by peer"),
+    ] {
+        console.print(
+            &LogRender::new(level, message)
+                .time("12:00:00")
+                .path("main.rs:42"),
+        );
+    }
 
     // Traceback — render an error + its source chain (Rust-native rich.traceback).
     console.print(&Rule::new("traceback"));

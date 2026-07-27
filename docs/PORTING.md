@@ -71,7 +71,8 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `pretty.py` | `pretty.rs` | 🟡 | Rust-native (`Debug` + repr highlight, #19) |
 | `repr.py`, `_inspect.py` | resp. | ⬜ | need Rust reflection — see #19 |
 | `traceback.py` | `traceback.rs` | 🟡 | Rust-native (error `source()` chain, #19) |
-| `logging.py`, `_log_render.py` | resp. | ⬜ | |
+| `_log_render.py` | `log_render.rs` | 🟡 | Rust-native formatter (#19) |
+| `logging.py` (log::Log handler) | `rich-ext` | ⬜ | needs the `log`/`tracing` crate |
 
 ## Utilities & platform
 

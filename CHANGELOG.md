@@ -8,6 +8,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added (functional, non-byte-parity)
+- **`LogRender`** (`log_render.rs`, a Rust-native reimagining of `rich/_log_render.py`
+  + `rich/logging.py`): formats a log record — optional time, a severity-colored
+  `LogLevel`, message, optional path — into a styled line, using the same column
+  styles (`log.time`, `logging.level.*`, `log.path`). Takes a `LogLevel` enum +
+  strings, so the core stays dependency-light; a `log::Log` handler on top is a
+  `rich-ext` follow-up (DIVERGENCES #19).
 - **`Traceback`** (`traceback.rs`, a Rust-native reimagining of `rich/traceback.py`):
   `Traceback::new(&error)` walks an error's `Error::source()` chain and renders the
   message + `Caused by:` chain in a red-bordered `HEAVY` panel; `from_message` takes

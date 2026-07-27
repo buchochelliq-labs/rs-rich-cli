@@ -217,7 +217,11 @@ Format: what differs · why · how to remove it (if temporary).
     `Error::source()` chain (`Caused by:`) in a red-bordered panel. There are no
     stack frames or source snippets — Rust errors don't carry them (pair with
     `std::backtrace::Backtrace` at the call site if you want a frame list).
-  - (Planned) a `log`/`tracing` handler, rather than Python `logging`.
+  - `LogRender` (`log_render.rs`) formats one log record — optional time, a
+    severity-colored level, message, optional path — into a styled line, using the
+    same column styles (`log.time`, `logging.level.*`, `log.path`). It takes a
+    `LogLevel` enum + strings rather than depending on `log`/`tracing`; wiring a
+    `log::Log` handler on top is a `rich-ext` follow-up.
 - **Why:** a 1:1 port isn't possible without reflection; the Rust-native analogs
   deliver the same *utility* (colorized value/error/log rendering).
 - **Remove:** inherent to the language difference; not removable.
