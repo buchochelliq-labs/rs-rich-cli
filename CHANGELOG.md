@@ -8,6 +8,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`Live`** (`live.rs`, port of `rich/live.py`'s manual-refresh core): drives a
+  `LiveRender` over a generic `Write` sink — `start` hides the cursor and draws,
+  `update`/`refresh` reposition and redraw in place, `stop` commits the final
+  frame and shows the cursor. The emitted byte stream is byte-parity with real
+  rich 15.0.0 (`auto_refresh=False`, `transient=False`). The background
+  auto-refresh thread + transient/alt-screen modes are deferred (DIVERGENCES #17).
 - **`LiveRender`** (`live_render.rs`, port of `rich/live_render.py`): wraps a
   renderable, records its rendered shape, and emits the `position_cursor` /
   `restore_cursor` control-code sequences (`\r` + erase-line + cursor-up×N) that

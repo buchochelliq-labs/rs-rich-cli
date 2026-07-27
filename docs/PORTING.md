@@ -59,7 +59,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `spinner.py`, `_spinners.py` (full table) | `spinner.rs` | 🟡 |
 | `status.py` | `status.rs` | 🟡 |
 | `live_render.py` | `live_render.rs` | 🟡 |
-| `live.py` (refresh loop) | `live.rs` | ⬜ |
+| `live.py` (manual refresh) | `live.rs` | 🟡 |
 
 ## Content renderers
 

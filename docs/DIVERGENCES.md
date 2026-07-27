@@ -160,6 +160,18 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** generalize to a `ProgressColumn` list (over renderable table cells)
   and add the `Live` loop, under the Live/progress issue (#6).
 
+### 17. `Live` is the manual-refresh core only (no auto-refresh thread)
+- **Differs:** `Live` implements the deterministic `start`/`update`/`refresh`/`stop`
+  flow, writing a byte stream that is byte-parity with upstream's
+  `auto_refresh=False`, `transient=False` Live. Not ported: the background
+  auto-refresh thread (`refresh_per_second`), `transient`/alt-screen modes,
+  stdout/stderr redirection, and the console render-hook integration. It also
+  renders to a generic `Write` sink rather than through `Console`'s own file.
+- **Why:** the manual path captures the mechanism and stays testable; the
+  auto-refresh thread is timing-dependent and the render-hook plumbing is large.
+- **Remove:** add a refresh thread + `transient`/alt-screen handling, and route
+  through `Console`, under the Live/progress issue (#6).
+
 ## Feature-flagged divergences
 
 *None yet.* If a future feature can only be built by changing core behavior, it

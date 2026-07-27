@@ -41,6 +41,12 @@ impl LiveRender {
         self
     }
 
+    /// Replace the wrapped renderable (the shape carries over until the next
+    /// render). Port of `LiveRender.set_renderable`.
+    pub fn set_renderable(&mut self, renderable: Box<dyn Renderable>) {
+        self.renderable = renderable;
+    }
+
     /// Control codes to move the cursor to the start of the previous render,
     /// erasing each line. Port of `LiveRender.position_cursor`.
     pub fn position_cursor(&self) -> Control {

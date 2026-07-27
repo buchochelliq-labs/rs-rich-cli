@@ -14,7 +14,7 @@ use rich::r#box::{DOUBLE, SQUARE};
 use rich::text::Text;
 use rich::{
     filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, Control, Highlighter,
-    HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, LiveRender, Padding, Panel,
+    HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, Live, LiveRender, Padding, Panel,
     Progress, ProgressBar, Renderable, Rule, Spinner, Status, Style, Styled, Table, Tree,
     DEFAULT_TERMINAL_THEME,
 };
@@ -473,9 +473,25 @@ fn run_demo() {
     show_escape("hide cursor", &Control::show_cursor(false));
     show_escape("bell", &Control::bell());
     // LiveRender — the in-place redraw sequence for a 3-line render.
-    let live = LiveRender::new(text("a\nb\nc"));
-    let _ = console.render_to_string(&live); // render once to record the shape
-    show_escape("live refresh", &live.position_cursor());
+    let live_render = LiveRender::new(text("a\nb\nc"));
+    let _ = console.render_to_string(&live_render); // render once to record the shape
+    show_escape("live refresh", &live_render.position_cursor());
+    // Live — the full control stream for a two-frame in-place update (captured
+    // to a buffer so the demo stays static instead of animating).
+    let live_console = Console::builder()
+        .force_terminal(true)
+        .color_system(Some(ColorSystem::Truecolor))
+        .width(20)
+        .build();
+    let mut live = Live::new(text("frame one"), live_console, Vec::<u8>::new());
+    live.start();
+    live.update(text("frame two"));
+    live.stop();
+    let stream = String::from_utf8_lossy(live.writer())
+        .replace('\x1b', "\\x1b")
+        .replace('\r', "\\r")
+        .replace('\n', "\\n");
+    console.print(&Text::new(format!("  {:>14}: {stream}", "live stream")));
 
     // ANSI decoder — parse a raw SGR string back into styled Text, then re-render.
     console.print(&Rule::new("ansi decoder"));
