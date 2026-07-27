@@ -179,20 +179,18 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** store style names on spans and resolve at render via the theme, under
   the highlighter/theme issue (#3).
 
-### 15. HTML export done (both forms); SVG export in progress
-- **Differs:** `Console::export_html` (inline styles) and
-  `Console::export_html_classes` (the default `.r1 {…}` stylesheet form) are both
-  ported with byte-parity. `export_svg` is **not yet** ported; groundwork is in
-  place — `SVG_EXPORT_THEME` (the dark theme rich uses for SVG, byte-parity
-  colors) and `blend_rgb` (the dim blend) both exist and are tested.
-- **Why:** SVG is a separate, whitespace-and-float-format-sensitive renderer
-  (font metrics, `<rect>`/`<text>` layout, per-line clip-paths, a CSS-class table).
-  Note: upstream's **default** `unique_id` is `adler32` over Python's `repr()` of
-  each `Segment`, which Rust can't reproduce — so the eventual `export_svg` will be
-  byte-parity **only when an explicit `unique_id` is passed** (same shape as the
-  OSC8 `id=` deviation, #20); the auto-default id will differ.
-- **Remove:** build the `export_svg` renderer (template + `get_svg_style` + the
-  matrix/chrome layout) on this groundwork, under the Console issue (#1).
+### 15. Exports done (HTML both forms + SVG); SVG needs an explicit `unique_id`
+- **Differs:** `Console::export_html` (inline styles), `export_html_classes` (the
+  default `.r1 {…}` stylesheet form), and **`export_svg`** are all ported with
+  byte-parity (`svg.rs`, golden `tests/golden/svg_export.svg`). The only SVG
+  residual: upstream's **default** `unique_id` is `adler32` over Python's `repr()`
+  of each `Segment`, which Rust can't reproduce — so `Console::export_svg` takes an
+  **explicit `unique_id`**, and output is byte-parity with
+  `export_svg(title=…, unique_id=…)`. Same shape as the OSC8 `id=` deviation (#20).
+- **Why:** the default id is non-deterministic (breaks golden tests) and only
+  namespaces the CSS classes / element ids within one document.
+- **Remove:** add an `adler32`-of-`repr` default id only if a caller needs the
+  exact auto-generated ids (rare); the explicit-id form already round-trips.
 
 ### 16. `Progress` — deterministic columns done; time/rate/spinner + Live deferred
 - **Differs:** `Progress` now renders a **configurable `ProgressColumn` list**

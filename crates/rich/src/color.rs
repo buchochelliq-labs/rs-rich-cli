@@ -73,6 +73,11 @@ pub struct Color {
 }
 
 impl Color {
+    /// Whether this is the terminal default color. Port of `Color.is_default`.
+    pub fn is_default(&self) -> bool {
+        self.kind == ColorType::Default
+    }
+
     /// The terminal default color.
     pub fn default_color() -> Self {
         Color {

@@ -8,16 +8,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
-- **SVG export groundwork** (groundwork for DIVERGENCES #15): `SVG_EXPORT_THEME`
-  (`terminal_theme.rs`) — the dark terminal theme rich uses for `export_svg`,
-  byte-parity colors, unit-tested (+ a `blend_rgb` dim test) — and
-  **`Style::get_svg_style`** (`style.rs`), a port of `export_svg`'s `get_svg_style`
-  closure: the `<text>` fill/weight/style/decoration CSS for a style under a
-  theme (bgcolor excluded from the fill, `reverse` swaps to the background, `dim`
-  blends 40% toward it), byte-parity-tested. The two primitives the SVG renderer
-  assembles. (Note: `export_svg` will be byte-parity only with an explicit
-  `unique_id`; upstream's default id hashes Python `repr()` output, which Rust
-  can't reproduce.)
+- **`Console::export_svg`** (`svg.rs`, resolves DIVERGENCES #15): exports recorded
+  output as a self-contained SVG image of a terminal window (Fira Code font-face,
+  window chrome + traffic-light circles, per-line clip-paths, a generated CSS
+  class table, and the styled text matrix), using `SVG_EXPORT_THEME`.
+  **Byte-parity** with real rich 15.0.0 (golden `tests/golden/svg_export.svg`).
+  Built on the groundwork primitives `SVG_EXPORT_THEME`, `blend_rgb`, and
+  `Style::get_svg_style`, plus new `Style::attr` / `Color::is_default` accessors.
+  Takes an **explicit `unique_id`** (upstream's default hashes Python `repr()`
+  output, not reproducible in Rust — the auto-default is the only residual, #15).
 - **`rich-cli` CSV/TSV rendering** (`rich-cli/main.rs`, advances the CLI port):
   `--csv` (and `.csv`/`.tsv` auto-detection) renders a delimited file as a table,
   a port of rich-cli's `render_csv` — blue-bordered `HEAVY_HEAD` table with the

@@ -115,6 +115,12 @@ impl Style {
         self.bgcolor.as_ref()
     }
 
+    /// The tri-state value of attribute `index` (see the internal `attrs` order:
+    /// 0=bold, 1=dim, 2=italic, 3=underline, 6=reverse, 8=strike, …).
+    pub fn attr(&self, index: usize) -> Option<bool> {
+        self.attrs.get(index).copied().flatten()
+    }
+
     /// True when nothing at all is set (renders as a no-op).
     pub fn is_null(&self) -> bool {
         self.color.is_none()

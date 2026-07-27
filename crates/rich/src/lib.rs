@@ -57,6 +57,7 @@ mod spinner_data;
 pub mod status;
 pub mod style;
 pub mod styled;
+pub mod svg;
 pub mod syntax;
 pub mod table;
 pub mod terminal_theme;

@@ -328,6 +328,27 @@ impl Console {
         )
     }
 
+    /// Capture output printed inside `f` and export it as a self-contained SVG
+    /// image of a terminal window, using [`SVG_EXPORT_THEME`]. Port of
+    /// `Console.export_svg`.
+    ///
+    /// `unique_id` prefixes every generated id/class. Upstream's auto-computed
+    /// default hashes Python `repr()` output (not reproducible in Rust), so this
+    /// port takes an explicit id; output is byte-parity with
+    /// `export_svg(title=…, unique_id=…)` (see docs/DIVERGENCES.md #15).
+    ///
+    /// [`SVG_EXPORT_THEME`]: crate::terminal_theme::SVG_EXPORT_THEME
+    pub fn export_svg(&self, title: &str, unique_id: &str, f: impl FnOnce(&Console)) -> String {
+        let segments = self.record(f);
+        crate::svg::export_svg(
+            &segments,
+            &crate::terminal_theme::SVG_EXPORT_THEME,
+            title,
+            unique_id,
+            self.width(),
+        )
+    }
+
     /// Run `f` with output recorded to a fresh buffer, returning the captured
     /// segments and restoring the previous capture state (so captures nest).
     fn record(&self, f: impl FnOnce(&Console)) -> Vec<Segment> {
