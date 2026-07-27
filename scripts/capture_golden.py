@@ -307,6 +307,8 @@ RENDERABLE_CASES = [
     ("markdown_doc", 24, Markdown("# Title\n\nHello **bold** and *italic* and `code`.")),
     ("markdown_list", 20, Markdown("Items:\n\n- one\n- two\n\n1. a\n2. b")),
     ("markdown_quote_hr", 20, Markdown("Note:\n\n> important\n\n---\n\ndone")),
+    # A document ending with a thematic break emits one extra trailing blank line.
+    ("markdown_hr_end", 20, Markdown("a\n\n---")),
     (
         "markdown_table",
         40,

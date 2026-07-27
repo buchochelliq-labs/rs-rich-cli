@@ -107,10 +107,11 @@ Format: what differs · why · how to remove it (if temporary).
   `Syntax` renderable — so they're highlighted but **not** byte-identical to
   upstream (syntect ≠ Pygments; see #18). **Links** render as an OSC 8 hyperlink +
   the `markdown.link_url` style — byte-identical to upstream except the random
-  `id=` field we omit (#20). The one table gap: **inline styling within a table
-  cell** (e.g. `**bold**` inside a cell) is collected as plain text, since Table
-  cells are strings, not `Text` renderables. Also, a document that *ends* with a
-  thematic break omits a trailing blank line upstream emits.
+  `id=` field we omit (#20). The one remaining gap: **inline styling within a
+  table cell** (e.g. `**bold**` inside a cell) is collected as plain text, since
+  Table cells are strings, not `Text` renderables. (The trailing-blank-line quirk
+  for a document ending in a thematic break is now matched — golden
+  `markdown_hr_end`.)
 - **Why:** these are the common elements; cell-level inline styling needs Table
   cells to become full renderables (a larger refactor).
 - **Remove:** give Table cells styled `Text` content, then route inline markdown

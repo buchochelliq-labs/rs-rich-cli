@@ -61,6 +61,7 @@ json_unicode	40	\x1b[1m{\x1b[0m\n  \x1b[1;34m"name"\x1b[0m: \x1b[32m"café"\x1b[
 markdown_doc	24	         \x1b[1;4mTitle\x1b[0m          \n\nHello \x1b[1mbold\x1b[0m and \x1b[3mitalic\x1b[0m   \nand \x1b[1;36;40mcode\x1b[0m.               \n
 markdown_list	20	Items:              \n\n\x1b[1m • \x1b[0mone              \n\x1b[1m • \x1b[0mtwo              \n\n\x1b[36m 1 \x1b[0ma                \n\x1b[36m 2 \x1b[0mb                \n
 markdown_quote_hr	20	Note:               \n\n\x1b[35m▌ \x1b[0m\x1b[35mimportant\x1b[0m\x1b[35m       \x1b[0m\n\n\x1b[2m--------------------\x1b[0m\n\ndone                \n
+markdown_hr_end	20	a                   \n\n\x1b[2m--------------------\x1b[0m\n\n
 markdown_table	40	\n\x1b[36m            \x1b[0m\n\x1b[36m \x1b[0m\x1b[36mName\x1b[0m\x1b[1m \x1b[0m\x1b[1m \x1b[0m\x1b[36m \x1b[0m\x1b[36mAge\x1b[0m\x1b[36m \x1b[0m\n\x1b[36m ────────── \x1b[0m\n\x1b[36m \x1b[0mAlice \x1b[36m \x1b[0m 30\x1b[36m \x1b[0m\n\x1b[36m \x1b[0mBob   \x1b[36m \x1b[0m  7\x1b[36m \x1b[0m\n\x1b[36m            \x1b[0m\n
 hbar_full	20	\x1b[39;49m████████████████████\x1b[0m\n
 hbar_mid	20	\x1b[39;49m     ██████████     \x1b[0m\n

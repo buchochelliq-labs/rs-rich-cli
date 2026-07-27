@@ -440,6 +440,14 @@ impl Renderable for Markdown {
             }
         }
 
+        // Upstream's thematic-break element emits a trailing line break, which is
+        // only observable when the rule is the document's last block: it adds one
+        // extra blank line there (a mid-document rule merges with the normal block
+        // separator). Match that.
+        if matches!(self.blocks.last(), Some(Block::Rule)) {
+            lines.push(Vec::new());
+        }
+
         let mut segments = Vec::new();
         let last = lines.len().saturating_sub(1);
         for (index, line) in lines.into_iter().enumerate() {
@@ -568,6 +576,17 @@ mod tests {
         assert_eq!(
             render("a\n\n---\n\nb"),
             "a                   \n\n\x1b[2m--------------------\x1b[0m\n\nb                   "
+        );
+    }
+
+    #[test]
+    fn thematic_break_at_end_adds_trailing_blank() {
+        // A document ending with a rule emits one extra trailing blank line
+        // (upstream's hr element yields a trailing break). Byte-parity is
+        // guaranteed by the `markdown_hr_end` golden; here we assert the shape.
+        assert_eq!(
+            render("a\n\n---"),
+            "a                   \n\n\x1b[2m--------------------\x1b[0m\n"
         );
     }
 }

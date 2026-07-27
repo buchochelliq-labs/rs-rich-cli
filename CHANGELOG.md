@@ -8,6 +8,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Fixed / clarified
+- **Markdown trailing thematic-break blank line** (`markdown.rs`): a document that
+  *ends* with a `---` rule now emits the extra trailing blank line upstream does
+  (upstream's hr element yields a trailing break, observable only when the rule is
+  the last block — a mid-document rule merges with the normal block separator).
+  Byte-parity golden `markdown_hr_end` + unit test; the mid-document case
+  (`markdown_quote_hr`) is unchanged. Closes the last Markdown-block divergence.
 - **`Json` non-ASCII is byte-parity** (`json.rs`): confirmed and locked in with a
   golden (`json_unicode`) + unit test. `rich.json.JSON` defaults to
   `ensure_ascii=False`, so our UTF-8 output already matched upstream (accented

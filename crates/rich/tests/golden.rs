@@ -303,6 +303,7 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         )),
         "markdown_list" => Box::new(Markdown::new("Items:\n\n- one\n- two\n\n1. a\n2. b")),
         "markdown_quote_hr" => Box::new(Markdown::new("Note:\n\n> important\n\n---\n\ndone")),
+        "markdown_hr_end" => Box::new(Markdown::new("a\n\n---")),
         "markdown_table" => Box::new(Markdown::new(
             "| Name | Age |\n| :--- | ---: |\n| Alice | 30 |\n| Bob | 7 |\n",
         )),
