@@ -3,11 +3,12 @@
 //! Port of upstream `rich/table.py` (core subset). A [`Table`] lays out columns
 //! and rows inside a box, sizing each column to its widest cell.
 //!
-//! Scope: headers, rows, box choice, per-cell padding, header styling,
-//! multi-line/wrapped cells (with **ellipsis overflow**), **shrink-to-fit** +
-//! **expand** column widths, per-column justify, **explicit width**, **per-column
-//! style**, title, caption, and `show_lines`. Deferred (tracked in the Table
-//! issue): explicit `ratio`/min/max, and `no_wrap`.
+//! Scope: headers, rows, box choice (with legacy/ASCII substitution), per-cell
+//! padding, header styling, multi-line/wrapped cells (with **ellipsis
+//! overflow**), **shrink-to-fit** + **expand** column widths, per-column
+//! justify, **explicit width**, **per-column style**, **`no_wrap`**, title,
+//! caption, and `show_lines`. Deferred (tracked in the Table issue): explicit
+//! per-column `ratio`/min/max.
 
 use crate::cells::{cell_len, set_cell_size};
 use crate::console::{Console, ConsoleOptions, Justify};
@@ -322,10 +323,16 @@ impl Table {
 }
 
 impl Renderable for Table {
-    fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         if self.columns.is_empty() {
             return Vec::new();
         }
+        // Fall back to a terminal-safe box on legacy Windows / non-UTF-8.
+        let box_set = self.box_set.substitute(
+            console.legacy_windows(),
+            console.safe_box(),
+            console.ascii_only(),
+        );
         let (_, pr, _, pl) = self.padding;
         // Borders occupy: 2 edges + (ncols - 1) dividers. Port of `_extra_width`.
         let extra_width = 2 + self.columns.len().saturating_sub(1);
@@ -350,26 +357,18 @@ impl Renderable for Table {
         }
 
         lines.push(vec![Segment::new(
-            self.box_set.get_top(&rendered_widths),
+            box_set.get_top(&rendered_widths),
             border.clone(),
         )]);
 
-        let head_edges = (
-            self.box_set.head_left,
-            self.box_set.head_vertical,
-            self.box_set.head_right,
-        );
-        let body_edges = (
-            self.box_set.mid_left,
-            self.box_set.mid_vertical,
-            self.box_set.mid_right,
-        );
+        let head_edges = (box_set.head_left, box_set.head_vertical, box_set.head_right);
+        let body_edges = (box_set.mid_left, box_set.mid_vertical, box_set.mid_right);
 
         if self.show_header {
             let headers: Vec<String> = self.columns.iter().map(|c| c.header.clone()).collect();
             lines.extend(self.render_row(&headers, &content_widths, true, head_edges));
             lines.push(vec![Segment::new(
-                self.box_set.get_row(&rendered_widths, RowLevel::Head),
+                box_set.get_row(&rendered_widths, RowLevel::Head),
                 border.clone(),
             )]);
         }
@@ -379,14 +378,14 @@ impl Renderable for Table {
             lines.extend(self.render_row(row, &content_widths, false, body_edges));
             if self.show_lines && index != row_last {
                 lines.push(vec![Segment::new(
-                    self.box_set.get_row(&rendered_widths, RowLevel::Row),
+                    box_set.get_row(&rendered_widths, RowLevel::Row),
                     border.clone(),
                 )]);
             }
         }
 
         lines.push(vec![Segment::new(
-            self.box_set.get_bottom(&rendered_widths),
+            box_set.get_bottom(&rendered_widths),
             border.clone(),
         )]);
 

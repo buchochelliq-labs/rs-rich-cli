@@ -76,6 +76,9 @@ pub struct Console {
     no_color: bool,
     emoji: bool,
     highlight: bool,
+    legacy_windows: bool,
+    safe_box: bool,
+    ascii_only: bool,
     theme: Theme,
     base_style: Style,
     highlighters: Vec<Box<dyn Highlighter>>,
@@ -125,6 +128,21 @@ impl Console {
     /// Whether output is going to a real terminal.
     pub fn is_terminal(&self) -> bool {
         self.is_terminal
+    }
+
+    /// Whether output targets a legacy Windows console (drives box substitution).
+    pub fn legacy_windows(&self) -> bool {
+        self.legacy_windows
+    }
+
+    /// Whether to substitute box glyphs for terminal-safe variants (default on).
+    pub fn safe_box(&self) -> bool {
+        self.safe_box
+    }
+
+    /// Whether the terminal can only render ASCII (forces the `ASCII` box).
+    pub fn ascii_only(&self) -> bool {
+        self.ascii_only
     }
 
     /// The active theme.
@@ -435,6 +453,9 @@ pub struct ConsoleBuilder {
     no_color: Option<bool>,
     emoji: Option<bool>,
     highlight: Option<bool>,
+    legacy_windows: Option<bool>,
+    safe_box: Option<bool>,
+    ascii_only: Option<bool>,
     theme: Option<Theme>,
 }
 
@@ -449,12 +470,33 @@ impl ConsoleBuilder {
             no_color: None,
             emoji: None,
             highlight: None,
+            legacy_windows: None,
+            safe_box: None,
+            ascii_only: None,
             theme: None,
         }
     }
 
     pub fn force_terminal(mut self, value: bool) -> Self {
         self.force_terminal = Some(value);
+        self
+    }
+
+    /// Force legacy-Windows-console behavior (box substitution). Default off.
+    pub fn legacy_windows(mut self, value: bool) -> Self {
+        self.legacy_windows = Some(value);
+        self
+    }
+
+    /// Enable/disable terminal-safe box substitution (default on).
+    pub fn safe_box(mut self, value: bool) -> Self {
+        self.safe_box = Some(value);
+        self
+    }
+
+    /// Force ASCII-only box rendering (default off). Set for non-UTF-8 terminals.
+    pub fn ascii_only(mut self, value: bool) -> Self {
+        self.ascii_only = Some(value);
         self
     }
 
@@ -522,6 +564,9 @@ impl ConsoleBuilder {
             no_color,
             emoji: self.emoji.unwrap_or(true),
             highlight: self.highlight.unwrap_or(false),
+            legacy_windows: self.legacy_windows.unwrap_or(false),
+            safe_box: self.safe_box.unwrap_or(true),
+            ascii_only: self.ascii_only.unwrap_or(false),
             theme: self.theme.unwrap_or_else(Theme::default_theme),
             base_style: Style::new(),
             highlighters: Vec::new(),

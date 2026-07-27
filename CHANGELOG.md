@@ -8,6 +8,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Box substitution** (`Box::substitute`, port of `rich/box.py`'s `substitute`):
+  on a legacy Windows console the fancy boxes (`ROUNDED`/`HEAVY`/`HEAVY_HEAD`) fall
+  back to `SQUARE`, and on a non-UTF-8 terminal any non-ASCII box falls back to
+  `ASCII`. Added the `legacy_windows`/`safe_box`/`ascii_only` `Console` flags
+  (default off/on/off); `Panel` and `Table` apply the substitution. Byte-parity-
+  tested against real rich 15.0.0. Resolves the mechanism half of DIVERGENCES #6
+  (runtime auto-detection of legacy terminals is still deferred).
 - **Table `no_wrap`** (`table.rs`, toward `rich/table.py`): `Table::column_no_wrap`
   marks a column whose cells crop to a single line with ellipsis instead of
   wrapping, and which doesn't shrink during collapse (only yielding via the

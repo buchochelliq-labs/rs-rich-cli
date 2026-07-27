@@ -332,6 +332,14 @@ fn run_demo() {
             .title("top")
             .subtitle("bottom"),
     );
+    // Legacy-Windows box substitution: a ROUNDED panel falls back to SQUARE.
+    let legacy = Console::builder()
+        .force_terminal(true)
+        .color_system(Some(ColorSystem::Truecolor))
+        .width(console.width())
+        .legacy_windows(true)
+        .build();
+    legacy.print(&Panel::new(text("rounded → square on legacy Windows")).title("legacy"));
 
     // Padding (shown inside a panel so the blank space is visible).
     console.print(&Rule::new("padding"));

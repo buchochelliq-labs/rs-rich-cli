@@ -80,6 +80,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `filesize.py` | `filesize.rs` | 🟡 |
 | `prompt.py`, `pager.py` | resp. | ⬜ |
 | `_unicode_data/` | `unicode_data/` | ⬜ |
+| `box.substitute` (legacy/ASCII fallback) | `box.rs` | 🟡 | ✅ |
 | `_windows.py`, `_win32_console.py`, `_windows_renderer.py` | `windows/` | ⬜ |
 | `jupyter.py`, `file_proxy.py`, `diagnose.py`, `_fileno.py`, `_null_file.py` | resp. | ⬜ |
 | `_ratio.py` (`ratio_resolve`) | `ratio.rs` | 🟡 | — |

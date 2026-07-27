@@ -4,9 +4,9 @@
 //! (exactly as upstream), giving named access to every corner, edge, and
 //! junction. Panels, rules, and (later) tables draw their borders from these.
 //!
-//! Slice scope: the common boxes are provided. Platform-dependent substitution
-//! (`Box.substitute` for legacy Windows / ASCII terminals) is **not** yet
-//! implemented — see docs/DIVERGENCES.md.
+//! The common boxes are provided, along with [`Box::substitute`] — the
+//! platform-dependent fallback upstream applies on legacy Windows consoles
+//! (fancy boxes → `SQUARE`) and non-UTF-8 terminals (→ `ASCII`).
 
 /// Which divider a [`Box::get_row`] draws.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -174,6 +174,25 @@ impl Box {
         parts
     }
 
+    /// Return a version of this box safe for the target terminal. Port of
+    /// `Box.substitute`.
+    ///
+    /// On a legacy Windows console (`legacy_windows` + `safe`), the fancy boxes
+    /// that legacy code pages can't draw — `ROUNDED`, `HEAVY`, `HEAVY_HEAD` —
+    /// fall back to `SQUARE` (`DOUBLE`/`SQUARE`/`MINIMAL` are kept). On a
+    /// non-UTF-8 terminal (`ascii_only`), any non-ASCII box becomes `ASCII`.
+    pub fn substitute(&self, legacy_windows: bool, safe: bool, ascii_only: bool) -> Box {
+        let mut result = *self;
+        if legacy_windows && safe && (result == ROUNDED || result == HEAVY || result == HEAVY_HEAD)
+        {
+            result = SQUARE;
+        }
+        if ascii_only && result != ASCII {
+            result = ASCII;
+        }
+        result
+    }
+
     /// The bottom border for the given column `widths`. Port of `Box.get_bottom`.
     pub fn get_bottom(&self, widths: &[usize]) -> String {
         let mut parts = String::new();
@@ -292,5 +311,23 @@ mod tests {
     fn get_top_and_bottom_single_column() {
         assert_eq!(ROUNDED.get_top(&[3]), "╭───╮");
         assert_eq!(ROUNDED.get_bottom(&[3]), "╰───╯");
+    }
+
+    #[test]
+    fn substitute_legacy_and_ascii() {
+        // Legacy Windows: fancy → SQUARE; DOUBLE/SQUARE kept.
+        assert_eq!(ROUNDED.substitute(true, true, false), SQUARE);
+        assert_eq!(HEAVY.substitute(true, true, false), SQUARE);
+        assert_eq!(HEAVY_HEAD.substitute(true, true, false), SQUARE);
+        assert_eq!(DOUBLE.substitute(true, true, false), DOUBLE);
+        assert_eq!(SQUARE.substitute(true, true, false), SQUARE);
+        // `safe=false` disables the legacy fallback.
+        assert_eq!(ROUNDED.substitute(true, false, false), ROUNDED);
+        // Non-UTF-8: anything non-ASCII → ASCII.
+        assert_eq!(ROUNDED.substitute(false, true, true), ASCII);
+        assert_eq!(DOUBLE.substitute(false, true, true), ASCII);
+        assert_eq!(ASCII.substitute(false, true, true), ASCII);
+        // No flags → unchanged.
+        assert_eq!(ROUNDED.substitute(false, true, false), ROUNDED);
     }
 }

@@ -47,14 +47,19 @@ Format: what differs · why · how to remove it (if temporary).
   wrapping slice; identical for non-combining text (the common case).
 - **Remove:** port grapheme segmentation with the `_unicode_data` utilities issue.
 
-### 6. No platform box substitution
-- **Differs:** upstream's `Box.substitute` swaps box-drawing glyphs for ASCII (or
-  a safe subset) on legacy Windows / non-UTF-8 terminals. We always emit the
-  requested glyphs.
-- **Why:** keeps output deterministic and platform-independent for the first
-  layout slice (and for golden fixtures, which are captured in UTF-8 mode).
-- **Remove:** port `Box.substitute` + the `legacy_windows`/`ascii` console flags
-  with the Windows-console issue (#12).
+### 6. Box substitution is opt-in (no legacy-terminal auto-detection)
+- **Differs:** `Box.substitute` **is** ported — `Box::substitute` maps the fancy
+  boxes (`ROUNDED`/`HEAVY`/`HEAVY_HEAD`) to `SQUARE` when `legacy_windows` is set,
+  and any non-ASCII box to `ASCII` when `ascii_only` is set; `Panel`/`Table`
+  apply it. The `legacy_windows`/`safe_box`/`ascii_only` console flags exist. What
+  differs: those flags default **off** and are not auto-detected from the runtime
+  terminal (upstream auto-detects legacy Windows / a non-UTF-8 encoding), so the
+  default build always emits the requested glyphs.
+- **Why:** keeps default output deterministic (and golden fixtures, captured in
+  UTF-8 non-legacy mode, unaffected); runtime terminal detection is platform code.
+- **Remove:** auto-detect `legacy_windows` (WINDOWS && no VT support) and
+  `ascii_only` (non-UTF-8 encoding) at `Console` build time, under the
+  Windows-console issue (#12).
 
 ### 7. `Table` — a few advanced options remain
 - **Differs:** sizing (content, shrink-to-fit, `expand`), per-column justify,

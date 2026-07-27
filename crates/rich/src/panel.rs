@@ -124,6 +124,12 @@ impl Panel {
 impl Renderable for Panel {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let width = options.max_width;
+        // Fall back to a terminal-safe box on legacy Windows / non-UTF-8.
+        let box_set = self.box_set.substitute(
+            console.legacy_windows(),
+            console.safe_box(),
+            console.ascii_only(),
+        );
         let inner_width = width.saturating_sub(2);
         let (pt, pr, pb, pl) = self.padding;
         let child_width = inner_width.saturating_sub(pl).saturating_sub(pr);
@@ -138,8 +144,8 @@ impl Renderable for Panel {
 
         let border = Some(self.border_style.clone());
         let inner_style = Some(self.style.clone());
-        let left_border = || Segment::new(self.box_set.mid_left.to_string(), border.clone());
-        let right_border = || Segment::new(self.box_set.mid_right.to_string(), border.clone());
+        let left_border = || Segment::new(box_set.mid_left.to_string(), border.clone());
+        let right_border = || Segment::new(box_set.mid_right.to_string(), border.clone());
         let blank_inner = || Segment::new(" ".repeat(inner_width), inner_style.clone());
 
         let mut rows: Vec<Vec<Segment>> = Vec::new();
@@ -148,9 +154,9 @@ impl Renderable for Panel {
         rows.push(vec![Segment::new(
             self.border_line(
                 inner_width,
-                self.box_set.top_left,
-                self.box_set.top,
-                self.box_set.top_right,
+                box_set.top_left,
+                box_set.top,
+                box_set.top_right,
                 self.title.as_ref(),
                 self.title_align,
             ),
@@ -185,9 +191,9 @@ impl Renderable for Panel {
         rows.push(vec![Segment::new(
             self.border_line(
                 inner_width,
-                self.box_set.bottom_left,
-                self.box_set.bottom,
-                self.box_set.bottom_right,
+                box_set.bottom_left,
+                box_set.bottom,
+                box_set.bottom_right,
                 self.subtitle.as_ref(),
                 self.subtitle_align,
             ),
@@ -237,5 +243,20 @@ mod tests {
             out,
             "┌──────────────────┐\n│ hi               │\n└──────────────────┘\n"
         );
+    }
+
+    #[test]
+    fn legacy_windows_substitutes_rounded_to_square() {
+        // On a legacy Windows console, ROUNDED falls back to SQUARE. Captured
+        // from real rich 15.0.0 (legacy_windows=True, width 12).
+        let legacy = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(crate::color::ColorSystem::Truecolor))
+            .width(12)
+            .no_color(false)
+            .legacy_windows(true)
+            .build();
+        let out = legacy.render_export(&Panel::new(Box::new(Text::new("hi"))));
+        assert_eq!(out, "┌──────────┐\n│ hi       │\n└──────────┘\n");
     }
 }
