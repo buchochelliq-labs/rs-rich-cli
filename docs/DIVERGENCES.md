@@ -68,19 +68,18 @@ Format: what differs · why · how to remove it (if temporary).
   `ascii_only` (non-UTF-8 encoding) at `Console` build time, under the
   Windows-console issue (#12).
 
-### 7. `Table` — a few advanced options remain
+### 7. `Table` — one rare padding edge remains
 - **Differs:** sizing (content, shrink-to-fit, `expand`), per-column justify,
-  explicit per-column **width**, per-column **style**, **`no_wrap`** (crop to one
-  line with ellipsis), **ellipsis overflow** (the table default), title, caption,
-  and `show_lines` are all ported. Not yet ported: explicit per-column
-  `ratio`/`min_width`/`max_width`. Also, a *wrapping* column squeezed to width 0
-  by a greedy `no_wrap` neighbor still renders its cell padding (upstream drops
-  it) — a rare over-constrained case.
-- **Why:** the remaining options are less common and build on the same width
-  machinery; the width-0 padding edge only appears when a table is narrower than
-  its no_wrap content plus one other column.
-- **Remove:** add the per-column ratio/min/max fields, and drop padding on
-  zero-width columns, with the Table issue (#5).
+  explicit per-column **width**, per-column **`ratio`/`min_width`/`max_width`**,
+  per-column **style**, **`no_wrap`** (crop to one line with ellipsis), **ellipsis
+  overflow** (the table default), a **table-level style**, `pad_edge`/`show_edge`/
+  `collapse_padding`, title, caption, and `show_lines` are all ported and
+  byte-parity. The only residual: a *wrapping* column squeezed to width 0 by a
+  greedy `no_wrap` neighbor still renders its cell padding (upstream drops it) — a
+  rare over-constrained case.
+- **Why:** the width-0 padding edge only appears when a table is narrower than its
+  no_wrap content plus one other column.
+- **Remove:** drop padding on zero-width columns under the Table issue (#5).
 
 ### 8. `Json` — exotic number formatting differs from CPython
 - **Differs:** non-ASCII strings and key order are **byte-parity** with upstream

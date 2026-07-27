@@ -7,9 +7,10 @@
 //! padding, **`pad_edge`** + **`show_edge`** + **`collapse_padding`**, header
 //! styling (incl. a per-column header-content span), a **table-level style**,
 //! multi-line/wrapped cells (with **ellipsis overflow**), **shrink-to-fit** +
-//! **expand** column widths, per-column justify, **explicit width**, **per-column
-//! style**, **`no_wrap`**, title, caption, and `show_lines`. Deferred (tracked in
-//! the Table issue): explicit per-column `ratio`/min/max.
+//! **expand** column widths, per-column justify, **explicit width**, per-column
+//! **`ratio`/`min_width`/`max_width`**, **per-column style**, **`no_wrap`**,
+//! title, caption, and `show_lines`. Deferred (tracked in the Table issue): the
+//! rare width-0 column padding edge.
 
 use crate::cells::{cell_len, set_cell_size};
 use crate::console::{Console, ConsoleOptions, Justify};
@@ -31,6 +32,14 @@ struct Column {
     /// `header_style`), leaving the header padding as `header_style`. Mirrors
     /// upstream stylizing the heading `Text` (e.g. `markdown.table.header`).
     header_content_style: Option<Style>,
+    /// When set, the column flexes to this share of the free width when the table
+    /// is `expand`ed (port of `Column.ratio`; makes the column "flexible").
+    ratio: Option<usize>,
+    /// A floor on the column's content width (port of `Column.min_width`).
+    min_width: Option<usize>,
+    /// A cap on the column's content width — wider cells wrap (port of
+    /// `Column.max_width`).
+    max_width: Option<usize>,
     /// When set, cells are never wrapped — they crop to one line (with ellipsis).
     no_wrap: bool,
 }
@@ -181,6 +190,9 @@ impl Table {
             width: None,
             style: Style::new(),
             header_content_style: None,
+            ratio: None,
+            min_width: None,
+            max_width: None,
             no_wrap: false,
         });
         self
@@ -192,6 +204,34 @@ impl Table {
     pub fn column_width(&mut self, width: usize) -> &mut Self {
         if let Some(column) = self.columns.last_mut() {
             column.width = Some(width);
+        }
+        self
+    }
+
+    /// Give the most-recently-added column a flex `ratio`: when the table is
+    /// `expand`ed, ratio columns share the free width in proportion. Chain after
+    /// `add_column`. Port of `Column.ratio`.
+    pub fn column_ratio(&mut self, ratio: usize) -> &mut Self {
+        if let Some(column) = self.columns.last_mut() {
+            column.ratio = Some(ratio);
+        }
+        self
+    }
+
+    /// Set a minimum content width on the most-recently-added column. Chain after
+    /// `add_column`. Port of `Column.min_width`.
+    pub fn column_min_width(&mut self, min_width: usize) -> &mut Self {
+        if let Some(column) = self.columns.last_mut() {
+            column.min_width = Some(min_width);
+        }
+        self
+    }
+
+    /// Set a maximum content width on the most-recently-added column — wider
+    /// cells wrap. Chain after `add_column`. Port of `Column.max_width`.
+    pub fn column_max_width(&mut self, max_width: usize) -> &mut Self {
+        if let Some(column) = self.columns.last_mut() {
+            column.max_width = Some(max_width);
         }
         self
     }
@@ -254,7 +294,8 @@ impl Table {
     /// path of `Table._calculate_column_widths` + `_collapse_widths`.
     fn column_widths(&self, available: usize) -> Vec<usize> {
         let ncols = self.columns.len();
-        // A fixed-width column uses its declared width; others measure content.
+        // A fixed-width column uses its declared width; others measure content,
+        // clamped to the column's [min_width, max_width]. Port of `_measure_column`.
         let content = self.max_content_widths();
         let mut widths: Vec<i64> = self
             .columns
@@ -263,9 +304,59 @@ impl Table {
             .enumerate()
             .map(|(index, (column, &measured))| {
                 let (pl, pr) = self.cell_padding(index, ncols);
-                (column.width.unwrap_or(measured) + pl + pr) as i64
+                let content_width = match column.width {
+                    Some(w) => w,
+                    None => {
+                        let mut w = measured;
+                        if let Some(min) = column.min_width {
+                            w = w.max(min);
+                        }
+                        if let Some(max) = column.max_width {
+                            w = w.min(max);
+                        }
+                        w
+                    }
+                };
+                (content_width + pl + pr) as i64
             })
             .collect();
+
+        // Expand with explicit ratios: flexible (ratio) columns share the free
+        // width in proportion, fixed columns keep their measured width. Port of
+        // the `if self.expand: … if any(ratios)` block of `_calculate_column_widths`.
+        if self.expand {
+            let ratios: Vec<i64> = self
+                .columns
+                .iter()
+                .filter(|c| c.ratio.is_some())
+                .map(|c| c.ratio.unwrap() as i64)
+                .collect();
+            if ratios.iter().any(|&r| r > 0) {
+                let fixed_widths: Vec<i64> = widths
+                    .iter()
+                    .zip(&self.columns)
+                    .map(|(&w, c)| if c.ratio.is_some() { 0 } else { w })
+                    .collect();
+                let flex_minimum: Vec<i64> = self
+                    .columns
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, c)| c.ratio.is_some())
+                    .map(|(index, c)| {
+                        let (pl, pr) = self.cell_padding(index, ncols);
+                        (c.width.unwrap_or(1) + pl + pr) as i64
+                    })
+                    .collect();
+                let flexible_width = available as i64 - fixed_widths.iter().sum::<i64>();
+                let flex_widths = ratio_distribute(flexible_width, &ratios, Some(&flex_minimum));
+                let mut iter_flex = flex_widths.into_iter();
+                for (index, column) in self.columns.iter().enumerate() {
+                    if column.ratio.is_some() {
+                        widths[index] = fixed_widths[index] + iter_flex.next().unwrap_or(0);
+                    }
+                }
+            }
+        }
 
         let table_width: i64 = widths.iter().sum();
         if table_width > available as i64 {
@@ -291,7 +382,7 @@ impl Table {
         // `expand` tail of `_calculate_column_widths` (via `ratio_distribute`).
         let table_width: i64 = widths.iter().sum();
         if self.expand && table_width < available as i64 && table_width > 0 {
-            let pad = ratio_distribute(available as i64 - table_width, &widths);
+            let pad = ratio_distribute(available as i64 - table_width, &widths, None);
             for (width, extra) in widths.iter_mut().zip(pad) {
                 *width += extra;
             }
@@ -607,17 +698,30 @@ fn ratio_reduce(total: i64, ratios: &[i64], maximums: &[i64], values: &[i64]) ->
     result
 }
 
-/// Divide `total` across slots proportionally to `ratios` (ceil each share).
-/// Port of `rich._ratio.ratio_distribute` (no minimums).
-fn ratio_distribute(total: i64, ratios: &[i64]) -> Vec<i64> {
+/// Divide `total` across slots proportionally to `ratios` (ceil each share),
+/// each share floored at the matching `minimums` entry when given. Port of
+/// `rich._ratio.ratio_distribute`.
+fn ratio_distribute(total: i64, ratios: &[i64], minimums: Option<&[i64]>) -> Vec<i64> {
+    // Upstream zeroes the ratio of any slot whose minimum is 0 (falsy).
+    let ratios: Vec<i64> = match minimums {
+        Some(mins) => ratios
+            .iter()
+            .zip(mins)
+            .map(|(&r, &m)| if m != 0 { r } else { 0 })
+            .collect(),
+        None => ratios.to_vec(),
+    };
     let mut total_ratio: i64 = ratios.iter().sum();
     let mut total_remaining = total;
     let mut result = Vec::with_capacity(ratios.len());
-    for &ratio in ratios {
+    for (index, &ratio) in ratios.iter().enumerate() {
+        let minimum = minimums.map_or(0, |m| m[index]);
         let distributed = if total_ratio > 0 {
-            // ceil(ratio * total_remaining / total_ratio) for positive values.
+            // ceil(ratio * total_remaining / total_ratio) for positive values,
+            // then floored at `minimum`.
             let numerator = ratio * total_remaining;
-            (numerator + total_ratio - 1) / total_ratio
+            let ceil_div = (numerator + total_ratio - 1) / total_ratio;
+            minimum.max(ceil_div)
         } else {
             total_remaining
         };

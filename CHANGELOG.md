@@ -8,6 +8,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`Table` per-column `ratio` / `min_width` / `max_width`** (`table.rs`, the
+  substantive half of DIVERGENCES #7): `column_ratio`, `column_min_width`, and
+  `column_max_width` builders. `min_width`/`max_width` clamp the measured content
+  width (over-wide cells wrap); `ratio` columns share the free width in proportion
+  when the table is `expand`ed, via a faithful port of upstream's flexible/fixed
+  split (`ratio_distribute` now takes per-slot minimums). Byte-parity goldens
+  `table_ratio`, `table_min_width`, `table_max_width`. Only the rare width-0
+  padding edge remains open on #7.
 - **`ISO8601Highlighter` covers the full upstream pattern set** (`highlighter.rs`,
   resolves DIVERGENCES #13): added compact/basic calendar dates (`20230615`),
   ordinal dates, week dates, basic times, standalone timezones, and space-separated

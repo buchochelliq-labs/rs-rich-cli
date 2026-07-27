@@ -186,6 +186,32 @@ fn table_style_table() -> Table {
     table
 }
 
+fn table_ratio_table() -> Table {
+    let mut table = Table::new().box_set(SQUARE).expand(true);
+    table.add_column("A");
+    table.column_ratio(1);
+    table.add_column("B");
+    table.column_ratio(2);
+    table.add_row(&["x", "y"]);
+    table
+}
+
+fn table_min_width_table() -> Table {
+    let mut table = Table::new().box_set(SQUARE);
+    table.add_column("A");
+    table.column_min_width(10);
+    table.add_row(&["hi"]);
+    table
+}
+
+fn table_max_width_table() -> Table {
+    let mut table = Table::new().box_set(SQUARE);
+    table.add_column("A");
+    table.column_max_width(5);
+    table.add_row(&["a very long cell value here"]);
+    table
+}
+
 fn justify_table() -> Table {
     let mut table = Table::new().box_set(SQUARE);
     table.add_column_justify("L", Justify::Left);
@@ -281,6 +307,9 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "table_no_edge" => Box::new(edge_table(true, false)),
         "table_collapse" => Box::new(collapse_table()),
         "table_style" => Box::new(table_style_table()),
+        "table_ratio" => Box::new(table_ratio_table()),
+        "table_min_width" => Box::new(table_min_width_table()),
+        "table_max_width" => Box::new(table_max_width_table()),
         "tree_nested" => Box::new(sample_tree()),
         "align_center" | "align_center_odd" => Box::new(Align::center(Box::new(Text::new("hi")))),
         "align_right" => Box::new(Align::right(Box::new(Text::new("hi")))),

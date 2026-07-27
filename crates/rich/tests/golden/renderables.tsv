@@ -45,6 +45,9 @@ table_pad_edge	40	┌──────┬────┐\n│\x1b[1mName \x1b[0
 table_no_edge	40	\x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mAge\x1b[0m\x1b[1m \x1b[0m\n───────┼─────\n Alice │ 30  \n Bob   │ 7   \n
 table_collapse	40	┌───────┬────┐\n│\x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m│\x1b[1mAge\x1b[0m\x1b[1m \x1b[0m│\n├───────┼────┤\n│ Alice │30  │\n│ Bob   │7   │\n└───────┴────┘\n
 table_style	40	\x1b[34m┌───────┬─────┐\x1b[0m\n\x1b[34m│\x1b[0m\x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m\x1b[34m│\x1b[0m\x1b[1m \x1b[0m\x1b[1mAge\x1b[0m\x1b[1m \x1b[0m\x1b[34m│\x1b[0m\n\x1b[34m├───────┼─────┤\x1b[0m\n\x1b[34m│\x1b[0m Alice \x1b[34m│\x1b[0m 30  \x1b[34m│\x1b[0m\n\x1b[34m│\x1b[0m Bob   \x1b[34m│\x1b[0m 7   \x1b[34m│\x1b[0m\n\x1b[34m└───────┴─────┘\x1b[0m\n
+table_ratio	30	┌─────────┬──────────────────┐\n│\x1b[1m \x1b[0m\x1b[1mA      \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mB               \x1b[0m\x1b[1m \x1b[0m│\n├─────────┼──────────────────┤\n│ x       │ y                │\n└─────────┴──────────────────┘\n
+table_min_width	30	┌────────────┐\n│\x1b[1m \x1b[0m\x1b[1mA         \x1b[0m\x1b[1m \x1b[0m│\n├────────────┤\n│ hi         │\n└────────────┘\n
+table_max_width	40	┌───────┐\n│\x1b[1m \x1b[0m\x1b[1mA    \x1b[0m\x1b[1m \x1b[0m│\n├───────┤\n│ a     │\n│ very  │\n│ long  │\n│ cell  │\n│ value │\n│ here  │\n└───────┘\n
 tree_nested	40	root\n├── child A\n│   ├── leaf A1\n│   └── leaf A2\n└── child B\n
 align_center	20	         hi         \n
 align_right	20	                  hi\n

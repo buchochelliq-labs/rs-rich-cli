@@ -205,6 +205,28 @@ def _table_style() -> Table:
     return table
 
 
+def _table_ratio() -> Table:
+    table = Table(box=box.SQUARE, expand=True)
+    table.add_column("A", ratio=1)
+    table.add_column("B", ratio=2)
+    table.add_row("x", "y")
+    return table
+
+
+def _table_min_width() -> Table:
+    table = Table(box=box.SQUARE)
+    table.add_column("A", min_width=10)
+    table.add_row("hi")
+    return table
+
+
+def _table_max_width() -> Table:
+    table = Table(box=box.SQUARE)
+    table.add_column("A", max_width=5)
+    table.add_row("a very long cell value here")
+    return table
+
+
 def _nowrap_table() -> Table:
     # A single no_wrap column that must crop to one line (with ellipsis).
     table = Table(box=box.SQUARE)
@@ -289,6 +311,9 @@ RENDERABLE_CASES = [
     ("table_no_edge", 40, _no_edge_table()),
     ("table_collapse", 40, _collapse_table()),
     ("table_style", 40, _table_style()),
+    ("table_ratio", 30, _table_ratio()),
+    ("table_min_width", 30, _table_min_width()),
+    ("table_max_width", 40, _table_max_width()),
     ("tree_nested", 40, _tree()),
     ("align_center", 20, Align.center("hi")),
     ("align_right", 20, Align.right("hi")),
