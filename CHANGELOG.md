@@ -8,6 +8,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`rich-cli` CSV/TSV rendering** (`rich-cli/main.rs`, advances the CLI port):
+  `--csv` (and `.csv`/`.tsv` auto-detection) renders a delimited file as a table,
+  a port of rich-cli's `render_csv` — blue-bordered `HEAVY_HEAD` table with the
+  first row as the header and any all-numeric column right-justified + bold-green
+  (body & header). Includes an RFC-4180-ish parser (double-quoted fields with
+  `""` escaping, embedded delimiters/newlines, `\r\n`, leading-BOM stripping) and
+  the numeric-column heuristic. **Byte-parity** with the Table real rich-cli
+  builds (unit-tested). Deferred: `csv.Sniffer` dialect/has-header heuristics and
+  title/caption. Demo shows a CSV table.
 - **`Table` `border_style` + per-column header cell fill** (`table.rs`): a
   `border_style` builder (tints the box edges/dividers, composed over the table
   style) and `column_header_fill` (a per-column header *cell* style — content +

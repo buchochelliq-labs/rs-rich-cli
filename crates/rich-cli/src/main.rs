@@ -2,7 +2,7 @@
 //!
 //! This binary mirrors the upstream `rich-cli` command-line tool and is built on
 //! the [`rich`] library crate. It implements a slice of upstream's rendering
-//! flags — `--print`, `--markdown`, `--json`, `--rule` — plus width/justify
+//! flags — `--print`, `--markdown`, `--json`, `--syntax`, `--csv`, `--rule` — plus width/justify
 //! options, a plain-file printer (with extension auto-detection), and a
 //! capability demo. Syntax, CSV, and export flags are tracked as roadmap issues.
 
@@ -40,6 +40,8 @@ enum Mode {
     Json,
     /// `-x/--syntax`: syntax-highlight the resource (language from extension).
     Syntax,
+    /// `--csv`: render a CSV/TSV resource as a table.
+    Csv,
     /// `--rule`: draw a horizontal rule (the resource, if any, is its title).
     Rule,
 }
@@ -70,7 +72,10 @@ fn main() -> ExitCode {
 /// Set the render mode, rejecting a second, conflicting mode flag.
 fn set_mode(current: &mut Mode, mode: Mode) -> Result<(), String> {
     if *current != Mode::Auto && *current != mode {
-        return Err("only one of --print/--markdown/--json/--rule may be given".into());
+        return Err(
+            "only one render mode (--print/--markdown/--json/--syntax/--csv/--rule) may be given"
+                .into(),
+        );
     }
     *current = mode;
     Ok(())
@@ -100,6 +105,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "-m" | "--markdown" => set_mode(&mut mode, Mode::Markdown)?,
             "-j" | "--json" => set_mode(&mut mode, Mode::Json)?,
             "-x" | "--syntax" => set_mode(&mut mode, Mode::Syntax)?,
+            "--csv" => set_mode(&mut mode, Mode::Csv)?,
             "--rule" => set_mode(&mut mode, Mode::Rule)?,
             "--left" => justify = Some(Justify::Left),
             "--right" => justify = Some(Justify::Right),
@@ -153,6 +159,7 @@ fn detect_mode(resource: Option<&str>) -> Mode {
     match resource.and_then(|r| r.rsplit_once('.').map(|(_, ext)| ext.to_ascii_lowercase())) {
         Some(ext) if ext == "md" || ext == "markdown" => Mode::Markdown,
         Some(ext) if ext == "json" => Mode::Json,
+        Some(ext) if ext == "csv" || ext == "tsv" => Mode::Csv,
         _ => Mode::Auto,
     }
 }
@@ -223,9 +230,18 @@ fn run(cli: Cli) -> ExitCode {
         .and_then(|r| r.rsplit_once('.').map(|(_, ext)| ext.to_string()))
         .unwrap_or_default();
 
+    // Pre-build the CSV/TSV table (delimiter from the extension: tab for `.tsv`).
+    let csv_table = if mode == Mode::Csv {
+        let delimiter = if language == "tsv" { '\t' } else { ',' };
+        Some(render_csv(&parse_csv(&content, delimiter)))
+    } else {
+        None
+    };
+
     emit(&console, cli.export_html, |c| match mode {
         Mode::Markdown => c.print(&Markdown::new(&content)),
         Mode::Json => c.print(json.as_ref().expect("json parsed above")),
+        Mode::Csv => c.print(csv_table.as_ref().expect("csv built above")),
         Mode::Syntax => c.print(&Syntax::new(content.as_str(), language.as_str())),
         Mode::Print => match cli.justify {
             Some(justify) => c.print_justified(&content, justify),
@@ -238,6 +254,105 @@ fn run(cli: Cli) -> ExitCode {
         },
     });
     ExitCode::SUCCESS
+}
+
+/// Parse CSV/TSV `content` into rows of fields. Handles double-quoted fields
+/// (with `""` escaping) that may contain the delimiter or newlines; `\r` outside
+/// quotes is dropped (so `\r\n` line endings work). A trailing newline does not
+/// produce an empty final row.
+fn parse_csv(content: &str, delimiter: char) -> Vec<Vec<String>> {
+    // Strip a leading UTF-8 BOM so it doesn't cling to the first header cell.
+    let content = content.strip_prefix('\u{feff}').unwrap_or(content);
+    let mut rows: Vec<Vec<String>> = Vec::new();
+    let mut row: Vec<String> = Vec::new();
+    let mut field = String::new();
+    let mut in_quotes = false;
+    // Whether the current record has any content yet (so a lone `""` or a
+    // trailing delimiter still yields a field, but a bare newline does not).
+    let mut pending = false;
+    let mut chars = content.chars().peekable();
+    while let Some(c) = chars.next() {
+        if in_quotes {
+            if c == '"' {
+                if chars.peek() == Some(&'"') {
+                    chars.next();
+                    field.push('"');
+                } else {
+                    in_quotes = false;
+                }
+            } else {
+                field.push(c);
+            }
+        } else if c == '"' {
+            in_quotes = true;
+            pending = true;
+        } else if c == delimiter {
+            row.push(std::mem::take(&mut field));
+            pending = true;
+        } else if c == '\n' {
+            row.push(std::mem::take(&mut field));
+            rows.push(std::mem::take(&mut row));
+            pending = false;
+        } else if c != '\r' {
+            field.push(c);
+            pending = true;
+        }
+    }
+    if pending || !row.is_empty() {
+        row.push(field);
+        rows.push(row);
+    }
+    rows
+}
+
+/// Whether `value` is a plain number (`-?[0-9]+(\.[0-9]+)?`). Mirrors rich-cli's
+/// `is_number` for the numeric-column heuristic.
+fn is_number(value: &str) -> bool {
+    let value = value.trim();
+    let body = value.strip_prefix('-').unwrap_or(value);
+    let mut parts = body.split('.');
+    let int_part = parts.next().unwrap_or("");
+    let frac_part = parts.next();
+    if parts.next().is_some() {
+        return false; // more than one '.'
+    }
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    digits(int_part) && frac_part.map_or(true, digits)
+}
+
+/// Build a table from parsed CSV `rows`, mirroring rich-cli's `render_csv`:
+/// `HEAVY_HEAD` box (the `Table` default), a blue border, the first row as the
+/// header, and any all-numeric column right-justified with bold-green body +
+/// header cells.
+///
+/// First slice: the first row is always treated as the header. `csv.Sniffer`'s
+/// dialect/has-header heuristics and the title/caption are follow-ups.
+fn render_csv(rows: &[Vec<String>]) -> Table {
+    let mut table = Table::new().border_style(Style::parse("blue").expect("valid style"));
+    let Some((header, data)) = rows.split_first() else {
+        return table;
+    };
+    for (index, name) in header.iter().enumerate() {
+        // A column is numeric when no data cell is a non-empty non-number
+        // (empty cells are allowed); an empty data set counts as numeric, as
+        // upstream's `for … else` does.
+        let numeric = data.iter().all(|row| {
+            let value = row.get(index).map(String::as_str).unwrap_or("");
+            value.is_empty() || is_number(value)
+        });
+        if numeric {
+            table.add_column_justify(name, Justify::Right);
+            table.column_style(Style::parse("bold green").expect("valid style"));
+            table.column_header_fill(Style::parse("bold green").expect("valid style"));
+        } else {
+            table.add_column(name);
+        }
+    }
+    for row in data {
+        let cells: Vec<&str> = row.iter().map(String::as_str).collect();
+        table.add_row(&cells);
+    }
+    table
 }
 
 /// Apply a render action either straight to the terminal, or — when
@@ -265,6 +380,7 @@ RENDER MODE (choose at most one; default auto-detects by extension):\n\
     -m, --markdown   Render RESOURCE as Markdown\n\
     -j, --json       Pretty-print RESOURCE as JSON\n\
     -x, --syntax     Syntax-highlight RESOURCE (language from its extension)\n\
+        --csv        Render RESOURCE as a CSV/TSV table\n\
         --rule       Draw a horizontal rule (RESOURCE is its title)\n\
 \n\
 OPTIONS:\n\
@@ -639,10 +755,78 @@ fn run_demo() {
     let status = Status::new("Loading…").renderable().render(0.0);
     console.print(&Text::new("       status: ").append_text(&status));
 
+    // CSV rendered as a table (blue border, numeric columns bold-green + right).
+    console.print(&Rule::new("csv"));
+    let csv = "Product,Qty,Price\nWidget,3,9.99\nGadget,12,19.50\nGizmo,1,4.25";
+    console.print(&render_csv(&parse_csv(csv, ',')));
+
     // filesize.
     console.print(&Rule::new("filesize"));
     for bytes in [1u64, 999, 1_000, 1_500, 1_000_000, 1_500_000_000] {
         console.print_str(&format!("  {bytes:>13} → {}", filesize::decimal(bytes)));
     }
     console.print(&Rule::line());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rich::ColorSystem;
+
+    #[test]
+    fn parse_csv_handles_quotes_and_delimiters() {
+        // Quoted field containing the delimiter, and `""` escaping.
+        let rows = parse_csv("a,\"b,c\",d\n\"he said \"\"hi\"\"\",2\n", ',');
+        assert_eq!(
+            rows,
+            vec![
+                vec!["a".to_string(), "b,c".to_string(), "d".to_string()],
+                vec!["he said \"hi\"".to_string(), "2".to_string()],
+            ]
+        );
+        // No trailing empty row after a final newline; `\r\n` endings work.
+        assert_eq!(parse_csv("x\r\ny\r\n", ','), vec![vec!["x"], vec!["y"]]);
+        // Tab delimiter.
+        assert_eq!(parse_csv("a\tb", '\t'), vec![vec!["a", "b"]]);
+        // A leading UTF-8 BOM is stripped, not glued to the first cell.
+        assert_eq!(parse_csv("\u{feff}a,b", ','), vec![vec!["a", "b"]]);
+    }
+
+    #[test]
+    fn is_number_matches_pattern() {
+        for ok in ["0", "42", "-7", "3.14", "-0.5", " 12 "] {
+            assert!(is_number(ok), "{ok:?} should be numeric");
+        }
+        for no in ["", "1.2.3", "1e5", "abc", "5%", "-", "."] {
+            assert!(!is_number(no), "{no:?} should not be numeric");
+        }
+    }
+
+    #[test]
+    fn render_csv_matches_upstream() {
+        // Byte-parity with the Table real rich-cli's render_csv builds for this
+        // CSV (captured from rich 15.0.0): HEAVY_HEAD box, blue border, the
+        // numeric Age column right-justified with bold-green body + header cells.
+        let table = render_csv(&parse_csv("Name,Age,City\nAlice,30,NYC\nBob,25,LA\n", ','));
+        let out = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(40)
+            .no_color(false)
+            .build()
+            .render_to_string(&table);
+        let expected = concat!(
+            "\x1b[34m┏━━━━━━━┳━━━━━┳━━━━━━┓\x1b[0m\n",
+            "\x1b[34m┃\x1b[0m\x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m\x1b[34m┃\x1b[0m",
+            "\x1b[1;32m \x1b[0m\x1b[1;32mAge\x1b[0m\x1b[1;32m \x1b[0m\x1b[34m┃\x1b[0m",
+            "\x1b[1m \x1b[0m\x1b[1mCity\x1b[0m\x1b[1m \x1b[0m\x1b[34m┃\x1b[0m\n",
+            "\x1b[34m┡━━━━━━━╇━━━━━╇━━━━━━┩\x1b[0m\n",
+            "\x1b[34m│\x1b[0m Alice \x1b[34m│\x1b[0m\x1b[1;32m \x1b[0m\x1b[1;32m 30\x1b[0m",
+            "\x1b[1;32m \x1b[0m\x1b[34m│\x1b[0m NYC  \x1b[34m│\x1b[0m\n",
+            "\x1b[34m│\x1b[0m Bob   \x1b[34m│\x1b[0m\x1b[1;32m \x1b[0m\x1b[1;32m 25\x1b[0m",
+            "\x1b[1;32m \x1b[0m\x1b[34m│\x1b[0m LA   \x1b[34m│\x1b[0m\n",
+            "\x1b[34m└───────┴─────┴──────┘\x1b[0m",
+        );
+        assert_eq!(out, expected);
+    }
 }
