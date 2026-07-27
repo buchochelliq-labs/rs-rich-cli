@@ -85,7 +85,7 @@ pub use crate::log_render::{LogLevel, LogRender};
 pub use crate::padding::Padding;
 pub use crate::panel::Panel;
 pub use crate::pretty::Pretty;
-pub use crate::progress::Progress;
+pub use crate::progress::{Progress, ProgressColumn};
 pub use crate::progress_bar::ProgressBar;
 pub use crate::protocol::{Highlighter, Renderable};
 pub use crate::rule::Rule;

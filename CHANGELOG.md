@@ -8,6 +8,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`Progress` custom columns** (`progress.rs`, advances DIVERGENCES #16):
+  generalized from a hard-coded 3-column layout to a configurable
+  `ProgressColumn` list (`Progress::columns`). Deterministic columns ported
+  byte-parity — description, static text, bar, percentage, and **M-of-N**
+  (`{completed}/{total}`, `progress.download` green). The inline grid matches
+  upstream's `Table.grid(padding=(0,1))`. Non-deterministic columns (spinner,
+  speed, time) and the download byte-unit formatting stay deferred (need the
+  `Live` loop / filesize units). Default layout unchanged (byte-parity).
 - **`Table` per-column `ratio` / `min_width` / `max_width`** (`table.rs`, the
   substantive half of DIVERGENCES #7): `column_ratio`, `column_min_width`, and
   `column_max_width` builders. `min_width`/`max_width` clamp the measured content

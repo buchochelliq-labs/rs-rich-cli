@@ -15,8 +15,8 @@ use rich::text::Text;
 use rich::{
     filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, Control, Highlighter,
     HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, Live, LiveRender, LogLevel,
-    LogRender, Padding, Panel, Pretty, Progress, ProgressBar, Renderable, Rule, Spinner, Status,
-    Style, Styled, Syntax, Table, Traceback, Tree, DEFAULT_TERMINAL_THEME,
+    LogRender, Padding, Panel, Pretty, Progress, ProgressBar, ProgressColumn, Renderable, Rule,
+    Spinner, Status, Style, Styled, Syntax, Table, Traceback, Tree, DEFAULT_TERMINAL_THEME,
 };
 use rich_ext::ConsoleExt;
 
@@ -454,6 +454,16 @@ fn run_demo() {
     progress.add_task("Processing", 100.0, 100.0);
     progress.add_task("Waiting", 100.0, 0.0);
     console.print(&progress);
+
+    // Progress with custom columns — description + bar + M-of-N counter.
+    let mut mofn = Progress::new().columns(vec![
+        ProgressColumn::Description,
+        ProgressColumn::Bar,
+        ProgressColumn::MofN,
+    ]);
+    mofn.add_task("Files", 8.0, 3.0);
+    mofn.add_task("Chunks", 128.0, 128.0);
+    console.print(&mofn);
 
     // JSON — pretty-printed and highlighted.
     console.print(&Rule::new("json"));
