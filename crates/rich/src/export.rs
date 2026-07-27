@@ -40,6 +40,16 @@ fn escape(text: &str) -> String {
         .replace('\'', "&#x27;")
 }
 
+/// Substitute the four template placeholders. Port of the `.format(...)` call
+/// (done via `replace` to avoid escaping the CSS braces).
+fn fill_template(code: &str, stylesheet: &str, theme: &TerminalTheme) -> String {
+    CONSOLE_HTML_FORMAT
+        .replace("{stylesheet}", stylesheet)
+        .replace("{foreground}", &theme.foreground.hex())
+        .replace("{background}", &theme.background.hex())
+        .replace("{code}", code)
+}
+
 /// Render `segments` to a self-contained HTML document with inline styles.
 /// Port of `Console.export_html(inline_styles=True)`.
 pub fn export_html_inline(segments: &[Segment], theme: &TerminalTheme) -> String {
@@ -62,12 +72,49 @@ pub fn export_html_inline(segments: &[Segment], theme: &TerminalTheme) -> String
             _ => code.push_str(&text),
         }
     }
+    fill_template(&code, "", theme)
+}
 
-    CONSOLE_HTML_FORMAT
-        .replace("{stylesheet}", "")
-        .replace("{foreground}", &theme.foreground.hex())
-        .replace("{background}", &theme.background.hex())
-        .replace("{code}", &code)
+/// Render `segments` to a self-contained HTML document using CSS classes and a
+/// generated stylesheet. Port of `Console.export_html(inline_styles=False)`
+/// (upstream's default). Distinct styles are numbered `.r1`, `.r2`, … in the
+/// order first seen.
+pub fn export_html_classes(segments: &[Segment], theme: &TerminalTheme) -> String {
+    let simplified = Segment::simplify(segments);
+    // (rule → class number), in insertion order.
+    let mut styles: Vec<(String, usize)> = Vec::new();
+    let mut code = String::new();
+    for segment in &simplified {
+        if segment.control {
+            continue;
+        }
+        let text = escape(&segment.text);
+        match &segment.style {
+            Some(style) if !style.is_null() => {
+                let rule = style.get_html_style(theme);
+                if rule.is_empty() {
+                    code.push_str(&text);
+                } else {
+                    let number = match styles.iter().find(|(existing, _)| *existing == rule) {
+                        Some((_, n)) => *n,
+                        None => {
+                            let n = styles.len() + 1;
+                            styles.push((rule, n));
+                            n
+                        }
+                    };
+                    code.push_str(&format!("<span class=\"r{number}\">{text}</span>"));
+                }
+            }
+            _ => code.push_str(&text),
+        }
+    }
+    let stylesheet = styles
+        .iter()
+        .map(|(rule, number)| format!(".r{number} {{{rule}}}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    fill_template(&code, &stylesheet, theme)
 }
 
 #[cfg(test)]

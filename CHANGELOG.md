@@ -18,8 +18,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   captures printed output and returns a self-contained HTML document with inline
   styles, resolving colors through a `TerminalTheme` (`DEFAULT_TERMINAL_THEME`).
   Added `Style::get_html_style` and `blend_rgb`. Byte-parity-tested against real
-  rich 15.0.0 (full document + `get_html_style`). The `rich-cli` gains a
-  `--export-html` flag. (CSS-class variant + SVG deferred — DIVERGENCES #15.)
+  rich 15.0.0 (full document + `get_html_style`). Also `export_html_classes`
+  (the default `.r1 {…}` CSS-class stylesheet form, byte-parity). The `rich-cli`
+  `--export-html` flag emits the class form (rich-cli's default). (SVG export
+  deferred — DIVERGENCES #15.)
 - **Generic `RegexHighlighter` base + `ISO8601Highlighter`** (`highlighter.rs`,
   toward `rich/highlighter.py`): extracted the shared regex-highlight loop into a
   public `RegexHighlighter` (base-style prefix + named-group patterns), refactored

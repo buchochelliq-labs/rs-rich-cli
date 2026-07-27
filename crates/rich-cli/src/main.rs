@@ -232,7 +232,8 @@ fn run(cli: Cli) -> ExitCode {
 /// `export_html` is set — captured and printed as a self-contained HTML document.
 fn emit(console: &Console, export_html: bool, render: impl FnOnce(&Console)) {
     if export_html {
-        print!("{}", console.export_html(render));
+        // CSS-class stylesheet form (upstream rich-cli's default HTML export).
+        print!("{}", console.export_html_classes(render));
     } else {
         render(console);
     }
