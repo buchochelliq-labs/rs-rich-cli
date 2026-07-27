@@ -4,9 +4,9 @@
 //! (exactly as upstream), giving named access to every corner, edge, and
 //! junction. Panels, rules, and (later) tables draw their borders from these.
 //!
-//! The common boxes are provided, along with [`Box::substitute`] — the
-//! platform-dependent fallback upstream applies on legacy Windows consoles
-//! (fancy boxes → `SQUARE`) and non-UTF-8 terminals (→ `ASCII`).
+//! All of upstream's built-in boxes are provided, along with [`Box::substitute`]
+//! — the platform-dependent fallback applied on legacy Windows consoles (fancy
+//! boxes → `SQUARE`) and non-UTF-8 terminals (→ `ASCII`).
 
 /// Which divider a [`Box::get_row`] draws.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -284,6 +284,32 @@ pub const DOUBLE: Box = Box::parse("╔═╦╗\n║ ║║\n╠═╬╣\n║ 
 
 pub const MINIMAL: Box = Box::parse("  ╷ \n  │ \n╶─┼╴\n  │ \n╶─┼╴\n╶─┼╴\n  │ \n  ╵ \n");
 
+pub const ASCII2: Box = Box::parse("+-++\n| ||\n+-++\n| ||\n+-++\n+-++\n| ||\n+-++\n");
+
+pub const ASCII_DOUBLE_HEAD: Box = Box::parse("+-++\n| ||\n+=++\n| ||\n+-++\n+-++\n| ||\n+-++\n");
+
+pub const SQUARE_DOUBLE_HEAD: Box = Box::parse("┌─┬┐\n│ ││\n╞═╪╡\n│ ││\n├─┼┤\n├─┼┤\n│ ││\n└─┴┘\n");
+
+pub const MINIMAL_HEAVY_HEAD: Box = Box::parse("  ╷ \n  │ \n╺━┿╸\n  │ \n╶─┼╴\n╶─┼╴\n  │ \n  ╵ \n");
+
+pub const MINIMAL_DOUBLE_HEAD: Box = Box::parse("  ╷ \n  │ \n ═╪ \n  │ \n ─┼ \n ─┼ \n  │ \n  ╵ \n");
+
+/// A boxless table with a light head/foot rule. Used by Markdown tables.
+pub const SIMPLE: Box = Box::parse("    \n    \n ── \n    \n    \n ── \n    \n    \n");
+
+pub const SIMPLE_HEAD: Box = Box::parse("    \n    \n ── \n    \n    \n    \n    \n    \n");
+
+pub const SIMPLE_HEAVY: Box = Box::parse("    \n    \n ━━ \n    \n    \n ━━ \n    \n    \n");
+
+pub const HORIZONTALS: Box = Box::parse(" ── \n    \n ── \n    \n ── \n ── \n    \n ── \n");
+
+pub const HEAVY_EDGE: Box = Box::parse("┏━┯┓\n┃ │┃\n┠─┼┨\n┃ │┃\n┠─┼┨\n┠─┼┨\n┃ │┃\n┗━┷┛\n");
+
+pub const DOUBLE_EDGE: Box = Box::parse("╔═╤╗\n║ │║\n╟─┼╢\n║ │║\n╟─┼╢\n╟─┼╢\n║ │║\n╚═╧╝\n");
+
+/// The box Markdown tables use for GFM output (pipes + a light head rule).
+pub const MARKDOWN: Box = Box::parse("    \n| ||\n|-||\n| ||\n|-||\n|-||\n| ||\n    \n");
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -311,6 +337,21 @@ mod tests {
     fn get_top_and_bottom_single_column() {
         assert_eq!(ROUNDED.get_top(&[3]), "╭───╮");
         assert_eq!(ROUNDED.get_bottom(&[3]), "╰───╯");
+    }
+
+    #[test]
+    fn additional_boxes_parse() {
+        // SIMPLE / MARKDOWN have blank edges and a head rule.
+        assert_eq!(SIMPLE.top_left, ' ');
+        assert_eq!(SIMPLE.head_row_horizontal, '─');
+        assert_eq!(SIMPLE_HEAVY.head_row_horizontal, '━');
+        assert_eq!(MARKDOWN.mid_left, '|');
+        assert_eq!(MARKDOWN.head_row_horizontal, '-');
+        assert_eq!(DOUBLE_EDGE.top_left, '╔');
+        assert_eq!(DOUBLE_EDGE.mid_vertical, '│');
+        assert_eq!(HEAVY_EDGE.top_left, '┏');
+        assert_eq!(SQUARE_DOUBLE_HEAD.head_row_horizontal, '═');
+        assert_eq!(ASCII2.head_row_cross, '+');
     }
 
     #[test]

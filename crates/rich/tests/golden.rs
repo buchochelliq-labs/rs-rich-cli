@@ -7,7 +7,7 @@
 //! guarantee described in AGENTS.md.
 
 use rich::markdown::Markdown;
-use rich::r#box::{Box as BoxSet, HEAVY_HEAD, SQUARE};
+use rich::r#box::{Box as BoxSet, DOUBLE_EDGE, HEAVY_HEAD, SIMPLE, SQUARE};
 use rich::{
     Align, AnsiDecoder, Bar, ColorSystem, Columns, Console, Constrain, Control, HorizontalAlign,
     Json, Justify, Layout, Padding, Panel, ProgressBar, Renderable, Rule, Style, Styled, Table,
@@ -235,6 +235,8 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "text_justify_bare" => Box::new(Text::new("hi").justify(Justify::Center)),
         "table_square" => Box::new(sample_table(SQUARE)),
         "table_default" => Box::new(sample_table(HEAVY_HEAD)),
+        "table_simple" => Box::new(sample_table(SIMPLE)),
+        "table_double_edge" => Box::new(sample_table(DOUBLE_EDGE)),
         "table_shrink" => Box::new(shrink_table()),
         "table_expand" => Box::new(expand_table()),
         "table_justify" => Box::new(justify_table()),

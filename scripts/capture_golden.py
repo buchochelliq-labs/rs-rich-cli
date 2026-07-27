@@ -239,6 +239,8 @@ RENDERABLE_CASES = [
     ("text_justify_bare", 10, Text("hi", justify="center")),
     ("table_square", 40, _table(box.SQUARE)),
     ("table_default", 40, _table(box.HEAVY_HEAD)),
+    ("table_simple", 40, _table(box.SIMPLE)),
+    ("table_double_edge", 40, _table(box.DOUBLE_EDGE)),
     ("table_shrink", 30, _shrink_table()),
     ("table_expand", 30, _expand_table()),
     ("table_justify", 30, _justify_table()),

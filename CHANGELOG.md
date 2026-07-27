@@ -17,6 +17,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   leading chunk for a char wider than the fold width, which we suppress.
 
 ### Added
+- **All built-in boxes** (`box.rs`): added the remaining upstream box constants —
+  `ASCII2`, `ASCII_DOUBLE_HEAD`, `SQUARE_DOUBLE_HEAD`, `MINIMAL_HEAVY_HEAD`,
+  `MINIMAL_DOUBLE_HEAD`, `SIMPLE`, `SIMPLE_HEAD`, `SIMPLE_HEAVY`, `HORIZONTALS`,
+  `HEAVY_EDGE`, `DOUBLE_EDGE`, `MARKDOWN` — so `box.py` is complete. Byte-parity-
+  tested (new goldens `table_simple`, `table_double_edge`). `SIMPLE`/`MARKDOWN`
+  are the boxes Markdown tables will use.
 - **Box substitution** (`Box::substitute`, port of `rich/box.py`'s `substitute`):
   on a legacy Windows console the fancy boxes (`ROUNDED`/`HEAVY`/`HEAVY_HEAD`) fall
   back to `SQUARE`, and on a non-UTF-8 terminal any non-ASCII box falls back to

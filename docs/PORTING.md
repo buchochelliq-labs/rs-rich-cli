@@ -36,7 +36,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 
 | upstream `rich/…` | rust file | status | parity |
 |-------------------|-----------|:------:|:------:|
-| `box.py` | `box.rs` | 🟡 | — |
+| `box.py` (all boxes + substitute) | `box.rs` | 🟢 | ✅ |
 | `rule.py` | `rule.rs` | 🟡 | ✅ |
 | `padding.py` | `padding.rs` | 🟡 | ✅ |
 | `panel.py` | `panel.rs` | 🟡 | ✅ |
