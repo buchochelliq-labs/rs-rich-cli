@@ -187,6 +187,15 @@ def _no_edge_table() -> Table:
     return table
 
 
+def _collapse_table() -> Table:
+    table = Table(box=box.SQUARE, collapse_padding=True)
+    table.add_column("Name")
+    table.add_column("Age")
+    table.add_row("Alice", "30")
+    table.add_row("Bob", "7")
+    return table
+
+
 def _nowrap_table() -> Table:
     # A single no_wrap column that must crop to one line (with ellipsis).
     table = Table(box=box.SQUARE)
@@ -269,6 +278,7 @@ RENDERABLE_CASES = [
     ("table_nowrap", 20, _nowrap_table()),
     ("table_pad_edge", 40, _pad_edge_table()),
     ("table_no_edge", 40, _no_edge_table()),
+    ("table_collapse", 40, _collapse_table()),
     ("tree_nested", 40, _tree()),
     ("align_center", 20, Align.center("hi")),
     ("align_right", 20, Align.right("hi")),

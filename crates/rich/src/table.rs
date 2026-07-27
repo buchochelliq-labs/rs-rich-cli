@@ -39,6 +39,7 @@ pub struct Table {
     show_lines: bool,
     show_edge: bool,
     pad_edge: bool,
+    collapse_padding: bool,
     expand: bool,
     title: Option<String>,
     caption: Option<String>,
@@ -57,6 +58,7 @@ impl Default for Table {
             show_lines: false,
             show_edge: true,
             pad_edge: true,
+            collapse_padding: false,
             expand: false,
             title: None,
             caption: None,
@@ -110,16 +112,32 @@ impl Table {
         self
     }
 
-    /// The `(left, right)` padding for column `index` of `ncols` — the outer
-    /// edges are dropped when `pad_edge` is off.
+    /// Merge adjacent cell padding: an interior column's left pad is reduced by
+    /// the previous column's right pad. Port of `collapse_padding`.
+    pub fn collapse_padding(mut self, collapse: bool) -> Self {
+        self.collapse_padding = collapse;
+        self
+    }
+
+    /// The `(left, right)` padding for column `index` of `ncols`. Port of
+    /// `_get_padding_width` (collapse) combined with the `pad_edge` edge drops.
     fn cell_padding(&self, index: usize, ncols: usize) -> (usize, usize) {
         let (_, pr, _, pl) = self.padding;
-        let left = if !self.pad_edge && index == 0 { 0 } else { pl };
-        let right = if !self.pad_edge && index + 1 == ncols {
-            0
+        // collapse_padding: interior columns shed the overlap with the previous
+        // column's right pad.
+        let mut left = if self.collapse_padding && index > 0 {
+            pl.saturating_sub(pr)
         } else {
-            pr
+            pl
         };
+        let mut right = pr;
+        // pad_edge: the outer edges lose their padding.
+        if !self.pad_edge && index == 0 {
+            left = 0;
+        }
+        if !self.pad_edge && index + 1 == ncols {
+            right = 0;
+        }
         (left, right)
     }
 

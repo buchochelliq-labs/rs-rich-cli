@@ -8,6 +8,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Table `collapse_padding`** (`table.rs`, port of `_get_padding_width`):
+  `Table::collapse_padding(true)` merges adjacent cell padding — an interior
+  column's left pad is reduced by the previous column's right pad
+  (`max(0, pad_left - pad_right)`), so a default-padded grid collapses to a
+  single space between columns. Byte-parity-tested (new golden `table_collapse`).
+  The last per-cell Table feature Markdown tables need before wiring the element.
 - **Table `pad_edge` + `show_edge`** (`table.rs`, port of upstream's flags):
   `Table::pad_edge(false)` drops the first column's left pad and the last
   column's right pad; `Table::show_edge(false)` removes the outer box edges
