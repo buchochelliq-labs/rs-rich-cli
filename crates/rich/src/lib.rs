@@ -66,7 +66,7 @@ pub use crate::console::{Console, ConsoleOptions, Justify};
 pub use crate::constrain::Constrain;
 pub use crate::control::{Control, ControlType};
 pub use crate::errors::{Result, RichError};
-pub use crate::highlighter::ReprHighlighter;
+pub use crate::highlighter::{ISO8601Highlighter, RegexHighlighter, ReprHighlighter};
 pub use crate::json::Json;
 pub use crate::layout::Layout;
 pub use crate::padding::Padding;

@@ -28,7 +28,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `errors.py`                           | `errors.rs`              | 🟡 | — |
 | `control.py`                          | `control.rs`             | 🟢 | ✅ |
 | `ansi.py`                             | `ansi.rs`                | 🟡 | ✅ |
-| `highlighter.py` (ReprHighlighter)    | `highlighter.rs`         | 🟡 | ✅ |
+| `highlighter.py` (Regex/Repr/ISO8601) | `highlighter.rs`         | 🟡 | ✅ |
 | `scope.py`, `region.py`, `containers.py` | (tbd)                 | ⬜ | — |
 
 ## Widgets & layout

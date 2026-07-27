@@ -13,9 +13,9 @@ use rich::markdown::Markdown;
 use rich::r#box::{DOUBLE, SQUARE};
 use rich::text::Text;
 use rich::{
-    filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, Control, HorizontalAlign, Json,
-    Justify, Layout, Padding, Panel, ProgressBar, Renderable, Rule, Spinner, Style, Styled, Table,
-    Tree,
+    filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, Control, Highlighter,
+    HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, Padding, Panel, ProgressBar,
+    Renderable, Rule, Spinner, Style, Styled, Table, Tree,
 };
 use rich_ext::ConsoleExt;
 
@@ -275,6 +275,10 @@ fn run_demo() {
         .highlight(true)
         .build();
     hl.print_str("Highlight:  result = func(42, True, None, '/usr/bin')");
+    // ISO8601Highlighter — colors date/time/timezone fields.
+    let mut stamp = Text::new("2023-06-15T13:45:30+02:00");
+    ISO8601Highlighter::new().highlight(&mut stamp);
+    console.print(&Text::new("ISO 8601:   ").append_text(&stamp));
     console.print_str("Emoji:     :rocket: :fire: :sparkles: :thumbs_up: :snake: :coffee:");
 
     // Rule variants (title alignment).

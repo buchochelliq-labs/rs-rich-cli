@@ -1,8 +1,14 @@
 //! Built-in highlighters.
 //!
-//! Port of upstream `rich/highlighter.py` (`ReprHighlighter`). The patterns
-//! (vendored in `repr_patterns.rs`) use lookbehind/alternation, so we compile
-//! them with `fancy-regex`.
+//! Port of upstream `rich/highlighter.py` — the [`RegexHighlighter`] base and
+//! the [`ReprHighlighter`] / [`ISO8601Highlighter`] built-ins. Patterns
+//! (`repr_patterns.rs` for repr) use lookbehind/alternation, so we compile them
+//! with `fancy-regex`.
+//!
+//! Like upstream, a highlighter stylizes **every** matched named group with the
+//! style named `{base_style}{group}`; unknown names resolve to a null style,
+//! which still splits the text into spans (so e.g. an ISO date's sub-fields
+//! create the same segment boundaries upstream produces).
 
 use std::sync::OnceLock;
 
@@ -12,6 +18,96 @@ use crate::protocol::Highlighter;
 use crate::repr_patterns::REPR_PATTERNS;
 use crate::style::Style;
 use crate::text::Text;
+
+/// Standard ISO 8601 *extended* date/time patterns — the subset of upstream's
+/// `ISO8601Highlighter.highlights` that `fancy-regex` compiles. Exotic compact
+/// and conditional (`(?(hyphen)…)`) forms are omitted; see docs/DIVERGENCES.md.
+const ISO8601_PATTERNS: &[&str] = &[
+    r"^(?P<date>(?P<year>-?(?:[1-9][0-9]*)?[0-9]{4})-(?P<month>1[0-2]|0[1-9])-(?P<day>3[01]|0[1-9]|[12][0-9]))(?P<timezone>Z|[+-](?:2[0-3]|[01][0-9]):[0-5][0-9])?$",
+    r"^(?P<time>(?P<hour>2[0-3]|[01][0-9]):(?P<minute>[0-5][0-9]):(?P<second>[0-5][0-9])(?P<frac>\.[0-9]+)?)(?P<timezone>Z|[+-](?:2[0-3]|[01][0-9]):[0-5][0-9])?$",
+    r"^(?P<date>(?P<year>-?(?:[1-9][0-9]*)?[0-9]{4})-(?P<month>1[0-2]|0[1-9])-(?P<day>3[01]|0[1-9]|[12][0-9]))T(?P<time>(?P<hour>2[0-3]|[01][0-9]):(?P<minute>[0-5][0-9]):(?P<second>[0-5][0-9])(?P<ms>\.[0-9]+)?)(?P<timezone>Z|[+-](?:2[0-3]|[01][0-9]):[0-5][0-9])?$",
+];
+
+/// The default style for a fully-qualified style name (the subset of
+/// `default_styles.py` used by the built-in highlighters). Unknown names get a
+/// null style — matching upstream's `get_style(name, default=Style.null())`.
+fn default_style(name: &str) -> Style {
+    let spec = match name {
+        "repr.tag_start" | "repr.tag_end" | "repr.brace" => "bold",
+        "repr.tag_name" => "bold bright_magenta",
+        "repr.tag_contents" => "default",
+        "repr.attrib_name" => "not italic yellow",
+        "repr.attrib_value" => "not italic magenta",
+        "repr.ipv4" | "repr.ipv6" | "repr.eui48" | "repr.eui64" => "bold bright_green",
+        "repr.uuid" => "not bold bright_yellow",
+        "repr.call" => "bold magenta",
+        "repr.bool_true" => "italic bright_green",
+        "repr.bool_false" => "italic bright_red",
+        "repr.none" => "italic magenta",
+        "repr.ellipsis" => "yellow",
+        "repr.number" | "repr.number_complex" => "bold not italic cyan",
+        "repr.path" => "magenta",
+        "repr.filename" => "bright_magenta",
+        "repr.str" => "not bold not italic green",
+        "repr.url" => "not bold not italic underline bright_blue",
+        "iso8601.date" => "blue",
+        "iso8601.time" => "magenta",
+        "iso8601.timezone" => "yellow",
+        _ => return Style::new(),
+    };
+    Style::parse(spec).unwrap_or_default()
+}
+
+/// Compile a slice of pattern strings.
+fn compile(patterns: &[&str]) -> Vec<Regex> {
+    patterns
+        .iter()
+        .map(|pattern| Regex::new(pattern).expect("valid highlighter pattern"))
+        .collect()
+}
+
+/// Apply `patterns` to `text`, stylizing each matched named group with
+/// `{base_style}{group}`. Port of `RegexHighlighter.highlight`.
+fn run_highlighter(text: &mut Text, base_style: &str, patterns: &[Regex]) {
+    let plain = text.plain().to_string();
+    for regex in patterns {
+        let names: Vec<&str> = regex.capture_names().flatten().collect();
+        for captures in regex.captures_iter(&plain) {
+            let Ok(captures) = captures else { break };
+            for &name in &names {
+                if let Some(matched) = captures.name(name) {
+                    let style = default_style(&format!("{base_style}{name}"));
+                    text.stylize(matched.start(), matched.end(), style);
+                }
+            }
+        }
+    }
+}
+
+/// A generic regex highlighter — the extension point for custom highlighters.
+/// Give it a `base_style` prefix and named-group patterns; each matched group is
+/// styled with the built-in style named `{base_style}{group}`. Mirrors
+/// `rich.highlighter.RegexHighlighter`. (Theme-driven custom style names are a
+/// follow-up — see the Theme issue.)
+pub struct RegexHighlighter {
+    base_style: String,
+    patterns: Vec<Regex>,
+}
+
+impl RegexHighlighter {
+    pub fn new(base_style: impl Into<String>, patterns: &[&str]) -> Self {
+        RegexHighlighter {
+            base_style: base_style.into(),
+            patterns: compile(patterns),
+        }
+    }
+}
+
+impl Highlighter for RegexHighlighter {
+    fn highlight(&self, text: &mut Text) {
+        run_highlighter(text, &self.base_style, &self.patterns);
+    }
+}
 
 /// Highlights repr-style output — numbers, strings, bools, `None`, paths, URLs,
 /// braces, calls, IP/UUID/EUI, and tags. Mirrors `rich.highlighter.ReprHighlighter`.
@@ -24,58 +120,36 @@ impl ReprHighlighter {
     }
 }
 
-/// Compile the patterns once, globally.
-fn patterns() -> &'static [Regex] {
+fn repr_patterns() -> &'static [Regex] {
     static COMPILED: OnceLock<Vec<Regex>> = OnceLock::new();
-    COMPILED.get_or_init(|| {
-        REPR_PATTERNS
-            .iter()
-            .map(|pattern| Regex::new(pattern).expect("valid repr pattern"))
-            .collect()
-    })
-}
-
-/// The `repr.<group>` style for a capture-group name (from `default_styles.py`).
-fn group_style(name: &str) -> Option<Style> {
-    let spec = match name {
-        "tag_start" | "tag_end" | "brace" => "bold",
-        "tag_name" => "bold bright_magenta",
-        "tag_contents" => "default",
-        "attrib_name" => "not italic yellow",
-        "attrib_value" => "not italic magenta",
-        "ipv4" | "ipv6" | "eui48" | "eui64" => "bold bright_green",
-        "uuid" => "not bold bright_yellow",
-        "call" => "bold magenta",
-        "bool_true" => "italic bright_green",
-        "bool_false" => "italic bright_red",
-        "none" => "italic magenta",
-        "ellipsis" => "yellow",
-        "number" | "number_complex" => "bold not italic cyan",
-        "path" => "magenta",
-        "filename" => "bright_magenta",
-        "str" => "not bold not italic green",
-        "url" => "not bold not italic underline bright_blue",
-        _ => return None,
-    };
-    Style::parse(spec).ok()
+    COMPILED.get_or_init(|| compile(&REPR_PATTERNS))
 }
 
 impl Highlighter for ReprHighlighter {
     fn highlight(&self, text: &mut Text) {
-        let plain = text.plain().to_string();
-        for regex in patterns() {
-            let names: Vec<&str> = regex.capture_names().flatten().collect();
-            for captures in regex.captures_iter(&plain) {
-                let Ok(captures) = captures else { break };
-                for &name in &names {
-                    if let Some(matched) = captures.name(name) {
-                        if let Some(style) = group_style(name) {
-                            text.stylize(matched.start(), matched.end(), style);
-                        }
-                    }
-                }
-            }
-        }
+        run_highlighter(text, "repr.", repr_patterns());
+    }
+}
+
+/// Highlights ISO 8601 date/time strings (`iso8601.date`/`time`/`timezone`).
+/// Mirrors `rich.highlighter.ISO8601Highlighter` for standard extended formats.
+#[derive(Default)]
+pub struct ISO8601Highlighter;
+
+impl ISO8601Highlighter {
+    pub fn new() -> Self {
+        ISO8601Highlighter
+    }
+}
+
+fn iso8601_patterns() -> &'static [Regex] {
+    static COMPILED: OnceLock<Vec<Regex>> = OnceLock::new();
+    COMPILED.get_or_init(|| compile(ISO8601_PATTERNS))
+}
+
+impl Highlighter for ISO8601Highlighter {
+    fn highlight(&self, text: &mut Text) {
+        run_highlighter(text, "iso8601.", iso8601_patterns());
     }
 }
 
@@ -85,15 +159,25 @@ mod tests {
     use crate::color::ColorSystem;
     use crate::console::Console;
 
-    fn highlight(input: &str) -> String {
-        let mut text = Text::new(input);
-        ReprHighlighter::new().highlight(&mut text);
-        let console = Console::builder()
+    fn console() -> Console {
+        Console::builder()
             .force_terminal(true)
             .color_system(Some(ColorSystem::Truecolor))
             .width(80)
-            .build();
-        console.render_to_string(&text)
+            .no_color(false)
+            .build()
+    }
+
+    fn highlight(input: &str) -> String {
+        let mut text = Text::new(input);
+        ReprHighlighter::new().highlight(&mut text);
+        console().render_to_string(&text)
+    }
+
+    fn highlight_iso(input: &str) -> String {
+        let mut text = Text::new(input);
+        ISO8601Highlighter::new().highlight(&mut text);
+        console().render_to_string(&text)
     }
 
     #[test]
@@ -145,5 +229,26 @@ mod tests {
             highlight("ratio 3:4 and dots ..."),
             "ratio \x1b[1;92m3:4\x1b[0m and dots \x1b[33m...\x1b[0m"
         );
+    }
+
+    #[test]
+    fn iso8601_dates_times_and_zones() {
+        // All captured from real rich 15.0.0 ISO8601Highlighter. Sub-fields
+        // (year/month/…) split the run into per-field segments even though only
+        // date/time/timezone carry color.
+        assert_eq!(
+            highlight_iso("2023-06-15"),
+            "\x1b[34m2023\x1b[0m\x1b[34m-\x1b[0m\x1b[34m06\x1b[0m\x1b[34m-\x1b[0m\x1b[34m15\x1b[0m"
+        );
+        assert_eq!(
+            highlight_iso("13:45:30"),
+            "\x1b[35m13\x1b[0m\x1b[35m:\x1b[0m\x1b[35m45\x1b[0m\x1b[35m:\x1b[0m\x1b[35m30\x1b[0m"
+        );
+        assert_eq!(
+            highlight_iso("2023-06-15T13:45:30.123+02:00"),
+            "\x1b[34m2023\x1b[0m\x1b[34m-\x1b[0m\x1b[34m06\x1b[0m\x1b[34m-\x1b[0m\x1b[34m15\x1b[0mT\
+             \x1b[35m13\x1b[0m\x1b[35m:\x1b[0m\x1b[35m45\x1b[0m\x1b[35m:\x1b[0m\x1b[35m30\x1b[0m\x1b[35m.123\x1b[0m\x1b[33m+02:00\x1b[0m"
+        );
+        assert_eq!(highlight_iso("not a date"), "not a date");
     }
 }

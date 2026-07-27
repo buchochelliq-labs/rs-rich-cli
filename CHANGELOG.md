@@ -8,6 +8,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Generic `RegexHighlighter` base + `ISO8601Highlighter`** (`highlighter.rs`,
+  toward `rich/highlighter.py`): extracted the shared regex-highlight loop into a
+  public `RegexHighlighter` (base-style prefix + named-group patterns), refactored
+  `ReprHighlighter` onto it, and added `ISO8601Highlighter` for standard extended
+  date/time strings (`iso8601.date`/`time`/`timezone`). Highlighters now stylize
+  **every** matched named group (unknown names → null style), reproducing
+  upstream's per-field segment boundaries. Byte-parity-tested vs real rich 15.0.0
+  (repr unchanged; ISO8601 new). See DIVERGENCES #13/#14 for the remaining gaps.
 - **Table per-column width, style + ellipsis overflow** (`table.rs`, toward
   `rich/table.py`): `Table::column_width` pins a column's content width (content
   wraps to it instead of the column shrinking), `Table::column_style` styles a
