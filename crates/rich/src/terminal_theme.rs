@@ -48,6 +48,32 @@ pub const DEFAULT_TERMINAL_THEME: TerminalTheme = TerminalTheme {
     ansi: STANDARD_PALETTE,
 };
 
+/// The theme rich uses for SVG export (a dark terminal). Mirrors
+/// `rich.terminal_theme.SVG_EXPORT_THEME` — the foundation for `export_svg`
+/// (DIVERGENCES #15).
+pub const SVG_EXPORT_THEME: TerminalTheme = TerminalTheme {
+    background: ColorTriplet::new(41, 41, 41),
+    foreground: ColorTriplet::new(197, 200, 198),
+    ansi: [
+        ColorTriplet::new(75, 78, 85),
+        ColorTriplet::new(204, 85, 90),
+        ColorTriplet::new(152, 168, 75),
+        ColorTriplet::new(208, 179, 68),
+        ColorTriplet::new(96, 138, 177),
+        ColorTriplet::new(152, 114, 159),
+        ColorTriplet::new(104, 160, 179),
+        ColorTriplet::new(197, 200, 198),
+        ColorTriplet::new(154, 155, 153),
+        ColorTriplet::new(255, 38, 39),
+        ColorTriplet::new(0, 130, 61),
+        ColorTriplet::new(208, 132, 66),
+        ColorTriplet::new(25, 132, 233),
+        ColorTriplet::new(255, 44, 122),
+        ColorTriplet::new(57, 130, 128),
+        ColorTriplet::new(253, 253, 197),
+    ],
+};
+
 /// Blend two triplets, `cross_fade` of the way from `color1` to `color2`
 /// (truncating toward zero, matching upstream's `int()`). Port of
 /// `rich.color.blend_rgb`.
@@ -58,4 +84,65 @@ pub fn blend_rgb(color1: ColorTriplet, color2: ColorTriplet, cross_fade: f64) ->
         mix(color1.green, color2.green),
         mix(color1.blue, color2.blue),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn svg_export_theme_matches_upstream() {
+        // Captured from real rich 15.0.0 `terminal_theme.SVG_EXPORT_THEME`.
+        assert_eq!(
+            (
+                SVG_EXPORT_THEME.background.red,
+                SVG_EXPORT_THEME.background.green,
+                SVG_EXPORT_THEME.background.blue
+            ),
+            (41, 41, 41)
+        );
+        assert_eq!(
+            (
+                SVG_EXPORT_THEME.foreground.red,
+                SVG_EXPORT_THEME.foreground.green,
+                SVG_EXPORT_THEME.foreground.blue
+            ),
+            (197, 200, 198)
+        );
+        let ansi: Vec<(u8, u8, u8)> = SVG_EXPORT_THEME
+            .ansi
+            .iter()
+            .map(|c| (c.red, c.green, c.blue))
+            .collect();
+        assert_eq!(
+            ansi,
+            vec![
+                (75, 78, 85),
+                (204, 85, 90),
+                (152, 168, 75),
+                (208, 179, 68),
+                (96, 138, 177),
+                (152, 114, 159),
+                (104, 160, 179),
+                (197, 200, 198),
+                (154, 155, 153),
+                (255, 38, 39),
+                (0, 130, 61),
+                (208, 132, 66),
+                (25, 132, 233),
+                (255, 44, 122),
+                (57, 130, 128),
+                (253, 253, 197),
+            ]
+        );
+    }
+
+    #[test]
+    fn blend_rgb_truncates_like_upstream() {
+        // Dim blends the fg 40% toward the bg (int() truncation).
+        let fg = ColorTriplet::new(197, 200, 198);
+        let bg = ColorTriplet::new(41, 41, 41);
+        let dim = blend_rgb(fg, bg, 0.4);
+        assert_eq!((dim.red, dim.green, dim.blue), (134, 136, 135));
+    }
 }

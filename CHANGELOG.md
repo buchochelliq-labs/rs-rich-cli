@@ -8,6 +8,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`SVG_EXPORT_THEME`** (`terminal_theme.rs`, groundwork for DIVERGENCES #15):
+  the dark terminal theme rich uses for `export_svg` — byte-parity colors
+  (background, foreground, 16 ANSI), unit-tested, plus a `blend_rgb` dim test.
+  The foundation the SVG renderer will build on. (Note: `export_svg` will be
+  byte-parity only with an explicit `unique_id`; upstream's default id hashes
+  Python `repr()` output, which Rust can't reproduce.)
 - **`rich-cli` CSV/TSV rendering** (`rich-cli/main.rs`, advances the CLI port):
   `--csv` (and `.csv`/`.tsv` auto-detection) renders a delimited file as a table,
   a port of rich-cli's `render_csv` — blue-bordered `HEAVY_HEAD` table with the
