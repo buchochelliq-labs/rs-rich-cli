@@ -15,7 +15,7 @@ use rich::text::Text;
 use rich::{
     filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, Control, Highlighter,
     HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, Live, LiveRender, Padding, Panel,
-    Progress, ProgressBar, Renderable, Rule, Spinner, Status, Style, Styled, Table, Tree,
+    Progress, ProgressBar, Renderable, Rule, Spinner, Status, Style, Styled, Syntax, Table, Tree,
     DEFAULT_TERMINAL_THEME,
 };
 use rich_ext::ConsoleExt;
@@ -38,6 +38,8 @@ enum Mode {
     Markdown,
     /// `-j/--json`: pretty-print the resource as JSON.
     Json,
+    /// `-x/--syntax`: syntax-highlight the resource (language from extension).
+    Syntax,
     /// `--rule`: draw a horizontal rule (the resource, if any, is its title).
     Rule,
 }
@@ -97,6 +99,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "-p" | "--print" => set_mode(&mut mode, Mode::Print)?,
             "-m" | "--markdown" => set_mode(&mut mode, Mode::Markdown)?,
             "-j" | "--json" => set_mode(&mut mode, Mode::Json)?,
+            "-x" | "--syntax" => set_mode(&mut mode, Mode::Syntax)?,
             "--rule" => set_mode(&mut mode, Mode::Rule)?,
             "--left" => justify = Some(Justify::Left),
             "--right" => justify = Some(Justify::Right),
@@ -213,9 +216,17 @@ fn run(cli: Cli) -> ExitCode {
         None
     };
 
+    // The highlighting language comes from the resource's file extension.
+    let language = cli
+        .resource
+        .as_deref()
+        .and_then(|r| r.rsplit_once('.').map(|(_, ext)| ext.to_string()))
+        .unwrap_or_default();
+
     emit(&console, cli.export_html, |c| match mode {
         Mode::Markdown => c.print(&Markdown::new(&content)),
         Mode::Json => c.print(json.as_ref().expect("json parsed above")),
+        Mode::Syntax => c.print(&Syntax::new(content.as_str(), language.as_str())),
         Mode::Print => match cli.justify {
             Some(justify) => c.print_justified(&content, justify),
             None => c.print_str(&content),
@@ -253,6 +264,7 @@ RENDER MODE (choose at most one; default auto-detects by extension):\n\
     -p, --print      Interpret RESOURCE as console markup\n\
     -m, --markdown   Render RESOURCE as Markdown\n\
     -j, --json       Pretty-print RESOURCE as JSON\n\
+    -x, --syntax     Syntax-highlight RESOURCE (language from its extension)\n\
         --rule       Draw a horizontal rule (RESOURCE is its title)\n\
 \n\
 OPTIONS:\n\
@@ -267,7 +279,7 @@ OPTIONS:\n\
 \n\
 With no RESOURCE and no mode flag, a capability demo is shown.\n\
 \n\
-NOT YET PORTED (tracked as roadmap issues): syntax, csv/tsv, ipynb.\n"
+NOT YET PORTED (tracked as roadmap issues): csv/tsv, ipynb, URL fetch.\n"
     );
 }
 
@@ -461,6 +473,13 @@ fn run_demo() {
     console.print(&Rule::new("markdown"));
     console.print(&Markdown::new(
         "# Heading\n\nA paragraph with **bold**, *italic*, and `code`.\n\n- bullet item\n- another\n\n1. first\n2. second\n\n> a block quote\n\n---",
+    ));
+
+    // Syntax highlighting (via syntect — functional, not byte-parity with rich).
+    console.print(&Rule::new("syntax"));
+    console.print(&Syntax::new(
+        "fn main() {\n    let msg = \"hello, rich\";\n    println!(\"{msg}\");\n}",
+        "rust",
     ));
 
     // Control codes — cursor/screen sequences (shown escaped, not executed).

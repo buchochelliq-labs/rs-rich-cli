@@ -7,6 +7,17 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (functional, non-byte-parity)
+- **Syntax highlighting** (`syntax.rs`, port of `rich/syntax.py`'s renderable via
+  the `syntect` crate): `Syntax::new(code, language)` highlights a code block into
+  a solid colored panel (fg/bg + bold/italic/underline, each line padded to width
+  with the theme background), with a configurable theme. Language is resolved by
+  name or file extension; unknown languages render as plain text. **Not**
+  byte-parity with upstream — `syntect` uses different grammars/themes than
+  Pygments (DIVERGENCES #18); the first renderable that is functionally, not
+  byte-, verified. `syntect` uses its pure-Rust `fancy-regex` backend (no C
+  `onig`).
+
 ### Fixed / verified
 - **Wrapping matches upstream for combining sequences** (DIVERGENCES #5 corrected):
   confirmed `cells::chop_cells` is byte-parity with real rich 15.0.0 — current

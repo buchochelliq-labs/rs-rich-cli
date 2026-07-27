@@ -188,6 +188,21 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** add a refresh thread + `transient`/alt-screen handling, and route
   through `Console`, under the Live/progress issue (#6).
 
+### 18. Syntax highlighting uses `syntect`, not Pygments (non-byte-parity)
+- **Differs:** `Syntax` (`syntax.rs`) highlights code with the `syntect` crate,
+  whereas upstream uses Pygments. The two ship *different grammars and themes*, so
+  the token colors are **not byte-identical** to Python rich — this is the one
+  renderable whose output is functional rather than golden-tested. The default
+  theme is `base16-ocean.dark` (a syntect built-in), not rich's `ansi_dark`/
+  `monokai`. Line numbers, the `Syntax.from_path` loader, word-wrap/`line_range`,
+  and background-highlight ranges are not yet ported.
+- **Why:** Rust has no Pygments; `syntect` is the standard Rust equivalent
+  (mirrors how `cells` delegates East-Asian-width to `unicode-width`). Byte-parity
+  is impossible across highlighter engines.
+- **Remove:** not removable while using a different engine; the divergence is
+  inherent. Future work can add line numbers, themes matching rich's names, and
+  the path/loader conveniences.
+
 ## Feature-flagged divergences
 
 *None yet.* If a future feature can only be built by changing core behavior, it

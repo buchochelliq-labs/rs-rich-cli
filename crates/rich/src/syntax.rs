@@ -1,0 +1,196 @@
+//! Syntax highlighting.
+//!
+//! Port of `rich/syntax.py`'s renderable surface, powered by the `syntect`
+//! crate. A [`Syntax`] highlights a block of source code for a given language
+//! and theme, producing colored [`Segment`]s (a solid block: each line is padded
+//! to the render width with the theme background).
+//!
+//! **Divergence:** upstream uses Pygments; we use `syntect`, which ships
+//! different grammars and themes. So the *coloring is functional, not
+//! byte-identical* to Python rich — see docs/DIVERGENCES.md. Everything else
+//! (the renderable protocol, width handling) matches the port's conventions.
+
+use std::sync::OnceLock;
+
+use syntect::easy::HighlightLines;
+use syntect::highlighting::{Color as SynColor, FontStyle, Style as SynStyle, Theme, ThemeSet};
+use syntect::parsing::SyntaxSet;
+use syntect::util::LinesWithEndings;
+
+use crate::cells::cell_len;
+use crate::color::Color;
+use crate::console::{Console, ConsoleOptions};
+use crate::protocol::Renderable;
+use crate::segment::Segment;
+use crate::style::Style;
+
+/// The default theme (a dark base16 palette shipped with `syntect`).
+const DEFAULT_THEME: &str = "base16-ocean.dark";
+
+/// A block of syntax-highlighted source code. Mirrors `rich.syntax.Syntax`.
+pub struct Syntax {
+    code: String,
+    language: Option<String>,
+    theme: String,
+}
+
+impl Syntax {
+    /// Highlight `code` as `language` (a name or file extension, e.g. `"rust"`
+    /// or `"rs"`). Pass an empty/unknown language to render as plain text.
+    pub fn new(code: impl Into<String>, language: impl Into<String>) -> Self {
+        Syntax {
+            code: code.into(),
+            language: Some(language.into()).filter(|l| !l.is_empty()),
+            theme: DEFAULT_THEME.to_string(),
+        }
+    }
+
+    /// Choose the highlighting theme (a `syntect` theme name). Unknown names fall
+    /// back to the default.
+    pub fn theme(mut self, theme: impl Into<String>) -> Self {
+        self.theme = theme.into();
+        self
+    }
+}
+
+fn syntax_set() -> &'static SyntaxSet {
+    static SET: OnceLock<SyntaxSet> = OnceLock::new();
+    SET.get_or_init(SyntaxSet::load_defaults_newlines)
+}
+
+fn theme_set() -> &'static ThemeSet {
+    static SET: OnceLock<ThemeSet> = OnceLock::new();
+    SET.get_or_init(ThemeSet::load_defaults)
+}
+
+/// Convert a `syntect` RGBA color to a truecolor [`Color`] (alpha dropped).
+fn to_color(c: SynColor) -> Color {
+    Color::from_rgb(c.r, c.g, c.b)
+}
+
+/// Convert a `syntect` style (fg/bg + font flags) to a rich [`Style`].
+fn to_style(s: SynStyle) -> Style {
+    let mut style = Style::new()
+        .with_color(to_color(s.foreground))
+        .with_bgcolor(to_color(s.background));
+    if s.font_style.contains(FontStyle::BOLD) {
+        style = style.combine(&Style::parse("bold").expect("valid style"));
+    }
+    if s.font_style.contains(FontStyle::ITALIC) {
+        style = style.combine(&Style::parse("italic").expect("valid style"));
+    }
+    if s.font_style.contains(FontStyle::UNDERLINE) {
+        style = style.combine(&Style::parse("underline").expect("valid style"));
+    }
+    style
+}
+
+impl Syntax {
+    fn theme_ref<'a>(&self, themes: &'a ThemeSet) -> &'a Theme {
+        themes
+            .themes
+            .get(&self.theme)
+            .or_else(|| themes.themes.get(DEFAULT_THEME))
+            .expect("default theme present")
+    }
+}
+
+impl Renderable for Syntax {
+    fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        let syntaxes = syntax_set();
+        let themes = theme_set();
+        let theme = self.theme_ref(themes);
+        let background = theme.settings.background.map(to_color);
+
+        // Resolve the language by token (name) or extension; else plain text.
+        let syntax = self
+            .language
+            .as_deref()
+            .and_then(|lang| {
+                syntaxes
+                    .find_syntax_by_token(lang)
+                    .or_else(|| syntaxes.find_syntax_by_extension(lang))
+            })
+            .unwrap_or_else(|| syntaxes.find_syntax_plain_text());
+
+        let mut highlighter = HighlightLines::new(syntax, theme);
+        let width = options.max_width;
+
+        let mut lines: Vec<Vec<Segment>> = Vec::new();
+        for line in LinesWithEndings::from(&self.code) {
+            let ranges = highlighter
+                .highlight_line(line, syntaxes)
+                .unwrap_or_default();
+            let mut row: Vec<Segment> = Vec::new();
+            let mut used = 0usize;
+            for (syn_style, text) in ranges {
+                let text = text.strip_suffix('\n').unwrap_or(text);
+                if text.is_empty() {
+                    continue;
+                }
+                used += cell_len(text);
+                row.push(Segment::new(text, Some(to_style(syn_style))));
+            }
+            // Pad the line to the full width with the theme background, so the
+            // block reads as a solid panel of code.
+            if width > used {
+                let mut pad = Style::new();
+                if let Some(bg) = &background {
+                    pad = pad.with_bgcolor(bg.clone());
+                }
+                row.push(Segment::new(" ".repeat(width - used), Some(pad)));
+            }
+            lines.push(row);
+        }
+
+        let mut segments = Vec::new();
+        let last = lines.len().saturating_sub(1);
+        for (index, line) in lines.into_iter().enumerate() {
+            segments.extend(line);
+            if index != last {
+                segments.push(Segment::line());
+            }
+        }
+        segments
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::color::ColorSystem;
+
+    fn render(code: &str, lang: &str, width: usize) -> String {
+        Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(width)
+            .no_color(false)
+            .build()
+            .render_to_string(&Syntax::new(code, lang))
+    }
+
+    #[test]
+    fn highlights_rust_keyword() {
+        // Functional (not byte-parity): assert the code text survives and the
+        // output is colored (contains SGR sequences).
+        let out = render("fn main() {}", "rust", 20);
+        assert!(out.contains("fn"));
+        assert!(out.contains("main"));
+        assert!(out.contains('\x1b'), "expected ANSI color codes");
+    }
+
+    #[test]
+    fn multiple_lines_are_separated() {
+        let out = render("let x = 1;\nlet y = 2;", "rust", 20);
+        assert_eq!(out.matches('\n').count(), 1);
+        assert!(out.contains("let"));
+    }
+
+    #[test]
+    fn unknown_language_renders_plain() {
+        // No panic, code preserved, still padded/colored to a block.
+        let out = render("just some text", "nonsense-lang", 20);
+        assert!(out.contains("just some text"));
+    }
+}

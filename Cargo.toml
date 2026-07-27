@@ -26,6 +26,9 @@ serde_json = { version = "1", features = ["preserve_order"] }
 fancy-regex = "0.18"
 # CommonMark parser for the Markdown renderable.
 pulldown-cmark = { version = "0.12", default-features = false }
+# Syntax highlighting engine (Pygments-equivalent). `default-fancy` uses the
+# pure-Rust fancy-regex backend, avoiding the C `onig` dependency.
+syntect = { version = "5", default-features = false, features = ["default-fancy"] }
 
 # Core stays safe by default; the future Windows-console port may opt back in
 # per-item with an explicit `#[allow(unsafe_code)]` + justification.
