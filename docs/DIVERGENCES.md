@@ -147,6 +147,19 @@ Format: what differs · why · how to remove it (if temporary).
 - **Why:** SVG is a separate renderer (font metrics, `<rect>`/`<text>` layout).
 - **Remove:** add `export_svg` (+ the SVG template) under the Console issue (#1).
 
+### 16. `Progress` renders the three default deterministic columns only
+- **Differs:** `Progress` renders a static grid of the three default *deterministic*
+  columns — description, a flexing bar, and percentage — with byte-parity. Upstream
+  composes arbitrary `ProgressColumn`s (custom text, spinner, download, transfer-
+  speed, and the time-remaining/elapsed columns), and drives an in-place `Live`
+  refresh. Custom columns, the time/rate columns (non-deterministic), and the
+  refresh loop are not ported.
+- **Why:** the default description+bar+percentage layout is the common case and is
+  deterministic (testable); the time/rate columns depend on wall-clock elapsed and
+  the refresh loop needs `Live`.
+- **Remove:** generalize to a `ProgressColumn` list (over renderable table cells)
+  and add the `Live` loop, under the Live/progress issue (#6).
+
 ## Feature-flagged divergences
 
 *None yet.* If a future feature can only be built by changing core behavior, it

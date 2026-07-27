@@ -8,6 +8,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`Progress`** (`progress.rs`, port of `rich/progress.py`'s default display):
+  `Progress::add_task(description, total, completed)` renders a static grid of
+  tasks — each a description, a bar that flexes to fill the width, and a magenta
+  percentage — reproducing the default `TextColumn`/`BarColumn`/`TaskProgressColumn`
+  layout. Byte-parity-tested against real rich 15.0.0 (golden `progress_three`).
+  Custom columns, the time/rate columns, and the `Live` refresh loop are deferred
+  (DIVERGENCES #16 / issue #6).
 - **`Status`** (`status.rs`, port of `rich/status.py`) + **styled spinner frames**:
   `Status::new("…")` renders a spinner (default `dots`, green) followed by a
   message; `Spinner::style` styles the frame while the trailing text stays plain.

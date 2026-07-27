@@ -31,6 +31,7 @@ from rich.layout import Layout
 from rich.markdown import Markdown
 from rich.padding import Padding
 from rich.panel import Panel
+from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 from rich.progress_bar import ProgressBar
 
 JSON_SAMPLE = (
@@ -42,6 +43,19 @@ from rich.styled import Styled
 from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
+
+
+def _progress_table():
+    """The default-column Progress display (no time columns) as a static grid."""
+    progress = Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+    )
+    progress.add_task("Downloading", total=100, completed=50)
+    progress.add_task("Processing", total=100, completed=100)
+    progress.add_task("Waiting", total=100, completed=0)
+    return progress.make_tasks_table(progress.tasks)
 
 
 def _ansi(text: str):
@@ -248,6 +262,7 @@ RENDERABLE_CASES = [
     ("ansi_attrs", 20, _ansi("\x1b[3;4;9mstyled\x1b[0m")),
     ("styled_on_red", 20, Styled(Text("hi"), "on red")),
     ("styled_panel", 8, Styled(Panel("x", box=box.SQUARE), "green")),
+    ("progress_three", 50, _progress_table()),
 ]
 
 # (name, width, height, layout) — layouts need an explicit console height.

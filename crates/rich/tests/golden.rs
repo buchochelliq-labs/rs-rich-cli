@@ -270,6 +270,13 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
             Box::new(Panel::new(Box::new(Text::new("x"))).box_set(SQUARE)),
             Style::parse("green").unwrap(),
         )),
+        "progress_three" => {
+            let mut progress = rich::Progress::new();
+            progress.add_task("Downloading", 100.0, 50.0);
+            progress.add_task("Processing", 100.0, 100.0);
+            progress.add_task("Waiting", 100.0, 0.0);
+            Box::new(progress)
+        }
         other => panic!("no builder for renderable fixture {other:?}"),
     }
 }

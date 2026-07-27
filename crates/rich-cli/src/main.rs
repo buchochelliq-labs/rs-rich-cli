@@ -14,8 +14,9 @@ use rich::r#box::{DOUBLE, SQUARE};
 use rich::text::Text;
 use rich::{
     filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, Control, Highlighter,
-    HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, Padding, Panel, ProgressBar,
-    Renderable, Rule, Spinner, Status, Style, Styled, Table, Tree, DEFAULT_TERMINAL_THEME,
+    HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, Padding, Panel, Progress,
+    ProgressBar, Renderable, Rule, Spinner, Status, Style, Styled, Table, Tree,
+    DEFAULT_TERMINAL_THEME,
 };
 use rich_ext::ConsoleExt;
 
@@ -425,6 +426,14 @@ fn run_demo() {
     for pct in [0.0, 33.0, 66.0, 100.0] {
         console.print(&ProgressBar::new(100.0, pct).width(48));
     }
+
+    // Progress display — description + flexing bar + percentage (static frame).
+    console.print(&Rule::new("progress"));
+    let mut progress = Progress::new();
+    progress.add_task("Downloading", 100.0, 50.0);
+    progress.add_task("Processing", 100.0, 100.0);
+    progress.add_task("Waiting", 100.0, 0.0);
+    console.print(&progress);
 
     // JSON — pretty-printed and highlighted.
     console.print(&Rule::new("json"));
