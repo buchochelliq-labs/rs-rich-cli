@@ -8,6 +8,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Table-level `style`** (`table.rs`, port of `Table(style=…)`): a default style
+  for the whole table, composed as the base of the border style
+  (`border_style = style + border_style`) so it tints the box glyphs and dividers
+  while cell content keeps its own styles — matching upstream exactly. Byte-parity
+  golden `table_style`. With `pad_edge`/`show_edge`/`collapse_padding`/per-column
+  justify already in place, the only remaining Markdown-tables step is wiring the
+  `TableElement` (#9).
 - **Table `collapse_padding`** (`table.rs`, port of `_get_padding_width`):
   `Table::collapse_padding(true)` merges adjacent cell padding — an interior
   column's left pad is reduced by the previous column's right pad

@@ -175,6 +175,17 @@ fn collapse_table() -> Table {
     table
 }
 
+fn table_style_table() -> Table {
+    let mut table = Table::new()
+        .box_set(SQUARE)
+        .style(Style::parse("blue").unwrap());
+    table.add_column("Name");
+    table.add_column("Age");
+    table.add_row(&["Alice", "30"]);
+    table.add_row(&["Bob", "7"]);
+    table
+}
+
 fn justify_table() -> Table {
     let mut table = Table::new().box_set(SQUARE);
     table.add_column_justify("L", Justify::Left);
@@ -269,6 +280,7 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "table_pad_edge" => Box::new(edge_table(false, true)),
         "table_no_edge" => Box::new(edge_table(true, false)),
         "table_collapse" => Box::new(collapse_table()),
+        "table_style" => Box::new(table_style_table()),
         "tree_nested" => Box::new(sample_tree()),
         "align_center" | "align_center_odd" => Box::new(Align::center(Box::new(Text::new("hi")))),
         "align_right" => Box::new(Align::right(Box::new(Text::new("hi")))),

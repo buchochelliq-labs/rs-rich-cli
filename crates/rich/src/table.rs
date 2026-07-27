@@ -46,6 +46,7 @@ pub struct Table {
     padding: (usize, usize, usize, usize),
     header_style: Style,
     border_style: Style,
+    style: Style,
 }
 
 impl Default for Table {
@@ -65,6 +66,7 @@ impl Default for Table {
             padding: (0, 1, 0, 1),
             header_style: Style::parse("bold").expect("valid built-in style"),
             border_style: Style::new(),
+            style: Style::new(),
         }
     }
 }
@@ -116,6 +118,14 @@ impl Table {
     /// the previous column's right pad. Port of `collapse_padding`.
     pub fn collapse_padding(mut self, collapse: bool) -> Self {
         self.collapse_padding = collapse;
+        self
+    }
+
+    /// Default style for the whole table. Upstream applies it as the base of the
+    /// border style (`border_style = style + border_style`); cell content keeps
+    /// its own styles. Port of `Table(style=…)`.
+    pub fn style(mut self, style: Style) -> Self {
+        self.style = style;
         self
     }
 
@@ -298,7 +308,7 @@ impl Table {
         // top/bottom vertical padding is uniform.
         let (pt, _, pb, _) = self.padding;
         let (edge_left, edge_vertical, edge_right) = edges;
-        let border = Some(self.border_style.clone());
+        let border = Some(self.style.combine(&self.border_style));
         let ncols = self.columns.len();
 
         // Render each cell into padded, simplified visual lines.
@@ -409,7 +419,7 @@ impl Renderable for Table {
                 w.saturating_sub(pl + pr)
             })
             .collect();
-        let border = Some(self.border_style.clone());
+        let border = Some(self.style.combine(&self.border_style));
 
         // Full table width (for centering title/caption): columns + borders.
         let table_width: usize = rendered_widths.iter().sum::<usize>() + extra_width;
