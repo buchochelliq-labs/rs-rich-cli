@@ -8,6 +8,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`LiveRender`** (`live_render.rs`, port of `rich/live_render.py`): wraps a
+  renderable, records its rendered shape, and emits the `position_cursor` /
+  `restore_cursor` control-code sequences (`\r` + erase-line + cursor-up×N) that
+  redraw in place — the byte-parity-testable core of a `Live` display. Byte-parity
+  vs real rich 15.0.0. (The full `Live` refresh loop + vertical-overflow cropping
+  are deferred — issue #6.)
 - **`Progress`** (`progress.rs`, port of `rich/progress.py`'s default display):
   `Progress::add_task(description, total, completed)` renders a static grid of
   tasks — each a description, a bar that flexes to fill the width, and a magenta

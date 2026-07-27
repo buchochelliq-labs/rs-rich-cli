@@ -14,8 +14,8 @@ use rich::r#box::{DOUBLE, SQUARE};
 use rich::text::Text;
 use rich::{
     filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, Control, Highlighter,
-    HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, Padding, Panel, Progress,
-    ProgressBar, Renderable, Rule, Spinner, Status, Style, Styled, Table, Tree,
+    HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, LiveRender, Padding, Panel,
+    Progress, ProgressBar, Renderable, Rule, Spinner, Status, Style, Styled, Table, Tree,
     DEFAULT_TERMINAL_THEME,
 };
 use rich_ext::ConsoleExt;
@@ -462,7 +462,8 @@ fn run_demo() {
         let escaped = control
             .as_str()
             .replace('\x1b', "\\x1b")
-            .replace('\x07', "\\a");
+            .replace('\x07', "\\a")
+            .replace('\r', "\\r");
         console.print(&Text::new(format!("  {label:>14}: {escaped}")));
     };
     show_escape("clear screen", &Control::clear());
@@ -471,6 +472,10 @@ fn run_demo() {
     show_escape("move_to (3,4)", &Control::move_to(3, 4));
     show_escape("hide cursor", &Control::show_cursor(false));
     show_escape("bell", &Control::bell());
+    // LiveRender — the in-place redraw sequence for a 3-line render.
+    let live = LiveRender::new(text("a\nb\nc"));
+    let _ = console.render_to_string(&live); // render once to record the shape
+    show_escape("live refresh", &live.position_cursor());
 
     // ANSI decoder — parse a raw SGR string back into styled Text, then re-render.
     console.print(&Rule::new("ansi decoder"));
