@@ -8,6 +8,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Markdown tables** (`markdown.rs`, port of upstream's `TableElement`): GFM
+  tables now parse (`pulldown-cmark` `ENABLE_TABLES`) and render via [`Table`]
+  built exactly as upstream — `box=SIMPLE`, `pad_edge=false`,
+  `collapse_padding=true`, `markdown.table.border` (cyan) table style, and
+  `markdown.table.header` (`not bold cyan`) header-content styling — with
+  per-column justify read from the alignment row. **Byte-parity** with real rich
+  15.0.0 (new golden `markdown_table`). Inline styling *within* a table cell is a
+  documented follow-up. Enabled by a new Table capability: a per-column
+  **header-content style span** (`Table::column_header_style`) that styles the
+  visible header characters while the header padding keeps `header_style`.
 - **Table-level `style`** (`table.rs`, port of `Table(style=…)`): a default style
   for the whole table, composed as the base of the border style
   (`border_style = style + border_style`) so it tints the box glyphs and dividers

@@ -6,23 +6,28 @@
 //!
 //! Scope: paragraphs, ATX headings (h1–h6), bullet + ordered lists, block quotes,
 //! thematic breaks, fenced/indented **code blocks** (syntax-highlighted via
-//! [`Syntax`]), **links** (OSC 8 hyperlinks), and inline strong/emphasis/code.
-//! Only tables are deferred (see docs/DIVERGENCES.md and the Markdown issue).
+//! [`Syntax`]), **links** (OSC 8 hyperlinks), inline strong/emphasis/code, and
+//! **GFM tables** (rendered via [`Table`]). Inline styling *within* a table cell
+//! is a documented follow-up (see the Markdown issue).
 
-use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Parser, Tag, TagEnd};
+use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 use crate::cells::cell_len;
 use crate::console::{Console, ConsoleOptions, Justify};
 use crate::protocol::Renderable;
+use crate::r#box::SIMPLE;
 use crate::segment::Segment;
 use crate::style::Style;
 use crate::syntax::Syntax;
+use crate::table::Table;
 use crate::text::Text;
 
 const CODE_STYLE: &str = "bold cyan on black"; // markdown.code
 const BULLET: &str = " \u{2022} "; // " • ", markdown.item.bullet = bold
 const QUOTE_PREFIX: &str = "\u{258c} "; // "▌ ", markdown.block_quote = magenta
 const LINK_STYLE: &str = "underline blue"; // markdown.link_url
+const TABLE_BORDER_STYLE: &str = "cyan"; // markdown.table.border
+const TABLE_HEADER_STYLE: &str = "not bold cyan"; // markdown.table.header
 
 /// A parsed Markdown block.
 enum Block {
@@ -40,6 +45,34 @@ enum Block {
     Code { language: String, code: String },
     /// A thematic break (horizontal rule).
     Rule,
+    /// A GFM table: per-column justify (from the alignment row), header cells,
+    /// and body rows. Rendered via [`Table`], matching upstream's construction.
+    Table {
+        alignments: Vec<Justify>,
+        headers: Vec<String>,
+        rows: Vec<Vec<String>>,
+    },
+}
+
+/// Accumulates a GFM table across `pulldown-cmark`'s table events.
+#[derive(Default)]
+struct TableAccum {
+    alignments: Vec<Justify>,
+    headers: Vec<String>,
+    rows: Vec<Vec<String>>,
+    in_head: bool,
+    in_cell: bool,
+    cur_row: Vec<String>,
+    cur_cell: String,
+}
+
+fn alignment_justify(alignment: Alignment) -> Justify {
+    match alignment {
+        Alignment::Right => Justify::Right,
+        Alignment::Center => Justify::Center,
+        // `None` has no explicit marker; upstream leaves it default (left).
+        Alignment::Left | Alignment::None => Justify::Left,
+    }
 }
 
 /// A rendered Markdown document. Mirrors `rich.markdown.Markdown`.
@@ -110,8 +143,10 @@ fn parse(source: &str) -> Vec<Block> {
     let mut code: Option<(String, String)> = None;
     // The destination URL while inside a link.
     let mut link: Option<String> = None;
+    // The table being assembled while inside a GFM table.
+    let mut table: Option<TableAccum> = None;
 
-    for event in Parser::new(source) {
+    for event in Parser::new_ext(source, Options::ENABLE_TABLES) {
         match event {
             Event::Rule => blocks.push(Block::Rule),
             Event::Start(Tag::Link { dest_url, .. }) => link = Some(dest_url.to_string()),
@@ -136,6 +171,57 @@ fn parse(source: &str) -> Vec<Block> {
                         language,
                         code: source,
                     });
+                }
+            }
+            Event::Start(Tag::Table(aligns)) => {
+                table = Some(TableAccum {
+                    alignments: aligns.into_iter().map(alignment_justify).collect(),
+                    ..TableAccum::default()
+                });
+            }
+            Event::End(TagEnd::Table) => {
+                if let Some(acc) = table.take() {
+                    blocks.push(Block::Table {
+                        alignments: acc.alignments,
+                        headers: acc.headers,
+                        rows: acc.rows,
+                    });
+                }
+            }
+            Event::Start(Tag::TableHead) => {
+                if let Some(acc) = table.as_mut() {
+                    acc.in_head = true;
+                    acc.cur_row = Vec::new();
+                }
+            }
+            Event::End(TagEnd::TableHead) => {
+                if let Some(acc) = table.as_mut() {
+                    acc.headers = std::mem::take(&mut acc.cur_row);
+                    acc.in_head = false;
+                }
+            }
+            Event::Start(Tag::TableRow) => {
+                if let Some(acc) = table.as_mut() {
+                    acc.cur_row = Vec::new();
+                }
+            }
+            Event::End(TagEnd::TableRow) => {
+                if let Some(acc) = table.as_mut() {
+                    let row = std::mem::take(&mut acc.cur_row);
+                    acc.rows.push(row);
+                }
+            }
+            Event::Start(Tag::TableCell) => {
+                if let Some(acc) = table.as_mut() {
+                    acc.in_cell = true;
+                    acc.cur_cell = String::new();
+                }
+            }
+            Event::End(TagEnd::TableCell) => {
+                if let Some(acc) = table.as_mut() {
+                    let cell = std::mem::take(&mut acc.cur_cell);
+                    acc.cur_row.push(cell);
+                    acc.in_cell = false;
                 }
             }
             Event::Start(Tag::BlockQuote(_)) => quote = Some(Vec::new()),
@@ -204,7 +290,11 @@ fn parse(source: &str) -> Vec<Block> {
             Event::Start(Tag::Emphasis) => emphasis += 1,
             Event::End(TagEnd::Emphasis) => emphasis = emphasis.saturating_sub(1),
             Event::Text(text) => {
-                if let Some((_, source)) = code.as_mut() {
+                if let Some(acc) = table.as_mut().filter(|a| a.in_cell) {
+                    // Table cells collect plain text; inline styling within a cell
+                    // is a documented follow-up (see the Markdown issue).
+                    acc.cur_cell.push_str(&text);
+                } else if let Some((_, source)) = code.as_mut() {
                     source.push_str(&text);
                 } else if let Some(block) = current.as_mut() {
                     // Inside a link, use the markdown.link_url style + an OSC 8
@@ -219,7 +309,9 @@ fn parse(source: &str) -> Vec<Block> {
                 }
             }
             Event::Code(text) => {
-                if let Some(block) = current.as_mut() {
+                if let Some(acc) = table.as_mut().filter(|a| a.in_cell) {
+                    acc.cur_cell.push_str(&text);
+                } else if let Some(block) = current.as_mut() {
                     block.append(&text, Style::parse(CODE_STYLE).ok());
                 }
             }
@@ -246,8 +338,14 @@ impl Renderable for Markdown {
         let mut lines: Vec<Vec<Segment>> = Vec::new();
 
         for (index, block) in self.blocks.iter().enumerate() {
-            // A blank line precedes every non-first block, and every list/quote.
-            if index > 0 || matches!(block, Block::List { .. } | Block::Quote(_)) {
+            // A blank line precedes every non-first block, and every
+            // list/quote/table (which upstream renders with a leading gap).
+            if index > 0
+                || matches!(
+                    block,
+                    Block::List { .. } | Block::Quote(_) | Block::Table { .. }
+                )
+            {
                 lines.push(Vec::new());
             }
             match block {
@@ -311,6 +409,33 @@ impl Renderable for Markdown {
                 Block::Rule => {
                     let style = Style::parse("dim").expect("valid style");
                     lines.push(vec![Segment::new("-".repeat(width), Some(style))]);
+                }
+                Block::Table {
+                    alignments,
+                    headers,
+                    rows,
+                } => {
+                    // Build the Table exactly as upstream's TableElement does:
+                    // box=SIMPLE, pad_edge=False, collapse_padding=True, and the
+                    // markdown.table.border/header styles. Per-column justify comes
+                    // from the alignment row.
+                    let mut table = Table::new()
+                        .box_set(SIMPLE)
+                        .pad_edge(false)
+                        .collapse_padding(true)
+                        .style(Style::parse(TABLE_BORDER_STYLE).expect("valid style"));
+                    let header_style = Style::parse(TABLE_HEADER_STYLE).expect("valid style");
+                    for (col, header) in headers.iter().enumerate() {
+                        let justify = alignments.get(col).copied().unwrap_or(Justify::Left);
+                        table.add_column_justify(header.as_str(), justify);
+                        table.column_header_style(header_style.clone());
+                    }
+                    for row in rows {
+                        let refs: Vec<&str> = row.iter().map(String::as_str).collect();
+                        table.add_row(&refs);
+                    }
+                    let segments = table.rich_render(console, options);
+                    lines.extend(Segment::split_lines(&segments));
                 }
             }
         }
@@ -416,6 +541,26 @@ mod tests {
             render("> quoted text"),
             "\n\x1b[35m\u{258c} \x1b[0m\x1b[35mquoted text\x1b[0m\x1b[35m     \x1b[0m"
         );
+    }
+
+    #[test]
+    fn gfm_table() {
+        // Byte-parity is guaranteed by the `markdown_table` golden; this guards
+        // the parser wiring (tables enabled, cells + alignment collected).
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(40)
+            .no_color(false)
+            .build();
+        let md = "| Name | Age |\n| :--- | ---: |\n| Alice | 30 |\n| Bob | 7 |\n";
+        let out = console.render_to_string(&Markdown::new(md));
+        assert!(out.contains("Name"), "header present: {out:?}");
+        assert!(out.contains("Alice"), "body cell present");
+        assert!(out.contains('\u{2500}'), "SIMPLE box head rule present");
+        // Right-justified Age column: "30" padded on the left, "7" further.
+        assert!(out.contains(" 30"), "right-justified 30");
+        assert!(out.contains("  7"), "right-justified 7");
     }
 
     #[test]

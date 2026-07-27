@@ -94,16 +94,19 @@ Format: what differs · why · how to remove it (if temporary).
 
 ### 9. `Markdown` covers most elements (code blocks are non-parity)
 - **Differs:** paragraphs, ATX headings (h1–h6), bullet + ordered lists, block
-  quotes, thematic breaks (hr), and inline strong/emphasis/code are rendered
-  **byte-parity**. Fenced/indented **code blocks** now render via the `Syntax`
-  renderable — so they're highlighted but **not** byte-identical to upstream
-  (syntect ≠ Pygments; see #18). **Links** render as an OSC 8 hyperlink + the
-  `markdown.link_url` style — byte-identical to upstream except the random `id=`
-  field we omit (#20). Only **tables** (need several `Table` features — see #9 on
-  GitHub) are still deferred. Also, a document that *ends* with a thematic break
-  omits a trailing blank line upstream emits.
-- **Why:** these are the common elements; tables need more machinery.
-- **Remove:** add the table element under the Markdown issue (#9).
+  quotes, thematic breaks (hr), inline strong/emphasis/code, and **GFM tables**
+  are rendered **byte-parity**. Fenced/indented **code blocks** now render via the
+  `Syntax` renderable — so they're highlighted but **not** byte-identical to
+  upstream (syntect ≠ Pygments; see #18). **Links** render as an OSC 8 hyperlink +
+  the `markdown.link_url` style — byte-identical to upstream except the random
+  `id=` field we omit (#20). The one table gap: **inline styling within a table
+  cell** (e.g. `**bold**` inside a cell) is collected as plain text, since Table
+  cells are strings, not `Text` renderables. Also, a document that *ends* with a
+  thematic break omits a trailing blank line upstream emits.
+- **Why:** these are the common elements; cell-level inline styling needs Table
+  cells to become full renderables (a larger refactor).
+- **Remove:** give Table cells styled `Text` content, then route inline markdown
+  into table cells, under the Markdown issue (#9).
 
 ### 20. Hyperlinks omit upstream's random `id=` field
 - **Differs:** `Style::with_link` renders an OSC 8 hyperlink as

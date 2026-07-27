@@ -495,10 +495,10 @@ fn run_demo() {
         console.print(&Bar::new(100.0, begin, end).width(48));
     }
 
-    // Markdown — headings, inline styles, lists, block quotes, and rules.
+    // Markdown — headings, inline styles, lists, block quotes, tables, and rules.
     console.print(&Rule::new("markdown"));
     console.print(&Markdown::new(
-        "# Heading\n\nA paragraph with **bold**, *italic*, `code`, and a [link](https://example.com).\n\n- bullet item\n- another\n\n1. first\n2. second\n\n> a block quote\n\n```rust\nfn main() {\n    println!(\"hi\");\n}\n```\n\n---",
+        "# Heading\n\nA paragraph with **bold**, *italic*, `code`, and a [link](https://example.com).\n\n- bullet item\n- another\n\n1. first\n2. second\n\n> a block quote\n\n| Name | Age |\n| :--- | ---: |\n| Alice | 30 |\n| Bob | 7 |\n\n```rust\nfn main() {\n    println!(\"hi\");\n}\n```\n\n---",
     ));
 
     // Syntax highlighting (via syntect — functional, not byte-parity with rich).

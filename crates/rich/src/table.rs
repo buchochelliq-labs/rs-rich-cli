@@ -4,11 +4,12 @@
 //! and rows inside a box, sizing each column to its widest cell.
 //!
 //! Scope: headers, rows, box choice (with legacy/ASCII substitution), per-cell
-//! padding, **`pad_edge`** + **`show_edge`**, header styling, multi-line/wrapped
-//! cells (with **ellipsis overflow**), **shrink-to-fit** + **expand** column
-//! widths, per-column justify, **explicit width**, **per-column style**,
-//! **`no_wrap`**, title, caption, and `show_lines`. Deferred (tracked in the
-//! Table issue): explicit per-column `ratio`/min/max and `collapse_padding`.
+//! padding, **`pad_edge`** + **`show_edge`** + **`collapse_padding`**, header
+//! styling (incl. a per-column header-content span), a **table-level style**,
+//! multi-line/wrapped cells (with **ellipsis overflow**), **shrink-to-fit** +
+//! **expand** column widths, per-column justify, **explicit width**, **per-column
+//! style**, **`no_wrap`**, title, caption, and `show_lines`. Deferred (tracked in
+//! the Table issue): explicit per-column `ratio`/min/max.
 
 use crate::cells::{cell_len, set_cell_size};
 use crate::console::{Console, ConsoleOptions, Justify};
@@ -26,6 +27,10 @@ struct Column {
     width: Option<usize>,
     /// A style applied to this column's body cells.
     style: Style,
+    /// An extra style span applied to the header *content* only (over the base
+    /// `header_style`), leaving the header padding as `header_style`. Mirrors
+    /// upstream stylizing the heading `Text` (e.g. `markdown.table.header`).
+    header_content_style: Option<Style>,
     /// When set, cells are never wrapped — they crop to one line (with ellipsis).
     no_wrap: bool,
 }
@@ -175,6 +180,7 @@ impl Table {
             justify,
             width: None,
             style: Style::new(),
+            header_content_style: None,
             no_wrap: false,
         });
         self
@@ -195,6 +201,16 @@ impl Table {
     pub fn column_style(&mut self, style: Style) -> &mut Self {
         if let Some(column) = self.columns.last_mut() {
             column.style = style;
+        }
+        self
+    }
+
+    /// Style the most-recently-added column's header *content* (the visible
+    /// characters), leaving its padding as the base `header_style`. Chain after
+    /// `add_column`. Mirrors upstream stylizing the heading `Text`.
+    pub fn column_header_style(&mut self, style: Style) -> &mut Self {
+        if let Some(column) = self.columns.last_mut() {
+            column.header_content_style = Some(style);
         }
         self
     }
@@ -328,7 +344,15 @@ impl Table {
             } else {
                 wrap_cell(content, *width).join("\n")
             };
-            let text = Text::new(wrapped).justify(justify);
+            let mut text = Text::new(wrapped).justify(justify);
+            // Header content carries its own style span over `header_style`; the
+            // justify/edge padding stays `header_style` (matches upstream).
+            if is_header {
+                if let Some(span) = column.and_then(|c| c.header_content_style.clone()) {
+                    let len = text.plain().len();
+                    text.stylize(0, len, span);
+                }
+            }
             let mut lines = text.render_lines(&style, Some(*width));
             if lines.is_empty() {
                 lines.push(Vec::new());
