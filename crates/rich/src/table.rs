@@ -5,7 +5,8 @@
 //!
 //! Scope: headers, rows, box choice (with legacy/ASCII substitution), per-cell
 //! padding, **`pad_edge`** + **`show_edge`** + **`collapse_padding`**, header
-//! styling (incl. a per-column header-content span), a **table-level style**,
+//! styling (incl. a per-column header-content span and a per-column header-cell
+//! fill), a **table-level style** + **border style**,
 //! multi-line/wrapped cells (with **ellipsis overflow**), **shrink-to-fit** +
 //! **expand** column widths, per-column justify, **explicit width**, per-column
 //! **`ratio`/`min_width`/`max_width`**, **per-column style**, **`no_wrap`**,
@@ -32,6 +33,10 @@ struct Column {
     /// `header_style`), leaving the header padding as `header_style`. Mirrors
     /// upstream stylizing the heading `Text` (e.g. `markdown.table.header`).
     header_content_style: Option<Style>,
+    /// A per-column header *cell* style — combined over the table-level
+    /// `header_style` to fill the whole header cell (content + padding). Port of
+    /// `Column.header_style` (as used by e.g. rich-cli's numeric columns).
+    header_fill: Option<Style>,
     /// When set, the column flexes to this share of the free width when the table
     /// is `expand`ed (port of `Column.ratio`; makes the column "flexible").
     ratio: Option<usize>,
@@ -93,6 +98,13 @@ impl Table {
     /// Choose the box-drawing set.
     pub fn box_set(mut self, box_set: BoxSet) -> Self {
         self.box_set = box_set;
+        self
+    }
+
+    /// Style the box border (edges + dividers). Composed over the table-level
+    /// style: `border = style + border_style`. Port of `Table(border_style=…)`.
+    pub fn border_style(mut self, style: Style) -> Self {
+        self.border_style = style;
         self
     }
 
@@ -190,6 +202,7 @@ impl Table {
             width: None,
             style: Style::new(),
             header_content_style: None,
+            header_fill: None,
             ratio: None,
             min_width: None,
             max_width: None,
@@ -251,6 +264,16 @@ impl Table {
     pub fn column_header_style(&mut self, style: Style) -> &mut Self {
         if let Some(column) = self.columns.last_mut() {
             column.header_content_style = Some(style);
+        }
+        self
+    }
+
+    /// Style the most-recently-added column's whole header *cell* (content +
+    /// padding), combined over the table-level `header_style`. Chain after
+    /// `add_column`. Port of `Column.header_style`.
+    pub fn column_header_fill(&mut self, style: Style) -> &mut Self {
+        if let Some(column) = self.columns.last_mut() {
+            column.header_fill = Some(style);
         }
         self
     }
@@ -394,7 +417,11 @@ impl Table {
     /// header row, else that column's own style.
     fn cell_style(&self, index: usize, is_header: bool) -> Style {
         if is_header {
-            self.header_style.clone()
+            // A per-column header cell style is combined over the table-level one.
+            match self.columns.get(index).and_then(|c| c.header_fill.as_ref()) {
+                Some(fill) => self.header_style.combine(fill),
+                None => self.header_style.clone(),
+            }
         } else {
             self.columns
                 .get(index)

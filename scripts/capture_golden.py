@@ -205,6 +205,21 @@ def _table_style() -> Table:
     return table
 
 
+def _csv_table() -> Table:
+    # Reproduces rich-cli's render_csv styling: HEAVY_HEAD, blue border, and a
+    # numeric column (Age) right-justified with a bold-green body + header.
+    table = Table(show_header=True, box=box.HEAVY_HEAD, border_style="blue")
+    table.add_column("Name")
+    table.add_column("Age")
+    table.columns[-1].justify = "right"
+    table.columns[-1].style = "bold green"
+    table.columns[-1].header_style = "bold green"
+    table.add_column("City")
+    table.add_row("Alice", "30", "NYC")
+    table.add_row("Bob", "25", "LA")
+    return table
+
+
 def _table_ratio() -> Table:
     table = Table(box=box.SQUARE, expand=True)
     table.add_column("A", ratio=1)
@@ -311,6 +326,7 @@ RENDERABLE_CASES = [
     ("table_no_edge", 40, _no_edge_table()),
     ("table_collapse", 40, _collapse_table()),
     ("table_style", 40, _table_style()),
+    ("table_csv_style", 40, _csv_table()),
     ("table_ratio", 30, _table_ratio()),
     ("table_min_width", 30, _table_min_width()),
     ("table_max_width", 40, _table_max_width()),

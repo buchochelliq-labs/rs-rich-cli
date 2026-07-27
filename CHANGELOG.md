@@ -8,6 +8,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`Table` `border_style` + per-column header cell fill** (`table.rs`): a
+  `border_style` builder (tints the box edges/dividers, composed over the table
+  style) and `column_header_fill` (a per-column header *cell* style — content +
+  padding — combined over the table `header_style`, distinct from the existing
+  content-only span). Together they reproduce **rich-cli's `render_csv` styling**
+  byte-parity (HEAVY_HEAD, blue border, numeric columns right-justified + bold
+  green), verified by the new golden `table_csv_style`. Groundwork for the CLI's
+  CSV rendering.
 - **`Progress` `Download` column + `filesize::pick_unit_and_suffix`** (`progress.rs`,
   `filesize.rs`, advances DIVERGENCES #16): the `DownloadColumn` renders
   `completed`/`total` in a shared SI byte unit (`0.5/1.0 kB`), byte-parity with
