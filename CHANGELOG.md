@@ -8,6 +8,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`rich-cli` `--export-svg`** (`rich-cli/main.rs`): exposes the new SVG export
+  through the CLI (any render mode → a self-contained SVG), alongside the existing
+  `--export-html`. The two are mutually exclusive; the SVG title is the resource's
+  basename (else `rich`) and it uses a fixed `unique_id` (the default can't be
+  byte-parity — DIVERGENCES #15). `emit` refactored to an `Export` enum.
 - **`Console::export_svg`** (`svg.rs`, resolves DIVERGENCES #15): exports recorded
   output as a self-contained SVG image of a terminal window (Fira Code font-face,
   window chrome + traffic-light circles, per-line clip-paths, a generated CSS

@@ -96,7 +96,8 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | arg parsing, plain-file print, capability demo | `main.rs` | 🟡 |
 | `--print` / `--markdown` / `--json` / `--syntax` / `--csv` / `--rule`, width + justify, stdin, extension auto-detect | `main.rs` | 🟡 |
 | `csv`/`tsv` table render (blue border, numeric-column bold-green, quoted-field parse) | `main.rs` | 🟡 CSV done; sniffer heuristics/title deferred |
-| `panel` / `padding` / `ipynb` / URL fetch / HTML export | (tbd) | ⬜ HTML export done |
+| HTML export (`--export-html`) + SVG export (`--export-svg`) | `main.rs` | 🟡 both done |
+| `panel` / `padding` / `ipynb` / URL fetch / paging | (tbd) | ⬜ |
 
 ---
 

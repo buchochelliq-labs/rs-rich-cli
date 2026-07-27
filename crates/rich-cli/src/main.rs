@@ -55,6 +55,8 @@ struct Cli {
     no_color: bool,
     /// Emit a self-contained HTML document instead of writing to the terminal.
     export_html: bool,
+    /// Emit a self-contained SVG document instead of writing to the terminal.
+    export_svg: bool,
 }
 
 fn main() -> ExitCode {
@@ -89,6 +91,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut justify = None;
     let mut no_color = false;
     let mut export_html = false;
+    let mut export_svg = false;
 
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -112,6 +115,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--center" => justify = Some(Justify::Center),
             "--no-color" => no_color = true,
             "--export-html" => export_html = true,
+            "--export-svg" => export_svg = true,
             "-w" | "--width" => {
                 let value = iter.next().ok_or("--width requires a number")?;
                 width = Some(
@@ -132,6 +136,10 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         }
     }
 
+    if export_html && export_svg {
+        return Err("only one of --export-html/--export-svg may be given".into());
+    }
+
     Ok(Some(Cli {
         mode,
         resource,
@@ -139,6 +147,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         justify,
         no_color,
         export_html,
+        export_svg,
     }))
 }
 
@@ -178,6 +187,26 @@ fn run(cli: Cli) -> ExitCode {
     let mut console = builder.build();
     console.install_extensions();
 
+    // SVG export needs a title (the resource's basename, else "rich") and a
+    // stable id. Upstream's auto id hashes Python reprs, so we use a fixed one
+    // (see the rich crate's svg module / DIVERGENCES #15).
+    let svg_title = cli
+        .resource
+        .as_deref()
+        .filter(|r| *r != "-")
+        .map(|r| r.rsplit(['/', '\\']).next().unwrap_or(r).to_string())
+        .unwrap_or_else(|| "rich".to_string());
+    let export = if cli.export_svg {
+        Export::Svg {
+            title: &svg_title,
+            unique_id: "rich-cli",
+        }
+    } else if cli.export_html {
+        Export::Html
+    } else {
+        Export::Terminal
+    };
+
     let mode = match cli.mode {
         Mode::Auto => detect_mode(cli.resource.as_deref()),
         other => other,
@@ -189,7 +218,7 @@ fn run(cli: Cli) -> ExitCode {
             Some(title) if title != "-" => Rule::new(title),
             _ => Rule::line(),
         };
-        emit(&console, cli.export_html, |c| c.print(&rule));
+        emit(&console, &export, |c| c.print(&rule));
         return ExitCode::SUCCESS;
     }
 
@@ -238,7 +267,7 @@ fn run(cli: Cli) -> ExitCode {
         None
     };
 
-    emit(&console, cli.export_html, |c| match mode {
+    emit(&console, &export, |c| match mode {
         Mode::Markdown => c.print(&Markdown::new(&content)),
         Mode::Json => c.print(json.as_ref().expect("json parsed above")),
         Mode::Csv => c.print(csv_table.as_ref().expect("csv built above")),
@@ -355,14 +384,23 @@ fn render_csv(rows: &[Vec<String>]) -> Table {
     table
 }
 
-/// Apply a render action either straight to the terminal, or — when
-/// `export_html` is set — captured and printed as a self-contained HTML document.
-fn emit(console: &Console, export_html: bool, render: impl FnOnce(&Console)) {
-    if export_html {
+/// Where a render action's output goes: straight to the terminal, or captured
+/// into a self-contained HTML or SVG document.
+enum Export<'a> {
+    Terminal,
+    Html,
+    Svg { title: &'a str, unique_id: &'a str },
+}
+
+/// Apply a render action per the chosen [`Export`] target.
+fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) {
+    match export {
+        Export::Terminal => render(console),
         // CSS-class stylesheet form (upstream rich-cli's default HTML export).
-        print!("{}", console.export_html_classes(render));
-    } else {
-        render(console);
+        Export::Html => print!("{}", console.export_html_classes(render)),
+        Export::Svg { title, unique_id } => {
+            print!("{}", console.export_svg(title, unique_id, render))
+        }
     }
 }
 
@@ -389,6 +427,7 @@ OPTIONS:\n\
         --center      Center output\n\
         --right       Right-justify output\n\
         --export-html Emit a self-contained HTML document instead of ANSI\n\
+        --export-svg  Emit a self-contained SVG document instead of ANSI\n\
         --no-color    Disable colored output\n\
     -h, --help        Show this help\n\
     -V, --version     Show the version (mirrors upstream rich-cli)\n\
@@ -790,6 +829,17 @@ mod tests {
         assert_eq!(parse_csv("a\tb", '\t'), vec![vec!["a", "b"]]);
         // A leading UTF-8 BOM is stripped, not glued to the first cell.
         assert_eq!(parse_csv("\u{feff}a,b", ','), vec![vec!["a", "b"]]);
+    }
+
+    #[test]
+    fn parses_export_flags() {
+        let s = |v: &str| v.to_string();
+        let cli = parse(&[s("--export-svg"), s("x")]).unwrap().unwrap();
+        assert!(cli.export_svg && !cli.export_html);
+        let cli = parse(&[s("--export-html"), s("x")]).unwrap().unwrap();
+        assert!(cli.export_html && !cli.export_svg);
+        // The two export formats are mutually exclusive.
+        assert!(parse(&[s("--export-html"), s("--export-svg"), s("x")]).is_err());
     }
 
     #[test]
