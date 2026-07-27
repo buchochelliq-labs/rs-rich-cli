@@ -120,9 +120,12 @@ impl Box {
     }
 
     /// The top border for the given column `widths`. Port of `Box.get_top`.
-    pub fn get_top(&self, widths: &[usize]) -> String {
+    /// `edge` controls whether the left/right corner glyphs are drawn.
+    pub fn get_top(&self, widths: &[usize], edge: bool) -> String {
         let mut parts = String::new();
-        parts.push(self.top_left);
+        if edge {
+            parts.push(self.top_left);
+        }
         let last = widths.len().saturating_sub(1);
         for (index, &width) in widths.iter().enumerate() {
             for _ in 0..width {
@@ -132,13 +135,15 @@ impl Box {
                 parts.push(self.top_divider);
             }
         }
-        parts.push(self.top_right);
+        if edge {
+            parts.push(self.top_right);
+        }
         parts
     }
 
-    /// A horizontal divider row between columns at a given `level`.
-    /// Port of `Box.get_row` (with `edge = true`).
-    pub fn get_row(&self, widths: &[usize], level: RowLevel) -> String {
+    /// A horizontal divider row between columns at a given `level`. Port of
+    /// `Box.get_row`. `edge` controls whether the left/right glyphs are drawn.
+    pub fn get_row(&self, widths: &[usize], level: RowLevel, edge: bool) -> String {
         let (left, horizontal, cross, right) = match level {
             RowLevel::Head => (
                 self.head_row_left,
@@ -160,7 +165,9 @@ impl Box {
             ),
         };
         let mut parts = String::new();
-        parts.push(left);
+        if edge {
+            parts.push(left);
+        }
         let last = widths.len().saturating_sub(1);
         for (index, &width) in widths.iter().enumerate() {
             for _ in 0..width {
@@ -170,7 +177,9 @@ impl Box {
                 parts.push(cross);
             }
         }
-        parts.push(right);
+        if edge {
+            parts.push(right);
+        }
         parts
     }
 
@@ -194,9 +203,12 @@ impl Box {
     }
 
     /// The bottom border for the given column `widths`. Port of `Box.get_bottom`.
-    pub fn get_bottom(&self, widths: &[usize]) -> String {
+    /// `edge` controls whether the left/right corner glyphs are drawn.
+    pub fn get_bottom(&self, widths: &[usize], edge: bool) -> String {
         let mut parts = String::new();
-        parts.push(self.bottom_left);
+        if edge {
+            parts.push(self.bottom_left);
+        }
         let last = widths.len().saturating_sub(1);
         for (index, &width) in widths.iter().enumerate() {
             for _ in 0..width {
@@ -206,7 +218,9 @@ impl Box {
                 parts.push(self.bottom_divider);
             }
         }
-        parts.push(self.bottom_right);
+        if edge {
+            parts.push(self.bottom_right);
+        }
         parts
     }
 }
@@ -335,8 +349,11 @@ mod tests {
 
     #[test]
     fn get_top_and_bottom_single_column() {
-        assert_eq!(ROUNDED.get_top(&[3]), "╭───╮");
-        assert_eq!(ROUNDED.get_bottom(&[3]), "╰───╯");
+        assert_eq!(ROUNDED.get_top(&[3], true), "╭───╮");
+        assert_eq!(ROUNDED.get_bottom(&[3], true), "╰───╯");
+        // Without edges, the corners are omitted.
+        assert_eq!(ROUNDED.get_top(&[3], false), "───");
+        assert_eq!(SQUARE.get_row(&[2, 2], RowLevel::Head, false), "──┼──");
     }
 
     #[test]

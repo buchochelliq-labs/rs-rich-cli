@@ -8,6 +8,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Table `pad_edge` + `show_edge`** (`table.rs`, port of upstream's flags):
+  `Table::pad_edge(false)` drops the first column's left pad and the last
+  column's right pad; `Table::show_edge(false)` removes the outer box edges
+  (top/bottom borders + left/right glyphs), leaving only the internal dividers +
+  content. `Box::get_top/get_row/get_bottom` gained an `edge` parameter.
+  Byte-parity-tested (new goldens `table_pad_edge`, `table_no_edge`). These are
+  two of the features Markdown tables need (`SIMPLE` box + `pad_edge=False`).
 - **OSC 8 hyperlinks** (`Style::with_link`): a `Style` can now carry a link URL,
   rendered as an OSC 8 hyperlink around its styled text. **Markdown links**
   (`[text](url)`) render as the `markdown.link_url` style (underline blue) + the

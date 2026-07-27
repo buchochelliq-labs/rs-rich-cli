@@ -41,6 +41,8 @@ table_lines	30	┌───────┬─────┐\n│\x1b[1m \x1b[0m
 table_col_width	40	┌────┬──────────┐\n│\x1b[1m \x1b[0m\x1b[1mId\x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mNote    \x1b[0m\x1b[1m \x1b[0m│\n├────┼──────────┤\n│ 1  │ alpha    │\n│    │ beta     │\n│    │ gammaga… │\n│ 2  │ ok       │\n└────┴──────────┘\n
 table_col_style	40	┌───────┬─────┐\n│\x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mAge\x1b[0m\x1b[1m \x1b[0m│\n├───────┼─────┤\n│\x1b[31m \x1b[0m\x1b[31mAlice\x1b[0m\x1b[31m \x1b[0m│ 30  │\n│\x1b[31m \x1b[0m\x1b[31mBob  \x1b[0m\x1b[31m \x1b[0m│ 7   │\n└───────┴─────┘\n
 table_nowrap	20	┌──────────────────┐\n│\x1b[1m \x1b[0m\x1b[1mNote            \x1b[0m\x1b[1m \x1b[0m│\n├──────────────────┤\n│ this is a fairl… │\n│ short            │\n└──────────────────┘\n
+table_pad_edge	40	┌──────┬────┐\n│\x1b[1mName \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mAge\x1b[0m│\n├──────┼────┤\n│Alice │ 30 │\n│Bob   │ 7  │\n└──────┴────┘\n
+table_no_edge	40	\x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mAge\x1b[0m\x1b[1m \x1b[0m\n───────┼─────\n Alice │ 30  \n Bob   │ 7   \n
 tree_nested	40	root\n├── child A\n│   ├── leaf A1\n│   └── leaf A2\n└── child B\n
 align_center	20	         hi         \n
 align_right	20	                  hi\n
