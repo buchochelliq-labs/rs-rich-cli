@@ -295,6 +295,9 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "bar_third" => Box::new(ProgressBar::new(100.0, 33.0).width(20)),
         "bar_full" => Box::new(ProgressBar::new(100.0, 100.0).width(20)),
         "json_object" => Box::new(Json::new(JSON_SAMPLE).expect("valid JSON")),
+        "json_unicode" => Box::new(
+            Json::new("{\"name\": \"caf\u{e9}\", \"emoji\": \"\u{2764}\"}").expect("valid JSON"),
+        ),
         "markdown_doc" => Box::new(Markdown::new(
             "# Title\n\nHello **bold** and *italic* and `code`.",
         )),

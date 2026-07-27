@@ -82,15 +82,23 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** add the per-column ratio/min/max fields, and drop padding on
   zero-width columns, with the Table issue (#5).
 
-### 8. `Json` does not escape non-ASCII (`ensure_ascii`)
-- **Differs:** Python's `json.dumps` defaults to `ensure_ascii=True`, escaping
-  non-ASCII as `\uXXXX`; our `Json` (via `serde_json`) emits UTF-8 directly.
-  Exotic float formatting may also differ from CPython's `repr`.
-- **Why:** the first `Json` slice targets byte-parity on ASCII documents (the
-  common case); matching CPython's escaping/float formatting exactly is a
-  follow-up.
-- **Remove:** post-process the serialized string to `\u`-escape non-ASCII, and
-  reconcile float formatting, under the JSON issue (#10).
+### 8. `Json` — exotic number formatting differs from CPython
+- **Differs:** non-ASCII strings and key order are **byte-parity** with upstream
+  (golden `json_unicode`): `rich.json.JSON` defaults to `ensure_ascii=False`, so
+  our UTF-8 output matches, and `serde_json`'s `preserve_order` keeps input key
+  order — the earlier "we don't `\u`-escape" concern was a false alarm (upstream
+  doesn't escape either). What *can* still differ is **number formatting** for
+  exotic values: exponent notation (CPython renders `1e+20` / `1e-07`; ryu via
+  `serde_json` renders `1e20` / `1e-7`, and the two use different thresholds for
+  *when* to switch to exponent form), and integers beyond i64/u64 lose precision
+  (parsed as f64) where CPython keeps them exact.
+- **Why:** matching CPython exactly means replicating its `float_repr`
+  (shortest-round-trip *and* its decimal/exponent threshold + `e[+-]NN` padding),
+  which ryu formats differently; and exact big-integers need `serde_json`'s
+  `arbitrary_precision`, which in turn stops normalizing numbers. Both are a
+  rabbit hole disproportionate to how rarely JSON documents carry such values.
+- **Remove:** port CPython's `float_repr` and enable `arbitrary_precision` (with
+  its own normalization pass) under the JSON issue (#10).
 
 ### 9. `Markdown` covers most elements (code blocks are non-parity)
 - **Differs:** paragraphs, ATX headings (h1–h6), bullet + ordered lists, block

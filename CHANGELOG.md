@@ -7,6 +7,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed / clarified
+- **`Json` non-ASCII is byte-parity** (`json.rs`): confirmed and locked in with a
+  golden (`json_unicode`) + unit test. `rich.json.JSON` defaults to
+  `ensure_ascii=False`, so our UTF-8 output already matched upstream (accented
+  characters/symbols render literally, not `\uXXXX`), and `serde_json`'s
+  `preserve_order` keeps input key order. Corrected the stale DIVERGENCES #8,
+  which wrongly claimed an escaping mismatch; the only remaining JSON caveat is
+  exotic **number formatting** (exponent notation like `1e+20`/`1e-07`, and
+  integers beyond i64/u64) differing from CPython's `repr`.
+
 ### Added
 - **Markdown tables** (`markdown.rs`, port of upstream's `TableElement`): GFM
   tables now parse (`pulldown-cmark` `ENABLE_TABLES`) and render via [`Table`]

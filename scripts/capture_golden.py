@@ -301,6 +301,9 @@ RENDERABLE_CASES = [
     ("bar_third", 20, ProgressBar(total=100, completed=33, width=20)),
     ("bar_full", 20, ProgressBar(total=100, completed=100, width=20)),
     ("json_object", 40, JSON(JSON_SAMPLE)),
+    # Non-ASCII strings: rich's JSON defaults to ensure_ascii=False, so accented
+    # characters and symbols render as UTF-8 (not \uXXXX). Keys keep input order.
+    ("json_unicode", 40, JSON('{"name": "café", "emoji": "❤"}')),
     ("markdown_doc", 24, Markdown("# Title\n\nHello **bold** and *italic* and `code`.")),
     ("markdown_list", 20, Markdown("Items:\n\n- one\n- two\n\n1. a\n2. b")),
     ("markdown_quote_hr", 20, Markdown("Note:\n\n> important\n\n---\n\ndone")),

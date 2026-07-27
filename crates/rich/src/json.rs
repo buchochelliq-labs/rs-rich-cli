@@ -4,9 +4,12 @@
 //! with 2-space indentation (matching Python's `json.dumps(indent=2)`) and the
 //! default JSON highlight colors.
 //!
-//! Slice scope: ASCII input with the default 2-space indent. Non-ASCII escaping
-//! (`ensure_ascii`) and custom indent/sort options are deferred — see
-//! docs/DIVERGENCES.md.
+//! Non-ASCII strings render as UTF-8, matching upstream (`rich.json.JSON`
+//! defaults to `ensure_ascii=False`); object keys keep input order (serde_json's
+//! `preserve_order`). The one remaining caveat is **number formatting** for
+//! exotic values — exponent notation (`1e+20`, `1e-07`) and integers beyond
+//! i64/u64 can differ from CPython's `repr`. Custom indent/sort options are
+//! deferred — see docs/DIVERGENCES.md.
 
 use serde_json::Value;
 
@@ -169,5 +172,18 @@ mod tests {
     #[test]
     fn invalid_json_errors() {
         assert!(Json::new("{not json}").is_err());
+    }
+
+    #[test]
+    fn non_ascii_stays_utf8_in_input_order() {
+        // Upstream's JSON defaults to ensure_ascii=False, so accented/symbol
+        // characters render as UTF-8 (not \uXXXX), and keys keep input order.
+        // (Byte-parity is guaranteed by the `json_unicode` golden.)
+        let out = render("{\"name\": \"caf\u{e9}\", \"emoji\": \"\u{2764}\"}");
+        assert!(out.contains("caf\u{e9}"), "café stays UTF-8: {out:?}");
+        assert!(out.contains('\u{2764}'), "heart stays UTF-8");
+        let name_at = out.find("name").expect("name key present");
+        let emoji_at = out.find("emoji").expect("emoji key present");
+        assert!(name_at < emoji_at, "keys keep input order");
     }
 }
