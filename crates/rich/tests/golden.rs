@@ -222,6 +222,10 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "padding_0_1" => Box::new(Padding::new(Box::new(Text::new("hi")), (0, 1, 0, 1))),
         "wrap_words" => Box::new(Text::new("The quick brown fox")),
         "wrap_fold" => Box::new(Text::new("abcdefghij")),
+        "wrap_combining" => {
+            let s: String = "abcdef".chars().flat_map(|c| [c, '\u{301}']).collect();
+            Box::new(Text::new(s))
+        }
         "panel_wrap" => {
             Box::new(Panel::new(Box::new(Text::new("The quick brown fox"))).box_set(SQUARE))
         }

@@ -7,6 +7,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed / verified
+- **Wrapping matches upstream for combining sequences** (DIVERGENCES #5 corrected):
+  confirmed `cells::chop_cells` is byte-parity with real rich 15.0.0 — current
+  rich folds over-long words char-by-char (not by grapheme), and 0-width combining
+  marks stay attached to their base char in both. Added unit tests and a golden
+  (`wrap_combining`, a decomposed `base + U+0301` fold). The old "we don't do
+  grapheme wrapping" note was stale; the only residual difference is an empty
+  leading chunk for a char wider than the fold width, which we suppress.
+
 ### Added
 - **Box substitution** (`Box::substitute`, port of `rich/box.py`'s `substitute`):
   on a legacy Windows console the fancy boxes (`ROUNDED`/`HEAVY`/`HEAVY_HEAD`) fall

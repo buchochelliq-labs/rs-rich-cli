@@ -18,8 +18,10 @@ pub fn char_cell_width(c: char) -> usize {
 }
 
 /// Split `text` into chunks, each at most `width` cells wide. Port of
-/// `cells.chop_cells` (cell-aware; a grapheme wider than `width` still gets its
-/// own chunk). Used to fold over-long words during wrapping.
+/// `cells.chop_cells` — char-based, so 0-width combining marks stay attached to
+/// their base character (no grapheme table needed). Used to fold over-long words
+/// during wrapping. (Unlike upstream, a leading character wider than `width`
+/// doesn't produce an empty leading chunk — see docs/DIVERGENCES.md #5.)
 pub fn chop_cells(text: &str, width: usize) -> Vec<String> {
     if width == 0 {
         return vec![text.to_string()];
@@ -90,5 +92,29 @@ mod tests {
     fn set_size_pads_and_truncates() {
         assert_eq!(set_cell_size("hi", 5), "hi   ");
         assert_eq!(set_cell_size("hello", 3), "hel");
+    }
+
+    #[test]
+    fn chop_ascii_and_wide() {
+        // Matches real rich 15.0.0 `chop_cells`.
+        assert_eq!(chop_cells("abcdefghij", 4), vec!["abcd", "efgh", "ij"]);
+        // Each wide char (2 cells) gets its own chunk at width 3.
+        assert_eq!(chop_cells("宽宽宽宽", 3), vec!["宽", "宽", "宽", "宽"]);
+    }
+
+    #[test]
+    fn chop_keeps_combining_marks_attached() {
+        // base char + U+0301 (combining acute): each grapheme is one cell, the
+        // combining mark is 0-width, so it stays with its base — exactly as
+        // upstream's char-based `chop_cells` does (no grapheme table needed).
+        let decomposed: String = "abcdef".chars().flat_map(|c| [c, '\u{301}']).collect();
+        let chunks = chop_cells(&decomposed, 3);
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(
+            chunks.iter().map(|c| cell_len(c)).collect::<Vec<_>>(),
+            vec![3, 3]
+        );
+        // Three base chars + three combining marks per chunk.
+        assert_eq!(chunks[0].chars().count(), 6);
     }
 }

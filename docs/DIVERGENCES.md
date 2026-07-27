@@ -39,13 +39,20 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** not planned unless a public API needs code-point indexing; if so,
   expose a char-index helper without changing the internal representation.
 
-### 5. Wrapping folds by cell width, not full grapheme clusters
-- **Differs:** `Text` word-wrapping is implemented (port of `_wrap.divide_line`),
-  but the over-long-word fold (`cells.chop_cells`) breaks on cell boundaries per
-  `char`, whereas upstream splits on grapheme clusters for combining sequences.
-- **Why:** avoids vendoring the grapheme/`_unicode_data` tables for the first
-  wrapping slice; identical for non-combining text (the common case).
-- **Remove:** port grapheme segmentation with the `_unicode_data` utilities issue.
+### 5. Over-long-word fold suppresses one empty chunk vs upstream
+- **Differs:** `Text` word-wrapping (`_wrap.divide_line`) and the over-long-word
+  fold (`cells.chop_cells`) are ported and are **byte-parity** with upstream —
+  current rich's `chop_cells` is itself char-based (not grapheme-based), and
+  0-width combining marks stay attached to their base char in both (verified with
+  a decomposed `base + U+0301` fold). The only residual difference: when a *single
+  character is wider than the entire fold width* (e.g. folding a 2-cell CJK char
+  to width 1), upstream emits an empty leading chunk (`["", "宽", …]`) and we
+  suppress it (`["宽", …]`).
+- **Why:** the empty leading chunk is an upstream quirk that only appears when
+  folding below one character's width — a case that doesn't occur in normal
+  layout; suppressing it is cleaner and never observable in realistic output.
+- **Remove:** drop the `!line.is_empty()` guard in `chop_cells` to match
+  upstream's empty chunk exactly, if strict parity on that edge is ever needed.
 
 ### 6. Box substitution is opt-in (no legacy-terminal auto-detection)
 - **Differs:** `Box.substitute` **is** ported — `Box::substitute` maps the fancy

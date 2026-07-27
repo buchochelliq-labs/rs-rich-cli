@@ -227,6 +227,9 @@ RENDERABLE_CASES = [
     ("padding_0_1", 10, Padding("hi", (0, 1))),
     ("wrap_words", 10, Text("The quick brown fox")),
     ("wrap_fold", 6, Text("abcdefghij")),
+    # Decomposed base+combining (U+0301) folds by grapheme without a grapheme
+    # table — the combining marks are 0-width and stay with their base char.
+    ("wrap_combining", 3, Text("".join(ch + "́" for ch in "abcdef"))),
     ("panel_wrap", 14, Panel("The quick brown fox", box=box.SQUARE)),
     ("panel_just_center", 14, Panel(Text("hi", justify="center"), box=box.SQUARE)),
     ("panel_just_right", 14, Panel(Text("hi", justify="right"), box=box.SQUARE)),
