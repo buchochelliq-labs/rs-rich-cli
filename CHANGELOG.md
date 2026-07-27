@@ -7,6 +7,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- **OSC 8 hyperlinks** (`Style::with_link`): a `Style` can now carry a link URL,
+  rendered as an OSC 8 hyperlink around its styled text. **Markdown links**
+  (`[text](url)`) render as the `markdown.link_url` style (underline blue) + the
+  hyperlink. Byte-identical to real rich 15.0.0 **except** upstream's random `id=`
+  field, which we omit for determinism (DIVERGENCES #20).
+
 ### Added (functional, non-byte-parity)
 - **Markdown code blocks** (`markdown.rs`): fenced and indented code blocks now
   render via the `Syntax` renderable (language from the fence info string), so

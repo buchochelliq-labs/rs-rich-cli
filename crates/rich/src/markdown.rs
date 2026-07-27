@@ -6,8 +6,8 @@
 //!
 //! Scope: paragraphs, ATX headings (h1–h6), bullet + ordered lists, block quotes,
 //! thematic breaks, fenced/indented **code blocks** (syntax-highlighted via
-//! [`Syntax`]), and inline strong/emphasis/code. Links and tables are deferred
-//! (see docs/DIVERGENCES.md and the Markdown issue).
+//! [`Syntax`]), **links** (OSC 8 hyperlinks), and inline strong/emphasis/code.
+//! Only tables are deferred (see docs/DIVERGENCES.md and the Markdown issue).
 
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Parser, Tag, TagEnd};
 
@@ -22,6 +22,7 @@ use crate::text::Text;
 const CODE_STYLE: &str = "bold cyan on black"; // markdown.code
 const BULLET: &str = " \u{2022} "; // " • ", markdown.item.bullet = bold
 const QUOTE_PREFIX: &str = "\u{258c} "; // "▌ ", markdown.block_quote = magenta
+const LINK_STYLE: &str = "underline blue"; // markdown.link_url
 
 /// A parsed Markdown block.
 enum Block {
@@ -107,10 +108,14 @@ fn parse(source: &str) -> Vec<Block> {
     let mut quote: Option<Vec<Text>> = None;
     // (language, accumulated source) while inside a code block.
     let mut code: Option<(String, String)> = None;
+    // The destination URL while inside a link.
+    let mut link: Option<String> = None;
 
     for event in Parser::new(source) {
         match event {
             Event::Rule => blocks.push(Block::Rule),
+            Event::Start(Tag::Link { dest_url, .. }) => link = Some(dest_url.to_string()),
+            Event::End(TagEnd::Link) => link = None,
             Event::Start(Tag::CodeBlock(kind)) => {
                 let language = match kind {
                     CodeBlockKind::Fenced(info) => {
@@ -202,7 +207,15 @@ fn parse(source: &str) -> Vec<Block> {
                 if let Some((_, source)) = code.as_mut() {
                     source.push_str(&text);
                 } else if let Some(block) = current.as_mut() {
-                    block.append(&text, inline_style(strong, emphasis));
+                    // Inside a link, use the markdown.link_url style + an OSC 8
+                    // hyperlink; otherwise the inline strong/emphasis style.
+                    let style = match &link {
+                        Some(url) => Style::parse(LINK_STYLE)
+                            .ok()
+                            .map(|s| s.with_link(url.clone())),
+                        None => inline_style(strong, emphasis),
+                    };
+                    block.append(&text, style);
                 }
             }
             Event::Code(text) => {
@@ -334,6 +347,21 @@ mod tests {
             render("a `x` b"),
             "a \x1b[1;36;40mx\x1b[0m b               "
         );
+    }
+
+    #[test]
+    fn link_renders_osc8_hyperlink() {
+        // Matches real rich 15.0.0 exactly except upstream's random `id=` field,
+        // which we omit for determinism (DIVERGENCES). markdown.link_url styling
+        // is "underline blue" (4;34).
+        let out = render("See [the site](https://example.com) now.");
+        assert!(
+            out.contains(
+                "\x1b]8;;https://example.com\x1b\\\x1b[4;34mthe site\x1b[0m\x1b]8;;\x1b\\"
+            ),
+            "got {out:?}"
+        );
+        assert!(!out.contains("id="), "we omit the random link id");
     }
 
     #[test]

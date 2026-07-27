@@ -57,6 +57,8 @@ pub struct Style {
     color: Option<Color>,
     bgcolor: Option<Color>,
     attrs: [Option<bool>; ATTR_COUNT],
+    /// An OSC 8 hyperlink target, if any.
+    link: Option<String>,
 }
 
 impl Style {
@@ -72,12 +74,24 @@ impl Style {
             color,
             bgcolor,
             attrs: [None; ATTR_COUNT],
+            link: None,
         }
     }
 
     pub fn with_color(mut self, color: Color) -> Self {
         self.color = Some(color);
         self
+    }
+
+    /// Attach an OSC 8 hyperlink target. Port of `Style(link=…)`.
+    pub fn with_link(mut self, url: impl Into<String>) -> Self {
+        self.link = Some(url.into());
+        self
+    }
+
+    /// The hyperlink target, if set.
+    pub fn link(&self) -> Option<&str> {
+        self.link.as_deref()
     }
 
     pub fn with_bgcolor(mut self, color: Color) -> Self {
@@ -95,7 +109,10 @@ impl Style {
 
     /// True when nothing at all is set (renders as a no-op).
     pub fn is_null(&self) -> bool {
-        self.color.is_none() && self.bgcolor.is_none() && self.attrs.iter().all(Option::is_none)
+        self.color.is_none()
+            && self.bgcolor.is_none()
+            && self.link.is_none()
+            && self.attrs.iter().all(Option::is_none)
     }
 
     /// Parse a style definition such as `"bold red on blue"`.
@@ -152,6 +169,7 @@ impl Style {
             color: other.color.clone().or_else(|| self.color.clone()),
             bgcolor: other.bgcolor.clone().or_else(|| self.bgcolor.clone()),
             attrs,
+            link: other.link.clone().or_else(|| self.link.clone()),
         }
     }
 
@@ -226,7 +244,12 @@ impl Style {
     /// Wrap `text` in this style's escape sequence for `system`.
     ///
     /// With `system == None` (no color) or a null style, `text` is returned
-    /// unchanged. Port of `Style.render`.
+    /// unchanged. A [`link`](Self::with_link) additionally wraps the result in an
+    /// OSC 8 hyperlink. Port of `Style.render`.
+    ///
+    /// **Divergence:** upstream tags each hyperlink with a random `id=` field (to
+    /// group multi-segment links for hover); we omit it so output is
+    /// deterministic. See docs/DIVERGENCES.md.
     pub fn render(&self, text: &str, system: Option<ColorSystem>) -> String {
         let Some(system) = system else {
             return text.to_string();
@@ -235,10 +258,14 @@ impl Style {
             return text.to_string();
         }
         let codes = self.ansi_codes(system);
-        if codes.is_empty() {
+        let rendered = if codes.is_empty() {
             text.to_string()
         } else {
             format!("\x1b[{codes}m{text}\x1b[0m")
+        };
+        match &self.link {
+            Some(url) => format!("\x1b]8;;{url}\x1b\\{rendered}\x1b]8;;\x1b\\"),
+            None => rendered,
         }
     }
 }
@@ -255,6 +282,24 @@ mod tests {
             style.render("hello", Some(ColorSystem::Truecolor)),
             "\x1b[1;31mhello\x1b[0m"
         );
+    }
+
+    #[test]
+    fn link_wraps_in_osc8() {
+        let style = Style::parse("underline blue")
+            .unwrap()
+            .with_link("https://example.com");
+        assert_eq!(
+            style.render("click", Some(ColorSystem::Truecolor)),
+            "\x1b]8;;https://example.com\x1b\\\x1b[4;34mclick\x1b[0m\x1b]8;;\x1b\\"
+        );
+        // A link-only style still wraps (no SGR inside).
+        let bare = Style::new().with_link("https://x.com");
+        assert_eq!(
+            bare.render("y", Some(ColorSystem::Truecolor)),
+            "\x1b]8;;https://x.com\x1b\\y\x1b]8;;\x1b\\"
+        );
+        assert!(!bare.is_null());
     }
 
     #[test]

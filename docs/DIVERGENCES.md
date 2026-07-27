@@ -97,12 +97,24 @@ Format: what differs · why · how to remove it (if temporary).
   quotes, thematic breaks (hr), and inline strong/emphasis/code are rendered
   **byte-parity**. Fenced/indented **code blocks** now render via the `Syntax`
   renderable — so they're highlighted but **not** byte-identical to upstream
-  (syntect ≠ Pygments; see #18). **Links** (need OSC hyperlinks / `Text` link
-  support) and **tables** (need several `Table` features — see #9 on GitHub) are
-  still deferred. Also, a document that *ends* with a thematic break omits a
-  trailing blank line that upstream emits.
-- **Why:** these are the common elements; links/tables each need more machinery.
-- **Remove:** add link + table elements under the Markdown issue (#9).
+  (syntect ≠ Pygments; see #18). **Links** render as an OSC 8 hyperlink + the
+  `markdown.link_url` style — byte-identical to upstream except the random `id=`
+  field we omit (#20). Only **tables** (need several `Table` features — see #9 on
+  GitHub) are still deferred. Also, a document that *ends* with a thematic break
+  omits a trailing blank line upstream emits.
+- **Why:** these are the common elements; tables need more machinery.
+- **Remove:** add the table element under the Markdown issue (#9).
+
+### 20. Hyperlinks omit upstream's random `id=` field
+- **Differs:** `Style::with_link` renders an OSC 8 hyperlink as
+  `\x1b]8;;{url}\x1b\…\x1b]8;;\x1b\`. Upstream adds a **random** `id=` field
+  (`\x1b]8;id={random};{url}…`) so a terminal can group the segments of one link
+  for hover highlighting. We omit it, making output deterministic (and
+  golden-testable); the link still works, and byte output otherwise matches.
+- **Why:** the random id is non-deterministic (breaks golden tests) and only
+  affects hover-grouping of a multi-segment link.
+- **Remove:** add a stable per-link id (e.g. a hash of the URL) if hover grouping
+  is ever needed — but it still wouldn't match upstream's random value.
 
 ### 10. `AnsiDecoder` skips OSC hyperlinks
 - **Differs:** upstream's decoder reads OSC `8;…` sequences and attaches the URL
