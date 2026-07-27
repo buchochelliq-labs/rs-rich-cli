@@ -139,6 +139,17 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** store style names on spans and resolve at render via the theme, under
   the highlighter/theme issue (#3).
 
+### 15. HTML export is inline-styles only (no CSS classes, no SVG)
+- **Differs:** `Console::export_html` implements upstream's `inline_styles=True`
+  path (each span carries its own `style="…"`) with byte-parity. The default
+  CSS-class variant (`.r1 {…}` stylesheet + `class="r1"`) and `export_svg` are
+  not ported. Custom `TerminalTheme`s work for color resolution, but only the
+  default theme is byte-parity-verified.
+- **Why:** inline styles are the self-contained common case; the class variant is
+  a mechanical follow-up and SVG is a separate renderer.
+- **Remove:** add the CSS-class dedup + stylesheet assembly, and an
+  `export_svg`, under the Console issue (#1).
+
 ## Feature-flagged divergences
 
 *None yet.* If a future feature can only be built by changing core behavior, it

@@ -21,7 +21,8 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `markup.py`                           | `markup.rs`              | 🟡 | ✅ |
 | `text.py` (+ justify)                 | `text.rs`                | 🟡 | ✅ |
 | `_wrap.py`                            | `wrap.rs`                | 🟡 | ✅ |
-| `theme.py`, `themes.py`, `default_styles.py`, `terminal_theme.py` | `theme.rs` | 🟡 | — |
+| `theme.py`, `themes.py`, `default_styles.py` | `theme.rs` | 🟡 | — |
+| `terminal_theme.py` | `terminal_theme.rs` | 🟡 | ✅ |
 | `console.py` (+ `ConsoleOptions`, `render_lines`) | `console.rs`  | 🟡 | ✅ |
 | `protocol.py`, `abc.py`, `_extension.py` | `protocol.rs`         | 🟡 | — |
 | `measure.py` (+ `Renderable::measure`, fit) | `measure.rs`       | 🟡 | ✅ |
@@ -82,7 +83,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `jupyter.py`, `file_proxy.py`, `diagnose.py`, `_fileno.py`, `_null_file.py` | resp. | ⬜ |
 | `_ratio.py` (`ratio_resolve`) | `ratio.rs` | 🟡 | — |
 | `_loop.py`, `_pick.py`, `_stack.py`, `_timer.py` | internal helpers | ⬜ |
-| `_export_format.py` (HTML/SVG export) | `export.rs` | ⬜ |
+| `_export_format.py`, `Console.export_html` | `export.rs` | 🟡 | ✅ |
 
 ## `rich-cli` (tool, versions separately — 1.8.1)
 

@@ -174,6 +174,55 @@ impl Style {
         sgr.join(";")
     }
 
+    /// The CSS declarations for this style under `theme` (for HTML export).
+    /// Port of `Style.get_html_style`.
+    pub fn get_html_style(&self, theme: &crate::terminal_theme::TerminalTheme) -> String {
+        use crate::terminal_theme::blend_rgb;
+        let mut css: Vec<String> = Vec::new();
+
+        let mut color = self.color.clone();
+        let mut bgcolor = self.bgcolor.clone();
+        // reverse (attr index 6): swap fore/background.
+        if self.attrs[6] == Some(true) {
+            std::mem::swap(&mut color, &mut bgcolor);
+        }
+        // dim (attr index 1): blend the foreground halfway to the background.
+        if self.attrs[1] == Some(true) {
+            let fg = match &color {
+                Some(c) => theme.resolve(c, true),
+                None => theme.foreground,
+            };
+            let blended = blend_rgb(fg, theme.background, 0.5);
+            color = Some(Color::from_rgb(blended.red, blended.green, blended.blue));
+        }
+
+        if let Some(c) = &color {
+            let hex = theme.resolve(c, true).hex();
+            css.push(format!("color: {hex}"));
+            css.push(format!("text-decoration-color: {hex}"));
+        }
+        if let Some(c) = &bgcolor {
+            let hex = theme.resolve(c, false).hex();
+            css.push(format!("background-color: {hex}"));
+        }
+        if self.attrs[0] == Some(true) {
+            css.push("font-weight: bold".to_string());
+        }
+        if self.attrs[2] == Some(true) {
+            css.push("font-style: italic".to_string());
+        }
+        if self.attrs[3] == Some(true) {
+            css.push("text-decoration: underline".to_string());
+        }
+        if self.attrs[8] == Some(true) {
+            css.push("text-decoration: line-through".to_string());
+        }
+        if self.attrs[12] == Some(true) {
+            css.push("text-decoration: overline".to_string());
+        }
+        css.join("; ")
+    }
+
     /// Wrap `text` in this style's escape sequence for `system`.
     ///
     /// With `system == None` (no color) or a null style, `text` is returned

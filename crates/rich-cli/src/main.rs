@@ -15,7 +15,7 @@ use rich::text::Text;
 use rich::{
     filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, Control, Highlighter,
     HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, Padding, Panel, ProgressBar,
-    Renderable, Rule, Spinner, Style, Styled, Table, Tree,
+    Renderable, Rule, Spinner, Style, Styled, Table, Tree, DEFAULT_TERMINAL_THEME,
 };
 use rich_ext::ConsoleExt;
 
@@ -48,6 +48,8 @@ struct Cli {
     width: Option<usize>,
     justify: Option<Justify>,
     no_color: bool,
+    /// Emit a self-contained HTML document instead of writing to the terminal.
+    export_html: bool,
 }
 
 fn main() -> ExitCode {
@@ -78,6 +80,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut width = None;
     let mut justify = None;
     let mut no_color = false;
+    let mut export_html = false;
 
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -98,6 +101,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--right" => justify = Some(Justify::Right),
             "--center" => justify = Some(Justify::Center),
             "--no-color" => no_color = true,
+            "--export-html" => export_html = true,
             "-w" | "--width" => {
                 let value = iter.next().ok_or("--width requires a number")?;
                 width = Some(
@@ -124,6 +128,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         width,
         justify,
         no_color,
+        export_html,
     }))
 }
 
@@ -169,10 +174,11 @@ fn run(cli: Cli) -> ExitCode {
 
     // A rule takes its optional title from the resource string directly.
     if mode == Mode::Rule {
-        match cli.resource.as_deref() {
-            Some(title) if title != "-" => console.print(&Rule::new(title)),
-            _ => console.print(&Rule::line()),
-        }
+        let rule = match cli.resource.as_deref() {
+            Some(title) if title != "-" => Rule::new(title),
+            _ => Rule::line(),
+        };
+        emit(&console, cli.export_html, |c| c.print(&rule));
         return ExitCode::SUCCESS;
     }
 
@@ -193,26 +199,43 @@ fn run(cli: Cli) -> ExitCode {
         }
     };
 
-    match mode {
-        Mode::Markdown => console.print(&Markdown::new(&content)),
-        Mode::Json => match Json::new(content.trim()) {
-            Ok(json) => console.print(&json),
+    // Pre-parse JSON so a parse error surfaces before any (HTML) rendering.
+    let json = if mode == Mode::Json {
+        match Json::new(content.trim()) {
+            Ok(json) => Some(json),
             Err(err) => {
                 eprintln!("rich: invalid JSON: {err}");
                 return ExitCode::FAILURE;
             }
-        },
+        }
+    } else {
+        None
+    };
+
+    emit(&console, cli.export_html, |c| match mode {
+        Mode::Markdown => c.print(&Markdown::new(&content)),
+        Mode::Json => c.print(json.as_ref().expect("json parsed above")),
         Mode::Print => match cli.justify {
-            Some(justify) => console.print_justified(&content, justify),
-            None => console.print_str(&content),
+            Some(justify) => c.print_justified(&content, justify),
+            None => c.print_str(&content),
         },
-        // Auto with no detected type: print the file as plain text.
+        // Auto with no detected type: print the resource as plain text.
         _ => match cli.justify {
-            Some(justify) => console.print_justified(&content, justify),
-            None => console.print(&Text::new(content)),
+            Some(justify) => c.print_justified(&content, justify),
+            None => c.print(&Text::new(content.as_str())),
         },
-    }
+    });
     ExitCode::SUCCESS
+}
+
+/// Apply a render action either straight to the terminal, or — when
+/// `export_html` is set — captured and printed as a self-contained HTML document.
+fn emit(console: &Console, export_html: bool, render: impl FnOnce(&Console)) {
+    if export_html {
+        print!("{}", console.export_html(render));
+    } else {
+        render(console);
+    }
 }
 
 fn print_help() {
@@ -231,17 +254,18 @@ RENDER MODE (choose at most one; default auto-detects by extension):\n\
         --rule       Draw a horizontal rule (RESOURCE is its title)\n\
 \n\
 OPTIONS:\n\
-    -w, --width N    Set the output width\n\
-        --left       Left-justify output\n\
-        --center     Center output\n\
-        --right      Right-justify output\n\
-        --no-color   Disable colored output\n\
-    -h, --help       Show this help\n\
-    -V, --version    Show the version (mirrors upstream rich-cli)\n\
+    -w, --width N     Set the output width\n\
+        --left        Left-justify output\n\
+        --center      Center output\n\
+        --right       Right-justify output\n\
+        --export-html Emit a self-contained HTML document instead of ANSI\n\
+        --no-color    Disable colored output\n\
+    -h, --help        Show this help\n\
+    -V, --version     Show the version (mirrors upstream rich-cli)\n\
 \n\
 With no RESOURCE and no mode flag, a capability demo is shown.\n\
 \n\
-NOT YET PORTED (tracked as roadmap issues): syntax, csv/tsv, ipynb, export-html.\n"
+NOT YET PORTED (tracked as roadmap issues): syntax, csv/tsv, ipynb.\n"
     );
 }
 
@@ -460,6 +484,13 @@ fn run_demo() {
     for line in plain.lines() {
         console.print(&Text::new(format!("    {line}")));
     }
+    // export_html — the inline CSS a style compiles to (via `--export-html`).
+    let html_rule = Style::parse("bold red")
+        .unwrap()
+        .get_html_style(&DEFAULT_TERMINAL_THEME);
+    console.print(&Text::new(format!(
+        "  export_html: [bold red] → <span style=\"{html_rule}\">"
+    )));
 
     // Layout — split a region into ratioed rows/columns; Panel leaves expand
     // to fill their region (rendered here at a fixed size).

@@ -291,6 +291,14 @@ impl Console {
         segments_to_plain(&segments)
     }
 
+    /// Capture output printed inside `f` and export it as a self-contained HTML
+    /// document (inline styles), using the default terminal theme. Port of
+    /// `Console.export_html(inline_styles=True)`.
+    pub fn export_html(&self, f: impl FnOnce(&Console)) -> String {
+        let segments = self.record(f);
+        crate::export::export_html_inline(&segments, &crate::terminal_theme::DEFAULT_TERMINAL_THEME)
+    }
+
     /// Run `f` with output recorded to a fresh buffer, returning the captured
     /// segments and restoring the previous capture state (so captures nest).
     fn record(&self, f: impl FnOnce(&Console)) -> Vec<Segment> {
@@ -628,6 +636,31 @@ mod tests {
         // Captured from real rich 15.0.0 (Console.export_text(styles=False)).
         let out = console.export_text(|c| c.print_str("[bold red]hi[/] there"));
         assert_eq!(out, "hi there\n");
+    }
+
+    #[test]
+    fn export_html_matches_upstream() {
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(20)
+            .no_color(false)
+            .build();
+        let html = console.export_html(|c| {
+            c.print_str("[bold red]hi[/] there");
+            c.print_str("plain line");
+        });
+        // Captured verbatim from real rich 15.0.0 export_html(inline_styles=True).
+        let expected = concat!(
+            "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"UTF-8\">\n<style>\n\n",
+            "body {\n    color: #000000;\n    background-color: #ffffff;\n}\n</style>\n",
+            "</head>\n<body>\n    <pre style=\"font-family:Menlo,'DejaVu Sans Mono',",
+            "consolas,'Courier New',monospace\"><code style=\"font-family:inherit\">",
+            "<span style=\"color: #800000; text-decoration-color: #800000; ",
+            "font-weight: bold\">hi</span> there\nplain line\n",
+            "</code></pre>\n</body>\n</html>\n"
+        );
+        assert_eq!(html, expected);
     }
 
     #[test]
