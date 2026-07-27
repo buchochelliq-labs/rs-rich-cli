@@ -8,6 +8,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added (functional, non-byte-parity)
+- **Markdown code blocks** (`markdown.rs`): fenced and indented code blocks now
+  render via the `Syntax` renderable (language from the fence info string), so
+  they're syntax-highlighted. Not byte-parity (syntect ≠ Pygments — DIVERGENCES
+  #9/#18). Markdown now covers everything but links and tables.
 - **`LogRender`** (`log_render.rs`, a Rust-native reimagining of `rich/_log_render.py`
   + `rich/logging.py`): formats a log record — optional time, a severity-colored
   `LogLevel`, message, optional path — into a styled line, using the same column

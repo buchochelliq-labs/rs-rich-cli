@@ -4,17 +4,19 @@
 //! CommonMark with `pulldown-cmark` and renders each block as justified,
 //! full-width lines separated by blank lines.
 //!
-//! Scope: paragraphs, ATX headings (h1–h6), bullet + ordered lists, and inline
-//! strong/emphasis/code. Code blocks, block quotes, links, rules, and tables are
-//! deferred (see docs/DIVERGENCES.md and the Markdown issue).
+//! Scope: paragraphs, ATX headings (h1–h6), bullet + ordered lists, block quotes,
+//! thematic breaks, fenced/indented **code blocks** (syntax-highlighted via
+//! [`Syntax`]), and inline strong/emphasis/code. Links and tables are deferred
+//! (see docs/DIVERGENCES.md and the Markdown issue).
 
-use pulldown_cmark::{Event, HeadingLevel, Parser, Tag, TagEnd};
+use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Parser, Tag, TagEnd};
 
 use crate::cells::cell_len;
 use crate::console::{Console, ConsoleOptions, Justify};
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::style::Style;
+use crate::syntax::Syntax;
 use crate::text::Text;
 
 const CODE_STYLE: &str = "bold cyan on black"; // markdown.code
@@ -33,6 +35,8 @@ enum Block {
     },
     /// A block quote; each paragraph is a magenta, left-justified `Text`.
     Quote(Vec<Text>),
+    /// A fenced/indented code block, syntax-highlighted via [`Syntax`].
+    Code { language: String, code: String },
     /// A thematic break (horizontal rule).
     Rule,
 }
@@ -101,10 +105,34 @@ fn parse(source: &str) -> Vec<Block> {
     let mut list: Option<(bool, u64, Vec<Text>)> = None;
     // Collected quote paragraphs while inside a block quote.
     let mut quote: Option<Vec<Text>> = None;
+    // (language, accumulated source) while inside a code block.
+    let mut code: Option<(String, String)> = None;
 
     for event in Parser::new(source) {
         match event {
             Event::Rule => blocks.push(Block::Rule),
+            Event::Start(Tag::CodeBlock(kind)) => {
+                let language = match kind {
+                    CodeBlockKind::Fenced(info) => {
+                        // The info string is `lang` (possibly with extra tokens).
+                        info.split_whitespace().next().unwrap_or("").to_string()
+                    }
+                    CodeBlockKind::Indented => String::new(),
+                };
+                code = Some((language, String::new()));
+            }
+            Event::End(TagEnd::CodeBlock) => {
+                if let Some((language, mut source)) = code.take() {
+                    // Drop the single trailing newline the parser appends.
+                    if source.ends_with('\n') {
+                        source.pop();
+                    }
+                    blocks.push(Block::Code {
+                        language,
+                        code: source,
+                    });
+                }
+            }
             Event::Start(Tag::BlockQuote(_)) => quote = Some(Vec::new()),
             Event::End(TagEnd::BlockQuote(_)) => {
                 if let Some(paragraphs) = quote.take() {
@@ -171,7 +199,9 @@ fn parse(source: &str) -> Vec<Block> {
             Event::Start(Tag::Emphasis) => emphasis += 1,
             Event::End(TagEnd::Emphasis) => emphasis = emphasis.saturating_sub(1),
             Event::Text(text) => {
-                if let Some(block) = current.as_mut() {
+                if let Some((_, source)) = code.as_mut() {
+                    source.push_str(&text);
+                } else if let Some(block) = current.as_mut() {
                     block.append(&text, inline_style(strong, emphasis));
                 }
             }
@@ -257,6 +287,14 @@ impl Renderable for Markdown {
                         }
                     }
                 }
+                Block::Code { language, code } => {
+                    // Render the code block via the Syntax renderable (functional,
+                    // not byte-parity — see DIVERGENCES). Split its segment stream
+                    // back into per-line rows for the shared join below.
+                    let syntax = Syntax::new(code.as_str(), language.as_str());
+                    let segments = syntax.rich_render(console, options);
+                    lines.extend(Segment::split_lines(&segments));
+                }
                 Block::Rule => {
                     let style = Style::parse("dim").expect("valid style");
                     lines.push(vec![Segment::new("-".repeat(width), Some(style))]);
@@ -296,6 +334,22 @@ mod tests {
             render("a `x` b"),
             "a \x1b[1;36;40mx\x1b[0m b               "
         );
+    }
+
+    #[test]
+    fn fenced_code_block_is_highlighted() {
+        // Functional (not byte-parity): the fenced code renders via Syntax, so
+        // its text survives and it's colored.
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(24)
+            .no_color(false)
+            .build();
+        let out = console.render_to_string(&Markdown::new("```rust\nfn main() {}\n```"));
+        assert!(out.contains("fn"), "got {out:?}");
+        assert!(out.contains("main"));
+        assert!(out.contains('\x1b'), "code block should be colored");
     }
 
     #[test]

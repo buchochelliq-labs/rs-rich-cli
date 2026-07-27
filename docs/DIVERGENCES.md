@@ -92,15 +92,17 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** post-process the serialized string to `\u`-escape non-ASCII, and
   reconcile float formatting, under the JSON issue (#10).
 
-### 9. `Markdown` covers a subset of elements
+### 9. `Markdown` covers most elements (code blocks are non-parity)
 - **Differs:** paragraphs, ATX headings (h1–h6), bullet + ordered lists, block
   quotes, thematic breaks (hr), and inline strong/emphasis/code are rendered
-  (byte-parity); code blocks, links, and tables are not yet handled. Also, a
-  document that *ends* with a thematic break omits a trailing blank line that
-  upstream emits.
-- **Why:** these are the common elements; the rest each need their own renderer.
-- **Remove:** port the remaining `markdown.py` element types under the Markdown
-  issue (#9).
+  **byte-parity**. Fenced/indented **code blocks** now render via the `Syntax`
+  renderable — so they're highlighted but **not** byte-identical to upstream
+  (syntect ≠ Pygments; see #18). **Links** (need OSC hyperlinks / `Text` link
+  support) and **tables** (need several `Table` features — see #9 on GitHub) are
+  still deferred. Also, a document that *ends* with a thematic break omits a
+  trailing blank line that upstream emits.
+- **Why:** these are the common elements; links/tables each need more machinery.
+- **Remove:** add link + table elements under the Markdown issue (#9).
 
 ### 10. `AnsiDecoder` skips OSC hyperlinks
 - **Differs:** upstream's decoder reads OSC `8;…` sequences and attaches the URL
