@@ -137,6 +137,24 @@ def _lines_table() -> Table:
     return table
 
 
+def _width_table() -> Table:
+    table = Table(box=box.SQUARE)
+    table.add_column("Id")
+    table.add_column("Note", width=8)
+    table.add_row("1", "alpha beta gammagammagamma")
+    table.add_row("2", "ok")
+    return table
+
+
+def _style_table() -> Table:
+    table = Table(box=box.SQUARE)
+    table.add_column("Name", style="red")
+    table.add_column("Age")
+    table.add_row("Alice", "30")
+    table.add_row("Bob", "7")
+    return table
+
+
 def _justify_table() -> Table:
     table = Table(box=box.SQUARE)
     table.add_column("L", justify="left")
@@ -200,6 +218,8 @@ RENDERABLE_CASES = [
     ("table_justify", 30, _justify_table()),
     ("table_title", 30, _title_table()),
     ("table_lines", 30, _lines_table()),
+    ("table_col_width", 40, _width_table()),
+    ("table_col_style", 40, _style_table()),
     ("tree_nested", 40, _tree()),
     ("align_center", 20, Align.center("hi")),
     ("align_right", 20, Align.right("hi")),
@@ -291,7 +311,11 @@ def main() -> None:
     # highlight=False so no ReprHighlighter styling leaks in — the Rust core
     # ships no default highlighter.
     console = Console(
-        force_terminal=True, color_system="truecolor", width=80, highlight=False
+        force_terminal=True,
+        color_system="truecolor",
+        width=80,
+        highlight=False,
+        no_color=False,
     )
     markup_path = golden_dir() / "truecolor.tsv"
     lines = [HEADER.rstrip("\n")]
@@ -312,6 +336,7 @@ def main() -> None:
             highlight=False,
             safe_box=False,
             legacy_windows=False,
+            no_color=False,
         )
         with rconsole.capture() as capture:
             rconsole.print(renderable)
@@ -339,6 +364,7 @@ def main() -> None:
             highlight=False,
             safe_box=False,
             legacy_windows=False,
+            no_color=False,
         )
         with lconsole.capture() as capture:
             lconsole.print(layout)

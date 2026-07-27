@@ -338,8 +338,11 @@ fn run_demo() {
     // Table.
     console.print(&Rule::new("table"));
     let mut table = Table::new().title("ported renderables");
-    table.add_column("Renderable");
-    table.add_column("Module");
+    // A styled column and a fixed-width column (content wraps with ellipsis).
+    table
+        .add_column("Renderable")
+        .column_style(Style::parse("cyan").unwrap());
+    table.add_column("Module").column_width(12);
     table.add_column_justify("Parity", Justify::Center);
     for (renderable, module, parity) in [
         ("Text / markup", "text, markup", "✓"),

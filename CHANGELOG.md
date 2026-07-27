@@ -8,6 +8,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Table per-column width, style + ellipsis overflow** (`table.rs`, toward
+  `rich/table.py`): `Table::column_width` pins a column's content width (content
+  wraps to it instead of the column shrinking), `Table::column_style` styles a
+  column's body cells, and table cells now wrap with **ellipsis overflow** (a
+  word wider than the column is cropped with `…`), matching upstream's default.
+  Added the last-resort even `ratio_reduce` when fixed columns overflow.
+  Byte-parity-tested against real rich 15.0.0. (Per-column `ratio`/min/max and
+  `no_wrap` still deferred — DIVERGENCES #7.)
 - **Markup fidelity** (`markup.rs`, toward `rich/markup.py`): a `[…]` is now only
   a tag when it starts with `[a-z#/@]` (so `[Hello]`/`[42]` are literal text),
   unmatched closing tags return `RichError::Markup`, `@`-tags apply no visible

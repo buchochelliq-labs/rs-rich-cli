@@ -58,13 +58,13 @@ Format: what differs · why · how to remove it (if temporary).
 
 ### 7. `Table` — a few advanced options remain
 - **Differs:** sizing (content, shrink-to-fit, `expand`), per-column justify,
-  title, caption, and `show_lines` are all ported. Not yet ported: explicit
-  per-column `ratio`/`width`/`min_width`/`max_width`, `no_wrap`, and per-column
-  style.
+  explicit per-column **width**, per-column **style**, **ellipsis overflow**
+  (the table default), title, caption, and `show_lines` are all ported. Not yet
+  ported: explicit per-column `ratio`/`min_width`/`max_width` and `no_wrap`.
 - **Why:** the remaining options are less common and build on the same width
   machinery.
-- **Remove:** add the per-column width/no_wrap/style fields with the Table
-  issue (#5).
+- **Remove:** add the per-column ratio/min/max and `no_wrap` fields with the
+  Table issue (#5).
 
 ### 8. `Json` does not escape non-ASCII (`ensure_ascii`)
 - **Differs:** Python's `json.dumps` defaults to `ensure_ascii=True`, escaping

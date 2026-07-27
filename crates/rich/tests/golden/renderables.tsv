@@ -35,6 +35,8 @@ table_expand	30	┌────────────────┬───�
 table_justify	30	┌──────┬────┬─────┐\n│\x1b[1m \x1b[0m\x1b[1mL   \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mC \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1m  R\x1b[0m\x1b[1m \x1b[0m│\n├──────┼────┼─────┤\n│ a    │ bb │ ccc │\n│ xxxx │ y  │  zz │\n└──────┴────┴─────┘\n
 table_title	30	\x1b[3m     Users     \x1b[0m\n┌───────┬─────┐\n│\x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mAge\x1b[0m\x1b[1m \x1b[0m│\n├───────┼─────┤\n│ Alice │ 30  │\n│ Bob   │ 7   │\n└───────┴─────┘\n\x1b[2;3m    2 rows     \x1b[0m\n
 table_lines	30	┌───────┬─────┐\n│\x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mAge\x1b[0m\x1b[1m \x1b[0m│\n├───────┼─────┤\n│ Alice │ 30  │\n├───────┼─────┤\n│ Bob   │ 7   │\n└───────┴─────┘\n
+table_col_width	40	┌────┬──────────┐\n│\x1b[1m \x1b[0m\x1b[1mId\x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mNote    \x1b[0m\x1b[1m \x1b[0m│\n├────┼──────────┤\n│ 1  │ alpha    │\n│    │ beta     │\n│    │ gammaga… │\n│ 2  │ ok       │\n└────┴──────────┘\n
+table_col_style	40	┌───────┬─────┐\n│\x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mAge\x1b[0m\x1b[1m \x1b[0m│\n├───────┼─────┤\n│\x1b[31m \x1b[0m\x1b[31mAlice\x1b[0m\x1b[31m \x1b[0m│ 30  │\n│\x1b[31m \x1b[0m\x1b[31mBob  \x1b[0m\x1b[31m \x1b[0m│ 7   │\n└───────┴─────┘\n
 tree_nested	40	root\n├── child A\n│   ├── leaf A1\n│   └── leaf A2\n└── child B\n
 align_center	20	         hi         \n
 align_right	20	                  hi\n
