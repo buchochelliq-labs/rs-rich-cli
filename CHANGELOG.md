@@ -8,6 +8,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Fixed / clarified
+- **`chop_cells` over-long-word fold is byte-parity** (`cells.rs`, resolves
+  DIVERGENCES #5): dropped the `!line.is_empty()` guard so folding a character
+  wider than the fold width (e.g. a 2-cell CJK char to width 1) emits upstream's
+  empty leading chunk (`["", "宽", …]`), and `_wrap.divide_line` therefore yields
+  the same break positions (and the same empty line) as rich. Normal text is
+  unaffected (`cw <= width` never triggers the empty push). Unit-tested against
+  real rich 15.0.0. Only a rare multi-codepoint-grapheme residual remains (needs a
+  grapheme table).
 - **Markdown trailing thematic-break blank line** (`markdown.rs`): a document that
   *ends* with a `---` rule now emits the extra trailing blank line upstream does
   (upstream's hr element yields a trailing break, observable only when the rule is

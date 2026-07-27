@@ -20,8 +20,9 @@ pub fn char_cell_width(c: char) -> usize {
 /// Split `text` into chunks, each at most `width` cells wide. Port of
 /// `cells.chop_cells` — char-based, so 0-width combining marks stay attached to
 /// their base character (no grapheme table needed). Used to fold over-long words
-/// during wrapping. (Unlike upstream, a leading character wider than `width`
-/// doesn't produce an empty leading chunk — see docs/DIVERGENCES.md #5.)
+/// during wrapping. Matches upstream byte-for-byte, including its quirk that a
+/// leading character *wider* than `width` (e.g. a 2-cell CJK char folded to
+/// width 1) yields an empty leading chunk (`["", "宽", …]`).
 pub fn chop_cells(text: &str, width: usize) -> Vec<String> {
     if width == 0 {
         return vec![text.to_string()];
@@ -31,7 +32,11 @@ pub fn chop_cells(text: &str, width: usize) -> Vec<String> {
     let mut size = 0usize;
     for c in text.chars() {
         let cw = char_cell_width(c);
-        if size + cw > width && !line.is_empty() {
+        // No `!line.is_empty()` guard: when the first char of a fresh line is
+        // already wider than `width`, upstream appends the empty prefix (and so
+        // do we). For normal text (`cw <= width`) this branch never fires on an
+        // empty line, so ordinary wrapping is unaffected.
+        if size + cw > width {
             lines.push(std::mem::take(&mut line));
             size = 0;
         }
@@ -100,6 +105,18 @@ mod tests {
         assert_eq!(chop_cells("abcdefghij", 4), vec!["abcd", "efgh", "ij"]);
         // Each wide char (2 cells) gets its own chunk at width 3.
         assert_eq!(chop_cells("宽宽宽宽", 3), vec!["宽", "宽", "宽", "宽"]);
+    }
+
+    #[test]
+    fn chop_char_wider_than_width_emits_empty_leading_chunk() {
+        // Upstream quirk: folding a 2-cell CJK char to width 1 yields an empty
+        // leading chunk. Captured from real rich 15.0.0 `chop_cells`:
+        //   chop_cells("宽宽", 1) == ["", "宽", "宽"]
+        //   chop_cells("宽", 1)   == ["", "宽"]
+        //   chop_cells("a宽b", 2) == ["a", "宽", "b"]
+        assert_eq!(chop_cells("宽宽", 1), vec!["", "宽", "宽"]);
+        assert_eq!(chop_cells("宽", 1), vec!["", "宽"]);
+        assert_eq!(chop_cells("a宽b", 2), vec!["a", "宽", "b"]);
     }
 
     #[test]

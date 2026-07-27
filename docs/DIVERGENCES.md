@@ -39,20 +39,20 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** not planned unless a public API needs code-point indexing; if so,
   expose a char-index helper without changing the internal representation.
 
-### 5. Over-long-word fold suppresses one empty chunk vs upstream
-- **Differs:** `Text` word-wrapping (`_wrap.divide_line`) and the over-long-word
-  fold (`cells.chop_cells`) are ported and are **byte-parity** with upstream —
-  current rich's `chop_cells` is itself char-based (not grapheme-based), and
-  0-width combining marks stay attached to their base char in both (verified with
-  a decomposed `base + U+0301` fold). The only residual difference: when a *single
-  character is wider than the entire fold width* (e.g. folding a 2-cell CJK char
-  to width 1), upstream emits an empty leading chunk (`["", "宽", …]`) and we
-  suppress it (`["宽", …]`).
-- **Why:** the empty leading chunk is an upstream quirk that only appears when
-  folding below one character's width — a case that doesn't occur in normal
-  layout; suppressing it is cleaner and never observable in realistic output.
-- **Remove:** drop the `!line.is_empty()` guard in `chop_cells` to match
-  upstream's empty chunk exactly, if strict parity on that edge is ever needed.
+### 5. ~~Over-long-word fold suppresses one empty chunk vs upstream~~ (resolved)
+- **Resolved:** `Text` word-wrapping (`_wrap.divide_line`) and the over-long-word
+  fold (`cells.chop_cells`) are **byte-parity** with upstream. The `!line.is_empty()`
+  guard has been dropped, so folding a character *wider than the fold width* (e.g.
+  a 2-cell CJK char to width 1) now emits upstream's empty leading chunk
+  (`["", "宽", …]`) — and `divide_line` therefore produces the same duplicate break
+  position (hence the same empty line) as upstream. Verified against real rich
+  15.0.0 (`chop_cells("宽宽", 1) == ["", "宽", "宽"]`, unit-tested), and unchanged
+  for normal text (`cw <= width` never triggers the empty push). 0-width combining
+  marks still stay attached to their base char (char-based, no grapheme table).
+- **Residual (minor):** `chop_cells` is char-based, not grapheme-based, so it
+  still differs from upstream for *multi-codepoint graphemes folded below their
+  own width* (ZWJ emoji, regional-indicator flags) — vanishingly rare, and it
+  would need a grapheme-segmentation dependency to close.
 
 ### 6. Box substitution is opt-in (no legacy-terminal auto-detection)
 - **Differs:** `Box.substitute` **is** ported — `Box::substitute` maps the fancy
