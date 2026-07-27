@@ -94,6 +94,14 @@ impl Style {
         self.link.as_deref()
     }
 
+    /// Return a copy with the hyperlink target set (`Some`) or cleared (`None`),
+    /// leaving every other attribute unchanged. Port of `Style.update_link`.
+    pub fn update_link(&self, link: Option<String>) -> Style {
+        let mut style = self.clone();
+        style.link = link;
+        style
+    }
+
     pub fn with_bgcolor(mut self, color: Color) -> Self {
         self.bgcolor = Some(color);
         self

@@ -7,6 +7,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- **`AnsiDecoder` decodes OSC 8 hyperlinks** (`ansi.rs`, resolves DIVERGENCES
+  #10): `\x1b]8;<params>;<url>\x1b\` sequences now attach the URL to the running
+  `Style` (via the new `Style::update_link`), with the empty closing sequence
+  clearing it and `id=`/other params ignored — matching upstream. Re-rendering is
+  byte-identical to rich except the random `id=` field we omit for determinism
+  (same deviation as #20). Round-trip unit tests added.
+
 ### Fixed / clarified
 - **`chop_cells` over-long-word fold is byte-parity** (`cells.rs`, resolves
   DIVERGENCES #5): dropped the `!line.is_empty()` guard so folding a character

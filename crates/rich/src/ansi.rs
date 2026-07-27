@@ -6,9 +6,11 @@
 //! of the [`Console`](crate::console::Console)'s styled output.
 //!
 //! Scope: SGR styling (attributes, 16/256/truecolor foreground + background) is
-//! fully handled. OSC hyperlink sequences (`\x1b]8;…`) are recognized and
-//! skipped rather than attached, because `Style` links are not yet ported (see
-//! docs/DIVERGENCES.md).
+//! fully handled, as are **OSC 8 hyperlinks** (`\x1b]8;<params>;<url>\x1b\`): the
+//! URL is attached to the running [`Style`] (and cleared by the empty closing
+//! sequence). Re-rendering reproduces upstream byte-for-byte except the random
+//! `id=` field upstream adds, which we omit for determinism (docs/DIVERGENCES.md
+//! #20).
 
 use fancy_regex::Regex;
 use std::sync::OnceLock;
@@ -92,15 +94,18 @@ fn re_ansi() -> &'static Regex {
     })
 }
 
-/// One token from [`tokenize`]: either plain text, or an SGR parameter string.
+/// One token from [`tokenize`]: plain text, an SGR parameter string, or the
+/// body of an OSC string (`\x1b]<body>\x1b\`).
 enum Token {
     Plain(String),
     /// The parameters of an `\x1b[…m` sequence (without the `[` and `m`).
     Sgr(String),
+    /// The body of an OSC string (e.g. `8;;https://example.com`).
+    Osc(String),
 }
 
-/// Tokenize a line into plain runs and SGR parameter strings, mirroring
-/// `_ansi_tokenize`. Non-SGR CSI sequences and OSC strings are dropped.
+/// Tokenize a line into plain runs, SGR parameter strings, and OSC bodies,
+/// mirroring `_ansi_tokenize`. Non-SGR CSI sequences are dropped.
 fn tokenize(line: &str) -> Vec<Token> {
     let mut tokens = Vec::new();
     let mut position = 0;
@@ -124,7 +129,11 @@ fn tokenize(line: &str) -> Vec<Token> {
                 // Other CSI sequences (e.g. `[2J`) are dropped.
             }
             None => {
-                // An OSC string — links are not yet ported, so skip it.
+                // An OSC string — group 1 is its body (between `\x1b]` and the
+                // terminating `\x1b\`).
+                if let Some(osc) = caps.get(1) {
+                    tokens.push(Token::Osc(osc.as_str().to_string()));
+                }
             }
         }
         position = end;
@@ -173,9 +182,25 @@ impl AnsiDecoder {
                     text.append(&plain, style);
                 }
                 Token::Sgr(params) => self.apply_sgr(&params),
+                Token::Osc(osc) => self.apply_osc(&osc),
             }
         }
         text
+    }
+
+    /// Apply an OSC body. Only hyperlinks (`8;<params>;<url>`) are meaningful:
+    /// the params (e.g. `id=…`) are ignored, and the URL is attached to — or,
+    /// when empty, cleared from — the running style. Port of the OSC branch of
+    /// `decode_line`.
+    fn apply_osc(&mut self, osc: &str) {
+        if let Some(rest) = osc.strip_prefix("8;") {
+            // partition on the first ';': everything after it is the link.
+            if let Some(idx) = rest.find(';') {
+                let link = &rest[idx + 1..];
+                let link = (!link.is_empty()).then(|| link.to_string());
+                self.style = self.style.update_link(link);
+            }
+        }
     }
 
     /// Apply an SGR parameter string (e.g. `"1;31"`) to the running style.
@@ -277,5 +302,36 @@ mod tests {
     #[test]
     fn non_sgr_csi_is_dropped() {
         assert_eq!(round_trip("\x1b[2Jhi"), "hi");
+    }
+
+    #[test]
+    fn osc8_hyperlink_round_trips() {
+        // A styled hyperlink: the URL attaches to the running style, so the
+        // re-render wraps the styled text in OSC 8. Matches real rich 15.0.0
+        // except upstream's random `id=` field, which we omit (DIVERGENCES #20).
+        assert_eq!(
+            round_trip("\x1b]8;;https://example.com\x1b\\\x1b[4;34mlink\x1b[0m\x1b]8;;\x1b\\"),
+            "\x1b]8;;https://example.com\x1b\\\x1b[4;34mlink\x1b[0m\x1b]8;;\x1b\\"
+        );
+    }
+
+    #[test]
+    fn osc8_link_without_style_and_clear() {
+        // Unstyled link text between plain runs; the empty closing OSC clears the
+        // link so " after" is plain.
+        assert_eq!(
+            round_trip("before \x1b]8;;https://x.io\x1b\\here\x1b]8;;\x1b\\ after"),
+            "before \x1b]8;;https://x.io\x1b\\here\x1b]8;;\x1b\\ after"
+        );
+    }
+
+    #[test]
+    fn osc8_id_param_is_ignored() {
+        // Upstream includes a random `id=`; when decoding we drop the params and
+        // keep only the URL, re-emitting without an id.
+        assert_eq!(
+            round_trip("\x1b]8;id=42;https://x.io\x1b\\a\x1b]8;;\x1b\\"),
+            "\x1b]8;;https://x.io\x1b\\a\x1b]8;;\x1b\\"
+        );
     }
 }

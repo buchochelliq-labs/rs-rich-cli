@@ -128,14 +128,14 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** add a stable per-link id (e.g. a hash of the URL) if hover grouping
   is ever needed — but it still wouldn't match upstream's random value.
 
-### 10. `AnsiDecoder` skips OSC hyperlinks
-- **Differs:** upstream's decoder reads OSC `8;…` sequences and attaches the URL
-  as a `Style` link; we recognize and skip the OSC string (the surrounding text
-  still decodes normally, just without the link).
-- **Why:** `Style` links/meta are not yet ported (see #3-adjacent notes); SGR
-  styling — the common case — is fully handled.
-- **Remove:** attach the link once `Style` grows link support, under the
-  Console/text-completeness issues (#1/#2).
+### 10. ~~`AnsiDecoder` skips OSC hyperlinks~~ (resolved)
+- **Resolved:** the decoder now reads OSC 8 sequences (`\x1b]8;<params>;<url>\x1b\`)
+  and attaches the URL to the running `Style` via `Style::update_link` (the empty
+  closing sequence clears it; `id=`/other params are ignored). Re-rendering
+  reproduces upstream byte-for-byte **except** the random `id=` field upstream
+  adds, which we omit for determinism — the same, already-documented deviation as
+  #20. Covered by round-trip unit tests (a golden isn't possible precisely because
+  upstream's `id=` is random).
 
 ### 11. `Layout` — empty-leaf placeholder
 - **Differs:** an empty `Layout` leaf renders as blank space, not upstream's
