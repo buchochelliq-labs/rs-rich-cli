@@ -70,7 +70,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `json.py` | `json.rs` | 🟡 | ✅ |
 | `pretty.py` | `pretty.rs` | 🟡 | Rust-native (`Debug` + repr highlight, #19) |
 | `repr.py`, `_inspect.py` | resp. | ⬜ | need Rust reflection — see #19 |
-| `traceback.py` | `traceback.rs` | ⬜ | |
+| `traceback.py` | `traceback.rs` | 🟡 | Rust-native (error `source()` chain, #19) |
 | `logging.py`, `_log_render.py` | resp. | ⬜ | |
 
 ## Utilities & platform

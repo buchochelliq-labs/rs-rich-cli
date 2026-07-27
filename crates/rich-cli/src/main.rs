@@ -16,7 +16,7 @@ use rich::{
     filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, Control, Highlighter,
     HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, Live, LiveRender, Padding, Panel,
     Pretty, Progress, ProgressBar, Renderable, Rule, Spinner, Status, Style, Styled, Syntax, Table,
-    Tree, DEFAULT_TERMINAL_THEME,
+    Traceback, Tree, DEFAULT_TERMINAL_THEME,
 };
 use rich_ext::ConsoleExt;
 
@@ -467,6 +467,12 @@ fn run_demo() {
     console.print(&Rule::new("pretty"));
     let value = vec![("panel", 1u32), ("table", 2), ("tree", 3)];
     console.print(&Pretty::new(&value));
+
+    // Traceback — render an error + its source chain (Rust-native rich.traceback).
+    console.print(&Rule::new("traceback"));
+    let cause = std::io::Error::new(std::io::ErrorKind::NotFound, "no such file: config.toml");
+    let err = std::io::Error::other(cause);
+    console.print(&Traceback::new(&err));
 
     // Bar — a filled span within a range (eighth-block resolution).
     console.print(&Rule::new("bar (range)"));

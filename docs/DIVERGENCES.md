@@ -213,8 +213,11 @@ Format: what differs · why · how to remove it (if temporary).
     targets Python-repr spellings, Rust-specific tokens differ — `true`/`false`
     (vs `True`/`False`) are left unstyled — and there is no field/attribute
     introspection (`inspect`). No golden test; verified functionally.
-  - (Planned) a Rust traceback renderer over panics / `std::error::Error` chains,
-    and a `log`/`tracing` handler, rather than Python exceptions / `logging`.
+  - `Traceback` (`traceback.rs`) renders an error's message and its
+    `Error::source()` chain (`Caused by:`) in a red-bordered panel. There are no
+    stack frames or source snippets — Rust errors don't carry them (pair with
+    `std::backtrace::Backtrace` at the call site if you want a frame list).
+  - (Planned) a `log`/`tracing` handler, rather than Python `logging`.
 - **Why:** a 1:1 port isn't possible without reflection; the Rust-native analogs
   deliver the same *utility* (colorized value/error/log rendering).
 - **Remove:** inherent to the language difference; not removable.

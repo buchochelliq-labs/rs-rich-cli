@@ -8,6 +8,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added (functional, non-byte-parity)
+- **`Traceback`** (`traceback.rs`, a Rust-native reimagining of `rich/traceback.py`):
+  `Traceback::new(&error)` walks an error's `Error::source()` chain and renders the
+  message + `Caused by:` chain in a red-bordered `HEAVY` panel; `from_message` takes
+  a plain string (e.g. a captured panic). No stack frames — Rust errors don't carry
+  them (DIVERGENCES #19).
 - **`Pretty`** (`pretty.rs`, a Rust-native reimagining of `rich/pretty.py`):
   `Pretty::new(&value)` / `Pretty::compact(&value)` format a value with its
   `Debug` impl (`{:#?}` / `{:?}`) and colorize the result with the built-in

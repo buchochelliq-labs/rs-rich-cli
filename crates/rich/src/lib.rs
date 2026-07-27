@@ -61,6 +61,7 @@ pub mod table;
 pub mod terminal_theme;
 pub mod text;
 pub mod theme;
+pub mod traceback;
 pub mod tree;
 pub mod wrap;
 
@@ -97,4 +98,5 @@ pub use crate::table::Table;
 pub use crate::terminal_theme::{TerminalTheme, DEFAULT_TERMINAL_THEME};
 pub use crate::text::Text;
 pub use crate::theme::Theme;
+pub use crate::traceback::Traceback;
 pub use crate::tree::Tree;
