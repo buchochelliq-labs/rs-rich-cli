@@ -68,7 +68,8 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `syntax.py` | `syntax.rs` | 🟡 | functional via `syntect` (non-parity, DIVERGENCES #18) |
 | `markdown.py` | `markdown.rs` | 🟡 | paragraphs/headings/inline via `pulldown-cmark` |
 | `json.py` | `json.rs` | 🟡 | ✅ |
-| `pretty.py`, `repr.py`, `_inspect.py` | resp. | ⬜ | |
+| `pretty.py` | `pretty.rs` | 🟡 | Rust-native (`Debug` + repr highlight, #19) |
+| `repr.py`, `_inspect.py` | resp. | ⬜ | need Rust reflection — see #19 |
 | `traceback.py` | `traceback.rs` | ⬜ | |
 | `logging.py`, `_log_render.py` | resp. | ⬜ | |
 

@@ -15,8 +15,8 @@ use rich::text::Text;
 use rich::{
     filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, Control, Highlighter,
     HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, Live, LiveRender, Padding, Panel,
-    Progress, ProgressBar, Renderable, Rule, Spinner, Status, Style, Styled, Syntax, Table, Tree,
-    DEFAULT_TERMINAL_THEME,
+    Pretty, Progress, ProgressBar, Renderable, Rule, Spinner, Status, Style, Styled, Syntax, Table,
+    Tree, DEFAULT_TERMINAL_THEME,
 };
 use rich_ext::ConsoleExt;
 
@@ -462,6 +462,11 @@ fn run_demo() {
     ) {
         console.print(&json);
     }
+
+    // Pretty — colorize a Rust value's Debug output (Rust-native rich.pretty).
+    console.print(&Rule::new("pretty"));
+    let value = vec![("panel", 1u32), ("table", 2), ("tree", 3)];
+    console.print(&Pretty::new(&value));
 
     // Bar — a filled span within a range (eighth-block resolution).
     console.print(&Rule::new("bar (range)"));

@@ -8,6 +8,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added (functional, non-byte-parity)
+- **`Pretty`** (`pretty.rs`, a Rust-native reimagining of `rich/pretty.py`):
+  `Pretty::new(&value)` / `Pretty::compact(&value)` format a value with its
+  `Debug` impl (`{:#?}` / `{:?}`) and colorize the result with the built-in
+  `ReprHighlighter` (numbers, strings, `None`/`Some`, paths, …). Rust has no
+  reflection, so this replaces upstream's Python-object introspection; a few
+  Rust spellings (`true`/`false`) are left unstyled (DIVERGENCES #19).
 - **Syntax highlighting** (`syntax.rs`, port of `rich/syntax.py`'s renderable via
   the `syntect` crate): `Syntax::new(code, language)` highlights a code block into
   a solid colored panel (fg/bg + bold/italic/underline, each line padded to width
