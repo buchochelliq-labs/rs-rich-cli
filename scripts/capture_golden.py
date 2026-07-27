@@ -169,6 +169,15 @@ def _style_table() -> Table:
     return table
 
 
+def _nowrap_table() -> Table:
+    # A single no_wrap column that must crop to one line (with ellipsis).
+    table = Table(box=box.SQUARE)
+    table.add_column("Note", no_wrap=True)
+    table.add_row("this is a fairly long note that will not fit")
+    table.add_row("short")
+    return table
+
+
 def _justify_table() -> Table:
     table = Table(box=box.SQUARE)
     table.add_column("L", justify="left")
@@ -234,6 +243,7 @@ RENDERABLE_CASES = [
     ("table_lines", 30, _lines_table()),
     ("table_col_width", 40, _width_table()),
     ("table_col_style", 40, _style_table()),
+    ("table_nowrap", 20, _nowrap_table()),
     ("tree_nested", 40, _tree()),
     ("align_center", 20, Align.center("hi")),
     ("align_right", 20, Align.right("hi")),

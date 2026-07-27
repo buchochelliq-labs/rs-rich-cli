@@ -146,6 +146,14 @@ fn style_table() -> Table {
     table
 }
 
+fn nowrap_table() -> Table {
+    let mut table = Table::new().box_set(SQUARE);
+    table.add_column("Note").column_no_wrap();
+    table.add_row(&["this is a fairly long note that will not fit"]);
+    table.add_row(&["short"]);
+    table
+}
+
 fn justify_table() -> Table {
     let mut table = Table::new().box_set(SQUARE);
     table.add_column_justify("L", Justify::Left);
@@ -230,6 +238,7 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "table_lines" => Box::new(lines_table()),
         "table_col_width" => Box::new(width_table()),
         "table_col_style" => Box::new(style_table()),
+        "table_nowrap" => Box::new(nowrap_table()),
         "tree_nested" => Box::new(sample_tree()),
         "align_center" | "align_center_odd" => Box::new(Align::center(Box::new(Text::new("hi")))),
         "align_right" => Box::new(Align::right(Box::new(Text::new("hi")))),

@@ -25,6 +25,8 @@ struct Column {
     width: Option<usize>,
     /// A style applied to this column's body cells.
     style: Style,
+    /// When set, cells are never wrapped — they crop to one line (with ellipsis).
+    no_wrap: bool,
 }
 
 /// A grid of cells rendered inside a box. Mirrors `rich.table.Table`.
@@ -113,6 +115,7 @@ impl Table {
             justify,
             width: None,
             style: Style::new(),
+            no_wrap: false,
         });
         self
     }
@@ -132,6 +135,15 @@ impl Table {
     pub fn column_style(&mut self, style: Style) -> &mut Self {
         if let Some(column) = self.columns.last_mut() {
             column.style = style;
+        }
+        self
+    }
+
+    /// Mark the most-recently-added column `no_wrap`: its cells crop to a single
+    /// line (with ellipsis) instead of wrapping. Chain after `add_column`.
+    pub fn column_no_wrap(&mut self) -> &mut Self {
+        if let Some(column) = self.columns.last_mut() {
+            column.no_wrap = true;
         }
         self
     }
@@ -178,8 +190,13 @@ impl Table {
 
         let table_width: i64 = widths.iter().sum();
         if table_width > available as i64 {
-            // Only auto-width columns may shrink; fixed columns hold their width.
-            let wrapable: Vec<bool> = self.columns.iter().map(|c| c.width.is_none()).collect();
+            // Only auto-width, wrapping columns may shrink; fixed and no_wrap
+            // columns hold their width (no_wrap only yields via the last resort).
+            let wrapable: Vec<bool> = self
+                .columns
+                .iter()
+                .map(|c| c.width.is_none() && !c.no_wrap)
+                .collect();
             widths = collapse_widths(widths, &wrapable, available as i64);
             // Last resort: if fixed columns still overflow, reduce every column
             // evenly. Port of `_calculate_column_widths`'s final `ratio_reduce`.
@@ -236,13 +253,16 @@ impl Table {
             let style = self.cell_style(index, is_header);
             let cell_fill = Some(style.clone());
             let content = cells.get(index).map(String::as_str).unwrap_or("");
-            let justify = self
-                .columns
-                .get(index)
-                .map(|column| column.justify)
-                .unwrap_or(Justify::Left);
-            // Wrap with ellipsis overflow (table default), then justify + pad.
-            let wrapped = wrap_cell(content, *width).join("\n");
+            let column = self.columns.get(index);
+            let justify = column.map(|c| c.justify).unwrap_or(Justify::Left);
+            let no_wrap = column.map(|c| c.no_wrap).unwrap_or(false);
+            // A no_wrap cell is one ellipsis-cropped line; otherwise wrap with
+            // ellipsis overflow (the table default). Then justify + pad.
+            let wrapped = if no_wrap {
+                ellipsis_crop(content, *width)
+            } else {
+                wrap_cell(content, *width).join("\n")
+            };
             let text = Text::new(wrapped).justify(justify);
             let mut lines = text.render_lines(&style, Some(*width));
             if lines.is_empty() {

@@ -8,6 +8,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Table `no_wrap`** (`table.rs`, toward `rich/table.py`): `Table::column_no_wrap`
+  marks a column whose cells crop to a single line with ellipsis instead of
+  wrapping, and which doesn't shrink during collapse (only yielding via the
+  last-resort even reduce). Byte-parity-tested (golden `table_nowrap`). Narrows
+  DIVERGENCES #7 (only per-column ratio/min/max and the width-0 padding edge
+  remain).
 - **`Live`** (`live.rs`, port of `rich/live.py`'s manual-refresh core): drives a
   `LiveRender` over a generic `Write` sink — `start` hides the cursor and draws,
   `update`/`refresh` reposition and redraw in place, `stop` commits the final
