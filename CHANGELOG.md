@@ -8,6 +8,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`Progress` `Download` column + `filesize::pick_unit_and_suffix`** (`progress.rs`,
+  `filesize.rs`, advances DIVERGENCES #16): the `DownloadColumn` renders
+  `completed`/`total` in a shared SI byte unit (`0.5/1.0 kB`), byte-parity with
+  rich 15.0.0. Added `pick_unit_and_suffix` (the unit/suffix picker upstream's
+  download/transfer columns share). This completes the *deterministic* Progress
+  columns; only the wall-clock columns (spinner/speed/time) + the `Live` loop
+  remain.
 - **`Progress` custom columns** (`progress.rs`, advances DIVERGENCES #16):
   generalized from a hard-coded 3-column layout to a configurable
   `ProgressColumn` list (`Progress::columns`). Deterministic columns ported

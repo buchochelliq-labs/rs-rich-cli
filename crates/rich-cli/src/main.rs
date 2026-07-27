@@ -465,6 +465,15 @@ fn run_demo() {
     mofn.add_task("Chunks", 128.0, 128.0);
     console.print(&mofn);
 
+    // Progress with a download column — completed/total in shared byte units.
+    let mut download = Progress::new().columns(vec![
+        ProgressColumn::Description,
+        ProgressColumn::Bar,
+        ProgressColumn::Download,
+    ]);
+    download.add_task("archive.tar", 10_000_000.0, 4_200_000.0);
+    console.print(&download);
+
     // JSON — pretty-printed and highlighted.
     console.print(&Rule::new("json"));
     if let Ok(json) = Json::new(
