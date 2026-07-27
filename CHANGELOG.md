@@ -8,6 +8,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`Status`** (`status.rs`, port of `rich/status.py`) + **styled spinner frames**:
+  `Status::new("…")` renders a spinner (default `dots`, green) followed by a
+  message; `Spinner::style` styles the frame while the trailing text stays plain.
+  Byte-parity-tested against real rich 15.0.0 (static `t = 0` frame). Live-loop
+  animation is still deferred (DIVERGENCES / issue #6).
 - **HTML export** (`export.rs` + `terminal_theme.rs`, port of
   `Console.export_html` + `_export_format`): `Console::export_html(|c| …)`
   captures printed output and returns a self-contained HTML document with inline

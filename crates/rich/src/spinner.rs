@@ -5,12 +5,13 @@
 //! itself is driven by a `Live` loop (not yet ported); [`Spinner::render`] gives
 //! the frame at a point in time and is the testable surface.
 //!
-//! Scope: all built-in spinners (vendored in `spinner_data.rs`) with plain
-//! (unstyled) frames. Styled frames land with the Live-loop work.
+//! Scope: all built-in spinners (vendored in `spinner_data.rs`), an optional
+//! trailing text and a frame [`Style`]. Live-loop animation is still deferred.
 
 use crate::console::{Console, ConsoleOptions};
 use crate::protocol::Renderable;
 use crate::segment::Segment;
+use crate::style::Style;
 use crate::text::Text;
 
 /// A named terminal spinner. Mirrors `rich.spinner.Spinner`.
@@ -20,6 +21,7 @@ pub struct Spinner {
     interval: f64,
     text: String,
     speed: f64,
+    style: Option<Style>,
 }
 
 impl Spinner {
@@ -33,6 +35,7 @@ impl Spinner {
             interval,
             text: String::new(),
             speed: 1.0,
+            style: None,
         }
     }
 
@@ -48,20 +51,32 @@ impl Spinner {
         self
     }
 
+    /// Style applied to the spinner *frame* (not the trailing text).
+    pub fn style(mut self, style: Style) -> Self {
+        self.style = Some(style);
+        self
+    }
+
     /// The frame index at `time` seconds (from an implicit start of 0).
     fn frame_index(&self, time: f64) -> usize {
         let interval_secs = self.interval / 1000.0;
         ((time * self.speed / interval_secs) as usize) % self.frames.len()
     }
 
-    /// Render the spinner as it appears at `time` seconds. Port of `Spinner.render`.
+    /// Render the spinner as it appears at `time` seconds. Port of
+    /// `Spinner.render` (`Text.assemble(frame, " ", text)`): the frame carries
+    /// the spinner style, the trailing `" text"` stays plain.
     pub fn render(&self, time: f64) -> Text {
         let frame = self.frames[self.frame_index(time)];
-        if self.text.is_empty() {
+        let mut text = if self.text.is_empty() {
             Text::new(frame)
         } else {
             Text::new(format!("{frame} {}", self.text))
+        };
+        if let Some(style) = &self.style {
+            text.stylize(0, frame.len(), style.clone());
         }
+        text
     }
 }
 
@@ -126,5 +141,23 @@ mod tests {
             .build();
         let out = console.render_to_string(&Spinner::new("dots").text("Working").render(0.0));
         assert_eq!(out, "⠋ Working");
+    }
+
+    #[test]
+    fn styled_frame_only() {
+        // Captured from real rich 15.0.0: the frame is green, " Working" plain.
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(30)
+            .no_color(false)
+            .build();
+        let spinner = Spinner::new("dots")
+            .text("Working")
+            .style(crate::style::Style::parse("green").unwrap());
+        assert_eq!(
+            console.render_to_string(&spinner.render(0.0)),
+            "\x1b[32m⠋\x1b[0m Working"
+        );
     }
 }

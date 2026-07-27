@@ -15,7 +15,7 @@ use rich::text::Text;
 use rich::{
     filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, Control, Highlighter,
     HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, Padding, Panel, ProgressBar,
-    Renderable, Rule, Spinner, Style, Styled, Table, Tree, DEFAULT_TERMINAL_THEME,
+    Renderable, Rule, Spinner, Status, Style, Styled, Table, Tree, DEFAULT_TERMINAL_THEME,
 };
 use rich_ext::ConsoleExt;
 
@@ -532,6 +532,9 @@ fn run_demo() {
             .join(" ");
         console.print_str(&format!("  {name:>11}: {frames}"));
     }
+    // Status — a spinner + message (green frame; animation needs a Live loop).
+    let status = Status::new("Loading…").renderable().render(0.0);
+    console.print(&Text::new("       status: ").append_text(&status));
 
     // filesize.
     console.print(&Rule::new("filesize"));
