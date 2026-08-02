@@ -12,7 +12,7 @@ use std::io::Read;
 use std::process::ExitCode;
 
 use rich::markdown::Markdown;
-use rich::r#box::{Box as BoxSet, ASCII, ASCII2, DOUBLE, HEAVY, ROUNDED, SQUARE};
+use rich::r#box::{Box as BoxSet, ASCII, ASCII2, DOUBLE, HEAVY, NONE, ROUNDED, SQUARE};
 use rich::text::Text;
 use rich::{
     filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, Control, Highlighter,
@@ -63,6 +63,12 @@ struct Cli {
     panel: Option<BoxSet>,
     /// `--padding T[,R[,B,L]]`: wrap the output in [`Padding`].
     padding: Option<(usize, usize, usize, usize)>,
+    /// `--title`: a panel title (only used with `--panel`).
+    title: Option<String>,
+    /// `--caption`: a panel subtitle (only used with `--panel`).
+    caption: Option<String>,
+    /// `--style`: the panel border style (only used with `--panel`).
+    border_style: Option<Style>,
 }
 
 fn main() -> ExitCode {
@@ -78,9 +84,10 @@ fn main() -> ExitCode {
 }
 
 /// Map a `--panel` box name to a box set (port of rich-cli's `BOXES` +
-/// `getattr(box, name.upper())`). `none` isn't supported (no borderless box yet).
+/// `getattr(box, name.upper())`).
 fn parse_box(name: &str) -> Result<BoxSet, String> {
     match name.to_ascii_lowercase().as_str() {
+        "none" => Ok(NONE),
         "ascii" => Ok(ASCII),
         "ascii2" => Ok(ASCII2),
         "square" => Ok(SQUARE),
@@ -88,7 +95,7 @@ fn parse_box(name: &str) -> Result<BoxSet, String> {
         "heavy" => Ok(HEAVY),
         "double" => Ok(DOUBLE),
         other => Err(format!(
-            "unknown panel box {other:?} (use ascii/ascii2/square/rounded/heavy/double)"
+            "unknown panel box {other:?} (use none/ascii/ascii2/square/rounded/heavy/double)"
         )),
     }
 }
@@ -134,6 +141,9 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut export_svg = false;
     let mut panel = None;
     let mut padding = None;
+    let mut title = None;
+    let mut caption = None;
+    let mut border_style = None;
 
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -165,6 +175,17 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--padding" => {
                 let value = iter.next().ok_or("--padding requires a value")?;
                 padding = Some(parse_padding(value)?);
+            }
+            "--title" => {
+                title = Some(iter.next().ok_or("--title requires a value")?.clone());
+            }
+            "--caption" => {
+                caption = Some(iter.next().ok_or("--caption requires a value")?.clone());
+            }
+            "--style" => {
+                let value = iter.next().ok_or("--style requires a value")?;
+                border_style =
+                    Some(Style::parse(value).map_err(|e| format!("invalid --style: {e}"))?);
             }
             "-w" | "--width" => {
                 let value = iter.next().ok_or("--width requires a number")?;
@@ -200,6 +221,9 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         export_svg,
         panel,
         padding,
+        title,
+        caption,
+        border_style,
     }))
 }
 
@@ -347,7 +371,17 @@ fn run(cli: Cli) -> ExitCode {
             content = Box::new(Padding::new(content, pad));
         }
         if let Some(box_set) = cli.panel {
-            content = Box::new(Panel::new(content).box_set(box_set));
+            let mut panel = Panel::new(content).box_set(box_set);
+            if let Some(title) = cli.title.clone() {
+                panel = panel.title(title);
+            }
+            if let Some(caption) = cli.caption.clone() {
+                panel = panel.subtitle(caption);
+            }
+            if let Some(style) = cli.border_style.clone() {
+                panel = panel.border_style(style);
+            }
+            content = Box::new(panel);
         }
         emit(&console, &export, |c| c.print(content.as_ref()));
         return ExitCode::SUCCESS;
@@ -514,8 +548,11 @@ OPTIONS:\n\
         --right       Right-justify output\n\
         --export-html Emit a self-contained HTML document instead of ANSI\n\
         --export-svg  Emit a self-contained SVG document instead of ANSI\n\
-        --panel BOX   Wrap output in a panel (ascii/ascii2/square/rounded/heavy/double)\n\
+        --panel BOX   Wrap output in a panel (none/ascii/ascii2/square/rounded/heavy/double)\n\
         --padding P   Wrap output in padding (1, 2, or 4 comma-separated ints)\n\
+        --title T     Panel title (with --panel)\n\
+        --caption T   Panel caption/subtitle (with --panel)\n\
+        --style S     Panel border style, e.g. \"bold red\" (with --panel)\n\
         --no-color    Disable colored output\n\
     -h, --help        Show this help\n\
     -V, --version     Show the version (mirrors upstream rich-cli)\n\
@@ -933,7 +970,7 @@ mod tests {
     fn parse_box_maps_names() {
         assert!(parse_box("rounded").is_ok());
         assert!(parse_box("HEAVY").is_ok());
-        assert!(parse_box("none").is_err()); // borderless box unsupported
+        assert!(parse_box("none").is_ok()); // borderless box
         assert!(parse_box("bogus").is_err());
     }
 

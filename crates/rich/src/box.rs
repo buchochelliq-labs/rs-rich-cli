@@ -308,6 +308,9 @@ pub const MINIMAL_HEAVY_HEAD: Box = Box::parse("  ╷ \n  │ \n╺━┿╸\n  
 
 pub const MINIMAL_DOUBLE_HEAD: Box = Box::parse("  ╷ \n  │ \n ═╪ \n  │ \n ─┼ \n ─┼ \n  │ \n  ╵ \n");
 
+/// A fully blank box (all spaces) — no visible borders. Port of `box.NONE`.
+pub const NONE: Box = Box::parse("    \n    \n    \n    \n    \n    \n    \n    \n");
+
 /// A boxless table with a light head/foot rule. Used by Markdown tables.
 pub const SIMPLE: Box = Box::parse("    \n    \n ── \n    \n    \n ── \n    \n    \n");
 

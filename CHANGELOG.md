@@ -8,6 +8,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`rich-cli` panel `--title` / `--caption` / `--style` + `none` box**
+  (`rich-cli/main.rs`, `box.rs`): completes the `--panel` decorator to full
+  rich-cli fidelity — the panel gets a title (top border), caption (bottom
+  border), and border style (e.g. `--style "bold red"`); `--panel none` uses the
+  new blank `box.NONE`. Composes the already-byte-parity `Panel` builders.
 - **`rich-cli` `--panel` / `--padding` decorators** (`rich-cli/main.rs`): wrap any
   render mode's output in a `Panel` (`--panel ascii|ascii2|square|rounded|heavy|
   double`) and/or `Padding` (`--padding` with 1, 2, or 4 comma-separated ints,
