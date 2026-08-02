@@ -29,6 +29,16 @@ pulldown-cmark = { version = "0.12", default-features = false }
 # Syntax highlighting engine (Pygments-equivalent). `default-fancy` uses the
 # pure-Rust fancy-regex backend, avoiding the C `onig` dependency.
 syntect = { version = "5", default-features = false, features = ["default-fancy"] }
+# Blocking HTTP client for the CLI's URL fetch (rich-cli's `rich <url>`). Uses
+# rustls + bundled webpki roots (self-contained TLS, no OS cert dependency).
+# Behind rich-cli's default `fetch` feature so lean builds can opt out.
+#
+# Pinned below 3.3 because 3.3 itself declares rust-version 1.85. NOTE: this pin
+# does NOT bring the dependency tree within `rust-version` below — ureq 3.2.1
+# still pulls rustls -> zeroize 1.9 (needs 1.85). The declared 1.74 was already
+# unachievable before this dep (syntect -> plist/time need 1.88); the floor is
+# tracked as its own issue rather than silently rewritten here.
+ureq = ">=3.2, <3.3"
 
 # Core stays safe by default; the future Windows-console port may opt back in
 # per-item with an explicit `#[allow(unsafe_code)]` + justification.

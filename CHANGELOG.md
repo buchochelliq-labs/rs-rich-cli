@@ -8,6 +8,20 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`rich-cli` URL fetch** (`rich-cli/main.rs`, completes the common CLI surface):
+  `rich <url>` fetches an `http(s)` resource and renders it — the render mode
+  comes from a flag, else the URL extension, else the response `Content-Type`
+  (markdown/json/csv), else syntax-highlighting (with a lexer guessed from the
+  Content-Type; upstream's behavior). Fetching uses `ureq` (rustls +
+  bundled webpki roots — self-contained TLS), bounded by a 30 s timeout and a
+  16 MiB **decoded**-body limit, behind a **default `fetch` feature**
+  (`--no-default-features` gives a lean, network-free build). Like
+  `requests.get`, a non-2xx status still renders the response body. The size
+  limit is applied to the post-decompression stream (ureq's own `limit()` sits
+  *under* the gzip decoder and would only bound compressed bytes, leaving a
+  decompression-bomb hole); oversized and non-UTF-8 bodies get their own clear
+  errors. The only deliberate divergences from upstream are the timeout and size
+  bound, which upstream lacks.
 - **`Live` auto-refresh thread** (`live.rs`, advances DIVERGENCES #17):
   `Live::spawn(renderable, console, writer, refresh_per_second)` returns an
   `AutoLive` handle whose background thread redraws on an interval (and on each

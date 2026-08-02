@@ -5,8 +5,9 @@
 //! `--markdown`, `--json`, `--syntax`, `--csv`, `--ipynb`, and `--rule`, plus
 //! width/justify, HTML/SVG export (`--export-html`/`--export-svg`), the
 //! `--panel`/`--padding` decorators (with `--title`/`--caption`/`--style`), a
-//! plain-file printer (with extension auto-detection), and a capability demo.
-//! Remaining rich-cli surface (URL fetch, paging) is tracked as roadmap issues.
+//! plain-file printer (with extension auto-detection), **URL fetch** (`rich <url>`,
+//! behind the default `fetch` feature), and a capability demo. Remaining rich-cli
+//! surface (paging) is tracked as roadmap issues.
 
 use std::io::Read;
 use std::process::ExitCode;
@@ -124,7 +125,8 @@ fn parse_padding(value: &str) -> Result<(usize, usize, usize, usize), String> {
 fn set_mode(current: &mut Mode, mode: Mode) -> Result<(), String> {
     if *current != Mode::Auto && *current != mode {
         return Err(
-            "only one render mode (--print/--markdown/--json/--syntax/--csv/--rule) may be given"
+            "only one render mode (--print/--markdown/--json/--syntax/--csv/--ipynb/--rule) \
+             may be given"
                 .into(),
         );
     }
@@ -242,13 +244,144 @@ fn read_resource(resource: Option<&str>) -> std::io::Result<String> {
     }
 }
 
+/// Whether `resource` is an `http(s)` URL (rich-cli's `rich <url>`). The scheme
+/// is matched case-insensitively, as RFC 3986 specifies.
+fn is_url(resource: &str) -> bool {
+    let head: String = resource.chars().take(8).collect::<String>().to_lowercase();
+    head.starts_with("http://") || head.starts_with("https://")
+}
+
+/// The lowercased file extension of a resource, taken from its basename (the
+/// last path segment) with any `?query`/`#fragment` stripped — so it works for
+/// URLs (`…/main.rs?raw=1` → `rs`) as well as plain paths.
+fn resource_ext(resource: &str) -> Option<String> {
+    let basename = resource.rsplit(['/', '\\']).next().unwrap_or(resource);
+    let basename = basename.split(['?', '#']).next().unwrap_or(basename);
+    basename
+        .rsplit_once('.')
+        .map(|(_, ext)| ext.to_ascii_lowercase())
+        .filter(|ext| !ext.is_empty())
+}
+
+/// The maximum *decoded* response body we will hold in memory, in bytes.
+/// Exceeding it is a hard error (we never render a truncated resource).
+#[cfg(feature = "fetch")]
+const MAX_BODY_BYTES: u64 = 16 * 1024 * 1024;
+
+/// Fetch a URL over HTTP(S), returning `(body, content_type)`. Port of
+/// rich-cli's `requests.get`, with two deliberate safety bounds upstream lacks:
+/// a 30-second global timeout and [`MAX_BODY_BYTES`].
+///
+/// Like `requests.get`, a non-2xx status is **not** an error — the body is
+/// returned so an error page still renders. TLS verification is on (rustls with
+/// bundled webpki roots).
+#[cfg(feature = "fetch")]
+fn fetch_url(url: &str) -> Result<(String, Option<String>), String> {
+    use std::time::Duration;
+    let mut response = ureq::get(url)
+        .config()
+        .timeout_global(Some(Duration::from_secs(30)))
+        // Match `requests.get`: don't turn 4xx/5xx into an error, so the
+        // response body (often a useful error page) is rendered instead.
+        .http_status_as_error(false)
+        .build()
+        .call()
+        .map_err(|err| format!("cannot fetch {url}: {err}"))?;
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
+
+    // Bound the *decoded* body: `.reader()` yields post-decompression bytes, so
+    // capping it here (rather than via ureq's `limit()`, whose LimitReader sits
+    // *under* the gzip decoder and would only bound compressed bytes) also
+    // defuses a `Content-Encoding: gzip` bomb. Read one byte past the limit so
+    // an oversized body is detectable rather than silently truncated.
+    let mut buffer = Vec::new();
+    response
+        .body_mut()
+        .with_config()
+        .reader()
+        .take(MAX_BODY_BYTES + 1)
+        .read_to_end(&mut buffer)
+        .map_err(|err| format!("cannot read {url}: {err}"))?;
+    if buffer.len() as u64 > MAX_BODY_BYTES {
+        return Err(format!(
+            "{url} exceeds the {} MiB limit",
+            MAX_BODY_BYTES / (1024 * 1024)
+        ));
+    }
+    let body = String::from_utf8(buffer)
+        .map_err(|_| format!("{url} is not valid UTF-8 text (binary content?)"))?;
+    Ok((body, content_type))
+}
+
+/// Stub used when the crate is built without the `fetch` feature.
+#[cfg(not(feature = "fetch"))]
+fn fetch_url(url: &str) -> Result<(String, Option<String>), String> {
+    Err(format!(
+        "cannot fetch {url}: this build has no URL support (rebuild with the `fetch` feature)"
+    ))
+}
+
+/// The high-level render mode implied by a response `Content-Type` (the MIME
+/// type, ignoring any `; charset=…`). Used only when neither a flag nor the URL
+/// extension already picked a mode.
+fn content_type_mode(content_type: &str) -> Option<Mode> {
+    let mime = mime_of(content_type);
+    match mime.as_str() {
+        "text/markdown" | "text/x-markdown" => Some(Mode::Markdown),
+        "application/json" | "text/json" => Some(Mode::Json),
+        "text/csv" => Some(Mode::Csv),
+        _ => None,
+    }
+}
+
+/// A syntect lexer name for a response `Content-Type`, for syntax-highlighting a
+/// fetched resource that has no informative extension. A small common subset of
+/// upstream's Pygments MIME table.
+fn content_type_lexer(content_type: &str) -> Option<&'static str> {
+    let mime = mime_of(content_type);
+    Some(match mime.as_str() {
+        "text/html" | "application/xhtml+xml" => "html",
+        "text/css" => "css",
+        "application/javascript" | "text/javascript" => "javascript",
+        "application/xml" | "text/xml" => "xml",
+        "text/x-python" | "application/x-python" | "text/x-python3" => "python",
+        "text/x-rust" => "rust",
+        "text/x-c" | "text/x-csrc" => "c",
+        "application/x-sh" | "text/x-shellscript" => "bash",
+        "application/x-yaml" | "text/yaml" | "text/x-yaml" => "yaml",
+        "application/toml" | "text/x-toml" => "toml",
+        _ => return None,
+    })
+}
+
+/// Whether an extension names no particular language, so a `Content-Type` that
+/// does should win when picking a syntax lexer.
+fn is_uninformative_ext(ext: &str) -> bool {
+    matches!(ext, "txt" | "text" | "log" | "dat" | "out")
+}
+
+/// The bare MIME type from a `Content-Type` header (lowercased, `; charset=…`
+/// and surrounding whitespace stripped).
+fn mime_of(content_type: &str) -> String {
+    content_type
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase()
+}
+
 /// Resolve `Mode::Auto` to a concrete mode from the resource's file extension.
 fn detect_mode(resource: Option<&str>) -> Mode {
-    match resource.and_then(|r| r.rsplit_once('.').map(|(_, ext)| ext.to_ascii_lowercase())) {
-        Some(ext) if ext == "md" || ext == "markdown" => Mode::Markdown,
-        Some(ext) if ext == "json" => Mode::Json,
-        Some(ext) if ext == "csv" || ext == "tsv" => Mode::Csv,
-        Some(ext) if ext == "ipynb" => Mode::Ipynb,
+    match resource.and_then(resource_ext).as_deref() {
+        Some("md") | Some("markdown") => Mode::Markdown,
+        Some("json") => Mode::Json,
+        Some("csv") | Some("tsv") => Mode::Csv,
+        Some("ipynb") => Mode::Ipynb,
         _ => Mode::Auto,
     }
 }
@@ -287,12 +420,13 @@ fn run(cli: Cli) -> ExitCode {
         Export::Terminal
     };
 
-    let mode = match cli.mode {
+    let mut mode = match cli.mode {
         Mode::Auto => detect_mode(cli.resource.as_deref()),
         other => other,
     };
 
-    // A rule takes its optional title from the resource string directly.
+    // A rule takes its optional title from the resource string directly (no
+    // fetch/read).
     if mode == Mode::Rule {
         let rule = match cli.resource.as_deref() {
             Some(title) if title != "-" => Rule::new(title),
@@ -302,13 +436,23 @@ fn run(cli: Cli) -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    // `--print` treats the resource as a literal markup string, not a file path
-    // (stdin when it's `-` or absent). Other modes read the resource as a file.
-    let content = if mode == Mode::Print && matches!(cli.resource.as_deref(), Some(r) if r != "-") {
-        cli.resource.clone().unwrap()
+    // Obtain the content: fetch it over HTTP(S) when the resource is a URL,
+    // treat it as a literal markup string under `--print`, else read the
+    // file/stdin. A URL also yields a `Content-Type` used below.
+    let resource_is_url = matches!(cli.resource.as_deref(), Some(r) if is_url(r));
+    let (content, content_type) = if resource_is_url {
+        match fetch_url(cli.resource.as_deref().unwrap()) {
+            Ok(fetched) => fetched,
+            Err(err) => {
+                eprintln!("rich: {err}");
+                return ExitCode::FAILURE;
+            }
+        }
+    } else if mode == Mode::Print && matches!(cli.resource.as_deref(), Some(r) if r != "-") {
+        (cli.resource.clone().unwrap(), None)
     } else {
         match read_resource(cli.resource.as_deref()) {
-            Ok(content) => content,
+            Ok(content) => (content, None),
             Err(err) => {
                 eprintln!(
                     "rich: cannot read {}: {err}",
@@ -318,6 +462,16 @@ fn run(cli: Cli) -> ExitCode {
             }
         }
     };
+
+    // For a URL that neither a flag nor a telltale extension resolved: upstream
+    // renders fetched content as syntax-highlighted source by default, unless the
+    // Content-Type marks it markdown / json / csv.
+    if resource_is_url && mode == Mode::Auto {
+        mode = content_type
+            .as_deref()
+            .and_then(content_type_mode)
+            .unwrap_or(Mode::Syntax);
+    }
 
     // Pre-parse JSON so a parse error surfaces before any (HTML) rendering.
     let json = if mode == Mode::Json {
@@ -332,11 +486,19 @@ fn run(cli: Cli) -> ExitCode {
         None
     };
 
-    // The highlighting language comes from the resource's file extension.
-    let language = cli
-        .resource
-        .as_deref()
-        .and_then(|r| r.rsplit_once('.').map(|(_, ext)| ext.to_string()))
+    // The highlighting language comes from the resource extension, falling back
+    // (for a URL) to a lexer guessed from its Content-Type. An *uninformative*
+    // extension (.txt/.log/…) doesn't shadow a Content-Type that names a real
+    // language, so `snippet.txt` served as `text/x-python` still highlights.
+    let extension = resource_ext(cli.resource.as_deref().unwrap_or_default())
+        .filter(|ext| !is_uninformative_ext(ext));
+    let language = extension
+        .or_else(|| {
+            content_type
+                .as_deref()
+                .and_then(content_type_lexer)
+                .map(str::to_string)
+        })
         .unwrap_or_default();
 
     // Pre-build the CSV/TSV table (delimiter from the extension: tab for `.tsv`).
@@ -627,7 +789,7 @@ fn print_help() {
 USAGE:\n\
     rich [OPTIONS] [RESOURCE]\n\
 \n\
-RESOURCE is a file path, or `-` for stdin.\n\
+RESOURCE is a file path, an http(s) URL, or `-` for stdin.\n\
 \n\
 RENDER MODE (choose at most one; default auto-detects by extension):\n\
     -p, --print      Interpret RESOURCE as console markup\n\
@@ -656,7 +818,7 @@ OPTIONS:\n\
 \n\
 With no RESOURCE and no mode flag, a capability demo is shown.\n\
 \n\
-NOT YET PORTED (tracked as roadmap issues): csv/tsv, ipynb, URL fetch.\n"
+NOT YET PORTED (tracked as roadmap issues): paging.\n"
     );
 }
 
@@ -1051,6 +1213,58 @@ mod tests {
         assert_eq!(parse_csv("a\tb", '\t'), vec![vec!["a", "b"]]);
         // A leading UTF-8 BOM is stripped, not glued to the first cell.
         assert_eq!(parse_csv("\u{feff}a,b", ','), vec![vec!["a", "b"]]);
+    }
+
+    #[test]
+    fn detects_urls() {
+        assert!(is_url("http://example.com"));
+        assert!(is_url("https://example.com/x"));
+        // RFC 3986: the scheme is case-insensitive.
+        assert!(is_url("HTTPS://example.com"));
+        assert!(is_url("Http://example.com"));
+        assert!(!is_url("example.com"));
+        assert!(!is_url("./file.md"));
+        assert!(!is_url("-"));
+        assert!(!is_url("")); // must not panic on a short/empty resource
+        assert!(!is_url("ht"));
+        assert!(!is_url("ftp://example.com"));
+    }
+
+    #[test]
+    fn uninformative_extensions_defer_to_content_type() {
+        assert!(is_uninformative_ext("txt"));
+        assert!(is_uninformative_ext("log"));
+        assert!(!is_uninformative_ext("py"));
+        assert!(!is_uninformative_ext("rs"));
+    }
+
+    #[test]
+    fn resource_ext_uses_basename_without_query() {
+        assert_eq!(resource_ext("a.md").as_deref(), Some("md"));
+        assert_eq!(resource_ext("path/to/b.RS").as_deref(), Some("rs"));
+        assert_eq!(
+            resource_ext("https://x.com/c.py?raw=1").as_deref(),
+            Some("py")
+        );
+        // Dots in the host must not be mistaken for an extension.
+        assert_eq!(resource_ext("https://api.example.com/data"), None);
+        assert_eq!(resource_ext("https://x.com/"), None);
+        assert_eq!(resource_ext("noext"), None);
+    }
+
+    #[test]
+    fn content_type_maps_mode_and_lexer() {
+        assert_eq!(mime_of("text/html; charset=utf-8"), "text/html");
+        assert_eq!(content_type_mode("text/markdown"), Some(Mode::Markdown));
+        assert_eq!(
+            content_type_mode("application/json; charset=utf-8"),
+            Some(Mode::Json)
+        );
+        assert_eq!(content_type_mode("text/csv"), Some(Mode::Csv));
+        assert_eq!(content_type_mode("text/html"), None); // -> syntax, not a mode
+        assert_eq!(content_type_lexer("text/html"), Some("html"));
+        assert_eq!(content_type_lexer("text/x-python"), Some("python"));
+        assert_eq!(content_type_lexer("text/plain"), None);
     }
 
     #[test]
