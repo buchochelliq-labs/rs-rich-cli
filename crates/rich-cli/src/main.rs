@@ -2,11 +2,11 @@
 //!
 //! This binary mirrors the upstream `rich-cli` command-line tool and is built on
 //! the [`rich`] library crate. It implements the rendering modes `--print`,
-//! `--markdown`, `--json`, `--syntax`, `--csv`, and `--rule`, plus width/justify,
-//! HTML/SVG export (`--export-html`/`--export-svg`), the `--panel`/`--padding`
-//! decorators, a plain-file printer (with extension auto-detection), and a
-//! capability demo. Remaining rich-cli surface (`.ipynb`, URL fetch, paging) is
-//! tracked as roadmap issues.
+//! `--markdown`, `--json`, `--syntax`, `--csv`, `--ipynb`, and `--rule`, plus
+//! width/justify, HTML/SVG export (`--export-html`/`--export-svg`), the
+//! `--panel`/`--padding` decorators (with `--title`/`--caption`/`--style`), a
+//! plain-file printer (with extension auto-detection), and a capability demo.
+//! Remaining rich-cli surface (URL fetch, paging) is tracked as roadmap issues.
 
 use std::io::Read;
 use std::process::ExitCode;
@@ -15,10 +15,10 @@ use rich::markdown::Markdown;
 use rich::r#box::{Box as BoxSet, ASCII, ASCII2, DOUBLE, HEAVY, NONE, ROUNDED, SQUARE};
 use rich::text::Text;
 use rich::{
-    filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, Control, Highlighter,
-    HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, Live, LiveRender, LogLevel,
-    LogRender, Padding, Panel, Pretty, Progress, ProgressBar, ProgressColumn, Renderable, Rule,
-    Spinner, Status, Style, Styled, Syntax, Table, Traceback, Tree, DEFAULT_TERMINAL_THEME,
+    filesize, Align, AnsiDecoder, Bar, ColorSystem, Columns, Console, Constrain, Control,
+    Highlighter, HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, Live, LiveRender,
+    LogLevel, LogRender, Padding, Panel, Pretty, Progress, ProgressBar, ProgressColumn, Renderable,
+    Rule, Spinner, Status, Style, Styled, Syntax, Table, Traceback, Tree, DEFAULT_TERMINAL_THEME,
 };
 use rich_ext::ConsoleExt;
 
@@ -44,6 +44,8 @@ enum Mode {
     Syntax,
     /// `--csv`: render a CSV/TSV resource as a table.
     Csv,
+    /// `.ipynb`: render a Jupyter notebook (markdown + code cells + outputs).
+    Ipynb,
     /// `--rule`: draw a horizontal rule (the resource, if any, is its title).
     Rule,
 }
@@ -161,6 +163,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "-j" | "--json" => set_mode(&mut mode, Mode::Json)?,
             "-x" | "--syntax" => set_mode(&mut mode, Mode::Syntax)?,
             "--csv" => set_mode(&mut mode, Mode::Csv)?,
+            "--ipynb" => set_mode(&mut mode, Mode::Ipynb)?,
             "--rule" => set_mode(&mut mode, Mode::Rule)?,
             "--left" => justify = Some(Justify::Left),
             "--right" => justify = Some(Justify::Right),
@@ -245,6 +248,7 @@ fn detect_mode(resource: Option<&str>) -> Mode {
         Some(ext) if ext == "md" || ext == "markdown" => Mode::Markdown,
         Some(ext) if ext == "json" => Mode::Json,
         Some(ext) if ext == "csv" || ext == "tsv" => Mode::Csv,
+        Some(ext) if ext == "ipynb" => Mode::Ipynb,
         _ => Mode::Auto,
     }
 }
@@ -345,7 +349,7 @@ fn run(cli: Cli) -> ExitCode {
 
     // With `--panel`/`--padding`, build the content as a single renderable and
     // wrap it (padding inside, panel outside) — the rich-cli decorator flow.
-    if cli.panel.is_some() || cli.padding.is_some() {
+    if (cli.panel.is_some() || cli.padding.is_some()) && mode != Mode::Ipynb {
         let mut content: Box<dyn Renderable> = match mode {
             Mode::Markdown => Box::new(Markdown::new(&content)),
             Mode::Json => Box::new(Json::new(content.trim()).expect("json validated above")),
@@ -391,6 +395,7 @@ fn run(cli: Cli) -> ExitCode {
         Mode::Markdown => c.print(&Markdown::new(&content)),
         Mode::Json => c.print(json.as_ref().expect("json parsed above")),
         Mode::Csv => c.print(csv_table.as_ref().expect("csv built above")),
+        Mode::Ipynb => render_ipynb(c, &content),
         Mode::Syntax => c.print(&Syntax::new(content.as_str(), language.as_str())),
         Mode::Print => match cli.justify {
             Some(justify) => c.print_justified(&content, justify),
@@ -504,6 +509,97 @@ fn render_csv(rows: &[Vec<String>]) -> Table {
     table
 }
 
+/// Join a notebook cell/output `source` field (a JSON string, or an array of
+/// line strings that already include their trailing newlines).
+fn join_source(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Array(a) => a.iter().filter_map(|v| v.as_str()).collect(),
+        _ => String::new(),
+    }
+}
+
+/// Build an `In [n]:` / `Out[n]:` execution-count label. Port of rich-cli's
+/// `[green]In [[#66ff00]{count}[/#66ff00]]:[/green]` markup (built as spans to
+/// avoid markup-escaping the literal brackets).
+fn io_label(word: &str, count: Option<i64>, base: &str, number: &str) -> Text {
+    let base_style = Style::parse(base).ok();
+    let number_style = Style::parse(number).ok();
+    let n = count.map_or_else(|| " ".to_string(), |c| c.to_string());
+    let mut text = Text::new("");
+    text.append(&format!("{word}["), base_style.clone());
+    text.append(&n, number_style);
+    text.append("]:", base_style);
+    text
+}
+
+/// Decode an output string (which may carry ANSI codes) and print it line by
+/// line — the equivalent of upstream's `Text.from_ansi`.
+fn print_ansi(console: &Console, text: &str) {
+    if text.is_empty() {
+        return;
+    }
+    let mut decoder = AnsiDecoder::new();
+    for line in decoder.decode(text) {
+        console.print(&line);
+    }
+}
+
+/// Render one cell output (stream / error / execute_result / display_data).
+fn render_output(console: &Console, output: &serde_json::Value, count: Option<i64>) {
+    match output["output_type"].as_str().unwrap_or("") {
+        "stream" => print_ansi(console, &join_source(&output["text"])),
+        "error" => print_ansi(console, &join_source(&output["traceback"])),
+        "execute_result" | "display_data" => {
+            console.print(&io_label("Out", count, "red", "#ee4b2b"));
+            print_ansi(console, &join_source(&output["data"]["text/plain"]));
+        }
+        _ => {}
+    }
+}
+
+/// Render a Jupyter notebook: markdown cells as [`Markdown`], code cells as an
+/// `In [n]:` label + a dim [`Panel`] of [`Syntax`] + their outputs, blank-line
+/// separated. Port of rich-cli's `render_ipynb` (rich outputs like images/HTML
+/// are deferred — text/plain, stream, and error tracebacks are handled).
+fn render_ipynb(console: &Console, content: &str) {
+    let notebook: serde_json::Value = match serde_json::from_str(content) {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("rich: invalid notebook JSON: {err}");
+            return;
+        }
+    };
+    let language = notebook["metadata"]["kernelspec"]["language"]
+        .as_str()
+        .or_else(|| notebook["metadata"]["language_info"]["name"].as_str())
+        .unwrap_or("python")
+        .to_string();
+    let empty = Vec::new();
+    let cells = notebook["cells"].as_array().unwrap_or(&empty);
+    for (index, cell) in cells.iter().enumerate() {
+        if index > 0 {
+            console.print(&Text::new("")); // blank line between cells
+        }
+        let source = join_source(&cell["source"]);
+        match cell["cell_type"].as_str().unwrap_or("") {
+            "markdown" => console.print(&Markdown::new(&source)),
+            "code" => {
+                let count = cell["execution_count"].as_i64();
+                console.print(&io_label("In ", count, "green", "#66ff00"));
+                let syntax = Syntax::new(source.as_str(), language.as_str());
+                let panel =
+                    Panel::new(Box::new(syntax)).border_style(Style::parse("dim").expect("valid"));
+                console.print(&panel);
+                for output in cell["outputs"].as_array().unwrap_or(&empty) {
+                    render_output(console, output, count);
+                }
+            }
+            _ => console.print(&Text::new(source.as_str())),
+        }
+    }
+}
+
 /// Where a render action's output goes: straight to the terminal, or captured
 /// into a self-contained HTML or SVG document.
 enum Export<'a> {
@@ -539,6 +635,7 @@ RENDER MODE (choose at most one; default auto-detects by extension):\n\
     -j, --json       Pretty-print RESOURCE as JSON\n\
     -x, --syntax     Syntax-highlight RESOURCE (language from its extension)\n\
         --csv        Render RESOURCE as a CSV/TSV table\n\
+        --ipynb      Render RESOURCE as a Jupyter notebook\n\
         --rule       Draw a horizontal rule (RESOURCE is its title)\n\
 \n\
 OPTIONS:\n\
@@ -954,6 +1051,30 @@ mod tests {
         assert_eq!(parse_csv("a\tb", '\t'), vec![vec!["a", "b"]]);
         // A leading UTF-8 BOM is stripped, not glued to the first cell.
         assert_eq!(parse_csv("\u{feff}a,b", ','), vec![vec!["a", "b"]]);
+    }
+
+    #[test]
+    fn join_source_handles_string_and_array() {
+        use serde_json::json;
+        assert_eq!(join_source(&json!("a\nb")), "a\nb");
+        // Array elements already carry their trailing newlines; they concat.
+        assert_eq!(join_source(&json!(["a\n", "b"])), "a\nb");
+        assert_eq!(join_source(&json!(null)), "");
+    }
+
+    #[test]
+    fn ipynb_extension_auto_detects() {
+        assert_eq!(detect_mode(Some("notebook.ipynb")), Mode::Ipynb);
+    }
+
+    #[test]
+    fn io_label_builds_execution_count() {
+        // "In [1]:" — the plain text (styles aside) should read back exactly.
+        assert_eq!(
+            io_label("In ", Some(1), "green", "#66ff00").plain(),
+            "In [1]:"
+        );
+        assert_eq!(io_label("Out", None, "red", "#ee4b2b").plain(), "Out[ ]:");
     }
 
     #[test]

@@ -8,6 +8,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`rich-cli` `.ipynb` (Jupyter notebook) rendering** (`rich-cli/main.rs`, port
+  of rich-cli's `render_ipynb`): `--ipynb` (and `.ipynb` auto-detect) renders a
+  notebook — markdown cells as `Markdown`, code cells as an `In [n]:` label + a
+  dim `Panel` of `Syntax`, and cell outputs (stream / error traceback /
+  execute_result `text/plain`) decoded via `AnsiDecoder`, blank-line separated.
+  Adds a `serde_json` dependency for notebook parsing. (Rich outputs — images,
+  HTML — are deferred; text is handled.)
 - **`rich-cli` panel `--title` / `--caption` / `--style` + `none` box**
   (`rich-cli/main.rs`, `box.rs`): completes the `--panel` decorator to full
   rich-cli fidelity — the panel gets a title (top border), caption (bottom

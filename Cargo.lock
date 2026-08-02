@@ -288,6 +288,7 @@ version = "1.8.1"
 dependencies = [
  "rich",
  "rich-ext",
+ "serde_json",
 ]
 
 [[package]]
