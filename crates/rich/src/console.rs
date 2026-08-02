@@ -373,7 +373,10 @@ impl Console {
         self.render_to_string(&text)
     }
 
-    fn build_text(&self, content: &str) -> Text {
+    /// Parse `content` as console markup (expanding emoji + applying the active
+    /// highlighters), returning the styled [`Text`] that `print_str` would print.
+    /// Exposed so callers can wrap the markup in another renderable.
+    pub fn build_text(&self, content: &str) -> Text {
         // Emoji shortcodes are expanded before markup parsing (matching upstream's
         // default `emoji=True`); `:name:` and `[tag]` don't overlap.
         let expanded = if self.emoji {

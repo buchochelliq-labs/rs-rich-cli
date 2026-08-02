@@ -8,6 +8,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`rich-cli` `--panel` / `--padding` decorators** (`rich-cli/main.rs`): wrap any
+  render mode's output in a `Panel` (`--panel ascii|ascii2|square|rounded|heavy|
+  double`) and/or `Padding` (`--padding` with 1, 2, or 4 comma-separated ints,
+  unpacked like upstream's `Padding.unpack`), composing the byte-parity Panel/
+  Padding renderables. Port of rich-cli's decorator flow (padding inside, panel
+  outside). `Console::build_text` is now public so the `--print` markup can be
+  wrapped. (`none` box + `--title`/`--caption`/`--style` are follow-ups.)
 - **`rich-cli` `--export-svg`** (`rich-cli/main.rs`): exposes the new SVG export
   through the CLI (any render mode → a self-contained SVG), alongside the existing
   `--export-html`. The two are mutually exclusive; the SVG title is the resource's

@@ -1,16 +1,18 @@
 //! `rich` — a Rust port of the `rich-cli` terminal toolbox.
 //!
 //! This binary mirrors the upstream `rich-cli` command-line tool and is built on
-//! the [`rich`] library crate. It implements a slice of upstream's rendering
-//! flags — `--print`, `--markdown`, `--json`, `--syntax`, `--csv`, `--rule` — plus width/justify
-//! options, a plain-file printer (with extension auto-detection), and a
-//! capability demo. Syntax, CSV, and export flags are tracked as roadmap issues.
+//! the [`rich`] library crate. It implements the rendering modes `--print`,
+//! `--markdown`, `--json`, `--syntax`, `--csv`, and `--rule`, plus width/justify,
+//! HTML/SVG export (`--export-html`/`--export-svg`), the `--panel`/`--padding`
+//! decorators, a plain-file printer (with extension auto-detection), and a
+//! capability demo. Remaining rich-cli surface (`.ipynb`, URL fetch, paging) is
+//! tracked as roadmap issues.
 
 use std::io::Read;
 use std::process::ExitCode;
 
 use rich::markdown::Markdown;
-use rich::r#box::{DOUBLE, SQUARE};
+use rich::r#box::{Box as BoxSet, ASCII, ASCII2, DOUBLE, HEAVY, ROUNDED, SQUARE};
 use rich::text::Text;
 use rich::{
     filesize, Align, Bar, ColorSystem, Columns, Console, Constrain, Control, Highlighter,
@@ -57,6 +59,10 @@ struct Cli {
     export_html: bool,
     /// Emit a self-contained SVG document instead of writing to the terminal.
     export_svg: bool,
+    /// `--panel BOX`: wrap the output in a [`Panel`] with the named box.
+    panel: Option<BoxSet>,
+    /// `--padding T[,R[,B,L]]`: wrap the output in [`Padding`].
+    padding: Option<(usize, usize, usize, usize)>,
 }
 
 fn main() -> ExitCode {
@@ -68,6 +74,40 @@ fn main() -> ExitCode {
             eprintln!("rich: {message} (try --help)");
             ExitCode::FAILURE
         }
+    }
+}
+
+/// Map a `--panel` box name to a box set (port of rich-cli's `BOXES` +
+/// `getattr(box, name.upper())`). `none` isn't supported (no borderless box yet).
+fn parse_box(name: &str) -> Result<BoxSet, String> {
+    match name.to_ascii_lowercase().as_str() {
+        "ascii" => Ok(ASCII),
+        "ascii2" => Ok(ASCII2),
+        "square" => Ok(SQUARE),
+        "rounded" => Ok(ROUNDED),
+        "heavy" => Ok(HEAVY),
+        "double" => Ok(DOUBLE),
+        other => Err(format!(
+            "unknown panel box {other:?} (use ascii/ascii2/square/rounded/heavy/double)"
+        )),
+    }
+}
+
+/// Parse a `--padding` value: 1, 2, or 4 comma-separated integers, unpacked into
+/// `(top, right, bottom, left)`. Port of rich-cli's padding parsing + upstream's
+/// `Padding.unpack`.
+fn parse_padding(value: &str) -> Result<(usize, usize, usize, usize), String> {
+    let error = || "padding should be 1, 2, or 4 integers separated by commas".to_string();
+    let parts: Result<Vec<usize>, _> = value
+        .split(',')
+        .map(|p| p.trim().parse::<usize>())
+        .collect();
+    let parts = parts.map_err(|_| error())?;
+    match parts.as_slice() {
+        [p] => Ok((*p, *p, *p, *p)),
+        [v, h] => Ok((*v, *h, *v, *h)),
+        [t, r, b, l] => Ok((*t, *r, *b, *l)),
+        _ => Err(error()),
     }
 }
 
@@ -92,6 +132,8 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut no_color = false;
     let mut export_html = false;
     let mut export_svg = false;
+    let mut panel = None;
+    let mut padding = None;
 
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -116,6 +158,14 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--no-color" => no_color = true,
             "--export-html" => export_html = true,
             "--export-svg" => export_svg = true,
+            "--panel" => {
+                let value = iter.next().ok_or("--panel requires a box name")?;
+                panel = Some(parse_box(value)?);
+            }
+            "--padding" => {
+                let value = iter.next().ok_or("--padding requires a value")?;
+                padding = Some(parse_padding(value)?);
+            }
             "-w" | "--width" => {
                 let value = iter.next().ok_or("--width requires a number")?;
                 width = Some(
@@ -148,6 +198,8 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         no_color,
         export_html,
         export_svg,
+        panel,
+        padding,
     }))
 }
 
@@ -266,6 +318,40 @@ fn run(cli: Cli) -> ExitCode {
     } else {
         None
     };
+
+    // With `--panel`/`--padding`, build the content as a single renderable and
+    // wrap it (padding inside, panel outside) — the rich-cli decorator flow.
+    if cli.panel.is_some() || cli.padding.is_some() {
+        let mut content: Box<dyn Renderable> = match mode {
+            Mode::Markdown => Box::new(Markdown::new(&content)),
+            Mode::Json => Box::new(Json::new(content.trim()).expect("json validated above")),
+            Mode::Csv => {
+                let delimiter = if language == "tsv" { '\t' } else { ',' };
+                Box::new(render_csv(&parse_csv(&content, delimiter)))
+            }
+            Mode::Syntax => Box::new(Syntax::new(content.as_str(), language.as_str())),
+            _ => {
+                // Print + auto: parse markup (Print) or take plain text (auto).
+                let mut text = if mode == Mode::Print {
+                    console.build_text(&content)
+                } else {
+                    Text::new(content.as_str())
+                };
+                if let Some(justify) = cli.justify {
+                    text = text.justify(justify);
+                }
+                Box::new(text)
+            }
+        };
+        if let Some(pad) = cli.padding {
+            content = Box::new(Padding::new(content, pad));
+        }
+        if let Some(box_set) = cli.panel {
+            content = Box::new(Panel::new(content).box_set(box_set));
+        }
+        emit(&console, &export, |c| c.print(content.as_ref()));
+        return ExitCode::SUCCESS;
+    }
 
     emit(&console, &export, |c| match mode {
         Mode::Markdown => c.print(&Markdown::new(&content)),
@@ -428,6 +514,8 @@ OPTIONS:\n\
         --right       Right-justify output\n\
         --export-html Emit a self-contained HTML document instead of ANSI\n\
         --export-svg  Emit a self-contained SVG document instead of ANSI\n\
+        --panel BOX   Wrap output in a panel (ascii/ascii2/square/rounded/heavy/double)\n\
+        --padding P   Wrap output in padding (1, 2, or 4 comma-separated ints)\n\
         --no-color    Disable colored output\n\
     -h, --help        Show this help\n\
     -V, --version     Show the version (mirrors upstream rich-cli)\n\
@@ -829,6 +917,24 @@ mod tests {
         assert_eq!(parse_csv("a\tb", '\t'), vec![vec!["a", "b"]]);
         // A leading UTF-8 BOM is stripped, not glued to the first cell.
         assert_eq!(parse_csv("\u{feff}a,b", ','), vec![vec!["a", "b"]]);
+    }
+
+    #[test]
+    fn parse_padding_unpacks_like_upstream() {
+        assert_eq!(parse_padding("2"), Ok((2, 2, 2, 2)));
+        assert_eq!(parse_padding("1,2"), Ok((1, 2, 1, 2)));
+        assert_eq!(parse_padding("1,2,3,4"), Ok((1, 2, 3, 4)));
+        assert_eq!(parse_padding(" 1 , 2 "), Ok((1, 2, 1, 2)));
+        assert!(parse_padding("1,2,3").is_err()); // 3 values not allowed
+        assert!(parse_padding("x").is_err());
+    }
+
+    #[test]
+    fn parse_box_maps_names() {
+        assert!(parse_box("rounded").is_ok());
+        assert!(parse_box("HEAVY").is_ok());
+        assert!(parse_box("none").is_err()); // borderless box unsupported
+        assert!(parse_box("bogus").is_err());
     }
 
     #[test]
