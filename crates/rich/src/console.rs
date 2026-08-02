@@ -311,6 +311,34 @@ impl Console {
         segments_to_plain(&segments)
     }
 
+    /// Buffer everything printed inside `f` and display it through the system
+    /// pager. The Rust analogue of upstream's `with console.pager():` block.
+    ///
+    /// Styles are stripped unless `styles` is set, matching
+    /// `Console.pager(styles=False)`. When there's no terminal to page in (piped
+    /// output, `TERM=dumb`) or no pager can be started, the content is written
+    /// straight to stdout.
+    pub fn page(&self, styles: bool, f: impl FnOnce(&Console)) -> std::io::Result<()> {
+        self.page_with(&crate::pager::SystemPager, styles, f)
+    }
+
+    /// Like [`page`](Self::page) but with an explicit [`Pager`](crate::pager::Pager)
+    /// — the seam upstream exposes as `Console.pager(pager=…)`.
+    pub fn page_with(
+        &self,
+        pager: &dyn crate::pager::Pager,
+        styles: bool,
+        f: impl FnOnce(&Console),
+    ) -> std::io::Result<()> {
+        let segments = self.record(f);
+        let content = if styles {
+            self.segments_to_string(&segments)
+        } else {
+            segments_to_plain(&segments)
+        };
+        pager.show(&content)
+    }
+
     /// Capture output printed inside `f` and export it as a self-contained HTML
     /// document (inline styles), using the default terminal theme. Port of
     /// `Console.export_html(inline_styles=True)`.
@@ -706,6 +734,44 @@ mod tests {
         // Captured from real rich 15.0.0 (Console.capture()).
         let out = console.capture(|c| c.print_str("[bold red]hi[/] there"));
         assert_eq!(out, "\x1b[1;31mhi\x1b[0m there\n");
+    }
+
+    #[test]
+    fn page_with_honors_the_styles_flag() {
+        use std::sync::Mutex;
+
+        #[derive(Default)]
+        struct Recorder(Mutex<String>);
+        impl crate::pager::Pager for Recorder {
+            fn show(&self, content: &str) -> std::io::Result<()> {
+                *self.0.lock().unwrap() = content.to_string();
+                Ok(())
+            }
+        }
+
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(20)
+            .no_color(false)
+            .build();
+
+        // styles = false (upstream's `Console.pager()` default) strips ANSI.
+        let plain = Recorder::default();
+        console
+            .page_with(&plain, false, |c| c.print_str("[bold red]hi[/] there"))
+            .unwrap();
+        assert_eq!(plain.0.lock().unwrap().as_str(), "hi there\n");
+
+        // styles = true keeps it, matching `Console.pager(styles=True)`.
+        let styled = Recorder::default();
+        console
+            .page_with(&styled, true, |c| c.print_str("[bold red]hi[/] there"))
+            .unwrap();
+        assert_eq!(
+            styled.0.lock().unwrap().as_str(),
+            "\x1b[1;31mhi\x1b[0m there\n"
+        );
     }
 
     #[test]

@@ -8,6 +8,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Paging** (`pager.rs` + `Console::page`, `rich-cli --pager`) — the last
+  unported rich-cli surface item. A `Pager` trait with a `SystemPager` that
+  ports `pydoc.get_pager`'s selection order (`MANPAGER`, then `PAGER` — split
+  into program + args — then `less -R`/`more`), including its guards: no tty on
+  stdin/stdout or `TERM=dumb`/`emacs` falls back to writing straight to stdout,
+  as does a pager that can't be spawned. `Console::page(styles, f)` buffers a
+  closure's output and shows it, stripping styles unless `styles` is set
+  (matching `Console.pager(styles=False)`); `page_with` takes a custom `Pager`,
+  upstream's `Console.pager(pager=…)` seam. `rich --pager` pages *styled*
+  output. **The rich-cli surface is now complete.**
 - **`rich-cli` URL fetch** (`rich-cli/main.rs`, completes the common CLI surface):
   `rich <url>` fetches an `http(s)` resource and renders it — the render mode
   comes from a flag, else the URL extension, else the response `Content-Type`

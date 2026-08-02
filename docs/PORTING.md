@@ -98,7 +98,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `csv`/`tsv` table render (blue border, numeric-column bold-green, quoted-field parse) | `main.rs` | 🟡 CSV done; sniffer heuristics/title deferred |
 | HTML export (`--export-html`) + SVG export (`--export-svg`) | `main.rs` | 🟡 both done |
 | `--panel`/`--padding` decorators (+ title/caption/style), `--ipynb`, URL fetch (`fetch` feature) | `main.rs` | 🟡 done |
-| paging | (tbd) | ⬜ |
+| paging (`--pager`) | `pager.rs` + `main.rs` | 🟡 done |
 
 ---
 

@@ -6,8 +6,8 @@
 //! width/justify, HTML/SVG export (`--export-html`/`--export-svg`), the
 //! `--panel`/`--padding` decorators (with `--title`/`--caption`/`--style`), a
 //! plain-file printer (with extension auto-detection), **URL fetch** (`rich <url>`,
-//! behind the default `fetch` feature), and a capability demo. Remaining rich-cli
-//! surface (paging) is tracked as roadmap issues.
+//! behind the default `fetch` feature), **paging** (`--pager`), and a capability
+//! demo — i.e. the whole common rich-cli surface.
 
 use std::io::Read;
 use std::process::ExitCode;
@@ -72,6 +72,8 @@ struct Cli {
     caption: Option<String>,
     /// `--style`: the panel border style (only used with `--panel`).
     border_style: Option<Style>,
+    /// `--pager`: page the output through the system pager.
+    pager: bool,
 }
 
 fn main() -> ExitCode {
@@ -148,6 +150,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut title = None;
     let mut caption = None;
     let mut border_style = None;
+    let mut pager = false;
 
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -171,6 +174,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--right" => justify = Some(Justify::Right),
             "--center" => justify = Some(Justify::Center),
             "--no-color" => no_color = true,
+            "--pager" => pager = true,
             "--export-html" => export_html = true,
             "--export-svg" => export_svg = true,
             "--panel" => {
@@ -229,6 +233,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         title,
         caption,
         border_style,
+        pager,
     }))
 }
 
@@ -416,6 +421,8 @@ fn run(cli: Cli) -> ExitCode {
         }
     } else if cli.export_html {
         Export::Html
+    } else if cli.pager {
+        Export::Pager
     } else {
         Export::Terminal
     };
@@ -766,14 +773,26 @@ fn render_ipynb(console: &Console, content: &str) {
 /// into a self-contained HTML or SVG document.
 enum Export<'a> {
     Terminal,
+    /// Page the (styled) output through the system pager.
+    Pager,
     Html,
-    Svg { title: &'a str, unique_id: &'a str },
+    Svg {
+        title: &'a str,
+        unique_id: &'a str,
+    },
 }
 
 /// Apply a render action per the chosen [`Export`] target.
 fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) {
     match export {
         Export::Terminal => render(console),
+        // Keep styles: unlike a plain `console.pager()`, the point of `rich
+        // --pager` is to page *rich* output.
+        Export::Pager => {
+            if let Err(err) = console.page(true, render) {
+                eprintln!("rich: cannot page output: {err}");
+            }
+        }
         // CSS-class stylesheet form (upstream rich-cli's default HTML export).
         Export::Html => print!("{}", console.export_html_classes(render)),
         Export::Svg { title, unique_id } => {
@@ -812,13 +831,12 @@ OPTIONS:\n\
         --title T     Panel title (with --panel)\n\
         --caption T   Panel caption/subtitle (with --panel)\n\
         --style S     Panel border style, e.g. \"bold red\" (with --panel)\n\
+        --pager       Page the output through the system pager ($PAGER, else less/more)\n\
         --no-color    Disable colored output\n\
     -h, --help        Show this help\n\
     -V, --version     Show the version (mirrors upstream rich-cli)\n\
 \n\
-With no RESOURCE and no mode flag, a capability demo is shown.\n\
-\n\
-NOT YET PORTED (tracked as roadmap issues): paging.\n"
+With no RESOURCE and no mode flag, a capability demo is shown.\n"
     );
 }
 
@@ -1307,6 +1325,13 @@ mod tests {
         assert!(parse_box("HEAVY").is_ok());
         assert!(parse_box("none").is_ok()); // borderless box
         assert!(parse_box("bogus").is_err());
+    }
+
+    #[test]
+    fn parses_pager_flag() {
+        let s = |v: &str| v.to_string();
+        assert!(parse(&[s("--pager"), s("x")]).unwrap().unwrap().pager);
+        assert!(!parse(&[s("x")]).unwrap().unwrap().pager);
     }
 
     #[test]
