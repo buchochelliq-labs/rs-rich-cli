@@ -8,6 +8,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`Live` auto-refresh thread** (`live.rs`, advances DIVERGENCES #17):
+  `Live::spawn(renderable, console, writer, refresh_per_second)` returns an
+  `AutoLive` handle whose background thread redraws on an interval (and on each
+  `update`) — a port of upstream's `refresh_per_second`. The thread constructs and
+  owns the `Live` internally (only `Send` inputs cross the boundary), so
+  `Console` is now `Send` (highlighter boxes are `dyn Highlighter + Send`; the
+  rich-ext registry factory matches). Deterministically tested to emit the same
+  byte stream through the thread; `Drop` finalizes if `stop()` is skipped.
 - **`rich-cli` `.ipynb` (Jupyter notebook) rendering** (`rich-cli/main.rs`, port
   of rich-cli's `render_ipynb`): `--ipynb` (and `.ipynb` auto-detect) renders a
   notebook — markdown cells as `Markdown`, code cells as an `In [n]:` label + a

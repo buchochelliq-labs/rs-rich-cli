@@ -81,7 +81,7 @@ pub struct Console {
     ascii_only: bool,
     theme: Theme,
     base_style: Style,
-    highlighters: Vec<Box<dyn Highlighter>>,
+    highlighters: Vec<Box<dyn Highlighter + Send>>,
     /// While capturing, print paths append their segments here instead of
     /// writing to stdout. Mirrors `Console._record_buffer` under `capture()`.
     record_buffer: std::cell::RefCell<Vec<Segment>>,
@@ -156,7 +156,9 @@ impl Console {
     }
 
     /// Register a highlighter. **The core plugin seam** — see docs/PLUGINS.md.
-    pub fn add_highlighter(&mut self, highlighter: Box<dyn Highlighter>) {
+    /// The highlighter must be `Send` so a [`Console`](Console) can move to a
+    /// background thread (e.g. an auto-refreshing [`Live`](crate::live::Live)).
+    pub fn add_highlighter(&mut self, highlighter: Box<dyn Highlighter + Send>) {
         self.highlighters.push(highlighter);
     }
 

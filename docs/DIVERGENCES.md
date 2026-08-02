@@ -207,15 +207,20 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** add the time/rate/spinner columns (with the `Live` loop) under the
   Live/progress issue (#6).
 
-### 17. `Live` is the manual-refresh core only (no auto-refresh thread)
+### 17. `Live` — auto-refresh thread done; alt-screen/redirect deferred
 - **Differs:** `Live` implements the deterministic `start`/`update`/`refresh`/`stop`
-  flow, writing a byte stream that is byte-parity with upstream's
-  `auto_refresh=False`, `transient=False` Live. Not ported: the background
-  auto-refresh thread (`refresh_per_second`), `transient`/alt-screen modes,
-  stdout/stderr redirection, and the console render-hook integration. It also
+  flow (byte-parity with upstream's `auto_refresh=False`, `transient=False` Live),
+  **and** a background **auto-refresh thread** — `Live::spawn(...)` returns an
+  [`AutoLive`] handle that redraws every `1/refresh_per_second` (and on each
+  `update`), a port of upstream's `refresh_per_second`. The thread constructs and
+  owns the `Live` internally, so only `Send` inputs (renderable/console/writer)
+  cross over — which made `Console` `Send` (its highlighter boxes are now
+  `dyn Highlighter + Send`). Still deferred: `transient`/alt-screen modes,
+  stdout/stderr redirection, and the console render-hook integration; `Live` also
   renders to a generic `Write` sink rather than through `Console`'s own file.
-- **Why:** the manual path captures the mechanism and stays testable; the
-  auto-refresh thread is timing-dependent and the render-hook plumbing is large.
+- **Why:** those remaining pieces are large plumbing; the refresh loop itself is
+  ported and (with a long interval, so no timeout fires) even deterministically
+  tested to emit the same stream through the thread.
 - **Remove:** add a refresh thread + `transient`/alt-screen handling, and route
   through `Console`, under the Live/progress issue (#6).
 
