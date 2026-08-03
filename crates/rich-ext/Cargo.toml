@@ -4,7 +4,7 @@
 # any upstream version. All local features + the internal plugin registry live
 # here so the core stays a clean mirror. See AGENTS.md.
 [package]
-name = "rich-ext"
+name = "rs-rich-ext"
 version = "0.1.0"
 description = "Extensions and the internal plugin registry for the `rich` Rust port"
 edition.workspace = true
@@ -18,6 +18,11 @@ documentation = "https://docs.rs/rich-ext"
 keywords = ["terminal", "console", "plugin", "extension", "highlighter"]
 categories = ["command-line-interface", "text-processing"]
 include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
+
+[lib]
+# The package is `rs-rich-ext` on crates.io (plain `rich` is taken), but the
+# library target keeps the short name so users write `use rich_ext::…`.
+name = "rich_ext"
 
 [lints]
 workspace = true

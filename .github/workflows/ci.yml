@@ -126,4 +126,4 @@ jobs:
         run: git diff --exit-code crates/rich/tests/golden
 
       - name: Run parity tests
-        run: cargo test -p rich --test golden
+        run: cargo test -p rs-rich --test golden
