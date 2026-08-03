@@ -731,13 +731,16 @@ def main() -> None:
     (golden_dir() / "export_html.html").write_text(
         html_inline_console.export_html(clear=False, inline_styles=True),
         encoding="utf-8",
+        newline="\n",
     )
 
     # console.rs::export_html_classes_matches_upstream (width 20, ONE line):
     html_classes_console = recording_console(20)
     html_classes_console.print("[bold red]hi[/] there")
     (golden_dir() / "export_html_classes.html").write_text(
-        html_classes_console.export_html(clear=False), encoding="utf-8"
+        html_classes_console.export_html(clear=False),
+        encoding="utf-8",
+        newline="\n",
     )
 
     # SVG: svg.rs::export_svg_matches_upstream (width 10, one printed line).
@@ -748,6 +751,7 @@ def main() -> None:
     (golden_dir() / "svg_export.svg").write_text(
         svg_console.export_svg(title="X", unique_id="test", clear=False),
         encoding="utf-8",
+        newline="\n",
     )
     print("wrote export fixtures (html inline, html classes, svg)")
 
