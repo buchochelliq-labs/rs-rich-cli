@@ -75,16 +75,22 @@ impl LogRender {
     fn content(&self) -> Text {
         let mut text = Text::new("");
         if let Some(time) = &self.time {
-            text.append(time, Style::parse("dim cyan").ok());
+            text.append(time, Style::parse("dim cyan").ok().map(Into::into));
             text.append(" ", None);
         }
         let (name, spec) = self.level.styled();
         // Pad the level name so messages line up (level names are ≤ 5 cells).
-        text.append(&format!("{name:<5}"), Style::parse(spec).ok());
+        text.append(
+            &format!("{name:<5}"),
+            Style::parse(spec).ok().map(Into::into),
+        );
         text.append(" ", None);
         text.append(&self.message, None);
         if let Some(path) = &self.path {
-            text.append(&format!("  {path}"), Style::parse("dim").ok());
+            text.append(
+                &format!("  {path}"),
+                Style::parse("dim").ok().map(Into::into),
+            );
         }
         text
     }

@@ -11,9 +11,8 @@
 //! `@`-tags (meta/handlers) apply no visible style.
 
 use crate::errors::{Result, RichError};
-use crate::style::Style;
+use crate::style::{Style, StyleType};
 use crate::text::{Span, Text};
-use crate::theme::Theme;
 
 struct RawSpan {
     start: usize,
@@ -68,7 +67,12 @@ pub fn escape(markup: &str) -> String {
 }
 
 /// Parse `markup` into styled [`Text`].
-pub fn render(markup: &str, theme: &Theme) -> Result<Text> {
+///
+/// Tag names are stored unresolved on the spans, so the returned `Text` renders
+/// in whichever theme prints it. The `Result` therefore reports only genuine
+/// *syntax* errors — an unmatched or mismatched closing tag. An unknown tag
+/// *name* is not an error: it renders as a no-op, as it does upstream.
+pub fn render(markup: &str) -> Result<Text> {
     let mut plain = String::new();
     let mut raw_spans: Vec<RawSpan> = Vec::new();
     let mut stack: Vec<(String, usize)> = Vec::new();
@@ -148,13 +152,24 @@ pub fn render(markup: &str, theme: &Theme) -> Result<Text> {
         });
     }
 
-    // Resolve tag strings to styles.
+    // Carry tag strings through as names — the theme of whichever console
+    // renders this text resolves them. Resolving here instead would freeze the
+    // colours at parse time and make an unknown tag an error rather than the
+    // no-op upstream produces.
     let mut spans: Vec<Span> = Vec::with_capacity(raw_spans.len());
     for raw in raw_spans {
         if raw.start >= raw.end {
             continue;
         }
-        let style = resolve(&raw.tag, theme)?;
+        let tag = raw.tag.trim();
+        // `@`-prefixed tags are meta/handler tags (links, spans of app data). We
+        // don't model those, so they carry no styling — stated explicitly rather
+        // than left to fall out of a failed parse.
+        let style = if tag.starts_with('@') {
+            StyleType::Style(Style::new())
+        } else {
+            StyleType::Name(tag.to_string())
+        };
         spans.push(Span {
             start: raw.start,
             end: raw.end,
@@ -171,31 +186,15 @@ pub fn render(markup: &str, theme: &Theme) -> Result<Text> {
     Ok(text)
 }
 
-/// Resolve a tag to a [`Style`]: a theme name if known, else an inline spec.
-///
-/// `@`-prefixed tags are meta/handler tags (links, spans of app data); we don't
-/// model those, so they contribute a null style — matching upstream, where they
-/// carry no visible styling.
-fn resolve(tag: &str, theme: &Theme) -> Result<Style> {
-    let trimmed = tag.trim();
-    if trimmed.starts_with('@') {
-        return Ok(Style::new());
-    }
-    if let Some(style) = theme.get(trimmed) {
-        return Ok(style.clone());
-    }
-    Style::parse(trimmed)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::color::ColorSystem;
+    use crate::theme::Theme;
 
     fn render_to_ansi(markup: &str) -> String {
-        let theme = Theme::default_theme();
-        let text = render(markup, &theme).unwrap();
-        let segments = text.render(&Style::new(), Some(ColorSystem::Truecolor));
+        let text = render(markup).unwrap();
+        let segments = text.render(&Theme::default_theme(), &Style::new());
         segments
             .iter()
             .map(|s| {
@@ -224,8 +223,7 @@ mod tests {
 
     #[test]
     fn escaped_bracket_is_literal() {
-        let theme = Theme::default_theme();
-        let text = render("\\[not a tag]", &theme).unwrap();
+        let text = render("\\[not a tag]").unwrap();
         assert_eq!(text.plain(), "[not a tag]");
     }
 
@@ -250,12 +248,8 @@ mod tests {
     #[test]
     fn bracket_is_literal_unless_tag_start() {
         // Upstream only treats `[a-z#/@]`-led brackets as tags.
-        let theme = Theme::default_theme();
-        assert_eq!(
-            render("[Hello] world", &theme).unwrap().plain(),
-            "[Hello] world"
-        );
-        assert_eq!(render("[42] x", &theme).unwrap().plain(), "[42] x");
+        assert_eq!(render("[Hello] world").unwrap().plain(), "[Hello] world");
+        assert_eq!(render("[42] x").unwrap().plain(), "[42] x");
     }
 
     #[test]
@@ -270,12 +264,11 @@ mod tests {
 
     #[test]
     fn unmatched_closing_tags_error() {
-        let theme = Theme::default_theme();
-        assert!(render("a[/]b", &theme).is_err());
-        assert!(render("[bold]a[/red]", &theme).is_err());
-        assert!(render("x[/red]y", &theme).is_err());
+        assert!(render("a[/]b").is_err());
+        assert!(render("[bold]a[/red]").is_err());
+        assert!(render("x[/red]y").is_err());
         // Unclosed *opening* tags are auto-closed, not an error.
-        assert!(render("[bold]hi", &theme).is_ok());
+        assert!(render("[bold]hi").is_ok());
     }
 
     #[test]
@@ -286,7 +279,6 @@ mod tests {
         assert_eq!(escape("trailing\\"), "trailing\\\\");
         assert_eq!(escape("[Hello]"), "[Hello]"); // not a tag → unchanged
                                                   // Escaped markup round-trips to the literal text.
-        let theme = Theme::default_theme();
-        assert_eq!(render(&escape("[bold]"), &theme).unwrap().plain(), "[bold]");
+        assert_eq!(render(&escape("[bold]")).unwrap().plain(), "[bold]");
     }
 }

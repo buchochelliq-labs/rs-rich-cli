@@ -26,6 +26,35 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   A unit test had been asserting the buggy values; it now asserts upstream's,
   captured from real rich 15.0.0.
 
+### Changed
+- **Style names on spans now resolve at render time, against the rendering
+  console's theme** (`StyleType` in `style.rs`, `Theme::get_style`,
+  `Console::get_style`; closes the main half of #14). Previously a span held a
+  concrete `Style`, resolved eagerly — highlighters looked names up in a
+  *process-global* default theme, so a console's own theme could not restyle
+  their output at all, and an unknown markup tag was an error rather than the
+  no-op upstream produces.
+  - `Span.style` and `Text`'s base style are now `StyleType { Name | Style }`,
+    the port of upstream's `Union[str, "Style"]`. The render path resolves them
+    once per render into a vector parallel to the spans (upstream's `style_map`).
+  - Two user-visible behaviour changes, both verified against real rich 15.0.0
+    before shipping: highlight colours follow the console's theme, and an unknown
+    markup **tag name** renders as a no-op (a genuine *syntax* error still fails).
+  - `Text::highlight_regex` gains its named-group half — each group is styled
+    with `{style_prefix}{name}` as a *name*, retiring the deferral noted when it
+    was first ported. This is also how `RegexHighlighter` now works, so a custom
+    highlighter with novel group names finally gets colours rather than just span
+    boundaries.
+  - `Text::stylize` takes its arguments in upstream's order
+    (`stylize(style, start, end)`), and the render family takes a `&Theme`.
+    `Text::render_wrapped` and `render_joined_justified` are gone (no callers,
+    not upstream). `Text::render` drops its unused `ColorSystem` argument.
+  - Covered by `golden/highlight.tsv` — the **only** fixture set rendered with
+    `highlight=true`, which is why this path had no byte-parity net before. All
+    12 pre-existing fixture sets are byte-identical.
+  - Still deferred: upstream's theme *stack* (`push_theme`/`pop_theme`). See
+    `docs/DIVERGENCES.md` §14 for why it needs its own design pass.
+
 ### Added
 - **Prompts** (`prompt.rs`, closes the `prompt.py` half of #11): `Prompt`,
   `Confirm`, `IntPrompt`, `FloatPrompt` — a styled question, a read, and a

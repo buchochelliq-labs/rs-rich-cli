@@ -6,21 +6,24 @@
 //! [`Segment`]s by combining every span covering each run.
 
 use crate::cells::{cell_len, set_cell_size};
-use crate::color::ColorSystem;
 use crate::console::{Justify, Overflow};
 use crate::errors::Result;
 use crate::markup;
 use crate::segment::Segment;
-use crate::style::Style;
+use crate::style::{Style, StyleType};
 use crate::theme::Theme;
 
 /// A style applied to a byte range `[start, end)` of a [`Text`]'s plain string.
 /// Mirrors `rich.text.Span`.
+///
+/// The style may be a *name* rather than a resolved [`Style`]; see [`StyleType`].
+/// Names are resolved when the text is rendered, against the theme of whichever
+/// console renders it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
-    pub style: Style,
+    pub style: StyleType,
 }
 
 /// Styled text. Mirrors `rich.text.Text`.
@@ -28,8 +31,8 @@ pub struct Span {
 pub struct Text {
     plain: String,
     spans: Vec<Span>,
-    /// A base style applied to the whole text.
-    style: Style,
+    /// A base style applied to the whole text. May be an unresolved name.
+    style: StyleType,
     /// How lines are justified within the render width.
     justify: Justify,
     /// What to do with lines wider than the render width. `None` defers to the
@@ -46,19 +49,20 @@ impl Text {
         Text {
             plain: plain.into(),
             spans: Vec::new(),
-            style: Style::new(),
+            style: StyleType::default(),
             justify: Justify::Default,
             overflow: None,
             no_wrap: None,
         }
     }
 
-    /// Text with a base style.
-    pub fn styled(plain: impl Into<String>, style: Style) -> Self {
+    /// Text with a base style, which may be a style *name* resolved at render
+    /// time (`Text::styled("hi", "repr.number")`) or a resolved [`Style`].
+    pub fn styled(plain: impl Into<String>, style: impl Into<StyleType>) -> Self {
         Text {
             plain: plain.into(),
             spans: Vec::new(),
-            style,
+            style: style.into(),
             justify: Justify::Default,
             overflow: None,
             no_wrap: None,
@@ -390,7 +394,7 @@ impl Text {
     pub fn highlight_words(
         &mut self,
         words: &[&str],
-        style: &Style,
+        style: impl Into<StyleType>,
         case_sensitive: bool,
     ) -> Result<usize> {
         let alternation = words
@@ -406,42 +410,86 @@ impl Text {
         } else {
             format!("(?i){alternation}")
         };
-        self.highlight_regex(&pattern, style)
+        self.highlight_regex(&pattern, Some(style.into()), "")
     }
 
-    /// Style every match of `pattern`. Port of `Text.highlight_regex` in its
-    /// explicit-style form, returning the number of matches.
+    /// Style every match of `pattern`, returning the number of matches. Full port
+    /// of `Text.highlight_regex`.
     ///
-    /// Upstream also styles each *named group* with the group's name as a style
-    /// name, which needs spans that can hold an unresolved name; that half waits
-    /// on the named-span refactor (see `docs/DIVERGENCES.md`). Until then, use a
-    /// [`RegexHighlighter`](crate::highlighter::RegexHighlighter), which resolves
-    /// group names against a theme as it goes.
-    pub fn highlight_regex(&mut self, pattern: &str, style: &Style) -> Result<usize> {
+    /// `style`, when given, styles the whole match. Each **named group** is then
+    /// styled with `{style_prefix}{name}` as a style *name*, left for the theme
+    /// to resolve at render time — which is how a highlighter colours its groups
+    /// without ever seeing a console.
+    ///
+    /// Groups that did not participate in the match, and zero-width ones, are
+    /// skipped.
+    pub fn highlight_regex(
+        &mut self,
+        pattern: &str,
+        style: Option<StyleType>,
+        style_prefix: &str,
+    ) -> Result<usize> {
         let regex = fancy_regex::Regex::new(pattern)
             .map_err(|e| crate::errors::RichError::Regex(format!("invalid pattern: {e}")))?;
-        let mut count = 0;
-        let mut spans = Vec::new();
-        for found in regex.find_iter(&self.plain) {
-            let found =
-                found.map_err(|e| crate::errors::RichError::Regex(format!("match failed: {e}")))?;
-            if found.end() > found.start() {
-                spans.push(Span {
-                    start: found.start(),
-                    end: found.end(),
-                    style: style.clone(),
-                });
-            }
-            count += 1;
-        }
-        self.spans.extend(spans);
-        Ok(count)
+        Ok(self.highlight_with_regex(&regex, style, style_prefix))
     }
 
-    /// Build styled text from console markup, resolving tags against `theme`.
-    /// Port of `Text.from_markup`.
-    pub fn from_markup(markup_text: &str, theme: &Theme) -> Result<Text> {
-        markup::render(markup_text, theme)
+    /// As [`highlight_regex`](Self::highlight_regex) with an already-compiled
+    /// pattern, for callers that apply the same patterns repeatedly.
+    ///
+    /// A match that errors mid-scan (a `fancy-regex` backtrack-limit hit) stops
+    /// the scan and keeps the spans found so far, rather than discarding them.
+    pub(crate) fn highlight_with_regex(
+        &mut self,
+        regex: &fancy_regex::Regex,
+        style: Option<StyleType>,
+        style_prefix: &str,
+    ) -> usize {
+        // Capture-definition order, matching upstream's `match.groupdict()`.
+        let names: Vec<(usize, String)> = regex
+            .capture_names()
+            .enumerate()
+            .filter_map(|(index, name)| name.map(|name| (index, name.to_string())))
+            .collect();
+
+        // Scanning borrows the plain string while the spans are pushed, so move
+        // it out and put it back — no copy, and no fighting the borrow checker.
+        let plain = std::mem::take(&mut self.plain);
+        let mut count = 0;
+        for captures in regex.captures_iter(&plain) {
+            let Ok(captures) = captures else { break };
+            if let (Some(style), Some(whole)) = (style.as_ref(), captures.get(0)) {
+                if whole.end() > whole.start() {
+                    self.spans.push(Span {
+                        start: whole.start(),
+                        end: whole.end(),
+                        style: style.clone(),
+                    });
+                }
+            }
+            count += 1;
+            for (index, name) in &names {
+                if let Some(group) = captures.get(*index) {
+                    if group.end() > group.start() {
+                        self.spans.push(Span {
+                            start: group.start(),
+                            end: group.end(),
+                            style: StyleType::Name(format!("{style_prefix}{name}")),
+                        });
+                    }
+                }
+            }
+        }
+        self.plain = plain;
+        count
+    }
+
+    /// Build styled text from console markup. Port of `Text.from_markup`.
+    ///
+    /// Tag names are stored on the spans and resolved when the text is rendered,
+    /// so no theme is needed here.
+    pub fn from_markup(markup_text: &str) -> Result<Text> {
+        markup::render(markup_text)
     }
 
     /// The unstyled string content.
@@ -464,8 +512,9 @@ impl Text {
         self.plain.is_empty()
     }
 
-    /// Append more text, optionally under `style`, returning the byte range added.
-    pub fn append(&mut self, text: &str, style: Option<Style>) {
+    /// Append more text, optionally under `style` (a resolved [`Style`] or a
+    /// style name).
+    pub fn append(&mut self, text: &str, style: Option<StyleType>) {
         let start = self.plain.len();
         self.plain.push_str(text);
         let end = self.plain.len();
@@ -481,7 +530,7 @@ impl Text {
         let offset = self.plain.len();
         self.plain.push_str(&other.plain);
         let end = self.plain.len();
-        if !other.style.is_null() {
+        if !other.style.is_null_style() {
             self.spans.push(Span {
                 start: offset,
                 end,
@@ -498,15 +547,25 @@ impl Text {
         self
     }
 
-    /// Apply `style` to the byte range `[start, end)`. Port of `Text.stylize`
-    /// (byte offsets; ASCII-only callers such as highlighters are unaffected by
-    /// the char-vs-byte distinction).
-    pub fn stylize(&mut self, start: usize, end: usize, style: Style) {
+    /// Apply `style` to the byte range `[start, end)`. Port of `Text.stylize`,
+    /// including its argument order.
+    ///
+    /// `style` may be a resolved [`Style`] or a name (`"repr.number"`) left for
+    /// the renderer to look up. Byte offsets, not char offsets; ASCII-only
+    /// callers such as highlighters are unaffected by the distinction.
+    ///
+    /// A range that is empty or inverted is ignored, which is what gives us
+    /// upstream's `end > start` skip for non-participating regex groups.
+    pub fn stylize(&mut self, style: impl Into<StyleType>, start: usize, end: usize) {
         let end = end.min(self.plain.len());
         if start >= end {
             return;
         }
-        self.spans.push(Span { start, end, style });
+        self.spans.push(Span {
+            start,
+            end,
+            style: style.into(),
+        });
     }
 
     /// Push a raw span (used by the markup parser).
@@ -514,20 +573,18 @@ impl Text {
         self.spans.push(span);
     }
 
-    /// Set the whole-text base style.
-    pub fn set_base_style(&mut self, style: Style) {
-        self.style = style;
+    /// Set the whole-text base style, resolved or named.
+    pub fn set_base_style(&mut self, style: impl Into<StyleType>) {
+        self.style = style.into();
     }
 
     /// Flatten into non-overlapping segments (newlines become [`Segment::line`]),
     /// combining `base_style`, this text's base style, and every covering span.
     /// Does **not** wrap. Port of the core of `Text.render`.
     ///
-    /// `system` is accepted for API symmetry; the color system is applied later
-    /// by the [`Console`](crate::console::Console).
-    pub fn render(&self, base_style: &Style, system: Option<ColorSystem>) -> Vec<Segment> {
-        let _ = system;
-        self.render_joined(base_style, None)
+    /// Named span styles are resolved against `theme`.
+    pub fn render(&self, theme: &Theme, base_style: &Style) -> Vec<Segment> {
+        self.render_joined(theme, base_style, None)
     }
 
     /// The `(minimum, maximum)` cell width of this text: `maximum` is the widest
@@ -545,19 +602,26 @@ impl Text {
 
     /// Render into visual lines, wrapping each hard line to `width` cells when
     /// `Some`, and justifying per this text's own justify.
-    pub fn render_lines(&self, base_style: &Style, width: Option<usize>) -> Vec<Vec<Segment>> {
-        self.render_lines_justified(base_style, width, self.justify)
+    pub fn render_lines(
+        &self,
+        theme: &Theme,
+        base_style: &Style,
+        width: Option<usize>,
+    ) -> Vec<Vec<Segment>> {
+        self.render_lines_justified(theme, base_style, width, self.justify)
     }
 
     /// Like [`render_lines`](Self::render_lines) but with an explicit `justify`
     /// (used by the console to apply `options.justify`).
     pub fn render_lines_justified(
         &self,
+        theme: &Theme,
         base_style: &Style,
         width: Option<usize>,
         justify: Justify,
     ) -> Vec<Vec<Segment>> {
         self.render_lines_wrapped(
+            theme,
             base_style,
             width,
             justify,
@@ -575,18 +639,27 @@ impl Text {
     /// lines may come back wider than `width`.
     pub fn render_lines_wrapped(
         &self,
+        theme: &Theme,
         base_style: &Style,
         width: Option<usize>,
         justify: Justify,
         overflow: Overflow,
         no_wrap: bool,
     ) -> Vec<Vec<Segment>> {
-        let effective_base = base_style.combine(&self.style);
+        // Resolve every span's style once, up front, into a vector parallel to
+        // `self.spans` — upstream's `style_map`. Resolving inside the per-line
+        // loop would re-parse the same names for every visual line.
+        let resolved: Vec<Style> = self
+            .spans
+            .iter()
+            .map(|span| theme.get_style_or_null(&span.style))
+            .collect();
+        let effective_base = base_style.combine(&theme.get_style_or_null(&self.style));
         // Upstream folds `overflow == "ignore"` into no_wrap before splitting.
         let no_wrap = no_wrap || overflow == Overflow::Ignore;
         let mut lines: Vec<Vec<Segment>> = Vec::new();
         for (start, end) in self.wrapped_ranges(width, overflow, no_wrap) {
-            lines.push(self.line_segments(start, end, &effective_base));
+            lines.push(self.line_segments(&resolved, start, end, &effective_base));
         }
         let Some(width) = width else {
             return lines;
@@ -607,34 +680,19 @@ impl Text {
         lines
     }
 
-    /// Render into a flat segment stream (newlines between lines), justifying per
-    /// `justify`.
-    pub fn render_joined_justified(
-        &self,
-        base_style: &Style,
-        width: usize,
-        justify: Justify,
-    ) -> Vec<Segment> {
-        self.render_joined_wrapped(
-            base_style,
-            width,
-            justify,
-            self.overflow.unwrap_or(Overflow::Fold),
-            self.no_wrap.unwrap_or(false),
-        )
-    }
-
     /// As [`render_lines_wrapped`](Self::render_lines_wrapped), flattened into a
     /// single segment stream with [`Segment::line`] between visual lines.
     pub fn render_joined_wrapped(
         &self,
+        theme: &Theme,
         base_style: &Style,
         width: usize,
         justify: Justify,
         overflow: Overflow,
         no_wrap: bool,
     ) -> Vec<Segment> {
-        let lines = self.render_lines_wrapped(base_style, Some(width), justify, overflow, no_wrap);
+        let lines =
+            self.render_lines_wrapped(theme, base_style, Some(width), justify, overflow, no_wrap);
         let mut segments = Vec::new();
         let last = lines.len().saturating_sub(1);
         for (index, line) in lines.into_iter().enumerate() {
@@ -648,8 +706,13 @@ impl Text {
 
     /// Render into a flat segment stream with [`Segment::line`] between visual
     /// lines (wrapping when `width` is `Some`), using this text's own justify.
-    fn render_joined(&self, base_style: &Style, width: Option<usize>) -> Vec<Segment> {
-        let lines = self.render_lines(base_style, width);
+    fn render_joined(
+        &self,
+        theme: &Theme,
+        base_style: &Style,
+        width: Option<usize>,
+    ) -> Vec<Segment> {
+        let lines = self.render_lines(theme, base_style, width);
         let mut segments = Vec::new();
         let last = lines.len().saturating_sub(1);
         for (index, line) in lines.into_iter().enumerate() {
@@ -706,7 +769,20 @@ impl Text {
 
     /// Combine `effective_base` with every span covering `[start, end)`,
     /// producing non-overlapping segments for that byte range.
-    fn line_segments(&self, start: usize, end: usize, effective_base: &Style) -> Vec<Segment> {
+    ///
+    /// `resolved` is the per-render style map, index-parallel to `self.spans`.
+    /// Spans are folded in vector order, and spans that resolved to nothing are
+    /// **not** skipped — they still contribute a boundary. Upstream behaves the
+    /// same way, and the highlighter fixtures depend on it: an ISO-8601 date
+    /// emits separate segments per sub-field even where the field styles are
+    /// identical.
+    fn line_segments(
+        &self,
+        resolved: &[Style],
+        start: usize,
+        end: usize,
+        effective_base: &Style,
+    ) -> Vec<Segment> {
         if start >= end {
             return Vec::new();
         }
@@ -731,20 +807,14 @@ impl Text {
                 continue;
             }
             let mut style = effective_base.clone();
-            for span in &self.spans {
+            for (span, span_style) in self.spans.iter().zip(resolved) {
                 if span.start <= a && span.end >= b {
-                    style = style.combine(&span.style);
+                    style = style.combine(span_style);
                 }
             }
             segments.push(Segment::new(slice, Some(style)));
         }
         segments
-    }
-
-    /// Render wrapped to `width`, joined into a flat segment stream. Used by the
-    /// [`Console`](crate::console::Console) render path.
-    pub fn render_wrapped(&self, base_style: &Style, width: usize) -> Vec<Segment> {
-        self.render_joined(base_style, Some(width))
     }
 }
 
@@ -957,7 +1027,7 @@ mod tests {
     fn full_justify_matches_upstream() {
         let text = Text::new("aaa bbb ccc ddddddddddddddddddd ee ff").justify(Justify::Full);
         let plain: Vec<String> = text
-            .render_lines(&Style::new(), Some(20))
+            .render_lines(&Theme::default_theme(), &Style::new(), Some(20))
             .iter()
             .map(|line| line.iter().map(|s| s.text.as_str()).collect())
             .collect();
@@ -971,7 +1041,7 @@ mod tests {
     #[test]
     fn append_creates_spans() {
         let mut text = Text::new("");
-        text.append("hello", Some(Style::parse("bold").unwrap()));
+        text.append("hello", Some(Style::parse("bold").unwrap().into()));
         text.append(" world", None);
         assert_eq!(text.plain(), "hello world");
         assert_eq!(text.spans().len(), 1);
@@ -980,9 +1050,9 @@ mod tests {
     #[test]
     fn render_flattens_overlapping_spans() {
         let mut text = Text::new("abcdef");
-        text.stylize(0, 4, Style::parse("bold").unwrap());
-        text.stylize(2, 6, Style::parse("red").unwrap());
-        let segments = text.render(&Style::new(), Some(ColorSystem::Truecolor));
+        text.stylize(Style::parse("bold").unwrap(), 0, 4);
+        text.stylize(Style::parse("red").unwrap(), 2, 6);
+        let segments = text.render(&Theme::default_theme(), &Style::new());
         // Boundaries at 0,2,4,6 -> "ab"(bold) "cd"(bold+red) "ef"(red)
         let rendered: Vec<_> = segments.iter().map(|s| s.text.clone()).collect();
         assert_eq!(rendered, vec!["ab", "cd", "ef"]);
@@ -1022,8 +1092,8 @@ mod tests {
     #[test]
     fn truncate_trims_dangling_spans() {
         let mut text = Text::new("hello world");
-        text.stylize(6, 11, Style::parse("bold").unwrap());
-        text.stylize(0, 5, Style::parse("red").unwrap());
+        text.stylize(Style::parse("bold").unwrap(), 6, 11);
+        text.stylize(Style::parse("red").unwrap(), 0, 5);
         text.truncate(3, Some(Overflow::Crop), false);
         assert_eq!(text.plain(), "hel");
         // The "world" span starts past the new end and is dropped entirely; the

@@ -86,7 +86,7 @@ fn column_widths(widths: &[usize], column_count: usize) -> Vec<usize> {
 }
 
 impl Renderable for Columns {
-    fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         if self.items.is_empty() {
             return Vec::new();
         }
@@ -110,7 +110,11 @@ impl Renderable for Columns {
                 }
                 let index = start + column;
                 let content = self.items.get(index).map(String::as_str).unwrap_or("");
-                let rendered = Text::new(content).render_lines(&Style::new(), Some(col_width));
+                let rendered = Text::new(content).render_lines(
+                    console.theme(),
+                    &Style::new(),
+                    Some(col_width),
+                );
                 let cell = rendered.into_iter().next().unwrap_or_default();
                 let padded = Segment::adjust_line_length(&cell, col_width, style.clone());
                 row.extend(Segment::simplify(&padded));

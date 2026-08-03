@@ -20,6 +20,7 @@ use crate::r#box::{Box as BoxSet, RowLevel, HEAVY_HEAD};
 use crate::segment::Segment;
 use crate::style::Style;
 use crate::text::Text;
+use crate::theme::Theme;
 
 /// A single column definition. Mirrors the used subset of `rich.table.Column`.
 struct Column {
@@ -433,6 +434,7 @@ impl Table {
     /// Render one table row (a list of cell strings) into visual lines.
     fn render_row(
         &self,
+        theme: &Theme,
         cells: &[String],
         content_widths: &[usize],
         is_header: bool,
@@ -468,10 +470,10 @@ impl Table {
             if is_header {
                 if let Some(span) = column.and_then(|c| c.header_content_style.clone()) {
                     let len = text.plain().len();
-                    text.stylize(0, len, span);
+                    text.stylize(span, 0, len);
                 }
             }
-            let mut lines = text.render_lines(&style, Some(*width));
+            let mut lines = text.render_lines(theme, &style, Some(*width));
             if lines.is_empty() {
                 lines.push(Vec::new());
             }
@@ -587,7 +589,13 @@ impl Renderable for Table {
 
         if self.show_header {
             let headers: Vec<String> = self.columns.iter().map(|c| c.header.clone()).collect();
-            lines.extend(self.render_row(&headers, &content_widths, true, head_edges));
+            lines.extend(self.render_row(
+                console.theme(),
+                &headers,
+                &content_widths,
+                true,
+                head_edges,
+            ));
             lines.push(vec![Segment::new(
                 box_set.get_row(&rendered_widths, RowLevel::Head, edge),
                 border.clone(),
@@ -596,7 +604,7 @@ impl Renderable for Table {
 
         let row_last = self.rows.len().saturating_sub(1);
         for (index, row) in self.rows.iter().enumerate() {
-            lines.extend(self.render_row(row, &content_widths, false, body_edges));
+            lines.extend(self.render_row(console.theme(), row, &content_widths, false, body_edges));
             if self.show_lines && index != row_last {
                 lines.push(vec![Segment::new(
                     box_set.get_row(&rendered_widths, RowLevel::Row, edge),

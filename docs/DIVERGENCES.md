@@ -20,14 +20,16 @@ Format: what differs · why · how to remove it (if temporary).
 ### 2. Markup: lenient print path is opt-out, not opt-in; partial backslash rules
 - **Differs:** `markup::render` matches upstream — a `[…]` is only a tag when it
   starts with `[a-z#/@]`, an unmatched closing tag returns `RichError::Markup`,
-  and unclosed *opening* tags auto-close (as upstream does). Two gaps remain:
-  (a) the infallible `Console::print_str`/`build_text` still fall back to
-  printing the raw text where upstream would raise `MarkupError` — the strict
-  behaviour is now available as `try_print_str` / `try_print_justified` /
-  `try_build_text`, and `rich --print` uses it, so user-supplied markup is
-  reported rather than rendered literally; and (b) the parser handles the common
-  `\[` escape but not the full backslash-run doubling semantics of `_parse` (the
-  public `markup::escape` *does* implement the full rule).
+  unclosed *opening* tags auto-close, and (since tag names are resolved at render)
+  an **unknown tag name is a silent no-op** rather than an error, as verified
+  against real rich 15.0.0. Two gaps remain: (a) the infallible
+  `Console::print_str`/`build_text` still fall back to printing the raw text
+  where upstream would raise `MarkupError` — the strict behaviour is available as
+  `try_print_str` / `try_print_justified` / `try_build_text`, and `rich --print`
+  uses it, so user-supplied markup is reported rather than rendered literally;
+  and (b) the parser handles the common `\[` escape but not the full
+  backslash-run doubling semantics of `_parse` (the public `markup::escape`
+  *does* implement the full rule).
 - **Why:** the infallible signatures keep the ~30 internal call sites that pass
   literal markup free of `unwrap`/`?` noise, where a parse error is a bug rather
   than a runtime condition. The exotic backslash-run cases are rare.
@@ -171,17 +173,30 @@ Format: what differs · why · how to remove it (if temporary).
   same strings the conditional does. Byte-parity with real rich 15.0.0 across
   compact/basic/ordinal/week/split forms (unit-tested).
 
-### 14. Highlighting resolves to fixed styles, not theme-driven names
-- **Differs:** upstream stores highlight spans as style *names* (`repr.number`)
-  resolved against the console theme at render time; our highlighters resolve to
-  concrete `Style`s from a built-in `default_styles` subset. So a custom
-  `RegexHighlighter` with a novel `base_style` can create span boundaries but not
-  colors (its names aren't in the built-in map), and re-theming built-in highlight
-  colors isn't possible yet.
-- **Why:** `Text` spans hold concrete styles in this port; name-based resolution
-  needs the theme stack.
-- **Remove:** store style names on spans and resolve at render via the theme, under
-  the highlighter/theme issue (#3).
+### 14. No theme *stack* (`push_theme`/`pop_theme`)
+- **Differs:** style names on spans now resolve against the rendering console's
+  theme, as upstream does — that half is **done** (`StyleType`, `Theme::get_style`).
+  What is missing is upstream's per-console theme *stack*: `Console.push_theme`,
+  `pop_theme` and the `use_theme` context manager. Names resolve against the
+  console's single current theme instead.
+- **Why:** the stack forces a `&mut self`-vs-interior-mutability decision that
+  this port should not make casually. An RAII guard borrowing the `Console`
+  mutably makes `console.print(...)` *inside* the guard a borrow error — which is
+  the entire use case — and a `RefCell` stack breaks `Console::theme() -> &Theme`
+  and adds an `already borrowed` panic class on re-entrant renders. Upstream's
+  stack is also thread-local, which sits awkwardly with a `Console` that gets
+  *moved* between threads by `Live::spawn`.
+- **Remove:** design the stack against those constraints, under its own issue.
+  Late-bound span names are a strict prerequisite and are now in place.
+
+### 14a. `Style::parse` results are not cached
+- **Differs:** upstream LRU-caches style-definition parsing; we re-resolve names
+  once per render (into a vector parallel to the spans, like upstream's
+  `style_map`) with no cross-render cache.
+- **Why:** the per-render resolution already collapses the repeated work inside a
+  render, which is where it mattered; a global cache would need a lock or
+  thread-local and has not been shown to be worth it.
+- **Remove:** measure first; add only if a profile justifies it.
 
 ### 15. Exports done (HTML both forms + SVG); SVG needs an explicit `unique_id`
 - **Differs:** `Console::export_html` (inline styles), `export_html_classes` (the

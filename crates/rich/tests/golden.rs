@@ -420,6 +420,63 @@ fn truecolor_parity() {
     assert!(checked > 0, "no golden cases were checked");
 }
 
+/// Highlighting and markup resolved against the *console's* theme, checked
+/// against upstream. The only fixture set rendered with `highlight=true`.
+///
+/// A port that resolves highlighter styles eagerly against a global default
+/// passes every other fixture in the corpus and fails these — which is exactly
+/// what it did before style names were carried on spans.
+#[test]
+fn highlight_parity() {
+    use serde_json::Value;
+
+    let data = include_str!("golden/highlight.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(4, '\t');
+        let name = parts.next().unwrap_or("");
+        let mut field = |what: &str| {
+            parts
+                .next()
+                .unwrap_or_else(|| panic!("line {}: missing {what}", index + 1))
+                .to_string()
+        };
+        let overrides: Value = serde_json::from_str(&field("theme")).expect("theme is json");
+        let source = field("input");
+        let expected = unescape(&field("expected"));
+
+        let mut theme = rich::theme::Theme::default_theme();
+        for (key, definition) in overrides.as_object().expect("theme is an object") {
+            let definition = definition.as_str().expect("style definition is a string");
+            theme.insert(
+                key.clone(),
+                Style::parse(definition).expect("fixture style must parse"),
+            );
+        }
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(80)
+            .no_color(false)
+            .highlight(true)
+            .theme(theme)
+            .build();
+
+        assert_eq!(
+            console.render_str_to_string(&source),
+            expected,
+            "highlight case {name:?} (line {}) diverged from upstream rich",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert!(checked > 0, "no highlight cases were checked");
+}
+
 /// Render the question line for a `prompts.tsv` fixture `name`. Must stay in
 /// sync with `PROMPT_CASES` in `scripts/capture_golden.py`.
 fn render_prompt(console: &Console, name: &str) -> String {
@@ -486,11 +543,12 @@ fn prompt_parity() {
 /// Build the result of a `text_ops.tsv` fixture `name`. Must stay in sync with
 /// `TEXT_OPS_CASES` in `scripts/capture_golden.py`.
 fn build_text_op(name: &str) -> Vec<Text> {
-    let style = |s: &str| Style::parse(s).expect("test style must parse");
+    // The style strings go through as names, exactly as the capture script hands
+    // them to Python's `Text.stylize` — no parse step on either side.
     let styled = |plain: &str, spans: &[(&str, usize, usize)]| {
         let mut text = Text::new(plain);
-        for (s, start, end) in spans {
-            text.stylize(*start, *end, style(s));
+        for (style, start, end) in spans {
+            text.stylize(*style, *start, *end);
         }
         text
     };
@@ -530,15 +588,15 @@ fn build_text_op(name: &str) -> Vec<Text> {
         }
         "join_empty_sep" => vec![Text::new("").join(&[Text::new("a"), Text::new("b")])],
         "highlight_words" => mutated(Text::new("the cat sat on the mat"), &|t| {
-            t.highlight_words(&["cat", "mat"], &style("bold red"), true)
+            t.highlight_words(&["cat", "mat"], "bold red", true)
                 .expect("valid pattern");
         }),
         "highlight_words_nocase" => mutated(Text::new("Cat cat CAT"), &|t| {
-            t.highlight_words(&["cat"], &style("bold"), false)
+            t.highlight_words(&["cat"], "bold", false)
                 .expect("valid pattern");
         }),
         "highlight_regex" => mutated(Text::new("abc 123 def 456"), &|t| {
-            t.highlight_regex(r"\d+", &style("bold cyan"))
+            t.highlight_regex(r"\d+", Some("bold cyan".into()), "")
                 .expect("valid pattern");
         }),
         other => panic!("unknown text-op fixture {other:?} — add it to build_text_op"),
@@ -586,11 +644,7 @@ fn text_ops_parity() {
 fn build_overflow_text(name: &str) -> Text {
     let span = |plain: &str, style: &str, start: usize, end: usize| {
         let mut text = Text::new(plain);
-        text.stylize(
-            start,
-            end,
-            Style::parse(style).expect("test style must parse"),
-        );
+        text.stylize(style, start, end);
         text
     };
     match name {

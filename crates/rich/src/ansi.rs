@@ -177,7 +177,7 @@ impl AnsiDecoder {
                     let style = if self.style.is_null() {
                         None
                     } else {
-                        Some(self.style.clone())
+                        Some(self.style.clone().into())
                     };
                     text.append(&plain, style);
                 }

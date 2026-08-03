@@ -57,12 +57,12 @@ impl Traceback {
         let cause_style = Style::parse("red").expect("valid style");
 
         let mut text = Text::new("");
-        text.append(&self.message, Some(error_style));
+        text.append(&self.message, Some(error_style.into()));
         if !self.causes.is_empty() {
-            text.append("\n\nCaused by:", Some(label_style));
+            text.append("\n\nCaused by:", Some(label_style.into()));
             for (index, cause) in self.causes.iter().enumerate() {
                 text.append(&format!("\n  {}: ", index + 1), None);
-                text.append(cause, Some(cause_style.clone()));
+                text.append(cause, Some(cause_style.clone().into()));
             }
         }
         text

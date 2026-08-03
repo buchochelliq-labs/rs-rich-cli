@@ -482,7 +482,7 @@ impl Console {
     /// markup instead of falling back to the raw text — upstream's behaviour.
     pub fn try_build_text(&self, content: &str) -> crate::errors::Result<Text> {
         let expanded = self.expand_emoji(content);
-        Ok(self.decorate(Text::from_markup(&expanded, &self.theme)?))
+        Ok(self.decorate(Text::from_markup(&expanded)?))
     }
 
     /// As [`print_str`](Console::print_str), but reports malformed markup.
@@ -596,6 +596,7 @@ impl Renderable for Text {
             .unwrap_or(Overflow::Fold);
         let no_wrap = self.get_no_wrap().or(options.no_wrap).unwrap_or(false);
         self.render_joined_wrapped(
+            console.theme(),
             console.base_style(),
             options.max_width,
             justify,
@@ -831,6 +832,55 @@ mod tests {
             strict.spans().len(),
             console.build_text("[bold]hi[/]").spans().len()
         );
+    }
+
+    /// An unknown tag *name* is not an error — it renders as a no-op, tag
+    /// consumed. Only genuine syntax errors fail.
+    ///
+    /// Verified against real rich 15.0.0: `Console().print("[nope]x[/]")` writes
+    /// `x`, while `[bold]a[/italic]` raises `MarkupError`. Before names were
+    /// carried on spans, the port resolved `nope` eagerly, failed, and fell back
+    /// to printing the markup source literally.
+    #[test]
+    fn unknown_tag_names_render_as_no_ops() {
+        let console = test_console();
+        let text = console
+            .try_build_text("[nope]x[/]")
+            .expect("an unknown tag name is not a syntax error");
+        assert_eq!(console.render_to_string(&text), "x");
+        assert_eq!(
+            console.render_to_string(&console.build_text("[a.b.c]x[/]")),
+            "x"
+        );
+
+        // A mismatched closing tag is still an error, on both paths.
+        assert!(console.try_build_text("[bold]a[/italic]").is_err());
+        assert!(console.try_build_text("[/nope]").is_err());
+    }
+
+    /// Markup styles bind to the theme of the console that renders the text, not
+    /// the one that parsed it. Verified against real rich 15.0.0.
+    #[test]
+    fn markup_styles_bind_at_render_not_at_parse() {
+        let themed = |definition: &str| {
+            let mut theme = Theme::default_theme();
+            theme.insert("accent", Style::parse(definition).unwrap());
+            Console::builder()
+                .force_terminal(true)
+                .color_system(Some(ColorSystem::Truecolor))
+                .width(80)
+                .no_color(false)
+                .theme(theme)
+                .build()
+        };
+        let red = themed("bold red");
+        let green = themed("underline green");
+
+        // Built once, by the red console...
+        let text = red.build_text("[accent]hi[/]");
+        assert_eq!(red.render_to_string(&text), "\x1b[1;31mhi\x1b[0m");
+        // ...and the green console still renders it in green.
+        assert_eq!(green.render_to_string(&text), "\x1b[4;32mhi\x1b[0m");
     }
 
     /// Emoji expansion and the highlighters have to run on both paths, or the

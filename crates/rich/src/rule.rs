@@ -97,9 +97,9 @@ impl Rule {
                 let right = self.fill(right_length);
 
                 let mut text = Text::new("");
-                text.append(&format!("{left} "), Some(self.style.clone()));
+                text.append(&format!("{left} "), Some(self.style.clone().into()));
                 text.append(&title, None);
-                text.append(&format!(" {right}"), Some(self.style.clone()));
+                text.append(&format!(" {right}"), Some(self.style.clone().into()));
                 text
             }
             HorizontalAlign::Left => {
@@ -107,14 +107,14 @@ impl Rule {
                 let fill_len = width.saturating_sub(cell_len(&title)).saturating_sub(1);
                 let mut text = Text::new("");
                 text.append(&format!("{title} "), None);
-                text.append(&self.fill(fill_len), Some(self.style.clone()));
+                text.append(&self.fill(fill_len), Some(self.style.clone().into()));
                 text
             }
             HorizontalAlign::Right => {
                 let title = truncate(title, width.saturating_sub(2));
                 let fill_len = width.saturating_sub(cell_len(&title)).saturating_sub(1);
                 let mut text = Text::new("");
-                text.append(&self.fill(fill_len), Some(self.style.clone()));
+                text.append(&self.fill(fill_len), Some(self.style.clone().into()));
                 text.append(&format!(" {title}"), None);
                 text
             }
@@ -125,7 +125,7 @@ impl Rule {
 impl Renderable for Rule {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let text = self.build_text(options.max_width);
-        text.render(console.base_style(), console.color_system())
+        text.render(console.theme(), console.base_style())
     }
 }
 

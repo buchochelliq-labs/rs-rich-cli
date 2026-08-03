@@ -10,7 +10,6 @@
 use std::io::{BufRead, Write};
 
 use crate::console::Console;
-use crate::style::Style;
 use crate::text::Text;
 
 /// Where a prompt reads its answers from. Upstream takes an optional `stream`
@@ -92,24 +91,26 @@ impl PromptBase {
     /// Build the question line: the prompt, then `[a/b/c]`, then `(default)`,
     /// then the suffix. Port of `PromptBase.make_prompt`.
     fn make_prompt(&self, console: &Console, default: Option<&str>) -> Text {
-        let style = |name: &str| console.theme().get_style_or_null(&name.into());
         // The prompt itself is markup, matching upstream's `Text.from_markup`
         // default for a `str` prompt.
         let mut text = console.build_text(&self.prompt);
 
+        // The style *names* go on the spans, as upstream passes them
+        // (`prompt.append(choices, "prompt.choices")`), so a console with a
+        // custom theme restyles the question without the prompt knowing.
         if self.show_choices {
             if let Some(choices) = &self.choices {
                 text.append(" ", None);
                 text.append(
                     &format!("[{}]", choices.join("/")),
-                    Some(style("prompt.choices")),
+                    Some("prompt.choices".into()),
                 );
             }
         }
         if self.show_default {
             if let Some(default) = default {
                 text.append(" ", None);
-                text.append(&format!("({default})"), Some(style("prompt.default")));
+                text.append(&format!("({default})"), Some("prompt.default".into()));
             }
         }
         text.append(&self.suffix, None);
@@ -410,12 +411,6 @@ numeric_prompt!(
     "[prompt.invalid]Please enter a valid integer number"
 );
 numeric_prompt!(FloatPrompt, f64, "[prompt.invalid]Please enter a number");
-
-/// The style a prompt uses for a piece of its question, for callers that want to
-/// render the pieces themselves.
-pub fn prompt_style(console: &Console, name: &str) -> Style {
-    console.theme().get_style_or_null(&name.into())
-}
 
 #[cfg(test)]
 mod tests {

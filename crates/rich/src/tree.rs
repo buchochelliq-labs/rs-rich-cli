@@ -13,6 +13,7 @@ use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::style::Style;
 use crate::text::Text;
+use crate::theme::Theme;
 
 // Default (thin) guide segments, matching `TREE_GUIDES[0]`.
 const SPACE: &str = "    ";
@@ -47,6 +48,7 @@ impl Tree {
     /// for this node's children.
     fn render_into(
         &self,
+        theme: &Theme,
         lines: &mut Vec<Vec<Segment>>,
         prefix_first: &str,
         prefix_rest: &str,
@@ -54,7 +56,8 @@ impl Tree {
     ) {
         let guide_style = Some(Style::new());
         let available = width.saturating_sub(cell_len(prefix_first));
-        let mut label_lines = Text::new(&self.label).render_lines(&Style::new(), Some(available));
+        let mut label_lines =
+            Text::new(&self.label).render_lines(theme, &Style::new(), Some(available));
         if label_lines.is_empty() {
             label_lines.push(Vec::new());
         }
@@ -78,15 +81,15 @@ impl Tree {
             let last = index == last_index;
             let child_first = format!("{prefix_rest}{}", if last { END } else { FORK });
             let child_rest = format!("{prefix_rest}{}", if last { SPACE } else { CONTINUE });
-            child.render_into(lines, &child_first, &child_rest, width);
+            child.render_into(theme, lines, &child_first, &child_rest, width);
         }
     }
 }
 
 impl Renderable for Tree {
-    fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let mut lines: Vec<Vec<Segment>> = Vec::new();
-        self.render_into(&mut lines, "", "", options.max_width);
+        self.render_into(console.theme(), &mut lines, "", "", options.max_width);
 
         let mut segments = Vec::new();
         let last = lines.len().saturating_sub(1);

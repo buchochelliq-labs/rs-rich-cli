@@ -736,9 +736,9 @@ fn io_label(word: &str, count: Option<i64>, base: &str, number: &str) -> Text {
     let number_style = Style::parse(number).ok();
     let n = count.map_or_else(|| " ".to_string(), |c| c.to_string());
     let mut text = Text::new("");
-    text.append(&format!("{word}["), base_style.clone());
-    text.append(&n, number_style);
-    text.append("]:", base_style);
+    text.append(&format!("{word}["), base_style.clone().map(Into::into));
+    text.append(&n, number_style.map(Into::into));
+    text.append("]:", base_style.map(Into::into));
     text
 }
 

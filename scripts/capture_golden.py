@@ -50,6 +50,7 @@ from rich.prompt import FloatPrompt as RichFloatPrompt
 from rich.prompt import IntPrompt as RichIntPrompt
 from rich.prompt import Prompt as RichPrompt
 from rich.text import Text
+from rich.theme import Theme as RichTheme
 from rich.tree import Tree
 
 
@@ -722,6 +723,26 @@ PROMPT_CASES = [
     ("float_default", lambda c: RichFloatPrompt("Ratio", console=c), 1.5),
 ]
 
+# (name, theme-overrides, input) — rendered with `highlight=True` so the built-in
+# ReprHighlighter runs, then the span style *names* resolve against the theme.
+#
+# This is the only fixture set in the corpus with highlighting on: every other
+# one pins `highlight=False`, which is why the theme-resolution path had no net
+# under it. A port that resolves highlighter styles against a global default
+# instead of the console's theme passes every other fixture and fails these.
+HIGHLIGHT_CASES = [
+    ("default_number", {}, "n = 42"),
+    ("themed_number", {"repr.number": "bold red"}, "n = 42"),
+    ("themed_bool_none", {"repr.bool_true": "bold magenta", "repr.none": "dim"}, "True and None"),
+    ("themed_str", {"repr.str": "italic yellow"}, "greeting = 'hello'"),
+    # A name the theme does not define falls back to the default table.
+    ("partial_override", {"repr.number": "underline"}, "call(1, 'two', True)"),
+    # Markup and highlighting in the same string, both theme-resolved.
+    ("markup_and_highlight", {"accent": "bold blue", "repr.number": "green"}, "[accent]total[/] = 7"),
+    # An unknown tag name is a no-op upstream, not an error.
+    ("unknown_tag_is_noop", {}, "[nope]x[/]"),
+]
+
 COLOR_SYSTEMS = ["truecolor", "256", "standard"]
 
 HEADER = """\
@@ -748,6 +769,18 @@ OVERFLOW_HEADER = """\
 # truncate, and the console-level crop that "ignore" relies on.
 """
 
+
+HIGHLIGHT_HEADER = """\
+# Golden parity fixtures for theme-resolved highlighting — captured from real
+# Python `rich`. Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\\t<theme-overrides-json>\\t<input>\\t<expected-ansi>
+#
+# Console: highlight=True (the ONLY fixture set with it on), width 80, truecolor.
+# The theme column is applied over the default theme before rendering, so these
+# pin that highlighter and markup styles resolve against the *console's* theme
+# rather than a process-global default.
+"""
 
 PROMPT_HEADER = """\
 # Golden parity fixtures for prompts — captured from real Python `rich`.
@@ -875,6 +908,27 @@ def main() -> None:
         rlines.append(f"{name}\t{width}\t{escape(output)}")
     renderable_path.write_text("\n".join(rlines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(RENDERABLE_CASES)} renderable cases to {renderable_path}")
+
+    highlight_path = golden_dir() / "highlight.tsv"
+    hlines = [HIGHLIGHT_HEADER.rstrip("\n")]
+    for name, overrides, source in HIGHLIGHT_CASES:
+        hconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=80,
+            highlight=True,
+            safe_box=False,
+            legacy_windows=False,
+            no_color=False,
+            theme=RichTheme(overrides) if overrides else None,
+        )
+        with hconsole.capture() as capture:
+            hconsole.print(source, end="")
+        hlines.append(
+            f"{name}\t{json.dumps(overrides, sort_keys=True)}\t{source}\t{escape(capture.get())}"
+        )
+    highlight_path.write_text("\n".join(hlines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(HIGHLIGHT_CASES)} highlight cases to {highlight_path}")
 
     prompt_path = golden_dir() / "prompts.tsv"
     plines = [PROMPT_HEADER.rstrip("\n")]
