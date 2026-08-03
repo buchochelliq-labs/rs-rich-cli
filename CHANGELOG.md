@@ -8,8 +8,8 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
-- **Paging** (`pager.rs` + `Console::page`, `rich-cli --pager`) — the last
-  unported rich-cli surface item. A `Pager` trait with a `SystemPager` that
+- **Paging** (`pager.rs` + `Console::page`, `rich-cli --pager`). A `Pager` trait
+  with a `SystemPager` that
   ports `pydoc.get_pager`'s selection order (`MANPAGER`, then `PAGER` — split
   into program + args — then `less -R`/`more`), including its guards: no tty on
   stdin/stdout or `TERM=dumb`/`emacs` falls back to writing straight to stdout,
