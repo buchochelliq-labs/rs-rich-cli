@@ -29,6 +29,9 @@ panel_just_center	14	┌────────────┐\n│     hi     
 panel_just_right	14	┌────────────┐\n│         hi │\n└────────────┘\n
 panel_just_left	14	┌────────────┐\n│ hi         │\n└────────────┘\n
 text_justify_bare	10	hi\n
+text_tabs	40	a       b       c\n
+text_tabs_multiline	40	ab      c\nd       e\n
+text_control_codes	40	abcd\n
 table_square	40	┌───────┬─────┐\n│\x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mAge\x1b[0m\x1b[1m \x1b[0m│\n├───────┼─────┤\n│ Alice │ 30  │\n│ Bob   │ 7   │\n└───────┴─────┘\n
 table_default	40	┏━━━━━━━┳━━━━━┓\n┃\x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m┃\x1b[1m \x1b[0m\x1b[1mAge\x1b[0m\x1b[1m \x1b[0m┃\n┡━━━━━━━╇━━━━━┩\n│ Alice │ 30  │\n│ Bob   │ 7   │\n└───────┴─────┘\n
 table_simple	40	               \n \x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m \x1b[1m \x1b[0m\x1b[1mAge\x1b[0m\x1b[1m \x1b[0m \n ───────────── \n  Alice   30   \n  Bob     7    \n               \n

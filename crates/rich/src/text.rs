@@ -13,6 +13,10 @@ use crate::segment::Segment;
 use crate::style::{Style, StyleType};
 use crate::theme::Theme;
 
+/// Cell width of a tab stop. Upstream's `Console.tab_size` default; a per-console
+/// override is not ported yet (see `docs/DIVERGENCES.md`).
+pub const DEFAULT_TAB_SIZE: usize = 8;
+
 /// A style applied to a byte range `[start, end)` of a [`Text`]'s plain string.
 /// Mirrors `rich.text.Span`.
 ///
@@ -44,10 +48,27 @@ pub struct Text {
 }
 
 impl Text {
+    /// Strip the control codes upstream removes in `Text.__init__`
+    /// (`strip_control_codes`): BEL, backspace, vertical tab, form feed and
+    /// carriage return. Tab and newline are deliberately kept — they are layout,
+    /// not control.
+    fn strip_control_codes(text: &str) -> String {
+        if text
+            .bytes()
+            .any(|b| matches!(b, 0x07 | 0x08 | 0x0b | 0x0c | 0x0d))
+        {
+            text.chars()
+                .filter(|c| !matches!(c, '\u{7}' | '\u{8}' | '\u{b}' | '\u{c}' | '\r'))
+                .collect()
+        } else {
+            text.to_string()
+        }
+    }
+
     /// Plain, unstyled text.
     pub fn new(plain: impl Into<String>) -> Self {
         Text {
-            plain: plain.into(),
+            plain: Text::strip_control_codes(&plain.into()),
             spans: Vec::new(),
             style: StyleType::default(),
             justify: Justify::Default,
@@ -599,9 +620,22 @@ impl Text {
     /// The `(minimum, maximum)` cell width of this text: `maximum` is the widest
     /// hard line, `minimum` the widest word. Port of `Text.__rich_measure__`.
     pub fn measurement(&self) -> (usize, usize) {
-        let max_line = self.plain.split('\n').map(cell_len).max().unwrap_or(0);
-        let min_word = self
-            .plain
+        // Measured against the tab-EXPANDED text. Upstream measures the raw
+        // string, where a tab counts as zero cells, and gets away with it
+        // because its measurement never narrows the render width. Ours does, so
+        // measuring raw would hand the renderer a width smaller than the text it
+        // is about to expand and `"a\tb\tc"` would wrap on nothing.
+        let expanded;
+        let plain = if self.plain.contains('\t') {
+            let mut text = self.clone();
+            text.expand_tabs(DEFAULT_TAB_SIZE);
+            expanded = text.plain;
+            &expanded
+        } else {
+            &self.plain
+        };
+        let max_line = plain.split('\n').map(cell_len).max().unwrap_or(0);
+        let min_word = plain
             .split_whitespace()
             .map(cell_len)
             .max()
@@ -655,6 +689,17 @@ impl Text {
         overflow: Overflow,
         no_wrap: bool,
     ) -> Vec<Vec<Segment>> {
+        // Tabs are expanded before anything measures or wraps the text, as
+        // upstream's `Text.wrap` does per line. Without this a tab occupies one
+        // cell everywhere in the layout and then eight on the terminal, so every
+        // width calculation downstream is wrong.
+        if self.plain.contains('\t') {
+            let mut expanded = self.clone();
+            expanded.expand_tabs(DEFAULT_TAB_SIZE);
+            return expanded
+                .render_lines_wrapped(theme, base_style, width, justify, overflow, no_wrap);
+        }
+
         // Resolve every span's style once, up front, into a vector parallel to
         // `self.spans` — upstream's `style_map`. Resolving inside the per-line
         // loop would re-parse the same names for every visual line.

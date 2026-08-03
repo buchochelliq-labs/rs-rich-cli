@@ -21,6 +21,9 @@ normalized_multi_word	[dim i]x[/]	\x1b[2;3mx\x1b[0m
 mixed_case_unknown_is_noop	[nOpE]x[/]	x
 not_attribute	[not bold]x[/]	x
 uppercase_is_not_a_tag	[BOLD]x	[BOLD]x
+mixed_case_hex_colour	[on #FF0000]x[/on #ff0000]	\x1b[48;2;255;0;0mx\x1b[0m
+mixed_case_named_colour	[RED]x	[RED]x
+bare_link_is_not_a_style	[link]y[/]	y
 hex_truecolor	[#ff8800]x[/]	\x1b[38;2;255;136;0mx\x1b[0m
 plain_text	no styles here	no styles here
 emoji_rocket	:rocket: launch :fire:	🚀 launch 🔥

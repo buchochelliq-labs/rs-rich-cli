@@ -27,6 +27,19 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   captured from real rich 15.0.0.
 
 ### Fixed
+- **Four more defects**, from a second adversarial review (of the change above):
+  - **Tabs were never expanded on the render path.** `Text::expand_tabs` existed
+    but nothing called it, so a tab occupied one cell in every layout calculation
+    and eight on the terminal. `Text::measurement` now measures the *expanded*
+    text too — upstream gets away with measuring raw (a tab counts as zero cells
+    there) only because its `print` never narrows to the measurement.
+  - **A bare `link` was accepted** and emitted an empty OSC 8 hyperlink; upstream
+    raises `"URL expected after 'link'"`. This one was mine, from the `link`
+    keyword added in the previous commit.
+  - **Colour names kept their original case**, so `on #FF0000` did not normalize
+    to `on #ff0000` and a mixed-case open/close tag pair raised.
+  - **`Text::new` did not strip control codes** (BEL, backspace, vertical tab,
+    form feed, carriage return), which upstream removes on construction.
 - **Six markup and `Style::parse` defects**, all found by an adversarial review of
   the named-span change and each verified against real rich 15.0.0:
   - **The highlighter beat markup.** `[green]123[/]` rendered `repr.number` cyan

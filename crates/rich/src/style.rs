@@ -275,10 +275,12 @@ impl Style {
                     style.attrs[idx] = Some(false);
                 }
                 "link" => {
-                    // `link` takes the rest of the word as its target; a missing
-                    // one is an empty link, not an error (upstream's
-                    // `next(words, "")`).
-                    style.link = Some(words.next().unwrap_or("").to_string());
+                    // A bare `link` is a syntax error upstream, not an empty
+                    // link — accepting it would emit a hyperlink to nowhere.
+                    let url = words.next().filter(|url| !url.is_empty()).ok_or_else(|| {
+                        RichError::StyleSyntax("URL expected after 'link'".to_string())
+                    })?;
+                    style.link = Some(url.to_string());
                 }
                 _ => {
                     if let Some(idx) = attribute_index(&word) {
@@ -501,8 +503,9 @@ mod tests {
         let style = Style::parse("link https://example.com").expect("link parses");
         assert_eq!(style.link.as_deref(), Some("https://example.com"));
         assert_eq!(style.definition(), "link https://example.com");
-        // A bare `link` takes an empty target rather than erroring.
-        assert_eq!(Style::parse("link").unwrap().link.as_deref(), Some(""));
+        // A bare `link` is a syntax error, exactly as upstream — accepting it
+        // would emit a hyperlink to nowhere.
+        assert!(Style::parse("link").is_err());
     }
 
     #[test]

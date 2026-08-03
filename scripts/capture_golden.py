@@ -294,6 +294,13 @@ CASES: list[tuple[str, str]] = [
     # An uppercase tag is not a tag at all (RE_TAGS is `[a-z#/@]`), so this is
     # literal text followed by a close with nothing open.
     ("uppercase_is_not_a_tag", "[BOLD]x"),
+    # Colour names normalize to lower case, so a mixed-case open matches a
+    # lower-case close and `Style::definition` round-trips.
+    ("mixed_case_hex_colour", "[on #FF0000]x[/on #ff0000]"),
+    ("mixed_case_named_colour", "[RED]x"),
+    # A bare `link` is a syntax error, so this tag resolves to nothing rather
+    # than emitting a hyperlink to nowhere.
+    ("bare_link_is_not_a_style", "[link]y[/]"),
     ("hex_truecolor", "[#ff8800]x[/]"),
     ("plain_text", "no styles here"),
     ("emoji_rocket", ":rocket: launch :fire:"),
@@ -338,6 +345,12 @@ RENDERABLE_CASES = [
     # A bare justified Text is shrunk to its content width (measurement-fit),
     # so it appears unpadded — the payoff of the Measurement port.
     ("text_justify_bare", 10, Text("hi", justify="center")),
+    # Tabs must be expanded to 8-cell stops before anything measures or wraps.
+    ("text_tabs", 40, Text("a\tb\tc")),
+    ("text_tabs_multiline", 40, Text("ab\tc\nd\te")),
+    # Control codes are stripped on construction (BEL, BS, VT, FF, CR) while
+    # tab and newline survive.
+    ("text_control_codes", 40, Text("a\rb\x07c\x08d")),
     ("table_square", 40, _table(box.SQUARE)),
     ("table_default", 40, _table(box.HEAVY_HEAD)),
     ("table_simple", 40, _table(box.SIMPLE)),

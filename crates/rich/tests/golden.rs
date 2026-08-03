@@ -259,6 +259,9 @@ fn unescape(s: &str) -> String {
 /// `RENDERABLE_CASES` in `scripts/capture_golden.py`.
 fn build_renderable(name: &str) -> Box<dyn Renderable> {
     match name {
+        "text_tabs" => Box::new(Text::new("a\tb\tc")),
+        "text_tabs_multiline" => Box::new(Text::new("ab\tc\nd\te")),
+        "text_control_codes" => Box::new(Text::new("a\rb\x07c\x08d")),
         "rule_plain" => Box::new(Rule::line()),
         "rule_title" | "rule_title_odd" => Box::new(Rule::new("Hi")),
         "rule_left" => Box::new(Rule::new("Hi").align(HorizontalAlign::Left)),
