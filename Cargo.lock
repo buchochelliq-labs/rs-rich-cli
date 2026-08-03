@@ -344,6 +344,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rich-art"
+version = "0.1.0"
+dependencies = [
+ "rich",
+]
+
+[[package]]
 name = "rich-cli"
 version = "1.8.1"
 dependencies = [

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/rich", "crates/rich-ext", "crates/rich-cli"]
+members = ["crates/rich", "crates/rich-ext", "crates/rich-cli", "crates/rich-art"]
 
 # Shared metadata. NOTE: `version` is intentionally NOT shared here — each crate
 # carries its own version because `rich` and `rich-cli` mirror *different*
@@ -16,6 +16,7 @@ rust-version = "1.74"
 # Internal crates
 rich = { path = "crates/rich", version = "15.0.0" }
 rich-ext = { path = "crates/rich-ext", version = "0.1.0" }
+rich-art = { path = "crates/rich-art", version = "0.1.0" }
 
 # Third-party (kept lean for the first slice)
 unicode-width = "0.2"
