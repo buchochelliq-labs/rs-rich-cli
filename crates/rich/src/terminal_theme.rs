@@ -74,6 +74,78 @@ pub const SVG_EXPORT_THEME: TerminalTheme = TerminalTheme {
     ],
 };
 
+/// The Monokai palette. Port of `rich.terminal_theme.MONOKAI`.
+pub const MONOKAI: TerminalTheme = TerminalTheme {
+    background: ColorTriplet::new(12, 12, 12),
+    foreground: ColorTriplet::new(217, 217, 217),
+    ansi: [
+        ColorTriplet::new(26, 26, 26),
+        ColorTriplet::new(244, 0, 95),
+        ColorTriplet::new(152, 224, 36),
+        ColorTriplet::new(253, 151, 31),
+        ColorTriplet::new(157, 101, 255),
+        ColorTriplet::new(244, 0, 95),
+        ColorTriplet::new(88, 209, 235),
+        ColorTriplet::new(196, 197, 181),
+        ColorTriplet::new(98, 94, 76),
+        ColorTriplet::new(244, 0, 95),
+        ColorTriplet::new(152, 224, 36),
+        ColorTriplet::new(224, 213, 97),
+        ColorTriplet::new(157, 101, 255),
+        ColorTriplet::new(244, 0, 95),
+        ColorTriplet::new(88, 209, 235),
+        ColorTriplet::new(246, 246, 239),
+    ],
+};
+
+/// A muted Monokai. Port of `rich.terminal_theme.DIMMED_MONOKAI`.
+pub const DIMMED_MONOKAI: TerminalTheme = TerminalTheme {
+    background: ColorTriplet::new(25, 25, 25),
+    foreground: ColorTriplet::new(185, 188, 186),
+    ansi: [
+        ColorTriplet::new(58, 61, 67),
+        ColorTriplet::new(190, 63, 72),
+        ColorTriplet::new(135, 154, 59),
+        ColorTriplet::new(197, 166, 53),
+        ColorTriplet::new(79, 118, 161),
+        ColorTriplet::new(133, 92, 141),
+        ColorTriplet::new(87, 143, 164),
+        ColorTriplet::new(185, 188, 186),
+        ColorTriplet::new(136, 137, 135),
+        ColorTriplet::new(251, 0, 31),
+        ColorTriplet::new(15, 114, 47),
+        ColorTriplet::new(196, 112, 51),
+        ColorTriplet::new(24, 109, 227),
+        ColorTriplet::new(251, 0, 103),
+        ColorTriplet::new(46, 112, 109),
+        ColorTriplet::new(253, 255, 185),
+    ],
+};
+
+/// A light theme. Port of `rich.terminal_theme.NIGHT_OWLISH`.
+pub const NIGHT_OWLISH: TerminalTheme = TerminalTheme {
+    background: ColorTriplet::new(255, 255, 255),
+    foreground: ColorTriplet::new(64, 63, 83),
+    ansi: [
+        ColorTriplet::new(1, 22, 39),
+        ColorTriplet::new(211, 66, 62),
+        ColorTriplet::new(42, 162, 152),
+        ColorTriplet::new(218, 170, 1),
+        ColorTriplet::new(72, 118, 214),
+        ColorTriplet::new(64, 63, 83),
+        ColorTriplet::new(8, 145, 106),
+        ColorTriplet::new(122, 129, 129),
+        ColorTriplet::new(122, 129, 129),
+        ColorTriplet::new(247, 110, 110),
+        ColorTriplet::new(73, 208, 197),
+        ColorTriplet::new(218, 194, 107),
+        ColorTriplet::new(92, 167, 228),
+        ColorTriplet::new(105, 112, 152),
+        ColorTriplet::new(0, 201, 144),
+        ColorTriplet::new(152, 159, 177),
+    ],
+};
+
 /// Blend two triplets, `cross_fade` of the way from `color1` to `color2`
 /// (truncating toward zero, matching upstream's `int()`). Port of
 /// `rich.color.blend_rgb`.

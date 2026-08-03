@@ -343,19 +343,39 @@ impl Console {
     /// document (inline styles), using the default terminal theme. Port of
     /// `Console.export_html(inline_styles=True)`.
     pub fn export_html(&self, f: impl FnOnce(&Console)) -> String {
+        self.export_html_themed(&crate::terminal_theme::DEFAULT_TERMINAL_THEME, f)
+    }
+
+    /// Like [`export_html`](Self::export_html) but with an explicit palette —
+    /// upstream's `export_html(theme=…)`. See [`terminal_theme`] for the
+    /// bundled presets.
+    ///
+    /// [`terminal_theme`]: crate::terminal_theme
+    pub fn export_html_themed(
+        &self,
+        theme: &crate::terminal_theme::TerminalTheme,
+        f: impl FnOnce(&Console),
+    ) -> String {
         let segments = self.record(f);
-        crate::export::export_html_inline(&segments, &crate::terminal_theme::DEFAULT_TERMINAL_THEME)
+        crate::export::export_html_inline(&segments, theme)
     }
 
     /// Like [`export_html`](Self::export_html) but with a generated CSS-class
     /// stylesheet (`.r1 {…}`) instead of inline styles. Port of upstream's
     /// default `Console.export_html(inline_styles=False)`.
     pub fn export_html_classes(&self, f: impl FnOnce(&Console)) -> String {
+        self.export_html_classes_themed(&crate::terminal_theme::DEFAULT_TERMINAL_THEME, f)
+    }
+
+    /// Like [`export_html_classes`](Self::export_html_classes) but with an
+    /// explicit palette — upstream's `export_html(theme=…, inline_styles=False)`.
+    pub fn export_html_classes_themed(
+        &self,
+        theme: &crate::terminal_theme::TerminalTheme,
+        f: impl FnOnce(&Console),
+    ) -> String {
         let segments = self.record(f);
-        crate::export::export_html_classes(
-            &segments,
-            &crate::terminal_theme::DEFAULT_TERMINAL_THEME,
-        )
+        crate::export::export_html_classes(&segments, theme)
     }
 
     /// Capture output printed inside `f` and export it as a self-contained SVG
@@ -369,14 +389,25 @@ impl Console {
     ///
     /// [`SVG_EXPORT_THEME`]: crate::terminal_theme::SVG_EXPORT_THEME
     pub fn export_svg(&self, title: &str, unique_id: &str, f: impl FnOnce(&Console)) -> String {
-        let segments = self.record(f);
-        crate::svg::export_svg(
-            &segments,
+        self.export_svg_themed(
             &crate::terminal_theme::SVG_EXPORT_THEME,
             title,
             unique_id,
-            self.width(),
+            f,
         )
+    }
+
+    /// Like [`export_svg`](Self::export_svg) but with an explicit palette —
+    /// upstream's `export_svg(theme=…)`.
+    pub fn export_svg_themed(
+        &self,
+        theme: &crate::terminal_theme::TerminalTheme,
+        title: &str,
+        unique_id: &str,
+        f: impl FnOnce(&Console),
+    ) -> String {
+        let segments = self.record(f);
+        crate::svg::export_svg(&segments, theme, title, unique_id, self.width())
     }
 
     /// Run `f` with output recorded to a fresh buffer, returning the captured
@@ -734,6 +765,40 @@ mod tests {
         // Captured from real rich 15.0.0 (Console.capture()).
         let out = console.capture(|c| c.print_str("[bold red]hi[/] there"));
         assert_eq!(out, "\x1b[1;31mhi\x1b[0m there\n");
+    }
+
+    #[test]
+    fn themed_exports_use_the_given_palette() {
+        use crate::terminal_theme::{MONOKAI, NIGHT_OWLISH};
+
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(20)
+            .no_color(false)
+            .build();
+        let render = |c: &Console| c.print_str("hi");
+
+        // Monokai's background is #0c0c0c and Night Owlish's is #ffffff, so the
+        // chosen theme has to show up in the emitted CSS.
+        let monokai = console.export_html_themed(&MONOKAI, render);
+        assert!(
+            monokai.contains("#0c0c0c"),
+            "monokai bg missing:\n{monokai}"
+        );
+
+        let owlish = console.export_html_themed(&NIGHT_OWLISH, render);
+        assert!(owlish.contains("#ffffff"), "owlish bg missing:\n{owlish}");
+        assert!(!owlish.contains("#0c0c0c"), "leaked monokai into owlish");
+
+        // The class form and SVG take a theme too.
+        let classes = console.export_html_classes_themed(&MONOKAI, render);
+        assert!(classes.contains("#0c0c0c"), "class-form ignored the theme");
+        let svg = console.export_svg_themed(&MONOKAI, "t", "id", render);
+        assert!(svg.contains("#0c0c0c"), "svg ignored the theme");
+
+        // The convenience methods keep their documented defaults.
+        assert!(console.export_html(render).contains("#ffffff"));
     }
 
     #[test]
