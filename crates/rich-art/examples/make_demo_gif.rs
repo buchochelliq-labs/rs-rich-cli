@@ -1,8 +1,9 @@
-//! Generate `cat.gif` — a waving cat — for trying out GIF playback.
+//! Generate the demo assets — a waving cat and a bouncing ball — used by the
+//! GIF examples.
 //!
 //! ```text
 //! cargo run -p rich-art --features gif --example make_demo_gif
-//! cargo run -p rich-art --features gif --example gif -- cat.gif 3
+//! cargo run -p rich-art --features gif --example gif -- crates/rich-art/examples/assets/cat.gif 3
 //! ```
 //!
 //! Drawn procedurally so the repository needs no binary fixture. Shapes are
@@ -146,17 +147,61 @@ fn draw_cat(phase: f64) -> RgbaImage {
     img
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// A bouncing ball — a second animation, with a *different* frame rate, so the
+/// stage example shows independent clocks.
+fn draw_ball(phase: f64) -> RgbaImage {
+    let mut img = RgbaImage::from_pixel(SIZE, SIZE, DARK);
+    // |sin| gives a convincing bounce: fast through the bottom, slow at the top.
+    let height = (phase.sin()).abs();
+    let cy = 78.0 - 54.0 * height;
+    // Squash slightly on impact.
+    let squash = 1.0 + 0.25 * (1.0 - height);
+    ellipse(&mut img, 48.0, cy, 13.0 * squash, 13.0 / squash, PINK);
+    // Ground line.
+    for x in 8..(SIZE - 8) {
+        img.put_pixel(x, 92, FUR);
+        img.put_pixel(x, 93, FUR);
+    }
+    img
+}
+
+fn encode(frames: impl Iterator<Item = RgbaImage>, delay_ms: u32) -> Vec<u8> {
     let mut buffer = Vec::new();
     {
         let mut encoder = GifEncoder::new(&mut buffer);
-        for f in 0..FRAMES {
-            let phase = (f as f64 / FRAMES as f64) * std::f64::consts::TAU;
-            let frame = Frame::from_parts(draw_cat(phase), 0, 0, Delay::from_numer_denom_ms(80, 1));
-            encoder.encode_frame(frame)?;
+        for image in frames {
+            let frame = Frame::from_parts(image, 0, 0, Delay::from_numer_denom_ms(delay_ms, 1));
+            encoder.encode_frame(frame).expect("encodes");
         }
     }
-    std::fs::write("cat.gif", &buffer)?;
-    println!("wrote cat.gif ({} frames, {} bytes)", FRAMES, buffer.len());
+    buffer
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/examples/assets");
+    std::fs::create_dir_all(dir)?;
+
+    let cat = encode(
+        (0..FRAMES).map(|f| draw_cat((f as f64 / FRAMES as f64) * std::f64::consts::TAU)),
+        80,
+    );
+    std::fs::write(format!("{dir}/cat.gif"), &cat)?;
+    println!(
+        "wrote cat.gif ({FRAMES} frames @ 80ms, {} bytes)",
+        cat.len()
+    );
+
+    // Deliberately a different frame rate from the cat.
+    let ball_frames = 16;
+    let ball = encode(
+        (0..ball_frames)
+            .map(|f| draw_ball((f as f64 / ball_frames as f64) * std::f64::consts::TAU)),
+        45,
+    );
+    std::fs::write(format!("{dir}/ball.gif"), &ball)?;
+    println!(
+        "wrote ball.gif ({ball_frames} frames @ 45ms, {} bytes)",
+        ball.len()
+    );
     Ok(())
 }

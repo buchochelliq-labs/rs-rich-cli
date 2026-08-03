@@ -36,6 +36,14 @@ required-features = ["gif"]
 name = "make_demo_gif"
 required-features = ["gif"]
 
+[[example]]
+name = "stage"
+required-features = ["gif"]
+
+[[example]]
+name = "shrink_asset"
+required-features = ["gif"]
+
 [lints]
 workspace = true
 

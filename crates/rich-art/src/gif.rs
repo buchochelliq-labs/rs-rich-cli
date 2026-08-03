@@ -44,12 +44,14 @@ pub enum Repeat {
 }
 
 /// One decoded frame: a full canvas plus how long it should be shown.
+#[derive(Clone)]
 struct Frame {
     image: DynamicImage,
     delay: Duration,
 }
 
 /// An animated GIF, renderable as terminal art.
+#[derive(Clone)]
 pub struct AnimatedArt {
     frames: Vec<Frame>,
     width: Option<usize>,
@@ -168,6 +170,12 @@ impl AnimatedArt {
         }
     }
 
+    /// How long frame `index` is displayed, after any frame-rate cap. Used by
+    /// [`Stage`](crate::Stage) to drive each animation on its own clock.
+    pub fn frame_delay(&self, index: usize) -> Option<Duration> {
+        self.frames.get(index).map(|frame| self.delay_of(frame))
+    }
+
     /// Frame `index` as a still renderable, carrying this animation's options.
     pub fn frame(&self, index: usize) -> Option<AsciiArt> {
         let frame = self.frames.get(index)?;
@@ -187,7 +195,7 @@ impl AnimatedArt {
     }
 
     /// How many passes to make, or `None` for endless.
-    fn passes(&self) -> Option<usize> {
+    pub(crate) fn passes(&self) -> Option<usize> {
         match self.repeat {
             Repeat::Once => Some(1),
             Repeat::Times(n) => Some(n),
@@ -267,15 +275,15 @@ impl Renderable for AnimatedArt {
     }
 }
 
+/// Helpers shared by this module's tests and the [`stage`](crate::stage) ones.
 #[cfg(test)]
-mod tests {
-    use super::*;
+pub(crate) mod tests_support {
     use image::codecs::gif::GifEncoder;
     use image::{Delay, Frame as ImageFrame, Rgba, RgbaImage};
 
-    /// Encode a small animated GIF in memory: `frames` solid colours, each
-    /// shown for `delay_ms`.
-    fn make_gif(colors: &[[u8; 3]], delay_ms: u32) -> Vec<u8> {
+    /// Encode a small animated GIF in memory: one solid-colour frame per entry
+    /// in `colors`, each shown for `delay_ms`.
+    pub(crate) fn make_gif(colors: &[[u8; 3]], delay_ms: u32) -> Vec<u8> {
         let mut buffer = Vec::new();
         {
             let mut encoder = GifEncoder::new(&mut buffer);
@@ -288,6 +296,12 @@ mod tests {
         }
         buffer
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tests_support::make_gif;
+    use super::*;
 
     #[test]
     fn decodes_frames_and_delays() {

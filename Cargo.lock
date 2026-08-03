@@ -454,6 +454,7 @@ name = "rich-cli"
 version = "1.8.1"
 dependencies = [
  "rich",
+ "rich-art",
  "rich-ext",
  "serde_json",
  "ureq",

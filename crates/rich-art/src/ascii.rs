@@ -35,6 +35,7 @@ pub struct AsciiArt {
     ramp: Vec<char>,
     invert: bool,
     color: bool,
+    normalize: bool,
 }
 
 impl AsciiArt {
@@ -47,6 +48,7 @@ impl AsciiArt {
             ramp: DEFAULT_RAMP.chars().collect(),
             invert: false,
             color: false,
+            normalize: true,
         }
     }
 
@@ -95,6 +97,24 @@ impl AsciiArt {
         self
     }
 
+    /// Stretch the image's luminance range across the whole ramp (on by
+    /// default).
+    ///
+    /// Photographs rarely span pure black to pure white, so mapping raw
+    /// luminance onto the ramp bunches most cells into the middle and the art
+    /// reads as noise. Auto-levelling rescales what's actually there. Turn it
+    /// off to map absolute luminance instead.
+    pub fn normalize(mut self, normalize: bool) -> Self {
+        self.normalize = normalize;
+        self
+    }
+
+    /// How many columns this art occupies given the available width — its
+    /// explicit width if set, else the space offered.
+    pub fn columns(&self, available: usize) -> usize {
+        self.grid(available).0
+    }
+
     /// The output grid for a given available width.
     fn grid(&self, available: usize) -> (usize, usize) {
         let (image_width, image_height) = self.image.dimensions();
@@ -140,12 +160,32 @@ impl AsciiArt {
             .resize_exact(columns as u32, rows as u32, FilterType::Triangle)
             .to_rgba8();
 
+        // Auto-levels: find the luminance range actually present so it can be
+        // stretched across the ramp. A flat image (min == max) is left alone.
+        let (low, span) = if self.normalize {
+            let mut min = f64::MAX;
+            let mut max = f64::MIN;
+            for pixel in scaled.pixels() {
+                let luma = Self::luminance(*pixel);
+                min = min.min(luma);
+                max = max.max(luma);
+            }
+            if max - min > f64::EPSILON {
+                (min, max - min)
+            } else {
+                (0.0, 255.0)
+            }
+        } else {
+            (0.0, 255.0)
+        };
+        let level = |luma: f64| ((luma - low) / span) * 255.0;
+
         (0..rows)
             .map(|y| {
                 (0..columns)
                     .map(|x| {
                         let pixel = *scaled.get_pixel(x as u32, y as u32);
-                        let glyph = self.glyph(Self::luminance(pixel));
+                        let glyph = self.glyph(level(Self::luminance(pixel)));
                         let colour = if self.color {
                             let [r, g, b, _] = pixel.0;
                             Some(Color::from_rgb(r, g, b))
