@@ -670,7 +670,7 @@ fn is_number(value: &str) -> bool {
         return false; // more than one '.'
     }
     let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
-    digits(int_part) && frac_part.map_or(true, digits)
+    digits(int_part) && frac_part.is_none_or(digits)
 }
 
 /// Build a table from parsed CSV `rows`, mirroring rich-cli's `render_csv`:
