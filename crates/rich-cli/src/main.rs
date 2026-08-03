@@ -943,6 +943,9 @@ fn run_demo() {
     let mut console = Console::builder()
         .force_terminal(true)
         .color_system(Some(ColorSystem::Truecolor))
+        // `[error]`/`[warning]`/`[info]` are rich-ext's additions, not upstream
+        // styles — the core theme is a faithful 154-entry port.
+        .theme(rich_ext::extended_theme())
         .build();
     console.install_extensions();
 

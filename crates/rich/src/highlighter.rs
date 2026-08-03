@@ -61,30 +61,14 @@ const ISO8601_PATTERNS: &[&str] = &[
 /// `default_styles.py` used by the built-in highlighters). Unknown names get a
 /// null style — matching upstream's `get_style(name, default=Style.null())`.
 fn default_style(name: &str) -> Style {
-    let spec = match name {
-        "repr.tag_start" | "repr.tag_end" | "repr.brace" => "bold",
-        "repr.tag_name" => "bold bright_magenta",
-        "repr.tag_contents" => "default",
-        "repr.attrib_name" => "not italic yellow",
-        "repr.attrib_value" => "not italic magenta",
-        "repr.ipv4" | "repr.ipv6" | "repr.eui48" | "repr.eui64" => "bold bright_green",
-        "repr.uuid" => "not bold bright_yellow",
-        "repr.call" => "bold magenta",
-        "repr.bool_true" => "italic bright_green",
-        "repr.bool_false" => "italic bright_red",
-        "repr.none" => "italic magenta",
-        "repr.ellipsis" => "yellow",
-        "repr.number" | "repr.number_complex" => "bold not italic cyan",
-        "repr.path" => "magenta",
-        "repr.filename" => "bright_magenta",
-        "repr.str" => "not bold not italic green",
-        "repr.url" => "not bold not italic underline bright_blue",
-        "iso8601.date" => "blue",
-        "iso8601.time" => "magenta",
-        "iso8601.timezone" => "yellow",
-        _ => return Style::new(),
-    };
-    Style::parse(spec).unwrap_or_default()
+    // Resolved from the single upstream style table rather than a second copy
+    // kept here — the two used to drift (the local copy was right, `theme.rs`'s
+    // was lossy). An unknown name yields a null style, matching upstream's
+    // `get_style(name, default=Style.null())`.
+    crate::theme::Theme::default_shared()
+        .get(name)
+        .cloned()
+        .unwrap_or_default()
 }
 
 /// Compile a slice of pattern strings.

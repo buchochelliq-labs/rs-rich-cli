@@ -22,9 +22,11 @@
 
 pub mod highlighter;
 pub mod registry;
+pub mod theme;
 
 pub use highlighter::NumberHighlighter;
 pub use registry::{install_defaults, ExtensionRegistry};
+pub use theme::{extended_theme, EXTRA_STYLES};
 
 use rich::Console;
 

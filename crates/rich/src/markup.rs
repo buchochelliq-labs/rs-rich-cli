@@ -231,8 +231,20 @@ mod tests {
 
     #[test]
     fn theme_name_resolves() {
-        // "error" -> "bold red" -> 1;31
-        assert_eq!(render_to_ansi("[error]boom[/]"), "\x1b[1;31mboom\x1b[0m");
+        // An upstream style name resolves via the theme rather than being
+        // parsed as an inline definition: "repr.number" -> bold not-italic cyan.
+        // Captured from real rich 15.0.0: `[repr.number]7[/]`.
+        assert_eq!(render_to_ansi("[repr.number]7[/]"), "\x1b[1;36m7\x1b[0m");
+    }
+
+    #[test]
+    fn none_is_the_null_style() {
+        // Upstream's `Style.parse` special-cases a bare "none" (many
+        // DEFAULT_STYLES entries are exactly that); as a *word* inside a longer
+        // definition it is still an error.
+        assert!(Style::parse("none").unwrap().is_null());
+        assert!(Style::parse("").unwrap().is_null());
+        assert!(Style::parse("bold none").is_err());
     }
 
     #[test]
