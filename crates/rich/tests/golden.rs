@@ -186,6 +186,22 @@ fn table_style_table() -> Table {
     table
 }
 
+fn csv_style_table() -> Table {
+    // Mirrors rich-cli's render_csv styling: HEAVY_HEAD, blue border, numeric
+    // column (Age) right-justified with a bold-green body + header cell.
+    let mut table = Table::new()
+        .box_set(HEAVY_HEAD)
+        .border_style(Style::parse("blue").unwrap());
+    table.add_column("Name");
+    table.add_column_justify("Age", Justify::Right);
+    table.column_style(Style::parse("bold green").unwrap());
+    table.column_header_fill(Style::parse("bold green").unwrap());
+    table.add_column("City");
+    table.add_row(&["Alice", "30", "NYC"]);
+    table.add_row(&["Bob", "25", "LA"]);
+    table
+}
+
 fn table_ratio_table() -> Table {
     let mut table = Table::new().box_set(SQUARE).expand(true);
     table.add_column("A");
@@ -307,6 +323,7 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "table_no_edge" => Box::new(edge_table(true, false)),
         "table_collapse" => Box::new(collapse_table()),
         "table_style" => Box::new(table_style_table()),
+        "table_csv_style" => Box::new(csv_style_table()),
         "table_ratio" => Box::new(table_ratio_table()),
         "table_min_width" => Box::new(table_min_width_table()),
         "table_max_width" => Box::new(table_max_width_table()),

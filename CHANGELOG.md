@@ -8,6 +8,95 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Paging** (`pager.rs` + `Console::page`, `rich-cli --pager`) — the last
+  unported rich-cli surface item. A `Pager` trait with a `SystemPager` that
+  ports `pydoc.get_pager`'s selection order (`MANPAGER`, then `PAGER` — split
+  into program + args — then `less -R`/`more`), including its guards: no tty on
+  stdin/stdout or `TERM=dumb`/`emacs` falls back to writing straight to stdout,
+  as does a pager that can't be spawned. `Console::page(styles, f)` buffers a
+  closure's output and shows it, stripping styles unless `styles` is set
+  (matching `Console.pager(styles=False)`); `page_with` takes a custom `Pager`,
+  upstream's `Console.pager(pager=…)` seam. `rich --pager` pages *styled*
+  output. **The rich-cli surface is now complete.**
+- **`rich-cli` URL fetch** (`rich-cli/main.rs`, completes the common CLI surface):
+  `rich <url>` fetches an `http(s)` resource and renders it — the render mode
+  comes from a flag, else the URL extension, else the response `Content-Type`
+  (markdown/json/csv), else syntax-highlighting (with a lexer guessed from the
+  Content-Type; upstream's behavior). Fetching uses `ureq` (rustls +
+  bundled webpki roots — self-contained TLS), bounded by a 30 s timeout and a
+  16 MiB **decoded**-body limit, behind a **default `fetch` feature**
+  (`--no-default-features` gives a lean, network-free build). Like
+  `requests.get`, a non-2xx status still renders the response body. The size
+  limit is applied to the post-decompression stream (ureq's own `limit()` sits
+  *under* the gzip decoder and would only bound compressed bytes, leaving a
+  decompression-bomb hole); oversized and non-UTF-8 bodies get their own clear
+  errors. The only deliberate divergences from upstream are the timeout and size
+  bound, which upstream lacks.
+- **`Live` auto-refresh thread** (`live.rs`, advances DIVERGENCES #17):
+  `Live::spawn(renderable, console, writer, refresh_per_second)` returns an
+  `AutoLive` handle whose background thread redraws on an interval (and on each
+  `update`) — a port of upstream's `refresh_per_second`. The thread constructs and
+  owns the `Live` internally (only `Send` inputs cross the boundary), so
+  `Console` is now `Send` (highlighter boxes are `dyn Highlighter + Send`; the
+  rich-ext registry factory matches). Deterministically tested to emit the same
+  byte stream through the thread; `Drop` finalizes if `stop()` is skipped.
+- **`rich-cli` `.ipynb` (Jupyter notebook) rendering** (`rich-cli/main.rs`, port
+  of rich-cli's `render_ipynb`): `--ipynb` (and `.ipynb` auto-detect) renders a
+  notebook — markdown cells as `Markdown`, code cells as an `In [n]:` label + a
+  dim `Panel` of `Syntax`, and cell outputs (stream / error traceback /
+  execute_result `text/plain`) decoded via `AnsiDecoder`, blank-line separated.
+  Adds a `serde_json` dependency for notebook parsing. (Rich outputs — images,
+  HTML — are deferred; text is handled.)
+- **`rich-cli` panel `--title` / `--caption` / `--style` + `none` box**
+  (`rich-cli/main.rs`, `box.rs`): completes the `--panel` decorator to full
+  rich-cli fidelity — the panel gets a title (top border), caption (bottom
+  border), and border style (e.g. `--style "bold red"`); `--panel none` uses the
+  new blank `box.NONE`. Composes the already-byte-parity `Panel` builders.
+- **`rich-cli` `--panel` / `--padding` decorators** (`rich-cli/main.rs`): wrap any
+  render mode's output in a `Panel` (`--panel ascii|ascii2|square|rounded|heavy|
+  double`) and/or `Padding` (`--padding` with 1, 2, or 4 comma-separated ints,
+  unpacked like upstream's `Padding.unpack`), composing the byte-parity Panel/
+  Padding renderables. Port of rich-cli's decorator flow (padding inside, panel
+  outside). `Console::build_text` is now public so the `--print` markup can be
+  wrapped. (`none` box + `--title`/`--caption`/`--style` are follow-ups.)
+- **`rich-cli` `--export-svg`** (`rich-cli/main.rs`): exposes the new SVG export
+  through the CLI (any render mode → a self-contained SVG), alongside the existing
+  `--export-html`. The two are mutually exclusive; the SVG title is the resource's
+  basename (else `rich`) and it uses a fixed `unique_id` (the default can't be
+  byte-parity — DIVERGENCES #15). `emit` refactored to an `Export` enum.
+- **`Console::export_svg`** (`svg.rs`, resolves DIVERGENCES #15): exports recorded
+  output as a self-contained SVG image of a terminal window (Fira Code font-face,
+  window chrome + traffic-light circles, per-line clip-paths, a generated CSS
+  class table, and the styled text matrix), using `SVG_EXPORT_THEME`.
+  **Byte-parity** with real rich 15.0.0 (golden `tests/golden/svg_export.svg`).
+  Built on the groundwork primitives `SVG_EXPORT_THEME`, `blend_rgb`, and
+  `Style::get_svg_style`, plus new `Style::attr` / `Color::is_default` accessors.
+  Takes an **explicit `unique_id`** (upstream's default hashes Python `repr()`
+  output, not reproducible in Rust — the auto-default is the only residual, #15).
+- **`rich-cli` CSV/TSV rendering** (`rich-cli/main.rs`, advances the CLI port):
+  `--csv` (and `.csv`/`.tsv` auto-detection) renders a delimited file as a table,
+  a port of rich-cli's `render_csv` — blue-bordered `HEAVY_HEAD` table with the
+  first row as the header and any all-numeric column right-justified + bold-green
+  (body & header). Includes an RFC-4180-ish parser (double-quoted fields with
+  `""` escaping, embedded delimiters/newlines, `\r\n`, leading-BOM stripping) and
+  the numeric-column heuristic. **Byte-parity** with the Table real rich-cli
+  builds (unit-tested). Deferred: `csv.Sniffer` dialect/has-header heuristics and
+  title/caption. Demo shows a CSV table.
+- **`Table` `border_style` + per-column header cell fill** (`table.rs`): a
+  `border_style` builder (tints the box edges/dividers, composed over the table
+  style) and `column_header_fill` (a per-column header *cell* style — content +
+  padding — combined over the table `header_style`, distinct from the existing
+  content-only span). Together they reproduce **rich-cli's `render_csv` styling**
+  byte-parity (HEAVY_HEAD, blue border, numeric columns right-justified + bold
+  green), verified by the new golden `table_csv_style`. Groundwork for the CLI's
+  CSV rendering.
+- **`Progress` `Download` column + `filesize::pick_unit_and_suffix`** (`progress.rs`,
+  `filesize.rs`, advances DIVERGENCES #16): the `DownloadColumn` renders
+  `completed`/`total` in a shared SI byte unit (`0.5/1.0 kB`), byte-parity with
+  rich 15.0.0. Added `pick_unit_and_suffix` (the unit/suffix picker upstream's
+  download/transfer columns share). This completes the *deterministic* Progress
+  columns; only the wall-clock columns (spinner/speed/time) + the `Live` loop
+  remain.
 - **`Progress` custom columns** (`progress.rs`, advances DIVERGENCES #16):
   generalized from a hard-coded 3-column layout to a configurable
   `ProgressColumn` list (`Progress::columns`). Deterministic columns ported

@@ -179,38 +179,48 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** store style names on spans and resolve at render via the theme, under
   the highlighter/theme issue (#3).
 
-### 15. HTML export done (both forms); SVG export not ported
-- **Differs:** `Console::export_html` (inline styles) and
-  `Console::export_html_classes` (the default `.r1 {…}` stylesheet form) are both
-  ported with byte-parity. `export_svg` is not. Custom `TerminalTheme`s work for
-  color resolution, but only the default theme is byte-parity-verified.
-- **Why:** SVG is a separate renderer (font metrics, `<rect>`/`<text>` layout).
-- **Remove:** add `export_svg` (+ the SVG template) under the Console issue (#1).
+### 15. Exports done (HTML both forms + SVG); SVG needs an explicit `unique_id`
+- **Differs:** `Console::export_html` (inline styles), `export_html_classes` (the
+  default `.r1 {…}` stylesheet form), and **`export_svg`** are all ported with
+  byte-parity (`svg.rs`, golden `tests/golden/svg_export.svg`). The only SVG
+  residual: upstream's **default** `unique_id` is `adler32` over Python's `repr()`
+  of each `Segment`, which Rust can't reproduce — so `Console::export_svg` takes an
+  **explicit `unique_id`**, and output is byte-parity with
+  `export_svg(title=…, unique_id=…)`. Same shape as the OSC8 `id=` deviation (#20).
+- **Why:** the default id is non-deterministic (breaks golden tests) and only
+  namespaces the CSS classes / element ids within one document.
+- **Remove:** add an `adler32`-of-`repr` default id only if a caller needs the
+  exact auto-generated ids (rare); the explicit-id form already round-trips.
 
 ### 16. `Progress` — deterministic columns done; time/rate/spinner + Live deferred
 - **Differs:** `Progress` now renders a **configurable `ProgressColumn` list**
   (default: description, flexing bar, percentage), with the deterministic columns
-  ported byte-parity — description, static text, the bar, percentage, and
-  **M-of-N** (`{completed}/{total}`). The grid layout matches upstream's
+  ported byte-parity — description, static text, the bar, percentage, **M-of-N**
+  (`{completed}/{total}`), and **download** (`0.5/1.0 kB`, shared SI byte unit via
+  `filesize::pick_unit_and_suffix`). The grid layout matches upstream's
   `Table.grid(padding=(0, 1))`: fixed columns take their widest cell, the bar
   flexes (capped at 40), single unstyled space between columns. Still deferred:
   the non-deterministic columns (spinner, transfer-speed, time-remaining/elapsed)
-  and the download column's byte-unit formatting, plus the in-place `Live` refresh
-  loop.
+  and the in-place `Live` refresh loop.
 - **Why:** the ported columns are deterministic (testable); the time/rate/spinner
   columns depend on wall-clock elapsed and the refresh loop needs `Live` (#17).
-- **Remove:** add the download/filesize unit formatting and the time/rate/spinner
-  columns (with the `Live` loop) under the Live/progress issue (#6).
+- **Remove:** add the time/rate/spinner columns (with the `Live` loop) under the
+  Live/progress issue (#6).
 
-### 17. `Live` is the manual-refresh core only (no auto-refresh thread)
+### 17. `Live` — auto-refresh thread done; alt-screen/redirect deferred
 - **Differs:** `Live` implements the deterministic `start`/`update`/`refresh`/`stop`
-  flow, writing a byte stream that is byte-parity with upstream's
-  `auto_refresh=False`, `transient=False` Live. Not ported: the background
-  auto-refresh thread (`refresh_per_second`), `transient`/alt-screen modes,
-  stdout/stderr redirection, and the console render-hook integration. It also
+  flow (byte-parity with upstream's `auto_refresh=False`, `transient=False` Live),
+  **and** a background **auto-refresh thread** — `Live::spawn(...)` returns an
+  [`AutoLive`] handle that redraws every `1/refresh_per_second` (and on each
+  `update`), a port of upstream's `refresh_per_second`. The thread constructs and
+  owns the `Live` internally, so only `Send` inputs (renderable/console/writer)
+  cross over — which made `Console` `Send` (its highlighter boxes are now
+  `dyn Highlighter + Send`). Still deferred: `transient`/alt-screen modes,
+  stdout/stderr redirection, and the console render-hook integration; `Live` also
   renders to a generic `Write` sink rather than through `Console`'s own file.
-- **Why:** the manual path captures the mechanism and stays testable; the
-  auto-refresh thread is timing-dependent and the render-hook plumbing is large.
+- **Why:** those remaining pieces are large plumbing; the refresh loop itself is
+  ported and (with a long interval, so no timeout fires) even deterministically
+  tested to emit the same stream through the thread.
 - **Remove:** add a refresh thread + `transient`/alt-screen handling, and route
   through `Console`, under the Live/progress issue (#6).
 

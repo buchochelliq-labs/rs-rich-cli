@@ -115,6 +115,12 @@ impl Style {
         self.bgcolor.as_ref()
     }
 
+    /// The tri-state value of attribute `index` (see the internal `attrs` order:
+    /// 0=bold, 1=dim, 2=italic, 3=underline, 6=reverse, 8=strike, …).
+    pub fn attr(&self, index: usize) -> Option<bool> {
+        self.attrs.get(index).copied().flatten()
+    }
+
     /// True when nothing at all is set (renders as a no-op).
     pub fn is_null(&self) -> bool {
         self.color.is_none()
@@ -249,6 +255,46 @@ impl Style {
         css.join("; ")
     }
 
+    /// The SVG `<text>` CSS declarations for this style under `theme`. Port of
+    /// the `get_svg_style` closure in `Console.export_svg`. Unlike
+    /// [`get_html_style`](Self::get_html_style), the colour is always resolved to
+    /// a concrete triplet (the theme fore/background stands in for a missing or
+    /// default colour), `dim` blends 40% toward the background (not 50%), and the
+    /// rules are joined with a bare `;`.
+    pub fn get_svg_style(&self, theme: &crate::terminal_theme::TerminalTheme) -> String {
+        use crate::terminal_theme::blend_rgb;
+        // Resolve fore/background to concrete triplets (theme defaults fill in for
+        // a None/default colour, exactly as `theme.resolve` does for `Default`).
+        let mut color = self
+            .color
+            .as_ref()
+            .map_or(theme.foreground, |c| theme.resolve(c, true));
+        let mut bgcolor = self
+            .bgcolor
+            .as_ref()
+            .map_or(theme.background, |c| theme.resolve(c, false));
+        if self.attrs[6] == Some(true) {
+            std::mem::swap(&mut color, &mut bgcolor);
+        }
+        if self.attrs[1] == Some(true) {
+            color = blend_rgb(color, bgcolor, 0.4);
+        }
+        let mut rules = vec![format!("fill: {}", color.hex())];
+        if self.attrs[0] == Some(true) {
+            rules.push("font-weight: bold".to_string());
+        }
+        if self.attrs[2] == Some(true) {
+            rules.push("font-style: italic;".to_string());
+        }
+        if self.attrs[3] == Some(true) {
+            rules.push("text-decoration: underline;".to_string());
+        }
+        if self.attrs[8] == Some(true) {
+            rules.push("text-decoration: line-through;".to_string());
+        }
+        rules.join(";")
+    }
+
     /// Wrap `text` in this style's escape sequence for `system`.
     ///
     /// With `system == None` (no color) or a null style, `text` is returned
@@ -290,6 +336,24 @@ mod tests {
             style.render("hello", Some(ColorSystem::Truecolor)),
             "\x1b[1;31mhello\x1b[0m"
         );
+    }
+
+    #[test]
+    fn svg_style_matches_upstream() {
+        // Captured from real rich 15.0.0 `export_svg`'s `get_svg_style` under
+        // `SVG_EXPORT_THEME`. Note: bgcolor is excluded from the fill style,
+        // `reverse` swaps to the background, and dim blends 40% toward it.
+        use crate::terminal_theme::SVG_EXPORT_THEME as theme;
+        let svg = |spec: &str| Style::parse(spec).unwrap().get_svg_style(&theme);
+        assert_eq!(Style::new().get_svg_style(&theme), "fill: #c5c8c6");
+        assert_eq!(svg("bold red"), "fill: #cc555a;font-weight: bold");
+        assert_eq!(svg("italic green"), "fill: #98a84b;font-style: italic;");
+        assert_eq!(svg("dim"), "fill: #868887");
+        assert_eq!(
+            svg("underline blue on yellow"),
+            "fill: #608ab1;text-decoration: underline;"
+        );
+        assert_eq!(svg("reverse"), "fill: #292929");
     }
 
     #[test]

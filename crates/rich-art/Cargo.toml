@@ -1,0 +1,30 @@
+# crates/rich-art — ASCII-art renderables (FIGlet banners, and later image art).
+#
+# ⚠️  NOT a port. This crate is OUR OWN feature, not a mirror of anything
+# upstream, so it carries its own SemVer (like rich-ext) and must never be
+# version-locked to `rich`/`rich-cli`. See AGENTS.md → Versioning.
+#
+# It is deliberately self-contained: it depends only on `rich` (for the
+# `Renderable` trait) so it can be lifted into its own repository unchanged.
+[package]
+name = "rich-art"
+version = "0.1.0"
+description = "ASCII-art renderables for `rich` — FIGlet-style text banners"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+# `image` enables image -> ASCII/ANSI art (jp2a-style). Off by default so the
+# crate stays dependency-free for the FIGlet banners alone.
+image = ["dep:image"]
+
+[lints]
+workspace = true
+
+[dependencies]
+rich.workspace = true
+image = { workspace = true, optional = true }

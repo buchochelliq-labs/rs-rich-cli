@@ -8,8 +8,9 @@
 
 use rich::{Console, Highlighter};
 
-/// A factory that produces a fresh highlighter each time it installs.
-type HighlighterFactory = Box<dyn Fn() -> Box<dyn Highlighter>>;
+/// A factory that produces a fresh highlighter each time it installs. The
+/// highlighter is `Send` so the [`Console`] it installs onto stays `Send`.
+type HighlighterFactory = Box<dyn Fn() -> Box<dyn Highlighter + Send>>;
 
 /// A collection of extensions to install onto a [`Console`].
 #[derive(Default)]
@@ -36,7 +37,7 @@ impl ExtensionRegistry {
     /// [`install`]: ExtensionRegistry::install
     pub fn register_highlighter<F>(&mut self, factory: F) -> &mut Self
     where
-        F: Fn() -> Box<dyn Highlighter> + 'static,
+        F: Fn() -> Box<dyn Highlighter + Send> + 'static,
     {
         self.highlighters.push(Box::new(factory));
         self

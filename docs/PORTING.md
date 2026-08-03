@@ -94,8 +94,11 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | upstream feature | rust `crates/rich-cli/src/…` | status |
 |------------------|------------------------------|:------:|
 | arg parsing, plain-file print, capability demo | `main.rs` | 🟡 |
-| `--print` / `--markdown` / `--json` / `--rule`, width + justify, stdin, extension auto-detect | `main.rs` | 🟡 |
-| `syntax` / `csv`/`tsv` / `panel` / `padding` / `ipynb` / URL fetch / HTML export | (tbd) | ⬜ |
+| `--print` / `--markdown` / `--json` / `--syntax` / `--csv` / `--rule`, width + justify, stdin, extension auto-detect | `main.rs` | 🟡 |
+| `csv`/`tsv` table render (blue border, numeric-column bold-green, quoted-field parse) | `main.rs` | 🟡 CSV done; sniffer heuristics/title deferred |
+| HTML export (`--export-html`) + SVG export (`--export-svg`) | `main.rs` | 🟡 both done |
+| `--panel`/`--padding` decorators (+ title/caption/style), `--ipynb`, URL fetch (`fetch` feature) | `main.rs` | 🟡 done |
+| paging (`--pager`) | `pager.rs` + `main.rs` | 🟡 done |
 
 ---
 

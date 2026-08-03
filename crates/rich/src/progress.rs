@@ -13,6 +13,7 @@
 
 use crate::cells::{cell_len, set_cell_size};
 use crate::console::{Console, ConsoleOptions};
+use crate::filesize;
 use crate::progress_bar::ProgressBar;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
@@ -35,6 +36,9 @@ pub enum ProgressColumn {
     Percentage,
     /// `"{completed}/{total}"` (`MofNCompleteColumn`, `progress.download` — green).
     MofN,
+    /// `"{completed}/{total} {unit}"` in shared SI byte units, e.g. `0.5/1.0 kB`
+    /// (`DownloadColumn`, `progress.download` — green).
+    Download,
 }
 
 impl ProgressColumn {
@@ -50,6 +54,7 @@ impl ProgressColumn {
             ProgressColumn::Text(text, text_style) => (text.clone(), Some(text_style.clone())),
             ProgressColumn::Percentage => (task.percentage_text(), Some(style("magenta"))),
             ProgressColumn::MofN => (task.mofn_text(), Some(style("green"))),
+            ProgressColumn::Download => (task.download_text(), Some(style("green"))),
             ProgressColumn::Bar => unreachable!("bar column has no text cell"),
         }
     }
@@ -85,6 +90,20 @@ impl Task {
         let total = self.total as i64;
         let total_width = total.to_string().len();
         format!("{completed:>total_width$}/{total}")
+    }
+
+    /// The download cell text: `completed`/`total` in a shared SI byte unit, e.g.
+    /// `0.5/1.0 kB`. Port of `DownloadColumn.render` (decimal units). The ratio is
+    /// always `< base`, so upstream's `,` thousands grouping never triggers.
+    fn download_text(&self) -> String {
+        const SUFFIXES: &[&str] = &["bytes", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+        let completed = self.completed as u64;
+        let total = self.total as u64;
+        let (unit, suffix) = filesize::pick_unit_and_suffix(total, SUFFIXES, 1000);
+        let precision = if unit == 1 { 0 } else { 1 };
+        let completed_ratio = completed as f64 / unit as f64;
+        let total_ratio = total as f64 / unit as f64;
+        format!("{completed_ratio:.precision$}/{total_ratio:.precision$} {suffix}")
     }
 }
 
@@ -232,6 +251,41 @@ mod tests {
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m \x1b[35m100%\x1b[0m\n",
             "Waiting     \x1b[38;5;237m",
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m \x1b[35m  0%\x1b[0m",
+        );
+        assert_eq!(render(&progress), expected);
+    }
+
+    #[test]
+    fn download_text_matches_upstream() {
+        // Captured from real rich 15.0.0 DownloadColumn.render (decimal units).
+        let dl = |completed: f64, total: f64| {
+            Task {
+                description: String::new(),
+                total,
+                completed,
+            }
+            .download_text()
+        };
+        assert_eq!(dl(500.0, 1000.0), "0.5/1.0 kB");
+        assert_eq!(dl(500.0, 999.0), "500/999 bytes");
+        assert_eq!(dl(1_500_000.0, 3_000_000.0), "1.5/3.0 MB");
+        assert_eq!(dl(0.0, 1024.0), "0.0/1.0 kB");
+        assert_eq!(dl(2_500_000_000.0, 10_000_000_000.0), "2.5/10.0 GB");
+        assert_eq!(dl(250.0, 250.0), "250/250 bytes");
+    }
+
+    #[test]
+    fn download_column_in_grid_matches_upstream() {
+        // Captured from real rich 15.0.0: description + bar + download at width 50.
+        let mut progress = Progress::new().columns(vec![
+            ProgressColumn::Description,
+            ProgressColumn::Bar,
+            ProgressColumn::Download,
+        ]);
+        progress.add_task("File", 1000.0, 500.0);
+        let expected = concat!(
+            "File \x1b[38;2;249;38;114m━━━━━━━━━━━━━━━━━\x1b[0m\x1b[38;5;237m╺\x1b[0m",
+            "\x1b[38;5;237m━━━━━━━━━━━━━━━━\x1b[0m \x1b[32m0.5/1.0 kB\x1b[0m",
         );
         assert_eq!(render(&progress), expected);
     }

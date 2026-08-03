@@ -81,7 +81,7 @@ pub struct Console {
     ascii_only: bool,
     theme: Theme,
     base_style: Style,
-    highlighters: Vec<Box<dyn Highlighter>>,
+    highlighters: Vec<Box<dyn Highlighter + Send>>,
     /// While capturing, print paths append their segments here instead of
     /// writing to stdout. Mirrors `Console._record_buffer` under `capture()`.
     record_buffer: std::cell::RefCell<Vec<Segment>>,
@@ -156,7 +156,9 @@ impl Console {
     }
 
     /// Register a highlighter. **The core plugin seam** — see docs/PLUGINS.md.
-    pub fn add_highlighter(&mut self, highlighter: Box<dyn Highlighter>) {
+    /// The highlighter must be `Send` so a [`Console`](Console) can move to a
+    /// background thread (e.g. an auto-refreshing [`Live`](crate::live::Live)).
+    pub fn add_highlighter(&mut self, highlighter: Box<dyn Highlighter + Send>) {
         self.highlighters.push(highlighter);
     }
 
@@ -309,6 +311,34 @@ impl Console {
         segments_to_plain(&segments)
     }
 
+    /// Buffer everything printed inside `f` and display it through the system
+    /// pager. The Rust analogue of upstream's `with console.pager():` block.
+    ///
+    /// Styles are stripped unless `styles` is set, matching
+    /// `Console.pager(styles=False)`. When there's no terminal to page in (piped
+    /// output, `TERM=dumb`) or no pager can be started, the content is written
+    /// straight to stdout.
+    pub fn page(&self, styles: bool, f: impl FnOnce(&Console)) -> std::io::Result<()> {
+        self.page_with(&crate::pager::SystemPager, styles, f)
+    }
+
+    /// Like [`page`](Self::page) but with an explicit [`Pager`](crate::pager::Pager)
+    /// — the seam upstream exposes as `Console.pager(pager=…)`.
+    pub fn page_with(
+        &self,
+        pager: &dyn crate::pager::Pager,
+        styles: bool,
+        f: impl FnOnce(&Console),
+    ) -> std::io::Result<()> {
+        let segments = self.record(f);
+        let content = if styles {
+            self.segments_to_string(&segments)
+        } else {
+            segments_to_plain(&segments)
+        };
+        pager.show(&content)
+    }
+
     /// Capture output printed inside `f` and export it as a self-contained HTML
     /// document (inline styles), using the default terminal theme. Port of
     /// `Console.export_html(inline_styles=True)`.
@@ -325,6 +355,27 @@ impl Console {
         crate::export::export_html_classes(
             &segments,
             &crate::terminal_theme::DEFAULT_TERMINAL_THEME,
+        )
+    }
+
+    /// Capture output printed inside `f` and export it as a self-contained SVG
+    /// image of a terminal window, using [`SVG_EXPORT_THEME`]. Port of
+    /// `Console.export_svg`.
+    ///
+    /// `unique_id` prefixes every generated id/class. Upstream's auto-computed
+    /// default hashes Python `repr()` output (not reproducible in Rust), so this
+    /// port takes an explicit id; output is byte-parity with
+    /// `export_svg(title=…, unique_id=…)` (see docs/DIVERGENCES.md #15).
+    ///
+    /// [`SVG_EXPORT_THEME`]: crate::terminal_theme::SVG_EXPORT_THEME
+    pub fn export_svg(&self, title: &str, unique_id: &str, f: impl FnOnce(&Console)) -> String {
+        let segments = self.record(f);
+        crate::svg::export_svg(
+            &segments,
+            &crate::terminal_theme::SVG_EXPORT_THEME,
+            title,
+            unique_id,
+            self.width(),
         )
     }
 
@@ -352,7 +403,10 @@ impl Console {
         self.render_to_string(&text)
     }
 
-    fn build_text(&self, content: &str) -> Text {
+    /// Parse `content` as console markup (expanding emoji + applying the active
+    /// highlighters), returning the styled [`Text`] that `print_str` would print.
+    /// Exposed so callers can wrap the markup in another renderable.
+    pub fn build_text(&self, content: &str) -> Text {
         // Emoji shortcodes are expanded before markup parsing (matching upstream's
         // default `emoji=True`); `:name:` and `[tag]` don't overlap.
         let expanded = if self.emoji {
@@ -680,6 +734,44 @@ mod tests {
         // Captured from real rich 15.0.0 (Console.capture()).
         let out = console.capture(|c| c.print_str("[bold red]hi[/] there"));
         assert_eq!(out, "\x1b[1;31mhi\x1b[0m there\n");
+    }
+
+    #[test]
+    fn page_with_honors_the_styles_flag() {
+        use std::sync::Mutex;
+
+        #[derive(Default)]
+        struct Recorder(Mutex<String>);
+        impl crate::pager::Pager for Recorder {
+            fn show(&self, content: &str) -> std::io::Result<()> {
+                *self.0.lock().unwrap() = content.to_string();
+                Ok(())
+            }
+        }
+
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(20)
+            .no_color(false)
+            .build();
+
+        // styles = false (upstream's `Console.pager()` default) strips ANSI.
+        let plain = Recorder::default();
+        console
+            .page_with(&plain, false, |c| c.print_str("[bold red]hi[/] there"))
+            .unwrap();
+        assert_eq!(plain.0.lock().unwrap().as_str(), "hi there\n");
+
+        // styles = true keeps it, matching `Console.pager(styles=True)`.
+        let styled = Recorder::default();
+        console
+            .page_with(&styled, true, |c| c.print_str("[bold red]hi[/] there"))
+            .unwrap();
+        assert_eq!(
+            styled.0.lock().unwrap().as_str(),
+            "\x1b[1;31mhi\x1b[0m there\n"
+        );
     }
 
     #[test]
