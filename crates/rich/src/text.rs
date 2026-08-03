@@ -197,8 +197,11 @@ impl Text {
         }
         if let Some(width) = width {
             if justify != Justify::Default {
-                for line in &mut lines {
-                    *line = justify_line(line, width, justify, &effective_base);
+                let last = lines.len().saturating_sub(1);
+                for (index, line) in lines.iter_mut().enumerate() {
+                    // Full justification leaves the final line ragged, so it
+                    // needs to know where it is in the paragraph.
+                    *line = justify_line(line, width, justify, &effective_base, index == last);
                 }
             }
         }
@@ -325,15 +328,105 @@ fn char_to_byte(text: &str, char_idx: usize) -> usize {
         .unwrap_or(text.len())
 }
 
+/// Split a rendered line into whitespace-separated words, each word keeping its
+/// own styled segments. Separator spaces are dropped — [`full_justify`] decides
+/// the new gaps. Port of the `line.split(" ")` in upstream's `full` branch.
+fn split_words(line: &[Segment]) -> Vec<Vec<Segment>> {
+    let mut words: Vec<Vec<Segment>> = Vec::new();
+    let mut current: Vec<Segment> = Vec::new();
+    for segment in line {
+        // A segment can straddle a space, so split within it and keep the style.
+        for (index, piece) in segment.text.split(' ').enumerate() {
+            if index > 0 {
+                words.push(std::mem::take(&mut current));
+            }
+            if !piece.is_empty() {
+                current.push(Segment::new(piece, segment.style.clone()));
+            }
+        }
+    }
+    words.push(current);
+    // Wrapping leaves a trailing space on every line but the last, so the naive
+    // split ends with an empty word. Upstream's `Text.split` drops it, and the
+    // count matters: it decides how many gaps share the slack.
+    if words.last().is_some_and(|w| w.is_empty()) {
+        words.pop();
+    }
+    words
+}
+
+/// Distribute `width` across `line`'s words by widening the gaps between them.
+/// Direct port of the `justify == "full"` branch of upstream's `Lines.justify`:
+/// every gap starts at one space, and the extra columns are handed out from the
+/// rightmost gap backwards, cycling.
+fn full_justify(line: &[Segment], width: usize, style: &Style) -> Vec<Segment> {
+    let words = split_words(line);
+    let words_size: usize = words
+        .iter()
+        .map(|word| word.iter().map(Segment::cell_length).sum::<usize>())
+        .sum();
+    let mut num_spaces = words.len().saturating_sub(1);
+    let mut spaces = vec![1usize; num_spaces];
+    if !spaces.is_empty() {
+        let mut index = 0;
+        while words_size + num_spaces < width {
+            let slot = spaces.len() - index - 1;
+            spaces[slot] += 1;
+            num_spaces += 1;
+            index = (index + 1) % spaces.len();
+        }
+    }
+
+    let mut out: Vec<Segment> = Vec::new();
+    for (index, word) in words.iter().enumerate() {
+        out.extend(word.iter().cloned());
+        if let Some(&gap) = spaces.get(index) {
+            // Upstream styles the gap with the surrounding style when the two
+            // neighbours agree, else with the line's base style.
+            let before = word.last().and_then(|s| s.style.clone());
+            let after = words
+                .get(index + 1)
+                .and_then(|w| w.first())
+                .and_then(|s| s.style.clone());
+            let gap_style = if before == after {
+                before.unwrap_or_else(|| style.clone())
+            } else {
+                style.clone()
+            };
+            out.push(Segment::new(" ".repeat(gap), Some(gap_style)));
+        }
+    }
+    out
+}
+
 /// Pad `line` to `width` cells according to `justify`, using `style` for the
 /// pad (so e.g. a styled table cell fills with its own style).
-fn justify_line(line: &[Segment], width: usize, justify: Justify, style: &Style) -> Vec<Segment> {
+///
+/// `is_last` marks the final line of the paragraph, which full justification
+/// leaves ragged rather than stretching.
+fn justify_line(
+    line: &[Segment],
+    width: usize,
+    justify: Justify,
+    style: &Style,
+    is_last: bool,
+) -> Vec<Segment> {
+    // Full justification rewrites the interior gaps instead of padding an edge.
+    if justify == Justify::Full {
+        // Upstream `break`s before the final line, so it is left exactly as
+        // wrapped — not even padded out to the width, unlike every other mode.
+        return if is_last {
+            line.to_vec()
+        } else {
+            full_justify(line, width, style)
+        };
+    }
     let line_width: usize = line.iter().map(Segment::cell_length).sum();
     let excess = width.saturating_sub(line_width);
     let (left, right) = match justify {
         Justify::Right => (excess, 0),
         Justify::Center => (excess / 2, excess - excess / 2),
-        // Left and (for now) Full pad on the right; Default never reaches here.
+        // Left, Default, and full justification's ragged last line pad right.
         Justify::Left | Justify::Full | Justify::Default => (0, excess),
     };
     let mut out = Vec::with_capacity(line.len() + 2);
@@ -350,6 +443,38 @@ fn justify_line(line: &[Segment], width: usize, justify: Justify, style: &Style)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Full justification widens the gaps between words so every line but the
+    /// last fills the width exactly.
+    ///
+    /// Captured verbatim from real rich 15.0.0 —
+    /// `Lines.justify(console, 20, justify="full")` on
+    /// `"aaa bbb ccc ddddddddddddddddddd ee ff"` yields:
+    ///
+    /// ```text
+    /// 'aaa     bbb      ccc'   <- stretched to exactly 20
+    /// 'ddddddddddddddddddd'    <- one word: nothing to widen, and the
+    ///                             trailing space wrapping left is dropped
+    /// 'ee ff'                  <- final line untouched: NOT padded to width
+    /// ```
+    ///
+    /// Two details worth pinning: the slack is handed out from the rightmost
+    /// gap backwards (so the gaps are 5 then 6, not 6 then 5), and the last
+    /// line is the one case where a justified line is left short of the width.
+    #[test]
+    fn full_justify_matches_upstream() {
+        let text = Text::new("aaa bbb ccc ddddddddddddddddddd ee ff").justify(Justify::Full);
+        let plain: Vec<String> = text
+            .render_lines(&Style::new(), Some(20))
+            .iter()
+            .map(|line| line.iter().map(|s| s.text.as_str()).collect())
+            .collect();
+        assert_eq!(
+            plain,
+            vec!["aaa     bbb      ccc", "ddddddddddddddddddd", "ee ff"]
+        );
+        assert_eq!(plain[0].chars().count(), 20);
+    }
 
     #[test]
     fn append_creates_spans() {
