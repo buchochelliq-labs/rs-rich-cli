@@ -247,9 +247,12 @@ fn truecolor_console(width: usize) -> Console {
         .build()
 }
 
-/// Turn the human-readable `\x1b` / `\n` markers in a fixture into real bytes.
+/// Turn the human-readable `\x1b` / `\n` / `\x1f` markers in a fixture into real
+/// bytes. `\x1f` separates the pieces of a multi-result `text_ops` case.
 fn unescape(s: &str) -> String {
-    s.replace("\\x1b", "\x1b").replace("\\n", "\n")
+    s.replace("\\x1b", "\x1b")
+        .replace("\\n", "\n")
+        .replace("\\x1f", "\x1f")
 }
 
 /// Build the renderable matching a fixture `name`. Must stay in sync with
@@ -415,6 +418,104 @@ fn truecolor_parity() {
         checked += 1;
     }
     assert!(checked > 0, "no golden cases were checked");
+}
+
+/// Build the result of a `text_ops.tsv` fixture `name`. Must stay in sync with
+/// `TEXT_OPS_CASES` in `scripts/capture_golden.py`.
+fn build_text_op(name: &str) -> Vec<Text> {
+    let style = |s: &str| Style::parse(s).expect("test style must parse");
+    let styled = |plain: &str, spans: &[(&str, usize, usize)]| {
+        let mut text = Text::new(plain);
+        for (s, start, end) in spans {
+            text.stylize(*start, *end, style(s));
+        }
+        text
+    };
+    // Run `mutate` on a text and return it as the single result piece.
+    let mutated = |mut text: Text, mutate: &dyn Fn(&mut Text)| {
+        mutate(&mut text);
+        vec![text]
+    };
+    match name {
+        "divide" => styled("hello world", &[("bold", 0, 5), ("red", 6, 11)]).divide(&[5]),
+        "divide_span_across" => styled("abcdefgh", &[("bold", 2, 7)]).divide(&[4]),
+        "split_newline" => styled("one\ntwo\nthree", &[("bold", 4, 7)]).split("\n", false, false),
+        "split_include" => styled("one\ntwo\nthree", &[("bold", 4, 7)]).split("\n", true, false),
+        "split_trailing" => Text::new("one\ntwo\n").split("\n", false, false),
+        "split_trailing_blank" => Text::new("one\ntwo\n").split("\n", false, true),
+        "split_absent" => Text::new("no separator here").split("|", false, false),
+        "split_word" => styled("a-b-c", &[("bold", 2, 3)]).split("-", false, false),
+        "pad" => mutated(styled("hi", &[("bold", 0, 2)]), &|t| t.pad(3, ' ')),
+        "pad_left" => mutated(styled("hi", &[("bold", 0, 2)]), &|t| t.pad_left(3, '.')),
+        "pad_right" => mutated(styled("hi", &[("bold", 0, 2)]), &|t| t.pad_right(3, '.')),
+        "right_crop" => mutated(styled("hello world", &[("bold", 3, 9)]), &|t| {
+            t.right_crop(4)
+        }),
+        "rstrip" => mutated(styled("hi there   ", &[("bold", 0, 2)]), &|t| t.rstrip()),
+        "rstrip_end_partial" => mutated(Text::new("hello      "), &|t| t.rstrip_end(8)),
+        "rstrip_end_noop" => mutated(Text::new("hi   "), &|t| t.rstrip_end(10)),
+        "expand_tabs" => mutated(Text::new("a\tb\tc"), &|t| t.expand_tabs(4)),
+        "expand_tabs_styled" => mutated(styled("a\tb", &[("bold", 0, 2)]), &|t| t.expand_tabs(8)),
+        "expand_tabs_multiline" => mutated(Text::new("ab\tc\nd\te"), &|t| t.expand_tabs(4)),
+        "join" => vec![Text::new(", ").join(&[
+            Text::new("a"),
+            styled("b", &[("bold", 0, 1)]),
+            Text::new("c"),
+        ])],
+        "join_styled_sep" => {
+            vec![styled(" | ", &[("red", 0, 3)]).join(&[Text::new("x"), Text::new("y")])]
+        }
+        "join_empty_sep" => vec![Text::new("").join(&[Text::new("a"), Text::new("b")])],
+        "highlight_words" => mutated(Text::new("the cat sat on the mat"), &|t| {
+            t.highlight_words(&["cat", "mat"], &style("bold red"), true)
+                .expect("valid pattern");
+        }),
+        "highlight_words_nocase" => mutated(Text::new("Cat cat CAT"), &|t| {
+            t.highlight_words(&["cat"], &style("bold"), false)
+                .expect("valid pattern");
+        }),
+        "highlight_regex" => mutated(Text::new("abc 123 def 456"), &|t| {
+            t.highlight_regex(r"\d+", &style("bold cyan"))
+                .expect("valid pattern");
+        }),
+        other => panic!("unknown text-op fixture {other:?} — add it to build_text_op"),
+    }
+}
+
+/// `Text` manipulation — split, divide, padding, cropping, tab expansion,
+/// joining and highlighting — checked against upstream. Rendering each result
+/// pins the plain text, the span boundaries and the styles at once.
+#[test]
+fn text_ops_parity() {
+    let data = include_str!("golden/text_ops.tsv");
+    let console = truecolor_console(80);
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(2, '\t');
+        let name = parts.next().unwrap_or("");
+        let expected = unescape(
+            parts
+                .next()
+                .unwrap_or_else(|| panic!("line {}: missing expected", index + 1)),
+        );
+        let got = build_text_op(name)
+            .iter()
+            .map(|piece| console.render_to_string(piece))
+            .collect::<Vec<_>>()
+            .join("\x1f");
+        assert_eq!(
+            got,
+            expected,
+            "text-op case {name:?} (line {}) diverged from upstream rich",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert!(checked > 0, "no text-op cases were checked");
 }
 
 /// Build the `Text` matching an `overflow.tsv` fixture `name`. Must stay in sync

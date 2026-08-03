@@ -539,6 +539,150 @@ OVERFLOW_CASES = [
     ("ellipsis_width_one", 1, Text("hello"), "ellipsis", False),
 ]
 
+def _styled(plain: str, *spans) -> Text:
+    text = Text(plain)
+    for style, start, end in spans:
+        text.stylize(style, start, end)
+    return text
+
+
+def _op_divide():
+    return _styled("hello world", ("bold", 0, 5), ("red", 6, 11)).divide([5])
+
+
+def _op_divide_span_across():
+    return _styled("abcdefgh", ("bold", 2, 7)).divide([4])
+
+
+def _op_split_newline():
+    return _styled("one\ntwo\nthree", ("bold", 4, 7)).split("\n")
+
+
+def _op_split_include():
+    return _styled("one\ntwo\nthree", ("bold", 4, 7)).split("\n", include_separator=True)
+
+
+def _op_split_trailing():
+    return Text("one\ntwo\n").split("\n")
+
+
+def _op_split_trailing_blank():
+    return Text("one\ntwo\n").split("\n", allow_blank=True)
+
+
+def _op_split_absent():
+    return Text("no separator here").split("|")
+
+
+def _op_split_word():
+    return _styled("a-b-c", ("bold", 2, 3)).split("-")
+
+
+def _mutated(text: Text, mutate) -> list:
+    mutate(text)
+    return [text]
+
+
+def _op_pad():
+    return _mutated(_styled("hi", ("bold", 0, 2)), lambda t: t.pad(3))
+
+
+def _op_pad_left():
+    return _mutated(_styled("hi", ("bold", 0, 2)), lambda t: t.pad_left(3, "."))
+
+
+def _op_pad_right():
+    return _mutated(_styled("hi", ("bold", 0, 2)), lambda t: t.pad_right(3, "."))
+
+
+def _op_right_crop():
+    return _mutated(_styled("hello world", ("bold", 3, 9)), lambda t: t.right_crop(4))
+
+
+def _op_rstrip():
+    return _mutated(_styled("hi there   ", ("bold", 0, 2)), lambda t: t.rstrip())
+
+
+def _op_rstrip_end_partial():
+    # 6 cells of trailing space but only 3 cells of excess: 3 must survive.
+    return _mutated(Text("hello      "), lambda t: t.rstrip_end(8))
+
+
+def _op_rstrip_end_noop():
+    return _mutated(Text("hi   "), lambda t: t.rstrip_end(10))
+
+
+def _op_expand_tabs():
+    return _mutated(Text("a\tb\tc"), lambda t: t.expand_tabs(4))
+
+
+def _op_expand_tabs_styled():
+    return _mutated(_styled("a\tb", ("bold", 0, 2)), lambda t: t.expand_tabs(8))
+
+
+def _op_expand_tabs_multiline():
+    return _mutated(Text("ab\tc\nd\te"), lambda t: t.expand_tabs(4))
+
+
+def _op_join():
+    return [Text(", ").join([Text("a"), _styled("b", ("bold", 0, 1)), Text("c")])]
+
+
+def _op_join_styled_sep():
+    return [_styled(" | ", ("red", 0, 3)).join([Text("x"), Text("y")])]
+
+
+def _op_join_empty_sep():
+    return [Text("").join([Text("a"), Text("b")])]
+
+
+def _op_highlight_words():
+    text = Text("the cat sat on the mat")
+    text.highlight_words(["cat", "mat"], "bold red")
+    return [text]
+
+
+def _op_highlight_words_nocase():
+    text = Text("Cat cat CAT")
+    text.highlight_words(["cat"], "bold", case_sensitive=False)
+    return [text]
+
+
+def _op_highlight_regex():
+    text = Text("abc 123 def 456")
+    text.highlight_regex(r"\d+", "bold cyan")
+    return [text]
+
+
+# (name, factory) — the factory returns a list of Text, each rendered and joined
+# with US (\x1f) so a multi-piece result stays one fixture row.
+TEXT_OPS_CASES = [
+    ("divide", _op_divide),
+    ("divide_span_across", _op_divide_span_across),
+    ("split_newline", _op_split_newline),
+    ("split_include", _op_split_include),
+    ("split_trailing", _op_split_trailing),
+    ("split_trailing_blank", _op_split_trailing_blank),
+    ("split_absent", _op_split_absent),
+    ("split_word", _op_split_word),
+    ("pad", _op_pad),
+    ("pad_left", _op_pad_left),
+    ("pad_right", _op_pad_right),
+    ("right_crop", _op_right_crop),
+    ("rstrip", _op_rstrip),
+    ("rstrip_end_partial", _op_rstrip_end_partial),
+    ("rstrip_end_noop", _op_rstrip_end_noop),
+    ("expand_tabs", _op_expand_tabs),
+    ("expand_tabs_styled", _op_expand_tabs_styled),
+    ("expand_tabs_multiline", _op_expand_tabs_multiline),
+    ("join", _op_join),
+    ("join_styled_sep", _op_join_styled_sep),
+    ("join_empty_sep", _op_join_empty_sep),
+    ("highlight_words", _op_highlight_words),
+    ("highlight_words_nocase", _op_highlight_words_nocase),
+    ("highlight_regex", _op_highlight_regex),
+]
+
 COLOR_SYSTEMS = ["truecolor", "256", "standard"]
 
 HEADER = """\
@@ -566,9 +710,23 @@ OVERFLOW_HEADER = """\
 """
 
 
+TEXT_OPS_HEADER = """\
+# Golden parity fixtures for Text manipulation — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py  (see AGENTS.md → Parity)
+#
+# Format: <name>\\t<expected-ansi>
+#
+# Each case renders its result at width 80 (so nothing wraps) — the ANSI output
+# pins the plain text, the span boundaries and the styles in one go. Ops that
+# return several pieces (split/divide) join them with \\x1f.
+"""
+
+
 def escape(text: str) -> str:
     """Render ESC and newline as the literal markers the Rust test unescapes."""
-    return text.replace("\x1b", "\\x1b").replace("\n", "\\n")
+    return (
+        text.replace("\x1b", "\\x1b").replace("\n", "\\n").replace("\x1f", "\\x1f")
+    )
 
 
 #: Worker run in a fresh interpreter, one per colour system. Reads
@@ -666,6 +824,27 @@ def main() -> None:
         rlines.append(f"{name}\t{width}\t{escape(output)}")
     renderable_path.write_text("\n".join(rlines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(RENDERABLE_CASES)} renderable cases to {renderable_path}")
+
+    ops_path = golden_dir() / "text_ops.tsv"
+    oplines = [TEXT_OPS_HEADER.rstrip("\n")]
+    for name, factory in TEXT_OPS_CASES:
+        pieces = []
+        for piece in factory():
+            opconsole = Console(
+                force_terminal=True,
+                color_system="truecolor",
+                width=80,
+                highlight=False,
+                safe_box=False,
+                legacy_windows=False,
+                no_color=False,
+            )
+            with opconsole.capture() as capture:
+                opconsole.print(piece, end="")
+            pieces.append(capture.get())
+        oplines.append(f"{name}\t{escape(chr(31).join(pieces))}")
+    ops_path.write_text("\n".join(oplines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(TEXT_OPS_CASES)} text-op cases to {ops_path}")
 
     overflow_path = golden_dir() / "overflow.tsv"
     olines = [OVERFLOW_HEADER.rstrip("\n")]

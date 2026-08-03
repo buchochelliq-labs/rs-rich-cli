@@ -27,6 +27,19 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   captured from real rich 15.0.0.
 
 ### Added
+- **The rest of the `Text` manipulation API** (`text.rs`): `divide`, `split`,
+  `pad`/`pad_left`/`pad_right`, `right_crop`, `rstrip`, `rstrip_end`,
+  `expand_tabs`, `join`, `blank_copy`, `highlight_words` and `highlight_regex`.
+  All carry spans correctly through the transformation — re-based and clipped by
+  `divide`, shifted by `pad_left`, extended over the spaces a tab expands into.
+  - `highlight_regex` is ported in its **explicit-style** form only. Upstream also
+    styles each named group with the group's *name* as a style name, which needs
+    a span that can hold an unresolved name; that waits on the named-span
+    refactor (#14). `RegexHighlighter` already covers the named-group case by
+    resolving against a theme as it goes.
+  - Covered by 24 new byte-parity fixtures (`golden/text_ops.tsv`). Each case
+    renders its result, so one comparison pins the plain text, the span
+    boundaries and the styles together.
 - **Text overflow** (`Overflow` in `console.rs`, `text.rs`, `segment.rs`). `Text`
   now carries `overflow` and `no_wrap`, as do `ConsoleOptions`, resolved with
   upstream's `self.x or options.x or DEFAULT` precedence. The wrap pipeline is

@@ -157,6 +157,287 @@ impl Text {
         }
     }
 
+    /// An empty `Text` carrying this one's style, justify, overflow and no-wrap.
+    /// Port of `Text.blank_copy`.
+    pub fn blank_copy(&self) -> Text {
+        Text {
+            plain: String::new(),
+            spans: Vec::new(),
+            style: self.style.clone(),
+            justify: self.justify,
+            overflow: self.overflow,
+            no_wrap: self.no_wrap,
+        }
+    }
+
+    /// Cut this text at each byte offset in `offsets`, returning the pieces.
+    /// Port of `Text.divide`.
+    ///
+    /// Every piece inherits the base style, justify, overflow and no-wrap, and
+    /// each span is re-based onto the pieces it covers. Spans that would come out
+    /// empty are dropped, matching upstream's `new_end > new_start`.
+    ///
+    /// Offsets are **byte** offsets (as everywhere else in this port's span
+    /// arithmetic) and must fall on `char` boundaries.
+    pub fn divide(&self, offsets: &[usize]) -> Vec<Text> {
+        if offsets.is_empty() {
+            return vec![self.clone()];
+        }
+        let mut bounds = Vec::with_capacity(offsets.len() + 2);
+        bounds.push(0);
+        bounds.extend(offsets.iter().copied());
+        bounds.push(self.plain.len());
+
+        let mut lines: Vec<Text> = bounds
+            .windows(2)
+            .map(|w| {
+                let (start, end) = (w[0].min(self.plain.len()), w[1].min(self.plain.len()));
+                let mut line = self.blank_copy();
+                if start < end {
+                    line.plain = self.plain[start..end].to_string();
+                }
+                line
+            })
+            .collect();
+
+        for span in &self.spans {
+            for (index, window) in bounds.windows(2).enumerate() {
+                let (line_start, line_end) = (window[0], window[1]);
+                let new_start = span.start.max(line_start) - line_start;
+                let new_end = span.end.min(line_end).saturating_sub(line_start);
+                if new_end > new_start {
+                    lines[index].spans.push(Span {
+                        start: new_start,
+                        end: new_end,
+                        style: span.style.clone(),
+                    });
+                }
+            }
+        }
+        lines
+    }
+
+    /// Split on `separator`. Port of `Text.split`.
+    ///
+    /// `include_separator` keeps the separator at the end of each piece.
+    /// `allow_blank` keeps the trailing empty piece that a text ending in the
+    /// separator would otherwise produce.
+    ///
+    /// # Panics
+    /// If `separator` is empty, which upstream asserts against.
+    pub fn split(&self, separator: &str, include_separator: bool, allow_blank: bool) -> Vec<Text> {
+        assert!(!separator.is_empty(), "separator must not be empty");
+        if !self.plain.contains(separator) {
+            return vec![self.clone()];
+        }
+        let matches: Vec<usize> = self
+            .plain
+            .match_indices(separator)
+            .map(|(i, _)| i)
+            .collect();
+        let mut lines = if include_separator {
+            let offsets: Vec<usize> = matches.iter().map(|s| s + separator.len()).collect();
+            self.divide(&offsets)
+        } else {
+            // Cut on both sides of every separator, then drop the separators.
+            let mut offsets = Vec::with_capacity(matches.len() * 2);
+            for start in &matches {
+                offsets.push(*start);
+                offsets.push(start + separator.len());
+            }
+            self.divide(&offsets)
+                .into_iter()
+                .filter(|line| line.plain != separator)
+                .collect()
+        };
+        if !allow_blank && self.plain.ends_with(separator) {
+            lines.pop();
+        }
+        lines
+    }
+
+    /// Pad both sides with `count` copies of `character`. Port of `Text.pad`.
+    pub fn pad(&mut self, count: usize, character: char) {
+        self.pad_left(count, character);
+        self.pad_right(count, character);
+    }
+
+    /// Pad the left with `count` copies of `character`, shifting every span to
+    /// follow the text. Port of `Text.pad_left`.
+    pub fn pad_left(&mut self, count: usize, character: char) {
+        if count == 0 {
+            return;
+        }
+        let padding: String = std::iter::repeat_n(character, count).collect();
+        let offset = padding.len();
+        self.plain.insert_str(0, &padding);
+        for span in &mut self.spans {
+            span.start += offset;
+            span.end += offset;
+        }
+    }
+
+    /// Pad the right with `count` copies of `character`. Port of
+    /// `Text.pad_right`. Spans are untouched, so the padding is unstyled.
+    pub fn pad_right(&mut self, count: usize, character: char) {
+        if count == 0 {
+            return;
+        }
+        self.plain.extend(std::iter::repeat_n(character, count));
+    }
+
+    /// Drop the last `amount` bytes, clipping any span that reached into them.
+    /// Port of `Text.right_crop`.
+    pub fn right_crop(&mut self, amount: usize) {
+        if amount == 0 {
+            return;
+        }
+        let max_offset = self.plain.len().saturating_sub(amount);
+        let plain = self.plain[..max_offset].to_string();
+        self.set_plain(plain);
+    }
+
+    /// Remove trailing whitespace. Port of `Text.rstrip`.
+    pub fn rstrip(&mut self) {
+        let plain = self.plain.trim_end().to_string();
+        self.set_plain(plain);
+    }
+
+    /// Remove *only as much* trailing whitespace as it takes to get down to
+    /// `size` cells, leaving the rest. Port of `Text.rstrip_end`.
+    ///
+    /// This is what lets a wrapped line keep the space that ended it while a
+    /// line that overshot the width gives its padding back.
+    pub fn rstrip_end(&mut self, size: usize) {
+        let length = self.cell_len();
+        if length <= size {
+            return;
+        }
+        let excess = length - size;
+        let whitespace = self.plain.len() - self.plain.trim_end().len();
+        if whitespace > 0 {
+            self.right_crop(whitespace.min(excess));
+        }
+    }
+
+    /// Replace tabs with spaces up to the next `tab_size` stop. Port of
+    /// `Text.expand_tabs`.
+    ///
+    /// Styles extend over the inserted spaces, so a styled tab pads in its own
+    /// style rather than punching an unstyled hole (upstream reaches the same
+    /// result via `extend_style`).
+    pub fn expand_tabs(&mut self, tab_size: usize) {
+        if !self.plain.contains('\t') || tab_size == 0 {
+            return;
+        }
+        // Build the expanded string alongside a map from old byte offset to new,
+        // so spans can be moved without re-deriving them.
+        let mut expanded = String::with_capacity(self.plain.len());
+        let mut offsets: Vec<(usize, usize)> = Vec::new();
+        let mut cell_position = 0usize;
+        let mut buffer = [0u8; 4];
+        for (index, ch) in self.plain.char_indices() {
+            offsets.push((index, expanded.len()));
+            match ch {
+                '\t' => {
+                    // A tab always advances at least one cell.
+                    let spaces = tab_size - (cell_position % tab_size);
+                    expanded.extend(std::iter::repeat_n(' ', spaces));
+                    cell_position += spaces;
+                }
+                '\n' => {
+                    expanded.push('\n');
+                    cell_position = 0;
+                }
+                _ => {
+                    expanded.push(ch);
+                    cell_position += cell_len(ch.encode_utf8(&mut buffer));
+                }
+            }
+        }
+        offsets.push((self.plain.len(), expanded.len()));
+        // A span end maps to the end of the expanded run, which is what carries
+        // the style across the spaces a tab turned into.
+        let map = |offset: usize| -> usize {
+            match offsets.binary_search_by_key(&offset, |(old, _)| *old) {
+                Ok(index) => offsets[index].1,
+                Err(index) => offsets.get(index).map_or(expanded.len(), |(_, new)| *new),
+            }
+        };
+        for span in &mut self.spans {
+            span.start = map(span.start);
+            span.end = map(span.end);
+        }
+        self.plain = expanded;
+    }
+
+    /// Join `lines` with this text as the separator, carrying each piece's base
+    /// style across as a covering span. Port of `Text.join`.
+    pub fn join(&self, lines: &[Text]) -> Text {
+        let mut joined = self.blank_copy();
+        let last = lines.len().saturating_sub(1);
+        for (index, line) in lines.iter().enumerate() {
+            joined = joined.append_text(line);
+            if !self.plain.is_empty() && index != last {
+                joined = joined.append_text(self);
+            }
+        }
+        joined
+    }
+
+    /// Style every occurrence of any of `words`. Port of `Text.highlight_words`,
+    /// returning the number of matches.
+    pub fn highlight_words(
+        &mut self,
+        words: &[&str],
+        style: &Style,
+        case_sensitive: bool,
+    ) -> Result<usize> {
+        let alternation = words
+            .iter()
+            .map(|word| fancy_regex::escape(word).into_owned())
+            .collect::<Vec<_>>()
+            .join("|");
+        if alternation.is_empty() {
+            return Ok(0);
+        }
+        let pattern = if case_sensitive {
+            alternation
+        } else {
+            format!("(?i){alternation}")
+        };
+        self.highlight_regex(&pattern, style)
+    }
+
+    /// Style every match of `pattern`. Port of `Text.highlight_regex` in its
+    /// explicit-style form, returning the number of matches.
+    ///
+    /// Upstream also styles each *named group* with the group's name as a style
+    /// name, which needs spans that can hold an unresolved name; that half waits
+    /// on the named-span refactor (see `docs/DIVERGENCES.md`). Until then, use a
+    /// [`RegexHighlighter`](crate::highlighter::RegexHighlighter), which resolves
+    /// group names against a theme as it goes.
+    pub fn highlight_regex(&mut self, pattern: &str, style: &Style) -> Result<usize> {
+        let regex = fancy_regex::Regex::new(pattern)
+            .map_err(|e| crate::errors::RichError::Regex(format!("invalid pattern: {e}")))?;
+        let mut count = 0;
+        let mut spans = Vec::new();
+        for found in regex.find_iter(&self.plain) {
+            let found =
+                found.map_err(|e| crate::errors::RichError::Regex(format!("match failed: {e}")))?;
+            if found.end() > found.start() {
+                spans.push(Span {
+                    start: found.start(),
+                    end: found.end(),
+                    style: style.clone(),
+                });
+            }
+            count += 1;
+        }
+        self.spans.extend(spans);
+        Ok(count)
+    }
+
     /// Build styled text from console markup, resolving tags against `theme`.
     /// Port of `Text.from_markup`.
     pub fn from_markup(markup_text: &str, theme: &Theme) -> Result<Text> {
