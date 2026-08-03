@@ -9,6 +9,7 @@ members = ["crates/rich", "crates/rich-ext", "crates/rich-cli", "crates/rich-art
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/buchochelliq-labs/rs-rich-cli"
+homepage = "https://github.com/buchochelliq-labs/rs-rich-cli"
 authors = ["rs-rich-cli contributors"]
 rust-version = "1.74"
 
