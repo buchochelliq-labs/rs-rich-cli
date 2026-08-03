@@ -16,7 +16,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 |---------------------------------------|--------------------------|:------:|:------:|
 | `color.py`, `color_triplet.py`, `_palettes.py`, `palette.py` | `color.rs` | 🟡 | ✅ truecolor + 8-bit + standard |
 | `style.py`                            | `style.rs`               | 🟡 | ✅ |
-| `cells.py`, `_cell_widths.py`         | `cells.rs`               | 🟡 | — |
+| `cells.py`, `_cell_widths.py`         | `cells.rs`               | 🟡 | ✅ |
 | `segment.py`                          | `segment.rs`             | 🟡 | — |
 | `markup.py`                           | `markup.rs`              | 🟡 | ✅ |
 | `text.py` (+ justify)                 | `text.rs`                | 🟡 | ✅ |
@@ -86,7 +86,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `box.substitute` (legacy/ASCII fallback) | `box.rs` | 🟡 | ✅ |
 | `_windows.py`, `_win32_console.py`, `_windows_renderer.py` | `windows/` | ⬜ |
 | `jupyter.py`, `file_proxy.py`, `diagnose.py`, `_fileno.py`, `_null_file.py` | resp. | ⬜ |
-| `_ratio.py` (`ratio_resolve`) | `ratio.rs` | 🟡 | — |
+| `_ratio.py` (`ratio_resolve`) | `ratio.rs` | 🟡 | ✅ |
 | `_loop.py`, `_pick.py`, `_stack.py`, `_timer.py` | internal helpers | ⬜ |
 | `_export_format.py`, `Console.export_html` | `export.rs` | 🟡 | ✅ |
 

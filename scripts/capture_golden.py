@@ -406,6 +406,51 @@ RENDERABLE_HEADER = """\
 # The Rust test builds the renderable matching each <name>; keep them in sync.
 """
 
+FUNCTIONS_HEADER = """\
+# Golden parity fixtures for PURE FUNCTIONS — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py
+#
+# Format: <function>\\t<json-args>\\t<json-result>
+#
+# These underpin every renderable (cell widths decide all layout, ratio_resolve
+# sizes every Layout split) but had no golden coverage — they were verified only
+# against our own unit tests, which is how two Color::downgrade bugs survived.
+"""
+
+#: `(function, args)` pairs. Args are JSON-encodable and passed positionally.
+#: Chosen to hit the awkward cases: double-width CJK, zero-width combining
+#: marks, cropping that would split a wide glyph, and ratio edge cases.
+FUNCTION_CASES: list[tuple[str, list]] = [
+    # cell_len
+    ("cell_len", [""]),
+    ("cell_len", ["hello"]),
+    ("cell_len", ["宽宽"]),
+    ("cell_len", ["a宽b"]),
+    ("cell_len", ["é"]),          # e + combining acute = 1 cell
+    ("cell_len", ["abćdef"]),
+    # set_cell_size — pad, exact, crop, and cropping onto a wide glyph
+    ("set_cell_size", ["hi", 5]),
+    ("set_cell_size", ["hello", 5]),
+    ("set_cell_size", ["hello", 3]),
+    ("set_cell_size", ["宽宽", 3]),
+    ("set_cell_size", ["宽宽", 2]),
+    ("set_cell_size", ["宽宽", 1]),
+    ("set_cell_size", ["", 3]),
+    ("set_cell_size", ["abc", 0]),
+    # chop_cells — the over-long-word fold
+    ("chop_cells", ["abcdefghij", 4]),
+    ("chop_cells", ["宽宽宽宽", 3]),
+    ("chop_cells", ["宽宽", 1]),
+    # ratio_resolve — args are (total, [[size, ratio, minimum_size], ...])
+    ("ratio_resolve", [10, [[None, 1, 1], [None, 1, 1]]]),
+    ("ratio_resolve", [10, [[None, 1, 1], [None, 2, 1]]]),
+    ("ratio_resolve", [10, [[3, 1, 1], [None, 1, 1]]]),
+    ("ratio_resolve", [10, [[None, 1, 4], [None, 1, 4]]]),
+    ("ratio_resolve", [3, [[None, 1, 2], [None, 1, 2]]]),
+    ("ratio_resolve", [20, [[None, 1, 1], [None, 1, 1], [None, 1, 1]]]),
+    ("ratio_resolve", [7, [[None, 3, 1], [None, 1, 1]]]),
+]
+
 COLORS_HEADER = """\
 # Golden parity fixtures for COLOR SYSTEMS — captured from real Python `rich`.
 # Regenerate with: python scripts/capture_golden.py
@@ -592,6 +637,43 @@ def main() -> None:
         f"wrote {len(COLOR_CASES) * len(COLOR_SYSTEMS)} colour cases "
         f"({len(COLOR_SYSTEMS)} systems) to {colors_path}"
     )
+
+    # --- pure functions -------------------------------------------------
+    from dataclasses import dataclass
+
+    from rich._ratio import ratio_resolve
+    from rich.cells import cell_len, chop_cells, set_cell_size
+
+    @dataclass
+    class _Edge:
+        """Matches `rich._ratio`'s Edge protocol (size / ratio / minimum_size)."""
+
+        size: "int | None"
+        ratio: int
+        minimum_size: int
+
+    def call(fn: str, args: list):
+        if fn == "cell_len":
+            return cell_len(*args)
+        if fn == "set_cell_size":
+            return set_cell_size(*args)
+        if fn == "chop_cells":
+            return list(chop_cells(*args))
+        if fn == "ratio_resolve":
+            total, raw_edges = args
+            return ratio_resolve(total, [_Edge(*edge) for edge in raw_edges])
+        raise SystemExit(f"no capture wired for function {fn!r}")
+
+    functions_path = golden_dir() / "functions.tsv"
+    flines = [FUNCTIONS_HEADER.rstrip("\n")]
+    for fn, args in FUNCTION_CASES:
+        result = call(fn, args)
+        flines.append(
+            f"{fn}\t{json.dumps(args, ensure_ascii=False)}"
+            f"\t{json.dumps(result, ensure_ascii=False)}"
+        )
+    functions_path.write_text("\n".join(flines) + "\n", encoding="utf-8")
+    print(f"wrote {len(FUNCTION_CASES)} function cases to {functions_path}")
 
     # --- exports --------------------------------------------------------
     # These were previously pasted into Rust source as string literals, which

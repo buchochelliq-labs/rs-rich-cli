@@ -417,6 +417,83 @@ fn truecolor_parity() {
     assert!(checked > 0, "no golden cases were checked");
 }
 
+/// Pure functions — cell widths and ratio resolution — checked against
+/// upstream. These decide every layout decision the renderables make, so a
+/// divergence here is invisible until it shows up as a mis-sized table.
+#[test]
+fn pure_function_parity() {
+    use rich::cells::{cell_len, chop_cells, set_cell_size};
+    use rich::ratio::{ratio_resolve, Edge};
+    use serde_json::Value;
+
+    let data = include_str!("golden/functions.tsv");
+    let mut checked = 0;
+    let mut seen: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let args: Value = serde_json::from_str(
+            parts
+                .next()
+                .unwrap_or_else(|| panic!("line {}: missing args", index + 1)),
+        )
+        .unwrap_or_else(|e| panic!("line {}: bad args json: {e}", index + 1));
+        let expected: Value = serde_json::from_str(
+            parts
+                .next()
+                .unwrap_or_else(|| panic!("line {}: missing result", index + 1)),
+        )
+        .unwrap_or_else(|e| panic!("line {}: bad result json: {e}", index + 1));
+
+        let str_arg = |i: usize| args[i].as_str().expect("string arg").to_string();
+        let usize_arg = |i: usize| args[i].as_u64().expect("integer arg") as usize;
+
+        let got: Value = match name {
+            "cell_len" => Value::from(cell_len(&str_arg(0))),
+            "set_cell_size" => Value::from(set_cell_size(&str_arg(0), usize_arg(1))),
+            "chop_cells" => Value::from(chop_cells(&str_arg(0), usize_arg(1))),
+            "ratio_resolve" => {
+                let edges: Vec<Edge> = args[1]
+                    .as_array()
+                    .expect("edge array")
+                    .iter()
+                    .map(|e| {
+                        Edge::new(
+                            e[0].as_u64().map(|v| v as usize),
+                            e[1].as_u64().expect("ratio") as usize,
+                            e[2].as_u64().expect("minimum_size") as usize,
+                        )
+                    })
+                    .collect();
+                Value::from(ratio_resolve(usize_arg(0), &edges))
+            }
+            other => panic!("line {}: no binding for function {other:?}", index + 1),
+        };
+
+        assert_eq!(
+            got,
+            expected,
+            "{name}{args} (line {}) diverged from upstream rich",
+            index + 1
+        );
+        seen.insert(name);
+        checked += 1;
+    }
+
+    assert!(checked > 0, "no function cases were checked");
+    // A fixture that silently loses a whole function should fail loudly.
+    assert_eq!(
+        seen.len(),
+        4,
+        "expected all four functions covered, got {seen:?}"
+    );
+}
+
 /// A console pinned to one colour system, for the downgrade fixtures.
 fn console_with_system(system: ColorSystem, width: usize) -> Console {
     Console::builder()
