@@ -417,6 +417,73 @@ fn truecolor_parity() {
     assert!(checked > 0, "no golden cases were checked");
 }
 
+/// The bundled terminal-theme palettes, checked against upstream. Each theme is
+/// 18 colour triplets typed by hand, so this is the difference between a typo
+/// failing the build and it quietly shifting every exported colour.
+#[test]
+fn terminal_theme_parity() {
+    use rich::terminal_theme::TerminalTheme;
+    use rich::{DEFAULT_TERMINAL_THEME, DIMMED_MONOKAI, MONOKAI, NIGHT_OWLISH, SVG_EXPORT_THEME};
+    use serde_json::Value;
+
+    fn lookup(name: &str) -> &'static TerminalTheme {
+        match name {
+            "DEFAULT_TERMINAL_THEME" => &DEFAULT_TERMINAL_THEME,
+            "MONOKAI" => &MONOKAI,
+            "DIMMED_MONOKAI" => &DIMMED_MONOKAI,
+            "NIGHT_OWLISH" => &NIGHT_OWLISH,
+            "SVG_EXPORT_THEME" => &SVG_EXPORT_THEME,
+            other => panic!("no binding for theme {other:?}"),
+        }
+    }
+
+    let data = include_str!("golden/themes.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let (name, payload) = line
+            .split_once('\t')
+            .unwrap_or_else(|| panic!("line {}: expected name<TAB>json", index + 1));
+        let expected: Value = serde_json::from_str(payload)
+            .unwrap_or_else(|e| panic!("line {}: bad json: {e}", index + 1));
+        let theme = lookup(name);
+
+        let triplet = |c: &rich::color::ColorTriplet| vec![c.red, c.green, c.blue];
+        let as_vec = |v: &Value| -> Vec<u8> {
+            v.as_array()
+                .expect("rgb array")
+                .iter()
+                .map(|n| n.as_u64().expect("channel") as u8)
+                .collect()
+        };
+
+        assert_eq!(
+            triplet(&theme.background),
+            as_vec(&expected["background"]),
+            "{name}: background diverged"
+        );
+        assert_eq!(
+            triplet(&theme.foreground),
+            as_vec(&expected["foreground"]),
+            "{name}: foreground diverged"
+        );
+        let expected_ansi = expected["ansi"].as_array().expect("ansi array");
+        assert_eq!(expected_ansi.len(), 16, "{name}: expected 16 ANSI colours");
+        for (slot, want) in expected_ansi.iter().enumerate() {
+            assert_eq!(
+                triplet(&theme.ansi[slot]),
+                as_vec(want),
+                "{name}: ANSI colour {slot} diverged"
+            );
+        }
+        checked += 1;
+    }
+    assert_eq!(checked, 5, "expected all five bundled themes");
+}
+
 /// Pure functions — cell widths and ratio resolution — checked against
 /// upstream. These decide every layout decision the renderables make, so a
 /// divergence here is invisible until it shows up as a mis-sized table.

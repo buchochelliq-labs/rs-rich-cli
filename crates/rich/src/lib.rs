@@ -100,7 +100,9 @@ pub use crate::style::Style;
 pub use crate::styled::Styled;
 pub use crate::syntax::Syntax;
 pub use crate::table::Table;
-pub use crate::terminal_theme::{TerminalTheme, DEFAULT_TERMINAL_THEME, SVG_EXPORT_THEME};
+pub use crate::terminal_theme::{
+    TerminalTheme, DEFAULT_TERMINAL_THEME, DIMMED_MONOKAI, MONOKAI, NIGHT_OWLISH, SVG_EXPORT_THEME,
+};
 pub use crate::text::Text;
 pub use crate::theme::Theme;
 pub use crate::traceback::Traceback;

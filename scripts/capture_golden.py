@@ -406,6 +406,16 @@ RENDERABLE_HEADER = """\
 # The Rust test builds the renderable matching each <name>; keep them in sync.
 """
 
+THEMES_HEADER = """\
+# Golden parity fixtures for TERMINAL THEMES — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\\t{"background": [r,g,b], "foreground": [r,g,b], "ansi": [[r,g,b] x16]}
+#
+# 18 hand-transcribed colour triplets per theme; capturing them means a typo
+# fails the build instead of quietly shifting an exported palette.
+"""
+
 FUNCTIONS_HEADER = """\
 # Golden parity fixtures for PURE FUNCTIONS — captured from real Python `rich`.
 # Regenerate with: python scripts/capture_golden.py
@@ -570,7 +580,7 @@ def main() -> None:
         with console.capture() as capture:
             console.print(markup, end="")
         lines.append(f"{name}\t{markup}\t{escape(capture.get())}")
-    markup_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    markup_path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(CASES)} markup cases to {markup_path}")
 
     renderable_path = golden_dir() / "renderables.tsv"
@@ -597,7 +607,7 @@ def main() -> None:
                 "    PYTHONUTF8=1 python scripts/capture_golden.py"
             )
         rlines.append(f"{name}\t{width}\t{escape(output)}")
-    renderable_path.write_text("\n".join(rlines) + "\n", encoding="utf-8")
+    renderable_path.write_text("\n".join(rlines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(RENDERABLE_CASES)} renderable cases to {renderable_path}")
 
     layout_path = golden_dir() / "layout.tsv"
@@ -616,7 +626,7 @@ def main() -> None:
         with lconsole.capture() as capture:
             lconsole.print(layout)
         llines.append(f"{name}\t{width}\t{height}\t{escape(capture.get())}")
-    layout_path.write_text("\n".join(llines) + "\n", encoding="utf-8")
+    layout_path.write_text("\n".join(llines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(LAYOUT_CASES)} layout cases to {layout_path}")
 
     # --- colour systems -------------------------------------------------
@@ -632,7 +642,7 @@ def main() -> None:
         # in-process silently yields three copies of the first system's output.
         for name, markup, output in _capture_colors_isolated(system):
             clines.append(f"{name}\t{system}\t{markup}\t{escape(output)}")
-    colors_path.write_text("\n".join(clines) + "\n", encoding="utf-8")
+    colors_path.write_text("\n".join(clines) + "\n", encoding="utf-8", newline="\n")
     print(
         f"wrote {len(COLOR_CASES) * len(COLOR_SYSTEMS)} colour cases "
         f"({len(COLOR_SYSTEMS)} systems) to {colors_path}"
@@ -672,8 +682,30 @@ def main() -> None:
             f"{fn}\t{json.dumps(args, ensure_ascii=False)}"
             f"\t{json.dumps(result, ensure_ascii=False)}"
         )
-    functions_path.write_text("\n".join(flines) + "\n", encoding="utf-8")
+    functions_path.write_text("\n".join(flines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(FUNCTION_CASES)} function cases to {functions_path}")
+
+    # --- terminal themes -------------------------------------------------
+    import rich.terminal_theme as _tt
+
+    themes_path = golden_dir() / "themes.tsv"
+    tlines = [THEMES_HEADER.rstrip("\n")]
+    for theme_name in [
+        "DEFAULT_TERMINAL_THEME",
+        "MONOKAI",
+        "DIMMED_MONOKAI",
+        "NIGHT_OWLISH",
+        "SVG_EXPORT_THEME",
+    ]:
+        theme = getattr(_tt, theme_name)
+        payload = {
+            "background": list(theme.background_color),
+            "foreground": list(theme.foreground_color),
+            "ansi": [list(c) for c in theme.ansi_colors._colors],
+        }
+        tlines.append(f"{theme_name}\t{json.dumps(payload)}")
+    themes_path.write_text("\n".join(tlines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(tlines) - 1} terminal themes to {themes_path}")
 
     # --- exports --------------------------------------------------------
     # These were previously pasted into Rust source as string literals, which
