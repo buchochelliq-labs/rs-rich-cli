@@ -17,7 +17,10 @@ use crate::text::{Span, Text};
 struct RawSpan {
     start: usize,
     end: usize,
-    tag: String,
+    /// The tag's normalized name, e.g. `bold` for `[b]`.
+    name: String,
+    /// Anything after the first `=`, e.g. the URL of `[link=https://…]`.
+    parameters: Option<String>,
 }
 
 /// Whether `c` may start a markup tag (upstream's `[a-z#/@]` class).
@@ -75,7 +78,9 @@ pub fn escape(markup: &str) -> String {
 pub fn render(markup: &str) -> Result<Text> {
     let mut plain = String::new();
     let mut raw_spans: Vec<RawSpan> = Vec::new();
-    let mut stack: Vec<(String, usize)> = Vec::new();
+    // Open tags, as `(normalized name, parameters, start offset)`. The name is
+    // normalized on the way in so that `[b]…[/bold]` matches, as upstream does.
+    let mut stack: Vec<(String, Option<String>, usize)> = Vec::new();
 
     let bytes = markup.as_bytes();
     let mut chars = markup.char_indices().peekable();
@@ -105,37 +110,46 @@ pub fn render(markup: &str) -> Result<Text> {
                     plain.push_str(&tag);
                     continue;
                 }
-                if let Some(name) = tag.strip_prefix('/') {
+                // Everything after the first `=` is the tag's parameters, not
+                // part of its name — so `[link=url]` closes with `[/link]`.
+                let (tag_name, parameters) = match tag.split_once('=') {
+                    Some((name, params)) => (name.to_string(), Some(params.to_string())),
+                    None => (tag.clone(), None),
+                };
+
+                if let Some(name) = tag_name.strip_prefix('/') {
                     let name = name.trim();
                     let end = plain.len();
-                    if name.is_empty() {
+                    let (open_name, open_parameters, start) = if name.is_empty() {
                         // Auto-close: pop the most recent open tag, or error.
-                        let (open_tag, start) = stack.pop().ok_or_else(|| {
+                        stack.pop().ok_or_else(|| {
                             RichError::Markup(format!(
                                 "closing tag '[/]' at position {i} has nothing to close"
                             ))
-                        })?;
-                        raw_spans.push(RawSpan {
-                            start,
-                            end,
-                            tag: open_tag,
-                        });
+                        })?
                     } else {
-                        // Explicit close: must match an open tag of the same name.
-                        let pos = stack.iter().rposition(|(t, _)| t == name).ok_or_else(|| {
-                            RichError::Markup(format!(
+                        // Explicit close. Both sides are normalized first, so
+                        // `[b]…[/bold]` matches — upstream normalizes the open
+                        // tag's name on push and the close name here.
+                        let wanted = Style::normalize(name);
+                        let pos = stack
+                            .iter()
+                            .rposition(|(open, _, _)| *open == wanted)
+                            .ok_or_else(|| {
+                                RichError::Markup(format!(
                                 "closing tag '[/{name}]' at position {i} doesn't match any open tag"
                             ))
-                        })?;
-                        let (open_tag, start) = stack.remove(pos);
-                        raw_spans.push(RawSpan {
-                            start,
-                            end,
-                            tag: open_tag,
-                        });
-                    }
+                            })?;
+                        stack.remove(pos)
+                    };
+                    raw_spans.push(RawSpan {
+                        start,
+                        end,
+                        name: open_name,
+                        parameters: open_parameters,
+                    });
                 } else {
-                    stack.push((tag, plain.len()));
+                    stack.push((Style::normalize(&tag_name), parameters, plain.len()));
                 }
             }
             _ => plain.push(c),
@@ -144,11 +158,12 @@ pub fn render(markup: &str) -> Result<Text> {
 
     // Auto-close anything still open (lenient — see module docs).
     let end = plain.len();
-    while let Some((open_tag, start)) = stack.pop() {
+    while let Some((open_name, open_parameters, start)) = stack.pop() {
         raw_spans.push(RawSpan {
             start,
             end,
-            tag: open_tag,
+            name: open_name,
+            parameters: open_parameters,
         });
     }
 
@@ -161,14 +176,19 @@ pub fn render(markup: &str) -> Result<Text> {
         if raw.start >= raw.end {
             continue;
         }
-        let tag = raw.tag.trim();
-        // `@`-prefixed tags are meta/handler tags (links, spans of app data). We
-        // don't model those, so they carry no styling — stated explicitly rather
-        // than left to fall out of a failed parse.
-        let style = if tag.starts_with('@') {
+        // `@`-prefixed tags are meta/handler tags (spans of app data). We don't
+        // model those, so they carry no styling — stated explicitly rather than
+        // left to fall out of a failed parse.
+        let style = if raw.name.starts_with('@') {
             StyleType::Style(Style::new())
         } else {
-            StyleType::Name(tag.to_string())
+            // Upstream's `str(Tag)`: the name, or `"{name} {parameters}"`. That
+            // is what turns `[link=https://x]` into the style `link https://x`,
+            // which `Style::parse` then understands.
+            StyleType::Name(match &raw.parameters {
+                Some(parameters) => format!("{} {}", raw.name, parameters),
+                None => raw.name.clone(),
+            })
         };
         spans.push(Span {
             start: raw.start,

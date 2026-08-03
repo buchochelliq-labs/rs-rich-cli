@@ -14,6 +14,13 @@ nested_inner_wins	[red]a[blue]x[/]b[/]	\x1b[31ma\x1b[0m\x1b[34mx\x1b[0m\x1b[31mb
 coincident_inner_wins	[red][blue]x[/][/]	\x1b[34mx\x1b[0m
 coincident_inner_wins_swapped	[blue][red]x[/][/]	\x1b[31mx\x1b[0m
 coincident_attrs_merge	[bold][dim]y[/][/]	\x1b[1;2my\x1b[0m
+abbrev_tag	[b]x[/]	\x1b[1mx\x1b[0m
+abbrev_open_long_close	[b]x[/bold]	\x1b[1mx\x1b[0m
+long_open_abbrev_close	[bold]x[/b]	\x1b[1mx\x1b[0m
+normalized_multi_word	[dim i]x[/]	\x1b[2;3mx\x1b[0m
+mixed_case_unknown_is_noop	[nOpE]x[/]	x
+not_attribute	[not bold]x[/]	x
+uppercase_is_not_a_tag	[BOLD]x	[BOLD]x
 hex_truecolor	[#ff8800]x[/]	\x1b[38;2;255;136;0mx\x1b[0m
 plain_text	no styles here	no styles here
 emoji_rocket	:rocket: launch :fire:	🚀 launch 🔥

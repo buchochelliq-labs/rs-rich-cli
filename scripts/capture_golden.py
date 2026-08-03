@@ -282,6 +282,18 @@ CASES: list[tuple[str, str]] = [
     ("coincident_inner_wins", "[red][blue]x[/][/]"),
     ("coincident_inner_wins_swapped", "[blue][red]x[/][/]"),
     ("coincident_attrs_merge", "[bold][dim]y[/][/]"),
+    # Tag names are normalized (`Style.normalize`) before they are stored or
+    # matched, so an abbreviation opens what its long form closes, and a
+    # mixed-case name reaches the theme lowercased.
+    ("abbrev_tag", "[b]x[/]"),
+    ("abbrev_open_long_close", "[b]x[/bold]"),
+    ("long_open_abbrev_close", "[bold]x[/b]"),
+    ("normalized_multi_word", "[dim i]x[/]"),
+    ("mixed_case_unknown_is_noop", "[nOpE]x[/]"),
+    ("not_attribute", "[not bold]x[/]"),
+    # An uppercase tag is not a tag at all (RE_TAGS is `[a-z#/@]`), so this is
+    # literal text followed by a close with nothing open.
+    ("uppercase_is_not_a_tag", "[BOLD]x"),
     ("hex_truecolor", "[#ff8800]x[/]"),
     ("plain_text", "no styles here"),
     ("emoji_rocket", ":rocket: launch :fire:"),

@@ -26,6 +26,29 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   A unit test had been asserting the buggy values; it now asserts upstream's,
   captured from real rich 15.0.0.
 
+### Fixed
+- **Six markup and `Style::parse` defects**, all found by an adversarial review of
+  the named-span change and each verified against real rich 15.0.0:
+  - **The highlighter beat markup.** `[green]123[/]` rendered `repr.number` cyan
+    instead of green, because markup spans were pushed first and the highlighter
+    decorated that `Text` in place. Upstream highlights the plain string and
+    appends the markup spans last, so an explicit tag wins.
+  - **Two tags over the exact same range combined backwards**, so `[red][blue]x[/][/]`
+    came out red. Upstream's `sorted(spans[::-1], key=start)` needs both the
+    reversal *and* a start-only key; sorting by `(start, end desc)` makes an
+    identical range compare equal and hands the win to the outer tag.
+  - **`expand_tabs` kept one span** where upstream splits per tab-part, so a span
+    crossing several tabs rendered as one segment instead of several — same
+    colours, different bytes.
+  - **Tag names weren't normalized.** `Style::normalize` is now ported (with
+    `Style::definition`, the port of `Style.__str__`), so `[b]` opens what
+    `[/bold]` closes and a mixed-case name reaches the theme lowercased.
+  - **`[link=url]` was unusable**: parameters weren't split from the tag name, so
+    `[/link]` raised a markup error. `Style::parse` also had no `link` keyword,
+    which meant such a style resolved to null and dropped the hyperlink.
+  - **`not BOLD` was accepted** and silently cancelled an enclosing bold;
+    upstream's `not` operand is case-sensitive and raises.
+
 ### Changed
 - **Style names on spans now resolve at render time, against the rendering
   console's theme** (`StyleType` in `style.rs`, `Theme::get_style`,

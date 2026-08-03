@@ -29,7 +29,11 @@ Format: what differs · why · how to remove it (if temporary).
   uses it, so user-supplied markup is reported rather than rendered literally;
   and (b) the parser handles the common `\[` escape but not the full
   backslash-run doubling semantics of `_parse` (the public `markup::escape`
-  *does* implement the full rule).
+  *does* implement the full rule). Tag names now go through `Style::normalize`
+  and `[name=parameters]` is split as upstream does, so `[b]…[/bold]` matches and
+  `[link=url]…[/link]` works. `@`-tag *meta payloads* are still not modelled —
+  the tag applies no style and its parameters are discarded rather than being
+  `literal_eval`'d into a meta map.
 - **Why:** the infallible signatures keep the ~30 internal call sites that pass
   literal markup free of `unwrap`/`?` noise, where a parse error is a bug rather
   than a runtime condition. The exotic backslash-run cases are rare.
