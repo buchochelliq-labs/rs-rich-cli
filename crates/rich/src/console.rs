@@ -463,15 +463,55 @@ impl Console {
     /// highlighters), returning the styled [`Text`] that `print_str` would print.
     /// Exposed so callers can wrap the markup in another renderable.
     pub fn build_text(&self, content: &str) -> Text {
-        // Emoji shortcodes are expanded before markup parsing (matching upstream's
-        // default `emoji=True`); `:name:` and `[tag]` don't overlap.
-        let expanded = if self.emoji {
+        // Malformed markup falls back to printing the text as-is. Upstream would
+        // raise `MarkupError` instead; use `try_build_text` (or `try_print_str`)
+        // when the markup comes from a user and a mistake should be reported
+        // rather than rendered. See docs/DIVERGENCES.md §2.
+        self.try_build_text(content)
+            .unwrap_or_else(|_| self.decorate(Text::new(self.expand_emoji(content))))
+    }
+
+    /// As [`build_text`](Console::build_text), but returns
+    /// [`RichError::Markup`](crate::errors::RichError::Markup) for malformed
+    /// markup instead of falling back to the raw text — upstream's behaviour.
+    pub fn try_build_text(&self, content: &str) -> crate::errors::Result<Text> {
+        let expanded = self.expand_emoji(content);
+        Ok(self.decorate(Text::from_markup(&expanded, &self.theme)?))
+    }
+
+    /// As [`print_str`](Console::print_str), but reports malformed markup.
+    pub fn try_print_str(&self, content: &str) -> crate::errors::Result<()> {
+        self.print(&self.try_build_text(content)?);
+        Ok(())
+    }
+
+    /// As [`print_justified`](Console::print_justified), but reports malformed
+    /// markup.
+    pub fn try_print_justified(
+        &self,
+        content: &str,
+        justify: Justify,
+    ) -> crate::errors::Result<()> {
+        let text = self.try_build_text(content)?;
+        let mut options = self.options();
+        options.justify = justify;
+        self.emit(text.rich_render(self, &options));
+        Ok(())
+    }
+
+    /// Expand `:emoji:` shortcodes. Runs before markup parsing (matching
+    /// upstream's default `emoji=True`); `:name:` and `[tag]` don't overlap.
+    fn expand_emoji(&self, content: &str) -> String {
+        if self.emoji {
             crate::emoji::replace(content)
         } else {
             content.to_string()
-        };
-        let mut text =
-            Text::from_markup(&expanded, &self.theme).unwrap_or_else(|_| Text::new(&expanded));
+        }
+    }
+
+    /// Apply the registered highlighters, plus the built-in `ReprHighlighter`
+    /// when `highlight` is on.
+    fn decorate(&self, mut text: Text) -> Text {
         for highlighter in &self.highlighters {
             highlighter.highlight(&mut text);
         }
@@ -761,6 +801,44 @@ mod tests {
             .width(80)
             .no_color(false)
             .build()
+    }
+
+    /// The strict path reports malformed markup where the lenient one prints it
+    /// literally. Both must still agree on markup that is actually valid.
+    #[test]
+    fn try_build_text_reports_bad_markup() {
+        let console = test_console();
+
+        let err = console
+            .try_build_text("[/nope]")
+            .expect_err("an unmatched closing tag must be an error");
+        assert!(
+            matches!(err, crate::errors::RichError::Markup(_)),
+            "{err:?}"
+        );
+        // The lenient path swallows it and prints the source text as-is.
+        assert_eq!(console.build_text("[/nope]").plain(), "[/nope]");
+
+        let strict = console.try_build_text("[bold]hi[/]").expect("valid markup");
+        assert_eq!(strict.plain(), "hi");
+        assert_eq!(
+            strict.spans().len(),
+            console.build_text("[bold]hi[/]").spans().len()
+        );
+    }
+
+    /// Emoji expansion and the highlighters have to run on both paths, or the
+    /// strict variant would quietly render differently from the lenient one.
+    #[test]
+    fn try_build_text_expands_emoji_like_build_text() {
+        let console = test_console();
+        assert_eq!(
+            console
+                .try_build_text(":rocket: go")
+                .expect("valid")
+                .plain(),
+            console.build_text(":rocket: go").plain()
+        );
     }
 
     #[test]

@@ -590,6 +590,16 @@ fn run(cli: Cli) -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    // Markup comes from the user in Print mode, so a mistake in it should be
+    // reported rather than printed literally (upstream raises `MarkupError`).
+    // Checked up front because the render closure below cannot fail.
+    if mode == Mode::Print {
+        if let Err(err) = console.try_build_text(&content) {
+            eprintln!("rich: {err}");
+            return ExitCode::FAILURE;
+        }
+    }
+
     emit(&console, &export, |c| match mode {
         Mode::Markdown => c.print(&Markdown::new(&content)),
         Mode::Json => c.print(json.as_ref().expect("json parsed above")),

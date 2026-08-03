@@ -17,18 +17,22 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** only if a concrete codepoint mismatch is found — then vendor the
   upstream table into `cells.rs`. Tracked with the `cells` porting issue.
 
-### 2. Markup: error is swallowed at the print boundary; partial backslash rules
-- **Differs:** `markup::render` now matches upstream — a `[…]` is only a tag when
-  it starts with `[a-z#/@]`, an unmatched closing tag returns `RichError::Markup`,
-  and unclosed *opening* tags auto-close (as upstream does). Two smaller gaps
-  remain: (a) the `Console` print path swallows a markup error and falls back to
-  printing the raw text, rather than propagating it; and (b) the parser handles
-  the common `\[` escape but not the full backslash-run doubling semantics of
-  `_parse` (the public `markup::escape` *does* implement the full rule).
-- **Why:** swallowing at the boundary keeps the demo/CLI robust on arbitrary
-  input; the exotic backslash-run cases are rare.
-- **Remove:** add a strict print variant that surfaces `MarkupError`, and port
-  the backslash-run branch of `_parse`, under the markup/text issue (#2).
+### 2. Markup: lenient print path is opt-out, not opt-in; partial backslash rules
+- **Differs:** `markup::render` matches upstream — a `[…]` is only a tag when it
+  starts with `[a-z#/@]`, an unmatched closing tag returns `RichError::Markup`,
+  and unclosed *opening* tags auto-close (as upstream does). Two gaps remain:
+  (a) the infallible `Console::print_str`/`build_text` still fall back to
+  printing the raw text where upstream would raise `MarkupError` — the strict
+  behaviour is now available as `try_print_str` / `try_print_justified` /
+  `try_build_text`, and `rich --print` uses it, so user-supplied markup is
+  reported rather than rendered literally; and (b) the parser handles the common
+  `\[` escape but not the full backslash-run doubling semantics of `_parse` (the
+  public `markup::escape` *does* implement the full rule).
+- **Why:** the infallible signatures keep the ~30 internal call sites that pass
+  literal markup free of `unwrap`/`?` noise, where a parse error is a bug rather
+  than a runtime condition. The exotic backslash-run cases are rare.
+- **Remove:** make the strict form the default (renaming the lenient one to
+  `*_lossy`), and port the backslash-run branch of `_parse`, under #2.
 
 ### 3. Byte offsets in `Text` spans
 - **Differs:** upstream `Text` uses code-point offsets for spans; our `Text` uses
