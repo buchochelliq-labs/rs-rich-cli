@@ -5,9 +5,9 @@
 //! may overlap and nest; [`Text::render`] flattens them into non-overlapping
 //! [`Segment`]s by combining every span covering each run.
 
-use crate::cells::cell_len;
+use crate::cells::{cell_len, set_cell_size};
 use crate::color::ColorSystem;
-use crate::console::Justify;
+use crate::console::{Justify, Overflow};
 use crate::errors::Result;
 use crate::markup;
 use crate::segment::Segment;
@@ -32,6 +32,12 @@ pub struct Text {
     style: Style,
     /// How lines are justified within the render width.
     justify: Justify,
+    /// What to do with lines wider than the render width. `None` defers to the
+    /// console options, then to [`Overflow::Fold`].
+    overflow: Option<Overflow>,
+    /// Whether to skip wrapping. `None` defers to the console options, then to
+    /// `false`.
+    no_wrap: Option<bool>,
 }
 
 impl Text {
@@ -42,6 +48,8 @@ impl Text {
             spans: Vec::new(),
             style: Style::new(),
             justify: Justify::Default,
+            overflow: None,
+            no_wrap: None,
         }
     }
 
@@ -52,6 +60,8 @@ impl Text {
             spans: Vec::new(),
             style,
             justify: Justify::Default,
+            overflow: None,
+            no_wrap: None,
         }
     }
 
@@ -69,6 +79,82 @@ impl Text {
     /// This text's own justify method.
     pub fn get_justify(&self) -> Justify {
         self.justify
+    }
+
+    /// Set what happens to lines wider than the render width (builder form).
+    pub fn overflow(mut self, overflow: Overflow) -> Self {
+        self.overflow = Some(overflow);
+        self
+    }
+
+    /// Set what happens to lines wider than the render width. Pass `None` to
+    /// defer to the console options.
+    pub fn set_overflow(&mut self, overflow: Option<Overflow>) {
+        self.overflow = overflow;
+    }
+
+    /// This text's own overflow method, if it set one.
+    pub fn get_overflow(&self) -> Option<Overflow> {
+        self.overflow
+    }
+
+    /// Disable (or re-enable) wrapping for this text (builder form).
+    pub fn no_wrap(mut self, no_wrap: bool) -> Self {
+        self.no_wrap = Some(no_wrap);
+        self
+    }
+
+    /// Disable (or re-enable) wrapping. Pass `None` to defer to the console
+    /// options.
+    pub fn set_no_wrap(&mut self, no_wrap: Option<bool>) {
+        self.no_wrap = no_wrap;
+    }
+
+    /// This text's own no-wrap setting, if it set one.
+    pub fn get_no_wrap(&self) -> Option<bool> {
+        self.no_wrap
+    }
+
+    /// Shorten this text to at most `max_width` cells, optionally padding it out
+    /// to exactly `max_width` when it is shorter. Port of `Text.truncate`.
+    ///
+    /// `overflow` defaults to this text's own method, then to [`Overflow::Fold`];
+    /// [`Overflow::Ignore`] leaves the text alone entirely. Note that `Fold` and
+    /// `Crop` behave identically here — folding is a property of *wrapping*, and
+    /// a line that has already been wrapped can only be cut.
+    pub fn truncate(&mut self, max_width: usize, overflow: Option<Overflow>, pad: bool) {
+        let overflow = overflow.or(self.overflow).unwrap_or(Overflow::Fold);
+        if overflow == Overflow::Ignore {
+            return;
+        }
+        let length = cell_len(&self.plain);
+        if length > max_width {
+            let plain = if overflow == Overflow::Ellipsis {
+                // `…` is one cell wide, so cut one short and add it back.
+                format!(
+                    "{}…",
+                    set_cell_size(&self.plain, max_width.saturating_sub(1))
+                )
+            } else {
+                set_cell_size(&self.plain, max_width)
+            };
+            self.set_plain(plain);
+        } else if pad {
+            let plain = set_cell_size(&self.plain, max_width);
+            self.set_plain(plain);
+        }
+    }
+
+    /// Replace the plain string, clamping every span into the new length so no
+    /// span can dangle past the end. Upstream's `Text.plain` setter does the
+    /// same via `_trim_spans`.
+    fn set_plain(&mut self, plain: String) {
+        let length = plain.len();
+        self.plain = plain;
+        self.spans.retain(|span| span.start < length);
+        for span in &mut self.spans {
+            span.end = span.end.min(length);
+        }
     }
 
     /// Build styled text from console markup, resolving tags against `theme`.
@@ -190,19 +276,51 @@ impl Text {
         width: Option<usize>,
         justify: Justify,
     ) -> Vec<Vec<Segment>> {
+        self.render_lines_wrapped(
+            base_style,
+            width,
+            justify,
+            self.overflow.unwrap_or(Overflow::Fold),
+            self.no_wrap.unwrap_or(false),
+        )
+    }
+
+    /// The full wrap-justify-truncate pipeline, with every knob resolved by the
+    /// caller. Port of `Text.wrap`.
+    ///
+    /// Lines are split on `\n`, wrapped to `width` (folding over-long words only
+    /// when `overflow` is [`Overflow::Fold`]), justified, and finally truncated
+    /// to `width`. [`Overflow::Ignore`] skips wrapping and truncation both, so
+    /// lines may come back wider than `width`.
+    pub fn render_lines_wrapped(
+        &self,
+        base_style: &Style,
+        width: Option<usize>,
+        justify: Justify,
+        overflow: Overflow,
+        no_wrap: bool,
+    ) -> Vec<Vec<Segment>> {
         let effective_base = base_style.combine(&self.style);
+        // Upstream folds `overflow == "ignore"` into no_wrap before splitting.
+        let no_wrap = no_wrap || overflow == Overflow::Ignore;
         let mut lines: Vec<Vec<Segment>> = Vec::new();
-        for (start, end) in self.wrapped_ranges(width) {
+        for (start, end) in self.wrapped_ranges(width, overflow, no_wrap) {
             lines.push(self.line_segments(start, end, &effective_base));
         }
-        if let Some(width) = width {
-            if justify != Justify::Default {
-                let last = lines.len().saturating_sub(1);
-                for (index, line) in lines.iter_mut().enumerate() {
-                    // Full justification leaves the final line ragged, so it
-                    // needs to know where it is in the paragraph.
-                    *line = justify_line(line, width, justify, &effective_base, index == last);
-                }
+        let Some(width) = width else {
+            return lines;
+        };
+        if justify != Justify::Default {
+            let last = lines.len().saturating_sub(1);
+            for (index, line) in lines.iter_mut().enumerate() {
+                // Full justification leaves the final line ragged, so it
+                // needs to know where it is in the paragraph.
+                *line = justify_line(line, width, justify, &effective_base, index == last);
+            }
+        }
+        if overflow != Overflow::Ignore {
+            for line in &mut lines {
+                *line = truncate_line(line, width, overflow);
             }
         }
         lines
@@ -216,7 +334,26 @@ impl Text {
         width: usize,
         justify: Justify,
     ) -> Vec<Segment> {
-        let lines = self.render_lines_justified(base_style, Some(width), justify);
+        self.render_joined_wrapped(
+            base_style,
+            width,
+            justify,
+            self.overflow.unwrap_or(Overflow::Fold),
+            self.no_wrap.unwrap_or(false),
+        )
+    }
+
+    /// As [`render_lines_wrapped`](Self::render_lines_wrapped), flattened into a
+    /// single segment stream with [`Segment::line`] between visual lines.
+    pub fn render_joined_wrapped(
+        &self,
+        base_style: &Style,
+        width: usize,
+        justify: Justify,
+        overflow: Overflow,
+        no_wrap: bool,
+    ) -> Vec<Segment> {
+        let lines = self.render_lines_wrapped(base_style, Some(width), justify, overflow, no_wrap);
         let mut segments = Vec::new();
         let last = lines.len().saturating_sub(1);
         for (index, line) in lines.into_iter().enumerate() {
@@ -245,7 +382,12 @@ impl Text {
 
     /// The `(start_byte, end_byte)` range of each visual line: hard lines split
     /// on `\n`, then wrapped to `width` cells when `Some`.
-    fn wrapped_ranges(&self, width: Option<usize>) -> Vec<(usize, usize)> {
+    fn wrapped_ranges(
+        &self,
+        width: Option<usize>,
+        overflow: Overflow,
+        no_wrap: bool,
+    ) -> Vec<(usize, usize)> {
         let mut hard: Vec<(usize, usize)> = Vec::new();
         let mut start = 0;
         for (i, byte) in self.plain.bytes().enumerate() {
@@ -259,11 +401,16 @@ impl Text {
         let Some(width) = width else {
             return hard;
         };
+        if no_wrap {
+            return hard;
+        }
 
         let mut ranges: Vec<(usize, usize)> = Vec::new();
         for (a, b) in hard {
             let sub = &self.plain[a..b];
-            let breaks = crate::wrap::divide_line(sub, width, true);
+            // Only `fold` breaks a word that is wider than the whole line; the
+            // cropping methods leave it long and let truncation cut it.
+            let breaks = crate::wrap::divide_line(sub, width, overflow == Overflow::Fold);
             let mut cuts = vec![a];
             for char_offset in breaks {
                 cuts.push(a + char_to_byte(sub, char_offset));
@@ -326,6 +473,70 @@ fn char_to_byte(text: &str, char_idx: usize) -> usize {
         .nth(char_idx)
         .map(|(byte, _)| byte)
         .unwrap_or(text.len())
+}
+
+/// Cut a rendered line down to `width` cells, applying `overflow`. Segment-level
+/// counterpart of [`Text::truncate`], used once per line at the end of the wrap
+/// pipeline.
+///
+/// [`Overflow::Fold`] and [`Overflow::Crop`] both plain-cut: by this point the
+/// line has already been wrapped, so anything still over-long is an unbreakable
+/// run that folding cannot help with.
+///
+/// [`Overflow::Ellipsis`] cuts one cell short and appends `…`. The marker takes
+/// the style of the first segment the cut did *not* keep whole — upstream writes
+/// the ellipsis into the plain string and lets span-trimming decide, which works
+/// out to the same rule, including when the cut lands exactly on a boundary.
+fn truncate_line(line: &[Segment], width: usize, overflow: Overflow) -> Vec<Segment> {
+    if overflow == Overflow::Ignore {
+        return line.to_vec();
+    }
+    let total: usize = line.iter().map(Segment::cell_length).sum();
+    if total <= width {
+        return line.to_vec();
+    }
+    let ellipsis = overflow == Overflow::Ellipsis;
+    // `…` occupies one cell, so the kept text must stop one cell early.
+    let keep = if ellipsis {
+        width.saturating_sub(1)
+    } else {
+        width
+    };
+
+    let mut result: Vec<Segment> = Vec::new();
+    let mut used = 0usize;
+    // Style the ellipsis inherits: that of the first segment reaching past the
+    // cut. `total > width >= keep` guarantees such a segment exists.
+    let mut cut_style: Option<Style> = None;
+    for segment in line {
+        let length = segment.cell_length();
+        if used + length <= keep {
+            result.push(segment.clone());
+            used += length;
+            continue;
+        }
+        cut_style = segment.style.clone();
+        if used < keep {
+            // This segment straddles the cut, so keep the part that fits. A wide
+            // character landing across the boundary is dropped whole and
+            // `set_cell_size` pads the gap with a space, as upstream does.
+            result.push(Segment::new(
+                set_cell_size(&segment.text, keep - used),
+                segment.style.clone(),
+            ));
+        }
+        break;
+    }
+    if ellipsis {
+        // Upstream appends the marker to the plain string and re-renders, so it
+        // lands inside the preceding run rather than beside it. Merging keeps
+        // the byte stream identical — a separate segment would re-emit the style.
+        match result.last_mut() {
+            Some(last) if !last.control && last.style == cut_style => last.text.push('…'),
+            _ => result.push(Segment::new("…", cut_style)),
+        }
+    }
+    result
 }
 
 /// Split a rendered line into whitespace-separated words, each word keeping its
@@ -494,5 +705,95 @@ mod tests {
         // Boundaries at 0,2,4,6 -> "ab"(bold) "cd"(bold+red) "ef"(red)
         let rendered: Vec<_> = segments.iter().map(|s| s.text.clone()).collect();
         assert_eq!(rendered, vec!["ab", "cd", "ef"]);
+    }
+
+    /// `Text::truncate` on its own, against real rich 15.0.0. `fold` and `crop`
+    /// deliberately agree: folding is a wrapping behaviour, and truncation has
+    /// no line to fold onto.
+    #[test]
+    fn truncate_matches_upstream() {
+        for (overflow, expected) in [
+            (Overflow::Fold, "hello"),
+            (Overflow::Crop, "hello"),
+            (Overflow::Ellipsis, "hell…"),
+            (Overflow::Ignore, "hello world"),
+        ] {
+            let mut text = Text::new("hello world");
+            text.truncate(5, Some(overflow), false);
+            assert_eq!(text.plain(), expected, "overflow {overflow:?}");
+        }
+    }
+
+    /// `pad` fills out to the width, but only when the text is short — a text
+    /// that is already too long is cut, never padded.
+    #[test]
+    fn truncate_pads_only_when_short() {
+        let mut short = Text::new("hi");
+        short.truncate(6, Some(Overflow::Crop), true);
+        assert_eq!(short.plain(), "hi    ");
+
+        let mut exact = Text::new("hi");
+        exact.truncate(2, Some(Overflow::Crop), true);
+        assert_eq!(exact.plain(), "hi");
+    }
+
+    /// Truncating must not leave a span pointing past the end of the string.
+    #[test]
+    fn truncate_trims_dangling_spans() {
+        let mut text = Text::new("hello world");
+        text.stylize(6, 11, Style::parse("bold").unwrap());
+        text.stylize(0, 5, Style::parse("red").unwrap());
+        text.truncate(3, Some(Overflow::Crop), false);
+        assert_eq!(text.plain(), "hel");
+        // The "world" span starts past the new end and is dropped entirely; the
+        // "hello" span survives, clamped.
+        assert_eq!(text.spans().len(), 1);
+        assert!(text.spans().iter().all(|s| s.end <= text.plain().len()));
+    }
+
+    use crate::protocol::Renderable;
+
+    /// The overflow method may come from the text or from the console options,
+    /// and the text's own setting wins — mirroring upstream's
+    /// `self.overflow or options.overflow or DEFAULT_OVERFLOW`.
+    #[test]
+    fn text_overflow_beats_console_options() {
+        let console = crate::Console::builder().width(8).build();
+        let mut options = console.options();
+        options.overflow = Some(Overflow::Ellipsis);
+        options.no_wrap = Some(true);
+
+        // Nothing set on the text: the options decide.
+        let from_options = Text::new("the quick brown fox");
+        assert_eq!(
+            plain_of(&from_options.rich_render(&console, &options)),
+            "the qui…"
+        );
+
+        // Set on the text: the text decides, and the options are ignored.
+        let from_text = Text::new("the quick brown fox").overflow(Overflow::Crop);
+        assert_eq!(
+            plain_of(&from_text.rich_render(&console, &options)),
+            "the quic"
+        );
+    }
+
+    /// With no overflow anywhere, upstream's default applies: fold.
+    #[test]
+    fn overflow_defaults_to_fold() {
+        let console = crate::Console::builder().width(8).build();
+        let text = Text::new("supercalifragilistic");
+        let rendered = plain_of(&text.rich_render(&console, &console.options()));
+        assert_eq!(rendered, "supercal\nifragili\nstic");
+    }
+
+    /// Concatenate the visible text of a segment stream, for assertions that
+    /// care about layout rather than styling.
+    fn plain_of(segments: &[Segment]) -> String {
+        segments
+            .iter()
+            .filter(|s| !s.control)
+            .map(|s| s.text.as_str())
+            .collect()
     }
 }

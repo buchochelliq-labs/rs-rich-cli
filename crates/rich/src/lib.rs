@@ -74,7 +74,7 @@ pub use crate::ansi::AnsiDecoder;
 pub use crate::bar::Bar;
 pub use crate::color::{Color, ColorSystem, ColorTriplet};
 pub use crate::columns::Columns;
-pub use crate::console::{Console, ConsoleOptions, Justify};
+pub use crate::console::{Console, ConsoleOptions, Justify, Overflow};
 pub use crate::constrain::Constrain;
 pub use crate::control::{Control, ControlType};
 pub use crate::errors::{Result, RichError};

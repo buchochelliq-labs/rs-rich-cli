@@ -19,7 +19,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `cells.py`, `_cell_widths.py`         | `cells.rs`               | 🟡 | ✅ |
 | `segment.py`                          | `segment.rs`             | 🟡 | — |
 | `markup.py`                           | `markup.rs`              | 🟡 | ✅ |
-| `text.py` (+ justify)                 | `text.rs`                | 🟡 | ✅ |
+| `text.py` (+ justify, overflow)       | `text.rs`                | 🟡 | ✅ |
 | `_wrap.py`                            | `wrap.rs`                | 🟡 | ✅ |
 | `theme.py`, `themes.py`, `default_styles.py` | `theme.rs` | 🟡 | — |
 | `terminal_theme.py` | `terminal_theme.rs` | 🟡 | ✅ |

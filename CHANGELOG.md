@@ -27,6 +27,21 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   captured from real rich 15.0.0.
 
 ### Added
+- **Text overflow** (`Overflow` in `console.rs`, `text.rs`, `segment.rs`). `Text`
+  now carries `overflow` and `no_wrap`, as do `ConsoleOptions`, resolved with
+  upstream's `self.x or options.x or DEFAULT` precedence. The wrap pipeline is
+  now a full port of `Text.wrap`: split on newlines, wrap (folding an unbreakable
+  word **only** under `fold`), justify, then truncate each line.
+  - `Overflow::Ignore` neither wraps nor truncates, which upstream keeps
+    survivable via `Console.print(crop=True)` — ported as `Segment::crop_lines`
+    and applied on the print path. Without it, `ignore` would run off the side of
+    the terminal rather than being cut at the edge.
+  - `Text::truncate(max_width, overflow, pad)` is exposed directly.
+  - Covered by 22 new byte-parity fixtures (`golden/overflow.tsv`) spanning every
+    method, `no_wrap`, double-width characters straddling the cut, and the three
+    positions an ellipsis can land relative to a span — the last of these caught
+    a real bug, since the marker inherits the style of the run the cut *entered*,
+    not the one it left.
 - **Paging** (`pager.rs` + `Console::page`, `rich-cli --pager`). A `Pager` trait
   with a `SystemPager` that
   ports `pydoc.get_pager`'s selection order (`MANPAGER`, then `PAGER` — split
@@ -36,7 +51,7 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   closure's output and shows it, stripping styles unless `styles` is set
   (matching `Console.pager(styles=False)`); `page_with` takes a custom `Pager`,
   upstream's `Console.pager(pager=…)` seam. `rich --pager` pages *styled*
-  output. **The rich-cli surface is now complete.**
+  output.
 - **`rich-cli` URL fetch** (`rich-cli/main.rs`, completes the common CLI surface):
   `rich <url>` fetches an `http(s)` resource and renders it — the render mode
   comes from a flag, else the URL extension, else the response `Content-Type`

@@ -30,6 +30,21 @@ pub enum Justify {
     Full,
 }
 
+/// What to do with text that is wider than the space available.
+/// Mirrors `rich.console.OverflowMethod`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Overflow {
+    /// Break over-long words across lines. Upstream's `DEFAULT_OVERFLOW`.
+    #[default]
+    Fold,
+    /// Cut the line off at the width.
+    Crop,
+    /// Cut the line off one cell early and mark it with `…`.
+    Ellipsis,
+    /// Leave over-long lines intact, and do not wrap.
+    Ignore,
+}
+
 /// The options passed to a [`Renderable`] describing the space it must fit into.
 ///
 /// Port of the core of `rich.console.ConsoleOptions`. Only the fields needed by
@@ -40,29 +55,32 @@ pub struct ConsoleOptions {
     pub max_width: usize,
     pub height: Option<usize>,
     pub justify: Justify,
+    /// Overflow method to impose on renderables, or `None` to let each pick its
+    /// own. Mirrors `ConsoleOptions.overflow`.
+    pub overflow: Option<Overflow>,
+    /// Disable wrapping, or `None` to let each renderable pick. Mirrors
+    /// `ConsoleOptions.no_wrap`.
+    pub no_wrap: Option<bool>,
 }
 
 impl ConsoleOptions {
     /// Return a copy with `max_width` (and a clamped `min_width`) updated.
     /// Port of `ConsoleOptions.update_width`.
     pub fn update_width(&self, width: usize) -> ConsoleOptions {
-        ConsoleOptions {
-            min_width: width,
-            max_width: width,
-            height: self.height,
-            justify: self.justify,
-        }
+        // Copy-then-overwrite rather than a fresh literal, so fields added later
+        // are carried through instead of being silently reset to a default.
+        let mut options = self.clone();
+        options.min_width = width;
+        options.max_width = width;
+        options
     }
 
     /// Return a copy with both width and height pinned. Port of
     /// `ConsoleOptions.update_dimensions`.
     pub fn update_dimensions(&self, width: usize, height: usize) -> ConsoleOptions {
-        ConsoleOptions {
-            min_width: width,
-            max_width: width,
-            height: Some(height),
-            justify: self.justify,
-        }
+        let mut options = self.update_width(width);
+        options.height = Some(height);
+        options
     }
 }
 
@@ -169,6 +187,8 @@ impl Console {
             max_width: self.width,
             height: None,
             justify: Justify::Default,
+            overflow: None,
+            no_wrap: None,
         }
     }
 
@@ -191,7 +211,12 @@ impl Console {
             let measurement = renderable.measure(self, &options);
             options.max_width = measurement.maximum.min(options.max_width).max(1);
         }
-        renderable.rich_render(self, &options)
+        let segments = renderable.rich_render(self, &options);
+        // `Console.print(crop=True)`: the final backstop against a line running
+        // off the side of the terminal. Renderables that fit are untouched; this
+        // is what gives `Overflow::Ignore` its "wrap nothing, but still don't
+        // corrupt the display" behaviour.
+        Segment::crop_lines(&segments, self.width)
     }
 
     /// Write (or, while capturing, record) a rendered segment stream, adding a
@@ -516,7 +541,21 @@ impl Renderable for Text {
         } else {
             options.justify
         };
-        self.render_joined_justified(console.base_style(), options.max_width, justify)
+        // Same precedence for overflow and no_wrap: the text's own setting wins,
+        // then the options', then upstream's default. Mirrors the `self.x or
+        // options.x or DEFAULT` chain in `Text.__rich_console__`.
+        let overflow = self
+            .get_overflow()
+            .or(options.overflow)
+            .unwrap_or(Overflow::Fold);
+        let no_wrap = self.get_no_wrap().or(options.no_wrap).unwrap_or(false);
+        self.render_joined_wrapped(
+            console.base_style(),
+            options.max_width,
+            justify,
+            overflow,
+            no_wrap,
+        )
     }
 
     fn measure(&self, _console: &Console, options: &ConsoleOptions) -> crate::measure::Measurement {

@@ -494,6 +494,51 @@ COLOR_CASES: list[tuple[str, str]] = [
     ("default_color", "[default on default]x[/]"),
 ]
 
+def _span_text(plain: str, style: str, start: int, end: int) -> Text:
+    text = Text(plain)
+    text.stylize(style, start, end)
+    return text
+
+
+# (name, width, Text, overflow, no_wrap) — the Rust test rebuilds each Text by
+# name and renders it with the same overflow/no_wrap.
+#
+# "supercalifragilistic" is one unbreakable word, which is the only thing that
+# tells `fold` apart from `crop`: a line of ordinary words wraps identically
+# under every method, so a case built from those would pass against a stub.
+OVERFLOW_CASES = [
+    ("fold_long_word", 8, Text("supercalifragilistic"), "fold", False),
+    ("crop_long_word", 8, Text("supercalifragilistic"), "crop", False),
+    ("ellipsis_long_word", 8, Text("supercalifragilistic"), "ellipsis", False),
+    ("ignore_long_word", 8, Text("supercalifragilistic"), "ignore", False),
+    ("fold_sentence", 8, Text("the quick brown fox jumps"), "fold", False),
+    ("crop_sentence", 8, Text("the quick brown fox jumps"), "crop", False),
+    ("ellipsis_sentence", 8, Text("the quick brown fox jumps"), "ellipsis", False),
+    ("ignore_sentence", 8, Text("the quick brown fox jumps"), "ignore", False),
+    # no_wrap keeps each hard line whole, then the overflow method cuts it.
+    ("nowrap_fold", 8, Text("the quick brown fox"), "fold", True),
+    ("nowrap_crop", 8, Text("the quick brown fox"), "crop", True),
+    ("nowrap_ellipsis", 8, Text("the quick brown fox"), "ellipsis", True),
+    ("nowrap_ignore", 8, Text("the quick brown fox"), "ignore", True),
+    # Hard newlines are still honoured when wrapping is off.
+    ("nowrap_multiline", 8, Text("first line here\nsecond line here"), "ellipsis", True),
+    # A double-width character straddling the cut is dropped whole and the
+    # leftover cell padded with a space.
+    ("wide_crop", 5, Text("aa你好世"), "crop", False),
+    ("wide_ellipsis", 5, Text("aa你好世"), "ellipsis", False),
+    ("wide_ellipsis_exact", 6, Text("aa你好世"), "ellipsis", False),
+    # Which style the ellipsis inherits depends on where the cut lands relative
+    # to a span: inside one, exactly on its start, and after it has ended.
+    ("ellipsis_in_span", 4, _span_text("abcdefgh", "bold", 2, 5), "ellipsis", False),
+    ("ellipsis_at_span_start", 5, _span_text("aaaabbbb", "bold red", 4, 8), "ellipsis", False),
+    ("ellipsis_after_span", 5, _span_text("aaaabbbb", "bold red", 0, 4), "ellipsis", False),
+    # Text that exactly fills the width must not be cut, and a width of 1 leaves
+    # room for nothing but the marker itself.
+    ("crop_exact_width", 5, Text("hello"), "crop", False),
+    ("ellipsis_exact_width", 5, Text("hello"), "ellipsis", False),
+    ("ellipsis_width_one", 1, Text("hello"), "ellipsis", False),
+]
+
 COLOR_SYSTEMS = ["truecolor", "256", "standard"]
 
 HEADER = """\
@@ -506,6 +551,18 @@ HEADER = """\
 #
 # Only cases whose output is byte-identical to upstream belong here. Our theme
 # conveniences ([error]/[warning]/[info]) are NOT upstream and live in unit tests.
+"""
+
+
+OVERFLOW_HEADER = """\
+# Golden parity fixtures for Text overflow — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py  (see AGENTS.md → Parity)
+#
+# Format: <name>\\t<width>\\t<overflow>\\t<no_wrap>\\t<expected-ansi>
+#
+# Captured via `Console.print(text, overflow=..., no_wrap=...)`, so these cover
+# the whole pipeline: wrap (folding only under "fold"), justify, per-line
+# truncate, and the console-level crop that "ignore" relies on.
 """
 
 
@@ -609,6 +666,26 @@ def main() -> None:
         rlines.append(f"{name}\t{width}\t{escape(output)}")
     renderable_path.write_text("\n".join(rlines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(RENDERABLE_CASES)} renderable cases to {renderable_path}")
+
+    overflow_path = golden_dir() / "overflow.tsv"
+    olines = [OVERFLOW_HEADER.rstrip("\n")]
+    for name, width, text, overflow, no_wrap in OVERFLOW_CASES:
+        oconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=width,
+            highlight=False,
+            safe_box=False,
+            legacy_windows=False,
+            no_color=False,
+        )
+        with oconsole.capture() as capture:
+            oconsole.print(text, overflow=overflow, no_wrap=no_wrap)
+        olines.append(
+            f"{name}\t{width}\t{overflow}\t{str(no_wrap).lower()}\t{escape(capture.get())}"
+        )
+    overflow_path.write_text("\n".join(olines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(OVERFLOW_CASES)} overflow cases to {overflow_path}")
 
     layout_path = golden_dir() / "layout.tsv"
     llines = [LAYOUT_HEADER.rstrip("\n")]

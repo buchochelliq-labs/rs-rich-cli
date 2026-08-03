@@ -10,8 +10,8 @@ use rich::markdown::Markdown;
 use rich::r#box::{Box as BoxSet, DOUBLE_EDGE, HEAVY_HEAD, SIMPLE, SQUARE};
 use rich::{
     Align, AnsiDecoder, Bar, ColorSystem, Columns, Console, Constrain, Control, HorizontalAlign,
-    Json, Justify, Layout, Padding, Panel, ProgressBar, Renderable, Rule, Style, Styled, Table,
-    Text, Tree,
+    Json, Justify, Layout, Overflow, Padding, Panel, ProgressBar, Renderable, Rule, Style, Styled,
+    Table, Text, Tree,
 };
 
 /// Build the layout matching a `layout_*` fixture name. Must stay in sync with
@@ -415,6 +415,84 @@ fn truecolor_parity() {
         checked += 1;
     }
     assert!(checked > 0, "no golden cases were checked");
+}
+
+/// Build the `Text` matching an `overflow.tsv` fixture `name`. Must stay in sync
+/// with `OVERFLOW_CASES` in `scripts/capture_golden.py`.
+fn build_overflow_text(name: &str) -> Text {
+    let span = |plain: &str, style: &str, start: usize, end: usize| {
+        let mut text = Text::new(plain);
+        text.stylize(
+            start,
+            end,
+            Style::parse(style).expect("test style must parse"),
+        );
+        text
+    };
+    match name {
+        "fold_long_word" | "crop_long_word" | "ellipsis_long_word" | "ignore_long_word" => {
+            Text::new("supercalifragilistic")
+        }
+        "fold_sentence" | "crop_sentence" | "ellipsis_sentence" | "ignore_sentence" => {
+            Text::new("the quick brown fox jumps")
+        }
+        "nowrap_fold" | "nowrap_crop" | "nowrap_ellipsis" | "nowrap_ignore" => {
+            Text::new("the quick brown fox")
+        }
+        "nowrap_multiline" => Text::new("first line here\nsecond line here"),
+        "wide_crop" | "wide_ellipsis" | "wide_ellipsis_exact" => Text::new("aa你好世"),
+        "ellipsis_in_span" => span("abcdefgh", "bold", 2, 5),
+        "ellipsis_at_span_start" => span("aaaabbbb", "bold red", 4, 8),
+        "ellipsis_after_span" => span("aaaabbbb", "bold red", 0, 4),
+        "crop_exact_width" | "ellipsis_exact_width" | "ellipsis_width_one" => Text::new("hello"),
+        other => panic!("unknown overflow fixture {other:?} — add it to build_overflow_text"),
+    }
+}
+
+/// `Text` overflow handling, checked against upstream end to end: wrapping (which
+/// only folds under `fold`), justification, the per-line truncate, and the
+/// console-level crop that `ignore` depends on to stay inside the terminal.
+#[test]
+fn overflow_parity() {
+    let data = include_str!("golden/overflow.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(5, '\t');
+        let name = parts.next().unwrap_or("");
+        let mut field = |what: &str| {
+            parts
+                .next()
+                .unwrap_or_else(|| panic!("line {}: missing {what}", index + 1))
+                .to_string()
+        };
+        let width: usize = field("width").parse().expect("width must be a number");
+        let overflow = match field("overflow").as_str() {
+            "fold" => Overflow::Fold,
+            "crop" => Overflow::Crop,
+            "ellipsis" => Overflow::Ellipsis,
+            "ignore" => Overflow::Ignore,
+            other => panic!("line {}: unknown overflow {other:?}", index + 1),
+        };
+        let no_wrap = field("no_wrap") == "true";
+        let expected = unescape(&field("expected"));
+
+        let text = build_overflow_text(name)
+            .overflow(overflow)
+            .no_wrap(no_wrap);
+        let got = truecolor_console(width).render_export(&text);
+        assert_eq!(
+            got,
+            expected,
+            "overflow case {name:?} (line {}) diverged from upstream rich",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert!(checked > 0, "no overflow cases were checked");
 }
 
 /// The bundled terminal-theme palettes, checked against upstream. Each theme is
