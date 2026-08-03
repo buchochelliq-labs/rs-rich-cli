@@ -134,6 +134,15 @@ impl Style {
     /// Port of `Style.parse` covering attributes, `not <attr>`, and
     /// `<color> on <color>`. (`link`/`meta` are deferred — see DIVERGENCES.)
     pub fn parse(definition: &str) -> Result<Self> {
+        // Port of upstream's leading guard:
+        //     if style_definition.strip() == "none" or not style_definition
+        // `none` is only valid as the WHOLE definition — upstream raises on
+        // `"bold none"`, because inside the word loop `none` is treated as a
+        // colour name and fails to parse. Many `DEFAULT_STYLES` entries are
+        // exactly `"none"`, so without this they would all be dropped.
+        if definition.is_empty() || definition.trim() == "none" {
+            return Ok(Style::new());
+        }
         let mut style = Style::new();
         let mut words = definition.split_whitespace();
         while let Some(raw) = words.next() {
