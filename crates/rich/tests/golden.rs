@@ -576,6 +576,9 @@ fn build_text_op(name: &str) -> Vec<Text> {
         "rstrip_end_partial" => mutated(Text::new("hello      "), &|t| t.rstrip_end(8)),
         "rstrip_end_noop" => mutated(Text::new("hi   "), &|t| t.rstrip_end(10)),
         "expand_tabs" => mutated(Text::new("a\tb\tc"), &|t| t.expand_tabs(4)),
+        "expand_tabs_span_across_tabs" => {
+            mutated(styled("a\tb\tc", &[("bold", 0, 5)]), &|t| t.expand_tabs(4))
+        }
         "expand_tabs_styled" => mutated(styled("a\tb", &[("bold", 0, 2)]), &|t| t.expand_tabs(8)),
         "expand_tabs_multiline" => mutated(Text::new("ab\tc\nd\te"), &|t| t.expand_tabs(4)),
         "join" => vec![Text::new(", ").join(&[

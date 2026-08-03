@@ -176,8 +176,17 @@ pub fn render(markup: &str) -> Result<Text> {
             style,
         });
     }
-    // Outer spans first so that inner (more nested) spans win when combined.
-    spans.sort_by(|a, b| a.start.cmp(&b.start).then(b.end.cmp(&a.end)));
+    // Outer spans first, so inner (more nested) spans are combined last and win.
+    //
+    // Upstream is `sorted(spans[::-1], key=attrgetter("start"))`, and both halves
+    // matter. Spans are pushed in *closing* order, innermost first, so the
+    // reverse puts the outermost first; the sort then keys on `start` **only**,
+    // and being stable it preserves that reversal for ties. Sorting by
+    // `(start, end desc)` instead looks equivalent but is not: two tags covering
+    // the exact same range compare Equal, the innermost stays first, and the
+    // outer tag ends up winning. `[red][blue]x[/][/]` must render blue.
+    spans.reverse();
+    spans.sort_by_key(|span| span.start);
 
     let mut text = Text::new(plain);
     for span in spans {

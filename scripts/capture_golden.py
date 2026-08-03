@@ -275,6 +275,13 @@ CASES: list[tuple[str, str]] = [
     ("two_tags", "[bold]Hello[/] [red]World[/]"),
     ("fg_on_bg", "[white on blue]bg[/]"),
     ("nested_inner_wins", "[red]a[blue]x[/]b[/]"),
+    # Two tags over the *exact same* range — the inner one must win. Sorting the
+    # spans by (start, end desc) makes these compare equal, leaves the innermost
+    # first, and hands the win to the outer tag. Only an identical range shows
+    # it; `nested_inner_wins` above has differing ends and passes either way.
+    ("coincident_inner_wins", "[red][blue]x[/][/]"),
+    ("coincident_inner_wins_swapped", "[blue][red]x[/][/]"),
+    ("coincident_attrs_merge", "[bold][dim]y[/][/]"),
     ("hex_truecolor", "[#ff8800]x[/]"),
     ("plain_text", "no styles here"),
     ("emoji_rocket", ":rocket: launch :fire:"),
@@ -621,6 +628,13 @@ def _op_expand_tabs():
     return _mutated(Text("a\tb\tc"), lambda t: t.expand_tabs(4))
 
 
+def _op_expand_tabs_span_across_tabs():
+    # A span crossing several tabs. Upstream splits it into one span per
+    # tab-part, so this renders as three segments — remapping offsets instead
+    # would keep one span, same colours but different bytes.
+    return _mutated(_styled("a\tb\tc", ("bold", 0, 5)), lambda t: t.expand_tabs(4))
+
+
 def _op_expand_tabs_styled():
     return _mutated(_styled("a\tb", ("bold", 0, 2)), lambda t: t.expand_tabs(8))
 
@@ -678,6 +692,7 @@ TEXT_OPS_CASES = [
     ("rstrip_end_partial", _op_rstrip_end_partial),
     ("rstrip_end_noop", _op_rstrip_end_noop),
     ("expand_tabs", _op_expand_tabs),
+    ("expand_tabs_span_across_tabs", _op_expand_tabs_span_across_tabs),
     ("expand_tabs_styled", _op_expand_tabs_styled),
     ("expand_tabs_multiline", _op_expand_tabs_multiline),
     ("join", _op_join),
@@ -741,6 +756,16 @@ HIGHLIGHT_CASES = [
     ("markup_and_highlight", {"accent": "bold blue", "repr.number": "green"}, "[accent]total[/] = 7"),
     # An unknown tag name is a no-op upstream, not an error.
     ("unknown_tag_is_noop", {}, "[nope]x[/]"),
+    # An explicit tag must BEAT the highlighter where they overlap. The
+    # highlighter runs on the markup-stripped text and its spans go on first;
+    # decorating the markup `Text` in place inverts that, which is the obvious
+    # way to write it and produces the wrong colour on all four of these.
+    ("markup_beats_highlight_colour", {}, "[green]123[/]"),
+    ("markup_beats_highlight_bool", {}, "[red]True[/]"),
+    ("markup_beats_highlight_str", {}, "[bold]'hi'[/]"),
+    ("markup_over_highlight_inline", {}, "x = [magenta]99[/] ok"),
+    # Attributes that do not collide merge instead of replacing.
+    ("markup_merges_with_highlight", {}, "[underline]3.14[/]"),
 ]
 
 COLOR_SYSTEMS = ["truecolor", "256", "standard"]

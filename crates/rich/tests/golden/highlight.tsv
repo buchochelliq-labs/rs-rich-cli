@@ -14,3 +14,8 @@ themed_str	{"repr.str": "italic yellow"}	greeting = 'hello'	greeting = \x1b[3;33
 partial_override	{"repr.number": "underline"}	call(1, 'two', True)	\x1b[1;35mcall\x1b[0m\x1b[1m(\x1b[0m\x1b[4m1\x1b[0m, \x1b[32m'two'\x1b[0m, \x1b[3;92mTrue\x1b[0m\x1b[1m)\x1b[0m
 markup_and_highlight	{"accent": "bold blue", "repr.number": "green"}	[accent]total[/] = 7	\x1b[1;34mtotal\x1b[0m = \x1b[32m7\x1b[0m
 unknown_tag_is_noop	{}	[nope]x[/]	x
+markup_beats_highlight_colour	{}	[green]123[/]	\x1b[1;32m123\x1b[0m
+markup_beats_highlight_bool	{}	[red]True[/]	\x1b[3;31mTrue\x1b[0m
+markup_beats_highlight_str	{}	[bold]'hi'[/]	\x1b[1;32m'hi'\x1b[0m
+markup_over_highlight_inline	{}	x = [magenta]99[/] ok	x = \x1b[1;35m99\x1b[0m ok
+markup_merges_with_highlight	{}	[underline]3.14[/]	\x1b[1;4;36m3.14\x1b[0m

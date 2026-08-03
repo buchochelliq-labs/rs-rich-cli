@@ -482,7 +482,23 @@ impl Console {
     /// markup instead of falling back to the raw text — upstream's behaviour.
     pub fn try_build_text(&self, content: &str) -> crate::errors::Result<Text> {
         let expanded = self.expand_emoji(content);
-        Ok(self.decorate(Text::from_markup(&expanded)?))
+        let markup = Text::from_markup(&expanded)?;
+
+        // The highlighter runs on the *markup-stripped* text and its spans go on
+        // first; the markup spans are appended afterwards. Spans combine in
+        // order, so this is what makes an explicit tag beat the highlighter —
+        // `[green]123[/]` is green, not `repr.number` cyan.
+        //
+        // Upstream reaches the same result a different way: `Console.render_str`
+        // highlights a fresh `Text(str(rich_text))` and then calls
+        // `highlight_text.copy_styles(rich_text)`, whose `_spans.extend` appends
+        // the markup spans last. Decorating the markup `Text` in place — the
+        // obvious reading — inverts the precedence.
+        let mut text = self.decorate(Text::new(markup.plain()));
+        for span in markup.spans() {
+            text.push_span(span.clone());
+        }
+        Ok(text)
     }
 
     /// As [`print_str`](Console::print_str), but reports malformed markup.

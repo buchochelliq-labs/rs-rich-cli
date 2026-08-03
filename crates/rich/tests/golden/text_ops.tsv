@@ -22,6 +22,7 @@ rstrip	\x1b[1mhi\x1b[0m there
 rstrip_end_partial	hello   
 rstrip_end_noop	hi   
 expand_tabs	a   b   c
+expand_tabs_span_across_tabs	\x1b[1ma   \x1b[0m\x1b[1mb   \x1b[0m\x1b[1mc\x1b[0m
 expand_tabs_styled	\x1b[1ma       \x1b[0mb
 expand_tabs_multiline	ab  c\nd   e
 join	a, \x1b[1mb\x1b[0m, c

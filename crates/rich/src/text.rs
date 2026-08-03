@@ -330,49 +330,58 @@ impl Text {
     /// Styles extend over the inserted spaces, so a styled tab pads in its own
     /// style rather than punching an unstyled hole (upstream reaches the same
     /// result via `extend_style`).
+    /// Append `count` spaces, extending any span that reached the end so the
+    /// padding takes its style. Port of `Text.extend_style`.
+    fn extend_style(&mut self, count: usize) {
+        if count == 0 {
+            return;
+        }
+        let length = self.plain.len();
+        self.plain.extend(std::iter::repeat_n(' ', count));
+        for span in &mut self.spans {
+            if span.end >= length {
+                span.end += count;
+            }
+        }
+    }
+
     pub fn expand_tabs(&mut self, tab_size: usize) {
         if !self.plain.contains('\t') || tab_size == 0 {
             return;
         }
-        // Build the expanded string alongside a map from old byte offset to new,
-        // so spans can be moved without re-deriving them.
-        let mut expanded = String::with_capacity(self.plain.len());
-        let mut offsets: Vec<(usize, usize)> = Vec::new();
-        let mut cell_position = 0usize;
-        let mut buffer = [0u8; 4];
-        for (index, ch) in self.plain.char_indices() {
-            offsets.push((index, expanded.len()));
-            match ch {
-                '\t' => {
-                    // A tab always advances at least one cell.
-                    let spaces = tab_size - (cell_position % tab_size);
-                    expanded.extend(std::iter::repeat_n(' ', spaces));
-                    cell_position += spaces;
+        // Rebuilt part-by-part rather than by remapping offsets, because the
+        // *split* is observable: upstream turns each tab-terminated run into its
+        // own piece, so a span crossing several tabs comes back as several spans
+        // and renders as several segments. Remapping offsets keeps one span and
+        // emits one segment — same colours, different bytes.
+        let mut result = Text::new("");
+        for line in self.split("\n", true, false) {
+            if !line.plain.contains('\t') {
+                result = result.append_text(&line);
+                continue;
+            }
+            let mut cell_position = 0usize;
+            for mut part in line.split("\t", true, false) {
+                if part.plain.ends_with('\t') {
+                    // The tab becomes one space, then the run is padded out to
+                    // the next stop — so a tab always advances at least one cell.
+                    part.plain.pop();
+                    part.plain.push(' ');
+                    cell_position += part.cell_len();
+                    let remainder = cell_position % tab_size;
+                    if remainder != 0 {
+                        let spaces = tab_size - remainder;
+                        part.extend_style(spaces);
+                        cell_position += spaces;
+                    }
+                } else {
+                    cell_position += part.cell_len();
                 }
-                '\n' => {
-                    expanded.push('\n');
-                    cell_position = 0;
-                }
-                _ => {
-                    expanded.push(ch);
-                    cell_position += cell_len(ch.encode_utf8(&mut buffer));
-                }
+                result = result.append_text(&part);
             }
         }
-        offsets.push((self.plain.len(), expanded.len()));
-        // A span end maps to the end of the expanded run, which is what carries
-        // the style across the spaces a tab turned into.
-        let map = |offset: usize| -> usize {
-            match offsets.binary_search_by_key(&offset, |(old, _)| *old) {
-                Ok(index) => offsets[index].1,
-                Err(index) => offsets.get(index).map_or(expanded.len(), |(_, new)| *new),
-            }
-        };
-        for span in &mut self.spans {
-            span.start = map(span.start);
-            span.end = map(span.end);
-        }
-        self.plain = expanded;
+        self.plain = result.plain;
+        self.spans = result.spans;
     }
 
     /// Join `lines` with this text as the separator, carrying each piece's base
