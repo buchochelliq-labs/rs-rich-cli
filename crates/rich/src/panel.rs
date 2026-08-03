@@ -99,7 +99,7 @@ impl Panel {
         let mut border = String::new();
         border.push(left_corner);
         match label {
-            None => border.extend(std::iter::repeat(fill_char).take(inner_width)),
+            None => border.extend(std::iter::repeat_n(fill_char, inner_width)),
             Some(label) => {
                 // Truncate the label so it (plus its flanking spaces) fits.
                 let label = truncate(label, inner_width.saturating_sub(2));
@@ -111,9 +111,9 @@ impl Panel {
                     HorizontalAlign::Left => (1.min(fill), fill.saturating_sub(1)),
                     HorizontalAlign::Right => (fill.saturating_sub(1), 1.min(fill)),
                 };
-                border.extend(std::iter::repeat(fill_char).take(left));
+                border.extend(std::iter::repeat_n(fill_char, left));
                 border.push_str(&padded);
-                border.extend(std::iter::repeat(fill_char).take(right));
+                border.extend(std::iter::repeat_n(fill_char, right));
             }
         }
         border.push(right_corner);
