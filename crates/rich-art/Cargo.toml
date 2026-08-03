@@ -21,6 +21,28 @@ default = []
 # `image` enables image -> ASCII/ANSI art (jp2a-style). Off by default so the
 # crate stays dependency-free for the FIGlet banners alone.
 image = ["dep:image"]
+# `gif` adds animated-GIF playback, driven by `rich`'s Live display.
+gif = ["image"]
+
+# The image/GIF examples only build when their feature is on.
+[[example]]
+name = "banner"
+
+[[example]]
+name = "gif"
+required-features = ["gif"]
+
+[[example]]
+name = "make_demo_gif"
+required-features = ["gif"]
+
+[[example]]
+name = "stage"
+required-features = ["gif"]
+
+[[example]]
+name = "shrink_asset"
+required-features = ["gif"]
 
 [lints]
 workspace = true

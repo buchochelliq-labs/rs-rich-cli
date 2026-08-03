@@ -1,7 +1,17 @@
 # rich-art
 
-ASCII-art renderables for [`rich`](../rich) — currently **FIGlet-style text
-banners**, in the spirit of `figlet(6)` / `pyfiglet`.
+ASCII-art renderables for [`rich`](../rich): **FIGlet-style text banners**
+(`figlet(6)` / `pyfiglet`), **image → ASCII/ANSI art** (`jp2a`), and **animated
+GIF playback** in the terminal.
+
+| Feature | Default | Pulls in |
+| --- | --- | --- |
+| FIGlet banners | ✅ always | nothing — just `rich` |
+| `image` — image → ASCII/ANSI art | off | `image` (png + jpeg decoders) |
+| `gif` — animated GIF playback | off | `image` + its gif decoder |
+
+The default build has **exactly one dependency** (`rich`), so banners cost you
+nothing extra.
 
 ```rust
 use rich::Console;
@@ -57,8 +67,45 @@ let font = FigletFont::parse(&std::fs::read_to_string("slant.flf")?)?;
 println!("{}", Figlet::new("hello").font(font).to_text(80));
 ```
 
-## Example
+## Images and animated GIFs
+
+```rust
+use rich_art::AsciiArt;
+
+// jp2a-style: a density ramp by luminance, optionally in colour.
+let art = AsciiArt::from_path("photo.png")?.color(true);
+println!("{}", art.to_text(80));
+```
+
+Cells are corrected for terminal aspect (they're about twice as tall as wide),
+so images aren't stretched. `invert()` suits light-on-dark terminals, and
+`ramp()` takes a custom density ramp.
+
+Animated GIFs play in place, driven by `rich`'s `Live` display and honouring
+each frame's own delay. Frame disposal is handled by the decoder, so frames
+never smear.
+
+```rust
+use rich::Console;
+use rich_art::gif::{AnimatedArt, Repeat};
+
+AnimatedArt::from_path("cat.gif")?
+    .color(true)
+    .max_fps(20.0)              // colour art is byte-heavy; cap the rate
+    .repeat(Repeat::Forever)
+    .play_stdout(Console::builder().build())?;
+```
+
+`play` hides the cursor and restores it on return. An interrupt (Ctrl-C) kills
+the process without unwinding, so a caller that traps signals should emit
+`rich_art::gif::show_cursor_sequence()` on the way out.
+
+## Examples
 
 ```bash
 cargo run -p rich-art --example banner -- "your text"
+
+# Draw a waving cat, then play it in the terminal.
+cargo run -p rich-art --features gif --example make_demo_gif
+cargo run -p rich-art --features gif --example gif -- cat.gif 3
 ```

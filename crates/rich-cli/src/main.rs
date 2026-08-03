@@ -47,6 +47,8 @@ enum Mode {
     Csv,
     /// `.ipynb`: render a Jupyter notebook (markdown + code cells + outputs).
     Ipynb,
+    /// `--gif`: animate one or more GIFs in place.
+    Gif,
     /// `--rule`: draw a horizontal rule (the resource, if any, is its title).
     Rule,
 }
@@ -55,6 +57,14 @@ enum Mode {
 struct Cli {
     mode: Mode,
     resource: Option<String>,
+    /// Every positional argument. Only `--gif` accepts more than one (so
+    /// several animations can share the screen); other modes reject extras.
+    /// Read only by the GIF player, hence unused without the `art` feature.
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    resources: Vec<String>,
+    /// `--loop N`: how many times `--gif` repeats (0 = forever).
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    loops: Option<usize>,
     width: Option<usize>,
     justify: Option<Justify>,
     no_color: bool,
@@ -139,7 +149,8 @@ fn set_mode(current: &mut Mode, mode: Mode) -> Result<(), String> {
 /// Parse args into a [`Cli`], or `Ok(None)` when `--help`/`--version` handled it.
 fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut mode = Mode::Auto;
-    let mut resource = None;
+    let mut resources: Vec<String> = Vec::new();
+    let mut loops = None;
     let mut width = None;
     let mut justify = None;
     let mut no_color = false;
@@ -169,6 +180,15 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "-x" | "--syntax" => set_mode(&mut mode, Mode::Syntax)?,
             "--csv" => set_mode(&mut mode, Mode::Csv)?,
             "--ipynb" => set_mode(&mut mode, Mode::Ipynb)?,
+            "--gif" => set_mode(&mut mode, Mode::Gif)?,
+            "--loop" => {
+                let value = iter.next().ok_or("--loop requires a count (0 = forever)")?;
+                loops = Some(
+                    value
+                        .parse()
+                        .map_err(|_| format!("invalid loop count {value:?}"))?,
+                );
+            }
             "--rule" => set_mode(&mut mode, Mode::Rule)?,
             "--left" => justify = Some(Justify::Left),
             "--right" => justify = Some(Justify::Right),
@@ -207,22 +227,25 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             other if other.starts_with('-') && other != "-" => {
                 return Err(format!("unknown option {other:?}"));
             }
-            other => {
-                if resource.is_some() {
-                    return Err("only one resource may be given".into());
-                }
-                resource = Some(other.to_string());
-            }
+            other => resources.push(other.to_string()),
         }
     }
 
     if export_html && export_svg {
         return Err("only one of --export-html/--export-svg may be given".into());
     }
+    // Only `--gif` animates several resources at once; every other mode renders
+    // exactly one.
+    if mode != Mode::Gif && resources.len() > 1 {
+        return Err("only one resource may be given (except with --gif)".into());
+    }
+    let resource = resources.first().cloned();
 
     Ok(Some(Cli {
         mode,
         resource,
+        resources,
+        loops,
         width,
         justify,
         no_color,
@@ -387,6 +410,7 @@ fn detect_mode(resource: Option<&str>) -> Mode {
         Some("json") => Mode::Json,
         Some("csv") | Some("tsv") => Mode::Csv,
         Some("ipynb") => Mode::Ipynb,
+        Some("gif") => Mode::Gif,
         _ => Mode::Auto,
     }
 }
@@ -431,6 +455,12 @@ fn run(cli: Cli) -> ExitCode {
         Mode::Auto => detect_mode(cli.resource.as_deref()),
         other => other,
     };
+
+    // GIF playback consumes the resource list itself (it can take several) and
+    // animates rather than rendering once.
+    if mode == Mode::Gif {
+        return play_gifs(&cli, &console);
+    }
 
     // A rule takes its optional title from the resource string directly (no
     // fetch/read).
@@ -769,6 +799,72 @@ fn render_ipynb(console: &Console, content: &str) {
     }
 }
 
+/// Animate every `--gif` resource at once, sharing the console width.
+#[cfg(feature = "art")]
+fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
+    use rich_art::{AnimatedArt, Repeat, Stage};
+
+    if cli.resources.is_empty() {
+        eprintln!("rich: --gif needs at least one GIF path");
+        return ExitCode::FAILURE;
+    }
+    let count = cli.resources.len();
+    const GAP: usize = 2;
+
+    // Share the width between the animations, leaving room for the gaps.
+    let total = cli.width.unwrap_or_else(|| console.width());
+    let per_gif = total
+        .saturating_sub(GAP * count.saturating_sub(1))
+        .checked_div(count)
+        .unwrap_or(total)
+        .max(8);
+
+    let repeat = match cli.loops {
+        Some(0) => Repeat::Forever,
+        Some(n) => Repeat::Times(n),
+        None => Repeat::Times(1),
+    };
+
+    let mut stage = Stage::new().gap(GAP);
+    for path in &cli.resources {
+        match AnimatedArt::from_path(path) {
+            Ok(art) => {
+                stage = stage.with(
+                    art.width(per_gif)
+                        .color(!cli.no_color)
+                        .repeat(repeat)
+                        // Colour art is byte-heavy; keep it comfortable.
+                        .max_fps(30.0),
+                );
+            }
+            Err(err) => {
+                eprintln!("rich: cannot read {path}: {err}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+
+    // `play` needs its own console (it moves into the Live display).
+    let mut builder = Console::builder().no_color(cli.no_color);
+    if let Some(width) = cli.width {
+        builder = builder.width(width);
+    }
+    match stage.play_stdout(builder.build()) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("rich: playback failed: {err}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Without the `art` feature there is no GIF support.
+#[cfg(not(feature = "art"))]
+fn play_gifs(_cli: &Cli, _console: &Console) -> ExitCode {
+    eprintln!("rich: this build has no GIF support (rebuild with the `art` feature)");
+    ExitCode::FAILURE
+}
+
 /// Where a render action's output goes: straight to the terminal, or captured
 /// into a self-contained HTML or SVG document.
 enum Export<'a> {
@@ -817,6 +913,8 @@ RENDER MODE (choose at most one; default auto-detects by extension):\n\
     -x, --syntax     Syntax-highlight RESOURCE (language from its extension)\n\
         --csv        Render RESOURCE as a CSV/TSV table\n\
         --ipynb      Render RESOURCE as a Jupyter notebook\n\
+        --gif        Animate one or more GIFs (several play side by side)\n\
+        --loop N     With --gif, repeat N times (0 = forever)\n\
         --rule       Draw a horizontal rule (RESOURCE is its title)\n\
 \n\
 OPTIONS:\n\

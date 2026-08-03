@@ -24,10 +24,22 @@ pub mod figlet;
 #[cfg(feature = "image")]
 pub mod ascii;
 
+#[cfg(feature = "gif")]
+pub mod gif;
+
+#[cfg(feature = "gif")]
+pub mod stage;
+
 pub use crate::figlet::{FigletFont, FontError, Justify};
 
 #[cfg(feature = "image")]
 pub use crate::ascii::{AsciiArt, DEFAULT_RAMP};
+
+#[cfg(feature = "gif")]
+pub use crate::gif::{AnimatedArt, Repeat};
+
+#[cfg(feature = "gif")]
+pub use crate::stage::{Stage, Until};
 
 use rich::console::{Console, ConsoleOptions};
 use rich::protocol::Renderable;
