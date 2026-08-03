@@ -33,7 +33,7 @@ syntect = { version = "5", default-features = false, features = ["default-fancy"
 # Image decoding for rich-art's optional image->ASCII art (jp2a-style). Only the
 # PNG/JPEG decoders are enabled, keeping the tree small; behind rich-art's
 # NON-default `image` feature so the crate is zero-dependency unless opted in.
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif"] }
 
 # Blocking HTTP client for the CLI's URL fetch (rich-cli's `rich <url>`). Uses
 # rustls + bundled webpki roots (self-contained TLS, no OS cert dependency).
