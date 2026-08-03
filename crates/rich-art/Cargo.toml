@@ -13,8 +13,24 @@ description = "ASCII-art renderables for `rich` — FIGlet-style text banners"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
 authors.workspace = true
 rust-version.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rich-art"
+keywords = ["ascii-art", "figlet", "terminal", "gif", "banner"]
+categories = ["command-line-interface", "multimedia::images", "text-processing"]
+# The bundled FIGfont and the demo GIFs are part of the package; the example
+# assets are small and make the examples runnable from a published copy.
+include = [
+    "src/**/*",
+    "fonts/**/*",
+    "examples/**/*",
+    "tests/**/*",
+    "README.md",
+    "LICENSE",
+    "Cargo.toml",
+]
 
 [features]
 default = []

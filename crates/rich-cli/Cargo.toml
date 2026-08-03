@@ -10,8 +10,14 @@ description = "A Rust port of the `rich-cli` terminal toolbox, built on the `ric
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
 authors.workspace = true
 rust-version.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rich-cli"
+keywords = ["cli", "terminal", "markdown", "syntax", "pretty-print"]
+categories = ["command-line-utilities", "text-processing"]
+include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
 
 [[bin]]
 name = "rich"
