@@ -14,7 +14,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 
 | upstream `rich/…`                     | rust `crates/rich/src/…` | status | parity |
 |---------------------------------------|--------------------------|:------:|:------:|
-| `color.py`, `color_triplet.py`, `_palettes.py`, `palette.py` | `color.rs` | 🟡 | ✅ |
+| `color.py`, `color_triplet.py`, `_palettes.py`, `palette.py` | `color.rs` | 🟡 | ✅ truecolor + 8-bit + standard |
 | `style.py`                            | `style.rs`               | 🟡 | ✅ |
 | `cells.py`, `_cell_widths.py`         | `cells.rs`               | 🟡 | — |
 | `segment.py`                          | `segment.rs`             | 🟡 | — |
@@ -49,7 +49,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `styled.py` | `styled.rs` | 🟢 | ✅ |
 | `screen.py` | `screen.rs` | 🟡 | — |
 | `progress_bar.py` | `progress_bar.rs` | 🟡 |
-| `bar.py` | `bar.rs` | 🟡 | — |
+| `bar.py` | `bar.rs` | 🟡 | ✅ |
 
 ## Live & progress
 
@@ -80,7 +80,8 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 |-------------------|-----------|:------:|
 | `emoji.py`, `_emoji_codes.py`, `_emoji_replace.py` | `emoji.rs` | 🟡 |
 | `filesize.py` | `filesize.rs` | 🟡 |
-| `prompt.py`, `pager.py` | resp. | ⬜ |
+| `pager.py` | `pager.rs` | 🟡 |
+| `prompt.py` | — | ⬜ not started |
 | `_unicode_data/` | `unicode_data/` | ⬜ |
 | `box.substitute` (legacy/ASCII fallback) | `box.rs` | 🟡 | ✅ |
 | `_windows.py`, `_win32_console.py`, `_windows_renderer.py` | `windows/` | ⬜ |
