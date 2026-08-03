@@ -97,7 +97,7 @@ pub use crate::screen::Screen;
 pub use crate::segment::Segment;
 pub use crate::spinner::Spinner;
 pub use crate::status::Status;
-pub use crate::style::Style;
+pub use crate::style::{Style, StyleType};
 pub use crate::styled::Styled;
 pub use crate::syntax::Syntax;
 pub use crate::table::Table;

@@ -10,6 +10,9 @@
 
 use std::collections::HashMap;
 
+use crate::errors::Result;
+use crate::style::StyleType;
+
 use crate::style::Style;
 
 /// Upstream's `rich.default_styles.DEFAULT_STYLES`, verbatim.
@@ -201,6 +204,36 @@ impl Theme {
         self.styles.insert(name.into(), style);
     }
 
+    /// Resolve a [`StyleType`] against this theme. Port of `Console.get_style`.
+    ///
+    /// An already-resolved style passes straight through. A name is looked up in
+    /// the theme **first**, and only then parsed as a style definition — the
+    /// order matters, because the default theme itself defines bare words like
+    /// `none`, `bold` and `red`, and a custom theme has to be able to shadow
+    /// them.
+    ///
+    /// The lookup is case-sensitive while the parse fallback is not, which
+    /// reproduces an asymmetry upstream really has: `"BOLD"` misses the theme but
+    /// still parses to bold, whereas a theme key `"Danger"` is never found by a
+    /// span naming `"danger"`.
+    pub fn get_style(&self, style: &StyleType) -> Result<Style> {
+        match style {
+            StyleType::Style(style) => Ok(style.clone()),
+            StyleType::Name(name) => match self.styles.get(name) {
+                Some(style) => Ok(style.clone()),
+                None => Style::parse(name),
+            },
+        }
+    }
+
+    /// As [`get_style`](Self::get_style), but an unresolvable name yields the
+    /// null style instead of an error. Port of upstream's
+    /// `get_style(..., default=Style.null())`, which is what the render path
+    /// uses — an unknown name must not blow up a print.
+    pub fn get_style_or_null(&self, style: &StyleType) -> Style {
+        self.get_style(style).unwrap_or_default()
+    }
+
     /// How many named styles this theme holds.
     pub fn len(&self) -> usize {
         self.styles.len()
@@ -237,6 +270,76 @@ impl Theme {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The theme is consulted *before* the style parser. The default theme
+    /// defines bare words like `red` itself, so parse-first would make a custom
+    /// theme unable to shadow them.
+    ///
+    /// Verified against real rich 15.0.0: with `Theme({"red": "blue"})`,
+    /// `Console.get_style("red")` returns blue.
+    #[test]
+    fn theme_lookup_beats_the_style_parser() {
+        let mut theme = Theme::default_theme();
+        theme.insert("red", Style::parse("blue").unwrap());
+        assert_eq!(
+            theme.get_style(&StyleType::Name("red".into())).unwrap(),
+            Style::parse("blue").unwrap()
+        );
+    }
+
+    /// Upstream's case handling is asymmetric, and this pins it: the theme
+    /// lookup is case-sensitive, but the parse fallback is not. So `"BOLD"`
+    /// misses the theme and still parses to bold, while a theme key `"Danger"`
+    /// is never found by a span naming `"danger"`.
+    #[test]
+    fn lookup_is_case_sensitive_but_parsing_is_not() {
+        let mut theme = Theme::new();
+        theme.insert("Danger", Style::parse("bold red").unwrap());
+
+        assert_eq!(
+            theme.get_style(&StyleType::Name("BOLD".into())).unwrap(),
+            Style::parse("bold").unwrap()
+        );
+        // "danger" is not a style definition either, so it does not resolve.
+        assert!(theme.get_style(&StyleType::Name("danger".into())).is_err());
+        assert_eq!(
+            theme.get_style(&StyleType::Name("Danger".into())).unwrap(),
+            Style::parse("bold red").unwrap()
+        );
+    }
+
+    /// The parse fallback inherits `Style::parse`'s single-letter aliases.
+    #[test]
+    fn parse_fallback_understands_aliases() {
+        let theme = Theme::new();
+        assert_eq!(
+            theme.get_style(&StyleType::Name("b".into())).unwrap(),
+            Style::parse("bold").unwrap()
+        );
+    }
+
+    /// An unknown name is an error from `get_style` and the null style from
+    /// `get_style_or_null` — the render path uses the latter so a typo cannot
+    /// blow up a print.
+    #[test]
+    fn unknown_names_error_but_render_null() {
+        let theme = Theme::default_theme();
+        let unknown = StyleType::Name("repr.nope".into());
+        assert!(theme.get_style(&unknown).is_err());
+        assert!(theme.get_style_or_null(&unknown).is_null());
+    }
+
+    /// An already-resolved style passes through untouched, theme or no theme.
+    #[test]
+    fn resolved_styles_pass_through() {
+        let mut theme = Theme::new();
+        theme.insert("bold", Style::parse("red").unwrap());
+        let style = Style::parse("bold").unwrap();
+        assert_eq!(
+            theme.get_style(&StyleType::Style(style.clone())).unwrap(),
+            style
+        );
+    }
 
     #[test]
     fn theme_covers_upstream() {

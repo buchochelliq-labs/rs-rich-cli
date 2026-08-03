@@ -92,7 +92,7 @@ impl PromptBase {
     /// Build the question line: the prompt, then `[a/b/c]`, then `(default)`,
     /// then the suffix. Port of `PromptBase.make_prompt`.
     fn make_prompt(&self, console: &Console, default: Option<&str>) -> Text {
-        let style = |name: &str| console.theme().get(name).cloned().unwrap_or_default();
+        let style = |name: &str| console.theme().get_style_or_null(&name.into());
         // The prompt itself is markup, matching upstream's `Text.from_markup`
         // default for a `str` prompt.
         let mut text = console.build_text(&self.prompt);
@@ -414,7 +414,7 @@ numeric_prompt!(FloatPrompt, f64, "[prompt.invalid]Please enter a number");
 /// The style a prompt uses for a piece of its question, for callers that want to
 /// render the pieces themselves.
 pub fn prompt_style(console: &Console, name: &str) -> Style {
-    console.theme().get(name).cloned().unwrap_or_default()
+    console.theme().get_style_or_null(&name.into())
 }
 
 #[cfg(test)]

@@ -168,6 +168,12 @@ impl Console {
         &self.theme
     }
 
+    /// Resolve a style name (or pass a style through) against this console's
+    /// theme. Port of `Console.get_style`.
+    pub fn get_style(&self, style: &crate::style::StyleType) -> crate::errors::Result<Style> {
+        self.theme.get_style(style)
+    }
+
     /// The whole-output base style.
     pub fn base_style(&self) -> &Style {
         &self.base_style

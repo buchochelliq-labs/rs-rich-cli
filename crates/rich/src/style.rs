@@ -51,6 +51,61 @@ fn attribute_index(word: &str) -> Option<usize> {
     ATTR_NAMES.iter().position(|&n| n == canonical)
 }
 
+/// A style, or the *name* of one to be looked up later. Port of upstream's
+/// `StyleType = Union[str, "Style"]` (`rich/style.py`).
+///
+/// A [`Span`](crate::text::Span) that holds a [`Name`](StyleType::Name) is
+/// resolved when it is rendered, against the theme of the console doing the
+/// rendering — so the same [`Text`](crate::text::Text) printed to two differently
+/// themed consoles comes out in two different colours, as it does upstream.
+/// Resolving eagerly instead would freeze the colours at construction time.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StyleType {
+    /// A theme key (`"repr.number"`) or a style definition (`"bold red"`),
+    /// resolved by [`Theme::get_style`](crate::theme::Theme::get_style).
+    Name(String),
+    /// An already-resolved style.
+    Style(Style),
+}
+
+impl Default for StyleType {
+    fn default() -> Self {
+        StyleType::Style(Style::new())
+    }
+}
+
+impl StyleType {
+    /// True when this is an already-resolved style that sets nothing. A
+    /// [`Name`](StyleType::Name) is never null — it may resolve to anything.
+    pub fn is_null_style(&self) -> bool {
+        matches!(self, StyleType::Style(style) if style.is_null())
+    }
+}
+
+impl From<Style> for StyleType {
+    fn from(style: Style) -> Self {
+        StyleType::Style(style)
+    }
+}
+
+impl From<&Style> for StyleType {
+    fn from(style: &Style) -> Self {
+        StyleType::Style(style.clone())
+    }
+}
+
+impl From<String> for StyleType {
+    fn from(name: String) -> Self {
+        StyleType::Name(name)
+    }
+}
+
+impl From<&str> for StyleType {
+    fn from(name: &str) -> Self {
+        StyleType::Name(name.to_string())
+    }
+}
+
 /// A terminal text style. Mirrors `rich.style.Style`.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Style {
