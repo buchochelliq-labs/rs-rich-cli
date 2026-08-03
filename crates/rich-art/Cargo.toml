@@ -16,8 +16,15 @@ repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 
+[features]
+default = []
+# `image` enables image -> ASCII/ANSI art (jp2a-style). Off by default so the
+# crate stays dependency-free for the FIGlet banners alone.
+image = ["dep:image"]
+
 [lints]
 workspace = true
 
 [dependencies]
 rich.workspace = true
+image = { workspace = true, optional = true }

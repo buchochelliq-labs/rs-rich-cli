@@ -21,7 +21,13 @@
 
 pub mod figlet;
 
+#[cfg(feature = "image")]
+pub mod ascii;
+
 pub use crate::figlet::{FigletFont, FontError, Justify};
+
+#[cfg(feature = "image")]
+pub use crate::ascii::{AsciiArt, DEFAULT_RAMP};
 
 use rich::console::{Console, ConsoleOptions};
 use rich::protocol::Renderable;
