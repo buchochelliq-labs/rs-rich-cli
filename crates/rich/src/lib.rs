@@ -47,6 +47,7 @@ pub mod panel;
 pub mod pretty;
 pub mod progress;
 pub mod progress_bar;
+pub mod prompt;
 pub mod protocol;
 pub mod ratio;
 mod repr_patterns;

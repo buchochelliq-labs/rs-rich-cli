@@ -27,6 +27,20 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   captured from real rich 15.0.0.
 
 ### Added
+- **Prompts** (`prompt.rs`, closes the `prompt.py` half of #11): `Prompt`,
+  `Confirm`, `IntPrompt`, `FloatPrompt` — a styled question, a read, and a
+  re-ask until the answer validates.
+  - Reading sits behind an `InputSource` trait (upstream's `stream=` argument),
+    so the whole loop — including the re-ask path and the empty-answer-takes-the-
+    default rule — is testable without a terminal. `ScriptedInput` is provided
+    for that; `StdinInput` is the default.
+  - The question line is byte-parity tested (13 fixtures in `golden/prompts.tsv`)
+    across choices, defaults, `show_choices`/`show_default`, markup prompts and
+    `Confirm`'s `(y)`/`(n)` rendering.
+  - Case-insensitive choices return the choice as spelled in the list, not as
+    typed, which upstream is explicit about.
+  - Diverges in one place: exhausted input returns the default instead of
+    looping forever (Python raises `EOFError`).
 - **The rest of the `Text` manipulation API** (`text.rs`): `divide`, `split`,
   `pad`/`pad_left`/`pad_right`, `right_crop`, `rstrip`, `rstrip_end`,
   `expand_tabs`, `join`, `blank_copy`, `highlight_words` and `highlight_regex`.

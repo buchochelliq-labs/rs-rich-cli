@@ -45,6 +45,10 @@ JSON_SAMPLE = (
 from rich.rule import Rule
 from rich.styled import Styled
 from rich.table import Table
+from rich.prompt import Confirm as RichConfirm
+from rich.prompt import FloatPrompt as RichFloatPrompt
+from rich.prompt import IntPrompt as RichIntPrompt
+from rich.prompt import Prompt as RichPrompt
 from rich.text import Text
 from rich.tree import Tree
 
@@ -683,6 +687,41 @@ TEXT_OPS_CASES = [
     ("highlight_regex", _op_highlight_regex),
 ]
 
+# (name, builder, default) — `builder(console)` returns a prompt object, and the
+# fixture records `make_prompt(default)`. `...` means "no default", which is what
+# upstream uses to distinguish it from a default of "" or 0.
+PROMPT_CASES = [
+    ("prompt_plain", lambda c: RichPrompt("Name", console=c), ...),
+    ("prompt_default", lambda c: RichPrompt("Name", console=c), "World"),
+    ("prompt_markup", lambda c: RichPrompt("[bold]Name[/]", console=c), ...),
+    (
+        "prompt_choices",
+        lambda c: RichPrompt("Pick", console=c, choices=["a", "b"]),
+        ...,
+    ),
+    (
+        "prompt_choices_default",
+        lambda c: RichPrompt("Pick", console=c, choices=["a", "b"]),
+        "a",
+    ),
+    (
+        "prompt_no_show_choices",
+        lambda c: RichPrompt("Pick", console=c, choices=["a", "b"], show_choices=False),
+        "a",
+    ),
+    (
+        "prompt_no_show_default",
+        lambda c: RichPrompt("Pick", console=c, choices=["a", "b"], show_default=False),
+        "a",
+    ),
+    ("confirm_plain", lambda c: RichConfirm("Sure", console=c), ...),
+    ("confirm_default_true", lambda c: RichConfirm("Sure", console=c), True),
+    ("confirm_default_false", lambda c: RichConfirm("Sure", console=c), False),
+    ("int_plain", lambda c: RichIntPrompt("Age", console=c), ...),
+    ("int_default", lambda c: RichIntPrompt("Age", console=c), 42),
+    ("float_default", lambda c: RichFloatPrompt("Ratio", console=c), 1.5),
+]
+
 COLOR_SYSTEMS = ["truecolor", "256", "standard"]
 
 HEADER = """\
@@ -709,6 +748,18 @@ OVERFLOW_HEADER = """\
 # truncate, and the console-level crop that "ignore" relies on.
 """
 
+
+PROMPT_HEADER = """\
+# Golden parity fixtures for prompts — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py  (see AGENTS.md → Parity)
+#
+# Format: <name>\\t<expected-ansi>
+#
+# Each row is `make_prompt(default)` rendered at width 80 — the question line as
+# the user sees it, including the `prompt.choices` and `prompt.default` styles.
+# Reading the answer is not captured here; that half is covered by unit tests
+# driving a scripted input source.
+"""
 
 TEXT_OPS_HEADER = """\
 # Golden parity fixtures for Text manipulation — captured from real Python `rich`.
@@ -824,6 +875,25 @@ def main() -> None:
         rlines.append(f"{name}\t{width}\t{escape(output)}")
     renderable_path.write_text("\n".join(rlines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(RENDERABLE_CASES)} renderable cases to {renderable_path}")
+
+    prompt_path = golden_dir() / "prompts.tsv"
+    plines = [PROMPT_HEADER.rstrip("\n")]
+    for name, builder, default in PROMPT_CASES:
+        pconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=80,
+            highlight=False,
+            safe_box=False,
+            legacy_windows=False,
+            no_color=False,
+        )
+        rendered = builder(pconsole).make_prompt(default)
+        with pconsole.capture() as capture:
+            pconsole.print(rendered, end="")
+        plines.append(f"{name}\t{escape(capture.get())}")
+    prompt_path.write_text("\n".join(plines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(PROMPT_CASES)} prompt cases to {prompt_path}")
 
     ops_path = golden_dir() / "text_ops.tsv"
     oplines = [TEXT_OPS_HEADER.rstrip("\n")]

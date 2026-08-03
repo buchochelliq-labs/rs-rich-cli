@@ -81,7 +81,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `emoji.py`, `_emoji_codes.py`, `_emoji_replace.py` | `emoji.rs` | 🟡 |
 | `filesize.py` | `filesize.rs` | 🟡 |
 | `pager.py` | `pager.rs` | 🟡 |
-| `prompt.py` | — | ⬜ not started |
+| `prompt.py` | `prompt.rs` | 🟡 |
 | `_unicode_data/` | `unicode_data/` | ⬜ |
 | `box.substitute` (legacy/ASCII fallback) | `box.rs` | 🟡 | ✅ |
 | `_windows.py`, `_win32_console.py`, `_windows_renderer.py` | `windows/` | ⬜ |

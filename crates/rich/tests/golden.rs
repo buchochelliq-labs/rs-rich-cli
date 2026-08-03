@@ -420,6 +420,69 @@ fn truecolor_parity() {
     assert!(checked > 0, "no golden cases were checked");
 }
 
+/// Render the question line for a `prompts.tsv` fixture `name`. Must stay in
+/// sync with `PROMPT_CASES` in `scripts/capture_golden.py`.
+fn render_prompt(console: &Console, name: &str) -> String {
+    use rich::prompt::{Confirm, FloatPrompt, IntPrompt, Prompt};
+    let text = match name {
+        "prompt_plain" => Prompt::new("Name").make_prompt(console, None),
+        "prompt_default" => Prompt::new("Name").make_prompt(console, Some("World")),
+        "prompt_markup" => Prompt::new("[bold]Name[/]").make_prompt(console, None),
+        "prompt_choices" => Prompt::new("Pick")
+            .choices(["a", "b"])
+            .make_prompt(console, None),
+        "prompt_choices_default" => Prompt::new("Pick")
+            .choices(["a", "b"])
+            .make_prompt(console, Some("a")),
+        "prompt_no_show_choices" => Prompt::new("Pick")
+            .choices(["a", "b"])
+            .show_choices(false)
+            .make_prompt(console, Some("a")),
+        "prompt_no_show_default" => Prompt::new("Pick")
+            .choices(["a", "b"])
+            .show_default(false)
+            .make_prompt(console, Some("a")),
+        "confirm_plain" => Confirm::new("Sure").make_prompt(console, None),
+        "confirm_default_true" => Confirm::new("Sure").make_prompt(console, Some(true)),
+        "confirm_default_false" => Confirm::new("Sure").make_prompt(console, Some(false)),
+        "int_plain" => IntPrompt::new("Age").make_prompt(console, None),
+        "int_default" => IntPrompt::new("Age").make_prompt(console, Some(42)),
+        "float_default" => FloatPrompt::new("Ratio").make_prompt(console, Some(1.5)),
+        other => panic!("unknown prompt fixture {other:?} — add it to render_prompt"),
+    };
+    console.render_to_string(&text)
+}
+
+/// The question line each prompt prints, checked against upstream — including
+/// the `prompt.choices` / `prompt.default` styles and where the spaces fall.
+#[test]
+fn prompt_parity() {
+    let data = include_str!("golden/prompts.tsv");
+    let console = truecolor_console(80);
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(2, '\t');
+        let name = parts.next().unwrap_or("");
+        let expected = unescape(
+            parts
+                .next()
+                .unwrap_or_else(|| panic!("line {}: missing expected", index + 1)),
+        );
+        assert_eq!(
+            render_prompt(&console, name),
+            expected,
+            "prompt case {name:?} (line {}) diverged from upstream rich",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert!(checked > 0, "no prompt cases were checked");
+}
+
 /// Build the result of a `text_ops.tsv` fixture `name`. Must stay in sync with
 /// `TEXT_OPS_CASES` in `scripts/capture_golden.py`.
 fn build_text_op(name: &str) -> Vec<Text> {
