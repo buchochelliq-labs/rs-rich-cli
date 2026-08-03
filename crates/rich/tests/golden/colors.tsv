@@ -1,0 +1,50 @@
+# Golden parity fixtures for COLOR SYSTEMS — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<color-system>\t<console-markup>\t<expected-ansi>
+# Console: force_terminal=True, width=20, highlight=False, no_color=False, and
+#          the <color-system> column as `color_system`.
+#
+# This is what pins `Color::downgrade`: the SAME markup is captured against
+# truecolor, 256 and standard, so a truecolor value's fall-back to the 8-bit
+# palette and then to the 16 ANSI colors is byte-checked against upstream
+# rather than only against our own unit tests.
+truecolor_fg	truecolor	[#ff8800]x[/]	\x1b[38;2;255;136;0mx\x1b[0m
+truecolor_bg	truecolor	[on #003366]x[/]	\x1b[48;2;0;51;102mx\x1b[0m
+truecolor_both	truecolor	[#00ff00 on #330000]x[/]	\x1b[38;2;0;255;0;48;2;51;0;0mx\x1b[0m
+truecolor_dark	truecolor	[#101010]x[/]	\x1b[38;2;16;16;16mx\x1b[0m
+truecolor_light	truecolor	[#f5f5f5]x[/]	\x1b[38;2;245;245;245mx\x1b[0m
+eight_bit_fg	truecolor	[color(214)]x[/]	\x1b[38;5;214mx\x1b[0m
+eight_bit_bg	truecolor	[on color(57)]x[/]	\x1b[48;5;57mx\x1b[0m
+eight_bit_grey	truecolor	[color(244)]x[/]	\x1b[38;5;244mx\x1b[0m
+standard_named	truecolor	[red]x[/]	\x1b[31mx\x1b[0m
+standard_bright	truecolor	[bright_cyan]x[/]	\x1b[96mx\x1b[0m
+standard_on	truecolor	[white on blue]x[/]	\x1b[37;44mx\x1b[0m
+attrs_with_color	truecolor	[bold underline #cc3366]x[/]	\x1b[1;4;38;2;204;51;102mx\x1b[0m
+default_color	truecolor	[default on default]x[/]	\x1b[39;49mx\x1b[0m
+truecolor_fg	256	[#ff8800]x[/]	\x1b[38;5;208mx\x1b[0m
+truecolor_bg	256	[on #003366]x[/]	\x1b[48;5;23mx\x1b[0m
+truecolor_both	256	[#00ff00 on #330000]x[/]	\x1b[38;5;46;48;5;52mx\x1b[0m
+truecolor_dark	256	[#101010]x[/]	\x1b[38;5;233mx\x1b[0m
+truecolor_light	256	[#f5f5f5]x[/]	\x1b[38;5;255mx\x1b[0m
+eight_bit_fg	256	[color(214)]x[/]	\x1b[38;5;214mx\x1b[0m
+eight_bit_bg	256	[on color(57)]x[/]	\x1b[48;5;57mx\x1b[0m
+eight_bit_grey	256	[color(244)]x[/]	\x1b[38;5;244mx\x1b[0m
+standard_named	256	[red]x[/]	\x1b[31mx\x1b[0m
+standard_bright	256	[bright_cyan]x[/]	\x1b[96mx\x1b[0m
+standard_on	256	[white on blue]x[/]	\x1b[37;44mx\x1b[0m
+attrs_with_color	256	[bold underline #cc3366]x[/]	\x1b[1;4;38;5;167mx\x1b[0m
+default_color	256	[default on default]x[/]	\x1b[39;49mx\x1b[0m
+truecolor_fg	standard	[#ff8800]x[/]	\x1b[91mx\x1b[0m
+truecolor_bg	standard	[on #003366]x[/]	\x1b[100mx\x1b[0m
+truecolor_both	standard	[#00ff00 on #330000]x[/]	\x1b[32;40mx\x1b[0m
+truecolor_dark	standard	[#101010]x[/]	\x1b[30mx\x1b[0m
+truecolor_light	standard	[#f5f5f5]x[/]	\x1b[97mx\x1b[0m
+eight_bit_fg	standard	[color(214)]x[/]	\x1b[93mx\x1b[0m
+eight_bit_bg	standard	[on color(57)]x[/]	\x1b[104mx\x1b[0m
+eight_bit_grey	standard	[color(244)]x[/]	\x1b[37mx\x1b[0m
+standard_named	standard	[red]x[/]	\x1b[31mx\x1b[0m
+standard_bright	standard	[bright_cyan]x[/]	\x1b[96mx\x1b[0m
+standard_on	standard	[white on blue]x[/]	\x1b[37;44mx\x1b[0m
+attrs_with_color	standard	[bold underline #cc3366]x[/]	\x1b[1;4;91mx\x1b[0m
+default_color	standard	[default on default]x[/]	\x1b[39;49mx\x1b[0m

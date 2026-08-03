@@ -5,7 +5,7 @@
 //! background — onto concrete RGB values, so styled output can be exported to
 //! HTML/SVG. [`DEFAULT_TERMINAL_THEME`] mirrors upstream's default.
 
-use crate::color::{Color, ColorTriplet, ColorType, STANDARD_PALETTE};
+use crate::color::{Color, ColorTriplet, ColorType, ANSI_BASE_PALETTE};
 
 /// A concrete palette for exporting styled output. Mirrors
 /// `rich.terminal_theme.TerminalTheme` (the fields the exporters use).
@@ -45,7 +45,7 @@ impl TerminalTheme {
 pub const DEFAULT_TERMINAL_THEME: TerminalTheme = TerminalTheme {
     background: ColorTriplet::new(255, 255, 255),
     foreground: ColorTriplet::new(0, 0, 0),
-    ansi: STANDARD_PALETTE,
+    ansi: ANSI_BASE_PALETTE,
 };
 
 /// The theme rich uses for SVG export (a dark terminal). Mirrors

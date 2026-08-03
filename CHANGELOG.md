@@ -7,6 +7,25 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- **`Color::downgrade` was wrong for 8-bit and standard targets** (`color.rs`) —
+  found by the new colour-system goldens, which is exactly the coverage gap that
+  let it survive:
+  - **8-bit:** we searched the 256 palette for the nearest colour. Upstream
+    instead maps into the 6×6×6 cube *by formula* (with a greyscale-ramp branch
+    under 15% saturation), which picks different entries: `#00ff00` is cube index
+    46, not the exactly-matching system green 10. The axis is also non-linear
+    (first step 0–95, then 40 per step), and Python's banker's rounding is
+    reproduced with `round_ties_even`.
+  - **standard:** we matched against the 128-based ANSI table. Upstream matches
+    against a *separate* 170/85-based `STANDARD_PALETTE`, so `#ff0000` gives 1
+    (maroon), not 9. The two tables are now distinct: `ANSI_BASE_PALETTE` (the
+    first 16 of the 8-bit palette, and the default terminal theme's ANSI set)
+    versus `STANDARD_PALETTE` (matching only).
+
+  A unit test had been asserting the buggy values; it now asserts upstream's,
+  captured from real rich 15.0.0.
+
 ### Added
 - **Paging** (`pager.rs` + `Console::page`, `rich-cli --pager`). A `Pager` trait
   with a `SystemPager` that

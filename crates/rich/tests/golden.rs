@@ -417,6 +417,73 @@ fn truecolor_parity() {
     assert!(checked > 0, "no golden cases were checked");
 }
 
+/// A console pinned to one colour system, for the downgrade fixtures.
+fn console_with_system(system: ColorSystem, width: usize) -> Console {
+    Console::builder()
+        .force_terminal(true)
+        .color_system(Some(system))
+        .width(width)
+        .no_color(false)
+        .build()
+}
+
+/// The same markup rendered under truecolor, 8-bit and standard — this is what
+/// pins `Color::downgrade` to upstream's exact fall-back behaviour, rather than
+/// only to our own unit tests.
+#[test]
+fn color_system_parity() {
+    let data = include_str!("golden/colors.tsv");
+    let mut checked = 0;
+    let mut seen_systems = std::collections::BTreeSet::new();
+
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(4, '\t');
+        let name = parts.next().unwrap_or("");
+        let system_name = parts
+            .next()
+            .unwrap_or_else(|| panic!("line {}: missing color system", index + 1));
+        let markup = parts
+            .next()
+            .unwrap_or_else(|| panic!("line {}: missing markup", index + 1));
+        let expected = unescape(
+            parts
+                .next()
+                .unwrap_or_else(|| panic!("line {}: missing expected", index + 1)),
+        );
+
+        // Names are upstream's `color_system=` strings.
+        let system = match system_name {
+            "truecolor" => ColorSystem::Truecolor,
+            "256" => ColorSystem::EightBit,
+            "standard" => ColorSystem::Standard,
+            other => panic!("line {}: unknown color system {other:?}", index + 1),
+        };
+        seen_systems.insert(system_name.to_string());
+
+        let console = console_with_system(system, 20);
+        let got = console.render_str_to_string(markup);
+        assert_eq!(
+            got,
+            expected,
+            "colour case {name:?} under {system_name} (line {}) diverged from upstream rich",
+            index + 1
+        );
+        checked += 1;
+    }
+
+    assert!(checked > 0, "no colour cases were checked");
+    // Guard against a fixture that silently loses a whole system.
+    assert_eq!(
+        seen_systems.len(),
+        3,
+        "expected truecolor/256/standard, got {seen_systems:?}"
+    );
+}
+
 #[test]
 fn renderables_parity() {
     let data = include_str!("golden/renderables.tsv");

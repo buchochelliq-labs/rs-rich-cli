@@ -16,7 +16,11 @@ theme conveniences) are NOT upstream and must not be captured here.
 
 from __future__ import annotations
 
+import json
+import os
 import pathlib
+import subprocess
+import sys
 
 from rich import box
 from rich.align import Align
@@ -402,6 +406,41 @@ RENDERABLE_HEADER = """\
 # The Rust test builds the renderable matching each <name>; keep them in sync.
 """
 
+COLORS_HEADER = """\
+# Golden parity fixtures for COLOR SYSTEMS — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\\t<color-system>\\t<console-markup>\\t<expected-ansi>
+# Console: force_terminal=True, width=20, highlight=False, no_color=False, and
+#          the <color-system> column as `color_system`.
+#
+# This is what pins `Color::downgrade`: the SAME markup is captured against
+# truecolor, 256 and standard, so a truecolor value's fall-back to the 8-bit
+# palette and then to the 16 ANSI colors is byte-checked against upstream
+# rather than only against our own unit tests.
+"""
+
+# Markup chosen to exercise downgrade paths, not just to be colourful: a
+# truecolor value has to fall back twice, an 8-bit index once, and a named
+# standard colour not at all.
+COLOR_CASES: list[tuple[str, str]] = [
+    ("truecolor_fg", "[#ff8800]x[/]"),
+    ("truecolor_bg", "[on #003366]x[/]"),
+    ("truecolor_both", "[#00ff00 on #330000]x[/]"),
+    ("truecolor_dark", "[#101010]x[/]"),
+    ("truecolor_light", "[#f5f5f5]x[/]"),
+    ("eight_bit_fg", "[color(214)]x[/]"),
+    ("eight_bit_bg", "[on color(57)]x[/]"),
+    ("eight_bit_grey", "[color(244)]x[/]"),
+    ("standard_named", "[red]x[/]"),
+    ("standard_bright", "[bright_cyan]x[/]"),
+    ("standard_on", "[white on blue]x[/]"),
+    ("attrs_with_color", "[bold underline #cc3366]x[/]"),
+    ("default_color", "[default on default]x[/]"),
+]
+
+COLOR_SYSTEMS = ["truecolor", "256", "standard"]
+
 HEADER = """\
 # Golden parity fixtures — captured from the real Python `rich` library.
 # Regenerate with: python scripts/capture_golden.py  (see AGENTS.md → Parity)
@@ -418,6 +457,46 @@ HEADER = """\
 def escape(text: str) -> str:
     """Render ESC and newline as the literal markers the Rust test unescapes."""
     return text.replace("\x1b", "\\x1b").replace("\n", "\\n")
+
+
+#: Worker run in a fresh interpreter, one per colour system. Reads
+#: `[[name, markup], ...]` as JSON on stdin, writes `[[name, markup, out], ...]`.
+_COLOR_WORKER = r"""
+import json, sys
+from rich.console import Console
+
+system = sys.argv[1]
+cases = json.load(sys.stdin)
+out = []
+for name, markup in cases:
+    console = Console(force_terminal=True, color_system=system, width=20,
+                      highlight=False, no_color=False)
+    with console.capture() as capture:
+        console.print(markup, end="")
+    out.append([name, markup, capture.get()])
+json.dump(out, sys.stdout)
+"""
+
+
+def _capture_colors_isolated(system: str) -> list[tuple[str, str, str]]:
+    """Capture every colour case for `system` in a dedicated interpreter.
+
+    See the call site: rich memoises rendered SGR codes on `Style`, so mixing
+    colour systems in one process produces wrong fixtures.
+    """
+    proc = subprocess.run(
+        [sys.executable, "-c", _COLOR_WORKER, system],
+        input=json.dumps([[n, m] for n, m in COLOR_CASES]),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ, "PYTHONUTF8": "1"},
+    )
+    if proc.returncode != 0:
+        raise SystemExit(
+            f"colour capture for {system!r} failed:\n{proc.stderr.strip()}"
+        )
+    return [(n, m, o) for n, m, o in json.loads(proc.stdout)]
 
 
 def golden_dir() -> pathlib.Path:
@@ -494,6 +573,69 @@ def main() -> None:
         llines.append(f"{name}\t{width}\t{height}\t{escape(capture.get())}")
     layout_path.write_text("\n".join(llines) + "\n", encoding="utf-8")
     print(f"wrote {len(LAYOUT_CASES)} layout cases to {layout_path}")
+
+    # --- colour systems -------------------------------------------------
+    # The same markup through each system, so `Color::downgrade` is pinned to
+    # upstream's exact fall-back rather than just to our own unit tests.
+    colors_path = golden_dir() / "colors.tsv"
+    clines = [COLORS_HEADER.rstrip("\n")]
+    for system in COLOR_SYSTEMS:
+        # Each system MUST be captured in a fresh interpreter. `Style.parse` is
+        # lru_cached and `Style._ansi` memoises the rendered SGR codes on the
+        # (shared) Style object, so whichever colour system renders a given
+        # style first wins for the rest of the process — capturing all three
+        # in-process silently yields three copies of the first system's output.
+        for name, markup, output in _capture_colors_isolated(system):
+            clines.append(f"{name}\t{system}\t{markup}\t{escape(output)}")
+    colors_path.write_text("\n".join(clines) + "\n", encoding="utf-8")
+    print(
+        f"wrote {len(COLOR_CASES) * len(COLOR_SYSTEMS)} colour cases "
+        f"({len(COLOR_SYSTEMS)} systems) to {colors_path}"
+    )
+
+    # --- exports --------------------------------------------------------
+    # These were previously pasted into Rust source as string literals, which
+    # put them outside the CI drift check entirely. Capturing them here means
+    # `git diff --exit-code` on the golden dir now covers exports too.
+    def recording_console(width: int) -> Console:
+        return Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=width,
+            highlight=False,
+            record=True,
+            no_color=False,
+        )
+
+    # Inputs below MUST match the corresponding Rust tests exactly, or the
+    # fixtures are meaningless — including how many lines each prints, since
+    # the two HTML tests deliberately differ.
+    # console.rs::export_html_matches_upstream (width 20, TWO printed lines):
+    html_inline_console = recording_console(20)
+    html_inline_console.print("[bold red]hi[/] there")
+    html_inline_console.print("plain line")
+    (golden_dir() / "export_html.html").write_text(
+        html_inline_console.export_html(clear=False, inline_styles=True),
+        encoding="utf-8",
+    )
+
+    # console.rs::export_html_classes_matches_upstream (width 20, ONE line):
+    html_classes_console = recording_console(20)
+    html_classes_console.print("[bold red]hi[/] there")
+    (golden_dir() / "export_html_classes.html").write_text(
+        html_classes_console.export_html(clear=False), encoding="utf-8"
+    )
+
+    # SVG: svg.rs::export_svg_matches_upstream (width 10, one printed line).
+    # A FIXED unique_id — upstream's default is adler32 over Python `repr()`
+    # output, which Rust cannot reproduce (see docs/DIVERGENCES.md #15).
+    svg_console = recording_console(10)
+    svg_console.print("[bold red]Hi[/] ok")
+    (golden_dir() / "svg_export.svg").write_text(
+        svg_console.export_svg(title="X", unique_id="test", clear=False),
+        encoding="utf-8",
+    )
+    print("wrote export fixtures (html inline, html classes, svg)")
 
 
 if __name__ == "__main__":
