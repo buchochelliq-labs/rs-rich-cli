@@ -65,7 +65,29 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
+## 6. Land it
+
+Work that isn't on `main` doesn't exist. Read
+[docs/BRANCHING.md](../../../docs/BRANCHING.md) — this repo has twice lost work
+that GitHub reported as merged.
+
+```bash
+gh pr create --base main --fill        # ALWAYS --base main
+```
+
+After it merges, verify rather than trusting the badge — a squash or rebase merge
+rewrites every SHA, so `git branch --contains` and `git cherry` both lie:
+
+```bash
+git fetch origin --prune
+git merge-base --is-ancestor   "$(gh pr view <number> --json mergeCommit -q .mergeCommit.oid)" origin/main   && echo "landed" || echo "NOT ON MAIN"
+```
+
+The branch is dead once merged. Never push to it again; cut a new one from
+`origin/main`.
+
 ## Done when
 
 The module compiles, its behavior matches upstream in golden + unit tests, the
-docs/PORTING.md status is updated, and the full gate passes.
+docs/PORTING.md status is updated, the full gate passes, **and the PR has merged
+with the ancestor check above confirming it reached `main`**.

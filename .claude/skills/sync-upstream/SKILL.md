@@ -45,12 +45,15 @@ optionally open/refresh its roadmap issue.
 - **Do not** let any of our own behavior leak into core here. If upstream added an
   extension point, mirror it in `protocol.rs`.
 
-## 4. Bump the version + repin
+## 4. Repin the upstream reference
 
-- Set `crates/rich/Cargo.toml` `version` (or `crates/rich-cli` for a CLI sync) to
-  the new upstream version — **exactly**.
 - Update the matching `[rich]` / `[rich-cli]` block in `UPSTREAM.toml`
-  (`version`, `git_tag`, `git_sha`).
+  (`version`, `git_tag`, `git_sha`). This is now the **only** record of which
+  upstream release the port tracks.
+- **Do not touch any crate `version`.** Crate versions are independent of the
+  upstream number and move only at release time — see AGENTS.md → Versioning for
+  why the old mirror-the-version rule was dropped, and the `release` skill for
+  how a version actually gets bumped.
 
 ## 5. Refresh parity fixtures
 
@@ -77,7 +80,30 @@ cargo test
 - Add a `CHANGELOG.md` entry: `Synced rich to <version>` plus any notable deltas.
 - Update statuses in `docs/PORTING.md` if coverage changed.
 
+
+## 8. Land it
+
+Work that isn't on `main` doesn't exist. Read
+[docs/BRANCHING.md](../../../docs/BRANCHING.md) — this repo has twice lost work
+that GitHub reported as merged.
+
+```bash
+gh pr create --base main --fill        # ALWAYS --base main
+```
+
+After it merges, verify rather than trusting the badge — a squash or rebase merge
+rewrites every SHA, so `git branch --contains` and `git cherry` both lie:
+
+```bash
+git fetch origin --prune
+git merge-base --is-ancestor   "$(gh pr view <number> --json mergeCommit -q .mergeCommit.oid)" origin/main   && echo "landed" || echo "NOT ON MAIN"
+```
+
+The branch is dead once merged. Never push to it again; cut a new one from
+`origin/main`.
+
 ## Done when
 
-Mirror crate version == upstream version, `UPSTREAM.toml` repinned, golden tests
-green against the new version, and the full `fmt`/`clippy`/`test` gate passes.
+`UPSTREAM.toml` is repinned (and no crate version was touched), golden tests are
+green against the new version, the full `fmt`/`clippy`/`test` gate passes, **and
+the PR has merged with the ancestor check above confirming it reached `main`**.
