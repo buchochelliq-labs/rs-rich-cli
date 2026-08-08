@@ -5,6 +5,30 @@ entries here note which upstream release was absorbed and what our own crates di
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.0.1] — first release
+
+The first published version of all four crates: `rs-rich`, `rs-rich-ext`,
+`rs-rich-cli`, `rs-rich-art`.
+
+**Read the version number literally.** `0.0.1` is not modesty — the API takes
+breaking changes regularly (three in the week before this release), and the port
+is deliberately incomplete. What is implemented is byte-parity tested against
+real Python `rich` 15.0.0; what isn't is listed in the README and
+`docs/PORTING.md`, and what deliberately differs is in `docs/DIVERGENCES.md`.
+
+Two things worth knowing up front:
+
+- **Package names carry an `rs-` prefix** because `rich` is taken on crates.io.
+  The library targets keep the short names, so you write `use rich::…`, and the
+  CLI's binary is still `rich`.
+- **Crate versions are independent SemVer and do not mirror the upstream release.**
+  Which upstream version is tracked lives in `UPSTREAM.toml`. An earlier policy
+  mirrored the number; it was dropped before release because publishing a young
+  API as `15.0.0` would have been a lie, and the first breaking change would have
+  collided with upstream's next major.
+
+Everything below this heading is the development history that led here.
+
 ## [Unreleased]
 
 ### Fixed
@@ -26,7 +50,114 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   A unit test had been asserting the buggy values; it now asserts upstream's,
   captured from real rich 15.0.0.
 
+### Fixed
+- **Four more defects**, from a second adversarial review (of the change above):
+  - **Tabs were never expanded on the render path.** `Text::expand_tabs` existed
+    but nothing called it, so a tab occupied one cell in every layout calculation
+    and eight on the terminal. `Text::measurement` now measures the *expanded*
+    text too — upstream gets away with measuring raw (a tab counts as zero cells
+    there) only because its `print` never narrows to the measurement.
+  - **A bare `link` was accepted** and emitted an empty OSC 8 hyperlink; upstream
+    raises `"URL expected after 'link'"`. This one was mine, from the `link`
+    keyword added in the previous commit.
+  - **Colour names kept their original case**, so `on #FF0000` did not normalize
+    to `on #ff0000` and a mixed-case open/close tag pair raised.
+  - **`Text::new` did not strip control codes** (BEL, backspace, vertical tab,
+    form feed, carriage return), which upstream removes on construction.
+- **Six markup and `Style::parse` defects**, all found by an adversarial review of
+  the named-span change and each verified against real rich 15.0.0:
+  - **The highlighter beat markup.** `[green]123[/]` rendered `repr.number` cyan
+    instead of green, because markup spans were pushed first and the highlighter
+    decorated that `Text` in place. Upstream highlights the plain string and
+    appends the markup spans last, so an explicit tag wins.
+  - **Two tags over the exact same range combined backwards**, so `[red][blue]x[/][/]`
+    came out red. Upstream's `sorted(spans[::-1], key=start)` needs both the
+    reversal *and* a start-only key; sorting by `(start, end desc)` makes an
+    identical range compare equal and hands the win to the outer tag.
+  - **`expand_tabs` kept one span** where upstream splits per tab-part, so a span
+    crossing several tabs rendered as one segment instead of several — same
+    colours, different bytes.
+  - **Tag names weren't normalized.** `Style::normalize` is now ported (with
+    `Style::definition`, the port of `Style.__str__`), so `[b]` opens what
+    `[/bold]` closes and a mixed-case name reaches the theme lowercased.
+  - **`[link=url]` was unusable**: parameters weren't split from the tag name, so
+    `[/link]` raised a markup error. `Style::parse` also had no `link` keyword,
+    which meant such a style resolved to null and dropped the hyperlink.
+  - **`not BOLD` was accepted** and silently cancelled an enclosing bold;
+    upstream's `not` operand is case-sensitive and raises.
+
+### Changed
+- **Style names on spans now resolve at render time, against the rendering
+  console's theme** (`StyleType` in `style.rs`, `Theme::get_style`,
+  `Console::get_style`; closes the main half of #14). Previously a span held a
+  concrete `Style`, resolved eagerly — highlighters looked names up in a
+  *process-global* default theme, so a console's own theme could not restyle
+  their output at all, and an unknown markup tag was an error rather than the
+  no-op upstream produces.
+  - `Span.style` and `Text`'s base style are now `StyleType { Name | Style }`,
+    the port of upstream's `Union[str, "Style"]`. The render path resolves them
+    once per render into a vector parallel to the spans (upstream's `style_map`).
+  - Two user-visible behaviour changes, both verified against real rich 15.0.0
+    before shipping: highlight colours follow the console's theme, and an unknown
+    markup **tag name** renders as a no-op (a genuine *syntax* error still fails).
+  - `Text::highlight_regex` gains its named-group half — each group is styled
+    with `{style_prefix}{name}` as a *name*, retiring the deferral noted when it
+    was first ported. This is also how `RegexHighlighter` now works, so a custom
+    highlighter with novel group names finally gets colours rather than just span
+    boundaries.
+  - `Text::stylize` takes its arguments in upstream's order
+    (`stylize(style, start, end)`), and the render family takes a `&Theme`.
+    `Text::render_wrapped` and `render_joined_justified` are gone (no callers,
+    not upstream). `Text::render` drops its unused `ColorSystem` argument.
+  - Covered by `golden/highlight.tsv` — the **only** fixture set rendered with
+    `highlight=true`, which is why this path had no byte-parity net before. All
+    12 pre-existing fixture sets are byte-identical.
+  - Still deferred: upstream's theme *stack* (`push_theme`/`pop_theme`). See
+    `docs/DIVERGENCES.md` §14 for why it needs its own design pass.
+
 ### Added
+- **Prompts** (`prompt.rs`, closes the `prompt.py` half of #11): `Prompt`,
+  `Confirm`, `IntPrompt`, `FloatPrompt` — a styled question, a read, and a
+  re-ask until the answer validates.
+  - Reading sits behind an `InputSource` trait (upstream's `stream=` argument),
+    so the whole loop — including the re-ask path and the empty-answer-takes-the-
+    default rule — is testable without a terminal. `ScriptedInput` is provided
+    for that; `StdinInput` is the default.
+  - The question line is byte-parity tested (13 fixtures in `golden/prompts.tsv`)
+    across choices, defaults, `show_choices`/`show_default`, markup prompts and
+    `Confirm`'s `(y)`/`(n)` rendering.
+  - Case-insensitive choices return the choice as spelled in the list, not as
+    typed, which upstream is explicit about.
+  - Diverges in one place: exhausted input returns the default instead of
+    looping forever (Python raises `EOFError`).
+- **The rest of the `Text` manipulation API** (`text.rs`): `divide`, `split`,
+  `pad`/`pad_left`/`pad_right`, `right_crop`, `rstrip`, `rstrip_end`,
+  `expand_tabs`, `join`, `blank_copy`, `highlight_words` and `highlight_regex`.
+  All carry spans correctly through the transformation — re-based and clipped by
+  `divide`, shifted by `pad_left`, extended over the spaces a tab expands into.
+  - `highlight_regex` is ported in its **explicit-style** form only. Upstream also
+    styles each named group with the group's *name* as a style name, which needs
+    a span that can hold an unresolved name; that waits on the named-span
+    refactor (#14). `RegexHighlighter` already covers the named-group case by
+    resolving against a theme as it goes.
+  - Covered by 24 new byte-parity fixtures (`golden/text_ops.tsv`). Each case
+    renders its result, so one comparison pins the plain text, the span
+    boundaries and the styles together.
+- **Text overflow** (`Overflow` in `console.rs`, `text.rs`, `segment.rs`). `Text`
+  now carries `overflow` and `no_wrap`, as do `ConsoleOptions`, resolved with
+  upstream's `self.x or options.x or DEFAULT` precedence. The wrap pipeline is
+  now a full port of `Text.wrap`: split on newlines, wrap (folding an unbreakable
+  word **only** under `fold`), justify, then truncate each line.
+  - `Overflow::Ignore` neither wraps nor truncates, which upstream keeps
+    survivable via `Console.print(crop=True)` — ported as `Segment::crop_lines`
+    and applied on the print path. Without it, `ignore` would run off the side of
+    the terminal rather than being cut at the edge.
+  - `Text::truncate(max_width, overflow, pad)` is exposed directly.
+  - Covered by 22 new byte-parity fixtures (`golden/overflow.tsv`) spanning every
+    method, `no_wrap`, double-width characters straddling the cut, and the three
+    positions an ellipsis can land relative to a span — the last of these caught
+    a real bug, since the marker inherits the style of the run the cut *entered*,
+    not the one it left.
 - **Paging** (`pager.rs` + `Console::page`, `rich-cli --pager`). A `Pager` trait
   with a `SystemPager` that
   ports `pydoc.get_pager`'s selection order (`MANPAGER`, then `PAGER` — split
@@ -36,7 +167,7 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   closure's output and shows it, stripping styles unless `styles` is set
   (matching `Console.pager(styles=False)`); `page_with` takes a custom `Pager`,
   upstream's `Console.pager(pager=…)` seam. `rich --pager` pages *styled*
-  output. **The rich-cli surface is now complete.**
+  output.
 - **`rich-cli` URL fetch** (`rich-cli/main.rs`, completes the common CLI surface):
   `rich <url>` fetches an `http(s)` resource and renders it — the render mode
   comes from a flag, else the URL extension, else the response `Content-Type`

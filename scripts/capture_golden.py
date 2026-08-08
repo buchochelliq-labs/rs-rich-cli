@@ -45,7 +45,12 @@ JSON_SAMPLE = (
 from rich.rule import Rule
 from rich.styled import Styled
 from rich.table import Table
+from rich.prompt import Confirm as RichConfirm
+from rich.prompt import FloatPrompt as RichFloatPrompt
+from rich.prompt import IntPrompt as RichIntPrompt
+from rich.prompt import Prompt as RichPrompt
 from rich.text import Text
+from rich.theme import Theme as RichTheme
 from rich.tree import Tree
 
 
@@ -270,6 +275,32 @@ CASES: list[tuple[str, str]] = [
     ("two_tags", "[bold]Hello[/] [red]World[/]"),
     ("fg_on_bg", "[white on blue]bg[/]"),
     ("nested_inner_wins", "[red]a[blue]x[/]b[/]"),
+    # Two tags over the *exact same* range — the inner one must win. Sorting the
+    # spans by (start, end desc) makes these compare equal, leaves the innermost
+    # first, and hands the win to the outer tag. Only an identical range shows
+    # it; `nested_inner_wins` above has differing ends and passes either way.
+    ("coincident_inner_wins", "[red][blue]x[/][/]"),
+    ("coincident_inner_wins_swapped", "[blue][red]x[/][/]"),
+    ("coincident_attrs_merge", "[bold][dim]y[/][/]"),
+    # Tag names are normalized (`Style.normalize`) before they are stored or
+    # matched, so an abbreviation opens what its long form closes, and a
+    # mixed-case name reaches the theme lowercased.
+    ("abbrev_tag", "[b]x[/]"),
+    ("abbrev_open_long_close", "[b]x[/bold]"),
+    ("long_open_abbrev_close", "[bold]x[/b]"),
+    ("normalized_multi_word", "[dim i]x[/]"),
+    ("mixed_case_unknown_is_noop", "[nOpE]x[/]"),
+    ("not_attribute", "[not bold]x[/]"),
+    # An uppercase tag is not a tag at all (RE_TAGS is `[a-z#/@]`), so this is
+    # literal text followed by a close with nothing open.
+    ("uppercase_is_not_a_tag", "[BOLD]x"),
+    # Colour names normalize to lower case, so a mixed-case open matches a
+    # lower-case close and `Style::definition` round-trips.
+    ("mixed_case_hex_colour", "[on #FF0000]x[/on #ff0000]"),
+    ("mixed_case_named_colour", "[RED]x"),
+    # A bare `link` is a syntax error, so this tag resolves to nothing rather
+    # than emitting a hyperlink to nowhere.
+    ("bare_link_is_not_a_style", "[link]y[/]"),
     ("hex_truecolor", "[#ff8800]x[/]"),
     ("plain_text", "no styles here"),
     ("emoji_rocket", ":rocket: launch :fire:"),
@@ -314,6 +345,12 @@ RENDERABLE_CASES = [
     # A bare justified Text is shrunk to its content width (measurement-fit),
     # so it appears unpadded — the payoff of the Measurement port.
     ("text_justify_bare", 10, Text("hi", justify="center")),
+    # Tabs must be expanded to 8-cell stops before anything measures or wraps.
+    ("text_tabs", 40, Text("a\tb\tc")),
+    ("text_tabs_multiline", 40, Text("ab\tc\nd\te")),
+    # Control codes are stripped on construction (BEL, BS, VT, FF, CR) while
+    # tab and newline survive.
+    ("text_control_codes", 40, Text("a\rb\x07c\x08d")),
     ("table_square", 40, _table(box.SQUARE)),
     ("table_default", 40, _table(box.HEAVY_HEAD)),
     ("table_simple", 40, _table(box.SIMPLE)),
@@ -406,6 +443,16 @@ RENDERABLE_HEADER = """\
 # The Rust test builds the renderable matching each <name>; keep them in sync.
 """
 
+THEMES_HEADER = """\
+# Golden parity fixtures for TERMINAL THEMES — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\\t{"background": [r,g,b], "foreground": [r,g,b], "ansi": [[r,g,b] x16]}
+#
+# 18 hand-transcribed colour triplets per theme; capturing them means a typo
+# fails the build instead of quietly shifting an exported palette.
+"""
+
 FUNCTIONS_HEADER = """\
 # Golden parity fixtures for PURE FUNCTIONS — captured from real Python `rich`.
 # Regenerate with: python scripts/capture_golden.py
@@ -484,6 +531,268 @@ COLOR_CASES: list[tuple[str, str]] = [
     ("default_color", "[default on default]x[/]"),
 ]
 
+def _span_text(plain: str, style: str, start: int, end: int) -> Text:
+    text = Text(plain)
+    text.stylize(style, start, end)
+    return text
+
+
+# (name, width, Text, overflow, no_wrap) — the Rust test rebuilds each Text by
+# name and renders it with the same overflow/no_wrap.
+#
+# "supercalifragilistic" is one unbreakable word, which is the only thing that
+# tells `fold` apart from `crop`: a line of ordinary words wraps identically
+# under every method, so a case built from those would pass against a stub.
+OVERFLOW_CASES = [
+    ("fold_long_word", 8, Text("supercalifragilistic"), "fold", False),
+    ("crop_long_word", 8, Text("supercalifragilistic"), "crop", False),
+    ("ellipsis_long_word", 8, Text("supercalifragilistic"), "ellipsis", False),
+    ("ignore_long_word", 8, Text("supercalifragilistic"), "ignore", False),
+    ("fold_sentence", 8, Text("the quick brown fox jumps"), "fold", False),
+    ("crop_sentence", 8, Text("the quick brown fox jumps"), "crop", False),
+    ("ellipsis_sentence", 8, Text("the quick brown fox jumps"), "ellipsis", False),
+    ("ignore_sentence", 8, Text("the quick brown fox jumps"), "ignore", False),
+    # no_wrap keeps each hard line whole, then the overflow method cuts it.
+    ("nowrap_fold", 8, Text("the quick brown fox"), "fold", True),
+    ("nowrap_crop", 8, Text("the quick brown fox"), "crop", True),
+    ("nowrap_ellipsis", 8, Text("the quick brown fox"), "ellipsis", True),
+    ("nowrap_ignore", 8, Text("the quick brown fox"), "ignore", True),
+    # Hard newlines are still honoured when wrapping is off.
+    ("nowrap_multiline", 8, Text("first line here\nsecond line here"), "ellipsis", True),
+    # A double-width character straddling the cut is dropped whole and the
+    # leftover cell padded with a space.
+    ("wide_crop", 5, Text("aa你好世"), "crop", False),
+    ("wide_ellipsis", 5, Text("aa你好世"), "ellipsis", False),
+    ("wide_ellipsis_exact", 6, Text("aa你好世"), "ellipsis", False),
+    # Which style the ellipsis inherits depends on where the cut lands relative
+    # to a span: inside one, exactly on its start, and after it has ended.
+    ("ellipsis_in_span", 4, _span_text("abcdefgh", "bold", 2, 5), "ellipsis", False),
+    ("ellipsis_at_span_start", 5, _span_text("aaaabbbb", "bold red", 4, 8), "ellipsis", False),
+    ("ellipsis_after_span", 5, _span_text("aaaabbbb", "bold red", 0, 4), "ellipsis", False),
+    # Text that exactly fills the width must not be cut, and a width of 1 leaves
+    # room for nothing but the marker itself.
+    ("crop_exact_width", 5, Text("hello"), "crop", False),
+    ("ellipsis_exact_width", 5, Text("hello"), "ellipsis", False),
+    ("ellipsis_width_one", 1, Text("hello"), "ellipsis", False),
+]
+
+def _styled(plain: str, *spans) -> Text:
+    text = Text(plain)
+    for style, start, end in spans:
+        text.stylize(style, start, end)
+    return text
+
+
+def _op_divide():
+    return _styled("hello world", ("bold", 0, 5), ("red", 6, 11)).divide([5])
+
+
+def _op_divide_span_across():
+    return _styled("abcdefgh", ("bold", 2, 7)).divide([4])
+
+
+def _op_split_newline():
+    return _styled("one\ntwo\nthree", ("bold", 4, 7)).split("\n")
+
+
+def _op_split_include():
+    return _styled("one\ntwo\nthree", ("bold", 4, 7)).split("\n", include_separator=True)
+
+
+def _op_split_trailing():
+    return Text("one\ntwo\n").split("\n")
+
+
+def _op_split_trailing_blank():
+    return Text("one\ntwo\n").split("\n", allow_blank=True)
+
+
+def _op_split_absent():
+    return Text("no separator here").split("|")
+
+
+def _op_split_word():
+    return _styled("a-b-c", ("bold", 2, 3)).split("-")
+
+
+def _mutated(text: Text, mutate) -> list:
+    mutate(text)
+    return [text]
+
+
+def _op_pad():
+    return _mutated(_styled("hi", ("bold", 0, 2)), lambda t: t.pad(3))
+
+
+def _op_pad_left():
+    return _mutated(_styled("hi", ("bold", 0, 2)), lambda t: t.pad_left(3, "."))
+
+
+def _op_pad_right():
+    return _mutated(_styled("hi", ("bold", 0, 2)), lambda t: t.pad_right(3, "."))
+
+
+def _op_right_crop():
+    return _mutated(_styled("hello world", ("bold", 3, 9)), lambda t: t.right_crop(4))
+
+
+def _op_rstrip():
+    return _mutated(_styled("hi there   ", ("bold", 0, 2)), lambda t: t.rstrip())
+
+
+def _op_rstrip_end_partial():
+    # 6 cells of trailing space but only 3 cells of excess: 3 must survive.
+    return _mutated(Text("hello      "), lambda t: t.rstrip_end(8))
+
+
+def _op_rstrip_end_noop():
+    return _mutated(Text("hi   "), lambda t: t.rstrip_end(10))
+
+
+def _op_expand_tabs():
+    return _mutated(Text("a\tb\tc"), lambda t: t.expand_tabs(4))
+
+
+def _op_expand_tabs_span_across_tabs():
+    # A span crossing several tabs. Upstream splits it into one span per
+    # tab-part, so this renders as three segments — remapping offsets instead
+    # would keep one span, same colours but different bytes.
+    return _mutated(_styled("a\tb\tc", ("bold", 0, 5)), lambda t: t.expand_tabs(4))
+
+
+def _op_expand_tabs_styled():
+    return _mutated(_styled("a\tb", ("bold", 0, 2)), lambda t: t.expand_tabs(8))
+
+
+def _op_expand_tabs_multiline():
+    return _mutated(Text("ab\tc\nd\te"), lambda t: t.expand_tabs(4))
+
+
+def _op_join():
+    return [Text(", ").join([Text("a"), _styled("b", ("bold", 0, 1)), Text("c")])]
+
+
+def _op_join_styled_sep():
+    return [_styled(" | ", ("red", 0, 3)).join([Text("x"), Text("y")])]
+
+
+def _op_join_empty_sep():
+    return [Text("").join([Text("a"), Text("b")])]
+
+
+def _op_highlight_words():
+    text = Text("the cat sat on the mat")
+    text.highlight_words(["cat", "mat"], "bold red")
+    return [text]
+
+
+def _op_highlight_words_nocase():
+    text = Text("Cat cat CAT")
+    text.highlight_words(["cat"], "bold", case_sensitive=False)
+    return [text]
+
+
+def _op_highlight_regex():
+    text = Text("abc 123 def 456")
+    text.highlight_regex(r"\d+", "bold cyan")
+    return [text]
+
+
+# (name, factory) — the factory returns a list of Text, each rendered and joined
+# with US (\x1f) so a multi-piece result stays one fixture row.
+TEXT_OPS_CASES = [
+    ("divide", _op_divide),
+    ("divide_span_across", _op_divide_span_across),
+    ("split_newline", _op_split_newline),
+    ("split_include", _op_split_include),
+    ("split_trailing", _op_split_trailing),
+    ("split_trailing_blank", _op_split_trailing_blank),
+    ("split_absent", _op_split_absent),
+    ("split_word", _op_split_word),
+    ("pad", _op_pad),
+    ("pad_left", _op_pad_left),
+    ("pad_right", _op_pad_right),
+    ("right_crop", _op_right_crop),
+    ("rstrip", _op_rstrip),
+    ("rstrip_end_partial", _op_rstrip_end_partial),
+    ("rstrip_end_noop", _op_rstrip_end_noop),
+    ("expand_tabs", _op_expand_tabs),
+    ("expand_tabs_span_across_tabs", _op_expand_tabs_span_across_tabs),
+    ("expand_tabs_styled", _op_expand_tabs_styled),
+    ("expand_tabs_multiline", _op_expand_tabs_multiline),
+    ("join", _op_join),
+    ("join_styled_sep", _op_join_styled_sep),
+    ("join_empty_sep", _op_join_empty_sep),
+    ("highlight_words", _op_highlight_words),
+    ("highlight_words_nocase", _op_highlight_words_nocase),
+    ("highlight_regex", _op_highlight_regex),
+]
+
+# (name, builder, default) — `builder(console)` returns a prompt object, and the
+# fixture records `make_prompt(default)`. `...` means "no default", which is what
+# upstream uses to distinguish it from a default of "" or 0.
+PROMPT_CASES = [
+    ("prompt_plain", lambda c: RichPrompt("Name", console=c), ...),
+    ("prompt_default", lambda c: RichPrompt("Name", console=c), "World"),
+    ("prompt_markup", lambda c: RichPrompt("[bold]Name[/]", console=c), ...),
+    (
+        "prompt_choices",
+        lambda c: RichPrompt("Pick", console=c, choices=["a", "b"]),
+        ...,
+    ),
+    (
+        "prompt_choices_default",
+        lambda c: RichPrompt("Pick", console=c, choices=["a", "b"]),
+        "a",
+    ),
+    (
+        "prompt_no_show_choices",
+        lambda c: RichPrompt("Pick", console=c, choices=["a", "b"], show_choices=False),
+        "a",
+    ),
+    (
+        "prompt_no_show_default",
+        lambda c: RichPrompt("Pick", console=c, choices=["a", "b"], show_default=False),
+        "a",
+    ),
+    ("confirm_plain", lambda c: RichConfirm("Sure", console=c), ...),
+    ("confirm_default_true", lambda c: RichConfirm("Sure", console=c), True),
+    ("confirm_default_false", lambda c: RichConfirm("Sure", console=c), False),
+    ("int_plain", lambda c: RichIntPrompt("Age", console=c), ...),
+    ("int_default", lambda c: RichIntPrompt("Age", console=c), 42),
+    ("float_default", lambda c: RichFloatPrompt("Ratio", console=c), 1.5),
+]
+
+# (name, theme-overrides, input) — rendered with `highlight=True` so the built-in
+# ReprHighlighter runs, then the span style *names* resolve against the theme.
+#
+# This is the only fixture set in the corpus with highlighting on: every other
+# one pins `highlight=False`, which is why the theme-resolution path had no net
+# under it. A port that resolves highlighter styles against a global default
+# instead of the console's theme passes every other fixture and fails these.
+HIGHLIGHT_CASES = [
+    ("default_number", {}, "n = 42"),
+    ("themed_number", {"repr.number": "bold red"}, "n = 42"),
+    ("themed_bool_none", {"repr.bool_true": "bold magenta", "repr.none": "dim"}, "True and None"),
+    ("themed_str", {"repr.str": "italic yellow"}, "greeting = 'hello'"),
+    # A name the theme does not define falls back to the default table.
+    ("partial_override", {"repr.number": "underline"}, "call(1, 'two', True)"),
+    # Markup and highlighting in the same string, both theme-resolved.
+    ("markup_and_highlight", {"accent": "bold blue", "repr.number": "green"}, "[accent]total[/] = 7"),
+    # An unknown tag name is a no-op upstream, not an error.
+    ("unknown_tag_is_noop", {}, "[nope]x[/]"),
+    # An explicit tag must BEAT the highlighter where they overlap. The
+    # highlighter runs on the markup-stripped text and its spans go on first;
+    # decorating the markup `Text` in place inverts that, which is the obvious
+    # way to write it and produces the wrong colour on all four of these.
+    ("markup_beats_highlight_colour", {}, "[green]123[/]"),
+    ("markup_beats_highlight_bool", {}, "[red]True[/]"),
+    ("markup_beats_highlight_str", {}, "[bold]'hi'[/]"),
+    ("markup_over_highlight_inline", {}, "x = [magenta]99[/] ok"),
+    # Attributes that do not collide merge instead of replacing.
+    ("markup_merges_with_highlight", {}, "[underline]3.14[/]"),
+]
+
 COLOR_SYSTEMS = ["truecolor", "256", "standard"]
 
 HEADER = """\
@@ -499,9 +808,59 @@ HEADER = """\
 """
 
 
+OVERFLOW_HEADER = """\
+# Golden parity fixtures for Text overflow — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py  (see AGENTS.md → Parity)
+#
+# Format: <name>\\t<width>\\t<overflow>\\t<no_wrap>\\t<expected-ansi>
+#
+# Captured via `Console.print(text, overflow=..., no_wrap=...)`, so these cover
+# the whole pipeline: wrap (folding only under "fold"), justify, per-line
+# truncate, and the console-level crop that "ignore" relies on.
+"""
+
+
+HIGHLIGHT_HEADER = """\
+# Golden parity fixtures for theme-resolved highlighting — captured from real
+# Python `rich`. Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\\t<theme-overrides-json>\\t<input>\\t<expected-ansi>
+#
+# Console: highlight=True (the ONLY fixture set with it on), width 80, truecolor.
+# The theme column is applied over the default theme before rendering, so these
+# pin that highlighter and markup styles resolve against the *console's* theme
+# rather than a process-global default.
+"""
+
+PROMPT_HEADER = """\
+# Golden parity fixtures for prompts — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py  (see AGENTS.md → Parity)
+#
+# Format: <name>\\t<expected-ansi>
+#
+# Each row is `make_prompt(default)` rendered at width 80 — the question line as
+# the user sees it, including the `prompt.choices` and `prompt.default` styles.
+# Reading the answer is not captured here; that half is covered by unit tests
+# driving a scripted input source.
+"""
+
+TEXT_OPS_HEADER = """\
+# Golden parity fixtures for Text manipulation — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py  (see AGENTS.md → Parity)
+#
+# Format: <name>\\t<expected-ansi>
+#
+# Each case renders its result at width 80 (so nothing wraps) — the ANSI output
+# pins the plain text, the span boundaries and the styles in one go. Ops that
+# return several pieces (split/divide) join them with \\x1f.
+"""
+
+
 def escape(text: str) -> str:
     """Render ESC and newline as the literal markers the Rust test unescapes."""
-    return text.replace("\x1b", "\\x1b").replace("\n", "\\n")
+    return (
+        text.replace("\x1b", "\\x1b").replace("\n", "\\n").replace("\x1f", "\\x1f")
+    )
 
 
 #: Worker run in a fresh interpreter, one per colour system. Reads
@@ -570,7 +929,7 @@ def main() -> None:
         with console.capture() as capture:
             console.print(markup, end="")
         lines.append(f"{name}\t{markup}\t{escape(capture.get())}")
-    markup_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    markup_path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(CASES)} markup cases to {markup_path}")
 
     renderable_path = golden_dir() / "renderables.tsv"
@@ -597,8 +956,89 @@ def main() -> None:
                 "    PYTHONUTF8=1 python scripts/capture_golden.py"
             )
         rlines.append(f"{name}\t{width}\t{escape(output)}")
-    renderable_path.write_text("\n".join(rlines) + "\n", encoding="utf-8")
+    renderable_path.write_text("\n".join(rlines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(RENDERABLE_CASES)} renderable cases to {renderable_path}")
+
+    highlight_path = golden_dir() / "highlight.tsv"
+    hlines = [HIGHLIGHT_HEADER.rstrip("\n")]
+    for name, overrides, source in HIGHLIGHT_CASES:
+        hconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=80,
+            highlight=True,
+            safe_box=False,
+            legacy_windows=False,
+            no_color=False,
+            theme=RichTheme(overrides) if overrides else None,
+        )
+        with hconsole.capture() as capture:
+            hconsole.print(source, end="")
+        hlines.append(
+            f"{name}\t{json.dumps(overrides, sort_keys=True)}\t{source}\t{escape(capture.get())}"
+        )
+    highlight_path.write_text("\n".join(hlines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(HIGHLIGHT_CASES)} highlight cases to {highlight_path}")
+
+    prompt_path = golden_dir() / "prompts.tsv"
+    plines = [PROMPT_HEADER.rstrip("\n")]
+    for name, builder, default in PROMPT_CASES:
+        pconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=80,
+            highlight=False,
+            safe_box=False,
+            legacy_windows=False,
+            no_color=False,
+        )
+        rendered = builder(pconsole).make_prompt(default)
+        with pconsole.capture() as capture:
+            pconsole.print(rendered, end="")
+        plines.append(f"{name}\t{escape(capture.get())}")
+    prompt_path.write_text("\n".join(plines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(PROMPT_CASES)} prompt cases to {prompt_path}")
+
+    ops_path = golden_dir() / "text_ops.tsv"
+    oplines = [TEXT_OPS_HEADER.rstrip("\n")]
+    for name, factory in TEXT_OPS_CASES:
+        pieces = []
+        for piece in factory():
+            opconsole = Console(
+                force_terminal=True,
+                color_system="truecolor",
+                width=80,
+                highlight=False,
+                safe_box=False,
+                legacy_windows=False,
+                no_color=False,
+            )
+            with opconsole.capture() as capture:
+                opconsole.print(piece, end="")
+            pieces.append(capture.get())
+        oplines.append(f"{name}\t{escape(chr(31).join(pieces))}")
+    ops_path.write_text("\n".join(oplines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(TEXT_OPS_CASES)} text-op cases to {ops_path}")
+
+    overflow_path = golden_dir() / "overflow.tsv"
+    olines = [OVERFLOW_HEADER.rstrip("\n")]
+    for name, width, text, overflow, no_wrap in OVERFLOW_CASES:
+        oconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=width,
+            highlight=False,
+            safe_box=False,
+            legacy_windows=False,
+            no_color=False,
+        )
+        with oconsole.capture() as capture:
+            oconsole.print(text, overflow=overflow, no_wrap=no_wrap)
+        olines.append(
+            f"{name}\t{width}\t{overflow}\t{str(no_wrap).lower()}\t{escape(capture.get())}"
+        )
+    overflow_path.write_text("\n".join(olines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(OVERFLOW_CASES)} overflow cases to {overflow_path}")
 
     layout_path = golden_dir() / "layout.tsv"
     llines = [LAYOUT_HEADER.rstrip("\n")]
@@ -616,7 +1056,7 @@ def main() -> None:
         with lconsole.capture() as capture:
             lconsole.print(layout)
         llines.append(f"{name}\t{width}\t{height}\t{escape(capture.get())}")
-    layout_path.write_text("\n".join(llines) + "\n", encoding="utf-8")
+    layout_path.write_text("\n".join(llines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(LAYOUT_CASES)} layout cases to {layout_path}")
 
     # --- colour systems -------------------------------------------------
@@ -632,7 +1072,7 @@ def main() -> None:
         # in-process silently yields three copies of the first system's output.
         for name, markup, output in _capture_colors_isolated(system):
             clines.append(f"{name}\t{system}\t{markup}\t{escape(output)}")
-    colors_path.write_text("\n".join(clines) + "\n", encoding="utf-8")
+    colors_path.write_text("\n".join(clines) + "\n", encoding="utf-8", newline="\n")
     print(
         f"wrote {len(COLOR_CASES) * len(COLOR_SYSTEMS)} colour cases "
         f"({len(COLOR_SYSTEMS)} systems) to {colors_path}"
@@ -672,8 +1112,30 @@ def main() -> None:
             f"{fn}\t{json.dumps(args, ensure_ascii=False)}"
             f"\t{json.dumps(result, ensure_ascii=False)}"
         )
-    functions_path.write_text("\n".join(flines) + "\n", encoding="utf-8")
+    functions_path.write_text("\n".join(flines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(FUNCTION_CASES)} function cases to {functions_path}")
+
+    # --- terminal themes -------------------------------------------------
+    import rich.terminal_theme as _tt
+
+    themes_path = golden_dir() / "themes.tsv"
+    tlines = [THEMES_HEADER.rstrip("\n")]
+    for theme_name in [
+        "DEFAULT_TERMINAL_THEME",
+        "MONOKAI",
+        "DIMMED_MONOKAI",
+        "NIGHT_OWLISH",
+        "SVG_EXPORT_THEME",
+    ]:
+        theme = getattr(_tt, theme_name)
+        payload = {
+            "background": list(theme.background_color),
+            "foreground": list(theme.foreground_color),
+            "ansi": [list(c) for c in theme.ansi_colors._colors],
+        }
+        tlines.append(f"{theme_name}\t{json.dumps(payload)}")
+    themes_path.write_text("\n".join(tlines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(tlines) - 1} terminal themes to {themes_path}")
 
     # --- exports --------------------------------------------------------
     # These were previously pasted into Rust source as string literals, which
@@ -699,13 +1161,16 @@ def main() -> None:
     (golden_dir() / "export_html.html").write_text(
         html_inline_console.export_html(clear=False, inline_styles=True),
         encoding="utf-8",
+        newline="\n",
     )
 
     # console.rs::export_html_classes_matches_upstream (width 20, ONE line):
     html_classes_console = recording_console(20)
     html_classes_console.print("[bold red]hi[/] there")
     (golden_dir() / "export_html_classes.html").write_text(
-        html_classes_console.export_html(clear=False), encoding="utf-8"
+        html_classes_console.export_html(clear=False),
+        encoding="utf-8",
+        newline="\n",
     )
 
     # SVG: svg.rs::export_svg_matches_upstream (width 10, one printed line).
@@ -716,6 +1181,7 @@ def main() -> None:
     (golden_dir() / "svg_export.svg").write_text(
         svg_console.export_svg(title="X", unique_id="test", clear=False),
         encoding="utf-8",
+        newline="\n",
     )
     print("wrote export fixtures (html inline, html classes, svg)")
 

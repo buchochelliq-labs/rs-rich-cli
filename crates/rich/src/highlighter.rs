@@ -16,7 +16,6 @@ use fancy_regex::Regex;
 
 use crate::protocol::Highlighter;
 use crate::repr_patterns::REPR_PATTERNS;
-use crate::style::Style;
 use crate::text::Text;
 
 /// The full ISO 8601 pattern set from upstream's `ISO8601Highlighter.highlights`,
@@ -57,20 +56,6 @@ const ISO8601_PATTERNS: &[&str] = &[
     r"^(?P<date>(?P<year>-?(?:[1-9][0-9]*)?[0-9]{4})-(?P<month>1[0-2]|0[1-9])-(?P<day>3[01]|0[1-9]|[12][0-9]))T(?P<time>(?P<hour>2[0-3]|[01][0-9]):(?P<minute>[0-5][0-9]):(?P<second>[0-5][0-9])(?P<ms>\.[0-9]+)?)(?P<timezone>Z|[+-](?:2[0-3]|[01][0-9]):[0-5][0-9])?$",
 ];
 
-/// The default style for a fully-qualified style name (the subset of
-/// `default_styles.py` used by the built-in highlighters). Unknown names get a
-/// null style — matching upstream's `get_style(name, default=Style.null())`.
-fn default_style(name: &str) -> Style {
-    // Resolved from the single upstream style table rather than a second copy
-    // kept here — the two used to drift (the local copy was right, `theme.rs`'s
-    // was lossy). An unknown name yields a null style, matching upstream's
-    // `get_style(name, default=Style.null())`.
-    crate::theme::Theme::default_shared()
-        .get(name)
-        .cloned()
-        .unwrap_or_default()
-}
-
 /// Compile a slice of pattern strings.
 fn compile(patterns: &[&str]) -> Vec<Regex> {
     patterns
@@ -79,29 +64,29 @@ fn compile(patterns: &[&str]) -> Vec<Regex> {
         .collect()
 }
 
-/// Apply `patterns` to `text`, stylizing each matched named group with
-/// `{base_style}{group}`. Port of `RegexHighlighter.highlight`.
+/// Apply `patterns` to `text`, stylizing each matched named group with the style
+/// *named* `{base_style}{group}`. Port of `RegexHighlighter.highlight`.
+///
+/// The names are left unresolved on the spans, so the colours come from the
+/// theme of whichever console renders the text. That is why this function — like
+/// upstream's — never needs to see a `Console`.
+///
+/// Takes already-compiled patterns rather than strings: the built-in
+/// highlighters run on every print, and recompiling their dozen patterns each
+/// time would be a real cost.
 fn run_highlighter(text: &mut Text, base_style: &str, patterns: &[Regex]) {
-    let plain = text.plain().to_string();
     for regex in patterns {
-        let names: Vec<&str> = regex.capture_names().flatten().collect();
-        for captures in regex.captures_iter(&plain) {
-            let Ok(captures) = captures else { break };
-            for &name in &names {
-                if let Some(matched) = captures.name(name) {
-                    let style = default_style(&format!("{base_style}{name}"));
-                    text.stylize(matched.start(), matched.end(), style);
-                }
-            }
-        }
+        text.highlight_with_regex(regex, None, base_style);
     }
 }
 
 /// A generic regex highlighter — the extension point for custom highlighters.
 /// Give it a `base_style` prefix and named-group patterns; each matched group is
-/// styled with the built-in style named `{base_style}{group}`. Mirrors
-/// `rich.highlighter.RegexHighlighter`. (Theme-driven custom style names are a
-/// follow-up — see the Theme issue.)
+/// styled with the style named `{base_style}{group}`, resolved against the
+/// rendering console's theme. Mirrors `rich.highlighter.RegexHighlighter`.
+///
+/// Because the names are resolved late, a console with a custom theme restyles
+/// highlighter output without the highlighter knowing anything about it.
 pub struct RegexHighlighter {
     base_style: String,
     patterns: Vec<Regex>,
@@ -171,6 +156,7 @@ mod tests {
     use super::*;
     use crate::color::ColorSystem;
     use crate::console::Console;
+    use crate::style::Style;
 
     fn console() -> Console {
         Console::builder()
@@ -185,6 +171,54 @@ mod tests {
         let mut text = Text::new(input);
         ReprHighlighter::new().highlight(&mut text);
         console().render_to_string(&text)
+    }
+
+    /// Highlight colours come from the theme of the console that *renders* the
+    /// text, not from a process-global default.
+    ///
+    /// Before the named-span change this was impossible: the highlighter resolved
+    /// `repr.number` against `Theme::default_shared()` at highlight time, so a
+    /// custom theme could not reach it. Verified against real rich 15.0.0, where
+    /// `Console(theme=Theme({"repr.number": "bold red"}), highlight=True)`
+    /// prints `42` as `\x1b[1;31m`.
+    #[test]
+    fn highlight_colours_follow_the_consoles_theme() {
+        let mut theme = crate::theme::Theme::default_theme();
+        theme.insert("repr.number", Style::parse("bold red").unwrap());
+        let themed = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(80)
+            .no_color(false)
+            .theme(theme)
+            .build();
+
+        let mut text = Text::new("n = 42");
+        ReprHighlighter::new().highlight(&mut text);
+
+        assert_eq!(themed.render_to_string(&text), "n = \x1b[1;31m42\x1b[0m");
+        // The very same Text, rendered by a default console, keeps the stock
+        // colour — proof the styles are bound at render, not at highlight.
+        assert_eq!(console().render_to_string(&text), "n = \x1b[1;36m42\x1b[0m");
+    }
+
+    /// A custom highlighter's group names resolve against the theme too, so a
+    /// name the built-in table has never heard of still works.
+    #[test]
+    fn custom_group_names_resolve_against_the_theme() {
+        let mut theme = crate::theme::Theme::default_theme();
+        theme.insert("sql.keyword", Style::parse("bold blue").unwrap());
+        let sql = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(80)
+            .no_color(false)
+            .theme(theme)
+            .build();
+
+        let mut text = Text::new("SELECT x");
+        RegexHighlighter::new("sql.", &[r"(?P<keyword>SELECT)"]).highlight(&mut text);
+        assert_eq!(sql.render_to_string(&text), "\x1b[1;34mSELECT\x1b[0m x");
     }
 
     fn highlight_iso(input: &str) -> String {

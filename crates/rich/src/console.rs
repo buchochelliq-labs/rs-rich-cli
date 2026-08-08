@@ -30,6 +30,21 @@ pub enum Justify {
     Full,
 }
 
+/// What to do with text that is wider than the space available.
+/// Mirrors `rich.console.OverflowMethod`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Overflow {
+    /// Break over-long words across lines. Upstream's `DEFAULT_OVERFLOW`.
+    #[default]
+    Fold,
+    /// Cut the line off at the width.
+    Crop,
+    /// Cut the line off one cell early and mark it with `…`.
+    Ellipsis,
+    /// Leave over-long lines intact, and do not wrap.
+    Ignore,
+}
+
 /// The options passed to a [`Renderable`] describing the space it must fit into.
 ///
 /// Port of the core of `rich.console.ConsoleOptions`. Only the fields needed by
@@ -40,29 +55,32 @@ pub struct ConsoleOptions {
     pub max_width: usize,
     pub height: Option<usize>,
     pub justify: Justify,
+    /// Overflow method to impose on renderables, or `None` to let each pick its
+    /// own. Mirrors `ConsoleOptions.overflow`.
+    pub overflow: Option<Overflow>,
+    /// Disable wrapping, or `None` to let each renderable pick. Mirrors
+    /// `ConsoleOptions.no_wrap`.
+    pub no_wrap: Option<bool>,
 }
 
 impl ConsoleOptions {
     /// Return a copy with `max_width` (and a clamped `min_width`) updated.
     /// Port of `ConsoleOptions.update_width`.
     pub fn update_width(&self, width: usize) -> ConsoleOptions {
-        ConsoleOptions {
-            min_width: width,
-            max_width: width,
-            height: self.height,
-            justify: self.justify,
-        }
+        // Copy-then-overwrite rather than a fresh literal, so fields added later
+        // are carried through instead of being silently reset to a default.
+        let mut options = self.clone();
+        options.min_width = width;
+        options.max_width = width;
+        options
     }
 
     /// Return a copy with both width and height pinned. Port of
     /// `ConsoleOptions.update_dimensions`.
     pub fn update_dimensions(&self, width: usize, height: usize) -> ConsoleOptions {
-        ConsoleOptions {
-            min_width: width,
-            max_width: width,
-            height: Some(height),
-            justify: self.justify,
-        }
+        let mut options = self.update_width(width);
+        options.height = Some(height);
+        options
     }
 }
 
@@ -150,6 +168,12 @@ impl Console {
         &self.theme
     }
 
+    /// Resolve a style name (or pass a style through) against this console's
+    /// theme. Port of `Console.get_style`.
+    pub fn get_style(&self, style: &crate::style::StyleType) -> crate::errors::Result<Style> {
+        self.theme.get_style(style)
+    }
+
     /// The whole-output base style.
     pub fn base_style(&self) -> &Style {
         &self.base_style
@@ -169,6 +193,8 @@ impl Console {
             max_width: self.width,
             height: None,
             justify: Justify::Default,
+            overflow: None,
+            no_wrap: None,
         }
     }
 
@@ -191,7 +217,12 @@ impl Console {
             let measurement = renderable.measure(self, &options);
             options.max_width = measurement.maximum.min(options.max_width).max(1);
         }
-        renderable.rich_render(self, &options)
+        let segments = renderable.rich_render(self, &options);
+        // `Console.print(crop=True)`: the final backstop against a line running
+        // off the side of the terminal. Renderables that fit are untouched; this
+        // is what gives `Overflow::Ignore` its "wrap nothing, but still don't
+        // corrupt the display" behaviour.
+        Segment::crop_lines(&segments, self.width)
     }
 
     /// Write (or, while capturing, record) a rendered segment stream, adding a
@@ -343,19 +374,39 @@ impl Console {
     /// document (inline styles), using the default terminal theme. Port of
     /// `Console.export_html(inline_styles=True)`.
     pub fn export_html(&self, f: impl FnOnce(&Console)) -> String {
+        self.export_html_themed(&crate::terminal_theme::DEFAULT_TERMINAL_THEME, f)
+    }
+
+    /// Like [`export_html`](Self::export_html) but with an explicit palette —
+    /// upstream's `export_html(theme=…)`. See [`terminal_theme`] for the
+    /// bundled presets.
+    ///
+    /// [`terminal_theme`]: crate::terminal_theme
+    pub fn export_html_themed(
+        &self,
+        theme: &crate::terminal_theme::TerminalTheme,
+        f: impl FnOnce(&Console),
+    ) -> String {
         let segments = self.record(f);
-        crate::export::export_html_inline(&segments, &crate::terminal_theme::DEFAULT_TERMINAL_THEME)
+        crate::export::export_html_inline(&segments, theme)
     }
 
     /// Like [`export_html`](Self::export_html) but with a generated CSS-class
     /// stylesheet (`.r1 {…}`) instead of inline styles. Port of upstream's
     /// default `Console.export_html(inline_styles=False)`.
     pub fn export_html_classes(&self, f: impl FnOnce(&Console)) -> String {
+        self.export_html_classes_themed(&crate::terminal_theme::DEFAULT_TERMINAL_THEME, f)
+    }
+
+    /// Like [`export_html_classes`](Self::export_html_classes) but with an
+    /// explicit palette — upstream's `export_html(theme=…, inline_styles=False)`.
+    pub fn export_html_classes_themed(
+        &self,
+        theme: &crate::terminal_theme::TerminalTheme,
+        f: impl FnOnce(&Console),
+    ) -> String {
         let segments = self.record(f);
-        crate::export::export_html_classes(
-            &segments,
-            &crate::terminal_theme::DEFAULT_TERMINAL_THEME,
-        )
+        crate::export::export_html_classes(&segments, theme)
     }
 
     /// Capture output printed inside `f` and export it as a self-contained SVG
@@ -369,14 +420,45 @@ impl Console {
     ///
     /// [`SVG_EXPORT_THEME`]: crate::terminal_theme::SVG_EXPORT_THEME
     pub fn export_svg(&self, title: &str, unique_id: &str, f: impl FnOnce(&Console)) -> String {
-        let segments = self.record(f);
-        crate::svg::export_svg(
-            &segments,
+        self.export_svg_themed(
             &crate::terminal_theme::SVG_EXPORT_THEME,
             title,
             unique_id,
-            self.width(),
+            f,
         )
+    }
+
+    /// Like [`export_svg`](Self::export_svg) but with an explicit palette —
+    /// upstream's `export_svg(theme=…)`.
+    pub fn export_svg_themed(
+        &self,
+        theme: &crate::terminal_theme::TerminalTheme,
+        title: &str,
+        unique_id: &str,
+        f: impl FnOnce(&Console),
+    ) -> String {
+        let segments = self.record(f);
+        crate::svg::export_svg(&segments, theme, title, unique_id, self.width())
+    }
+
+    /// Record everything `f` prints and hand back the raw segments, without
+    /// writing to the terminal.
+    ///
+    /// This is the seam for producing *several* outputs from one render — the
+    /// terminal bytes and an HTML and an SVG file, say — which is what
+    /// `rich --export-html … --export-svg …` needs. Upstream reaches the same
+    /// place with `Console(record=True)` plus `save_html(clear=False)`; here the
+    /// buffer is returned instead of being held on the console, so the caller
+    /// decides what to do with it and there is no hidden state to clear.
+    ///
+    /// Pair with [`segments_to_string`](Self::segments_to_string) to get the
+    /// terminal form, [`export::export_html_classes`](crate::export::export_html_classes)
+    /// for HTML, and [`svg::export_svg`](crate::svg::export_svg) for SVG.
+    ///
+    /// Rendering twice instead would be wrong, not merely wasteful: a renderable
+    /// reading standard input only yields its content once.
+    pub fn record_output(&self, f: impl FnOnce(&Console)) -> Vec<Segment> {
+        self.record(f)
     }
 
     /// Run `f` with output recorded to a fresh buffer, returning the captured
@@ -407,15 +489,71 @@ impl Console {
     /// highlighters), returning the styled [`Text`] that `print_str` would print.
     /// Exposed so callers can wrap the markup in another renderable.
     pub fn build_text(&self, content: &str) -> Text {
-        // Emoji shortcodes are expanded before markup parsing (matching upstream's
-        // default `emoji=True`); `:name:` and `[tag]` don't overlap.
-        let expanded = if self.emoji {
+        // Malformed markup falls back to printing the text as-is. Upstream would
+        // raise `MarkupError` instead; use `try_build_text` (or `try_print_str`)
+        // when the markup comes from a user and a mistake should be reported
+        // rather than rendered. See docs/DIVERGENCES.md §2.
+        self.try_build_text(content)
+            .unwrap_or_else(|_| self.decorate(Text::new(self.expand_emoji(content))))
+    }
+
+    /// As [`build_text`](Console::build_text), but returns
+    /// [`RichError::Markup`](crate::errors::RichError::Markup) for malformed
+    /// markup instead of falling back to the raw text — upstream's behaviour.
+    pub fn try_build_text(&self, content: &str) -> crate::errors::Result<Text> {
+        let expanded = self.expand_emoji(content);
+        let markup = Text::from_markup(&expanded)?;
+
+        // The highlighter runs on the *markup-stripped* text and its spans go on
+        // first; the markup spans are appended afterwards. Spans combine in
+        // order, so this is what makes an explicit tag beat the highlighter —
+        // `[green]123[/]` is green, not `repr.number` cyan.
+        //
+        // Upstream reaches the same result a different way: `Console.render_str`
+        // highlights a fresh `Text(str(rich_text))` and then calls
+        // `highlight_text.copy_styles(rich_text)`, whose `_spans.extend` appends
+        // the markup spans last. Decorating the markup `Text` in place — the
+        // obvious reading — inverts the precedence.
+        let mut text = self.decorate(Text::new(markup.plain()));
+        for span in markup.spans() {
+            text.push_span(span.clone());
+        }
+        Ok(text)
+    }
+
+    /// As [`print_str`](Console::print_str), but reports malformed markup.
+    pub fn try_print_str(&self, content: &str) -> crate::errors::Result<()> {
+        self.print(&self.try_build_text(content)?);
+        Ok(())
+    }
+
+    /// As [`print_justified`](Console::print_justified), but reports malformed
+    /// markup.
+    pub fn try_print_justified(
+        &self,
+        content: &str,
+        justify: Justify,
+    ) -> crate::errors::Result<()> {
+        let text = self.try_build_text(content)?;
+        let mut options = self.options();
+        options.justify = justify;
+        self.emit(text.rich_render(self, &options));
+        Ok(())
+    }
+
+    /// Expand `:emoji:` shortcodes. Runs before markup parsing (matching
+    /// upstream's default `emoji=True`); `:name:` and `[tag]` don't overlap.
+    fn expand_emoji(&self, content: &str) -> String {
+        if self.emoji {
             crate::emoji::replace(content)
         } else {
             content.to_string()
-        };
-        let mut text =
-            Text::from_markup(&expanded, &self.theme).unwrap_or_else(|_| Text::new(&expanded));
+        }
+    }
+
+    /// Apply the registered highlighters, plus the built-in `ReprHighlighter`
+    /// when `highlight` is on.
+    fn decorate(&self, mut text: Text) -> Text {
         for highlighter in &self.highlighters {
             highlighter.highlight(&mut text);
         }
@@ -447,8 +585,9 @@ impl Console {
         self.segments_to_string(&segments)
     }
 
-    /// Convert rendered segments into a string, applying the color system.
-    fn segments_to_string(&self, segments: &[Segment]) -> String {
+    /// Convert rendered segments into a terminal string, applying this console's
+    /// colour system (and honouring `no_color`).
+    pub fn segments_to_string(&self, segments: &[Segment]) -> String {
         let system = self.color_system();
         let mut out = String::new();
         for segment in segments {
@@ -485,7 +624,22 @@ impl Renderable for Text {
         } else {
             options.justify
         };
-        self.render_joined_justified(console.base_style(), options.max_width, justify)
+        // Same precedence for overflow and no_wrap: the text's own setting wins,
+        // then the options', then upstream's default. Mirrors the `self.x or
+        // options.x or DEFAULT` chain in `Text.__rich_console__`.
+        let overflow = self
+            .get_overflow()
+            .or(options.overflow)
+            .unwrap_or(Overflow::Fold);
+        let no_wrap = self.get_no_wrap().or(options.no_wrap).unwrap_or(false);
+        self.render_joined_wrapped(
+            console.theme(),
+            console.base_style(),
+            options.max_width,
+            justify,
+            overflow,
+            no_wrap,
+        )
     }
 
     fn measure(&self, _console: &Console, options: &ConsoleOptions) -> crate::measure::Measurement {
@@ -583,7 +737,8 @@ impl ConsoleBuilder {
         self
     }
 
-    /// Enable/disable automatic repr highlighting (default disabled).
+    /// Enable/disable automatic repr highlighting. Defaults to **on**, matching
+    /// upstream `Console(highlight=True)`.
     pub fn highlight(mut self, value: bool) -> Self {
         self.highlight = Some(value);
         self
@@ -617,7 +772,11 @@ impl ConsoleBuilder {
             is_terminal,
             no_color,
             emoji: self.emoji.unwrap_or(true),
-            highlight: self.highlight.unwrap_or(false),
+            // Upstream's `Console(highlight=True)` default. Getting this wrong is
+            // invisible in the fixtures (every one is captured with
+            // highlight=False) but is the first thing a user sees: numbers,
+            // paths, booleans and URLs come out plain instead of coloured.
+            highlight: self.highlight.unwrap_or(true),
             legacy_windows: self.legacy_windows.unwrap_or(false),
             safe_box: self.safe_box.unwrap_or(true),
             ascii_only: self.ascii_only.unwrap_or(false),
@@ -693,6 +852,93 @@ mod tests {
             .build()
     }
 
+    /// The strict path reports malformed markup where the lenient one prints it
+    /// literally. Both must still agree on markup that is actually valid.
+    #[test]
+    fn try_build_text_reports_bad_markup() {
+        let console = test_console();
+
+        let err = console
+            .try_build_text("[/nope]")
+            .expect_err("an unmatched closing tag must be an error");
+        assert!(
+            matches!(err, crate::errors::RichError::Markup(_)),
+            "{err:?}"
+        );
+        // The lenient path swallows it and prints the source text as-is.
+        assert_eq!(console.build_text("[/nope]").plain(), "[/nope]");
+
+        let strict = console.try_build_text("[bold]hi[/]").expect("valid markup");
+        assert_eq!(strict.plain(), "hi");
+        assert_eq!(
+            strict.spans().len(),
+            console.build_text("[bold]hi[/]").spans().len()
+        );
+    }
+
+    /// An unknown tag *name* is not an error — it renders as a no-op, tag
+    /// consumed. Only genuine syntax errors fail.
+    ///
+    /// Verified against real rich 15.0.0: `Console().print("[nope]x[/]")` writes
+    /// `x`, while `[bold]a[/italic]` raises `MarkupError`. Before names were
+    /// carried on spans, the port resolved `nope` eagerly, failed, and fell back
+    /// to printing the markup source literally.
+    #[test]
+    fn unknown_tag_names_render_as_no_ops() {
+        let console = test_console();
+        let text = console
+            .try_build_text("[nope]x[/]")
+            .expect("an unknown tag name is not a syntax error");
+        assert_eq!(console.render_to_string(&text), "x");
+        assert_eq!(
+            console.render_to_string(&console.build_text("[a.b.c]x[/]")),
+            "x"
+        );
+
+        // A mismatched closing tag is still an error, on both paths.
+        assert!(console.try_build_text("[bold]a[/italic]").is_err());
+        assert!(console.try_build_text("[/nope]").is_err());
+    }
+
+    /// Markup styles bind to the theme of the console that renders the text, not
+    /// the one that parsed it. Verified against real rich 15.0.0.
+    #[test]
+    fn markup_styles_bind_at_render_not_at_parse() {
+        let themed = |definition: &str| {
+            let mut theme = Theme::default_theme();
+            theme.insert("accent", Style::parse(definition).unwrap());
+            Console::builder()
+                .force_terminal(true)
+                .color_system(Some(ColorSystem::Truecolor))
+                .width(80)
+                .no_color(false)
+                .theme(theme)
+                .build()
+        };
+        let red = themed("bold red");
+        let green = themed("underline green");
+
+        // Built once, by the red console...
+        let text = red.build_text("[accent]hi[/]");
+        assert_eq!(red.render_to_string(&text), "\x1b[1;31mhi\x1b[0m");
+        // ...and the green console still renders it in green.
+        assert_eq!(green.render_to_string(&text), "\x1b[4;32mhi\x1b[0m");
+    }
+
+    /// Emoji expansion and the highlighters have to run on both paths, or the
+    /// strict variant would quietly render differently from the lenient one.
+    #[test]
+    fn try_build_text_expands_emoji_like_build_text() {
+        let console = test_console();
+        assert_eq!(
+            console
+                .try_build_text(":rocket: go")
+                .expect("valid")
+                .plain(),
+            console.build_text(":rocket: go").plain()
+        );
+    }
+
     #[test]
     fn renders_markup_string() {
         let console = test_console();
@@ -734,6 +980,40 @@ mod tests {
         // Captured from real rich 15.0.0 (Console.capture()).
         let out = console.capture(|c| c.print_str("[bold red]hi[/] there"));
         assert_eq!(out, "\x1b[1;31mhi\x1b[0m there\n");
+    }
+
+    #[test]
+    fn themed_exports_use_the_given_palette() {
+        use crate::terminal_theme::{MONOKAI, NIGHT_OWLISH};
+
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(20)
+            .no_color(false)
+            .build();
+        let render = |c: &Console| c.print_str("hi");
+
+        // Monokai's background is #0c0c0c and Night Owlish's is #ffffff, so the
+        // chosen theme has to show up in the emitted CSS.
+        let monokai = console.export_html_themed(&MONOKAI, render);
+        assert!(
+            monokai.contains("#0c0c0c"),
+            "monokai bg missing:\n{monokai}"
+        );
+
+        let owlish = console.export_html_themed(&NIGHT_OWLISH, render);
+        assert!(owlish.contains("#ffffff"), "owlish bg missing:\n{owlish}");
+        assert!(!owlish.contains("#0c0c0c"), "leaked monokai into owlish");
+
+        // The class form and SVG take a theme too.
+        let classes = console.export_html_classes_themed(&MONOKAI, render);
+        assert!(classes.contains("#0c0c0c"), "class-form ignored the theme");
+        let svg = console.export_svg_themed(&MONOKAI, "t", "id", render);
+        assert!(svg.contains("#0c0c0c"), "svg ignored the theme");
+
+        // The convenience methods keep their documented defaults.
+        assert!(console.export_html(render).contains("#ffffff"));
     }
 
     #[test]

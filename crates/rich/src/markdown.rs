@@ -276,7 +276,7 @@ fn parse(source: &str) -> Vec<Block> {
                     } else {
                         if let Some(style) = &heading_style {
                             let end = text.plain().len();
-                            text.stylize(0, end, style.clone());
+                            text.stylize(style.clone(), 0, end);
                         }
                         text.set_justify(justify);
                         blocks.push(Block::Text(text));
@@ -305,14 +305,14 @@ fn parse(source: &str) -> Vec<Block> {
                             .map(|s| s.with_link(url.clone())),
                         None => inline_style(strong, emphasis),
                     };
-                    block.append(&text, style);
+                    block.append(&text, style.map(Into::into));
                 }
             }
             Event::Code(text) => {
                 if let Some(acc) = table.as_mut().filter(|a| a.in_cell) {
                     acc.cur_cell.push_str(&text);
                 } else if let Some(block) = current.as_mut() {
-                    block.append(&text, Style::parse(CODE_STYLE).ok());
+                    block.append(&text, Style::parse(CODE_STYLE).ok().map(Into::into));
                 }
             }
             Event::SoftBreak => {
@@ -349,7 +349,9 @@ impl Renderable for Markdown {
                 lines.push(Vec::new());
             }
             match block {
-                Block::Text(text) => lines.extend(text.render_lines(base, Some(width))),
+                Block::Text(text) => {
+                    lines.extend(text.render_lines(console.theme(), base, Some(width)))
+                }
                 Block::List {
                     ordered,
                     start,
@@ -368,8 +370,11 @@ impl Renderable for Markdown {
                             )
                         };
                         let prefix_width = cell_len(&prefix);
-                        let item_lines =
-                            item.render_lines(base, Some(width.saturating_sub(prefix_width)));
+                        let item_lines = item.render_lines(
+                            console.theme(),
+                            base,
+                            Some(width.saturating_sub(prefix_width)),
+                        );
                         for (line_index, line) in item_lines.into_iter().enumerate() {
                             let mut row = Vec::new();
                             if line_index == 0 {
@@ -387,7 +392,8 @@ impl Renderable for Markdown {
                     // Upstream renders quote content at `max_width - 4`.
                     let content_width = width.saturating_sub(4);
                     for paragraph in paragraphs {
-                        let quote_lines = paragraph.render_lines(base, Some(content_width));
+                        let quote_lines =
+                            paragraph.render_lines(console.theme(), base, Some(content_width));
                         for line in quote_lines {
                             let mut row = vec![Segment::new(
                                 QUOTE_PREFIX.to_string(),

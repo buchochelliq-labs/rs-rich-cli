@@ -17,10 +17,13 @@ authors = ["rs-rich-cli contributors"]
 rust-version = "1.88"
 
 [workspace.dependencies]
-# Internal crates
-rich = { path = "crates/rich", version = "15.0.0" }
-rich-ext = { path = "crates/rich-ext", version = "0.1.0" }
-rich-art = { path = "crates/rich-art", version = "0.1.0" }
+# Internal crates. The crates.io *package* names are `rs-rich-*` because plain
+# `rich` is taken by an unrelated crate; the `package = …` key maps them back to
+# the short names, so every `use rich::…` in this workspace is unaffected.
+# External users get the same short names via each crate's `[lib] name`.
+rich = { package = "rs-rich", path = "crates/rich", version = "0.0.1" }
+rich-ext = { package = "rs-rich-ext", path = "crates/rich-ext", version = "0.0.1" }
+rich-art = { package = "rs-rich-art", path = "crates/rich-art", version = "0.0.1" }
 
 # Third-party (kept lean for the first slice)
 unicode-width = "0.2"

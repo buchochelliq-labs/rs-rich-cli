@@ -7,8 +7,8 @@
 # It is deliberately self-contained: it depends only on `rich` (for the
 # `Renderable` trait) so it can be lifted into its own repository unchanged.
 [package]
-name = "rich-art"
-version = "0.1.0"
+name = "rs-rich-art"
+version = "0.0.1"
 description = "ASCII-art renderables for `rich` — FIGlet-style text banners"
 edition.workspace = true
 license.workspace = true
@@ -59,6 +59,11 @@ required-features = ["gif"]
 [[example]]
 name = "shrink_asset"
 required-features = ["gif"]
+
+[lib]
+# The package is `rs-rich-art` on crates.io (plain `rich` is taken), but the
+# library target keeps the short name so users write `use rich_art::…`.
+name = "rich_art"
 
 [lints]
 workspace = true

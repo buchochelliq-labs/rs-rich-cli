@@ -38,7 +38,7 @@ impl Highlighter for NumberHighlighter {
                 while i < bytes.len() && bytes[i].is_ascii_digit() {
                     i += 1;
                 }
-                text.stylize(start, i, self.style.clone());
+                text.stylize(self.style.clone(), start, i);
             } else {
                 i += 1;
             }

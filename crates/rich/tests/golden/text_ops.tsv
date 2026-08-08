@@ -1,0 +1,33 @@
+# Golden parity fixtures for Text manipulation — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py  (see AGENTS.md → Parity)
+#
+# Format: <name>\t<expected-ansi>
+#
+# Each case renders its result at width 80 (so nothing wraps) — the ANSI output
+# pins the plain text, the span boundaries and the styles in one go. Ops that
+# return several pieces (split/divide) join them with \x1f.
+divide	\x1b[1mhello\x1b[0m\x1f \x1b[31mworld\x1b[0m
+divide_span_across	ab\x1b[1mcd\x1b[0m\x1f\x1b[1mefg\x1b[0mh
+split_newline	one\x1f\x1b[1mtwo\x1b[0m\x1fthree
+split_include	one\n\x1f\x1b[1mtwo\x1b[0m\n\x1fthree
+split_trailing	one\x1ftwo
+split_trailing_blank	one\x1ftwo\x1f
+split_absent	no separator here
+split_word	a\x1f\x1b[1mb\x1b[0m\x1fc
+pad	   \x1b[1mhi\x1b[0m   
+pad_left	...\x1b[1mhi\x1b[0m
+pad_right	\x1b[1mhi\x1b[0m...
+right_crop	hel\x1b[1mlo w\x1b[0m
+rstrip	\x1b[1mhi\x1b[0m there
+rstrip_end_partial	hello   
+rstrip_end_noop	hi   
+expand_tabs	a   b   c
+expand_tabs_span_across_tabs	\x1b[1ma   \x1b[0m\x1b[1mb   \x1b[0m\x1b[1mc\x1b[0m
+expand_tabs_styled	\x1b[1ma       \x1b[0mb
+expand_tabs_multiline	ab  c\nd   e
+join	a, \x1b[1mb\x1b[0m, c
+join_styled_sep	x\x1b[31m | \x1b[0my
+join_empty_sep	ab
+highlight_words	the \x1b[1;31mcat\x1b[0m sat on the \x1b[1;31mmat\x1b[0m
+highlight_words_nocase	\x1b[1mCat\x1b[0m \x1b[1mcat\x1b[0m \x1b[1mCAT\x1b[0m
+highlight_regex	abc \x1b[1;36m123\x1b[0m def \x1b[1;36m456\x1b[0m

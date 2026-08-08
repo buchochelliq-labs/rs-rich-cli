@@ -103,9 +103,9 @@ the process without unwinding, so a caller that traps signals should emit
 ## Examples
 
 ```bash
-cargo run -p rich-art --example banner -- "your text"
+cargo run -p rs-rich-art --example banner -- "your text"
 
 # Draw a waving cat, then play it in the terminal.
-cargo run -p rich-art --features gif --example make_demo_gif
-cargo run -p rich-art --features gif --example gif -- cat.gif 3
+cargo run -p rs-rich-art --features gif --example make_demo_gif
+cargo run -p rs-rich-art --features gif --example gif -- cat.gif 3
 ```

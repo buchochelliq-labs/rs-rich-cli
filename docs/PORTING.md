@@ -19,7 +19,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `cells.py`, `_cell_widths.py`         | `cells.rs`               | 🟡 | ✅ |
 | `segment.py`                          | `segment.rs`             | 🟡 | — |
 | `markup.py`                           | `markup.rs`              | 🟡 | ✅ |
-| `text.py` (+ justify)                 | `text.rs`                | 🟡 | ✅ |
+| `text.py` (+ justify, overflow)       | `text.rs`                | 🟡 | ✅ |
 | `_wrap.py`                            | `wrap.rs`                | 🟡 | ✅ |
 | `theme.py`, `themes.py`, `default_styles.py` | `theme.rs` | 🟡 | — |
 | `terminal_theme.py` | `terminal_theme.rs` | 🟡 | ✅ |
@@ -81,7 +81,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `emoji.py`, `_emoji_codes.py`, `_emoji_replace.py` | `emoji.rs` | 🟡 |
 | `filesize.py` | `filesize.rs` | 🟡 |
 | `pager.py` | `pager.rs` | 🟡 |
-| `prompt.py` | — | ⬜ not started |
+| `prompt.py` | `prompt.rs` | 🟡 |
 | `_unicode_data/` | `unicode_data/` | ⬜ |
 | `box.substitute` (legacy/ASCII fallback) | `box.rs` | 🟡 | ✅ |
 | `_windows.py`, `_win32_console.py`, `_windows_renderer.py` | `windows/` | ⬜ |
@@ -90,7 +90,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `_loop.py`, `_pick.py`, `_stack.py`, `_timer.py` | internal helpers | ⬜ |
 | `_export_format.py`, `Console.export_html` | `export.rs` | 🟡 | ✅ |
 
-## `rich-cli` (tool, versions separately — 1.8.1)
+## `rich-cli` (tool — tracks upstream 1.8.1, see UPSTREAM.toml)
 
 | upstream feature | rust `crates/rich-cli/src/…` | status |
 |------------------|------------------------------|:------:|

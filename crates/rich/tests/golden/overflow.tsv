@@ -1,0 +1,30 @@
+# Golden parity fixtures for Text overflow — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py  (see AGENTS.md → Parity)
+#
+# Format: <name>\t<width>\t<overflow>\t<no_wrap>\t<expected-ansi>
+#
+# Captured via `Console.print(text, overflow=..., no_wrap=...)`, so these cover
+# the whole pipeline: wrap (folding only under "fold"), justify, per-line
+# truncate, and the console-level crop that "ignore" relies on.
+fold_long_word	8	fold	false	supercal\nifragili\nstic\n
+crop_long_word	8	crop	false	supercal\n
+ellipsis_long_word	8	ellipsis	false	superca…\n
+ignore_long_word	8	ignore	false	supercal\n
+fold_sentence	8	fold	false	the \nquick \nbrown \nfox \njumps\n
+crop_sentence	8	crop	false	the \nquick \nbrown \nfox \njumps\n
+ellipsis_sentence	8	ellipsis	false	the \nquick \nbrown \nfox \njumps\n
+ignore_sentence	8	ignore	false	the quic\n
+nowrap_fold	8	fold	true	the quic\n
+nowrap_crop	8	crop	true	the quic\n
+nowrap_ellipsis	8	ellipsis	true	the qui…\n
+nowrap_ignore	8	ignore	true	the quic\n
+nowrap_multiline	8	ellipsis	true	first l…\nsecond …\n
+wide_crop	5	crop	false	aa你 \n
+wide_ellipsis	5	ellipsis	false	aa你…\n
+wide_ellipsis_exact	6	ellipsis	false	aa你 …\n
+ellipsis_in_span	4	ellipsis	false	ab\x1b[1mc…\x1b[0m\n
+ellipsis_at_span_start	5	ellipsis	false	aaaa\x1b[1;31m…\x1b[0m\n
+ellipsis_after_span	5	ellipsis	false	\x1b[1;31maaaa\x1b[0m…\n
+crop_exact_width	5	crop	false	hello\n
+ellipsis_exact_width	5	ellipsis	false	hello\n
+ellipsis_width_one	1	ellipsis	false	…\n

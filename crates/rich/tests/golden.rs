@@ -10,8 +10,8 @@ use rich::markdown::Markdown;
 use rich::r#box::{Box as BoxSet, DOUBLE_EDGE, HEAVY_HEAD, SIMPLE, SQUARE};
 use rich::{
     Align, AnsiDecoder, Bar, ColorSystem, Columns, Console, Constrain, Control, HorizontalAlign,
-    Json, Justify, Layout, Padding, Panel, ProgressBar, Renderable, Rule, Style, Styled, Table,
-    Text, Tree,
+    Json, Justify, Layout, Overflow, Padding, Panel, ProgressBar, Renderable, Rule, Style, Styled,
+    Table, Text, Tree,
 };
 
 /// Build the layout matching a `layout_*` fixture name. Must stay in sync with
@@ -243,19 +243,29 @@ fn truecolor_console(width: usize) -> Console {
         .force_terminal(true)
         .color_system(Some(ColorSystem::Truecolor))
         .width(width)
+        // Every fixture except `highlight.tsv` is captured with
+        // `highlight=False`, so this must be set explicitly — the default is
+        // ON, matching upstream.
+        .highlight(false)
         .no_color(false)
         .build()
 }
 
-/// Turn the human-readable `\x1b` / `\n` markers in a fixture into real bytes.
+/// Turn the human-readable `\x1b` / `\n` / `\x1f` markers in a fixture into real
+/// bytes. `\x1f` separates the pieces of a multi-result `text_ops` case.
 fn unescape(s: &str) -> String {
-    s.replace("\\x1b", "\x1b").replace("\\n", "\n")
+    s.replace("\\x1b", "\x1b")
+        .replace("\\n", "\n")
+        .replace("\\x1f", "\x1f")
 }
 
 /// Build the renderable matching a fixture `name`. Must stay in sync with
 /// `RENDERABLE_CASES` in `scripts/capture_golden.py`.
 fn build_renderable(name: &str) -> Box<dyn Renderable> {
     match name {
+        "text_tabs" => Box::new(Text::new("a\tb\tc")),
+        "text_tabs_multiline" => Box::new(Text::new("ab\tc\nd\te")),
+        "text_control_codes" => Box::new(Text::new("a\rb\x07c\x08d")),
         "rule_plain" => Box::new(Rule::line()),
         "rule_title" | "rule_title_odd" => Box::new(Rule::new("Hi")),
         "rule_left" => Box::new(Rule::new("Hi").align(HorizontalAlign::Left)),
@@ -415,6 +425,369 @@ fn truecolor_parity() {
         checked += 1;
     }
     assert!(checked > 0, "no golden cases were checked");
+}
+
+/// Highlighting and markup resolved against the *console's* theme, checked
+/// against upstream. The only fixture set rendered with `highlight=true`.
+///
+/// A port that resolves highlighter styles eagerly against a global default
+/// passes every other fixture in the corpus and fails these — which is exactly
+/// what it did before style names were carried on spans.
+#[test]
+fn highlight_parity() {
+    use serde_json::Value;
+
+    let data = include_str!("golden/highlight.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(4, '\t');
+        let name = parts.next().unwrap_or("");
+        let mut field = |what: &str| {
+            parts
+                .next()
+                .unwrap_or_else(|| panic!("line {}: missing {what}", index + 1))
+                .to_string()
+        };
+        let overrides: Value = serde_json::from_str(&field("theme")).expect("theme is json");
+        let source = field("input");
+        let expected = unescape(&field("expected"));
+
+        let mut theme = rich::theme::Theme::default_theme();
+        for (key, definition) in overrides.as_object().expect("theme is an object") {
+            let definition = definition.as_str().expect("style definition is a string");
+            theme.insert(
+                key.clone(),
+                Style::parse(definition).expect("fixture style must parse"),
+            );
+        }
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(80)
+            .no_color(false)
+            .highlight(true)
+            .theme(theme)
+            .build();
+
+        assert_eq!(
+            console.render_str_to_string(&source),
+            expected,
+            "highlight case {name:?} (line {}) diverged from upstream rich",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert!(checked > 0, "no highlight cases were checked");
+}
+
+/// Render the question line for a `prompts.tsv` fixture `name`. Must stay in
+/// sync with `PROMPT_CASES` in `scripts/capture_golden.py`.
+fn render_prompt(console: &Console, name: &str) -> String {
+    use rich::prompt::{Confirm, FloatPrompt, IntPrompt, Prompt};
+    let text = match name {
+        "prompt_plain" => Prompt::new("Name").make_prompt(console, None),
+        "prompt_default" => Prompt::new("Name").make_prompt(console, Some("World")),
+        "prompt_markup" => Prompt::new("[bold]Name[/]").make_prompt(console, None),
+        "prompt_choices" => Prompt::new("Pick")
+            .choices(["a", "b"])
+            .make_prompt(console, None),
+        "prompt_choices_default" => Prompt::new("Pick")
+            .choices(["a", "b"])
+            .make_prompt(console, Some("a")),
+        "prompt_no_show_choices" => Prompt::new("Pick")
+            .choices(["a", "b"])
+            .show_choices(false)
+            .make_prompt(console, Some("a")),
+        "prompt_no_show_default" => Prompt::new("Pick")
+            .choices(["a", "b"])
+            .show_default(false)
+            .make_prompt(console, Some("a")),
+        "confirm_plain" => Confirm::new("Sure").make_prompt(console, None),
+        "confirm_default_true" => Confirm::new("Sure").make_prompt(console, Some(true)),
+        "confirm_default_false" => Confirm::new("Sure").make_prompt(console, Some(false)),
+        "int_plain" => IntPrompt::new("Age").make_prompt(console, None),
+        "int_default" => IntPrompt::new("Age").make_prompt(console, Some(42)),
+        "float_default" => FloatPrompt::new("Ratio").make_prompt(console, Some(1.5)),
+        other => panic!("unknown prompt fixture {other:?} — add it to render_prompt"),
+    };
+    console.render_to_string(&text)
+}
+
+/// The question line each prompt prints, checked against upstream — including
+/// the `prompt.choices` / `prompt.default` styles and where the spaces fall.
+#[test]
+fn prompt_parity() {
+    let data = include_str!("golden/prompts.tsv");
+    let console = truecolor_console(80);
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(2, '\t');
+        let name = parts.next().unwrap_or("");
+        let expected = unescape(
+            parts
+                .next()
+                .unwrap_or_else(|| panic!("line {}: missing expected", index + 1)),
+        );
+        assert_eq!(
+            render_prompt(&console, name),
+            expected,
+            "prompt case {name:?} (line {}) diverged from upstream rich",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert!(checked > 0, "no prompt cases were checked");
+}
+
+/// Build the result of a `text_ops.tsv` fixture `name`. Must stay in sync with
+/// `TEXT_OPS_CASES` in `scripts/capture_golden.py`.
+fn build_text_op(name: &str) -> Vec<Text> {
+    // The style strings go through as names, exactly as the capture script hands
+    // them to Python's `Text.stylize` — no parse step on either side.
+    let styled = |plain: &str, spans: &[(&str, usize, usize)]| {
+        let mut text = Text::new(plain);
+        for (style, start, end) in spans {
+            text.stylize(*style, *start, *end);
+        }
+        text
+    };
+    // Run `mutate` on a text and return it as the single result piece.
+    let mutated = |mut text: Text, mutate: &dyn Fn(&mut Text)| {
+        mutate(&mut text);
+        vec![text]
+    };
+    match name {
+        "divide" => styled("hello world", &[("bold", 0, 5), ("red", 6, 11)]).divide(&[5]),
+        "divide_span_across" => styled("abcdefgh", &[("bold", 2, 7)]).divide(&[4]),
+        "split_newline" => styled("one\ntwo\nthree", &[("bold", 4, 7)]).split("\n", false, false),
+        "split_include" => styled("one\ntwo\nthree", &[("bold", 4, 7)]).split("\n", true, false),
+        "split_trailing" => Text::new("one\ntwo\n").split("\n", false, false),
+        "split_trailing_blank" => Text::new("one\ntwo\n").split("\n", false, true),
+        "split_absent" => Text::new("no separator here").split("|", false, false),
+        "split_word" => styled("a-b-c", &[("bold", 2, 3)]).split("-", false, false),
+        "pad" => mutated(styled("hi", &[("bold", 0, 2)]), &|t| t.pad(3, ' ')),
+        "pad_left" => mutated(styled("hi", &[("bold", 0, 2)]), &|t| t.pad_left(3, '.')),
+        "pad_right" => mutated(styled("hi", &[("bold", 0, 2)]), &|t| t.pad_right(3, '.')),
+        "right_crop" => mutated(styled("hello world", &[("bold", 3, 9)]), &|t| {
+            t.right_crop(4)
+        }),
+        "rstrip" => mutated(styled("hi there   ", &[("bold", 0, 2)]), &|t| t.rstrip()),
+        "rstrip_end_partial" => mutated(Text::new("hello      "), &|t| t.rstrip_end(8)),
+        "rstrip_end_noop" => mutated(Text::new("hi   "), &|t| t.rstrip_end(10)),
+        "expand_tabs" => mutated(Text::new("a\tb\tc"), &|t| t.expand_tabs(4)),
+        "expand_tabs_span_across_tabs" => {
+            mutated(styled("a\tb\tc", &[("bold", 0, 5)]), &|t| t.expand_tabs(4))
+        }
+        "expand_tabs_styled" => mutated(styled("a\tb", &[("bold", 0, 2)]), &|t| t.expand_tabs(8)),
+        "expand_tabs_multiline" => mutated(Text::new("ab\tc\nd\te"), &|t| t.expand_tabs(4)),
+        "join" => vec![Text::new(", ").join(&[
+            Text::new("a"),
+            styled("b", &[("bold", 0, 1)]),
+            Text::new("c"),
+        ])],
+        "join_styled_sep" => {
+            vec![styled(" | ", &[("red", 0, 3)]).join(&[Text::new("x"), Text::new("y")])]
+        }
+        "join_empty_sep" => vec![Text::new("").join(&[Text::new("a"), Text::new("b")])],
+        "highlight_words" => mutated(Text::new("the cat sat on the mat"), &|t| {
+            t.highlight_words(&["cat", "mat"], "bold red", true)
+                .expect("valid pattern");
+        }),
+        "highlight_words_nocase" => mutated(Text::new("Cat cat CAT"), &|t| {
+            t.highlight_words(&["cat"], "bold", false)
+                .expect("valid pattern");
+        }),
+        "highlight_regex" => mutated(Text::new("abc 123 def 456"), &|t| {
+            t.highlight_regex(r"\d+", Some("bold cyan".into()), "")
+                .expect("valid pattern");
+        }),
+        other => panic!("unknown text-op fixture {other:?} — add it to build_text_op"),
+    }
+}
+
+/// `Text` manipulation — split, divide, padding, cropping, tab expansion,
+/// joining and highlighting — checked against upstream. Rendering each result
+/// pins the plain text, the span boundaries and the styles at once.
+#[test]
+fn text_ops_parity() {
+    let data = include_str!("golden/text_ops.tsv");
+    let console = truecolor_console(80);
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(2, '\t');
+        let name = parts.next().unwrap_or("");
+        let expected = unescape(
+            parts
+                .next()
+                .unwrap_or_else(|| panic!("line {}: missing expected", index + 1)),
+        );
+        let got = build_text_op(name)
+            .iter()
+            .map(|piece| console.render_to_string(piece))
+            .collect::<Vec<_>>()
+            .join("\x1f");
+        assert_eq!(
+            got,
+            expected,
+            "text-op case {name:?} (line {}) diverged from upstream rich",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert!(checked > 0, "no text-op cases were checked");
+}
+
+/// Build the `Text` matching an `overflow.tsv` fixture `name`. Must stay in sync
+/// with `OVERFLOW_CASES` in `scripts/capture_golden.py`.
+fn build_overflow_text(name: &str) -> Text {
+    let span = |plain: &str, style: &str, start: usize, end: usize| {
+        let mut text = Text::new(plain);
+        text.stylize(style, start, end);
+        text
+    };
+    match name {
+        "fold_long_word" | "crop_long_word" | "ellipsis_long_word" | "ignore_long_word" => {
+            Text::new("supercalifragilistic")
+        }
+        "fold_sentence" | "crop_sentence" | "ellipsis_sentence" | "ignore_sentence" => {
+            Text::new("the quick brown fox jumps")
+        }
+        "nowrap_fold" | "nowrap_crop" | "nowrap_ellipsis" | "nowrap_ignore" => {
+            Text::new("the quick brown fox")
+        }
+        "nowrap_multiline" => Text::new("first line here\nsecond line here"),
+        "wide_crop" | "wide_ellipsis" | "wide_ellipsis_exact" => Text::new("aa你好世"),
+        "ellipsis_in_span" => span("abcdefgh", "bold", 2, 5),
+        "ellipsis_at_span_start" => span("aaaabbbb", "bold red", 4, 8),
+        "ellipsis_after_span" => span("aaaabbbb", "bold red", 0, 4),
+        "crop_exact_width" | "ellipsis_exact_width" | "ellipsis_width_one" => Text::new("hello"),
+        other => panic!("unknown overflow fixture {other:?} — add it to build_overflow_text"),
+    }
+}
+
+/// `Text` overflow handling, checked against upstream end to end: wrapping (which
+/// only folds under `fold`), justification, the per-line truncate, and the
+/// console-level crop that `ignore` depends on to stay inside the terminal.
+#[test]
+fn overflow_parity() {
+    let data = include_str!("golden/overflow.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(5, '\t');
+        let name = parts.next().unwrap_or("");
+        let mut field = |what: &str| {
+            parts
+                .next()
+                .unwrap_or_else(|| panic!("line {}: missing {what}", index + 1))
+                .to_string()
+        };
+        let width: usize = field("width").parse().expect("width must be a number");
+        let overflow = match field("overflow").as_str() {
+            "fold" => Overflow::Fold,
+            "crop" => Overflow::Crop,
+            "ellipsis" => Overflow::Ellipsis,
+            "ignore" => Overflow::Ignore,
+            other => panic!("line {}: unknown overflow {other:?}", index + 1),
+        };
+        let no_wrap = field("no_wrap") == "true";
+        let expected = unescape(&field("expected"));
+
+        let text = build_overflow_text(name)
+            .overflow(overflow)
+            .no_wrap(no_wrap);
+        let got = truecolor_console(width).render_export(&text);
+        assert_eq!(
+            got,
+            expected,
+            "overflow case {name:?} (line {}) diverged from upstream rich",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert!(checked > 0, "no overflow cases were checked");
+}
+
+/// The bundled terminal-theme palettes, checked against upstream. Each theme is
+/// 18 colour triplets typed by hand, so this is the difference between a typo
+/// failing the build and it quietly shifting every exported colour.
+#[test]
+fn terminal_theme_parity() {
+    use rich::terminal_theme::TerminalTheme;
+    use rich::{DEFAULT_TERMINAL_THEME, DIMMED_MONOKAI, MONOKAI, NIGHT_OWLISH, SVG_EXPORT_THEME};
+    use serde_json::Value;
+
+    fn lookup(name: &str) -> &'static TerminalTheme {
+        match name {
+            "DEFAULT_TERMINAL_THEME" => &DEFAULT_TERMINAL_THEME,
+            "MONOKAI" => &MONOKAI,
+            "DIMMED_MONOKAI" => &DIMMED_MONOKAI,
+            "NIGHT_OWLISH" => &NIGHT_OWLISH,
+            "SVG_EXPORT_THEME" => &SVG_EXPORT_THEME,
+            other => panic!("no binding for theme {other:?}"),
+        }
+    }
+
+    let data = include_str!("golden/themes.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let (name, payload) = line
+            .split_once('\t')
+            .unwrap_or_else(|| panic!("line {}: expected name<TAB>json", index + 1));
+        let expected: Value = serde_json::from_str(payload)
+            .unwrap_or_else(|e| panic!("line {}: bad json: {e}", index + 1));
+        let theme = lookup(name);
+
+        let triplet = |c: &rich::color::ColorTriplet| vec![c.red, c.green, c.blue];
+        let as_vec = |v: &Value| -> Vec<u8> {
+            v.as_array()
+                .expect("rgb array")
+                .iter()
+                .map(|n| n.as_u64().expect("channel") as u8)
+                .collect()
+        };
+
+        assert_eq!(
+            triplet(&theme.background),
+            as_vec(&expected["background"]),
+            "{name}: background diverged"
+        );
+        assert_eq!(
+            triplet(&theme.foreground),
+            as_vec(&expected["foreground"]),
+            "{name}: foreground diverged"
+        );
+        let expected_ansi = expected["ansi"].as_array().expect("ansi array");
+        assert_eq!(expected_ansi.len(), 16, "{name}: expected 16 ANSI colours");
+        for (slot, want) in expected_ansi.iter().enumerate() {
+            assert_eq!(
+                triplet(&theme.ansi[slot]),
+                as_vec(want),
+                "{name}: ANSI colour {slot} diverged"
+            );
+        }
+        checked += 1;
+    }
+    assert_eq!(checked, 5, "expected all five bundled themes");
 }
 
 /// Pure functions — cell widths and ratio resolution — checked against

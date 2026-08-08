@@ -149,7 +149,12 @@ impl Color {
             let triplet = parse_hex(hex)
                 .ok_or_else(|| RichError::ColorParse(format!("invalid hex color {original:?}")))?;
             return Ok(Color {
-                name: original.to_string(),
+                // Lowercased, matching upstream's `color.lower().strip()`. The
+                // name is what `Style::definition` prints, so keeping the
+                // original case would stop `on #FF0000` normalizing to
+                // `on #ff0000` — and then a mixed-case open/close tag pair would
+                // no longer match.
+                name: lower.clone(),
                 kind: ColorType::Truecolor,
                 number: None,
                 triplet: Some(triplet),
@@ -159,7 +164,12 @@ impl Color {
             let triplet = parse_rgb(inner)
                 .ok_or_else(|| RichError::ColorParse(format!("invalid rgb color {original:?}")))?;
             return Ok(Color {
-                name: original.to_string(),
+                // Lowercased, matching upstream's `color.lower().strip()`. The
+                // name is what `Style::definition` prints, so keeping the
+                // original case would stop `on #FF0000` normalizing to
+                // `on #ff0000` — and then a mixed-case open/close tag pair would
+                // no longer match.
+                name: lower.clone(),
                 kind: ColorType::Truecolor,
                 number: None,
                 triplet: Some(triplet),
@@ -181,7 +191,12 @@ impl Color {
             // Numbers < 16 are standard SGR colors; the rest are 8-bit palette
             // (matching `Color.parse`'s `color_8` branch).
             return Ok(Color {
-                name: original.to_string(),
+                // Lowercased, matching upstream's `color.lower().strip()`. The
+                // name is what `Style::definition` prints, so keeping the
+                // original case would stop `on #FF0000` normalizing to
+                // `on #ff0000` — and then a mixed-case open/close tag pair would
+                // no longer match.
+                name: lower.clone(),
                 kind: if n < 16 {
                     ColorType::Standard
                 } else {

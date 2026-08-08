@@ -11,14 +11,16 @@
 //! `@`-tags (meta/handlers) apply no visible style.
 
 use crate::errors::{Result, RichError};
-use crate::style::Style;
+use crate::style::{Style, StyleType};
 use crate::text::{Span, Text};
-use crate::theme::Theme;
 
 struct RawSpan {
     start: usize,
     end: usize,
-    tag: String,
+    /// The tag's normalized name, e.g. `bold` for `[b]`.
+    name: String,
+    /// Anything after the first `=`, e.g. the URL of `[link=https://…]`.
+    parameters: Option<String>,
 }
 
 /// Whether `c` may start a markup tag (upstream's `[a-z#/@]` class).
@@ -68,10 +70,17 @@ pub fn escape(markup: &str) -> String {
 }
 
 /// Parse `markup` into styled [`Text`].
-pub fn render(markup: &str, theme: &Theme) -> Result<Text> {
+///
+/// Tag names are stored unresolved on the spans, so the returned `Text` renders
+/// in whichever theme prints it. The `Result` therefore reports only genuine
+/// *syntax* errors — an unmatched or mismatched closing tag. An unknown tag
+/// *name* is not an error: it renders as a no-op, as it does upstream.
+pub fn render(markup: &str) -> Result<Text> {
     let mut plain = String::new();
     let mut raw_spans: Vec<RawSpan> = Vec::new();
-    let mut stack: Vec<(String, usize)> = Vec::new();
+    // Open tags, as `(normalized name, parameters, start offset)`. The name is
+    // normalized on the way in so that `[b]…[/bold]` matches, as upstream does.
+    let mut stack: Vec<(String, Option<String>, usize)> = Vec::new();
 
     let bytes = markup.as_bytes();
     let mut chars = markup.char_indices().peekable();
@@ -101,37 +110,46 @@ pub fn render(markup: &str, theme: &Theme) -> Result<Text> {
                     plain.push_str(&tag);
                     continue;
                 }
-                if let Some(name) = tag.strip_prefix('/') {
+                // Everything after the first `=` is the tag's parameters, not
+                // part of its name — so `[link=url]` closes with `[/link]`.
+                let (tag_name, parameters) = match tag.split_once('=') {
+                    Some((name, params)) => (name.to_string(), Some(params.to_string())),
+                    None => (tag.clone(), None),
+                };
+
+                if let Some(name) = tag_name.strip_prefix('/') {
                     let name = name.trim();
                     let end = plain.len();
-                    if name.is_empty() {
+                    let (open_name, open_parameters, start) = if name.is_empty() {
                         // Auto-close: pop the most recent open tag, or error.
-                        let (open_tag, start) = stack.pop().ok_or_else(|| {
+                        stack.pop().ok_or_else(|| {
                             RichError::Markup(format!(
                                 "closing tag '[/]' at position {i} has nothing to close"
                             ))
-                        })?;
-                        raw_spans.push(RawSpan {
-                            start,
-                            end,
-                            tag: open_tag,
-                        });
+                        })?
                     } else {
-                        // Explicit close: must match an open tag of the same name.
-                        let pos = stack.iter().rposition(|(t, _)| t == name).ok_or_else(|| {
-                            RichError::Markup(format!(
+                        // Explicit close. Both sides are normalized first, so
+                        // `[b]…[/bold]` matches — upstream normalizes the open
+                        // tag's name on push and the close name here.
+                        let wanted = Style::normalize(name);
+                        let pos = stack
+                            .iter()
+                            .rposition(|(open, _, _)| *open == wanted)
+                            .ok_or_else(|| {
+                                RichError::Markup(format!(
                                 "closing tag '[/{name}]' at position {i} doesn't match any open tag"
                             ))
-                        })?;
-                        let (open_tag, start) = stack.remove(pos);
-                        raw_spans.push(RawSpan {
-                            start,
-                            end,
-                            tag: open_tag,
-                        });
-                    }
+                            })?;
+                        stack.remove(pos)
+                    };
+                    raw_spans.push(RawSpan {
+                        start,
+                        end,
+                        name: open_name,
+                        parameters: open_parameters,
+                    });
                 } else {
-                    stack.push((tag, plain.len()));
+                    stack.push((Style::normalize(&tag_name), parameters, plain.len()));
                 }
             }
             _ => plain.push(c),
@@ -140,29 +158,55 @@ pub fn render(markup: &str, theme: &Theme) -> Result<Text> {
 
     // Auto-close anything still open (lenient — see module docs).
     let end = plain.len();
-    while let Some((open_tag, start)) = stack.pop() {
+    while let Some((open_name, open_parameters, start)) = stack.pop() {
         raw_spans.push(RawSpan {
             start,
             end,
-            tag: open_tag,
+            name: open_name,
+            parameters: open_parameters,
         });
     }
 
-    // Resolve tag strings to styles.
+    // Carry tag strings through as names — the theme of whichever console
+    // renders this text resolves them. Resolving here instead would freeze the
+    // colours at parse time and make an unknown tag an error rather than the
+    // no-op upstream produces.
     let mut spans: Vec<Span> = Vec::with_capacity(raw_spans.len());
     for raw in raw_spans {
         if raw.start >= raw.end {
             continue;
         }
-        let style = resolve(&raw.tag, theme)?;
+        // `@`-prefixed tags are meta/handler tags (spans of app data). We don't
+        // model those, so they carry no styling — stated explicitly rather than
+        // left to fall out of a failed parse.
+        let style = if raw.name.starts_with('@') {
+            StyleType::Style(Style::new())
+        } else {
+            // Upstream's `str(Tag)`: the name, or `"{name} {parameters}"`. That
+            // is what turns `[link=https://x]` into the style `link https://x`,
+            // which `Style::parse` then understands.
+            StyleType::Name(match &raw.parameters {
+                Some(parameters) => format!("{} {}", raw.name, parameters),
+                None => raw.name.clone(),
+            })
+        };
         spans.push(Span {
             start: raw.start,
             end: raw.end,
             style,
         });
     }
-    // Outer spans first so that inner (more nested) spans win when combined.
-    spans.sort_by(|a, b| a.start.cmp(&b.start).then(b.end.cmp(&a.end)));
+    // Outer spans first, so inner (more nested) spans are combined last and win.
+    //
+    // Upstream is `sorted(spans[::-1], key=attrgetter("start"))`, and both halves
+    // matter. Spans are pushed in *closing* order, innermost first, so the
+    // reverse puts the outermost first; the sort then keys on `start` **only**,
+    // and being stable it preserves that reversal for ties. Sorting by
+    // `(start, end desc)` instead looks equivalent but is not: two tags covering
+    // the exact same range compare Equal, the innermost stays first, and the
+    // outer tag ends up winning. `[red][blue]x[/][/]` must render blue.
+    spans.reverse();
+    spans.sort_by_key(|span| span.start);
 
     let mut text = Text::new(plain);
     for span in spans {
@@ -171,31 +215,15 @@ pub fn render(markup: &str, theme: &Theme) -> Result<Text> {
     Ok(text)
 }
 
-/// Resolve a tag to a [`Style`]: a theme name if known, else an inline spec.
-///
-/// `@`-prefixed tags are meta/handler tags (links, spans of app data); we don't
-/// model those, so they contribute a null style — matching upstream, where they
-/// carry no visible styling.
-fn resolve(tag: &str, theme: &Theme) -> Result<Style> {
-    let trimmed = tag.trim();
-    if trimmed.starts_with('@') {
-        return Ok(Style::new());
-    }
-    if let Some(style) = theme.get(trimmed) {
-        return Ok(style.clone());
-    }
-    Style::parse(trimmed)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::color::ColorSystem;
+    use crate::theme::Theme;
 
     fn render_to_ansi(markup: &str) -> String {
-        let theme = Theme::default_theme();
-        let text = render(markup, &theme).unwrap();
-        let segments = text.render(&Style::new(), Some(ColorSystem::Truecolor));
+        let text = render(markup).unwrap();
+        let segments = text.render(&Theme::default_theme(), &Style::new());
         segments
             .iter()
             .map(|s| {
@@ -224,8 +252,7 @@ mod tests {
 
     #[test]
     fn escaped_bracket_is_literal() {
-        let theme = Theme::default_theme();
-        let text = render("\\[not a tag]", &theme).unwrap();
+        let text = render("\\[not a tag]").unwrap();
         assert_eq!(text.plain(), "[not a tag]");
     }
 
@@ -250,12 +277,8 @@ mod tests {
     #[test]
     fn bracket_is_literal_unless_tag_start() {
         // Upstream only treats `[a-z#/@]`-led brackets as tags.
-        let theme = Theme::default_theme();
-        assert_eq!(
-            render("[Hello] world", &theme).unwrap().plain(),
-            "[Hello] world"
-        );
-        assert_eq!(render("[42] x", &theme).unwrap().plain(), "[42] x");
+        assert_eq!(render("[Hello] world").unwrap().plain(), "[Hello] world");
+        assert_eq!(render("[42] x").unwrap().plain(), "[42] x");
     }
 
     #[test]
@@ -270,12 +293,11 @@ mod tests {
 
     #[test]
     fn unmatched_closing_tags_error() {
-        let theme = Theme::default_theme();
-        assert!(render("a[/]b", &theme).is_err());
-        assert!(render("[bold]a[/red]", &theme).is_err());
-        assert!(render("x[/red]y", &theme).is_err());
+        assert!(render("a[/]b").is_err());
+        assert!(render("[bold]a[/red]").is_err());
+        assert!(render("x[/red]y").is_err());
         // Unclosed *opening* tags are auto-closed, not an error.
-        assert!(render("[bold]hi", &theme).is_ok());
+        assert!(render("[bold]hi").is_ok());
     }
 
     #[test]
@@ -286,7 +308,6 @@ mod tests {
         assert_eq!(escape("trailing\\"), "trailing\\\\");
         assert_eq!(escape("[Hello]"), "[Hello]"); // not a tag → unchanged
                                                   // Escaped markup round-trips to the literal text.
-        let theme = Theme::default_theme();
-        assert_eq!(render(&escape("[bold]"), &theme).unwrap().plain(), "[bold]");
+        assert_eq!(render(&escape("[bold]")).unwrap().plain(), "[bold]");
     }
 }

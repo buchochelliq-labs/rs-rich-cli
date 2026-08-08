@@ -74,7 +74,7 @@ impl Spinner {
             Text::new(format!("{frame} {}", self.text))
         };
         if let Some(style) = &self.style {
-            text.stylize(0, frame.len(), style.clone());
+            text.stylize(style.clone(), 0, frame.len());
         }
         text
     }

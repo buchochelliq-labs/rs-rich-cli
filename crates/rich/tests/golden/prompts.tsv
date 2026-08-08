@@ -1,0 +1,22 @@
+# Golden parity fixtures for prompts — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py  (see AGENTS.md → Parity)
+#
+# Format: <name>\t<expected-ansi>
+#
+# Each row is `make_prompt(default)` rendered at width 80 — the question line as
+# the user sees it, including the `prompt.choices` and `prompt.default` styles.
+# Reading the answer is not captured here; that half is covered by unit tests
+# driving a scripted input source.
+prompt_plain	Name: 
+prompt_default	Name \x1b[1;36m(World)\x1b[0m: 
+prompt_markup	\x1b[1mName\x1b[0m: 
+prompt_choices	Pick \x1b[1;35m[a/b]\x1b[0m: 
+prompt_choices_default	Pick \x1b[1;35m[a/b]\x1b[0m \x1b[1;36m(a)\x1b[0m: 
+prompt_no_show_choices	Pick \x1b[1;36m(a)\x1b[0m: 
+prompt_no_show_default	Pick \x1b[1;35m[a/b]\x1b[0m: 
+confirm_plain	Sure \x1b[1;35m[y/n]\x1b[0m: 
+confirm_default_true	Sure \x1b[1;35m[y/n]\x1b[0m \x1b[1;36m(y)\x1b[0m: 
+confirm_default_false	Sure \x1b[1;35m[y/n]\x1b[0m \x1b[1;36m(n)\x1b[0m: 
+int_plain	Age: 
+int_default	Age \x1b[1;36m(42)\x1b[0m: 
+float_default	Ratio \x1b[1;36m(1.5)\x1b[0m: 

@@ -51,6 +51,61 @@ fn attribute_index(word: &str) -> Option<usize> {
     ATTR_NAMES.iter().position(|&n| n == canonical)
 }
 
+/// A style, or the *name* of one to be looked up later. Port of upstream's
+/// `StyleType = Union[str, "Style"]` (`rich/style.py`).
+///
+/// A [`Span`](crate::text::Span) that holds a [`Name`](StyleType::Name) is
+/// resolved when it is rendered, against the theme of the console doing the
+/// rendering — so the same [`Text`](crate::text::Text) printed to two differently
+/// themed consoles comes out in two different colours, as it does upstream.
+/// Resolving eagerly instead would freeze the colours at construction time.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StyleType {
+    /// A theme key (`"repr.number"`) or a style definition (`"bold red"`),
+    /// resolved by [`Theme::get_style`](crate::theme::Theme::get_style).
+    Name(String),
+    /// An already-resolved style.
+    Style(Style),
+}
+
+impl Default for StyleType {
+    fn default() -> Self {
+        StyleType::Style(Style::new())
+    }
+}
+
+impl StyleType {
+    /// True when this is an already-resolved style that sets nothing. A
+    /// [`Name`](StyleType::Name) is never null — it may resolve to anything.
+    pub fn is_null_style(&self) -> bool {
+        matches!(self, StyleType::Style(style) if style.is_null())
+    }
+}
+
+impl From<Style> for StyleType {
+    fn from(style: Style) -> Self {
+        StyleType::Style(style)
+    }
+}
+
+impl From<&Style> for StyleType {
+    fn from(style: &Style) -> Self {
+        StyleType::Style(style.clone())
+    }
+}
+
+impl From<String> for StyleType {
+    fn from(name: String) -> Self {
+        StyleType::Name(name)
+    }
+}
+
+impl From<&str> for StyleType {
+    fn from(name: &str) -> Self {
+        StyleType::Name(name.to_string())
+    }
+}
+
 /// A terminal text style. Mirrors `rich.style.Style`.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Style {
@@ -129,10 +184,61 @@ impl Style {
             && self.attrs.iter().all(Option::is_none)
     }
 
+    /// Regenerate the style definition string. Port of `Style.__str__`.
+    ///
+    /// Attributes come first in their canonical order, then the foreground
+    /// colour, then `on <bgcolour>`, then `link <url>`. A style that sets nothing
+    /// is `"none"` — never the empty string, which upstream reserves for "no
+    /// style at all".
+    pub fn definition(&self) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        for (index, name) in ATTR_NAMES.iter().enumerate() {
+            match self.attrs[index] {
+                Some(true) => parts.push((*name).to_string()),
+                Some(false) => parts.push(format!("not {name}")),
+                None => {}
+            }
+        }
+        if let Some(color) = &self.color {
+            parts.push(color.name.clone());
+        }
+        if let Some(bgcolor) = &self.bgcolor {
+            parts.push("on".to_string());
+            parts.push(bgcolor.name.clone());
+        }
+        if let Some(link) = &self.link {
+            parts.push("link".to_string());
+            parts.push(link.clone());
+        }
+        if parts.is_empty() {
+            "none".to_string()
+        } else {
+            parts.join(" ")
+        }
+    }
+
+    /// Canonicalise a style definition so that definitions with the same effect
+    /// have the same string. Port of `Style.normalize`.
+    ///
+    /// A definition that parses round-trips through [`definition`](Self::definition),
+    /// so `"b"` and `"BOLD"` both become `"bold"`. One that does not parse is
+    /// merely trimmed and lowercased — that is the path a *theme name* like
+    /// `"repr.number"` takes, and it is why theme lookups are effectively
+    /// case-insensitive on the markup side while [`Theme::get_style`] itself is
+    /// case-sensitive.
+    ///
+    /// [`Theme::get_style`]: crate::theme::Theme::get_style
+    pub fn normalize(definition: &str) -> String {
+        match Style::parse(definition) {
+            Ok(style) => style.definition(),
+            Err(_) => definition.trim().to_lowercase(),
+        }
+    }
+
     /// Parse a style definition such as `"bold red on blue"`.
     ///
-    /// Port of `Style.parse` covering attributes, `not <attr>`, and
-    /// `<color> on <color>`. (`link`/`meta` are deferred — see DIVERGENCES.)
+    /// Port of `Style.parse` covering attributes, `not <attr>`, `link <url>`, and
+    /// `<color> on <color>`. (`meta` is deferred — see DIVERGENCES.)
     pub fn parse(definition: &str) -> Result<Self> {
         // Port of upstream's leading guard:
         //     if style_definition.strip() == "none" or not style_definition
@@ -158,13 +264,23 @@ impl Style {
                     let attr_word = words.next().ok_or_else(|| {
                         RichError::StyleSyntax("attribute expected after 'not'".to_string())
                     })?;
-                    let idx =
-                        attribute_index(&attr_word.to_ascii_lowercase()).ok_or_else(|| {
-                            RichError::StyleSyntax(format!(
-                                "{attr_word:?} is not a recognized attribute"
-                            ))
-                        })?;
+                    // Deliberately NOT lowercased: upstream folds case only on
+                    // the loop word, and looks the `not` operand up verbatim —
+                    // so `"not BOLD"` is a syntax error there, and must be here.
+                    let idx = attribute_index(attr_word).ok_or_else(|| {
+                        RichError::StyleSyntax(format!(
+                            "{attr_word:?} is not a recognized attribute"
+                        ))
+                    })?;
                     style.attrs[idx] = Some(false);
+                }
+                "link" => {
+                    // A bare `link` is a syntax error upstream, not an empty
+                    // link — accepting it would emit a hyperlink to nowhere.
+                    let url = words.next().filter(|url| !url.is_empty()).ok_or_else(|| {
+                        RichError::StyleSyntax("URL expected after 'link'".to_string())
+                    })?;
+                    style.link = Some(url.to_string());
                 }
                 _ => {
                     if let Some(idx) = attribute_index(&word) {
@@ -336,6 +452,61 @@ impl Style {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `normalize` round-trips a parseable definition through `definition()` and
+    /// merely trims+lowercases one that isn't. Every expectation here was taken
+    /// from real rich 15.0.0's `Style.normalize`.
+    #[test]
+    fn normalize_matches_upstream() {
+        for (input, expected) in [
+            ("b", "bold"),
+            ("bold", "bold"),
+            ("BOLD", "bold"),
+            ("  Bold  ", "bold"),
+            ("dim i", "dim italic"),
+            ("not bold", "not bold"),
+            ("bold red", "bold red"),
+            ("red on blue", "red on blue"),
+            ("link https://x", "link https://x"),
+            // Not a style definition, so it falls through to trim+lowercase —
+            // this is the path every theme name takes.
+            ("nope", "nope"),
+            ("REPR.Number", "repr.number"),
+            // `not` is case-sensitive upstream, so this fails to parse and takes
+            // the fallback, which happens to produce the same string.
+            ("not BOLD", "not bold"),
+        ] {
+            assert_eq!(Style::normalize(input), expected, "normalize({input:?})");
+        }
+    }
+
+    /// A style that sets nothing renders as `"none"`, never as an empty string.
+    #[test]
+    fn definition_of_null_style_is_none() {
+        assert_eq!(Style::new().definition(), "none");
+        assert_eq!(Style::parse("none").unwrap().definition(), "none");
+    }
+
+    /// `not <attr>` is case-sensitive, matching upstream, which looks the operand
+    /// up without folding and raises when it misses. Accepting `not BOLD` would
+    /// silently *cancel* an enclosing bold instead of being ignored.
+    #[test]
+    fn not_operand_is_case_sensitive() {
+        assert!(Style::parse("not bold").is_ok());
+        assert!(Style::parse("not BOLD").is_err());
+    }
+
+    /// `link <url>` is a style keyword, not a colour name. Without it the whole
+    /// definition failed to parse and the hyperlink was silently dropped.
+    #[test]
+    fn parse_understands_link() {
+        let style = Style::parse("link https://example.com").expect("link parses");
+        assert_eq!(style.link.as_deref(), Some("https://example.com"));
+        assert_eq!(style.definition(), "link https://example.com");
+        // A bare `link` is a syntax error, exactly as upstream — accepting it
+        // would emit a hyperlink to nowhere.
+        assert!(Style::parse("link").is_err());
+    }
 
     #[test]
     fn parse_bold_red() {

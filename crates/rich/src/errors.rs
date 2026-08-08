@@ -17,6 +17,10 @@ pub enum RichError {
     Markup(String),
     /// A JSON string could not be parsed (used by `rich.json.JSON`).
     Json(String),
+    /// A regular expression could not be compiled or run. Python has no rich
+    /// equivalent — it lets `re.error` propagate — but a caller-supplied pattern
+    /// has to fail somewhere, and returning it beats panicking.
+    Regex(String),
 }
 
 impl fmt::Display for RichError {
@@ -26,6 +30,7 @@ impl fmt::Display for RichError {
             RichError::StyleSyntax(msg) => write!(f, "style syntax error: {msg}"),
             RichError::Markup(msg) => write!(f, "markup error: {msg}"),
             RichError::Json(msg) => write!(f, "json parse error: {msg}"),
+            RichError::Regex(msg) => write!(f, "regex error: {msg}"),
         }
     }
 }

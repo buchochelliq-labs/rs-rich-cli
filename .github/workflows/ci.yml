@@ -42,14 +42,14 @@ jobs:
           # rich-art is zero-dependency by default; its image/GIF support is
           # opt-in, and each config compiles different code. `--all-features`
           # rather than naming them, so new features are covered automatically.
-          - crate: rich-art
+          - crate: rs-rich-art
             args: ""
-          - crate: rich-art
+          - crate: rs-rich-art
             args: "--all-features"
           # The CLI must still build without network or image decoders.
-          - crate: rich-cli
+          - crate: rs-rich-cli
             args: "--no-default-features"
-          - crate: rich-cli
+          - crate: rs-rich-cli
             args: "--all-features"
     steps:
       - uses: actions/checkout@v4
@@ -113,7 +113,21 @@ jobs:
 
       - name: Install the pinned upstream rich
         run: |
-          version="$(grep -m1 -A2 '\[rich\]' UPSTREAM.toml | grep version | cut -d'"' -f2)"
+          # Read `version` from within the [rich] section of UPSTREAM.toml.
+          # (The previous `grep -A2` stopped two lines short of it and silently
+          # produced an empty pin, so this job installed nothing and failed on
+          # `rich==`. Empty is now a hard error rather than a confusing one.)
+          version="$(awk '
+            /^\[rich\]$/       { in_section = 1; next }
+            /^\[/              { in_section = 0 }
+            in_section && /^version[[:space:]]*=/ {
+              gsub(/^version[[:space:]]*=[[:space:]]*"|"$/, ""); print; exit
+            }
+          ' UPSTREAM.toml)"
+          if [ -z "$version" ]; then
+            echo "::error::could not read [rich] version from UPSTREAM.toml"
+            exit 1
+          fi
           echo "Pinned rich version: $version"
           python -m pip install "rich==$version"
 
@@ -126,4 +140,4 @@ jobs:
         run: git diff --exit-code crates/rich/tests/golden
 
       - name: Run parity tests
-        run: cargo test -p rich --test golden
+        run: cargo test -p rs-rich --test golden

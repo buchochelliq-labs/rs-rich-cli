@@ -30,19 +30,34 @@ certainly in the wrong place — see [Adding our own features](#adding-our-own-f
 
 ## Versioning
 
-| crate       | version source                              | when it bumps                    |
-|-------------|---------------------------------------------|----------------------------------|
-| `rich`      | **exactly** the upstream `rich` release     | only on an upstream sync         |
-| `rich-cli`  | **exactly** the upstream `rich-cli` release | only on an upstream sync         |
-| `rich-ext`  | independent SemVer (started at `0.1.0`)     | whenever we ship our own changes |
+**Every crate versions independently, by its own SemVer. Started at `0.0.1`.**
 
-- The pinned upstream refs live in [`UPSTREAM.toml`](UPSTREAM.toml). The crate
-  `version` and the pin are updated **together**, only during a sync.
-- **Never** bump `crates/rich`'s version to ship one of our features. Features go
-  in `rich-ext`, which versions on its own. This is what keeps "our version number
-  == the rich feature set you get" true.
-- `rich` and `rich-cli` version *independently* — they are different upstream
-  projects (today: `rich` 15.0.0, `rich-cli` 1.8.1).
+| crate          | version source    | when it bumps                          |
+|----------------|-------------------|----------------------------------------|
+| `rs-rich`      | independent SemVer | whenever we ship anything              |
+| `rs-rich-cli`  | independent SemVer | whenever we ship anything              |
+| `rs-rich-ext`  | independent SemVer | whenever we ship anything              |
+| `rs-rich-art`  | independent SemVer | whenever we ship anything              |
+
+### Why not mirror the upstream version?
+
+The port originally set `crates/rich`'s version to the upstream `rich` version it
+mirrored, so the number told you which feature set you got. That policy does not
+survive contact with crates.io, and it was dropped before the first release:
+
+- Publishing as `15.0.0` claims a stable API with fourteen majors behind it. This
+  is a young Rust API that still takes breaking changes regularly.
+- The first breaking change would force `16.0.0` — and then upstream `rich` 16
+  lands and the number can no longer mirror anything. The policy breaks on its
+  first real use.
+
+**Which upstream release we track now lives in [`UPSTREAM.toml`](UPSTREAM.toml)
+only**, and is restated in the README. That file is still the source of truth for
+a sync, and it is still updated as part of one — it just no longer drives a crate
+version.
+
+- **Never** bump a mirror crate to ship one of *our* features. Features still go
+  in `rich-ext`. The mirror/ext boundary is unchanged; only the numbering is.
 
 ---
 
