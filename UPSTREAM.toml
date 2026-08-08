@@ -2,8 +2,12 @@
 #
 # Each crate that MIRRORS an upstream project records the exact release it
 # currently reflects. An upstream sync is a diff between the pinned ref here and
-# the new release tag (see the `sync-upstream` skill). Update this file — and the
-# corresponding crate `version` — only as part of a sync.
+# the new release tag (see the `sync-upstream` skill).
+#
+# This file is the ONLY record of which upstream release we track. Crate versions
+# are independent SemVer and deliberately do NOT mirror these numbers — see
+# AGENTS.md → Versioning for why. Update the pins here as part of a sync; bump
+# crate versions on their own schedule.
 
 [rich]
 # Mirrored by: crates/rich

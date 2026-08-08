@@ -90,7 +90,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
 | `_loop.py`, `_pick.py`, `_stack.py`, `_timer.py` | internal helpers | ⬜ |
 | `_export_format.py`, `Console.export_html` | `export.rs` | 🟡 | ✅ |
 
-## `rich-cli` (tool, versions separately — 1.8.1)
+## `rich-cli` (tool — tracks upstream 1.8.1, see UPSTREAM.toml)
 
 | upstream feature | rust `crates/rich-cli/src/…` | status |
 |------------------|------------------------------|:------:|

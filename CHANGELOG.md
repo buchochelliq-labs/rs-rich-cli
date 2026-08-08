@@ -5,6 +5,30 @@ entries here note which upstream release was absorbed and what our own crates di
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.0.1] — first release
+
+The first published version of all four crates: `rs-rich`, `rs-rich-ext`,
+`rs-rich-cli`, `rs-rich-art`.
+
+**Read the version number literally.** `0.0.1` is not modesty — the API takes
+breaking changes regularly (three in the week before this release), and the port
+is deliberately incomplete. What is implemented is byte-parity tested against
+real Python `rich` 15.0.0; what isn't is listed in the README and
+`docs/PORTING.md`, and what deliberately differs is in `docs/DIVERGENCES.md`.
+
+Two things worth knowing up front:
+
+- **Package names carry an `rs-` prefix** because `rich` is taken on crates.io.
+  The library targets keep the short names, so you write `use rich::…`, and the
+  CLI's binary is still `rich`.
+- **Crate versions are independent SemVer and do not mirror the upstream release.**
+  Which upstream version is tracked lives in `UPSTREAM.toml`. An earlier policy
+  mirrored the number; it was dropped before release because publishing a young
+  API as `15.0.0` would have been a lie, and the first breaking change would have
+  collided with upstream's next major.
+
+Everything below this heading is the development history that led here.
+
 ## [Unreleased]
 
 ### Fixed

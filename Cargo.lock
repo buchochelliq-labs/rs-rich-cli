@@ -445,7 +445,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich"
-version = "15.0.0"
+version = "0.0.1"
 dependencies = [
  "fancy-regex 0.18.0",
  "pulldown-cmark",
@@ -457,7 +457,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-art"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "image",
  "rs-rich",
@@ -465,7 +465,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-cli"
-version = "1.8.1"
+version = "0.0.1"
 dependencies = [
  "rs-rich",
  "rs-rich-art",
@@ -476,7 +476,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-ext"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "rs-rich",
 ]

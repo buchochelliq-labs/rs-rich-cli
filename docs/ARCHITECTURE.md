@@ -1,18 +1,20 @@
 # Architecture
 
-A three-crate Cargo workspace with a strict, one-directional dependency rule.
+A four-crate Cargo workspace with a strict, one-directional dependency rule.
+All crates are at `0.0.1` and version independently (see AGENTS.md → Versioning).
 
 ```
 ┌────────────┐     ┌────────────┐     ┌───────────────────────────┐
 │  rich-cli  │ ──▶ │  rich-ext  │ ──▶ │  rich (faithful core)     │
-│  (binary)  │     │ (our code) │     │  mirrors upstream `rich`  │
-│  = 1.8.1   │     │  = 0.1.0   │     │  = 15.0.0                 │
+│  (bin:rich)│     │ (our code) │     │  mirrors upstream `rich`  │
+│  rs-rich-  │     │  rs-rich-  │     │  rs-rich (crates.io name)  │
 └────────────┘     └────────────┘     └───────────────────────────┘
         the arrow never points left ─────────────▶
 ```
 
 - **`crates/rich`** — the faithful port of the Python `rich` *library*. Mirrors
-  upstream module-for-module; version equals the upstream release it reflects.
+  upstream module-for-module. Which upstream release it reflects is recorded in
+  `UPSTREAM.toml`, not in the crate version.
   Depends on nothing in this workspace and knows nothing about the other crates.
 - **`crates/rich-ext`** — everything that is *ours*: extra highlighters,
   renderables, and the internal plugin registry. Independent SemVer. Talks to core
