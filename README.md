@@ -1,5 +1,12 @@
 # rs-rich-cli
 
+[![CI](https://github.com/buchochelliq-labs/rs-rich-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/buchochelliq-labs/rs-rich-cli/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/rs-rich.svg)](https://crates.io/crates/rs-rich)
+[![docs.rs](https://img.shields.io/docsrs/rs-rich)](https://docs.rs/rs-rich)
+[![MSRV](https://img.shields.io/crates/msrv/rs-rich.svg)](https://github.com/buchochelliq-labs/rs-rich-cli#develop)
+[![License](https://img.shields.io/crates/l/rs-rich.svg)](LICENSE)
+[![Docs site](https://img.shields.io/badge/docs-site-blue)](https://buchochelliq-labs.github.io/rs-rich-cli/)
+
 A **Rust port of the Python [`rich`](https://github.com/Textualize/rich)** library
 and the [`rich-cli`](https://github.com/Textualize/rich-cli) tool — for rich text,
 color, and beautiful formatting in the terminal.
@@ -19,14 +26,14 @@ Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
 
 ## Workspace
 
-All four are at `0.0.1`.
+**All four are published on crates.io at `0.0.1`.**
 
-| crate | crates.io | `use` as | what it is |
-|-------|-----------|----------|------------|
-| [`crates/rich`](crates/rich) | `rs-rich` | `rich` | faithful port of the `rich` library |
-| [`crates/rich-ext`](crates/rich-ext) | `rs-rich-ext` | `rich_ext` | our additions + the plugin registry |
-| [`crates/rich-cli`](crates/rich-cli) | `rs-rich-cli` | *(binary `rich`)* | the `rich` command-line tool |
-| [`crates/rich-art`](crates/rich-art) | `rs-rich-art` | `rich_art` | FIGlet text, image→ASCII, animated GIFs |
+| crate | crates.io | docs | `use` as | what it is |
+|-------|-----------|------|----------|------------|
+| [`crates/rich`](crates/rich) | [![rs-rich](https://img.shields.io/crates/v/rs-rich.svg)](https://crates.io/crates/rs-rich) | [docs.rs](https://docs.rs/rs-rich) | `rich` | faithful port of the `rich` library |
+| [`crates/rich-ext`](crates/rich-ext) | [![rs-rich-ext](https://img.shields.io/crates/v/rs-rich-ext.svg)](https://crates.io/crates/rs-rich-ext) | [docs.rs](https://docs.rs/rs-rich-ext) | `rich_ext` | our additions + the plugin registry |
+| [`crates/rich-cli`](crates/rich-cli) | [![rs-rich-cli](https://img.shields.io/crates/v/rs-rich-cli.svg)](https://crates.io/crates/rs-rich-cli) | — *(binary)* | *(binary `rich`)* | the `rich` command-line tool |
+| [`crates/rich-art`](crates/rich-art) | [![rs-rich-art](https://img.shields.io/crates/v/rs-rich-art.svg)](https://crates.io/crates/rs-rich-art) | [docs.rs](https://docs.rs/rs-rich-art) | `rich_art` | FIGlet text, image→ASCII, animated GIFs |
 
 The published package names carry an `rs-` prefix because `rich` is already taken
 on crates.io by an unrelated crate. The library targets keep the short names, so

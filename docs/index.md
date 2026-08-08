@@ -1,5 +1,12 @@
 # rs-rich
 
+[![CI](https://github.com/buchochelliq-labs/rs-rich-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/buchochelliq-labs/rs-rich-cli/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/rs-rich.svg)](https://crates.io/crates/rs-rich)
+[![docs.rs](https://img.shields.io/docsrs/rs-rich)](https://docs.rs/rs-rich)
+[![MSRV](https://img.shields.io/crates/msrv/rs-rich.svg)](https://github.com/buchochelliq-labs/rs-rich-cli#develop)
+[![License](https://img.shields.io/crates/l/rs-rich.svg)](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/LICENSE)
+[![GitHub](https://img.shields.io/badge/github-repo-blue)](https://github.com/buchochelliq-labs/rs-rich-cli)
+
 A Rust port of Python's [`rich`](https://github.com/Textualize/rich) — rich text,
 colour, tables, markdown and progress bars in the terminal — plus a port of the
 [`rich-cli`](https://github.com/Textualize/rich-cli) tool.
@@ -50,6 +57,19 @@ That promise is why the honest bits matter:
     plainly in [Module status](PORTING.md), and what deliberately differs is in
     [Divergences](DIVERGENCES.md) — most notably syntax highlighting, which uses
     `syntect` rather than Pygments and is therefore *not* byte-identical.
+
+## Released crates
+
+All four are published on crates.io at **0.0.1**.
+
+| crate | version | docs | what it is |
+|---|---|---|---|
+| [`rs-rich`](https://crates.io/crates/rs-rich) | [![rs-rich](https://img.shields.io/crates/v/rs-rich.svg)](https://crates.io/crates/rs-rich) | [docs.rs](https://docs.rs/rs-rich) | the library — `use rich::…` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | [![rs-rich-cli](https://img.shields.io/crates/v/rs-rich-cli.svg)](https://crates.io/crates/rs-rich-cli) | — | the `rich` command |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | [![rs-rich-ext](https://img.shields.io/crates/v/rs-rich-ext.svg)](https://crates.io/crates/rs-rich-ext) | [docs.rs](https://docs.rs/rs-rich-ext) | extensions + plugin registry |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | [![rs-rich-art](https://img.shields.io/crates/v/rs-rich-art.svg)](https://crates.io/crates/rs-rich-art) | [docs.rs](https://docs.rs/rs-rich-art) | FIGlet text, image→ASCII, GIFs |
+
+The badges read live from crates.io, so this table cannot go stale.
 
 ## Install
 
