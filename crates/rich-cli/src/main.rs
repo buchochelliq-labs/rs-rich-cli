@@ -3,7 +3,8 @@
 //! This binary mirrors the upstream `rich-cli` command-line tool and is built on
 //! the [`rich`] library crate. It implements the rendering modes `--print`,
 //! `--markdown`, `--json`, `--syntax`, `--csv`, `--ipynb`, and `--rule`, plus
-//! width/justify, HTML/SVG export (`--export-html`/`--export-svg`), the
+//! width/justify, HTML/SVG export to a file (`--export-html PATH` / `-o PATH`,
+//! `--export-svg PATH`, which may be combined), the
 //! `--panel`/`--padding` decorators (with `--title`/`--caption`/`--style`), a
 //! plain-file printer (with extension auto-detection), **URL fetch** (`rich <url>`,
 //! behind the default `fetch` feature), **paging** (`--pager`), and a capability
@@ -68,10 +69,11 @@ struct Cli {
     width: Option<usize>,
     justify: Option<Justify>,
     no_color: bool,
-    /// Emit a self-contained HTML document instead of writing to the terminal.
-    export_html: bool,
-    /// Emit a self-contained SVG document instead of writing to the terminal.
-    export_svg: bool,
+    /// `--export-html PATH` (`-o PATH`): also write a self-contained HTML
+    /// document to PATH. The resource is still rendered to the terminal.
+    export_html: Option<String>,
+    /// `--export-svg PATH`: also write a self-contained SVG document to PATH.
+    export_svg: Option<String>,
     /// `--panel BOX`: wrap the output in a [`Panel`] with the named box.
     panel: Option<BoxSet>,
     /// `--padding T[,R[,B,L]]`: wrap the output in [`Padding`].
@@ -154,8 +156,8 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut width = None;
     let mut justify = None;
     let mut no_color = false;
-    let mut export_html = false;
-    let mut export_svg = false;
+    let mut export_html: Option<String> = None;
+    let mut export_svg: Option<String> = None;
     let mut panel = None;
     let mut padding = None;
     let mut title = None;
@@ -195,8 +197,15 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--center" => justify = Some(Justify::Center),
             "--no-color" => no_color = true,
             "--pager" => pager = true,
-            "--export-html" => export_html = true,
-            "--export-svg" => export_svg = true,
+            // Both take a PATH and both may be given at once, matching
+            // upstream: the resource still renders to the terminal and the
+            // files are written alongside it.
+            "--export-html" | "-o" => {
+                export_html = Some(iter.next().ok_or("--export-html requires a PATH")?.clone());
+            }
+            "--export-svg" => {
+                export_svg = Some(iter.next().ok_or("--export-svg requires a PATH")?.clone());
+            }
             "--panel" => {
                 let value = iter.next().ok_or("--panel requires a box name")?;
                 panel = Some(parse_box(value)?);
@@ -231,9 +240,6 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         }
     }
 
-    if export_html && export_svg {
-        return Err("only one of --export-html/--export-svg may be given".into());
-    }
     // Only `--gif` animates several resources at once; every other mode renders
     // exactly one.
     if mode != Mode::Gif && resources.len() > 1 {
@@ -438,17 +444,11 @@ fn run(cli: Cli) -> ExitCode {
         .filter(|r| *r != "-")
         .map(|r| r.rsplit(['/', '\\']).next().unwrap_or(r).to_string())
         .unwrap_or_else(|| "rich".to_string());
-    let export = if cli.export_svg {
-        Export::Svg {
-            title: &svg_title,
-            unique_id: "rich-cli",
-        }
-    } else if cli.export_html {
-        Export::Html
-    } else if cli.pager {
-        Export::Pager
-    } else {
-        Export::Terminal
+    let export = Export {
+        html_path: cli.export_html.as_deref(),
+        svg_path: cli.export_svg.as_deref(),
+        svg_title: &svg_title,
+        pager: cli.pager,
     };
 
     let mut mode = match cli.mode {
@@ -469,8 +469,7 @@ fn run(cli: Cli) -> ExitCode {
             Some(title) if title != "-" => Rule::new(title),
             _ => Rule::line(),
         };
-        emit(&console, &export, |c| c.print(&rule));
-        return ExitCode::SUCCESS;
+        return exit_code(emit(&console, &export, |c| c.print(&rule)));
     }
 
     // Obtain the content: fetch it over HTTP(S) when the resource is a URL,
@@ -586,8 +585,7 @@ fn run(cli: Cli) -> ExitCode {
             }
             content = Box::new(panel);
         }
-        emit(&console, &export, |c| c.print(content.as_ref()));
-        return ExitCode::SUCCESS;
+        return exit_code(emit(&console, &export, |c| c.print(content.as_ref())));
     }
 
     // Markup comes from the user in Print mode, so a mistake in it should be
@@ -600,7 +598,7 @@ fn run(cli: Cli) -> ExitCode {
         }
     }
 
-    emit(&console, &export, |c| match mode {
+    let ok = emit(&console, &export, |c| match mode {
         Mode::Markdown => c.print(&Markdown::new(&content)),
         Mode::Json => c.print(json.as_ref().expect("json parsed above")),
         Mode::Csv => c.print(csv_table.as_ref().expect("csv built above")),
@@ -616,7 +614,17 @@ fn run(cli: Cli) -> ExitCode {
             None => c.print(&Text::new(content.as_str())),
         },
     });
-    ExitCode::SUCCESS
+    exit_code(ok)
+}
+
+/// Turn an "everything written successfully" flag into a process exit code.
+/// A failed `--export-html`/`--export-svg` write must not report success.
+fn exit_code(ok: bool) -> ExitCode {
+    if ok {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
 }
 
 /// Parse CSV/TSV `content` into rows of fields. Handles double-quoted fields
@@ -877,34 +885,82 @@ fn play_gifs(_cli: &Cli, _console: &Console) -> ExitCode {
 
 /// Where a render action's output goes: straight to the terminal, or captured
 /// into a self-contained HTML or SVG document.
-enum Export<'a> {
-    Terminal,
-    /// Page the (styled) output through the system pager.
-    Pager,
-    Html,
-    Svg {
-        title: &'a str,
-        unique_id: &'a str,
-    },
+struct Export<'a> {
+    /// `--export-html PATH`, if given.
+    html_path: Option<&'a str>,
+    /// `--export-svg PATH`, if given.
+    svg_path: Option<&'a str>,
+    /// Document title for the SVG frame (the resource's file name).
+    svg_title: &'a str,
+    /// `--pager`: page the terminal output instead of writing it straight out.
+    pager: bool,
 }
 
-/// Apply a render action per the chosen [`Export`] target.
-fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) {
-    match export {
-        Export::Terminal => render(console),
-        // Keep styles: unlike a plain `console.pager()`, the point of `rich
-        // --pager` is to page *rich* output.
-        Export::Pager => {
+/// Render once and deliver it everywhere it was asked for.
+///
+/// The exports do **not** replace the terminal output — upstream prints the
+/// resource *and* saves the files, and both `--export-html` and `--export-svg`
+/// may be given together. So when either is set the render is recorded once and
+/// the same segments are turned into terminal bytes, HTML and SVG. Rendering per
+/// destination would be wrong rather than merely wasteful: a resource read from
+/// standard input only yields its content once.
+///
+/// Returns false if a file could not be written, so the caller can exit non-zero.
+fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) -> bool {
+    if export.html_path.is_none() && export.svg_path.is_none() {
+        if export.pager {
+            // Keep styles: unlike a plain `console.pager()`, the point of `rich
+            // --pager` is to page *rich* output.
             if let Err(err) = console.page(true, render) {
                 eprintln!("rich: cannot page output: {err}");
+                return false;
             }
+        } else {
+            render(console);
         }
-        // CSS-class stylesheet form (upstream rich-cli's default HTML export).
-        Export::Html => print!("{}", console.export_html_classes(render)),
-        Export::Svg { title, unique_id } => {
-            print!("{}", console.export_svg(title, unique_id, render))
+        return true;
+    }
+
+    let segments = console.record_output(render);
+    let mut ok = true;
+
+    // The terminal still gets the output, exports or not.
+    let terminal = console.segments_to_string(&segments);
+    if export.pager {
+        // The text is already rendered, so hand it straight to the pager
+        // rather than re-rendering through `Console::page`.
+        if let Err(err) = rich::pager::Pager::show(&rich::pager::SystemPager, &terminal) {
+            eprintln!("rich: cannot page output: {err}");
+            ok = false;
+        }
+    } else {
+        print!("{terminal}");
+    }
+
+    if let Some(path) = export.html_path {
+        // CSS-class stylesheet form, as upstream's `save_html` default.
+        let html = rich::export::export_html_classes(&segments, &DEFAULT_TERMINAL_THEME);
+        if let Err(err) = std::fs::write(path, html) {
+            eprintln!("rich: failed to save HTML: {err}");
+            ok = false;
         }
     }
+    if let Some(path) = export.svg_path {
+        let svg = rich::svg::export_svg(
+            &segments,
+            &rich::SVG_EXPORT_THEME,
+            export.svg_title,
+            // Upstream derives this id by hashing Python reprs; a fixed one keeps
+            // our output deterministic (DIVERGENCES #15).
+            "rich-cli",
+            console.width(),
+        );
+        if let Err(err) = std::fs::write(path, svg) {
+            eprintln!("rich: failed to save SVG: {err}");
+            ok = false;
+        }
+    }
+    ok
 }
 
 fn print_help() {
@@ -932,8 +988,10 @@ OPTIONS:\n\
         --left        Left-justify output\n\
         --center      Center output\n\
         --right       Right-justify output\n\
-        --export-html Emit a self-contained HTML document instead of ANSI\n\
-        --export-svg  Emit a self-contained SVG document instead of ANSI\n\
+    -o, --export-html PATH\n\
+                      Also write a self-contained HTML document to PATH\n\
+        --export-svg PATH\n\
+                      Also write a self-contained SVG document to PATH\n\
         --panel BOX   Wrap output in a panel (none/ascii/ascii2/square/rounded/heavy/double)\n\
         --padding P   Wrap output in padding (1, 2, or 4 comma-separated ints)\n\
         --title T     Panel title (with --panel)\n\
@@ -1448,12 +1506,33 @@ mod tests {
     #[test]
     fn parses_export_flags() {
         let s = |v: &str| v.to_string();
-        let cli = parse(&[s("--export-svg"), s("x")]).unwrap().unwrap();
-        assert!(cli.export_svg && !cli.export_html);
-        let cli = parse(&[s("--export-html"), s("x")]).unwrap().unwrap();
-        assert!(cli.export_html && !cli.export_svg);
+        // Both take a PATH, and the resource is a separate positional.
+        let cli = parse(&[s("--export-svg"), s("out.svg"), s("x")])
+            .unwrap()
+            .unwrap();
+        assert_eq!(cli.export_svg.as_deref(), Some("out.svg"));
+        assert!(cli.export_html.is_none());
+        assert_eq!(cli.resource.as_deref(), Some("x"));
+
+        let cli = parse(&[s("-o"), s("out.html"), s("x")]).unwrap().unwrap();
+        assert_eq!(cli.export_html.as_deref(), Some("out.html"));
+
+        // Both together is allowed — upstream writes both files.
+        let cli = parse(&[
+            s("--export-html"),
+            s("a.html"),
+            s("--export-svg"),
+            s("b.svg"),
+            s("x"),
+        ])
+        .unwrap()
+        .unwrap();
+        assert_eq!(cli.export_html.as_deref(), Some("a.html"));
+        assert_eq!(cli.export_svg.as_deref(), Some("b.svg"));
+
+        // A missing PATH is an error rather than swallowing the next argument.
+        assert!(parse(&[s("--export-html")]).is_err());
         // The two export formats are mutually exclusive.
-        assert!(parse(&[s("--export-html"), s("--export-svg"), s("x")]).is_err());
     }
 
     #[test]

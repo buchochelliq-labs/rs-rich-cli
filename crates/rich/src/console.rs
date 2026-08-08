@@ -441,6 +441,26 @@ impl Console {
         crate::svg::export_svg(&segments, theme, title, unique_id, self.width())
     }
 
+    /// Record everything `f` prints and hand back the raw segments, without
+    /// writing to the terminal.
+    ///
+    /// This is the seam for producing *several* outputs from one render — the
+    /// terminal bytes and an HTML and an SVG file, say — which is what
+    /// `rich --export-html … --export-svg …` needs. Upstream reaches the same
+    /// place with `Console(record=True)` plus `save_html(clear=False)`; here the
+    /// buffer is returned instead of being held on the console, so the caller
+    /// decides what to do with it and there is no hidden state to clear.
+    ///
+    /// Pair with [`segments_to_string`](Self::segments_to_string) to get the
+    /// terminal form, [`export::export_html_classes`](crate::export::export_html_classes)
+    /// for HTML, and [`svg::export_svg`](crate::svg::export_svg) for SVG.
+    ///
+    /// Rendering twice instead would be wrong, not merely wasteful: a renderable
+    /// reading standard input only yields its content once.
+    pub fn record_output(&self, f: impl FnOnce(&Console)) -> Vec<Segment> {
+        self.record(f)
+    }
+
     /// Run `f` with output recorded to a fresh buffer, returning the captured
     /// segments and restoring the previous capture state (so captures nest).
     fn record(&self, f: impl FnOnce(&Console)) -> Vec<Segment> {
@@ -565,8 +585,9 @@ impl Console {
         self.segments_to_string(&segments)
     }
 
-    /// Convert rendered segments into a string, applying the color system.
-    fn segments_to_string(&self, segments: &[Segment]) -> String {
+    /// Convert rendered segments into a terminal string, applying this console's
+    /// colour system (and honouring `no_color`).
+    pub fn segments_to_string(&self, segments: &[Segment]) -> String {
         let system = self.color_system();
         let mut out = String::new();
         for segment in segments {
