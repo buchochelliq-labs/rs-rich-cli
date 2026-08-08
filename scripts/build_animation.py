@@ -128,7 +128,8 @@ def main() -> None:
 
     output = pathlib.Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(out, encoding="utf-8")
+    output.write_text(out, encoding="utf-8", newline="
+")
     print(f"  {output}  ({count} frames, {args.duration}s loop)", file=sys.stderr)
 
 
