@@ -1,5 +1,12 @@
 # rs-rich
 
+[![CI](https://github.com/buchochelliq-labs/rs-rich-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/buchochelliq-labs/rs-rich-cli/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/rs-rich.svg)](https://crates.io/crates/rs-rich)
+[![docs.rs](https://img.shields.io/docsrs/rs-rich)](https://docs.rs/rs-rich)
+[![MSRV](https://img.shields.io/crates/msrv/rs-rich.svg)](https://github.com/buchochelliq-labs/rs-rich-cli#develop)
+[![License](https://img.shields.io/crates/l/rs-rich.svg)](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/LICENSE)
+[![GitHub](https://img.shields.io/badge/github-repo-blue)](https://github.com/buchochelliq-labs/rs-rich-cli)
+
 A Rust port of Python's [`rich`](https://github.com/Textualize/rich) — rich text,
 colour, tables, markdown and progress bars in the terminal — plus a port of the
 [`rich-cli`](https://github.com/Textualize/rich-cli) tool.

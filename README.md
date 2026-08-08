@@ -1,5 +1,12 @@
 # rs-rich-cli
 
+[![CI](https://github.com/buchochelliq-labs/rs-rich-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/buchochelliq-labs/rs-rich-cli/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/rs-rich.svg)](https://crates.io/crates/rs-rich)
+[![docs.rs](https://img.shields.io/docsrs/rs-rich)](https://docs.rs/rs-rich)
+[![MSRV](https://img.shields.io/crates/msrv/rs-rich.svg)](https://github.com/buchochelliq-labs/rs-rich-cli#develop)
+[![License](https://img.shields.io/crates/l/rs-rich.svg)](LICENSE)
+[![Docs site](https://img.shields.io/badge/docs-site-blue)](https://buchochelliq-labs.github.io/rs-rich-cli/)
+
 A **Rust port of the Python [`rich`](https://github.com/Textualize/rich)** library
 and the [`rich-cli`](https://github.com/Textualize/rich-cli) tool — for rich text,
 color, and beautiful formatting in the terminal.
