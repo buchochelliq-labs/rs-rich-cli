@@ -4,9 +4,13 @@ Thanks for helping build the Rust `rich` port! The golden rule of this project i
 in **[AGENTS.md](AGENTS.md)** — please read it first. The short version:
 
 - **`crates/rich` and `crates/rich-cli` are faithful mirrors of upstream.** Match
-  upstream behavior exactly; their versions track upstream and only move on a sync.
-- **Our own features go in `crates/rich-ext`**, which versions independently.
+  upstream behavior exactly.
+- **Our own features go in `crates/rich-ext`** (or `crates/rich-art`), never in
+  the mirror crates.
 - The dependency arrow is one-way: `rich-cli → rich-ext → rich`.
+- All four crates share **one version**, bumped in lockstep at release time.
+  Which upstream release we track lives in `UPSTREAM.toml`, not in a version
+  number — see AGENTS.md → Versioning.
 
 ## Common workflows
 
@@ -14,8 +18,24 @@ Both are driven by skills (and documented for humans too):
 
 - **Port a module** → [`.claude/skills/port-module/SKILL.md`](.claude/skills/port-module/SKILL.md)
 - **Sync a new upstream release** → [`.claude/skills/sync-upstream/SKILL.md`](.claude/skills/sync-upstream/SKILL.md)
+- **Cut a release** → [`.claude/skills/release/SKILL.md`](.claude/skills/release/SKILL.md)
 
 Pick up a `type:port` issue, follow the skill, and open a PR.
+
+## Branching
+
+Read **[docs/BRANCHING.md](docs/BRANCHING.md)**. In one line: cut from fresh
+`origin/main`, target `main`, and after merging *verify* the work reached `main`
+rather than trusting the badge.
+
+That last part is not paranoia — this repo has lost work this way three times.
+CI enforces the base branch, merged branches are deleted automatically, and a
+local hook refuses to push to a branch whose PR already merged. Enable it once
+per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
 
 ## Parity is the point
 

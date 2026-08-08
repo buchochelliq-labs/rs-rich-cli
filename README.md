@@ -4,8 +4,12 @@ A **Rust port of the Python [`rich`](https://github.com/Textualize/rich)** libra
 and the [`rich-cli`](https://github.com/Textualize/rich-cli) tool — for rich text,
 color, and beautiful formatting in the terminal.
 
+**📖 [Documentation, tutorial and gallery](https://buchochelliq-labs.github.io/rs-rich-cli/)**
+
 Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
 (see [`UPSTREAM.toml`](UPSTREAM.toml)).
+
+![Console markup](docs/assets/markup.svg)
 
 > **`0.0.1` — early, and the version says so.** The crates version independently
 > by ordinary SemVer; the number is *not* tied to the upstream release. Expect

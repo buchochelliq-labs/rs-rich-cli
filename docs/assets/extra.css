@@ -1,0 +1,22 @@
+/* The screenshots are exported terminal SVGs. They carry their own colours and
+   their own dark background, so they must not be inverted or tinted by the
+   theme — and they should sit at a comfortable width rather than filling the
+   column edge to edge. */
+.md-typeset img[src$=".svg"] {
+  display: block;
+  margin: 1.2rem auto;
+  max-width: 100%;
+  border-radius: 8px;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
+}
+
+/* Terminal output in a fenced block should read like a terminal: no ligatures
+   turning != into a glyph nobody typed. */
+.md-typeset pre code {
+  font-variant-ligatures: none;
+}
+
+/* Slightly tighter tables — the parity and status tables are wide. */
+.md-typeset table:not([class]) {
+  font-size: 0.72rem;
+}

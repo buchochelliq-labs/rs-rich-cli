@@ -1,9 +1,18 @@
 name: CI
 
 on:
+  # Callable so the release workflow re-runs this identical gate on the
+  # tagged commit — cargo publish's own verification does not compile tests.
+  workflow_call:
   push:
     branches: [main]
   pull_request:
+
+# Least privilege. Without this the workflow inherits the repository default,
+# which may include write scopes it has no use for — CI only ever reads the
+# tree. Flagged by CodeQL; the other workflows already declare theirs.
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -141,3 +150,36 @@ jobs:
 
       - name: Run parity tests
         run: cargo test -p rs-rich --test golden
+
+  # One stable, aggregate context for branch protection to require.
+  #
+  # Requiring the individual jobs by name looks tighter but is a trap: the
+  # `features` matrix expands to names like "feature matrix (rs-rich-art)", so
+  # renaming a package silently orphans the required context. That happened here
+  # — the crates.io rename left four required checks that could never report, and
+  # every PR sat "expected — waiting for status" with a fully green run. The only
+  # way through is an admin bypass, which trains the habit that defeats every
+  # other guardrail.
+  #
+  # Require `ci-ok` and nothing else from this workflow. Adding or renaming jobs
+  # then never touches branch protection again.
+  ci-ok:
+    name: ci-ok
+    needs: [check, features, msrv, parity]
+    # `always()` so this reports failure rather than being skipped when a
+    # dependency fails — a skipped required check blocks the PR forever.
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any job did not succeed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "dependency results: $RESULTS"
+          for r in $RESULTS; do
+            if [ "$r" != "success" ]; then
+              echo "::error::A required CI job did not succeed (got '$r')."
+              exit 1
+            fi
+          done
+          echo "All CI jobs succeeded."

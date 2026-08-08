@@ -8,7 +8,7 @@ plus the porting status of each. It is the lookup table used by both the
 **Status:** ⬜ not started · 🟡 partial (subset ported) · 🟢 complete
 **Parity:** ✅ golden-tested against real `rich` · — none yet
 
-Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](../UPSTREAM.toml)).
+Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/UPSTREAM.toml)).
 
 ## Rendering core
 

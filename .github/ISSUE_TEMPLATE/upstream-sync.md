@@ -17,8 +17,10 @@ labels: ["upstream-sync", "type:infra"]
 - [ ] Diff upstream `<pinned_sha>..<new_tag>`
 - [ ] Map changed modules via `docs/PORTING.md`
 - [ ] Port the diffs into the mirror crate (no `rich-ext` behavior in core)
-- [ ] Bump mirror crate `version` to the exact upstream version
-- [ ] Update `UPSTREAM.toml` (version, tag, sha)
+- [ ] Update `UPSTREAM.toml` (version, tag, sha) — this is now the **only**
+      record of which upstream release we track. Do **not** set the crate
+      version to the upstream version; crates version independently by SemVer
+      (see AGENTS.md → Versioning).
 - [ ] `pip install rich==<version>` + `python scripts/capture_golden.py`; investigate every changed fixture
 - [ ] `cargo fmt --all && cargo clippy --all-targets -- -D warnings && cargo test`
 - [ ] Confirm `rich-ext` still builds/tests unchanged

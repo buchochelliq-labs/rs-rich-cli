@@ -21,3 +21,9 @@ Thumbs.db
 
 # Third-party GIFs kept locally for testing (not ours to redistribute).
 crates/rich-art/examples/assets/waving_cat.gif
+
+# Built documentation site and its virtualenv
+/site/
+/.docsvenv/
+# Intermediate animation frames
+/target/doc-frames/

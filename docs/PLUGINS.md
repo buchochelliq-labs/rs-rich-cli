@@ -17,7 +17,7 @@ manual three-way merge. Instead:
 
 ## Extension points (today)
 
-Defined in [`crates/rich/src/protocol.rs`](../crates/rich/src/protocol.rs):
+Defined in [`crates/rich/src/protocol.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich/src/protocol.rs):
 
 | trait          | upstream analogue          | purpose |
 |----------------|----------------------------|---------|
@@ -49,7 +49,7 @@ registry.register_highlighter(|| Box::new(rich_ext::NumberHighlighter::new()));
 registry.install(&mut console);
 ```
 
-The registry ([`crates/rich-ext/src/registry.rs`](../crates/rich-ext/src/registry.rs))
+The registry ([`crates/rich-ext/src/registry.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-ext/src/registry.rs))
 holds *factories* so one registry can be installed onto many consoles.
 
 ## Roadmap: from internal to public

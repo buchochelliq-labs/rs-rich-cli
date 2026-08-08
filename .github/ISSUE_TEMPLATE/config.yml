@@ -1,0 +1,15 @@
+# Templates are the only route in — a blank issue skips the one question that
+# makes a report actionable here ("what does Python rich do?").
+blank_issues_enabled: false
+contact_links:
+  - name: Question or idea
+    url: https://github.com/buchochelliq-labs/rs-rich-cli/discussions
+    about: For anything that isn't a concrete bug or a specific missing feature.
+  - name: Upstream rich itself
+    url: https://github.com/Textualize/rich/issues
+    about: >
+      If Python rich behaves the same way, the bug is upstream's — this project
+      deliberately reproduces upstream behaviour, quirks included.
+  - name: Known deliberate divergences
+    url: https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/DIVERGENCES.md
+    about: Check here before filing a parity bug; some differences are intentional.
