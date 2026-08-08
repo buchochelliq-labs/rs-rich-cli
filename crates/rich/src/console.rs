@@ -716,7 +716,8 @@ impl ConsoleBuilder {
         self
     }
 
-    /// Enable/disable automatic repr highlighting (default disabled).
+    /// Enable/disable automatic repr highlighting. Defaults to **on**, matching
+    /// upstream `Console(highlight=True)`.
     pub fn highlight(mut self, value: bool) -> Self {
         self.highlight = Some(value);
         self
@@ -750,7 +751,11 @@ impl ConsoleBuilder {
             is_terminal,
             no_color,
             emoji: self.emoji.unwrap_or(true),
-            highlight: self.highlight.unwrap_or(false),
+            // Upstream's `Console(highlight=True)` default. Getting this wrong is
+            // invisible in the fixtures (every one is captured with
+            // highlight=False) but is the first thing a user sees: numbers,
+            // paths, booleans and URLs come out plain instead of coloured.
+            highlight: self.highlight.unwrap_or(true),
             legacy_windows: self.legacy_windows.unwrap_or(false),
             safe_box: self.safe_box.unwrap_or(true),
             ascii_only: self.ascii_only.unwrap_or(false),

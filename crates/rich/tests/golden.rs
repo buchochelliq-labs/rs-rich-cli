@@ -243,6 +243,10 @@ fn truecolor_console(width: usize) -> Console {
         .force_terminal(true)
         .color_system(Some(ColorSystem::Truecolor))
         .width(width)
+        // Every fixture except `highlight.tsv` is captured with
+        // `highlight=False`, so this must be set explicitly — the default is
+        // ON, matching upstream.
+        .highlight(false)
         .no_color(false)
         .build()
 }
