@@ -29,7 +29,7 @@ jobs:
     name: verify the tag
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0                       # need main to test ancestry
           ref: ${{ inputs.tag || github.ref }}
@@ -71,7 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: crates-io          # gate the credential behind an environment
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
 
