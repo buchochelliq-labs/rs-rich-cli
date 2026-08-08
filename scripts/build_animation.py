@@ -128,8 +128,9 @@ def main() -> None:
 
     output = pathlib.Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(out, encoding="utf-8", newline="
-")
+    # Pin LF. Without this the platform default is used, so regenerating on
+    # Windows rewrites every byte and each commit carries a whole-file diff.
+    output.write_text(out, encoding="utf-8", newline="\n")
     print(f"  {output}  ({count} frames, {args.duration}s loop)", file=sys.stderr)
 
 
