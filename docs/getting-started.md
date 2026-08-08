@@ -21,6 +21,14 @@
     rs-rich = "0.0.1"
     ```
 
+!!! tip "Published on crates.io"
+
+    [`rs-rich`](https://crates.io/crates/rs-rich) ·
+    [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) ·
+    [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) ·
+    [`rs-rich-art`](https://crates.io/crates/rs-rich-art) — all at 0.0.1.
+    API documentation is on [docs.rs](https://docs.rs/rs-rich).
+
 ## The package is `rs-rich`, the crate is `rich`
 
 `rich` was already taken on crates.io by an unrelated crate, so the published

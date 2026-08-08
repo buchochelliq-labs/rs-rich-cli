@@ -1,7 +1,9 @@
 # Changelog
 
-Notable changes to the port. Because the mirror crates track upstream versions,
-entries here note which upstream release was absorbed and what our own crates did.
+Notable changes to the port. Crate versions are independent SemVer and do **not**
+mirror the upstream release — which upstream version is tracked lives in
+[`UPSTREAM.toml`](UPSTREAM.toml). Entries note which upstream release was
+absorbed and what our own crates did.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
