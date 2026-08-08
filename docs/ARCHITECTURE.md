@@ -24,7 +24,7 @@ All crates are at `0.0.1` and version independently (see AGENTS.md → Versionin
 
 Why the split: it makes upstream syncs a mechanical diff-and-port of `crates/rich`
 only, and guarantees our features can never make that harder. See
-[AGENTS.md](../AGENTS.md).
+[AGENTS.md](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/AGENTS.md).
 
 ## Render pipeline (first slice)
 

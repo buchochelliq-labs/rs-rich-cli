@@ -1,6 +1,9 @@
 name: CI
 
 on:
+  # Callable so the release workflow re-runs this identical gate on the
+  # tagged commit — cargo publish's own verification does not compile tests.
+  workflow_call:
   push:
     branches: [main]
   pull_request:

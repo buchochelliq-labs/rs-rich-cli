@@ -1,0 +1,353 @@
+<svg class="rich-terminal" viewBox="0 0 506 74.4" xmlns="http://www.w3.org/2000/svg">
+<style>
+
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .rich-docs-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .rich-docs-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .rich-docs-r1 { fill: #c5c8c6 }
+    
+@keyframes f0{0%,0.0000%{opacity:0}0.0000%,8.3333%{opacity:1}8.3333%,100%{opacity:0}}@keyframes f1{0%,8.3333%{opacity:0}8.3333%,16.6667%{opacity:1}16.6667%,100%{opacity:0}}@keyframes f2{0%,16.6667%{opacity:0}16.6667%,25.0000%{opacity:1}25.0000%,100%{opacity:0}}@keyframes f3{0%,25.0000%{opacity:0}25.0000%,33.3333%{opacity:1}33.3333%,100%{opacity:0}}@keyframes f4{0%,33.3333%{opacity:0}33.3333%,41.6667%{opacity:1}41.6667%,100%{opacity:0}}@keyframes f5{0%,41.6667%{opacity:0}41.6667%,50.0000%{opacity:1}50.0000%,100%{opacity:0}}@keyframes f6{0%,50.0000%{opacity:0}50.0000%,58.3333%{opacity:1}58.3333%,100%{opacity:0}}@keyframes f7{0%,58.3333%{opacity:0}58.3333%,66.6667%{opacity:1}66.6667%,100%{opacity:0}}@keyframes f8{0%,66.6667%{opacity:0}66.6667%,75.0000%{opacity:1}75.0000%,100%{opacity:0}}@keyframes f9{0%,75.0000%{opacity:0}75.0000%,83.3333%{opacity:1}83.3333%,100%{opacity:0}}@keyframes f10{0%,83.3333%{opacity:0}83.3333%,91.6667%{opacity:1}91.6667%,100%{opacity:0}}@keyframes f11{0%,91.6667%{opacity:0}91.6667%,100.0000%{opacity:1}100.0000%,100%{opacity:0}}
+.frame0{opacity:0;animation:f0 1.0s steps(1,end) infinite}.frame1{opacity:0;animation:f1 1.0s steps(1,end) infinite}.frame2{opacity:0;animation:f2 1.0s steps(1,end) infinite}.frame3{opacity:0;animation:f3 1.0s steps(1,end) infinite}.frame4{opacity:0;animation:f4 1.0s steps(1,end) infinite}.frame5{opacity:0;animation:f5 1.0s steps(1,end) infinite}.frame6{opacity:0;animation:f6 1.0s steps(1,end) infinite}.frame7{opacity:0;animation:f7 1.0s steps(1,end) infinite}.frame8{opacity:0;animation:f8 1.0s steps(1,end) infinite}.frame9{opacity:0;animation:f9 1.0s steps(1,end) infinite}.frame10{opacity:0;animation:f10 1.0s steps(1,end) infinite}.frame11{opacity:0;animation:f11 1.0s steps(1,end) infinite}
+@media (prefers-reduced-motion: reduce){.frame0{animation:none;opacity:0}.frame1{animation:none;opacity:0}.frame2{animation:none;opacity:0}.frame3{animation:none;opacity:0}.frame4{animation:none;opacity:0}.frame5{animation:none;opacity:0}.frame6{animation:none;opacity:0}.frame7{animation:none;opacity:0}.frame8{animation:none;opacity:0}.frame9{animation:none;opacity:0}.frame10{animation:none;opacity:0}.frame11{animation:none;opacity:1}}
+</style>
+<g class="frame0">
+    <!-- Generated with Rich https://www.textualize.io -->
+    
+
+    <defs>
+    <clipPath id="rich-docs-clip-terminal">
+      <rect x="0" y="0" width="487.0" height="23.4" />
+    </clipPath>
+    
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="504" height="72.4" rx="8"/><text class="rich-docs-title" fill="#c5c8c6" text-anchor="middle" x="252" y="27">spinner</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#rich-docs-clip-terminal)">
+    
+    <g class="rich-docs-matrix">
+    <text class="rich-docs-r1" x="0" y="20" textLength="158.6" clip-path="url(#rich-docs-line-0)">&#160;&#160;⠋&#160;&#160;working…</text><text class="rich-docs-r1" x="488" y="20" textLength="12.2" clip-path="url(#rich-docs-line-0)">
+</text>
+    </g>
+    </g>
+</g>
+<g class="frame1">
+    <!-- Generated with Rich https://www.textualize.io -->
+    
+
+    <defs>
+    <clipPath id="rich-docs-clip-terminal">
+      <rect x="0" y="0" width="487.0" height="23.4" />
+    </clipPath>
+    
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="504" height="72.4" rx="8"/><text class="rich-docs-title" fill="#c5c8c6" text-anchor="middle" x="252" y="27">spinner</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#rich-docs-clip-terminal)">
+    
+    <g class="rich-docs-matrix">
+    <text class="rich-docs-r1" x="0" y="20" textLength="158.6" clip-path="url(#rich-docs-line-0)">&#160;&#160;⠙&#160;&#160;working…</text><text class="rich-docs-r1" x="488" y="20" textLength="12.2" clip-path="url(#rich-docs-line-0)">
+</text>
+    </g>
+    </g>
+</g>
+<g class="frame2">
+    <!-- Generated with Rich https://www.textualize.io -->
+    
+
+    <defs>
+    <clipPath id="rich-docs-clip-terminal">
+      <rect x="0" y="0" width="487.0" height="23.4" />
+    </clipPath>
+    
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="504" height="72.4" rx="8"/><text class="rich-docs-title" fill="#c5c8c6" text-anchor="middle" x="252" y="27">spinner</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#rich-docs-clip-terminal)">
+    
+    <g class="rich-docs-matrix">
+    <text class="rich-docs-r1" x="0" y="20" textLength="158.6" clip-path="url(#rich-docs-line-0)">&#160;&#160;⠹&#160;&#160;working…</text><text class="rich-docs-r1" x="488" y="20" textLength="12.2" clip-path="url(#rich-docs-line-0)">
+</text>
+    </g>
+    </g>
+</g>
+<g class="frame3">
+    <!-- Generated with Rich https://www.textualize.io -->
+    
+
+    <defs>
+    <clipPath id="rich-docs-clip-terminal">
+      <rect x="0" y="0" width="487.0" height="23.4" />
+    </clipPath>
+    
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="504" height="72.4" rx="8"/><text class="rich-docs-title" fill="#c5c8c6" text-anchor="middle" x="252" y="27">spinner</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#rich-docs-clip-terminal)">
+    
+    <g class="rich-docs-matrix">
+    <text class="rich-docs-r1" x="0" y="20" textLength="158.6" clip-path="url(#rich-docs-line-0)">&#160;&#160;⠸&#160;&#160;working…</text><text class="rich-docs-r1" x="488" y="20" textLength="12.2" clip-path="url(#rich-docs-line-0)">
+</text>
+    </g>
+    </g>
+</g>
+<g class="frame4">
+    <!-- Generated with Rich https://www.textualize.io -->
+    
+
+    <defs>
+    <clipPath id="rich-docs-clip-terminal">
+      <rect x="0" y="0" width="487.0" height="23.4" />
+    </clipPath>
+    
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="504" height="72.4" rx="8"/><text class="rich-docs-title" fill="#c5c8c6" text-anchor="middle" x="252" y="27">spinner</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#rich-docs-clip-terminal)">
+    
+    <g class="rich-docs-matrix">
+    <text class="rich-docs-r1" x="0" y="20" textLength="158.6" clip-path="url(#rich-docs-line-0)">&#160;&#160;⠼&#160;&#160;working…</text><text class="rich-docs-r1" x="488" y="20" textLength="12.2" clip-path="url(#rich-docs-line-0)">
+</text>
+    </g>
+    </g>
+</g>
+<g class="frame5">
+    <!-- Generated with Rich https://www.textualize.io -->
+    
+
+    <defs>
+    <clipPath id="rich-docs-clip-terminal">
+      <rect x="0" y="0" width="487.0" height="23.4" />
+    </clipPath>
+    
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="504" height="72.4" rx="8"/><text class="rich-docs-title" fill="#c5c8c6" text-anchor="middle" x="252" y="27">spinner</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#rich-docs-clip-terminal)">
+    
+    <g class="rich-docs-matrix">
+    <text class="rich-docs-r1" x="0" y="20" textLength="158.6" clip-path="url(#rich-docs-line-0)">&#160;&#160;⠴&#160;&#160;working…</text><text class="rich-docs-r1" x="488" y="20" textLength="12.2" clip-path="url(#rich-docs-line-0)">
+</text>
+    </g>
+    </g>
+</g>
+<g class="frame6">
+    <!-- Generated with Rich https://www.textualize.io -->
+    
+
+    <defs>
+    <clipPath id="rich-docs-clip-terminal">
+      <rect x="0" y="0" width="487.0" height="23.4" />
+    </clipPath>
+    
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="504" height="72.4" rx="8"/><text class="rich-docs-title" fill="#c5c8c6" text-anchor="middle" x="252" y="27">spinner</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#rich-docs-clip-terminal)">
+    
+    <g class="rich-docs-matrix">
+    <text class="rich-docs-r1" x="0" y="20" textLength="158.6" clip-path="url(#rich-docs-line-0)">&#160;&#160;⠦&#160;&#160;working…</text><text class="rich-docs-r1" x="488" y="20" textLength="12.2" clip-path="url(#rich-docs-line-0)">
+</text>
+    </g>
+    </g>
+</g>
+<g class="frame7">
+    <!-- Generated with Rich https://www.textualize.io -->
+    
+
+    <defs>
+    <clipPath id="rich-docs-clip-terminal">
+      <rect x="0" y="0" width="487.0" height="23.4" />
+    </clipPath>
+    
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="504" height="72.4" rx="8"/><text class="rich-docs-title" fill="#c5c8c6" text-anchor="middle" x="252" y="27">spinner</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#rich-docs-clip-terminal)">
+    
+    <g class="rich-docs-matrix">
+    <text class="rich-docs-r1" x="0" y="20" textLength="158.6" clip-path="url(#rich-docs-line-0)">&#160;&#160;⠧&#160;&#160;working…</text><text class="rich-docs-r1" x="488" y="20" textLength="12.2" clip-path="url(#rich-docs-line-0)">
+</text>
+    </g>
+    </g>
+</g>
+<g class="frame8">
+    <!-- Generated with Rich https://www.textualize.io -->
+    
+
+    <defs>
+    <clipPath id="rich-docs-clip-terminal">
+      <rect x="0" y="0" width="487.0" height="23.4" />
+    </clipPath>
+    
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="504" height="72.4" rx="8"/><text class="rich-docs-title" fill="#c5c8c6" text-anchor="middle" x="252" y="27">spinner</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#rich-docs-clip-terminal)">
+    
+    <g class="rich-docs-matrix">
+    <text class="rich-docs-r1" x="0" y="20" textLength="158.6" clip-path="url(#rich-docs-line-0)">&#160;&#160;⠇&#160;&#160;working…</text><text class="rich-docs-r1" x="488" y="20" textLength="12.2" clip-path="url(#rich-docs-line-0)">
+</text>
+    </g>
+    </g>
+</g>
+<g class="frame9">
+    <!-- Generated with Rich https://www.textualize.io -->
+    
+
+    <defs>
+    <clipPath id="rich-docs-clip-terminal">
+      <rect x="0" y="0" width="487.0" height="23.4" />
+    </clipPath>
+    
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="504" height="72.4" rx="8"/><text class="rich-docs-title" fill="#c5c8c6" text-anchor="middle" x="252" y="27">spinner</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#rich-docs-clip-terminal)">
+    
+    <g class="rich-docs-matrix">
+    <text class="rich-docs-r1" x="0" y="20" textLength="158.6" clip-path="url(#rich-docs-line-0)">&#160;&#160;⠏&#160;&#160;working…</text><text class="rich-docs-r1" x="488" y="20" textLength="12.2" clip-path="url(#rich-docs-line-0)">
+</text>
+    </g>
+    </g>
+</g>
+<g class="frame10">
+    <!-- Generated with Rich https://www.textualize.io -->
+    
+
+    <defs>
+    <clipPath id="rich-docs-clip-terminal">
+      <rect x="0" y="0" width="487.0" height="23.4" />
+    </clipPath>
+    
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="504" height="72.4" rx="8"/><text class="rich-docs-title" fill="#c5c8c6" text-anchor="middle" x="252" y="27">spinner</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#rich-docs-clip-terminal)">
+    
+    <g class="rich-docs-matrix">
+    <text class="rich-docs-r1" x="0" y="20" textLength="158.6" clip-path="url(#rich-docs-line-0)">&#160;&#160;⠋&#160;&#160;working…</text><text class="rich-docs-r1" x="488" y="20" textLength="12.2" clip-path="url(#rich-docs-line-0)">
+</text>
+    </g>
+    </g>
+</g>
+<g class="frame11">
+    <!-- Generated with Rich https://www.textualize.io -->
+    
+
+    <defs>
+    <clipPath id="rich-docs-clip-terminal">
+      <rect x="0" y="0" width="487.0" height="23.4" />
+    </clipPath>
+    
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="504" height="72.4" rx="8"/><text class="rich-docs-title" fill="#c5c8c6" text-anchor="middle" x="252" y="27">spinner</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#rich-docs-clip-terminal)">
+    
+    <g class="rich-docs-matrix">
+    <text class="rich-docs-r1" x="0" y="20" textLength="158.6" clip-path="url(#rich-docs-line-0)">&#160;&#160;⠙&#160;&#160;working…</text><text class="rich-docs-r1" x="488" y="20" textLength="12.2" clip-path="url(#rich-docs-line-0)">
+</text>
+    </g>
+    </g>
+</g>
+</svg>

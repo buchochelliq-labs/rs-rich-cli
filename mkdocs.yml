@@ -1,0 +1,86 @@
+site_name: rs-rich
+site_description: A Rust port of Python's rich — rich text, colour and beautiful formatting in the terminal.
+site_url: https://buchochelliq-labs.github.io/rs-rich-cli/
+repo_url: https://github.com/buchochelliq-labs/rs-rich-cli
+repo_name: buchochelliq-labs/rs-rich-cli
+edit_uri: edit/main/docs/
+copyright: MIT — a port of <a href="https://github.com/Textualize/rich">Textualize/rich</a>
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    # The docs are about terminal output, so dark is the honest default.
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: deep purple
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: deep purple
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - content.code.copy
+    - content.action.edit
+    - search.highlight
+    - search.suggest
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+
+plugins:
+  - search
+
+extra_css:
+  - assets/extra.css
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Tutorial:
+      - tutorial/index.md
+      - 1. Your first output: tutorial/01-hello.md
+      - 2. Markup and style: tutorial/02-markup.md
+      - 3. Tables: tutorial/03-tables.md
+      - 4. Layout: tutorial/04-layout.md
+      - 5. Progress and live output: tutorial/05-live.md
+      - 6. The CLI: tutorial/06-cli.md
+  - Gallery: gallery.md
+  - CLI reference: cli.md
+  - Parity with Python rich:
+      - Overview: parity.md
+      - Divergences: DIVERGENCES.md
+      - Module status: PORTING.md
+  - Contributing:
+      - Branching and releases: BRANCHING.md
+      - Architecture: ARCHITECTURE.md
+      - Extending: PLUGINS.md

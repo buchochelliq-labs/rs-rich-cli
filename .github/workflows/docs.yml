@@ -1,0 +1,85 @@
+# Build the documentation site and publish it to GitHub Pages.
+#
+# The screenshots are NOT regenerated here — they are committed, and CI checks
+# they are current. Regenerating during deploy would let the published images
+# silently disagree with the reviewed ones.
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - mkdocs.yml
+      - .github/workflows/docs.yml
+  pull_request:
+    paths:
+      - docs/**
+      - mkdocs.yml
+      - .github/workflows/docs.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install MkDocs
+        run: pip install mkdocs-material
+
+      # --strict turns broken internal links into failures. A docs site whose
+      # links rot is worse than no docs site.
+      - name: Build
+        run: mkdocs build --strict
+
+      - name: Check every referenced image exists
+        run: |
+          python - <<'PY'
+          import re, pathlib, sys
+          missing = []
+          for md in pathlib.Path("docs").rglob("*.md"):
+              for m in re.finditer(r'!\[[^\]]*\]\(([^)]+)\)', md.read_text(encoding="utf-8")):
+                  src = m.group(1)
+                  if src.startswith("http"):
+                      continue
+                  if not (md.parent / src).resolve().exists():
+                      missing.append(f"{md}: {src}")
+          if missing:
+              print("Missing images:\n  " + "\n  ".join(missing))
+              sys.exit(1)
+          print("all image references resolve")
+          PY
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main'
+        with:
+          path: site
+
+  deploy:
+    name: deploy to pages
+    # Only from main; a PR build proves the site compiles without publishing it.
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,114 @@
+# Publish a tagged version to crates.io.
+#
+# Publishing is IRREVERSIBLE — a version can be yanked but never deleted or
+# edited — so this workflow is deliberately paranoid. It re-runs the full gate on
+# the tagged commit, refuses to publish anything that is not on `main`, and skips
+# crates already at that version so a partially-failed run can be re-run safely.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to publish (must already exist)
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never cancel a half-finished four-crate upload: cargo publishes them one at
+  # a time and the earlier ones cannot be undone.
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: verify the tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0                       # need main to test ancestry
+          ref: ${{ inputs.tag || github.ref }}
+
+      # The invariant the whole branching model exists to protect: a published
+      # artifact must be reachable from main. See docs/BRANCHING.md.
+      - name: Refuse to publish content that is not on main
+        run: |
+          git fetch origin main --depth=0 2>/dev/null || git fetch origin main
+          if git merge-base --is-ancestor HEAD origin/main; then
+            echo "tagged commit is on main"
+          else
+            echo "::error::This tag does not point at a commit on main."
+            echo "::error::Tags are placed on main after the release PR merges — see docs/BRANCHING.md."
+            exit 1
+          fi
+
+      - name: Tag version must match the manifest version
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          manifest=$(grep -m1 '^version' crates/rich/Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          if [ "v$manifest" != "$tag" ]; then
+            echo "::error::Tag is $tag but crates/rich/Cargo.toml says $manifest."
+            exit 1
+          fi
+          echo "tag $tag matches manifest $manifest"
+
+  # The same gate every PR passes, re-run on the exact tagged tree. `cargo
+  # publish`'s own verification does NOT compile test targets for these crates
+  # (their `include` omits tests), so this is the real check.
+  ci:
+    name: full gate
+    needs: gate
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: publish to crates.io
+    needs: [gate, ci]
+    runs-on: ubuntu-latest
+    environment: crates-io          # gate the credential behind an environment
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Dry run
+        run: cargo publish --workspace --locked --dry-run
+
+      - name: Publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          # `--workspace` derives the topological order itself and cross-verifies
+          # dependents against sibling tarballs, so no ordering script is needed.
+          # If a previous run published some crates, this reports them as already
+          # uploaded rather than failing the job.
+          cargo publish --workspace --locked
+
+  verify:
+    name: verify from crates.io
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Wait for the index, then install as a stranger would
+        run: |
+          version="${{ inputs.tag || github.ref_name }}"
+          version="${version#v}"
+          for attempt in 1 2 3 4 5 6; do
+            # A User-Agent is mandatory; without one crates.io answers 403, which
+            # is easy to misread as "not published".
+            code=$(curl -s -o /dev/null -w '%{http_code}' \
+              -H 'User-Agent: rs-rich-release-verify' \
+              "https://crates.io/api/v1/crates/rs-rich/$version")
+            [ "$code" = "200" ] && break
+            echo "index not ready (HTTP $code), attempt $attempt"; sleep 20
+          done
+          cargo install rs-rich-cli --version "$version" --root "$(mktemp -d)" --locked
+          echo "installed rs-rich-cli $version from crates.io"

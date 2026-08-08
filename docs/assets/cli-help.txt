@@ -1,0 +1,39 @@
+rich 0.0.1 — Rust port of the rich-cli terminal toolbox
+
+USAGE:
+rich [OPTIONS] [RESOURCE]
+
+RESOURCE is a file path, an http(s) URL, or `-` for stdin.
+
+RENDER MODE (choose at most one; default auto-detects by extension):
+-p, --print      Interpret RESOURCE as console markup
+-m, --markdown   Render RESOURCE as Markdown
+-j, --json       Pretty-print RESOURCE as JSON
+-x, --syntax     Syntax-highlight RESOURCE (language from its extension)
+--csv        Render RESOURCE as a CSV/TSV table
+--ipynb      Render RESOURCE as a Jupyter notebook
+--gif        Animate one or more GIFs (several play side by side)
+--loop N     With --gif, repeat N times (0 = forever)
+--rule       Draw a horizontal rule (RESOURCE is its title)
+
+OPTIONS:
+-w, --width N     Set the output width
+--left        Left-justify output
+--center      Center output
+--right       Right-justify output
+-o, --export-html PATH
+Also write a self-contained HTML document to PATH
+--export-svg PATH
+Also write a self-contained SVG document to PATH
+--panel BOX   Wrap output in a panel (none/ascii/ascii2/square/rounded/heavy/double)
+--padding P   Wrap output in padding (1, 2, or 4 comma-separated ints)
+--title T     Panel title (with --panel)
+--caption T   Panel caption/subtitle (with --panel)
+--style S     Panel border style, e.g. "bold red" (with --panel)
+--pager       Page the output through the system pager ($PAGER, else less/more)
+--no-color    Disable colored output
+-h, --help        Show this help
+-V, --version     Show the version (mirrors upstream rich-cli)
+
+With no RESOURCE and no mode flag, a capability demo is shown.
+
