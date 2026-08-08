@@ -37,7 +37,10 @@ fn run(args: &[&str], stdin: &str) -> (String, bool) {
 fn version_flag() {
     let (out, ok) = run(&["--version"], "");
     assert!(ok);
-    assert!(out.contains("rich (rs-rich-cli) 1.8.1"), "got: {out:?}");
+    // Tracks the crate version, which is independent SemVer — deliberately NOT
+    // the upstream rich-cli version (see AGENTS.md → Versioning).
+    let expected = format!("rich (rs-rich-cli) {}", env!("CARGO_PKG_VERSION"));
+    assert!(out.contains(&expected), "got: {out:?}, want: {expected:?}");
 }
 
 #[test]
