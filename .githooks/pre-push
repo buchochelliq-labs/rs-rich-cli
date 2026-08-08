@@ -1,0 +1,53 @@
+#!/bin/sh
+# Refuse to push to a branch whose pull request has already merged.
+#
+# This is the last line of defence against the failure that has now cost this
+# repo work three times: a merged branch still exists locally, `git push`
+# succeeds, and the commits go nowhere — they are not on `main` and no PR will
+# ever carry them.
+#
+# `delete_branch_on_merge` prevents this server-side, but only for branches
+# merged *after* it was enabled, and only once you have fetched --prune. This
+# catches the local case, before the push leaves the machine.
+#
+# Enable once per clone:
+#     git config core.hooksPath .githooks
+#
+# Bypass deliberately (you had better be sure):
+#     git push --no-verify
+
+branch=$(git rev-parse --abbrev-ref HEAD)
+
+if [ "$branch" = "HEAD" ]; then
+    exit 0   # detached; nothing sensible to check
+fi
+
+if ! command -v gh >/dev/null 2>&1; then
+    exit 0   # no gh, no check — do not block a push on a missing optional tool
+fi
+
+merged=$(gh pr list --state merged --head "$branch" --json number \
+             --jq '.[0].number' 2>/dev/null)
+
+if [ -n "$merged" ] && [ "$merged" != "null" ]; then
+    cat >&2 <<EOF
+
+  Refusing to push: this branch's PR #${merged} has already merged.
+
+  '${branch}' is dead. Anything you add to it will not reach main, and GitHub
+  will not tell you — that is exactly how work was lost in PRs #23, #30 and #31.
+
+  Move the work to a fresh branch instead:
+
+      git log --oneline origin/main..HEAD     # what is not on main yet
+      git fetch origin --prune
+      git switch -c <type>/<slug> origin/main
+      git cherry-pick <those commits>
+
+  See docs/BRANCHING.md. To override anyway: git push --no-verify
+
+EOF
+    exit 1
+fi
+
+exit 0

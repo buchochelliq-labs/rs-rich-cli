@@ -47,6 +47,18 @@ If that ever fails, something was published that isn't on `main`.
 A merged branch is **dead**. It is auto-deleted, and pushing to it is a bug, not
 a shortcut. If you need to add to merged work, cut a new branch from `origin/main`.
 
+Enable the local guard once per clone — server-side deletion only helps for
+branches merged *after* it was switched on, and only once you've fetched:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+It refuses any push to a branch whose PR has already merged. This is not
+hypothetical: it was written immediately after two commits were pushed onto
+PR #31's branch minutes after that PR merged, stranding them exactly as #23 and
+#30 were stranded.
+
 ### Stacked branches
 
 Opening a PR based on another PR's branch is fine. **Merging it while stacked is
@@ -92,6 +104,7 @@ Documented discipline decays; these are the mechanisms.
 | Risk | Mechanism | Prevents or detects |
 |---|---|---|
 | Pushing to a branch whose PR merged | `delete_branch_on_merge` — the branch ceases to exist | prevents |
+| …the same, on a clone that still has the branch | `.githooks/pre-push` — refuses the push | prevents |
 | Merging a stacked PR into a dead base | `base branch` CI check | prevents |
 | A required check that can never report | one aggregate `ci-ok` context, not per-matrix-job names | prevents |
 | Merging a branch cut from a stale `main` | `strict: true` on required checks | prevents |

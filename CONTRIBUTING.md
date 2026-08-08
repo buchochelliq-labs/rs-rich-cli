@@ -28,9 +28,14 @@ Read **[docs/BRANCHING.md](docs/BRANCHING.md)**. In one line: cut from fresh
 `origin/main`, target `main`, and after merging *verify* the work reached `main`
 rather than trusting the badge.
 
-That last part is not paranoia — this repo has twice lost work that GitHub
-reported as merged. CI enforces the base branch, and merged branches are deleted
-automatically so they cannot be silently extended.
+That last part is not paranoia — this repo has lost work this way three times.
+CI enforces the base branch, merged branches are deleted automatically, and a
+local hook refuses to push to a branch whose PR already merged. Enable it once
+per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
 
 ## Parity is the point
 
