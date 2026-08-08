@@ -1,0 +1,117 @@
+# Makes the pull-request template mandatory rather than decorative.
+#
+# GitHub cannot require a PR body to be filled in, so this does it: the required
+# sections must be present AND contain real prose, not the template's own comment
+# prompts. Without this the template is a suggestion, and suggestions decay.
+name: pr hygiene
+
+on:
+  pull_request:
+    # `edited` matters: fixing the body must be able to clear the check without
+    # pushing a commit.
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  body:
+    name: pr body
+    runs-on: ubuntu-latest
+    # Bots do not use our template and their PRs are mechanical.
+    if: github.event.pull_request.user.type != 'Bot'
+    steps:
+      - name: Check required sections are present and filled
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const REQUIRED = [
+              'What & why',
+              'How this was verified',
+              'Parity impact',
+              'Risk',
+            ];
+
+            const body = context.payload.pull_request.body || '';
+            const problems = [];
+
+            if (!body.trim()) {
+              problems.push('The description is empty. The template is there to be filled in.');
+            }
+
+            // Split into `## ` sections by walking the lines. Parsing this way
+            // rather than with a regex per heading avoids depending on what
+            // follows a section — an earlier version anchored on "next heading
+            // or end of input" and silently rejected any PR whose last section
+            // was a required one.
+            const sections = new Map();
+            let current = null;
+            for (const line of body.split(/\r?\n/)) {
+              const heading = line.match(/^##\s+(.+?)\s*$/);
+              if (heading) {
+                current = heading[1].trim().toLowerCase();
+                if (!sections.has(current)) sections.set(current, []);
+              } else if (current) {
+                sections.get(current).push(line);
+              }
+            }
+
+            for (const heading of REQUIRED) {
+              const lines = sections.get(heading.toLowerCase());
+              if (!lines) {
+                problems.push(`Missing section: "## ${heading}".`);
+                continue;
+              }
+              // Strip HTML comments — the template's prompts live in them, and a
+              // section containing only its prompt has not been filled in.
+              const content = lines.join('\n').replace(/<!--[\s\S]*?-->/g, '').trim();
+              if (!content) {
+                problems.push(
+                  `Section "## ${heading}" is empty. ` +
+                  `Replace the prompt with your answer ("N/A — <reason>" is fine).`
+                );
+              }
+            }
+
+            // Unticked boxes are allowed — the checklist is a reminder, not a
+            // gate. Leaving the whole checklist out is not.
+            if (!sections.has('checklist')) {
+              problems.push('Missing the "## Checklist" section.');
+            }
+
+            if (problems.length) {
+              core.setFailed(
+                'Pull request description is incomplete:\n\n' +
+                problems.map((p) => `  • ${p}`).join('\n') +
+                '\n\nEdit the description and this check re-runs automatically.' +
+                '\nThe template is .github/pull_request_template.md.'
+              );
+            } else {
+              core.info('All required sections present and filled.');
+            }
+
+  base:
+    name: base branch
+    runs-on: ubuntu-latest
+    steps:
+      # This repo has twice lost work to a PR based on another PR's branch: the
+      # base was squash-merged and deleted, so the child merged into a dead
+      # branch and reported success while its commits never reached main.
+      # Stacking is still allowed — it just cannot be merged while stacked.
+      - name: Reject a base that is not main or a release branch
+        env:
+          BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          case "$BASE" in
+            main|release/*)
+              echo "Base '$BASE' is fine."
+              ;;
+            *)
+              echo "::error::This PR targets '$BASE', which is neither 'main' nor a 'release/*' branch."
+              echo "::error::Stacked PRs are fine to open, but must be retargeted to main before merging —"
+              echo "::error::a base branch that gets squash-merged and deleted takes this PR's commits with it."
+              echo "::error::Retarget with: gh pr edit <number> --base main"
+              exit 1
+              ;;
+          esac

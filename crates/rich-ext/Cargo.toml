@@ -14,7 +14,9 @@ homepage.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 readme = "README.md"
-documentation = "https://docs.rs/rich-ext"
+# Must match the PACKAGE name, not the lib name: `docs.rs/rich` is a real,
+# unrelated crate, and crates.io metadata cannot be edited after publishing.
+documentation = "https://docs.rs/rs-rich-ext"
 keywords = ["terminal", "console", "plugin", "extension", "highlighter"]
 categories = ["command-line-interface", "text-processing"]
 include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]

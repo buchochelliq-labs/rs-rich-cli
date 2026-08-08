@@ -14,7 +14,6 @@ homepage.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 readme = "README.md"
-documentation = "https://docs.rs/rich-cli"
 keywords = ["cli", "terminal", "markdown", "syntax", "pretty-print"]
 categories = ["command-line-utilities", "text-processing"]
 include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]

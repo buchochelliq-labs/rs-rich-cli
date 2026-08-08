@@ -1,0 +1,74 @@
+name: Bug report
+description: Something renders wrong, panics, or diverges from Python rich
+title: "bug: "
+labels: ["type:bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing. The single most useful thing you can give us is a
+        **comparison against Python `rich`** — this project's whole promise is
+        byte-parity, so "upstream prints X, this prints Y" turns a bug report
+        into a test case.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+      placeholder: |
+        `Table` with a `no_wrap` column drops the last character when the cell is
+        exactly the column width. I expected it to be kept.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: >
+        The smallest Rust snippet or `rich` command that shows it. If output is
+        involved, paste the **exact bytes** (e.g. `println!("{:?}", …)` or
+        `cargo run … | xxd | head`) rather than a screenshot — an escape
+        sequence is invisible otherwise.
+      render: rust
+      placeholder: |
+        let console = Console::builder().width(10).build();
+        println!("{:?}", console.capture(|c| c.print_str("[bold]hi[/]")));
+    validations:
+      required: true
+
+  - type: textarea
+    id: upstream
+    attributes:
+      label: What Python rich 15.0.0 does
+      description: >
+        The equivalent Python and its output, if you have it. Use
+        `Console(force_terminal=True, color_system="truecolor",
+        legacy_windows=False, safe_box=False, no_color=False)` so the comparison
+        is deterministic.
+
+        If you have not checked upstream, write "not checked" — that is fine and
+        honest, and we will check.
+      render: python
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Crate version or git SHA, and which crate.
+      placeholder: "rs-rich 0.0.1 (or main @ abc1234)"
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: Terminal and OS
+      description: >
+        Terminal emulator matters for anything involving colour, width or boxes.
+      placeholder: "Windows Terminal on Windows 11 / iTerm2 on macOS 15"
+    validations:
+      required: false
