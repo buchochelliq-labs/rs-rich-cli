@@ -17,7 +17,9 @@ homepage.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 readme = "README.md"
-documentation = "https://docs.rs/rich-art"
+# Must match the PACKAGE name, not the lib name: `docs.rs/rich` is a real,
+# unrelated crate, and crates.io metadata cannot be edited after publishing.
+documentation = "https://docs.rs/rs-rich-art"
 keywords = ["ascii-art", "figlet", "terminal", "gif", "banner"]
 categories = ["command-line-interface", "multimedia::images", "text-processing"]
 # The bundled FIGfont and the demo GIFs are part of the package; the example

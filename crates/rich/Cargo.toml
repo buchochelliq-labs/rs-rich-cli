@@ -15,7 +15,9 @@ homepage.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 readme = "README.md"
-documentation = "https://docs.rs/rich"
+# Must match the PACKAGE name, not the lib name: `docs.rs/rich` is a real,
+# unrelated crate, and crates.io metadata cannot be edited after publishing.
+documentation = "https://docs.rs/rs-rich"
 keywords = ["terminal", "console", "ansi", "formatting", "tui"]
 categories = ["command-line-interface", "text-processing"]
 # Keep the published tarball lean: sources, licence and readme only. Without

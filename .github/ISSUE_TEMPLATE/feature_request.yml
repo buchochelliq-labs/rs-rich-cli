@@ -1,0 +1,56 @@
+name: Feature request
+description: Something missing that upstream rich has, or an addition of our own
+title: "feat: "
+labels: ["type:feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Two quite different things land here, and the answer differs by which:
+
+        - **Upstream has it, we don't** → it belongs in `crates/rich`, ported
+          faithfully. Prefer the *Port a module* template if it maps to a whole
+          upstream module.
+        - **Upstream does not have it** → it belongs in `crates/rich-ext` or
+          `crates/rich-art`, never in the core. See AGENTS.md; this boundary is
+          what keeps upstream syncs mechanical.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Which is it?
+      options:
+        - Upstream rich has this and we're missing it
+        - Our own addition (not in upstream)
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What should exist
+      description: The capability, and what you'd do with it.
+    validations:
+      required: true
+
+  - type: input
+    id: upstream_ref
+    attributes:
+      label: Upstream reference
+      description: >
+        If upstream has it, where? A module, class or function name is enough —
+        it becomes the parity target.
+      placeholder: "rich/columns.py — Columns(equal=True, expand=True)"
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you're doing instead today
+      description: >
+        The workaround, if any. This is genuinely useful for prioritising: a gap
+        with no workaround is a different problem from one with an ugly one.
+    validations:
+      required: false
