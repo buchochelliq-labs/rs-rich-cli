@@ -1200,9 +1200,15 @@ RENDER MODE (choose at most one; default auto-detects by extension):\n\
         --gif        Animate one or more GIFs (several play side by side)\n\
         --loop N     With --gif, repeat N times (0 = forever)\n\
         --rule       Draw a horizontal rule (RESOURCE is its title)\n\
+        --diff       Perceptually compare two images (needs exactly two)\n\
 \n\
 OPTIONS:\n\
     -w, --width N     Set the output width\n\
+        --image-mode M\n\
+                      With --diff, how to draw the picture: auto (default),\n\
+                      sixel (real pixels), blocks, ascii, none\n\
+        --threshold PCT\n\
+                      With --diff, exit non-zero above PCT%% changed\n\
         --left        Left-justify output\n\
         --center      Center output\n\
         --right       Right-justify output\n\
