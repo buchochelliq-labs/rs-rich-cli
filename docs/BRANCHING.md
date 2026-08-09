@@ -40,7 +40,7 @@ If that ever fails, something was published that isn't on `main`.
 | `feat/<slug>` · `fix/<slug>` · `chore/<slug>` · `docs/<slug>` | fresh `origin/main` | `main` via PR | one PR |
 | `port/<module>` | fresh `origin/main` | `main` via PR | one PR — the `port-module` skill |
 | `sync/rich-<version>` | fresh `origin/main` | `main` via PR | one PR — the `sync-upstream` skill |
-| `rc/<X.Y.Z>-rc.<N>` | fresh `origin/main` | `main` via PR, then tag `vX.Y.Z-rc.N` on `main` | minutes |
+| `rc/<X.Y.Z>` | fresh `origin/main` | `main` via PR, then tag on `main` | a release cycle |
 | `release/<X.Y.Z>` | fresh `origin/main` | `main` via PR, then tag `vX.Y.Z` on `main` | minutes |
 | `hotfix/<X.Y.Z>` | the tag `vX.Y.(Z-1)` | nothing — tagged in place, forward-ported to `main` by PR | until forward-ported |
 
@@ -58,6 +58,25 @@ It refuses any push to a branch whose PR has already merged. This is not
 hypothetical: it was written immediately after two commits were pushed onto
 PR #31's branch minutes after that PR merged, stranding them exactly as #23 and
 #30 were stranded.
+
+### Release-candidate branches
+
+`rc/<X.Y.Z>` is an **integration branch**: ordinary work targets it during a
+release cycle, and it merges to `main` when the cycle closes. Tags are still only
+ever placed on `main`, so the ancestor invariant above still holds.
+
+This is a deliberate exception to "everything targets `main`", and it reintroduces
+the one thing the rest of this document exists to avoid — a second long-lived
+head. It is safe **only** while the rc stays a fast-forward of `main`. The moment
+`main` moves ahead, merging the rc either conflicts or silently reverts, and a
+release cut from it no longer contains what is on `main`.
+
+CI enforces that: the `rc not behind main` check fails any PR into an `rc/*`
+branch that has fallen behind. Keep it current with:
+
+```bash
+git switch rc/0.0.2 && git merge origin/main && git push
+```
 
 ### Stacked branches
 
@@ -106,6 +125,7 @@ Documented discipline decays; these are the mechanisms.
 | Pushing to a branch whose PR merged | `delete_branch_on_merge` — the branch ceases to exist | prevents |
 | …the same, on a clone that still has the branch | `.githooks/pre-push` — refuses the push | prevents |
 | Merging a stacked PR into a dead base | `base branch` CI check | prevents |
+| An rc branch drifting behind `main` | `rc not behind main` CI check | detects, before release |
 | A required check that can never report | one aggregate `ci-ok` context, not per-matrix-job names | prevents |
 | Merging a branch cut from a stale `main` | `strict: true` on required checks | prevents |
 | A PR that says nothing useful | `pr body` CI check against the template | prevents |

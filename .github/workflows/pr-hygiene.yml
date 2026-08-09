@@ -104,14 +104,44 @@ jobs:
           BASE: ${{ github.event.pull_request.base.ref }}
         run: |
           case "$BASE" in
-            main|release/*)
+            main|release/*|rc/*)
               echo "Base '$BASE' is fine."
               ;;
             *)
-              echo "::error::This PR targets '$BASE', which is neither 'main' nor a 'release/*' branch."
+              echo "::error::This PR targets '$BASE', which is not 'main', 'rc/*' or 'release/*'."
               echo "::error::Stacked PRs are fine to open, but must be retargeted to main before merging —"
               echo "::error::a base branch that gets squash-merged and deleted takes this PR's commits with it."
               echo "::error::Retarget with: gh pr edit <number> --base main"
               exit 1
               ;;
           esac
+
+  # An rc branch is a second long-lived head, which is the shape behind every
+  # instance of work being lost in this repo. It is safe only while it stays a
+  # fast-forward of main — the moment main moves ahead, an rc merge either
+  # conflicts or silently reverts, and a tag cut from it is no longer on main.
+  #
+  # So: fail loudly the moment rc falls behind, rather than at release time.
+  rc-current:
+    name: rc not behind main
+    if: startsWith(github.event.pull_request.base.ref, 'rc/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Fail if the rc branch is behind main
+        env:
+          BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          git fetch origin main "$BASE" --quiet
+          behind=$(git rev-list --count "origin/$BASE..origin/main")
+          if [ "$behind" -gt 0 ]; then
+            echo "::error::'$BASE' is $behind commit(s) behind main."
+            echo "::error::Merge main into it before landing more work, or the release"
+            echo "::error::cut from this branch will not contain what is on main."
+            echo "::error::  git switch $BASE && git merge origin/main && git push"
+            exit 1
+          fi
+          echo "'$BASE' is up to date with main."
