@@ -62,6 +62,11 @@ required-features = ["gif"]
 name = "shrink_asset"
 required-features = ["gif"]
 
+# Prints an image-diff report as JSON, for diffing against the Python oracle.
+[[example]]
+name = "diff_report"
+required-features = ["image"]
+
 [lib]
 # The package is `rs-rich-art` on crates.io (plain `rich` is taken), but the
 # library target keeps the short name so users write `use rich_art::…`.

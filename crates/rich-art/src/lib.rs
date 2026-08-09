@@ -24,6 +24,9 @@ pub mod figlet;
 #[cfg(feature = "image")]
 pub mod ascii;
 
+#[cfg(feature = "image")]
+pub mod imagediff;
+
 #[cfg(feature = "gif")]
 pub mod gif;
 
@@ -34,6 +37,9 @@ pub use crate::figlet::{FigletFont, FontError, Justify};
 
 #[cfg(feature = "image")]
 pub use crate::ascii::{AsciiArt, DEFAULT_RAMP};
+
+#[cfg(feature = "image")]
+pub use crate::imagediff::{diff, DiffError, DiffReport, DiffSettings, Region};
 
 #[cfg(feature = "gif")]
 pub use crate::gif::{AnimatedArt, Repeat};
