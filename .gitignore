@@ -27,3 +27,6 @@ crates/rich-art/examples/assets/waving_cat.gif
 /.docsvenv/
 # Intermediate animation frames
 /target/doc-frames/
+# Benchmark venv (holds an older `rich` than UPSTREAM.toml pins) and fixtures
+/.benchvenv/
+/target/bench-fixtures/

@@ -79,6 +79,7 @@ nav:
   - Parity with Python rich:
       - Overview: parity.md
       - Divergences: DIVERGENCES.md
+      - Benchmarks: benchmarks.md
       - Roadmap: ROADMAP.md
       - Module status: PORTING.md
   - Contributing:
