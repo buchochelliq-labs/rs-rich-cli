@@ -50,8 +50,47 @@ enum Mode {
     Ipynb,
     /// `--gif`: animate one or more GIFs in place.
     Gif,
+    /// `--diff`: perceptually compare two images (takes exactly two resources).
+    Diff,
     /// `--rule`: draw a horizontal rule (the resource, if any, is its title).
     Rule,
+}
+
+/// How `--diff` draws the image part of its report.
+///
+/// Detection of terminal graphics support is a heuristic and will be wrong
+/// somewhere (there is no reliable probe that works when output is piped), so
+/// this is exposed rather than inferred: when the guess is wrong the user
+/// picks.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ImageMode {
+    /// Sixel where it looks supported, else half-blocks, else ASCII.
+    Auto,
+    /// Real pixels via the Sixel graphics protocol.
+    Sixel,
+    /// Half-block characters — works in any truecolour terminal.
+    Blocks,
+    /// A character ramp, the jp2a-style rendering. No colour required.
+    Ascii,
+    /// Skip the picture; print only the numbers.
+    None,
+}
+
+impl std::str::FromStr for ImageMode {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.to_ascii_lowercase().as_str() {
+            "auto" => Ok(Self::Auto),
+            "sixel" => Ok(Self::Sixel),
+            "blocks" | "block" => Ok(Self::Blocks),
+            "ascii" | "art" => Ok(Self::Ascii),
+            "none" | "off" => Ok(Self::None),
+            other => Err(format!(
+                "unknown image mode {other:?} (auto, sixel, blocks, ascii, none)"
+            )),
+        }
+    }
 }
 
 /// Parsed command line.
@@ -66,6 +105,13 @@ struct Cli {
     /// `--loop N`: how many times `--gif` repeats (0 = forever).
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     loops: Option<usize>,
+    /// `--threshold PCT`: with `--diff`, exit non-zero when the changed
+    /// percentage of the canvas exceeds this. Makes the tool a CI gate.
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    diff_threshold: Option<f32>,
+    /// `--image-mode`: how `--diff` draws its picture.
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    image_mode: ImageMode,
     width: Option<usize>,
     justify: Option<Justify>,
     no_color: bool,
@@ -153,6 +199,8 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut mode = Mode::Auto;
     let mut resources: Vec<String> = Vec::new();
     let mut loops = None;
+    let mut diff_threshold = None;
+    let mut image_mode = ImageMode::Auto;
     let mut width = None;
     let mut justify = None;
     let mut no_color = false;
@@ -183,6 +231,23 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--csv" => set_mode(&mut mode, Mode::Csv)?,
             "--ipynb" => set_mode(&mut mode, Mode::Ipynb)?,
             "--gif" => set_mode(&mut mode, Mode::Gif)?,
+            "--diff" => set_mode(&mut mode, Mode::Diff)?,
+            "--image-mode" => {
+                let value = iter
+                    .next()
+                    .ok_or("--image-mode requires one of: auto, sixel, blocks, ascii, none")?;
+                image_mode = value.parse()?;
+            }
+            "--threshold" => {
+                let value = iter
+                    .next()
+                    .ok_or("--threshold requires a percentage, e.g. --threshold 2")?;
+                diff_threshold = Some(
+                    value
+                        .parse()
+                        .map_err(|_| format!("invalid threshold {value:?}"))?,
+                );
+            }
             "--loop" => {
                 let value = iter.next().ok_or("--loop requires a count (0 = forever)")?;
                 loops = Some(
@@ -242,7 +307,10 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
 
     // Only `--gif` animates several resources at once; every other mode renders
     // exactly one.
-    if mode != Mode::Gif && resources.len() > 1 {
+    if mode == Mode::Diff && resources.len() != 2 {
+        return Err("--diff needs exactly two images: --diff before.png after.png".into());
+    }
+    if mode != Mode::Gif && mode != Mode::Diff && resources.len() > 1 {
         return Err("only one resource may be given (except with --gif)".into());
     }
     let resource = resources.first().cloned();
@@ -252,6 +320,8 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         resource,
         resources,
         loops,
+        diff_threshold,
+        image_mode,
         width,
         justify,
         no_color,
@@ -460,6 +530,12 @@ fn run(cli: Cli) -> ExitCode {
     // animates rather than rendering once.
     if mode == Mode::Gif {
         return play_gifs(&cli, &console);
+    }
+
+    // `--diff` consumes both resources and reports rather than rendering one.
+    #[cfg(feature = "art")]
+    if mode == Mode::Diff {
+        return run_diff(&cli, &console, &export);
     }
 
     // A rule takes its optional title from the resource string directly (no
@@ -817,6 +893,148 @@ fn render_ipynb(console: &Console, content: &str) {
     }
 }
 
+/// Compare two images perceptually and report where they differ.
+///
+/// Prints a heat map of the ΔE field plus a ranked table of changed regions.
+/// The table is the point: it is text, so it survives a pipe, a log, and a CI
+/// transcript, which a picture does not.
+///
+/// With `--threshold`, exits non-zero when the changed percentage exceeds it,
+/// which is what makes this usable as a visual-regression gate.
+#[cfg(feature = "art")]
+fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
+    use rich::Table;
+    use rich_art::imagediff::{diff, DiffSettings};
+    use rich_art::{AsciiArt, BlockArt, SixelArt};
+
+    let (before_path, after_path) = (&cli.resources[0], &cli.resources[1]);
+    let open = |path: &String| match rich_art::image::open(path) {
+        Ok(image) => Some(image),
+        Err(err) => {
+            eprintln!("rich: cannot read {path}: {err}");
+            None
+        }
+    };
+    let (Some(before), Some(after)) = (open(before_path), open(after_path)) else {
+        return ExitCode::FAILURE;
+    };
+
+    let report = match diff(&before, &after, &DiffSettings::default()) {
+        Ok(report) => report,
+        Err(err) => {
+            eprintln!("rich: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let width = cli.width.unwrap_or_else(|| console.width());
+    let changed = report.changed_fraction * 100.0;
+    let naive = report.naive_changed_fraction * 100.0;
+
+    // Decided before rendering so the verdict can be part of the output (and
+    // therefore part of an --export-svg capture), while the exit code is
+    // settled outside the closure.
+    let failed = cli.diff_threshold.is_some_and(|limit| changed > limit);
+
+    let wrote = emit(console, export, |c| {
+        // Half-blocks when there is colour to use: a ramp renderer turns the
+        // dark parts of a heat map into spaces, which reads as noise rather
+        // than as a picture. Without colour the blocks convey nothing, so fall
+        // back to the ramp there.
+        // Resolve `auto` once, here, so the rest is a plain match. Sixel gives
+        // real pixels; half-blocks are the best the character grid can do; the
+        // ramp is the only one that survives without colour.
+        let rows_cap = 30;
+        let mut mode = cli.image_mode;
+        if mode == ImageMode::Auto {
+            mode = if cli.no_color {
+                ImageMode::Ascii
+            } else if rich_art::sixel::is_probably_supported() {
+                ImageMode::Sixel
+            } else {
+                ImageMode::Blocks
+            };
+        }
+
+        match mode {
+            ImageMode::None => {}
+            ImageMode::Ascii => c.print(
+                &AsciiArt::new(report.heatmap())
+                    .width(width)
+                    .color(!cli.no_color),
+            ),
+            ImageMode::Blocks => c.print(
+                &BlockArt::new(report.heatmap())
+                    .width(width)
+                    .height(rows_cap),
+            ),
+            ImageMode::Sixel => {
+                let art = SixelArt::new(report.heatmap())
+                    .width(width)
+                    .height(rows_cap);
+                // Encoding can fail, and a terminal that ignores the sequence
+                // shows nothing at all. Either way the report must stay useful,
+                // so fall back rather than leaving an empty gap.
+                if art.encode(width).is_some() {
+                    c.print(&art);
+                } else {
+                    c.print(
+                        &BlockArt::new(report.heatmap())
+                            .width(width)
+                            .height(rows_cap),
+                    );
+                }
+            }
+            ImageMode::Auto => unreachable!("resolved above"),
+        }
+        c.print_str(&format!(
+            "\n[bold]{changed:.1}%[/] of the canvas changed perceptibly \
+             [dim](a plain pixel diff would say {naive:.1}%)[/]"
+        ));
+
+        if report.regions.is_empty() {
+            c.print_str("[dim]No region large enough to report.[/]");
+        } else {
+            let mut table = Table::new().title("Where it changed");
+            table.add_column("#");
+            table.add_column_justify("Share", rich::Justify::Right);
+            table.add_column_justify("Mean ΔE", rich::Justify::Right);
+            table.add_column_justify("Area px", rich::Justify::Right);
+            table.add_column("Box (x,y w×h)");
+            for (rank, r) in report.regions.iter().enumerate() {
+                table.add_row(&[
+                    &format!("{}", rank + 1),
+                    &format!("{:.0}%", r.share_of_change * 100.0),
+                    &format!("{:.1}", r.mean_delta_e),
+                    &format!("{}", r.area_px),
+                    &format!("{},{} {}×{}", r.x, r.y, r.width, r.height),
+                ]);
+            }
+            c.print(&table);
+        }
+
+        // The gate is compared against the perceptual figure, never the naive
+        // one — gating on a pixel diff is what makes visual regression testing
+        // useless in the first place.
+        if let Some(limit) = cli.diff_threshold {
+            if failed {
+                c.print_str(&format!(
+                    "[bold red]FAIL[/] {changed:.1}% changed, limit {limit:.1}%"
+                ));
+            } else {
+                c.print_str(&format!(
+                    "[bold green]OK[/] {changed:.1}% changed, within {limit:.1}%"
+                ));
+            }
+        }
+    });
+
+    if !wrote || failed {
+        return ExitCode::FAILURE;
+    }
+    ExitCode::SUCCESS
+}
+
 /// Animate every `--gif` resource at once, sharing the console width.
 #[cfg(feature = "art")]
 fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
@@ -982,9 +1200,15 @@ RENDER MODE (choose at most one; default auto-detects by extension):\n\
         --gif        Animate one or more GIFs (several play side by side)\n\
         --loop N     With --gif, repeat N times (0 = forever)\n\
         --rule       Draw a horizontal rule (RESOURCE is its title)\n\
+        --diff       Perceptually compare two images (needs exactly two)\n\
 \n\
 OPTIONS:\n\
     -w, --width N     Set the output width\n\
+        --image-mode M\n\
+                      With --diff, how to draw the picture: auto (default),\n\
+                      sixel (real pixels), blocks, ascii, none\n\
+        --threshold PCT\n\
+                      With --diff, exit non-zero above PCT% changed\n\
         --left        Left-justify output\n\
         --center      Center output\n\
         --right       Right-justify output\n\
