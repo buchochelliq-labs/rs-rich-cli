@@ -56,6 +56,43 @@ enum Mode {
     Rule,
 }
 
+/// How `--diff` draws the image part of its report.
+///
+/// Detection of terminal graphics support is a heuristic and will be wrong
+/// somewhere (there is no reliable probe that works when output is piped), so
+/// this is exposed rather than inferred: when the guess is wrong the user
+/// picks.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ImageMode {
+    /// Sixel where it looks supported, else half-blocks, else ASCII.
+    Auto,
+    /// Real pixels via the Sixel graphics protocol.
+    Sixel,
+    /// Half-block characters — works in any truecolour terminal.
+    Blocks,
+    /// A character ramp, the jp2a-style rendering. No colour required.
+    Ascii,
+    /// Skip the picture; print only the numbers.
+    None,
+}
+
+impl std::str::FromStr for ImageMode {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.to_ascii_lowercase().as_str() {
+            "auto" => Ok(Self::Auto),
+            "sixel" => Ok(Self::Sixel),
+            "blocks" | "block" => Ok(Self::Blocks),
+            "ascii" | "art" => Ok(Self::Ascii),
+            "none" | "off" => Ok(Self::None),
+            other => Err(format!(
+                "unknown image mode {other:?} (auto, sixel, blocks, ascii, none)"
+            )),
+        }
+    }
+}
+
 /// Parsed command line.
 struct Cli {
     mode: Mode,
@@ -72,6 +109,9 @@ struct Cli {
     /// percentage of the canvas exceeds this. Makes the tool a CI gate.
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     diff_threshold: Option<f32>,
+    /// `--image-mode`: how `--diff` draws its picture.
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    image_mode: ImageMode,
     width: Option<usize>,
     justify: Option<Justify>,
     no_color: bool,
@@ -160,6 +200,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut resources: Vec<String> = Vec::new();
     let mut loops = None;
     let mut diff_threshold = None;
+    let mut image_mode = ImageMode::Auto;
     let mut width = None;
     let mut justify = None;
     let mut no_color = false;
@@ -191,6 +232,12 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--ipynb" => set_mode(&mut mode, Mode::Ipynb)?,
             "--gif" => set_mode(&mut mode, Mode::Gif)?,
             "--diff" => set_mode(&mut mode, Mode::Diff)?,
+            "--image-mode" => {
+                let value = iter
+                    .next()
+                    .ok_or("--image-mode requires one of: auto, sixel, blocks, ascii, none")?;
+                image_mode = value.parse()?;
+            }
             "--threshold" => {
                 let value = iter
                     .next()
@@ -274,6 +321,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         resources,
         loops,
         diff_threshold,
+        image_mode,
         width,
         justify,
         no_color,
@@ -857,7 +905,7 @@ fn render_ipynb(console: &Console, content: &str) {
 fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     use rich::Table;
     use rich_art::imagediff::{diff, DiffSettings};
-    use rich_art::{AsciiArt, BlockArt};
+    use rich_art::{AsciiArt, BlockArt, SixelArt};
 
     let (before_path, after_path) = (&cli.resources[0], &cli.resources[1]);
     let open = |path: &String| match rich_art::image::open(path) {
@@ -893,15 +941,51 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
         // dark parts of a heat map into spaces, which reads as noise rather
         // than as a picture. Without colour the blocks convey nothing, so fall
         // back to the ramp there.
+        // Resolve `auto` once, here, so the rest is a plain match. Sixel gives
+        // real pixels; half-blocks are the best the character grid can do; the
+        // ramp is the only one that survives without colour.
         let rows_cap = 30;
-        if cli.no_color {
-            c.print(&AsciiArt::new(report.heatmap()).width(width).color(false));
-        } else {
-            c.print(
+        let mut mode = cli.image_mode;
+        if mode == ImageMode::Auto {
+            mode = if cli.no_color {
+                ImageMode::Ascii
+            } else if rich_art::sixel::is_probably_supported() {
+                ImageMode::Sixel
+            } else {
+                ImageMode::Blocks
+            };
+        }
+
+        match mode {
+            ImageMode::None => {}
+            ImageMode::Ascii => c.print(
+                &AsciiArt::new(report.heatmap())
+                    .width(width)
+                    .color(!cli.no_color),
+            ),
+            ImageMode::Blocks => c.print(
                 &BlockArt::new(report.heatmap())
                     .width(width)
                     .height(rows_cap),
-            );
+            ),
+            ImageMode::Sixel => {
+                let art = SixelArt::new(report.heatmap())
+                    .width(width)
+                    .height(rows_cap);
+                // Encoding can fail, and a terminal that ignores the sequence
+                // shows nothing at all. Either way the report must stay useful,
+                // so fall back rather than leaving an empty gap.
+                if art.encode(width).is_some() {
+                    c.print(&art);
+                } else {
+                    c.print(
+                        &BlockArt::new(report.heatmap())
+                            .width(width)
+                            .height(rows_cap),
+                    );
+                }
+            }
+            ImageMode::Auto => unreachable!("resolved above"),
         }
         c.print_str(&format!(
             "\n[bold]{changed:.1}%[/] of the canvas changed perceptibly \

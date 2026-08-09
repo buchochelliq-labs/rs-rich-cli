@@ -30,8 +30,9 @@ default = ["fetch", "art"]
 # `fetch` enables the CLI's URL support (`rich <url>`); disable it
 # (`--no-default-features`) for a lean, network-free build.
 fetch = ["dep:ureq"]
-# `art` enables `--gif` (animated GIF playback). Pulls in image decoders, so it
-# can be dropped for a smaller binary.
+# `art` enables `--gif` (animated GIF playback), `--diff` (perceptual image
+# diffing) and the image renderers behind `--image-mode`, including Sixel.
+# Pulls in image decoders, so it can be dropped for a smaller binary.
 art = ["dep:rich-art"]
 
 [dependencies]
@@ -39,4 +40,4 @@ rich.workspace = true
 rich-ext.workspace = true
 serde_json.workspace = true
 ureq = { workspace = true, optional = true }
-rich-art = { workspace = true, optional = true, features = ["gif"] }
+rich-art = { workspace = true, optional = true, features = ["gif", "sixel"] }

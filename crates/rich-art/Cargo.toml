@@ -41,6 +41,8 @@ default = []
 image = ["dep:image"]
 # `gif` adds animated-GIF playback, driven by `rich`'s Live display.
 gif = ["image"]
+# `sixel` renders real pixels via the Sixel graphics protocol.
+sixel = ["image", "dep:icy_sixel"]
 
 # The image/GIF examples only build when their feature is on.
 [[example]]
@@ -78,3 +80,4 @@ workspace = true
 [dependencies]
 rich.workspace = true
 image = { workspace = true, optional = true }
+icy_sixel = { version = "0.5.1", optional = true }
