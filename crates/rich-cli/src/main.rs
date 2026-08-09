@@ -1208,7 +1208,7 @@ OPTIONS:\n\
                       With --diff, how to draw the picture: auto (default),\n\
                       sixel (real pixels), blocks, ascii, none\n\
         --threshold PCT\n\
-                      With --diff, exit non-zero above PCT%% changed\n\
+                      With --diff, exit non-zero above PCT% changed\n\
         --left        Left-justify output\n\
         --center      Center output\n\
         --right       Right-justify output\n\
