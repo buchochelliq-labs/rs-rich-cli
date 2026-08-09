@@ -152,6 +152,10 @@ pub fn render(markup: &str) -> Result<Text> {
                     stack.push((Style::normalize(&tag_name), parameters, plain.len()));
                 }
             }
+            // Dropped here rather than later by `Text::new`: span offsets are
+            // computed against `plain` as it is built, so stripping afterwards
+            // shifts the text out from under them.
+            _ if crate::text::is_control_code(c) => {}
             _ => plain.push(c),
         }
     }
@@ -241,6 +245,30 @@ mod tests {
             render_to_ansi("[bold]Hello[/] [red]World[/]"),
             "\x1b[1mHello\x1b[0m \x1b[31mWorld\x1b[0m"
         );
+    }
+
+    /// A control code must never reach `plain`, because span offsets are
+    /// computed against it as it is built. Stripping later shifts the text out
+    /// from under the offsets, and a boundary landing inside a multi-byte
+    /// character panics on slicing.
+    ///
+    /// Regression: `rich --print` on any input containing a CR — i.e. any file
+    /// with CRLF line endings — panicked.
+    #[test]
+    fn control_codes_never_desynchronise_span_offsets() {
+        let text = render("a\r[red]\u{2593}x[/]").expect("valid markup");
+        assert_eq!(text.plain(), "a\u{2593}x");
+        for span in text.spans() {
+            assert!(
+                text.plain().is_char_boundary(span.start)
+                    && text.plain().is_char_boundary(span.end),
+                "span {span:?} does not land on char boundaries of {:?}",
+                text.plain()
+            );
+        }
+        // Rendering is what actually panicked, so exercise it.
+        let rendered = render_to_ansi("a\r[red]\u{2593}x[/]");
+        assert!(rendered.contains('\u{2593}'), "got {rendered:?}");
     }
 
     #[test]

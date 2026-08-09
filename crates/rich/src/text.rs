@@ -13,6 +13,19 @@ use crate::segment::Segment;
 use crate::style::{Style, StyleType};
 use crate::theme::Theme;
 
+/// The control codes upstream drops in `Text.__init__` (`strip_control_codes`):
+/// BEL, backspace, vertical tab, form feed and carriage return. Tab and newline
+/// are layout, not control, and are kept.
+///
+/// Crate-visible because **every** producer of a `Text` plus its spans must agree
+/// on this set. `markup::render` computes span byte-offsets as it builds the
+/// plain string; if it kept a code that `Text::new` later removed, the content
+/// would shift left while the offsets stayed put, and a boundary landing inside
+/// a multi-byte character panics on slicing.
+pub(crate) fn is_control_code(c: char) -> bool {
+    matches!(c, '\u{7}' | '\u{8}' | '\u{b}' | '\u{c}' | '\r')
+}
+
 /// Cell width of a tab stop. Upstream's `Console.tab_size` default; a per-console
 /// override is not ported yet (see `docs/DIVERGENCES.md`).
 pub const DEFAULT_TAB_SIZE: usize = 8;
@@ -53,13 +66,8 @@ impl Text {
     /// carriage return. Tab and newline are deliberately kept — they are layout,
     /// not control.
     fn strip_control_codes(text: &str) -> String {
-        if text
-            .bytes()
-            .any(|b| matches!(b, 0x07 | 0x08 | 0x0b | 0x0c | 0x0d))
-        {
-            text.chars()
-                .filter(|c| !matches!(c, '\u{7}' | '\u{8}' | '\u{b}' | '\u{c}' | '\r'))
-                .collect()
+        if text.chars().any(is_control_code) {
+            text.chars().filter(|c| !is_control_code(*c)).collect()
         } else {
             text.to_string()
         }
@@ -81,7 +89,10 @@ impl Text {
     /// time (`Text::styled("hi", "repr.number")`) or a resolved [`Style`].
     pub fn styled(plain: impl Into<String>, style: impl Into<StyleType>) -> Self {
         Text {
-            plain: plain.into(),
+            // Strips too: upstream's `Text.__init__` does this regardless of
+            // style, and a constructor that skipped it would reintroduce the
+            // offset divergence the moment a caller added spans.
+            plain: Text::strip_control_codes(&plain.into()),
             spans: Vec::new(),
             style: style.into(),
             justify: Justify::Default,
