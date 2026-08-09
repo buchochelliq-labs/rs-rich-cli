@@ -62,6 +62,10 @@ plugins:
 
 extra_css:
   - assets/extra.css
+  - assets/imgdiff.css
+
+extra_javascript:
+  - assets/imgdiff.js
 
 nav:
   - Home: index.md
@@ -75,6 +79,7 @@ nav:
       - 5. Progress and live output: tutorial/05-live.md
       - 6. The CLI: tutorial/06-cli.md
   - Gallery: gallery.md
+  - Comparing images: image-diff.md
   - CLI reference: cli.md
   - Parity with Python rich:
       - Overview: parity.md

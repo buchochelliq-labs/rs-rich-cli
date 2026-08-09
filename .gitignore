@@ -27,3 +27,7 @@ crates/rich-art/examples/assets/waving_cat.gif
 /.docsvenv/
 # Intermediate animation frames
 /target/doc-frames/
+
+# Local docs toolchain (mkdocs-material venv) and its build output.
+.docsvenv/
+site/

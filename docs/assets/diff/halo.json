@@ -1,0 +1,46 @@
+{
+  "before": "docs/assets/diff/src/halo-before.webp",
+  "after": "docs/assets/diff/src/halo-after.webp",
+  "size": [
+    1254,
+    1254
+  ],
+  "settings": {
+    "blur": 6.0,
+    "delta_e_threshold": 60.0,
+    "open_kernel": 11
+  },
+  "changed_fraction": 0.1247,
+  "naive_changed_fraction": 0.4218,
+  "mean_delta_e": 23.88,
+  "max_delta_e": 156.95,
+  "regions": [
+    {
+      "x": 277,
+      "y": 70,
+      "width": 712,
+      "height": 262,
+      "area_px": 83526,
+      "share_of_change": 0.4681,
+      "mean_delta_e": 98.0
+    },
+    {
+      "x": 605,
+      "y": 861,
+      "width": 277,
+      "height": 275,
+      "area_px": 10575,
+      "share_of_change": 0.0593,
+      "mean_delta_e": 78.3
+    },
+    {
+      "x": 172,
+      "y": 595,
+      "width": 145,
+      "height": 331,
+      "area_px": 7608,
+      "share_of_change": 0.0426,
+      "mean_delta_e": 71.8
+    }
+  ]
+}
