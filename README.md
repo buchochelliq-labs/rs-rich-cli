@@ -67,8 +67,9 @@ and a `log`/`tracing` handler.
 [docs/DIVERGENCES.md](docs/DIVERGENCES.md) — most notably syntax highlighting uses
 `syntect` rather than Pygments, so highlighted code is *not* byte-identical.
 
-Per-module detail is in [docs/PORTING.md](docs/PORTING.md); the roadmap is in
-GitHub issues.
+Per-module detail is in [docs/PORTING.md](docs/PORTING.md). What comes next, and
+why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
+[#16](https://github.com/buchochelliq-labs/rs-rich-cli/issues/16).
 
 ## Install
 
