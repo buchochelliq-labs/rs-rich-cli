@@ -8,7 +8,7 @@ Two rules constrain everything here:
 - **The core stays a faithful mirror.** Anything upstream `rich` does not have
   goes in `rich-ext`, `rich-art`, or a new crate — never in `crates/rich`. This
   is what keeps an upstream sync a mechanical diff rather than a merge conflict.
-  See [AGENTS.md](../AGENTS.md).
+  See [AGENTS.md](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/AGENTS.md).
 - **Byte-parity is the correctness oracle.** A feature that cannot be checked
   against real Python `rich` needs its own argument for why it is correct.
 
