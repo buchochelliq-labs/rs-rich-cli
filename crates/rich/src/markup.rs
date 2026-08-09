@@ -10,6 +10,8 @@
 //! and an unmatched closing tag raises [`RichError::Markup`](crate::RichError).
 //! `@`-tags (meta/handlers) apply no visible style.
 
+use fancy_regex::Regex;
+
 use crate::errors::{Result, RichError};
 use crate::style::{Style, StyleType};
 use crate::text::{Span, Text};
@@ -23,9 +25,113 @@ struct RawSpan {
     parameters: Option<String>,
 }
 
-/// Whether `c` may start a markup tag (upstream's `[a-z#/@]` class).
+/// Whether `c` may start a markup tag (the `[a-z#/@]` class in `RE_TAGS`).
+/// Used by [`escape`], which decides where to insert backslashes and so needs
+/// the same notion of "this bracket would open a tag".
 fn is_tag_start(c: char) -> bool {
     c.is_ascii_lowercase() || c == '#' || c == '/' || c == '@'
+}
+
+/// Upstream's `RE_TAGS`, verbatim.
+///
+/// Using the same expression rather than hand-scanning is deliberate. Two of its
+/// details are easy to get wrong by hand and both were wrong here before:
+///
+/// - `(\\*)` captures the **whole run** of preceding backslashes, so escaping
+///   can be decided by parity. An even-length run is *not* an escape: it emits
+///   half as many literal backslashes and the tag still fires.
+/// - `[^\[]*?` forbids a `[` inside the tag body, so `[a[b]` is not a tag at
+///   all — it is literal text, and scanning resumes at the inner `[`.
+static RE_TAGS: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+    Regex::new(r"((\\*)\[([a-z#/@][^\[]*?)\])").expect("RE_TAGS is a valid pattern")
+});
+
+/// One item from the scanner: either literal text or a tag.
+enum Event<'a> {
+    Text(String),
+    Tag {
+        name: &'a str,
+        parameters: Option<String>,
+        /// Byte offset in the source markup, used only for error messages.
+        position: usize,
+    },
+}
+
+/// Split `markup` into text and tag events. Direct port of `markup._parse`.
+fn parse(markup: &str) -> Result<Vec<Event<'_>>> {
+    let mut events: Vec<Event> = Vec::new();
+    let mut position = 0usize;
+
+    for captures in RE_TAGS.captures_iter(markup) {
+        let captures =
+            captures.map_err(|e| RichError::Markup(format!("markup scan failed: {e}")))?;
+        let whole = captures.get(1).expect("group 1 always participates");
+        let escapes = captures.get(2).map_or("", |m| m.as_str());
+        let tag_text = captures
+            .get(3)
+            .expect("group 3 always participates")
+            .as_str();
+        let (mut start, end) = (whole.start(), whole.end());
+
+        if start > position {
+            events.push(Event::Text(unescape_brackets(&markup[position..start])));
+        }
+
+        if !escapes.is_empty() {
+            // `divmod(len(escapes), 2)`: pairs collapse to one literal
+            // backslash each, and only an odd remainder escapes the tag.
+            let (backslashes, escaped) = (escapes.len() / 2, escapes.len() % 2 == 1);
+            if backslashes > 0 {
+                events.push(Event::Text("\\".repeat(backslashes)));
+                start += backslashes * 2;
+            }
+            if escaped {
+                // The tag is escaped: emit it as literal text, minus its
+                // backslashes, and do not open anything.
+                events.push(Event::Text(whole.as_str()[escapes.len()..].to_string()));
+                position = end;
+                continue;
+            }
+        }
+
+        // Everything after the first `=` is the tag's parameters, not part of
+        // its name — so `[link=url]` closes with `[/link]`.
+        let (name, parameters) = match tag_text.split_once('=') {
+            Some((name, params)) => (name, Some(params.to_string())),
+            None => (tag_text, None),
+        };
+        events.push(Event::Tag {
+            name,
+            parameters,
+            position: start,
+        });
+        position = end;
+    }
+
+    if position < markup.len() {
+        events.push(Event::Text(unescape_brackets(&markup[position..])));
+    }
+    Ok(events)
+}
+
+/// `\[` in ordinary text is a literal bracket. Upstream applies exactly this
+/// replacement to every text run it yields.
+fn unescape_brackets(text: &str) -> String {
+    text.replace("\\[", "[")
+}
+
+/// Append text to the plain buffer, dropping control codes as it goes.
+///
+/// Stripping has to happen *here*, not later in `Text::new`: span offsets are
+/// computed against `plain` as it is built, so removing bytes afterwards shifts
+/// the text out from under them — which panicked on any markup containing a
+/// carriage return.
+fn push_plain(plain: &mut String, chunk: &str) {
+    if chunk.chars().any(crate::text::is_control_code) {
+        plain.extend(chunk.chars().filter(|c| !crate::text::is_control_code(*c)));
+    } else {
+        plain.push_str(chunk);
+    }
 }
 
 /// Escape `markup` so it renders literally (no tags interpreted). Port of
@@ -82,41 +188,14 @@ pub fn render(markup: &str) -> Result<Text> {
     // normalized on the way in so that `[b]…[/bold]` matches, as upstream does.
     let mut stack: Vec<(String, Option<String>, usize)> = Vec::new();
 
-    let bytes = markup.as_bytes();
-    let mut chars = markup.char_indices().peekable();
-    while let Some((i, c)) = chars.next() {
-        match c {
-            '\\' if bytes.get(i + 1) == Some(&b'[') => {
-                // Escaped bracket: emit a literal '[' and skip it.
-                plain.push('[');
-                chars.next();
-            }
-            // A '[' only opens a tag when the next char is a tag-start; a tag
-            // must then close with ']'. Otherwise the '[' is literal text.
-            '[' if chars.peek().is_some_and(|&(_, nc)| is_tag_start(nc)) => {
-                // Read up to the closing ']'.
-                let mut tag = String::new();
-                let mut closed = false;
-                for (_, tc) in chars.by_ref() {
-                    if tc == ']' {
-                        closed = true;
-                        break;
-                    }
-                    tag.push(tc);
-                }
-                if !closed {
-                    // No closing bracket — treat the '[' as literal text.
-                    plain.push('[');
-                    plain.push_str(&tag);
-                    continue;
-                }
-                // Everything after the first `=` is the tag's parameters, not
-                // part of its name — so `[link=url]` closes with `[/link]`.
-                let (tag_name, parameters) = match tag.split_once('=') {
-                    Some((name, params)) => (name.to_string(), Some(params.to_string())),
-                    None => (tag.clone(), None),
-                };
-
+    for event in parse(markup)? {
+        match event {
+            Event::Text(chunk) => push_plain(&mut plain, &chunk),
+            Event::Tag {
+                name: tag_name,
+                parameters,
+                position: i,
+            } => {
                 if let Some(name) = tag_name.strip_prefix('/') {
                     let name = name.trim();
                     let end = plain.len();
@@ -149,14 +228,9 @@ pub fn render(markup: &str) -> Result<Text> {
                         parameters: open_parameters,
                     });
                 } else {
-                    stack.push((Style::normalize(&tag_name), parameters, plain.len()));
+                    stack.push((Style::normalize(tag_name), parameters, plain.len()));
                 }
             }
-            // Dropped here rather than later by `Text::new`: span offsets are
-            // computed against `plain` as it is built, so stripping afterwards
-            // shifts the text out from under them.
-            _ if crate::text::is_control_code(c) => {}
-            _ => plain.push(c),
         }
     }
 
@@ -177,9 +251,10 @@ pub fn render(markup: &str) -> Result<Text> {
     // no-op upstream produces.
     let mut spans: Vec<Span> = Vec::with_capacity(raw_spans.len());
     for raw in raw_spans {
-        if raw.start >= raw.end {
-            continue;
-        }
+        // Zero-length spans are NOT skipped. Upstream keeps them, and they
+        // still contribute a boundary point when segments are cut, so
+        // `[b]a[i][/i]b[/b]` emits two runs rather than one merged run. Same
+        // colours either way — different bytes.
         // `@`-prefixed tags are meta/handler tags (spans of app data). We don't
         // model those, so they carry no styling — stated explicitly rather than
         // left to fall out of a failed parse.
