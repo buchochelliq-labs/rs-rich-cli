@@ -205,6 +205,61 @@ fn naive_changed_fraction(before: &DynamicImage, after: &DynamicImage) -> f32 {
     changed as f32 / (a.width() * a.height()) as f32
 }
 
+impl DiffReport {
+    /// Render the ΔE map as a heat image — dark blue through magenta to
+    /// yellow, normalised so the ramp always spans the actual range rather
+    /// than a fixed scale. The ramp is the oracle's.
+    ///
+    /// Normalising per-image is deliberate: an absolute scale makes a pair
+    /// with one small intense change look identical to a pair with none.
+    pub fn heatmap(&self) -> DynamicImage {
+        const STOPS: [[f32; 3]; 5] = [
+            [13.0, 8.0, 66.0],
+            [86.0, 15.0, 129.0],
+            [170.0, 38.0, 118.0],
+            [238.0, 90.0, 70.0],
+            [252.0, 205.0, 60.0],
+        ];
+        // Guard the divisor: an all-zero map (identical images) would
+        // otherwise divide by zero and paint the canvas with NaN.
+        let peak = self.max_delta_e.max(1.0);
+        let mut out = image::RgbImage::new(self.width, self.height);
+        for (i, pixel) in out.pixels_mut().enumerate() {
+            let t = (self.delta_e[i] / peak).clamp(0.0, 1.0);
+            let pos = t * (STOPS.len() - 1) as f32;
+            let low = (pos.floor() as usize).min(STOPS.len() - 2);
+            let frac = pos - low as f32;
+            let mut rgb = [0u8; 3];
+            for c in 0..3 {
+                rgb[c] = (STOPS[low][c] * (1.0 - frac) + STOPS[low + 1][c] * frac) as u8;
+            }
+            *pixel = image::Rgb(rgb);
+        }
+        DynamicImage::ImageRgb8(out)
+    }
+
+    /// The "after" image dimmed, with the ranked regions left at full
+    /// brightness — the headline view, showing *where* rather than *how much*.
+    pub fn highlight(&self, after: &DynamicImage) -> DynamicImage {
+        const DIM: f32 = 0.35;
+        let src = after.to_rgb8();
+        let mut out = image::RgbImage::new(self.width, self.height);
+        for (x, y, pixel) in out.enumerate_pixels_mut() {
+            let p = src.get_pixel(x, y);
+            let inside = self
+                .regions
+                .iter()
+                .any(|r| x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height);
+            *pixel = if inside {
+                *p
+            } else {
+                image::Rgb(p.0.map(|c| (f32::from(c) * DIM) as u8))
+            };
+        }
+        DynamicImage::ImageRgb8(out)
+    }
+}
+
 /// Separable Gaussian blur over RGB, in f32.
 ///
 /// **Known parity risk against the oracle.** PIL's `ImageFilter.GaussianBlur`

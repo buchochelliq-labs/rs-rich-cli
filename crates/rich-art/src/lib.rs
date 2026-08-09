@@ -25,7 +25,15 @@ pub mod figlet;
 pub mod ascii;
 
 #[cfg(feature = "image")]
+pub mod block;
+
+#[cfg(feature = "image")]
 pub mod imagediff;
+
+/// The `image` crate, re-exported so callers can decode files without taking
+/// their own dependency on it (and without a version skew against ours).
+#[cfg(feature = "image")]
+pub use image;
 
 #[cfg(feature = "gif")]
 pub mod gif;
@@ -37,6 +45,9 @@ pub use crate::figlet::{FigletFont, FontError, Justify};
 
 #[cfg(feature = "image")]
 pub use crate::ascii::{AsciiArt, DEFAULT_RAMP};
+
+#[cfg(feature = "image")]
+pub use crate::block::BlockArt;
 
 #[cfg(feature = "image")]
 pub use crate::imagediff::{diff, DiffError, DiffReport, DiffSettings, Region};

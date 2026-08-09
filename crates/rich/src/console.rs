@@ -789,7 +789,17 @@ impl ConsoleBuilder {
     }
 }
 
-/// Detect the terminal color system from environment variables.
+/// Detect the terminal color system.
+///
+/// `COLORTERM`/`TERM` are the portable signals, but **Windows sets neither**.
+/// Detecting from them alone meant every Windows console fell back to
+/// [`ColorSystem::Standard`] — 16 colors — for all output. Measured on a real
+/// Windows Terminal session: 28 distinct colors in a rendered heat map against
+/// 140 once truecolor was detected.
+///
+/// Upstream `rich` special-cases Windows for the same reason. It reaches the
+/// platform APIs directly; we ask `anstyle-query`, which avoids hand-written
+/// `unsafe` FFI for a console handle (see `docs/DIVERGENCES.md`).
 fn detect_color_system() -> ColorSystem {
     if let Some(colorterm) = std::env::var_os("COLORTERM") {
         let colorterm = colorterm.to_string_lossy().to_ascii_lowercase();
@@ -797,6 +807,17 @@ fn detect_color_system() -> ColorSystem {
             return ColorSystem::Truecolor;
         }
     }
+
+    // A Windows console that accepts ENABLE_VIRTUAL_TERMINAL_PROCESSING is a
+    // modern one, and every Windows console that speaks VT also speaks 24-bit
+    // color. The call also *enables* VT processing, which legacy `conhost`
+    // needs before it will honour any escape sequence at all — so this both
+    // detects the capability and turns it on.
+    #[cfg(windows)]
+    if anstyle_query::windows::enable_ansi_colors() == Some(true) {
+        return ColorSystem::Truecolor;
+    }
+
     if let Some(term) = std::env::var_os("TERM") {
         if term.to_string_lossy().contains("256") {
             return ColorSystem::EightBit;

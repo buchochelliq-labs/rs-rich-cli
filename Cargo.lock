@@ -18,6 +18,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "anstyle-query"
+version = "1.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
+dependencies = [
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -447,6 +456,7 @@ dependencies = [
 name = "rs-rich"
 version = "0.0.1"
 dependencies = [
+ "anstyle-query",
  "fancy-regex 0.18.0",
  "pulldown-cmark",
  "serde_json",
