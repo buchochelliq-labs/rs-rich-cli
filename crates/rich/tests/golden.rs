@@ -723,6 +723,60 @@ fn overflow_parity() {
     assert!(checked > 0, "no overflow cases were checked");
 }
 
+/// Markup edge cases, checked against upstream — including which side errors.
+///
+/// These pin the three places a hand-rolled tag scanner drifts from upstream's
+/// `RE_TAGS`: backslash-run parity, a `[` inside a tag body, and zero-length
+/// spans. Every one of them passed the old ad-hoc scanner's own unit tests while
+/// diverging from real `rich`.
+#[test]
+fn markup_edge_parity() {
+    let data = include_str!("golden/markup_edge.tsv");
+    let console = truecolor_console(80);
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let markup = unescape(
+            parts
+                .next()
+                .unwrap_or_else(|| panic!("line {}: missing markup", index + 1)),
+        );
+        let expected = parts
+            .next()
+            .unwrap_or_else(|| panic!("line {}: missing expected", index + 1));
+
+        match console.try_build_text(&markup) {
+            Ok(text) => {
+                assert_ne!(
+                    expected,
+                    "<ERROR>",
+                    "edge case {name:?} (line {}): upstream raises MarkupError, we accepted it",
+                    index + 1
+                );
+                assert_eq!(
+                    console.render_to_string(&text),
+                    unescape(expected),
+                    "edge case {name:?} (line {}) diverged from upstream rich",
+                    index + 1
+                );
+            }
+            Err(error) => assert_eq!(
+                expected,
+                "<ERROR>",
+                "edge case {name:?} (line {}): upstream renders this, we raised {error}",
+                index + 1
+            ),
+        }
+        checked += 1;
+    }
+    assert!(checked > 0, "no markup edge cases were checked");
+}
+
 /// The bundled terminal-theme palettes, checked against upstream. Each theme is
 /// 18 colour triplets typed by hand, so this is the difference between a typo
 /// failing the build and it quietly shifting every exported colour.

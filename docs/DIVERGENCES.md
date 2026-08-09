@@ -17,28 +17,26 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** only if a concrete codepoint mismatch is found — then vendor the
   upstream table into `cells.rs`. Tracked with the `cells` porting issue.
 
-### 2. Markup: lenient print path is opt-out, not opt-in; partial backslash rules
-- **Differs:** `markup::render` matches upstream — a `[…]` is only a tag when it
-  starts with `[a-z#/@]`, an unmatched closing tag returns `RichError::Markup`,
-  unclosed *opening* tags auto-close, and (since tag names are resolved at render)
-  an **unknown tag name is a silent no-op** rather than an error, as verified
-  against real rich 15.0.0. Two gaps remain: (a) the infallible
-  `Console::print_str`/`build_text` still fall back to printing the raw text
-  where upstream would raise `MarkupError` — the strict behaviour is available as
-  `try_print_str` / `try_print_justified` / `try_build_text`, and `rich --print`
-  uses it, so user-supplied markup is reported rather than rendered literally;
-  and (b) the parser handles the common `\[` escape but not the full
-  backslash-run doubling semantics of `_parse` (the public `markup::escape`
-  *does* implement the full rule). Tag names now go through `Style::normalize`
-  and `[name=parameters]` is split as upstream does, so `[b]…[/bold]` matches and
-  `[link=url]…[/link]` works. `@`-tag *meta payloads* are still not modelled —
-  the tag applies no style and its parameters are discarded rather than being
-  `literal_eval`'d into a meta map.
+### 2. Markup: the lenient print path is opt-out, not opt-in
+- **Differs:** the *scanner* now matches upstream exactly. `markup::render` uses
+  upstream's own `RE_TAGS` expression rather than a hand-rolled loop, so
+  backslash-run parity, the ban on `[` inside a tag body, and zero-length spans
+  all behave identically. Pinned by 34 byte-parity fixtures in
+  `golden/markup_edge.tsv`, half of which assert *which side raises*.
+
+  One gap remains: the infallible `Console::print_str` / `build_text` still fall
+  back to printing the raw text where upstream would raise `MarkupError`. The
+  strict behaviour is available as `try_print_str` / `try_print_justified` /
+  `try_build_text`, and `rich --print` uses it, so user-supplied markup is
+  reported rather than rendered literally.
+
+  Also unmodelled: `@`-tag *meta payloads*. The tag applies no style and its
+  parameters are discarded rather than being `literal_eval`'d into a meta map.
 - **Why:** the infallible signatures keep the ~30 internal call sites that pass
   literal markup free of `unwrap`/`?` noise, where a parse error is a bug rather
-  than a runtime condition. The exotic backslash-run cases are rare.
-- **Remove:** make the strict form the default (renaming the lenient one to
-  `*_lossy`), and port the backslash-run branch of `_parse`, under #2.
+  than a runtime condition.
+- **Remove:** make the strict form the default, renaming the lenient one to
+  `*_lossy`.
 
 ### 3. Byte offsets in `Text` spans
 - **Differs:** upstream `Text` uses code-point offsets for spans; our `Text` uses
