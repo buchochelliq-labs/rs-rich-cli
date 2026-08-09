@@ -78,6 +78,37 @@ branch that has fallen behind. Keep it current with:
 git switch rc/0.0.2 && git merge origin/main && git push
 ```
 
+#### Protection
+
+`rc/*` is covered by its own ruleset (**"rc branches"**), matching `main`'s
+protection rather than being the soft underbelly of the release process:
+
+| rule | effect |
+|---|---|
+| `creation` | only repository **admins** may create an `rc/*` branch |
+| `deletion` | it cannot be deleted |
+| `non_fast_forward` | it cannot be force-pushed |
+| `pull_request` | changes land by PR (0 approvals — solo maintainer) |
+| `required_status_checks` | `ci-ok`, `pr body`, `base branch`, `rc not behind main`, strict |
+
+The required checks are deliberately **not** the same list as `main`'s. `main`
+additionally requires the CodeQL `Analyze (…)` contexts, and those do not run on
+PRs into `rc/*` — requiring them would leave every rc PR blocked forever on a
+check that can never report. Only require a context you have watched report on a
+PR against that specific base.
+
+**An rc branch must be cut from `main`, and GitHub cannot enforce it.** No
+protection rule or ruleset constrains the commit a branch is created *from*. The
+`rc branch guard` workflow fires on branch creation and fails if the new `rc/*`
+branch does not contain `origin/main` — a detector, not a gate, since the branch
+already exists by then. It pairs with `rc not behind main`, which gates drift
+afterwards.
+
+```bash
+git fetch origin --prune
+git switch -c rc/0.0.3 origin/main    # from main, always
+```
+
 ### Stacked branches
 
 Opening a PR based on another PR's branch is fine. **Merging it while stacked is
@@ -126,6 +157,9 @@ Documented discipline decays; these are the mechanisms.
 | …the same, on a clone that still has the branch | `.githooks/pre-push` — refuses the push | prevents |
 | Merging a stacked PR into a dead base | `base branch` CI check | prevents |
 | An rc branch drifting behind `main` | `rc not behind main` CI check | detects, before release |
+| Anyone creating an `rc/*` branch | `creation` rule in the "rc branches" ruleset — admins only | prevents |
+| An rc branch deleted or force-pushed | `deletion` + `non_fast_forward` rules on `rc/*` | prevents |
+| An rc branch cut from something other than `main` | `rc branch guard` workflow on branch creation | detects (GitHub cannot prevent it) |
 | A required check that can never report | one aggregate `ci-ok` context, not per-matrix-job names | prevents |
 | Merging a branch cut from a stale `main` | `strict: true` on required checks | prevents |
 | A PR that says nothing useful | `pr body` CI check against the template | prevents |
