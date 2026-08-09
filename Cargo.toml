@@ -31,7 +31,7 @@ terminal_size = "0.4"
 # preserve_order keeps object keys in input order, matching Python's json module.
 serde_json = { version = "1", features = ["preserve_order"] }
 # fancy-regex supports the lookbehind/backreference features rich's ReprHighlighter uses.
-fancy-regex = "0.18"
+fancy-regex = "0.19"
 # CommonMark parser for the Markdown renderable.
 pulldown-cmark = { version = "0.12", default-features = false }
 # Syntax highlighting engine (Pygments-equivalent). `default-fancy` uses the
