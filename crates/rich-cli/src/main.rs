@@ -10,7 +10,7 @@
 //! behind the default `fetch` feature), **paging** (`--pager`), and a capability
 //! demo — i.e. the whole common rich-cli surface.
 
-use std::io::Read;
+use std::io::{IsTerminal, Read};
 use std::process::ExitCode;
 
 use rich::markdown::Markdown;
@@ -327,6 +327,41 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     if mode == Mode::Diff && resources.len() != 2 {
         return Err("--diff needs exactly two images: --diff before.png after.png".into());
     }
+    // A flag whose mode is absent is almost always a mistake, and silence is the
+    // dangerous response: `--threshold` without `--diff` used to render the file
+    // and exit 0, so a CI job that lost its `--diff` — a typo, a refactor, an
+    // argument reordered — became a permanently green gate. That is the same
+    // failure the NaN check closed, reached from the other side.
+    let orphans = [
+        (
+            "--threshold",
+            diff_threshold.is_some(),
+            "--diff",
+            mode == Mode::Diff,
+        ),
+        (
+            "--image-mode",
+            image_mode != ImageMode::Auto,
+            "--diff",
+            mode == Mode::Diff,
+        ),
+        ("--loop", loops.is_some(), "--gif", mode == Mode::Gif),
+        ("--title", title.is_some(), "--panel", panel.is_some()),
+        ("--caption", caption.is_some(), "--panel", panel.is_some()),
+        (
+            "--style",
+            border_style.is_some(),
+            "--panel",
+            panel.is_some(),
+        ),
+    ];
+    if let Some((flag, _, needs, _)) = orphans
+        .iter()
+        .find(|(_, given, _, mode_present)| *given && !*mode_present)
+    {
+        return Err(format!("{flag} only has an effect with {needs}"));
+    }
+
     // These decorate a single rendered resource; --diff composes its own report
     // and quietly dropped them, which reads as the flag having no effect.
     if mode == Mode::Diff {
@@ -389,7 +424,38 @@ fn read_resource(resource: Option<&str>) -> std::io::Result<String> {
             buffer
         }
     };
-    Ok(strip_bom(content))
+    Ok(normalize_newlines(strip_bom(content)))
+}
+
+/// Translate CRLF and lone CR to LF, as Python's universal newlines do.
+///
+/// Upstream reads text files in universal-newline mode, so it **never sees a
+/// CR**; `std::fs::read_to_string` hands them straight through. That gap made
+/// `--syntax` on a CRLF file render as a blank rectangle: each line was emitted
+/// as `code` + CR + padding, so the CR returned the cursor to column 0 and the
+/// padding overwrote the code. Exit 0, nothing visible, and piping hid it
+/// because the bytes were all present — only a terminal acts on the CR.
+fn normalize_newlines(text: String) -> String {
+    const CR: char = '\r';
+    const LF: char = '\n';
+    if !text.contains(CR) {
+        return text;
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == CR {
+            // CRLF and a lone CR both collapse to a single LF, matching
+            // Python's universal-newline translation.
+            if chars.peek() == Some(&LF) {
+                chars.next();
+            }
+            out.push(LF);
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 /// Drop a leading UTF-8 byte-order mark.
@@ -566,7 +632,7 @@ fn detect_mode(resource: Option<&str>) -> Mode {
 fn run(cli: Cli) -> ExitCode {
     // With no flags and no resource, show the capability demo.
     if cli.mode == Mode::Auto && cli.resource.is_none() {
-        run_demo();
+        run_demo(cli.no_color);
         return ExitCode::SUCCESS;
     }
 
@@ -673,6 +739,24 @@ fn run(cli: Cli) -> ExitCode {
     } else {
         None
     };
+
+    // Same treatment for a notebook. Without this the parse failure was printed
+    // from inside the render closure, which cannot influence the exit code — so
+    // a broken notebook reported an error and exited 0, while a broken .json
+    // exited 1. A malformed input must not look like success to a script.
+    if mode == Mode::Ipynb {
+        match serde_json::from_str::<serde_json::Value>(&content) {
+            Ok(value) if value.get("cells").and_then(|c| c.as_array()).is_some() => {}
+            Ok(_) => {
+                eprintln!("rich: not a notebook: no `cells` array");
+                return ExitCode::FAILURE;
+            }
+            Err(err) => {
+                eprintln!("rich: invalid notebook JSON: {err}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
 
     // The highlighting language comes from the resource extension, falling back
     // (for a URL) to a lexer guessed from its Content-Type. An *uninformative*
@@ -984,11 +1068,19 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     use rich_art::{AsciiArt, BlockArt, SixelArt};
 
     let (before_path, after_path) = (&cli.resources[0], &cli.resources[1]);
-    let open = |path: &String| match rich_art::image::open(path) {
-        Ok(image) => Some(image),
-        Err(err) => {
-            eprintln!("rich: cannot read {path}: {err}");
-            None
+    // The directory check reached the plain read path but not this one, so
+    // `rich --diff a.png somedir` still reported "Access is denied".
+    let open = |path: &String| {
+        if std::path::Path::new(path).is_dir() {
+            eprintln!("rich: cannot read {path}: is a directory, not a file");
+            return None;
+        }
+        match rich_art::image::open(path) {
+            Ok(image) => Some(image),
+            Err(err) => {
+                eprintln!("rich: cannot read {path}: {err}");
+                None
+            }
         }
     };
     let (Some(before), Some(after)) = (open(before_path), open(after_path)) else {
@@ -1303,8 +1395,9 @@ USAGE:
 
 RESOURCE is a file path, an http(s) URL, or `-` for stdin.
 
-RENDER MODE (choose at most one; default auto-detects by extension):
-    -p, --print      Interpret RESOURCE as console markup
+RENDER MODE (choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb
+by extension — anything else is printed as-is unless you pass -x):
+    -p, --print      Treat RESOURCE as literal markup TEXT, not a file path
     -m, --markdown   Render RESOURCE as Markdown
     -j, --json       Pretty-print RESOURCE as JSON
     -x, --syntax     Syntax-highlight RESOURCE (language from its extension)
@@ -1329,17 +1422,17 @@ OPTIONS:
     -o, --export-html PATH
                      Also write a self-contained HTML document to PATH
         --export-svg PATH
-                     Also write a self-contained SVG document to PATH
+                     Also write an SVG document to PATH. Unlike the HTML,
+                     it references its font from a CDN, so it is not
+                     self-contained offline.
         --panel BOX  Wrap output in a panel
                      (none/ascii/ascii2/square/rounded/heavy/double)
         --padding P  Wrap output in padding (1, 2, or 4 comma-separated ints)
         --title T    Panel title (with --panel)
         --caption T  Panel caption/subtitle (with --panel)
         --style S    Panel border style, e.g. "bold red" (with --panel)
-        --pager      Page the output through the system pager
-                     ($PAGER, else less/more)
-        --no-color   Disable colored output. NO_COLOR in the environment does
-                     the same.
+        --pager      Page the output through $PAGER (no pager, no paging)
+        --no-color   Disable colored output (as does a non-empty NO_COLOR)
     -h, --help       Show this help
     -V, --version    Show the version (mirrors upstream rich-cli)
 
@@ -1352,11 +1445,20 @@ With no RESOURCE and no mode flag, a capability demo is shown.
     );
 }
 
-fn run_demo() {
-    // Force truecolor so the demo looks the same regardless of TERM.
+fn run_demo(no_color: bool) {
+    // Force truecolor so the demo looks the same regardless of TERM — but only
+    // when it is actually going to a terminal. Forcing it unconditionally wrote
+    // escape sequences into a pipe, and made `--no-color` a no-op on this path
+    // alone while every other mode honoured it.
+    let to_terminal = std::io::stdout().is_terminal() && !no_color;
     let mut console = Console::builder()
-        .force_terminal(true)
-        .color_system(Some(ColorSystem::Truecolor))
+        .force_terminal(to_terminal)
+        .no_color(no_color)
+        .color_system(if to_terminal {
+            Some(ColorSystem::Truecolor)
+        } else {
+            None
+        })
         // `[error]`/`[warning]`/`[info]` are rich-ext's additions, not upstream
         // styles — the core theme is a faithful 154-entry port.
         .theme(rich_ext::extended_theme())
@@ -1379,9 +1481,17 @@ fn run_demo() {
     console.print_str("Extension: numbers like 3.14 and 2026 are auto-highlighted");
     // Built-in ReprHighlighter (highlight=true): auto-colors numbers, bools,
     // strings, paths, calls, etc.
+    // A second console, so it needs the same terminal/colour decision as the
+    // main one — building it with force_terminal(true) unconditionally was what
+    // leaked escape sequences into a pipe after the demo itself stopped.
     let hl = Console::builder()
-        .force_terminal(true)
-        .color_system(Some(ColorSystem::Truecolor))
+        .force_terminal(to_terminal)
+        .no_color(no_color)
+        .color_system(if to_terminal {
+            Some(ColorSystem::Truecolor)
+        } else {
+            None
+        })
         .highlight(true)
         .build();
     hl.print_str("Highlight:  result = func(42, True, None, '/usr/bin')");
