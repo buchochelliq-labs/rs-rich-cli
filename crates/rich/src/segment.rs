@@ -146,16 +146,6 @@ impl Segment {
         shaped
     }
 
-    /// Crop every line in a segment stream to at most `width` cells, discarding
-    /// the excess and leaving short lines alone.
-    ///
-    /// Port of `Segment.split_and_crop_lines` with `pad=False`, which is what
-    /// `Console.print(crop=True)` applies to the finished stream. It is the only
-    /// thing standing between an [`Overflow::Ignore`](crate::console::Overflow)
-    /// text and a line that runs off the side of the terminal.
-    ///
-    /// Control segments occupy no cells and are always kept, so cursor moves and
-    /// hyperlink codes survive a crop.
     /// Fold every line to at most `width` cells, carrying the overflow onto
     /// continuation lines instead of discarding it.
     ///
@@ -188,13 +178,29 @@ impl Segment {
                         continue;
                     }
                     let chunks = crate::cells::chop_cells(remaining, room);
-                    let head = chunks.first().cloned().unwrap_or_default();
+                    let mut head = chunks.first().cloned().unwrap_or_default();
                     if head.is_empty() {
-                        // A single character wider than the room left; give it a
-                        // fresh row rather than looping forever.
-                        out.push(Segment::line());
-                        used = 0;
-                        continue;
+                        if used > 0 {
+                            // The row has content but no space for this
+                            // character; start a fresh one and try again.
+                            out.push(Segment::line());
+                            used = 0;
+                            continue;
+                        }
+                        // Already at the start of a row and the character STILL
+                        // does not fit — a 2-cell glyph at width 1. Emit it
+                        // anyway, overflowing by a cell.
+                        //
+                        // Retrying here instead was an infinite loop that
+                        // allocated a line break per iteration: ~400 MB/s until
+                        // the process was killed. Every branch of this loop must
+                        // consume input.
+                        let take = remaining
+                            .chars()
+                            .next()
+                            .map(char::len_utf8)
+                            .unwrap_or(remaining.len());
+                        head = remaining[..take].to_string();
                     }
                     used += crate::cells::cell_len(&head);
                     remaining = &remaining[head.len()..];
@@ -212,6 +218,16 @@ impl Segment {
         out
     }
 
+    /// Crop every line in a segment stream to at most `width` cells, discarding
+    /// the excess and leaving short lines alone.
+    ///
+    /// Port of `Segment.split_and_crop_lines` with `pad=False`, which is what
+    /// `Console.print(crop=True)` applies to the finished stream. It is the only
+    /// thing standing between an [`Overflow::Ignore`](crate::console::Overflow)
+    /// text and a line that runs off the side of the terminal.
+    ///
+    /// Control segments occupy no cells and are always kept, so cursor moves and
+    /// hyperlink codes survive a crop.
     pub fn crop_lines(segments: &[Segment], width: usize) -> Vec<Segment> {
         let mut result: Vec<Segment> = Vec::with_capacity(segments.len());
         let mut used = 0usize;
@@ -357,5 +373,34 @@ mod tests {
         let cropped = Segment::crop_lines(&segments, 4);
         let text: String = cropped.iter().map(|s| s.text.as_str()).collect();
         assert_eq!(text, "abcd");
+    }
+
+    #[test]
+    fn fold_lines_terminates_when_a_glyph_is_wider_than_the_width() {
+        // A 2-cell character with 1 column available used to loop forever,
+        // pushing a line break per iteration (~400 MB/s until killed). Every
+        // branch of the fold loop must consume input.
+        let segments = vec![Segment::new("\u{4f60}\u{4f60}", None)];
+        let folded = Segment::fold_lines(&segments, 1);
+        let text: String = folded.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(
+            text.matches('\u{4f60}').count(),
+            2,
+            "both characters should survive, overflowing rather than looping"
+        );
+    }
+
+    #[test]
+    fn fold_lines_terminates_at_every_narrow_width() {
+        // Mixed widths: ASCII, CJK, and an emoji, folded at each width from 1.
+        let sample = "a\u{4f60}b\u{1f600}c";
+        for width in 1..=6 {
+            let folded = Segment::fold_lines(&[Segment::new(sample, None)], width);
+            let text: String = folded.iter().map(|s| s.text.as_str()).collect();
+            assert!(
+                text.contains('c'),
+                "width {width} lost the tail, or did not terminate"
+            );
+        }
     }
 }
