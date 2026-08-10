@@ -753,9 +753,13 @@ impl ConsoleBuilder {
         let is_terminal = self
             .force_terminal
             .unwrap_or_else(|| std::io::stdout().is_terminal());
+        // Upstream's rule is `environ.get("NO_COLOR", "") != ""`, so an EMPTY
+        // NO_COLOR does not disable colour — only a non-empty value does. That
+        // matters because a shell that exports `NO_COLOR=` (a common way to
+        // clear it) would otherwise still be treated as opting out.
         let no_color = self
             .no_color
-            .unwrap_or_else(|| std::env::var_os("NO_COLOR").is_some());
+            .unwrap_or_else(|| std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty()));
         let color_system = if self.color_system_set {
             self.color_system
         } else if is_terminal {

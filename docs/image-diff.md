@@ -76,9 +76,16 @@ output is piped, and terminals that ignore the query leave you waiting. `auto`
 is therefore a **heuristic over environment variables** and will be wrong
 somewhere.
 
-So the guess is overridable at every level: `--image-mode` beats everything,
-`RICH_SIXEL=0`/`1` beats the heuristic, and `sixel` falls back to `blocks` if
-encoding fails — the report stays useful even when the guess is wrong.
+So the guess is overridable at every level: `--image-mode` beats everything, and
+`RICH_SIXEL=0`/`1` beats the heuristic.
+
+**Every mode degrades rather than failing.** Sixel is a control sequence, so it
+only works on a terminal — redirected or exported, it falls back to blocks (or
+ASCII without colour). Blocks need colour, so without it they fall back to
+ASCII, since a half-block render with no colour is a rectangle of identical
+characters carrying no information. Each downgrade prints a line to **stderr**
+saying what it did, so the change is visible rather than mysterious, and stderr
+keeps it out of a redirected report.
 
 ## As a CI gate
 
@@ -91,10 +98,24 @@ visual regressions fail a build. The threshold is compared against the
 *perceptual* figure, never the naive one — gating on a byte comparison is what
 makes visual regression testing unusable, because every re-render trips it.
 
+The comparison uses the percentage **as printed**, to one decimal place, so a
+limit equal to the reported figure passes and the verdict never contradicts the
+number beside it. A threshold outside 0–100, or one that is not a real number,
+is rejected: `NaN` parses successfully as a float and compares false against
+everything, so accepting it would silently switch the gate off and report a pass.
+
+Everything the gate prints goes to **stdout**; only the downgrade notices above
+use stderr.
+
 ## Tuning
 
+**These are not exposed on the command line yet** — they are listed so the
+output can be interpreted, not adjusted. `--threshold` gates the *result*; it
+does not change the ΔE threshold below. Callers of the `rich-art` crate can set
+all four through `DiffSettings`.
+
 Defaults are tuned for regenerated artwork, where noise is heavy. Screenshot
-pairs are far cleaner and tolerate a much lower threshold.
+pairs are far cleaner and would tolerate a much lower ΔE threshold.
 
 | setting | default | effect |
 |---|---|---|

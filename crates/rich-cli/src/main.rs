@@ -242,11 +242,19 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
                 let value = iter
                     .next()
                     .ok_or("--threshold requires a percentage, e.g. --threshold 2")?;
-                diff_threshold = Some(
-                    value
-                        .parse()
-                        .map_err(|_| format!("invalid threshold {value:?}"))?,
-                );
+                let percent: f32 = value
+                    .parse()
+                    .map_err(|_| format!("invalid threshold '{value}'"))?;
+                // `"NaN"` and `"inf"` both parse as f32, and every comparison
+                // against NaN is false — so an empty template variable or a bad
+                // substitution would turn the gate off and report a pass. A gate
+                // that can be silently disabled is worse than no gate.
+                if !percent.is_finite() || !(0.0..=100.0).contains(&percent) {
+                    return Err(format!(
+                        "threshold must be a percentage between 0 and 100, got '{value}'"
+                    ));
+                }
+                diff_threshold = Some(percent);
             }
             "--loop" => {
                 let value = iter.next().ok_or("--loop requires a count (0 = forever)")?;
@@ -292,11 +300,20 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             }
             "-w" | "--width" => {
                 let value = iter.next().ok_or("--width requires a number")?;
-                width = Some(
-                    value
-                        .parse()
-                        .map_err(|_| format!("invalid width {value:?}"))?,
-                );
+                let columns: usize = value.parse().map_err(|_| {
+                    // The common cause is a missing value, in which case this
+                    // has just eaten the filename — say so rather than quoting
+                    // the path back with debug escaping.
+                    if std::path::Path::new(value).exists() {
+                        format!("--width needs a number, but got the file '{value}' — a value is missing")
+                    } else {
+                        format!("invalid width '{value}'")
+                    }
+                })?;
+                if columns == 0 {
+                    return Err("--width must be at least 1".into());
+                }
+                width = Some(columns);
             }
             other if other.starts_with('-') && other != "-" => {
                 return Err(format!("unknown option {other:?}"));
@@ -309,6 +326,21 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     // exactly one.
     if mode == Mode::Diff && resources.len() != 2 {
         return Err("--diff needs exactly two images: --diff before.png after.png".into());
+    }
+    // These decorate a single rendered resource; --diff composes its own report
+    // and quietly dropped them, which reads as the flag having no effect.
+    if mode == Mode::Diff {
+        let unsupported = [
+            ("--panel", panel.is_some()),
+            ("--padding", padding.is_some()),
+            ("--title", title.is_some()),
+            ("--caption", caption.is_some()),
+            ("--style", border_style.is_some()),
+            ("--left/--center/--right", justify.is_some()),
+        ];
+        if let Some((flag, _)) = unsupported.iter().find(|(_, given)| *given) {
+            return Err(format!("{flag} cannot be combined with --diff"));
+        }
     }
     if mode != Mode::Gif && mode != Mode::Diff && resources.len() > 1 {
         return Err("only one resource may be given (except with --gif)".into());
@@ -338,13 +370,53 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
 
 /// Read a resource: `-` (or `None`) means stdin, otherwise a file path.
 fn read_resource(resource: Option<&str>) -> std::io::Result<String> {
-    match resource {
-        Some(path) if path != "-" => std::fs::read_to_string(path),
+    let content = match resource {
+        Some(path) if path != "-" => {
+            let path = std::path::Path::new(path);
+            // A directory reaches read_to_string as "Access is denied" on
+            // Windows, which sends the reader hunting for a permissions problem.
+            if path.is_dir() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "is a directory, not a file",
+                ));
+            }
+            std::fs::read_to_string(path)?
+        }
         _ => {
             let mut buffer = String::new();
             std::io::stdin().read_to_string(&mut buffer)?;
-            Ok(buffer)
+            buffer
         }
+    };
+    Ok(strip_bom(content))
+}
+
+/// Drop a leading UTF-8 byte-order mark.
+///
+/// Windows editors write one by default and it is invisible: it made valid JSON
+/// fail to parse at "column 1", and Markdown render its first heading as
+/// literal text at exit 0 — in both cases with nothing pointing at the cause.
+/// Whether a path's extension names an image format `--diff` could read.
+///
+/// Used only to improve an error message, so a false negative costs nothing.
+fn looks_like_image(path: &str) -> bool {
+    std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .is_some_and(|e| {
+            matches!(
+                e.as_str(),
+                "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" | "tif" | "tiff" | "ico" | "avif"
+            )
+        })
+}
+
+fn strip_bom(text: String) -> String {
+    match text.strip_prefix('\u{feff}') {
+        Some(rest) => rest.to_string(),
+        None => text,
     }
 }
 
@@ -566,10 +638,14 @@ fn run(cli: Cli) -> ExitCode {
         match read_resource(cli.resource.as_deref()) {
             Ok(content) => (content, None),
             Err(err) => {
-                eprintln!(
-                    "rich: cannot read {}: {err}",
-                    cli.resource.as_deref().unwrap_or("<stdin>")
-                );
+                let name = cli.resource.as_deref().unwrap_or("<stdin>");
+                eprintln!("rich: cannot read {name}: {err}");
+                // The usual cause of "invalid UTF-8" is an image passed without
+                // --diff. Saying so beats an encoding lecture the reader cannot
+                // act on.
+                if err.kind() == std::io::ErrorKind::InvalidData && looks_like_image(name) {
+                    eprintln!("rich: {name} looks like an image — did you mean `rich --diff <before> <after>`?");
+                }
                 return ExitCode::FAILURE;
             }
         }
@@ -934,25 +1010,54 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     // Decided before rendering so the verdict can be part of the output (and
     // therefore part of an --export-svg capture), while the exit code is
     // settled outside the closure.
-    let failed = cli.diff_threshold.is_some_and(|limit| changed > limit);
+    // Compare the number that is PRINTED, not the one behind it. Comparing full
+    // precision against a one-decimal display produced "FAIL 5.4% changed, limit
+    // 5.4%" -- a verdict that contradicts itself and cannot be explained from
+    // the output, which is what anyone tuning a threshold to the reported figure
+    // runs straight into.
+    let shown = (changed * 10.0).round() / 10.0;
+    let failed = cli.diff_threshold.is_some_and(|limit| shown > limit);
 
     let wrote = emit(console, export, |c| {
-        // Half-blocks when there is colour to use: a ramp renderer turns the
-        // dark parts of a heat map into spaces, which reads as noise rather
-        // than as a picture. Without colour the blocks convey nothing, so fall
-        // back to the ramp there.
-        // Resolve `auto` once, here, so the rest is a plain match. Sixel gives
-        // real pixels; half-blocks are the best the character grid can do; the
-        // ramp is the only one that survives without colour.
-        let rows_cap = 30;
+        // Leave room for the summary, the table and the prompt, so the top of
+        // the picture is not scrolled off before the reader sees it.
+        let rows_cap = console.height().saturating_sub(14).clamp(6, 30);
+
+        // Resolve `auto` from what this console can ACTUALLY do, not from the
+        // --no-color flag alone. Redirected output has no colour, and a
+        // half-block render without colour is a solid rectangle of identical
+        // characters -- 30 rows carrying no information. Sixel is a control
+        // sequence, so it is dropped entirely when the destination is not a
+        // terminal.
+        let has_color = c.color_system().is_some() && !cli.no_color;
+        let is_terminal = c.is_terminal();
         let mut mode = cli.image_mode;
         if mode == ImageMode::Auto {
-            mode = if cli.no_color {
+            mode = if !has_color {
                 ImageMode::Ascii
-            } else if rich_art::sixel::is_probably_supported() {
+            } else if is_terminal && rich_art::sixel::is_probably_supported() {
                 ImageMode::Sixel
             } else {
                 ImageMode::Blocks
+            };
+        }
+
+        // An explicit choice still has to produce something. Downgrade rather
+        // than emit a rectangle of identical blocks or nothing at all, and say
+        // why on stderr so the change is visible rather than mysterious.
+        if mode == ImageMode::Blocks && !has_color {
+            eprintln!("rich: no colour available, drawing the diff as ASCII art");
+            mode = ImageMode::Ascii;
+        }
+        if mode == ImageMode::Sixel && !is_terminal {
+            eprintln!(
+                "rich: Sixel graphics need a terminal, drawing the diff as {} instead",
+                if has_color { "blocks" } else { "ASCII art" }
+            );
+            mode = if has_color {
+                ImageMode::Blocks
+            } else {
+                ImageMode::Ascii
             };
         }
 
@@ -961,7 +1066,7 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
             ImageMode::Ascii => c.print(
                 &AsciiArt::new(report.heatmap())
                     .width(width)
-                    .color(!cli.no_color),
+                    .color(has_color),
             ),
             ImageMode::Blocks => c.print(
                 &BlockArt::new(report.heatmap())
@@ -972,12 +1077,12 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
                 let art = SixelArt::new(report.heatmap())
                     .width(width)
                     .height(rows_cap);
-                // Encoding can fail, and a terminal that ignores the sequence
-                // shows nothing at all. Either way the report must stay useful,
-                // so fall back rather than leaving an empty gap.
+                // Encoding can still fail on a terminal; the report must stay
+                // useful, so fall back rather than leaving an empty gap.
                 if art.encode(width).is_some() {
                     c.print(&art);
                 } else {
+                    eprintln!("rich: could not encode Sixel, drawing the diff as blocks");
                     c.print(
                         &BlockArt::new(report.heatmap())
                             .width(width)
@@ -987,8 +1092,14 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
             }
             ImageMode::Auto => unreachable!("resolved above"),
         }
+        // The blank line separates the picture from the summary, so it belongs
+        // to the picture — with --image-mode none it was just a stray first
+        // line in every report and every redirected file.
+        if mode != ImageMode::None {
+            c.print_str("");
+        }
         c.print_str(&format!(
-            "\n[bold]{changed:.1}%[/] of the canvas changed perceptibly \
+            "[bold]{changed:.1}%[/] of the canvas changed perceptibly \
              [dim](a plain pixel diff would say {naive:.1}%)[/]"
         ));
 
@@ -1182,51 +1293,62 @@ fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) -> bo
 }
 
 fn print_help() {
+    // A RAW string: `\`-continuations would eat the leading spaces of every
+    // line and print the whole thing flush-left.
     println!(
-        "rich {VERSION} — Rust port of the rich-cli terminal toolbox\n\
-\n\
-USAGE:\n\
-    rich [OPTIONS] [RESOURCE]\n\
-\n\
-RESOURCE is a file path, an http(s) URL, or `-` for stdin.\n\
-\n\
-RENDER MODE (choose at most one; default auto-detects by extension):\n\
-    -p, --print      Interpret RESOURCE as console markup\n\
-    -m, --markdown   Render RESOURCE as Markdown\n\
-    -j, --json       Pretty-print RESOURCE as JSON\n\
-    -x, --syntax     Syntax-highlight RESOURCE (language from its extension)\n\
-        --csv        Render RESOURCE as a CSV/TSV table\n\
-        --ipynb      Render RESOURCE as a Jupyter notebook\n\
-        --gif        Animate one or more GIFs (several play side by side)\n\
-        --loop N     With --gif, repeat N times (0 = forever)\n\
-        --rule       Draw a horizontal rule (RESOURCE is its title)\n\
-        --diff       Perceptually compare two images (needs exactly two)\n\
-\n\
-OPTIONS:\n\
-    -w, --width N     Set the output width\n\
-        --image-mode M\n\
-                      With --diff, how to draw the picture: auto (default),\n\
-                      sixel (real pixels), blocks, ascii, none\n\
-        --threshold PCT\n\
-                      With --diff, exit non-zero above PCT% changed\n\
-        --left        Left-justify output\n\
-        --center      Center output\n\
-        --right       Right-justify output\n\
-    -o, --export-html PATH\n\
-                      Also write a self-contained HTML document to PATH\n\
-        --export-svg PATH\n\
-                      Also write a self-contained SVG document to PATH\n\
-        --panel BOX   Wrap output in a panel (none/ascii/ascii2/square/rounded/heavy/double)\n\
-        --padding P   Wrap output in padding (1, 2, or 4 comma-separated ints)\n\
-        --title T     Panel title (with --panel)\n\
-        --caption T   Panel caption/subtitle (with --panel)\n\
-        --style S     Panel border style, e.g. \"bold red\" (with --panel)\n\
-        --pager       Page the output through the system pager ($PAGER, else less/more)\n\
-        --no-color    Disable colored output\n\
-    -h, --help        Show this help\n\
-    -V, --version     Show the version (mirrors upstream rich-cli)\n\
-\n\
-With no RESOURCE and no mode flag, a capability demo is shown.\n"
+        r#"rich {VERSION} — Rust port of the rich-cli terminal toolbox
+
+USAGE:
+    rich [OPTIONS] [RESOURCE]
+
+RESOURCE is a file path, an http(s) URL, or `-` for stdin.
+
+RENDER MODE (choose at most one; default auto-detects by extension):
+    -p, --print      Interpret RESOURCE as console markup
+    -m, --markdown   Render RESOURCE as Markdown
+    -j, --json       Pretty-print RESOURCE as JSON
+    -x, --syntax     Syntax-highlight RESOURCE (language from its extension)
+        --csv        Render RESOURCE as a CSV/TSV table
+        --ipynb      Render RESOURCE as a Jupyter notebook
+        --gif        Animate one or more GIFs (several play side by side)
+        --loop N     With --gif, repeat N times (0 = forever)
+        --rule       Draw a horizontal rule (RESOURCE is its title)
+        --diff       Perceptually compare two images (needs exactly two)
+
+OPTIONS:
+    -w, --width N    Set the output width
+        --image-mode M
+                     With --diff, how to draw the picture: auto (default),
+                     sixel (real pixels), blocks, ascii, none
+        --threshold PCT
+                     With --diff, exit non-zero above PCT% changed.
+                     Also sets the exit code: 0 within, 1 over.
+        --left       Left-justify output
+        --center     Center output
+        --right      Right-justify output
+    -o, --export-html PATH
+                     Also write a self-contained HTML document to PATH
+        --export-svg PATH
+                     Also write a self-contained SVG document to PATH
+        --panel BOX  Wrap output in a panel
+                     (none/ascii/ascii2/square/rounded/heavy/double)
+        --padding P  Wrap output in padding (1, 2, or 4 comma-separated ints)
+        --title T    Panel title (with --panel)
+        --caption T  Panel caption/subtitle (with --panel)
+        --style S    Panel border style, e.g. "bold red" (with --panel)
+        --pager      Page the output through the system pager
+                     ($PAGER, else less/more)
+        --no-color   Disable colored output. NO_COLOR in the environment does
+                     the same.
+    -h, --help       Show this help
+    -V, --version    Show the version (mirrors upstream rich-cli)
+
+ENVIRONMENT:
+    NO_COLOR         Any non-empty value disables colour
+    RICH_SIXEL       0/1 overrides Sixel detection for --image-mode auto
+
+With no RESOURCE and no mode flag, a capability demo is shown.
+"#
     );
 }
 
