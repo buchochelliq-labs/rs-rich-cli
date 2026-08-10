@@ -327,6 +327,24 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     if mode == Mode::Diff && resources.len() != 2 {
         return Err("--diff needs exactly two images: --diff before.png after.png".into());
     }
+    // `--gif` animates in place and the demo writes its own console, so neither
+    // goes through the export path: both accepted -o/--export-svg, wrote no
+    // file, and exited 0. Everywhere else a bad export path is a hard error, so
+    // silence here reads as success.
+    let exporting = export_html.is_some() || export_svg.is_some();
+    if exporting {
+        let unsupported = if mode == Mode::Gif {
+            Some("--gif")
+        } else if mode == Mode::Auto && resources.is_empty() {
+            Some("the capability demo")
+        } else {
+            None
+        };
+        if let Some(what) = unsupported {
+            return Err(format!("--export-html/--export-svg cannot capture {what}"));
+        }
+    }
+
     // A flag whose mode is absent is almost always a mistake, and silence is the
     // dangerous response: `--threshold` without `--diff` used to render the file
     // and exit 0, so a CI job that lost its `--diff` — a typo, a refactor, an
