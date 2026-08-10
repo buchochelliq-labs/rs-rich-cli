@@ -809,7 +809,9 @@ fn run(cli: Cli) -> ExitCode {
                 let delimiter = if language == "tsv" { '\t' } else { ',' };
                 Box::new(render_csv(&parse_csv(&content, delimiter)))
             }
-            Mode::Syntax => Box::new(Syntax::new(content.as_str(), language.as_str())),
+            Mode::Syntax => {
+                Box::new(Syntax::new(content.as_str(), language.as_str()).word_wrap(true))
+            }
             _ => {
                 // Print + auto: parse markup (Print) or take plain text (auto).
                 let mut text = if mode == Mode::Print {
@@ -857,7 +859,7 @@ fn run(cli: Cli) -> ExitCode {
         Mode::Json => c.print(json.as_ref().expect("json parsed above")),
         Mode::Csv => c.print(csv_table.as_ref().expect("csv built above")),
         Mode::Ipynb => render_ipynb(c, &content),
-        Mode::Syntax => c.print(&Syntax::new(content.as_str(), language.as_str())),
+        Mode::Syntax => c.print(&Syntax::new(content.as_str(), language.as_str()).word_wrap(true)),
         Mode::Print => match cli.justify {
             Some(justify) => c.print_justified(&content, justify),
             None => c.print_str(&content),
