@@ -156,6 +156,62 @@ impl Segment {
     ///
     /// Control segments occupy no cells and are always kept, so cursor moves and
     /// hyperlink codes survive a crop.
+    /// Fold every line to at most `width` cells, carrying the overflow onto
+    /// continuation lines instead of discarding it.
+    ///
+    /// [`crop_lines`](Self::crop_lines) is the display backstop and **throws the
+    /// remainder away** — correct for a renderable that has already wrapped
+    /// itself, and data loss for one that emits a long line verbatim. Styles are
+    /// preserved across the split.
+    pub fn fold_lines(segments: &[Segment], width: usize) -> Vec<Segment> {
+        if width == 0 {
+            return segments.to_vec();
+        }
+        let mut out = Vec::new();
+        let lines = Self::split_lines(segments);
+        let last = lines.len().saturating_sub(1);
+        for (index, line) in lines.into_iter().enumerate() {
+            let mut used = 0usize;
+            for segment in line {
+                if segment.control {
+                    out.push(segment);
+                    continue;
+                }
+                // Walk the segment in cell-sized pieces, breaking whenever the
+                // current row is full.
+                let mut remaining = segment.text.as_str();
+                while !remaining.is_empty() {
+                    let room = width.saturating_sub(used);
+                    if room == 0 {
+                        out.push(Segment::line());
+                        used = 0;
+                        continue;
+                    }
+                    let chunks = crate::cells::chop_cells(remaining, room);
+                    let head = chunks.first().cloned().unwrap_or_default();
+                    if head.is_empty() {
+                        // A single character wider than the room left; give it a
+                        // fresh row rather than looping forever.
+                        out.push(Segment::line());
+                        used = 0;
+                        continue;
+                    }
+                    used += crate::cells::cell_len(&head);
+                    remaining = &remaining[head.len()..];
+                    out.push(Segment::new(head, segment.style.clone()));
+                    if !remaining.is_empty() {
+                        out.push(Segment::line());
+                        used = 0;
+                    }
+                }
+            }
+            if index != last {
+                out.push(Segment::line());
+            }
+        }
+        out
+    }
+
     pub fn crop_lines(segments: &[Segment], width: usize) -> Vec<Segment> {
         let mut result: Vec<Segment> = Vec::with_capacity(segments.len());
         let mut used = 0usize;
@@ -271,5 +327,35 @@ mod tests {
     fn cell_length_ignores_control() {
         assert_eq!(Segment::new("abc", None).cell_length(), 3);
         assert_eq!(Segment::control("\x1b[2J").cell_length(), 0);
+    }
+
+    #[test]
+    fn fold_lines_carries_the_overflow_instead_of_dropping_it() {
+        let segments = vec![Segment::new("abcdefghij", None)];
+        let folded = Segment::fold_lines(&segments, 4);
+        let text: String = folded.iter().map(|s| s.text.as_str()).collect();
+        // Every character survives; only line breaks are added.
+        assert_eq!(text.replace('\n', ""), "abcdefghij");
+        assert_eq!(Segment::split_lines(&folded).len(), 3);
+    }
+
+    #[test]
+    fn fold_lines_preserves_styles_across_a_break() {
+        let style = Style::parse("bold").expect("valid style");
+        let segments = vec![Segment::new("abcdef", Some(style.clone()))];
+        let folded = Segment::fold_lines(&segments, 3);
+        for segment in folded.iter().filter(|s| !s.text.contains('\n')) {
+            assert_eq!(segment.style.as_ref(), Some(&style), "style lost on fold");
+        }
+    }
+
+    #[test]
+    fn crop_lines_still_drops_the_overflow() {
+        // fold_lines is the alternative, not a replacement: crop stays the
+        // display backstop for renderables that already wrapped themselves.
+        let segments = vec![Segment::new("abcdefghij", None)];
+        let cropped = Segment::crop_lines(&segments, 4);
+        let text: String = cropped.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(text, "abcd");
     }
 }

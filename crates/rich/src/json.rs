@@ -129,10 +129,14 @@ impl Json {
 }
 
 impl Renderable for Json {
-    fn rich_render(&self, _console: &Console, _options: &ConsoleOptions) -> Vec<Segment> {
+    fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let mut segments = Vec::new();
         self.render_value(&self.value, 0, &mut segments);
-        segments
+        // Fold rather than let the console crop: a long string value used to be
+        // cut mid-token, so the printed document was missing data (and, for
+        // JSON specifically, was no longer parseable) at exit 0. Upstream keeps
+        // every character by wrapping.
+        Segment::fold_lines(&segments, options.max_width)
     }
 }
 
@@ -185,5 +189,21 @@ mod tests {
         let name_at = out.find("name").expect("name key present");
         let emoji_at = out.find("emoji").expect("emoji key present");
         assert!(name_at < emoji_at, "keys keep input order");
+    }
+
+    #[test]
+    fn a_long_value_is_wrapped_rather_than_cropped() {
+        // A long string value used to be cut mid-token, so the printed document
+        // was missing data -- and, for JSON, no longer parseable -- at exit 0.
+        let payload = format!("{{\"k\": \"{}\"}}", "y".repeat(120));
+        let console = Console::builder().width(40).no_color(true).build();
+        let json = Json::new(&payload).expect("valid json");
+        let out = console.render_to_string(&json);
+        assert_eq!(
+            out.matches('y').count(),
+            120,
+            "characters were dropped:
+{out}"
+        );
     }
 }

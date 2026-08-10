@@ -32,13 +32,25 @@ pub struct Syntax {
     code: String,
     language: Option<String>,
     theme: String,
+    word_wrap: bool,
 }
 
 impl Syntax {
+    /// Wrap lines wider than the render width instead of cropping them.
+    ///
+    /// Off by default, matching upstream's `Syntax(word_wrap=False)`: a long
+    /// line is cut at the width. Upstream's **CLI** turns this on, which is why
+    /// `rich --syntax` does too — cropping a source file silently loses code.
+    pub fn word_wrap(mut self, wrap: bool) -> Self {
+        self.word_wrap = wrap;
+        self
+    }
+
     /// Highlight `code` as `language` (a name or file extension, e.g. `"rust"`
     /// or `"rs"`). Pass an empty/unknown language to render as plain text.
     pub fn new(code: impl Into<String>, language: impl Into<String>) -> Self {
         Syntax {
+            word_wrap: false,
             code: code.into(),
             language: Some(language.into()).filter(|l| !l.is_empty()),
             theme: DEFAULT_THEME.to_string(),
@@ -131,8 +143,23 @@ impl Renderable for Syntax {
                 used += cell_len(text);
                 row.push(Segment::new(text, Some(to_style(syn_style))));
             }
-            // Pad the line to the full width with the theme background, so the
-            // block reads as a solid panel of code.
+            let _ = used;
+            lines.push(row);
+        }
+
+        // Wrapping happens before padding, so every *visual* row gets the same
+        // background treatment rather than only the first.
+        if self.word_wrap {
+            lines = lines
+                .into_iter()
+                .flat_map(|row| Segment::split_lines(&Segment::fold_lines(&row, width)))
+                .collect();
+        }
+
+        // Pad each line to the full width with the theme background, so the
+        // block reads as a solid panel of code.
+        for row in &mut lines {
+            let used: usize = row.iter().map(Segment::cell_length).sum();
             if width > used {
                 let mut pad = Style::new();
                 if let Some(bg) = &background {
@@ -140,7 +167,6 @@ impl Renderable for Syntax {
                 }
                 row.push(Segment::new(" ".repeat(width - used), Some(pad)));
             }
-            lines.push(row);
         }
 
         let mut segments = Vec::new();
@@ -192,5 +218,27 @@ mod tests {
         // No panic, code preserved, still padded/colored to a block.
         let out = render("just some text", "nonsense-lang", 20);
         assert!(out.contains("just some text"));
+    }
+
+    #[test]
+    fn word_wrap_is_off_by_default_matching_upstream() {
+        // Measured against upstream: Syntax(word_wrap=False) at width 80 keeps
+        // 80 of 300 characters. The default must not diverge from that.
+        let code = "A".repeat(300);
+        let out = render(&code, "python", 80);
+        assert_eq!(out.matches('A').count(), 80, "default should crop");
+    }
+
+    #[test]
+    fn word_wrap_keeps_every_character() {
+        let code = "A".repeat(300);
+        let console = Console::builder().width(80).no_color(true).build();
+        let out = console.render_to_string(&Syntax::new(code.as_str(), "python").word_wrap(true));
+        assert_eq!(
+            out.matches('A').count(),
+            300,
+            "wrapping must not lose characters:
+{out}"
+        );
     }
 }
