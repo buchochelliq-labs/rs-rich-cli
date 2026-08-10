@@ -131,17 +131,23 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fail if the rc branch is behind main
+      # Checked against the MERGE RESULT (the checked-out merge commit), not
+      # against the base branch as it stands. Testing the base directly
+      # deadlocks: the PR that merges main into the rc can never go green,
+      # because the rc is still behind until that very PR lands. The question
+      # worth asking is "would merging this leave the rc behind main?", and the
+      # merge commit is what answers it.
+      - name: Fail if merging this would leave the rc behind main
         env:
           BASE: ${{ github.event.pull_request.base.ref }}
         run: |
-          git fetch origin main "$BASE" --quiet
-          behind=$(git rev-list --count "origin/$BASE..origin/main")
+          git fetch origin main --quiet
+          behind=$(git rev-list --count "HEAD..origin/main")
           if [ "$behind" -gt 0 ]; then
-            echo "::error::'$BASE' is $behind commit(s) behind main."
-            echo "::error::Merge main into it before landing more work, or the release"
-            echo "::error::cut from this branch will not contain what is on main."
-            echo "::error::  git switch $BASE && git merge origin/main && git push"
+            echo "::error::Merging this would leave '$BASE' $behind commit(s) behind main."
+            echo "::error::A release cut from it would not contain what is on main."
+            echo "::error::Open a PR merging main into '$BASE' first — note that rc/*"
+            echo "::error::is protected, so a direct push needs admin rights."
             exit 1
           fi
-          echo "'$BASE' is up to date with main."
+          echo "Merging this keeps '$BASE' level with main."
