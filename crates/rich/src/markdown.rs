@@ -172,6 +172,26 @@ fn sink<'a>(document: &'a mut Vec<Block>, stack: &'a mut [Frame]) -> &'a mut Vec
     }
 }
 
+/// Commit any pending inline text to the innermost open container.
+///
+/// A *tight* list item's text arrives as bare `Text` events with no enclosing
+/// paragraph, so it sits in `current` until something closes it. Every
+/// block-level start must call this first, or it overwrites that text — which
+/// silently deleted the item's own content and reordered code blocks ahead of
+/// the paragraph introducing them.
+fn flush_pending(current: &mut Option<Text>, blocks: &mut Vec<Block>, stack: &mut [Frame]) {
+    let Some(mut text) = current.take() else {
+        return;
+    };
+    // A freshly opened item holds an empty buffer; committing it would emit a
+    // blank block.
+    if text.plain().is_empty() {
+        return;
+    }
+    text.set_justify(Justify::Left);
+    sink(blocks, stack).push(Block::Text(text));
+}
+
 fn parse(source: &str) -> Vec<Block> {
     let mut blocks: Vec<Block> = Vec::new();
     let mut current: Option<Text> = None;
@@ -192,10 +212,14 @@ fn parse(source: &str) -> Vec<Block> {
 
     for event in Parser::new_ext(source, Options::ENABLE_TABLES) {
         match event {
-            Event::Rule => sink(&mut blocks, &mut stack).push(Block::Rule),
+            Event::Rule => {
+                flush_pending(&mut current, &mut blocks, &mut stack);
+                sink(&mut blocks, &mut stack).push(Block::Rule);
+            }
             Event::Start(Tag::Link { dest_url, .. }) => link = Some(dest_url.to_string()),
             Event::End(TagEnd::Link) => link = None,
             Event::Start(Tag::CodeBlock(kind)) => {
+                flush_pending(&mut current, &mut blocks, &mut stack);
                 let language = match kind {
                     CodeBlockKind::Fenced(info) => {
                         // The info string is `lang` (possibly with extra tokens).
@@ -218,6 +242,7 @@ fn parse(source: &str) -> Vec<Block> {
                 }
             }
             Event::Start(Tag::Table(aligns)) => {
+                flush_pending(&mut current, &mut blocks, &mut stack);
                 table = Some(TableAccum {
                     alignments: aligns.into_iter().map(alignment_justify).collect(),
                     ..TableAccum::default()
@@ -268,21 +293,17 @@ fn parse(source: &str) -> Vec<Block> {
                     acc.in_cell = false;
                 }
             }
-            Event::Start(Tag::BlockQuote(_)) => stack.push(Frame::Quote { blocks: Vec::new() }),
+            Event::Start(Tag::BlockQuote(_)) => {
+                flush_pending(&mut current, &mut blocks, &mut stack);
+                stack.push(Frame::Quote { blocks: Vec::new() });
+            }
             Event::End(TagEnd::BlockQuote(_)) => {
                 if let Some(Frame::Quote { blocks: quoted }) = stack.pop() {
                     sink(&mut blocks, &mut stack).push(Block::Quote(quoted));
                 }
             }
             Event::Start(Tag::List(first)) => {
-                // In a tight list the parent item's text is still pending here,
-                // and the sublist's own Start(Item) would overwrite it. Commit
-                // it to the parent item first, so it survives and stays ahead of
-                // the sublist.
-                if let Some(mut text) = current.take() {
-                    text.set_justify(Justify::Left);
-                    sink(&mut blocks, &mut stack).push(Block::Text(text));
-                }
+                flush_pending(&mut current, &mut blocks, &mut stack);
                 stack.push(Frame::List {
                     ordered: first.is_some(),
                     start: first.unwrap_or(1),
@@ -329,11 +350,13 @@ fn parse(source: &str) -> Vec<Block> {
                 }
             }
             Event::Start(Tag::Paragraph) => {
+                flush_pending(&mut current, &mut blocks, &mut stack);
                 current = Some(Text::new(""));
                 heading_style = None;
                 justify = Justify::Left;
             }
             Event::Start(Tag::Heading { level, .. }) => {
+                flush_pending(&mut current, &mut blocks, &mut stack);
                 let (style, heading_justify) = heading_format(heading_level(level));
                 current = Some(Text::new(""));
                 heading_style = Some(style);
@@ -820,5 +843,47 @@ mod container_tests {
             quoted.contains(QUOTE_PREFIX.trim_end()),
             "lost the quote bar:\n{out}"
         );
+    }
+
+    /// In a *tight* list the item's text arrives as bare `Text` events, so any
+    /// block-level start used to overwrite it: the item's own content vanished
+    /// and the block took its place.
+    #[test]
+    fn a_tight_item_keeps_its_text_before_a_heading() {
+        assert_all_present(
+            "- P1_text\n  ## H1_head\n- P2_text\n",
+            &["P1_text", "H1_head", "P2_text"],
+        );
+    }
+
+    #[test]
+    fn a_tight_item_keeps_its_text_before_a_quote() {
+        assert_all_present("- Q1_text\n  > Q1_quote\n", &["Q1_text", "Q1_quote"]);
+    }
+
+    #[test]
+    fn a_tight_ordered_item_keeps_its_text_before_a_quote() {
+        assert_all_present("1. C_num_text\n   > C_quote\n", &["C_num_text", "C_quote"]);
+    }
+
+    #[test]
+    fn a_nested_tight_item_keeps_its_text_before_a_heading() {
+        assert_all_present(
+            "- A\n  - B_inner\n    ## B_head\n",
+            &["A", "B_inner", "B_head"],
+        );
+    }
+
+    /// A fenced block tight after the item's text used to render *before* it —
+    /// #69 stopped hoisting it above the whole list, but it still overtook the
+    /// paragraph that introduced it.
+    #[test]
+    fn a_tight_code_block_renders_after_the_text_that_introduces_it() {
+        let out = plain("- F1_text\n  ```\n  F1_code\n  ```\n- F2_text\n", 55);
+        let (text, code) = (
+            out.find("F1_text").expect("F1_text"),
+            out.find("F1_code").expect("F1_code"),
+        );
+        assert!(text < code, "the code block overtook its paragraph:\n{out}");
     }
 }
