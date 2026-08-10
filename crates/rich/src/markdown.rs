@@ -29,16 +29,48 @@ const LINK_STYLE: &str = "underline blue"; // markdown.link_url
 const TABLE_BORDER_STYLE: &str = "cyan"; // markdown.table.border
 const TABLE_HEADER_STYLE: &str = "not bold cyan"; // markdown.table.header
 
+/// One entry in a (possibly nested) list.
+///
+/// `depth` is the nesting level, 0 for the outermost. `number` is `Some` for an
+/// ordered list and carries the value to print, resolved when the item is
+/// collected so each nesting level keeps its own sequence.
+struct ListItem {
+    depth: usize,
+    number: Option<u64>,
+    text: Text,
+}
+
+/// A list under construction: its own ordered-ness and start, plus the items
+/// collected so far (including those merged up from nested lists).
+struct ListFrame {
+    ordered: bool,
+    start: u64,
+    items: Vec<ListItem>,
+}
+
+impl ListFrame {
+    /// Collect `text` as an item of this frame at `depth`.
+    ///
+    /// The item's number counts only items at this depth, so entries merged up
+    /// from a nested list do not advance the parent's numbering.
+    fn push_item(&mut self, depth: usize, text: Text) {
+        let index = self.items.iter().filter(|item| item.depth == depth).count() as u64;
+        let number = self.ordered.then(|| self.start + index);
+        self.items.push(ListItem {
+            depth,
+            number,
+            text,
+        });
+    }
+}
+
 /// A parsed Markdown block.
 enum Block {
     /// A paragraph or heading (its `Text` carries justify + any heading span).
     Text(Text),
-    /// A bullet or ordered list; each item is a left-justified `Text`.
-    List {
-        ordered: bool,
-        start: u64,
-        items: Vec<Text>,
-    },
+    /// A bullet or ordered list, flattened: every item carries its own nesting
+    /// depth and marker, so a nested list is not a separate block.
+    List { items: Vec<ListItem> },
     /// A block quote; each paragraph is a magenta, left-justified `Text`.
     Quote(Vec<Text>),
     /// A fenced/indented code block, syntax-highlighted via [`Syntax`].
@@ -136,7 +168,13 @@ fn parse(source: &str) -> Vec<Block> {
     let mut strong = 0usize;
     let mut emphasis = 0usize;
     // (ordered, start_number, items) while inside a list.
-    let mut list: Option<(bool, u64, Vec<Text>)> = None;
+    // A STACK, not a single slot. A nested list starts while its parent is
+    // still open, so one Option was overwritten by the child: the parent's
+    // collected items were discarded and the parent's End(List) then found
+    // nothing to emit. A three-item list with one nested entry rendered as
+    // just the nested entry, silently deleting the other two and promoting
+    // the survivor to top level.
+    let mut lists: Vec<ListFrame> = Vec::new();
     // Collected quote paragraphs while inside a block quote.
     let mut quote: Option<Vec<Text>> = None;
     // (language, accumulated source) while inside a code block.
@@ -231,15 +269,30 @@ fn parse(source: &str) -> Vec<Block> {
                 }
             }
             Event::Start(Tag::List(first)) => {
-                list = Some((first.is_some(), first.unwrap_or(1), Vec::new()))
+                // The parent item's text is complete before its sublist starts,
+                // but its End(Item) does not arrive until after the sublist
+                // closes. Flush it now so ordering survives.
+                if let (Some(text), Some(_)) = (current.take(), lists.last()) {
+                    let depth = lists.len() - 1;
+                    if let Some(frame) = lists.last_mut() {
+                        frame.push_item(depth, text);
+                    }
+                }
+                lists.push(ListFrame {
+                    ordered: first.is_some(),
+                    start: first.unwrap_or(1),
+                    items: Vec::new(),
+                });
             }
             Event::End(TagEnd::List(_)) => {
-                if let Some((ordered, start, items)) = list.take() {
-                    blocks.push(Block::List {
-                        ordered,
-                        start,
-                        items,
-                    });
+                if let Some(frame) = lists.pop() {
+                    match lists.last_mut() {
+                        // A nested list belongs to its parent, not to the
+                        // document: merge its items up rather than emitting a
+                        // separate block.
+                        Some(parent) => parent.items.extend(frame.items),
+                        None => blocks.push(Block::List { items: frame.items }),
+                    }
                 }
             }
             Event::Start(Tag::Item) => {
@@ -248,9 +301,12 @@ fn parse(source: &str) -> Vec<Block> {
                 justify = Justify::Left;
             }
             Event::End(TagEnd::Item) => {
-                if let (Some(mut text), Some((_, _, items))) = (current.take(), list.as_mut()) {
+                if let (Some(mut text), Some(_)) = (current.take(), lists.last()) {
                     text.set_justify(Justify::Left);
-                    items.push(text);
+                    let depth = lists.len() - 1;
+                    if let Some(frame) = lists.last_mut() {
+                        frame.push_item(depth, text);
+                    }
                 }
             }
             // Don't reset the active text if we're inside a list item.
@@ -266,7 +322,7 @@ fn parse(source: &str) -> Vec<Block> {
                 justify = heading_justify;
             }
             // In a list, the item text is finalized at End(Item) instead.
-            Event::End(TagEnd::Paragraph) | Event::End(TagEnd::Heading(_)) if list.is_none() => {
+            Event::End(TagEnd::Paragraph) | Event::End(TagEnd::Heading(_)) if lists.is_empty() => {
                 if let Some(mut text) = current.take() {
                     if let Some(paragraphs) = quote.as_mut() {
                         // Quote paragraph: magenta base so its padding is magenta too.
@@ -352,25 +408,23 @@ impl Renderable for Markdown {
                 Block::Text(text) => {
                     lines.extend(text.render_lines(console.theme(), base, Some(width)))
                 }
-                Block::List {
-                    ordered,
-                    start,
-                    items,
-                } => {
-                    for (number, item) in (*start..).zip(items.iter()) {
-                        let (prefix, prefix_style) = if *ordered {
-                            (
+                Block::List { items } => {
+                    for item in items {
+                        let (prefix, prefix_style) = match item.number {
+                            Some(number) => (
                                 format!(" {number} "),
                                 Style::parse("cyan").expect("valid style"),
-                            )
-                        } else {
-                            (
+                            ),
+                            None => (
                                 BULLET.to_string(),
                                 Style::parse("bold").expect("valid style"),
-                            )
+                            ),
                         };
-                        let prefix_width = cell_len(&prefix);
-                        let item_lines = item.render_lines(
+                        // Nested items are indented by their depth; the marker
+                        // and any wrapped continuation line then align under it.
+                        let indent = "  ".repeat(item.depth);
+                        let prefix_width = cell_len(&indent) + cell_len(&prefix);
+                        let item_lines = item.text.render_lines(
                             console.theme(),
                             base,
                             Some(width.saturating_sub(prefix_width)),
@@ -378,6 +432,7 @@ impl Renderable for Markdown {
                         for (line_index, line) in item_lines.into_iter().enumerate() {
                             let mut row = Vec::new();
                             if line_index == 0 {
+                                row.push(Segment::new(indent.clone(), None));
                                 row.push(Segment::new(prefix.clone(), Some(prefix_style.clone())));
                             } else {
                                 row.push(Segment::new(" ".repeat(prefix_width), None));
@@ -593,6 +648,79 @@ mod tests {
         assert_eq!(
             render("a\n\n---"),
             "a                   \n\n\x1b[2m--------------------\x1b[0m\n"
+        );
+    }
+}
+
+#[cfg(test)]
+mod nested_list_tests {
+    use super::*;
+
+    fn plain(source: &str, width: usize) -> String {
+        let console = Console::builder().width(width).no_color(true).build();
+        console.render_to_string(&Markdown::new(source))
+    }
+
+    /// The parser tracked the open list in a single `Option`, so a nested list
+    /// overwrote its parent: the parent's collected items were discarded and its
+    /// `End(List)` found nothing to emit. Three items became one.
+    #[test]
+    fn a_nested_list_keeps_every_item() {
+        let out = plain("- one\n- two\n  - nested\n", 40);
+        for expected in ["one", "two", "nested"] {
+            assert!(
+                out.contains(expected),
+                "{expected:?} was dropped from:\n{out}"
+            );
+        }
+    }
+
+    #[test]
+    fn nesting_three_deep_keeps_every_item() {
+        let out = plain("- top\n  - mid\n    - deep\n", 40);
+        for expected in ["top", "mid", "deep"] {
+            assert!(
+                out.contains(expected),
+                "{expected:?} was dropped from:\n{out}"
+            );
+        }
+    }
+
+    /// Items after a sublist arrive at `End(Item)` only once the sublist has
+    /// closed, so a naive flush puts them out of order.
+    #[test]
+    fn an_item_following_a_sublist_keeps_its_place() {
+        let out = plain("- one\n  - nested\n- two\n", 40);
+        let (one, nested, two) = (
+            out.find("one").expect("one"),
+            out.find("nested").expect("nested"),
+            out.find("two").expect("two"),
+        );
+        assert!(one < nested && nested < two, "order was wrong:\n{out}");
+    }
+
+    /// Each nesting level numbers independently; a merged sublist must not
+    /// advance its parent's sequence.
+    #[test]
+    fn each_level_of_an_ordered_list_numbers_independently() {
+        let out = plain("1. first\n2. second\n   1. sub\n", 40);
+        for expected in ["1 first", "2 second", "1 sub"] {
+            assert!(out.contains(expected), "expected {expected:?} in:\n{out}");
+        }
+    }
+
+    #[test]
+    fn nested_items_are_indented_under_their_parent() {
+        let out = plain("- top\n  - child\n", 40);
+        let top = out.lines().find(|l| l.contains("top")).expect("top line");
+        let child = out
+            .lines()
+            .find(|l| l.contains("child"))
+            .expect("child line");
+        let indent = |line: &str| line.len() - line.trim_start().len();
+        assert!(
+            indent(child) > indent(top),
+            "child should be indented under its parent:\n{out}"
         );
     }
 }
