@@ -557,7 +557,13 @@ impl Text {
     /// style name).
     pub fn append(&mut self, text: &str, style: Option<StyleType>) {
         let start = self.plain.len();
-        self.plain.push_str(text);
+        // Strip here as well as in `new`: upstream's `Text.append` runs the same
+        // `strip_control_codes`, and skipping it let BEL, backspace, vertical
+        // tab and form feed reach the terminal through every path that builds
+        // text incrementally — Markdown, Syntax and plain files. A backspace run
+        // is a spoofing tool: `FAILED\u{8}\u{8}\u{8}\u{8}\u{8}\u{8}PASSED`
+        // displays as `PASSED`.
+        self.plain.push_str(&Text::strip_control_codes(text));
         let end = self.plain.len();
         if let Some(style) = style {
             self.spans.push(Span { start, end, style });
@@ -1211,5 +1217,31 @@ mod tests {
             .filter(|s| !s.control)
             .map(|s| s.text.as_str())
             .collect()
+    }
+
+    /// `Text::new` stripped control codes but `append` did not, so every path
+    /// that builds text incrementally — Markdown, Syntax, plain files — leaked
+    /// them to the terminal. A backspace run is a spoofing tool: the reader sees
+    /// the overwritten text, not what the file says.
+    #[test]
+    fn append_strips_control_codes_like_new() {
+        let mut text = Text::new("");
+        text.append("FAILED\u{8}\u{8}\u{8}\u{8}\u{8}\u{8}PASSED", None);
+        assert_eq!(text.plain(), "FAILEDPASSED");
+
+        for code in ['\u{7}', '\u{8}', '\u{b}', '\u{c}', '\u{d}'] {
+            let mut text = Text::new("");
+            text.append(&format!("a{code}b"), None);
+            assert_eq!(text.plain(), "ab", "control code {code:?} survived append");
+        }
+    }
+
+    /// Upstream's `strip_control_codes` keeps NUL and ESC; only BEL, backspace,
+    /// vertical tab, form feed and carriage return go.
+    #[test]
+    fn append_keeps_the_codes_upstream_keeps() {
+        let mut text = Text::new("");
+        text.append("a\u{0}b\u{1b}c", None);
+        assert_eq!(text.plain(), "a\u{0}b\u{1b}c");
     }
 }
