@@ -116,10 +116,21 @@ fn a_nonsense_threshold_is_rejected_rather_than_disabling_the_gate() {
     let (before, after) = diff_fixtures();
     for bad in ["NaN", "inf", "-1", "101", "1e3"] {
         let (_out, ok) = run(
-            &["--diff", &before, &after, "--image-mode", "none", "--threshold", bad],
+            &[
+                "--diff",
+                &before,
+                &after,
+                "--image-mode",
+                "none",
+                "--threshold",
+                bad,
+            ],
             "",
         );
-        assert!(!ok, "--threshold {bad} should be rejected, but the run succeeded");
+        assert!(
+            !ok,
+            "--threshold {bad} should be rejected, but the run succeeded"
+        );
     }
 }
 
@@ -128,12 +139,28 @@ fn a_nonsense_threshold_is_rejected_rather_than_disabling_the_gate() {
 fn a_valid_threshold_still_gates() {
     let (before, after) = diff_fixtures();
     let (_out, over) = run(
-        &["--diff", &before, &after, "--image-mode", "none", "--threshold", "2"],
+        &[
+            "--diff",
+            &before,
+            &after,
+            "--image-mode",
+            "none",
+            "--threshold",
+            "2",
+        ],
         "",
     );
     assert!(!over, "5.4% change against a 2% limit must fail");
     let (_out, under) = run(
-        &["--diff", &before, &after, "--image-mode", "none", "--threshold", "90"],
+        &[
+            "--diff",
+            &before,
+            &after,
+            "--image-mode",
+            "none",
+            "--threshold",
+            "90",
+        ],
         "",
     );
     assert!(under, "5.4% change against a 90% limit must pass");
@@ -146,7 +173,15 @@ fn a_valid_threshold_still_gates() {
 fn the_threshold_matches_the_percentage_it_prints() {
     let (before, after) = diff_fixtures();
     let (out, ok) = run(
-        &["--diff", &before, &after, "--image-mode", "none", "--threshold", "5.4"],
+        &[
+            "--diff",
+            &before,
+            &after,
+            "--image-mode",
+            "none",
+            "--threshold",
+            "5.4",
+        ],
         "",
     );
     assert!(
@@ -185,10 +220,19 @@ fn decoration_flags_are_refused_with_diff_rather_than_ignored() {
         vec!["--padding", "2"],
         vec!["--center"],
     ] {
-        let mut args = vec!["--diff", before.as_str(), after.as_str(), "--image-mode", "none"];
+        let mut args = vec![
+            "--diff",
+            before.as_str(),
+            after.as_str(),
+            "--image-mode",
+            "none",
+        ];
         args.extend(flag.iter().copied());
         let (_out, ok) = run(&args, "");
-        assert!(!ok, "{flag:?} with --diff should be an error, not a silent no-op");
+        assert!(
+            !ok,
+            "{flag:?} with --diff should be an error, not a silent no-op"
+        );
     }
 }
 
