@@ -97,6 +97,7 @@ fn conflicting_modes_error() {
 // could not see any of them.
 
 /// The image pair the diff tests run against, as absolute paths.
+#[cfg(feature = "art")]
 fn diff_fixtures() -> (String, String) {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -111,6 +112,7 @@ fn diff_fixtures() -> (String, String) {
 /// `"NaN"` parses as an f32 and every comparison against it is false, so this
 /// silently switched the CI gate off and reported a pass. A gate that can be
 /// disabled by an empty template variable is worse than no gate at all.
+#[cfg(feature = "art")]
 #[test]
 fn a_nonsense_threshold_is_rejected_rather_than_disabling_the_gate() {
     let (before, after) = diff_fixtures();
@@ -135,6 +137,7 @@ fn a_nonsense_threshold_is_rejected_rather_than_disabling_the_gate() {
 }
 
 /// A threshold inside the range must still gate normally.
+#[cfg(feature = "art")]
 #[test]
 fn a_valid_threshold_still_gates() {
     let (before, after) = diff_fixtures();
@@ -169,6 +172,7 @@ fn a_valid_threshold_still_gates() {
 /// The gate compared full precision against a one-decimal display, so a limit
 /// equal to the reported figure printed "FAIL 5.4% changed, limit 5.4%" — a
 /// verdict contradicting itself, and unexplainable from the output.
+#[cfg(feature = "art")]
 #[test]
 fn the_threshold_matches_the_percentage_it_prints() {
     let (before, after) = diff_fixtures();
@@ -192,6 +196,7 @@ fn the_threshold_matches_the_percentage_it_prints() {
 
 /// Redirected output has no colour, and half-blocks without colour are a
 /// rectangle of identical characters — 30 rows carrying no information.
+#[cfg(feature = "art")]
 #[test]
 fn a_colourless_diff_renders_something_readable() {
     let (before, after) = diff_fixtures();
@@ -212,6 +217,7 @@ fn a_colourless_diff_renders_something_readable() {
 
 /// Flags that decorate a single rendered resource were accepted and silently
 /// dropped by `--diff`, which reads as the flag having no effect.
+#[cfg(feature = "art")]
 #[test]
 fn decoration_flags_are_refused_with_diff_rather_than_ignored() {
     let (before, after) = diff_fixtures();
