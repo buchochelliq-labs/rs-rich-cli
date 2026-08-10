@@ -368,3 +368,58 @@ fn the_demo_emits_no_escapes_when_piped() {
         );
     }
 }
+
+// --- Regressions found by UAT round 4 ----------------------------------------
+
+/// nbformat's `source`/`text` arrays carry their own trailing newlines, but a
+/// `traceback` array does not — each element is a line. Joining both the same
+/// way fused a whole stack trace onto one run-on line, which is the single
+/// output a user opens a failed notebook to read.
+#[test]
+fn a_notebook_traceback_keeps_its_line_breaks() {
+    let dir = std::env::temp_dir().join("rich-tb-test");
+    std::fs::create_dir_all(&dir).unwrap();
+    let nb = dir.join("tb.ipynb");
+    std::fs::write(
+        &nb,
+        r#"{"cells":[{"cell_type":"code","source":["1/0"],"outputs":[
+            {"output_type":"error","ename":"E","evalue":"v",
+             "traceback":["LINE_ONE","LINE_TWO","LINE_THREE"]}]}],
+            "metadata":{},"nbformat":4,"nbformat_minor":5}"#,
+    )
+    .unwrap();
+
+    let (out, ok) = run(&["--ipynb", nb.to_str().unwrap(), "--no-color"], "");
+    assert!(ok);
+    assert!(
+        !out.contains("LINE_ONELINE_TWO"),
+        "traceback lines were fused together:\n{out}"
+    );
+    for line in ["LINE_ONE", "LINE_TWO", "LINE_THREE"] {
+        assert!(out.contains(line), "{line} missing from:\n{out}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Columns were derived from the header alone, so a row carrying more fields
+/// than the header names silently lost the surplus — data loss in a tool whose
+/// entire job is showing you the file.
+#[test]
+fn a_csv_row_wider_than_its_header_keeps_every_field() {
+    let dir = std::env::temp_dir().join("rich-csv-test");
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("ragged.csv");
+    // Row 2 is short (must be padded) and row 3 is long (must not be dropped).
+    std::fs::write(&csv, "a,b,c\n1,2\n3,4,5,SURPLUS\n").unwrap();
+
+    let (out, ok) = run(
+        &["--csv", csv.to_str().unwrap(), "--no-color", "-w", "60"],
+        "",
+    );
+    assert!(ok);
+    assert!(
+        out.contains("SURPLUS"),
+        "the field past the header count was dropped:\n{out}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

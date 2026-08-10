@@ -973,6 +973,14 @@ fn render_csv(rows: &[Vec<String>]) -> Table {
             table.add_column(name);
         }
     }
+    // A row may carry more fields than the header names. Columns came from the
+    // header alone, so those fields had nowhere to go and were dropped -- a
+    // silent data loss in a tool whose job is showing you the file. Add unnamed
+    // columns to hold them.
+    let widest = data.iter().map(Vec::len).max().unwrap_or(0);
+    for _ in header.len()..widest {
+        table.add_column("");
+    }
     for row in data {
         let cells: Vec<&str> = row.iter().map(String::as_str).collect();
         table.add_row(&cells);
@@ -986,6 +994,24 @@ fn join_source(value: &serde_json::Value) -> String {
     match value {
         serde_json::Value::String(s) => s.clone(),
         serde_json::Value::Array(a) => a.iter().filter_map(|v| v.as_str()).collect(),
+        _ => String::new(),
+    }
+}
+
+/// Join a notebook `traceback`, whose elements are lines WITHOUT trailing
+/// newlines (unlike `source`/`text`, which carry their own). Using
+/// [`join_source`] here fused a whole stack trace onto one line.
+fn join_traceback(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Array(a) => a
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect::<Vec<_>>()
+            .join(
+                "
+",
+            ),
         _ => String::new(),
     }
 }
@@ -1020,7 +1046,7 @@ fn print_ansi(console: &Console, text: &str) {
 fn render_output(console: &Console, output: &serde_json::Value, count: Option<i64>) {
     match output["output_type"].as_str().unwrap_or("") {
         "stream" => print_ansi(console, &join_source(&output["text"])),
-        "error" => print_ansi(console, &join_source(&output["traceback"])),
+        "error" => print_ansi(console, &join_traceback(&output["traceback"])),
         "execute_result" | "display_data" => {
             console.print(&io_label("Out", count, "red", "#ee4b2b"));
             print_ansi(console, &join_source(&output["data"]["text/plain"]));
