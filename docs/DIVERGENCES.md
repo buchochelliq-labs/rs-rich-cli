@@ -124,6 +124,18 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** give Table cells styled `Text` content, then route inline markdown
   into table cells, under the Markdown issue (#9).
 
+### 21. Strikethrough delimiter runs of three or more tildes
+- **Differs:** `~x~` (single tilde) and `~~x~~` (double) match upstream exactly —
+  the first is literal text, the second is struck through. A run of **three or
+  more** tildes does not: `~~~x~~~` renders as literal `~~~x~~~` here, while
+  upstream renders `~x~` (it consumes the outer pair and strikes the rest).
+- **Why:** the two parsers resolve delimiter runs differently. `pulldown-cmark`
+  emits no strikethrough event at all for a triple run, so there is nothing to
+  re-interpret after the fact; matching upstream would mean reimplementing
+  markdown-it's delimiter-run algorithm rather than reading its output.
+- **Remove:** port markdown-it's `tokenize`/`postProcess` delimiter pairing for
+  strikethrough, under the Markdown issue (#9).
+
 ### 20. Hyperlinks omit upstream's random `id=` field
 - **Differs:** `Style::with_link` renders an OSC 8 hyperlink as
   `\x1b]8;;{url}\x1b\…\x1b]8;;\x1b\`. Upstream adds a **random** `id=` field

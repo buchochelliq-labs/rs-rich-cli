@@ -23,6 +23,7 @@ use crate::console::{Console, ConsoleOptions};
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::style::Style;
+use crate::text::is_control_code;
 
 /// The default theme (a dark base16 palette shipped with `syntect`).
 const DEFAULT_THEME: &str = "base16-ocean.dark";
@@ -33,6 +34,7 @@ pub struct Syntax {
     language: Option<String>,
     theme: String,
     word_wrap: bool,
+    padding: usize,
 }
 
 impl Syntax {
@@ -51,10 +53,22 @@ impl Syntax {
     pub fn new(code: impl Into<String>, language: impl Into<String>) -> Self {
         Syntax {
             word_wrap: false,
+            padding: 0,
             code: code.into(),
             language: Some(language.into()).filter(|l| !l.is_empty()),
             theme: DEFAULT_THEME.to_string(),
         }
+    }
+
+    /// Surround the code with `padding` cells of background on every side.
+    ///
+    /// Upstream's Markdown renders a fenced block as `Syntax(..., padding=1)`,
+    /// which is what gives a code block its blank inset row above and below and
+    /// its one-column gutter. Without it the code sat flush against the
+    /// surrounding text and every document containing a fence diverged.
+    pub fn padding(mut self, padding: usize) -> Self {
+        self.padding = padding;
+        self
     }
 
     /// Choose the highlighting theme (a `syntect` theme name). Unknown names fall
@@ -126,7 +140,9 @@ impl Renderable for Syntax {
             .unwrap_or_else(|| syntaxes.find_syntax_plain_text());
 
         let mut highlighter = HighlightLines::new(syntax, theme);
+        // The gutter eats into the space the code itself may occupy.
         let width = options.max_width;
+        let code_width = width.saturating_sub(self.padding * 2);
 
         let mut lines: Vec<Vec<Segment>> = Vec::new();
         for line in LinesWithEndings::from(&self.code) {
@@ -140,7 +156,15 @@ impl Renderable for Syntax {
                 if text.is_empty() {
                     continue;
                 }
-                used += cell_len(text);
+                // Upstream's Syntax builds a `Text`, so `strip_control_codes`
+                // runs on every token. We emit segments directly, which let BEL,
+                // backspace, vertical tab and form feed through to the terminal
+                // — a backspace run rewrites what the reader sees.
+                let text: String = text.chars().filter(|c| !is_control_code(*c)).collect();
+                if text.is_empty() {
+                    continue;
+                }
+                used += cell_len(&text);
                 row.push(Segment::new(text, Some(to_style(syn_style))));
             }
             let _ = used;
@@ -152,8 +176,30 @@ impl Renderable for Syntax {
         if self.word_wrap {
             lines = lines
                 .into_iter()
-                .flat_map(|row| Segment::split_lines(&Segment::fold_lines(&row, width)))
+                .flat_map(|row| Segment::split_lines(&Segment::fold_lines(&row, code_width)))
                 .collect();
+        }
+
+        // Left gutter, then the blank inset rows, both in the block background.
+        let pad_style = {
+            let mut style = Style::new();
+            if let Some(bg) = &background {
+                style = style.with_bgcolor(bg.clone());
+            }
+            style
+        };
+        if self.padding > 0 {
+            for row in &mut lines {
+                row.insert(
+                    0,
+                    Segment::new(" ".repeat(self.padding), Some(pad_style.clone())),
+                );
+            }
+            let blank = vec![Segment::new(" ".repeat(width), Some(pad_style.clone()))];
+            for _ in 0..self.padding {
+                lines.insert(0, blank.clone());
+                lines.push(blank.clone());
+            }
         }
 
         // Pad each line to the full width with the theme background, so the
@@ -240,5 +286,20 @@ mod tests {
             "wrapping must not lose characters:
 {out}"
         );
+    }
+
+    /// Syntax emits segments directly rather than going through `Text`, so the
+    /// shared `strip_control_codes` never ran and `rich -x` leaked backspaces
+    /// and BELs that `rich -m` did not.
+    #[test]
+    fn control_codes_are_stripped_from_highlighted_code() {
+        let out = render("let x = 1;\u{7}\u{8}\u{b}\u{c}", "rust", 40);
+        for code in ['\u{7}', '\u{8}', '\u{b}', '\u{c}'] {
+            assert!(
+                !out.contains(code),
+                "control code {code:?} reached the output"
+            );
+        }
+        assert!(out.contains("let"), "content lost with the control codes");
     }
 }

@@ -215,6 +215,9 @@ fn parse(source: &str) -> Vec<Block> {
     let mut strong = 0usize;
     let mut emphasis = 0usize;
     let mut strike = 0usize;
+    // Depth of single-tilde spans currently open; their delimiters are re-emitted
+    // as literal text so the run is not styled.
+    let mut single_tilde = 0usize;
     // Open containers, innermost last. Markdown nests, so this has to be a
     // stack: with flat slots, any nested block overwrote its parent's pending
     // content and the parent then emitted nothing.
@@ -231,7 +234,11 @@ fn parse(source: &str) -> Vec<Block> {
     let mut table: Option<TableAccum> = None;
 
     let options = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH;
-    for event in Parser::new_ext(source, options) {
+    // Offsets, not just events: pulldown-cmark accepts a *single* tilde as a
+    // strikethrough delimiter, while upstream's markdown-it requires two. Prose
+    // like `costs ~5~10` was silently restyled and its tildes deleted. The
+    // source range is the only way to tell `~x~` from `~~x~~` after parsing.
+    for (event, range) in Parser::new_ext(source, options).into_offset_iter() {
         match event {
             Event::Rule => {
                 flush_pending(&mut current, &mut blocks, &mut stack);
@@ -440,8 +447,26 @@ fn parse(source: &str) -> Vec<Block> {
             }
             Event::Start(Tag::Strong) => strong += 1,
             Event::End(TagEnd::Strong) => strong = strong.saturating_sub(1),
-            Event::Start(Tag::Strikethrough) => strike += 1,
-            Event::End(TagEnd::Strikethrough) => strike = strike.saturating_sub(1),
+            Event::Start(Tag::Strikethrough) => {
+                if source[range.clone()].starts_with("~~") {
+                    strike += 1;
+                } else {
+                    // Single-tilde: not a delimiter upstream. Keep the literal
+                    // text, tildes and all.
+                    single_tilde += 1;
+                    let block = current.get_or_insert_with(|| Text::new(""));
+                    block.append("~", None);
+                }
+            }
+            Event::End(TagEnd::Strikethrough) => {
+                if single_tilde > 0 {
+                    single_tilde -= 1;
+                    let block = current.get_or_insert_with(|| Text::new(""));
+                    block.append("~", None);
+                } else {
+                    strike = strike.saturating_sub(1);
+                }
+            }
             Event::Start(Tag::Emphasis) => emphasis += 1,
             Event::End(TagEnd::Emphasis) => emphasis = emphasis.saturating_sub(1),
             Event::Text(text) => {
@@ -520,6 +545,23 @@ impl Renderable for Markdown {
     }
 }
 
+/// Pad every row out to `width`, as upstream's `console.render_lines` does —
+/// `pad=True` is its default, and both the list-item and block-quote handlers
+/// rely on it.
+///
+/// Without this a child rendered in a narrower box hands back short rows and
+/// every enclosing level inherits the shortfall, so nesting lost two cells per
+/// level: quotes measured 68, 66, 64, 62 at depths 1–4 where upstream holds a
+/// flat 68.
+fn pad_lines(lines: &mut [Vec<Segment>], width: usize) {
+    for line in lines.iter_mut() {
+        let len: usize = line.iter().map(Segment::cell_length).sum();
+        if len < width {
+            line.push(Segment::new(" ".repeat(width - len), None));
+        }
+    }
+}
+
 /// Render a run of blocks into rows of segments at `width`.
 ///
 /// Recursive, because a list item and a quote are containers: whatever they
@@ -541,13 +583,17 @@ fn render_blocks(
         // none inside a list item or a quote — neither before a nested list nor
         // between two paragraphs of one item — so applying the rule there added
         // a stray row per block, and one per level of nesting.
-        if top_level
-            && (index > 0
-                || matches!(
-                    block,
-                    Block::List { .. } | Block::Quote(_) | Block::Table { .. }
-                ))
-        {
+        // A rule brings its own trailing blank, so the usual gap after it would
+        // double up (upstream sets `HorizontalRule.new_line = False` for exactly
+        // this reason).
+        let after_rule = index > 0 && matches!(blocks[index - 1], Block::Rule);
+        // A list, quote or table carries its own leading gap, which survives even
+        // after a rule; only the generic inter-block separator is suppressed.
+        let own_gap = matches!(
+            block,
+            Block::List { .. } | Block::Quote(_) | Block::Table { .. }
+        );
+        if top_level && (own_gap || (index > 0 && !after_rule)) {
             lines.push(Vec::new());
         }
         match block {
@@ -578,10 +624,11 @@ fn render_blocks(
                         false,
                     );
                     // A leading blank row would push the marker off its content.
-                    let item_lines: Vec<Vec<Segment>> = item_lines
+                    let mut item_lines: Vec<Vec<Segment>> = item_lines
                         .into_iter()
                         .skip_while(|line| line.is_empty())
                         .collect();
+                    pad_lines(&mut item_lines, width.saturating_sub(prefix_width));
                     for (line_index, line) in item_lines.into_iter().enumerate() {
                         let mut row = Vec::new();
                         if line_index == 0 {
@@ -599,12 +646,21 @@ fn render_blocks(
                 // Upstream renders quote content at `max_width - 4`.
                 let content_width = width.saturating_sub(4);
                 let quoted_lines = render_blocks(quoted, console, options, content_width, false);
-                for line in quoted_lines.into_iter().skip_while(|line| line.is_empty()) {
+                let mut quoted_lines: Vec<Vec<Segment>> = quoted_lines
+                    .into_iter()
+                    .skip_while(|line| line.is_empty())
+                    .collect();
+                pad_lines(&mut quoted_lines, content_width);
+                for line in quoted_lines {
                     let mut row = vec![Segment::new(
                         QUOTE_PREFIX.to_string(),
                         Some(prefix_style.clone()),
                     )];
-                    row.extend(line);
+                    // Upstream passes `style=self.style` to `render_lines`, so
+                    // the quote colour reaches *every* child — including a list
+                    // or table, which set their own styles and so previously
+                    // rendered inside a quote with no magenta at all.
+                    row.extend(Segment::apply_style(&line, &prefix_style));
                     lines.push(row);
                 }
             }
@@ -612,7 +668,8 @@ fn render_blocks(
                 // Render the code block via the Syntax renderable (functional,
                 // not byte-parity — see DIVERGENCES). Split its segment stream
                 // back into per-line rows for the shared join below.
-                let syntax = Syntax::new(code.as_str(), language.as_str());
+                // Upstream: `Syntax(code, lexer, theme=..., word_wrap=True, padding=1)`.
+                let syntax = Syntax::new(code.as_str(), language.as_str()).padding(1);
                 let inner = options.update_width(width);
                 let segments = syntax.rich_render(console, &inner);
                 lines.extend(Segment::split_lines(&segments));
@@ -620,6 +677,18 @@ fn render_blocks(
             Block::Rule => {
                 let style = Style::parse("dim").expect("valid style");
                 lines.push(vec![Segment::new("-".repeat(width), Some(style))]);
+                // Upstream's rule carries a trailing blank row of its own, in
+                // place of the usual inter-block gap (`HorizontalRule.new_line
+                // = False`). Inside a quote that row picks up the quote prefix,
+                // which is why upstream shows a bare `▌` line under a quoted
+                // rule and we showed none.
+                //
+                // At the very end of a document the trailing break already
+                // arrives from the join below — the `markdown_hr_end` golden
+                // pins it — so adding one here would double it.
+                if index + 1 < blocks.len() || !top_level {
+                    lines.push(Vec::new());
+                }
             }
             Block::Table {
                 alignments,
@@ -1029,6 +1098,91 @@ mod container_tests {
             rows.len(),
             4,
             "expected exactly four content rows, got {rows:?}"
+        );
+    }
+
+    /// Upstream's `render_lines` pads a child back to the width it was handed
+    /// (`pad=True`). We never padded, so every nesting level inherited the
+    /// shortfall: quote rows measured 68, 66, 64, 62 at depths 1–4 where
+    /// upstream holds a flat 68.
+    #[test]
+    fn nesting_does_not_narrow_each_level() {
+        let source = "> d1\n\n>> d2\n\n>>> d3\n\n>>>> d4\n";
+        let out = plain(source, 70);
+        let widths: Vec<usize> = out
+            .lines()
+            .filter(|l| {
+                l.contains("d1") || l.contains("d2") || l.contains("d3") || l.contains("d4")
+            })
+            .map(|l| l.chars().count())
+            .collect();
+        assert_eq!(widths.len(), 4, "expected one row per depth: {widths:?}");
+        assert!(
+            widths.iter().all(|w| *w == widths[0]),
+            "each nesting level lost width: {widths:?}"
+        );
+    }
+
+    /// pulldown-cmark accepts a single tilde as a strikethrough delimiter;
+    /// upstream's markdown-it requires two, so `~struck~` had its tildes deleted
+    /// and its content restyled where upstream leaves the text alone.
+    #[test]
+    fn a_single_tilde_is_literal_text() {
+        let out = plain("a ~struck~ b and ~~gone~~ here", 60);
+        assert!(
+            out.contains("~struck~"),
+            "single tildes were eaten: {out:?}"
+        );
+        assert!(!out.contains("~~gone~~"), "double tildes leaked: {out:?}");
+        assert!(out.contains("gone"), "struck content lost: {out:?}");
+    }
+
+    /// Upstream renders a fenced block as `Syntax(..., padding=1)`: a blank
+    /// inset row above and below and a one-column gutter. Without it the code
+    /// sat flush against the surrounding text.
+    #[test]
+    fn a_code_block_is_inset_by_one_cell() {
+        let out = plain("intro para\n\n```\nCODEWORD\n```\n", 40);
+        let rows: Vec<&str> = out.lines().collect();
+        let index = rows
+            .iter()
+            .position(|r| r.contains("CODEWORD"))
+            .expect("code row present");
+        assert!(
+            rows[index].starts_with(' '),
+            "no left gutter on the code row: {:?}",
+            rows[index]
+        );
+        assert!(
+            rows[index - 1].trim().is_empty(),
+            "no blank inset row above the code: {:?}",
+            rows[index - 1]
+        );
+        assert!(
+            rows.get(index + 1).is_some_and(|r| r.trim().is_empty()),
+            "no blank inset row below the code"
+        );
+    }
+
+    /// A rule carries its own trailing blank in place of the usual inter-block
+    /// gap, so a block after it is separated by exactly one blank row — not two,
+    /// and not none.
+    #[test]
+    fn a_rule_is_followed_by_exactly_one_blank_row() {
+        let out = plain("before\n\n---\n\nafter\n", 40);
+        let rows: Vec<&str> = out.lines().collect();
+        let rule = rows
+            .iter()
+            .position(|r| r.trim_end().ends_with('-') && r.trim().len() > 3)
+            .expect("rule row present");
+        let after = rows
+            .iter()
+            .position(|r| r.contains("after"))
+            .expect("following row present");
+        assert_eq!(
+            after - rule,
+            2,
+            "expected one blank row between rule and next block: {rows:?}"
         );
     }
 }
