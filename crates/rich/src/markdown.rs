@@ -142,8 +142,8 @@ fn heading_format(level: usize) -> (Style, Justify) {
     (Style::parse(spec).unwrap_or_default(), justify)
 }
 
-fn inline_style(strong: usize, emphasis: usize) -> Option<Style> {
-    if strong == 0 && emphasis == 0 {
+fn inline_style(strong: usize, emphasis: usize, strike: usize) -> Option<Style> {
+    if strong == 0 && emphasis == 0 && strike == 0 {
         return None;
     }
     let mut style = Style::new();
@@ -152,6 +152,10 @@ fn inline_style(strong: usize, emphasis: usize) -> Option<Style> {
     }
     if emphasis > 0 {
         style = style.combine(&Style::parse("italic").expect("valid style"));
+    }
+    if strike > 0 {
+        // `markdown.s` in upstream's default theme.
+        style = style.combine(&Style::parse("strike").expect("valid style"));
     }
     Some(style)
 }
@@ -171,6 +175,17 @@ fn sink<'a>(document: &'a mut Vec<Block>, stack: &'a mut [Frame]) -> &'a mut Vec
         None => document,
     }
 }
+
+/// How deep containers may nest before further nesting is flattened.
+///
+/// Rendering recurses once per level, so an unbounded document overflows the
+/// stack and takes the process with it: 400 nested block quotes aborted with
+/// STATUS_STACK_OVERFLOW, no output, after burning four seconds of CPU.
+///
+/// Upstream caps this too — markdown-it's `maxNesting` defaults to 20, which is
+/// why it renders such a document rather than dying. Content past the cap is
+/// kept; it simply stops indenting.
+const MAX_NESTING: usize = 20;
 
 /// Commit any pending inline text to the innermost open container.
 ///
@@ -199,10 +214,15 @@ fn parse(source: &str) -> Vec<Block> {
     let mut justify = Justify::Left;
     let mut strong = 0usize;
     let mut emphasis = 0usize;
+    let mut strike = 0usize;
     // Open containers, innermost last. Markdown nests, so this has to be a
     // stack: with flat slots, any nested block overwrote its parent's pending
     // content and the parent then emitted nothing.
     let mut stack: Vec<Frame> = Vec::new();
+    // Containers past MAX_NESTING are not pushed; these count them so the
+    // matching End events unwind symmetrically and the stack stays balanced.
+    let mut suppressed = 0usize;
+    let mut item_suppressed = 0usize;
     // (language, accumulated source) while inside a code block.
     let mut code: Option<(String, String)> = None;
     // The destination URL while inside a link.
@@ -210,7 +230,8 @@ fn parse(source: &str) -> Vec<Block> {
     // The table being assembled while inside a GFM table.
     let mut table: Option<TableAccum> = None;
 
-    for event in Parser::new_ext(source, Options::ENABLE_TABLES) {
+    let options = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH;
+    for event in Parser::new_ext(source, options) {
         match event {
             Event::Rule => {
                 flush_pending(&mut current, &mut blocks, &mut stack);
@@ -295,28 +316,44 @@ fn parse(source: &str) -> Vec<Block> {
             }
             Event::Start(Tag::BlockQuote(_)) => {
                 flush_pending(&mut current, &mut blocks, &mut stack);
-                stack.push(Frame::Quote { blocks: Vec::new() });
+                if stack.len() >= MAX_NESTING {
+                    suppressed += 1;
+                } else {
+                    stack.push(Frame::Quote { blocks: Vec::new() });
+                }
             }
             Event::End(TagEnd::BlockQuote(_)) => {
-                if let Some(Frame::Quote { blocks: quoted }) = stack.pop() {
+                if suppressed > 0 {
+                    suppressed -= 1;
+                } else if let Some(Frame::Quote { blocks: quoted }) = stack.pop() {
                     sink(&mut blocks, &mut stack).push(Block::Quote(quoted));
                 }
             }
             Event::Start(Tag::List(first)) => {
                 flush_pending(&mut current, &mut blocks, &mut stack);
-                stack.push(Frame::List {
-                    ordered: first.is_some(),
-                    start: first.unwrap_or(1),
-                    entries: Vec::new(),
-                });
+                if stack.len() >= MAX_NESTING {
+                    suppressed += 1;
+                } else {
+                    stack.push(Frame::List {
+                        ordered: first.is_some(),
+                        start: first.unwrap_or(1),
+                        entries: Vec::new(),
+                    });
+                }
             }
             Event::End(TagEnd::List(_)) => {
-                if let Some(Frame::List { entries, .. }) = stack.pop() {
+                if suppressed > 0 {
+                    suppressed -= 1;
+                } else if let Some(Frame::List { entries, .. }) = stack.pop() {
                     sink(&mut blocks, &mut stack).push(Block::List { items: entries });
                 }
             }
             Event::Start(Tag::Item) => {
-                stack.push(Frame::Item { blocks: Vec::new() });
+                if stack.len() >= MAX_NESTING {
+                    item_suppressed += 1;
+                } else {
+                    stack.push(Frame::Item { blocks: Vec::new() });
+                }
                 // A *tight* list emits its item text as bare `Text` events with
                 // no enclosing Paragraph, so open a buffer here for it to land
                 // in. A loose item simply resets this at its Start(Paragraph).
@@ -331,7 +368,9 @@ fn parse(source: &str) -> Vec<Block> {
                     text.set_justify(Justify::Left);
                     sink(&mut blocks, &mut stack).push(Block::Text(text));
                 }
-                if let Some(Frame::Item {
+                if item_suppressed > 0 {
+                    item_suppressed -= 1;
+                } else if let Some(Frame::Item {
                     blocks: item_blocks,
                 }) = stack.pop()
                 {
@@ -371,7 +410,17 @@ fn parse(source: &str) -> Vec<Block> {
                     if in_quote {
                         // Quote paragraph: magenta base so its padding is magenta too.
                         text.set_base_style(Style::parse("magenta").expect("valid style"));
-                        text.set_justify(Justify::Left);
+                        // A heading inside a quote keeps its own style and
+                        // alignment on top of that base; treating everything in
+                        // a quote as body text flattened h1 to plain magenta and
+                        // left-aligned it.
+                        if let Some(style) = &heading_style {
+                            let end = text.plain().len();
+                            text.stylize(style.clone(), 0, end);
+                            text.set_justify(justify);
+                        } else {
+                            text.set_justify(Justify::Left);
+                        }
                     } else {
                         // A heading's style is a SPAN over the text, not a base
                         // style: a base style would paint the centring padding
@@ -391,6 +440,8 @@ fn parse(source: &str) -> Vec<Block> {
             }
             Event::Start(Tag::Strong) => strong += 1,
             Event::End(TagEnd::Strong) => strong = strong.saturating_sub(1),
+            Event::Start(Tag::Strikethrough) => strike += 1,
+            Event::End(TagEnd::Strikethrough) => strike = strike.saturating_sub(1),
             Event::Start(Tag::Emphasis) => emphasis += 1,
             Event::End(TagEnd::Emphasis) => emphasis = emphasis.saturating_sub(1),
             Event::Text(text) => {
@@ -400,14 +451,19 @@ fn parse(source: &str) -> Vec<Block> {
                     acc.cur_cell.push_str(&text);
                 } else if let Some((_, source)) = code.as_mut() {
                     source.push_str(&text);
-                } else if let Some(block) = current.as_mut() {
+                } else {
+                    // Open a buffer if none is active. In a tight list item the
+                    // text after a nested block arrives bare, with the previous
+                    // buffer already flushed by that block's start — matching
+                    // on `as_mut()` here silently dropped it.
+                    let block = current.get_or_insert_with(|| Text::new(""));
                     // Inside a link, use the markdown.link_url style + an OSC 8
                     // hyperlink; otherwise the inline strong/emphasis style.
                     let style = match &link {
                         Some(url) => Style::parse(LINK_STYLE)
                             .ok()
                             .map(|s| s.with_link(url.clone())),
-                        None => inline_style(strong, emphasis),
+                        None => inline_style(strong, emphasis, strike),
                     };
                     block.append(&text, style.map(Into::into));
                 }
@@ -415,7 +471,12 @@ fn parse(source: &str) -> Vec<Block> {
             Event::Code(text) => {
                 if let Some(acc) = table.as_mut().filter(|a| a.in_cell) {
                     acc.cur_cell.push_str(&text);
-                } else if let Some(block) = current.as_mut() {
+                } else {
+                    // Open a buffer if none is active. In a tight list item the
+                    // text after a nested block arrives bare, with the previous
+                    // buffer already flushed by that block's start — matching
+                    // on `as_mut()` here silently dropped it.
+                    let block = current.get_or_insert_with(|| Text::new(""));
                     block.append(&text, Style::parse(CODE_STYLE).ok().map(Into::into));
                 }
             }
@@ -437,7 +498,7 @@ fn parse(source: &str) -> Vec<Block> {
 
 impl Renderable for Markdown {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        let mut lines = render_blocks(&self.blocks, console, options, options.max_width);
+        let mut lines = render_blocks(&self.blocks, console, options, options.max_width, true);
 
         // Upstream's thematic-break element emits a trailing line break, which is
         // only observable when the rule is the document's last block: it adds one
@@ -468,6 +529,7 @@ fn render_blocks(
     console: &Console,
     options: &ConsoleOptions,
     width: usize,
+    top_level: bool,
 ) -> Vec<Vec<Segment>> {
     let base = console.base_style();
     let mut lines: Vec<Vec<Segment>> = Vec::new();
@@ -475,11 +537,16 @@ fn render_blocks(
     for (index, block) in blocks.iter().enumerate() {
         // A blank line precedes every non-first block, and every
         // list/quote/table (which upstream renders with a leading gap).
-        if index > 0
-            || matches!(
-                block,
-                Block::List { .. } | Block::Quote(_) | Block::Table { .. }
-            )
+        // Blank lines between blocks are a *document* convention. Upstream puts
+        // none inside a list item or a quote — neither before a nested list nor
+        // between two paragraphs of one item — so applying the rule there added
+        // a stray row per block, and one per level of nesting.
+        if top_level
+            && (index > 0
+                || matches!(
+                    block,
+                    Block::List { .. } | Block::Quote(_) | Block::Table { .. }
+                ))
         {
             lines.push(Vec::new());
         }
@@ -508,6 +575,7 @@ fn render_blocks(
                         console,
                         options,
                         width.saturating_sub(prefix_width),
+                        false,
                     );
                     // A leading blank row would push the marker off its content.
                     let item_lines: Vec<Vec<Segment>> = item_lines
@@ -530,7 +598,7 @@ fn render_blocks(
                 let prefix_style = Style::parse("magenta").expect("valid style");
                 // Upstream renders quote content at `max_width - 4`.
                 let content_width = width.saturating_sub(4);
-                let quoted_lines = render_blocks(quoted, console, options, content_width);
+                let quoted_lines = render_blocks(quoted, console, options, content_width, false);
                 for line in quoted_lines.into_iter().skip_while(|line| line.is_empty()) {
                     let mut row = vec![Segment::new(
                         QUOTE_PREFIX.to_string(),
@@ -885,5 +953,82 @@ mod container_tests {
             out.find("F1_code").expect("F1_code"),
         );
         assert!(text < code, "the code block overtook its paragraph:\n{out}");
+    }
+
+    /// Rendering recurses once per nesting level, so an unbounded document
+    /// overflowed the stack and killed the process: 400 nested quotes aborted
+    /// with STATUS_STACK_OVERFLOW after four seconds, no output at all.
+    #[test]
+    fn deeply_nested_input_does_not_overflow_the_stack() {
+        for depth in [50usize, 400, 2000] {
+            let quotes = ">".repeat(depth) + " x\n";
+            let _ = plain(&quotes, 80);
+
+            let list: String = (0..depth)
+                .map(|i| format!("{}- L{i}\n", "  ".repeat(i)))
+                .collect();
+            let _ = plain(&list, 80);
+        }
+        // Reaching here without aborting is the assertion.
+    }
+
+    /// Text after a nested block inside a tight item arrives as a bare `Text`
+    /// event with no buffer open — the previous one having been flushed by that
+    /// block's start — and was silently dropped at exit 0.
+    #[test]
+    fn a_tight_item_keeps_text_that_follows_a_nested_block() {
+        assert_all_present(
+            "- ITEM\n  ```\n  FIRST code\n  ```\n  SECOND para\n",
+            &["ITEM", "FIRST code", "SECOND para"],
+        );
+        assert_all_present(
+            "- ITEM\n  ## HEAD\n  TAIL para\n",
+            &["ITEM", "HEAD", "TAIL para"],
+        );
+        assert_all_present("- ITEM\n  ---\n  TAIL para\n", &["ITEM", "TAIL para"]);
+    }
+
+    /// A heading inside a quote was flattened to body text: it lost its own
+    /// style and its centring, keeping only the quote's magenta.
+    #[test]
+    fn a_heading_inside_a_quote_keeps_its_alignment() {
+        let out = plain("> # Heading in quote\n", 50);
+        let line = out
+            .lines()
+            .find(|l| l.contains("Heading in quote"))
+            .expect("heading line");
+        // Centred: the text does not start immediately after the quote bar.
+        let after_bar = line.split(QUOTE_PREFIX.trim_end()).nth(1).expect("bar");
+        assert!(
+            after_bar.starts_with("  "),
+            "heading was left-aligned inside the quote: {line:?}"
+        );
+    }
+
+    /// Upstream enables strikethrough explicitly; without the parser option the
+    /// tilde markers leaked into the output and widened table columns.
+    #[test]
+    fn strikethrough_is_rendered_rather_than_leaked() {
+        let out = plain("~~Deprecated~~ text\n", 50);
+        assert!(!out.contains("~~"), "tildes leaked into output: {out:?}");
+        assert!(out.contains("Deprecated"), "content lost: {out:?}");
+    }
+
+    /// Blank lines between blocks are a document convention. Applying them
+    /// inside a container added a stray row per block and per nesting level —
+    /// upstream emits none there.
+    #[test]
+    fn nested_blocks_gain_no_phantom_blank_row() {
+        let out = plain("- a\n  - b\n  - c\n- d\n", 50);
+        let rows: Vec<&str> = out
+            .lines()
+            .map(str::trim_end)
+            .filter(|l| !l.is_empty())
+            .collect();
+        assert_eq!(
+            rows.len(),
+            4,
+            "expected exactly four content rows, got {rows:?}"
+        );
     }
 }
