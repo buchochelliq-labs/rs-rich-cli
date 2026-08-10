@@ -107,6 +107,11 @@ everything, so accepting it would silently switch the gate off and report a pass
 Everything the gate prints goes to **stdout**; only the downgrade notices above
 use stderr.
 
+`--threshold` and `--image-mode` are refused without `--diff` rather than
+ignored. Silently accepting them meant a job that lost its `--diff` — a typo, a
+refactor, an argument reordered — became a permanently green gate, which is the
+same failure an unvalidated threshold caused.
+
 ## Tuning
 
 **These are not exposed on the command line yet** — they are listed so the

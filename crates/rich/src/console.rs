@@ -812,22 +812,34 @@ fn detect_color_system() -> ColorSystem {
         }
     }
 
-    // A Windows console that accepts ENABLE_VIRTUAL_TERMINAL_PROCESSING is a
-    // modern one, and every Windows console that speaks VT also speaks 24-bit
-    // color. The call also *enables* VT processing, which legacy `conhost`
-    // needs before it will honour any escape sequence at all — so this both
-    // detects the capability and turns it on.
+    // Windows. This function is only reached when stdout is a terminal (see
+    // ConsoleBuilder::build), and every modern Windows console that can be a
+    // terminal speaks 24-bit color, so report truecolor.
+    //
+    // The call below is for its SIDE EFFECT — it turns on
+    // ENABLE_VIRTUAL_TERMINAL_PROCESSING, which legacy `conhost` needs before
+    // it honours any escape sequence. Its RETURN VALUE is deliberately ignored:
+    // it enables VT on stdout *and stderr* and propagates failure with `?`, so
+    // merely redirecting stderr (`rich ... 2>log`, the most natural CI
+    // invocation) made it report failure and dropped the whole console to 16
+    // colors — even though stdout was still a fully capable terminal.
     #[cfg(windows)]
-    if anstyle_query::windows::enable_ansi_colors() == Some(true) {
-        return ColorSystem::Truecolor;
+    {
+        let _ = anstyle_query::windows::enable_ansi_colors();
+        ColorSystem::Truecolor
     }
 
-    if let Some(term) = std::env::var_os("TERM") {
-        if term.to_string_lossy().contains("256") {
-            return ColorSystem::EightBit;
+    // `TERM` is meaningless on Windows and the branch above always returns, so
+    // gating this keeps either platform free of unreachable code.
+    #[cfg(not(windows))]
+    {
+        if let Some(term) = std::env::var_os("TERM") {
+            if term.to_string_lossy().contains("256") {
+                return ColorSystem::EightBit;
+            }
         }
+        ColorSystem::Standard
     }
-    ColorSystem::Standard
 }
 
 /// Detect the terminal width: `COLUMNS`, then the real terminal, then a default.

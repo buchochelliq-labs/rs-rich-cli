@@ -283,3 +283,88 @@ fn a_directory_says_it_is_a_directory() {
     let (_out, ok) = run(&[dir.to_str().unwrap()], "");
     assert!(!ok, "a directory is not a renderable resource");
 }
+
+// --- Regressions found by UAT round 2 ----------------------------------------
+
+/// Python reads text with universal newlines, so upstream never sees a CR;
+/// `read_to_string` hands them through. `--syntax` emitted `code` + CR +
+/// padding, so a terminal returned to column 0 and the padding overwrote the
+/// code — a blank rectangle at exit 0. Piping hid it completely, because the
+/// bytes were all present and only a terminal acts on the CR.
+#[test]
+fn a_crlf_file_does_not_leak_carriage_returns() {
+    let dir = std::env::temp_dir().join("rich-crlf-test");
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("crlf.py");
+    std::fs::write(&file, "import os\r\ndef f():\r\n    return 1\r\n").unwrap();
+
+    for mode in [["-x"], ["-m"]] {
+        let (out, ok) = run(&[mode[0], file.to_str().unwrap(), "--no-color"], "");
+        assert!(ok, "{mode:?} should render a CRLF file");
+        assert!(
+            !out.contains('\r'),
+            "{mode:?} leaked a carriage return; a terminal would overwrite the line: {out:?}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A flag whose mode is absent used to be silently ignored at exit 0. For
+/// `--threshold` that meant a CI job which lost its `--diff` became a
+/// permanently green gate — the same failure the NaN check closed, from the
+/// other side.
+#[test]
+fn a_flag_without_its_mode_is_refused() {
+    for args in [
+        vec!["--threshold", "5"],
+        vec!["--image-mode", "blocks"],
+        vec!["--loop", "2"],
+        vec!["--title", "x"],
+        vec!["--caption", "x"],
+    ] {
+        let mut full = args.clone();
+        full.push("README.md");
+        let (_out, ok) = run(&full, "");
+        assert!(
+            !ok,
+            "{args:?} without its mode should be refused, not ignored"
+        );
+    }
+}
+
+/// A malformed notebook printed an error and exited 0, while malformed JSON
+/// exited 1. A script cannot tell that apart from success.
+#[test]
+fn a_broken_notebook_exits_non_zero() {
+    let dir = std::env::temp_dir().join("rich-ipynb-test");
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let broken = dir.join("broken.ipynb");
+    std::fs::write(&broken, "{ not json").unwrap();
+    let (_out, ok) = run(&["--ipynb", broken.to_str().unwrap()], "");
+    assert!(!ok, "malformed notebook JSON must exit non-zero");
+
+    // Valid JSON that is not a notebook printed nothing at all, at exit 0.
+    let not_nb = dir.join("not-a-notebook.ipynb");
+    std::fs::write(&not_nb, "{\"a\": 1}").unwrap();
+    let (_out, ok) = run(&["--ipynb", not_nb.to_str().unwrap()], "");
+    assert!(!ok, "JSON without a `cells` array is not a notebook");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The no-argument demo built its consoles with `force_terminal(true)`, so it
+/// wrote escape sequences into a pipe and ignored `--no-color` — on that path
+/// alone, while every other mode honoured both.
+#[test]
+fn the_demo_emits_no_escapes_when_piped() {
+    for args in [vec![], vec!["--no-color"]] {
+        let (out, ok) = run(&args, "");
+        assert!(ok);
+        assert!(!out.is_empty(), "the demo should still produce output");
+        assert!(
+            !out.contains('\u{1b}'),
+            "{args:?}: escape sequences leaked into a pipe"
+        );
+    }
+}
