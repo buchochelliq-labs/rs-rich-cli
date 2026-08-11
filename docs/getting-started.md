@@ -33,7 +33,7 @@ than unsupported.
 
     ```toml
     [dependencies]
-    rs-rich = "0.0.1"
+    rs-rich = "0.0.2"
     ```
 
 !!! tip "Published on crates.io"
@@ -41,7 +41,7 @@ than unsupported.
     [`rs-rich`](https://crates.io/crates/rs-rich) ·
     [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) ·
     [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) ·
-    [`rs-rich-art`](https://crates.io/crates/rs-rich-art) — all at 0.0.1.
+    [`rs-rich-art`](https://crates.io/crates/rs-rich-art) — all at 0.0.2.
     API documentation is on [docs.rs](https://docs.rs/rs-rich).
 
 ## Check the install worked
@@ -51,7 +51,7 @@ rich --version
 ```
 
 ```text
-rich (rs-rich-cli) 0.0.1
+rich (rs-rich-cli) 0.0.2
 ```
 
 If the shell reports "command not found", Cargo's binary directory is not on
@@ -82,7 +82,7 @@ package carries an `rs-` prefix. The library target keeps the short name, so the
 dependency and the `use` line differ:
 
 ```toml
-rs-rich = "0.0.1"      # what you depend on
+rs-rich = "0.0.2"      # what you depend on
 ```
 
 ```rust

@@ -23,7 +23,7 @@ Ranges are across three separate passes on one Windows 11 machine.
 | `--rule` (no input file at all) | 12–15 ms | 316–356 ms | **~26×** |
 | syntax highlight, 46 KB `.rs` | 283–306 ms | 1050–1184 ms | **~3.8×** |
 
-Versions: this crate at 0.0.1 (release build) against `rich-cli` 1.8.1, which
+Versions: this crate at 0.0.2 (release build) against `rich-cli` 1.8.1, which
 pins **`rich` 12.6.0** — not the 15.0.0 that `UPSTREAM.toml` mirrors. That is
 what `pip install rich-cli` gives you today, so it is the honest real-world
 comparison, but it is not a controlled one.

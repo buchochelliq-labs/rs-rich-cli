@@ -4,7 +4,7 @@ What does not work yet, what was never meant to, and what works differently on
 purpose. Three different things, kept apart — a deliberate trade-off listed as a
 bug makes a considered decision look like neglect.
 
-**Applies to** `rich 0.0.1` / `rs-rich 0.0.1`, verified 2026-08-11 against Python
+**Applies to** `rich 0.0.2` / `rs-rich 0.0.2`, verified 2026-08-11 against Python
 `rich` 15.0.0. Each entry links to its issue so you can check the status without
 waiting for this page to be updated.
 
@@ -131,12 +131,12 @@ Kept here so anyone on an older build still finds the symptom. Full detail in
 
 | Symptom | Fixed in |
 |---------|----------|
-| `--csv` printed a made-up one-column table and exited `0` on unreadable input | `0.0.1` (round 9) |
-| Markdown link destinations vanished from piped output | `0.0.1` (round 9) |
-| `--syntax` deleted every blank line in the file | `0.0.1` (round 8) |
-| Long lines in Markdown code blocks were cropped and their tail lost | `0.0.1` (round 8) |
-| Emoji and Indic text broke table and panel borders | `0.0.1` (rounds 8–9) |
-| Deeply nested Markdown crashed the process | `0.0.1` (round 6) |
+| `--csv` printed a made-up one-column table and exited `0` on unreadable input | `0.0.2` (round 9) |
+| Markdown link destinations vanished from piped output | `0.0.2` (round 9) |
+| `--syntax` deleted every blank line in the file | `0.0.2` (round 8) |
+| Long lines in Markdown code blocks were cropped and their tail lost | `0.0.2` (round 8) |
+| Emoji and Indic text broke table and panel borders | `0.0.2` (rounds 8–9) |
+| Deeply nested Markdown crashed the process | `0.0.2` (round 6) |
 
 ---
 

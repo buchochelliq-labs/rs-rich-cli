@@ -6,7 +6,7 @@ by what you are trying to do. For the complete list of options, see the
 [CLI reference](cli-reference.md).
 
 **Assumes** you can run commands in a terminal. Every example below was run
-against `rich 0.0.1` and shows its real output, with colour removed for print.
+against `rich 0.0.2` and shows its real output, with colour removed for print.
 
 ---
 

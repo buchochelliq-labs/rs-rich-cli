@@ -619,7 +619,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anstyle-query",
  "fancy-regex 0.19.0",
@@ -631,7 +631,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-art"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "icy_sixel",
  "image",
@@ -640,7 +640,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-cli"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "rs-rich",
  "rs-rich-art",
@@ -651,7 +651,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-ext"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "rs-rich",
 ]

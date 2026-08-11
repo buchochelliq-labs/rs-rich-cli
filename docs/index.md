@@ -50,7 +50,7 @@ captured from the real library and asserted in CI.
 
 That promise is why the honest bits matter:
 
-!!! warning "This is version 0.0.1, and it means it"
+!!! warning "This is version 0.0.2, and it means it"
 
     The API takes breaking changes regularly, and the port is deliberately
     incomplete. What is implemented is parity-tested; what isn't is listed
@@ -60,7 +60,7 @@ That promise is why the honest bits matter:
 
 ## Released crates
 
-All four are published on crates.io at **0.0.1**.
+All four are published on crates.io at **0.0.2**.
 
 | crate | version | docs | what it is |
 |---|---|---|---|

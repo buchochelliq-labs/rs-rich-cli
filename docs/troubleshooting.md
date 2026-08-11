@@ -4,7 +4,7 @@ Error messages exactly as `rich` prints them, with what causes each and what to
 do. All diagnostics go to **stderr** and every failure exits **1**, so a failed
 render never looks like a successful one to a script.
 
-**Applies to** `rich 0.0.1`. If your version differs, check
+**Applies to** `rich 0.0.2`. If your version differs, check
 [the changelog](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/CHANGELOG.md).
 
 ---

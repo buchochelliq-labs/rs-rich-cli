@@ -33,6 +33,10 @@ Everything below this heading is the development history that led here.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.0.2] — 2026-08-11
+
 ### Fixed
 - **`Color::downgrade` was wrong for 8-bit and standard targets** (`color.rs`) —
   found by the new colour-system goldens, which is exactly the coverage gap that

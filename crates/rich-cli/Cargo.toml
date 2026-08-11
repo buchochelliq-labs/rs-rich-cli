@@ -5,7 +5,7 @@
 # See UPSTREAM.toml and AGENTS.md.
 [package]
 name = "rs-rich-cli"
-version = "0.0.1"
+version = "0.0.2"
 description = "A Rust port of the `rich-cli` terminal toolbox, built on the `rich` crate"
 edition.workspace = true
 license.workspace = true
