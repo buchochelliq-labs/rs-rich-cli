@@ -28,6 +28,9 @@ use crate::text::is_control_code;
 /// The default theme (a dark base16 palette shipped with `syntect`).
 const DEFAULT_THEME: &str = "base16-ocean.dark";
 
+/// Upstream's `Syntax(tab_size=4)`.
+const DEFAULT_TAB_SIZE: usize = 4;
+
 /// A block of syntax-highlighted source code. Mirrors `rich.syntax.Syntax`.
 pub struct Syntax {
     code: String,
@@ -35,6 +38,46 @@ pub struct Syntax {
     theme: String,
     word_wrap: bool,
     padding: usize,
+    tab_size: usize,
+}
+
+/// Port of Python's `str.expandtabs(tab_size)`, which `Syntax._process_code`
+/// runs over the source before highlighting it.
+///
+/// A tab advances to the next multiple of `tab_size` **counted in characters,
+/// not cells** (CPython's `unicode_expandtabs` walks code points), and the
+/// column resets at `\n` and `\r`. `tab_size == 0` deletes the tab, matching
+/// CPython's `tabsize <= 0` branch.
+///
+/// Without this the raw U+0009 reached the terminal, where it jumps to the next
+/// 8-cell stop while we had measured it as one cell: a block asked to be 30
+/// wide rendered 31-32 cells and tore the background panel.
+fn expand_tabs(code: &str, tab_size: usize) -> String {
+    if !code.contains('\t') {
+        return code.to_string();
+    }
+    let mut out = String::with_capacity(code.len());
+    let mut column = 0usize;
+    for ch in code.chars() {
+        match ch {
+            '\t' => {
+                if tab_size > 0 {
+                    let advance = tab_size - (column % tab_size);
+                    out.extend(std::iter::repeat_n(' ', advance));
+                    column += advance;
+                }
+            }
+            '\n' | '\r' => {
+                out.push(ch);
+                column = 0;
+            }
+            _ => {
+                out.push(ch);
+                column += 1;
+            }
+        }
+    }
+    out
 }
 
 impl Syntax {
@@ -54,10 +97,22 @@ impl Syntax {
         Syntax {
             word_wrap: false,
             padding: 0,
+            tab_size: DEFAULT_TAB_SIZE,
             code: code.into(),
             language: Some(language.into()).filter(|l| !l.is_empty()),
             theme: DEFAULT_THEME.to_string(),
         }
+    }
+
+    /// How far a tab advances the column, in characters. Upstream's
+    /// `Syntax(tab_size=…)`, default 4.
+    ///
+    /// Tabs are *expanded* to spaces before highlighting (upstream's
+    /// `code.expandtabs(self.tab_size)`), so this is the only tab handling in
+    /// play — the rendered code contains no U+0009 at all.
+    pub fn tab_size(mut self, tab_size: usize) -> Self {
+        self.tab_size = tab_size;
+        self
     }
 
     /// Surround the code with `padding` cells of background on every side.
@@ -144,8 +199,12 @@ impl Renderable for Syntax {
         let width = options.max_width;
         let code_width = width.saturating_sub(self.padding * 2);
 
+        // `Syntax._process_code`: the source is tab-expanded before it reaches
+        // the highlighter, so no U+0009 ever survives into a segment.
+        let code = expand_tabs(&self.code, self.tab_size);
+
         let mut lines: Vec<Vec<Segment>> = Vec::new();
-        for line in LinesWithEndings::from(&self.code) {
+        for line in LinesWithEndings::from(&code) {
             let ranges = highlighter
                 .highlight_line(line, syntaxes)
                 .unwrap_or_default();
@@ -169,6 +228,15 @@ impl Renderable for Syntax {
             }
             let _ = used;
             lines.push(row);
+        }
+
+        // Upstream splits the source with Python's `str.split("\n")`, which keeps
+        // the empty element after a trailing newline — so a file ending in `\n`
+        // gets one final padded blank row. `LinesWithEndings` yields no such
+        // element, so every source (i.e. nearly every real file) rendered one row
+        // short of upstream. An empty source splits to `[""]`, one row, too.
+        if code.is_empty() || code.ends_with('\n') {
+            lines.push(Vec::new());
         }
 
         // Wrapping happens before padding, so every *visual* row gets the same
@@ -323,11 +391,117 @@ mod tests {
         let out =
             console.render_to_string(&Syntax::new("a = 1\n\nb = 2\n", "python").word_wrap(true));
         let rows: Vec<&str> = out.trim_end_matches('\n').split('\n').collect();
-        assert_eq!(rows.len(), 3, "blank line lost: {rows:?}");
+        // Four rows, not three: upstream splits with Python's `str.split("\n")`,
+        // so the trailing newline contributes a final empty row —
+        // `"a = 1\n\nb = 2\n".split("\n") == ["a = 1", "", "b = 2", ""]`, and
+        // rich 15.0.0 prints four padded rows for it. This assertion previously
+        // said three, pinning our own missing-row bug as the expectation.
+        assert_eq!(rows.len(), 4, "blank line lost: {rows:?}");
         assert!(
             rows[1].trim().is_empty(),
             "middle row should be blank: {rows:?}"
         );
+        assert!(
+            rows[3].trim().is_empty(),
+            "trailing row should be blank: {rows:?}"
+        );
+    }
+
+    /// `Syntax._process_code` runs `code.expandtabs(self.tab_size)` before
+    /// anything is highlighted. We emitted the raw U+0009 and measured it as one
+    /// cell, so a tabbed line reached the terminal 31-32 cells wide against a
+    /// requested 30 and tore the background block.
+    ///
+    /// Both expectations captured verbatim from real rich 15.0.0.
+    #[test]
+    fn tabs_are_expanded_before_highlighting() {
+        let console = Console::builder().width(30).no_color(true).build();
+        let out = console.render_to_string(&Syntax::new(
+            "def f():\n\tif x:\n\t\treturn 1\n\treturn 0",
+            "python",
+        ));
+        assert_eq!(
+            out.split('\n').collect::<Vec<_>>(),
+            [
+                "def f():                      ",
+                "    if x:                     ",
+                "        return 1              ",
+                "    return 0                  ",
+            ]
+        );
+        assert!(!out.contains('\t'), "a raw tab survived: {out:?}");
+    }
+
+    /// A tab advances to the next multiple of the tab size, so it is *not* a
+    /// fixed run of spaces — the width of the text before it decides.
+    #[test]
+    fn a_tab_advances_to_the_next_tab_stop() {
+        let console = Console::builder().width(20).no_color(true).build();
+        let out = console.render_to_string(&Syntax::new(
+            "a\tb\tc\nab\tcd\tef\nabcd\tefgh\tijkl",
+            "python",
+        ));
+        assert_eq!(
+            out.split('\n').collect::<Vec<_>>(),
+            [
+                "a   b   c           ",
+                "ab  cd  ef          ",
+                "abcd    efgh    ijkl",
+            ]
+        );
+    }
+
+    /// Every row must occupy exactly the requested width *on screen*.
+    ///
+    /// Measuring against [`cell_len`] cannot catch this: it counted a raw tab as
+    /// one cell and the padding was computed the same way, so the row looked
+    /// exactly `width` wide to us while the terminal advanced the tab to the
+    /// next 8-cell stop and the block overran by seven.
+    #[test]
+    fn a_tabbed_line_measures_the_requested_width() {
+        /// Width as the *terminal* renders it: a tab jumps to the next 8-cell
+        /// stop, which is the only measure that reveals the defect.
+        fn screen_width(row: &str) -> usize {
+            let mut column = 0usize;
+            for ch in row.chars() {
+                column += if ch == '\t' {
+                    8 - (column % 8)
+                } else {
+                    cell_len(ch.encode_utf8(&mut [0u8; 4]))
+                };
+            }
+            column
+        }
+
+        for width in [10usize, 20, 30, 40] {
+            let console = Console::builder().width(width).no_color(true).build();
+            let out = console.render_to_string(&Syntax::new("\tvalue = compute(a, b)", "python"));
+            for row in out.split('\n') {
+                assert_eq!(screen_width(row), width, "row {row:?} at width {width}");
+            }
+        }
+    }
+
+    /// `str.expandtabs` counts *characters*, not cells, and resets its column at
+    /// `\n` and `\r`.
+    #[test]
+    fn expand_tabs_matches_pythons_str_expandtabs() {
+        // Left column verified against CPython's `str.expandtabs(4)`.
+        for (input, expected) in [
+            ("a\tb", "a   b"),
+            ("ab\tb", "ab  b"),
+            ("abc\tb", "abc b"),
+            ("abcd\tb", "abcd    b"),
+            ("\t", "    "),
+            ("a\nbb\tc", "a\nbb  c"),
+            ("a\rbb\tc", "a\rbb  c"),
+            // A wide char counts as one column, exactly as in Python.
+            ("\u{4e2d}\tx", "\u{4e2d}   x"),
+        ] {
+            assert_eq!(expand_tabs(input, 4), expected, "input {input:?}");
+        }
+        // `tabsize <= 0` deletes the tab (CPython's own branch).
+        assert_eq!(expand_tabs("a\tb", 0), "ab");
     }
 
     /// Upstream's word_wrap breaks at word boundaries; we folded wherever the

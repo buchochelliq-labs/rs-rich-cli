@@ -157,13 +157,11 @@ struct Cli {
 /// visible, and only `-y` turns it into an OSC 8 hyperlink whose target the
 /// reader cannot see.
 ///
-/// This port's [`Markdown`] has no such switch — it always emits OSC 8 — so
-/// `-y` currently names the rendering that is already produced, and it is the
-/// *default* half that is missing. The flag is plumbed to here so that the
-/// call site is one line when the switch lands:
-/// `Markdown::new(source).hyperlinks(hyperlinks)`.
-fn build_markdown(source: &str, _hyperlinks: bool) -> Markdown {
-    Markdown::new(source)
+/// Without this, `rich -m` emitted the OSC 8 rendering unconditionally and the
+/// destination appeared nowhere in the byte stream — so every URL in a document
+/// was unrecoverable as soon as the output was piped or `NO_COLOR` was set.
+fn build_markdown(source: &str, hyperlinks: bool) -> Markdown {
+    Markdown::new(source).hyperlinks(hyperlinks)
 }
 
 fn main() -> ExitCode {

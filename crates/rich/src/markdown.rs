@@ -10,7 +10,9 @@
 //! **GFM tables** (rendered via [`Table`]). Inline styling *within* a table cell
 //! is a documented follow-up (see the Markdown issue).
 
-use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{
+    Alignment, CodeBlockKind, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd,
+};
 
 use crate::cells::cell_len;
 use crate::console::{Console, ConsoleOptions, Justify};
@@ -28,7 +30,8 @@ const CODE_STYLE: &str = "bold cyan on black"; // markdown.code
 const IMAGE_MARKER: &str = "\u{1f306} ";
 const BULLET: &str = " \u{2022} "; // " • ", markdown.item.bullet = bold
 const QUOTE_PREFIX: &str = "\u{258c} "; // "▌ ", markdown.block_quote = magenta
-const LINK_STYLE: &str = "underline blue"; // markdown.link_url
+const LINK_STYLE: &str = "bright_blue"; // markdown.link
+const LINK_URL_STYLE: &str = "underline blue"; // markdown.link_url
 const TABLE_BORDER_STYLE: &str = "cyan"; // markdown.table.border
 const TABLE_HEADER_STYLE: &str = "not bold cyan"; // markdown.table.header
 
@@ -125,15 +128,51 @@ fn alignment_justify(alignment: Alignment) -> Justify {
 
 /// A rendered Markdown document. Mirrors `rich.markdown.Markdown`.
 pub struct Markdown {
+    source: String,
+    hyperlinks: bool,
     blocks: Vec<Block>,
 }
 
 impl Markdown {
     /// Parse CommonMark `source` into renderable blocks.
+    ///
+    /// Hyperlinks are on, matching `rich.markdown.Markdown(hyperlinks=True)`.
+    /// **The CLI wants them off** — see [`hyperlinks`](Self::hyperlinks).
     pub fn new(source: &str) -> Self {
         Markdown {
-            blocks: parse(source),
+            source: source.to_string(),
+            hyperlinks: true,
+            blocks: parse(source, true),
         }
+    }
+
+    /// Choose how a `[text](url)` is rendered. Port of
+    /// `rich.markdown.Markdown(hyperlinks=…)`, default `true`.
+    ///
+    /// * `true` — the text becomes an OSC 8 hyperlink pointing at the URL.
+    /// * `false` — the URL is written out after the text, as
+    ///   `text (https://example.com)`.
+    ///
+    /// The distinction is not cosmetic. An OSC 8 escape is only emitted when
+    /// the console has a colour system, so with hyperlinks on a piped or
+    /// `NO_COLOR` render drops every destination with nothing left to recover
+    /// it from. That is why upstream's **`rich-cli` passes `hyperlinks=False`
+    /// by default** and puts the OSC 8 form behind its opt-in `-y/--hyperlinks`
+    /// flag; a CLI built on this crate should do the same:
+    ///
+    /// ```
+    /// # use rich::markdown::Markdown;
+    /// let opt_in = false; // set by `-y/--hyperlinks`
+    /// let md = Markdown::new("A [link](https://example.com).").hyperlinks(opt_in);
+    /// ```
+    pub fn hyperlinks(mut self, hyperlinks: bool) -> Self {
+        // The flag changes what the *text* of a paragraph or table cell is, not
+        // just how it is painted, so the document has to be re-parsed.
+        if hyperlinks != self.hyperlinks {
+            self.blocks = parse(&self.source, hyperlinks);
+            self.hyperlinks = hyperlinks;
+        }
+        self
     }
 }
 
@@ -180,6 +219,42 @@ fn inline_style(strong: usize, emphasis: usize, strike: usize) -> Option<Style> 
     Some(style)
 }
 
+/// `markdown.link_url` plus the OSC 8 target, which is what upstream pushes for
+/// a link when `hyperlinks=True`.
+fn link_style(url: &str) -> Style {
+    Style::parse(LINK_URL_STYLE)
+        .expect("valid style")
+        .with_link(url.to_string())
+}
+
+/// Upstream's `MarkdownContext.style_stack.current`: the product of every style
+/// open at this point, outermost first, each layer overriding the last.
+///
+/// The order is what makes an inline style compose rather than replace. A link
+/// inside `**bold**` is `bold underline blue`, not plain `underline blue`; a
+/// `` `code` `` inside a link keeps the link *and* takes cyan over the link's
+/// blue. Applying only the innermost layer dropped the outer attributes, and —
+/// worse — a link whose whole text was inline code lost its URL entirely.
+///
+/// `extra` is the run's own style (`markdown.code` for a code span), pushed last
+/// because upstream enters it after the link.
+fn stack_style(
+    heading: Option<&Style>,
+    inline: Option<Style>,
+    link: Option<&str>,
+    extra: Option<Style>,
+) -> Option<Style> {
+    let mut current: Option<Style> = None;
+    for layer in [heading.cloned(), inline, link.map(link_style), extra] {
+        let Some(next) = layer else { continue };
+        current = Some(match current {
+            Some(previous) => previous.combine(&next),
+            None => next,
+        });
+    }
+    current
+}
+
 /// The title upstream shows when an image has no alt text: the last path
 /// component of its destination, `destination.strip("/").rsplit("/", 1)[-1]`.
 ///
@@ -198,23 +273,38 @@ fn image_fallback_title(destination: &str) -> &str {
 /// `link` is the URL of an enclosing `[…](…)`, which upstream prefers over the
 /// image's own destination (`self.link or self.destination`) so that a linked
 /// badge points at the link, not at the picture.
-fn image_text(destination: &str, alt: Text, link: Option<&str>, heading: Option<&Style>) -> Text {
+///
+/// With `hyperlinks` off the target is dropped entirely:
+/// `ImageItem.__rich_console__` guards its `title.stylize(link_style)` behind
+/// `if self.hyperlinks`, so the marker carries no OSC 8 escape at all.
+fn image_text(
+    destination: &str,
+    alt: Text,
+    link: Option<&str>,
+    outer: Option<Style>,
+    hyperlinks: bool,
+) -> Text {
     let mut title = if alt.plain().is_empty() {
         Text::new(image_fallback_title(destination))
     } else {
         alt
     };
     let end = title.plain().len();
-    // Upstream stylizes the *whole* title, over whatever inline styles the alt
-    // text already carries.
-    if let Some(style) = heading {
-        title.stylize(style.clone(), 0, end);
+    // `ImageItem.on_text` appends with `context.current_style`, so the title
+    // carries whatever was open around the image — a heading's style, and the
+    // enclosing link's `markdown.link_url` for a badge wrapped in a link.
+    if let Some(style) = outer {
+        title.stylize(style, 0, end);
     }
-    title.stylize(
-        Style::new().with_link(link.unwrap_or(destination).to_string()),
-        0,
-        end,
-    );
+    // `Style(link=self.link or self.destination or None)`: the enclosing link
+    // wins, the image's own destination is the fallback, and neither being set
+    // leaves the title unlinked.
+    if hyperlinks {
+        let target = link.unwrap_or(destination);
+        if !target.is_empty() {
+            title.stylize(Style::new().with_link(target.to_string()), 0, end);
+        }
+    }
     let mut text = Text::new(IMAGE_MARKER).append_text(&title);
     text.append(" ", None);
     text
@@ -267,7 +357,40 @@ fn flush_pending(current: &mut Option<Text>, blocks: &mut Vec<Block>, stack: &mu
     sink(blocks, stack).push(Block::Text(text));
 }
 
-fn parse(source: &str) -> Vec<Block> {
+/// Emit a literal `~` for a single-tilde span, into whichever buffer the
+/// surrounding characters are going to.
+///
+/// Inside a link label the label text is buffered separately, so appending
+/// straight to `current` put BOTH tildes in front of the label: `[~a~ label]`
+/// rendered as `~~a label`, characters reordered rather than restyled. Outside
+/// one the buffer may not be open yet, so it still has to be created — routing
+/// through a plain `as_mut()` silently DROPPED the tilde instead.
+fn push_tilde(current: &mut Option<Text>, link_label: &mut Option<String>) {
+    if let Some(label) = link_label.as_mut() {
+        label.push('~');
+    } else {
+        current
+            .get_or_insert_with(|| Text::new(""))
+            .append("~", None);
+    }
+}
+
+/// Append a soft/hard break to the open link label if one is being buffered,
+/// else to the open text buffer if there is one.
+fn append_break(
+    current: Option<&mut Text>,
+    link_label: Option<&mut String>,
+    text: &str,
+    style: Option<Style>,
+) {
+    if let Some(label) = link_label {
+        label.push_str(text);
+    } else if let Some(block) = current {
+        block.append(text, style.map(Into::into));
+    }
+}
+
+fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
     let mut blocks: Vec<Block> = Vec::new();
     let mut current: Option<Text> = None;
     let mut heading_style: Option<Style> = None;
@@ -290,6 +413,14 @@ fn parse(source: &str) -> Vec<Block> {
     let mut code: Option<(String, String)> = None;
     // The destination URL while inside a link.
     let mut link: Option<String> = None;
+    // The label of the open link, when hyperlinks are off. Upstream pushes a
+    // `Link` **element** at `link_close`-time rather than a style, so every
+    // token in between is captured by it instead of by the paragraph, and only
+    // `element.text.plain` is re-emitted at the close. That is why the label's
+    // own emphasis is lost: `[**bold** label](u)` prints an unbolded
+    // `bold label`. `None` whenever hyperlinks are on, where the label is
+    // styled in place and this buffer must stay out of the way.
+    let mut link_label: Option<String> = None;
     // Destination of the image being parsed, and the source span of its alt.
     let mut image: Option<String> = None;
     let mut image_span: Option<(usize, usize)> = None;
@@ -343,8 +474,69 @@ fn parse(source: &str) -> Vec<Block> {
                 flush_pending(&mut current, &mut blocks, &mut stack);
                 sink(&mut blocks, &mut stack).push(Block::Rule);
             }
-            Event::Start(Tag::Link { dest_url, .. }) => link = Some(dest_url.to_string()),
-            Event::End(TagEnd::Link) => link = None,
+            Event::Start(Tag::Link {
+                link_type,
+                dest_url,
+                ..
+            }) => {
+                // An email autolink (`<user@example.org>`) carries a `mailto:`
+                // destination in CommonMark, but pulldown-cmark leaves the
+                // scheme to the renderer and hands us the bare address. Adding
+                // it is what makes the destination a usable URL — upstream's
+                // markdown-it puts it in the `href` itself.
+                link = Some(match link_type {
+                    LinkType::Email => format!("mailto:{dest_url}"),
+                    _ => dest_url.to_string(),
+                });
+                if !hyperlinks {
+                    link_label = Some(String::new());
+                }
+            }
+            Event::End(TagEnd::Link) => {
+                let url = link.take();
+                let label = link_label.take();
+                // `hyperlinks=False`: upstream flushes the buffered label under
+                // `markdown.link` and then writes the destination out after it —
+                // `A link (https://example.com) here.`
+                //
+                // Emitting nothing here (our only behaviour before) loses the
+                // URL outright the moment the console has no colour system, and
+                // a pipe has no OSC 8 escape to recover it from. `rich -m`
+                // passes `hyperlinks=False`, so that was every URL in every
+                // redirected render.
+                if let Some(url) = url.filter(|_| !hyperlinks) {
+                    let label = label.unwrap_or_default();
+                    let inline = inline_style(strong, emphasis, strike);
+                    if let Some(acc) = table.as_mut().filter(|a| a.in_cell) {
+                        // The URL is part of the cell's *text*, so it counts
+                        // towards the column width — a table of links laid out
+                        // against the bare label is far too narrow.
+                        acc.cur_cell.push_str(&label);
+                        acc.cur_cell.push_str(" (");
+                        acc.cur_cell.push_str(&url);
+                        acc.cur_cell.push(')');
+                    } else {
+                        let block = current.get_or_insert_with(|| Text::new(""));
+                        let layer = |style: Option<Style>| {
+                            stack_style(heading_style.as_ref(), inline.clone(), None, style)
+                        };
+                        // An empty label appends a zero-length span upstream,
+                        // which renders as nothing at all.
+                        if !label.is_empty() {
+                            block.append(
+                                &label,
+                                layer(Style::parse(LINK_STYLE).ok()).map(Into::into),
+                            );
+                        }
+                        block.append(" (", layer(None).map(Into::into));
+                        block.append(
+                            &url,
+                            layer(Style::parse(LINK_URL_STYLE).ok()).map(Into::into),
+                        );
+                        block.append(")", layer(None).map(Into::into));
+                    }
+                }
+            }
             // KNOWN DIVERGENCE (not a design choice): an image inside a table
             // cell keeps its alt text in the cell, where upstream hoists it out
             // and leaves the cell empty — `TableDataElement` does not override
@@ -382,7 +574,13 @@ fn parse(source: &str) -> Vec<Block> {
                             &destination,
                             alt,
                             link.as_deref(),
-                            heading_style.as_ref(),
+                            stack_style(
+                                heading_style.as_ref(),
+                                inline_style(strong, emphasis, strike),
+                                link.as_deref().filter(|_| hyperlinks),
+                                None,
+                            ),
+                            hyperlinks,
                         ),
                         joins_next: stack.is_empty(),
                         leading_break: new_line,
@@ -561,27 +759,15 @@ fn parse(source: &str) -> Vec<Block> {
                     if in_quote {
                         // Quote paragraph: magenta base so its padding is magenta too.
                         text.set_base_style(Style::parse("magenta").expect("valid style"));
-                        // A heading inside a quote keeps its own style and
-                        // alignment on top of that base; treating everything in
-                        // a quote as body text flattened h1 to plain magenta and
-                        // left-aligned it.
-                        if let Some(style) = &heading_style {
-                            let end = text.plain().len();
-                            text.stylize(style.clone(), 0, end);
-                            text.set_justify(justify);
-                        } else {
-                            text.set_justify(Justify::Left);
-                        }
-                    } else {
-                        // A heading's style is a SPAN over the text, not a base
-                        // style: a base style would paint the centring padding
-                        // too, which upstream leaves unstyled.
-                        if let Some(style) = &heading_style {
-                            let end = text.plain().len();
-                            text.stylize(style.clone(), 0, end);
-                        }
-                        text.set_justify(justify);
                     }
+                    // A heading's style rides on each run (upstream pushes
+                    // `markdown.h<n>` onto the style stack at `heading_open`, so
+                    // every inline style composes *over* it), never as a base
+                    // style — a base style would paint the centring padding too,
+                    // which upstream leaves unstyled. Only the alignment is left
+                    // to apply here; treating a quoted heading as body text
+                    // flattened h1 to plain magenta and left-aligned it.
+                    text.set_justify(justify);
                     sink(&mut blocks, &mut stack).push(Block::Text(text));
                 }
                 heading_style = None;
@@ -597,16 +783,20 @@ fn parse(source: &str) -> Vec<Block> {
                 } else {
                     // Single-tilde: not a delimiter upstream. Keep the literal
                     // text, tildes and all.
+                    //
+                    // Route it the same way as any other text: inside a link
+                    // label the surrounding characters are buffered separately,
+                    // so appending straight to `current` put BOTH tildes in
+                    // front of the label — `[~a~ label]` came out as
+                    // `~~a label`, characters reordered rather than restyled.
                     single_tilde += 1;
-                    let block = current.get_or_insert_with(|| Text::new(""));
-                    block.append("~", None);
+                    push_tilde(&mut current, &mut link_label);
                 }
             }
             Event::End(TagEnd::Strikethrough) => {
                 if single_tilde > 0 {
                     single_tilde -= 1;
-                    let block = current.get_or_insert_with(|| Text::new(""));
-                    block.append("~", None);
+                    push_tilde(&mut current, &mut link_label);
                 } else {
                     strike = strike.saturating_sub(1);
                 }
@@ -614,7 +804,9 @@ fn parse(source: &str) -> Vec<Block> {
             Event::Start(Tag::Emphasis) => emphasis += 1,
             Event::End(TagEnd::Emphasis) => emphasis = emphasis.saturating_sub(1),
             Event::Text(text) => {
-                if let Some(acc) = table.as_mut().filter(|a| a.in_cell) {
+                if let Some(label) = link_label.as_mut() {
+                    label.push_str(&text);
+                } else if let Some(acc) = table.as_mut().filter(|a| a.in_cell) {
                     // Table cells collect plain text; inline styling within a cell
                     // is a documented follow-up (see the Markdown issue).
                     acc.cur_cell.push_str(&text);
@@ -626,19 +818,19 @@ fn parse(source: &str) -> Vec<Block> {
                     // buffer already flushed by that block's start — matching
                     // on `as_mut()` here silently dropped it.
                     let block = current.get_or_insert_with(|| Text::new(""));
-                    // Inside a link, use the markdown.link_url style + an OSC 8
-                    // hyperlink; otherwise the inline strong/emphasis style.
-                    let style = match &link {
-                        Some(url) => Style::parse(LINK_STYLE)
-                            .ok()
-                            .map(|s| s.with_link(url.clone())),
-                        None => inline_style(strong, emphasis, strike),
-                    };
+                    let style = stack_style(
+                        heading_style.as_ref(),
+                        inline_style(strong, emphasis, strike),
+                        link.as_deref().filter(|_| hyperlinks),
+                        None,
+                    );
                     block.append(&text, style.map(Into::into));
                 }
             }
             Event::Code(text) => {
-                if let Some(acc) = table.as_mut().filter(|a| a.in_cell) {
+                if let Some(label) = link_label.as_mut() {
+                    label.push_str(&text);
+                } else if let Some(acc) = table.as_mut().filter(|a| a.in_cell) {
                     acc.cur_cell.push_str(&text);
                 } else {
                     // Open a buffer if none is active. In a tight list item the
@@ -646,19 +838,44 @@ fn parse(source: &str) -> Vec<Block> {
                     // buffer already flushed by that block's start — matching
                     // on `as_mut()` here silently dropped it.
                     let block = current.get_or_insert_with(|| Text::new(""));
-                    block.append(&text, Style::parse(CODE_STYLE).ok().map(Into::into));
+                    // `markdown.code` is pushed on TOP of the link, so a link
+                    // whose whole label is inline code — ``[`rich`](url)`` —
+                    // keeps its destination. Applying the code style alone
+                    // discarded it.
+                    let style = stack_style(
+                        heading_style.as_ref(),
+                        inline_style(strong, emphasis, strike),
+                        link.as_deref().filter(|_| hyperlinks),
+                        Style::parse(CODE_STYLE).ok(),
+                    );
+                    block.append(&text, style.map(Into::into));
                 }
             }
-            Event::SoftBreak => {
-                if let Some(block) = current.as_mut() {
-                    block.append(" ", None);
-                }
-            }
-            Event::HardBreak => {
-                if let Some(block) = current.as_mut() {
-                    block.append("\n", None);
-                }
-            }
+            // `softbreak`/`hardbreak` go through `context.on_text`, so they land
+            // in the open link label if there is one, and otherwise carry
+            // whatever styles are open just like any other run.
+            Event::SoftBreak => append_break(
+                current.as_mut(),
+                link_label.as_mut(),
+                " ",
+                stack_style(
+                    heading_style.as_ref(),
+                    inline_style(strong, emphasis, strike),
+                    link.as_deref().filter(|_| hyperlinks),
+                    None,
+                ),
+            ),
+            Event::HardBreak => append_break(
+                current.as_mut(),
+                link_label.as_mut(),
+                "\n",
+                stack_style(
+                    heading_style.as_ref(),
+                    inline_style(strong, emphasis, strike),
+                    link.as_deref().filter(|_| hyperlinks),
+                    None,
+                ),
+            ),
             _ => {}
         }
     }
@@ -1451,5 +1668,204 @@ yet-another-package --upgrade --no-cache-dir\n```\n";
             out.contains("no-cache-dir"),
             "the tail of the code line was discarded: {out:?}"
         );
+    }
+
+    /// A tab in a fenced block reaches the terminal as U+0009, which jumps to
+    /// the next 8-cell stop while we had counted it as one cell — so the block
+    /// overran the width it was given. Upstream expands tabs before
+    /// highlighting; the fenced block inherits that through `Syntax`.
+    #[test]
+    fn a_fenced_block_expands_its_tabs() {
+        // Rows captured from rich 15.0.0 at width 30.
+        let out = plain("```python\ndef f():\n\tif x:\n\t\treturn 1\n```", 30);
+        assert_eq!(
+            out.split('\n').collect::<Vec<_>>(),
+            [
+                "                              ",
+                " def f():                     ",
+                "     if x:                    ",
+                "         return 1             ",
+                "                              ",
+            ]
+        );
+    }
+}
+
+/// `Markdown(hyperlinks=…)`. Every expectation here was captured verbatim from
+/// real rich 15.0.0 (with its random OSC 8 `id=` field removed, which we
+/// deliberately do not reproduce — see docs/DIVERGENCES.md).
+#[cfg(test)]
+mod hyperlink_tests {
+    use super::*;
+    use crate::color::ColorSystem;
+
+    fn plain(source: &str, width: usize, hyperlinks: bool) -> String {
+        Console::builder()
+            .width(width)
+            .no_color(true)
+            .build()
+            .render_to_string(&Markdown::new(source).hyperlinks(hyperlinks))
+    }
+
+    fn ansi(source: &str, width: usize, hyperlinks: bool) -> String {
+        Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(width)
+            .no_color(false)
+            .build()
+            .render_to_string(&Markdown::new(source).hyperlinks(hyperlinks))
+    }
+
+    /// THE defect: an OSC 8 escape is only written when the console has a colour
+    /// system, so with hyperlinks on a piped or `NO_COLOR` render dropped every
+    /// destination and left nothing to recover it from. `rich -m` passes
+    /// `hyperlinks=False` precisely so the URL is written out as text.
+    #[test]
+    fn hyperlinks_off_writes_the_url_out_after_the_label() {
+        assert_eq!(
+            plain("A [link](https://example.com) here.", 40, false),
+            "A link (https://example.com) here.      "
+        );
+    }
+
+    #[test]
+    fn hyperlinks_on_keeps_the_label_alone() {
+        assert_eq!(
+            plain("A [link](https://example.com) here.", 40, true),
+            "A link here.                            "
+        );
+    }
+
+    /// The knock-on: the URL is part of the cell's *text*, so it drives the
+    /// column width. Laying the table out against the bare label made it far too
+    /// narrow and the URL was then wrapped or cropped away.
+    #[test]
+    fn hyperlinks_off_widens_a_table_column_to_fit_the_url() {
+        let source = "| T | W |\n| :-- | --: |\n| r | [repo](https://ex.org/a) |\n";
+        assert_eq!(
+            plain(source, 60, false).split('\n').collect::<Vec<_>>(),
+            [
+                "",
+                "                            ",
+                " T                        W ",
+                " ────────────────────────── ",
+                " r  repo (https://ex.org/a) ",
+                "                            ",
+            ]
+        );
+        // ...and with hyperlinks on the column stays at the label's width.
+        assert_eq!(
+            plain(source, 60, true).split('\n').collect::<Vec<_>>(),
+            [
+                "",
+                "         ",
+                " T     W ",
+                " ─────── ",
+                " r  repo ",
+                "         "
+            ]
+        );
+    }
+
+    /// Upstream buffers the label in a `Link` element and re-emits only
+    /// `element.text.plain`, so emphasis *inside* the label is lost.
+    #[test]
+    fn hyperlinks_off_flattens_the_labels_own_emphasis() {
+        assert_eq!(
+            plain("A [**b** and *i* l](https://e.org) t.", 60, false),
+            "A b and i l (https://e.org) t.                              "
+        );
+    }
+
+    /// `markdown.link` (bright_blue) paints the label, `markdown.link_url`
+    /// (underline blue) the URL, and both compose over the heading's own style —
+    /// h2's magenta loses to each in turn.
+    #[test]
+    fn hyperlinks_off_styles_the_label_and_the_url_under_a_heading() {
+        assert_eq!(
+            ansi("## H [x](https://e.org)", 40, false),
+            "\x1b[4;35mH \x1b[0m\x1b[4;94mx\x1b[0m\x1b[4;35m (\x1b[0m\
+             \x1b[4;34mhttps://e.org\x1b[0m\x1b[4;35m)\x1b[0m                     "
+        );
+        assert_eq!(
+            ansi("## H [x](https://e.org)", 40, true),
+            "\x1b[4;35mH \x1b[0m\x1b]8;;https://e.org\x1b\\\x1b[4;34mx\x1b[0m\
+             \x1b]8;;\x1b\\                                     "
+        );
+    }
+
+    /// Upstream pushes `markdown.link_url` *onto* the open style stack, so a
+    /// link inside `**bold**` is bold as well. Replacing the stack with the link
+    /// style alone dropped the bold.
+    #[test]
+    fn a_link_inside_bold_stays_bold() {
+        assert_eq!(
+            ansi("x **b [l](https://e.org) b** y", 60, true),
+            "x \x1b[1mb \x1b[0m\x1b]8;;https://e.org\x1b\\\x1b[1;4;34ml\x1b[0m\
+             \x1b]8;;\x1b\\\x1b[1m b\x1b[0m y                                                   "
+        );
+    }
+
+    /// `markdown.code` is pushed on top of the link, so a label that is entirely
+    /// inline code keeps its destination. Applying the code style alone threw the
+    /// URL away even with hyperlinks *on*.
+    #[test]
+    fn a_link_labelled_with_inline_code_keeps_its_destination() {
+        assert_eq!(
+            ansi("A [`code`](https://e.org/x) tail.", 60, true),
+            "A \x1b]8;;https://e.org/x\x1b\\\x1b[1;4;36;40mcode\x1b[0m\x1b]8;;\x1b\\ \
+             tail.                                                "
+        );
+    }
+
+    /// CommonMark gives an email autolink a `mailto:` destination, but
+    /// pulldown-cmark leaves the scheme to the renderer and hands over the bare
+    /// address — so the URL we printed was not a URL.
+    #[test]
+    fn an_email_autolink_keeps_its_mailto_scheme() {
+        assert_eq!(
+            plain("Mail <who@where.net> now.", 50, false),
+            "Mail who@where.net (mailto:who@where.net) now.    "
+        );
+        assert_eq!(
+            ansi("Mail <who@where.net> now.", 50, true),
+            "Mail \x1b]8;;mailto:who@where.net\x1b\\\x1b[4;34mwho@where.net\x1b[0m\
+             \x1b]8;;\x1b\\ now.                           "
+        );
+    }
+
+    /// A badge wrapped in a link: `ImageItem` appends its title with the style
+    /// open around it, so the alt text carries the link's `markdown.link_url`
+    /// too, not just the OSC 8 target.
+    #[test]
+    fn an_image_inside_a_link_carries_the_links_style() {
+        assert_eq!(
+            ansi("[![badge](b.svg)](https://e.org)", 40, true),
+            "\u{1f306} \x1b]8;;https://e.org\x1b\\\x1b[4;34mbadge\x1b[0m\
+             \x1b]8;;\x1b\\                                "
+        );
+    }
+
+    /// A single-tilde span inside a link label put BOTH tildes in front of the
+    /// label, because the tilde went to the paragraph buffer while the label
+    /// text accumulated in its own — characters reordered, not restyled.
+    #[test]
+    fn a_single_tilde_inside_a_link_label_keeps_its_place() {
+        let out = plain("A [~a~ label](https://e.com) here.\n", 60, false);
+        assert!(
+            out.contains("~a~ label"),
+            "tilde moved out of the label: {out:?}"
+        );
+        assert!(!out.contains("~~a"), "tildes were reordered: {out:?}");
+    }
+
+    /// Outside a link there may be no open buffer yet; routing the tilde
+    /// through `as_mut()` dropped it and 11 of 102 sweep cases regressed.
+    #[test]
+    fn a_single_tilde_survives_with_no_buffer_open() {
+        let out = plain("~5~10 and ~x~\n", 40, false);
+        assert!(out.contains("~5~10"), "tilde dropped: {out:?}");
+        assert!(out.contains("~x~"), "tilde dropped: {out:?}");
     }
 }
