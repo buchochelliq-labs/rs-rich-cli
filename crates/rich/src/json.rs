@@ -47,6 +47,8 @@ use crate::style::Style;
 pub struct Json {
     value: Node,
     styles: JsonStyles,
+    /// See [`Json::no_wrap`].
+    no_wrap: bool,
 }
 
 /// A parsed JSON value.
@@ -134,7 +136,38 @@ impl Json {
         Ok(Json {
             value: Parser::new(text).parse_document()?,
             styles: JsonStyles::defaults(),
+            no_wrap: false,
         })
+    }
+
+    /// Keep `rich.json.JSON`'s `self.text.no_wrap = True`, which **crops** each
+    /// line at the available width instead of wrapping it.
+    ///
+    /// Defaults to `false`, because that is what a *top-level*
+    /// `Console.print(JSON(...))` produces and that is how this renderable is
+    /// normally reached. Upstream's flag really is set, but `Console.print`
+    /// never renders the `Text` it is set on: `_collect_renderables` sees a
+    /// `Text`, buffers it, and `check_text` hands back
+    /// `Text(sep, justify=…, end=…).join(buffered)` — and `Text.join` starts
+    /// from `self.blank_copy()`, i.e. from the *separator's* metadata. The
+    /// separator has `no_wrap=None`, so the copy that actually renders wraps
+    /// with the default `fold` overflow.
+    ///
+    /// Turn it on whenever the document is **nested** inside another
+    /// renderable — a `Panel`, `Padding`, `Styled`, `Constrain`, or rich-cli's
+    /// `ForceWidth`. Those are `ConsoleRenderable`s, so `_collect_renderables`
+    /// appends them untouched and the inner `Text` reaches
+    /// `Text.__rich_console__` with the flag intact; `Text.wrap` then skips
+    /// `divide_line` and only `truncate`s to the width.
+    ///
+    /// The two are not interchangeable. Wrapping keeps every character;
+    /// cropping discards what does not fit, which for JSON means the printed
+    /// document no longer parses — so the choice has to follow upstream's,
+    /// not taste.
+    #[must_use]
+    pub fn no_wrap(mut self, no_wrap: bool) -> Self {
+        self.no_wrap = no_wrap;
+        self
     }
 
     /// Flatten the document into segments, iteratively.
@@ -230,17 +263,18 @@ impl Json {
 impl Renderable for Json {
     fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let segments = self.render_value();
-        // Fold rather than let the console crop: a long string value used to be
-        // cut mid-token, so the printed document was missing data (and, for
-        // JSON specifically, was no longer parseable) at exit 0. Upstream keeps
-        // every character by wrapping.
-        //
-        // The break must land at a *word* boundary. `JSON.text` sets
-        // `no_wrap=True`, but `Console.print` re-joins it through
-        // `Text(sep).join(...)`, whose blank copy carries neither that flag nor
-        // an overflow — so upstream wraps with the default `fold` overflow and
-        // only splits mid-word when a single token is wider than the terminal.
-        Segment::fold_lines_words(&segments, options.max_width)
+        if self.no_wrap {
+            // `Text.wrap` with `no_wrap` keeps the line whole and then calls
+            // `line.truncate(width, overflow="fold")`, which is a crop. See
+            // [`Json::no_wrap`] for when upstream gets here.
+            Segment::crop_lines(&segments, options.max_width)
+        } else {
+            // The break must land at a *word* boundary: the joined copy carries
+            // no overflow either, so upstream wraps with the default `fold`
+            // overflow and only splits mid-word when a single token is wider
+            // than the line.
+            Segment::fold_lines_words(&segments, options.max_width)
+        }
     }
 }
 
@@ -620,6 +654,52 @@ mod tests {
              the lazy dog and keeps running for a \n\
              very long time indeed\"\n}"
         );
+    }
+
+    /// Nested inside another renderable, `JSON.text.no_wrap` survives and each
+    /// line is **cropped** at the width rather than wrapped — see
+    /// [`Json::no_wrap`]. Wrapping here instead was silent content loss: with
+    /// `rich -j doc.json -w 120` on an 80-column console the document was laid
+    /// out at 120 and then cropped to 80 by `Console.print`, so whole runs
+    /// vanished and the surviving text read as if it were contiguous.
+    ///
+    /// Captured from rich-cli 1.8.1 driven by rich 15.0.0:
+    /// `COLUMNS=80 rich -j long.json -w 40`.
+    #[test]
+    fn a_nested_document_is_cropped_rather_than_wrapped() {
+        let payload = r#"{"k": "the quick brown fox jumps over the lazy dog and keeps running for a very long time indeed"}"#;
+        let console = Console::builder().width(40).no_color(true).build();
+        let json = Json::new(payload).expect("valid json").no_wrap(true);
+        assert_eq!(
+            console.render_to_string(&json),
+            "{\n  \"k\": \"the quick brown fox jumps over t\n}"
+        );
+
+        // …and the wrap is still the default, because a bare
+        // `Console.print(JSON(...))` loses the flag in `Text.join`.
+        assert_eq!(
+            render_plain(payload, 40),
+            "{\n  \"k\": \"the quick brown fox jumps over \n\
+             the lazy dog and keeps running for a \n\
+             very long time indeed\"\n}"
+        );
+    }
+
+    /// A crop must not cut a double-width character in half: `set_cell_size`
+    /// drops the straddling character and the line comes out one cell short,
+    /// never one cell over.
+    #[test]
+    fn cropping_never_splits_a_wide_character() {
+        let console = Console::builder().width(12).no_color(true).build();
+        let json = Json::new("{\"k\": \"\u{1f306}\u{1f306}\u{1f306}\"}")
+            .expect("valid json")
+            .no_wrap(true);
+        for line in console.render_to_string(&json).lines() {
+            assert!(
+                crate::cells::cell_len(line) <= 12,
+                "line {line:?} overflows the crop"
+            );
+        }
     }
 
     /// serde_json's default float parser takes a fast path that can land 1 ULP

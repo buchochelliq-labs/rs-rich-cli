@@ -143,6 +143,27 @@ struct Cli {
     expand: bool,
     /// `--pager`: page the output through the system pager.
     pager: bool,
+    /// `-y/--hyperlinks`: render a Markdown link as an OSC 8 hyperlink.
+    /// Upstream's flag, and upstream's default of **false** — see
+    /// [`build_markdown`], which is where it is consumed.
+    hyperlinks: bool,
+}
+
+/// Build the `-m/--markdown` renderable, honouring `-y/--hyperlinks`.
+///
+/// Upstream is `Markdown(markdown_data, code_theme=theme, hyperlinks=hyperlinks)`
+/// with `@click.option("--hyperlinks", "-y", is_flag=True)`, so the default is
+/// **false**: `rich -m` renders `[text](url)` as `text (url)`, with the URL
+/// visible, and only `-y` turns it into an OSC 8 hyperlink whose target the
+/// reader cannot see.
+///
+/// This port's [`Markdown`] has no such switch — it always emits OSC 8 — so
+/// `-y` currently names the rendering that is already produced, and it is the
+/// *default* half that is missing. The flag is plumbed to here so that the
+/// call site is one line when the switch lands:
+/// `Markdown::new(source).hyperlinks(hyperlinks)`.
+fn build_markdown(source: &str, _hyperlinks: bool) -> Markdown {
+    Markdown::new(source)
 }
 
 fn main() -> ExitCode {
@@ -233,6 +254,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut style = None;
     let mut expand = false;
     let mut pager = false;
+    let mut hyperlinks = false;
     // Set by `--`: everything after it is a positional argument, however much it
     // looks like a flag. Without this nothing beginning with `-` could be
     // printed or opened at all — `rich -p -- "-5 degrees"` and `rich -- -weird.md`
@@ -301,6 +323,10 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--center" => justify = Some(Justify::Center),
             "--no-color" => no_color = true,
             "--pager" => pager = true,
+            // Upstream's `@click.option("--hyperlinks", "-y", is_flag=True,
+            // help="Render hyperlinks in markdown.")`. Accepted in every mode,
+            // as click accepts it — it is read only where markdown is rendered.
+            "-y" | "--hyperlinks" => hyperlinks = true,
             // Both take a PATH and both may be given at once, matching
             // upstream: the resource still renders to the terminal and the
             // files are written alongside it.
@@ -470,6 +496,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         style,
         expand,
         pager,
+        hyperlinks,
     }))
 }
 
@@ -1082,7 +1109,9 @@ fn run(cli: Cli) -> ExitCode {
                 return ExitCode::FAILURE;
             }
         }
-        return exit_code(emit(&console, &export, |c| render_ipynb(c, &content)));
+        return exit_code(emit(&console, &export, |c| {
+            render_ipynb(c, &content, cli.hyperlinks)
+        }));
     }
 
     // Markup comes from the user in Print mode, so a mistake in it should be
@@ -1115,22 +1144,51 @@ fn run(cli: Cli) -> ExitCode {
     let (renderable, fit): (Box<dyn Renderable>, Option<usize>) = match mode {
         // `Markdown` defines no `__rich_measure__`, so upstream measures it as
         // the whole available width and a panel around it never shrinks.
-        Mode::Markdown => (Box::new(Markdown::new(&content)), None),
+        Mode::Markdown => (Box::new(build_markdown(&content, cli.hyperlinks)), None),
         Mode::Json => {
-            let json = json.expect("json parsed above");
+            // `rich.json.JSON` sets `text.no_wrap = True`, and every decorator
+            // upstream can wrap the document in — `Padding`, `Panel`, `Styled`,
+            // `ForceWidth` — is a `ConsoleRenderable`, so the `Text` reaches
+            // `Text.__rich_console__` with the flag intact and each line is
+            // CROPPED at the width. A *bare* document is a `Text`, which
+            // `_collect_renderables` re-joins through `Text(sep).join(...)`;
+            // `Text.join` copies its metadata from the separator, so the flag
+            // is lost and the default fold wrap applies instead.
+            //
+            // `--left/--center/--right` is not on the list: `align_append`
+            // wraps whatever `check_text` produced, so the join — and the loss
+            // — has already happened by the time `Align` sees it.
+            //
+            // `--pager` skips `ForceWidth`, but pages through
+            // `console.render_lines(renderable, …)`, which renders the `Text`
+            // directly and keeps the flag.
+            let nested = cli.padding.is_some()
+                || cli.panel.is_some()
+                || cli.style.is_some()
+                || cli.width.is_some()
+                || cli.pager;
+            let json = json.expect("json parsed above").no_wrap(nested);
             let fit = measure_rendered(&console, &json);
             (Box::new(json), Some(fit))
         }
         Mode::Csv => {
             // `.tsv` only picks the fallback dialect; the sniffer reads the file
             // itself, so a comma-separated `.tsv` still renders as a table.
-            let fallback = if language == "tsv" { '\t' } else { ',' };
-            let table = build_csv_table(
+            let fallback = csv_fallback_delimiter(cli.resource.as_deref());
+            let table = match build_csv_table(
                 &content,
                 fallback,
                 cli.title.as_deref(),
                 cli.caption.as_deref(),
-            );
+            ) {
+                Some(table) => table,
+                // Upstream's `on_error(str(error))`. The message is CPython's,
+                // verbatim, because it is the one a script would grep for.
+                None => {
+                    eprintln!("rich: Could not determine delimiter");
+                    return ExitCode::FAILURE;
+                }
+            };
             let fit = measure_rendered(&console, &table);
             (Box::new(table), Some(fit))
         }
@@ -1896,23 +1954,54 @@ fn is_number(value: &str) -> bool {
 /// Build the CSV table for `content`, sniffing the dialect and the header the
 /// way upstream's `render_csv` does.
 ///
-/// When the sniffer cannot find a delimiter, upstream falls back to the excel
-/// dialect (with a header assumed) for a `.csv`/`.tsv` resource and **exits 1**
-/// for anything else, including stdin. We fall back for everything: a
-/// single-column file has no delimiter to find, and `cat one-column.csv | rich
-/// --csv -` refusing to render it is not a failure worth inventing.
+/// `fallback_delimiter` is the dialect to use when `csv.Sniffer` raises, and
+/// `None` means upstream has none to offer: its `except csv.Error` arm falls
+/// back to `csv.get_dialect("excel")` for a resource whose name ends `.csv`
+/// and to `"excel-tab"` for one ending `.tsv`, and for **everything else** —
+/// any other extension, a bare name, a URL, stdin — calls
+/// `on_error(str(error))`, which prints the message and exits non-zero.
+///
+/// So `None` here is a failure, and the caller must report it. Rendering a
+/// fabricated one-column table at exit 0 instead is the worst possible
+/// outcome: `rich --csv "$f" && publish` proceeds on a file nothing could
+/// parse, with empty stderr to say so.
 fn build_csv_table(
     content: &str,
-    fallback_delimiter: char,
+    fallback_delimiter: Option<char>,
     title: Option<&str>,
     caption: Option<&str>,
-) -> Table {
+) -> Option<Table> {
     // The sniffer sees only the first 1024 *characters* — upstream's
     // `csv_data[:1024]` — however long the file is.
     let sample: String = content.chars().take(1024).collect();
     let sniffed = sniff(&sample, Some(&[',', '\t', '|', ';'])).zip(has_header(&sample));
-    let (dialect, header) = sniffed.unwrap_or((Dialect::excel(fallback_delimiter), true));
-    render_csv(&read_csv_rows(content, &dialect), header, title, caption)
+    let (dialect, header) = match sniffed {
+        Some(sniffed) => sniffed,
+        None => (Dialect::excel(fallback_delimiter?), true),
+    };
+    Some(render_csv(
+        &read_csv_rows(content, &dialect),
+        header,
+        title,
+        caption,
+    ))
+}
+
+/// The dialect upstream falls back to when `csv.Sniffer` cannot read
+/// `resource`, or `None` when it has none — a failure, not a default.
+///
+/// Upstream tests the **resource string**, not the detected language:
+/// `resource.lower().endswith(".csv")` then `.endswith(".tsv")`. So a URL
+/// ending `.tsv` gets the tab dialect, and `-` (stdin) gets nothing.
+fn csv_fallback_delimiter(resource: Option<&str>) -> Option<char> {
+    let name = resource.unwrap_or_default().to_lowercase();
+    if name.ends_with(".csv") {
+        Some(',')
+    } else if name.ends_with(".tsv") {
+        Some('\t')
+    } else {
+        None
+    }
 }
 
 /// Build a table from parsed CSV `rows`, mirroring rich-cli's `render_csv`: a
@@ -2051,7 +2140,7 @@ fn render_output(console: &Console, output: &serde_json::Value, count: Option<i6
 /// `In [n]:` label + a dim [`Panel`] of [`Syntax`] + their outputs, blank-line
 /// separated. Port of rich-cli's `render_ipynb` (rich outputs like images/HTML
 /// are deferred — text/plain, stream, and error tracebacks are handled).
-fn render_ipynb(console: &Console, content: &str) {
+fn render_ipynb(console: &Console, content: &str, hyperlinks: bool) {
     let notebook: serde_json::Value = match serde_json::from_str(content) {
         Ok(value) => value,
         Err(err) => {
@@ -2072,7 +2161,9 @@ fn render_ipynb(console: &Console, content: &str) {
         }
         let source = join_source(&cell["source"]);
         match cell["cell_type"].as_str().unwrap_or("") {
-            "markdown" => console.print(&Markdown::new(&source)),
+            // Upstream passes `-y` on to a notebook's markdown cells too:
+            // `Markdown(source, code_theme=theme, hyperlinks=hyperlinks)`.
+            "markdown" => console.print(&build_markdown(&source, hyperlinks)),
             "code" => {
                 let count = cell["execution_count"].as_i64();
                 console.print(&io_label("In ", count, "green", "#66ff00"));
@@ -2470,6 +2561,8 @@ OPTIONS:
                      (implied by --width)
         --title T    Panel title; also the CSV table's title
         --caption T  Panel subtitle; also the CSV table's caption
+    -y, --hyperlinks Render a Markdown link as a clickable OSC 8 hyperlink.
+                     Off by default, which shows the URL as `text (url)`
     -s, --style S    Style laid under the whole output, e.g. "bold red"
     -S, --panel-style S
                      Panel border style, e.g. "dim" (with --panel)
@@ -2866,7 +2959,9 @@ fn run_demo(no_color: bool) {
     // CSV rendered as a table (blue border, numeric columns bold-green + right).
     console.print(&Rule::new("csv"));
     let csv = "Product,Qty,Price\nWidget,3,9.99\nGadget,12,19.50\nGizmo,1,4.25";
-    console.print(&build_csv_table(csv, ',', None, None));
+    if let Some(table) = build_csv_table(csv, Some(','), None, None) {
+        console.print(&table);
+    }
 
     // filesize.
     console.print(&Rule::new("filesize"));
@@ -3107,7 +3202,13 @@ mod tests {
         // Byte-parity with the Table real rich-cli's render_csv builds for this
         // CSV (captured from rich 15.0.0): HEAVY_HEAD box, blue border, the
         // numeric Age column right-justified with bold-green body + header cells.
-        let table = build_csv_table("Name,Age,City\nAlice,30,NYC\nBob,25,LA\n", ',', None, None);
+        let table = build_csv_table(
+            "Name,Age,City\nAlice,30,NYC\nBob,25,LA\n",
+            Some(','),
+            None,
+            None,
+        )
+        .expect("the sniffer reads this one");
         let out = Console::builder()
             .force_terminal(true)
             .color_system(Some(ColorSystem::Truecolor))

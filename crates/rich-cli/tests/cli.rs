@@ -18,12 +18,18 @@ fn bin() -> Command {
 /// where output lands *within the terminal*, and a 120-column developer machine
 /// would otherwise disagree with CI about the answer.
 fn run(args: &[&str], stdin: &str) -> (String, bool) {
+    let (out, _err, ok) = run_full(args, stdin);
+    (out, ok)
+}
+
+/// As [`run`], but keeps stderr — a failure that says nothing is its own defect.
+fn run_full(args: &[&str], stdin: &str) -> (String, String, bool) {
     let mut child = bin()
         .args(args)
         .env("COLUMNS", "80")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
         .expect("spawn rich");
     child
@@ -35,6 +41,7 @@ fn run(args: &[&str], stdin: &str) -> (String, bool) {
     let output = child.wait_with_output().expect("wait rich");
     (
         String::from_utf8_lossy(&output.stdout).into_owned(),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
         output.status.success(),
     )
 }
@@ -793,4 +800,161 @@ fn width_bounds_the_renderable_not_the_console() {
         frame(&["-p", "hello"]),
         "`--width` narrowed the SVG frame, so it narrowed the console"
     );
+}
+
+// --- Regressions found by UAT round 9 ----------------------------------------
+
+/// A file whose delimiter `csv.Sniffer` cannot find, and whose name does not
+/// end `.csv`/`.tsv`, has no dialect to fall back to. We invented one, printed
+/// a fabricated single-column table, wrote nothing to stderr and exited **0** —
+/// so `rich --csv "$f" && publish` went ahead on a file nothing could parse.
+///
+/// Upstream's `except csv.Error` arm ends in `on_error(str(error))`, which
+/// prints the message and exits non-zero. Verified against rich-cli 1.8.1
+/// driven by rich 15.0.0: `Could not determine delimiter` on stderr, nothing
+/// on stdout, non-zero exit.
+#[test]
+fn an_unsniffable_csv_with_no_dialect_to_fall_back_on_fails_loudly() {
+    // A single-column file: there is no delimiter in it to find.
+    let body = b"single\nvalues\nhere\n";
+
+    for name in ["one.dat", "one.txt", "one"] {
+        let path = fixture(name, body);
+        let (out, err, ok) = run_full(&["--csv", path.to_str().unwrap(), "--no-color"], "");
+        assert!(!ok, "{name}: exit 0 on an unreadable CSV, printing:\n{out}");
+        assert!(
+            err.contains("Could not determine delimiter"),
+            "{name}: nothing on stderr said why; got: {err:?}"
+        );
+        assert!(
+            !out.contains("single"),
+            "{name}: a fabricated table was printed anyway:\n{out}"
+        );
+    }
+
+    // Stdin has no name at all, so it takes the same path.
+    let (_out, err, ok) = run_full(&["--csv", "-", "--no-color"], "single\nvalues\nhere\n");
+    assert!(!ok, "stdin: exit 0 on an unreadable CSV");
+    assert!(
+        err.contains("Could not determine delimiter"),
+        "got: {err:?}"
+    );
+
+    // …and the two extensions upstream *does* have a fallback for still render,
+    // header and all. This is the half that was already right.
+    for name in ["one.csv", "one.tsv", "ONE.CSV"] {
+        let path = fixture(name, body);
+        let (out, _err, ok) = run_full(&["--csv", path.to_str().unwrap(), "--no-color"], "");
+        assert!(ok, "{name}: the excel fallback should still render:\n{out}");
+        assert!(out.contains("single"), "{name}: missing content:\n{out}");
+        assert!(
+            out.contains('┏'),
+            "{name}: the fallback assumes a header:\n{out}"
+        );
+    }
+
+    // A file the sniffer *can* read is untouched by any of this.
+    let good = fixture("good.dat", b"name;age\nAlice;30\nBob;25\n");
+    let (out, _err, ok) = run_full(&["--csv", good.to_str().unwrap(), "--no-color"], "");
+    assert!(ok, "a sniffable .dat must still render:\n{out}");
+    assert!(out.contains("Alice"), "missing content:\n{out}");
+}
+
+/// `rich.json.JSON` sets `text.no_wrap = True`, and every decorator rich-cli
+/// can wrap the document in keeps it — so upstream **crops** each line at the
+/// width. Word-wrapping instead was silent content loss whenever `--width`
+/// exceeded the console: the document was laid out at 120 and then cropped to
+/// 80 by `Console.print`, so columns 80-120 of every line vanished and the
+/// material from column 120 on was spliced underneath as if it followed.
+///
+/// The fixture is 20 runs of ten identical digits, so which columns survived is
+/// readable from the output. All three expectations captured from rich-cli
+/// 1.8.1 driven by rich 15.0.0, at `COLUMNS=80`.
+#[test]
+fn json_under_a_width_is_cropped_not_wrapped() {
+    let value: String =
+        (0..20)
+            .map(|i| (b'0' + (i % 10)) as char)
+            .fold(String::new(), |mut acc, digit| {
+                for _ in 0..10 {
+                    acc.push(digit);
+                }
+                acc
+            });
+    let path = fixture("runs.json", format!("{{\"k\": \"{value}\"}}").as_bytes());
+    let file = path.to_str().unwrap();
+
+    // `-w 120` on an 80-column console: one line, cropped at the console edge.
+    // The old output carried three lines, and the second and third were not
+    // adjacent in the source.
+    let (out, _err, ok) = run_full(&["--no-color", "-j", file, "-w", "120"], "");
+    assert!(ok);
+    assert_eq!(
+        out,
+        "{\n  \"k\": \"000000000011111111112222222222333333333344444444445555555555666666666677\n}\n",
+        "the document was wrapped and then cropped, splicing non-adjacent runs"
+    );
+
+    // `-w 40`: cropped at 40, not at the console width.
+    let (out, _err, ok) = run_full(&["--no-color", "-j", file, "-w", "40"], "");
+    assert!(ok);
+    assert_eq!(out, "{\n  \"k\": \"00000000001111111111222222222233\n}\n");
+
+    // The control: with no decorator at all the flag is lost in `Text.join`,
+    // upstream folds, and every one of the 200 digits survives.
+    let (out, _err, ok) = run_full(&["--no-color", "-j", file], "");
+    assert!(ok);
+    assert_eq!(
+        out,
+        "{\n  \"k\": \n\
+         \"0000000000111111111122222222223333333333444444444455555555556666666666777777777\n\
+         78888888888999999999900000000001111111111222222222233333333334444444444555555555\n\
+         56666666666777777777788888888889999999999\"\n}\n"
+    );
+    assert_eq!(
+        out.chars().filter(char::is_ascii_digit).count(),
+        200,
+        "the undecorated document must not lose a character:\n{out}"
+    );
+
+    // A `--panel` is a `ConsoleRenderable` too, so it keeps the flag: the
+    // document must not spill past the border.
+    let (out, _err, ok) = run_full(&["--no-color", "-j", file, "--panel", "square"], "");
+    assert!(ok);
+    for line in out.lines() {
+        assert_eq!(
+            line.chars().count(),
+            80,
+            "the JSON escaped its panel:\n{out}"
+        );
+    }
+}
+
+/// `-y/--hyperlinks` is upstream's
+/// `@click.option("--hyperlinks", "-y", is_flag=True)` and was simply missing,
+/// so `rich -m -y notes.md` died with "unknown option".
+#[test]
+fn the_hyperlinks_flag_is_accepted_and_documented() {
+    let (help, ok) = run(&["--help"], "");
+    assert!(ok);
+    assert!(
+        help.contains("-y, --hyperlinks"),
+        "the flag is undocumented:\n{help}"
+    );
+
+    let md = fixture("links.md", b"See [the docs](https://example.com/docs).\n");
+    for args in [
+        vec!["-m", md.to_str().unwrap(), "-y"],
+        vec!["-m", md.to_str().unwrap(), "--hyperlinks"],
+        vec!["-m", md.to_str().unwrap()],
+    ] {
+        let mut full = vec!["--no-color"];
+        full.extend(args.iter().copied());
+        let (out, err, ok) = run_full(&full, "");
+        assert!(ok, "{args:?} was rejected: {err}");
+        assert!(
+            out.contains("the docs"),
+            "{args:?} lost the link text:\n{out}"
+        );
+    }
 }
