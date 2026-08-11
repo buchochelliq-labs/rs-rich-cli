@@ -1910,8 +1910,7 @@ fn build_csv_table(
     // The sniffer sees only the first 1024 *characters* — upstream's
     // `csv_data[:1024]` — however long the file is.
     let sample: String = content.chars().take(1024).collect();
-    let sniffed = sniff(&sample, Some(&[',', '\t', '|', ';']))
-        .and_then(|dialect| has_header(&sample).map(|header| (dialect, header)));
+    let sniffed = sniff(&sample, Some(&[',', '\t', '|', ';'])).zip(has_header(&sample));
     let (dialect, header) = sniffed.unwrap_or((Dialect::excel(fallback_delimiter), true));
     render_csv(&read_csv_rows(content, &dialect), header, title, caption)
 }
