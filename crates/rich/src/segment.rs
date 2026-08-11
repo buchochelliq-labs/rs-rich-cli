@@ -252,19 +252,22 @@ impl Segment {
                             used = 0;
                             continue;
                         }
-                        // Already at the start of a row and the character STILL
-                        // does not fit — a 2-cell glyph at width 1. Emit it
-                        // anyway, overflowing by a cell.
+                        // Already at the start of a row and the glyph STILL does
+                        // not fit — a 2-cell glyph at width 1. Emit it anyway,
+                        // overflowing by a cell.
+                        //
+                        // A whole *grapheme*, not a single code point: taking one
+                        // code point off `"❤️"` emits a bare `❤` and leaves a
+                        // stranded variation selector to be emitted on the next
+                        // row, where it silently re-widens whatever character
+                        // precedes it.
                         //
                         // Retrying here instead was an infinite loop that
                         // allocated a line break per iteration: ~400 MB/s until
                         // the process was killed. Every branch of this loop must
                         // consume input.
-                        let take = remaining
-                            .chars()
-                            .next()
-                            .map(char::len_utf8)
-                            .unwrap_or(remaining.len());
+                        let (spans, _) = crate::cells::split_graphemes(remaining);
+                        let take = spans.first().map_or(remaining.len(), |span| span.1);
                         head = remaining[..take].to_string();
                     }
                     used += crate::cells::cell_len(&head);
@@ -428,6 +431,22 @@ mod tests {
         for segment in folded.iter().filter(|s| !s.text.contains('\n')) {
             assert_eq!(segment.style.as_ref(), Some(&style), "style lost on fold");
         }
+    }
+
+    /// A glyph wider than the whole row is emitted anyway, overflowing — but as
+    /// a whole grapheme. Taking a single code point off `"❤️"` put the bare `❤`
+    /// on one row and stranded the variation selector at the start of the next,
+    /// where it silently re-widens whatever character follows it.
+    #[test]
+    fn fold_lines_never_splits_a_grapheme() {
+        let heart = "\u{2764}\u{fe0f}";
+        let segments = vec![Segment::new(heart.repeat(3), None)];
+        let folded = Segment::fold_lines(&segments, 1);
+        let rows: Vec<String> = Segment::split_lines(&folded)
+            .iter()
+            .map(|line| line.iter().map(|s| s.text.as_str()).collect())
+            .collect();
+        assert_eq!(rows, vec![heart, heart, heart]);
     }
 
     #[test]
