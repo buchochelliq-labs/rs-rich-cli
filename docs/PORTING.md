@@ -8,6 +8,10 @@ plus the porting status of each. It is the lookup table used by both the
 **Status:** ⬜ not started · 🟡 partial (subset ported) · 🟢 complete
 **Parity:** ✅ golden-tested against real `rich` · — none yet
 
+**Last verified:** 2026-08-11, against Python `rich` 15.0.0 on `rc/0.0.2`
+(`9d2610d`). The status column is what the differential sweeps measured, not
+an estimate — see [Parity](parity.md) for the figures.
+
 Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/UPSTREAM.toml)).
 
 ## Rendering core
@@ -16,11 +20,11 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 |---------------------------------------|--------------------------|:------:|:------:|
 | `color.py`, `color_triplet.py`, `_palettes.py`, `palette.py` | `color.rs` | 🟡 | ✅ truecolor + 8-bit + standard |
 | `style.py`                            | `style.rs`               | 🟡 | ✅ |
-| `cells.py`, `_cell_widths.py`         | `cells.rs`               | 🟡 | ✅ |
+| `cells.py`, `_cell_widths.py`         | `cells.rs`               | 🟢 | ✅ 0 / 127,754 codepoints |
 | `segment.py`                          | `segment.rs`             | 🟡 | — |
 | `markup.py`                           | `markup.rs`              | 🟡 | ✅ |
 | `text.py` (+ justify, overflow)       | `text.rs`                | 🟡 | ✅ |
-| `_wrap.py`                            | `wrap.rs`                | 🟡 | ✅ |
+| `_wrap.py`                            | `wrap.rs`                | 🟢 | ✅ 0 / 30,680 wrap cases |
 | `theme.py`, `themes.py`, `default_styles.py` | `theme.rs` | 🟡 | — |
 | `terminal_theme.py` | `terminal_theme.rs` | 🟡 | ✅ |
 | `console.py` (+ `ConsoleOptions`, `render_lines`) | `console.rs`  | 🟡 | ✅ |
@@ -66,7 +70,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | upstream `rich/…` | rust file | status | notes |
 |-------------------|-----------|:------:|-------|
 | `syntax.py` | `syntax.rs` | 🟡 | functional via `syntect` (non-parity, DIVERGENCES #18) |
-| `markdown.py` | `markdown.rs` | 🟡 | paragraphs/headings/inline/lists/quotes/code/links + **GFM tables** via `pulldown-cmark` (inline styling within a table cell deferred) |
+| `markdown.py` | `markdown.rs` | 🟡 | paragraphs/headings/inline/lists/quotes/code/links (both `hyperlinks` modes) + images + **GFM tables** via `pulldown-cmark` (inline styling within a table cell deferred) |
 | `json.py` | `json.rs` | 🟡 | ✅ |
 | `pretty.py` | `pretty.rs` | 🟡 | Rust-native (`Debug` + repr highlight, #19) |
 | `repr.py`, `_inspect.py` | resp. | ⬜ | need Rust reflection — see #19 |
@@ -82,7 +86,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `filesize.py` | `filesize.rs` | 🟡 |
 | `pager.py` | `pager.rs` | 🟡 |
 | `prompt.py` | `prompt.rs` | 🟡 |
-| `_unicode_data/` | `unicode_data/` | ⬜ |
+| `_unicode_data/` (21 version tables, `UNICODE_VERSION`) | `cell_widths.rs` | 🟢 |
 | `box.substitute` (legacy/ASCII fallback) | `box.rs` | 🟡 | ✅ |
 | `_windows.py`, `_win32_console.py`, `_windows_renderer.py` | `windows/` | ⬜ |
 | `jupyter.py`, `file_proxy.py`, `diagnose.py`, `_fileno.py`, `_null_file.py` | resp. | ⬜ |
@@ -96,7 +100,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 |------------------|------------------------------|:------:|
 | arg parsing, plain-file print, capability demo | `main.rs` | 🟡 |
 | `--print` / `--markdown` / `--json` / `--syntax` / `--csv` / `--rule`, width + justify, stdin, extension auto-detect | `main.rs` | 🟡 |
-| `csv`/`tsv` table render (blue border, numeric-column bold-green, quoted-field parse) | `main.rs` | 🟡 CSV done; sniffer heuristics/title deferred |
+| `csv`/`tsv` table render (blue border, numeric-column bold-green, quoted-field parse, `csv.Sniffer`) | `main.rs` | 🟡 sniffer agrees with CPython's on 42/42 samples |
 | HTML export (`--export-html`) + SVG export (`--export-svg`) | `main.rs` | 🟡 both done |
 | `--panel`/`--padding` decorators (+ title/caption/style), `--ipynb`, URL fetch (`fetch` feature) | `main.rs` | 🟡 done |
 | paging (`--pager`) | `pager.rs` + `main.rs` | 🟡 done |
