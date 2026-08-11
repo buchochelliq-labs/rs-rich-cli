@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 720 282" width="100%" role="img" aria-labelledby="pstitle pdesc">
+<title id="pstitle">Port status by upstream module</title>
+<desc id="pdesc">Of 61 upstream modules, 6 are complete, 49 are partial and 6 are not started. Each bar segment and each row links to that section of the parity table.</desc>
+<style>.seg{cursor:pointer}.seg:hover{opacity:.82}.lbl{font:600 13px system-ui,-apple-system,Segoe UI,sans-serif;fill:#fff}.cap{font:13px system-ui,-apple-system,Segoe UI,sans-serif;fill:currentColor}.sm{font:12px system-ui,-apple-system,Segoe UI,sans-serif;fill:currentColor}.rowbg{fill:currentColor;opacity:.07}</style>
+<a href="../PORTING/" aria-label="Complete: 6 of 61 modules"><rect class="seg" x="0.0" y="24" width="70.8" height="46" fill="#2e7d32"><title>Complete: 6 modules (10%)</title></rect>
+</a>
+<a href="../PORTING/" aria-label="Partial: 49 of 61 modules"><rect class="seg" x="70.8" y="24" width="578.4" height="46" fill="#b8860b"><title>Partial: 49 modules (80%)</title></rect>
+<text class="lbl" x="360.0" y="52" text-anchor="middle">Partial 49</text>
+</a>
+<a href="../PORTING/" aria-label="Not started: 6 of 61 modules"><rect class="seg" x="649.2" y="24" width="70.8" height="46" fill="#5f6368"><title>Not started: 6 modules (10%)</title></rect>
+</a>
+<text class="cap" x="0" y="16">61 upstream modules mapped · 6 complete · 49 partial · 6 not started</text>
+<a href="../PORTING/#rendering-core" aria-label="Rendering core: 16 of 17 modules started">
+<rect class="rowbg" x="0" y="82" width="720" height="22" rx="3"/>
+<text class="sm" x="8" y="98">Rendering core</text>
+<rect x="330" y="87" width="300" height="12" rx="6" fill="currentColor" opacity=".12"/>
+<rect class="seg" x="330" y="87" width="282.4" height="12" rx="6" fill="#b8860b"><title>Rendering core: 16 of 17 started, 3 complete</title></rect>
+<text class="sm" x="640" y="98">16/17</text>
+</a>
+<a href="../PORTING/#widgets-layout" aria-label="Widgets & layout: 14 of 14 modules started">
+<rect class="rowbg" x="0" y="108" width="720" height="22" rx="3"/>
+<text class="sm" x="8" y="124">Widgets & layout</text>
+<rect x="330" y="113" width="300" height="12" rx="6" fill="currentColor" opacity=".12"/>
+<rect class="seg" x="330" y="113" width="300.0" height="12" rx="6" fill="#2e7d32"><title>Widgets & layout: 14 of 14 started, 2 complete</title></rect>
+<text class="sm" x="640" y="124">14/14</text>
+</a>
+<a href="../PORTING/#live-progress" aria-label="Live & progress: 5 of 5 modules started">
+<rect class="rowbg" x="0" y="134" width="720" height="22" rx="3"/>
+<text class="sm" x="8" y="150">Live & progress</text>
+<rect x="330" y="139" width="300" height="12" rx="6" fill="currentColor" opacity=".12"/>
+<rect class="seg" x="330" y="139" width="300.0" height="12" rx="6" fill="#2e7d32"><title>Live & progress: 5 of 5 started, 0 complete</title></rect>
+<text class="sm" x="640" y="150">5/5</text>
+</a>
+<a href="../PORTING/#content-renderers" aria-label="Content renderers: 6 of 8 modules started">
+<rect class="rowbg" x="0" y="160" width="720" height="22" rx="3"/>
+<text class="sm" x="8" y="176">Content renderers</text>
+<rect x="330" y="165" width="300" height="12" rx="6" fill="currentColor" opacity=".12"/>
+<rect class="seg" x="330" y="165" width="225.0" height="12" rx="6" fill="#b8860b"><title>Content renderers: 6 of 8 started, 0 complete</title></rect>
+<text class="sm" x="640" y="176">6/8</text>
+</a>
+<a href="../PORTING/#utilities-platform" aria-label="Utilities & platform: 8 of 11 modules started">
+<rect class="rowbg" x="0" y="186" width="720" height="22" rx="3"/>
+<text class="sm" x="8" y="202">Utilities & platform</text>
+<rect x="330" y="191" width="300" height="12" rx="6" fill="currentColor" opacity=".12"/>
+<rect class="seg" x="330" y="191" width="218.2" height="12" rx="6" fill="#b8860b"><title>Utilities & platform: 8 of 11 started, 1 complete</title></rect>
+<text class="sm" x="640" y="202">8/11</text>
+</a>
+<a href="../PORTING/#rich-cli-tool-tracks-upstream-181-see-upstreamtoml" aria-label="rich-cli: 6 of 6 modules started">
+<rect class="rowbg" x="0" y="212" width="720" height="22" rx="3"/>
+<text class="sm" x="8" y="228">rich-cli</text>
+<rect x="330" y="217" width="300" height="12" rx="6" fill="currentColor" opacity=".12"/>
+<rect class="seg" x="330" y="217" width="300.0" height="12" rx="6" fill="#2e7d32"><title>rich-cli: 6 of 6 started, 0 complete</title></rect>
+<text class="sm" x="640" y="228">6/6</text>
+</a>
+</svg>
