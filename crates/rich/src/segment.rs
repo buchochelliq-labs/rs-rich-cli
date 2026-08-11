@@ -211,6 +211,13 @@ impl Segment {
     /// remainder away** — correct for a renderable that has already wrapped
     /// itself, and data loss for one that emits a long line verbatim. Styles are
     /// preserved across the split.
+    ///
+    /// This breaks wherever the row happens to fill up, so it splits words. That
+    /// is right only for content upstream folds *without* word wrapping. A
+    /// renderable whose upstream counterpart goes through `Text.wrap` wants
+    /// [`fold_lines_words`](Self::fold_lines_words) instead: reaching for this
+    /// one is what made `--json` print `over t` / `he lazy` where rich prints
+    /// `over ` / `the lazy`.
     pub fn fold_lines(segments: &[Segment], width: usize) -> Vec<Segment> {
         if width == 0 {
             return segments.to_vec();
@@ -446,6 +453,78 @@ mod tests {
             2,
             "both characters should survive, overflowing rather than looping"
         );
+    }
+
+    /// The word-wrapping fold breaks *between* words, leaving the space that
+    /// separated them at the end of the finished row — exactly where
+    /// `_wrap.divide_line` puts the offset.
+    #[test]
+    fn fold_lines_words_breaks_between_words() {
+        let segments = vec![Segment::new("the quick brown fox", None)];
+        // 12, not 10: at 10 a character fold would land on the same boundary by
+        // luck and the test would pass either way.
+        let folded = Segment::fold_lines_words(&segments, 12);
+        let lines: Vec<String> = Segment::split_lines(&folded)
+            .iter()
+            .map(|line| line.iter().map(|s| s.text.as_str()).collect())
+            .collect();
+        assert_eq!(lines, vec!["the quick ", "brown fox"]);
+    }
+
+    /// A break landing inside a styled run must not drop the style, or a wrapped
+    /// JSON string would lose its colour halfway down.
+    #[test]
+    fn fold_lines_words_preserves_styles_across_a_break() {
+        let green = Style::parse("green").expect("valid style");
+        let segments = vec![
+            Segment::new("key: ", None),
+            Segment::new("alpha beta gamma", Some(green.clone())),
+        ];
+        let folded = Segment::fold_lines_words(&segments, 12);
+        let styled: String = folded
+            .iter()
+            .filter(|s| s.style.as_ref() == Some(&green))
+            .map(|s| s.text.as_str())
+            .collect();
+        assert_eq!(styled, "alpha beta gamma", "style lost across the break");
+    }
+
+    /// Nothing may be dropped: a word wider than the row still has to fold, and
+    /// the offsets have to line up with the segments they cut.
+    #[test]
+    fn fold_lines_words_keeps_every_character() {
+        let segments = vec![
+            Segment::new("short ", None),
+            Segment::new("z".repeat(25), None),
+            Segment::new(" tail", None),
+        ];
+        for width in 1..=30 {
+            let folded = Segment::fold_lines_words(&segments, width);
+            let text: String = folded.iter().map(|s| s.text.as_str()).collect();
+            assert_eq!(
+                text.replace('\n', ""),
+                format!("short {} tail", "z".repeat(25)),
+                "width {width} lost or reordered characters"
+            );
+        }
+    }
+
+    /// Control segments carry no cells, so they must ride through untouched
+    /// rather than count against the width or vanish.
+    #[test]
+    fn fold_lines_words_keeps_control_segments() {
+        let segments = vec![
+            Segment::control("\x1b]8;;http://x\x1b\\"),
+            Segment::new("alpha beta", None),
+        ];
+        let folded = Segment::fold_lines_words(&segments, 8);
+        assert_eq!(folded.iter().filter(|s| s.control).count(), 1);
+        let text: String = folded
+            .iter()
+            .filter(|s| !s.control)
+            .map(|s| s.text.as_str())
+            .collect();
+        assert_eq!(text, "alpha \nbeta");
     }
 
     #[test]

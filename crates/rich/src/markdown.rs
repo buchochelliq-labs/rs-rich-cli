@@ -23,6 +23,9 @@ use crate::table::Table;
 use crate::text::Text;
 
 const CODE_STYLE: &str = "bold cyan on black"; // markdown.code
+/// The placeholder upstream's `ImageItem` puts in front of an image
+/// (`Text.assemble("🌆 ", title, " ")`). U+1F306 measures two cells.
+const IMAGE_MARKER: &str = "\u{1f306} ";
 const BULLET: &str = " \u{2022} "; // " • ", markdown.item.bullet = bold
 const QUOTE_PREFIX: &str = "\u{258c} "; // "▌ ", markdown.block_quote = magenta
 const LINK_STYLE: &str = "underline blue"; // markdown.link_url
@@ -73,6 +76,23 @@ enum Block {
     Code { language: String, code: String },
     /// A thematic break (horizontal rule).
     Rule,
+    /// An image placeholder. Upstream's `ImageItem` renders `🌆 <title> ` and
+    /// says nothing about the picture itself; `text` is that whole assembly.
+    ///
+    /// `joins_next` reproduces `ImageItem.new_line = False` together with the
+    /// `end=""` on its text: nothing separates the marker from whatever renders
+    /// next, so the following block continues on the marker's own row. Only an
+    /// image lifted out of a *top-level* paragraph or heading behaves that way —
+    /// see [`parse`] for why one inside a list or quote does not.
+    ///
+    /// `leading_break` is upstream's `new_line` flag frozen at the moment the
+    /// image was reached: a break precedes it only if some element had already
+    /// closed. It replaces the usual inter-block gap rather than adding to it.
+    Image {
+        text: Text,
+        joins_next: bool,
+        leading_break: bool,
+    },
     /// A GFM table: per-column justify (from the alignment row), header cells,
     /// and body rows. Rendered via [`Table`], matching upstream's construction.
     Table {
@@ -160,6 +180,46 @@ fn inline_style(strong: usize, emphasis: usize, strike: usize) -> Option<Style> 
     Some(style)
 }
 
+/// The title upstream shows when an image has no alt text: the last path
+/// component of its destination, `destination.strip("/").rsplit("/", 1)[-1]`.
+///
+/// Without it `![](logo.png)` rendered as a blank line — a badge row in a README
+/// simply disappeared.
+fn image_fallback_title(destination: &str) -> &str {
+    let trimmed = destination.trim_matches('/');
+    match trimmed.rsplit_once('/') {
+        Some((_, last)) => last,
+        None => trimmed,
+    }
+}
+
+/// Assemble upstream's `Text.assemble("🌆 ", title, " ")` for one image.
+///
+/// `link` is the URL of an enclosing `[…](…)`, which upstream prefers over the
+/// image's own destination (`self.link or self.destination`) so that a linked
+/// badge points at the link, not at the picture.
+fn image_text(destination: &str, alt: Text, link: Option<&str>, heading: Option<&Style>) -> Text {
+    let mut title = if alt.plain().is_empty() {
+        Text::new(image_fallback_title(destination))
+    } else {
+        alt
+    };
+    let end = title.plain().len();
+    // Upstream stylizes the *whole* title, over whatever inline styles the alt
+    // text already carries.
+    if let Some(style) = heading {
+        title.stylize(style.clone(), 0, end);
+    }
+    title.stylize(
+        Style::new().with_link(link.unwrap_or(destination).to_string()),
+        0,
+        end,
+    );
+    let mut text = Text::new(IMAGE_MARKER).append_text(&title);
+    text.append(" ", None);
+    text
+}
+
 /// Where a finished block belongs: the innermost open item or quote, else the
 /// document. A `List` frame holds entries rather than blocks, so content passes
 /// straight through it to the item that owns it.
@@ -230,6 +290,14 @@ fn parse(source: &str) -> Vec<Block> {
     let mut code: Option<(String, String)> = None;
     // The destination URL while inside a link.
     let mut link: Option<String> = None;
+    // Destination of the image being parsed, and the source span of its alt.
+    let mut image: Option<String> = None;
+    let mut image_span: Option<(usize, usize)> = None;
+    // Upstream's `new_line` flag: set by every element that closes, cleared by
+    // an image (`ImageItem.new_line = False`) and by a rule. Only images read
+    // it, and it is why one lifted out of the *second* list item gets a blank
+    // row above it while one lifted out of the first does not.
+    let mut new_line = false;
     // The table being assembled while inside a GFM table.
     let mut table: Option<TableAccum> = None;
 
@@ -239,6 +307,37 @@ fn parse(source: &str) -> Vec<Block> {
     // like `costs ~5~10` was silently restyled and its tildes deleted. The
     // source range is the only way to tell `~x~` from `~~x~~` after parsing.
     for (event, range) in Parser::new_ext(source, options).into_offset_iter() {
+        // Everything between an image's brackets is its alt text, and upstream
+        // takes that from the *raw* markdown (`token.content`) rather than from
+        // parsed inline events: `![alt *em*](u)` shows `alt *em*`, asterisks and
+        // all. Widening the source span is the only way back to the literal
+        // text once pulldown-cmark has turned the markers into events.
+        if image.is_some() && !matches!(event, Event::End(TagEnd::Image)) {
+            image_span = Some(match image_span {
+                Some((start, end)) => (start.min(range.start), end.max(range.end)),
+                None => (range.start, range.end),
+            });
+            continue;
+        }
+        // Upstream's `new_line = element.new_line` bookkeeping, which runs for
+        // every element that closes. Everything declares `new_line = True`
+        // except an image and a rule, and only an image ever reads the flag.
+        match &event {
+            Event::End(
+                TagEnd::Paragraph
+                | TagEnd::Heading(_)
+                | TagEnd::List(_)
+                | TagEnd::Item
+                | TagEnd::BlockQuote(_)
+                | TagEnd::CodeBlock
+                | TagEnd::Table
+                | TagEnd::TableHead
+                | TagEnd::TableRow
+                | TagEnd::TableCell,
+            ) => new_line = true,
+            Event::Rule => new_line = false,
+            _ => {}
+        }
         match event {
             Event::Rule => {
                 flush_pending(&mut current, &mut blocks, &mut stack);
@@ -246,6 +345,51 @@ fn parse(source: &str) -> Vec<Block> {
             }
             Event::Start(Tag::Link { dest_url, .. }) => link = Some(dest_url.to_string()),
             Event::End(TagEnd::Link) => link = None,
+            // KNOWN DIVERGENCE (not a design choice): an image inside a table
+            // cell keeps its alt text in the cell, where upstream hoists it out
+            // and leaves the cell empty — `TableDataElement` does not override
+            // `on_child_close`, so the base implementation renders the image
+            // immediately, above the table. This repo's own README badge table
+            // hits it: upstream prints four `🌆 …` rows and an empty column,
+            // while we keep the alt text and widen the table by 13 cells.
+            // Hoisting out of a cell needs the table accumulator to be able to
+            // emit blocks, which it cannot yet do. Tracked as a follow-up.
+            Event::Start(Tag::Image { dest_url, .. })
+                if !table.as_ref().is_some_and(|acc| acc.in_cell) =>
+            {
+                image = Some(dest_url.to_string());
+                image_span = None;
+            }
+            Event::End(TagEnd::Image) => {
+                if let Some(destination) = image.take() {
+                    let alt = image_span
+                        .take()
+                        .map(|(start, end)| Text::new(&source[start..end]))
+                        .unwrap_or_default();
+                    // Pushed to the *document*, not to `sink`: upstream renders
+                    // the image element the moment its token is reached, while
+                    // the list or quote containing it is still open and will not
+                    // render until it closes. An image inside a list therefore
+                    // appears above the whole list, not inside the item.
+                    //
+                    // `joins_next` is only true at the top level: upstream emits
+                    // no line break after an image, but a container closing
+                    // after it (its paragraph having been captured) emits one of
+                    // its own, so only a top-level paragraph or heading really
+                    // continues on the marker's row.
+                    blocks.push(Block::Image {
+                        text: image_text(
+                            &destination,
+                            alt,
+                            link.as_deref(),
+                            heading_style.as_ref(),
+                        ),
+                        joins_next: stack.is_empty(),
+                        leading_break: new_line,
+                    });
+                    new_line = false;
+                }
+            }
             Event::Start(Tag::CodeBlock(kind)) => {
                 flush_pending(&mut current, &mut blocks, &mut stack);
                 let language = match kind {
@@ -575,8 +719,12 @@ fn render_blocks(
 ) -> Vec<Vec<Segment>> {
     let base = console.base_style();
     let mut lines: Vec<Vec<Segment>> = Vec::new();
+    // Set by an image whose marker must stay on the same row as the block that
+    // follows it (see [`Block::Image`]).
+    let mut join_previous = false;
 
     for (index, block) in blocks.iter().enumerate() {
+        let merge = std::mem::take(&mut join_previous);
         // A blank line precedes every non-first block, and every
         // list/quote/table (which upstream renders with a leading gap).
         // Blank lines between blocks are a *document* convention. Upstream puts
@@ -593,12 +741,31 @@ fn render_blocks(
             block,
             Block::List { .. } | Block::Quote(_) | Block::Table { .. }
         );
-        if top_level && (own_gap || (index > 0 && !after_rule)) {
+        // An image emits no line break after itself, so the block that follows
+        // one gets no separator at all — not even the leading gap a list, quote
+        // or table would otherwise bring.
+        let after_image = index > 0 && matches!(blocks[index - 1], Block::Image { .. });
+        let separator = match block {
+            // An image carries its own decision, taken while parsing.
+            Block::Image { leading_break, .. } => top_level && *leading_break,
+            _ if after_image => false,
+            _ => top_level && (own_gap || (index > 0 && !after_rule)),
+        };
+        if separator {
             lines.push(Vec::new());
         }
+        let start = lines.len();
         match block {
             Block::Text(text) => {
                 lines.extend(text.render_lines(console.theme(), base, Some(width)))
+            }
+            Block::Image {
+                text, joins_next, ..
+            } => {
+                // No justify of its own, so the marker is wrapped but never
+                // padded — upstream assembles a bare `Text` for it.
+                lines.extend(text.render_lines(console.theme(), base, Some(width)));
+                join_previous = *joins_next;
             }
             Block::List { items } => {
                 for item in items {
@@ -723,6 +890,13 @@ fn render_blocks(
                 let inner = options.update_width(width);
                 lines.extend(Segment::split_lines(&table.rich_render(console, &inner)));
             }
+        }
+        // Fold this block's first row onto the row the image left open. `merge`
+        // is only ever set by a preceding image, which always pushed at least
+        // one row, so `start` is never zero here.
+        if merge && lines.len() > start {
+            let first = lines.remove(start);
+            lines[start - 1].extend(first);
         }
     }
     lines
@@ -1189,6 +1363,79 @@ mod container_tests {
             after - rule,
             2,
             "expected one blank row between rule and next block: {rows:?}"
+        );
+    }
+
+    /// Upstream's `ImageItem` renders `🌆 <title> ` and yields it *before* the
+    /// element it was lifted out of, with no line break of its own. We rendered
+    /// the alt text inline with no marker at all, and `![](url)` — a badge row,
+    /// which is what most READMEs open with — came out as a blank line.
+    ///
+    /// Every expectation captured verbatim from real rich 15.0.0 at width 40:
+    ///
+    /// ```text
+    /// ![alt text](https://example.com/pic.png)  -> '🌆 alt text'
+    /// ![](https://example.com/pic.png)          -> '🌆 pic.png'   <- filename
+    /// ![](img/)                                 -> '🌆 img'
+    /// Before ![alt text](img/pic.png) after.    -> '🌆 alt text Before  after.'
+    /// ![alt *em*](u/v.png)                      -> '🌆 alt *em*'  <- raw alt
+    /// ```
+    #[test]
+    fn an_image_is_marked_and_hoisted() {
+        let row = |source: &str| {
+            plain(source, 40)
+                .lines()
+                .next()
+                .expect("a row")
+                .trim_end()
+                .to_string()
+        };
+        assert_eq!(
+            row("![alt text](https://example.com/pic.png)"),
+            "🌆 alt text"
+        );
+        assert_eq!(row("![](https://example.com/pic.png)"), "🌆 pic.png");
+        assert_eq!(row("![](img/)"), "🌆 img");
+        // Hoisted to the front of the paragraph it sat inside, on the same row.
+        assert_eq!(
+            row("Before ![alt text](img/pic.png) after."),
+            "🌆 alt text Before  after."
+        );
+        // The alt is the raw markdown source, markers included: upstream reads
+        // markdown-it's `token.content`, which is never inline-parsed.
+        assert_eq!(row("![alt *em*](u/v.png)"), "🌆 alt *em*");
+    }
+
+    /// An image inside a container is lifted clear of it: upstream renders the
+    /// element the moment its token is reached, while the list or quote holding
+    /// it is still open and will not render until it closes.
+    ///
+    /// Real rich 15.0.0 at width 40 (trailing padding trimmed):
+    ///
+    /// ```text
+    /// '- item with ![pic](a/b.png) inside'
+    ///     -> ['🌆 pic', ' • item with  inside']
+    /// '> quoted ![pic](a/b.png) end'
+    ///     -> ['🌆 pic', '▌ quoted  end']
+    /// ```
+    ///
+    /// Note the absence of the blank row a list or quote normally brings with
+    /// it: the image asks for no line break after itself.
+    #[test]
+    fn an_image_is_lifted_out_of_a_list_or_quote() {
+        let rows = |source: &str| -> Vec<String> {
+            plain(source, 40)
+                .lines()
+                .map(|line| line.trim_end().to_string())
+                .collect()
+        };
+        assert_eq!(
+            rows("- item with ![pic](a/b.png) inside"),
+            vec!["🌆 pic", " • item with  inside"]
+        );
+        assert_eq!(
+            rows("> quoted ![pic](a/b.png) end"),
+            vec!["🌆 pic", "▌ quoted  end"]
         );
     }
 

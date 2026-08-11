@@ -735,6 +735,26 @@ impl Text {
         let Some(width) = width else {
             return lines;
         };
+        // Give each wrapped line back the padding it overshot by, exactly where
+        // upstream's `Text.wrap` does it — after dividing, before justifying.
+        // `divide_line` counts a word *including* its trailing space, so a line
+        // whose last word ends flush with the width comes back one cell too
+        // long; without this the ellipsis overflow then chops a real character
+        // to make room for a `…` that upstream never emits
+        // ("abcdefghij more" at width 10 became "abcdefghi…", not "abcdefghij").
+        //
+        // Only in the wrapping branch: upstream calls `rstrip_end` inside
+        // `Text.wrap`'s divide step, which `no_wrap` skips entirely. Running it
+        // unconditionally also stripped text that was never wrapped — and since
+        // this port folds `overflow == Ignore` into `no_wrap`, that silently ate
+        // the trailing spaces of content upstream returns verbatim. Measured over
+        // 61,320 wrap cases: unconditional fixed 37 and broke 54; gated here it
+        // keeps all 37 and breaks none.
+        if !no_wrap {
+            for line in &mut lines {
+                rstrip_end_line(line, width);
+            }
+        }
         if justify != Justify::Default {
             let last = lines.len().saturating_sub(1);
             for (index, line) in lines.iter_mut().enumerate() {
@@ -1054,7 +1074,17 @@ fn justify_line(
             full_justify(line, width, style)
         };
     }
-    let line_width: usize = line.iter().map(Segment::cell_length).sum();
+    let mut content = line.to_vec();
+    // Upstream's `Lines.justify` calls `line.rstrip()` in its `center` and
+    // `right` branches — and only there — so the space wrapping left at the end
+    // of a line is *not* content to be positioned. Keeping it shifts the visible
+    // text half a space left when centring (`" abcd efgh ijklmnop "` became
+    // `"abcd efgh ijklmnop  "`) and a whole column left when right-aligning.
+    // `left`/`full` deliberately keep it: upstream pads them without stripping.
+    if matches!(justify, Justify::Center | Justify::Right) {
+        rstrip_line(&mut content);
+    }
+    let line_width: usize = content.iter().map(Segment::cell_length).sum();
     let excess = width.saturating_sub(line_width);
     let (left, right) = match justify {
         Justify::Right => (excess, 0),
@@ -1062,15 +1092,73 @@ fn justify_line(
         // Left, Default, and full justification's ragged last line pad right.
         Justify::Left | Justify::Full | Justify::Default => (0, excess),
     };
-    let mut out = Vec::with_capacity(line.len() + 2);
+    let mut out = Vec::with_capacity(content.len() + 2);
     if left > 0 {
         out.push(Segment::new(" ".repeat(left), Some(style.clone())));
     }
-    out.extend(line.iter().cloned());
+    out.append(&mut content);
     if right > 0 {
         out.push(Segment::new(" ".repeat(right), Some(style.clone())));
     }
     out
+}
+
+/// The number of trailing whitespace *characters* on a rendered line.
+///
+/// Segment-level, because by the time the wrap pipeline justifies a line the
+/// spans have already been flattened into [`Segment`]s and there is no `Text`
+/// left to call `rstrip` on.
+fn trailing_whitespace(line: &[Segment]) -> usize {
+    let mut count = 0usize;
+    for segment in line.iter().rev() {
+        let trimmed = segment.text.trim_end();
+        count += segment.text[trimmed.len()..].chars().count();
+        if !trimmed.is_empty() {
+            break;
+        }
+    }
+    count
+}
+
+/// Drop the last `count` characters, discarding segments that empty out.
+/// Segment-level counterpart of `Text.right_crop`.
+fn right_crop_line(line: &mut Vec<Segment>, count: usize) {
+    let mut remaining = count;
+    while remaining > 0 {
+        let Some(last) = line.last_mut() else { break };
+        let length = last.text.chars().count();
+        if length <= remaining {
+            remaining -= length;
+            line.pop();
+        } else {
+            let keep = char_to_byte(&last.text, length - remaining);
+            last.text.truncate(keep);
+            remaining = 0;
+        }
+    }
+}
+
+/// Remove all trailing whitespace. Segment-level counterpart of `Text.rstrip`.
+fn rstrip_line(line: &mut Vec<Segment>) {
+    right_crop_line(line, trailing_whitespace(line));
+}
+
+/// Remove *only as much* trailing whitespace as it takes to get the line down to
+/// `size`, leaving the rest. Segment-level counterpart of `Text.rstrip_end`.
+///
+/// The length compared against `size` is a **character** count, not a cell
+/// count: upstream's `Text.rstrip_end` uses `len(self)`, which is
+/// `len(self.plain)`. The two only diverge on wide characters, and copying the
+/// quirk is cheaper than explaining a one-column difference later.
+fn rstrip_end_line(line: &mut Vec<Segment>, size: usize) {
+    let length: usize = line.iter().map(|s| s.text.chars().count()).sum();
+    let Some(excess) = length.checked_sub(size).filter(|excess| *excess > 0) else {
+        return;
+    };
+    let whitespace = trailing_whitespace(line);
+    if whitespace > 0 {
+        right_crop_line(line, whitespace.min(excess));
+    }
 }
 
 #[cfg(test)]
@@ -1107,6 +1195,87 @@ mod tests {
             vec!["aaa     bbb      ccc", "ddddddddddddddddddd", "ee ff"]
         );
         assert_eq!(plain[0].chars().count(), 20);
+    }
+
+    fn wrapped_plain(text: &Text, width: usize) -> Vec<String> {
+        text.render_lines(&Theme::default_theme(), &Style::new(), Some(width))
+            .iter()
+            .map(|line| line.iter().map(|s| s.text.as_str()).collect())
+            .collect()
+    }
+
+    /// Wrapping hands each line the space that ended it, and upstream's
+    /// `Lines.justify` throws that space away (`line.rstrip()`) before centring
+    /// or right-aligning — but *not* before left-aligning or full-justifying.
+    ///
+    /// Captured verbatim from real rich 15.0.0,
+    /// `Text(case, justify=…).wrap(console, 20)`:
+    ///
+    /// ```text
+    /// center 'abcd efgh ijklmnop qrst'  -> ' abcd efgh ijklmnop '
+    /// right  'abcd efgh ijklmnop qrst'  -> '  abcd efgh ijklmnop'
+    /// right  'aaaa bbbb cccc dddd eeee' -> ' aaaa bbbb cccc dddd'
+    /// left   'abcd efgh ijklmnop qrst'  -> 'abcd efgh ijklmnop  '
+    /// ```
+    ///
+    /// Counting the wrap space as content puts the centred line one column too
+    /// far left and the right-aligned line a whole column short of the edge.
+    #[test]
+    fn center_and_right_rstrip_the_wrap_space() {
+        let wrapped = "abcd efgh ijklmnop qrst";
+        assert_eq!(
+            wrapped_plain(&Text::new(wrapped).justify(Justify::Center), 20)[0],
+            " abcd efgh ijklmnop "
+        );
+        assert_eq!(
+            wrapped_plain(&Text::new(wrapped).justify(Justify::Right), 20)[0],
+            "  abcd efgh ijklmnop"
+        );
+        assert_eq!(
+            wrapped_plain(
+                &Text::new("aaaa bbbb cccc dddd eeee").justify(Justify::Right),
+                20
+            )[0],
+            " aaaa bbbb cccc dddd"
+        );
+        // Left is the control: upstream pads it without stripping, so the
+        // trailing space stays part of the line and nothing shifts.
+        assert_eq!(
+            wrapped_plain(&Text::new(wrapped).justify(Justify::Left), 20)[0],
+            "abcd efgh ijklmnop  "
+        );
+    }
+
+    /// `divide_line` measures a word *with* its trailing space, so a line whose
+    /// last word ends flush with the width comes back one character too long.
+    /// Upstream's `Text.wrap` calls `rstrip_end(width)` on every divided line to
+    /// hand that back before overflow is applied.
+    ///
+    /// Real rich 15.0.0, `Text(case, overflow="ellipsis").wrap(console, 10)`:
+    ///
+    /// ```text
+    /// 'abcdefghij more'   -> ['abcdefghij', 'more']   <- no ellipsis
+    /// 'abcdefghijkl more' -> ['abcdefghi…', 'more']   <- genuinely too long
+    /// ```
+    ///
+    /// Skipping the rstrip makes the first case measure 11 cells, so the
+    /// ellipsis fires and eats the `j` that upstream keeps.
+    #[test]
+    fn rstrip_end_stops_the_wrap_space_from_triggering_an_ellipsis() {
+        assert_eq!(
+            wrapped_plain(
+                &Text::new("abcdefghij more").overflow(Overflow::Ellipsis),
+                10
+            ),
+            vec!["abcdefghij", "more"]
+        );
+        assert_eq!(
+            wrapped_plain(
+                &Text::new("abcdefghijkl more").overflow(Overflow::Ellipsis),
+                10
+            ),
+            vec!["abcdefghi…", "more"]
+        );
     }
 
     #[test]

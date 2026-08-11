@@ -1,11 +1,81 @@
 //! Terminal cell measurement.
 //!
-//! Port of upstream `rich/cells.py`. Upstream ships its own width table
-//! (`_cell_widths.py`); we delegate to the `unicode-width` crate, which
-//! implements the same Unicode East Asian Width rules. Any observed divergence
-//! on exotic codepoints is tracked in docs/DIVERGENCES.md.
+//! Port of upstream `rich/cells.py`. The width data is upstream's own, vendored
+//! into [`cell_widths`](crate::cell_widths) by `scripts/gen_cell_widths.py` —
+//! all 21 Unicode versions `rich._unicode_data` ships, selected at runtime by
+//! `UNICODE_VERSION` exactly as upstream's `load()` does.
+//!
+//! We used to delegate to the `unicode-width` crate on the premise that both
+//! implement the same East Asian Width rules. They disagree on 348 code points,
+//! and a `unicode-width` build can only ever be one Unicode version anyway.
 
-use crate::cell_widths::NARROW_TO_WIDE;
+use std::sync::OnceLock;
+
+use crate::cell_widths::{NARROW_TO_WIDE, TABLES, VERSIONS};
+
+/// Parse a Unicode version string into `(major, minor, patch)`, padding missing
+/// components with zero and ignoring any beyond the third. Port of
+/// `rich._unicode_data._parse_version`; `None` stands in for its `ValueError`.
+fn parse_version(version: &str) -> Option<(i64, i64, i64)> {
+    let mut parts = [0i64; 3];
+    for (index, part) in version.split('.').enumerate() {
+        // `.trim()` because Python's `int()` accepts surrounding whitespace and
+        // this is a port of `map(int, version.split("."))`.
+        let value: i64 = part.trim().parse().ok()?;
+        if index < 3 {
+            parts[index] = value;
+        }
+    }
+    Some((parts[0], parts[1], parts[2]))
+}
+
+/// Index into [`VERSIONS`] of the table upstream would load for `requested`.
+/// Port of the version selection in `rich._unicode_data.load`.
+///
+/// Anything unparsable — including the literal `"latest"` — takes the newest
+/// table, and a version upstream does not ship falls back to the newest one
+/// *not newer* than it (`bisect_left` minus one, clamped at the oldest).
+fn resolve_version(requested: &str) -> usize {
+    let latest = VERSIONS.len() - 1;
+    let Some(wanted) = parse_version(requested) else {
+        return latest;
+    };
+    let shipped = || {
+        VERSIONS
+            .iter()
+            .map(|version| parse_version(version).expect("shipped versions parse"))
+    };
+    // An exact match wins: upstream checks the reformatted `major.minor.patch`
+    // against its version set before doing anything cleverer, so `"9.0"` finds
+    // `"9.0.0"` rather than bisecting to `"8.0.0"`.
+    if let Some(index) = shipped().position(|version| version == wanted) {
+        return index;
+    }
+    shipped()
+        .position(|version| version >= wanted)
+        .unwrap_or(VERSIONS.len())
+        .saturating_sub(1)
+}
+
+/// The width table this process measures with, chosen by `UNICODE_VERSION`.
+///
+/// Upstream's `_unicode_data.load("auto")` is `@cache`d, so the variable is read
+/// once per process however many strings get measured; the `OnceLock` matches
+/// that, and keeps [`char_cell_width`] free of a per-character env lookup.
+fn cell_table() -> &'static [(u32, u32, u8)] {
+    static TABLE: OnceLock<&'static [(u32, u32, u8)]> = OnceLock::new();
+    TABLE.get_or_init(|| {
+        // Unset behaves as `"latest"`, exactly as upstream's
+        // `os.environ.get("UNICODE_VERSION", "latest")` does.
+        let requested = std::env::var("UNICODE_VERSION").unwrap_or_else(|_| "latest".to_string());
+        table_for(&requested)
+    })
+}
+
+/// The table for `requested`, ignoring the environment.
+fn table_for(requested: &str) -> &'static [(u32, u32, u8)] {
+    TABLES[resolve_version(requested)]
+}
 
 /// The number of terminal cells `text` occupies. Port of `cell_len`.
 pub fn cell_len(text: &str) -> usize {
@@ -58,11 +128,16 @@ const VARIATION_SELECTOR_16: char = '\u{fe0f}';
 /// symbols), and every disagreement misaligns a table, panel or wrap point.
 /// Port of `cells.get_character_cell_size`.
 pub fn char_cell_width(c: char) -> usize {
+    width_in(cell_table(), c)
+}
+
+/// [`char_cell_width`] against an explicitly chosen table, so the version
+/// selection can be exercised without a process-wide environment variable.
+fn width_in(table: &[(u32, u32, u8)], c: char) -> usize {
     let codepoint = c as u32;
     if (codepoint > 0 && codepoint < 32) || (0x7F..0xA0).contains(&codepoint) {
         return 0;
     }
-    let table = &crate::cell_widths::CELL_WIDTH_RANGES;
     // Beyond the table's last range upstream assumes a single cell.
     if codepoint > table[table.len() - 1].1 {
         return 1;
@@ -228,6 +303,82 @@ mod tests {
             ("1\u{fe0f}\u{20e3}", 2, "keycap"),
         ] {
             assert_eq!(cell_len(text), expected, "{what} measured wrongly");
+        }
+    }
+
+    /// Upstream ships 21 width tables and picks between them with
+    /// `UNICODE_VERSION` (`rich._unicode_data.load`); we only ever measured with
+    /// the newest, so a terminal pinned to an older Unicode was mismeasured.
+    ///
+    /// Every expectation captured from real rich 15.0.0 by setting the variable
+    /// and reading `load("auto").unicode_version`:
+    ///
+    /// ```text
+    /// '9' -> 9.0.0     '9.0' -> 9.0.0      '9.0.0.7' -> 9.0.0   ' 9 ' -> 9.0.0
+    /// '13.1' -> 13.0.0 '12.1' -> 12.1.0    '18.0.0' -> 17.0.0   '99' -> 17.0.0
+    /// '0' -> 4.1.0     '-1' -> 4.1.0       '1.0.0' -> 4.1.0
+    /// 'latest' -> 17.0.0  'auto' -> 17.0.0  'banana' -> 17.0.0  '' -> 17.0.0
+    /// ```
+    ///
+    /// Three rules to keep straight: an exact match wins outright (so `"12.1"`
+    /// finds `12.1.0` rather than bisecting past it), an unknown version falls
+    /// back to the newest table *not newer* than it, and anything unparsable
+    /// takes the latest.
+    #[test]
+    fn unicode_version_selects_upstreams_table() {
+        for (requested, expected) in [
+            ("9", "9.0.0"),
+            ("9.0", "9.0.0"),
+            ("9.0.0", "9.0.0"),
+            ("9.0.0.7", "9.0.0"),
+            (" 9 ", "9.0.0"),
+            ("13.1", "13.0.0"),
+            ("12.1", "12.1.0"),
+            ("12.1.0", "12.1.0"),
+            ("0", "4.1.0"),
+            ("-1", "4.1.0"),
+            ("1.0.0", "4.1.0"),
+            ("4.1.0", "4.1.0"),
+            ("17.0.0", "17.0.0"),
+            ("18.0.0", "17.0.0"),
+            ("99", "17.0.0"),
+            ("latest", "17.0.0"),
+            ("auto", "17.0.0"),
+            ("banana", "17.0.0"),
+            ("", "17.0.0"),
+        ] {
+            assert_eq!(
+                VERSIONS[resolve_version(requested)],
+                expected,
+                "UNICODE_VERSION={requested:?} chose the wrong table"
+            );
+        }
+    }
+
+    /// The tables are not interchangeable, which is the whole point of honouring
+    /// the variable. Widths from real rich 15.0.0's
+    /// `get_character_cell_size(chr(cp), version)`:
+    ///
+    /// ```text
+    ///          4.1.0  8.0.0  9.0.0  12.0.0  17.0.0
+    /// U+1F600      1      1      2       2       2   grinning face
+    /// U+231A       1      1      2       2       2   watch
+    /// U+1F9E0      1      1      1       2       2   brain
+    /// U+1FAF0      1      1      1       1       2   hand with index finger
+    /// ```
+    #[test]
+    fn an_older_table_measures_emoji_narrower() {
+        for (c, widths) in [
+            ('\u{1F600}', [1, 1, 2, 2, 2]),
+            ('\u{231A}', [1, 1, 2, 2, 2]),
+            ('\u{1F9E0}', [1, 1, 1, 2, 2]),
+            ('\u{1FAF0}', [1, 1, 1, 1, 2]),
+        ] {
+            let measured: Vec<usize> = ["4.1.0", "8.0.0", "9.0.0", "12.0.0", "17.0.0"]
+                .iter()
+                .map(|version| width_in(table_for(version), c))
+                .collect();
+            assert_eq!(measured, widths.to_vec(), "{c:?} measured wrongly");
         }
     }
 
