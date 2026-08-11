@@ -13,14 +13,17 @@
 use std::io::{IsTerminal, Read};
 use std::process::ExitCode;
 
+use rich::cells::cell_len;
 use rich::markdown::Markdown;
-use rich::r#box::{Box as BoxSet, ASCII, ASCII2, DOUBLE, HEAVY, NONE, ROUNDED, SQUARE};
+use rich::measure::Measurement;
+use rich::r#box::{Box as BoxSet, ASCII, ASCII2, DOUBLE, HEAVY, HEAVY_HEAD, ROUNDED, SQUARE};
 use rich::text::Text;
 use rich::{
-    filesize, Align, AnsiDecoder, Bar, ColorSystem, Columns, Console, Constrain, Control,
-    Highlighter, HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, Live, LiveRender,
-    LogLevel, LogRender, Padding, Panel, Pretty, Progress, ProgressBar, ProgressColumn, Renderable,
-    Rule, Spinner, Status, Style, Styled, Syntax, Table, Traceback, Tree, DEFAULT_TERMINAL_THEME,
+    filesize, Align, AnsiDecoder, Bar, ColorSystem, Columns, Console, ConsoleOptions, Constrain,
+    Control, Highlighter, HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, Live,
+    LiveRender, LogLevel, LogRender, Padding, Panel, Pretty, Progress, ProgressBar, ProgressColumn,
+    Renderable, Rule, Segment, Spinner, Status, Style, Styled, Syntax, Table, Traceback, Tree,
+    DEFAULT_TERMINAL_THEME,
 };
 use rich_ext::ConsoleExt;
 
@@ -121,15 +124,23 @@ struct Cli {
     /// `--export-svg PATH`: also write a self-contained SVG document to PATH.
     export_svg: Option<String>,
     /// `--panel BOX`: wrap the output in a [`Panel`] with the named box.
+    /// `--panel none` is upstream's default and means *no panel at all*, so it
+    /// parses to `None` rather than to `box.NONE`.
     panel: Option<BoxSet>,
     /// `--padding T[,R[,B,L]]`: wrap the output in [`Padding`].
     padding: Option<(usize, usize, usize, usize)>,
-    /// `--title`: a panel title (only used with `--panel`).
+    /// `--title`: the panel title, and the CSV table's title.
     title: Option<String>,
-    /// `--caption`: a panel subtitle (only used with `--panel`).
+    /// `--caption`: the panel subtitle, and the CSV table's caption.
     caption: Option<String>,
-    /// `--style`: the panel border style (only used with `--panel`).
-    border_style: Option<Style>,
+    /// `-S/--panel-style`: the panel *border* style.
+    panel_style: Option<Style>,
+    /// `-s/--style`: a style laid under the whole renderable (upstream's
+    /// `Styled`), applied outside the panel.
+    style: Option<Style>,
+    /// `-e/--expand`: make `--panel`/`--padding` fill the available width
+    /// instead of shrinking to their content. Implied by `--width`.
+    expand: bool,
     /// `--pager`: page the output through the system pager.
     pager: bool,
 }
@@ -148,19 +159,27 @@ fn main() -> ExitCode {
 
 /// Map a `--panel` box name to a box set (port of rich-cli's `BOXES` +
 /// `getattr(box, name.upper())`).
-fn parse_box(name: &str) -> Result<BoxSet, String> {
-    match name.to_ascii_lowercase().as_str() {
-        "none" => Ok(NONE),
-        "ascii" => Ok(ASCII),
-        "ascii2" => Ok(ASCII2),
-        "square" => Ok(SQUARE),
-        "rounded" => Ok(ROUNDED),
-        "heavy" => Ok(HEAVY),
-        "double" => Ok(DOUBLE),
-        other => Err(format!(
-            "unknown panel box {other:?} (use none/ascii/ascii2/square/rounded/heavy/double)"
-        )),
-    }
+///
+/// `none` is upstream's *default* for `--panel`, and upstream guards the whole
+/// panel step with `if panel != "none"` — so it means "no panel", not "a panel
+/// drawn with `box.NONE`". Drawing box.NONE put an invisible one-cell frame and
+/// a blank line around the output, which reads as the tool having mangled the
+/// file for no reason.
+fn parse_box(name: &str) -> Result<Option<BoxSet>, String> {
+    Ok(Some(match name.to_ascii_lowercase().as_str() {
+        "none" => return Ok(None),
+        "ascii" => ASCII,
+        "ascii2" => ASCII2,
+        "square" => SQUARE,
+        "rounded" => ROUNDED,
+        "heavy" => HEAVY,
+        "double" => DOUBLE,
+        other => {
+            return Err(format!(
+                "unknown panel box {other:?} (use none/ascii/ascii2/square/rounded/heavy/double)"
+            ))
+        }
+    }))
 }
 
 /// Parse a `--padding` value: 1, 2, or 4 comma-separated integers, unpacked into
@@ -210,12 +229,24 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut padding = None;
     let mut title = None;
     let mut caption = None;
-    let mut border_style = None;
+    let mut panel_style = None;
+    let mut style = None;
+    let mut expand = false;
     let mut pager = false;
+    // Set by `--`: everything after it is a positional argument, however much it
+    // looks like a flag. Without this nothing beginning with `-` could be
+    // printed or opened at all — `rich -p -- "-5 degrees"` and `rich -- -weird.md`
+    // both died with "unknown option".
+    let mut end_of_options = false;
 
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
+        if end_of_options {
+            resources.push(arg.to_string());
+            continue;
+        }
         match arg.as_str() {
+            "--" => end_of_options = true,
             "-h" | "--help" => {
                 print_help();
                 return Ok(None);
@@ -281,22 +312,31 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             }
             "--panel" => {
                 let value = iter.next().ok_or("--panel requires a box name")?;
-                panel = Some(parse_box(value)?);
+                panel = parse_box(value)?;
             }
             "--padding" => {
                 let value = iter.next().ok_or("--padding requires a value")?;
                 padding = Some(parse_padding(value)?);
             }
+            "-e" | "--expand" => expand = true,
             "--title" => {
                 title = Some(iter.next().ok_or("--title requires a value")?.clone());
             }
             "--caption" => {
                 caption = Some(iter.next().ok_or("--caption requires a value")?.clone());
             }
-            "--style" => {
+            // `-s/--style` is the style of the *renderable* (upstream wraps it in
+            // `Styled`); `-S/--panel-style` is the border. They were fused into
+            // one flag that set the border, so there was no way to style the
+            // content at all and `--style` aborted without `--panel`.
+            "-s" | "--style" => {
                 let value = iter.next().ok_or("--style requires a value")?;
-                border_style =
-                    Some(Style::parse(value).map_err(|e| format!("invalid --style: {e}"))?);
+                style = Some(Style::parse(value).map_err(|e| format!("invalid --style: {e}"))?);
+            }
+            "-S" | "--panel-style" => {
+                let value = iter.next().ok_or("--panel-style requires a value")?;
+                panel_style =
+                    Some(Style::parse(value).map_err(|e| format!("invalid --panel-style: {e}"))?);
             }
             "-w" | "--width" => {
                 let value = iter.next().ok_or("--width requires a number")?;
@@ -364,13 +404,21 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             mode == Mode::Diff,
         ),
         ("--loop", loops.is_some(), "--gif", mode == Mode::Gif),
-        ("--title", title.is_some(), "--panel", panel.is_some()),
-        ("--caption", caption.is_some(), "--panel", panel.is_some()),
+        // `--title`/`--caption` are deliberately NOT here: upstream feeds them to
+        // the CSV table as well as to the panel, so requiring `--panel` made
+        // `rich --csv sales.csv --title Sales` — a documented upstream use —
+        // impossible. `-S`/`-e` really do nothing without a panel.
         (
-            "--style",
-            border_style.is_some(),
+            "--panel-style",
+            panel_style.is_some(),
             "--panel",
             panel.is_some(),
+        ),
+        (
+            "--expand",
+            expand,
+            "--panel/--padding",
+            panel.is_some() || padding.is_some(),
         ),
     ];
     if let Some((flag, _, needs, _)) = orphans
@@ -388,7 +436,9 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             ("--padding", padding.is_some()),
             ("--title", title.is_some()),
             ("--caption", caption.is_some()),
-            ("--style", border_style.is_some()),
+            ("--style", style.is_some()),
+            ("--panel-style", panel_style.is_some()),
+            ("--expand", expand),
             ("--left/--center/--right", justify.is_some()),
         ];
         if let Some((flag, _)) = unsupported.iter().find(|(_, given)| *given) {
@@ -416,25 +466,52 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         padding,
         title,
         caption,
-        border_style,
+        panel_style,
+        style,
+        expand,
         pager,
     }))
 }
 
 /// Read a resource: `-` (or `None`) means stdin, otherwise a file path.
+///
+/// A **file** is decoded with replacement, not rejected: upstream opens it as
+/// `open(path, "rt", encoding="utf8", errors="replace")`, so a cp1252 export —
+/// what Excel writes on a Windows box by default — renders with `�` where the
+/// odd byte was. We refused the whole file with exit 1, which is the one
+/// outcome that makes the tool useless for exactly the files people reach for
+/// it with.
+///
+/// **Stdin stays strict.** Upstream reads it with `sys.stdin.read()`, whose
+/// decode error escapes into rich-cli's `except Exception` and exits non-zero;
+/// there is no `errors="replace"` on that path.
 fn read_resource(resource: Option<&str>) -> std::io::Result<String> {
     let content = match resource {
         Some(path) if path != "-" => {
-            let path = std::path::Path::new(path);
-            // A directory reaches read_to_string as "Access is denied" on
-            // Windows, which sends the reader hunting for a permissions problem.
-            if path.is_dir() {
+            let file = std::path::Path::new(path);
+            // A directory reaches the reader as "Access is denied" on Windows,
+            // which sends the reader hunting for a permissions problem.
+            if file.is_dir() {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     "is a directory, not a file",
                 ));
             }
-            std::fs::read_to_string(path)?
+            let bytes = std::fs::read(file)?;
+            match String::from_utf8(bytes) {
+                Ok(text) => text,
+                // An image is not text in any encoding, and lossily decoding one
+                // fills the terminal with thousands of replacement characters
+                // and no clue. Keep the diagnostic for those; decode everything
+                // else, which is what `errors="replace"` is actually for.
+                Err(_) if looks_like_image(path) => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "stream did not contain valid UTF-8",
+                    ))
+                }
+                Err(err) => String::from_utf8_lossy(err.as_bytes()).into_owned(),
+            }
         }
         _ => {
             let mut buffer = String::new();
@@ -658,6 +735,217 @@ fn detect_mode(resource: Option<&str>) -> Mode {
     }
 }
 
+/// Force a renderable to a fixed width, wherever on the screen it lands. Port
+/// of rich-cli's `ForceWidth`.
+///
+/// `--width N` used to shrink the *console* to N, which also moved every
+/// alignment inside N columns: `rich -w 20 --center` centred within 20 rather
+/// than within the terminal, and an `--export-svg` frame came out N wide.
+/// Upstream leaves the console alone and narrows only the renderable.
+struct ForceWidth {
+    child: Box<dyn Renderable>,
+    width: usize,
+}
+
+impl Renderable for ForceWidth {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        self.child
+            .rich_render(console, &options.update_width(self.width))
+    }
+
+    fn measure(&self, _console: &Console, _options: &ConsoleOptions) -> Measurement {
+        Measurement::new(self.width, self.width)
+    }
+}
+
+/// Position a renderable within the available width. Port of the horizontal
+/// axis of `rich.align.Align`, which is what `console.print(justify=…)` wraps
+/// every renderable in.
+///
+/// The core crate's [`Align`] is not that: it renders its child at the *full*
+/// width and pads each line by that line's own width, so it neither shrinks the
+/// child (nothing that fills the width — `Syntax`, `Rule`, a `Panel` — moves at
+/// all) nor squares the block off (multi-line output comes out ragged).
+/// Upstream constrains the child to its measured width, `set_shape`s every line
+/// to that one width, then pads the block. Doing that here leaves `align.rs`,
+/// which other renderables depend on, untouched.
+struct Aligned {
+    child: Box<dyn Renderable>,
+    /// The width to render the child *within* — what upstream's `Align` reads
+    /// out of `console.measure(renderable)` and hands to `Constrain`. The block
+    /// it then pads is measured from the output, not from this: a `--csv` table
+    /// given `-w 40` still renders at its own 23 columns, and it is 23 that gets
+    /// centred.
+    width: usize,
+    justify: Justify,
+}
+
+impl Renderable for Aligned {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        let width = self.width.clamp(1, options.max_width);
+        // The child renders with the console's own justify, not this alignment.
+        // Upstream puts `print(justify=…)` into the render options, but rich-cli
+        // builds its `--print`/`--rule` text with an explicit `justify="default"`
+        // — a truthy string in Python — which blocks the inheritance, so
+        // `-w 9 --center -p mid` centres a three-cell block within the terminal
+        // rather than centring "mid" inside nine columns first. Every other
+        // renderable this CLI builds (`Table`, `Json`, `Syntax`, `Markdown`)
+        // ignores `options.justify` in this port, so there is nothing else for
+        // the inheritance to reach.
+        let lines = console.render_lines(self.child.as_ref(), &options.update_width(width), false);
+        let widths: Vec<usize> = lines
+            .iter()
+            .map(|line| line.iter().map(Segment::cell_length).sum())
+            .collect();
+        // `Segment.get_shape` then `Segment.set_shape`: square the block off at
+        // the widest line it actually produced, so a multi-line child moves as
+        // one block instead of each line drifting to its own width.
+        let shape = widths.iter().copied().max().unwrap_or(0);
+
+        let excess = options.max_width.saturating_sub(shape);
+        let (left, right) = match self.justify {
+            Justify::Right => (excess, 0),
+            Justify::Center => (excess / 2, excess - excess / 2),
+            _ => (0, excess),
+        };
+        let blank = |count: usize| Segment::new(" ".repeat(count), Some(Style::new()));
+
+        let mut segments = Vec::new();
+        let last = lines.len().saturating_sub(1);
+        for (index, (line, line_width)) in lines.into_iter().zip(widths).enumerate() {
+            if left > 0 {
+                segments.push(blank(left));
+            }
+            segments.extend(line);
+            let pad = shape - line_width + right;
+            if pad > 0 {
+                segments.push(blank(pad));
+            }
+            if index != last {
+                segments.push(Segment::line());
+            }
+        }
+        segments
+    }
+}
+
+/// The width a renderable actually occupies, found by rendering it.
+///
+/// `Table`, `Json` and friends inherit `(max_width, max_width)` from the
+/// `Renderable` default in the core crate, so asking them to measure themselves
+/// always answers "the whole console" and a fitted panel would not shrink at
+/// all. Neither pads its output to the space it is given, though, so the widest
+/// rendered line *is* upstream's `Measurement.get(…).maximum`, clamped to the
+/// console — which is what a fitted `Panel` needs.
+///
+/// Not usable for `Syntax`, whose lines *are* padded out to the full width by
+/// its background: that one is measured from the source instead.
+fn measure_rendered(console: &Console, renderable: &dyn Renderable) -> usize {
+    console
+        .render_lines(renderable, &console.options(), false)
+        .iter()
+        .map(|line| line.iter().map(Segment::cell_length).sum::<usize>())
+        .max()
+        .unwrap_or(0)
+}
+
+/// Apply upstream's decorator chain — padding, panel, style, fixed width,
+/// alignment — and print the result. Port of the tail of rich-cli's `main`.
+///
+/// `fit` is the width the renderable measures at; `None` means "fills whatever
+/// it is given", which is what a `Markdown` reports, so nothing shrinks to it.
+fn decorate_and_emit(
+    cli: &Cli,
+    console: &Console,
+    export: &Export,
+    renderable: Box<dyn Renderable>,
+    fit: Option<usize>,
+) -> ExitCode {
+    let max_width = console.width();
+    // `if width > 0: expand = True` — a fixed width is a width to fill.
+    let expand = cli.expand || cli.width.is_some();
+    let mut renderable = renderable;
+    let mut fit = fit;
+
+    // This port's `Padding` and `Panel` always fill the width they are given, so
+    // a *fitted* box is a `Constrain` around one. Upstream instead passes
+    // `expand=False` and lets the box measure its own child — the same width,
+    // reached from the outside, which is the only way that works while the core
+    // crate's `Table`/`Syntax`/`Json` still inherit the default measurement.
+    if let Some((top, right, bottom, left)) = cli.padding {
+        let padded: Box<dyn Renderable> =
+            Box::new(Padding::new(renderable, (top, right, bottom, left)));
+        // `Padding.__rich_measure__`: the child plus the horizontal padding,
+        // capped at the available width.
+        fit = fit.map(|width| (width + left + right).min(max_width));
+        renderable = if expand {
+            padded
+        } else {
+            Box::new(Constrain::new(padded, fit))
+        };
+    }
+
+    if let Some(box_set) = cli.panel {
+        let mut panel = Panel::new(renderable).box_set(box_set);
+        if let Some(title) = cli.title.clone() {
+            panel = panel.title(title);
+        }
+        if let Some(caption) = cli.caption.clone() {
+            panel = panel.subtitle(caption);
+        }
+        if let Some(style) = cli.panel_style.clone() {
+            panel = panel.border_style(style);
+        }
+        // `Panel.__rich_measure__`: the wider of the child (measured in
+        // `max_width - 4`) and the title, plus a border and a pad on each side.
+        // The *subtitle* is deliberately absent — upstream does not measure it,
+        // so a long `--caption` is truncated by the border rather than widening
+        // the panel.
+        //
+        // Upstream's title measures two cells wider than this, because its
+        // `_title` is `Text.pad(1)`-ed and the border then adds a `─` either
+        // side of it (`╭─ title ─╮`). This port's `Panel` draws `╭ title ╮`,
+        // with the pad but not the dashes, so `cell_len` is the width it needs:
+        // taking upstream's number here would leave a two-cell hole in a fitted
+        // panel. The dashes belong in `panel.rs`.
+        let inner = max_width.saturating_sub(4);
+        let child = fit.unwrap_or(inner).min(inner);
+        let title_width = cli.title.as_deref().map(cell_len).unwrap_or(0);
+        fit = Some(child.max(title_width) + 4);
+        let panel: Box<dyn Renderable> = Box::new(panel);
+        renderable = if expand {
+            panel
+        } else {
+            Box::new(Constrain::new(panel, fit))
+        };
+    }
+
+    // `-s/--style` lays a style under everything, outside the panel — upstream's
+    // `Styled(renderable, text_style)`. It does not change any width.
+    if let Some(style) = cli.style.clone() {
+        renderable = Box::new(Styled::new(renderable, style));
+    }
+
+    // `if width > 0 and not pager` — the pager lays out at its own width.
+    if let Some(width) = cli.width.filter(|_| !cli.pager) {
+        renderable = Box::new(ForceWidth {
+            child: renderable,
+            width,
+        });
+        fit = Some(width);
+    }
+
+    if let Some(justify) = cli.justify {
+        renderable = Box::new(Aligned {
+            child: renderable,
+            width: fit.unwrap_or(max_width),
+            justify,
+        });
+    }
+
+    exit_code(emit(console, export, |c| c.print(renderable.as_ref())))
+}
+
 fn run(cli: Cli) -> ExitCode {
     // With no flags and no resource, show the capability demo.
     if cli.mode == Mode::Auto && cli.resource.is_none() {
@@ -665,8 +953,19 @@ fn run(cli: Cli) -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    let mut mode = match cli.mode {
+        Mode::Auto => detect_mode(cli.resource.as_deref()),
+        other => other,
+    };
+
+    // `--gif`, `--diff` and `--ipynb` write a stream of renderables to the
+    // console themselves instead of composing one, so no wrapper can reach them:
+    // those three keep taking `--width` on the console. Everything else gets
+    // upstream's `ForceWidth` in `decorate_and_emit`, which is what keeps
+    // `--center` centring inside the terminal.
+    let width_on_console = matches!(mode, Mode::Gif | Mode::Diff | Mode::Ipynb);
     let mut builder = Console::builder().no_color(cli.no_color);
-    if let Some(width) = cli.width {
+    if let Some(width) = cli.width.filter(|_| width_on_console) {
         builder = builder.width(width);
     }
     let mut console = builder.build();
@@ -688,11 +987,6 @@ fn run(cli: Cli) -> ExitCode {
         pager: cli.pager,
     };
 
-    let mut mode = match cli.mode {
-        Mode::Auto => detect_mode(cli.resource.as_deref()),
-        other => other,
-    };
-
     // GIF playback consumes the resource list itself (it can take several) and
     // animates rather than rendering once.
     if mode == Mode::Gif {
@@ -706,13 +1000,16 @@ fn run(cli: Cli) -> ExitCode {
     }
 
     // A rule takes its optional title from the resource string directly (no
-    // fetch/read).
+    // fetch/read) — but it still goes through the decorators, because upstream
+    // wraps it like anything else, so `--rule --panel` really does draw a panel.
     if mode == Mode::Rule {
         let rule = match cli.resource.as_deref() {
             Some(title) if title != "-" => Rule::new(title),
             _ => Rule::line(),
         };
-        return exit_code(emit(&console, &export, |c| c.print(&rule)));
+        // `Rule.__rich_measure__` is `Measurement(1, 1)`: a rule claims no width
+        // of its own, so a fitted panel around one is 5 cells wide.
+        return decorate_and_emit(&cli, &console, &export, Box::new(rule), Some(1));
     }
 
     // Obtain the content: fetch it over HTTP(S) when the resource is a URL,
@@ -785,6 +1082,17 @@ fn run(cli: Cli) -> ExitCode {
                 return ExitCode::FAILURE;
             }
         }
+        return exit_code(emit(&console, &export, |c| render_ipynb(c, &content)));
+    }
+
+    // Markup comes from the user in Print mode, so a mistake in it should be
+    // reported rather than printed literally (upstream raises `MarkupError`).
+    // Checked up front because the render closure below cannot fail.
+    if mode == Mode::Print {
+        if let Err(err) = console.try_build_text(&content) {
+            eprintln!("rich: {err}");
+            return ExitCode::FAILURE;
+        }
     }
 
     // The highlighting language comes from the resource extension, falling back
@@ -802,86 +1110,51 @@ fn run(cli: Cli) -> ExitCode {
         })
         .unwrap_or_default();
 
-    // Pre-build the CSV/TSV table (delimiter from the extension: tab for `.tsv`).
-    let csv_table = if mode == Mode::Csv {
-        let delimiter = if language == "tsv" { '\t' } else { ',' };
-        Some(render_csv(&parse_csv(&content, delimiter)))
-    } else {
-        None
+    // Build the renderable, and the width a non-expanding `Panel`/`Padding`
+    // would shrink around it — upstream's `Measurement.get(…).maximum`.
+    let (renderable, fit): (Box<dyn Renderable>, Option<usize>) = match mode {
+        // `Markdown` defines no `__rich_measure__`, so upstream measures it as
+        // the whole available width and a panel around it never shrinks.
+        Mode::Markdown => (Box::new(Markdown::new(&content)), None),
+        Mode::Json => {
+            let json = json.expect("json parsed above");
+            let fit = measure_rendered(&console, &json);
+            (Box::new(json), Some(fit))
+        }
+        Mode::Csv => {
+            // `.tsv` only picks the fallback dialect; the sniffer reads the file
+            // itself, so a comma-separated `.tsv` still renders as a table.
+            let fallback = if language == "tsv" { '\t' } else { ',' };
+            let table = build_csv_table(
+                &content,
+                fallback,
+                cli.title.as_deref(),
+                cli.caption.as_deref(),
+            );
+            let fit = measure_rendered(&console, &table);
+            (Box::new(table), Some(fit))
+        }
+        Mode::Syntax => {
+            // `Syntax.__rich_measure__`: the widest source line, plus padding and
+            // a line-number column — neither of which this CLI turns on.
+            let fit = content.lines().map(cell_len).max().unwrap_or(0);
+            (
+                Box::new(Syntax::new(content.as_str(), language.as_str()).word_wrap(true)),
+                Some(fit),
+            )
+        }
+        // Print + auto: parse markup (Print) or take plain text (auto).
+        _ => {
+            let text = if mode == Mode::Print {
+                console.build_text(&content)
+            } else {
+                Text::new(content.as_str())
+            };
+            let fit = text.measurement().1;
+            (Box::new(text), Some(fit))
+        }
     };
-
-    // With `--panel`/`--padding`, build the content as a single renderable and
-    // wrap it (padding inside, panel outside) — the rich-cli decorator flow.
-    if (cli.panel.is_some() || cli.padding.is_some()) && mode != Mode::Ipynb {
-        let mut content: Box<dyn Renderable> = match mode {
-            Mode::Markdown => Box::new(Markdown::new(&content)),
-            Mode::Json => Box::new(Json::new(content.trim()).expect("json validated above")),
-            Mode::Csv => {
-                let delimiter = if language == "tsv" { '\t' } else { ',' };
-                Box::new(render_csv(&parse_csv(&content, delimiter)))
-            }
-            Mode::Syntax => {
-                Box::new(Syntax::new(content.as_str(), language.as_str()).word_wrap(true))
-            }
-            _ => {
-                // Print + auto: parse markup (Print) or take plain text (auto).
-                let mut text = if mode == Mode::Print {
-                    console.build_text(&content)
-                } else {
-                    Text::new(content.as_str())
-                };
-                if let Some(justify) = cli.justify {
-                    text = text.justify(justify);
-                }
-                Box::new(text)
-            }
-        };
-        if let Some(pad) = cli.padding {
-            content = Box::new(Padding::new(content, pad));
-        }
-        if let Some(box_set) = cli.panel {
-            let mut panel = Panel::new(content).box_set(box_set);
-            if let Some(title) = cli.title.clone() {
-                panel = panel.title(title);
-            }
-            if let Some(caption) = cli.caption.clone() {
-                panel = panel.subtitle(caption);
-            }
-            if let Some(style) = cli.border_style.clone() {
-                panel = panel.border_style(style);
-            }
-            content = Box::new(panel);
-        }
-        return exit_code(emit(&console, &export, |c| c.print(content.as_ref())));
-    }
-
-    // Markup comes from the user in Print mode, so a mistake in it should be
-    // reported rather than printed literally (upstream raises `MarkupError`).
-    // Checked up front because the render closure below cannot fail.
-    if mode == Mode::Print {
-        if let Err(err) = console.try_build_text(&content) {
-            eprintln!("rich: {err}");
-            return ExitCode::FAILURE;
-        }
-    }
-
-    let ok = emit(&console, &export, |c| match mode {
-        Mode::Markdown => c.print(&Markdown::new(&content)),
-        Mode::Json => c.print(json.as_ref().expect("json parsed above")),
-        Mode::Csv => c.print(csv_table.as_ref().expect("csv built above")),
-        Mode::Ipynb => render_ipynb(c, &content),
-        Mode::Syntax => c.print(&Syntax::new(content.as_str(), language.as_str()).word_wrap(true)),
-        Mode::Print => match cli.justify {
-            Some(justify) => c.print_justified(&content, justify),
-            None => c.print_str(&content),
-        },
-        // Auto with no detected type: print the resource as plain text.
-        _ => match cli.justify {
-            Some(justify) => c.print_justified(&content, justify),
-            None => c.print(&Text::new(content.as_str())),
-        },
-    });
-    exit_code(ok)
+    decorate_and_emit(&cli, &console, &export, renderable, fit)
 }
 
 /// Turn an "everything written successfully" flag into a process exit code.
@@ -894,90 +1167,804 @@ fn exit_code(ok: bool) -> ExitCode {
     }
 }
 
-/// Parse CSV/TSV `content` into rows of fields. Handles double-quoted fields
-/// (with `""` escaping) that may contain the delimiter or newlines; `\r` outside
-/// quotes is dropped (so `\r\n` line endings work). A trailing newline does not
-/// produce an empty final row.
-fn parse_csv(content: &str, delimiter: char) -> Vec<Vec<String>> {
+/// A CSV dialect: everything `csv.Sniffer` decides and `csv.reader` consumes.
+#[derive(Debug, Clone, Copy)]
+struct Dialect {
+    delimiter: char,
+    quotechar: char,
+    doublequote: bool,
+    skipinitialspace: bool,
+}
+
+impl Dialect {
+    /// `csv.get_dialect("excel")` (or `"excel-tab"` for a tab): upstream's
+    /// fallback for a `.csv`/`.tsv` the sniffer cannot read.
+    fn excel(delimiter: char) -> Self {
+        Dialect {
+            delimiter,
+            quotechar: '"',
+            doublequote: true,
+            skipinitialspace: false,
+        }
+    }
+}
+
+/// Whether `c` is a `\w` character for CPython's `re` over `str`.
+fn is_word_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+/// The `[^\w\n"']` class the sniffer accepts as a candidate delimiter.
+fn is_delimiter_char(c: char) -> bool {
+    !is_word_char(c) && c != '\n' && c != '"' && c != '\''
+}
+
+/// The `["']` class the sniffer accepts as a candidate quote character.
+fn is_quote_char(c: char) -> bool {
+    c == '"' || c == '\''
+}
+
+/// One hit from the quote/delimiter scan: the quote, the delimiter bracketing
+/// it (absent in the fourth, delimiter-free pattern), and whether a space sat
+/// between the two.
+struct QuoteHit {
+    quote: char,
+    delim: Option<char>,
+    space: bool,
+}
+
+/// Port of `csv.Sniffer.sniff`, restricted to `delimiters` when given (rich-cli
+/// passes `",\t|;"`). `None` is CPython's `csv.Error`: no delimiter found.
+///
+/// `doublequote` is **not** sniffed; it is left at excel's `true`. CPython
+/// decides it with a regex that only fires when a `""` pair sits inside a
+/// quoted field containing neither the delimiter nor a newline, and when it
+/// does not fire `csv.reader` stops unescaping — `"he said ""hi"""` reads back
+/// as `he said "hi"""`. Reproducing that can only ever make a well-formed file
+/// render worse, and upstream's own fallback (`csv.get_dialect("excel")`, used
+/// for every file the sniffer rejects) already sets it true. The divergence is
+/// confined to files that use `""` escaping *and* defeat the heuristic, e.g. a
+/// `""` inside a multi-line cell: there we unescape and upstream does not.
+fn sniff(sample: &str, delimiters: Option<&[char]>) -> Option<Dialect> {
+    let data: Vec<char> = sample.chars().collect();
+    let (quote, mut delimiter, mut skipinitialspace) = guess_quote_and_delimiter(&data, delimiters);
+    if delimiter.is_none() {
+        let (guessed, spaced) = guess_delimiter(sample, delimiters);
+        delimiter = guessed;
+        skipinitialspace = spaced;
+    }
+    Some(Dialect {
+        delimiter: delimiter?,
+        // `_csv.reader` won't accept an empty quotechar, so upstream falls back
+        // to `"` when the scan found no quotes at all.
+        quotechar: quote.unwrap_or('"'),
+        doublequote: true,
+        skipinitialspace,
+    })
+}
+
+/// Port of `csv.Sniffer._guess_quote_and_delimiter`: look for text enclosed in
+/// two identical quotes that are themselves bracketed by the same character.
+///
+/// CPython uses four backreferencing regexes (`(?P=quote)`, `(?P=delim)`),
+/// which no Rust regex engine can express, so they are scanned by hand below.
+/// The first pattern that hits anywhere decides; the most frequent quote wins,
+/// and so does the most frequent delimiter seen beside it.
+fn guess_quote_and_delimiter(
+    data: &[char],
+    delimiters: Option<&[char]>,
+) -> (Option<char>, Option<char>, bool) {
+    let hits = quote_hits(data);
+    if hits.is_empty() {
+        return (None, None, false);
+    }
+
+    // Insertion-ordered tallies: Python's `max(dict, key=dict.get)` returns the
+    // FIRST key holding the maximum, so the order these were first seen in
+    // decides ties.
+    let mut quotes: Vec<(char, usize)> = Vec::new();
+    let mut delims: Vec<(char, usize)> = Vec::new();
+    let mut spaces = 0usize;
+    fn bump(table: &mut Vec<(char, usize)>, key: char) {
+        match table.iter_mut().find(|(existing, _)| *existing == key) {
+            Some(entry) => entry.1 += 1,
+            None => table.push((key, 1)),
+        }
+    }
+    for hit in &hits {
+        bump(&mut quotes, hit.quote);
+        // The fourth pattern has no delimiter group at all, so it contributes
+        // only a quote — upstream `continue`s past both tallies below.
+        let Some(delim) = hit.delim else { continue };
+        if delimiters.is_none_or(|allowed| allowed.contains(&delim)) {
+            bump(&mut delims, delim);
+        }
+        if hit.space {
+            spaces += 1;
+        }
+    }
+
+    let first_max = |table: &[(char, usize)]| -> Option<(char, usize)> {
+        let mut best: Option<(char, usize)> = None;
+        for &(key, count) in table {
+            if best.is_none_or(|(_, seen)| count > seen) {
+                best = Some((key, count));
+            }
+        }
+        best
+    };
+    let quotechar = first_max(&quotes).map(|(key, _)| key);
+    match first_max(&delims) {
+        Some((delim, count)) => (quotechar, Some(delim), count == spaces),
+        // A single column of quoted data: quotes but nothing bracketing them.
+        None => (quotechar, None, false),
+    }
+}
+
+/// One of CPython's four quote/delimiter patterns, scanned over the sample.
+type QuoteScan = fn(&[char]) -> Vec<QuoteHit>;
+
+/// Run CPython's four quote/delimiter patterns in order, returning the hits of
+/// the first that matches anything.
+fn quote_hits(data: &[char]) -> Vec<QuoteHit> {
+    let scans: [QuoteScan; 4] = [
+        scan_delim_quote_delim,
+        scan_line_quote_delim,
+        scan_delim_quote_line,
+        scan_line_quote_line,
+    ];
+    for scan in scans {
+        let hits = scan(data);
+        if !hits.is_empty() {
+            return hits;
+        }
+    }
+    Vec::new()
+}
+
+/// `(?P<delim>[^\w\n"'])(?P<space> ?)(?P<quote>["']).*?(?P=quote)(?P=delim)` —
+/// `,"some text",`. The ` ?` needs no backtracking: if the space is there and
+/// the next character is not a quote, dropping the space only offers the space
+/// itself as the quote, which it is not.
+fn scan_delim_quote_delim(data: &[char]) -> Vec<QuoteHit> {
+    scan_delim_quote(data, |data, quote, delim, from| {
+        let mut k = from;
+        while k + 1 < data.len() {
+            if data[k] == quote && data[k + 1] == delim {
+                return Some(k + 2);
+            }
+            k += 1;
+        }
+        None
+    })
+}
+
+/// `(?P<delim>[^\w\n"'])(?P<space> ?)(?P<quote>["']).*?(?P=quote)(?:$|\n)` —
+/// `,"some text"` at the end of a line.
+fn scan_delim_quote_line(data: &[char]) -> Vec<QuoteHit> {
+    scan_delim_quote(data, |data, quote, _delim, from| {
+        let mut k = from;
+        while k < data.len() {
+            if data[k] == quote && (k + 1 == data.len() || data[k + 1] == '\n') {
+                // `$` is zero-width and the engine prefers it, so the match ends
+                // at the closing quote either way.
+                return Some(k + 1);
+            }
+            k += 1;
+        }
+        None
+    })
+}
+
+/// The shared `<delim><space?><quote> … ` head of patterns one and three;
+/// `close` finds the closing quote and reports where the match ends.
+fn scan_delim_quote(
+    data: &[char],
+    close: fn(&[char], char, char, usize) -> Option<usize>,
+) -> Vec<QuoteHit> {
+    let mut hits = Vec::new();
+    let mut i = 0;
+    while i < data.len() {
+        if is_delimiter_char(data[i]) {
+            let delim = data[i];
+            let mut j = i + 1;
+            let mut space = false;
+            if j < data.len() && data[j] == ' ' {
+                space = true;
+                j += 1;
+            }
+            if j < data.len() && is_quote_char(data[j]) {
+                let quote = data[j];
+                if let Some(end) = close(data, quote, delim, j + 1) {
+                    hits.push(QuoteHit {
+                        quote,
+                        delim: Some(delim),
+                        space,
+                    });
+                    i = end;
+                    continue;
+                }
+            }
+        }
+        i += 1;
+    }
+    hits
+}
+
+/// `(?:^|\n)(?P<quote>["']).*?(?P=quote)(?P<delim>[^\w\n"'])(?P<space> ?)` —
+/// `"some text",` at the start of a line.
+fn scan_line_quote_delim(data: &[char]) -> Vec<QuoteHit> {
+    scan_line_quote(data, |data, quote, from| {
+        let mut k = from;
+        while k + 1 < data.len() {
+            if data[k] == quote && is_delimiter_char(data[k + 1]) {
+                let space = k + 2 < data.len() && data[k + 2] == ' ';
+                return Some((Some(data[k + 1]), space, if space { k + 3 } else { k + 2 }));
+            }
+            k += 1;
+        }
+        None
+    })
+}
+
+/// `(?:^|\n)(?P<quote>["']).*?(?P=quote)(?:$|\n)` — a whole line that is one
+/// quoted field, with no delimiter to learn from.
+fn scan_line_quote_line(data: &[char]) -> Vec<QuoteHit> {
+    scan_line_quote(data, |data, quote, from| {
+        let mut k = from;
+        while k < data.len() {
+            if data[k] == quote && (k + 1 == data.len() || data[k + 1] == '\n') {
+                return Some((None, false, k + 1));
+            }
+            k += 1;
+        }
+        None
+    })
+}
+
+/// The shared `(?:^|\n)<quote> … ` head of patterns two and four; `close`
+/// reports `(delimiter, saw a space, match end)`.
+#[allow(clippy::type_complexity)]
+fn scan_line_quote(
+    data: &[char],
+    close: fn(&[char], char, usize) -> Option<(Option<char>, bool, usize)>,
+) -> Vec<QuoteHit> {
+    let mut hits = Vec::new();
+    let mut i = 0;
+    while i < data.len() {
+        // `^` is zero-width at a line start; the `\n` branch consumes the
+        // newline and puts the quote on the character after it. The engine tries
+        // them in that order at each position.
+        let mut starts: Vec<usize> = Vec::new();
+        if i == 0 || data[i - 1] == '\n' {
+            starts.push(i);
+        }
+        if data[i] == '\n' {
+            starts.push(i + 1);
+        }
+        let mut advanced = false;
+        for quote_at in starts {
+            if quote_at >= data.len() || !is_quote_char(data[quote_at]) {
+                continue;
+            }
+            let quote = data[quote_at];
+            if let Some((delim, space, end)) = close(data, quote, quote_at + 1) {
+                hits.push(QuoteHit {
+                    quote,
+                    delim,
+                    space,
+                });
+                i = end;
+                advanced = true;
+                break;
+            }
+        }
+        if !advanced {
+            i += 1;
+        }
+    }
+    hits
+}
+
+/// Port of `csv.Sniffer._guess_delimiter`: the character whose per-line
+/// occurrence count is most consistent across the sample wins.
+fn guess_delimiter(sample: &str, delimiters: Option<&[char]>) -> (Option<char>, bool) {
+    // `filter(None, data.split('\n'))` — blank lines carry no evidence.
+    let data: Vec<&str> = sample.split('\n').filter(|line| !line.is_empty()).collect();
+    if data.is_empty() {
+        return (None, false);
+    }
+    /// CPython scans `[chr(c) for c in range(127)]` — 7-bit ASCII.
+    const ASCII: usize = 127;
+
+    let chunk_length = 10.min(data.len());
+    let mut iteration = 0usize;
+    // Per character, an insertion-ordered list of (occurrences on a line, how
+    // many lines had exactly that many) — upstream's "meta-frequency".
+    let mut char_frequency: Vec<Vec<(usize, usize)>> = vec![Vec::new(); ASCII];
+    // The winning (frequency, confidence) per character. Confidence can go
+    // negative once every competing frequency is subtracted, hence `isize`.
+    let mut modes: Vec<Option<(usize, isize)>> = vec![None; ASCII];
+    let mut delims: Vec<(char, (usize, isize))> = Vec::new();
+
+    let (mut start, mut end) = (0usize, chunk_length);
+    while start < data.len() {
+        iteration += 1;
+        for line in &data[start..end.min(data.len())] {
+            for (code, table) in char_frequency.iter_mut().enumerate() {
+                let c = code as u8 as char;
+                // Counted even when zero: a character absent from a line is
+                // evidence against it being the delimiter.
+                let freq = line.matches(c).count();
+                match table.iter_mut().find(|(seen, _)| *seen == freq) {
+                    Some(entry) => entry.1 += 1,
+                    None => table.push((freq, 1)),
+                }
+            }
+        }
+
+        for (code, items) in char_frequency.iter().enumerate() {
+            if items.len() == 1 && items[0].0 == 0 {
+                continue;
+            }
+            if items.len() > 1 {
+                // The first frequency with the highest count, less the sum of
+                // every other count.
+                let mut best = 0usize;
+                for (index, item) in items.iter().enumerate() {
+                    if item.1 > items[best].1 {
+                        best = index;
+                    }
+                }
+                let others: usize = items
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| *index != best)
+                    .map(|(_, item)| item.1)
+                    .sum();
+                modes[code] = Some((items[best].0, items[best].1 as isize - others as isize));
+            } else if let Some(&(freq, count)) = items.first() {
+                modes[code] = Some((freq, count as isize));
+            }
+        }
+
+        let total = (chunk_length * iteration).min(data.len()) as f64;
+        let mut consistency = 1.0f64;
+        let threshold = 0.9f64;
+        while delims.is_empty() && consistency >= threshold {
+            for (code, mode) in modes.iter().enumerate() {
+                let Some((freq, count)) = *mode else { continue };
+                let c = code as u8 as char;
+                if freq > 0
+                    && count > 0
+                    && (count as f64 / total) >= consistency
+                    && delimiters.is_none_or(|allowed| allowed.contains(&c))
+                {
+                    delims.push((c, (freq, count)));
+                }
+            }
+            consistency -= 0.01;
+        }
+
+        if delims.len() == 1 {
+            let delim = delims[0].0;
+            return (Some(delim), saw_space_after(data[0], delim));
+        }
+
+        start = end;
+        end += chunk_length;
+    }
+
+    if delims.is_empty() {
+        return (None, false);
+    }
+    if delims.len() > 1 {
+        for preferred in [',', '\t', ';', ' ', ':'] {
+            if delims.iter().any(|(c, _)| *c == preferred) {
+                return (Some(preferred), saw_space_after(data[0], preferred));
+            }
+        }
+    }
+    // `items = [(v, k) …]; items.sort()` — ordered by the mode, then the char.
+    let best = delims
+        .iter()
+        .max_by_key(|(c, mode)| (*mode, *c))
+        .expect("delims is non-empty");
+    (Some(best.0), saw_space_after(data[0], best.0))
+}
+
+/// Upstream's `skipinitialspace` test: every delimiter on the first line is
+/// followed by a space.
+fn saw_space_after(line: &str, delimiter: char) -> bool {
+    line.matches(delimiter).count() == line.matches(&format!("{delimiter} ")).count()
+}
+
+/// What `csv.Sniffer.has_header` decides a column holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ColumnType {
+    /// Every value so far parsed as a Python `complex`.
+    Number,
+    /// They did not, but all had this many characters.
+    Length(usize),
+}
+
+/// Whether a column is still in play, and what it has looked like so far.
+#[derive(Debug, Clone, Copy)]
+enum ColumnVote {
+    /// In `columnTypes` with the value `None`: no data row typed it yet.
+    Untyped,
+    Typed(ColumnType),
+    /// `del columnTypes[col]` — the column was inconsistent.
+    Dropped,
+}
+
+/// Port of `csv.Sniffer.has_header`: if a column is one consistent type in every
+/// row *except* the first, the first row is a label. Each column casts one vote.
+///
+/// The typing is CPython's current one — a single `complex` attempt, falling
+/// back to the string's length. The historical `for thisType in [int, float,
+/// complex]` loop is NOT equivalent: it makes a column mixing `10` and `9.5`
+/// read as inconsistent (int then float), so `price,note / 10,aa / 9.5,bbb`
+/// loses its header.
+///
+/// `None` is CPython's `csv.Error` escaping from the re-sniff, which upstream
+/// handles the same way as a failed `sniff`.
+fn has_header(sample: &str) -> Option<bool> {
+    // Note the missing `delimiters` argument: upstream re-sniffs here with the
+    // full candidate set, not the four it renders with.
+    let dialect = sniff(sample, None)?;
+    let mut rows = read_csv_rows(sample, &dialect).into_iter();
+    let header = rows.next()?;
+    let columns = header.len();
+    let mut votes = vec![ColumnVote::Untyped; columns];
+
+    for (checked, row) in rows.enumerate() {
+        // An arbitrary cap, "to keep it sane" — the 22nd data row and beyond are
+        // never looked at, however inconsistent they are.
+        if checked > 20 {
+            break;
+        }
+        if row.len() != columns {
+            continue;
+        }
+        for (col, vote) in votes.iter_mut().enumerate() {
+            if matches!(vote, ColumnVote::Dropped) {
+                continue;
+            }
+            let this = if parses_as_complex(&row[col]) {
+                ColumnType::Number
+            } else {
+                ColumnType::Length(row[col].chars().count())
+            };
+            match vote {
+                ColumnVote::Untyped => *vote = ColumnVote::Typed(this),
+                ColumnVote::Typed(known) if *known != this => *vote = ColumnVote::Dropped,
+                _ => {}
+            }
+        }
+    }
+
+    let mut tally = 0isize;
+    for (col, vote) in votes.iter().enumerate() {
+        match vote {
+            ColumnVote::Dropped => {}
+            // `colType` is still `None`, and `None(header[col])` raises
+            // TypeError — which counts as "the header does not fit the column".
+            ColumnVote::Untyped => tally += 1,
+            ColumnVote::Typed(ColumnType::Length(len)) => {
+                if header[col].chars().count() == *len {
+                    tally -= 1;
+                } else {
+                    tally += 1;
+                }
+            }
+            ColumnVote::Typed(ColumnType::Number) => {
+                if parses_as_complex(&header[col]) {
+                    tally -= 1;
+                } else {
+                    tally += 1;
+                }
+            }
+        }
+    }
+    Some(tally > 0)
+}
+
+/// Whether Python's `complex(value)` would succeed — the type test at the heart
+/// of `has_header`.
+///
+/// `complex()` is much looser than "looks like a number": it takes surrounding
+/// whitespace, one level of parentheses, a sign, `inf`/`infinity`/`nan` in any
+/// case, an exponent, `_` digit separators and an imaginary `j` suffix. All of
+/// that is honoured. The single narrowing is the digit set — Python accepts any
+/// Unicode decimal digit, this accepts ASCII — which can only ever move one
+/// has-header vote, and only for a column written in non-ASCII numerals.
+fn parses_as_complex(value: &str) -> bool {
+    let trimmed = value.trim();
+    let body = match trimmed.strip_prefix('(') {
+        Some(inner) => match inner.strip_suffix(')') {
+            Some(inner) => inner.trim(),
+            None => return false,
+        },
+        None if trimmed.ends_with(')') => return false,
+        None => trimmed,
+    };
+    if body.is_empty() {
+        return false;
+    }
+    // `a`, `aj`, or `a±bj`. The split is the first sign that is not an
+    // exponent's, so `1e-5` stays one number.
+    let chars: Vec<char> = body.chars().collect();
+    let split = (1..chars.len())
+        .find(|&i| matches!(chars[i], '+' | '-') && !matches!(chars[i - 1], 'e' | 'E'));
+    match split {
+        Some(index) => {
+            let at: usize = chars[..index].iter().map(|c| c.len_utf8()).sum();
+            let (real, imaginary) = body.split_at(at);
+            is_float_literal(real) && is_imaginary_literal(imaginary)
+        }
+        None => is_float_literal(body) || is_imaginary_literal(body),
+    }
+}
+
+/// A Python float literal: optional sign, then `inf`/`infinity`/`nan`, or
+/// digits with an optional fraction and exponent.
+fn is_float_literal(value: &str) -> bool {
+    let body = value.strip_prefix(['+', '-']).unwrap_or(value);
+    if matches!(
+        body.to_ascii_lowercase().as_str(),
+        "inf" | "infinity" | "nan"
+    ) {
+        return true;
+    }
+    let chars: Vec<char> = body.chars().collect();
+    let mut index = 0usize;
+    let mut digits = 0usize;
+    let take_digits = |index: &mut usize, digits: &mut usize| {
+        while *index < chars.len() && (chars[*index].is_ascii_digit() || chars[*index] == '_') {
+            if chars[*index].is_ascii_digit() {
+                *digits += 1;
+            }
+            *index += 1;
+        }
+    };
+    take_digits(&mut index, &mut digits);
+    if index < chars.len() && chars[index] == '.' {
+        index += 1;
+        take_digits(&mut index, &mut digits);
+    }
+    if digits == 0 {
+        return false;
+    }
+    if index < chars.len() && (chars[index] == 'e' || chars[index] == 'E') {
+        index += 1;
+        if index < chars.len() && matches!(chars[index], '+' | '-') {
+            index += 1;
+        }
+        let mut exponent = 0usize;
+        take_digits(&mut index, &mut exponent);
+        if exponent == 0 {
+            return false;
+        }
+    }
+    index == chars.len()
+}
+
+/// `<number>j`, or a bare `j`/`+j`/`-j` (which Python reads as ±1j).
+fn is_imaginary_literal(value: &str) -> bool {
+    let Some(body) = value.strip_suffix(['j', 'J']) else {
+        return false;
+    };
+    matches!(body, "" | "+" | "-") || is_float_literal(body)
+}
+
+/// Where [`read_csv_rows`] is within a record. Port of `_csv.c`'s reader states
+/// (its `EAT_CRNL` is unreachable here: universal newlines ran first).
+enum State {
+    StartRecord,
+    StartField,
+    InField,
+    InQuotedField,
+    QuoteInQuotedField,
+}
+
+/// Parse `content` into rows of fields with `dialect`. Port of `_csv.reader`'s
+/// state machine, minus the escape character (no sniffed dialect sets one) and
+/// `strict` (always off, as `QUOTE_MINIMAL` leaves it).
+///
+/// A blank line yields an **empty** row, as `csv.reader` does — upstream drops
+/// those before building the table, where a `[""]` row would have drawn a
+/// spurious blank line in it. `\r` never reaches here: the reader has already
+/// applied Python's universal newlines.
+fn read_csv_rows(content: &str, dialect: &Dialect) -> Vec<Vec<String>> {
     // Strip a leading UTF-8 BOM so it doesn't cling to the first header cell.
     let content = content.strip_prefix('\u{feff}').unwrap_or(content);
     let mut rows: Vec<Vec<String>> = Vec::new();
     let mut row: Vec<String> = Vec::new();
     let mut field = String::new();
-    let mut in_quotes = false;
-    // Whether the current record has any content yet (so a lone `""` or a
-    // trailing delimiter still yields a field, but a bare newline does not).
-    let mut pending = false;
-    let mut chars = content.chars().peekable();
-    while let Some(c) = chars.next() {
-        if in_quotes {
-            if c == '"' {
-                if chars.peek() == Some(&'"') {
-                    chars.next();
-                    field.push('"');
+    let mut state = State::StartRecord;
+
+    for c in content.chars() {
+        match state {
+            State::StartRecord => {
+                if c == '\n' {
+                    rows.push(Vec::new());
                 } else {
-                    in_quotes = false;
+                    state = State::StartField;
+                    // Re-dispatch this character as the start of a field.
+                    read_csv_char(c, dialect, &mut state, &mut field, &mut row, &mut rows);
                 }
-            } else {
-                field.push(c);
             }
-        } else if c == '"' {
-            in_quotes = true;
-            pending = true;
-        } else if c == delimiter {
-            row.push(std::mem::take(&mut field));
-            pending = true;
-        } else if c == '\n' {
-            row.push(std::mem::take(&mut field));
-            rows.push(std::mem::take(&mut row));
-            pending = false;
-        } else if c != '\r' {
-            field.push(c);
-            pending = true;
+            _ => read_csv_char(c, dialect, &mut state, &mut field, &mut row, &mut rows),
         }
     }
-    if pending || !row.is_empty() {
-        row.push(field);
-        rows.push(row);
+    if !matches!(state, State::StartRecord) {
+        row.push(std::mem::take(&mut field));
+        rows.push(std::mem::take(&mut row));
     }
     rows
 }
 
-/// Whether `value` is a plain number (`-?[0-9]+(\.[0-9]+)?`). Mirrors rich-cli's
-/// `is_number` for the numeric-column heuristic.
-fn is_number(value: &str) -> bool {
-    let value = value.trim();
-    let body = value.strip_prefix('-').unwrap_or(value);
-    let mut parts = body.split('.');
-    let int_part = parts.next().unwrap_or("");
-    let frac_part = parts.next();
-    if parts.next().is_some() {
-        return false; // more than one '.'
+/// One character of [`read_csv_rows`]'s state machine, for every state but
+/// `StartRecord`.
+fn read_csv_char(
+    c: char,
+    dialect: &Dialect,
+    state: &mut State,
+    field: &mut String,
+    row: &mut Vec<String>,
+    rows: &mut Vec<Vec<String>>,
+) {
+    let end_record = |field: &mut String, row: &mut Vec<String>, rows: &mut Vec<Vec<String>>| {
+        row.push(std::mem::take(field));
+        rows.push(std::mem::take(row));
+    };
+    match state {
+        State::StartRecord => unreachable!("handled by the caller"),
+        State::StartField => {
+            if c == '\n' {
+                end_record(field, row, rows);
+                *state = State::StartRecord;
+            } else if c == dialect.quotechar {
+                *state = State::InQuotedField;
+            } else if c == ' ' && dialect.skipinitialspace {
+                // Stay in StartField, swallowing the padding.
+            } else if c == dialect.delimiter {
+                row.push(std::mem::take(field));
+            } else {
+                field.push(c);
+                *state = State::InField;
+            }
+        }
+        State::InField => {
+            if c == '\n' {
+                end_record(field, row, rows);
+                *state = State::StartRecord;
+            } else if c == dialect.delimiter {
+                row.push(std::mem::take(field));
+                *state = State::StartField;
+            } else {
+                field.push(c);
+            }
+        }
+        State::InQuotedField => {
+            if c == dialect.quotechar {
+                *state = if dialect.doublequote {
+                    State::QuoteInQuotedField
+                } else {
+                    // Without doublequote the quote simply ends the quoted part;
+                    // anything after it, quotes included, is literal.
+                    State::InField
+                };
+            } else {
+                field.push(c);
+            }
+        }
+        State::QuoteInQuotedField => {
+            if c == dialect.quotechar {
+                field.push(c);
+                *state = State::InQuotedField;
+            } else if c == dialect.delimiter {
+                row.push(std::mem::take(field));
+                *state = State::StartField;
+            } else if c == '\n' {
+                end_record(field, row, rows);
+                *state = State::StartRecord;
+            } else {
+                field.push(c);
+                *state = State::InField;
+            }
+        }
     }
-    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
-    digits(int_part) && frac_part.is_none_or(digits)
 }
 
-/// Build a table from parsed CSV `rows`, mirroring rich-cli's `render_csv`:
-/// `HEAVY_HEAD` box (the `Table` default), a blue border, the first row as the
-/// header, and any all-numeric column right-justified with bold-green body +
-/// header cells.
+/// Whether `value` matches rich-cli's `is_number`, i.e. Python's
+/// `re.fullmatch(r"\-?[0-9]*?\.?[0-9]*?", value)`.
 ///
-/// First slice: the first row is always treated as the header. `csv.Sniffer`'s
-/// dialect/has-header heuristics and the title/caption are follow-ups.
-fn render_csv(rows: &[Vec<String>]) -> Table {
-    let mut table = Table::new().border_style(Style::parse("blue").expect("valid style"));
-    let Some((header, data)) = rows.split_first() else {
-        return table;
+/// Note how loose that is: `-`, `.`, `-.` and the empty string all pass, and a
+/// leading space does not. The caller only asks about non-empty cells.
+fn is_number(value: &str) -> bool {
+    let body = value.strip_prefix('-').unwrap_or(value);
+    let (integer, fraction) = match body.split_once('.') {
+        Some((integer, fraction)) => (integer, Some(fraction)),
+        None => (body, None),
     };
-    for (index, name) in header.iter().enumerate() {
-        // A column is numeric when no data cell is a non-empty non-number
-        // (empty cells are allowed); an empty data set counts as numeric, as
-        // upstream's `for … else` does.
-        let numeric = data.iter().all(|row| {
-            let value = row.get(index).map(String::as_str).unwrap_or("");
-            value.is_empty() || is_number(value)
+    let digits = |part: &str| part.bytes().all(|b| b.is_ascii_digit());
+    digits(integer) && fraction.is_none_or(digits)
+}
+
+/// Build the CSV table for `content`, sniffing the dialect and the header the
+/// way upstream's `render_csv` does.
+///
+/// When the sniffer cannot find a delimiter, upstream falls back to the excel
+/// dialect (with a header assumed) for a `.csv`/`.tsv` resource and **exits 1**
+/// for anything else, including stdin. We fall back for everything: a
+/// single-column file has no delimiter to find, and `cat one-column.csv | rich
+/// --csv -` refusing to render it is not a failure worth inventing.
+fn build_csv_table(
+    content: &str,
+    fallback_delimiter: char,
+    title: Option<&str>,
+    caption: Option<&str>,
+) -> Table {
+    // The sniffer sees only the first 1024 *characters* — upstream's
+    // `csv_data[:1024]` — however long the file is.
+    let sample: String = content.chars().take(1024).collect();
+    let sniffed = sniff(&sample, Some(&[',', '\t', '|', ';'])).zip(has_header(&sample));
+    let (dialect, header) = sniffed.unwrap_or((Dialect::excel(fallback_delimiter), true));
+    render_csv(&read_csv_rows(content, &dialect), header, title, caption)
+}
+
+/// Build a table from parsed CSV `rows`, mirroring rich-cli's `render_csv`: a
+/// blue border, `HEAVY_HEAD` when the sniffer found a header and `SQUARE` when
+/// it did not, and any all-numeric column right-justified with bold-green body
+/// and header cells.
+fn render_csv(
+    rows: &[Vec<String>],
+    has_header: bool,
+    title: Option<&str>,
+    caption: Option<&str>,
+) -> Table {
+    let mut table = Table::new()
+        .border_style(Style::parse("blue").expect("valid style"))
+        .show_header(has_header)
+        .box_set(if has_header { HEAVY_HEAD } else { SQUARE });
+    if let Some(title) = title {
+        table = table.title(title);
+    }
+    if let Some(caption) = caption {
+        table = table.caption(caption);
+    }
+
+    let empty: Vec<String> = Vec::new();
+    let (header, body) = if has_header {
+        match rows.split_first() {
+            Some((header, body)) => (header, body),
+            None => return table,
+        }
+    } else {
+        (&empty, rows)
+    };
+    // `[row for row in rows if row]`: a blank line is not a table row.
+    let data: Vec<&Vec<String>> = body.iter().filter(|row| !row.is_empty()).collect();
+
+    // A row may carry more fields than the header names, and upstream's
+    // `table.add_row(*row)` grows the table to hold them. Columns came from the
+    // header alone, so those fields had nowhere to go and were dropped -- a
+    // silent data loss in a tool whose job is showing you the file.
+    let widest = data.iter().map(|row| row.len()).max().unwrap_or(0);
+    let columns = header.len().max(widest);
+
+    for index in 0..columns {
+        // A column is numeric when no data cell is a non-empty non-number. A
+        // row too SHORT to reach the column disqualifies it (upstream's
+        // `except Exception: break`), while an empty cell does not; and an
+        // empty data set counts as numeric, as upstream's `for … else` does.
+        let numeric = data.iter().all(|row| match row.get(index) {
+            Some(value) => value.is_empty() || is_number(value),
+            None => false,
         });
+        let name = header.get(index).map(String::as_str).unwrap_or("");
         if numeric {
             table.add_column_justify(name, Justify::Right);
             table.column_style(Style::parse("bold green").expect("valid style"));
@@ -985,14 +1972,6 @@ fn render_csv(rows: &[Vec<String>]) -> Table {
         } else {
             table.add_column(name);
         }
-    }
-    // A row may carry more fields than the header names. Columns came from the
-    // header alone, so those fields had nowhere to go and were dropped -- a
-    // silent data loss in a tool whose job is showing you the file. Add unnamed
-    // columns to hold them.
-    let widest = data.iter().map(Vec::len).max().unwrap_or(0);
-    for _ in header.len()..widest {
-        table.add_column("");
     }
     for row in data {
         let cells: Vec<&str> = row.iter().map(String::as_str).collect();
@@ -1450,7 +2429,8 @@ fn print_help() {
 USAGE:
     rich [OPTIONS] [RESOURCE]
 
-RESOURCE is a file path, an http(s) URL, or `-` for stdin.
+RESOURCE is a file path, an http(s) URL, or `-` for stdin. Everything after a
+bare `--` is a RESOURCE, however much it looks like an option.
 
 RENDER MODE (choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb
 by extension — anything else with a file extension is syntax-highlighted):
@@ -1466,7 +2446,8 @@ by extension — anything else with a file extension is syntax-highlighted):
         --diff       Perceptually compare two images (needs exactly two)
 
 OPTIONS:
-    -w, --width N    Set the output width
+    -w, --width N    Render the output N columns wide (the console keeps its
+                     own width, so --left/--center/--right still use it)
         --image-mode M
                      With --diff, how to draw the picture: auto (default),
                      sixel (real pixels), blocks, ascii, none
@@ -1482,12 +2463,16 @@ OPTIONS:
                      Also write an SVG document to PATH. Unlike the HTML,
                      it references its font from a CDN, so it is not
                      self-contained offline.
-        --panel BOX  Wrap output in a panel
-                     (none/ascii/ascii2/square/rounded/heavy/double)
+        --panel BOX  Wrap output in a panel, shrunk to fit its content
+                     (ascii/ascii2/square/rounded/heavy/double; none = no panel)
         --padding P  Wrap output in padding (1, 2, or 4 comma-separated ints)
-        --title T    Panel title (with --panel)
-        --caption T  Panel caption/subtitle (with --panel)
-        --style S    Panel border style, e.g. "bold red" (with --panel)
+    -e, --expand     Make --panel/--padding fill the width instead of fitting
+                     (implied by --width)
+        --title T    Panel title; also the CSV table's title
+        --caption T  Panel subtitle; also the CSV table's caption
+    -s, --style S    Style laid under the whole output, e.g. "bold red"
+    -S, --panel-style S
+                     Panel border style, e.g. "dim" (with --panel)
         --pager      Page the output through $PAGER (no pager, no paging)
         --no-color   Disable colored output (as does a non-empty NO_COLOR)
     -h, --help       Show this help
@@ -1881,7 +2866,7 @@ fn run_demo(no_color: bool) {
     // CSV rendered as a table (blue border, numeric columns bold-green + right).
     console.print(&Rule::new("csv"));
     let csv = "Product,Qty,Price\nWidget,3,9.99\nGadget,12,19.50\nGizmo,1,4.25";
-    console.print(&render_csv(&parse_csv(csv, ',')));
+    console.print(&build_csv_table(csv, ',', None, None));
 
     // filesize.
     console.print(&Rule::new("filesize"));
@@ -1897,9 +2882,10 @@ mod tests {
     use rich::ColorSystem;
 
     #[test]
-    fn parse_csv_handles_quotes_and_delimiters() {
+    fn read_csv_rows_handles_quotes_and_delimiters() {
+        let comma = Dialect::excel(',');
         // Quoted field containing the delimiter, and `""` escaping.
-        let rows = parse_csv("a,\"b,c\",d\n\"he said \"\"hi\"\"\",2\n", ',');
+        let rows = read_csv_rows("a,\"b,c\",d\n\"he said \"\"hi\"\"\",2\n", &comma);
         assert_eq!(
             rows,
             vec![
@@ -1907,12 +2893,63 @@ mod tests {
                 vec!["he said \"hi\"".to_string(), "2".to_string()],
             ]
         );
-        // No trailing empty row after a final newline; `\r\n` endings work.
-        assert_eq!(parse_csv("x\r\ny\r\n", ','), vec![vec!["x"], vec!["y"]]);
+        // No trailing empty row after a final newline (`\r` is gone by now:
+        // the reader applies universal newlines first).
+        assert_eq!(read_csv_rows("x\ny\n", &comma), vec![vec!["x"], vec!["y"]]);
         // Tab delimiter.
-        assert_eq!(parse_csv("a\tb", '\t'), vec![vec!["a", "b"]]);
+        assert_eq!(
+            read_csv_rows("a\tb", &Dialect::excel('\t')),
+            vec![vec!["a", "b"]]
+        );
         // A leading UTF-8 BOM is stripped, not glued to the first cell.
-        assert_eq!(parse_csv("\u{feff}a,b", ','), vec![vec!["a", "b"]]);
+        assert_eq!(read_csv_rows("\u{feff}a,b", &comma), vec![vec!["a", "b"]]);
+        // A blank line is an EMPTY record, as `csv.reader` reports it — upstream
+        // then drops it, where a `[""]` row would have drawn a blank table row.
+        assert_eq!(
+            read_csv_rows("a,b\n\nc,d\n", &comma),
+            vec![vec!["a", "b"], vec![], vec!["c", "d"]]
+        );
+        // `skipinitialspace` eats the padding after a delimiter, but only there.
+        let padded = Dialect {
+            skipinitialspace: true,
+            ..Dialect::excel(',')
+        };
+        assert_eq!(
+            read_csv_rows("a,  b , c", &padded),
+            vec![vec!["a", "b ", "c"]]
+        );
+    }
+
+    #[test]
+    fn the_sniffer_finds_the_delimiter_and_the_header() {
+        // Every expectation here was read out of CPython's own `csv.Sniffer`.
+        let candidates = [',', '\t', '|', ';'];
+        let sniffed =
+            |sample: &str| sniff(sample, Some(&candidates)).map(|dialect| dialect.delimiter);
+        assert_eq!(
+            sniffed("name;age;city\nAlice;30;Paris\nBob;25;Lyon\n"),
+            Some(';')
+        );
+        assert_eq!(sniffed("a|b|c\n1|2|3\n4|5|6\n"), Some('|'));
+        assert_eq!(sniffed("a\tb\tc\n1\t2\t3\n4\t5\t6\n"), Some('\t'));
+        assert_eq!(sniffed("a, b, c\n1, 2, 3\n4, 5, 6\n"), Some(','));
+        // A quoted, multi-line cell: only the quote/delimiter scan can find the
+        // comma here, because the line counts are inconsistent.
+        assert_eq!(
+            sniffed("name,bio\nAlice,\"line one\nline two\"\nBob,short\n"),
+            Some(',')
+        );
+        // Ragged rows and a single column defeat the sniffer, exactly as they do
+        // upstream — that is what the excel fallback is for.
+        assert_eq!(sniffed("a,b,c\n1,2\n3,4,5,6\n"), None);
+        assert_eq!(sniffed("alpha\nbeta\ngamma\n"), None);
+
+        assert_eq!(has_header("name,age\nAlice,30\nBob,25\n"), Some(true));
+        // A column mixing an int and a float must stay ONE type. The historical
+        // `for thisType in [int, float, complex]` loop reads it as inconsistent
+        // and loses the header.
+        assert_eq!(has_header("price,note\n10,aa\n9.5,bbb\n"), Some(true));
+        assert_eq!(has_header("1,2,3\n4,5,6\n7,8,9\n"), Some(false));
     }
 
     #[test]
@@ -2003,9 +3040,10 @@ mod tests {
 
     #[test]
     fn parse_box_maps_names() {
-        assert!(parse_box("rounded").is_ok());
-        assert!(parse_box("HEAVY").is_ok());
-        assert!(parse_box("none").is_ok()); // borderless box
+        assert!(matches!(parse_box("rounded"), Ok(Some(_))));
+        assert!(matches!(parse_box("HEAVY"), Ok(Some(_))));
+        // `none` is upstream's default and means NO panel, not `box.NONE`.
+        assert!(matches!(parse_box("none"), Ok(None)));
         assert!(parse_box("bogus").is_err());
     }
 
@@ -2050,10 +3088,16 @@ mod tests {
 
     #[test]
     fn is_number_matches_pattern() {
-        for ok in ["0", "42", "-7", "3.14", "-0.5", " 12 "] {
+        // Every case checked against Python's own
+        // `re.compile(r"\-?[0-9]*?\.?[0-9]*?").fullmatch`. The loose ones are
+        // not oversights: that pattern really does accept a lone `-`, a lone
+        // `.` and the empty string, and really does reject a padded `" 12 "`.
+        for ok in [
+            "0", "42", "-7", "3.14", "-0.5", "", "-", ".", "-.", "5.", ".5",
+        ] {
             assert!(is_number(ok), "{ok:?} should be numeric");
         }
-        for no in ["", "1.2.3", "1e5", "abc", "5%", "-", "."] {
+        for no in [" 12 ", "1.2.3", "1e5", "abc", "5%"] {
             assert!(!is_number(no), "{no:?} should not be numeric");
         }
     }
@@ -2063,7 +3107,7 @@ mod tests {
         // Byte-parity with the Table real rich-cli's render_csv builds for this
         // CSV (captured from rich 15.0.0): HEAVY_HEAD box, blue border, the
         // numeric Age column right-justified with bold-green body + header cells.
-        let table = render_csv(&parse_csv("Name,Age,City\nAlice,30,NYC\nBob,25,LA\n", ','));
+        let table = build_csv_table("Name,Age,City\nAlice,30,NYC\nBob,25,LA\n", ',', None, None);
         let out = Console::builder()
             .force_terminal(true)
             .color_system(Some(ColorSystem::Truecolor))

@@ -296,17 +296,28 @@ impl Table {
     }
 
     /// The measured content width of each column (widest cell, header included).
+    /// Widest *line* of a cell, not the width of the whole string.
+    ///
+    /// A cell spanning several lines occupies its widest line, exactly as
+    /// `Measurement.get` on a `Text` does. Measuring the raw string instead made
+    /// a multi-line cell as wide as all its lines **summed** — `\n` measures
+    /// zero, so nothing capped it — and a quoted CSV cell holding two sentences
+    /// blew its column out to 31 cells where upstream gives 23.
+    fn block_width(text: &str) -> usize {
+        text.split('\n').map(cell_len).max().unwrap_or(0)
+    }
+
     fn max_content_widths(&self) -> Vec<usize> {
         let mut widths = vec![0usize; self.columns.len()];
         for (index, column) in self.columns.iter().enumerate() {
             if self.show_header {
-                widths[index] = cell_len(&column.header);
+                widths[index] = Self::block_width(&column.header);
             }
         }
         for row in &self.rows {
             for (index, cell) in row.iter().enumerate() {
                 if index < widths.len() {
-                    widths[index] = widths[index].max(cell_len(cell));
+                    widths[index] = widths[index].max(Self::block_width(cell));
                 }
             }
         }
@@ -683,6 +694,17 @@ fn wrap_cell(content: &str, width: usize) -> Vec<String> {
     if width == 0 {
         return vec![String::new()];
     }
+    // Wrap each line of the cell on its own, as upstream's `Text.wrap` does —
+    // it splits on newlines before dividing. Handing the whole cell to
+    // `divide_line` treated the newline as ordinary whitespace worth zero cells,
+    // so it packed text from two source lines into one "line" that then printed
+    // as two rows: a 23-cell line inside a 23-cell column came out split.
+    if content.contains('\n') {
+        return content
+            .split('\n')
+            .flat_map(|line| wrap_cell(line, width))
+            .collect();
+    }
     // `fold = false`: over-long words stay on their own (overflowing) line,
     // which `ellipsis_crop` then trims — matching `Text(overflow="ellipsis")`.
     let breaks = crate::wrap::divide_line(content, width, false);
@@ -902,5 +924,31 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// A cell spanning several lines occupies its WIDEST line. Measuring the raw
+    /// string made it as wide as all its lines summed — `\n` measures zero, so
+    /// nothing capped it — and a quoted CSV cell holding two sentences blew its
+    /// column out to 31 cells where upstream gives 23.
+    #[test]
+    fn a_multi_line_cell_is_measured_by_its_widest_line() {
+        let mut table = Table::new().box_set(SQUARE);
+        table.add_column("name");
+        table.add_column("bio");
+        table.add_row(&["Alice", "line one\nline two is much longer"]);
+        table.add_row(&["Bob", "short"]);
+        let console = Console::builder().width(60).no_color(true).build();
+        let out = console.render_to_string(&table);
+        let top = out.lines().next().expect("a top border");
+        let width = top.chars().count();
+        // "line two is much longer" is 23 cells; summing both lines would be 31.
+        assert!(
+            width < 40,
+            "the multi-line cell was measured as the sum of its lines: {width} wide"
+        );
+        assert!(
+            out.contains("line two is much longer"),
+            "content lost: {out:?}"
+        );
     }
 }
