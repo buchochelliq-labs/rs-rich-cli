@@ -6,7 +6,7 @@
 # `rich-ext`. See AGENTS.md.
 [package]
 name = "rs-rich"
-version = "0.0.1"
+version = "0.0.2"
 description = "A faithful Rust port of the Python `rich` terminal-rendering library"
 edition.workspace = true
 license.workspace = true

@@ -5,7 +5,7 @@
 # here so the core stays a clean mirror. See AGENTS.md.
 [package]
 name = "rs-rich-ext"
-version = "0.0.1"
+version = "0.0.2"
 description = "Extensions and the internal plugin registry for the `rich` Rust port"
 edition.workspace = true
 license.workspace = true

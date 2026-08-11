@@ -18,7 +18,7 @@ Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
 
 ![Console markup](docs/assets/markup.svg)
 
-> **`0.0.1` — early, and the version says so.** The crates version independently
+> **`0.0.2` — early, and the version says so.** The crates version independently
 > by ordinary SemVer; the number is *not* tied to the upstream release. Expect
 > breaking API changes. Which upstream version is tracked lives in
 > [`UPSTREAM.toml`](UPSTREAM.toml) and the line above. See [AGENTS.md](AGENTS.md)
@@ -26,7 +26,7 @@ Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
 
 ## Workspace
 
-**All four are published on crates.io at `0.0.1`.**
+**All four are published on crates.io at `0.0.2`.**
 
 | crate | crates.io | docs | `use` as | what it is |
 |-------|-----------|------|----------|------------|

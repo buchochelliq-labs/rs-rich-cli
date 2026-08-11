@@ -21,9 +21,9 @@ rust-version = "1.90"
 # `rich` is taken by an unrelated crate; the `package = …` key maps them back to
 # the short names, so every `use rich::…` in this workspace is unaffected.
 # External users get the same short names via each crate's `[lib] name`.
-rich = { package = "rs-rich", path = "crates/rich", version = "0.0.1" }
-rich-ext = { package = "rs-rich-ext", path = "crates/rich-ext", version = "0.0.1" }
-rich-art = { package = "rs-rich-art", path = "crates/rich-art", version = "0.0.1" }
+rich = { package = "rs-rich", path = "crates/rich", version = "0.0.2" }
+rich-ext = { package = "rs-rich-ext", path = "crates/rich-ext", version = "0.0.2" }
+rich-art = { package = "rs-rich-art", path = "crates/rich-art", version = "0.0.2" }
 
 # Third-party (kept lean for the first slice)
 terminal_size = "0.4"

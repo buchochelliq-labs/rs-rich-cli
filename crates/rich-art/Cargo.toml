@@ -8,7 +8,7 @@
 # `Renderable` trait) so it can be lifted into its own repository unchanged.
 [package]
 name = "rs-rich-art"
-version = "0.0.1"
+version = "0.0.2"
 description = "ASCII-art renderables for `rich` — FIGlet-style text banners"
 edition.workspace = true
 license.workspace = true
