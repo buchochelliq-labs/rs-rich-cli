@@ -146,6 +146,64 @@ impl Segment {
         shaped
     }
 
+    /// Fold every line to at most `width` cells, breaking at **word boundaries**
+    /// the way upstream's word wrapping does.
+    ///
+    /// [`fold_lines`](Self::fold_lines) breaks wherever the row happens to fill
+    /// up, which splits identifiers and words mid-character-run
+    /// (`epsilon, z` / `eta, eta, theta)`). Upstream's `word_wrap=True` routes
+    /// through `_wrap.divide_line`, which we already port for `Text` — this
+    /// applies the same break offsets to a styled segment run, so styles survive
+    /// the split.
+    ///
+    /// A word longer than `width` is still folded mid-word; there is nowhere
+    /// else to break it.
+    pub fn fold_lines_words(segments: &[Segment], width: usize) -> Vec<Segment> {
+        if width == 0 {
+            return segments.to_vec();
+        }
+        let mut out = Vec::new();
+        let lines = Self::split_lines(segments);
+        let last = lines.len().saturating_sub(1);
+        for (index, line) in lines.into_iter().enumerate() {
+            let plain: String = line
+                .iter()
+                .filter(|segment| !segment.control)
+                .map(|segment| segment.text.as_str())
+                .collect();
+            let breaks = crate::wrap::divide_line(&plain, width, true);
+
+            let mut char_pos = 0usize;
+            let mut next_break = 0usize;
+            for segment in line {
+                if segment.control {
+                    out.push(segment);
+                    continue;
+                }
+                let mut buf = String::new();
+                for ch in segment.text.chars() {
+                    while next_break < breaks.len() && char_pos == breaks[next_break] {
+                        if !buf.is_empty() {
+                            out.push(Segment::new(buf.clone(), segment.style.clone()));
+                            buf.clear();
+                        }
+                        out.push(Segment::line());
+                        next_break += 1;
+                    }
+                    buf.push(ch);
+                    char_pos += 1;
+                }
+                if !buf.is_empty() {
+                    out.push(Segment::new(buf, segment.style.clone()));
+                }
+            }
+            if index != last {
+                out.push(Segment::line());
+            }
+        }
+        out
+    }
+
     /// Fold every line to at most `width` cells, carrying the overflow onto
     /// continuation lines instead of discarding it.
     ///

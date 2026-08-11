@@ -669,7 +669,13 @@ fn render_blocks(
                 // not byte-parity — see DIVERGENCES). Split its segment stream
                 // back into per-line rows for the shared join below.
                 // Upstream: `Syntax(code, lexer, theme=..., word_wrap=True, padding=1)`.
-                let syntax = Syntax::new(code.as_str(), language.as_str()).padding(1);
+                // Upstream: `Syntax(code, lexer, theme=..., word_wrap=True, padding=1)`.
+                // Without word_wrap a long line was cropped dead at the console
+                // width and its tail discarded entirely — a README's install
+                // command lost half its flags, with no marker that anything went.
+                let syntax = Syntax::new(code.as_str(), language.as_str())
+                    .word_wrap(true)
+                    .padding(1);
                 let inner = options.update_width(width);
                 let segments = syntax.rich_render(console, &inner);
                 lines.extend(Segment::split_lines(&segments));
@@ -1183,6 +1189,20 @@ mod container_tests {
             after - rule,
             2,
             "expected one blank row between rule and next block: {rows:?}"
+        );
+    }
+
+    /// Markdown code blocks are `Syntax(..., word_wrap=True)` upstream. Without
+    /// it a long line was cropped dead at the console width and its tail
+    /// discarded — a README's install command lost half its flags, silently.
+    #[test]
+    fn a_long_code_line_keeps_its_tail() {
+        let source = "```bash\npip install some-package another-package \
+yet-another-package --upgrade --no-cache-dir\n```\n";
+        let out = plain(source, 80);
+        assert!(
+            out.contains("no-cache-dir"),
+            "the tail of the code line was discarded: {out:?}"
         );
     }
 }

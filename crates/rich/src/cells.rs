@@ -5,16 +5,85 @@
 //! implements the same Unicode East Asian Width rules. Any observed divergence
 //! on exotic codepoints is tracked in docs/DIVERGENCES.md.
 
-use unicode_width::UnicodeWidthChar;
+use crate::cell_widths::NARROW_TO_WIDE;
 
 /// The number of terminal cells `text` occupies. Port of `cell_len`.
 pub fn cell_len(text: &str) -> usize {
-    text.chars().map(char_cell_width).sum()
+    // Fast path, matching upstream's: without a zero-width joiner or a
+    // variation selector nothing can change a character's measured width, so
+    // the sum of the per-character widths is the answer.
+    if !text.contains(ZERO_WIDTH_JOINER) && !text.contains(VARIATION_SELECTOR_16) {
+        return text.chars().map(char_cell_width).sum();
+    }
+
+    // Port of upstream `cells._cell_len`'s cluster pass. Two rules matter:
+    // a ZWJ consumes the character after it (so a family emoji measures as one
+    // emoji, not as its parts), and a variation selector promotes the preceding
+    // narrow character to two cells.
+    let chars: Vec<char> = text.chars().collect();
+    let mut total = 0usize;
+    let mut last_measured: Option<char> = None;
+    let mut index = 0usize;
+    while index < chars.len() {
+        let c = chars[index];
+        if c == ZERO_WIDTH_JOINER {
+            index += 1; // skip the joined character entirely
+        } else if c == VARIATION_SELECTOR_16 {
+            if let Some(previous) = last_measured.take() {
+                if NARROW_TO_WIDE.contains(&previous) {
+                    total += 1;
+                }
+            }
+        } else {
+            let width = char_cell_width(c);
+            if width > 0 {
+                last_measured = Some(c);
+                total += width;
+            }
+        }
+        index += 1;
+    }
+    total
 }
 
+/// Zero-width joiner: binds emoji into a single cluster.
+const ZERO_WIDTH_JOINER: char = '\u{200d}';
+/// Variation selector 16: renders the preceding character as emoji (2 cells).
+const VARIATION_SELECTOR_16: char = '\u{fe0f}';
+
 /// The cell width of a single character (control chars count as 0).
+///
+/// Uses upstream's vendored table rather than the `unicode-width` crate: the two
+/// disagree on 348 code points (spacing marks, format characters, modifier
+/// symbols), and every disagreement misaligns a table, panel or wrap point.
+/// Port of `cells.get_character_cell_size`.
 pub fn char_cell_width(c: char) -> usize {
-    UnicodeWidthChar::width(c).unwrap_or(0)
+    let codepoint = c as u32;
+    if (codepoint > 0 && codepoint < 32) || (0x7F..0xA0).contains(&codepoint) {
+        return 0;
+    }
+    let table = &crate::cell_widths::CELL_WIDTH_RANGES;
+    // Beyond the table's last range upstream assumes a single cell.
+    if codepoint > table[table.len() - 1].1 {
+        return 1;
+    }
+    let mut lower = 0usize;
+    let mut upper = table.len() - 1;
+    while lower <= upper {
+        let mid = (lower + upper) / 2;
+        let (start, end, width) = table[mid];
+        if codepoint > end {
+            lower = mid + 1;
+        } else if codepoint < start {
+            if mid == 0 {
+                break;
+            }
+            upper = mid - 1;
+        } else {
+            return width as usize;
+        }
+    }
+    1
 }
 
 /// Split `text` into chunks, each at most `width` cells wide. Port of
@@ -133,5 +202,51 @@ mod tests {
         );
         // Three base chars + three combining marks per chunk.
         assert_eq!(chunks[0].chars().count(), 6);
+    }
+
+    /// Upstream vendors its own width table and measures emoji *clusters*: a ZWJ
+    /// consumes the character after it and U+FE0F promotes a narrow character to
+    /// two cells. Summing per code point from the `unicode-width` crate gave 8
+    /// cells for a family emoji and 1 for a heart, misaligning every table and
+    /// panel that contained one.
+    #[test]
+    fn emoji_clusters_measure_as_one_glyph() {
+        for (text, expected, what) in [
+            ("\u{2764}\u{fe0f}", 2, "heart + VS16"),
+            ("\u{26a0}\u{fe0f}", 2, "warning + VS16"),
+            (
+                "\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}\u{200d}\u{1f466}",
+                2,
+                "ZWJ family",
+            ),
+            ("\u{1f44d}\u{1f3fb}", 2, "thumbs up + skin tone"),
+            (
+                "\u{1f3f3}\u{fe0f}\u{200d}\u{1f308}",
+                2,
+                "rainbow flag (ZWJ)",
+            ),
+            ("1\u{fe0f}\u{20e3}", 2, "keycap"),
+        ] {
+            assert_eq!(cell_len(text), expected, "{what} measured wrongly");
+        }
+    }
+
+    /// Spacing marks, format characters and modifier symbols are where the
+    /// `unicode-width` crate and upstream disagreed most (312 of 348 mismatches
+    /// were Mc spacing marks).
+    #[test]
+    fn combining_and_modifier_characters_take_no_cells() {
+        assert_eq!(
+            cell_len("\u{915}\u{93f}"),
+            1,
+            "Devanagari vowel sign should be zero-width"
+        );
+        assert_eq!(
+            cell_len("\u{1f3fb}"),
+            0,
+            "a lone skin-tone modifier is zero-width"
+        );
+        assert_eq!(cell_len("\u{4f60}\u{597d}"), 4, "CJK stayed wide");
+        assert_eq!(cell_len("ascii"), 5, "ASCII unaffected");
     }
 }
