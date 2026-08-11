@@ -14,7 +14,7 @@ authors = ["rs-rich-cli contributors"]
 # The true floor of the dependency tree, enforced by the `msrv` CI job. Driven
 # by syntect -> plist/time (1.88); the network/image deps sit below it. Verify
 # with `cargo +1.88.0 check --workspace --all-features` before lowering.
-rust-version = "1.88"
+rust-version = "1.90"
 
 [workspace.dependencies]
 # Internal crates. The crates.io *package* names are `rs-rich-*` because plain
@@ -26,10 +26,13 @@ rich-ext = { package = "rs-rich-ext", path = "crates/rich-ext", version = "0.0.1
 rich-art = { package = "rs-rich-art", path = "crates/rich-art", version = "0.0.1" }
 
 # Third-party (kept lean for the first slice)
-unicode-width = "0.2"
 terminal_size = "0.4"
 # preserve_order keeps object keys in input order, matching Python's json module.
-serde_json = { version = "1", features = ["preserve_order"] }
+# float_roundtrip: serde_json's default float parser takes a fast path that
+# can land 1 ULP away from the value in the file, so a rendered number
+# parsed back to a *different* double — ~12% of computed doubles. This
+# feature makes parsing bit-for-bit accurate.
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 # fancy-regex supports the lookbehind/backreference features rich's ReprHighlighter uses.
 fancy-regex = "0.19"
 # CommonMark parser for the Markdown renderable.

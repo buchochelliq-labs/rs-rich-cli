@@ -753,9 +753,13 @@ impl ConsoleBuilder {
         let is_terminal = self
             .force_terminal
             .unwrap_or_else(|| std::io::stdout().is_terminal());
+        // Upstream's rule is `environ.get("NO_COLOR", "") != ""`, so an EMPTY
+        // NO_COLOR does not disable colour — only a non-empty value does. That
+        // matters because a shell that exports `NO_COLOR=` (a common way to
+        // clear it) would otherwise still be treated as opting out.
         let no_color = self
             .no_color
-            .unwrap_or_else(|| std::env::var_os("NO_COLOR").is_some());
+            .unwrap_or_else(|| std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty()));
         let color_system = if self.color_system_set {
             self.color_system
         } else if is_terminal {
@@ -789,7 +793,17 @@ impl ConsoleBuilder {
     }
 }
 
-/// Detect the terminal color system from environment variables.
+/// Detect the terminal color system.
+///
+/// `COLORTERM`/`TERM` are the portable signals, but **Windows sets neither**.
+/// Detecting from them alone meant every Windows console fell back to
+/// [`ColorSystem::Standard`] — 16 colors — for all output. Measured on a real
+/// Windows Terminal session: 28 distinct colors in a rendered heat map against
+/// 140 once truecolor was detected.
+///
+/// Upstream `rich` special-cases Windows for the same reason. It reaches the
+/// platform APIs directly; we ask `anstyle-query`, which avoids hand-written
+/// `unsafe` FFI for a console handle (see `docs/DIVERGENCES.md`).
 fn detect_color_system() -> ColorSystem {
     if let Some(colorterm) = std::env::var_os("COLORTERM") {
         let colorterm = colorterm.to_string_lossy().to_ascii_lowercase();
@@ -797,12 +811,35 @@ fn detect_color_system() -> ColorSystem {
             return ColorSystem::Truecolor;
         }
     }
-    if let Some(term) = std::env::var_os("TERM") {
-        if term.to_string_lossy().contains("256") {
-            return ColorSystem::EightBit;
-        }
+
+    // Windows. This function is only reached when stdout is a terminal (see
+    // ConsoleBuilder::build), and every modern Windows console that can be a
+    // terminal speaks 24-bit color, so report truecolor.
+    //
+    // The call below is for its SIDE EFFECT — it turns on
+    // ENABLE_VIRTUAL_TERMINAL_PROCESSING, which legacy `conhost` needs before
+    // it honours any escape sequence. Its RETURN VALUE is deliberately ignored:
+    // it enables VT on stdout *and stderr* and propagates failure with `?`, so
+    // merely redirecting stderr (`rich ... 2>log`, the most natural CI
+    // invocation) made it report failure and dropped the whole console to 16
+    // colors — even though stdout was still a fully capable terminal.
+    #[cfg(windows)]
+    {
+        let _ = anstyle_query::windows::enable_ansi_colors();
+        ColorSystem::Truecolor
     }
-    ColorSystem::Standard
+
+    // `TERM` is meaningless on Windows and the branch above always returns, so
+    // gating this keeps either platform free of unreachable code.
+    #[cfg(not(windows))]
+    {
+        if let Some(term) = std::env::var_os("TERM") {
+            if term.to_string_lossy().contains("256") {
+                return ColorSystem::EightBit;
+            }
+        }
+        ColorSystem::Standard
+    }
 }
 
 /// Detect the terminal width: `COLUMNS`, then the real terminal, then a default.

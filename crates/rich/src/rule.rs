@@ -82,10 +82,25 @@ impl Rule {
             return Text::styled(self.fill(width), self.style.clone());
         };
 
+        // Upstream: `required_space = 4 if align == "center" else 2`, and when
+        // no space is left for the title it falls back to an untitled rule.
+        // Without this a narrow rule drew nothing at all — at width 1 and 2 the
+        // whole line came out blank, so `--rule` in a narrow terminal silently
+        // produced no rule.
+        let required_space = if matches!(self.align, HorizontalAlign::Center) {
+            4
+        } else {
+            2
+        };
+        let truncate_width = width.saturating_sub(required_space);
+        if truncate_width == 0 {
+            return Text::styled(self.fill(width), self.style.clone());
+        }
+
         match self.align {
             HorizontalAlign::Center => {
                 // Title truncated (never padded) to leave room for the flanking spaces.
-                let title = truncate(title, width.saturating_sub(4));
+                let title = truncate_ellipsis(title, truncate_width);
                 let title_len = cell_len(&title);
 
                 let side_width = width.saturating_sub(title_len) / 2;
@@ -103,7 +118,7 @@ impl Rule {
                 text
             }
             HorizontalAlign::Left => {
-                let title = truncate(title, width.saturating_sub(2));
+                let title = truncate_ellipsis(title, truncate_width);
                 let fill_len = width.saturating_sub(cell_len(&title)).saturating_sub(1);
                 let mut text = Text::new("");
                 text.append(&format!("{title} "), None);
@@ -111,7 +126,7 @@ impl Rule {
                 text
             }
             HorizontalAlign::Right => {
-                let title = truncate(title, width.saturating_sub(2));
+                let title = truncate_ellipsis(title, truncate_width);
                 let fill_len = width.saturating_sub(cell_len(&title)).saturating_sub(1);
                 let mut text = Text::new("");
                 text.append(&self.fill(fill_len), Some(self.style.clone().into()));
@@ -120,6 +135,21 @@ impl Rule {
             }
         }
     }
+}
+
+/// Truncate to `width` cells with upstream's `overflow="ellipsis"`: an over-long
+/// title loses its tail to a single `…` rather than being cut mid-word, which is
+/// what `Text.truncate(..., overflow="ellipsis")` does before a rule is drawn.
+fn truncate_ellipsis(text: &str, width: usize) -> String {
+    if cell_len(text) <= width {
+        return text.to_string();
+    }
+    if width == 0 {
+        return String::new();
+    }
+    let mut out = truncate(text, width.saturating_sub(1));
+    out.push('\u{2026}');
+    out
 }
 
 impl Renderable for Rule {
@@ -151,5 +181,29 @@ mod tests {
     fn titled_rule_centers() {
         let out = console().render_export(&Rule::new("Hi"));
         assert_eq!(out, "\x1b[92m──────── \x1b[0mHi\x1b[92m ────────\x1b[0m\n");
+    }
+
+    /// A title needs four cells beside it; with none left upstream falls back to
+    /// an untitled rule. We drew a line of spaces instead, so `--rule` in a very
+    /// narrow terminal produced no visible rule at all.
+    #[test]
+    fn a_title_that_cannot_fit_falls_back_to_a_plain_rule() {
+        for width in [1usize, 2, 3, 4] {
+            let console = Console::builder().width(width).no_color(true).build();
+            let out = console.render_to_string(&Rule::new("TITLE"));
+            assert_eq!(
+                out.trim_end_matches('\n'),
+                "\u{2500}".repeat(width),
+                "width {width} did not fall back to a plain rule"
+            );
+        }
+    }
+
+    /// Upstream truncates an over-long title with `overflow="ellipsis"`.
+    #[test]
+    fn an_over_long_title_is_ellipsised() {
+        let console = Console::builder().width(5).no_color(true).build();
+        let out = console.render_to_string(&Rule::new("TITLE"));
+        assert_eq!(out.trim_end_matches('\n'), "\u{2500} \u{2026} \u{2500}");
     }
 }

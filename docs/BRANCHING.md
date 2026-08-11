@@ -40,7 +40,7 @@ If that ever fails, something was published that isn't on `main`.
 | `feat/<slug>` · `fix/<slug>` · `chore/<slug>` · `docs/<slug>` | fresh `origin/main` | `main` via PR | one PR |
 | `port/<module>` | fresh `origin/main` | `main` via PR | one PR — the `port-module` skill |
 | `sync/rich-<version>` | fresh `origin/main` | `main` via PR | one PR — the `sync-upstream` skill |
-| `rc/<X.Y.Z>-rc.<N>` | fresh `origin/main` | `main` via PR, then tag `vX.Y.Z-rc.N` on `main` | minutes |
+| `rc/<X.Y.Z>` | fresh `origin/main` | `main` via PR, then tag on `main` | a release cycle |
 | `release/<X.Y.Z>` | fresh `origin/main` | `main` via PR, then tag `vX.Y.Z` on `main` | minutes |
 | `hotfix/<X.Y.Z>` | the tag `vX.Y.(Z-1)` | nothing — tagged in place, forward-ported to `main` by PR | until forward-ported |
 
@@ -58,6 +58,56 @@ It refuses any push to a branch whose PR has already merged. This is not
 hypothetical: it was written immediately after two commits were pushed onto
 PR #31's branch minutes after that PR merged, stranding them exactly as #23 and
 #30 were stranded.
+
+### Release-candidate branches
+
+`rc/<X.Y.Z>` is an **integration branch**: ordinary work targets it during a
+release cycle, and it merges to `main` when the cycle closes. Tags are still only
+ever placed on `main`, so the ancestor invariant above still holds.
+
+This is a deliberate exception to "everything targets `main`", and it reintroduces
+the one thing the rest of this document exists to avoid — a second long-lived
+head. It is safe **only** while the rc stays a fast-forward of `main`. The moment
+`main` moves ahead, merging the rc either conflicts or silently reverts, and a
+release cut from it no longer contains what is on `main`.
+
+CI enforces that: the `rc not behind main` check fails any PR into an `rc/*`
+branch that has fallen behind. Keep it current with:
+
+```bash
+git switch rc/0.0.2 && git merge origin/main && git push
+```
+
+#### Protection
+
+`rc/*` is covered by its own ruleset (**"rc branches"**), matching `main`'s
+protection rather than being the soft underbelly of the release process:
+
+| rule | effect |
+|---|---|
+| `creation` | only repository **admins** may create an `rc/*` branch |
+| `deletion` | it cannot be deleted |
+| `non_fast_forward` | it cannot be force-pushed |
+| `pull_request` | changes land by PR (0 approvals — solo maintainer) |
+| `required_status_checks` | `ci-ok`, `pr body`, `base branch`, `rc not behind main`, strict |
+
+The required checks are deliberately **not** the same list as `main`'s. `main`
+additionally requires the CodeQL `Analyze (…)` contexts, and those do not run on
+PRs into `rc/*` — requiring them would leave every rc PR blocked forever on a
+check that can never report. Only require a context you have watched report on a
+PR against that specific base.
+
+**An rc branch must be cut from `main`, and GitHub cannot enforce it.** No
+protection rule or ruleset constrains the commit a branch is created *from*. The
+`rc branch guard` workflow fires on branch creation and fails if the new `rc/*`
+branch does not contain `origin/main` — a detector, not a gate, since the branch
+already exists by then. It pairs with `rc not behind main`, which gates drift
+afterwards.
+
+```bash
+git fetch origin --prune
+git switch -c rc/0.0.3 origin/main    # from main, always
+```
 
 ### Stacked branches
 
@@ -106,6 +156,10 @@ Documented discipline decays; these are the mechanisms.
 | Pushing to a branch whose PR merged | `delete_branch_on_merge` — the branch ceases to exist | prevents |
 | …the same, on a clone that still has the branch | `.githooks/pre-push` — refuses the push | prevents |
 | Merging a stacked PR into a dead base | `base branch` CI check | prevents |
+| An rc branch drifting behind `main` | `rc not behind main` CI check | detects, before release |
+| Anyone creating an `rc/*` branch | `creation` rule in the "rc branches" ruleset — admins only | prevents |
+| An rc branch deleted or force-pushed | `deletion` + `non_fast_forward` rules on `rc/*` | prevents |
+| An rc branch cut from something other than `main` | `rc branch guard` workflow on branch creation | detects (GitHub cannot prevent it) |
 | A required check that can never report | one aggregate `ci-ok` context, not per-matrix-job names | prevents |
 | Merging a branch cut from a stale `main` | `strict: true` on required checks | prevents |
 | A PR that says nothing useful | `pr body` CI check against the template | prevents |

@@ -296,17 +296,28 @@ impl Table {
     }
 
     /// The measured content width of each column (widest cell, header included).
+    /// Widest *line* of a cell, not the width of the whole string.
+    ///
+    /// A cell spanning several lines occupies its widest line, exactly as
+    /// `Measurement.get` on a `Text` does. Measuring the raw string instead made
+    /// a multi-line cell as wide as all its lines **summed** — `\n` measures
+    /// zero, so nothing capped it — and a quoted CSV cell holding two sentences
+    /// blew its column out to 31 cells where upstream gives 23.
+    fn block_width(text: &str) -> usize {
+        text.split('\n').map(cell_len).max().unwrap_or(0)
+    }
+
     fn max_content_widths(&self) -> Vec<usize> {
         let mut widths = vec![0usize; self.columns.len()];
         for (index, column) in self.columns.iter().enumerate() {
             if self.show_header {
-                widths[index] = cell_len(&column.header);
+                widths[index] = Self::block_width(&column.header);
             }
         }
         for row in &self.rows {
             for (index, cell) in row.iter().enumerate() {
                 if index < widths.len() {
-                    widths[index] = widths[index].max(cell_len(cell));
+                    widths[index] = widths[index].max(Self::block_width(cell));
                 }
             }
         }
@@ -414,6 +425,29 @@ impl Table {
         widths.into_iter().map(|w| w.max(0) as usize).collect()
     }
 
+    /// `cell_padding` shrunk so that padding alone can never exceed the width
+    /// the column was actually allotted.
+    ///
+    /// When many columns compete for a narrow terminal a column can be squeezed
+    /// below its own padding. The cell then still emitted a full left and right
+    /// pad, so every such column spent two cells where its border spent one and
+    /// the content row grew wider than the table — at 29 columns in an 80-cell
+    /// terminal the row overflowed by 15 cells and was cropped, taking the
+    /// right-hand border with it while the border rows kept theirs.
+    fn cell_padding_fitted(&self, index: usize, ncols: usize, rendered: usize) -> (usize, usize) {
+        let (mut pl, mut pr) = self.cell_padding(index, ncols);
+        while pl + pr > rendered {
+            if pr > pl {
+                pr -= 1;
+            } else if pl > 0 {
+                pl -= 1;
+            } else {
+                break;
+            }
+        }
+        (pl, pr)
+    }
+
     /// The effective style for a cell in column `index`: the header style for a
     /// header row, else that column's own style.
     fn cell_style(&self, index: usize, is_header: bool) -> Style {
@@ -436,7 +470,7 @@ impl Table {
         &self,
         theme: &Theme,
         cells: &[String],
-        content_widths: &[usize],
+        rendered_widths: &[usize],
         is_header: bool,
         edges: (char, char, char),
     ) -> Vec<Vec<Segment>> {
@@ -446,6 +480,19 @@ impl Table {
         let (edge_left, edge_vertical, edge_right) = edges;
         let border = Some(self.style.combine(&self.border_style));
         let ncols = self.columns.len();
+        // Derived here rather than by the caller so the padding used to lay the
+        // row out is the same padding the content width was reduced by.
+        let paddings: Vec<(usize, usize)> = (0..ncols)
+            .map(|index| {
+                let rendered = rendered_widths.get(index).copied().unwrap_or(0);
+                self.cell_padding_fitted(index, ncols, rendered)
+            })
+            .collect();
+        let content_widths: Vec<usize> = rendered_widths
+            .iter()
+            .zip(&paddings)
+            .map(|(w, (pl, pr))| w.saturating_sub(pl + pr))
+            .collect();
 
         // Render each cell into padded, simplified visual lines.
         let mut cell_lines: Vec<Vec<Vec<Segment>>> = Vec::with_capacity(ncols);
@@ -517,7 +564,7 @@ impl Table {
             }
             for (c, column_lines) in cell_lines.iter().enumerate() {
                 let fill = Some(self.cell_style(c, is_header));
-                let (cpl, cpr) = self.cell_padding(c, ncols);
+                let (cpl, cpr) = paddings[c];
                 if cpl > 0 {
                     row.push(Segment::new(" ".repeat(cpl), fill.clone()));
                 }
@@ -555,14 +602,6 @@ impl Renderable for Table {
         let available = options.max_width.saturating_sub(extra_width);
 
         let rendered_widths = self.column_widths(available);
-        let content_widths: Vec<usize> = rendered_widths
-            .iter()
-            .enumerate()
-            .map(|(index, w)| {
-                let (pl, pr) = self.cell_padding(index, ncols);
-                w.saturating_sub(pl + pr)
-            })
-            .collect();
         let border = Some(self.style.combine(&self.border_style));
 
         // Full table width (for centering title/caption): columns + borders.
@@ -592,7 +631,7 @@ impl Renderable for Table {
             lines.extend(self.render_row(
                 console.theme(),
                 &headers,
-                &content_widths,
+                &rendered_widths,
                 true,
                 head_edges,
             ));
@@ -604,7 +643,13 @@ impl Renderable for Table {
 
         let row_last = self.rows.len().saturating_sub(1);
         for (index, row) in self.rows.iter().enumerate() {
-            lines.extend(self.render_row(console.theme(), row, &content_widths, false, body_edges));
+            lines.extend(self.render_row(
+                console.theme(),
+                row,
+                &rendered_widths,
+                false,
+                body_edges,
+            ));
             if self.show_lines && index != row_last {
                 lines.push(vec![Segment::new(
                     box_set.get_row(&rendered_widths, RowLevel::Row, edge),
@@ -648,6 +693,17 @@ impl Renderable for Table {
 fn wrap_cell(content: &str, width: usize) -> Vec<String> {
     if width == 0 {
         return vec![String::new()];
+    }
+    // Wrap each line of the cell on its own, as upstream's `Text.wrap` does —
+    // it splits on newlines before dividing. Handing the whole cell to
+    // `divide_line` treated the newline as ordinary whitespace worth zero cells,
+    // so it packed text from two source lines into one "line" that then printed
+    // as two rows: a 23-cell line inside a 23-cell column came out split.
+    if content.contains('\n') {
+        return content
+            .split('\n')
+            .flat_map(|line| wrap_cell(line, width))
+            .collect();
     }
     // `fold = false`: over-long words stay on their own (overflowing) line,
     // which `ellipsis_crop` then trims — matching `Text(overflow="ellipsis")`.
@@ -837,5 +893,62 @@ mod tests {
             "└───────┴─────┘\n",
         );
         assert_eq!(out, expected);
+    }
+
+    /// A column squeezed below its own padding still emitted a full left and
+    /// right pad, so each such column spent two cells where its border spent
+    /// one. The content row then overflowed the table and was cropped, losing
+    /// its right-hand border while the border rows kept theirs.
+    #[test]
+    fn a_column_narrower_than_its_padding_stays_inside_the_border() {
+        for ncols in [20usize, 29, 40] {
+            let mut table = Table::new().box_set(SQUARE);
+            for i in 0..ncols {
+                table.add_column(format!("c{i}"));
+            }
+            let row: Vec<String> = (0..ncols).map(|i| i.to_string()).collect();
+            table.add_row(&row.iter().map(String::as_str).collect::<Vec<_>>());
+            let console = Console::builder().width(80).no_color(true).build();
+            let out = console.render_to_string(&table);
+            let rows: Vec<&str> = out.lines().filter(|l| !l.trim().is_empty()).collect();
+            let widths: Vec<usize> = rows.iter().map(|r| r.chars().count()).collect();
+            assert!(
+                widths.iter().all(|w| *w == widths[0]),
+                "{ncols} columns produced ragged rows: {widths:?}"
+            );
+            for (index, row) in rows.iter().enumerate() {
+                let last = row.chars().last().expect("non-empty row");
+                assert!(
+                    !last.is_whitespace(),
+                    "{ncols} columns: row {index} lost its right border: {row:?}"
+                );
+            }
+        }
+    }
+
+    /// A cell spanning several lines occupies its WIDEST line. Measuring the raw
+    /// string made it as wide as all its lines summed — `\n` measures zero, so
+    /// nothing capped it — and a quoted CSV cell holding two sentences blew its
+    /// column out to 31 cells where upstream gives 23.
+    #[test]
+    fn a_multi_line_cell_is_measured_by_its_widest_line() {
+        let mut table = Table::new().box_set(SQUARE);
+        table.add_column("name");
+        table.add_column("bio");
+        table.add_row(&["Alice", "line one\nline two is much longer"]);
+        table.add_row(&["Bob", "short"]);
+        let console = Console::builder().width(60).no_color(true).build();
+        let out = console.render_to_string(&table);
+        let top = out.lines().next().expect("a top border");
+        let width = top.chars().count();
+        // "line two is much longer" is 23 cells; summing both lines would be 31.
+        assert!(
+            width < 40,
+            "the multi-line cell was measured as the sum of its lines: {width} wide"
+        );
+        assert!(
+            out.contains("line two is much longer"),
+            "content lost: {out:?}"
+        );
     }
 }

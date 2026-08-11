@@ -20,6 +20,7 @@ pub mod align;
 pub mod ansi;
 pub mod bar;
 pub mod r#box;
+mod cell_widths;
 pub mod cells;
 pub mod color;
 mod color_names;

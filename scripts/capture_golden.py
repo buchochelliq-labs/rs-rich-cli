@@ -28,6 +28,7 @@ from rich.ansi import AnsiDecoder
 from rich.bar import Bar as HBar
 from rich.columns import Columns
 from rich.console import Console
+from rich.errors import MarkupError
 from rich.constrain import Constrain
 from rich.control import Control
 from rich.json import JSON
@@ -793,6 +794,56 @@ HIGHLIGHT_CASES = [
     ("markup_merges_with_highlight", {}, "[underline]3.14[/]"),
 ]
 
+# Markup edge cases, chosen to pin the three places a hand-rolled scanner
+# diverges from upstream's RE_TAGS: backslash-run parity, `[` inside a tag body,
+# and zero-length spans.
+#
+# Unlike CASES these may legitimately RAISE, so the fixture records `<ERROR>` and
+# the Rust test asserts that too — for half of these, *which side errors* is the
+# entire point.
+MARKUP_EDGE_CASES = [
+    # Backslash runs: only an ODD run escapes the tag. An even run emits half as
+    # many literal backslashes and the tag still fires.
+    ("bs1_escapes", r"\[b]x"),
+    ("bs2_tag_fires", r"\\[b]x[/b]"),
+    ("bs3_escapes", r"\\\[b]x"),
+    ("bs4_tag_fires", r"\\\\[b]x[/b]"),
+    ("bs5_escapes", r"\\\\\[b]x"),
+    ("bs2_midtext", r"a\\[red]b[/red]c"),
+    ("bs2_before_wide", "\\\\[b]\u4f60[/b]"),
+    # A `[` inside a tag body means it is not a tag at all: the text is literal
+    # and scanning resumes at the inner bracket.
+    ("bracket_in_body", "[a[b]"),
+    ("bracket_in_body_literal", "[bold[]x"),
+    ("bracket_splits_tag", "[b[i]x[/i]"),
+    ("bracket_in_close", "[b]x[/i[]"),
+    ("bracket_nested_literal", "[b][c[]d[/b]"),
+    ("bracket_breaks_link", "[link=a[b]c[/link]"),
+    # Zero-length spans still contribute a segment boundary.
+    ("empty_span_splits", "[b]a[i][/i]b[/b]"),
+    ("empty_span_only", "[b][/b]x"),
+    ("empty_nested", "[b][i][/i][/b]"),
+    # The tag-start class, and other things that only look like tags.
+    ("upper_not_tag", "[Hello]x"),
+    ("digit_not_tag", "[42]x"),
+    ("hex_colour", "[#ff0000]x[/]"),
+    ("meta_tag", "[@meta]x[/]"),
+    ("close_nothing_open", "[/]x"),
+    ("unclosed_open", "[b]x"),
+    ("close_unopened", "x[/b]"),
+    ("empty_brackets", "[]x"),
+    ("space_brackets", "[ ]x"),
+    ("trailing_space_tag", "[b ]x[/]"),
+    ("leading_space_not_tag", "[ b]x"),
+    ("double_open_literal", "a[[b]c"),
+    ("double_open_in_span", "[b]a[[/b]"),
+    ("lone_escape", "\\["),
+    ("lone_backslashes", "\\\\"),
+    ("escaped_close", "[b]\\[/b]"),
+    ("nested_same_range", "[red][blue]x[/][/]"),
+    ("wide_chars", "[b]\u4f60\u597d[/]"),
+]
+
 COLOR_SYSTEMS = ["truecolor", "256", "standard"]
 
 HEADER = """\
@@ -830,6 +881,16 @@ HIGHLIGHT_HEADER = """\
 # The theme column is applied over the default theme before rendering, so these
 # pin that highlighter and markup styles resolve against the *console's* theme
 # rather than a process-global default.
+"""
+
+MARKUP_EDGE_HEADER = """\
+# Golden parity fixtures for markup edge cases — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py  (see AGENTS.md → Parity)
+#
+# Format: <name>\\t<markup>\\t<expected-ansi, or <ERROR>>
+#
+# `<ERROR>` means upstream raises MarkupError. Which side errors is often the
+# whole point of the case, so the test asserts that too.
 """
 
 PROMPT_HEADER = """\
@@ -979,6 +1040,28 @@ def main() -> None:
         )
     highlight_path.write_text("\n".join(hlines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(HIGHLIGHT_CASES)} highlight cases to {highlight_path}")
+
+    edge_path = golden_dir() / "markup_edge.tsv"
+    elines = [MARKUP_EDGE_HEADER.rstrip("\n")]
+    for name, markup in MARKUP_EDGE_CASES:
+        econsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=80,
+            highlight=False,
+            safe_box=False,
+            legacy_windows=False,
+            no_color=False,
+        )
+        try:
+            with econsole.capture() as capture:
+                econsole.print(markup, end="")
+            expected = escape(capture.get())
+        except MarkupError:
+            expected = "<ERROR>"
+        elines.append(f"{name}\t{escape(markup)}\t{expected}")
+    edge_path.write_text("\n".join(elines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(MARKUP_EDGE_CASES)} markup edge cases to {edge_path}")
 
     prompt_path = golden_dir() / "prompts.tsv"
     plines = [PROMPT_HEADER.rstrip("\n")]

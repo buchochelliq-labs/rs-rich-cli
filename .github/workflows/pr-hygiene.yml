@@ -104,14 +104,50 @@ jobs:
           BASE: ${{ github.event.pull_request.base.ref }}
         run: |
           case "$BASE" in
-            main|release/*)
+            main|release/*|rc/*)
               echo "Base '$BASE' is fine."
               ;;
             *)
-              echo "::error::This PR targets '$BASE', which is neither 'main' nor a 'release/*' branch."
+              echo "::error::This PR targets '$BASE', which is not 'main', 'rc/*' or 'release/*'."
               echo "::error::Stacked PRs are fine to open, but must be retargeted to main before merging —"
               echo "::error::a base branch that gets squash-merged and deleted takes this PR's commits with it."
               echo "::error::Retarget with: gh pr edit <number> --base main"
               exit 1
               ;;
           esac
+
+  # An rc branch is a second long-lived head, which is the shape behind every
+  # instance of work being lost in this repo. It is safe only while it stays a
+  # fast-forward of main — the moment main moves ahead, an rc merge either
+  # conflicts or silently reverts, and a tag cut from it is no longer on main.
+  #
+  # So: fail loudly the moment rc falls behind, rather than at release time.
+  rc-current:
+    name: rc not behind main
+    if: startsWith(github.event.pull_request.base.ref, 'rc/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Checked against the MERGE RESULT (the checked-out merge commit), not
+      # against the base branch as it stands. Testing the base directly
+      # deadlocks: the PR that merges main into the rc can never go green,
+      # because the rc is still behind until that very PR lands. The question
+      # worth asking is "would merging this leave the rc behind main?", and the
+      # merge commit is what answers it.
+      - name: Fail if merging this would leave the rc behind main
+        env:
+          BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          git fetch origin main --quiet
+          behind=$(git rev-list --count "HEAD..origin/main")
+          if [ "$behind" -gt 0 ]; then
+            echo "::error::Merging this would leave '$BASE' $behind commit(s) behind main."
+            echo "::error::A release cut from it would not contain what is on main."
+            echo "::error::Open a PR merging main into '$BASE' first — note that rc/*"
+            echo "::error::is protected, so a direct push needs admin rights."
+            exit 1
+          fi
+          echo "Merging this keeps '$BASE' level with main."

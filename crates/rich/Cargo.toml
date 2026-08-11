@@ -33,9 +33,9 @@ name = "rich"
 workspace = true
 
 [dependencies]
-unicode-width.workspace = true
 terminal_size.workspace = true
 serde_json.workspace = true
 fancy-regex.workspace = true
 pulldown-cmark.workspace = true
 syntect.workspace = true
+anstyle-query = "1.1.5"

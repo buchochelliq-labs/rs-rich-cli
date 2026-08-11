@@ -41,6 +41,8 @@ default = []
 image = ["dep:image"]
 # `gif` adds animated-GIF playback, driven by `rich`'s Live display.
 gif = ["image"]
+# `sixel` renders real pixels via the Sixel graphics protocol.
+sixel = ["image", "dep:icy_sixel"]
 
 # The image/GIF examples only build when their feature is on.
 [[example]]
@@ -62,6 +64,11 @@ required-features = ["gif"]
 name = "shrink_asset"
 required-features = ["gif"]
 
+# Prints an image-diff report as JSON, for diffing against the Python oracle.
+[[example]]
+name = "diff_report"
+required-features = ["image"]
+
 [lib]
 # The package is `rs-rich-art` on crates.io (plain `rich` is taken), but the
 # library target keeps the short name so users write `use rich_art::…`.
@@ -73,3 +80,4 @@ workspace = true
 [dependencies]
 rich.workspace = true
 image = { workspace = true, optional = true }
+icy_sixel = { version = "0.5.1", optional = true }

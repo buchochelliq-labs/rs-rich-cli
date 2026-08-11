@@ -146,6 +146,146 @@ impl Segment {
         shaped
     }
 
+    /// Fold every line to at most `width` cells, breaking at **word boundaries**
+    /// the way upstream's word wrapping does.
+    ///
+    /// [`fold_lines`](Self::fold_lines) breaks wherever the row happens to fill
+    /// up, which splits identifiers and words mid-character-run
+    /// (`epsilon, z` / `eta, eta, theta)`). Upstream's `word_wrap=True` routes
+    /// through `_wrap.divide_line`, which we already port for `Text` — this
+    /// applies the same break offsets to a styled segment run, so styles survive
+    /// the split.
+    ///
+    /// A word longer than `width` is still folded mid-word; there is nowhere
+    /// else to break it.
+    pub fn fold_lines_words(segments: &[Segment], width: usize) -> Vec<Segment> {
+        if width == 0 {
+            return segments.to_vec();
+        }
+        let mut out = Vec::new();
+        let lines = Self::split_lines(segments);
+        let last = lines.len().saturating_sub(1);
+        for (index, line) in lines.into_iter().enumerate() {
+            let plain: String = line
+                .iter()
+                .filter(|segment| !segment.control)
+                .map(|segment| segment.text.as_str())
+                .collect();
+            let breaks = crate::wrap::divide_line(&plain, width, true);
+
+            let mut char_pos = 0usize;
+            let mut next_break = 0usize;
+            for segment in line {
+                if segment.control {
+                    out.push(segment);
+                    continue;
+                }
+                let mut buf = String::new();
+                for ch in segment.text.chars() {
+                    while next_break < breaks.len() && char_pos == breaks[next_break] {
+                        if !buf.is_empty() {
+                            out.push(Segment::new(buf.clone(), segment.style.clone()));
+                            buf.clear();
+                        }
+                        out.push(Segment::line());
+                        next_break += 1;
+                    }
+                    buf.push(ch);
+                    char_pos += 1;
+                }
+                if !buf.is_empty() {
+                    out.push(Segment::new(buf, segment.style.clone()));
+                }
+            }
+            if index != last {
+                out.push(Segment::line());
+            }
+        }
+        out
+    }
+
+    /// Fold every line to at most `width` cells, carrying the overflow onto
+    /// continuation lines instead of discarding it.
+    ///
+    /// [`crop_lines`](Self::crop_lines) is the display backstop and **throws the
+    /// remainder away** — correct for a renderable that has already wrapped
+    /// itself, and data loss for one that emits a long line verbatim. Styles are
+    /// preserved across the split.
+    ///
+    /// This breaks wherever the row happens to fill up, so it splits words. That
+    /// is right only for content upstream folds *without* word wrapping. A
+    /// renderable whose upstream counterpart goes through `Text.wrap` wants
+    /// [`fold_lines_words`](Self::fold_lines_words) instead: reaching for this
+    /// one is what made `--json` print `over t` / `he lazy` where rich prints
+    /// `over ` / `the lazy`.
+    pub fn fold_lines(segments: &[Segment], width: usize) -> Vec<Segment> {
+        if width == 0 {
+            return segments.to_vec();
+        }
+        let mut out = Vec::new();
+        let lines = Self::split_lines(segments);
+        let last = lines.len().saturating_sub(1);
+        for (index, line) in lines.into_iter().enumerate() {
+            let mut used = 0usize;
+            for segment in line {
+                if segment.control {
+                    out.push(segment);
+                    continue;
+                }
+                // Walk the segment in cell-sized pieces, breaking whenever the
+                // current row is full.
+                let mut remaining = segment.text.as_str();
+                while !remaining.is_empty() {
+                    let room = width.saturating_sub(used);
+                    if room == 0 {
+                        out.push(Segment::line());
+                        used = 0;
+                        continue;
+                    }
+                    let chunks = crate::cells::chop_cells(remaining, room);
+                    let mut head = chunks.first().cloned().unwrap_or_default();
+                    if head.is_empty() {
+                        if used > 0 {
+                            // The row has content but no space for this
+                            // character; start a fresh one and try again.
+                            out.push(Segment::line());
+                            used = 0;
+                            continue;
+                        }
+                        // Already at the start of a row and the glyph STILL does
+                        // not fit — a 2-cell glyph at width 1. Emit it anyway,
+                        // overflowing by a cell.
+                        //
+                        // A whole *grapheme*, not a single code point: taking one
+                        // code point off `"❤️"` emits a bare `❤` and leaves a
+                        // stranded variation selector to be emitted on the next
+                        // row, where it silently re-widens whatever character
+                        // precedes it.
+                        //
+                        // Retrying here instead was an infinite loop that
+                        // allocated a line break per iteration: ~400 MB/s until
+                        // the process was killed. Every branch of this loop must
+                        // consume input.
+                        let (spans, _) = crate::cells::split_graphemes(remaining);
+                        let take = spans.first().map_or(remaining.len(), |span| span.1);
+                        head = remaining[..take].to_string();
+                    }
+                    used += crate::cells::cell_len(&head);
+                    remaining = &remaining[head.len()..];
+                    out.push(Segment::new(head, segment.style.clone()));
+                    if !remaining.is_empty() {
+                        out.push(Segment::line());
+                        used = 0;
+                    }
+                }
+            }
+            if index != last {
+                out.push(Segment::line());
+            }
+        }
+        out
+    }
+
     /// Crop every line in a segment stream to at most `width` cells, discarding
     /// the excess and leaving short lines alone.
     ///
@@ -271,5 +411,152 @@ mod tests {
     fn cell_length_ignores_control() {
         assert_eq!(Segment::new("abc", None).cell_length(), 3);
         assert_eq!(Segment::control("\x1b[2J").cell_length(), 0);
+    }
+
+    #[test]
+    fn fold_lines_carries_the_overflow_instead_of_dropping_it() {
+        let segments = vec![Segment::new("abcdefghij", None)];
+        let folded = Segment::fold_lines(&segments, 4);
+        let text: String = folded.iter().map(|s| s.text.as_str()).collect();
+        // Every character survives; only line breaks are added.
+        assert_eq!(text.replace('\n', ""), "abcdefghij");
+        assert_eq!(Segment::split_lines(&folded).len(), 3);
+    }
+
+    #[test]
+    fn fold_lines_preserves_styles_across_a_break() {
+        let style = Style::parse("bold").expect("valid style");
+        let segments = vec![Segment::new("abcdef", Some(style.clone()))];
+        let folded = Segment::fold_lines(&segments, 3);
+        for segment in folded.iter().filter(|s| !s.text.contains('\n')) {
+            assert_eq!(segment.style.as_ref(), Some(&style), "style lost on fold");
+        }
+    }
+
+    /// A glyph wider than the whole row is emitted anyway, overflowing — but as
+    /// a whole grapheme. Taking a single code point off `"❤️"` put the bare `❤`
+    /// on one row and stranded the variation selector at the start of the next,
+    /// where it silently re-widens whatever character follows it.
+    #[test]
+    fn fold_lines_never_splits_a_grapheme() {
+        let heart = "\u{2764}\u{fe0f}";
+        let segments = vec![Segment::new(heart.repeat(3), None)];
+        let folded = Segment::fold_lines(&segments, 1);
+        let rows: Vec<String> = Segment::split_lines(&folded)
+            .iter()
+            .map(|line| line.iter().map(|s| s.text.as_str()).collect())
+            .collect();
+        assert_eq!(rows, vec![heart, heart, heart]);
+    }
+
+    #[test]
+    fn crop_lines_still_drops_the_overflow() {
+        // fold_lines is the alternative, not a replacement: crop stays the
+        // display backstop for renderables that already wrapped themselves.
+        let segments = vec![Segment::new("abcdefghij", None)];
+        let cropped = Segment::crop_lines(&segments, 4);
+        let text: String = cropped.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(text, "abcd");
+    }
+
+    #[test]
+    fn fold_lines_terminates_when_a_glyph_is_wider_than_the_width() {
+        // A 2-cell character with 1 column available used to loop forever,
+        // pushing a line break per iteration (~400 MB/s until killed). Every
+        // branch of the fold loop must consume input.
+        let segments = vec![Segment::new("\u{4f60}\u{4f60}", None)];
+        let folded = Segment::fold_lines(&segments, 1);
+        let text: String = folded.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(
+            text.matches('\u{4f60}').count(),
+            2,
+            "both characters should survive, overflowing rather than looping"
+        );
+    }
+
+    /// The word-wrapping fold breaks *between* words, leaving the space that
+    /// separated them at the end of the finished row — exactly where
+    /// `_wrap.divide_line` puts the offset.
+    #[test]
+    fn fold_lines_words_breaks_between_words() {
+        let segments = vec![Segment::new("the quick brown fox", None)];
+        // 12, not 10: at 10 a character fold would land on the same boundary by
+        // luck and the test would pass either way.
+        let folded = Segment::fold_lines_words(&segments, 12);
+        let lines: Vec<String> = Segment::split_lines(&folded)
+            .iter()
+            .map(|line| line.iter().map(|s| s.text.as_str()).collect())
+            .collect();
+        assert_eq!(lines, vec!["the quick ", "brown fox"]);
+    }
+
+    /// A break landing inside a styled run must not drop the style, or a wrapped
+    /// JSON string would lose its colour halfway down.
+    #[test]
+    fn fold_lines_words_preserves_styles_across_a_break() {
+        let green = Style::parse("green").expect("valid style");
+        let segments = vec![
+            Segment::new("key: ", None),
+            Segment::new("alpha beta gamma", Some(green.clone())),
+        ];
+        let folded = Segment::fold_lines_words(&segments, 12);
+        let styled: String = folded
+            .iter()
+            .filter(|s| s.style.as_ref() == Some(&green))
+            .map(|s| s.text.as_str())
+            .collect();
+        assert_eq!(styled, "alpha beta gamma", "style lost across the break");
+    }
+
+    /// Nothing may be dropped: a word wider than the row still has to fold, and
+    /// the offsets have to line up with the segments they cut.
+    #[test]
+    fn fold_lines_words_keeps_every_character() {
+        let segments = vec![
+            Segment::new("short ", None),
+            Segment::new("z".repeat(25), None),
+            Segment::new(" tail", None),
+        ];
+        for width in 1..=30 {
+            let folded = Segment::fold_lines_words(&segments, width);
+            let text: String = folded.iter().map(|s| s.text.as_str()).collect();
+            assert_eq!(
+                text.replace('\n', ""),
+                format!("short {} tail", "z".repeat(25)),
+                "width {width} lost or reordered characters"
+            );
+        }
+    }
+
+    /// Control segments carry no cells, so they must ride through untouched
+    /// rather than count against the width or vanish.
+    #[test]
+    fn fold_lines_words_keeps_control_segments() {
+        let segments = vec![
+            Segment::control("\x1b]8;;http://x\x1b\\"),
+            Segment::new("alpha beta", None),
+        ];
+        let folded = Segment::fold_lines_words(&segments, 8);
+        assert_eq!(folded.iter().filter(|s| s.control).count(), 1);
+        let text: String = folded
+            .iter()
+            .filter(|s| !s.control)
+            .map(|s| s.text.as_str())
+            .collect();
+        assert_eq!(text, "alpha \nbeta");
+    }
+
+    #[test]
+    fn fold_lines_terminates_at_every_narrow_width() {
+        // Mixed widths: ASCII, CJK, and an emoji, folded at each width from 1.
+        let sample = "a\u{4f60}b\u{1f600}c";
+        for width in 1..=6 {
+            let folded = Segment::fold_lines(&[Segment::new(sample, None)], width);
+            let text: String = folded.iter().map(|s| s.text.as_str()).collect();
+            assert!(
+                text.contains('c'),
+                "width {width} lost the tail, or did not terminate"
+            );
+        }
     }
 }

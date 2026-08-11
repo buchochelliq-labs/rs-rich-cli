@@ -75,10 +75,15 @@ nav:
       - 5. Progress and live output: tutorial/05-live.md
       - 6. The CLI: tutorial/06-cli.md
   - Gallery: gallery.md
-  - CLI reference: cli.md
+  - Using the CLI: cli.md
+  - CLI reference: cli-reference.md
+  - Comparing images: image-diff.md
+  - Troubleshooting: troubleshooting.md
+  - Known issues: known-issues.md
   - Parity with Python rich:
       - Overview: parity.md
       - Divergences: DIVERGENCES.md
+      - Benchmarks: benchmarks.md
       - Roadmap: ROADMAP.md
       - Module status: PORTING.md
   - Contributing:

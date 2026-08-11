@@ -1,0 +1,41 @@
+# Golden parity fixtures for markup edge cases — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py  (see AGENTS.md → Parity)
+#
+# Format: <name>\t<markup>\t<expected-ansi, or <ERROR>>
+#
+# `<ERROR>` means upstream raises MarkupError. Which side errors is often the
+# whole point of the case, so the test asserts that too.
+bs1_escapes	\[b]x	[b]x
+bs2_tag_fires	\\[b]x[/b]	\\x1b[1mx\x1b[0m
+bs3_escapes	\\\[b]x	\[b]x
+bs4_tag_fires	\\\\[b]x[/b]	\\\x1b[1mx\x1b[0m
+bs5_escapes	\\\\\[b]x	\\[b]x
+bs2_midtext	a\\[red]b[/red]c	a\\x1b[31mb\x1b[0mc
+bs2_before_wide	\\[b]你[/b]	\\x1b[1m你\x1b[0m
+bracket_in_body	[a[b]	[a
+bracket_in_body_literal	[bold[]x	[bold[]x
+bracket_splits_tag	[b[i]x[/i]	[b\x1b[3mx\x1b[0m
+bracket_in_close	[b]x[/i[]	\x1b[1mx[/i[]\x1b[0m
+bracket_nested_literal	[b][c[]d[/b]	\x1b[1m[c[]d\x1b[0m
+bracket_breaks_link	[link=a[b]c[/link]	<ERROR>
+empty_span_splits	[b]a[i][/i]b[/b]	\x1b[1ma\x1b[0m\x1b[1mb\x1b[0m
+empty_span_only	[b][/b]x	x
+empty_nested	[b][i][/i][/b]	
+upper_not_tag	[Hello]x	[Hello]x
+digit_not_tag	[42]x	[42]x
+hex_colour	[#ff0000]x[/]	\x1b[38;2;255;0;0mx\x1b[0m
+meta_tag	[@meta]x[/]	x
+close_nothing_open	[/]x	<ERROR>
+unclosed_open	[b]x	\x1b[1mx\x1b[0m
+close_unopened	x[/b]	<ERROR>
+empty_brackets	[]x	[]x
+space_brackets	[ ]x	[ ]x
+trailing_space_tag	[b ]x[/]	\x1b[1mx\x1b[0m
+leading_space_not_tag	[ b]x	[ b]x
+double_open_literal	a[[b]c	a[\x1b[1mc\x1b[0m
+double_open_in_span	[b]a[[/b]	\x1b[1ma[\x1b[0m
+lone_escape	\[	[
+lone_backslashes	\\	\\
+escaped_close	[b]\[/b]	\x1b[1m[/b]\x1b[0m
+nested_same_range	[red][blue]x[/][/]	\x1b[34mx\x1b[0m
+wide_chars	[b]你好[/]	\x1b[1m你好\x1b[0m

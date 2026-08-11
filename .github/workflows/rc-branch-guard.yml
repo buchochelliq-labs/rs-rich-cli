@@ -1,0 +1,62 @@
+# An rc branch must be cut from `main`.
+#
+# GitHub cannot enforce this. No branch protection rule and no ruleset
+# constrains the commit a branch is created *from* — rulesets gate who may
+# create a ref and what may happen to it afterwards, never its starting point.
+# So this is a **detector, not a gate**: by the time it runs the branch already
+# exists. It exists to make the mistake loud and immediate rather than
+# discovered at release time, when an rc cut from a feature branch quietly
+# ships something `main` never had.
+#
+# The paired *gate* is the "rc not behind main" job in pr-hygiene.yml, which
+# blocks any PR into an rc branch that has fallen behind `main`. Between them:
+# this catches a bad starting point, that catches later drift.
+name: rc branch guard
+
+on:
+  create:
+
+permissions:
+  contents: read
+
+jobs:
+  cut-from-main:
+    name: rc cut from main
+    # `create` fires for tags too, hence the ref_type check.
+    if: github.event.ref_type == 'branch' && startsWith(github.event.ref, 'rc/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # ancestry needs full history
+
+      - name: Assert the new rc branch contains main
+        run: |
+          set -euo pipefail
+          BRANCH="${{ github.event.ref }}"
+          git fetch origin main --quiet
+
+          echo "new branch : $BRANCH ($(git rev-parse --short HEAD))"
+          echo "origin/main: $(git rev-parse --short origin/main)"
+
+          if ! git merge-base --is-ancestor origin/main HEAD; then
+            behind=$(git rev-list --count HEAD..origin/main)
+            echo "::error title=rc branch not cut from main::\
+          '$BRANCH' does not contain origin/main ($behind commit(s) missing). \
+          An rc branch must be cut from a freshly-fetched origin/main. \
+          Delete it and re-cut: git switch -c $BRANCH origin/main"
+            exit 1
+          fi
+
+          # Containing main is the hard requirement. Being *exactly* main is the
+          # expected case at creation time; anything else means the branch was
+          # cut from something downstream of main, which is legal but worth
+          # saying out loud rather than discovering later.
+          ahead=$(git rev-list --count origin/main..HEAD)
+          if [ "$ahead" -ne 0 ]; then
+            echo "::warning title=rc branch is ahead of main at creation::\
+          '$BRANCH' contains main but carries $ahead extra commit(s). \
+          Expected a clean cut from origin/main. Confirm this is deliberate."
+          else
+            echo "OK: '$BRANCH' is exactly origin/main."
+          fi
