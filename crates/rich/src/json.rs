@@ -206,4 +206,38 @@ mod tests {
 {out}"
         );
     }
+
+    /// serde_json's default float parser takes a fast path that can land 1 ULP
+    /// from the value in the file, so the rendered number parsed back to a
+    /// *different* double. The `float_roundtrip` feature makes parsing exact.
+    #[test]
+    fn floats_round_trip_exactly() {
+        for literal in [
+            "-938371.9565467801",
+            "0.1",
+            "1.7976931348623157e308",
+            "5e-324",
+            "3.141592653589793",
+        ] {
+            let json = Json::new(&format!("{{\"v\": {literal}}}")).expect("valid json");
+            let console = Console::builder().width(120).no_color(true).build();
+            let out = console.render_to_string(&json);
+            let rendered: String = out
+                .split(':')
+                .nth(1)
+                .expect("a value after the key")
+                .trim()
+                .trim_end_matches(['}', ' ', '\n'])
+                .to_string();
+            let want: f64 = literal.parse().expect("literal parses");
+            let got: f64 = rendered
+                .parse()
+                .unwrap_or_else(|_| panic!("rendered {rendered:?}"));
+            assert_eq!(
+                got.to_bits(),
+                want.to_bits(),
+                "{literal} rendered as {rendered} — a different double"
+            );
+        }
+    }
 }

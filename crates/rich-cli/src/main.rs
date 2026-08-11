@@ -643,7 +643,18 @@ fn detect_mode(resource: Option<&str>) -> Mode {
         Some("csv") | Some("tsv") => Mode::Csv,
         Some("ipynb") => Mode::Ipynb,
         Some("gif") => Mode::Gif,
-        _ => Mode::Auto,
+        // Anything the table above does not divert is source code, and upstream
+        // highlights it: `rich main.rs` is syntax-highlighted with no flag at
+        // all. We printed it raw instead, so `rich hello.py` produced no
+        // highlighting and no styling in an export — while `docs/cli.md` line 12
+        // advertised the upstream behaviour and `--help` documented ours. The
+        // two contradicted each other; this resolves them the way the docs (and
+        // upstream) say.
+        Some(_) => Mode::Syntax,
+        // No extension to go on (including stdin): stay in Auto and let the
+        // caller decide, rather than guessing a lexer for something that may not
+        // be source at all.
+        None => Mode::Auto,
     }
 }
 
@@ -1442,7 +1453,7 @@ USAGE:
 RESOURCE is a file path, an http(s) URL, or `-` for stdin.
 
 RENDER MODE (choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb
-by extension — anything else is printed as-is unless you pass -x):
+by extension — anything else with a file extension is syntax-highlighted):
     -p, --print      Treat RESOURCE as literal markup TEXT, not a file path
     -m, --markdown   Render RESOURCE as Markdown
     -j, --json       Pretty-print RESOURCE as JSON

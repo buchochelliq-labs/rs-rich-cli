@@ -176,7 +176,18 @@ impl Renderable for Syntax {
         if self.word_wrap {
             lines = lines
                 .into_iter()
-                .flat_map(|row| Segment::split_lines(&Segment::fold_lines(&row, code_width)))
+                .flat_map(|row| {
+                    // A blank source line has no segments at all, and folding an
+                    // empty row yields *zero* rows rather than one empty one — so
+                    // wrapping silently deleted every blank line in the file.
+                    // `rich -x` on a 2698-line source dropped all 386 of them, and
+                    // the loss was baked into HTML exports too.
+                    if row.is_empty() {
+                        vec![Vec::new()]
+                    } else {
+                        Segment::split_lines(&Segment::fold_lines_words(&row, code_width))
+                    }
+                })
                 .collect();
         }
 
@@ -301,5 +312,47 @@ mod tests {
             );
         }
         assert!(out.contains("let"), "content lost with the control codes");
+    }
+
+    /// A blank source line has no segments, and folding an empty row yielded
+    /// zero rows rather than one empty one — so wrapping silently deleted every
+    /// blank line in the file, and the loss was baked into exports.
+    #[test]
+    fn word_wrap_keeps_blank_lines() {
+        let console = Console::builder().width(20).no_color(true).build();
+        let out =
+            console.render_to_string(&Syntax::new("a = 1\n\nb = 2\n", "python").word_wrap(true));
+        let rows: Vec<&str> = out.trim_end_matches('\n').split('\n').collect();
+        assert_eq!(rows.len(), 3, "blank line lost: {rows:?}");
+        assert!(
+            rows[1].trim().is_empty(),
+            "middle row should be blank: {rows:?}"
+        );
+    }
+
+    /// Upstream's word_wrap breaks at word boundaries; we folded wherever the
+    /// row filled up, splitting identifiers mid-word.
+    #[test]
+    fn word_wrap_breaks_between_words() {
+        let console = Console::builder().width(30).no_color(true).build();
+        // This exact line is the one character-folding splits as `z` / `eta`,
+        // which is what makes the assertion discriminating.
+        let code = "result = compute_total(alpha, beta, gamma, delta, epsilon, zeta, eta, theta)\n";
+        let out = console.render_to_string(&Syntax::new(code, "python").word_wrap(true));
+        // Every identifier must survive on a single row. Folding mid-word split
+        // `epsilon` across the break as `e` / `psilon`.
+        for word in [
+            "compute_total",
+            "alpha",
+            "gamma",
+            "epsilon",
+            "zeta",
+            "theta",
+        ] {
+            assert!(
+                out.split('\n').any(|row| row.contains(word)),
+                "{word:?} was split across rows: {out:?}"
+            );
+        }
     }
 }
