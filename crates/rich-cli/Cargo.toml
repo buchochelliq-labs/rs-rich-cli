@@ -1,8 +1,8 @@
 # crates/rich-cli — binary that mirrors the Python `rich-cli` command-line tool.
 #
-# ⚠️  VERSION POLICY: this crate's version mirrors the upstream `rich-cli`
-# release (a DIFFERENT project from the `rich` library — it versions separately).
-# See UPSTREAM.toml and AGENTS.md.
+# ⚠️  VERSION POLICY: this crate owns an independent Rust SemVer. It does not
+# mirror Python `rich-cli`; UPSTREAM.toml records that separately. The current
+# release workflow coordinates all four crates; see docs/BRANCHING.md.
 [package]
 name = "rs-rich-cli"
 version = "0.0.2"
