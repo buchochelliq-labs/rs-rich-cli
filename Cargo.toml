@@ -3,8 +3,8 @@ resolver = "2"
 members = ["crates/rich", "crates/rich-ext", "crates/rich-cli", "crates/rich-art"]
 
 # Shared metadata. NOTE: `version` is intentionally NOT shared here — each crate
-# carries its own version because `rich` and `rich-cli` mirror *different*
-# upstream projects (see AGENTS.md → Versioning).
+# follows its own independent SemVer (see AGENTS.md → Versioning). Tracked Python
+# upstream releases are recorded separately in UPSTREAM.toml.
 [workspace.package]
 edition = "2021"
 license = "MIT"
