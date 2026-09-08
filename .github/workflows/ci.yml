@@ -122,17 +122,11 @@ jobs:
 
       - name: Install the pinned upstream rich
         run: |
-          # Read `version` from within the [rich] section of UPSTREAM.toml.
-          # (The previous `grep -A2` stopped two lines short of it and silently
-          # produced an empty pin, so this job installed nothing and failed on
-          # `rich==`. Empty is now a hard error rather than a confusing one.)
-          version="$(awk '
-            /^\[rich\]$/       { in_section = 1; next }
-            /^\[/              { in_section = 0 }
-            in_section && /^version[[:space:]]*=/ {
-              gsub(/^version[[:space:]]*=[[:space:]]*"|"$/, ""); print; exit
-            }
-          ' UPSTREAM.toml)"
+          # Read `version` from the [rich] section of UPSTREAM.toml with a
+          # TOML parser, so formatting/whitespace changes can't break CI.
+          version="$(
+            python -c "import tomllib; print(tomllib.load(open('UPSTREAM.toml','rb'))['rich']['version'])"
+          )"
           if [ -z "$version" ]; then
             echo "::error::could not read [rich] version from UPSTREAM.toml"
             exit 1
