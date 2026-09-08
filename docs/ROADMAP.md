@@ -1,6 +1,6 @@
 # Roadmap
 
-Where this goes after `0.0.1`. Ordered by what unblocks people, not by what is
+Where this goes after `0.0.2`. Ordered by what unblocks people, not by what is
 most interesting to build.
 
 Two rules constrain everything here:
@@ -14,12 +14,44 @@ Two rules constrain everything here:
 
 ---
 
-## 0.0.2 — pay the known correctness debt
+## 0.0.2 — released 2026-08-11
 
-Not speculative. These are **confirmed and reproduced** findings from adversarial
-review, left unfixed only so they could land as one coherent change.
+The correctness milestone shipped. It paid down the confirmed rendering,
+markup, colour, and CLI correctness debt; see the
+[0.0.2 changelog](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/CHANGELOG.md#002--2026-08-11)
+for the released work.
 
-### Rewrite the markup tag scanner against `RE_TAGS`
+---
+
+## 0.0.3 — patch-release hardening
+
+This patch accepts only:
+
+- correctness fixes confirmed against current `main` and, where applicable, the
+  pinned upstream oracle;
+- documentation and package-metadata consistency fixes; and
+- release hardening that makes the documented CI, parity, packaging, or
+  clean-room verification gates more reliable.
+
+No new features or speculative rewrites belong in `0.0.3`. Add a changelog entry
+under `Unreleased` only when a fix lands, and name every affected crate there.
+
+**Issue selection is a release gate.** Before `rc/0.0.3-rc.1` is cut, use an
+authenticated GitHub session to reproduce #67, triage every #86 follow-up, and
+check newer regression reports against current `main`. Close or explicitly defer
+each report, then replace this paragraph with the selected issue numbers. The RC
+must not be cut while that issue list is absent.
+
+Follow [the release procedure](BRANCHING.md): require a non-empty `Unreleased`
+section, reconcile all manifest pins with `Cargo.lock`, run the complete CI and
+parity gate, merge the release PR to `main`, and only then create the annotated
+tag.
+
+---
+
+## 0.0.2 planning record
+
+The milestone centered on rewriting the markup tag scanner against `RE_TAGS`.
 
 The scanner is hand-rolled and diverges from upstream's
 `((\\*)\[([a-z#/@][^[]*?)])` in three ways:
