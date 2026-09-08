@@ -33,7 +33,12 @@ Everything below this heading is the development history that led here.
 
 ## [Unreleased]
 
-_Nothing yet._
+- Fixed `Json` and the CLI's `--json --width` path so wrapping or cropping at a
+  narrow console boundary never divides an escaped quote, backslash, control
+  escape, or `\\uXXXX` escape. Added narrow-width regression fixtures at widths
+  8, 10, and 12 plus an end-to-end CLI regression for issue #67. This intentionally
+  tightens upstream's generic text-boundary behavior and is recorded as
+  divergence #22.
 
 ## [0.0.2] — 2026-08-11
 

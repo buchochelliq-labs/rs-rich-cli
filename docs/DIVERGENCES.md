@@ -314,6 +314,19 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** port markdown-it's `tokenize`/`postProcess` delimiter pairing for
   strikethrough, under the Markdown issue (#9).
 
+### 22. JSON width boundaries keep escape sequences atomic
+- **Differs:** Python rich 15.0.0 applies ordinary `Text` folding (for a bare
+  `JSON`) or cropping (when rich-cli's `ForceWidth` preserves `no_wrap=True`).
+  Either operation may put its boundary inside `\\"`, `\\\\`, a short control
+  escape, or `\\uXXXX`. This port moves such a boundary to the start of the
+  escape; if the escape itself cannot fit, it keeps the lexical atom together.
+- **Why:** a physical newline inside an escape changes the displayed token, and
+  a crop after its backslash leaves a misleading partial escape. Width is a
+  presentation constraint and must not bisect JSON lexical atoms (#67).
+- **Remove:** only if upstream makes escape atoms indivisible in `Text.wrap` and
+  `Text.truncate`, at which point the special handling should collapse back to
+  the generic segment helpers.
+
 ## Feature-flagged divergences
 
 *None yet.* If a future feature can only be built by changing core behavior, it

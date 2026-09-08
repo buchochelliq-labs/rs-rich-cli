@@ -84,3 +84,6 @@ ansi_attrs	20	\x1b[3;4;9mstyled\x1b[0m\n
 styled_on_red	20	\x1b[41mhi\x1b[0m\n
 styled_panel	8	\x1b[32m┌──────┐\x1b[0m\n\x1b[32m│\x1b[0m\x1b[32m \x1b[0m\x1b[32mx\x1b[0m\x1b[32m   \x1b[0m\x1b[32m \x1b[0m\x1b[32m│\x1b[0m\n\x1b[32m└──────┘\x1b[0m\n
 progress_three	50	Downloading \x1b[38;2;249;38;114m━━━━━━━━━━━━━━━━\x1b[0m\x1b[38;2;249;38;114m╸\x1b[0m\x1b[38;5;237m━━━━━━━━━━━━━━━━\x1b[0m \x1b[35m 50%\x1b[0m\nProcessing  \x1b[38;2;114;156;31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m \x1b[35m100%\x1b[0m\nWaiting     \x1b[38;5;237m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m \x1b[35m  0%\x1b[0m\n
+json_escapes_w8	8	\x1b[1m{\x1b[0m\n  \x1b[1;34m"v"\x1b[0m: \n\x1b[32m"a\x5c"b\x5c\x5cc\x1b[0m\n\x1b[32m\x5cnd\x1b[0m\n\x1b[32m\x5cu0001e"\x1b[0m\n\x1b[1m}\x1b[0m\n
+json_escapes_w10	10	\x1b[1m{\x1b[0m\n  \x1b[1;34m"v"\x1b[0m: \n\x1b[32m"a\x5c"b\x5c\x5cc\x5cn\x1b[0m\n\x1b[32md\x5cu0001e"\x1b[0m\n\x1b[1m}\x1b[0m\n
+json_escapes_w12	12	\x1b[1m{\x1b[0m\n  \x1b[1;34m"v"\x1b[0m: \n\x1b[32m"a\x5c"b\x5c\x5cc\x5cnd\x1b[0m\n\x1b[32m\x5cu0001e"\x1b[0m\n\x1b[1m}\x1b[0m\n

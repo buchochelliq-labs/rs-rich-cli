@@ -387,6 +387,11 @@ RENDERABLE_CASES = [
     # Non-ASCII strings: rich's JSON defaults to ensure_ascii=False, so accented
     # characters and symbols render as UTF-8 (not \uXXXX). Keys keep input order.
     ("json_unicode", 40, JSON('{"name": "café", "emoji": "❤"}')),
+    # Narrow JSON lines exercise boundaries around every escape form emitted by
+    # json.dumps: quote, backslash, short control escapes, and \uXXXX controls.
+    ("json_escapes_w8", 8, JSON(r'{"v":"a\"b\\c\nd\u0001e"}')),
+    ("json_escapes_w10", 10, JSON(r'{"v":"a\"b\\c\nd\u0001e"}')),
+    ("json_escapes_w12", 12, JSON(r'{"v":"a\"b\\c\nd\u0001e"}')),
     ("markdown_doc", 24, Markdown("# Title\n\nHello **bold** and *italic* and `code`.")),
     ("markdown_list", 20, Markdown("Items:\n\n- one\n- two\n\n1. a\n2. b")),
     ("markdown_quote_hr", 20, Markdown("Note:\n\n> important\n\n---\n\ndone")),
@@ -1008,6 +1013,10 @@ def main() -> None:
         with rconsole.capture() as capture:
             rconsole.print(renderable)
         output = capture.get()
+        if name.startswith("json_escapes_"):
+            # The fixture format reserves literal `\\n` for a physical newline.
+            # Protect JSON backslashes before applying that transport encoding.
+            output = output.replace("\\", "\\x5c")
         # Guard: if the capture console's encoding isn't UTF-8, rich substitutes
         # box-drawing glyphs with ASCII, producing non-deterministic fixtures.
         # Fail loudly instead of writing a bad fixture.

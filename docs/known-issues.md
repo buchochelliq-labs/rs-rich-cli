@@ -14,29 +14,21 @@ waiting for this page to be updated.
 
 Things that should work and do not.
 
-### `--json` can emit invalid JSON when a line is cropped
+### Narrow `--json` output is display output, not machine-readable JSON
 
-**Symptom.** Piping `rich --json` through a parser fails with something like
-`Invalid control character at: line 3 column 41`.
+**Symptom.** A value wider than `--width` is cropped, so piping the displayed
+output through a JSON parser can still fail even though issue #67 no longer
+allows the crop boundary to bisect an escape sequence.
 
-**Scope.** Only when a value is wider than the render width, so the line is
-cropped mid-escape. Reproduces at any narrow width:
+**Scope.** Upstream rich-cli preserves `JSON.text.no_wrap` through its width
+wrapper and crops overlong lines. This port retains that behavior; the #67 fix
+only makes `\\"`, `\\\\`, control escapes, and `\\uXXXX` indivisible.
 
-```bash
-rich --json wide.json --width 40 | jq .
-```
+**Workaround.** Use `jq` on the original file for machine-readable output, or
+render at a width that fits the longest value.
 
-**Workaround.** Render at a width that fits the longest value, or drop `--width`
-and let it use the terminal's:
-
-```bash
-rich --json wide.json --width 200
-```
-
-**Status.** Open —
-[#67](https://github.com/buchochelliq-labs/rs-rich-cli/issues/67).
-`rich --json` is for reading, not for piping into a parser; use `jq` on the raw
-file when you need machine-readable output.
+**Status.** The misleading partial-escape defect is fixed; lossless narrow JSON
+rendering is not promised because `--json` is a presentation mode.
 
 ### Markdown images: five smaller divergences remain
 

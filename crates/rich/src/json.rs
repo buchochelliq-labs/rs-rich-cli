@@ -267,15 +267,140 @@ impl Renderable for Json {
             // `Text.wrap` with `no_wrap` keeps the line whole and then calls
             // `line.truncate(width, overflow="fold")`, which is a crop. See
             // [`Json::no_wrap`] for when upstream gets here.
-            Segment::crop_lines(&segments, options.max_width)
+            crop_lines_escape_safe(&segments, options.max_width)
         } else {
             // The break must land at a *word* boundary: the joined copy carries
             // no overflow either, so upstream wraps with the default `fold`
             // overflow and only splits mid-word when a single token is wider
             // than the line.
-            Segment::fold_lines_words(&segments, options.max_width)
+            fold_lines_escape_safe(&segments, options.max_width)
         }
     }
+}
+
+/// Return a nearby legal boundary when `boundary` falls inside a JSON escape.
+///
+/// A JSON escape is one lexical unit. Inserting a terminal line break between
+/// its backslash and its final character changes the data (and generally makes
+/// the displayed document invalid), so prefer the start of the escape. At
+/// extremely small widths where that would make no progress, keep the complete
+/// escape on the current line even though it exceeds the requested width.
+/// The input is always produced by [`quote`], so every backslash necessarily
+/// begins one of JSON's valid two-character escapes or a complete `\\uXXXX`.
+fn escape_safe_boundary(chars: &[char], line_start: usize, boundary: usize) -> usize {
+    let mut index = line_start;
+    while index < chars.len() {
+        if chars[index] != '\\' {
+            index += 1;
+            continue;
+        }
+        let end = if chars.get(index + 1) == Some(&'u') {
+            (index + 6).min(chars.len())
+        } else {
+            (index + 2).min(chars.len())
+        };
+        if index < boundary && boundary < end {
+            return if index > line_start { index } else { end };
+        }
+        index = end;
+    }
+    boundary
+}
+
+fn fold_lines_escape_safe(segments: &[Segment], width: usize) -> Vec<Segment> {
+    if width == 0 {
+        return segments.to_vec();
+    }
+    let mut out = Vec::new();
+    let lines = Segment::split_lines(segments);
+    let last = lines.len().saturating_sub(1);
+    for (line_index, line) in lines.into_iter().enumerate() {
+        let plain: String = line
+            .iter()
+            .filter(|s| !s.control)
+            .map(|s| s.text.as_str())
+            .collect();
+        let chars: Vec<char> = plain.chars().collect();
+        let mut breaks = crate::wrap::divide_line(&plain, width, true);
+        let mut index = 0;
+        while index < chars.len() {
+            if chars[index] != '\\' {
+                index += 1;
+                continue;
+            }
+            let end = if chars.get(index + 1) == Some(&'u') {
+                (index + 6).min(chars.len())
+            } else {
+                (index + 2).min(chars.len())
+            };
+            if breaks.iter().any(|at| index < *at && *at < end) {
+                breaks.retain(|at| !(index < *at && *at < end));
+                breaks.push(index);
+            }
+            index = end;
+        }
+        breaks.sort_unstable();
+        breaks.dedup();
+        let mut position = 0;
+        let mut next = 0;
+        for segment in line {
+            if segment.control {
+                out.push(segment);
+                continue;
+            }
+            let mut buffer = String::new();
+            for ch in segment.text.chars() {
+                if breaks.get(next) == Some(&position) {
+                    if !buffer.is_empty() {
+                        out.push(Segment::new(
+                            std::mem::take(&mut buffer),
+                            segment.style.clone(),
+                        ));
+                    }
+                    out.push(Segment::line());
+                    next += 1;
+                }
+                buffer.push(ch);
+                position += 1;
+            }
+            if !buffer.is_empty() {
+                out.push(Segment::new(buffer, segment.style.clone()));
+            }
+        }
+        if line_index != last {
+            out.push(Segment::line());
+        }
+    }
+    out
+}
+
+fn crop_lines_escape_safe(segments: &[Segment], width: usize) -> Vec<Segment> {
+    let lines = Segment::split_lines(segments);
+    let last = lines.len().saturating_sub(1);
+    let mut out = Vec::new();
+    for (index, line) in lines.into_iter().enumerate() {
+        let plain: String = line
+            .iter()
+            .filter(|s| !s.control)
+            .map(|s| s.text.as_str())
+            .collect();
+        let chars: Vec<char> = plain.chars().collect();
+        let mut cells = 0;
+        let nominal = chars
+            .iter()
+            .position(|ch| {
+                cells += crate::cells::cell_len(&ch.to_string());
+                cells > width
+            })
+            .unwrap_or(chars.len());
+        let boundary = escape_safe_boundary(&chars, 0, nominal);
+        let safe_width = crate::cells::cell_len(&chars[..boundary].iter().collect::<String>());
+        out.extend(Segment::crop_lines(&line, safe_width));
+        if index != last {
+            out.push(Segment::line());
+        }
+    }
+    out
 }
 
 /// Serialize a string as a JSON string literal (quoted + escaped).
@@ -654,6 +779,37 @@ mod tests {
              the lazy dog and keeps running for a \n\
              very long time indeed\"\n}"
         );
+    }
+
+    #[test]
+    fn wrapping_keeps_json_escapes_atomic_at_narrow_widths() {
+        let payload = r#"{"v":"a\"b\\c\nd\u0001e"}"#;
+        for width in 8..=14 {
+            let output = render_plain(payload, width);
+            for line in output.lines() {
+                let bytes = line.as_bytes();
+                let mut index = 0;
+                while index < bytes.len() {
+                    if bytes[index] != b'\\' {
+                        index += 1;
+                        continue;
+                    }
+                    assert!(
+                        index + 1 < bytes.len(),
+                        "split escape at width {width}: {output:?}"
+                    );
+                    if bytes[index + 1] == b'u' {
+                        assert!(
+                            index + 6 <= bytes.len(),
+                            "split unicode escape at width {width}: {output:?}"
+                        );
+                        index += 6;
+                    } else {
+                        index += 2;
+                    }
+                }
+            }
+        }
     }
 
     /// Nested inside another renderable, `JSON.text.no_wrap` survives and each

@@ -257,6 +257,7 @@ fn unescape(s: &str) -> String {
     s.replace("\\x1b", "\x1b")
         .replace("\\n", "\n")
         .replace("\\x1f", "\x1f")
+        .replace("\\x5c", "\\")
 }
 
 /// Build the renderable matching a fixture `name`. Must stay in sync with
@@ -354,6 +355,9 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "json_unicode" => Box::new(
             Json::new("{\"name\": \"caf\u{e9}\", \"emoji\": \"\u{2764}\"}").expect("valid JSON"),
         ),
+        "json_escapes_w8" | "json_escapes_w10" | "json_escapes_w12" => {
+            Box::new(Json::new(r#"{"v":"a\"b\\c\nd\u0001e"}"#).expect("valid JSON"))
+        }
         "markdown_doc" => Box::new(Markdown::new(
             "# Title\n\nHello **bold** and *italic* and `code`.",
         )),

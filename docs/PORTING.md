@@ -71,7 +71,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 |-------------------|-----------|:------:|-------|
 | `syntax.py` | `syntax.rs` | 🟡 | functional via `syntect` (non-parity, DIVERGENCES #18) |
 | `markdown.py` | `markdown.rs` | 🟡 | paragraphs/headings/inline/lists/quotes/code/links (both `hyperlinks` modes) + images + **GFM tables** via `pulldown-cmark` (inline styling within a table cell deferred) |
-| `json.py` | `json.rs` | 🟡 | ✅ |
+| `json.py` | `json.rs` | 🟡 | ✅ except escape-safe width boundaries (DIVERGENCES #22, issue #67) |
 | `pretty.py` | `pretty.rs` | 🟡 | Rust-native (`Debug` + repr highlight, #19) |
 | `repr.py`, `_inspect.py` | resp. | ⬜ | need Rust reflection — see #19 |
 | `traceback.py` | `traceback.rs` | 🟡 | Rust-native (error `source()` chain, #19) |

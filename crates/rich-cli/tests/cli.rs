@@ -83,6 +83,53 @@ fn json_mode_pretty_prints_from_stdin() {
 }
 
 #[test]
+fn json_width_never_splits_an_escape_sequence() {
+    fn assert_complete_escapes(line: &str, width: &str, output: &str) {
+        let bytes = line.as_bytes();
+        let mut index = 0;
+        while index < bytes.len() {
+            if bytes[index] != b'\\' {
+                index += 1;
+                continue;
+            }
+            assert!(
+                index + 1 < bytes.len(),
+                "split escape at width {width}: {output:?}"
+            );
+            match bytes[index + 1] {
+                b'u' => {
+                    assert!(
+                        index + 6 <= bytes.len(),
+                        "split Unicode escape at width {width}: {output:?}"
+                    );
+                    assert!(bytes[index + 2..index + 6]
+                        .iter()
+                        .all(u8::is_ascii_hexdigit));
+                    index += 6;
+                }
+                b'"' | b'\\' | b'/' | b'b' | b'f' | b'n' | b'r' | b't' => index += 2,
+                other => panic!("invalid JSON escape {other:?} at width {width}: {output:?}"),
+            }
+        }
+    }
+
+    let input = r#"{"v":"a\"b\\c\nd\u0001e"}"#;
+    for (width, expected) in [
+        (8, "{\n  \"v\": \"\n}\n"),
+        (10, "{\n  \"v\": \"a\n}\n"),
+        (12, "{\n  \"v\": \"a\\\"b\n}\n"),
+    ] {
+        let width = width.to_string();
+        let (out, ok) = run(&["--no-color", "--json", "--width", &width, "-"], input);
+        assert!(ok, "--json failed at width {width}");
+        assert_eq!(out, expected, "unexpected display at width {width}");
+        for line in out.lines() {
+            assert_complete_escapes(line, &width, &out);
+        }
+    }
+}
+
+#[test]
 fn rule_mode_draws_title() {
     let (out, ok) = run(&["--no-color", "--width", "12", "--rule", "hi"], "");
     assert!(ok);
