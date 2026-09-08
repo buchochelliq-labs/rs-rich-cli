@@ -17,7 +17,8 @@ Two rules constrain everything here:
 ## 0.0.2 — released 2026-08-11
 
 The correctness milestone shipped. It paid down the confirmed rendering,
-markup, colour, and CLI correctness debt; see the [0.0.2 changelog](../CHANGELOG.md#002--2026-08-11)
+markup, colour, and CLI correctness debt; see the
+[0.0.2 changelog](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/CHANGELOG.md#002--2026-08-11)
 for the released work.
 
 ---
