@@ -3,8 +3,8 @@ resolver = "2"
 members = ["crates/rich", "crates/rich-ext", "crates/rich-cli", "crates/rich-art"]
 
 # Shared metadata. NOTE: `version` is intentionally NOT shared here — each crate
-# carries its own version because `rich` and `rich-cli` mirror *different*
-# upstream projects (see AGENTS.md → Versioning).
+# carries an independent SemVer, starting at 0.0.1, and is bumped only when that
+# crate is selected for a release (see AGENTS.md → Versioning).
 [workspace.package]
 edition = "2021"
 license = "MIT"
@@ -23,7 +23,7 @@ rust-version = "1.90"
 # External users get the same short names via each crate's `[lib] name`.
 rich = { package = "rs-rich", path = "crates/rich", version = "0.0.2" }
 rich-ext = { package = "rs-rich-ext", path = "crates/rich-ext", version = "0.0.2" }
-rich-art = { package = "rs-rich-art", path = "crates/rich-art", version = "0.0.2" }
+rich-art = { package = "rs-rich-art", path = "crates/rich-art", version = "0.0.3" }
 
 # Third-party (kept lean for the first slice)
 terminal_size = "0.4"
@@ -42,7 +42,7 @@ pulldown-cmark = { version = "0.13", default-features = false }
 syntect = { version = "5", default-features = false, features = ["default-fancy"] }
 # Image decoding for rich-art's optional image->ASCII art (jp2a-style). Only the
 # PNG/JPEG decoders are enabled, keeping the tree small; behind rich-art's
-# NON-default `image` feature so the crate is zero-dependency unless opted in.
+# NON-default `image` feature so the default adds no image dependencies.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif"] }
 
 # Blocking HTTP client for the CLI's URL fetch (rich-cli's `rich <url>`). Uses

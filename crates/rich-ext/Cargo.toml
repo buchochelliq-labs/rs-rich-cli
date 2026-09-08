@@ -1,8 +1,10 @@
 # crates/rich-ext — OUR additions on top of the faithful core.
 #
-# This crate carries an INDEPENDENT SemVer (starts at 0.1.0) and never mirrors
-# any upstream version. All local features + the internal plugin registry live
-# here so the core stays a clean mirror. See AGENTS.md.
+# Like every crate in this repository, this crate carries an independent SemVer
+# that started at 0.0.1 and is bumped only when this crate is selected for a
+# release; it never mirrors an upstream version. All local features + the
+# internal plugin registry live here so the core stays a clean mirror. See
+# AGENTS.md → Versioning.
 [package]
 name = "rs-rich-ext"
 version = "0.0.2"
