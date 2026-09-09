@@ -537,18 +537,11 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
                     }
                 }
             }
-            // KNOWN DIVERGENCE (not a design choice): an image inside a table
-            // cell keeps its alt text in the cell, where upstream hoists it out
-            // and leaves the cell empty — `TableDataElement` does not override
-            // `on_child_close`, so the base implementation renders the image
-            // immediately, above the table. This repo's own README badge table
-            // hits it: upstream prints four `🌆 …` rows and an empty column,
-            // while we keep the alt text and widen the table by 13 cells.
-            // Hoisting out of a cell needs the table accumulator to be able to
-            // emit blocks, which it cannot yet do. Tracked as a follow-up.
-            Event::Start(Tag::Image { dest_url, .. })
-                if !table.as_ref().is_some_and(|acc| acc.in_cell) =>
-            {
+            // Images are emitted immediately rather than appended to their
+            // parent element. `TableDataElement` uses that same base
+            // `on_child_close`, so an image in a cell is hoisted above the
+            // eventual table and contributes no text to the cell.
+            Event::Start(Tag::Image { dest_url, .. }) => {
                 image = Some(dest_url.to_string());
                 image_span = None;
             }
@@ -941,7 +934,20 @@ fn render_blocks(
     let mut join_previous = false;
 
     for (index, block) in blocks.iter().enumerate() {
-        let merge = std::mem::take(&mut join_previous);
+        let mut merge = std::mem::take(&mut join_previous);
+        // `new_line` before an image is a single line break, not the blank-row
+        // separator used between ordinary blocks. In particular, images
+        // hoisted from consecutive table rows must occupy consecutive output
+        // rows. It also cancels the preceding image's open-row join.
+        if matches!(
+            block,
+            Block::Image {
+                leading_break: true,
+                ..
+            }
+        ) {
+            merge = false;
+        }
         // A blank line precedes every non-first block, and every
         // list/quote/table (which upstream renders with a leading gap).
         // Blank lines between blocks are a *document* convention. Upstream puts
@@ -963,8 +969,10 @@ fn render_blocks(
         // or table would otherwise bring.
         let after_image = index > 0 && matches!(blocks[index - 1], Block::Image { .. });
         let separator = match block {
-            // An image carries its own decision, taken while parsing.
-            Block::Image { leading_break, .. } => top_level && *leading_break,
+            // After an ordinary element this is the usual blank-row gap;
+            // after an image (whose text has `end=""`) it is only a line break,
+            // represented above by declining to merge the two image rows.
+            Block::Image { leading_break, .. } => top_level && *leading_break && !after_image,
             _ if after_image => false,
             _ => top_level && (own_gap || (index > 0 && !after_rule)),
         };

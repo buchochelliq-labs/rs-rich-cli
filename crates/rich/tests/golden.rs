@@ -360,6 +360,20 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "markdown_list" => Box::new(Markdown::new("Items:\n\n- one\n- two\n\n1. a\n2. b")),
         "markdown_quote_hr" => Box::new(Markdown::new("Note:\n\n> important\n\n---\n\ndone")),
         "markdown_hr_end" => Box::new(Markdown::new("a\n\n---")),
+        "markdown_image_table_cell" => Box::new(
+            Markdown::new("| Icon | Name |\n| --- | --- |\n| ![crate](crate.svg) | rich |\n")
+                .hyperlinks(false),
+        ),
+        "markdown_images_one_container" => Box::new(
+            Markdown::new("Before ![one](one.svg) + ![two](two.svg) after.").hyperlinks(false),
+        ),
+        "markdown_badge_table" => Box::new(
+            Markdown::new(
+                "| Badge |\n| --- |\n| ![build](build.svg) |\n\
+                 | ![docs](docs.svg) |\n| ![crate](crate.svg) |\n",
+            )
+            .hyperlinks(false),
+        ),
         "markdown_table" => Box::new(Markdown::new(
             "| Name | Age |\n| :--- | ---: |\n| Alice | 30 |\n| Bob | 7 |\n",
         )),

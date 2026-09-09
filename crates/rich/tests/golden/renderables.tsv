@@ -84,3 +84,6 @@ ansi_attrs	20	\x1b[3;4;9mstyled\x1b[0m\n
 styled_on_red	20	\x1b[41mhi\x1b[0m\n
 styled_panel	8	\x1b[32m┌──────┐\x1b[0m\n\x1b[32m│\x1b[0m\x1b[32m \x1b[0m\x1b[32mx\x1b[0m\x1b[32m   \x1b[0m\x1b[32m \x1b[0m\x1b[32m│\x1b[0m\n\x1b[32m└──────┘\x1b[0m\n
 progress_three	50	Downloading \x1b[38;2;249;38;114m━━━━━━━━━━━━━━━━\x1b[0m\x1b[38;2;249;38;114m╸\x1b[0m\x1b[38;5;237m━━━━━━━━━━━━━━━━\x1b[0m \x1b[35m 50%\x1b[0m\nProcessing  \x1b[38;2;114;156;31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m \x1b[35m100%\x1b[0m\nWaiting     \x1b[38;5;237m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m \x1b[35m  0%\x1b[0m\n
+markdown_image_table_cell	44	\n🌆 crate \x1b[36m            \x1b[0m\n\x1b[36m \x1b[0m\x1b[36mIcon\x1b[0m\x1b[1m \x1b[0m\x1b[36m \x1b[0m\x1b[36mName\x1b[0m\x1b[36m \x1b[0m\n\x1b[36m ────────── \x1b[0m\n\x1b[36m \x1b[0m     \x1b[36m \x1b[0mrich\x1b[36m \x1b[0m\n\x1b[36m            \x1b[0m\n
+markdown_images_one_container	50	🌆 one 🌆 two Before  +  after.                   \n
+markdown_badge_table	44	\n🌆 build \n🌆 docs \n🌆 crate \x1b[36m       \x1b[0m\n\x1b[36m \x1b[0m\x1b[36mBadge\x1b[0m\x1b[36m \x1b[0m\n\x1b[36m ───── \x1b[0m\n\x1b[36m \x1b[0m     \x1b[36m \x1b[0m\n\x1b[36m \x1b[0m     \x1b[36m \x1b[0m\n\x1b[36m \x1b[0m     \x1b[36m \x1b[0m\n\x1b[36m       \x1b[0m\n
