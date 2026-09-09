@@ -4,6 +4,11 @@ on:
   # Callable so the release workflow re-runs this identical gate on the
   # tagged commit — cargo publish's own verification does not compile tests.
   workflow_call:
+    inputs:
+      checkout_ref:
+        description: Exact validated commit for a release; omitted for ordinary CI
+        required: false
+        type: string
   push:
     branches: [main]
   pull_request:
@@ -18,11 +23,28 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  release-tests:
+    name: release workflow regressions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Test release selection and registry verification
+        run: python3 -m unittest discover -s scripts -p 'test_release*.py' -v
+
   check:
     name: fmt · clippy · test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -62,6 +84,8 @@ jobs:
             args: "--all-features"
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -82,6 +106,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
       - name: Read rust-version from the workspace
         id: msrv
@@ -108,6 +134,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -165,7 +193,7 @@ jobs:
   # then never touches branch protection again.
   ci-ok:
     name: ci-ok
-    needs: [check, features, msrv, parity]
+    needs: [check, features, msrv, parity, release-tests]
     # `always()` so this reports failure rather than being skipped when a
     # dependency fails — a skipped required check blocks the PR forever.
     if: always()

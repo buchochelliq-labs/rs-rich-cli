@@ -631,7 +631,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-art"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "icy_sixel",
  "image",

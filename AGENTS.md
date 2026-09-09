@@ -144,7 +144,8 @@ Use the [`sync-upstream`](.claude/skills/sync-upstream/SKILL.md) skill:
 
 1. Diff upstream between the ref in `UPSTREAM.toml` and the new tag.
 2. Map each changed `.py` to its Rust file via `docs/PORTING.md` and port the diff.
-3. Bump the mirror crate's `version` to match, update `UPSTREAM.toml`.
+3. Bump the mirror crate's independent SemVer as appropriate, and update
+   `UPSTREAM.toml`; never copy the Python version into the crate manifest.
 4. Re-capture golden fixtures against the new version; make CI green.
 5. Add a `CHANGELOG.md` entry noting the upstream version absorbed.
 

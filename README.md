@@ -29,12 +29,15 @@ Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
 Each package follows independent SemVer. The Python releases being tracked are
 recorded separately in [`UPSTREAM.toml`](UPSTREAM.toml).
 
-| crate | crates.io package | Rust version | docs / installed name | what it is |
+A `vX.Y.Z` tag selects a coordinated workspace release; a `<crate>-vX.Y.Z`
+tag selects only that crate. See [the release documentation](docs/BRANCHING.md#releases).
+
+| crate | crates.io package | Manifest version | docs / installed name | what it is |
 |-------|-------------------|--------------|-----------------------|------------|
 | [`crates/rich`](crates/rich) | [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.2` | [docs.rs](https://docs.rs/rs-rich); `use rich` | faithful port of Python `rich` 15.0.0 |
 | [`crates/rich-ext`](crates/rich-ext) | [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.2` | [docs.rs](https://docs.rs/rs-rich-ext); `use rich_ext` | our additions + the plugin registry |
 | [`crates/rich-cli`](crates/rich-cli) | [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.3` | executable **`rich`** | port tracking Python `rich-cli` 1.8.1 |
-| [`crates/rich-art`](crates/rich-art) | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.2` | [docs.rs](https://docs.rs/rs-rich-art); `use rich_art` | FIGlet text, image→ASCII, animated GIFs |
+| [`crates/rich-art`](crates/rich-art) | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.3` | [docs.rs](https://docs.rs/rs-rich-art); `use rich_art` | FIGlet text, image→ASCII, animated GIFs |
 
 The published package names carry an `rs-` prefix because `rich` is already taken
 on crates.io by an unrelated crate. The library targets keep the short names, so
