@@ -3,9 +3,8 @@ resolver = "2"
 members = ["crates/rich", "crates/rich-ext", "crates/rich-cli", "crates/rich-art"]
 
 # Shared metadata. `version` is intentionally NOT inherited: each crate owns its
-# SemVer and a future release may version only part of the workspace. Repository
-# releases are currently coordinated, however, so every crate selected by a
-# `vX.Y.Z` tag must use X.Y.Z (see docs/BRANCHING.md).
+# SemVer. A `vX.Y.Z` tag selects the coordinated workspace; a
+# `<crate>-vX.Y.Z` tag selects only that crate (see docs/BRANCHING.md).
 [workspace.package]
 edition = "2021"
 license = "MIT"
