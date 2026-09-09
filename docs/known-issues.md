@@ -38,18 +38,6 @@ rich --json wide.json --width 200
 `rich --json` is for reading, not for piping into a parser; use `jq` on the raw
 file when you need machine-readable output.
 
-### Markdown images: five smaller divergences remain
-
-Images carry upstream's marker and are hoisted above their paragraph, but an
-image **inside a table cell** is not hoisted, two images in one container split
-across rows, and consecutive hoisted images gain a blank row.
-
-**Scope.** Documents whose images sit in table cells — a README badge table is
-the common case.
-
-**Status.** Open —
-[#86 follow-ups](https://github.com/buchochelliq-labs/rs-rich-cli/issues).
-
 ---
 
 ## Limitations

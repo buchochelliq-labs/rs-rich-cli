@@ -33,7 +33,13 @@ Everything below this heading is the development history that led here.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+- **Markdown image hoisting is byte-parity in nested and adjacent containers**
+  (`markdown.rs`): images inside table cells are now hoisted ahead of the table
+  and leave their cells empty, multiple images in one container share a row, and
+  images hoisted from consecutive containers occupy adjacent rows without a blank
+  row. Goldens cover a table cell, a multi-image paragraph, and a README-style
+  badge table against Python `rich` 15.0.0.
 
 ## [0.0.2] — 2026-08-11
 

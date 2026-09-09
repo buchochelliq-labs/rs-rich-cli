@@ -393,6 +393,31 @@ RENDERABLE_CASES = [
     # A document ending with a thematic break emits one extra trailing blank line.
     ("markdown_hr_end", 20, Markdown("a\n\n---")),
     (
+        "markdown_image_table_cell",
+        44,
+        Markdown(
+            "| Icon | Name |\n| --- | --- |\n| ![crate](crate.svg) | rich |\n",
+            hyperlinks=False,
+        ),
+    ),
+    (
+        "markdown_images_one_container",
+        50,
+        Markdown(
+            "Before ![one](one.svg) + ![two](two.svg) after.",
+            hyperlinks=False,
+        ),
+    ),
+    (
+        "markdown_badge_table",
+        44,
+        Markdown(
+            "| Badge |\n| --- |\n| ![build](build.svg) |\n"
+            "| ![docs](docs.svg) |\n| ![crate](crate.svg) |\n",
+            hyperlinks=False,
+        ),
+    ),
+    (
         "markdown_table",
         40,
         Markdown(
