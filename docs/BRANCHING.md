@@ -123,11 +123,53 @@ CI enforces this: the `base branch` check fails any PR not targeting `main` or
 
 ## Releases
 
-Versions move in **lockstep** — all four crates share one number and one tag.
-This is not a stylistic choice. In Cargo, `^0.0.1` is an *exact* requirement, so
-`rs-rich-ext` pinned to `rs-rich 0.0.1` can never resolve against `0.0.2`; Cargo
-already forces lockstep below `0.1.0`. Independent per-crate versions become
-meaningful at `0.1.0` and can be revisited then.
+There are two separate decisions here:
+
+1. **Each crate owns its SemVer.** A number describes that crate's Rust API and
+   contents; it is never copied from either Python upstream. A change in one
+   crate does not, by policy alone, require an unrelated crate's version to
+   change.
+2. **Repository tags currently describe a coordinated workspace release.** A
+   `vX.Y.Z` tag is not an `rs-rich`-only tag. The release workflow selects all
+   four publishable workspace crates, requires every manifest to say `X.Y.Z`,
+   verifies all three internal dependency requirements, and refuses the release
+   if any selected `name@X.Y.Z` already exists on crates.io.
+
+That coordination is a release-process choice, not SemVer ownership. It gives a
+single installable snapshot while the project is young. If independent release
+cadences become useful, tags and workflow inputs must first be redesigned to
+identify a crate (for example, `rs-rich-ext-v0.1.1`); a plain `vX.Y.Z` must never
+silently change meaning.
+
+### What Cargo means by `0.0.x`
+
+The workspace dependency spelling `version = "0.0.2"` is Cargo shorthand for
+the caret requirement `^0.0.2`. Cargo permits versions `>=0.0.2,<0.0.3`: for a
+`0.0.x` requirement, changing the patch component is incompatible. A path
+dependency can use the local package while developing, but its version must
+still satisfy that requirement, and the requirement is what consumers see in
+the published package. Thus bumping `rs-rich` from `0.0.2` to `0.0.3` requires
+updating the requirements used by its direct dependents (`rs-rich-ext`,
+`rs-rich-art`, and `rs-rich-cli`); bumping `rs-rich-ext` or `rs-rich-art`
+requires updating `rs-rich-cli`. Cargo does **not** force unrelated crates to
+share a version. Our coordinated-tag policy does.
+
+### Decision for `v0.0.3`
+
+`v0.0.3` is a coordinated workspace release, so the release decision is
+explicitly **publish** for every crate:
+
+| package | decision | manifest change | internal requirement change |
+|---|---|---|---|
+| `rs-rich` | publish `0.0.3` | `crates/rich/Cargo.toml`: `0.0.2` → `0.0.3` | root `rich` requirement: `0.0.2` → `0.0.3` |
+| `rs-rich-ext` | publish `0.0.3` | `crates/rich-ext/Cargo.toml`: `0.0.2` → `0.0.3` | root `rich-ext` requirement: `0.0.2` → `0.0.3`; it consumes the updated root `rich` requirement |
+| `rs-rich-art` | publish `0.0.3` | `crates/rich-art/Cargo.toml`: `0.0.2` → `0.0.3` | root `rich-art` requirement: `0.0.2` → `0.0.3`; it consumes the updated root `rich` requirement |
+| `rs-rich-cli` | publish `0.0.3` | `crates/rich-cli/Cargo.toml`: `0.0.2` → `0.0.3` | it consumes all three updated root requirements |
+
+Those seven edits (four package versions and three workspace requirements), the
+lockfile refresh, changelog promotion, and README release-number update belong
+in the eventual release commit. They are recorded here **before** creating the
+tag; this policy change does not itself create `v0.0.3` or claim it was shipped.
 
 Tags are annotated: `vX.Y.Z` for releases, `vX.Y.Z-rc.N` for candidates.
 
@@ -143,9 +185,13 @@ In outline:
 
 ### Publish order
 
-Don't script it. `cargo publish --workspace --locked` derives the topological
-order itself and cross-verifies dependents against sibling tarballs. Publishing
-is **irreversible** — versions are immutable and can only be yanked.
+`cargo publish --workspace --locked` derives the topological order and
+cross-verifies dependents against sibling tarballs. Before it runs, the workflow
+builds the selected set from `cargo metadata`, checks every selected manifest
+and internal requirement against the tag, and queries crates.io for every
+selected package/version. A hit aborts the entire job rather than accidentally
+republishing an unchanged crate or starting an inconsistent partial release.
+Publishing is **irreversible** — versions are immutable and can only be yanked.
 
 ## What is enforced, and what is merely written down
 

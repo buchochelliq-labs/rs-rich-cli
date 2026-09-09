@@ -1,8 +1,9 @@
 # crates/rich-art — ASCII-art renderables (FIGlet banners, and later image art).
 #
 # ⚠️  NOT a port. This crate is OUR OWN feature, not a mirror of anything
-# upstream, so it carries its own SemVer (like rich-ext) and must never be
-# version-locked to `rich`/`rich-cli`. See AGENTS.md → Versioning.
+# upstream, so it owns its own SemVer (like rich-ext). Its API version is not
+# derived from `rich`/`rich-cli`, although repository releases currently
+# coordinate all four crate versions. See docs/BRANCHING.md.
 #
 # It is deliberately self-contained: it depends only on `rich` (for the
 # `Renderable` trait) so it can be lifted into its own repository unchanged.

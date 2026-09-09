@@ -18,15 +18,21 @@ Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
 
 ![Console markup](docs/assets/markup.svg)
 
-> **`0.0.2` — early, and the version says so.** The crates version independently
-> by ordinary SemVer; the number is *not* tied to the upstream release. Expect
-> breaking API changes. Which upstream version is tracked lives in
+> **`0.0.2` — early, and the version says so.** Each crate owns its ordinary
+> SemVer; the number is *not* tied to the upstream release. Repository releases
+> currently coordinate all four crates under one `vX.Y.Z` tag, but that is a
+> release-train policy rather than shared SemVer ownership. Expect breaking API
+> changes. Which upstream version is tracked lives in
 > [`UPSTREAM.toml`](UPSTREAM.toml) and the line above. See [AGENTS.md](AGENTS.md)
 > for why the version is not mirrored.
 
 ## Workspace
 
 **All four are published on crates.io at `0.0.2`.**
+
+A repository tag represents a coordinated workspace release, not just
+`rs-rich`. Before `v0.0.3`, the exact four-crate release decision and all required
+manifest/dependency edits are recorded in [the release documentation](docs/BRANCHING.md#decision-for-v003).
 
 | crate | crates.io | docs | `use` as | what it is |
 |-------|-----------|------|----------|------------|

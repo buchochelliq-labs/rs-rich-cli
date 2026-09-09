@@ -2,8 +2,8 @@
 #
 # Publishing is IRREVERSIBLE — a version can be yanked but never deleted or
 # edited — so this workflow is deliberately paranoid. It re-runs the full gate on
-# the tagged commit, refuses to publish anything that is not on `main`, and skips
-# crates already at that version so a partially-failed run can be re-run safely.
+# the tagged commit, refuses to publish anything that is not on `main`, and
+# aborts before upload if any selected crate/version already exists.
 name: release
 
 on:
@@ -47,15 +47,49 @@ jobs:
             exit 1
           fi
 
-      - name: Tag version must match the manifest version
+      - name: Tag, manifests, and internal requirements must agree
         run: |
-          tag="${{ inputs.tag || github.ref_name }}"
-          manifest=$(grep -m1 '^version' crates/rich/Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
-          if [ "v$manifest" != "$tag" ]; then
-            echo "::error::Tag is $tag but crates/rich/Cargo.toml says $manifest."
-            exit 1
-          fi
-          echo "tag $tag matches manifest $manifest"
+          python3 - "${{ inputs.tag || github.ref_name }}" <<'PY'
+          import json
+          import pathlib
+          import subprocess
+          import sys
+          import tomllib
+
+          tag = sys.argv[1]
+          if not tag.startswith("v"):
+              raise SystemExit(f"::error::Release tag must start with v: {tag}")
+          version = tag[1:]
+          root = tomllib.loads(pathlib.Path("Cargo.toml").read_text())
+          metadata = json.loads(subprocess.check_output(
+              ["cargo", "metadata", "--no-deps", "--format-version", "1"],
+              text=True,
+          ))
+          expected = {"rs-rich", "rs-rich-ext", "rs-rich-cli", "rs-rich-art"}
+          selected = {p["name"]: p for p in metadata["packages"] if p["name"] in expected}
+          if selected.keys() != expected:
+              missing = sorted(expected - selected.keys())
+              extra = sorted(selected.keys() - expected)
+              raise SystemExit(f"::error::Publish selection mismatch; missing={missing}, extra={extra}")
+          errors = []
+          for name, package in sorted(selected.items()):
+              if package["version"] != version:
+                  errors.append(
+                      f'{name}: manifest says {package["version"]}, tag says {version}'
+                  )
+          requirements = root["workspace"]["dependencies"]
+          for key in ("rich", "rich-ext", "rich-art"):
+              requirement = requirements[key]["version"]
+              if requirement != version:
+                  errors.append(
+                      f'workspace dependency {key}: requirement is {requirement}, expected {version}'
+                  )
+          if errors:
+              for error in errors:
+                  print(f"::error::{error}")
+              raise SystemExit(1)
+          print(f"tag v{version} selects four matching manifests and three matching requirements")
+          PY
 
   # The same gate every PR passes, re-run on the exact tagged tree. `cargo
   # publish`'s own verification does NOT compile test targets for these crates
@@ -77,6 +111,27 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Refuse an already-published selected crate
+        run: |
+          version="${{ inputs.tag || github.ref_name }}"
+          version="${version#v}"
+          for crate in rs-rich rs-rich-ext rs-rich-cli rs-rich-art; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' \
+              -H 'User-Agent: rs-rich-release-preflight' \
+              "https://crates.io/api/v1/crates/$crate/$version")
+            case "$code" in
+              404) echo "$crate@$version is available" ;;
+              200)
+                echo "::error::$crate@$version already exists; refusing the coordinated release."
+                exit 1
+                ;;
+              *)
+                echo "::error::Could not verify $crate@$version on crates.io (HTTP $code)."
+                exit 1
+                ;;
+            esac
+          done
+
       - name: Dry run
         run: cargo publish --workspace --locked --dry-run
 
@@ -86,8 +141,8 @@ jobs:
         run: |
           # `--workspace` derives the topological order itself and cross-verifies
           # dependents against sibling tarballs, so no ordering script is needed.
-          # If a previous run published some crates, this reports them as already
-          # uploaded rather than failing the job.
+          # The preflight above guarantees this starts as an all-new coordinated
+          # release. A partial upload requires manual recovery, not a blind rerun.
           cargo publish --workspace --locked
 
   verify:
