@@ -2567,7 +2567,7 @@ OPTIONS:
         --pager      Page the output through $PAGER (no pager, no paging)
         --no-color   Disable colored output (as does a non-empty NO_COLOR)
     -h, --help       Show this help
-    -V, --version    Show the version (mirrors upstream rich-cli)
+    -V, --version    Show the rs-rich-cli package version
 
 ENVIRONMENT:
     NO_COLOR         Any non-empty value disables colour
