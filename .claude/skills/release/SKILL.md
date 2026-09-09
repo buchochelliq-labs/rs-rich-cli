@@ -16,9 +16,15 @@ cheap; step 5 is not.
 
 ## 0. Decide what you are cutting
 
-Versions move in **lockstep** — all four crates share one number. Below `0.1.0`
-Cargo enforces this anyway: `^0.0.1` is an exact requirement, so a dependent
-pinned to `rs-rich 0.0.1` cannot resolve against `0.0.2`.
+Each crate owns its SemVer, independently of the Python projects and of the
+other crates. The current **release train** is coordinated: a plain `vX.Y.Z` tag
+selects all four crates, and all four manifests must say `X.Y.Z`. Do not use this
+skill for a single-crate release; that requires a prior tag/workflow redesign.
+
+Cargo's compatibility rule is narrower than "below 0.1 is lockstep": `0.0.2`
+means `^0.0.2`, or `>=0.0.2,<0.0.3`. A bump of an internal dependency therefore
+requires its direct dependents' requirements to change, but Cargo does not make
+unrelated workspace packages bump. The coordinated release policy does.
 
 Pick the number from what is in `## [Unreleased]` in `CHANGELOG.md`. If that
 section is empty there is nothing to release — stop.
@@ -52,18 +58,22 @@ Never from another branch, never from a stale `main`.
 
 ## 3. Make the single release commit
 
-Four version sites, all in `Cargo.toml`:
+Exactly seven version sites, all in `Cargo.toml`:
 
-- `[workspace.package] version` — if the hoist has been done; otherwise the
-  `version` in each of the four `crates/*/Cargo.toml`
-- the three `[workspace.dependencies]` pins (`rs-rich`, `rs-rich-ext`,
-  `rs-rich-art`)
+- the `version` in each of the four `crates/*/Cargo.toml` manifests;
+- the three `[workspace.dependencies]` requirements (`rich`, `rich-ext`, and
+  `rich-art`) in the root manifest.
+
+For `v0.0.3`, the per-crate decisions and exact edit inventory are recorded in
+`docs/BRANCHING.md` under "Decision for v0.0.3". Update `Cargo.lock` too.
 
 Then `CHANGELOG.md`: move everything under `## [Unreleased]` beneath a new
 `## [X.Y.Z]` heading, leaving `[Unreleased]` empty.
 
-Re-run `cargo check --workspace` — a mismatched dependency pin fails here, long
-before it could reach crates.io.
+Re-run `cargo check --workspace`. Then run the workflow's manifest audit locally;
+it must prove that all four selected packages and all three requirements match
+the tag. A path dependency can mask publication mistakes, so compilation alone
+is not the release audit.
 
 Check the docs don't contradict the new number (`README.md`, `docs/ARCHITECTURE.md`).
 
@@ -92,9 +102,12 @@ Do **not** write an ordering script. Cargo derives the topological order from th
 dependency graph and cross-verifies dependents against sibling tarballs. The order
 it picks here is `rs-rich` → `rs-rich-art` → `rs-rich-ext` → `rs-rich-cli`.
 
-If the upload fails partway, the crates already uploaded stay uploaded — versions
-are immutable. Re-running is safe only for the crates that did *not* publish; check
-each with:
+The workflow first checks all four package/version pairs on crates.io and aborts
+if even one already exists. This prevents publishing an unchanged crate and
+prevents treating a partial prior upload as a coherent release. If an upload
+fails partway, versions already uploaded stay uploaded and the coordinated tag
+cannot simply be rerun; inspect every crate and make an explicit recovery plan.
+Check a version with:
 
 ```bash
 curl -s -H 'User-Agent: rs-rich-release' https://crates.io/api/v1/crates/rs-rich/0.1.0 \

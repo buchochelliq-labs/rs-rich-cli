@@ -2,9 +2,9 @@
 resolver = "2"
 members = ["crates/rich", "crates/rich-ext", "crates/rich-cli", "crates/rich-art"]
 
-# Shared metadata. NOTE: `version` is intentionally NOT shared here — each crate
-# carries an independent SemVer, starting at 0.0.1, and is bumped only when that
-# crate is selected for a release (see AGENTS.md → Versioning).
+# Shared metadata. `version` is intentionally NOT inherited: each crate owns its
+# SemVer. A `vX.Y.Z` tag selects the coordinated workspace; a
+# `<crate>-vX.Y.Z` tag selects only that crate (see docs/BRANCHING.md).
 [workspace.package]
 edition = "2021"
 license = "MIT"
@@ -24,6 +24,9 @@ rust-version = "1.90"
 rich = { package = "rs-rich", path = "crates/rich", version = "0.0.2" }
 rich-ext = { package = "rs-rich-ext", path = "crates/rich-ext", version = "0.0.2" }
 rich-art = { package = "rs-rich-art", path = "crates/rich-art", version = "0.0.3" }
+# Cargo's default caret requirement treats 0.0.x specially: `version = "0.0.2"`
+# means >=0.0.2,<0.0.3, not >=0.0.2,<0.1.0. Therefore any internal crate bump
+# must also update every direct dependent's workspace requirement.
 
 # Third-party (kept lean for the first slice)
 terminal_size = "0.4"

@@ -123,13 +123,81 @@ CI enforces this: the `base branch` check fails any PR not targeting `main` or
 
 ## Releases
 
-Versions move in **lockstep** — all four crates share one number and one tag.
-This is not a stylistic choice. In Cargo, `^0.0.1` is an *exact* requirement, so
-`rs-rich-ext` pinned to `rs-rich 0.0.1` can never resolve against `0.0.2`; Cargo
-already forces lockstep below `0.1.0`. Independent per-crate versions become
-meaningful at `0.1.0` and can be revisited then.
+There are two separate decisions here:
 
-Tags are annotated: `vX.Y.Z` for releases, `vX.Y.Z-rc.N` for candidates.
+1. **Each crate owns its SemVer.** A number describes that crate's Rust API and
+   contents; it is never copied from either Python upstream. A change in one
+   crate does not, by policy alone, require an unrelated crate's version to
+   change.
+2. **The tag explicitly selects what ships.** A `vX.Y.Z` tag retains the
+   coordinated workspace meaning: all four manifests and their internal
+   requirements must agree at `X.Y.Z`. A `<crate>-vX.Y.Z` tag selects only that
+   crate, whose manifest must match the tag. Unselected crates keep their own
+   versions and are neither published nor verified as if they had changed.
+
+| Tag | Packages published and verified |
+|---|---|
+| `v0.0.3` | All four crates at `0.0.3` |
+| `rs-rich-v0.0.3` | Only `rs-rich` at `0.0.3` |
+| `rs-rich-ext-v0.0.3` | Only `rs-rich-ext` at `0.0.3` |
+| `rs-rich-cli-v0.0.3` | Only `rs-rich-cli` at `0.0.3` |
+| `rs-rich-art-v0.0.3` | Only `rs-rich-art` at `0.0.3` |
+
+The same forms accept SemVer prereleases, for example
+`rs-rich-cli-v0.0.3-rc.1`. Manual dispatch accepts an **existing tag** in one of
+these forms, never a branch name. Every job checks out the validated tag's
+commit SHA, including the reusable CI gate. Tags still belong on `main` after
+merging the release changes; this does not relax the ancestry rule.
+
+For a CLI-only `0.0.3` release with core still at `0.0.2`, use
+`rs-rich-cli-v0.0.3`, not `v0.0.3`. For an art-only release, use
+`rs-rich-art-v0.0.3` and update the root `rich-art` dependency requirement to
+match. All three workspace requirements are checked against their respective
+crate versions, not against the selected crate's tag version. Refresh
+`Cargo.lock` whenever manifests or dependency requirements change.
+
+Dependencies outside the selected set must already be available on crates.io;
+`cargo publish -p <crate> --locked --dry-run` verifies the packaged crate against
+those registry dependencies before any upload. If both art and CLI advance and
+CLI requires the new art version, publish and verify art first, then CLI.
+
+### What Cargo means by `0.0.x`
+
+The workspace dependency spelling `version = "0.0.2"` is Cargo shorthand for
+the caret requirement `^0.0.2`. Cargo permits versions `>=0.0.2,<0.0.3`: for a
+`0.0.x` requirement, changing the patch component is incompatible. A path
+dependency can use the local package while developing, but its version must
+still satisfy that requirement, and the requirement is what consumers see in
+the published package. Thus bumping `rs-rich` from `0.0.2` to `0.0.3` requires
+updating the requirements used by its direct dependents (`rs-rich-ext`,
+`rs-rich-art`, and `rs-rich-cli`); bumping `rs-rich-ext` or `rs-rich-art`
+requires updating `rs-rich-cli`. Cargo does **not** force unrelated crates to
+share a version. Our coordinated-tag policy does.
+
+### Coordinated `v0.0.3` (if selected)
+
+A plain `v0.0.3` still means a coordinated workspace release, with
+**publish** selected for every crate:
+
+| package | decision | manifest change | internal requirement change |
+|---|---|---|---|
+| `rs-rich` | publish `0.0.3` | `crates/rich/Cargo.toml`: `0.0.2` → `0.0.3` | root `rich` requirement: `0.0.2` → `0.0.3` |
+| `rs-rich-ext` | publish `0.0.3` | `crates/rich-ext/Cargo.toml`: `0.0.2` → `0.0.3` | root `rich-ext` requirement: `0.0.2` → `0.0.3`; it consumes the updated root `rich` requirement |
+| `rs-rich-art` | publish `0.0.3` | `crates/rich-art/Cargo.toml`: `0.0.2` → `0.0.3` | root `rich-art` requirement: `0.0.2` → `0.0.3`; it consumes the updated root `rich` requirement |
+| `rs-rich-cli` | publish `0.0.3` | `crates/rich-cli/Cargo.toml`: `0.0.2` → `0.0.3` | it consumes all three updated root requirements |
+
+Those seven edits (four package versions and three workspace requirements), the
+lockfile refresh, changelog promotion, and README release-number update belong
+in the eventual release commit. They are recorded here **before** creating the
+tag; this policy change does not itself create `v0.0.3` or claim it was shipped.
+
+This coordinated option is separate from the independent CLI/art tags above.
+Do not publish a crate at `0.0.3` independently and then expect a coordinated
+`v0.0.3` to skip it: the already-published-version guard deliberately rejects
+that mixed attempt. Choose the release scope before tagging.
+
+Tags are annotated: `vX.Y.Z` or `<crate>-vX.Y.Z` for releases, with `-rc.N`
+appended for candidates.
 
 The full procedure lives in the **`release` skill** (`.claude/skills/release/`).
 In outline:
@@ -143,9 +211,24 @@ In outline:
 
 ### Publish order
 
-Don't script it. `cargo publish --workspace --locked` derives the topological
-order itself and cross-verifies dependents against sibling tarballs. Publishing
-is **irreversible** — versions are immutable and can only be yanked.
+`cargo publish --workspace --locked` retains the coordinated path's topological
+order and sibling-tarball verification. Independent tags use
+`cargo publish -p <crate> --locked`. Both paths run a dry run with the identical
+selection first. The workflow resolves that selection once, checks the
+manifests and internal requirements, and queries crates.io for each selected
+package/version. A hit or an unexpected registry response aborts the job;
+unchanged, unselected versions are not queried. Uploads are serialized across
+all release tags and manual dispatches.
+
+After publishing, verification waits for **each selected version** on crates.io
+and fails if it does not appear. In fresh temporary directories outside the
+checkout, it installs the CLI with an exact version and `--locked`, or compiles
+a consumer with an exact registry dependency for each selected library. An
+art-only release never installs the CLI or waits for a new core version.
+
+Publishing is **irreversible** — versions are immutable and can only be yanked.
+A partial upload still requires manual recovery, not a blind rerun. This change
+creates no tags and publishes no packages.
 
 ## What is enforced, and what is merely written down
 
