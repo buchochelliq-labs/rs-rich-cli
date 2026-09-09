@@ -69,6 +69,9 @@ markdown_doc	24	         \x1b[1;4mTitle\x1b[0m          \n\nHello \x1b[1mbold\x1
 markdown_list	20	Items:              \n\n\x1b[1m • \x1b[0mone              \n\x1b[1m • \x1b[0mtwo              \n\n\x1b[36m 1 \x1b[0ma                \n\x1b[36m 2 \x1b[0mb                \n
 markdown_quote_hr	20	Note:               \n\n\x1b[35m▌ \x1b[0m\x1b[35mimportant\x1b[0m\x1b[35m       \x1b[0m\n\n\x1b[2m--------------------\x1b[0m\n\ndone                \n
 markdown_hr_end	20	a                   \n\n\x1b[2m--------------------\x1b[0m\n\n
+markdown_image_table_cell	44	\n🌆 crate \n\x1b[36m            \x1b[0m\n\x1b[36m \x1b[0m\x1b[36mIcon\x1b[0m\x1b[1m \x1b[0m\x1b[36m \x1b[0m\x1b[36mName\x1b[0m\x1b[36m \x1b[0m\n\x1b[36m ────────── \x1b[0m\n\x1b[36m \x1b[0m     \x1b[36m \x1b[0mrich\x1b[36m \x1b[0m\n\x1b[36m            \x1b[0m\n
+markdown_images_one_container	50	🌆 one 🌆 two Before  +  after.                   \n
+markdown_badge_table	44	\n🌆 build \n🌆 docs \n🌆 crate \n\x1b[36m       \x1b[0m\n\x1b[36m \x1b[0m\x1b[36mBadge\x1b[0m\x1b[36m \x1b[0m\n\x1b[36m ───── \x1b[0m\n\x1b[36m \x1b[0m     \x1b[36m \x1b[0m\n\x1b[36m \x1b[0m     \x1b[36m \x1b[0m\n\x1b[36m \x1b[0m     \x1b[36m \x1b[0m\n\x1b[36m       \x1b[0m\n
 markdown_table	40	\n\x1b[36m            \x1b[0m\n\x1b[36m \x1b[0m\x1b[36mName\x1b[0m\x1b[1m \x1b[0m\x1b[1m \x1b[0m\x1b[36m \x1b[0m\x1b[36mAge\x1b[0m\x1b[36m \x1b[0m\n\x1b[36m ────────── \x1b[0m\n\x1b[36m \x1b[0mAlice \x1b[36m \x1b[0m 30\x1b[36m \x1b[0m\n\x1b[36m \x1b[0mBob   \x1b[36m \x1b[0m  7\x1b[36m \x1b[0m\n\x1b[36m            \x1b[0m\n
 hbar_full	20	\x1b[39;49m████████████████████\x1b[0m\n
 hbar_mid	20	\x1b[39;49m     ██████████     \x1b[0m\n
@@ -84,6 +87,3 @@ ansi_attrs	20	\x1b[3;4;9mstyled\x1b[0m\n
 styled_on_red	20	\x1b[41mhi\x1b[0m\n
 styled_panel	8	\x1b[32m┌──────┐\x1b[0m\n\x1b[32m│\x1b[0m\x1b[32m \x1b[0m\x1b[32mx\x1b[0m\x1b[32m   \x1b[0m\x1b[32m \x1b[0m\x1b[32m│\x1b[0m\n\x1b[32m└──────┘\x1b[0m\n
 progress_three	50	Downloading \x1b[38;2;249;38;114m━━━━━━━━━━━━━━━━\x1b[0m\x1b[38;2;249;38;114m╸\x1b[0m\x1b[38;5;237m━━━━━━━━━━━━━━━━\x1b[0m \x1b[35m 50%\x1b[0m\nProcessing  \x1b[38;2;114;156;31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m \x1b[35m100%\x1b[0m\nWaiting     \x1b[38;5;237m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m \x1b[35m  0%\x1b[0m\n
-markdown_image_table_cell	44	\n🌆 crate \x1b[36m            \x1b[0m\n\x1b[36m \x1b[0m\x1b[36mIcon\x1b[0m\x1b[1m \x1b[0m\x1b[36m \x1b[0m\x1b[36mName\x1b[0m\x1b[36m \x1b[0m\n\x1b[36m ────────── \x1b[0m\n\x1b[36m \x1b[0m     \x1b[36m \x1b[0mrich\x1b[36m \x1b[0m\n\x1b[36m            \x1b[0m\n
-markdown_images_one_container	50	🌆 one 🌆 two Before  +  after.                   \n
-markdown_badge_table	44	\n🌆 build \n🌆 docs \n🌆 crate \x1b[36m       \x1b[0m\n\x1b[36m \x1b[0m\x1b[36mBadge\x1b[0m\x1b[36m \x1b[0m\n\x1b[36m ───── \x1b[0m\n\x1b[36m \x1b[0m     \x1b[36m \x1b[0m\n\x1b[36m \x1b[0m     \x1b[36m \x1b[0m\n\x1b[36m \x1b[0m     \x1b[36m \x1b[0m\n\x1b[36m       \x1b[0m\n

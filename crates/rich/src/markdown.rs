@@ -575,7 +575,10 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
                             ),
                             hyperlinks,
                         ),
-                        joins_next: stack.is_empty(),
+                        // A table is a container too, even though it uses a
+                        // dedicated accumulator rather than a `Frame`. Its own
+                        // render begins after the hoisted image's open row.
+                        joins_next: stack.is_empty() && table.is_none(),
                         leading_break: new_line,
                     });
                     new_line = false;
