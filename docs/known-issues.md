@@ -65,7 +65,9 @@ playback are unsupported.
 ### CSV output still retains source rows
 
 Undecorated CSV output streams styled rows, reducing output-buffer overhead.
-Source rows remain in memory for measurement, so memory still scales with input.
+The 0.0.4 development build removes duplicate parsed-cell storage and trims row
+capacity, reducing the measured 100k-row peak RSS by about 46%. Source rows remain
+in memory for measurement, so memory still scales with input.
 Decorated, aligned, paged and exported CSV output still buffers. Further memory
 reductions and long-line wrapping optimization remain in
 [#74](https://github.com/buchochelliq-labs/rs-rich-cli/issues/74).

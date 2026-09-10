@@ -1,0 +1,5 @@
+Render path,Rows,Peak RSS KiB
+CSV file,10000,6608
+CSV file,50000,15584
+CSV file,100000,27088
+CSV with panel,10000,113268

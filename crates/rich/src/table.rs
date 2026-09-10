@@ -685,6 +685,17 @@ impl LineRenderable for Table {
     }
 }
 
+impl crate::protocol::OwnedTableRows for Table {
+    fn extend_owned_rows(&mut self, mut rows: Vec<Vec<String>>) -> &mut Self {
+        if self.rows.is_empty() {
+            self.rows = rows;
+        } else {
+            self.rows.append(&mut rows);
+        }
+        self
+    }
+}
+
 impl Renderable for Table {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let mut segments = Vec::new();
@@ -934,6 +945,37 @@ mod tests {
             .width(40)
             .no_color(false)
             .build()
+    }
+
+    #[test]
+    fn owned_rows_preserve_measurement_styles_and_missing_cells() {
+        use crate::protocol::OwnedTableRows;
+        for width in [1, 12, 40, 80] {
+            let console = Console::builder().width(width).force_terminal(true).build();
+            let build = || {
+                let mut table = Table::new()
+                    .title("Rows")
+                    .caption("owned or borrowed")
+                    .show_lines(true);
+                table.add_column("Name");
+                table.add_column_justify("Value", Justify::Right);
+                table
+            };
+            let mut borrowed = build();
+            let mut owned = build();
+            for row in [
+                vec!["漢字\n🙂", "123"],
+                vec!["short"],
+                vec!["extra", "4", "ignored"],
+            ] {
+                borrowed.add_row(&row);
+                owned.extend_owned_rows(vec![row.into_iter().map(str::to_owned).collect()]);
+            }
+            assert_eq!(
+                console.render_to_string(&borrowed),
+                console.render_to_string(&owned)
+            );
+        }
     }
 
     #[test]

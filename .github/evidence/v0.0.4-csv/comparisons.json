@@ -1,0 +1,1412 @@
+[
+  {
+    "fixture": "mixed.csv",
+    "width": 4,
+    "flags": [],
+    "exit_code": 0,
+    "stdout_sha256": "e1d5d8be4583d6709b7ced589bddc9fa3f78fb4cd4343282fd9c2289c0d8e7e9",
+    "html_sha256": "273b06ac21d3492b6d4e2dce8aeb985f466adc7aa75a3d63b8c9714b41d41989",
+    "svg_sha256": "9d382ea0727dd5d0c310137546643c8ed8d1298df73bd2e44d69e670f22a60ed"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 4,
+    "flags": [
+      "--panel",
+      "rounded"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "65182adb25555fc35ebde02dacf77cd83216fa1a2a6e194e762b8a13984a3d42",
+    "html_sha256": "f87c1fdf6dcef09a04771d8b3f7acd53fe204fb696c4cfbf90cb3deb5fe2989a",
+    "svg_sha256": "4b9164a39d477fbd61908823e700b7b4013ac0d4dc60d10eb6793856867687d1"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 4,
+    "flags": [
+      "--padding",
+      "1"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "3a3b31907cf7ab66ddb8c60d503dfef10f2825eadbd21c636805b204bbdc2d89",
+    "html_sha256": "5a26f9bfd7019fd808c057a776b189c149f545e63cd392af2f7d00ae494d85bb",
+    "svg_sha256": "69dd7f97d9810d2be278b639016dfc1d3eb51f40d69be0a711fef489311ca4bf"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 4,
+    "flags": [
+      "--center"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "626c44f19d2030c2444c307eeee015d1e768a018aca2a913138ea42ce638c194",
+    "html_sha256": "71c5cef8dcc77c04bb5f819cae0b0cb7123c5f1bc5ea79dd4272a4aa65cb5809",
+    "svg_sha256": "94f1edeb4b485c1536691211d0f3819a8b49d2acd256c414deaf14b7f70e06f3"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 4,
+    "flags": [
+      "--right"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "84af5814296d1beb0b1a0336b7a8d6929a1a385c258dd4de16dfbcaccb47dedb",
+    "html_sha256": "464871d43b8f80f19b98e6e3f95230985c1cc81eb97ed9e8e58111aab3e14727",
+    "svg_sha256": "75c65ebcc18aec2e5235eaae65c9628a2d36e66041b1736f9e9deed2ae551d01"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 4,
+    "flags": [
+      "--pager"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "2743c7e6563680be43d44dfb4217f2dd6425dc36c42d06f3e8cd3a58efd66d65",
+    "html_sha256": "2ff3f1e3db92fd691acf611a570371495b5c4840e9492524842d5a8ff36c64e9",
+    "svg_sha256": "2ad96d0c257328487321e0896e2f52b1398dd21a84ebc2cf80aca682ee49e8c6"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 4,
+    "flags": [
+      "--title",
+      "[bold]Data[/]",
+      "--caption",
+      "Values"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "f0630f8f2acf94c9995ee03d75cbb5c5cc4086094ecc13b1f71f8c337a9a10bb",
+    "html_sha256": "70e369a8a4ee534c943e6581ef00a45c5e155a160b177e048dd9f3cf5936ac8a",
+    "svg_sha256": "5ff9b6ed3aefd6e4635a9895e26da4021cc473284153745f92b3a9e46e1f653c"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 4,
+    "flags": [
+      "--panel",
+      "rounded",
+      "--style",
+      "italic"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "65182adb25555fc35ebde02dacf77cd83216fa1a2a6e194e762b8a13984a3d42",
+    "html_sha256": "3c8621f6b5e9341518adbad94a3e288264e74daebf7c5758ac501c1a1fbabad8",
+    "svg_sha256": "829f7c9b9aac7bab6858a6038c500e81842434792c99df0f50378181781a8c40"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 20,
+    "flags": [],
+    "exit_code": 0,
+    "stdout_sha256": "43c730048dc47f8aa003ac5709ff74c8fb7b429f4f38018d7dc323df93607132",
+    "html_sha256": "79add1569875da3148f3e9e1c6f6055129775efbe4fc76b6a35172c8ed34aa71",
+    "svg_sha256": "214897c854cc0de03839b741afdb71cdb162ccfdcd21cea3d11c2ead02e52e80"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 20,
+    "flags": [
+      "--panel",
+      "rounded"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "7083dee70ba8cfdd4862d38bab0db954cdbd8057578118c498ac863759166efb",
+    "html_sha256": "e771cf17cb0122bc86b417b6c27c0d614f9bbae17ad8f7b4835b06724a7ce430",
+    "svg_sha256": "8de3dfe8511667583cc291ddfae4d4a4c1e5a6f5977c6eb53649545dac3e3567"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 20,
+    "flags": [
+      "--padding",
+      "1"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "c34f45e93ea961f1d6a27fd0c11b347e7b4824c2c137fd3c90e6a168c51b8160",
+    "html_sha256": "b4d8679209569e277c3cb1da62ca7065cb67051c3828b5311fb44a0f628fc972",
+    "svg_sha256": "f583c0a543bd8eb344791f8cf91ff222240e269786f499ff02188bc562072bfe"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 20,
+    "flags": [
+      "--center"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "37c30d7722ec2a144bcd77b1c15aa798dbb373f6ec9753f80d979d4a119d8acc",
+    "html_sha256": "eef23525d4316de2aa0b983f9352ddb70b6627237a0e93edbc075f9e00a36080",
+    "svg_sha256": "6617dc8a7ca6e70a0b67c3f5aacfde566f737433a308104efafe8b618aebf9a2"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 20,
+    "flags": [
+      "--right"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "13937556ede7f61c77a870841d2a2199137ab705400934b4d8fd97a35056f5f0",
+    "html_sha256": "511cd2cc22ac137b3ff683dc3aa87932bb54b97f4c24f18ac821d3af624ee62b",
+    "svg_sha256": "41f600a87925b665b164289d519952723f838ccd6126ab7876d6bd7e1fccbbc2"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 20,
+    "flags": [
+      "--pager"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "2743c7e6563680be43d44dfb4217f2dd6425dc36c42d06f3e8cd3a58efd66d65",
+    "html_sha256": "2ff3f1e3db92fd691acf611a570371495b5c4840e9492524842d5a8ff36c64e9",
+    "svg_sha256": "2ad96d0c257328487321e0896e2f52b1398dd21a84ebc2cf80aca682ee49e8c6"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 20,
+    "flags": [
+      "--title",
+      "[bold]Data[/]",
+      "--caption",
+      "Values"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "cb3546083ebab8731ee3a10da81eeca6171b11af9b1b9f4748bce7087d3186b4",
+    "html_sha256": "c068ad17410eaeda670b66661353618b1cfc28f59cb75b4e19146c898e1571f9",
+    "svg_sha256": "5e44ba2532a63205168017c2b4d8a519fbf818ab3c23e862903b069abf26d711"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 20,
+    "flags": [
+      "--panel",
+      "rounded",
+      "--style",
+      "italic"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "7083dee70ba8cfdd4862d38bab0db954cdbd8057578118c498ac863759166efb",
+    "html_sha256": "94481dde3080dbe38c722a527a6941a3fe6a28b73f452a458e493c2a63c978fd",
+    "svg_sha256": "2e53e02ae77399946f1089013f679e0631541fa80292a0d210bcc3c4e35b8686"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 80,
+    "flags": [],
+    "exit_code": 0,
+    "stdout_sha256": "2743c7e6563680be43d44dfb4217f2dd6425dc36c42d06f3e8cd3a58efd66d65",
+    "html_sha256": "2ff3f1e3db92fd691acf611a570371495b5c4840e9492524842d5a8ff36c64e9",
+    "svg_sha256": "2ad96d0c257328487321e0896e2f52b1398dd21a84ebc2cf80aca682ee49e8c6"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 80,
+    "flags": [
+      "--panel",
+      "rounded"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "d64502d83c60b45270f1a19deb4caa84ec9e20db602f43089b762e1263c6a271",
+    "html_sha256": "0abb1ae626fe001f2be62cfd681c047c00530e7bdc5e5cf2e3a230474ef9a771",
+    "svg_sha256": "60f2d5a9ba27da76674cce14e61526a36efad8b6e447f0a3fb7dd8c257981cea"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 80,
+    "flags": [
+      "--padding",
+      "1"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "bf1eec0ec0533f2d4069a9940b57a446a13fd91db899a4ec2cec4b04c05b8c50",
+    "html_sha256": "0cea9025e799407616aa625de3f9147180acb8d4e8957f06dba99c60d78eedb3",
+    "svg_sha256": "9217e647d9342ef019204fb350e8910ecc58c055058f89f77c4f6d664b3662a6"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 80,
+    "flags": [
+      "--center"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "0cd72273c2bffcf628dd44ee07dec1b38c63fd7edb23d27a721783137a80e74d",
+    "html_sha256": "fc393521da48c3cf0b344f45a0e5a2e06bc215395cdbefbcb187761e790d84c1",
+    "svg_sha256": "0fd1f73b1b1c5c9ce299e58c26ff4649985a938c9e4b77e9bd9e8a6b35801b34"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 80,
+    "flags": [
+      "--right"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "8213d42d4a4792ed81d29d6a34a12d3ebde107531e0eabbca4cd2c0d5372a543",
+    "html_sha256": "ba5332ef041ae0216c2fbf7164c07ddfb9792a4d6329a0241f93b6ed01cb58ea",
+    "svg_sha256": "d4b701fe9898ec56799ed31165661df819c41b0670268f51ba90b484bacd3638"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 80,
+    "flags": [
+      "--pager"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "2743c7e6563680be43d44dfb4217f2dd6425dc36c42d06f3e8cd3a58efd66d65",
+    "html_sha256": "2ff3f1e3db92fd691acf611a570371495b5c4840e9492524842d5a8ff36c64e9",
+    "svg_sha256": "2ad96d0c257328487321e0896e2f52b1398dd21a84ebc2cf80aca682ee49e8c6"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 80,
+    "flags": [
+      "--title",
+      "[bold]Data[/]",
+      "--caption",
+      "Values"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "c81ae71b17f813bb7fefbe08101998e6f79cdf35bc14d85667155fe6f4aa7055",
+    "html_sha256": "31a34947af03a9b83bab7462b713c0d1856e041a34903522c249d44f4c4bb753",
+    "svg_sha256": "5b3950a8d33d73c05f00b492c672c3bb6b1a18530f1d1c46060bede1772cda1c"
+  },
+  {
+    "fixture": "mixed.csv",
+    "width": 80,
+    "flags": [
+      "--panel",
+      "rounded",
+      "--style",
+      "italic"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "d64502d83c60b45270f1a19deb4caa84ec9e20db602f43089b762e1263c6a271",
+    "html_sha256": "9a25aa107262ad0a428980ee7e16f202aab5edec065e66d0abcfe507833879ea",
+    "svg_sha256": "3a3bb7435578e2586901a1fd78b474790abc62e7b4fa3fddace7a9350eadf60e"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 4,
+    "flags": [],
+    "exit_code": 0,
+    "stdout_sha256": "ce1b0ae3d83ae35487b6152ce9e307de7a3e7034d1e00151da9a758727c2a103",
+    "html_sha256": "f0ca9e97b9c6639e51d5c9a38c3a50f509b1f3a0c365994c932c3be6588cf53c",
+    "svg_sha256": "d5ad991db1dbec8b31128f635546ed7d929f39f2734ca48b63cb8594fd560182"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 4,
+    "flags": [
+      "--panel",
+      "rounded"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "4db341b0cd6e8eace1ce53492ff3b4f64e874879164b7ad01b62cf15aff74045",
+    "html_sha256": "2298371a482135e0636180b59605ecea5391bbff9432e7e53f0c6896c38440d9",
+    "svg_sha256": "e6fb0fe596273db9aac5a581f54f994053f2421623520094657388121e2152f7"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 4,
+    "flags": [
+      "--padding",
+      "1"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "7f773b77a69c9bc3efe2ae5e63989380027152799364a782f06e05cbdc1214ea",
+    "html_sha256": "1dc0494bc4b60e17751fa6896474ab0ed8df52c2ebbf19012c3e7754ac0bb34b",
+    "svg_sha256": "752dce5c6cd29f25b49e8cc78d0bd28562fac4e6128b1a25bea76130692a5d1d"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 4,
+    "flags": [
+      "--center"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "be3abda5cc03f3bf7a219357fb969d9bd3983b0ec67408320863d524b85e3900",
+    "html_sha256": "b9c7a6500e57268582eca1919feb12fdb95ccd636da0e624d3e3ecbe8bef4b92",
+    "svg_sha256": "7861af560cd88f10dc708d7478c379bbdd96b3c45923cebe38177fceb1a452e2"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 4,
+    "flags": [
+      "--right"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "63db713f3fd380c9be84099878fb3abfb614f4be145474d4b34ae57bdf80265b",
+    "html_sha256": "f3c93abf9e882a8e71d1bf13e60b2357833b414bc5bb45c4abef45653e458f9f",
+    "svg_sha256": "143938e510d5a7ff271e344c2081a5628aaeb134a22f22ca9f81805a107ef932"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 4,
+    "flags": [
+      "--pager"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "c7b21c3817eb2678727b7f8d09aa7ccd5609e8a1df94a2c002ae0930b6674953",
+    "html_sha256": "2908822d4e2aa69b04ca20f5dfdd7258269dc29bb070d217bc23380cf7cc53f4",
+    "svg_sha256": "da2c4961b1f9b039cd1a585b5064908a7129c359de99b0a63e4dac142753b319"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 4,
+    "flags": [
+      "--title",
+      "[bold]Data[/]",
+      "--caption",
+      "Values"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "f8e6b7160ab6db0f1519615580a729fae17c23da3770ee6fb3c382fec2b6e7fd",
+    "html_sha256": "5f6f976bff0fdc3d067256bd355b2cabe645f56e3c8c57ce83593471efdb273d",
+    "svg_sha256": "7045cd61b2b2bcad09b2a94de16e5585deb09a868845417b1bee4f3aeaa89be6"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 4,
+    "flags": [
+      "--panel",
+      "rounded",
+      "--style",
+      "italic"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "4db341b0cd6e8eace1ce53492ff3b4f64e874879164b7ad01b62cf15aff74045",
+    "html_sha256": "fef519f1fed946d7f7f5b99a3f89b3e63dcfa8a1a3bcbd280b183124f1f02f77",
+    "svg_sha256": "9a870ab6c920311a51ac72fcfcb170ace599a042579e43f8c02380af4b2c607d"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 20,
+    "flags": [],
+    "exit_code": 0,
+    "stdout_sha256": "c7b21c3817eb2678727b7f8d09aa7ccd5609e8a1df94a2c002ae0930b6674953",
+    "html_sha256": "2908822d4e2aa69b04ca20f5dfdd7258269dc29bb070d217bc23380cf7cc53f4",
+    "svg_sha256": "da2c4961b1f9b039cd1a585b5064908a7129c359de99b0a63e4dac142753b319"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 20,
+    "flags": [
+      "--panel",
+      "rounded"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "052129854c102569de0513db9d79b1ea51ffa71ad91f3abcf7c3f077fab290f5",
+    "html_sha256": "e0081ec26350aaf8d77b2152c8bd029b90c4b00e70618d0888fe66030d282323",
+    "svg_sha256": "5fec2d598fc94526d6f64a4d4cbf87af338bece848b1c6e483b50d93c8205a04"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 20,
+    "flags": [
+      "--padding",
+      "1"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "c678f07cd8faa2917cf1b45eb932e6064402d2700d03b81b6881d9a1a5728348",
+    "html_sha256": "79018116c26ff6043d0ce0ff4431bd9da1a0801f96803924e23cb089df689777",
+    "svg_sha256": "8db1e89e48906faf90b396e72c4f61b195abe2e97362ca358f45b353864ef672"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 20,
+    "flags": [
+      "--center"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "57462067966a993d8d94ec8716594b456e33de6f2f7c3216be17c42764721d1b",
+    "html_sha256": "d82195641fb996f70e49ff12d0be7bd72c724561d4eb6ce40c55f2de1f493873",
+    "svg_sha256": "ac053938ac755593162e100d5d3148be78a582af7a1f9ac4cf3067223526fa61"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 20,
+    "flags": [
+      "--right"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "03143b624484f2bc84d770a75f6b9cbaba688c4aed5b84c7f05d52ff641047f5",
+    "html_sha256": "d7c069522366d43bb62450b6593571f926f529f5e826548ca4492f1ee30564c2",
+    "svg_sha256": "11b33234f7b90f9dd7bdf0011c04d60caf8faf04f574659c3a3e9d81fe5e5b70"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 20,
+    "flags": [
+      "--pager"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "c7b21c3817eb2678727b7f8d09aa7ccd5609e8a1df94a2c002ae0930b6674953",
+    "html_sha256": "2908822d4e2aa69b04ca20f5dfdd7258269dc29bb070d217bc23380cf7cc53f4",
+    "svg_sha256": "da2c4961b1f9b039cd1a585b5064908a7129c359de99b0a63e4dac142753b319"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 20,
+    "flags": [
+      "--title",
+      "[bold]Data[/]",
+      "--caption",
+      "Values"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "0b83ab122bdb3e32a91ce7a1bf0a3b0309ea62076409eeb34ac609eef0623a0d",
+    "html_sha256": "e085798678a96f36103521691fea2d9046e3c50597431acea35c12e85e09f674",
+    "svg_sha256": "c85cb622dccf785b9bd07bc040c13df125fc723ae36e103e2739f4419e3175e5"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 20,
+    "flags": [
+      "--panel",
+      "rounded",
+      "--style",
+      "italic"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "052129854c102569de0513db9d79b1ea51ffa71ad91f3abcf7c3f077fab290f5",
+    "html_sha256": "5203c926107fbb6496aa38b33bf5f2b594b7fd85fa4bdd1f5af1037bd6967c2e",
+    "svg_sha256": "91db26ff55831359314b9413e7efe46fd900dedc6f7b8911b5f6acffd6945d7f"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 80,
+    "flags": [],
+    "exit_code": 0,
+    "stdout_sha256": "c7b21c3817eb2678727b7f8d09aa7ccd5609e8a1df94a2c002ae0930b6674953",
+    "html_sha256": "2908822d4e2aa69b04ca20f5dfdd7258269dc29bb070d217bc23380cf7cc53f4",
+    "svg_sha256": "da2c4961b1f9b039cd1a585b5064908a7129c359de99b0a63e4dac142753b319"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 80,
+    "flags": [
+      "--panel",
+      "rounded"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "d799d6f8bd908343fa14d872bdd47420784965b0c6a93eadba6d3d1d249aa8f8",
+    "html_sha256": "24eed7f2d8b5456100c5d63e7d36d575f5c3d1ff6ae44ab9dc95d2981a90fbbd",
+    "svg_sha256": "af2ef6dba70c86b04cc6bfb6ff75c38f5648f6360d5baf23ebb2d2c749045399"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 80,
+    "flags": [
+      "--padding",
+      "1"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "73411b94d7a3e3ca7e6df47227fb27cfc97896046b4f2e738ce6e5991e5d121d",
+    "html_sha256": "902f1f4997164e3949ca7ea2434def8d02faff92ff025247a40e7a6c11553abb",
+    "svg_sha256": "8db1e89e48906faf90b396e72c4f61b195abe2e97362ca358f45b353864ef672"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 80,
+    "flags": [
+      "--center"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "57462067966a993d8d94ec8716594b456e33de6f2f7c3216be17c42764721d1b",
+    "html_sha256": "d82195641fb996f70e49ff12d0be7bd72c724561d4eb6ce40c55f2de1f493873",
+    "svg_sha256": "ac053938ac755593162e100d5d3148be78a582af7a1f9ac4cf3067223526fa61"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 80,
+    "flags": [
+      "--right"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "03143b624484f2bc84d770a75f6b9cbaba688c4aed5b84c7f05d52ff641047f5",
+    "html_sha256": "d7c069522366d43bb62450b6593571f926f529f5e826548ca4492f1ee30564c2",
+    "svg_sha256": "11b33234f7b90f9dd7bdf0011c04d60caf8faf04f574659c3a3e9d81fe5e5b70"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 80,
+    "flags": [
+      "--pager"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "c7b21c3817eb2678727b7f8d09aa7ccd5609e8a1df94a2c002ae0930b6674953",
+    "html_sha256": "2908822d4e2aa69b04ca20f5dfdd7258269dc29bb070d217bc23380cf7cc53f4",
+    "svg_sha256": "da2c4961b1f9b039cd1a585b5064908a7129c359de99b0a63e4dac142753b319"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 80,
+    "flags": [
+      "--title",
+      "[bold]Data[/]",
+      "--caption",
+      "Values"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "0b83ab122bdb3e32a91ce7a1bf0a3b0309ea62076409eeb34ac609eef0623a0d",
+    "html_sha256": "e085798678a96f36103521691fea2d9046e3c50597431acea35c12e85e09f674",
+    "svg_sha256": "c85cb622dccf785b9bd07bc040c13df125fc723ae36e103e2739f4419e3175e5"
+  },
+  {
+    "fixture": "numeric.csv",
+    "width": 80,
+    "flags": [
+      "--panel",
+      "rounded",
+      "--style",
+      "italic"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "d799d6f8bd908343fa14d872bdd47420784965b0c6a93eadba6d3d1d249aa8f8",
+    "html_sha256": "5f21810339d8b657de5f6c5d88f8287ab1e6299b4b68036ea44d2f9b70c64ada",
+    "svg_sha256": "5102260564409dbf91856b9c1489348fcde69543754496e2d1e1c7ea8da82873"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 4,
+    "flags": [],
+    "exit_code": 0,
+    "stdout_sha256": "ce1b0ae3d83ae35487b6152ce9e307de7a3e7034d1e00151da9a758727c2a103",
+    "html_sha256": "f0ca9e97b9c6639e51d5c9a38c3a50f509b1f3a0c365994c932c3be6588cf53c",
+    "svg_sha256": "4761c890f15fdc3ad3310836ceb19ed39e1e8e2c2efb028332536f0b847dbc4b"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 4,
+    "flags": [
+      "--panel",
+      "rounded"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "4db341b0cd6e8eace1ce53492ff3b4f64e874879164b7ad01b62cf15aff74045",
+    "html_sha256": "2298371a482135e0636180b59605ecea5391bbff9432e7e53f0c6896c38440d9",
+    "svg_sha256": "9deecd0e48616ed6f6c6112a7012ed756c07e81aca343a0c7d1ca63c0fe1983e"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 4,
+    "flags": [
+      "--padding",
+      "1"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "7f773b77a69c9bc3efe2ae5e63989380027152799364a782f06e05cbdc1214ea",
+    "html_sha256": "1dc0494bc4b60e17751fa6896474ab0ed8df52c2ebbf19012c3e7754ac0bb34b",
+    "svg_sha256": "7affcd4f883d0d55152476e4519c9a56e95bebc503bb3aa361ecb50da8009e0b"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 4,
+    "flags": [
+      "--center"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "be3abda5cc03f3bf7a219357fb969d9bd3983b0ec67408320863d524b85e3900",
+    "html_sha256": "b9c7a6500e57268582eca1919feb12fdb95ccd636da0e624d3e3ecbe8bef4b92",
+    "svg_sha256": "6f2f702ccaa5047c6d933411cc888c87310e250850e966abb57698977b6e289d"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 4,
+    "flags": [
+      "--right"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "63db713f3fd380c9be84099878fb3abfb614f4be145474d4b34ae57bdf80265b",
+    "html_sha256": "f3c93abf9e882a8e71d1bf13e60b2357833b414bc5bb45c4abef45653e458f9f",
+    "svg_sha256": "6bb6b6c4b54bad06c80d8f943ab403307ef3b83f9891ee0e448a8f611b526ac4"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 4,
+    "flags": [
+      "--pager"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "e4dd675cc956a160bf8029346b45322e419c2a6619be1df183d717ef306e40db",
+    "html_sha256": "df481cd7554e79bdca5f767c2425309f6d60555f71b67b1732254a513b66386b",
+    "svg_sha256": "18acbbfed733c0f3178f69362fd7225a7b5fbd7fdf83992e3ef810187e769cc2"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 4,
+    "flags": [
+      "--title",
+      "[bold]Data[/]",
+      "--caption",
+      "Values"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "f8e6b7160ab6db0f1519615580a729fae17c23da3770ee6fb3c382fec2b6e7fd",
+    "html_sha256": "5f6f976bff0fdc3d067256bd355b2cabe645f56e3c8c57ce83593471efdb273d",
+    "svg_sha256": "ed0f46eaace032c1ef8bcb02a79d0f32d9eb71fec9752583bd1ffe615a48aa09"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 4,
+    "flags": [
+      "--panel",
+      "rounded",
+      "--style",
+      "italic"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "4db341b0cd6e8eace1ce53492ff3b4f64e874879164b7ad01b62cf15aff74045",
+    "html_sha256": "fef519f1fed946d7f7f5b99a3f89b3e63dcfa8a1a3bcbd280b183124f1f02f77",
+    "svg_sha256": "3493384cf9206dec803d81f4339b1a593203ebe2a5fcc5a74688cd31596aa189"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 20,
+    "flags": [],
+    "exit_code": 0,
+    "stdout_sha256": "175cd5f23e97bd0b5246a4d388bc883c202477384454af03134d71a582cde868",
+    "html_sha256": "8f3ce4450d5efce04a6997c43cd58c47061ce25fe8c1879079ba0925df3139ad",
+    "svg_sha256": "a8017b3c8198a9c7c97f1feaf3ac5976a97fb48e19f4519a02a918059489b548"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 20,
+    "flags": [
+      "--panel",
+      "rounded"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "2302a2267e38c07905d1bf8342215b4e53219a7c678defce0828d0912aeee01b",
+    "html_sha256": "4702ca5ab707b3be8ad5a2b5095f83b5604f32ba2057fec006cd11141a79d4f9",
+    "svg_sha256": "aafe9f0bbad9b48ab0c377a246b2531ce1a123e7c3bb5a01570a19fcd42c4535"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 20,
+    "flags": [
+      "--padding",
+      "1"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "020494e74dccebd838dbfb201d67b4768dd47caef6893fa7a9cfd5a232afe703",
+    "html_sha256": "a57ae231160c7ad40e1ff040c0458631b7605b505d6aeac47e5d133cc1e05239",
+    "svg_sha256": "5c6d13cb673ec7b162bd0bdcf93cc056ba766ad2aed6e615cda0c3d559e01aed"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 20,
+    "flags": [
+      "--center"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "a688264afeaadfae8d7d46638571094ca10608d8a98ee7435df6ba24672ca8da",
+    "html_sha256": "ec5eb084780ff0ef8f244e61f2b4245f5eae1b47f08a021f1107592e267fc453",
+    "svg_sha256": "b670ee0a85d3811c1be734d5bca63cd2ced1184f5456150238a7b4f55c8ec3ef"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 20,
+    "flags": [
+      "--right"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "c112dabfeb3d2f5df96bd7d00aada18c07c6ff16be6204204a299e143fa29d91",
+    "html_sha256": "f2bb55fc3f4c0f05206319c059fe89dee8a9e2d710b402f3c2b89e192a293613",
+    "svg_sha256": "9af6529276ee2ce0fbe0600c0bd4eac90eda35aba024a58151f712c1b0885bd4"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 20,
+    "flags": [
+      "--pager"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "e4dd675cc956a160bf8029346b45322e419c2a6619be1df183d717ef306e40db",
+    "html_sha256": "df481cd7554e79bdca5f767c2425309f6d60555f71b67b1732254a513b66386b",
+    "svg_sha256": "18acbbfed733c0f3178f69362fd7225a7b5fbd7fdf83992e3ef810187e769cc2"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 20,
+    "flags": [
+      "--title",
+      "[bold]Data[/]",
+      "--caption",
+      "Values"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "f3210fafc0f5eac6505a29fd7157a2df39c35fca9ec0079bce73204cdb46b5cb",
+    "html_sha256": "fa3888e28cb0adbd01dcb7912673267c074b7a36782abede5adf500ac9ce4410",
+    "svg_sha256": "bcb0c91a58ca5ce471497301a9acebb63db0b879cca2bf0a52bbeb31cb94269e"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 20,
+    "flags": [
+      "--panel",
+      "rounded",
+      "--style",
+      "italic"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "2302a2267e38c07905d1bf8342215b4e53219a7c678defce0828d0912aeee01b",
+    "html_sha256": "7b822963db7c437a3130f5c3717214dabe519138a0f90e8a4c52f5a97bfaae9e",
+    "svg_sha256": "cb008f44f87a8f7d024151ed148663c4c74e76bee16d9838ca587a0d879b8e0b"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 80,
+    "flags": [],
+    "exit_code": 0,
+    "stdout_sha256": "e4dd675cc956a160bf8029346b45322e419c2a6619be1df183d717ef306e40db",
+    "html_sha256": "df481cd7554e79bdca5f767c2425309f6d60555f71b67b1732254a513b66386b",
+    "svg_sha256": "18acbbfed733c0f3178f69362fd7225a7b5fbd7fdf83992e3ef810187e769cc2"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 80,
+    "flags": [
+      "--panel",
+      "rounded"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "d560a9fec690ab032fd0a8f60799ee7ab7a7c311b2da87c3de478341cf49ba41",
+    "html_sha256": "71dab6335e0bad5f88acca2d1896bcaba851839e74987f4cd0da301c75a18911",
+    "svg_sha256": "80d74b271db1e937673199b16e556549f8d5f73b21932ad1db4ebc9e22eb646a"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 80,
+    "flags": [
+      "--padding",
+      "1"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "9c23bb37a67251ff1460dc39915ea6c3064ef1fc19f2519902b754e7ac27c7f4",
+    "html_sha256": "6147151c2ed7c1d70b56a3de037ea9d3d846e63f2a201253c672bcbf4f089dc2",
+    "svg_sha256": "f3010e6a251cdfc9d540addf6925628f3ee161df4c5a9af1f867d291f8906e9d"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 80,
+    "flags": [
+      "--center"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "bee1f06aca423cec99ac878cb9f4f39d3e254c4daa1129cc4efc289a78d93938",
+    "html_sha256": "9432f05f5173a3d76f14b8e5c1940be3c5aac106e0c8bba1c260d03ef86e0f3a",
+    "svg_sha256": "32f6cd19e76dce7699d7e4ad6ef98d9f563b3f2fb958607c2ba67325bd68bab8"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 80,
+    "flags": [
+      "--right"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "7d529233ae29106bc8977fa454eecf1aef8eb5254d869a5d11465ee3539f8990",
+    "html_sha256": "576b7cdaaf0b7dc0f5b75368176dd136cb479f46a00ae019b9635a6e14d8d45f",
+    "svg_sha256": "c5d8e11dfcabccc1ffe23cbcc9bc4ebf6738151ae726b2e7fededce3fd61cb78"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 80,
+    "flags": [
+      "--pager"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "e4dd675cc956a160bf8029346b45322e419c2a6619be1df183d717ef306e40db",
+    "html_sha256": "df481cd7554e79bdca5f767c2425309f6d60555f71b67b1732254a513b66386b",
+    "svg_sha256": "18acbbfed733c0f3178f69362fd7225a7b5fbd7fdf83992e3ef810187e769cc2"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 80,
+    "flags": [
+      "--title",
+      "[bold]Data[/]",
+      "--caption",
+      "Values"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "3591184e9d644faafeaa68d538409f92985f5eeadf9a404536c3facdbf1daf14",
+    "html_sha256": "41af87738f46c35a40100bc905149dbcb98046f0fbcb48ea00b737e2e2b45fba",
+    "svg_sha256": "0a1e6b16867d52932375bc6516b3019d34700ba2dd3cff101c30ed2a0059def0"
+  },
+  {
+    "fixture": "quoted.csv",
+    "width": 80,
+    "flags": [
+      "--panel",
+      "rounded",
+      "--style",
+      "italic"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "d560a9fec690ab032fd0a8f60799ee7ab7a7c311b2da87c3de478341cf49ba41",
+    "html_sha256": "8cc6f5014a41d2ade85c359694e4ec60267998c8567ebee6d24f79b2c3f73bce",
+    "svg_sha256": "03bdd10713f4999c283b7ccab6397a24acc577f4c33f12a3eccca4e55d7d0daa"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 4,
+    "flags": [],
+    "exit_code": 0,
+    "stdout_sha256": "3740dbc7c5c5c963bf2261bbc6c747727865f70506b4bc23c27c11a1a661fc78",
+    "html_sha256": "4f6e3f69cfd6ee613582b517508381f123e658a83864a6ac8aa0f04bda41e823",
+    "svg_sha256": "65d413c485ebcfe7bbd986b33f330f131ed07865af6209c886babcdbbe3ad5b3"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 4,
+    "flags": [
+      "--panel",
+      "rounded"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "40456900dbcb7ba57140c00fbf4d276712218dda6cd46b6189beabf093a3fff4",
+    "html_sha256": "a3ca1896dfdd1f292c3613bcca637625880efcf5a75c8e6d84de25df623998b9",
+    "svg_sha256": "7ede08c79d0654e47bd7dddfb53f4833530c1c593b6438c59e81f23d44f7aa79"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 4,
+    "flags": [
+      "--padding",
+      "1"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "69497284871aefb6847fc99052d7eb7edd620973552cf2a28a45b93f59ec4dcf",
+    "html_sha256": "6e481efb84ea1eda79e69a381454642f59899bfd832a445adc2fb11529374b42",
+    "svg_sha256": "0412c8dea0fa03658fc79b994af57a76590bc9aecdf8184047fb11a6b4e4fdee"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 4,
+    "flags": [
+      "--center"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "8a79c29ea85a04748266bf58337dba52ecf0e18769d4ed0d0f8e8e4b5be70d6b",
+    "html_sha256": "73a4b775ba9bcf037aab0ca389d47c95d8f27052674f57caf6ae2285cadb6163",
+    "svg_sha256": "bbb63854a8c524015a536998754e85179342bc74461923169a4fadde16632e29"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 4,
+    "flags": [
+      "--right"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "e488f8a8ef4b1633e85cdd2eb4f715d3b34ca1de311febaf8e8828cfd2dbfa7f",
+    "html_sha256": "ed02d7cdfa23a831cf483dcde721644548ac0b69c35fdbaafc63b36f3e31f32a",
+    "svg_sha256": "0f1b1e0a0514166d7961961686963d4f8d95ec56f6f0fc8aa21f04b91300bf39"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 4,
+    "flags": [
+      "--pager"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "5bca732fef6951181584d2189ab97d9883b597f72d6819d5d828eae21e74ab30",
+    "html_sha256": "dfb3265275f884cada217943fbbcff904f4f1b4c9b915024683075b7c5bc975c",
+    "svg_sha256": "7bf86703639fa0ff82e4cd52d70c32236898d85d1989989fd680fb10a7251d32"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 4,
+    "flags": [
+      "--title",
+      "[bold]Data[/]",
+      "--caption",
+      "Values"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "e441f4a6ba6f55f7f9ff91a0a133957c6e9e781d6fbdbca5bf1b5946a4dadf55",
+    "html_sha256": "4e80b7c6126fb2706a025e17eafd829a3fbb51adbba0e93345290f1b28a47099",
+    "svg_sha256": "96074ffac4639f90e3670880533cefccc61ac27fe03f217ca7e1e98d3fca6c40"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 4,
+    "flags": [
+      "--panel",
+      "rounded",
+      "--style",
+      "italic"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "40456900dbcb7ba57140c00fbf4d276712218dda6cd46b6189beabf093a3fff4",
+    "html_sha256": "b500b494863b3021bb6ff1fa43a45052adb6d32520843cd77caa70f89d7cd2c9",
+    "svg_sha256": "738815b892a0f43aa69774d12081e483be30150add60be38914e4ebb0aaf29f8"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 20,
+    "flags": [],
+    "exit_code": 0,
+    "stdout_sha256": "7eb305e4b30a0706cf0936eb655c7ccb809934f8a8bd4fc0ee42018493a966ef",
+    "html_sha256": "49e379b2918d9d39a33f5a43b9865c0ea0fd55797e309474d2bb998584ed1105",
+    "svg_sha256": "81e04536fc072a84d93db52a0fe3a25ed662fd8907e6cca9beaac6d711db7b2c"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 20,
+    "flags": [
+      "--panel",
+      "rounded"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "5950a2efb5a68eb186168989c028c31b247f91c9e30b43ceb62f9ae5aa3d6145",
+    "html_sha256": "e5b94aa5e7fa11e860c90633681ee4b825712d643cc5886d268f7a4ed108a36e",
+    "svg_sha256": "78a4a0dfdcf9f4b6a52e6d952a2d933ce8caa5147acbd38034ebf22427a0f20d"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 20,
+    "flags": [
+      "--padding",
+      "1"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "d164271c0ae99dd4c4a011ce3cbdae8df0d6858637faabe24b6c81b305d67201",
+    "html_sha256": "04bd05b9769fcf5cb9d4371a6eaf87ff056661d0d9b7633a5d679222daeb97ca",
+    "svg_sha256": "0d76fa4e0c65962e96792c91ae1a732fdfbde2e94842c5d584cfd3b8374c7b32"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 20,
+    "flags": [
+      "--center"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "8905bccc2a2d961b9b486859a33da6d41477e49da0264159b94a324094cf0d69",
+    "html_sha256": "f8d66454c5c83c114d2d79d8f794b9d3aa6c4bbf510cf00d0eec8261dcb692e0",
+    "svg_sha256": "893c61030ad0ac25b6e6088348a5b536bde9ea5249c5441354ef6bc97669f276"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 20,
+    "flags": [
+      "--right"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "1fa2f36ac0067efb230a7c9e01bd63b0579b806244ff18b3a73c196f0abed13d",
+    "html_sha256": "e23dce42aadb79eb583209cfc301049d92ef59f53577f48e4bd81bc8db66554f",
+    "svg_sha256": "eeb786d25ad3901bd1fe36cd25724a885b1c4483f29c344539750c2e9ac7872f"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 20,
+    "flags": [
+      "--pager"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "5bca732fef6951181584d2189ab97d9883b597f72d6819d5d828eae21e74ab30",
+    "html_sha256": "dfb3265275f884cada217943fbbcff904f4f1b4c9b915024683075b7c5bc975c",
+    "svg_sha256": "7bf86703639fa0ff82e4cd52d70c32236898d85d1989989fd680fb10a7251d32"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 20,
+    "flags": [
+      "--title",
+      "[bold]Data[/]",
+      "--caption",
+      "Values"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "24a3934c1d49d5fc92806f083f4ec17bf0249b7e75868b99d24af777d3e75730",
+    "html_sha256": "1f09b6eef60cc548a310538398e025c8840c69a08372107547d6e6e6669977e0",
+    "svg_sha256": "c59a71a9bbfc106932f5904cdce0f3063905144dfb5b2c6ae1f5b40f75bc7fbe"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 20,
+    "flags": [
+      "--panel",
+      "rounded",
+      "--style",
+      "italic"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "5950a2efb5a68eb186168989c028c31b247f91c9e30b43ceb62f9ae5aa3d6145",
+    "html_sha256": "5e891348d5eb9f607dc96b73058fd246ece854f2ecd98e1d3d414ae53200af56",
+    "svg_sha256": "3aa7274584be6cdef15a46598c6cfc55c1131aa42f1d2dd4fa08aac05e6b5887"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 80,
+    "flags": [],
+    "exit_code": 0,
+    "stdout_sha256": "5bca732fef6951181584d2189ab97d9883b597f72d6819d5d828eae21e74ab30",
+    "html_sha256": "dfb3265275f884cada217943fbbcff904f4f1b4c9b915024683075b7c5bc975c",
+    "svg_sha256": "7bf86703639fa0ff82e4cd52d70c32236898d85d1989989fd680fb10a7251d32"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 80,
+    "flags": [
+      "--panel",
+      "rounded"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "04a2b2447be82e26d40fd0b72aa785dc37c87c77c4ef378db75fe0a4350082d4",
+    "html_sha256": "06513e97f9019b0061b645463cfb12531e58f4ba04fc0a0663ed1a8427aacb23",
+    "svg_sha256": "4ce01262cc4223fc0b7aeee0e440305e6d7d0a1eaf48ec989de5a29b6dbe5753"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 80,
+    "flags": [
+      "--padding",
+      "1"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "054a08009c5f83ade8f37485236e48311d46980ef271a6142eb99889bc887364",
+    "html_sha256": "2fedb00b7c9ac0c7a5dc96e1477b2bc48341fd63ea54c3e5ff3414bc084f14a7",
+    "svg_sha256": "d80bd59cc9385f413468c691a11068ed977a92f5606dd7bf483404468fed1d50"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 80,
+    "flags": [
+      "--center"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "f5a2b2ded23f7eb2c9acda75a3ace8662509b360bf41d3f8cdcba34462e64733",
+    "html_sha256": "04307262f4cedcb623da43f0d785426434bbab0162ecd246b862ea157fe848f0",
+    "svg_sha256": "2f3e2796de0461d6c09586e24a492e0abba8979a36630bbc80207270502085bb"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 80,
+    "flags": [
+      "--right"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "b06c3c0fd34b2486d60ff97046e1c49c68f6b7614eb88ecf7d96af58120cc3f9",
+    "html_sha256": "7d8bd59605a0ea010fec321e3ce3fd625704a9493411d4a8c239ebb8c18d912c",
+    "svg_sha256": "2e60666ea08e629e34bd39d2b6163393485a3faf23c2e53136b123d77ba7ad43"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 80,
+    "flags": [
+      "--pager"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "5bca732fef6951181584d2189ab97d9883b597f72d6819d5d828eae21e74ab30",
+    "html_sha256": "dfb3265275f884cada217943fbbcff904f4f1b4c9b915024683075b7c5bc975c",
+    "svg_sha256": "7bf86703639fa0ff82e4cd52d70c32236898d85d1989989fd680fb10a7251d32"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 80,
+    "flags": [
+      "--title",
+      "[bold]Data[/]",
+      "--caption",
+      "Values"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "bbe9dfa8fd089cd08cb499af9fc5668d1417d0e9d4047fce658596a8caf3d554",
+    "html_sha256": "8f594c306850a47a1c31b2af4d2567d92b8c7fe5239332a835335a74e430ca71",
+    "svg_sha256": "04f3b1f0e9bf1accf7f7e5ed3672a4ad091c707ccc4d91854463aca04c460e9d"
+  },
+  {
+    "fixture": "tabs.tsv",
+    "width": 80,
+    "flags": [
+      "--panel",
+      "rounded",
+      "--style",
+      "italic"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "04a2b2447be82e26d40fd0b72aa785dc37c87c77c4ef378db75fe0a4350082d4",
+    "html_sha256": "0925d9b65afd450a0bb53c63b56d7b8948e42a878647d12444b440b110b3904a",
+    "svg_sha256": "21ad6a59afc90b94ea8e54dda2f230dbb697c128c41e1e608f978287da7a8c1b"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 4,
+    "flags": [],
+    "exit_code": 0,
+    "stdout_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "html_sha256": "ab9282e1e13224481fe992a7793c15c927e13686b97d026c8464a542a7d1bb23",
+    "svg_sha256": "74f39e3ce54e625737976b8fc967d1b84bc85394c4fe0a8e9de8b9eb6fc3db8e"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 4,
+    "flags": [
+      "--panel",
+      "rounded"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "243011d0402f3dc44278df6c710089c0a6c59232d9bd90ef05d15d0e58af0468",
+    "html_sha256": "6c59b4b8bc93e38ae90feb09612f8e659990a07299ea4d6e8ea62ef51d65adfa",
+    "svg_sha256": "1d02250ca20fd7e56378bc3a189e9cc61285ebd4d637d9c5e42d3fd4eacc9d18"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 4,
+    "flags": [
+      "--padding",
+      "1"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "fa2e00834f70bbf8720e218f59c2e02d96500e37da2acb3fcb83830c34439ca3",
+    "html_sha256": "629227a0967c65ba79fc1bb3164300cd9254c7f468cef6a9bf3c632e6ceca2df",
+    "svg_sha256": "f7d5b71e0293113720aa86e3ef7d3c79b235dbdbfae579c352d3887f60dd9fd7"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 4,
+    "flags": [
+      "--center"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "html_sha256": "964c442918a079f66712c5af395bd2e1fd918650eecbbe709a8ede5086984458",
+    "svg_sha256": "b29b623df40f03304a2fe118778047168da7994c2e56bad45c0605ff115248ea"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 4,
+    "flags": [
+      "--right"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "html_sha256": "964c442918a079f66712c5af395bd2e1fd918650eecbbe709a8ede5086984458",
+    "svg_sha256": "b29b623df40f03304a2fe118778047168da7994c2e56bad45c0605ff115248ea"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 4,
+    "flags": [
+      "--pager"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "html_sha256": "ab9282e1e13224481fe992a7793c15c927e13686b97d026c8464a542a7d1bb23",
+    "svg_sha256": "74f39e3ce54e625737976b8fc967d1b84bc85394c4fe0a8e9de8b9eb6fc3db8e"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 4,
+    "flags": [
+      "--title",
+      "[bold]Data[/]",
+      "--caption",
+      "Values"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "html_sha256": "ab9282e1e13224481fe992a7793c15c927e13686b97d026c8464a542a7d1bb23",
+    "svg_sha256": "74f39e3ce54e625737976b8fc967d1b84bc85394c4fe0a8e9de8b9eb6fc3db8e"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 4,
+    "flags": [
+      "--panel",
+      "rounded",
+      "--style",
+      "italic"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "243011d0402f3dc44278df6c710089c0a6c59232d9bd90ef05d15d0e58af0468",
+    "html_sha256": "dd2a8be68809e7a67f695627943a60915a7b1c267538b2e1cded8ffbd70690a8",
+    "svg_sha256": "e0deb779d184fb75ada6b2d9388722459543804b4a94bc00e6830755d4e18e98"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 20,
+    "flags": [],
+    "exit_code": 0,
+    "stdout_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "html_sha256": "ab9282e1e13224481fe992a7793c15c927e13686b97d026c8464a542a7d1bb23",
+    "svg_sha256": "74f39e3ce54e625737976b8fc967d1b84bc85394c4fe0a8e9de8b9eb6fc3db8e"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 20,
+    "flags": [
+      "--panel",
+      "rounded"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "f0dc43bd1a350e21b197a6a2ee7477fee2e7c3d548253e7004fd83374a2e4b9c",
+    "html_sha256": "d688e29bacefe141e73b93431ca4cff05ec8854f3235adc30e6fd422b3d207a0",
+    "svg_sha256": "bdb26f764f6f019bea592c282e3b9eb48fdbe28fadc2bed0407cb77337d38d55"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 20,
+    "flags": [
+      "--padding",
+      "1"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "4f6c1bd8588124399ff37af3f069160f1381d8faa1a1e327007132e46b50c99e",
+    "html_sha256": "98104350283dba8a53ce8547b09e582892fb31e32e9ef4b93a6b44ff3de212b7",
+    "svg_sha256": "f7d5b71e0293113720aa86e3ef7d3c79b235dbdbfae579c352d3887f60dd9fd7"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 20,
+    "flags": [
+      "--center"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "html_sha256": "964c442918a079f66712c5af395bd2e1fd918650eecbbe709a8ede5086984458",
+    "svg_sha256": "b29b623df40f03304a2fe118778047168da7994c2e56bad45c0605ff115248ea"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 20,
+    "flags": [
+      "--right"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "html_sha256": "964c442918a079f66712c5af395bd2e1fd918650eecbbe709a8ede5086984458",
+    "svg_sha256": "b29b623df40f03304a2fe118778047168da7994c2e56bad45c0605ff115248ea"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 20,
+    "flags": [
+      "--pager"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "html_sha256": "ab9282e1e13224481fe992a7793c15c927e13686b97d026c8464a542a7d1bb23",
+    "svg_sha256": "74f39e3ce54e625737976b8fc967d1b84bc85394c4fe0a8e9de8b9eb6fc3db8e"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 20,
+    "flags": [
+      "--title",
+      "[bold]Data[/]",
+      "--caption",
+      "Values"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "html_sha256": "ab9282e1e13224481fe992a7793c15c927e13686b97d026c8464a542a7d1bb23",
+    "svg_sha256": "74f39e3ce54e625737976b8fc967d1b84bc85394c4fe0a8e9de8b9eb6fc3db8e"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 20,
+    "flags": [
+      "--panel",
+      "rounded",
+      "--style",
+      "italic"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "f0dc43bd1a350e21b197a6a2ee7477fee2e7c3d548253e7004fd83374a2e4b9c",
+    "html_sha256": "2ac7f1ae43f27590e37f4d48dd71603cb263e16828405ea4c1b9c46c398b1703",
+    "svg_sha256": "731065fbf927d87b19f91ddf2b293f1d3300fa2e4a344e9912cabe06219a88ca"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 80,
+    "flags": [],
+    "exit_code": 0,
+    "stdout_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "html_sha256": "ab9282e1e13224481fe992a7793c15c927e13686b97d026c8464a542a7d1bb23",
+    "svg_sha256": "74f39e3ce54e625737976b8fc967d1b84bc85394c4fe0a8e9de8b9eb6fc3db8e"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 80,
+    "flags": [
+      "--panel",
+      "rounded"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "0799348e0ef5416fadd4ee28f13dd023e727f07b46cc1dfee28cdc18dbe742fb",
+    "html_sha256": "8eeedf08c162c37640e2d1cd1a0b0a4d599bccb2305354baa756880e1bb6951b",
+    "svg_sha256": "898a01c1c9aba07c0b50ac6fe595eb591d9b8be6c2c6cbcff41e5e21da2c05ff"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 80,
+    "flags": [
+      "--padding",
+      "1"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "03f3b9c7a4ddac5211b33ad0695bf49be09738b341f5bdd466353f2b1d0f65ef",
+    "html_sha256": "26c810531bb1072bcf3bdb261b0886f83bf5b4925a36e6b3ef08cc4ab05b7308",
+    "svg_sha256": "f7d5b71e0293113720aa86e3ef7d3c79b235dbdbfae579c352d3887f60dd9fd7"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 80,
+    "flags": [
+      "--center"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "html_sha256": "964c442918a079f66712c5af395bd2e1fd918650eecbbe709a8ede5086984458",
+    "svg_sha256": "b29b623df40f03304a2fe118778047168da7994c2e56bad45c0605ff115248ea"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 80,
+    "flags": [
+      "--right"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "html_sha256": "964c442918a079f66712c5af395bd2e1fd918650eecbbe709a8ede5086984458",
+    "svg_sha256": "b29b623df40f03304a2fe118778047168da7994c2e56bad45c0605ff115248ea"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 80,
+    "flags": [
+      "--pager"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "html_sha256": "ab9282e1e13224481fe992a7793c15c927e13686b97d026c8464a542a7d1bb23",
+    "svg_sha256": "74f39e3ce54e625737976b8fc967d1b84bc85394c4fe0a8e9de8b9eb6fc3db8e"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 80,
+    "flags": [
+      "--title",
+      "[bold]Data[/]",
+      "--caption",
+      "Values"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "html_sha256": "ab9282e1e13224481fe992a7793c15c927e13686b97d026c8464a542a7d1bb23",
+    "svg_sha256": "74f39e3ce54e625737976b8fc967d1b84bc85394c4fe0a8e9de8b9eb6fc3db8e"
+  },
+  {
+    "fixture": "empty.csv",
+    "width": 80,
+    "flags": [
+      "--panel",
+      "rounded",
+      "--style",
+      "italic"
+    ],
+    "exit_code": 0,
+    "stdout_sha256": "0799348e0ef5416fadd4ee28f13dd023e727f07b46cc1dfee28cdc18dbe742fb",
+    "html_sha256": "eee5e4640d7586e4fde72db7c75d812f348a081fb815cf55883dda10c4e46325",
+    "svg_sha256": "6b2c044b368b6cae2ca5fccfec24fa6f28fc9f9a2e9801c83807949b584e6303"
+  }
+]

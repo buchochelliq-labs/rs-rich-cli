@@ -48,6 +48,16 @@ pub trait LineRenderable: Renderable {
     ) -> Result<(), E>;
 }
 
+/// Transfer already-owned table rows without cloning every cell string.
+///
+/// This extension point changes ownership only. Column definitions, measurement
+/// and rendering follow the table's existing rules, including missing/extra cells.
+/// Producers that parse into owned strings can release their row collection as
+/// they populate a table instead of retaining a second complete copy.
+pub trait OwnedTableRows {
+    fn extend_owned_rows(&mut self, rows: Vec<Vec<String>>) -> &mut Self;
+}
+
 /// A transformer that adds style spans to [`Text`] (e.g. syntax/number/URL
 /// highlighting). The Rust equivalent of upstream's `Highlighter` ABC.
 ///
