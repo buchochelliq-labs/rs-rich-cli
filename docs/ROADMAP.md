@@ -75,7 +75,7 @@ limitations and successful exact-version consumer verification.
 ## 0.0.5 — proposed confidence and input-control work
 
 The [0.0.5 preparation plan](plans/0.0.5.md) proposes four bounded workstreams:
-#15 golden-test gaps, #34 reproducible differential fuzzing, #35 library
+issue #15 golden-test gaps, #34 reproducible differential fuzzing, #35 library
 benchmarks with CI artifacts, and #64 explicit input sanitization. Start with
 the oracle/case contract; benchmark work can proceed independently. Keep default
 rendering unchanged and sanitizer policy in extensions.

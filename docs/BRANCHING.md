@@ -57,7 +57,7 @@ git config core.hooksPath .githooks
 It refuses any push to a branch whose PR has already merged. This is not
 hypothetical: it was written immediately after two commits were pushed onto
 PR #31's branch minutes after that PR merged, stranding them exactly as #23 and
-#30 were stranded.
+PR #30 were stranded.
 
 ### Release-candidate branches
 
