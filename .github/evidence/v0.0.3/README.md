@@ -20,7 +20,9 @@ env -u NO_COLOR TERM=xterm-256color rich \
 
 Table-cell images appear as text inside their cells.
 
-![CLI before](markdown-before.svg)
+![CLI before](cli-before.jpg)
+
+[Original SVG export](markdown-before.svg)
 
 ## After
 
@@ -28,7 +30,9 @@ Image placeholders move above their tables and the source cells are empty.
 The paragraph retains both image placeholders. This CLI prints placeholders;
 it does not fetch or display the linked image files.
 
-![CLI after](markdown-after.svg)
+![CLI after](cli-after.jpg)
+
+[Original SVG export](markdown-after.svg)
 
 The independent parity check regenerates fixtures from Python rich 15.0.0
 and compares bytes for `markdown_image_table_cell`,
@@ -41,6 +45,8 @@ The former page hard-coded all published versions as 0.0.2. The updated page
 separates live registry badges from generated per-crate manifest versions.
 
 ![Documentation before](docs-before.jpg)
+
+![Documentation after](docs-after.jpg)
 
 ## Verification
 
@@ -70,3 +76,5 @@ no stdout and their stderr discarded by the old assertions. They passed serially
 and in the final normal parallel suite. The assertions now retain stderr for
 future failures; no product behavior or test expectation was changed. The cause
 of those transient failures is not established.
+
+GitHub checks passed on implementation commit `34b779d`: [CI #122](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/34425020022), [docs #47](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/34425020021), and [PR hygiene #90](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/34425020041).
