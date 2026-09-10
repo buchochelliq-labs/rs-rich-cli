@@ -232,3 +232,11 @@ Sequential frames captured from actual `--gif-mode blocks` CLI playback:
 ![CLI GIF frame 5](assets/releases/0.0.4-gif-frame4.jpg)
 
 [Playback recordings and reproduction commands](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/v0.0.4-gif).
+
+## Optional syntax cache
+
+For repetitive source files, build the CLI with
+`cargo build -p rs-rich-cli --release --features syntax-cache`. This feature is
+off by default and changes no CLI flags. It reuses parsing work within one
+render; varied source files may see no speedup. See the
+[measurements](benchmarks.md#004-repeated-source-syntax-results).

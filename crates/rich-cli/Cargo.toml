@@ -26,6 +26,8 @@ path = "src/main.rs"
 workspace = true
 
 [features]
+# Optional parser reuse; disabled in the default mirror (DIVERGENCES #23).
+syntax-cache = ["rich/syntax-cache"]
 default = ["fetch", "art"]
 # Optional JSON display divergence; never enabled by default.
 json-escape-safe = ["rich/json-escape-safe"]

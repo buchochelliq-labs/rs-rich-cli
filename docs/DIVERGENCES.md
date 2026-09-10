@@ -338,3 +338,21 @@ It provides strict UTF-8 and UTF-16 decoding only when requested. Default file
 replacement decoding and strict stdin/URL UTF-8 are retained. BOM diagnostics
 add stderr guidance without automatic encoding changes. This adds no core
 dependency on extensions. See [encoding policy](troubleshooting.md#text-encoding).
+
+### 23. Optional syntax parse reuse (`syntax-cache`)
+
+- **Default:** the faithful mirror uses Syntect's normal `HighlightLines` path.
+- **Opt-in:** the `syntax-cache` Cargo feature enables repository-specific repeated-line
+  parsing reuse. It is off by default in both `rs-rich` and `rs-rich-cli`; the CLI
+  feature forwards to core. The helper lives in a separately gated module.
+- **Scope:** exact repeated lines may reuse operations only when their before/after
+  parser state equals one reference captured after a first line of at most 4096
+  bytes. A longer first line disables caching. No later live state is cloned,
+  and cache entries contain operations rather than captured states. This prevents
+  a large heredoc opener from being copied once per body line.
+- **Limits:** at most 64 lines, each at most 4096 bytes and 256 operations. The
+  source and rendered output still allocate memory. Results are workload-specific;
+  varied source may see no gain. Grammars, themes and live highlight-state updates
+  remain unchanged. Differential tests and native export comparisons verify output.
+- **Enable:** `cargo build -p rs-rich-cli --release --features syntax-cache`.
+  See [benchmarks](benchmarks.md#004-repeated-source-syntax-results).

@@ -10,15 +10,17 @@
 //! byte-identical* to Python rich — see docs/DIVERGENCES.md. Everything else
 //! (the renderable protocol, width handling) matches the port's conventions.
 
-use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use syntect::highlighting::{
-    Color as SynColor, FontStyle, HighlightIterator, HighlightState, Highlighter,
-    Style as SynStyle, Theme, ThemeSet,
-};
-use syntect::parsing::{ParseState, ScopeStack, ScopeStackOp, SyntaxReference, SyntaxSet};
+use syntect::highlighting::{Color as SynColor, FontStyle, Style as SynStyle, Theme, ThemeSet};
+use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
+
+#[cfg(not(feature = "syntax-cache"))]
+use syntect::easy::HighlightLines;
+#[cfg(feature = "syntax-cache")]
+#[path = "syntax_cache.rs"]
+mod cache;
 
 use crate::cells::cell_len;
 use crate::color::Color;
@@ -179,64 +181,6 @@ impl Syntax {
     }
 }
 
-// Repeated boilerplate may reuse parsing, but never the live highlighting state.
-// Only state-neutral lines qualify: state-changing lines and first-line rules
-// still take the normal parser path. The cache lives in one render, uses
-// exact text plus the complete ParseState, and retains at most 64 entries.
-type CachedParse = (ParseState, Vec<(usize, ScopeStackOp)>);
-
-struct CachedHighlighter<'theme, 'code> {
-    highlighter: Highlighter<'theme>,
-    highlight_state: HighlightState,
-    parse_state: ParseState,
-    cache: HashMap<&'code str, CachedParse>,
-}
-
-impl<'theme, 'code> CachedHighlighter<'theme, 'code> {
-    fn new(syntax: &SyntaxReference, theme: &'theme Theme) -> Self {
-        let highlighter = Highlighter::new(theme);
-        let highlight_state = HighlightState::new(&highlighter, ScopeStack::new());
-        Self {
-            highlighter,
-            highlight_state,
-            parse_state: ParseState::new(syntax),
-            cache: HashMap::new(),
-        }
-    }
-
-    fn highlight_line(
-        &mut self,
-        line: &'code str,
-        syntaxes: &SyntaxSet,
-    ) -> Result<Vec<(SynStyle, &'code str)>, syntect::Error> {
-        if let Some((state, ops)) = self.cache.get(line) {
-            if state == &self.parse_state {
-                return Ok(HighlightIterator::new(
-                    &mut self.highlight_state,
-                    ops,
-                    line,
-                    &self.highlighter,
-                )
-                .collect());
-            }
-        }
-        // Avoid retaining operations for huge lines; opaque parser states can
-        // still contain captures, so this is an entry limit, not a byte bound.
-        let candidate = line.len() <= 4096 && self.cache.len() < 64;
-        let before = candidate.then(|| self.parse_state.clone());
-        let ops = self.parse_state.parse_line(line, syntaxes)?;
-        let ranges =
-            HighlightIterator::new(&mut self.highlight_state, &ops, line, &self.highlighter)
-                .collect();
-        if let Some(before) = before {
-            if before == self.parse_state && ops.len() <= 256 {
-                self.cache.insert(line, (before, ops));
-            }
-        }
-        Ok(ranges)
-    }
-}
-
 impl Renderable for Syntax {
     fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let syntaxes = syntax_set();
@@ -255,7 +199,10 @@ impl Renderable for Syntax {
             })
             .unwrap_or_else(|| syntaxes.find_syntax_plain_text());
 
-        let mut highlighter = CachedHighlighter::new(syntax, theme);
+        #[cfg(not(feature = "syntax-cache"))]
+        let mut highlighter = HighlightLines::new(syntax, theme);
+        #[cfg(feature = "syntax-cache")]
+        let mut highlighter = cache::CachedHighlighter::new(syntax, theme);
         // The gutter eats into the space the code itself may occupy.
         let width = options.max_width;
         let code_width = width.saturating_sub(self.padding * 2);
@@ -380,74 +327,6 @@ mod tests {
             .no_color(false)
             .build()
             .render_to_string(&Syntax::new(code, lang))
-    }
-
-    #[test]
-    fn cached_parsing_matches_live_syntect_states() {
-        use syntect::easy::HighlightLines;
-        // Repeated bytes can occur in radically different parser states. Include
-        // first-line rules, captured delimiters and embedded language contexts.
-        let cases = [
-            (
-                "rust",
-                "let x = 1;\n/*\nlet x = 1;\n*/\nlet x = 1;\nlet x = 1;\n",
-            ),
-            (
-                "rust",
-                "let s = r###\"\nvalue\n\"##;\nvalue\n\"###;\nvalue\nvalue",
-            ),
-            (
-                "python",
-                "#!/usr/bin/env python3\nx = 1\ns = \"\"\"\nx = 1\n\"\"\"\nx = 1\nx = 1\n",
-            ),
-            ("ruby", "s = <<ONE\nvalue\nTWO\nvalue\nONE\nvalue\nvalue\n"),
-            (
-                "html",
-                "value\n<script>\nvalue\nlet x = 1;\nlet x = 1;\n</script>\nvalue\nvalue\n",
-            ),
-            (
-                "yaml",
-                "key: |\n  value\n  value\nother: value\nother: value",
-            ),
-        ];
-        let syntaxes = syntax_set();
-        for theme in theme_set().themes.values() {
-            for (language, code) in cases {
-                let syntax = syntaxes.find_syntax_by_token(language).unwrap();
-                let mut cached = CachedHighlighter::new(syntax, theme);
-                let mut direct = HighlightLines::new(syntax, theme);
-                for line in LinesWithEndings::from(code) {
-                    assert_eq!(
-                        cached.highlight_line(line, syntaxes).unwrap(),
-                        direct.highlight_line(line, syntaxes).unwrap(),
-                        "language {language}, line {line:?}",
-                    );
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn cached_parsing_preserves_output_after_entry_limit_and_large_lines() {
-        use syntect::easy::HighlightLines;
-        let syntaxes = syntax_set();
-        let theme = &theme_set().themes[DEFAULT_THEME];
-        let syntax = syntaxes.find_syntax_by_token("rust").unwrap();
-        let mut code = String::from("// initialize first-line state\n");
-        for index in 0..100 {
-            code.push_str(&format!("let value_{index} = {index};\n"));
-        }
-        code.push_str(&format!("// {}\n", "x".repeat(8192)));
-        code.push_str("let value_0 = 0;\nlet value_0 = 0;");
-        let mut cached = CachedHighlighter::new(syntax, theme);
-        let mut direct = HighlightLines::new(syntax, theme);
-        for line in LinesWithEndings::from(&code) {
-            assert_eq!(
-                cached.highlight_line(line, syntaxes).unwrap(),
-                direct.highlight_line(line, syntaxes).unwrap()
-            );
-        }
-        assert_eq!(cached.cache.len(), 64);
     }
 
     #[test]

@@ -90,8 +90,8 @@ is not guessed: select its byte order explicitly or convert to UTF-8. See
 
 ### Syntax parsing remains costly for varied source
 
-The 0.0.4 development cache helps repeated boilerplate whose parser state stays
-unchanged. Measured real-source files showed essentially unchanged runtime;
+The off-by-default 0.0.4 `syntax-cache` Cargo feature helps repeated boilerplate
+whose parser state stays unchanged. Default builds use uncached Syntect. Measured real-source files showed essentially unchanged runtime;
 loading and parsing new syntax still costs more than plain text. See the
 [workload-specific results](benchmarks.md#004-repeated-source-syntax-results).
 Historical 0.0.2 Windows/Python comparisons are retained separately in the

@@ -62,3 +62,11 @@ cargo install rs-rich-cli --no-default-features   # installs `rich`; no network 
 ## Licence
 
 MIT.
+
+## Optional syntax cache
+
+For repetitive source files, build the CLI with
+`cargo build -p rs-rich-cli --release --features syntax-cache`. This feature is
+off by default and changes no CLI flags. It reuses parsing work within one
+render; varied source files may see no speedup. See the
+[measurements](https://buchochelliq-labs.github.io/rs-rich-cli/benchmarks/#004-repeated-source-syntax-results).
