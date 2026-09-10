@@ -172,3 +172,7 @@ guarantee. [All samples and 120 output comparisons](https://github.com/buchochel
 are retained. The comparison matrix matched stdout, stderr, exit status and both
 HTML/SVG exports byte-for-byte across dialects, ragged/multiline/Unicode rows,
 widths 4/20/80, panels, padding, alignment, titles/captions and pager selection.
+
+Actual CLI rendering of the recorded CSV memory measurements:
+
+![CSV memory measurements rendered by the CLI](assets/releases/0.0.4-csv.jpg)
