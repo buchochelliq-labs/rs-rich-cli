@@ -86,3 +86,58 @@ before they were caught:
 - **Single passes are noisy.** One pass measured the JSON case at 135 ms
   against a 25–27 ms consensus across every other pass. Take the median of
   several passes before believing a number, and never quote a single run.
+
+## 0.0.4 development baseline
+
+Measured on 2026-09-10 against published 0.0.3 source
+`d9bfe617e835d7403744d54726e24f21784a7faa`, Linux 6.18.35 x86-64,
+Rust 1.98.1, optimized build. These are separate from the historical Windows
+comparisons above: no Python comparison or cross-platform speed claim is made.
+
+```bash
+cargo build --release -p rs-rich-cli --locked
+python3 scripts/bench_v004.py --binary target/release/rich \
+  --revision "$(git rev-parse HEAD)" --output baseline.json
+```
+
+The Linux harness requires `cc`. It generates deterministic fixtures, validates
+and hashes one captured warmup render, then records five end-to-end samples at
+width 100 with `--no-color` and stdout redirected. A native `wait4` sampler
+measures the CLI's peak RSS without inheriting the Python harness's memory
+footprint. Process/sampler startup is included. Each invocation has a 10-second
+timeout and process-group cleanup; timed-out cases have no fabricated median.
+
+[Raw samples, ranges and input/output/binary SHA-256 hashes](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/.github/evidence/v0.0.4-baseline/baseline.json)
+are retained alongside the harness.
+
+| Case | Median (ms) | Peak RSS (KiB) |
+|---|---:|---:|
+| startup | 4.1 | 5,012 |
+| syntax-46000 | 186.5 | 25,068 |
+| syntax-199000 | 633.3 | 59,036 |
+| csv-10000 | 96.8 | 8,900 |
+| csv-stdin-10000 | 100.3 | 8,964 |
+| csv-panel-10000 | 311.4 | 113,464 |
+| csv-50000 | 496.2 | 27,024 |
+| csv-100000 | 977.5 | 49,884 |
+| wrap-ascii-65536 | 10.5 | 8,200 |
+| wrap-ascii-262144 | 27.6 | 11,252 |
+| wrap-ascii-1048576 | 95.8 | 24,388 |
+| wrap-ascii-5242880 | 454.7 | 94,476 |
+| wrap-words-5m | 601.2 | 129,964 |
+| wrap-markdown-1m | 3969.1 | 24,232 |
+| wrap-unicode | 8.8 | 7,964 |
+| wrap-markdown-5m | >10,000 (warmup timeout) | — |
+
+Plain text and Markdown take different rendering paths. The 5 MiB plain cases
+complete under a second on this host, while the 5 MiB Markdown paragraph times
+out. Do not apply the original issue's 120-second observation to every input.
+CSV retains source rows for global measurement; decorated output additionally
+buffers rendered lines. Memory is not constant.
+
+Before implementation, the targets are: reduce the 100k-row CSV peak RSS by at
+least 40%; halve the 1 MiB Markdown paragraph time and make the 5 MiB paragraph
+finish within 10 seconds; reduce the 199 KB syntax median by at least 20%.
+These are engineering targets, not shipped performance guarantees. Compare on
+this host with the same build settings and corpus, retain output hashes, and
+report short-input regressions and decorated-path limitations separately.
