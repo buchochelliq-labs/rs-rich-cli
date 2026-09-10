@@ -1,0 +1,10 @@
+    UTF-16 input · decoded     
+          explicitly           
+┌───────┬──────────┬──────────┐
+│ name  │ city     │ status   │
+│ Zoë   │ Montréal │ ready    │
+│ 田中  │ 東京     │ verified │
+│ Marta │ Kraków   │ ready    │
+└───────┴──────────┴──────────┘
+  Unicode preserved · strict   
+           decoding            

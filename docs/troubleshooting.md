@@ -119,6 +119,36 @@ Windows. Piped input keeps working without a hint.
 
 ---
 
+
+## Text encoding
+
+In the 0.0.4 development build, select a known encoding explicitly:
+
+```bash
+rich notes.txt --encoding utf-16
+rich notes.txt --encoding utf-16le
+cat notes.txt | rich - --encoding utf-16be
+rich https://example.com/notes.txt --encoding utf-16
+```
+
+`utf-16` requires a byte-order mark (BOM). `utf-16le` and `utf-16be` also accept
+headerless input; use the byte order specified by the file's producer. Decoding
+is strict: odd byte counts, unpaired surrogates and contradictory BOMs fail with
+nonzero status before rendering. Generic `utf-16` rejects UTF-32 BOM signatures;
+the little-endian signature is also possible for UTF-16 BOM followed by NUL, so
+select `utf-16le` explicitly for that known case. UTF-32 is not auto-detected.
+Only one BOM is consumed. File/stdin newlines are normalized as before.
+
+Without this option, files keep upstream-compatible UTF-8 replacement decoding.
+A recognized UTF-16 BOM prints a hint, without silently changing decoding or the
+exit status. Headerless encodings are not guessed. Stdin and fetched bodies
+remain strict UTF-8; `--encoding utf-8` additionally makes file decoding strict.
+URL download limits and TLS checks are unchanged. Encoding does not apply to
+literal `--print` text, rules, GIF playback, image diffs or the capability demo.
+
+An unreadable image passed as text now produces one actionable `rich --diff`
+hint. A valid text file with an image suffix still renders as text.
+
 ## Reporting a bug
 
 Include:
