@@ -150,3 +150,10 @@ Please [open an issue](https://github.com/buchochelliq-labs/rs-rich-cli/issues)
 with the exact command, the input if you can share it, and what you expected. If
 it is a *parity* difference from Python `rich`, [Reporting a parity
 bug](parity.md#reporting-a-parity-bug) explains what makes those reports useful.
+
+### SVG export can squeeze CJK glyphs
+
+SVG textLength uses character counts for some runs; wide CJK glyphs may overlap
+in the exported image. The same case reproduces in pinned Python Rich 15.0.0.
+Decoded text and plain terminal output retain the original characters. This is
+an export-layout limitation, separate from encoding support.

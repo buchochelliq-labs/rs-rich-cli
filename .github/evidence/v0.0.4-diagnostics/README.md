@@ -21,3 +21,9 @@ A duplicate-BOM regression ensures explicit stdin consumes only one BOM.
 
 Independent review findings were fixed: explicit-endian BOM ambiguity, duplicate
 BOM stripping on stdin, and an unnecessary whole-input copy on default reads.
+
+`screenshot.jpg` is a browser capture of the CLI's own SVG export. CJK glyphs
+can be squeezed by SVG textLength: pinned Python Rich 15.0.0 reproduces the same
+36.6 textLength for `田中 `, so this screenshot exposes an upstream export
+limitation, not lost decoded bytes. `stdout.txt` and regression tests preserve
+the original Unicode text.
