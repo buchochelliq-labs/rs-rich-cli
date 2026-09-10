@@ -32,8 +32,8 @@ recorded separately in [`UPSTREAM.toml`](UPSTREAM.toml).
 A `vX.Y.Z` tag selects a coordinated workspace release; a `<crate>-vX.Y.Z`
 tag selects only that crate. See [the release documentation](docs/BRANCHING.md#releases).
 
-These are the versions prepared in this checkout. They do not imply that a
-release has been published; the crates.io links show available releases.
+These are the manifest versions in this checkout. Publication status is recorded
+in the release notes; the crates.io links show available packages.
 
 <!-- BEGIN MANIFEST VERSIONS -->
 | Package | Manifest version |
@@ -87,12 +87,15 @@ Per-module detail is in [docs/PORTING.md](docs/PORTING.md). What comes next, and
 why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 [#16](https://github.com/buchochelliq-labs/rs-rich-cli/issues/16).
 
-## 0.0.4 preparation
+## 0.0.4 — released
 
-The [0.0.4 release preparation](docs/releases/0.0.4.md) covers explicit text
-encoding, GIF half-block rendering and measured CSV/wrapping improvements plus an optional syntax cache.
-The manifest table above describes prepared source; 0.0.4 has not been published.
-The latest published release remains 0.0.3.
+All four crates are published at 0.0.4. The [release notes](docs/releases/0.0.4.md)
+cover explicit text encoding, GIF half-block rendering, CSV/wrapping improvements
+and the optional syntax cache, with actual CLI screenshots and verified results.
+
+The [0.0.5 preparation plan](docs/plans/0.0.5.md) proposes targeted goldens,
+differential fuzzing, library benchmarks and opt-in input sanitization.
+That work is planned; the manifests remain at the released 0.0.4 versions.
 
 ## 0.0.3 release notes
 

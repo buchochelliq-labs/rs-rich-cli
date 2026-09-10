@@ -51,7 +51,7 @@ rich --version
 ```
 
 The output reports the installed `rs-rich-cli` package version. For a build
-from this checkout, compare it with the [manifest-version table](index.md#versions-prepared-in-this-checkout).
+from this checkout, compare it with the [manifest-version table](index.md#versions-in-this-checkout).
 It does not report the Python upstream version or the core library version.
 
 If the shell reports "command not found", Cargo's binary directory is not on

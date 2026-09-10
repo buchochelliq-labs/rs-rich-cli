@@ -35,10 +35,11 @@ Entries below record subsequent releases and development.
 
 No changes yet.
 
-## [0.0.4] — prepared, not published
+## [0.0.4] — 2026-09-10
 
-All four independently versioned packages select 0.0.4 for their code and
-internal dependency changes. Publication is a separate protected-workflow step.
+All four independently versioned packages published at 0.0.4 for their code and
+internal dependency changes. The annotated tag is on main; the protected release
+workflow passed full source checks and exact-version registry verification.
 
 - `rs-rich`, `rs-rich-cli`: optional, off-by-default `syntax-cache` for repeated
   lines matching a small initial parser state. No per-entry capture copies;

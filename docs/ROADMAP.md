@@ -1,6 +1,6 @@
 # Roadmap
 
-Where this goes after the `0.0.4` release preparation. Ordered by what unblocks people, not by what is
+Where this goes after `0.0.4`. Ordered by what unblocks people, not by what is
 most interesting to build.
 
 Two rules constrain everything here:
@@ -57,7 +57,7 @@ protected release workflow, separately from the completed source merge.
 
 ---
 
-## 0.0.4 — diagnostics, GIF and performance development
+## 0.0.4 — released 2026-09-10
 
 The [0.0.4 development plan](plans/0.0.4.md) scopes these four issues
 above into small PRs: reproduce current baselines, improve diagnostics, add
@@ -65,11 +65,24 @@ explicit GIF blocks, reduce CSV memory and wrapping costs, then optimize the
 measured syntax bottlenecks. It defines acceptance cases, per-crate version
 decisions, real CLI evidence, independent review and docs-site updates.
 
-The selected diagnostics (#62), GIF rendering (#65), CSV/wrapping (#74) and
-opt-in syntax parsing reuse (#45) are implemented and included in the prepared source.
-The [0.0.4 release preparation](releases/0.0.4.md) records measurements,
-limitations and the independently selected package versions. Publication is
-separate; the protected workflow repeats source and package verification.
+Diagnostics (#62), GIF rendering (#65), CSV/wrapping (#74) and opt-in syntax
+parsing reuse (#45) are merged into main and published in all four 0.0.4
+packages. The [release notes](releases/0.0.4.md) record measurements,
+limitations and successful exact-version consumer verification.
+
+---
+
+## 0.0.5 — proposed confidence and input-control work
+
+The [0.0.5 preparation plan](plans/0.0.5.md) proposes four bounded workstreams:
+#15 golden-test gaps, #34 reproducible differential fuzzing, #35 library
+benchmarks with CI artifacts, and #64 explicit input sanitization. Start with
+the oracle/case contract; benchmark work can proceed independently. Keep default
+rendering unchanged and sanitizer policy in extensions.
+
+The plan audits existing evidence and dependency PRs, defines acceptance gates,
+and preserves independent package selection. It is planning only: 0.0.5 code,
+manifest bumps and publication are not included in this documentation update.
 
 ---
 

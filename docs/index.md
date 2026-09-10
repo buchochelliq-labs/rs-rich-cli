@@ -18,13 +18,16 @@ browser screenshots are committed snapshots of actual output.
 
 ---
 
-## Preparing 0.0.4
+## 0.0.4 is released
 
-[0.0.4 release preparation](releases/0.0.4.md) brings together explicit text
-encoding, GIF half-block rendering and measured CSV/wrapping improvements plus an optional syntax cache.
-The selected changes are integrated; publication still requires the protected
-release workflow. 0.0.4 is not published.
-The latest published release remains 0.0.3.
+All four crates are published at 0.0.4 and passed exact-version registry
+verification. The [release notes](releases/0.0.4.md) cover explicit text encoding,
+GIF half-block rendering, measured CSV/wrapping improvements and an optional
+syntax cache, with actual CLI screenshots and the release workflow results.
+
+The [0.0.5 preparation plan](plans/0.0.5.md) proposes four focused workstreams:
+targeted goldens, differential fuzzing, library benchmarks and opt-in input
+sanitization. Implementation and version changes are still ahead.
 
 ## What changed in 0.0.3
 
@@ -87,7 +90,9 @@ The badges below show the versions currently available on crates.io.
 | [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | [![rs-rich-ext](https://img.shields.io/crates/v/rs-rich-ext.svg)](https://crates.io/crates/rs-rich-ext) | [docs.rs](https://docs.rs/rs-rich-ext) | extensions + plugin registry |
 | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | [![rs-rich-art](https://img.shields.io/crates/v/rs-rich-art.svg)](https://crates.io/crates/rs-rich-art) | [docs.rs](https://docs.rs/rs-rich-art) | FIGlet text, image→ASCII, GIFs |
 
-### Versions prepared in this checkout
+<a id="versions-prepared-in-this-checkout"></a>
+
+### Versions in this checkout
 
 These manifest versions describe the source tree, not publication status.
 Each crate versions independently; see [Branching and releases](BRANCHING.md).
