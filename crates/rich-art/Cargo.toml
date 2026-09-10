@@ -10,7 +10,7 @@
 # own repository unchanged.
 [package]
 name = "rs-rich-art"
-version = "0.0.3"
+version = "0.0.4"
 description = "ASCII-art renderables for `rich` — FIGlet-style text banners"
 edition.workspace = true
 license.workspace = true

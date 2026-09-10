@@ -4,7 +4,7 @@ What does not work yet, what was never meant to, and what works differently on
 purpose. Three different things, kept apart — a deliberate trade-off listed as a
 bug makes a considered decision look like neglect.
 
-**Applies to** the `rich 0.0.3` / `rs-rich 0.0.3` source snapshot, reviewed
+**Applies to** the prepared `rich 0.0.4` / `rs-rich 0.0.4` source snapshot, reviewed
 2026-09-10 against Python
 `rich` 15.0.0. Each entry links to its issue so you can check the status without
 waiting for this page to be updated.

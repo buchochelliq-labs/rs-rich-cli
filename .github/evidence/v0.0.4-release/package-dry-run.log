@@ -1,0 +1,51 @@
+    Updating crates.io index
+    Blocking waiting for file lock on package cache
+   Packaging rs-rich v0.0.4 (/workspace/scratch/ff80804b0321/v004-release-docs/crates/rich)
+warning: ignoring example `cell_len_probe` as `examples/cell_len_probe.rs` is not included in the published package
+warning: ignoring example `screenshot` as `examples/screenshot.rs` is not included in the published package
+warning: ignoring test `golden` as `tests/golden.rs` is not included in the published package
+    Blocking waiting for file lock on package cache
+    Updating crates.io index
+    Packaged 61 files, 1.1MiB (223.7KiB compressed)
+   Packaging rs-rich-art v0.0.4 (/workspace/scratch/ff80804b0321/v004-release-docs/crates/rich-art)
+    Updating crates.io index
+    Blocking waiting for file lock on package cache
+    Packaged 31 files, 775.3KiB (628.3KiB compressed)
+   Packaging rs-rich-ext v0.0.4 (/workspace/scratch/ff80804b0321/v004-release-docs/crates/rich-ext)
+    Blocking waiting for file lock on package cache
+    Updating crates.io index
+    Packaged 12 files, 33.7KiB (11.7KiB compressed)
+   Packaging rs-rich-cli v0.0.4 (/workspace/scratch/ff80804b0321/v004-release-docs/crates/rich-cli)
+warning: ignoring test `cli` as `tests/cli.rs` is not included in the published package
+    Updating crates.io index
+    Packaged 7 files, 175.0KiB (53.5KiB compressed)
+   Verifying rs-rich v0.0.4 (/workspace/scratch/ff80804b0321/v004-release-docs/crates/rich)
+   Compiling rs-rich v0.0.4 (/workspace/scratch/ff80804b0321/release-package-target/package/rs-rich-0.0.4)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 27.86s
+   Verifying rs-rich-art v0.0.4 (/workspace/scratch/ff80804b0321/v004-release-docs/crates/rich-art)
+    Updating crates.io index
+   Unpacking rs-rich v0.0.4 (registry `/workspace/scratch/ff80804b0321/release-package-target/package/tmp-registry`)
+   Compiling rs-rich v0.0.4
+   Compiling rs-rich-art v0.0.4 (/workspace/scratch/ff80804b0321/release-package-target/package/rs-rich-art-0.0.4)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 33.12s
+   Verifying rs-rich-ext v0.0.4 (/workspace/scratch/ff80804b0321/v004-release-docs/crates/rich-ext)
+    Updating crates.io index
+   Compiling rs-rich-ext v0.0.4 (/workspace/scratch/ff80804b0321/release-package-target/package/rs-rich-ext-0.0.4)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 34.44s
+   Verifying rs-rich-cli v0.0.4 (/workspace/scratch/ff80804b0321/v004-release-docs/crates/rich-cli)
+    Updating crates.io index
+   Unpacking rs-rich-art v0.0.4 (registry `/workspace/scratch/ff80804b0321/release-package-target/package/tmp-registry`)
+   Unpacking rs-rich-ext v0.0.4 (registry `/workspace/scratch/ff80804b0321/release-package-target/package/tmp-registry`)
+   Compiling rs-rich v0.0.4
+   Compiling rs-rich-art v0.0.4
+   Compiling rs-rich-ext v0.0.4
+   Compiling rs-rich-cli v0.0.4 (/workspace/scratch/ff80804b0321/release-package-target/package/rs-rich-cli-0.0.4)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 41.30s
+   Uploading rs-rich v0.0.4 (/workspace/scratch/ff80804b0321/v004-release-docs/crates/rich)
+warning: aborting upload due to dry run
+   Uploading rs-rich-art v0.0.4 (/workspace/scratch/ff80804b0321/v004-release-docs/crates/rich-art)
+warning: aborting upload due to dry run
+   Uploading rs-rich-ext v0.0.4 (/workspace/scratch/ff80804b0321/v004-release-docs/crates/rich-ext)
+warning: aborting upload due to dry run
+   Uploading rs-rich-cli v0.0.4 (/workspace/scratch/ff80804b0321/v004-release-docs/crates/rich-cli)
+warning: aborting upload due to dry run

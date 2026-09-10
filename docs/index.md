@@ -18,6 +18,14 @@ browser screenshots are committed snapshots of actual output.
 
 ---
 
+## Preparing 0.0.4
+
+[0.0.4 release preparation](releases/0.0.4.md) brings together explicit text
+encoding, GIF half-block rendering and measured CSV/wrapping improvements plus an optional syntax cache.
+The selected changes are integrated; publication still requires the protected
+release workflow. 0.0.4 is not published.
+The latest published release remains 0.0.3.
+
 ## What changed in 0.0.3
 
 Graphical diff exports retain color with redirected stdout; notebooks support
@@ -87,10 +95,10 @@ Each crate versions independently; see [Branching and releases](BRANCHING.md).
 <!-- BEGIN MANIFEST VERSIONS -->
 | Package | Manifest version |
 |---|---|
-| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.3` |
-| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.3` |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.3` |
-| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.3` |
+| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.4` |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.4` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.4` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.4` |
 <!-- END MANIFEST VERSIONS -->
 
 ## Install

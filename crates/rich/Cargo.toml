@@ -6,7 +6,7 @@
 # release tag selects a coordinated or per-crate upload; see docs/BRANCHING.md.
 [package]
 name = "rs-rich"
-version = "0.0.3"
+version = "0.0.4"
 description = "A faithful Rust port of the Python `rich` terminal-rendering library"
 edition.workspace = true
 license.workspace = true
