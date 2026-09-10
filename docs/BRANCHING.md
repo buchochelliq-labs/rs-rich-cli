@@ -182,12 +182,22 @@ updating the requirements used by its direct dependents (`rs-rich-ext`,
 requires updating `rs-rich-cli`. Cargo does **not** force unrelated crates to
 share a version. Our coordinated-tag policy does.
 
+### Prepared 0.0.4 snapshot
+
+All four manifests select 0.0.4 because each package changes or consumes the new
+core version. Core adds an ownership extension point and performance changes;
+ext adds explicit text decoding; art adds GIF half-block rendering; the CLI wires
+these options and reduces CSV copies. Root internal requirements and the lockfile
+must agree with those independently selected versions. The coordinated `v0.0.4`
+scope is appropriate after final integration and verification; preparation does
+not create a tag or publish. See [release preparation](releases/0.0.4.md).
+
 ### Prepared 0.0.3 snapshot
 
 This preparation includes the Markdown fix from `main`, requiring core 0.0.3.
 The ext package also changes its core dependency and must publish a new version.
-Together with the already-prepared CLI and art versions, all four manifests now
-say 0.0.3. This is the dependency closure for this release, not a lockstep policy.
+Together with the prepared CLI and art versions, all four manifests in that
+snapshot said 0.0.3. This is the dependency closure for this release, not a lockstep policy.
 The selected coordinated tag `v0.0.3` selects all four:
 
 | package | decision | manifest change | internal requirement change |

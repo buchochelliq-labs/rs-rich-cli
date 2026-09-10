@@ -1,6 +1,6 @@
 # Roadmap
 
-Where this goes after the `0.0.3` hardening work. Ordered by what unblocks people, not by what is
+Where this goes after the `0.0.4` release preparation. Ordered by what unblocks people, not by what is
 most interesting to build.
 
 Two rules constrain everything here:
@@ -23,9 +23,9 @@ for the released work.
 
 ---
 
-## 0.0.3 — patch-release hardening
+## 0.0.3 — released 2026-09-10
 
-This patch accepts only:
+The patch release accepted:
 
 - correctness fixes confirmed against current `main` and, where applicable, the
   pinned upstream oracle;
@@ -33,7 +33,7 @@ This patch accepts only:
 - release hardening that makes the documented CI, parity, packaging, or
   clean-room verification gates more reliable.
 
-No new features or speculative rewrites belong in `0.0.3`. Subsequent fixes go
+New features were deferred from `0.0.3`. Subsequent fixes go
 under `Unreleased`, naming every affected crate.
 
 ### Completed source scope (2026-09-10)
@@ -48,7 +48,7 @@ The selected changes are under the 0.0.3 changelog heading; `Unreleased` now tra
 subsequent work. Registry publication and verification are tracked by the
 protected release workflow, separately from the completed source merge.
 
-### Deferred beyond 0.0.3
+### Deferred from 0.0.3 into 0.0.4
 
 - [#65](https://github.com/buchochelliq-labs/rs-rich-cli/issues/65): GIF half-block rendering.
 - [#74](https://github.com/buchochelliq-labs/rs-rich-cli/issues/74): further CSV memory reductions and long-line wrapping performance.
@@ -59,14 +59,17 @@ protected release workflow, separately from the completed source merge.
 
 ## 0.0.4 — diagnostics, GIF and performance development
 
-The [0.0.4 development plan](plans/0.0.4.md) scopes the four remaining issues
+The [0.0.4 development plan](plans/0.0.4.md) scopes these four issues
 above into small PRs: reproduce current baselines, improve diagnostics, add
 explicit GIF blocks, reduce CSV memory and wrapping costs, then optimize the
 measured syntax bottlenecks. It defines acceptance cases, per-crate version
 decisions, real CLI evidence, independent review and docs-site updates.
 
-The plan is accepted and implementation is in progress; these features have not shipped. Versions and
-release date are finalized after the selected work is verified.
+The selected diagnostics (#62), GIF rendering (#65), CSV/wrapping (#74) and
+opt-in syntax parsing reuse (#45) are implemented and included in the prepared source.
+The [0.0.4 release preparation](releases/0.0.4.md) records measurements,
+limitations and the independently selected package versions. Publication is
+separate; the protected workflow repeats source and package verification.
 
 ---
 

@@ -38,10 +38,10 @@ release has been published; the crates.io links show available releases.
 <!-- BEGIN MANIFEST VERSIONS -->
 | Package | Manifest version |
 |---|---|
-| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.3` |
-| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.3` |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.3` |
-| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.3` |
+| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.4` |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.4` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.4` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.4` |
 <!-- END MANIFEST VERSIONS -->
 
 | Package | Role | Import / installed name |
@@ -86,6 +86,13 @@ and a `log`/`tracing` handler.
 Per-module detail is in [docs/PORTING.md](docs/PORTING.md). What comes next, and
 why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 [#16](https://github.com/buchochelliq-labs/rs-rich-cli/issues/16).
+
+## 0.0.4 preparation
+
+The [0.0.4 release preparation](docs/releases/0.0.4.md) covers explicit text
+encoding, GIF half-block rendering and measured CSV/wrapping improvements plus an optional syntax cache.
+The manifest table above describes prepared source; 0.0.4 has not been published.
+The latest published release remains 0.0.3.
 
 ## 0.0.3 release notes
 

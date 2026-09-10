@@ -18,7 +18,7 @@ rich https://example.com    # fetched and syntax-highlighted
 rich -p "[bold red]hi[/]"   # console markup
 ```
 
-The Rust package is currently version **`0.0.3`** and follows independent
+The Rust package is currently version **`0.0.4`** and follows independent
 SemVer; its version does not mirror Python `rich-cli`. The tracked upstream
 release is **`rich-cli` 1.8.1**, recorded in
 [`../../UPSTREAM.toml`](../../UPSTREAM.toml).
