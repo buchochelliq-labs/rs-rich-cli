@@ -188,7 +188,7 @@ This preparation includes the Markdown fix from `main`, requiring core 0.0.3.
 The ext package also changes its core dependency and must publish a new version.
 Together with the already-prepared CLI and art versions, all four manifests now
 say 0.0.3. This is the dependency closure for this release, not a lockstep policy.
-A plain `v0.0.3` would select all four:
+The selected coordinated tag `v0.0.3` selects all four:
 
 | package | decision | manifest change | internal requirement change |
 |---|---|---|---|
@@ -197,8 +197,8 @@ A plain `v0.0.3` would select all four:
 | `rs-rich-art` | publish `0.0.3` | `crates/rich-art/Cargo.toml`: `0.0.2` → `0.0.3` | root `rich-art` requirement: `0.0.2` → `0.0.3`; it consumes the updated root `rich` requirement |
 | `rs-rich-cli` | publish `0.0.3` | `crates/rich-cli/Cargo.toml`: `0.0.2` → `0.0.3` | it consumes all three updated root requirements |
 
-The manifest and lockfile updates are prepared now. Changelog promotion belongs
-in the final release PR; `Unreleased` remains populated until then. Regenerate
+The manifest and lockfile updates are finalized, and selected changes are under
+the 0.0.3 changelog heading. `Unreleased` is reserved for subsequent work. Regenerate
 version tables with `python3 scripts/gen_versions.py` and CLI help with
 `python3 scripts/gen_cli_reference.py` after building the release binary. CI
 checks both generated documents. No tag or registry upload is created by preparation.
@@ -239,8 +239,9 @@ a consumer with an exact registry dependency for each selected library. An
 art-only release never installs the CLI or waits for a new core version.
 
 Publishing is **irreversible** — versions are immutable and can only be yanked.
-A partial upload still requires manual recovery, not a blind rerun. This change
-creates no tags and publishes no packages.
+A partial upload still requires manual recovery, not a blind rerun. Planning and documentation updates
+do not create tags or publish packages. Create the annotated tag on `main`;
+the protected release workflow publishes the selected packages.
 
 ## What is enforced, and what is merely written down
 

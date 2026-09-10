@@ -87,6 +87,12 @@ Per-module detail is in [docs/PORTING.md](docs/PORTING.md). What comes next, and
 why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 [#16](https://github.com/buchochelliq-labs/rs-rich-cli/issues/16).
 
+## 0.0.3 release notes
+
+The [0.0.3 notes](docs/releases/0.0.3.md) cover graphical diff exports, notebook
+layout, styled titles, JSON correctness, Windows paging and safer GIF/CSV output.
+See [UAT closeout](docs/remaining-uat-0.0.3.md) for completed and deferred work.
+
 ## Install
 
 ```bash

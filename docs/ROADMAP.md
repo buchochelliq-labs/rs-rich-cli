@@ -1,6 +1,6 @@
 # Roadmap
 
-Where this goes after `0.0.2`. Ordered by what unblocks people, not by what is
+Where this goes after the `0.0.3` hardening work. Ordered by what unblocks people, not by what is
 most interesting to build.
 
 Two rules constrain everything here:
@@ -33,28 +33,27 @@ This patch accepts only:
 - release hardening that makes the documented CI, parity, packaging, or
   clean-room verification gates more reliable.
 
-No new features or speculative rewrites belong in `0.0.3`. Add a changelog entry
-under `Unreleased` only when a fix lands, and name every affected crate there.
+No new features or speculative rewrites belong in `0.0.3`. Subsequent fixes go
+under `Unreleased`, naming every affected crate.
 
-### Selected scope (2026-09-10)
+### Completed source scope (2026-09-10)
 
-| Work | Decision for this readiness PR |
-|---|---|
-| #86 Markdown image follow-ups | Include the existing fixes from `main`: table-cell image hoisting, multiple images per container, adjacent containers. Verify all three against rich 15.0.0 goldens. |
-| #102, #103, #106 | Retain the merged package-version and per-crate workflow fixes; prepare the dependency closure at 0.0.3. |
-| #99 oracle-pin parsing | Adopt TOML parsing independently; do not import its stacked JSON changes. |
-| Documentation and CI | Regenerate CLI help, check manifest-version tables, align release instructions, and gate all release branch aliases on main ancestry. |
-| #67 / #98 JSON wrapping | Follow-up requested: repair content loss and gate escape-safe layout off by default. |
-| #59, #72, #74 runtime reports | Follow-up requested: safe GIF redirection, CSV streaming and confirmed CLI/Markdown repairs. See [runtime audit](runtime-audit-0.0.3.md). |
+The 0.0.3 fixes are merged into the RC: Markdown image and container parity,
+independent release selection, tested TOML pin parsing, JSON precision/depth,
+optional escape-safe JSON presentation, safe GIF redirection, CSV streaming,
+title markup, notebook layout, graphical diff exports and native Windows paging.
 
-The release preparation branch is `releases/v0.0.3-rc`. Its name does not
-create a prerelease version or authorize publishing. The final release PR must
-land on `main` before any tag is created.
+See [release notes](releases/0.0.3.md) and [UAT closeout](remaining-uat-0.0.3.md).
+The selected changes are under the 0.0.3 changelog heading; `Unreleased` now tracks
+subsequent work. The release PR must land on `main` before its annotated tag and
+protected registry publication.
 
-Follow [the release procedure](BRANCHING.md): require a non-empty `Unreleased`
-section, reconcile all manifest pins with `Cargo.lock`, run the complete CI and
-parity gate, merge the release PR to `main`, and only then create the annotated
-tag.
+### Deferred beyond 0.0.3
+
+- [#65](https://github.com/buchochelliq-labs/rs-rich-cli/issues/65): GIF half-block rendering.
+- [#74](https://github.com/buchochelliq-labs/rs-rich-cli/issues/74): further CSV memory reductions and long-line wrapping performance.
+- [#62](https://github.com/buchochelliq-labs/rs-rich-cli/issues/62): image/encoding diagnostics and additional encoding support.
+- [#45](https://github.com/buchochelliq-labs/rs-rich-cli/issues/45): syntax-highlighting performance.
 
 ---
 
@@ -118,9 +117,10 @@ syncs.
 
 ### Benchmarks
 
-There are none. A rendering library with no performance data is a latent
-surprise for whoever first puts it in a hot loop. A baseline is worth more than
-any optimisation made without one.
+CLI timing and CSV memory measurements now exist in the
+[benchmarks](benchmarks.md) and [runtime audit](runtime-audit-0.0.3.md). A repeatable
+library microbenchmark suite and tracked regression thresholds remain useful
+follow-up work.
 
 ---
 

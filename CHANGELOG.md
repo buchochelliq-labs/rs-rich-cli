@@ -29,9 +29,13 @@ Two things worth knowing up front:
   API as `15.0.0` would have been a lie, and the first breaking change would have
   collided with upstream's next major.
 
-Everything below this heading is the development history that led here.
+Entries below record subsequent releases and development.
 
 ## [Unreleased]
+
+No changes yet.
+
+## [0.0.3] — 2026-09-10
 
 ### Fixed
 - **`rs-rich-cli`:** render diff HTML/SVG using destination color capabilities
@@ -66,10 +70,11 @@ Everything below this heading is the development history that led here.
   badge table against Python `rich` 15.0.0.
 
 ### Changed
-- **`rs-rich`, `rs-rich-ext`, `rs-rich-art`, `rs-rich-cli`:** prepare 0.0.3
+- **`rs-rich`, `rs-rich-ext`, `rs-rich-art`, `rs-rich-cli`:** set 0.0.3
   manifests and internal requirements together. Core includes the Markdown fix;
   ext needs a new package version for its dependency on core 0.0.3. Art and CLI
-  retain their already-prepared 0.0.3 versions. These versions are not yet released.
+  retain their 0.0.3 versions. This dependency closure is specific to this release;
+  independent per-crate versioning remains supported.
 - **Release tooling (all four crates):** retain coordinated `v*` releases and
   independent `<crate>-v*` releases, with selection-scoped exact-version
   verification. Align the release checklist and skill with both paths.

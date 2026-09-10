@@ -12,8 +12,8 @@ repository = "https://github.com/buchochelliq-labs/rs-rich-cli"
 homepage = "https://github.com/buchochelliq-labs/rs-rich-cli"
 authors = ["rs-rich-cli contributors"]
 # The true floor of the dependency tree, enforced by the `msrv` CI job. Driven
-# by syntect -> plist/time (1.88); the network/image deps sit below it. Verify
-# with `cargo +1.88.0 check --workspace --all-features` before lowering.
+# by the locked dependency graph, including CLI image/network features. Verify
+# with `cargo +1.90.0 check --workspace --all-features` before lowering.
 rust-version = "1.90"
 
 [workspace.dependencies]
@@ -52,7 +52,7 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 # rustls + bundled webpki roots (self-contained TLS, no OS cert dependency).
 # Behind rich-cli's default `fetch` feature so lean builds can opt out.
 # (No version pin needed: ureq 3.3 wants rustc 1.85, comfortably under the
-# workspace MSRV of 1.88.)
+# workspace MSRV of 1.90.)
 ureq = "3"
 
 # Core stays safe by default; the future Windows-console port may opt back in
