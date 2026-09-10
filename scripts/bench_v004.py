@@ -36,6 +36,13 @@ def fixtures(root):
     source = b'fn sample(value: usize) -> String { format!("value: {}", value + 1) }\n'
     for size in (46_000, 199_000):
         add(f"syntax-{size}", source * (size // len(source)), ".rs", ["--syntax"])
+    # Real-source controls expose cache overhead on varied, nonrepeating input.
+    # The checkout supplies fixtures; compare binaries from the same checkout.
+    repository = Path(__file__).resolve().parents[1]
+    for name, source_path in (("cli", "crates/rich-cli/src/main.rs"),
+                              ("text", "crates/rich/src/text.rs")):
+        add(f"syntax-real-{name}", (repository / source_path).read_bytes(),
+            ".rs", ["--syntax"])
     for rows in (10_000, 50_000, 100_000):
         data = b"id,name,note\n" + b"".join(
             f'{i},item-{i},"note, {i % 17}"\n'.encode() for i in range(rows))

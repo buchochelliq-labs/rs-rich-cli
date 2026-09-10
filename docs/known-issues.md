@@ -160,3 +160,10 @@ SVG textLength uses character counts for some runs; wide CJK glyphs may overlap
 in the exported image. The same case reproduces in pinned Python Rich 15.0.0.
 Decoded text and plain terminal output retain the original characters. This is
 an export-layout limitation, separate from encoding support.
+
+### Syntax parsing remains costly for varied source
+
+The 0.0.4 development cache helps repeated boilerplate whose parser state stays
+unchanged. Measured real-source files showed essentially unchanged runtime;
+loading and parsing new syntax still costs more than plain text. See the
+[workload-specific results](benchmarks.md#004-repeated-source-syntax-results).

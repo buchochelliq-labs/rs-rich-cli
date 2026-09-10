@@ -33,6 +33,9 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+- `rs-rich`: reuse state-neutral syntax parsing for repeated lines without
+  changing grammars, themes or highlighting state; gains are workload-dependent (#45).
+
 - `rs-rich`: ownership-transfer protocol for table rows, preserving existing rendering.
 - `rs-rich-cli`: move parsed CSV rows into the table and compact completed rows;
   measured 100k-row peak RSS falls about 46%, with identical output (#74).

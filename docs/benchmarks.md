@@ -176,3 +176,29 @@ widths 4/20/80, panels, padding, alignment, titles/captions and pager selection.
 Actual CLI rendering of the recorded CSV memory measurements:
 
 ![CSV memory measurements rendered by the CLI](assets/releases/0.0.4-csv.jpg)
+
+## 0.0.4 repeated-source syntax results
+
+Profiling showed parsing/highlighting dominated syntax rendering. A local cache
+now reuses parse operations for exact repeated lines only when the complete
+parser state is unchanged. Every line still advances the live highlighter.
+Grammars, themes and the regex engine are unchanged. The cache retains the first
+64 eligible distinct lines per render; it is not an adaptive or persistent cache.
+
+| Case | 0.0.3 median (ms) | Development median (ms) |
+|---|---:|---:|
+| Repetitive Rust, 46 KB | 184.8 | 63.3 |
+| Repetitive Rust, 199 KB | 697.7 | 159.4 |
+| Real CLI source | 431.1 | 435.2 |
+| Real Text source | 249.7 | 249.5 |
+
+These are five-run Linux medians using the same inputs and optimized settings.
+The repeated 199 KB fixture improves by 77%, exceeding the predeclared 20%
+target. Real-source controls are essentially unchanged: this is a benefit for
+repeated boilerplate, not a general syntax speedup. Source and output remain
+buffered; the cache has an entry limit, not a strict memory-byte bound.
+
+All five benchmark output hashes and 144 output/export combinations match the
+pre-change binary. State-sensitive tests compare every bundled theme with
+uncached Syntect. Cold-process samples and a separate repeated-library-render
+probe are included in the [raw evidence](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/v0.0.4-syntax).
