@@ -202,3 +202,7 @@ All five benchmark output hashes and 144 output/export combinations match the
 pre-change binary. State-sensitive tests compare every bundled theme with
 uncached Syntect. Cold-process samples and a separate repeated-library-render
 probe are included in the [raw evidence](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/v0.0.4-syntax).
+
+Actual CLI syntax output, including identical text inside and outside a comment:
+
+![Syntax colors and comment context in the CLI](assets/releases/0.0.4-syntax.jpg)
