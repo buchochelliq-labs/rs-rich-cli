@@ -31,3 +31,5 @@ to 24,656 KiB; elapsed time from 5.31 s to 2.27 s. These are measurements of thi
 fixture, not a constant-memory guarantee. Source rows still scale with input.
 See the repository's `.github/evidence/v0.0.3-runtime/` for commands, outputs and
 actual CLI screenshots.
+
+Further checks of older reports are recorded in [the remaining UAT audit](remaining-uat-0.0.3.md).

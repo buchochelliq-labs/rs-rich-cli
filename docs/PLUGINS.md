@@ -22,6 +22,7 @@ Defined in [`crates/rich/src/protocol.rs`](https://github.com/buchochelliq-labs/
 | trait          | upstream analogue          | purpose |
 |----------------|----------------------------|---------|
 | `Renderable`   | `__rich_console__` protocol | make a custom type printable by `Console` |
+| `LineRenderable` | incremental consumption of rendering generators | stream styled lines without collecting the full rendered output; implemented by `Table` |
 | `Highlighter`  | `Highlighter` ABC          | add style spans to `Text` (numbers, URLs, syntax, …) |
 
 More seams (custom `Box` sets, spinners, themes) are added here as the

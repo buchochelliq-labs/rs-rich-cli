@@ -16,6 +16,7 @@ use std::process::ExitCode;
 use rich::cells::cell_len;
 use rich::markdown::Markdown;
 use rich::measure::Measurement;
+use rich::protocol::LineRenderable;
 use rich::r#box::{Box as BoxSet, ASCII, ASCII2, DOUBLE, HEAVY, HEAVY_HEAD, ROUNDED, SQUARE};
 use rich::text::Text;
 use rich::{
@@ -1235,6 +1236,11 @@ fn run(cli: Cli) -> ExitCode {
                     })
                     .and_then(|()| output.flush());
                 if let Err(error) = result {
+                    // A consumer such as `head` may finish before this table.
+                    // Match the other stdout paths: a closed pipe is success.
+                    if error.kind() == std::io::ErrorKind::BrokenPipe {
+                        return ExitCode::SUCCESS;
+                    }
                     eprintln!("rich: could not write CSV output: {error}");
                     return ExitCode::FAILURE;
                 }

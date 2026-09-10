@@ -4,7 +4,7 @@
 //! (`--no-color`) output, so they check argument routing and library wiring
 //! without depending on exact ANSI bytes (that parity lives in the `rich` crate).
 
-use std::io::Write;
+use std::io::{Read, Write};
 use std::process::{Command, Stdio};
 
 fn bin() -> Command {
@@ -54,6 +54,32 @@ fn version_flag() {
     // the upstream rich-cli version (see AGENTS.md → Versioning).
     let expected = format!("rich (rs-rich-cli) {}", env!("CARGO_PKG_VERSION"));
     assert!(out.contains(&expected), "got: {out:?}, want: {expected:?}");
+}
+
+#[test]
+fn csv_consumer_closing_the_pipe_is_successful_termination() {
+    let mut child = bin()
+        .args(["--csv", "-", "--no-color"])
+        .env("COLUMNS", "80")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let input = format!("name,value\n{}", "example,12345\n".repeat(10_000));
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
+    // Like `head`: consume a little, then close stdout while more rows remain.
+    let mut reader = child.stdout.take().unwrap();
+    reader.read_exact(&mut [0; 1]).unwrap();
+    drop(reader);
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success(), "stderr: {:?}", output.stderr);
+    assert!(output.stderr.is_empty(), "stderr: {:?}", output.stderr);
 }
 
 #[test]

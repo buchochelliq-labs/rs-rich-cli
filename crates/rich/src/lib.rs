@@ -92,7 +92,7 @@ pub use crate::panel::Panel;
 pub use crate::pretty::Pretty;
 pub use crate::progress::{Progress, ProgressColumn};
 pub use crate::progress_bar::ProgressBar;
-pub use crate::protocol::{Highlighter, Renderable};
+pub use crate::protocol::{Highlighter, LineRenderable, Renderable};
 pub use crate::rule::Rule;
 pub use crate::screen::Screen;
 pub use crate::segment::Segment;
