@@ -38,15 +38,15 @@ under `Unreleased`, naming every affected crate.
 
 ### Completed source scope (2026-09-10)
 
-The 0.0.3 fixes are merged into the RC: Markdown image and container parity,
+The 0.0.3 fixes are merged into main through PR #111: Markdown image and container parity,
 independent release selection, tested TOML pin parsing, JSON precision/depth,
 optional escape-safe JSON presentation, safe GIF redirection, CSV streaming,
 title markup, notebook layout, graphical diff exports and native Windows paging.
 
 See [release notes](releases/0.0.3.md) and [UAT closeout](remaining-uat-0.0.3.md).
 The selected changes are under the 0.0.3 changelog heading; `Unreleased` now tracks
-subsequent work. The release PR must land on `main` before its annotated tag and
-protected registry publication.
+subsequent work. Registry publication and verification are tracked by the
+protected release workflow, separately from the completed source merge.
 
 ### Deferred beyond 0.0.3
 
@@ -54,6 +54,19 @@ protected registry publication.
 - [#74](https://github.com/buchochelliq-labs/rs-rich-cli/issues/74): further CSV memory reductions and long-line wrapping performance.
 - [#62](https://github.com/buchochelliq-labs/rs-rich-cli/issues/62): image/encoding diagnostics and additional encoding support.
 - [#45](https://github.com/buchochelliq-labs/rs-rich-cli/issues/45): syntax-highlighting performance.
+
+---
+
+## 0.0.4 — proposed diagnostics, GIF and performance work
+
+The [0.0.4 development plan](plans/0.0.4.md) scopes the four remaining issues
+above into small PRs: reproduce current baselines, improve diagnostics, add
+explicit GIF blocks, reduce CSV memory and wrapping costs, then optimize the
+measured syntax bottlenecks. It defines acceptance cases, per-crate version
+decisions, real CLI evidence, independent review and docs-site updates.
+
+This is a proposal, not a claim that those features have shipped. Versions and
+release date are finalized after the selected work is verified.
 
 ---
 
