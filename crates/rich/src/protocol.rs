@@ -30,6 +30,24 @@ pub trait Renderable {
     }
 }
 
+/// Optional line-streaming extension point for renderables.
+///
+/// Mirrors the incremental consumption of upstream's rendering generators.
+/// Consumers can write each visual line immediately instead of collecting the
+/// complete segment stream. Implementations may still retain source data for
+/// measurement. This trait keeps streaming hooks out of inherent core APIs.
+pub trait LineRenderable: Renderable {
+    /// Emit styled visual lines without trailing newlines, stopping immediately
+    /// on the callback's first error. An empty segment represents a blank line;
+    /// calling the callback zero times represents no output.
+    fn try_for_each_line<E>(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        emit: impl FnMut(Vec<Segment>) -> Result<(), E>,
+    ) -> Result<(), E>;
+}
+
 /// A transformer that adds style spans to [`Text`] (e.g. syntax/number/URL
 /// highlighting). The Rust equivalent of upstream's `Highlighter` ABC.
 ///

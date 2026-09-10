@@ -34,6 +34,9 @@ Everything below this heading is the development history that led here.
 ## [Unreleased]
 
 ### Fixed
+- **`rs-rich`, `rs-rich-cli`:** expose table streaming through the `LineRenderable`
+  protocol trait; treat an early-closing CSV consumer as successful termination.
+  Regression test covers a 10,000-row producer whose pipe is closed after one byte.
 - **`rs-rich`, `rs-rich-cli`:** preserve arbitrary-size JSON integers and render
   overflowing exponents as signed Infinity, matching Python. Repair #98 escape
   folding without losing suffix bytes; keep the divergence behind the off-default

@@ -15,7 +15,7 @@
 
 use crate::cells::{cell_len, set_cell_size};
 use crate::console::{Console, ConsoleOptions, Justify};
-use crate::protocol::Renderable;
+use crate::protocol::{LineRenderable, Renderable};
 use crate::r#box::{Box as BoxSet, RowLevel, HEAVY_HEAD};
 use crate::segment::Segment;
 use crate::style::Style;
@@ -584,7 +584,7 @@ impl Table {
     }
 }
 
-impl Table {
+impl LineRenderable for Table {
     /// Render visual lines in order without retaining the full rendered table.
     ///
     /// Like upstream's `Table.__rich_console__` / `_render` generators, this
@@ -592,7 +592,7 @@ impl Table {
     /// Lines contain styled segments without a trailing newline. The callback
     /// may write each line immediately; its first error stops rendering.
     /// The table still owns its source rows for column-width measurement.
-    pub fn try_for_each_line<E>(
+    fn try_for_each_line<E>(
         &self,
         console: &Console,
         options: &ConsoleOptions,
