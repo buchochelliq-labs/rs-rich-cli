@@ -152,6 +152,20 @@ def _title_table() -> Table:
     return table
 
 
+def _markup_title_table() -> Table:
+    table = _table(box.SQUARE)
+    table.title = "[bold red]Users[/] :rocket:"
+    table.caption = "[green]2 rows[/] :white_check_mark:"
+    return table
+
+
+def _wrapped_title_table() -> Table:
+    table = _table(box.SQUARE)
+    table.title = "[red]Long title wraps onto lines[/]"
+    table.caption = "[green]a\tb\nc[/]"
+    return table
+
+
 def _lines_table() -> Table:
     table = Table(box=box.SQUARE, show_lines=True)
     table.add_column("Name")
@@ -324,6 +338,23 @@ RENDERABLE_CASES = [
     ("rule_title_odd", 21, Rule("Hi")),
     ("rule_left", 20, Rule("Hi", align="left")),
     ("rule_right", 20, Rule("Hi", align="right")),
+    ("rule_title_markup", 24, Rule("[bold red]Ready[/] :rocket:")),
+    ("rule_title_literal", 24, Rule(r"\[red]literal\[/red]")),
+    ("rule_title_spaces", 24, Rule("[bold]a\tb\nc[/]")),
+    ("rule_title_truncate", 12, Rule("[red]long[/][bold blue]title[/]")),
+    ("rule_left_markup", 16, Rule("[red]Title[/]", align="left")),
+    ("rule_right_markup", 16, Rule("[red]Title[/]", align="right")),
+    ("rule_title_wide_truncate", 6, Rule("[red]界[/][blue]abc[/]")),
+    ("rule_empty_title", 12, Rule("")),
+    ("panel_title_markup", 24, Panel("x", title="[bold red]Ready[/] :rocket:", border_style="blue")),
+    ("panel_title_literal", 24, Panel("x", title=r"\[red]literal\[/red]")),
+    ("panel_title_spaces", 24, Panel("x", title="[bold]a\tb\nc[/]")),
+    ("panel_title_truncate", 12, Panel("x", title="[red]long[/][bold blue]title[/]", border_style="green")),
+    ("panel_subtitle_markup", 24, Panel("x", subtitle="[italic yellow]Done[/] :rocket:", subtitle_align="right", border_style="blue")),
+    ("panel_subtitle_truncate", 12, Panel("x", subtitle="[red]long[/][bold blue]title[/]", border_style="green")),
+    ("panel_title_wide_truncate", 6, Panel("x", title="[red]界[/][blue]abc[/]")),
+    ("panel_empty_title", 12, Panel("x", title="", subtitle="")),
+    ("panel_tiny_title", 4, Panel("x", title="[bold red]T[/]", subtitle="[green]S[/]")),
     ("panel_plain", 20, Panel("hello")),
     ("panel_title", 20, Panel("hello", title="T")),
     ("panel_title_left", 20, Panel("x", title="T", title_align="left", box=box.SQUARE)),
@@ -360,6 +391,8 @@ RENDERABLE_CASES = [
     ("table_expand", 30, _expand_table()),
     ("table_justify", 30, _justify_table()),
     ("table_title", 30, _title_table()),
+    ("table_title_markup", 30, _markup_title_table()),
+    ("table_title_wrap", 30, _wrapped_title_table()),
     ("table_lines", 30, _lines_table()),
     ("table_col_width", 40, _width_table()),
     ("table_col_style", 40, _style_table()),
@@ -383,14 +416,27 @@ RENDERABLE_CASES = [
     ("bar_half", 20, ProgressBar(total=100, completed=50, width=20)),
     ("bar_third", 20, ProgressBar(total=100, completed=33, width=20)),
     ("bar_full", 20, ProgressBar(total=100, completed=100, width=20)),
+    ("json_python_numbers", 80, JSON("[1234567890123456789012345678901234567890,-1234567890123456789012345678901234567890,1e400,-1e400,-0]")),
     ("json_object", 40, JSON(JSON_SAMPLE)),
     # Non-ASCII strings: rich's JSON defaults to ensure_ascii=False, so accented
     # characters and symbols render as UTF-8 (not \uXXXX). Keys keep input order.
     ("json_unicode", 40, JSON('{"name": "café", "emoji": "❤"}')),
+    # Narrow JSON lines exercise boundaries around every escape form emitted by
+    # json.dumps: quote, backslash, short control escapes, and \uXXXX controls.
+    ("json_escapes_w8", 8, JSON(r'{"v":"a\"b\\c\nd\u0001e"}')),
+    ("json_escapes_w10", 10, JSON(r'{"v":"a\"b\\c\nd\u0001e"}')),
+    ("json_escapes_w12", 12, JSON(r'{"v":"a\"b\\c\nd\u0001e"}')),
     ("markdown_doc", 24, Markdown("# Title\n\nHello **bold** and *italic* and `code`.")),
     ("markdown_list", 20, Markdown("Items:\n\n- one\n- two\n\n1. a\n2. b")),
     ("markdown_quote_hr", 20, Markdown("Note:\n\n> important\n\n---\n\ndone")),
     # A document ending with a thematic break emits one extra trailing blank line.
+    ("markdown_empty", 30, Markdown("", hyperlinks=False)),
+    ("markdown_rule_only_quote", 30, Markdown("> ---", hyperlinks=False)),
+    ("markdown_rule_then_quote_text", 30, Markdown("> ---\n>\n> text", hyperlinks=False)),
+    ("markdown_html_then_paragraph", 30, Markdown("<div>hidden</div>\n\nParagraph", hyperlinks=False)),
+    ("markdown_html_only", 30, Markdown("<div>hidden</div>", hyperlinks=False)),
+    ("markdown_html_between_paragraphs", 30, Markdown("A\n\n<div>x</div>\n\nB", hyperlinks=False)),
+    ("markdown_images_same_table_cell", 30, Markdown("| h |\n|---|\n| ![a](x) ![b](y) |\n| ![c](z) |", hyperlinks=False)),
     ("markdown_hr_end", 20, Markdown("a\n\n---")),
     (
         "markdown_image_table_cell",
@@ -738,6 +784,16 @@ TEXT_OPS_CASES = [
     ("pad", _op_pad),
     ("pad_left", _op_pad_left),
     ("pad_right", _op_pad_right),
+    ("truncate_styled_ellipsis", lambda: [
+        _mutated(Text.from_markup("[red]long[/][bold blue]title[/]"),
+                 lambda t, w=width: t.truncate(w, overflow="ellipsis"))[0]
+        for width in (1, 2, 5, 8)
+    ]),
+    ("truncate_wide_styled", lambda: [
+        _mutated(Text.from_markup("[red]界[/][blue]abc[/]"),
+                 lambda t, w=width, o=overflow: t.truncate(w, overflow=o))[0]
+        for width, overflow in ((1, "crop"), (1, "ellipsis"), (2, "ellipsis"), (3, "ellipsis"))
+    ]),
     ("right_crop", _op_right_crop),
     ("rstrip", _op_rstrip),
     ("rstrip_end_partial", _op_rstrip_end_partial),
@@ -1033,6 +1089,10 @@ def main() -> None:
         with rconsole.capture() as capture:
             rconsole.print(renderable)
         output = capture.get()
+        if name.startswith("json_escapes_"):
+            # The fixture format reserves literal `\\n` for a physical newline.
+            # Protect JSON backslashes before applying that transport encoding.
+            output = output.replace("\\", "\\x5c")
         # Guard: if the capture console's encoding isn't UTF-8, rich substitutes
         # box-drawing glyphs with ASCII, producing non-deterministic fixtures.
         # Fail loudly instead of writing a bad fixture.

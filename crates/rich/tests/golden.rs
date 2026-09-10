@@ -257,6 +257,7 @@ fn unescape(s: &str) -> String {
     s.replace("\\x1b", "\x1b")
         .replace("\\n", "\n")
         .replace("\\x1f", "\x1f")
+        .replace("\\x5c", "\\")
 }
 
 /// Build the renderable matching a fixture `name`. Must stay in sync with
@@ -270,6 +271,31 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "rule_title" | "rule_title_odd" => Box::new(Rule::new("Hi")),
         "rule_left" => Box::new(Rule::new("Hi").align(HorizontalAlign::Left)),
         "rule_right" => Box::new(Rule::new("Hi").align(HorizontalAlign::Right)),
+        "rule_title_markup" => Box::new(Rule::new("[bold red]Ready[/] :rocket:")),
+        "rule_title_literal" => Box::new(Rule::new(r"\[red]literal\[/red]")),
+        "rule_title_spaces" => Box::new(Rule::new("[bold]a\tb\nc[/]")),
+        "rule_title_truncate" => Box::new(Rule::new("[red]long[/][bold blue]title[/]")),
+        "rule_left_markup" => Box::new(Rule::new("[red]Title[/]").align(HorizontalAlign::Left)),
+        "rule_right_markup" => Box::new(Rule::new("[red]Title[/]").align(HorizontalAlign::Right)),
+        "rule_title_wide_truncate" => Box::new(Rule::new("[red]界[/][blue]abc[/]")),
+        "rule_empty_title" => Box::new(Rule::new("")),
+        "panel_title_markup" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title("[bold red]Ready[/] :rocket:").border_style(Style::parse("blue").unwrap())),
+        "panel_title_literal" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title(r"\[red]literal\[/red]")),
+        "panel_title_spaces" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title("[bold]a\tb\nc[/]")),
+        "panel_title_truncate" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title("[red]long[/][bold blue]title[/]").border_style(Style::parse("green").unwrap())),
+        "panel_subtitle_markup" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .subtitle("[italic yellow]Done[/] :rocket:").subtitle_align(HorizontalAlign::Right)
+            .border_style(Style::parse("blue").unwrap())),
+        "panel_subtitle_truncate" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .subtitle("[red]long[/][bold blue]title[/]").border_style(Style::parse("green").unwrap())),
+        "panel_title_wide_truncate" => Box::new(Panel::new(Box::new(Text::new("x"))).title("[red]界[/][blue]abc[/]")),
+        "panel_empty_title" => Box::new(Panel::new(Box::new(Text::new("x"))).title("").subtitle("")),
+        "panel_tiny_title" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title("[bold red]T[/]").subtitle("[green]S[/]")),
         "panel_plain" => Box::new(Panel::new(Box::new(Text::new("hello")))),
         "panel_title" => Box::new(Panel::new(Box::new(Text::new("hello"))).title("T")),
         "panel_title_left" => Box::new(
@@ -325,6 +351,10 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "table_expand" => Box::new(expand_table()),
         "table_justify" => Box::new(justify_table()),
         "table_title" => Box::new(title_table()),
+        "table_title_markup" => Box::new(sample_table(SQUARE)
+            .title("[bold red]Users[/] :rocket:").caption("[green]2 rows[/] :white_check_mark:")),
+        "table_title_wrap" => Box::new(sample_table(SQUARE)
+            .title("[red]Long title wraps onto lines[/]").caption("[green]a\tb\nc[/]")),
         "table_lines" => Box::new(lines_table()),
         "table_col_width" => Box::new(width_table()),
         "table_col_style" => Box::new(style_table()),
@@ -350,15 +380,26 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "bar_half" => Box::new(ProgressBar::new(100.0, 50.0).width(20)),
         "bar_third" => Box::new(ProgressBar::new(100.0, 33.0).width(20)),
         "bar_full" => Box::new(ProgressBar::new(100.0, 100.0).width(20)),
+        "json_python_numbers" => Box::new(Json::new("[1234567890123456789012345678901234567890,-1234567890123456789012345678901234567890,1e400,-1e400,-0]").unwrap()),
         "json_object" => Box::new(Json::new(JSON_SAMPLE).expect("valid JSON")),
         "json_unicode" => Box::new(
             Json::new("{\"name\": \"caf\u{e9}\", \"emoji\": \"\u{2764}\"}").expect("valid JSON"),
         ),
+        "json_escapes_w8" | "json_escapes_w10" | "json_escapes_w12" => {
+            Box::new(Json::new(r#"{"v":"a\"b\\c\nd\u0001e"}"#).expect("valid JSON"))
+        }
         "markdown_doc" => Box::new(Markdown::new(
             "# Title\n\nHello **bold** and *italic* and `code`.",
         )),
         "markdown_list" => Box::new(Markdown::new("Items:\n\n- one\n- two\n\n1. a\n2. b")),
         "markdown_quote_hr" => Box::new(Markdown::new("Note:\n\n> important\n\n---\n\ndone")),
+        "markdown_empty" => Box::new(Markdown::new("").hyperlinks(false)),
+        "markdown_rule_only_quote" => Box::new(Markdown::new("> ---").hyperlinks(false)),
+        "markdown_rule_then_quote_text" => Box::new(Markdown::new("> ---\n>\n> text").hyperlinks(false)),
+        "markdown_html_then_paragraph" => Box::new(Markdown::new("<div>hidden</div>\n\nParagraph").hyperlinks(false)),
+        "markdown_html_only" => Box::new(Markdown::new("<div>hidden</div>").hyperlinks(false)),
+        "markdown_html_between_paragraphs" => Box::new(Markdown::new("A\n\n<div>x</div>\n\nB").hyperlinks(false)),
+        "markdown_images_same_table_cell" => Box::new(Markdown::new("| h |\n|---|\n| ![a](x) ![b](y) |\n| ![c](z) |").hyperlinks(false)),
         "markdown_hr_end" => Box::new(Markdown::new("a\n\n---")),
         "markdown_image_table_cell" => Box::new(
             Markdown::new("| Icon | Name |\n| --- | --- |\n| ![crate](crate.svg) | rich |\n")
@@ -590,6 +631,27 @@ fn build_text_op(name: &str) -> Vec<Text> {
         "pad" => mutated(styled("hi", &[("bold", 0, 2)]), &|t| t.pad(3, ' ')),
         "pad_left" => mutated(styled("hi", &[("bold", 0, 2)]), &|t| t.pad_left(3, '.')),
         "pad_right" => mutated(styled("hi", &[("bold", 0, 2)]), &|t| t.pad_right(3, '.')),
+        "truncate_styled_ellipsis" => [1, 2, 5, 8]
+            .into_iter()
+            .map(|width| {
+                let mut text = Text::from_markup("[red]long[/][bold blue]title[/]").unwrap();
+                text.truncate(width, Some(Overflow::Ellipsis), false);
+                text
+            })
+            .collect(),
+        "truncate_wide_styled" => [
+            (1, Overflow::Crop),
+            (1, Overflow::Ellipsis),
+            (2, Overflow::Ellipsis),
+            (3, Overflow::Ellipsis),
+        ]
+        .into_iter()
+        .map(|(width, overflow)| {
+            let mut text = Text::from_markup("[red]界[/][blue]abc[/]").unwrap();
+            text.truncate(width, Some(overflow), false);
+            text
+        })
+        .collect(),
         "right_crop" => mutated(styled("hello world", &[("bold", 3, 9)]), &|t| {
             t.right_crop(4)
         }),

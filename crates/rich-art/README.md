@@ -6,12 +6,13 @@ GIF playback** in the terminal.
 
 | Feature | Default | Pulls in |
 | --- | --- | --- |
-| FIGlet banners | ✅ always | nothing — just `rich` |
+| FIGlet banners | ✅ always | no optional dependencies — just `rs-rich` |
 | `image` — image → ASCII/ANSI art | off | `image` (png + jpeg decoders) |
 | `gif` — animated GIF playback | off | `image` + its gif decoder |
 
-The default build has **exactly one dependency** (`rich`), so banners cost you
-nothing extra.
+The default build has **one direct dependency**, `rs-rich` (imported as `rich`).
+Its transitive dependency graph is determined by `rs-rich`; banners add no
+optional image dependencies unless you enable them.
 
 ```rust
 use rich::Console;
@@ -39,9 +40,11 @@ merge conflict.
 This crate is deliberately self-contained so it can be lifted into its own
 repository unchanged:
 
-- its only dependency is `rich`, and only for the `Renderable` trait;
-- it carries its **own SemVer** (`0.1.0`), never version-locked to
-  `rich`/`rich-cli`, which mirror upstream releases;
+- its only direct dependency is `rs-rich`, imported as `rich`, and used for the
+  `Renderable` trait;
+- like every crate in this repository, it follows an **independent SemVer** that
+  started at `0.0.1`; its version is bumped only when `rs-rich-art` is selected
+  for a release and never mirrors the Python projects' release numbers;
 - the parser and layout engine are original code; the single vendored asset is
   one FIGfont, documented in [`fonts/README.md`](fonts/README.md).
 

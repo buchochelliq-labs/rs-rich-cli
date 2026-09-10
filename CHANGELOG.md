@@ -29,17 +29,64 @@ Two things worth knowing up front:
   API as `15.0.0` would have been a lie, and the first breaking change would have
   collided with upstream's next major.
 
-Everything below this heading is the development history that led here.
+Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+No changes yet.
+
+## [0.0.3] — 2026-09-10
+
 ### Fixed
-- **Markdown image hoisting is byte-parity in nested and adjacent containers**
+- **`rs-rich-cli` diff thresholds:** compare both percentages with the same
+  one-decimal formatting used by the report, including fractional limits and
+  rounding ties, so the displayed verdict agrees with the process exit status.
+- **`rs-rich-cli`:** render diff HTML/SVG using destination color capabilities
+  while preserving plain piped stdout and threshold exit codes. Apply notebook
+  decorators to the whole cell group; reject ignored demo options, explain
+  interactive stdin, and document environment, paging and GIF repeat defaults.
+  Honor non-empty `NO_COLOR` in all CLI modes.
+- **`rs-rich`:** parse Panel, Rule and Table title/caption markup with visible
+  width measurement; preserve styled Unicode truncation without invalid span
+  offsets. New fixtures are captured from pinned Python Rich 15.0.0.
+- **`rs-rich`:** select `more.com` as the Windows pager fallback. Required Windows
+  CI launches the native pager and verifies its output as well as env precedence.
+- **`rs-rich`, `rs-rich-cli`:** expose table streaming through the `LineRenderable`
+  protocol trait; treat an early-closing CSV consumer as successful termination.
+  Regression test covers a 10,000-row producer whose pipe is closed after one byte.
+- **`rs-rich`, `rs-rich-cli`:** preserve arbitrary-size JSON integers and render
+  overflowing exponents as signed Infinity, matching Python. Repair #98 escape
+  folding without losing suffix bytes; keep the divergence behind the off-default
+  `json-escape-safe` feature. Default golden fixtures are captured from Python.
+- **`rs-rich-art`, `rs-rich-cli`:** piped GIFs emit their first frame once, including
+  infinite repeats, without cursor controls. Reject unsupported GIF decorators,
+  paging and exports; explain image-mode downgrades on stderr (#59, #72).
+- **`rs-rich`, `rs-rich-cli`:** stream undecorated CSV rows to reduce peak memory;
+  preserve upstream alignment-flag priority and notebook display-data omission.
+  Fix empty Markdown output, HTML/quoted-rule spacing, and adjacent images in one
+  table cell (#72, #74). Empty text and CSV retain their newline.
+- **`rs-rich` (and rendering through `rs-rich-cli`): Markdown image hoisting is byte-parity in nested and adjacent containers**
   (`markdown.rs`): images inside table cells are now hoisted ahead of the table
   and leave their cells empty, multiple images in one container share a row, and
   images hoisted from consecutive containers occupy adjacent rows without a blank
   row. Goldens cover a table cell, a multi-image paragraph, and a README-style
   badge table against Python `rich` 15.0.0.
+
+### Changed
+- **`rs-rich`, `rs-rich-ext`, `rs-rich-art`, `rs-rich-cli`:** set 0.0.3
+  manifests and internal requirements together. Core includes the Markdown fix;
+  ext needs a new package version for its dependency on core 0.0.3. Art and CLI
+  retain their 0.0.3 versions. This dependency closure is specific to this release;
+  independent per-crate versioning remains supported.
+- **Release tooling (all four crates):** retain coordinated `v*` releases and
+  independent `<crate>-v*` releases, with selection-scoped exact-version
+  verification. Protect registry consumer builds with the same `crates-io`
+  environment as upload, with a manual verification-only recovery mode. Reject
+  lightweight tags and require the tag's exact checked-out commit on main. Align the
+  release checklist and skill with both paths.
+- **CI and docs (all four crates):** parse the upstream pin as TOML, check
+  generated manifest versions and CLI help, and apply main-ancestry checks to
+  `rc/*`, `release/*`, and `releases/*` integration branches.
 
 ## [0.0.2] — 2026-08-11
 

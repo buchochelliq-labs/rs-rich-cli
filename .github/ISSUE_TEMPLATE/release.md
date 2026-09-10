@@ -1,36 +1,38 @@
 ---
 name: Release
 about: Track cutting and publishing a version
-title: "release: <version>"
+title: "release: <tag>"
 labels: ["type:release", "type:infra"]
 ---
 
 ## Target
 
-- Version: ______ (all four crates move in lockstep)
+- Tag: ______ (`vX.Y.Z` selects all four; `<crate>-vX.Y.Z` selects one)
+- Selected packages and versions: ______
 - Kind: release candidate / final (delete one)
-- Previous released version: ______
+- Previous published version of each selected package: ______
 
 ## Checklist (see the `release` skill and docs/BRANCHING.md)
 
-- [ ] `main` is green; `## [Unreleased]` in `CHANGELOG.md` has content
-- [ ] `python scripts/capture_golden.py` leaves `git diff` clean
-- [ ] Branch cut from fresh `origin/main` (`rc/<version>` or `release/<version>`)
-- [ ] Version bumped in `Cargo.toml` — the workspace version **and** the three
-      `[workspace.dependencies]` pins
-- [ ] `CHANGELOG.md`: `[Unreleased]` moved under the new `## [<version>]` heading
-- [ ] `cargo check --workspace` passes (catches a mismatched dependency pin)
+- [ ] `main` is green; `## [Unreleased]` names the affected crates
+- [ ] Goldens regenerate unchanged against the exact library pin in `UPSTREAM.toml`
+- [ ] Release branch contains fresh `origin/main`; all required checks pass
+- [ ] Each changed crate has its own version bump; every internal requirement
+      matches its target crate; `Cargo.lock` is refreshed
+- [ ] `python3 scripts/release.py plan <tag>` selects exactly the intended packages
+- [ ] Generated manifest-version tables and CLI reference match this checkout
+- [ ] `CHANGELOG.md`: selected changes moved under the new release heading
+- [ ] `cargo check --workspace --locked` passes
 - [ ] PR merged into `main`
-- [ ] Tag is annotated, on the **merge commit on `main`**, and
-      `git merge-base --is-ancestor "$(git rev-list -n1 v<version>)" origin/main`
-      passes
-- [ ] `cargo publish --workspace --locked --dry-run` clean, then published
-- [ ] All four crates visible on crates.io at the new version
-- [ ] **Verified from outside**: `cargo install rs-rich-cli --root $(mktemp -d)`,
-      and a fresh project doing `cargo add rs-rich` + `use rich::…` compiles
+- [ ] Annotated tag points at the merge commit on `main`; ancestry check passes
+- [ ] Workflow preflight finds no selected version already published
+- [ ] Workflow dry run and publish use identical selection (`--workspace` or `-p <crate>`, with `--locked`)
+- [ ] Each selected version is visible on crates.io
+- [ ] Workflow verification installs the selected CLI with `--version =X.Y.Z --locked`
+      and checks a fresh consumer with an exact registry dependency for each selected library
 
 ## Notes
 
-<!-- Anything unusual: a divergence introduced, an rc that needed a second round,
-     a crate that failed partway through publishing (say which — versions are
-     immutable and the re-run must skip them). -->
+<!-- For partial uploads, list every package/version already published. Versions
+     are immutable and preflight rejects a blind rerun. Inspect registry state
+     and agree an explicit recovery plan before any further upload. -->

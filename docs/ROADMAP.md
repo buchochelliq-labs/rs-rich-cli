@@ -1,6 +1,6 @@
 # Roadmap
 
-Where this goes after `0.0.1`. Ordered by what unblocks people, not by what is
+Where this goes after the `0.0.3` hardening work. Ordered by what unblocks people, not by what is
 most interesting to build.
 
 Two rules constrain everything here:
@@ -14,12 +14,52 @@ Two rules constrain everything here:
 
 ---
 
-## 0.0.2 — pay the known correctness debt
+## 0.0.2 — released 2026-08-11
 
-Not speculative. These are **confirmed and reproduced** findings from adversarial
-review, left unfixed only so they could land as one coherent change.
+The correctness milestone shipped. It paid down the confirmed rendering,
+markup, colour, and CLI correctness debt; see the
+[0.0.2 changelog](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/CHANGELOG.md#002--2026-08-11)
+for the released work.
 
-### Rewrite the markup tag scanner against `RE_TAGS`
+---
+
+## 0.0.3 — patch-release hardening
+
+This patch accepts only:
+
+- correctness fixes confirmed against current `main` and, where applicable, the
+  pinned upstream oracle;
+- documentation and package-metadata consistency fixes; and
+- release hardening that makes the documented CI, parity, packaging, or
+  clean-room verification gates more reliable.
+
+No new features or speculative rewrites belong in `0.0.3`. Subsequent fixes go
+under `Unreleased`, naming every affected crate.
+
+### Completed source scope (2026-09-10)
+
+The 0.0.3 fixes are merged into the RC: Markdown image and container parity,
+independent release selection, tested TOML pin parsing, JSON precision/depth,
+optional escape-safe JSON presentation, safe GIF redirection, CSV streaming,
+title markup, notebook layout, graphical diff exports and native Windows paging.
+
+See [release notes](releases/0.0.3.md) and [UAT closeout](remaining-uat-0.0.3.md).
+The selected changes are under the 0.0.3 changelog heading; `Unreleased` now tracks
+subsequent work. The release PR must land on `main` before its annotated tag and
+protected registry publication.
+
+### Deferred beyond 0.0.3
+
+- [#65](https://github.com/buchochelliq-labs/rs-rich-cli/issues/65): GIF half-block rendering.
+- [#74](https://github.com/buchochelliq-labs/rs-rich-cli/issues/74): further CSV memory reductions and long-line wrapping performance.
+- [#62](https://github.com/buchochelliq-labs/rs-rich-cli/issues/62): image/encoding diagnostics and additional encoding support.
+- [#45](https://github.com/buchochelliq-labs/rs-rich-cli/issues/45): syntax-highlighting performance.
+
+---
+
+## 0.0.2 planning record
+
+The milestone centered on rewriting the markup tag scanner against `RE_TAGS`.
 
 The scanner is hand-rolled and diverges from upstream's
 `((\\*)\[([a-z#/@][^[]*?)])` in three ways:
@@ -51,9 +91,9 @@ Without it, pre-Windows-10 terminals silently fall back to plain output.
 [§17](DIVERGENCES.md). A progress bar with no ETA is half a feature, and it is
 the most visible gap for anyone writing a CLI.
 
-`0.1.0` is also where **independent per-crate versioning** becomes meaningful.
-Below it, Cargo treats `^0.0.x` as an exact requirement, so lockstep is forced
-whether or not we choose it. See [BRANCHING.md](BRANCHING.md).
+Independent per-crate versioning already applies below `0.1.0`. A `0.0.x`
+dependency bump requires updating its dependents and publishing changed
+manifests; unrelated crates need not bump. See [BRANCHING.md](BRANCHING.md).
 
 ---
 
@@ -77,9 +117,10 @@ syncs.
 
 ### Benchmarks
 
-There are none. A rendering library with no performance data is a latent
-surprise for whoever first puts it in a hot loop. A baseline is worth more than
-any optimisation made without one.
+CLI timing and CSV memory measurements now exist in the
+[benchmarks](benchmarks.md) and [runtime audit](runtime-audit-0.0.3.md). A repeatable
+library microbenchmark suite and tracked regression thresholds remain useful
+follow-up work.
 
 ---
 

@@ -185,6 +185,33 @@ impl Text {
     /// span can dangle past the end. Upstream's `Text.plain` setter does the
     /// same via `_trim_spans`.
     fn set_plain(&mut self, plain: String) {
+        // Upstream spans use character offsets. A truncation may replace a
+        // wide glyph with padding or ASCII with a multibyte ellipsis, so byte
+        // offsets alone cannot be clamped into the replacement string.
+        if !self.spans.is_empty()
+            && !self.plain.starts_with(&plain)
+            && !plain.starts_with(&self.plain)
+        {
+            let old_offsets: Vec<usize> = self
+                .plain
+                .char_indices()
+                .map(|(i, _)| i)
+                .chain(std::iter::once(self.plain.len()))
+                .collect();
+            let new_offsets: Vec<usize> = plain
+                .char_indices()
+                .map(|(i, _)| i)
+                .chain(std::iter::once(plain.len()))
+                .collect();
+            let map_offset = |offset: usize| {
+                let character = old_offsets.partition_point(|old| *old < offset);
+                new_offsets[character.min(new_offsets.len() - 1)]
+            };
+            for span in &mut self.spans {
+                span.start = map_offset(span.start);
+                span.end = map_offset(span.end);
+            }
+        }
         let length = plain.len();
         self.plain = plain;
         self.spans.retain(|span| span.start < length);

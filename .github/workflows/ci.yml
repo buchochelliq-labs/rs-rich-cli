@@ -4,6 +4,11 @@ on:
   # Callable so the release workflow re-runs this identical gate on the
   # tagged commit — cargo publish's own verification does not compile tests.
   workflow_call:
+    inputs:
+      checkout_ref:
+        description: Exact validated commit for a release; omitted for ordinary CI
+        required: false
+        type: string
   push:
     branches: [main]
   pull_request:
@@ -18,11 +23,31 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  release-tests:
+    name: release workflow regressions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Check manifest-version documentation
+        run: python3 scripts/gen_versions.py --check
+
+      - name: Test release selection and registry verification
+        run: python3 -m unittest discover -s scripts -p 'test_release*.py' -v
+
   check:
     name: fmt · clippy · test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -41,6 +66,14 @@ jobs:
       - name: Test
         run: cargo test --all
 
+      - name: Check generated CLI reference
+        run: |
+          cargo build -p rs-rich-cli --locked
+          python3 scripts/gen_cli_reference.py --binary target/debug/rich --check
+
+      - name: Verify interactive stdin and NO_COLOR in a terminal
+        run: python3 scripts/test_cli_terminal.py --binary target/debug/rich
+
   features:
     name: feature matrix
     runs-on: ubuntu-latest
@@ -48,6 +81,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - crate: rs-rich
+            args: "--all-features"
           # rich-art is zero-dependency by default; its image/GIF support is
           # opt-in, and each config compiles different code. `--all-features`
           # rather than naming them, so new features are covered automatically.
@@ -62,6 +97,8 @@ jobs:
             args: "--all-features"
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -77,11 +114,31 @@ jobs:
       - name: Test (${{ matrix.crate }} ${{ matrix.args }})
         run: cargo test -p ${{ matrix.crate }} ${{ matrix.args }}
 
+  windows-pager:
+    name: Windows system pager
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Test pager selection and launch the native Windows pager
+        run: cargo test -p rs-rich --locked --lib pager::tests -- --test-threads=1
+
   msrv:
     name: minimum supported Rust version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
       - name: Read rust-version from the workspace
         id: msrv
@@ -108,6 +165,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -122,28 +181,14 @@ jobs:
 
       - name: Install the pinned upstream rich
         run: |
-          # Read `version` from within the [rich] section of UPSTREAM.toml.
-          # (The previous `grep -A2` stopped two lines short of it and silently
-          # produced an empty pin, so this job installed nothing and failed on
-          # `rich==`. Empty is now a hard error rather than a confusing one.)
-          version="$(awk '
-            /^\[rich\]$/       { in_section = 1; next }
-            /^\[/              { in_section = 0 }
-            in_section && /^version[[:space:]]*=/ {
-              gsub(/^version[[:space:]]*=[[:space:]]*"|"$/, ""); print; exit
-            }
-          ' UPSTREAM.toml)"
-          if [ -z "$version" ]; then
-            echo "::error::could not read [rich] version from UPSTREAM.toml"
-            exit 1
-          fi
+          version="$(python scripts/read_upstream_version.py)"
           echo "Pinned rich version: $version"
           python -m pip install "rich==$version"
 
       - name: Regenerate golden fixtures from real rich
         env:
           PYTHONUTF8: "1" # deterministic UTF-8 box glyphs (no ASCII substitution)
-        run: python scripts/capture_golden.py
+        run: env -u NO_COLOR TERM=xterm-256color python scripts/capture_golden.py
 
       - name: Fail if our fixtures drifted from upstream
         run: git diff --exit-code crates/rich/tests/golden
@@ -165,7 +210,7 @@ jobs:
   # then never touches branch protection again.
   ci-ok:
     name: ci-ok
-    needs: [check, features, msrv, parity]
+    needs: [check, features, msrv, parity, release-tests, windows-pager]
     # `always()` so this reports failure rather than being skipped when a
     # dependency fails — a skipped required check blocks the PR forever.
     if: always()

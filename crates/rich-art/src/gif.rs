@@ -205,7 +205,9 @@ impl AnimatedArt {
 
     /// Play the animation, drawing each frame in place on `writer`.
     ///
-    /// Blocks for the animation's duration. The cursor is hidden during
+    /// A non-terminal console writes the first frame once and returns, even
+    /// for infinite repeats. Terminal playback blocks for the animation's duration.
+    /// The cursor is hidden during
     /// playback and restored on return.
     ///
     /// **Note:** an interrupt (Ctrl-C) terminates the process without unwinding,
@@ -219,6 +221,10 @@ impl AnimatedArt {
             return Ok(());
         };
 
+        if !console.is_terminal() {
+            writeln!(writer, "{}", console.render_to_string(&first))?;
+            return writer.flush();
+        }
         let mut live = Live::new(Box::new(first), console, &mut writer);
         live.start();
 
@@ -350,13 +356,46 @@ mod tests {
             .width(4)
             .height(1)
             .max_fps(1000.0); // keep the test fast
-        let console = Console::builder().width(20).build();
+        let console = Console::builder().force_terminal(true).width(20).build();
         let mut out = Vec::new();
         art.play(console, &mut out).expect("plays");
         let text = String::from_utf8(out).expect("utf-8");
         // Hides the cursor to start and shows it again at the end.
         assert!(text.starts_with("\x1b[?25l"), "got {text:?}");
         assert!(text.ends_with("\x1b[?25h"), "got {text:?}");
+    }
+
+    #[test]
+    fn redirected_forever_animation_prints_first_frame_once() {
+        let art = AnimatedArt::from_bytes(&make_gif(&[[0, 0, 0], [255, 255, 255]], 60_000))
+            .unwrap()
+            .width(4)
+            .height(1)
+            .repeat(Repeat::Forever);
+        let console = Console::builder().force_terminal(false).width(20).build();
+        let expected = format!("{}\n", console.render_to_string(&art.frame(0).unwrap()));
+        let mut output = Vec::new();
+        art.play(console, &mut output).unwrap();
+        assert_eq!(String::from_utf8(output).unwrap(), expected);
+    }
+
+    #[test]
+    fn redirected_playback_propagates_write_failure() {
+        struct Broken;
+        impl std::io::Write for Broken {
+            fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::ErrorKind::BrokenPipe.into())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let art = AnimatedArt::from_bytes(&make_gif(&[[0, 0, 0]], 50)).unwrap();
+        let console = Console::builder().force_terminal(false).build();
+        assert_eq!(
+            art.play(console, &mut Broken).unwrap_err().kind(),
+            std::io::ErrorKind::BrokenPipe
+        );
     }
 
     #[test]

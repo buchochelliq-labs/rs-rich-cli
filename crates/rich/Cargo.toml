@@ -1,12 +1,12 @@
 # crates/rich — FAITHFUL port of the Python `rich` library.
 #
-# ⚠️  VERSION POLICY: this crate's version mirrors the upstream `rich` release it
-# reflects (see UPSTREAM.toml). It is bumped ONLY when syncing a new upstream
-# release — never to ship one of our own features. Local features live in
-# `rich-ext`. See AGENTS.md.
+# ⚠️  VERSION POLICY: this crate owns an independent Rust SemVer. It does not
+# mirror Python `rich`; UPSTREAM.toml records that separately. Bump it for
+# changes shipped in this crate, never to ship an extension-only feature. The
+# release tag selects a coordinated or per-crate upload; see docs/BRANCHING.md.
 [package]
 name = "rs-rich"
-version = "0.0.2"
+version = "0.0.3"
 description = "A faithful Rust port of the Python `rich` terminal-rendering library"
 edition.workspace = true
 license.workspace = true
@@ -31,6 +31,11 @@ name = "rich"
 
 [lints]
 workspace = true
+
+[features]
+default = []
+# Explicit opt-in to JSON escape-aware display boundaries (DIVERGENCES #22).
+json-escape-safe = []
 
 [dependencies]
 terminal_size.workspace = true

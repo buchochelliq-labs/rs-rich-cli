@@ -4,7 +4,8 @@ What does not work yet, what was never meant to, and what works differently on
 purpose. Three different things, kept apart — a deliberate trade-off listed as a
 bug makes a considered decision look like neglect.
 
-**Applies to** `rich 0.0.2` / `rs-rich 0.0.2`, verified 2026-08-11 against Python
+**Applies to** the `rich 0.0.3` / `rs-rich 0.0.3` source snapshot, reviewed
+2026-09-10 against Python
 `rich` 15.0.0. Each entry links to its issue so you can check the status without
 waiting for this page to be updated.
 
@@ -14,29 +15,15 @@ waiting for this page to be updated.
 
 Things that should work and do not.
 
-### `--json` can emit invalid JSON when a line is cropped
+### Narrow `--json` output is display output, not machine-readable JSON
 
-**Symptom.** Piping `rich --json` through a parser fails with something like
-`Invalid control character at: line 3 column 41`.
-
-**Scope.** Only when a value is wider than the render width, so the line is
-cropped mid-escape. Reproduces at any narrow width:
-
-```bash
-rich --json wide.json --width 40 | jq .
-```
-
-**Workaround.** Render at a width that fits the longest value, or drop `--width`
-and let it use the terminal's:
-
-```bash
-rich --json wide.json --width 200
-```
-
-**Status.** Open —
-[#67](https://github.com/buchochelliq-labs/rs-rich-cli/issues/67).
-`rich --json` is for reading, not for piping into a parser; use `jq` on the raw
-file when you need machine-readable output.
+**Scope.** Default builds match upstream: narrow output may wrap or crop inside
+an escape, and `--width` crops overlong JSON lines. The optional, off-by-default
+`json-escape-safe` Cargo feature avoids partial escapes when cropping and keeps
+escapes together when folding at widths that can fit them. See
+[DIVERGENCES §22](DIVERGENCES.md#22-escape-safe-json-presentation-json-escape-safe).
+Neither mode promises machine-readable output; use the original JSON with `jq`
+when every value must survive.
 
 ---
 
@@ -66,6 +53,30 @@ reimplemented Rust-natively instead — see
 `--export-svg` references its font from a CDN. The HTML from `--export-html`
 *is* self-contained. If you need an offline SVG, embed the font yourself after
 export.
+
+### GIF block rendering is deferred
+
+GIF playback currently renders character-ramp art. `--image-mode` applies only
+to image diffs; it cannot request GIF half-block rendering yet. Redirected GIFs
+emit the first frame once, without animation controls, including `--loop 0`.
+Tracked as [#65](https://github.com/buchochelliq-labs/rs-rich-cli/issues/65).
+
+### CSV output still retains source rows
+
+Undecorated CSV output streams styled rows, reducing output-buffer overhead.
+Source rows remain in memory for measurement, so memory still scales with input.
+Decorated, aligned, paged and exported CSV output still buffers. Further memory
+reductions and long-line wrapping optimization remain in
+[#74](https://github.com/buchochelliq-labs/rs-rich-cli/issues/74).
+
+### Image and encoding diagnostics need polish
+
+Image errors can still contain awkward extension punctuation, and the low-level
+UTF-8 error precedes the useful image/`--diff` hint. Text input follows upstream's
+UTF-8 replacement decoding: UTF-16 files may display replacement or NUL characters
+without an encoding hint. Convert those files to UTF-8 before rendering them.
+Additional encoding support and diagnostics remain in
+[#62](https://github.com/buchochelliq-labs/rs-rich-cli/issues/62).
 
 ### Syntax highlighting is the slowest path
 
@@ -119,6 +130,12 @@ Kept here so anyone on an older build still finds the symptom. Full detail in
 
 | Symptom | Fixed in |
 |---------|----------|
+| Diff exports lost graphical content when stdout was redirected | `0.0.3` |
+| Notebook layout flags were ignored; title markup printed literally | `0.0.3` |
+| Windows default pager failed to launch `more.com` | `0.0.3` |
+| Redirected GIFs emitted cursor controls or looped forever | `0.0.3` |
+| JSON rejected deep/non-finite input or rounded large integers | `0.0.3` |
+| Early-closing CSV consumers produced an error | `0.0.3` |
 | `--csv` printed a made-up one-column table and exited `0` on unreadable input | `0.0.2` (round 9) |
 | Markdown link destinations vanished from piped output | `0.0.2` (round 9) |
 | `--syntax` deleted every blank line in the file | `0.0.2` (round 8) |

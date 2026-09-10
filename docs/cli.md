@@ -29,11 +29,19 @@ rich --markdown CHANGELOG
 rich --syntax --width 100 script
 ```
 
-Read from standard input with `-`:
+Read from standard input with `-` (including `-p -` for markup):
 
 ```bash
 cat data.csv | rich --csv -
 ```
+
+Input modes without a resource also read stdin until EOF. Interactive input
+prints a hint: finish with Ctrl-D on Unix, or Ctrl-Z then Enter on Windows.
+With no mode and no resource, `rich` runs its capability demo. The demo accepts
+`--no-color`; layout, style, paging, hyperlink and export options require a
+resource or render mode and are rejected for the demo.
+
+Repeated scalar options use the last value, including `--width` and export paths.
 
 !!! tip "Filenames that begin with a dash"
 
@@ -110,8 +118,10 @@ A panel **shrinks to its content**. Use `-e/--expand` to fill the width instead.
   different flags because they do different things.
 - `--width N` bounds the *rendered block*, not the console, so `--center` still
   positions it within your real terminal width.
-- `--title` and `--caption` work with or without a panel; on a CSV they become
-  the table's title and caption.
+- `--title` and `--caption` interpret Rich markup; on a CSV they also become
+  the table's title and caption. Rules interpret markup in their resource title.
+- Notebooks use the same layout chain, so padding, panel, style, width and
+  alignment apply to the complete notebook, including its outputs.
 
 ## Export what you rendered
 
@@ -121,7 +131,11 @@ rich report.md --export-svg report.svg
 ```
 
 The HTML is self-contained. The SVG references its font from a CDN, so it is
-**not** self-contained offline.
+**not** self-contained offline. Both exports may be requested together, and
+stdout is still printed once. Diff reports choose color blocks for HTML/SVG
+independently of redirected stdout, which stays readable ASCII. Explicit
+`--image-mode ascii`, `--image-mode none` and `--no-color` are respected; Sixel
+requests use blocks in exported documents.
 
 ## Compare two images
 
@@ -154,7 +168,13 @@ fi
 ```
 
 Colour is disabled automatically when output is not a terminal, and by
-`NO_COLOR` or `--no-color` when it is.
+a non-empty `NO_COLOR` or `--no-color` when it is. `FORCE_COLOR` is unsupported;
+setting it does not add escape sequences to redirected stdout. `COLUMNS` sets
+the console width (80 when neither terminal width nor the variable is available).
+
+`--pager` tries a non-empty `MANPAGER`, then `PAGER`, then `less` on Unix or
+`more.com` on Windows. GIF playback repeats once by default; `--loop 0` repeats
+forever in a terminal. Pipes receive the first frame once, even with `--loop 0`.
 
 ---
 

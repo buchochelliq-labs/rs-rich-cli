@@ -8,9 +8,10 @@ Extensions and the internal plugin registry for the [`rich`](../rich) Rust port.
 behaviour and nothing else, so that absorbing a new upstream release is a
 diff-and-port rather than a merge conflict.
 
-Everything we add on top lives here instead. This crate carries an
-**independent SemVer** (starting at `0.1.0`) and never mirrors an upstream
-version — unlike `rich` and `rich-cli`, whose numbers track their upstreams.
+Everything we add on top lives here instead. Like every crate in this
+repository, this crate follows an **independent SemVer** that started at
+`0.0.1`; its version is bumped only when `rs-rich-ext` is selected for a release
+and never mirrors the Python projects' release numbers.
 
 The rule, in one line: *never edit the core to add a feature.*
 

@@ -71,7 +71,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 |-------------------|-----------|:------:|-------|
 | `syntax.py` | `syntax.rs` | 🟡 | functional via `syntect` (non-parity, DIVERGENCES #18) |
 | `markdown.py` | `markdown.rs` | 🟡 | paragraphs/headings/inline/lists/quotes/code/links (both `hyperlinks` modes) + images (including table-cell hoisting and adjacency) + **GFM tables** via `pulldown-cmark` (inline styling within a table cell deferred) |
-| `json.py` | `json.rs` | 🟡 | ✅ |
+| `json.py` | `json.rs` | 🟡 | ✅ default layout, arbitrary integers and overflowing exponents; optional escape-safe layout is off by default (DIVERGENCES §22) |
 | `pretty.py` | `pretty.rs` | 🟡 | Rust-native (`Debug` + repr highlight, #19) |
 | `repr.py`, `_inspect.py` | resp. | ⬜ | need Rust reflection — see #19 |
 | `traceback.py` | `traceback.rs` | 🟡 | Rust-native (error `source()` chain, #19) |
@@ -109,3 +109,13 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 
 *When you change a module's status, keep this table and the relevant roadmap
 issue in sync.*
+
+### 0.0.3 title and notebook follow-up
+
+Panel string labels parse markup/emoji, flatten newlines, expand tabs and measure
+visible cells. Rule labels use console markup/emoji handling; Table title/caption
+markup retains wrapped lines. Rich 15 goldens cover styled, wide, tiny, multiline
+and truncated labels. Text span offsets remain valid when Unicode truncation
+replaces a character with padding or an ellipsis. CLI notebooks compose the
+upstream cell/output group before applying the shared decorators and alignment.
+Windows paging selects `more.com` and has a required native CI launch test.

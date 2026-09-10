@@ -10,7 +10,7 @@ Looking for how to *do* something rather than what a flag is called? Start at
 [Using the CLI](cli.md).
 
 
-*rich 0.0.2 — Rust port of the rich-cli terminal toolbox*
+*rich 0.0.3 — Rust port of the rich-cli terminal toolbox*
 
 ## Usage
 
@@ -18,7 +18,9 @@ Looking for how to *do* something rather than what a flag is called? Start at
 rich [OPTIONS] [RESOURCE]
 
 RESOURCE is a file path, an http(s) URL, or `-` for stdin. Everything after a
-bare `--` is a RESOURCE, however much it looks like an option.
+bare `--` is a RESOURCE, however much it looks like an option. Input modes with
+no RESOURCE read stdin until EOF; `-p -` reads markup from stdin too. Terminal
+stdin shows an input hint. Repeated scalar options use their last value.
 ```
 
 ## Render modes
@@ -32,8 +34,8 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
 -x, --syntax     Syntax-highlight RESOURCE (language from its extension)
     --csv        Render RESOURCE as a CSV/TSV table
     --ipynb      Render RESOURCE as a Jupyter notebook
-    --gif        Animate one or more GIFs (several play side by side)
-    --loop N     With --gif, repeat N times (0 = forever)
+    --gif        Animate GIFs side by side; pipes receive the first frame
+    --loop N     With --gif, repeat N times (default 1; 0 = forever)
     --rule       Draw a horizontal rule (RESOURCE is its title)
     --diff       Perceptually compare two images (needs exactly two)
 ```
@@ -70,19 +72,23 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
 -s, --style S    Style laid under the whole output, e.g. "bold red"
 -S, --panel-style S
                  Panel border style, e.g. "dim" (with --panel)
-    --pager      Page the output through $PAGER (no pager, no paging)
+    --pager      Page via MANPAGER, then PAGER, then less/more.com
     --no-color   Disable colored output (as does a non-empty NO_COLOR)
 -h, --help       Show this help
--V, --version    Show the version (mirrors upstream rich-cli)
+-V, --version    Show the rs-rich-cli package version
 ```
 
 ## Environment variables
 
 ```text
 NO_COLOR         Any non-empty value disables colour
+COLUMNS          Console width (default 80 when unavailable)
+MANPAGER, PAGER   Pager command; fallback is less (Unix), more.com (Windows)
+FORCE_COLOR      Not supported; redirected stdout stays plain
 RICH_SIXEL       0/1 overrides Sixel detection for --image-mode auto
 
-With no RESOURCE and no mode flag, a capability demo is shown.
+With no RESOURCE and no mode flag, a capability demo is shown. Layout, style,
+paging, hyperlinks and export options require a resource or render mode.
 ```
 
 

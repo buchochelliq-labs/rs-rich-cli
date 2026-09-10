@@ -13,7 +13,7 @@ changed. On the pair used throughout this page a plain comparison calls **42%**
 of the canvas different, with a bounding box covering three quarters of the
 frame. True, and useless.
 
-The perceptual pipeline reports **5%**, and points at the one region that
+The perceptual pipeline reports **5.4%**, and points at the one region that
 matters.
 
 ## How it decides
@@ -80,7 +80,7 @@ So the guess is overridable at every level: `--image-mode` beats everything, and
 `RICH_SIXEL=0`/`1` beats the heuristic.
 
 **Every mode degrades rather than failing.** Sixel is a control sequence, so it
-only works on a terminal — redirected or exported, it falls back to blocks (or
+only works on a terminal. Redirected output falls back to ASCII; exports use blocks (or
 ASCII without colour). Blocks need colour, so without it they fall back to
 ASCII, since a half-block render with no colour is a rectangle of identical
 characters carrying no information. Each downgrade prints a line to **stderr**
@@ -98,9 +98,10 @@ visual regressions fail a build. The threshold is compared against the
 *perceptual* figure, never the naive one — gating on a byte comparison is what
 makes visual regression testing unusable, because every re-render trips it.
 
-The comparison uses the percentage **as printed**, to one decimal place, so a
-limit equal to the reported figure passes and the verdict never contradicts the
-number beside it. A threshold outside 0–100, or one that is not a real number,
+The comparison uses **both percentages as printed**, with the same one-decimal
+rounding, so equal displayed values pass. For example, a threshold of `5.39`
+prints as `5.4%` and passes a displayed change of `5.4%`; `5.34` prints as `5.3%`
+and fails that change. A threshold outside 0–100, or one that is not a real number,
 is rejected: `NaN` parses successfully as a float and compares false against
 everything, so accepting it would silently switch the gate off and report a pass.
 

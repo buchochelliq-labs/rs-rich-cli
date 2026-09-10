@@ -1,0 +1,1 @@
+rich: auto image mode has no terminal colour, drawing the diff as ASCII instead

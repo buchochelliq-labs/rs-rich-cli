@@ -18,7 +18,7 @@ Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
 
 ![Console markup](docs/assets/markup.svg)
 
-> **`0.0.2` — early, and the version says so.** The crates version independently
+> **Early releases, and the versions say so.** The crates version independently
 > by ordinary SemVer; the number is *not* tied to the upstream release. Expect
 > breaking API changes. Which upstream version is tracked lives in
 > [`UPSTREAM.toml`](UPSTREAM.toml) and the line above. See [AGENTS.md](AGENTS.md)
@@ -26,14 +26,30 @@ Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
 
 ## Workspace
 
-**All four are published on crates.io at `0.0.2`.**
+Each package follows independent SemVer. The Python releases being tracked are
+recorded separately in [`UPSTREAM.toml`](UPSTREAM.toml).
 
-| crate | crates.io | docs | `use` as | what it is |
-|-------|-----------|------|----------|------------|
-| [`crates/rich`](crates/rich) | [![rs-rich](https://img.shields.io/crates/v/rs-rich.svg)](https://crates.io/crates/rs-rich) | [docs.rs](https://docs.rs/rs-rich) | `rich` | faithful port of the `rich` library |
-| [`crates/rich-ext`](crates/rich-ext) | [![rs-rich-ext](https://img.shields.io/crates/v/rs-rich-ext.svg)](https://crates.io/crates/rs-rich-ext) | [docs.rs](https://docs.rs/rs-rich-ext) | `rich_ext` | our additions + the plugin registry |
-| [`crates/rich-cli`](crates/rich-cli) | [![rs-rich-cli](https://img.shields.io/crates/v/rs-rich-cli.svg)](https://crates.io/crates/rs-rich-cli) | — *(binary)* | *(binary `rich`)* | the `rich` command-line tool |
-| [`crates/rich-art`](crates/rich-art) | [![rs-rich-art](https://img.shields.io/crates/v/rs-rich-art.svg)](https://crates.io/crates/rs-rich-art) | [docs.rs](https://docs.rs/rs-rich-art) | `rich_art` | FIGlet text, image→ASCII, animated GIFs |
+A `vX.Y.Z` tag selects a coordinated workspace release; a `<crate>-vX.Y.Z`
+tag selects only that crate. See [the release documentation](docs/BRANCHING.md#releases).
+
+These are the versions prepared in this checkout. They do not imply that a
+release has been published; the crates.io links show available releases.
+
+<!-- BEGIN MANIFEST VERSIONS -->
+| Package | Manifest version |
+|---|---|
+| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.3` |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.3` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.3` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.3` |
+<!-- END MANIFEST VERSIONS -->
+
+| Package | Role | Import / installed name |
+|---|---|---|
+| `rs-rich` | faithful port of Python rich 15.0.0 | `use rich` |
+| `rs-rich-ext` | additions and plugin registry | `use rich_ext` |
+| `rs-rich-cli` | CLI tracking Python rich-cli 1.8.1 | executable `rich` |
+| `rs-rich-art` | FIGlet, image→ASCII, animated GIFs | `use rich_art` |
 
 The published package names carry an `rs-` prefix because `rich` is already taken
 on crates.io by an unrelated crate. The library targets keep the short names, so
@@ -70,6 +86,12 @@ and a `log`/`tracing` handler.
 Per-module detail is in [docs/PORTING.md](docs/PORTING.md). What comes next, and
 why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 [#16](https://github.com/buchochelliq-labs/rs-rich-cli/issues/16).
+
+## 0.0.3 release notes
+
+The [0.0.3 notes](docs/releases/0.0.3.md) cover graphical diff exports, notebook
+layout, styled titles, JSON correctness, Windows paging and safer GIF/CSV output.
+See [UAT closeout](docs/remaining-uat-0.0.3.md) for completed and deferred work.
 
 ## Install
 

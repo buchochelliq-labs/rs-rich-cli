@@ -2,37 +2,44 @@
 #
 # Publishing is IRREVERSIBLE — a version can be yanked but never deleted or
 # edited — so this workflow is deliberately paranoid. It re-runs the full gate on
-# the tagged commit, refuses to publish anything that is not on `main`, and skips
-# crates already at that version so a partially-failed run can be re-run safely.
+# the tagged commit, refuses to publish anything that is not on `main`, and
+# aborts before upload if any selected crate/version already exists.
 name: release
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["v*", "rs-rich-v*", "rs-rich-ext-v*", "rs-rich-cli-v*", "rs-rich-art-v*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: Tag to publish (must already exist)
+        description: Existing tag (vX.Y.Z for all crates or rs-rich[-ext/-cli/-art]-vX.Y.Z for one)
         required: true
+      verify_only:
+        description: Verify already-published exact versions without uploading
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  # Never cancel a half-finished four-crate upload: cargo publishes them one at
-  # a time and the earlier ones cannot be undone.
-  group: release-${{ github.ref }}
+  # Serialize coordinated and per-crate uploads, including manual dispatches.
+  # Never cancel a partially published release.
+  group: crates-io-release
   cancel-in-progress: false
 
 jobs:
   gate:
     name: verify the tag
     runs-on: ubuntu-latest
+    outputs:
+      selection: ${{ steps.plan.outputs.selection }}
+      sha: ${{ steps.commit.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0                       # need main to test ancestry
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ format('refs/tags/{0}', inputs.tag || github.ref_name) }}
 
       # The invariant the whole branching model exists to protect: a published
       # artifact must be reachable from main. See docs/BRANCHING.md.
@@ -47,15 +54,23 @@ jobs:
             exit 1
           fi
 
-      - name: Tag version must match the manifest version
-        run: |
-          tag="${{ inputs.tag || github.ref_name }}"
-          manifest=$(grep -m1 '^version' crates/rich/Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
-          if [ "v$manifest" != "$tag" ]; then
-            echo "::error::Tag is $tag but crates/rich/Cargo.toml says $manifest."
-            exit 1
-          fi
-          echo "tag $tag matches manifest $manifest"
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Tag, selected manifests, and internal requirements must agree
+        id: plan
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: python3 scripts/release.py plan "$RELEASE_TAG"
+
+      - name: Require an annotated tag and pin its validated commit
+        id: commit
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: python3 scripts/release.py validate-tag "$RELEASE_TAG"
 
   # The same gate every PR passes, re-run on the exact tagged tree. `cargo
   # publish`'s own verification does NOT compile test targets for these crates
@@ -64,51 +79,42 @@ jobs:
     name: full gate
     needs: gate
     uses: ./.github/workflows/ci.yml
+    with:
+      checkout_ref: ${{ needs.gate.outputs.sha }}
 
   publish:
-    name: publish to crates.io
+    name: publish and verify from crates.io
     needs: [gate, ci]
     runs-on: ubuntu-latest
     environment: crates-io          # gate the credential behind an environment
+    env:
+      RELEASE_SELECTION: ${{ needs.gate.outputs.selection }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ needs.gate.outputs.sha }}
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Dry run
-        run: cargo publish --workspace --locked --dry-run
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
 
-      - name: Publish
+      - name: Refuse an already-published selected crate
+        if: ${{ inputs.verify_only != true }}
+        run: python3 scripts/release.py preflight
+
+      - name: Dry run selected packages
+        if: ${{ inputs.verify_only != true }}
+        run: python3 scripts/release.py publish --dry-run
+
+      - name: Publish selected packages
+        if: ${{ inputs.verify_only != true }}
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          # `--workspace` derives the topological order itself and cross-verifies
-          # dependents against sibling tarballs, so no ordering script is needed.
-          # If a previous run published some crates, this reports them as already
-          # uploaded rather than failing the job.
-          cargo publish --workspace --locked
+        run: python3 scripts/release.py publish
 
-  verify:
-    name: verify from crates.io
-    needs: publish
-    runs-on: ubuntu-latest
-    steps:
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Wait for the index, then install as a stranger would
-        run: |
-          version="${{ inputs.tag || github.ref_name }}"
-          version="${version#v}"
-          for attempt in 1 2 3 4 5 6; do
-            # A User-Agent is mandatory; without one crates.io answers 403, which
-            # is easy to misread as "not published".
-            code=$(curl -s -o /dev/null -w '%{http_code}' \
-              -H 'User-Agent: rs-rich-release-verify' \
-              "https://crates.io/api/v1/crates/rs-rich/$version")
-            [ "$code" = "200" ] && break
-            echo "index not ready (HTTP $code), attempt $attempt"; sleep 20
-          done
-          cargo install rs-rich-cli --version "$version" --root "$(mktemp -d)" --locked
-          echo "installed rs-rich-cli $version from crates.io"
+      # Reuse the protected, validated checkout. Registry consumers still build
+      # in fresh temporary directories, without the upload step's credential.
+      - name: Wait for selected versions, then build as a stranger would
+        run: python3 scripts/release.py verify
