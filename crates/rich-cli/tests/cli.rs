@@ -279,22 +279,30 @@ fn a_valid_threshold_still_gates() {
 #[test]
 fn the_threshold_matches_the_percentage_it_prints() {
     let (before, after) = diff_fixtures();
-    let (out, err, ok) = run_full(
-        &[
-            "--diff",
-            &before,
-            &after,
-            "--image-mode",
-            "none",
-            "--threshold",
-            "5.4",
-        ],
-        "",
-    );
-    assert!(
-        ok,
-        "a limit equal to the reported figure must not fail; stdout: {out}; stderr: {err}"
-    );
+    for (limit, expected_ok, verdict) in [
+        ("5.4", true, "OK 5.4% changed, within 5.4%"),
+        ("5.39", true, "OK 5.4% changed, within 5.4%"),
+        ("5.34", false, "FAIL 5.4% changed, limit 5.3%"),
+    ] {
+        let (out, err, ok) = run_full(
+            &[
+                "--diff",
+                &before,
+                &after,
+                "--image-mode",
+                "none",
+                "--no-color",
+                "--threshold",
+                limit,
+            ],
+            "",
+        );
+        assert_eq!(
+            ok, expected_ok,
+            "limit {limit}; stdout: {out}; stderr: {err}"
+        );
+        assert!(out.contains(verdict), "limit {limit}; stdout: {out}");
+    }
 }
 
 /// Redirected output has no colour, and half-blocks without colour are a

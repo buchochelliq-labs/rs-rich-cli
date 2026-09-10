@@ -2334,6 +2334,18 @@ fn build_ipynb(
     Notebook { items, justify }
 }
 
+#[cfg(feature = "art")]
+fn diff_threshold_exceeded(changed: f32, limit: f32) -> bool {
+    // Use the formatter's rounding for BOTH displayed operands, including
+    // ties. f32::round uses a different tie rule from the report's formatting.
+    let displayed = |value: f32| {
+        format!("{value:.1}")
+            .parse::<f32>()
+            .expect("formatted percentage is a number")
+    };
+    displayed(changed) > displayed(limit)
+}
+
 /// Compare two images perceptually and report where they differ.
 ///
 /// Prints a heat map of the ΔE field plus a ranked table of changed regions.
@@ -2388,8 +2400,9 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     // 5.4%" -- a verdict that contradicts itself and cannot be explained from
     // the output, which is what anyone tuning a threshold to the reported figure
     // runs straight into.
-    let shown = (changed * 10.0).round() / 10.0;
-    let failed = cli.diff_threshold.is_some_and(|limit| shown > limit);
+    let failed = cli
+        .diff_threshold
+        .is_some_and(|limit| diff_threshold_exceeded(changed, limit));
 
     let render_report = |c: &Console, for_export: bool| {
         // Leave room for the summary, the table and the prompt, so the top of
@@ -3174,6 +3187,15 @@ fn run_demo(no_color: bool) {
 mod tests {
     use super::*;
     use rich::ColorSystem;
+
+    #[cfg(feature = "art")]
+    #[test]
+    fn diff_threshold_uses_the_reports_tie_rounding() {
+        // The report prints 0.2 against 0.2, then 0.8 against 0.7.
+        assert!(!diff_threshold_exceeded(0.25, 0.24));
+        assert!(diff_threshold_exceeded(0.75, 0.74));
+        assert!(!diff_threshold_exceeded(0.75, 0.76));
+    }
 
     #[test]
     fn read_csv_rows_handles_quotes_and_delimiters() {

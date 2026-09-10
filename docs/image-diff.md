@@ -98,9 +98,10 @@ visual regressions fail a build. The threshold is compared against the
 *perceptual* figure, never the naive one — gating on a byte comparison is what
 makes visual regression testing unusable, because every re-render trips it.
 
-The comparison uses the percentage **as printed**, to one decimal place, so a
-limit equal to the reported figure passes and the verdict never contradicts the
-number beside it. A threshold outside 0–100, or one that is not a real number,
+The comparison uses **both percentages as printed**, with the same one-decimal
+rounding, so equal displayed values pass. For example, a threshold of `5.39`
+prints as `5.4%` and passes a displayed change of `5.4%`; `5.34` prints as `5.3%`
+and fails that change. A threshold outside 0–100, or one that is not a real number,
 is rejected: `NaN` parses successfully as a float and compares false against
 everything, so accepting it would silently switch the gate off and report a pass.
 

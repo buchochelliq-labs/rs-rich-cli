@@ -232,14 +232,24 @@ package/version. A hit or an unexpected registry response aborts the job;
 unchanged, unselected versions are not queried. Uploads are serialized across
 all release tags and manual dispatches.
 
-After publishing, verification runs behind the same protected `crates-io`
-environment as upload: fresh registry consumers can execute build scripts too.
-It stays a separate job so verification can be retried without uploading again.
+The gate requires an annotated tag pointing at the checked-out commit on `main`;
+lightweight tags are rejected before CI or publication.
+
+After publishing, verification reuses the protected `crates-io` job's validated
+checkout: fresh registry consumers can execute build scripts too. The registry
+token is scoped only to the upload step.
 Verification waits for **each selected version** on crates.io
 and fails if it does not appear. In fresh temporary directories outside the
 checkout, it installs the CLI with an exact version and `--locked`, or compiles
 a consumer with an exact registry dependency for each selected library. An
 art-only release never installs the CLI or waits for a new core version.
+
+To retry verification after all selected packages have been uploaded, manually
+dispatch the release workflow with the same existing tag and `verify_only: true`.
+This keeps the annotated-tag, ancestry and full-CI gates, skips preflight and both
+upload commands, and runs exact-version verification. Normal tag pushes and
+manual dispatches default to publication and still reject any existing version.
+Verification-only mode cannot complete a partial upload.
 
 Publishing is **irreversible** — versions are immutable and can only be yanked.
 A partial upload still requires manual recovery, not a blind rerun. Planning and documentation updates

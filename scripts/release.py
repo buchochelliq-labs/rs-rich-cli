@@ -24,6 +24,22 @@ VERSION = rf"{NUMBER}\.{NUMBER}\.{NUMBER}(?:-{PRERELEASE}(?:\.{PRERELEASE})*)?(?
 TAG = re.compile(rf"(?:({'|'.join(CRATES)})-)?v({VERSION})")
 
 
+def validate_tag(tag):
+    if not TAG.fullmatch(tag):
+        raise ValueError(f"Invalid release tag: {tag!r}")
+    ref = f"refs/tags/{tag}"
+    kind = subprocess.check_output(["git", "cat-file", "-t", ref], text=True).strip()
+    if kind != "tag":
+        raise ValueError(f"Release tag {tag!r} must be annotated, not lightweight")
+    sha = subprocess.check_output(["git", "rev-parse", "--verify", f"{ref}^{{commit}}"],
+                                  text=True).strip()
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    if sha != head:
+        raise ValueError("Release tag must point at the checked-out commit")
+    subprocess.run(["git", "merge-base", "--is-ancestor", sha, "origin/main"], check=True)
+    return sha
+
+
 def select(tag, metadata, root):
     match = TAG.fullmatch(tag)
     if not match:
@@ -121,6 +137,8 @@ def verify(selection):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    tag_check = commands.add_parser("validate-tag")
+    tag_check.add_argument("tag")
     plan = commands.add_parser("plan")
     plan.add_argument("tag")
     commands.add_parser("preflight")
@@ -128,7 +146,13 @@ def main():
     upload.add_argument("--dry-run", action="store_true")
     commands.add_parser("verify")
     args = parser.parse_args()
-    if args.command == "plan":
+    if args.command == "validate-tag":
+        sha = validate_tag(args.tag)
+        print(sha)
+        if output := os.environ.get("GITHUB_OUTPUT"):
+            with open(output, "a", encoding="utf-8") as stream:
+                stream.write(f"sha={sha}\n")
+    elif args.command == "plan":
         metadata = json.loads(subprocess.check_output(
             ["cargo", "metadata", "--no-deps", "--format-version", "1", "--locked"], text=True,
         ))

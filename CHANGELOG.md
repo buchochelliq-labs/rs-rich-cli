@@ -38,6 +38,9 @@ No changes yet.
 ## [0.0.3] — 2026-09-10
 
 ### Fixed
+- **`rs-rich-cli` diff thresholds:** compare both percentages with the same
+  one-decimal formatting used by the report, including fractional limits and
+  rounding ties, so the displayed verdict agrees with the process exit status.
 - **`rs-rich-cli`:** render diff HTML/SVG using destination color capabilities
   while preserving plain piped stdout and threshold exit codes. Apply notebook
   decorators to the whole cell group; reject ignored demo options, explain
@@ -78,7 +81,8 @@ No changes yet.
 - **Release tooling (all four crates):** retain coordinated `v*` releases and
   independent `<crate>-v*` releases, with selection-scoped exact-version
   verification. Protect registry consumer builds with the same `crates-io`
-  environment as upload, preserving separate verification retries. Align the
+  environment as upload, with a manual verification-only recovery mode. Reject
+  lightweight tags and require the tag's exact checked-out commit on main. Align the
   release checklist and skill with both paths.
 - **CI and docs (all four crates):** parse the upstream pin as TOML, check
   generated manifest versions and CLI help, and apply main-ancestry checks to

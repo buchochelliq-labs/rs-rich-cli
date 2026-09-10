@@ -87,7 +87,8 @@ on that commit. Require:
 git merge-base --is-ancestor "$(git rev-list -n1 <tag>)" origin/main
 ```
 
-The release workflow validates the tag and selection, passes the exact commit
+The release workflow rejects lightweight tags and checks that the annotated
+tag peels to the checked-out commit on main. It validates the selection, passes the exact commit
 SHA to the complete CI gate, and uses the protected `crates-io` environment.
 Do not bypass that workflow by publishing separately from a local checkout.
 
@@ -103,6 +104,12 @@ with dependencies, finish the dependency's release and verification first.
 Uploads are serialized. A partial upload requires inspecting all selected
 versions and an explicit recovery plan. Versions already uploaded are immutable;
 preflight deliberately rejects a blind rerun and does not silently skip them.
+
+If every selected version uploaded but consumer verification failed, manually
+dispatch the same existing tag with `verify_only: true`. This retains the tag,
+ancestry, exact-SHA and full-CI gates, skips all upload steps, and retries registry
+verification in the protected release job. It cannot complete a partial upload.
+Normal tag pushes and manual dispatches default to publication and retain preflight.
 
 The workflow waits for every selected version to appear, then verifies outside
 the checkout. It installs a selected CLI using `--version =X.Y.Z --locked` into

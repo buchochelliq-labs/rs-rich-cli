@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -12,6 +13,39 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class ReadinessTests(unittest.TestCase):
+    def test_release_tag_must_be_annotated_checked_out_and_on_main(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            def git(*args):
+                return subprocess.run(["git", *args], cwd=tmp, check=True,
+                                      capture_output=True, text=True).stdout.strip()
+
+            def validate(tag):
+                return subprocess.run(
+                    [sys.executable, str(ROOT / "scripts/release.py"), "validate-tag", tag],
+                    cwd=tmp, capture_output=True, text=True,
+                )
+
+            git("init", "-q")
+            git("config", "user.name", "Test")
+            git("config", "user.email", "test@example.invalid")
+            git("commit", "--allow-empty", "-qm", "release")
+            main = git("rev-parse", "HEAD")
+            git("update-ref", "refs/remotes/origin/main", main)
+            for tag in ("v0.0.3", "rs-rich-cli-v0.0.3", "rs-rich-art-v0.0.3-rc.1"):
+                git("tag", "-a", tag, "-m", "release")
+                result = validate(tag)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), main)
+            git("tag", "rs-rich-v0.0.3")
+            result = validate("rs-rich-v0.0.3")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must be annotated", result.stderr)
+            git("commit", "--allow-empty", "-qm", "unmerged work")
+            self.assertNotEqual(validate("v0.0.3").returncode, 0)
+            git("tag", "-a", "v0.0.4", "-m", "not on main")
+            self.assertNotEqual(validate("v0.0.4").returncode, 0)
+            self.assertNotEqual(validate("main").returncode, 0)
+
     def test_independent_versions_and_drift(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
