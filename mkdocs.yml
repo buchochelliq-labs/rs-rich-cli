@@ -81,6 +81,7 @@ nav:
   - Troubleshooting: troubleshooting.md
   - Known issues: known-issues.md
   - Releases:
+      - 0.0.4 plan (proposed): plans/0.0.4.md
       - 0.0.3: releases/0.0.3.md
       - 0.0.3 UAT closeout: remaining-uat-0.0.3.md
       - Runtime verification: runtime-audit-0.0.3.md
