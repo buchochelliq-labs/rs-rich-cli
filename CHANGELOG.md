@@ -33,7 +33,9 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
-No changes yet.
+- `rs-rich-ext`: explicit strict UTF-8/UTF-16 decoder with BOM and byte-order validation.
+- `rs-rich-cli`: wire `--encoding` for text files, stdin and URLs; preserve default
+  decoding, add UTF-16 hints and clean actionable image errors (#62).
 
 ## [0.0.3] — 2026-09-10
 

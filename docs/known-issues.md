@@ -69,14 +69,13 @@ Decorated, aligned, paged and exported CSV output still buffers. Further memory
 reductions and long-line wrapping optimization remain in
 [#74](https://github.com/buchochelliq-labs/rs-rich-cli/issues/74).
 
-### Image and encoding diagnostics need polish
+### Headerless text encodings must be selected explicitly
 
-Image errors can still contain awkward extension punctuation, and the low-level
-UTF-8 error precedes the useful image/`--diff` hint. Text input follows upstream's
-UTF-8 replacement decoding: UTF-16 files may display replacement or NUL characters
-without an encoding hint. Convert those files to UTF-8 before rendering them.
-Additional encoding support and diagnostics remain in
-[#62](https://github.com/buchochelliq-labs/rs-rich-cli/issues/62).
+The development build supports `--encoding utf-16`, `utf-16le`, `utf-16be` and
+`utf-8`. Default files retain UTF-8 replacement decoding; stdin and URLs remain
+strict UTF-8. A recognized UTF-16 BOM gets an actionable hint. Headerless UTF-16
+is not guessed: select its byte order explicitly or convert to UTF-8. See
+[encoding troubleshooting](troubleshooting.md#text-encoding).
 
 ### Syntax highlighting is the slowest path
 
@@ -151,3 +150,10 @@ Please [open an issue](https://github.com/buchochelliq-labs/rs-rich-cli/issues)
 with the exact command, the input if you can share it, and what you expected. If
 it is a *parity* difference from Python `rich`, [Reporting a parity
 bug](parity.md#reporting-a-parity-bug) explains what makes those reports useful.
+
+### SVG export can squeeze CJK glyphs
+
+SVG textLength uses character counts for some runs; wide CJK glyphs may overlap
+in the exported image. The same case reproduces in pinned Python Rich 15.0.0.
+Decoded text and plain terminal output retain the original characters. This is
+an export-layout limitation, separate from encoding support.

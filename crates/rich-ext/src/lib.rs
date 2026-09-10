@@ -20,6 +20,7 @@
 //! assert!(out.contains("\x1b[1;36m7\x1b[0m"));
 //! ```
 
+pub mod encoding;
 pub mod highlighter;
 pub mod registry;
 pub mod theme;

@@ -26,6 +26,7 @@ use rich::{
     Renderable, Rule, Segment, Spinner, Status, Style, Styled, Syntax, Table, Traceback, Tree,
     DEFAULT_TERMINAL_THEME,
 };
+use rich_ext::encoding::{has_utf16_bom, Encoding};
 use rich_ext::ConsoleExt;
 
 /// Boxed `Text` helper to cut down on `Box::new(Text::new(...))` noise.
@@ -116,6 +117,7 @@ struct Cli {
     /// `--image-mode`: how `--diff` draws its picture.
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_mode: ImageMode,
+    encoding: Option<Encoding>,
     width: Option<usize>,
     justify: Option<Justify>,
     no_color: bool,
@@ -240,6 +242,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut loops = None;
     let mut diff_threshold = None;
     let mut image_mode = ImageMode::Auto;
+    let mut encoding = None;
     let mut width = None;
     let mut justify = None;
     let mut no_color = std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty());
@@ -284,6 +287,13 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--ipynb" => set_mode(&mut mode, Mode::Ipynb)?,
             "--gif" => set_mode(&mut mode, Mode::Gif)?,
             "--diff" => set_mode(&mut mode, Mode::Diff)?,
+            "--encoding" => {
+                encoding = Some(
+                    iter.next()
+                        .ok_or("--encoding requires an encoding name")?
+                        .parse()?,
+                );
+            }
             "--image-mode" => {
                 let value = iter
                     .next()
@@ -403,6 +413,13 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     } else {
         mode
     };
+    if encoding.is_some()
+        && (matches!(effective_mode, Mode::Gif | Mode::Diff | Mode::Rule)
+            || (mode == Mode::Auto && resources.is_empty())
+            || (mode == Mode::Print && resources.first().is_some_and(|r| r != "-" && !is_url(r))))
+    {
+        return Err("--encoding requires file, stdin or URL text input".into());
+    }
     let exporting = export_html.is_some() || export_svg.is_some();
     if exporting {
         let unsupported = if effective_mode == Mode::Gif {
@@ -505,6 +522,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         loops,
         diff_threshold,
         image_mode,
+        encoding,
         width,
         justify,
         no_color,
@@ -534,7 +552,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
 /// **Stdin stays strict.** Upstream reads it with `sys.stdin.read()`, whose
 /// decode error escapes into rich-cli's `except Exception` and exits non-zero;
 /// there is no `errors="replace"` on that path.
-fn read_resource(resource: Option<&str>) -> std::io::Result<String> {
+fn read_resource(resource: Option<&str>, encoding: Option<Encoding>) -> std::io::Result<String> {
     let content = match resource {
         Some(path) if path != "-" => {
             let file = std::path::Path::new(path);
@@ -547,6 +565,12 @@ fn read_resource(resource: Option<&str>) -> std::io::Result<String> {
                 ));
             }
             let bytes = std::fs::read(file)?;
+            if let Some(encoding) = encoding {
+                return encoding.decode(&bytes).map(normalize_newlines);
+            }
+            if has_utf16_bom(&bytes) {
+                eprintln!("rich: {path} has a UTF-16 BOM; use --encoding utf-16 to decode it (default remains UTF-8 replacement)");
+            }
             match String::from_utf8(bytes) {
                 Ok(text) => text,
                 // An image is not text in any encoding, and lossily decoding one
@@ -556,7 +580,7 @@ fn read_resource(resource: Option<&str>) -> std::io::Result<String> {
                 Err(_) if looks_like_image(path) => {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        "stream did not contain valid UTF-8",
+                        "looks like an image; use `rich --diff <before> <after>` to compare images",
                     ))
                 }
                 Err(err) => String::from_utf8_lossy(err.as_bytes()).into_owned(),
@@ -571,12 +595,31 @@ fn read_resource(resource: Option<&str>) -> std::io::Result<String> {
                 };
                 eprintln!("rich: reading stdin; finish input with {eof}");
             }
-            let mut buffer = String::new();
-            std::io::stdin().read_to_string(&mut buffer)?;
-            buffer
+            let mut buffer = Vec::new();
+            std::io::stdin().read_to_end(&mut buffer)?;
+            decode_strict(buffer, encoding)?
         }
     };
-    Ok(normalize_newlines(strip_bom(content)))
+    Ok(normalize_newlines(if encoding.is_some() {
+        content
+    } else {
+        strip_bom(content)
+    }))
+}
+
+/// Strict stdin/URL input; the default file path separately retains replacement.
+fn decode_strict(bytes: Vec<u8>, encoding: Option<Encoding>) -> std::io::Result<String> {
+    if let Some(encoding) = encoding {
+        return encoding.decode(&bytes);
+    }
+    String::from_utf8(bytes).map_err(|err| std::io::Error::new(
+        std::io::ErrorKind::InvalidData,
+        if has_utf16_bom(err.as_bytes()) {
+            "input has a UTF-16 BOM; use --encoding utf-16"
+        } else {
+            "input is not valid UTF-8 text; for known headerless UTF-16 select --encoding utf-16le or utf-16be"
+        },
+    ))
 }
 
 /// Translate CRLF and lone CR to LF, as Python's universal newlines do.
@@ -670,7 +713,7 @@ const MAX_BODY_BYTES: u64 = 16 * 1024 * 1024;
 /// returned so an error page still renders. TLS verification is on (rustls with
 /// bundled webpki roots).
 #[cfg(feature = "fetch")]
-fn fetch_url(url: &str) -> Result<(String, Option<String>), String> {
+fn fetch_url(url: &str, encoding: Option<Encoding>) -> Result<(String, Option<String>), String> {
     use std::time::Duration;
     let mut response = ureq::get(url)
         .config()
@@ -706,14 +749,14 @@ fn fetch_url(url: &str) -> Result<(String, Option<String>), String> {
             MAX_BODY_BYTES / (1024 * 1024)
         ));
     }
-    let body = String::from_utf8(buffer)
-        .map_err(|_| format!("{url} is not valid UTF-8 text (binary content?)"))?;
+    let body =
+        decode_strict(buffer, encoding).map_err(|err| format!("cannot decode {url}: {err}"))?;
     Ok((body, content_type))
 }
 
 /// Stub used when the crate is built without the `fetch` feature.
 #[cfg(not(feature = "fetch"))]
-fn fetch_url(url: &str) -> Result<(String, Option<String>), String> {
+fn fetch_url(url: &str, _encoding: Option<Encoding>) -> Result<(String, Option<String>), String> {
     Err(format!(
         "cannot fetch {url}: this build has no URL support (rebuild with the `fetch` feature)"
     ))
@@ -1103,7 +1146,7 @@ fn run(cli: Cli) -> ExitCode {
     // file/stdin. A URL also yields a `Content-Type` used below.
     let resource_is_url = matches!(cli.resource.as_deref(), Some(r) if is_url(r));
     let (content, content_type) = if resource_is_url {
-        match fetch_url(cli.resource.as_deref().unwrap()) {
+        match fetch_url(cli.resource.as_deref().unwrap(), cli.encoding) {
             Ok(fetched) => fetched,
             Err(err) => {
                 eprintln!("rich: {err}");
@@ -1113,17 +1156,11 @@ fn run(cli: Cli) -> ExitCode {
     } else if mode == Mode::Print && matches!(cli.resource.as_deref(), Some(r) if r != "-") {
         (cli.resource.clone().unwrap(), None)
     } else {
-        match read_resource(cli.resource.as_deref()) {
+        match read_resource(cli.resource.as_deref(), cli.encoding) {
             Ok(content) => (content, None),
             Err(err) => {
                 let name = cli.resource.as_deref().unwrap_or("<stdin>");
                 eprintln!("rich: cannot read {name}: {err}");
-                // The usual cause of "invalid UTF-8" is an image passed without
-                // --diff. Saying so beats an encoding lecture the reader cannot
-                // act on.
-                if err.kind() == std::io::ErrorKind::InvalidData && looks_like_image(name) {
-                    eprintln!("rich: {name} looks like an image — did you mean `rich --diff <before> <after>`?");
-                }
                 return ExitCode::FAILURE;
             }
         }
@@ -2371,7 +2408,19 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
         match rich_art::image::open(path) {
             Ok(image) => Some(image),
             Err(err) => {
-                eprintln!("rich: cannot read {path}: {err}");
+                use rich_art::image::error::{ImageFormatHint, UnsupportedErrorKind};
+                let hint = match &err {
+                    rich_art::image::ImageError::Unsupported(error) => match error.kind() {
+                        UnsupportedErrorKind::Format(ImageFormatHint::PathExtension(ext)) =>
+                            Some(format!("unsupported image extension {}; use a supported image format such as PNG or JPEG", ext.display())),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                eprintln!(
+                    "rich: cannot read {path}: {}",
+                    hint.unwrap_or_else(|| err.to_string())
+                );
                 None
             }
         }
@@ -2750,6 +2799,8 @@ OPTIONS:
         --image-mode M
                      With --diff, how to draw the picture: auto (default),
                      sixel (real pixels), blocks, ascii, none
+        --encoding E Explicit text encoding: utf-8, utf-16 (BOM required),
+                     utf-16le or utf-16be. Strict; files, stdin and URLs only.
         --threshold PCT
                      With --diff, exit non-zero above PCT% changed.
                      Also sets the exit code: 0 within, 1 over.

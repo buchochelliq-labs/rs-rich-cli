@@ -330,3 +330,11 @@ spelling to preserve bytes within the width; atomicity is impossible there.
 Cropping remains intentionally lossy presentation output. This behavior requires
 JSON lexical context unavailable in generic Text rendering. Remove this special
 handling if upstream adopts the same escape-aware layout.
+
+## Explicit text encoding extension (0.0.4 development)
+
+`--encoding` is a CLI convenience implemented by `rich_ext::encoding::Encoding`.
+It provides strict UTF-8 and UTF-16 decoding only when requested. Default file
+replacement decoding and strict stdin/URL UTF-8 are retained. BOM diagnostics
+add stderr guidance without automatic encoding changes. This adds no core
+dependency on extensions. See [encoding policy](troubleshooting.md#text-encoding).

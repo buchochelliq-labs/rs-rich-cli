@@ -1419,3 +1419,151 @@ fn notebook_alignment_reaches_unequal_text_lines() {
         assert_eq!(long.find("a longer line"), Some(long_left), "{out:?}");
     }
 }
+
+#[test]
+fn explicit_encoding_decodes_files_and_stdin_without_changing_defaults() {
+    let text = "Hello 漢字 🙂\r\n";
+    for (name, little) in [("utf-16le", true), ("utf-16be", false)] {
+        let bytes: Vec<u8> = text
+            .encode_utf16()
+            .flat_map(|unit| {
+                if little {
+                    unit.to_le_bytes()
+                } else {
+                    unit.to_be_bytes()
+                }
+            })
+            .collect();
+        let path = fixture(&format!("v004-{name}.txt"), &bytes);
+        let (out, err, ok) = run_full(&[path.to_str().unwrap(), "--encoding", name], "");
+        assert!(ok && err.is_empty(), "{err}");
+        assert!(
+            out.lines().any(|line| line.trim_end() == "Hello 漢字 🙂"),
+            "{out:?}"
+        );
+        let mut child = bin()
+            .args(["-p", "-", "--encoding", name])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child.stdin.take().unwrap().write_all(&bytes).unwrap();
+        let result = child.wait_with_output().unwrap();
+        assert!(result.status.success());
+        assert!(String::from_utf8_lossy(&result.stdout).contains("Hello 漢字 🙂"));
+        let (out, err, ok) = run_full(&[path.to_str().unwrap(), "--encoding", "utf-16"], "");
+        assert!(!ok && out.is_empty() && err.contains("BOM"));
+    }
+    let bom = fixture("v004-bom.txt", b"\xff\xfeH\0i\0");
+    let (out, err, ok) = run_full(&[bom.to_str().unwrap()], "");
+    assert!(ok && out.contains('\u{fffd}') && err.contains("--encoding utf-16"));
+    let (out, err, ok) = run_full(&[bom.to_str().unwrap(), "--encoding", "utf-16"], "");
+    assert!(ok && err.is_empty() && out.trim() == "Hi");
+    let malformed = fixture("v004-malformed.txt", b"\xff");
+    let (out, err, ok) = run_full(&[malformed.to_str().unwrap(), "--encoding", "utf-8"], "");
+    assert!(!ok && out.is_empty() && err.contains("UTF-8"));
+}
+
+#[test]
+fn encoding_rejects_unused_or_unknown_options() {
+    for args in [
+        vec!["--encoding", "utf-16"],
+        vec!["--rule", "hello", "--encoding", "utf-16"],
+        vec!["-p", "hello", "--encoding", "utf-16"],
+        vec!["--gif", "a.gif", "--encoding", "utf-16"],
+        vec!["--diff", "a.png", "b.png", "--encoding", "utf-16"],
+        vec!["-", "--encoding", "latin-1"],
+        vec!["-", "--encoding"],
+    ] {
+        let (out, err, ok) = run_full(&args, "");
+        assert!(!ok && out.is_empty() && !err.is_empty(), "{args:?}: {err}");
+    }
+}
+
+#[test]
+fn image_read_error_is_one_actionable_line_and_suffix_alone_is_not_an_error() {
+    let path = fixture("v004-binary.png", b"\x89PNG\r\n\x1a\n");
+    let (out, err, ok) = run_full(&[path.to_str().unwrap()], "");
+    assert!(!ok && out.is_empty());
+    assert_eq!(err.lines().count(), 1, "{err}");
+    assert!(err.contains("looks like an image") && err.contains("rich --diff"));
+    assert!(!err.contains("UTF-8"));
+    let path = fixture("v004-text.png", b"ordinary text\n");
+    let (out, err, ok) = run_full(&[path.to_str().unwrap()], "");
+    assert!(ok && err.is_empty() && out.contains("ordinary text"));
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn unknown_image_extension_has_clean_punctuation() {
+    let path = fixture("v004-image.unsupported", b"not an image");
+    let (_, err, ok) = run_full(
+        &["--diff", path.to_str().unwrap(), path.to_str().unwrap()],
+        "",
+    );
+    assert!(
+        !ok && err.contains("unsupported image extension unsupported;"),
+        "{err}"
+    );
+    assert!(!err.contains("\"\""));
+}
+
+#[cfg(feature = "fetch")]
+#[test]
+fn explicit_encoding_applies_to_url_bodies() {
+    use std::net::TcpListener;
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/document.txt", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        let (mut socket, _) = listener.accept().unwrap();
+        socket
+            .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+            .unwrap();
+        let mut request = Vec::new();
+        while !request.ends_with(b"\r\n\r\n") {
+            let mut byte = [0];
+            socket.read_exact(&mut byte).unwrap();
+            request.push(byte[0]);
+            assert!(request.len() < 16_384);
+        }
+        socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 6\r\nConnection: close\r\n\r\n\xff\xfeH\0i\0").unwrap();
+    });
+    let output = bin()
+        .args([&url, "--encoding", "utf-16"])
+        .env("NO_PROXY", "127.0.0.1")
+        .env("no_proxy", "127.0.0.1")
+        .output()
+        .unwrap();
+    server.join().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Hi"));
+}
+
+#[test]
+fn explicit_stdin_consumes_only_one_bom() {
+    let bytes = b"\xef\xbb\xbf\xef\xbb\xbfHello";
+    let path = fixture("v004-double-bom.txt", bytes);
+    let file = bin()
+        .args([path.to_str().unwrap(), "--encoding", "utf-8"])
+        .output()
+        .unwrap();
+    let mut child = bin()
+        .args(["-", "--encoding", "utf-8"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(bytes).unwrap();
+    let stdin = child.wait_with_output().unwrap();
+    assert!(file.status.success() && stdin.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&file.stdout).trim_end(),
+        String::from_utf8_lossy(&stdin.stdout).trim_end()
+    );
+    assert!(stdin.stdout.starts_with(b"\xef\xbb\xbfHello"));
+}
