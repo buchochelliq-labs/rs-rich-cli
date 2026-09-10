@@ -224,3 +224,11 @@ Library callers select `.blocks(true).color(true)` on `AnimatedArt`.
 `render_frame(index)` honors capabilities; the original `frame(index)` API still
 returns ASCII art. Block height is an aspect-preserving cap; ramp/inversion
 settings apply to ASCII fallback. Mixed-renderer stages retain per-frame widths.
+
+Sequential frames captured from actual `--gif-mode blocks` CLI playback:
+
+![CLI GIF frame 1](assets/releases/0.0.4-gif-frame0.jpg)
+
+![CLI GIF frame 5](assets/releases/0.0.4-gif-frame4.jpg)
+
+[Playback recordings and reproduction commands](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/v0.0.4-gif).
