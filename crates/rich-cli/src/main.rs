@@ -118,6 +118,8 @@ struct Cli {
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_mode: ImageMode,
     encoding: Option<Encoding>,
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    gif_blocks: Option<bool>,
     width: Option<usize>,
     justify: Option<Justify>,
     no_color: bool,
@@ -243,6 +245,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut diff_threshold = None;
     let mut image_mode = ImageMode::Auto;
     let mut encoding = None;
+    let mut gif_blocks = None;
     let mut width = None;
     let mut justify = None;
     let mut no_color = std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty());
@@ -287,6 +290,13 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--ipynb" => set_mode(&mut mode, Mode::Ipynb)?,
             "--gif" => set_mode(&mut mode, Mode::Gif)?,
             "--diff" => set_mode(&mut mode, Mode::Diff)?,
+            "--gif-mode" => {
+                gif_blocks = Some(match iter.next().map(String::as_str) {
+                    Some("ascii") => false,
+                    Some("blocks") => true,
+                    _ => return Err("--gif-mode requires ascii or blocks".into()),
+                });
+            }
             "--encoding" => {
                 encoding = Some(
                     iter.next()
@@ -441,6 +451,12 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     // failure the NaN check closed, reached from the other side.
     let orphans = [
         (
+            "--gif-mode",
+            gif_blocks.is_some(),
+            "--gif",
+            effective_mode == Mode::Gif,
+        ),
+        (
             "--threshold",
             diff_threshold.is_some(),
             "--diff",
@@ -523,6 +539,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         diff_threshold,
         image_mode,
         encoding,
+        gif_blocks,
         width,
         justify,
         no_color,
@@ -2643,6 +2660,7 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
             Ok(art) => {
                 stage = stage.with(
                     art.width(per_gif)
+                        .blocks(cli.gif_blocks.unwrap_or(false))
                         .color(!cli.no_color)
                         .repeat(repeat)
                         // Colour art is byte-heavy; keep it comfortable.
@@ -2799,6 +2817,8 @@ OPTIONS:
         --image-mode M
                      With --diff, how to draw the picture: auto (default),
                      sixel (real pixels), blocks, ascii, none
+        --gif-mode M With --gif: ascii (default) or blocks (half-block pixels).
+                     Blocks fall back to ASCII without color or when piped.
         --encoding E Explicit text encoding: utf-8, utf-16 (BOM required),
                      utf-16le or utf-16be. Strict; files, stdin and URLs only.
         --threshold PCT

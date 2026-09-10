@@ -48,6 +48,8 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
     --image-mode M
                  With --diff, how to draw the picture: auto (default),
                  sixel (real pixels), blocks, ascii, none
+    --gif-mode M With --gif: ascii (default) or blocks (half-block pixels).
+                 Blocks fall back to ASCII without color or when piped.
     --encoding E Explicit text encoding: utf-8, utf-16 (BOM required),
                  utf-16le or utf-16be. Strict; files, stdin and URLs only.
     --threshold PCT

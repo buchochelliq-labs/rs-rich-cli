@@ -191,3 +191,36 @@ Use `rich notes.txt --encoding utf-16` for a BOM-marked file, or explicitly
 select `utf-16le` / `utf-16be` for headerless input. The same option works on
 stdin and URLs. See [text encoding](troubleshooting.md#text-encoding) for strict
 error handling and unchanged default decoding.
+
+## GIF half-block rendering (0.0.4 development)
+
+```bash
+rich --gif animation.gif --gif-mode blocks --width 40 --loop 2
+rich animation.gif --gif-mode ascii
+rich --gif first.gif second.gif --gif-mode blocks --loop 0
+```
+
+`--gif-mode` selects the GIF renderer independently of the image-diff-only
+`--image-mode` flag. Existing invocations default to ASCII. Blocks pack two
+pixel rows into each terminal cell. GIF decoding retains the existing full-canvas
+transparency/disposal handling, and animations keep their individual clocks.
+
+| Destination | Explicit blocks behavior |
+|---|---|
+| Truecolor terminal | Full-color half-block frames |
+| 256-color terminal | Half-blocks with quantized colors |
+| 16-color terminal | Half-blocks with reduced color fidelity |
+| `NO_COLOR`, `--no-color`, or no color capability | ASCII fallback |
+| Redirected stdout | One ASCII frame; no animation controls or waiting |
+
+The default loop count is one; `--loop 2` plays twice and `--loop 0` repeats
+until interrupted. Normal completion restores the cursor. Ctrl-C terminates
+playback promptly but, as with existing ASCII playback, may leave the cursor
+hidden; restore it with `printf '\033[?25h'` in a Unix shell. Sixel GIF output
+and GIF HTML/SVG export are not supported. Captures below are from real CLI PTY
+output, not GIF export support.
+
+Library callers select `.blocks(true).color(true)` on `AnimatedArt`.
+`render_frame(index)` honors capabilities; the original `frame(index)` API still
+returns ASCII art. Block height is an aspect-preserving cap; ramp/inversion
+settings apply to ASCII fallback. Mixed-renderer stages retain per-frame widths.

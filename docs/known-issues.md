@@ -54,12 +54,13 @@ reimplemented Rust-natively instead — see
 *is* self-contained. If you need an offline SVG, embed the font yourself after
 export.
 
-### GIF block rendering is deferred
+### GIF interruption and export limitations
 
-GIF playback currently renders character-ramp art. `--image-mode` applies only
-to image diffs; it cannot request GIF half-block rendering yet. Redirected GIFs
-emit the first frame once, without animation controls, including `--loop 0`.
-Tracked as [#65](https://github.com/buchochelliq-labs/rs-rich-cli/issues/65).
+The 0.0.4 development build supports `--gif-mode blocks`; see the
+[capability matrix](cli.md#gif-half-block-rendering-004-development).
+ASCII remains the default and the redirected/colorless fallback. Normal playback
+restores the cursor; Ctrl-C can leave it hidden, as before. GIF export and Sixel
+playback are unsupported.
 
 ### CSV output still retains source rows
 

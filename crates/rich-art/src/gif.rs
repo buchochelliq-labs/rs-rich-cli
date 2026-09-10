@@ -1,6 +1,7 @@
 //! Animated GIFs played in the terminal as ASCII/ANSI art.
 //!
-//! Each frame is converted with [`AsciiArt`](crate::AsciiArt) and drawn in
+//! Frames use [`AsciiArt`](crate::AsciiArt) by default, or explicitly selected
+//! [`BlockArt`](crate::BlockArt) on color terminals, and are drawn in
 //! place through `rich`'s [`Live`] display, honouring the GIF's own per-frame
 //! delays. Frame disposal (background / previous) is handled by the `image`
 //! decoder, so every frame arrives as a full canvas.
@@ -26,6 +27,7 @@ use rich::protocol::Renderable;
 use rich::{Console, Control, Live};
 
 use crate::ascii::AsciiArt;
+use crate::BlockArt;
 
 /// A GIF's `0` delay means "as fast as possible"; browsers substitute 100ms and
 /// so do we, otherwise such GIFs spin at whatever speed the terminal allows.
@@ -59,6 +61,7 @@ pub struct AnimatedArt {
     ramp: Option<String>,
     invert: bool,
     color: bool,
+    blocks: bool,
     repeat: Repeat,
     /// Lower bound on a frame's on-screen time, i.e. an upper bound on frame
     /// rate. Colour art is byte-heavy, so an uncapped fast GIF can outrun a
@@ -98,6 +101,7 @@ impl AnimatedArt {
             ramp: None,
             invert: false,
             color: false,
+            blocks: false,
             repeat: Repeat::Once,
             min_delay: None,
         })
@@ -135,6 +139,14 @@ impl AnimatedArt {
     /// Colour each cell with its sampled pixel (ANSI art).
     pub fn color(mut self, color: bool) -> Self {
         self.color = color;
+        self
+    }
+
+    /// Select half-block frames on color terminals. ASCII remains the default
+    /// and is always used when color is disabled or output is redirected.
+    /// Call `.color(true)` to enable color, as with ASCII frames.
+    pub fn blocks(mut self, blocks: bool) -> Self {
+        self.blocks = blocks;
         self
     }
 
@@ -176,7 +188,8 @@ impl AnimatedArt {
         self.frames.get(index).map(|frame| self.delay_of(frame))
     }
 
-    /// Frame `index` as a still renderable, carrying this animation's options.
+    /// Frame `index` as ASCII art, preserving the original API.
+    /// Use [`Self::render_frame`] to honor half-block selection.
     pub fn frame(&self, index: usize) -> Option<AsciiArt> {
         let frame = self.frames.get(index)?;
         let mut art = AsciiArt::new(frame.image.clone())
@@ -192,6 +205,30 @@ impl AnimatedArt {
             art = art.ramp(ramp.clone());
         }
         Some(art)
+    }
+
+    /// A still frame that honors the selected renderer and console capabilities.
+    /// In block mode, height caps the rows while preserving aspect ratio.
+    /// Ramp and inversion apply to the ASCII fallback, not colored blocks.
+    pub fn render_frame(&self, index: usize) -> Option<GifFrame> {
+        let ascii = self.frame(index)?;
+        let blocks = if self.blocks {
+            let mut art = BlockArt::new(self.frames[index].image.clone());
+            if let Some(width) = self.width {
+                art = art.width(width);
+            }
+            if let Some(height) = self.height {
+                art = art.height(height);
+            }
+            Some(art)
+        } else {
+            None
+        };
+        Some(GifFrame {
+            ascii,
+            blocks,
+            color: self.color,
+        })
     }
 
     /// How many passes to make, or `None` for endless.
@@ -217,7 +254,7 @@ impl AnimatedArt {
         if self.frames.is_empty() {
             return Ok(());
         }
-        let Some(first) = self.frame(0) else {
+        let Some(first) = self.render_frame(0) else {
             return Ok(());
         };
 
@@ -234,7 +271,7 @@ impl AnimatedArt {
                 // The first frame of the first pass is already on screen from
                 // `start()`; sleep through its delay, then move on.
                 if !(pass == 0 && index == 0) {
-                    if let Some(art) = self.frame(index) {
+                    if let Some(art) = self.render_frame(index) {
                         live.update(Box::new(art));
                     }
                 }
@@ -260,6 +297,39 @@ impl AnimatedArt {
     }
 }
 
+/// An owned GIF frame with capability-aware ASCII / half-block rendering.
+pub struct GifFrame {
+    ascii: AsciiArt,
+    blocks: Option<BlockArt>,
+    color: bool,
+}
+
+impl GifFrame {
+    fn use_blocks(&self, console: &Console) -> bool {
+        self.color && console.is_terminal() && console.color_system().is_some()
+    }
+
+    pub(crate) fn columns(&self, console: &Console, available: usize) -> usize {
+        if self.use_blocks(console) {
+            if let Some(blocks) = &self.blocks {
+                return blocks.grid(available).0;
+            }
+        }
+        self.ascii.columns(available)
+    }
+}
+
+impl Renderable for GifFrame {
+    fn rich_render(&self, console: &Console, options: &rich::ConsoleOptions) -> Vec<rich::Segment> {
+        if self.use_blocks(console) {
+            if let Some(blocks) = &self.blocks {
+                return blocks.rich_render(console, options);
+            }
+        }
+        self.ascii.rich_render(console, options)
+    }
+}
+
 /// The control sequence that re-shows the cursor — useful for a signal handler
 /// that has to clean up after an interrupted [`AnimatedArt::play`].
 pub fn show_cursor_sequence() -> String {
@@ -274,7 +344,7 @@ impl Renderable for AnimatedArt {
         console: &Console,
         options: &rich::console::ConsoleOptions,
     ) -> Vec<rich::segment::Segment> {
-        match self.frame(0) {
+        match self.render_frame(0) {
             Some(art) => art.rich_render(console, options),
             None => Vec::new(),
         }
@@ -308,6 +378,92 @@ pub(crate) mod tests_support {
 mod tests {
     use super::tests_support::make_gif;
     use super::*;
+
+    #[test]
+    fn block_frames_follow_color_and_terminal_capabilities() {
+        let art = AnimatedArt::from_bytes(&make_gif(&[[230, 20, 60], [0, 120, 255]], 10))
+            .unwrap()
+            .width(4)
+            .height(2)
+            .color(true)
+            .blocks(true);
+        for system in [
+            rich::ColorSystem::Truecolor,
+            rich::ColorSystem::EightBit,
+            rich::ColorSystem::Standard,
+        ] {
+            let console = Console::builder()
+                .force_terminal(true)
+                .color_system(Some(system))
+                .build();
+            let first = console.render_to_string(&art.render_frame(0).unwrap());
+            let second = console.render_to_string(&art.render_frame(1).unwrap());
+            assert!(first.contains('▀'));
+            assert_ne!(first, second);
+            assert!(!console
+                .render_to_string(&art.frame(0).unwrap())
+                .contains('▀'));
+        }
+        for terminal in [false, true] {
+            let console = Console::builder()
+                .force_terminal(terminal)
+                .no_color(true)
+                .build();
+            assert_eq!(
+                console.render_to_string(&art.render_frame(0).unwrap()),
+                console.render_to_string(&art.frame(0).unwrap())
+            );
+        }
+        let console = Console::builder().force_terminal(true).build();
+        let disabled = art.clone().color(false);
+        assert!(!console.render_to_string(&disabled).contains('▀'));
+        assert!(art.render_frame(99).is_none());
+    }
+
+    #[test]
+    fn redirected_blocks_never_animate_or_emit_controls() {
+        let art = AnimatedArt::from_bytes(&make_gif(&[[50, 100, 200], [255, 0, 0]], 60_000))
+            .unwrap()
+            .width(4)
+            .height(2)
+            .color(true)
+            .blocks(true)
+            .repeat(Repeat::Forever);
+        let console = Console::builder().force_terminal(false).build();
+        let expected = format!("{}\n", console.render_to_string(&art.frame(0).unwrap()));
+        let mut out = Vec::new();
+        art.play(console, &mut out).unwrap();
+        assert_eq!(out, expected.as_bytes());
+        assert!(!out.contains(&0x1b));
+    }
+
+    #[test]
+    fn odd_height_transparent_gif_uses_existing_block_compositing() {
+        use image::{Frame as ImageFrame, Rgba, RgbaImage};
+        let mut pixels = RgbaImage::from_pixel(3, 5, Rgba([0, 0, 0, 0]));
+        pixels.put_pixel(1, 4, Rgba([255, 0, 0, 255]));
+        let mut bytes = Vec::new();
+        image::codecs::gif::GifEncoder::new(&mut bytes)
+            .encode_frame(ImageFrame::new(pixels))
+            .unwrap();
+        let art = AnimatedArt::from_bytes(&bytes)
+            .unwrap()
+            .width(3)
+            .color(true)
+            .blocks(true);
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(rich::ColorSystem::Truecolor))
+            .build();
+        let frame = art.render_frame(0).unwrap();
+        let expected = BlockArt::new(art.frames[0].image.clone()).width(3);
+        assert_eq!(
+            console.render_to_string(&frame),
+            console.render_to_string(&expected)
+        );
+        assert_eq!(frame.columns(&console, 80), 3);
+        assert_eq!(console.render_to_string(&frame).matches('▀').count(), 9);
+    }
 
     #[test]
     fn decodes_frames_and_delays() {
@@ -418,6 +574,7 @@ mod tests {
                 ramp: self.ramp.clone(),
                 invert: self.invert,
                 color: self.color,
+                blocks: self.blocks,
                 repeat,
                 min_delay: self.min_delay,
             }

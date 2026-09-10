@@ -57,7 +57,7 @@ protected release workflow, separately from the completed source merge.
 
 ---
 
-## 0.0.4 — proposed diagnostics, GIF and performance work
+## 0.0.4 — diagnostics, GIF and performance development
 
 The [0.0.4 development plan](plans/0.0.4.md) scopes the four remaining issues
 above into small PRs: reproduce current baselines, improve diagnostics, add
@@ -65,7 +65,7 @@ explicit GIF blocks, reduce CSV memory and wrapping costs, then optimize the
 measured syntax bottlenecks. It defines acceptance cases, per-crate version
 decisions, real CLI evidence, independent review and docs-site updates.
 
-This is a proposal, not a claim that those features have shipped. Versions and
+The plan is accepted and implementation is in progress; these features have not shipped. Versions and
 release date are finalized after the selected work is verified.
 
 ---
