@@ -1,0 +1,51 @@
+{
+  "revision": "d9bfe617e835d7403744d54726e24f21784a7faa",
+  "binary_sha256": "da6828dbcfafa41662c9adcdc1309c6bf6ae2abc63b0fa231c239632a0fbd835",
+  "platform": "Linux-6.18.35-x86_64-with-glibc2.39",
+  "cpu": "INTEL(R) XEON(R) PLATINUM 8573C",
+  "timeout_s": 10,
+  "runs": 5,
+  "warmup_runs": 1,
+  "width": 100,
+  "color": "--no-color",
+  "stdout": "redirected",
+  "cases": [
+    {
+      "name": "csv-100000",
+      "input_bytes": 2718967,
+      "input_sha256": "58119b3abe7a1b87439e45a8247fcb35380f22ed359d8692b3018885efe04e7e",
+      "flags": [
+        "--csv"
+      ],
+      "stdin": false,
+      "samples": [
+        {
+          "wall_ms": 1245.4350920015713,
+          "peak_rss_kib": 49900
+        },
+        {
+          "wall_ms": 1470.2331989974482,
+          "peak_rss_kib": 49872
+        },
+        {
+          "wall_ms": 1462.523301001056,
+          "peak_rss_kib": 49688
+        },
+        {
+          "wall_ms": 1212.9447720071767,
+          "peak_rss_kib": 49612
+        },
+        {
+          "wall_ms": 984.5740930031752,
+          "peak_rss_kib": 49616
+        }
+      ],
+      "output_bytes": 4200342,
+      "output_sha256": "9b1af26ff88efec6b32b7caae589ba222e3505b016cf18a3642413802628dd70",
+      "median_ms": 1245.4350920015713,
+      "min_ms": 984.5740930031752,
+      "max_ms": 1470.2331989974482,
+      "peak_rss_kib": 49900
+    }
+  ]
+}

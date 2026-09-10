@@ -141,3 +141,38 @@ finish within 10 seconds; reduce the 199 KB syntax median by at least 20%.
 These are engineering targets, not shipped performance guarantees. Compare on
 this host with the same build settings and corpus, retain output hashes, and
 report short-input regressions and decorated-path limitations separately.
+
+## 0.0.4 CSV ownership improvement
+
+The development build transfers parsed rows and their collection into `Table`
+through an ownership extension point, and trims completed row capacity. Global
+header/numeric inference and column measurement are unchanged. This removes a
+second full cell copy and duplicate row-container allocation; it is not
+constant-memory streaming.
+
+| Case | 0.0.3 peak RSS (KiB) | Development peak RSS (KiB) |
+|---|---:|---:|
+| csv-10000 | 8,900 | 6,608 |
+| csv-stdin-10000 | 8,964 | 6,604 |
+| csv-panel-10000 | 113,464 | 113,268 |
+| csv-50000 | 27,024 | 15,584 |
+| csv-100000 | 49,884 | 27,088 |
+
+The 100k-row case uses about 46% less peak RSS, exceeding the predeclared 40%
+target. Decorated output remains dominated by rendered-line buffers. A two-pass
+file reader or stdin spooling was considered; ownership transfer avoids new I/O,
+disk-failure and cleanup paths while meeting this release's memory target.
+Source rows and decorated/paged/exported output still need further work for
+bounded-memory processing.
+
+Timings varied with host load. A consecutive five-sample check measured 100k rows
+at 1,245 ms before and 1,059 ms after (peak RSS 49,900 → 26,952 KiB); the earlier
+full pass ranged more widely. This is a memory improvement, not a general speed
+guarantee. [All samples and 120 output comparisons](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/v0.0.4-csv)
+are retained. The comparison matrix matched stdout, stderr, exit status and both
+HTML/SVG exports byte-for-byte across dialects, ragged/multiline/Unicode rows,
+widths 4/20/80, panels, padding, alignment, titles/captions and pager selection.
+
+Actual CLI rendering of the recorded CSV memory measurements:
+
+![CSV memory measurements rendered by the CLI](assets/releases/0.0.4-csv.jpg)

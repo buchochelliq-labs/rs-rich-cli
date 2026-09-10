@@ -33,6 +33,10 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+- `rs-rich`: ownership-transfer protocol for table rows, preserving existing rendering.
+- `rs-rich-cli`: move parsed CSV rows into the table and compact completed rows;
+  measured 100k-row peak RSS falls about 46%, with identical output (#74).
+
 - `rs-rich-art`: explicit capability-aware half-block GIF frames and mixed-renderer stages.
 - `rs-rich-cli`: `--gif-mode ascii|blocks`, preserving ASCII defaults and safe
   ASCII fallback without color and first-frame output when redirected (#65).

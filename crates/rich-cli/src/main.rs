@@ -16,7 +16,7 @@ use std::process::ExitCode;
 use rich::cells::cell_len;
 use rich::markdown::Markdown;
 use rich::measure::Measurement;
-use rich::protocol::LineRenderable;
+use rich::protocol::{LineRenderable, OwnedTableRows};
 use rich::r#box::{Box as BoxSet, ASCII, ASCII2, DOUBLE, HEAVY, HEAVY_HEAD, ROUNDED, SQUARE};
 use rich::text::Text;
 use rich::{
@@ -1994,6 +1994,7 @@ fn read_csv_rows(content: &str, dialect: &Dialect) -> Vec<Vec<String>> {
     }
     if !matches!(state, State::StartRecord) {
         row.push(std::mem::take(&mut field));
+        row.shrink_to_fit();
         rows.push(std::mem::take(&mut row));
     }
     rows
@@ -2011,6 +2012,8 @@ fn read_csv_char(
 ) {
     let end_record = |field: &mut String, row: &mut Vec<String>, rows: &mut Vec<Vec<String>>| {
         row.push(std::mem::take(field));
+        // Completed records keep only their fields, not Vec's spare growth slots.
+        row.shrink_to_fit();
         rows.push(std::mem::take(row));
     };
     match state {
@@ -2116,7 +2119,7 @@ fn build_csv_table(
         None => (Dialect::excel(fallback_delimiter?), true),
     };
     Some(render_csv(
-        &read_csv_rows(content, &dialect),
+        read_csv_rows(content, &dialect),
         header,
         title,
         caption,
@@ -2145,7 +2148,7 @@ fn csv_fallback_delimiter(resource: Option<&str>) -> Option<char> {
 /// it did not, and any all-numeric column right-justified with bold-green body
 /// and header cells.
 fn render_csv(
-    rows: &[Vec<String>],
+    rows: Vec<Vec<String>>,
     has_header: bool,
     title: Option<&str>,
     caption: Option<&str>,
@@ -2168,7 +2171,7 @@ fn render_csv(
             None => return table,
         }
     } else {
-        (&empty, rows)
+        (&empty, rows.as_slice())
     };
     // `[row for row in rows if row]`: a blank line is not a table row.
     let data: Vec<&Vec<String>> = body.iter().filter(|row| !row.is_empty()).collect();
@@ -2198,10 +2201,15 @@ fn render_csv(
             table.add_column(name);
         }
     }
-    for row in data {
-        let cells: Vec<&str> = row.iter().map(String::as_str).collect();
-        table.add_row(&cells);
-    }
+    // Measurement/style inference is complete. Move the parsed cells into the
+    // table rather than retaining and cloning the complete input row set.
+    drop(data);
+    table.extend_owned_rows(
+        rows.into_iter()
+            .skip(usize::from(has_header))
+            .filter(|row| !row.is_empty())
+            .collect(),
+    );
     table
 }
 
