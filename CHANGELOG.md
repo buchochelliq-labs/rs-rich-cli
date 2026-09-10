@@ -34,6 +34,16 @@ Everything below this heading is the development history that led here.
 ## [Unreleased]
 
 ### Fixed
+- **`rs-rich-cli`:** render diff HTML/SVG using destination color capabilities
+  while preserving plain piped stdout and threshold exit codes. Apply notebook
+  decorators to the whole cell group; reject ignored demo options, explain
+  interactive stdin, and document environment, paging and GIF repeat defaults.
+  Honor non-empty `NO_COLOR` in all CLI modes.
+- **`rs-rich`:** parse Panel, Rule and Table title/caption markup with visible
+  width measurement; preserve styled Unicode truncation without invalid span
+  offsets. New fixtures are captured from pinned Python Rich 15.0.0.
+- **`rs-rich`:** select `more.com` as the Windows pager fallback. Required Windows
+  CI launches the native pager and verifies its output as well as env precedence.
 - **`rs-rich`, `rs-rich-cli`:** expose table streaming through the `LineRenderable`
   protocol trait; treat an early-closing CSV consumer as successful termination.
   Regression test covers a 10,000-row producer whose pipe is closed after one byte.

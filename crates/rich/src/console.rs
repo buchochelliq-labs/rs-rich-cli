@@ -549,7 +549,7 @@ impl Console {
 
     /// Expand `:emoji:` shortcodes. Runs before markup parsing (matching
     /// upstream's default `emoji=True`); `:name:` and `[tag]` don't overlap.
-    fn expand_emoji(&self, content: &str) -> String {
+    pub(crate) fn expand_emoji(&self, content: &str) -> String {
         if self.emoji {
             crate::emoji::replace(content)
         } else {

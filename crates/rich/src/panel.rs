@@ -7,13 +7,13 @@
 //! padding, expand-to-width. `fit` (shrink-to-content) sizing is deferred.
 
 use crate::align::HorizontalAlign;
-use crate::cells::{cell_len, truncate};
 use crate::console::{Console, ConsoleOptions};
 use crate::padding::join_rows;
 use crate::protocol::Renderable;
 use crate::r#box::{Box as BoxSet, ROUNDED};
 use crate::segment::Segment;
 use crate::style::Style;
+use crate::text::{Text, DEFAULT_TAB_SIZE};
 
 /// A bordered box around a renderable. Mirrors `rich.panel.Panel`.
 pub struct Panel {
@@ -86,38 +86,68 @@ impl Panel {
         self
     }
 
-    /// Build a top/bottom border, optionally embedding an aligned `label`.
+    /// Build a top/bottom border. Port of `Panel._title`, `_subtitle` and
+    /// `align_text`: markup is styled before its visible cell width is measured.
     fn border_line(
         &self,
+        console: &Console,
         inner_width: usize,
-        left_corner: char,
-        fill_char: char,
-        right_corner: char,
+        corners: (char, char, char),
         label: Option<&String>,
         align: HorizontalAlign,
-    ) -> String {
-        let mut border = String::new();
-        border.push(left_corner);
-        match label {
-            None => border.extend(std::iter::repeat_n(fill_char, inner_width)),
-            Some(label) => {
-                // Truncate the label so it (plus its flanking spaces) fits.
-                let label = truncate(label, inner_width.saturating_sub(2));
-                let padded = format!(" {label} ");
-                let fill = inner_width.saturating_sub(cell_len(&padded));
-                let (left, right) = match align {
-                    HorizontalAlign::Center => (fill / 2, fill - fill / 2),
-                    // Left/right keep a single box-char offset on the near side.
-                    HorizontalAlign::Left => (1.min(fill), fill.saturating_sub(1)),
-                    HorizontalAlign::Right => (fill.saturating_sub(1), 1.min(fill)),
-                };
-                border.extend(std::iter::repeat_n(fill_char, left));
-                border.push_str(&padded);
-                border.extend(std::iter::repeat_n(fill_char, right));
-            }
+    ) -> Vec<Segment> {
+        let (left_corner, fill_char, right_corner) = corners;
+        let border_style = Some(self.border_style.clone());
+        let Some(label) = label.filter(|label| !label.is_empty() && inner_width > 2) else {
+            return vec![Segment::new(
+                format!(
+                    "{left_corner}{}{right_corner}",
+                    fill_char.to_string().repeat(inner_width)
+                ),
+                border_style,
+            )];
+        };
+
+        // Text.from_markup expands emoji independently of the console's emoji
+        // flag. Preserve markup offsets while flattening newlines to spaces.
+        let expanded = crate::emoji::replace(label);
+        let parsed = Text::from_markup(&expanded).unwrap_or_else(|_| Text::new(expanded));
+        let mut label = parsed.blank_copy();
+        label.append(&parsed.plain().replace('\n', " "), None);
+        for span in parsed.spans() {
+            label.push_span(span.clone());
         }
-        border.push(right_corner);
-        border
+        label.expand_tabs(DEFAULT_TAB_SIZE);
+        label.pad(1, ' ');
+        label.set_base_style(self.border_style.clone());
+        let label_width = inner_width - 2;
+        label.truncate(label_width, None, false);
+
+        let fill = label_width.saturating_sub(label.cell_len());
+        let (left, right) = match align {
+            HorizontalAlign::Center => (fill / 2, fill - fill / 2),
+            HorizontalAlign::Left => (0, fill),
+            HorizontalAlign::Right => (fill, 0),
+        };
+        let mut text = Text::styled(
+            fill_char.to_string().repeat(left),
+            self.border_style.clone(),
+        )
+        .append_text(&label);
+        text.append(
+            &fill_char.to_string().repeat(right),
+            Some(self.border_style.clone().into()),
+        );
+        let mut segments = vec![Segment::new(
+            format!("{left_corner}{fill_char}"),
+            border_style.clone(),
+        )];
+        segments.extend(text.render(console.theme(), console.base_style()));
+        segments.push(Segment::new(
+            format!("{fill_char}{right_corner}"),
+            border_style,
+        ));
+        segments
     }
 }
 
@@ -151,17 +181,13 @@ impl Renderable for Panel {
         let mut rows: Vec<Vec<Segment>> = Vec::new();
 
         // Top border (with title if present).
-        rows.push(vec![Segment::new(
-            self.border_line(
-                inner_width,
-                box_set.top_left,
-                box_set.top,
-                box_set.top_right,
-                self.title.as_ref(),
-                self.title_align,
-            ),
-            border.clone(),
-        )]);
+        rows.push(self.border_line(
+            console,
+            inner_width,
+            (box_set.top_left, box_set.top, box_set.top_right),
+            self.title.as_ref(),
+            self.title_align,
+        ));
 
         // Top padding rows.
         for _ in 0..pt {
@@ -188,17 +214,13 @@ impl Renderable for Panel {
         }
 
         // Bottom border (with subtitle if present).
-        rows.push(vec![Segment::new(
-            self.border_line(
-                inner_width,
-                box_set.bottom_left,
-                box_set.bottom,
-                box_set.bottom_right,
-                self.subtitle.as_ref(),
-                self.subtitle_align,
-            ),
-            border.clone(),
-        )]);
+        rows.push(self.border_line(
+            console,
+            inner_width,
+            (box_set.bottom_left, box_set.bottom, box_set.bottom_right),
+            self.subtitle.as_ref(),
+            self.subtitle_align,
+        ));
 
         join_rows(rows)
     }

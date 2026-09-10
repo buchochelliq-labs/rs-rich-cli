@@ -271,6 +271,31 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "rule_title" | "rule_title_odd" => Box::new(Rule::new("Hi")),
         "rule_left" => Box::new(Rule::new("Hi").align(HorizontalAlign::Left)),
         "rule_right" => Box::new(Rule::new("Hi").align(HorizontalAlign::Right)),
+        "rule_title_markup" => Box::new(Rule::new("[bold red]Ready[/] :rocket:")),
+        "rule_title_literal" => Box::new(Rule::new(r"\[red]literal\[/red]")),
+        "rule_title_spaces" => Box::new(Rule::new("[bold]a\tb\nc[/]")),
+        "rule_title_truncate" => Box::new(Rule::new("[red]long[/][bold blue]title[/]")),
+        "rule_left_markup" => Box::new(Rule::new("[red]Title[/]").align(HorizontalAlign::Left)),
+        "rule_right_markup" => Box::new(Rule::new("[red]Title[/]").align(HorizontalAlign::Right)),
+        "rule_title_wide_truncate" => Box::new(Rule::new("[red]界[/][blue]abc[/]")),
+        "rule_empty_title" => Box::new(Rule::new("")),
+        "panel_title_markup" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title("[bold red]Ready[/] :rocket:").border_style(Style::parse("blue").unwrap())),
+        "panel_title_literal" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title(r"\[red]literal\[/red]")),
+        "panel_title_spaces" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title("[bold]a\tb\nc[/]")),
+        "panel_title_truncate" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title("[red]long[/][bold blue]title[/]").border_style(Style::parse("green").unwrap())),
+        "panel_subtitle_markup" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .subtitle("[italic yellow]Done[/] :rocket:").subtitle_align(HorizontalAlign::Right)
+            .border_style(Style::parse("blue").unwrap())),
+        "panel_subtitle_truncate" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .subtitle("[red]long[/][bold blue]title[/]").border_style(Style::parse("green").unwrap())),
+        "panel_title_wide_truncate" => Box::new(Panel::new(Box::new(Text::new("x"))).title("[red]界[/][blue]abc[/]")),
+        "panel_empty_title" => Box::new(Panel::new(Box::new(Text::new("x"))).title("").subtitle("")),
+        "panel_tiny_title" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title("[bold red]T[/]").subtitle("[green]S[/]")),
         "panel_plain" => Box::new(Panel::new(Box::new(Text::new("hello")))),
         "panel_title" => Box::new(Panel::new(Box::new(Text::new("hello"))).title("T")),
         "panel_title_left" => Box::new(
@@ -326,6 +351,10 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "table_expand" => Box::new(expand_table()),
         "table_justify" => Box::new(justify_table()),
         "table_title" => Box::new(title_table()),
+        "table_title_markup" => Box::new(sample_table(SQUARE)
+            .title("[bold red]Users[/] :rocket:").caption("[green]2 rows[/] :white_check_mark:")),
+        "table_title_wrap" => Box::new(sample_table(SQUARE)
+            .title("[red]Long title wraps onto lines[/]").caption("[green]a\tb\nc[/]")),
         "table_lines" => Box::new(lines_table()),
         "table_col_width" => Box::new(width_table()),
         "table_col_style" => Box::new(style_table()),
@@ -602,6 +631,27 @@ fn build_text_op(name: &str) -> Vec<Text> {
         "pad" => mutated(styled("hi", &[("bold", 0, 2)]), &|t| t.pad(3, ' ')),
         "pad_left" => mutated(styled("hi", &[("bold", 0, 2)]), &|t| t.pad_left(3, '.')),
         "pad_right" => mutated(styled("hi", &[("bold", 0, 2)]), &|t| t.pad_right(3, '.')),
+        "truncate_styled_ellipsis" => [1, 2, 5, 8]
+            .into_iter()
+            .map(|width| {
+                let mut text = Text::from_markup("[red]long[/][bold blue]title[/]").unwrap();
+                text.truncate(width, Some(Overflow::Ellipsis), false);
+                text
+            })
+            .collect(),
+        "truncate_wide_styled" => [
+            (1, Overflow::Crop),
+            (1, Overflow::Ellipsis),
+            (2, Overflow::Ellipsis),
+            (3, Overflow::Ellipsis),
+        ]
+        .into_iter()
+        .map(|(width, overflow)| {
+            let mut text = Text::from_markup("[red]界[/][blue]abc[/]").unwrap();
+            text.truncate(width, Some(overflow), false);
+            text
+        })
+        .collect(),
         "right_crop" => mutated(styled("hello world", &[("bold", 3, 9)]), &|t| {
             t.right_crop(4)
         }),

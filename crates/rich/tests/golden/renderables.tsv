@@ -11,6 +11,23 @@ rule_title	20	\x1b[92m──────── \x1b[0mHi\x1b[92m ─────
 rule_title_odd	21	\x1b[92m──────── \x1b[0mHi\x1b[92m ─────────\x1b[0m\n
 rule_left	20	Hi \x1b[92m─────────────────\x1b[0m\n
 rule_right	20	\x1b[92m─────────────────\x1b[0m Hi\n
+rule_title_markup	24	\x1b[92m─────── \x1b[0m\x1b[1;31mReady\x1b[0m 🚀\x1b[92m ───────\x1b[0m\n
+rule_title_literal	24	\x1b[92m── \x1b[0m[red]literal[/red]\x1b[92m ──\x1b[0m\n
+rule_title_spaces	24	\x1b[92m───── \x1b[0m\x1b[1ma       \x1b[0m\x1b[1mb c\x1b[0m\x1b[92m ──────\x1b[0m\n
+rule_title_truncate	12	\x1b[92m─ \x1b[0m\x1b[31mlong\x1b[0m\x1b[1;34mtit…\x1b[0m\x1b[92m ─\x1b[0m\n
+rule_left_markup	16	\x1b[31mTitle\x1b[0m \x1b[92m──────────\x1b[0m\n
+rule_right_markup	16	\x1b[92m──────────\x1b[0m \x1b[31mTitle\x1b[0m\n
+rule_title_wide_truncate	6	\x1b[92m─ \x1b[0m\x1b[31m \x1b[0m\x1b[34m…\x1b[0m\x1b[92m ─\x1b[0m\n
+rule_empty_title	12	\x1b[92m────────────\x1b[0m\n
+panel_title_markup	24	\x1b[34m╭─\x1b[0m\x1b[34m─────\x1b[0m\x1b[34m \x1b[0m\x1b[1;31mReady\x1b[0m\x1b[34m 🚀 \x1b[0m\x1b[34m─────\x1b[0m\x1b[34m─╮\x1b[0m\n\x1b[34m│\x1b[0m x                    \x1b[34m│\x1b[0m\n\x1b[34m╰──────────────────────╯\x1b[0m\n
+panel_title_literal	24	╭─ [red]literal[/red] ─╮\n│ x                    │\n╰──────────────────────╯\n
+panel_title_spaces	24	╭──── \x1b[1ma       \x1b[0m\x1b[1mb c\x1b[0m ─────╮\n│ x                    │\n╰──────────────────────╯\n
+panel_title_truncate	12	\x1b[32m╭─\x1b[0m\x1b[32m \x1b[0m\x1b[31mlong\x1b[0m\x1b[1;34mtit\x1b[0m\x1b[32m─╮\x1b[0m\n\x1b[32m│\x1b[0m x        \x1b[32m│\x1b[0m\n\x1b[32m╰──────────╯\x1b[0m\n
+panel_subtitle_markup	24	\x1b[34m╭──────────────────────╮\x1b[0m\n\x1b[34m│\x1b[0m x                    \x1b[34m│\x1b[0m\n\x1b[34m╰─\x1b[0m\x1b[34m───────────\x1b[0m\x1b[34m \x1b[0m\x1b[3;33mDone\x1b[0m\x1b[34m 🚀 \x1b[0m\x1b[34m─╯\x1b[0m\n
+panel_subtitle_truncate	12	\x1b[32m╭──────────╮\x1b[0m\n\x1b[32m│\x1b[0m x        \x1b[32m│\x1b[0m\n\x1b[32m╰─\x1b[0m\x1b[32m \x1b[0m\x1b[31mlong\x1b[0m\x1b[1;34mtit\x1b[0m\x1b[32m─╯\x1b[0m\n
+panel_title_wide_truncate	6	╭─ \x1b[31m \x1b[0m─╮\n│ x  │\n╰────╯\n
+panel_empty_title	12	╭──────────╮\n│ x        │\n╰──────────╯\n
+panel_tiny_title	4	╭──╮\n╰──╯\n
 panel_plain	20	╭──────────────────╮\n│ hello            │\n╰──────────────────╯\n
 panel_title	20	╭─────── T ────────╮\n│ hello            │\n╰──────────────────╯\n
 panel_title_left	20	┌─ T ──────────────┐\n│ x                │\n└──────────────────┘\n
@@ -40,6 +57,8 @@ table_shrink	30	┌───────┬────────────�
 table_expand	30	┌────────────────┬───────────┐\n│\x1b[1m \x1b[0m\x1b[1mName          \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mAge      \x1b[0m\x1b[1m \x1b[0m│\n├────────────────┼───────────┤\n│ Alice          │ 30        │\n│ Bob            │ 7         │\n└────────────────┴───────────┘\n
 table_justify	30	┌──────┬────┬─────┐\n│\x1b[1m \x1b[0m\x1b[1mL   \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mC \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1m  R\x1b[0m\x1b[1m \x1b[0m│\n├──────┼────┼─────┤\n│ a    │ bb │ ccc │\n│ xxxx │ y  │  zz │\n└──────┴────┴─────┘\n
 table_title	30	\x1b[3m     Users     \x1b[0m\n┌───────┬─────┐\n│\x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mAge\x1b[0m\x1b[1m \x1b[0m│\n├───────┼─────┤\n│ Alice │ 30  │\n│ Bob   │ 7   │\n└───────┴─────┘\n\x1b[2;3m    2 rows     \x1b[0m\n
+table_title_markup	30	\x1b[3m   \x1b[0m\x1b[1;3;31mUsers\x1b[0m\x1b[3m 🚀    \x1b[0m\n┌───────┬─────┐\n│\x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mAge\x1b[0m\x1b[1m \x1b[0m│\n├───────┼─────┤\n│ Alice │ 30  │\n│ Bob   │ 7   │\n└───────┴─────┘\n\x1b[2;3m   \x1b[0m\x1b[2;3;32m2 rows\x1b[0m\x1b[2;3m ✅   \x1b[0m\n
+table_title_wrap	30	\x1b[3m  \x1b[0m\x1b[3;31mLong title\x1b[0m\x1b[3m   \x1b[0m\n\x1b[3m  \x1b[0m\x1b[3;31mwraps onto\x1b[0m\x1b[3m   \x1b[0m\n\x1b[3m     \x1b[0m\x1b[3;31mlines\x1b[0m\x1b[3m     \x1b[0m\n┌───────┬─────┐\n│\x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mAge\x1b[0m\x1b[1m \x1b[0m│\n├───────┼─────┤\n│ Alice │ 30  │\n│ Bob   │ 7   │\n└───────┴─────┘\n\x1b[2;3m   \x1b[0m\x1b[2;3;32ma       \x1b[0m\x1b[2;3;32mb\x1b[0m\x1b[2;3m   \x1b[0m\n\x1b[2;3m       \x1b[0m\x1b[2;3;32mc\x1b[0m\x1b[2;3m       \x1b[0m\n
 table_lines	30	┌───────┬─────┐\n│\x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mAge\x1b[0m\x1b[1m \x1b[0m│\n├───────┼─────┤\n│ Alice │ 30  │\n├───────┼─────┤\n│ Bob   │ 7   │\n└───────┴─────┘\n
 table_col_width	40	┌────┬──────────┐\n│\x1b[1m \x1b[0m\x1b[1mId\x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mNote    \x1b[0m\x1b[1m \x1b[0m│\n├────┼──────────┤\n│ 1  │ alpha    │\n│    │ beta     │\n│    │ gammaga… │\n│ 2  │ ok       │\n└────┴──────────┘\n
 table_col_style	40	┌───────┬─────┐\n│\x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mAge\x1b[0m\x1b[1m \x1b[0m│\n├───────┼─────┤\n│\x1b[31m \x1b[0m\x1b[31mAlice\x1b[0m\x1b[31m \x1b[0m│ 30  │\n│\x1b[31m \x1b[0m\x1b[31mBob  \x1b[0m\x1b[31m \x1b[0m│ 7   │\n└───────┴─────┘\n

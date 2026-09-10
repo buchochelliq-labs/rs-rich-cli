@@ -4,7 +4,21 @@ Checked 2026-09-10 against runtime head `baf277c`, with the subsequent CSV revie
 repair tested separately. These are findings to triage, not additional fixes
 claimed by this PR. Issue titles alone overstate how much remains.
 
-## #60 — Windows pager fallback remains suspect
+## Follow-up: four CLI polish items
+
+The follow-up branch `fix/v0.0.3-cli-polish` addresses the four selected items:
+
+| Item | Change and verification |
+|---|---|
+| #65 diff exports | Separate HTML/SVG color capabilities; regression covers auto/blocks/Sixel/ASCII/none, unchanged stdout/diagnostics, no-color, threshold and write failures. |
+| #65 titles and layout | Panel/Rule/Table markup and UTF-8 truncation have Rich 15 goldens; notebook grouping now receives decorators and alignment; demo rejects unsupported options. |
+| #60 Windows pager | Explicit `more.com` fallback, env precedence test, and required native Windows process/output smoke test. |
+| Help/input cleanup | Document COLUMNS, unsupported FORCE_COLOR, pager precedence, GIF default repeat count, scalar flag repetition and stdin. Interactive stdin prints an EOF hint; pipes remain quiet. |
+
+The observations below record the **earlier audit**, before this follow-up. GIF
+block rendering and additional encoding support remain separate feature work.
+
+## #60 — Windows pager fallback in the earlier audit
 
 The fallback now exists: `MANPAGER`, then `PAGER`, then a platform default. A Linux
 PTY probe with both variables unset successfully invoked a temporary `less`

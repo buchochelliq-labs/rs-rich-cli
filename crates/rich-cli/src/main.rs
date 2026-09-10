@@ -242,7 +242,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut image_mode = ImageMode::Auto;
     let mut width = None;
     let mut justify = None;
-    let mut no_color = false;
+    let mut no_color = std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty());
     let mut export_html: Option<String> = None;
     let mut export_svg: Option<String> = None;
     let mut panel = None;
@@ -467,14 +467,19 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
 
     // These decorate a single rendered resource; --diff composes its own report
     // and quietly dropped them, which reads as the flag having no effect.
-    if matches!(effective_mode, Mode::Diff | Mode::Gif) {
+    let demo = mode == Mode::Auto && resources.is_empty();
+    if matches!(effective_mode, Mode::Diff | Mode::Gif) || demo {
         let mode_name = if effective_mode == Mode::Gif {
             "--gif"
+        } else if demo {
+            "the capability demo"
         } else {
             "--diff"
         };
         let unsupported = [
-            ("--pager", pager && effective_mode == Mode::Gif),
+            ("--pager", pager && (effective_mode == Mode::Gif || demo)),
+            ("--width", demo && width.is_some()),
+            ("--hyperlinks", demo && hyperlinks),
             ("--panel", panel.is_some()),
             ("--padding", padding.is_some()),
             ("--title", title.is_some()),
@@ -558,6 +563,14 @@ fn read_resource(resource: Option<&str>) -> std::io::Result<String> {
             }
         }
         _ => {
+            if std::io::stdin().is_terminal() {
+                let eof = if cfg!(windows) {
+                    "Ctrl-Z then Enter"
+                } else {
+                    "Ctrl-D"
+                };
+                eprintln!("rich: reading stdin; finish input with {eof}");
+            }
             let mut buffer = String::new();
             std::io::stdin().read_to_string(&mut buffer)?;
             buffer
@@ -893,6 +906,15 @@ fn measure_rendered(console: &Console, renderable: &dyn Renderable) -> usize {
         .unwrap_or(0)
 }
 
+/// Only labels consumed by a panel or CSV table should be parsed. Other modes
+/// ignore these options upstream, including malformed unused markup.
+fn validate_labels(cli: &Cli) -> Result<(), String> {
+    for label in cli.title.iter().chain(cli.caption.iter()) {
+        Text::from_markup(label).map_err(|err| err.to_string())?;
+    }
+    Ok(())
+}
+
 /// Apply upstream's decorator chain — padding, panel, style, fixed width,
 /// alignment — and print the result. Port of the tail of rich-cli's `main`.
 ///
@@ -905,6 +927,12 @@ fn decorate_and_emit(
     renderable: Box<dyn Renderable>,
     fit: Option<usize>,
 ) -> ExitCode {
+    if cli.panel.is_some() {
+        if let Err(err) = validate_labels(cli) {
+            eprintln!("rich: {err}");
+            return ExitCode::FAILURE;
+        }
+    }
     let max_width = console.width();
     // `if width > 0: expand = True` — a fixed width is a width to fill.
     let expand = cli.expand || cli.width.is_some();
@@ -946,15 +974,20 @@ fn decorate_and_emit(
         // so a long `--caption` is truncated by the border rather than widening
         // the panel.
         //
-        // Upstream's title measures two cells wider than this, because its
-        // `_title` is `Text.pad(1)`-ed and the border then adds a `─` either
-        // side of it (`╭─ title ─╮`). This port's `Panel` draws `╭ title ╮`,
-        // with the pad but not the dashes, so `cell_len` is the width it needs:
-        // taking upstream's number here would leave a two-cell hole in a fitted
-        // panel. The dashes belong in `panel.rs`.
+        // Panel parses markup, normalizes newlines/tabs, and pads the label by
+        // one cell on either side. Measure visible text with the same rules.
         let inner = max_width.saturating_sub(4);
         let child = fit.unwrap_or(inner).min(inner);
-        let title_width = cli.title.as_deref().map(cell_len).unwrap_or(0);
+        let title_width = cli
+            .title
+            .as_deref()
+            .map(|title| {
+                let mut title = Text::from_markup(&rich::emoji::replace(title).replace('\n', " "))
+                    .expect("title markup validated before rendering");
+                title.expand_tabs(8);
+                cell_len(title.plain()) + 2
+            })
+            .unwrap_or(0);
         fit = Some(child.max(title_width) + 4);
         let panel: Box<dyn Renderable> = Box::new(panel);
         renderable = if expand {
@@ -1002,18 +1035,27 @@ fn run(cli: Cli) -> ExitCode {
         other => other,
     };
 
-    // `--gif`, `--diff` and `--ipynb` write a stream of renderables to the
+    // `--gif` and `--diff` write a stream of renderables to the
     // console themselves instead of composing one, so no wrapper can reach them:
-    // those three keep taking `--width` on the console. Everything else gets
+    // those two keep taking `--width` on the console. Everything else gets
     // upstream's `ForceWidth` in `decorate_and_emit`, which is what keeps
     // `--center` centring inside the terminal.
-    let width_on_console = matches!(mode, Mode::Gif | Mode::Diff | Mode::Ipynb);
+    let width_on_console = matches!(mode, Mode::Gif | Mode::Diff);
     let mut builder = Console::builder().no_color(cli.no_color);
     if let Some(width) = cli.width.filter(|_| width_on_console) {
         builder = builder.width(width);
     }
     let mut console = builder.build();
     console.install_extensions();
+
+    if mode == Mode::Rule {
+        if let Some(title) = &cli.resource {
+            if let Err(err) = Text::from_markup(title) {
+                eprintln!("rich: {err}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
 
     // SVG export needs a title (the resource's basename, else "rich") and a
     // stable id. Upstream's auto id hashes Python reprs, so we use a fixed one
@@ -1115,8 +1157,8 @@ fn run(cli: Cli) -> ExitCode {
     // a broken notebook reported an error and exited 0, while a broken .json
     // exited 1. A malformed input must not look like success to a script.
     if mode == Mode::Ipynb {
-        match serde_json::from_str::<serde_json::Value>(&content) {
-            Ok(value) if value.get("cells").and_then(|c| c.as_array()).is_some() => {}
+        let notebook = match serde_json::from_str::<serde_json::Value>(&content) {
+            Ok(value) if value.get("cells").and_then(|c| c.as_array()).is_some() => value,
             Ok(_) => {
                 eprintln!("rich: not a notebook: no `cells` array");
                 return ExitCode::FAILURE;
@@ -1125,10 +1167,10 @@ fn run(cli: Cli) -> ExitCode {
                 eprintln!("rich: invalid notebook JSON: {err}");
                 return ExitCode::FAILURE;
             }
-        }
-        return exit_code(emit(&console, &export, |c| {
-            render_ipynb(c, &content, cli.hyperlinks)
-        }));
+        };
+        let renderable = build_ipynb(&notebook, cli.hyperlinks, cli.justify);
+        let fit = renderable.measure(&console, &console.options()).maximum;
+        return decorate_and_emit(&cli, &console, &export, Box::new(renderable), Some(fit));
     }
 
     // Markup comes from the user in Print mode, so a mistake in it should be
@@ -1191,6 +1233,10 @@ fn run(cli: Cli) -> ExitCode {
             (Box::new(json), Some(fit))
         }
         Mode::Csv => {
+            if let Err(err) = validate_labels(&cli) {
+                eprintln!("rich: {err}");
+                return ExitCode::FAILURE;
+            }
             // `.tsv` only picks the fallback dialect; the sniffer reads the file
             // itself, so a comma-separated `.tsv` still renders as a table.
             let fallback = csv_fallback_delimiter(cli.resource.as_deref());
@@ -2168,73 +2214,124 @@ fn io_label(word: &str, count: Option<i64>, base: &str, number: &str) -> Text {
     text
 }
 
-/// Decode an output string (which may carry ANSI codes) and print it line by
-/// line — the equivalent of upstream's `Text.from_ansi`.
-fn print_ansi(console: &Console, text: &str) {
-    if text.is_empty() {
-        return;
+/// Port of the Group returned by rich-cli's `render_ipynb`. Keeping the cells
+/// composable lets the common padding/panel/style/width/alignment chain apply.
+struct Notebook {
+    items: Vec<Box<dyn Renderable>>,
+    // Console.print(justify=...) also reaches the group's Text children in
+    // upstream. Their individual lines align within the group's measured width.
+    justify: Option<Justify>,
+}
+
+impl Renderable for Notebook {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        let mut options = options.clone();
+        if let Some(justify) = self.justify {
+            options.justify = justify;
+        }
+        let mut segments = Vec::new();
+        for item in &self.items {
+            let rendered = item.rich_render(console, &options);
+            if !rendered.is_empty() {
+                segments.extend(rendered);
+                segments.push(Segment::line());
+            }
+        }
+        // Console supplies the final newline. Empty groups produce no output.
+        if !segments.is_empty() {
+            segments.pop();
+        }
+        segments
     }
-    let mut decoder = AnsiDecoder::new();
-    for line in decoder.decode(text) {
-        console.print(&line);
+
+    fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+        self.items
+            .iter()
+            .map(|item| item.measure(console, options))
+            .fold(Measurement::new(0, 0), |width, item| {
+                Measurement::new(
+                    width.minimum.max(item.minimum),
+                    width.maximum.max(item.maximum),
+                )
+            })
     }
 }
 
-/// Render one cell output (stream / error / execute_result / display_data).
-fn render_output(console: &Console, output: &serde_json::Value, count: Option<i64>) {
-    match output["output_type"].as_str().unwrap_or("") {
-        "stream" => print_ansi(console, &join_source(&output["text"])),
-        "error" => print_ansi(console, &join_traceback(&output["traceback"])),
-        "execute_result" => {
-            console.print(&io_label("Out", count, "red", "#ee4b2b"));
-            print_ansi(console, &join_source(&output["data"]["text/plain"]));
+/// Text.from_ansi joins decoded lines, preserving their style spans.
+fn notebook_ansi(source: &str) -> Text {
+    let mut result = Text::new("");
+    for (index, line) in AnsiDecoder::new().decode(source).iter().enumerate() {
+        if index > 0 {
+            result.append("\n", None);
         }
-        _ => {}
+        result = result.append_text(line);
     }
+    result
 }
 
-/// Render a Jupyter notebook: markdown cells as [`Markdown`], code cells as an
-/// `In [n]:` label + a dim [`Panel`] of [`Syntax`] + their outputs, blank-line
-/// separated. Port of rich-cli's `render_ipynb` (rich outputs like images/HTML
-/// are deferred — text/plain, stream, and error tracebacks are handled).
-fn render_ipynb(console: &Console, content: &str, hyperlinks: bool) {
-    let notebook: serde_json::Value = match serde_json::from_str(content) {
-        Ok(value) => value,
-        Err(err) => {
-            eprintln!("rich: invalid notebook JSON: {err}");
-            return;
-        }
-    };
+/// Port of rich-cli 1.8.1's notebook cell/output grouping. Parse once, then use
+/// the same renderable for terminal output, paging and recorded exports.
+fn build_ipynb(
+    notebook: &serde_json::Value,
+    hyperlinks: bool,
+    justify: Option<Justify>,
+) -> Notebook {
     let language = notebook["metadata"]["kernelspec"]["language"]
         .as_str()
         .or_else(|| notebook["metadata"]["language_info"]["name"].as_str())
-        .unwrap_or("python")
-        .to_string();
+        .unwrap_or("python");
     let empty = Vec::new();
-    let cells = notebook["cells"].as_array().unwrap_or(&empty);
-    for (index, cell) in cells.iter().enumerate() {
-        if index > 0 {
-            console.print(&Text::new("")); // blank line between cells
+    let mut items: Vec<Box<dyn Renderable>> = Vec::new();
+    let mut new_line = true;
+    for cell in notebook["cells"].as_array().unwrap_or(&empty) {
+        if new_line {
+            items.push(text(""));
+        }
+        if cell.get("execution_count").is_some() {
+            items.push(Box::new(io_label(
+                "In ",
+                cell["execution_count"].as_i64().filter(|n| *n != 0),
+                "green",
+                "#66ff00",
+            )));
         }
         let source = join_source(&cell["source"]);
-        match cell["cell_type"].as_str().unwrap_or("") {
-            // Upstream passes `-y` on to a notebook's markdown cells too:
-            // `Markdown(source, code_theme=theme, hyperlinks=hyperlinks)`.
-            "markdown" => console.print(&build_markdown(&source, hyperlinks)),
-            "code" => {
-                let count = cell["execution_count"].as_i64();
-                console.print(&io_label("In ", count, "green", "#66ff00"));
-                let syntax = Syntax::new(source.as_str(), language.as_str());
-                let panel =
-                    Panel::new(Box::new(syntax)).border_style(Style::parse("dim").expect("valid"));
-                console.print(&panel);
-                for output in cell["outputs"].as_array().unwrap_or(&empty) {
-                    render_output(console, output, count);
+        items.push(match cell["cell_type"].as_str().unwrap_or("") {
+            "markdown" => Box::new(build_markdown(&source, hyperlinks)),
+            "code" => Box::new(
+                Panel::new(Box::new(Syntax::new(&source, language)))
+                    .border_style(Style::parse("dim").expect("valid style")),
+            ),
+            _ => text(&source),
+        });
+        new_line = true;
+        for output in cell["outputs"].as_array().unwrap_or(&empty) {
+            let rendered = match output["output_type"].as_str().unwrap_or("") {
+                "stream" => {
+                    new_line = false;
+                    notebook_ansi(&join_source(&output["text"]))
                 }
-            }
-            _ => console.print(&Text::new(source.as_str())),
+                "error" => {
+                    new_line = true;
+                    notebook_ansi(join_traceback(&output["traceback"]).trim_end())
+                }
+                "execute_result" => {
+                    new_line = true;
+                    let mut label = io_label(
+                        "Out",
+                        output["execution_count"].as_i64().filter(|n| *n != 0),
+                        "red",
+                        "#ee4b2b",
+                    );
+                    label.append("\n", None);
+                    label.append_text(&notebook_ansi(&join_source(&output["data"]["text/plain"])))
+                }
+                _ => continue,
+            };
+            items.push(Box::new(rendered));
         }
     }
+    Notebook { items, justify }
 }
 
 /// Compare two images perceptually and report where they differ.
@@ -2294,7 +2391,7 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     let shown = (changed * 10.0).round() / 10.0;
     let failed = cli.diff_threshold.is_some_and(|limit| shown > limit);
 
-    let wrote = emit(console, export, |c| {
+    let render_report = |c: &Console, for_export: bool| {
         // Leave room for the summary, the table and the prompt, so the top of
         // the picture is not scrolled off before the reader sees it.
         let rows_cap = console.height().saturating_sub(14).clamp(6, 30);
@@ -2309,7 +2406,7 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
         let is_terminal = c.is_terminal();
         let mut mode = cli.image_mode;
         if mode == ImageMode::Auto {
-            if !has_color {
+            if !has_color && !for_export {
                 eprintln!("rich: auto image mode has no terminal colour, drawing the diff as ASCII instead");
             }
             mode = if !has_color {
@@ -2325,14 +2422,18 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
         // than emit a rectangle of identical blocks or nothing at all, and say
         // why on stderr so the change is visible rather than mysterious.
         if mode == ImageMode::Blocks && !has_color {
-            eprintln!("rich: no colour available, drawing the diff as ASCII art");
+            if !for_export {
+                eprintln!("rich: no colour available, drawing the diff as ASCII art");
+            }
             mode = ImageMode::Ascii;
         }
         if mode == ImageMode::Sixel && !is_terminal {
-            eprintln!(
-                "rich: Sixel graphics need a terminal, drawing the diff as {} instead",
-                if has_color { "blocks" } else { "ASCII art" }
-            );
+            if !for_export {
+                eprintln!(
+                    "rich: Sixel graphics need a terminal, drawing the diff as {} instead",
+                    if has_color { "blocks" } else { "ASCII art" }
+                );
+            }
             mode = if has_color {
                 ImageMode::Blocks
             } else {
@@ -2417,7 +2518,30 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
                 ));
             }
         }
-    });
+    };
+
+    let terminal_only = Export {
+        html_path: None,
+        svg_path: None,
+        ..*export
+    };
+    let mut wrote = emit(console, &terminal_only, |c| render_report(c, false));
+    if export.html_path.is_some() || export.svg_path.is_some() {
+        // HTML/SVG support truecolor independently of stdout. Render the already
+        // loaded report for that destination; never reread images or recompute
+        // the comparison. A nonterminal console prevents Sixel control data.
+        let mut export_console = Console::builder()
+            .force_terminal(false)
+            .color_system(Some(ColorSystem::Truecolor))
+            .no_color(cli.no_color)
+            .width(console.width())
+            .height(console.height())
+            .theme(console.theme().clone())
+            .build();
+        export_console.install_extensions();
+        let segments = export_console.record_output(|c| render_report(c, true));
+        wrote = save_exports(&export_console, export, &segments) && wrote;
+    }
 
     if !wrote || failed {
         return ExitCode::FAILURE;
@@ -2513,9 +2637,9 @@ struct Export<'a> {
 /// The exports do **not** replace the terminal output — upstream prints the
 /// resource *and* saves the files, and both `--export-html` and `--export-svg`
 /// may be given together. So when either is set the render is recorded once and
-/// the same segments are turned into terminal bytes, HTML and SVG. Rendering per
-/// destination would be wrong rather than merely wasteful: a resource read from
-/// standard input only yields its content once.
+/// the same segments are turned into terminal bytes, HTML and SVG. Diff reports
+/// use separate destination capabilities after loading/comparing the images;
+/// ordinary input renderables are recorded once here.
 ///
 /// Returns false if a file could not be written, so the caller can exit non-zero.
 fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) -> bool {
@@ -2549,9 +2673,14 @@ fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) -> bo
         print!("{terminal}");
     }
 
+    save_exports(console, export, &segments) && ok
+}
+
+fn save_exports(console: &Console, export: &Export, segments: &[Segment]) -> bool {
+    let mut ok = true;
     if let Some(path) = export.html_path {
         // CSS-class stylesheet form, as upstream's `save_html` default.
-        let html = rich::export::export_html_classes(&segments, &DEFAULT_TERMINAL_THEME);
+        let html = rich::export::export_html_classes(segments, &DEFAULT_TERMINAL_THEME);
         if let Err(err) = std::fs::write(path, html) {
             eprintln!("rich: failed to save HTML: {err}");
             ok = false;
@@ -2559,7 +2688,7 @@ fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) -> bo
     }
     if let Some(path) = export.svg_path {
         let svg = rich::svg::export_svg(
-            &segments,
+            segments,
             &rich::SVG_EXPORT_THEME,
             export.svg_title,
             // Upstream derives this id by hashing Python reprs; a fixed one keeps
@@ -2585,7 +2714,9 @@ USAGE:
     rich [OPTIONS] [RESOURCE]
 
 RESOURCE is a file path, an http(s) URL, or `-` for stdin. Everything after a
-bare `--` is a RESOURCE, however much it looks like an option.
+bare `--` is a RESOURCE, however much it looks like an option. Input modes with
+no RESOURCE read stdin until EOF; `-p -` reads markup from stdin too. Terminal
+stdin shows an input hint. Repeated scalar options use their last value.
 
 RENDER MODE (choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb
 by extension — anything else with a file extension is syntax-highlighted):
@@ -2596,7 +2727,7 @@ by extension — anything else with a file extension is syntax-highlighted):
         --csv        Render RESOURCE as a CSV/TSV table
         --ipynb      Render RESOURCE as a Jupyter notebook
         --gif        Animate GIFs side by side; pipes receive the first frame
-        --loop N     With --gif, repeat N times (0 = forever)
+        --loop N     With --gif, repeat N times (default 1; 0 = forever)
         --rule       Draw a horizontal rule (RESOURCE is its title)
         --diff       Perceptually compare two images (needs exactly two)
 
@@ -2630,16 +2761,20 @@ OPTIONS:
     -s, --style S    Style laid under the whole output, e.g. "bold red"
     -S, --panel-style S
                      Panel border style, e.g. "dim" (with --panel)
-        --pager      Page the output through $PAGER (no pager, no paging)
+        --pager      Page via MANPAGER, then PAGER, then less/more.com
         --no-color   Disable colored output (as does a non-empty NO_COLOR)
     -h, --help       Show this help
     -V, --version    Show the rs-rich-cli package version
 
 ENVIRONMENT:
     NO_COLOR         Any non-empty value disables colour
+    COLUMNS          Console width (default 80 when unavailable)
+    MANPAGER, PAGER   Pager command; fallback is less (Unix), more.com (Windows)
+    FORCE_COLOR      Not supported; redirected stdout stays plain
     RICH_SIXEL       0/1 overrides Sixel detection for --image-mode auto
 
-With no RESOURCE and no mode flag, a capability demo is shown.
+With no RESOURCE and no mode flag, a capability demo is shown. Layout, style,
+paging, hyperlinks and export options require a resource or render mode.
 "#
     );
 }

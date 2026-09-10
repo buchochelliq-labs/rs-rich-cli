@@ -14,12 +14,12 @@
 //! rare width-0 column padding edge.
 
 use crate::cells::{cell_len, set_cell_size};
-use crate::console::{Console, ConsoleOptions, Justify};
+use crate::console::{Console, ConsoleOptions, Justify, Overflow};
 use crate::protocol::{LineRenderable, Renderable};
 use crate::r#box::{Box as BoxSet, RowLevel, HEAVY_HEAD};
 use crate::segment::Segment;
 use crate::style::Style;
-use crate::text::Text;
+use crate::text::{Text, DEFAULT_TAB_SIZE};
 use crate::theme::Theme;
 
 /// A single column definition. Mirrors the used subset of `rich.table.Column`.
@@ -620,9 +620,10 @@ impl LineRenderable for Table {
         let table_width: usize = rendered_widths.iter().sum::<usize>() + extra_width;
 
         // Title, centered above the table.
-        if let Some(title) = &self.title {
-            let style = Style::parse("italic").expect("valid built-in style");
-            emit(vec![Segment::new(center(title, table_width), Some(style))])?;
+        if let Some(title) = self.title.as_ref().filter(|title| !title.is_empty()) {
+            for line in render_annotation(console, options, title, "table.title", table_width) {
+                emit(line)?;
+            }
         }
 
         let edge = self.show_edge;
@@ -674,12 +675,10 @@ impl LineRenderable for Table {
         }
 
         // Caption, centered below the table.
-        if let Some(caption) = &self.caption {
-            let style = Style::parse("dim italic").expect("valid built-in style");
-            emit(vec![Segment::new(
-                center(caption, table_width),
-                Some(style),
-            )])?;
+        if let Some(caption) = self.caption.as_ref().filter(|caption| !caption.is_empty()) {
+            for line in render_annotation(console, options, caption, "table.caption", table_width) {
+                emit(line)?;
+            }
         }
 
         Ok(())
@@ -755,12 +754,54 @@ fn ellipsis_crop(text: &str, width: usize) -> String {
     format!("{}\u{2026}", set_cell_size(text, width - 1))
 }
 
-/// Center `text` within `width` cells (floor-left), padding with spaces.
-fn center(text: &str, width: usize) -> String {
-    let excess = width.saturating_sub(cell_len(text));
-    let left = excess / 2;
-    let right = excess - left;
-    format!("{}{}{}", " ".repeat(left), text, " ".repeat(right))
+/// Port of `Table.__rich_console__.render_annotation`: markup and emoji are
+/// enabled, automatic highlighting is disabled, and long annotations wrap.
+fn render_annotation(
+    console: &Console,
+    options: &ConsoleOptions,
+    annotation: &str,
+    style: &str,
+    width: usize,
+) -> Vec<Vec<Segment>> {
+    let expanded = console.expand_emoji(annotation);
+    let mut text = Text::from_markup(&expanded).unwrap_or_else(|_| Text::new(expanded));
+    text.set_base_style(style);
+    let overflow = options.overflow.unwrap_or(Overflow::Fold);
+    let no_wrap = options.no_wrap.unwrap_or(false) || overflow == Overflow::Ignore;
+    let mut lines = Vec::new();
+    for mut hard_line in text.split("\n", false, true) {
+        hard_line.expand_tabs(DEFAULT_TAB_SIZE);
+        let wrapped = if no_wrap {
+            vec![hard_line]
+        } else {
+            let char_offsets: Vec<usize> = hard_line
+                .plain()
+                .char_indices()
+                .map(|(i, _)| i)
+                .chain(std::iter::once(hard_line.plain().len()))
+                .collect();
+            let breaks: Vec<usize> =
+                crate::wrap::divide_line(hard_line.plain(), width, overflow == Overflow::Fold)
+                    .into_iter()
+                    .map(|i| char_offsets[i])
+                    .collect();
+            hard_line.divide(&breaks)
+        };
+        for mut line in wrapped {
+            if overflow != Overflow::Ignore {
+                // Upstream justifies the Text before rendering its segments.
+                // This preserves annotation span boundaries while merging the
+                // base-styled padding with an unstyled title's single run.
+                line.rstrip();
+                line.truncate(width, Some(overflow), false);
+                line.pad_left(width.saturating_sub(line.cell_len()) / 2, ' ');
+                line.pad_right(width.saturating_sub(line.cell_len()), ' ');
+                line.truncate(width, Some(overflow), false);
+            }
+            lines.push(line.render(console.theme(), console.base_style()));
+        }
+    }
+    lines
 }
 
 /// Round half to even (banker's rounding), matching Python's `round`.
