@@ -25,3 +25,9 @@ The browser screenshots capture those two actual sequential CLI frames.
 Independent review found no blockers. Added the requested mixed ASCII/block
 Stage test for height-capped widths and shorter-neighbor padding, and clarified
 16-color fidelity in the API docs. The original ASCII frame API is preserved.
+
+GitHub review follow-up: options/parsing/help/defaults now live in
+`rich-ext::cli`, with generic CLI delegation. ASCII-only consoles fall back to
+ASCII, and decoded images are shared with `Arc` across frame renderers/stages
+instead of being deep-copied. Regression tests cover both capabilities and
+sharing. Independent sub-agent review confirmed all three fixes.

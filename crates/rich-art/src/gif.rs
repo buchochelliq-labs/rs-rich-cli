@@ -48,7 +48,7 @@ pub enum Repeat {
 /// One decoded frame: a full canvas plus how long it should be shown.
 #[derive(Clone)]
 struct Frame {
-    image: DynamicImage,
+    image: std::sync::Arc<DynamicImage>,
     delay: Duration,
 }
 
@@ -89,7 +89,7 @@ impl AnimatedArt {
                     Duration::from_millis(millis)
                 };
                 Frame {
-                    image: DynamicImage::ImageRgba8(frame.into_buffer()),
+                    image: std::sync::Arc::new(DynamicImage::ImageRgba8(frame.into_buffer())),
                     delay,
                 }
             })
@@ -192,7 +192,7 @@ impl AnimatedArt {
     /// Use [`Self::render_frame`] to honor half-block selection.
     pub fn frame(&self, index: usize) -> Option<AsciiArt> {
         let frame = self.frames.get(index)?;
-        let mut art = AsciiArt::new(frame.image.clone())
+        let mut art = AsciiArt::from_shared(frame.image.clone())
             .invert(self.invert)
             .color(self.color);
         if let Some(width) = self.width {
@@ -213,7 +213,7 @@ impl AnimatedArt {
     pub fn render_frame(&self, index: usize) -> Option<GifFrame> {
         let ascii = self.frame(index)?;
         let blocks = if self.blocks {
-            let mut art = BlockArt::new(self.frames[index].image.clone());
+            let mut art = BlockArt::from_shared(self.frames[index].image.clone());
             if let Some(width) = self.width {
                 art = art.width(width);
             }
@@ -306,7 +306,10 @@ pub struct GifFrame {
 
 impl GifFrame {
     fn use_blocks(&self, console: &Console) -> bool {
-        self.color && console.is_terminal() && console.color_system().is_some()
+        self.color
+            && console.is_terminal()
+            && !console.ascii_only()
+            && console.color_system().is_some()
     }
 
     pub(crate) fn columns(&self, console: &Console, available: usize) -> usize {
@@ -414,6 +417,18 @@ mod tests {
                 console.render_to_string(&art.frame(0).unwrap())
             );
         }
+        let ascii_only = Console::builder()
+            .force_terminal(true)
+            .ascii_only(true)
+            .color_system(Some(rich::ColorSystem::Truecolor))
+            .build();
+        assert!(!ascii_only.render_to_string(&art).contains('▀'));
+        let shared = art.frames[0].image.clone();
+        let before = std::sync::Arc::strong_count(&shared);
+        let frame = art.render_frame(0).unwrap();
+        assert_eq!(std::sync::Arc::strong_count(&shared), before + 2);
+        drop(frame);
+        assert_eq!(std::sync::Arc::strong_count(&shared), before);
         let console = Console::builder().force_terminal(true).build();
         let disabled = art.clone().color(false);
         assert!(!console.render_to_string(&disabled).contains('▀'));
@@ -456,7 +471,7 @@ mod tests {
             .color_system(Some(rich::ColorSystem::Truecolor))
             .build();
         let frame = art.render_frame(0).unwrap();
-        let expected = BlockArt::new(art.frames[0].image.clone()).width(3);
+        let expected = BlockArt::from_shared(art.frames[0].image.clone()).width(3);
         assert_eq!(
             console.render_to_string(&frame),
             console.render_to_string(&expected)

@@ -26,6 +26,7 @@ use rich::{
     Renderable, Rule, Segment, Spinner, Status, Style, Styled, Syntax, Table, Traceback, Tree,
     DEFAULT_TERMINAL_THEME,
 };
+use rich_ext::cli::CliExtensions;
 use rich_ext::encoding::{has_utf16_bom, Encoding};
 use rich_ext::ConsoleExt;
 
@@ -117,9 +118,7 @@ struct Cli {
     /// `--image-mode`: how `--diff` draws its picture.
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_mode: ImageMode,
-    encoding: Option<Encoding>,
-    #[cfg_attr(not(feature = "art"), allow(dead_code))]
-    gif_blocks: Option<bool>,
+    extensions: CliExtensions,
     width: Option<usize>,
     justify: Option<Justify>,
     no_color: bool,
@@ -244,8 +243,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut loops = None;
     let mut diff_threshold = None;
     let mut image_mode = ImageMode::Auto;
-    let mut encoding = None;
-    let mut gif_blocks = None;
+    let mut extensions = CliExtensions::default();
     let mut width = None;
     let mut justify = None;
     let mut no_color = std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty());
@@ -272,6 +270,9 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             resources.push(arg.to_string());
             continue;
         }
+        if extensions.parse_option(arg, &mut iter)? {
+            continue;
+        }
         match arg.as_str() {
             "--" => end_of_options = true,
             "-h" | "--help" => {
@@ -290,20 +291,6 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--ipynb" => set_mode(&mut mode, Mode::Ipynb)?,
             "--gif" => set_mode(&mut mode, Mode::Gif)?,
             "--diff" => set_mode(&mut mode, Mode::Diff)?,
-            "--gif-mode" => {
-                gif_blocks = Some(match iter.next().map(String::as_str) {
-                    Some("ascii") => false,
-                    Some("blocks") => true,
-                    _ => return Err("--gif-mode requires ascii or blocks".into()),
-                });
-            }
-            "--encoding" => {
-                encoding = Some(
-                    iter.next()
-                        .ok_or("--encoding requires an encoding name")?
-                        .parse()?,
-                );
-            }
             "--image-mode" => {
                 let value = iter
                     .next()
@@ -423,13 +410,12 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     } else {
         mode
     };
-    if encoding.is_some()
-        && (matches!(effective_mode, Mode::Gif | Mode::Diff | Mode::Rule)
+    extensions.validate(
+        effective_mode == Mode::Gif,
+        !(matches!(effective_mode, Mode::Gif | Mode::Diff | Mode::Rule)
             || (mode == Mode::Auto && resources.is_empty())
-            || (mode == Mode::Print && resources.first().is_some_and(|r| r != "-" && !is_url(r))))
-    {
-        return Err("--encoding requires file, stdin or URL text input".into());
-    }
+            || (mode == Mode::Print && resources.first().is_some_and(|r| r != "-" && !is_url(r)))),
+    )?;
     let exporting = export_html.is_some() || export_svg.is_some();
     if exporting {
         let unsupported = if effective_mode == Mode::Gif {
@@ -450,12 +436,6 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     // argument reordered — became a permanently green gate. That is the same
     // failure the NaN check closed, reached from the other side.
     let orphans = [
-        (
-            "--gif-mode",
-            gif_blocks.is_some(),
-            "--gif",
-            effective_mode == Mode::Gif,
-        ),
         (
             "--threshold",
             diff_threshold.is_some(),
@@ -538,8 +518,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         loops,
         diff_threshold,
         image_mode,
-        encoding,
-        gif_blocks,
+        extensions,
         width,
         justify,
         no_color,
@@ -1163,7 +1142,7 @@ fn run(cli: Cli) -> ExitCode {
     // file/stdin. A URL also yields a `Content-Type` used below.
     let resource_is_url = matches!(cli.resource.as_deref(), Some(r) if is_url(r));
     let (content, content_type) = if resource_is_url {
-        match fetch_url(cli.resource.as_deref().unwrap(), cli.encoding) {
+        match fetch_url(cli.resource.as_deref().unwrap(), cli.extensions.encoding) {
             Ok(fetched) => fetched,
             Err(err) => {
                 eprintln!("rich: {err}");
@@ -1173,7 +1152,7 @@ fn run(cli: Cli) -> ExitCode {
     } else if mode == Mode::Print && matches!(cli.resource.as_deref(), Some(r) if r != "-") {
         (cli.resource.clone().unwrap(), None)
     } else {
-        match read_resource(cli.resource.as_deref(), cli.encoding) {
+        match read_resource(cli.resource.as_deref(), cli.extensions.encoding) {
             Ok(content) => (content, None),
             Err(err) => {
                 let name = cli.resource.as_deref().unwrap_or("<stdin>");
@@ -2660,7 +2639,7 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
             Ok(art) => {
                 stage = stage.with(
                     art.width(per_gif)
-                        .blocks(cli.gif_blocks.unwrap_or(false))
+                        .blocks(cli.extensions.gif_blocks())
                         .color(!cli.no_color)
                         .repeat(repeat)
                         // Colour art is byte-heavy; keep it comfortable.
@@ -2785,6 +2764,7 @@ fn save_exports(console: &Console, export: &Export, segments: &[Segment]) -> boo
 }
 
 fn print_help() {
+    let extension_help = rich_ext::cli::HELP;
     // A RAW string: `\`-continuations would eat the leading spaces of every
     // line and print the whole thing flush-left.
     println!(
@@ -2817,10 +2797,7 @@ OPTIONS:
         --image-mode M
                      With --diff, how to draw the picture: auto (default),
                      sixel (real pixels), blocks, ascii, none
-        --gif-mode M With --gif: ascii (default) or blocks (half-block pixels).
-                     Blocks fall back to ASCII without color or when piped.
-        --encoding E Explicit text encoding: utf-8, utf-16 (BOM required),
-                     utf-16le or utf-16be. Strict; files, stdin and URLs only.
+{extension_help}
         --threshold PCT
                      With --diff, exit non-zero above PCT% changed.
                      Also sets the exit code: 0 within, 1 over.

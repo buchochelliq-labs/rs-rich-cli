@@ -29,7 +29,7 @@ fn fg_style(color: Color) -> Style {
 
 /// An image rendered as ASCII (or ANSI) art.
 pub struct AsciiArt {
-    image: DynamicImage,
+    image: std::sync::Arc<DynamicImage>,
     width: Option<usize>,
     height: Option<usize>,
     ramp: Vec<char>,
@@ -41,6 +41,10 @@ pub struct AsciiArt {
 impl AsciiArt {
     /// Build from an already-decoded image.
     pub fn new(image: DynamicImage) -> Self {
+        Self::from_shared(std::sync::Arc::new(image))
+    }
+
+    pub(crate) fn from_shared(image: std::sync::Arc<DynamicImage>) -> Self {
         AsciiArt {
             image,
             width: None,

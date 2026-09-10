@@ -32,13 +32,17 @@ const UPPER_HALF: &str = "\u{2580}";
 
 /// An image drawn with half-block characters.
 pub struct BlockArt {
-    image: DynamicImage,
+    image: std::sync::Arc<DynamicImage>,
     width: Option<usize>,
     height: Option<usize>,
 }
 
 impl BlockArt {
     pub fn new(image: DynamicImage) -> Self {
+        Self::from_shared(std::sync::Arc::new(image))
+    }
+
+    pub(crate) fn from_shared(image: std::sync::Arc<DynamicImage>) -> Self {
         Self {
             image,
             width: None,

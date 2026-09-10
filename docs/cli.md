@@ -210,7 +210,7 @@ transparency/disposal handling, and animations keep their individual clocks.
 | Truecolor terminal | Full-color half-block frames |
 | 256-color terminal | Half-blocks with quantized colors |
 | 16-color terminal | Half-blocks with reduced color fidelity |
-| `NO_COLOR`, `--no-color`, or no color capability | ASCII fallback |
+| `NO_COLOR`, `--no-color`, ASCII-only console, or no color capability | ASCII fallback |
 | Redirected stdout | One ASCII frame; no animation controls or waiting |
 
 The default loop count is one; `--loop 2` plays twice and `--loop 0` repeats
