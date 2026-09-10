@@ -1,0 +1,220 @@
+{
+  "revision": "d9bfe617e835d7403744d54726e24f21784a7faa",
+  "binary_sha256": "da6828dbcfafa41662c9adcdc1309c6bf6ae2abc63b0fa231c239632a0fbd835",
+  "platform": "Linux-6.18.35-x86_64-with-glibc2.39",
+  "cpu": "INTEL(R) XEON(R) PLATINUM 8573C",
+  "timeout_s": 10,
+  "runs": 5,
+  "warmup_runs": 1,
+  "width": 100,
+  "color": "--no-color",
+  "stdout": "redirected",
+  "cases": [
+    {
+      "name": "wrap-markdown-1m",
+      "input_bytes": 1048572,
+      "input_sha256": "75b1b5cbc06c7ad589701e7c3ec9397768fe85ebf3290361a140ad4f93c87986",
+      "flags": [
+        "--markdown"
+      ],
+      "stdin": false,
+      "samples": [
+        {
+          "wall_ms": 4142.924632993527,
+          "peak_rss_kib": 24280
+        },
+        {
+          "wall_ms": 4495.661986991763,
+          "peak_rss_kib": 24032
+        },
+        {
+          "wall_ms": 4098.661917989375,
+          "peak_rss_kib": 24208
+        },
+        {
+          "wall_ms": 4612.628088987549,
+          "peak_rss_kib": 24384
+        },
+        {
+          "wall_ms": 4138.759287001449,
+          "peak_rss_kib": 23844
+        }
+      ],
+      "output_bytes": 1103223,
+      "output_sha256": "09a6c83dc4eb0f660463bb79f89a9cf89c15241853788315c66d5b9c43887c8e",
+      "median_ms": 4142.924632993527,
+      "min_ms": 4098.661917989375,
+      "max_ms": 4612.628088987549,
+      "peak_rss_kib": 24384
+    },
+    {
+      "name": "wrap-markdown-5m",
+      "input_bytes": 5242872,
+      "input_sha256": "9179171fd86d4f5b86d1255118f8cfbb3c3e62dcb03b2c2effe055e803befd9e",
+      "flags": [
+        "--markdown"
+      ],
+      "stdin": false,
+      "samples": [],
+      "timeout_s": 10
+    },
+    {
+      "name": "text-ascii-65536",
+      "input_bytes": 65536,
+      "input_sha256": "1f8745f0d2d1387ec1af2211a3cf417b2e9e885e853472649c1d979d0e9370e3",
+      "flags": [],
+      "stdin": false,
+      "samples": [
+        {
+          "wall_ms": 30.934729002183303,
+          "peak_rss_kib": 5260
+        },
+        {
+          "wall_ms": 25.001296991831623,
+          "peak_rss_kib": 5376
+        },
+        {
+          "wall_ms": 24.91800500138197,
+          "peak_rss_kib": 5136
+        },
+        {
+          "wall_ms": 22.43189599539619,
+          "peak_rss_kib": 5244
+        },
+        {
+          "wall_ms": 28.389064988004975,
+          "peak_rss_kib": 5372
+        }
+      ],
+      "output_bytes": 66192,
+      "output_sha256": "1f1c2c8a835469f7b092cad403fb571544df8fcb295d30d2b822969925d8068b",
+      "median_ms": 25.001296991831623,
+      "min_ms": 22.43189599539619,
+      "max_ms": 30.934729002183303,
+      "peak_rss_kib": 5376
+    },
+    {
+      "name": "text-ascii-262144",
+      "input_bytes": 262144,
+      "input_sha256": "d509bff642a353f88582e8a846ecae041c333b79c57a7a24ff310fbdb7e914e9",
+      "flags": [],
+      "stdin": false,
+      "samples": [
+        {
+          "wall_ms": 260.2781619934831,
+          "peak_rss_kib": 8204
+        },
+        {
+          "wall_ms": 257.57039900054224,
+          "peak_rss_kib": 8116
+        },
+        {
+          "wall_ms": 279.9628920038231,
+          "peak_rss_kib": 8188
+        },
+        {
+          "wall_ms": 506.46077399142087,
+          "peak_rss_kib": 8072
+        },
+        {
+          "wall_ms": 252.0422800007509,
+          "peak_rss_kib": 8108
+        }
+      ],
+      "output_bytes": 264766,
+      "output_sha256": "b5b158e02e2f67a671769146c27970945a7f0afefb5849bef006c86b5e3bfd24",
+      "median_ms": 260.2781619934831,
+      "min_ms": 252.0422800007509,
+      "max_ms": 506.46077399142087,
+      "peak_rss_kib": 8204
+    },
+    {
+      "name": "text-ascii-1048576",
+      "input_bytes": 1048576,
+      "input_sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b",
+      "flags": [],
+      "stdin": false,
+      "samples": [
+        {
+          "wall_ms": 3997.517459996743,
+          "peak_rss_kib": 19528
+        },
+        {
+          "wall_ms": 4785.9394190018065,
+          "peak_rss_kib": 19208
+        },
+        {
+          "wall_ms": 3830.2496450050967,
+          "peak_rss_kib": 19332
+        },
+        {
+          "wall_ms": 3895.467601993005,
+          "peak_rss_kib": 19208
+        },
+        {
+          "wall_ms": 4554.322777999914,
+          "peak_rss_kib": 19256
+        }
+      ],
+      "output_bytes": 1059062,
+      "output_sha256": "032a8be3871659e352e74962861c401708084f30170925d7e221acc83b482712",
+      "median_ms": 3997.517459996743,
+      "min_ms": 3830.2496450050967,
+      "max_ms": 4785.9394190018065,
+      "peak_rss_kib": 19528
+    },
+    {
+      "name": "text-ascii-5242880",
+      "input_bytes": 5242880,
+      "input_sha256": "dba67a476fa78973aabb087f214a1010f3bebca053674e0af50dfe5a582112be",
+      "flags": [],
+      "stdin": false,
+      "samples": [],
+      "timeout_s": 10
+    },
+    {
+      "name": "text-words-5m",
+      "input_bytes": 5242872,
+      "input_sha256": "9179171fd86d4f5b86d1255118f8cfbb3c3e62dcb03b2c2effe055e803befd9e",
+      "flags": [],
+      "stdin": false,
+      "samples": [],
+      "timeout_s": 10
+    },
+    {
+      "name": "text-unicode",
+      "input_bytes": 53248,
+      "input_sha256": "325db9c2070010229596ff6b8c4dd59b7a3fefb7b33c9f524c49dd8005d1b59e",
+      "flags": [],
+      "stdin": false,
+      "samples": [
+        {
+          "wall_ms": 14.123710003332235,
+          "peak_rss_kib": 5460
+        },
+        {
+          "wall_ms": 11.682014999678358,
+          "peak_rss_kib": 5496
+        },
+        {
+          "wall_ms": 11.511279008118436,
+          "peak_rss_kib": 5460
+        },
+        {
+          "wall_ms": 11.284341002465226,
+          "peak_rss_kib": 5460
+        },
+        {
+          "wall_ms": 13.391141008469276,
+          "peak_rss_kib": 5184
+        }
+      ],
+      "output_bytes": 53536,
+      "output_sha256": "03732350e2b092a321b8c7f43f203f6cec9906497fca096fd2303c50522ff562",
+      "median_ms": 11.682014999678358,
+      "min_ms": 11.284341002465226,
+      "max_ms": 14.123710003332235,
+      "peak_rss_kib": 5496
+    }
+  ]
+}

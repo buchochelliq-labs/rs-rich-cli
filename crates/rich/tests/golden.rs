@@ -332,6 +332,10 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "padding_0_1" => Box::new(Padding::new(Box::new(Text::new("hi")), (0, 1, 0, 1))),
         "wrap_words" => Box::new(Text::new("The quick brown fox")),
         "wrap_fold" => Box::new(Text::new("abcdefghij")),
+        "wrap_many_unicode" => Box::new(Text::from_markup(&format!(
+            "{}\n{}", "[red]界é🙂[/]".repeat(32), "[blue]❤️xyz[/]".repeat(16)
+        )).unwrap()),
+        "wrap_many_words" => Box::new(Text::from_markup(&"[green]éclair 界 hello [/]".repeat(24)).unwrap()),
         "wrap_combining" => {
             let s: String = "abcdef".chars().flat_map(|c| [c, '\u{301}']).collect();
             Box::new(Text::new(s))

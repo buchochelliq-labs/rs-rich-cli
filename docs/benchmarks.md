@@ -129,9 +129,13 @@ are retained alongside the harness.
 | wrap-unicode | 8.8 | 7,964 |
 | wrap-markdown-5m | >10,000 (warmup timeout) | — |
 
-Plain text and Markdown take different rendering paths. The 5 MiB plain cases
-complete under a second on this host, while the 5 MiB Markdown paragraph times
-out. Do not apply the original issue's 120-second observation to every input.
+The legacy `wrap-ascii-*`, `wrap-words-5m` and `wrap-unicode` fixtures have
+`.txt` extensions, which select the plain Syntax renderer. They do **not**
+measure the Text wrapping path. These 5 MiB Syntax cases complete under a second
+on this host, while the 5 MiB Markdown paragraph times out. The harness now also
+contains extensionless `text-*` fixtures that select Text directly. Legacy case
+names and raw measurements are retained for comparison. Do not apply the
+original issue's 120-second observation to every input.
 CSV retains source rows for global measurement; decorated output additionally
 buffers rendered lines. Memory is not constant.
 
@@ -176,6 +180,46 @@ widths 4/20/80, panels, padding, alignment, titles/captions and pager selection.
 Actual CLI rendering of the recorded CSV memory measurements:
 
 ![CSV memory measurements rendered by the CLI](assets/releases/0.0.4-csv.jpg)
+
+## 0.0.4 Text wrapping results
+
+Text now converts successive character break positions to UTF-8 byte positions
+by scanning only the next slice. This removes repeated prefix scans without
+changing line breaks, graphemes, cropping or styles.
+
+Same host, build profile and measurement method as above; a fresh 0.0.3 baseline
+was taken for the true Text cases. Five samples follow one warmup.
+
+| Case | 0.0.3 median (ms) | Optimized median (ms) |
+|---|---:|---:|
+| wrap-markdown-1m | 4142.9 | 112.6 |
+| wrap-markdown-5m | >10,000 (timeout) | 531.2 |
+| text-ascii-65536 | 25.0 | 8.8 |
+| text-ascii-262144 | 260.3 | 24.5 |
+| text-ascii-1048576 | 3997.5 | 86.9 |
+| text-ascii-5242880 | >10,000 (timeout) | 411.2 |
+| text-words-5m | >10,000 (timeout) | 536.0 |
+| text-unicode | 11.7 | 6.2 |
+
+The 1 MiB Markdown paragraph improves from 4.14 s to 113 ms, exceeding the
+halving target; the 5 MiB paragraph now finishes in 531 ms, below the 10-second
+target. The previously timed-out cases have no baseline median, so no speedup
+ratio is assigned to them. These are measurements on one Linux host, not a
+cross-platform guarantee. Long input still allocates source and rendered lines;
+this optimization does not make memory constant.
+
+All five completed before/after benchmark cases retain identical output hashes.
+A separate 192-case comparison retains exact stdout, stderr, exit status, HTML
+and SVG bytes across narrow/wide output, Unicode, tabs, empty input, Markdown
+and decorators. Two additional styled Unicode wrapping goldens come from real
+Rich 15.0.0; all existing goldens remain unchanged.
+
+[Raw timings, hashes and reproducible comparisons](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/v0.0.4-wrapping)
+are committed with the implementation.
+
+Actual CLI output at width 64:
+
+![Styled Markdown wrapping in the CLI](assets/releases/0.0.4-wrapping.jpg)
 
 ## 0.0.4 repeated-source syntax results
 
