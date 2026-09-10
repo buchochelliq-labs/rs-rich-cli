@@ -919,8 +919,14 @@ impl Text {
             // cropping methods leave it long and let truncation cut it.
             let breaks = crate::wrap::divide_line(sub, width, overflow == Overflow::Fold);
             let mut cuts = vec![a];
+            let mut previous_char = 0;
+            let mut previous_byte = 0;
             for char_offset in breaks {
-                cuts.push(a + char_to_byte(sub, char_offset));
+                // Breaks are ordered char offsets. Scan only the next slice;
+                // rescanning the prefix for every line is quadratic.
+                previous_byte += char_to_byte(&sub[previous_byte..], char_offset - previous_char);
+                previous_char = char_offset;
+                cuts.push(a + previous_byte);
             }
             cuts.push(b);
             groups.push(cuts.windows(2).map(|w| (w[0], w[1])).collect());

@@ -49,6 +49,12 @@ def fixtures(root):
     add("wrap-markdown-1m", b"hello world " * (1_048_576 // 12), ".md", ["--markdown"])
     add("wrap-markdown-5m", b"hello world " * (5_242_880 // 12), ".md", ["--markdown"])
     add("wrap-unicode", ("🙂e\u0301漢字" * 4096).encode(), ".txt")
+    # Legacy wrap-*.txt cases select plain Syntax by extension. Extensionless
+    # files exercise Text itself, including its long-line wrapping path.
+    for size in (65_536, 262_144, 1_048_576, 5_242_880):
+        add(f"text-ascii-{size}", b"x" * size, "")
+    add("text-words-5m", b"hello world " * (5_242_880 // 12), "")
+    add("text-unicode", ("🙂e\u0301漢字" * 4096).encode(), "")
     return cases
 
 

@@ -68,9 +68,17 @@ Undecorated CSV output streams styled rows, reducing output-buffer overhead.
 The 0.0.4 development build removes duplicate parsed-cell storage and trims row
 capacity, reducing the measured 100k-row peak RSS by about 46%. Source rows remain
 in memory for measurement, so memory still scales with input.
-Decorated, aligned, paged and exported CSV output still buffers. Further memory
-reductions and long-line wrapping optimization remain in
-[#74](https://github.com/buchochelliq-labs/rs-rich-cli/issues/74).
+Decorated, aligned, paged and exported CSV output still buffers. The 0.0.4
+work in [#74](https://github.com/buchochelliq-labs/rs-rich-cli/issues/74) reduces
+retained memory; it does not provide bounded-memory processing.
+
+### Long-line rendering still allocates memory
+
+The 0.0.4 development build removes repeated UTF-8 prefix scans during Text
+wrapping. On the recorded Linux benchmark, the 5 MiB Markdown paragraph now
+finishes in 531 ms; it previously timed out after 10 seconds. Source and rendered
+lines still occupy memory. See [measured results](benchmarks.md#004-text-wrapping-results)
+for input-path distinctions, output verification and reproducible samples.
 
 ### Headerless text encodings must be selected explicitly
 

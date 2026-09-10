@@ -367,6 +367,9 @@ RENDERABLE_CASES = [
     ("padding_0_1", 10, Padding("hi", (0, 1))),
     ("wrap_words", 10, Text("The quick brown fox")),
     ("wrap_fold", 6, Text("abcdefghij")),
+    # Repeated non-ASCII folds and hard lines exercise char-to-byte progress.
+    ("wrap_many_unicode", 7, Text.from_markup(("[red]界é🙂[/]" * 32) + "\n" + ("[blue]❤️xyz[/]" * 16))),
+    ("wrap_many_words", 9, Text.from_markup("[green]éclair 界 hello [/]" * 24)),
     # Decomposed base+combining (U+0301) folds by grapheme without a grapheme
     # table — the combining marks are 0-width and stay with their base char.
     ("wrap_combining", 3, Text("".join(ch + "́" for ch in "abcdef"))),
