@@ -22,3 +22,7 @@ Workspace tests and Clippy pass. All 22 release regressions pass, including
 real Git repositories with annotated, lightweight, mismatched and unmerged tags.
 The strict docs build passes. Independent review covered the threshold fix,
 tag-object enforcement and verification-only release recovery.
+
+![Actual corrected CLI diff verdict](threshold-after.jpg)
+
+The JPEG is an unedited browser capture of `threshold-after.svg`.
