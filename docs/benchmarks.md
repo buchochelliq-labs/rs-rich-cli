@@ -216,3 +216,7 @@ Rich 15.0.0; all existing goldens remain unchanged.
 
 [Raw timings, hashes and reproducible comparisons](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/v0.0.4-wrapping)
 are committed with the implementation.
+
+Actual CLI output at width 64:
+
+![Styled Markdown wrapping in the CLI](assets/releases/0.0.4-wrapping.jpg)
