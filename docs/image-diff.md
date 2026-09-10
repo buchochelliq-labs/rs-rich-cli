@@ -13,7 +13,7 @@ changed. On the pair used throughout this page a plain comparison calls **42%**
 of the canvas different, with a bounding box covering three quarters of the
 frame. True, and useless.
 
-The perceptual pipeline reports **5%**, and points at the one region that
+The perceptual pipeline reports **5.4%**, and points at the one region that
 matters.
 
 ## How it decides
@@ -80,7 +80,7 @@ So the guess is overridable at every level: `--image-mode` beats everything, and
 `RICH_SIXEL=0`/`1` beats the heuristic.
 
 **Every mode degrades rather than failing.** Sixel is a control sequence, so it
-only works on a terminal — redirected or exported, it falls back to blocks (or
+only works on a terminal. Redirected output falls back to ASCII; exports use blocks (or
 ASCII without colour). Blocks need colour, so without it they fall back to
 ASCII, since a half-block render with no colour is a rectangle of identical
 characters carrying no information. Each downgrade prints a line to **stderr**

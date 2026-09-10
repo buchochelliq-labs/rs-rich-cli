@@ -3,125 +3,116 @@ name: release
 description: Cut and publish a release of the rs-rich crates. Use when the user says "cut a release", "ship 0.1.0", "tag a release candidate", "publish to crates.io", or asks to prepare a version.
 ---
 
-# Cut and publish a release
+# Prepare and publish a release
 
-Goal: get a version of all four crates onto crates.io, from a tag that provably
-points at a commit on `main`. Read [docs/BRANCHING.md](../../../docs/BRANCHING.md)
-first — the branch model is binding, and the invariant it protects is the reason
-this procedure has the shape it does.
+Read `docs/BRANCHING.md` from the repository root first. Every published tag
+must point at a commit on `main`. Publishing is irreversible; preparation alone
+does not authorize creating tags or uploading packages.
 
-**Publishing is irreversible.** A crates.io version can be yanked but never
-deleted or edited, and the name is claimed forever. Everything before step 5 is
-cheap; step 5 is not.
+## 0. Select the packages
 
-## 0. Decide what you are cutting
+Every crate owns its independent SemVer. Choose a tag form explicitly:
 
-Versions move in **lockstep** — all four crates share one number. Below `0.1.0`
-Cargo enforces this anyway: `^0.0.1` is an exact requirement, so a dependent
-pinned to `rs-rich 0.0.1` cannot resolve against `0.0.2`.
+| Tag | Scope |
+|---|---|
+| `vX.Y.Z` | All four crates; all manifests must match X.Y.Z |
+| `<crate>-vX.Y.Z` | Only that package; its manifest must match X.Y.Z |
 
-Pick the number from what is in `## [Unreleased]` in `CHANGELOG.md`. If that
-section is empty there is nothing to release — stop.
+Supported packages: `rs-rich`, `rs-rich-ext`, `rs-rich-cli`, `rs-rich-art`.
+Both forms accept prereleases such as `-rc.1`. Manual workflow dispatch takes
+an existing tag, never a branch name.
 
-Cut a **release candidate first** whenever the publish pipeline itself has
-changed, or when it has not run recently. An rc costs nothing and is the only way
-to exercise tagging, credentials and the four-crate upload with a number nobody
-depends on.
+Choose versions from the non-empty `Unreleased` changelog. Cargo's `^0.0.2`
+means `>=0.0.2,<0.0.3`: an internal dependency bump requires updating dependent
+requirements and publishing changed dependent manifests. Unrelated packages
+need not bump. Unselected dependencies must already exist in the registry.
 
-## 1. Confirm main is releasable
+For the prepared 0.0.3 snapshot, see `docs/BRANCHING.md` under "Prepared 0.0.3
+snapshot". The core Markdown fix and dependency closure put all four at 0.0.3;
+this does not remove independent release support. A branch named `*-rc` does
+not change manifest versions to prereleases. If publishing an RC, choose actual
+prerelease versions and update the dependency requirements accordingly.
+
+## 1. Verify the source
+
+Start from fresh `origin/main`, or update the selected integration branch by PR
+so it contains `origin/main`. Keep the checkout clean before release operations.
+Run the complete CI gate:
 
 ```bash
-git fetch origin --prune && git switch main && git pull --ff-only
-git status --porcelain                     # must be empty
 cargo fmt --all --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo clippy --all-targets -- -D warnings
 cargo test --all
-python scripts/capture_golden.py && git diff --exit-code crates/rich/tests/golden
+python3 -m unittest discover -s scripts -p 'test_release*.py' -v
+python3 scripts/gen_versions.py --check
+cargo build -p rs-rich-cli --locked
+python3 scripts/gen_cli_reference.py --binary target/debug/rich --check
 ```
 
-The fixture check matters: a release whose goldens drift is a release that no
-longer matches upstream `rich`.
-
-## 2. Cut the branch
+Also require the CI feature matrix and declared MSRV check. In a dedicated
+Python environment, install `rich==$(python3 scripts/read_upstream_version.py)`;
+never install rich-cli there. Regenerate with a deterministic terminal environment:
 
 ```bash
-git switch -c rc/0.1.0-rc.1 origin/main      # or release/0.1.0
+env -u NO_COLOR TERM=xterm-256color PYTHONUTF8=1 python scripts/capture_golden.py
+git diff --exit-code crates/rich/tests/golden
 ```
 
-Never from another branch, never from a stale `main`.
+The fixture diff must be clean. Run the Rust tests with `NO_COLOR` removed too;
+ambient color suppression invalidates tests that assert ANSI output.
 
-## 3. Make the single release commit
+## 2. Prepare the release PR
 
-Four version sites, all in `Cargo.toml`:
-
-- `[workspace.package] version` — if the hoist has been done; otherwise the
-  `version` in each of the four `crates/*/Cargo.toml`
-- the three `[workspace.dependencies]` pins (`rs-rich`, `rs-rich-ext`,
-  `rs-rich-art`)
-
-Then `CHANGELOG.md`: move everything under `## [Unreleased]` beneath a new
-`## [X.Y.Z]` heading, leaving `[Unreleased]` empty.
-
-Re-run `cargo check --workspace` — a mismatched dependency pin fails here, long
-before it could reach crates.io.
-
-Check the docs don't contradict the new number (`README.md`, `docs/ARCHITECTURE.md`).
-
-## 4. Land it, then tag on main
+Update each selected manifest version, every affected internal requirement in
+the root `Cargo.toml`, and `Cargo.lock`. Do not invent a workspace package version.
+Re-run `cargo check --workspace --locked`. Audit the intended tag locally:
 
 ```bash
-gh pr create --base main --title "Release 0.1.0-rc.1"
-# after it merges:
-git fetch origin --prune && git switch main && git pull --ff-only
-git merge-base --is-ancestor HEAD origin/main    # must pass
-git tag -a v0.1.0-rc.1 -m "0.1.0-rc.1"
-git push origin v0.1.0-rc.1
+python3 scripts/release.py plan v0.0.3
+# or: python3 scripts/release.py plan rs-rich-cli-v0.0.3
 ```
 
-The tag goes on `main`, never on the release branch. That is what makes "every
-published artifact is on `main`" checkable rather than aspirational.
+These commands plan only; they do not create a tag or publish. Confirm the JSON
+selection, then regenerate version docs and CLI help. Move only the selected
+changes from `Unreleased` under the appropriate release heading when finalizing
+the release. Record tests and actual screenshot evidence in the PR.
 
-## 5. Publish
+## 3. Land on main, then tag
+
+After the release PR merges, fetch `origin/main` and verify the exact intended
+commit. Only with authorization to publish, create and push the annotated tag
+on that commit. Require:
 
 ```bash
-cargo publish --workspace --locked --dry-run    # always first
-cargo publish --workspace --locked
+git merge-base --is-ancestor "$(git rev-list -n1 <tag>)" origin/main
 ```
 
-Do **not** write an ordering script. Cargo derives the topological order from the
-dependency graph and cross-verifies dependents against sibling tarballs. The order
-it picks here is `rs-rich` → `rs-rich-art` → `rs-rich-ext` → `rs-rich-cli`.
+The release workflow validates the tag and selection, passes the exact commit
+SHA to the complete CI gate, and uses the protected `crates-io` environment.
+Do not bypass that workflow by publishing separately from a local checkout.
 
-If the upload fails partway, the crates already uploaded stay uploaded — versions
-are immutable. Re-running is safe only for the crates that did *not* publish; check
-each with:
+## 4. Observe publication and verification
 
-```bash
-curl -s -H 'User-Agent: rs-rich-release' https://crates.io/api/v1/crates/rs-rich/0.1.0 \
-  | head -c 80
-```
+The workflow checks each selected package/version on crates.io and aborts if
+one exists or the registry response is unexpected. It runs a dry run, then
+publishes with identical scope and `--locked`: `--workspace` for a coordinated
+tag, or `-p <crate>` for an independent tag. Cargo handles dependency order and
+sibling tarballs; do not introduce a manual ordering script. For separate tags
+with dependencies, finish the dependency's release and verification first.
 
-A missing User-Agent gets a 403, which is easy to misread as "not published".
+Uploads are serialized. A partial upload requires inspecting all selected
+versions and an explicit recovery plan. Versions already uploaded are immutable;
+preflight deliberately rejects a blind rerun and does not silently skip them.
 
-## 6. Verify from outside
-
-Do not trust the upload's own output. Install from crates.io into a clean prefix
-and use it as a stranger would:
-
-```bash
-cargo install rs-rich-cli --root "$(mktemp -d)" --locked
-cargo new /tmp/verify && cd /tmp/verify && cargo add rs-rich
-# then confirm `use rich::…` compiles — the package is rs-rich, the lib is rich
-```
-
-This step has already caught two real bugs that the whole test suite missed (the
-`highlight` default, and `--export-html` taking no path). It is not ceremony.
+The workflow waits for every selected version to appear, then verifies outside
+the checkout. It installs a selected CLI using `--version =X.Y.Z --locked` into
+a fresh prefix, and compiles a fresh consumer with an exact registry dependency
+for each selected library. Unselected packages are not installed or verified as
+though they changed. Do not substitute a floating `cargo install` or `cargo add`.
 
 ## Done when
 
-- `main` is green and the fixtures regenerate byte-identically.
-- The tag is annotated, named `vX.Y.Z` (or `vX.Y.Z-rc.N`), and
-  `git merge-base --is-ancestor "$(git rev-list -n1 <tag>)" origin/main` passes.
-- All four crates are on crates.io at the new version.
-- A clean-room `cargo install` and a fresh consumer project both work.
-- `CHANGELOG.md` has the released section and an empty `## [Unreleased]`.
+- The complete CI and parity gates passed on the tagged commit on `main`.
+- Every selected package/version is published and exact-version verification passed.
+- The changelog describes the versions actually released; remaining changes stay
+  under `Unreleased`.

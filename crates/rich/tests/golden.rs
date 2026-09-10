@@ -351,6 +351,7 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "bar_half" => Box::new(ProgressBar::new(100.0, 50.0).width(20)),
         "bar_third" => Box::new(ProgressBar::new(100.0, 33.0).width(20)),
         "bar_full" => Box::new(ProgressBar::new(100.0, 100.0).width(20)),
+        "json_python_numbers" => Box::new(Json::new("[1234567890123456789012345678901234567890,-1234567890123456789012345678901234567890,1e400,-1e400,-0]").unwrap()),
         "json_object" => Box::new(Json::new(JSON_SAMPLE).expect("valid JSON")),
         "json_unicode" => Box::new(
             Json::new("{\"name\": \"caf\u{e9}\", \"emoji\": \"\u{2764}\"}").expect("valid JSON"),
@@ -363,7 +364,28 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         )),
         "markdown_list" => Box::new(Markdown::new("Items:\n\n- one\n- two\n\n1. a\n2. b")),
         "markdown_quote_hr" => Box::new(Markdown::new("Note:\n\n> important\n\n---\n\ndone")),
+        "markdown_empty" => Box::new(Markdown::new("").hyperlinks(false)),
+        "markdown_rule_only_quote" => Box::new(Markdown::new("> ---").hyperlinks(false)),
+        "markdown_rule_then_quote_text" => Box::new(Markdown::new("> ---\n>\n> text").hyperlinks(false)),
+        "markdown_html_then_paragraph" => Box::new(Markdown::new("<div>hidden</div>\n\nParagraph").hyperlinks(false)),
+        "markdown_html_only" => Box::new(Markdown::new("<div>hidden</div>").hyperlinks(false)),
+        "markdown_html_between_paragraphs" => Box::new(Markdown::new("A\n\n<div>x</div>\n\nB").hyperlinks(false)),
+        "markdown_images_same_table_cell" => Box::new(Markdown::new("| h |\n|---|\n| ![a](x) ![b](y) |\n| ![c](z) |").hyperlinks(false)),
         "markdown_hr_end" => Box::new(Markdown::new("a\n\n---")),
+        "markdown_image_table_cell" => Box::new(
+            Markdown::new("| Icon | Name |\n| --- | --- |\n| ![crate](crate.svg) | rich |\n")
+                .hyperlinks(false),
+        ),
+        "markdown_images_one_container" => Box::new(
+            Markdown::new("Before ![one](one.svg) + ![two](two.svg) after.").hyperlinks(false),
+        ),
+        "markdown_badge_table" => Box::new(
+            Markdown::new(
+                "| Badge |\n| --- |\n| ![build](build.svg) |\n\
+                 | ![docs](docs.svg) |\n| ![crate](crate.svg) |\n",
+            )
+            .hyperlinks(false),
+        ),
         "markdown_table" => Box::new(Markdown::new(
             "| Name | Age |\n| :--- | ---: |\n| Alice | 30 |\n| Bob | 7 |\n",
         )),

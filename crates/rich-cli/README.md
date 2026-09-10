@@ -1,7 +1,14 @@
-# rich-cli
+# rs-rich-cli
 
-A Rust port of the [`rich-cli`](https://github.com/Textualize/rich-cli) terminal
-toolbox — rich output for files, data and URLs, from the command line.
+The `rs-rich-cli` package is a Rust port of the
+[`rich-cli`](https://github.com/Textualize/rich-cli) terminal toolbox — rich
+output for files, data and URLs, from the command line. Install it from
+crates.io with Cargo; the executable it installs is named `rich`:
+
+```bash
+cargo install rs-rich-cli
+rich --help
+```
 
 ```bash
 rich README.md              # auto-detected and rendered as Markdown
@@ -11,8 +18,10 @@ rich https://example.com    # fetched and syntax-highlighted
 rich -p "[bold red]hi[/]"   # console markup
 ```
 
-Its **version mirrors upstream `rich-cli`** (currently `1.8.1`) — a *different*
-project from the `rich` library, which versions separately.
+The Rust package is currently version **`0.0.3`** and follows independent
+SemVer; its version does not mirror Python `rich-cli`. The tracked upstream
+release is **`rich-cli` 1.8.1**, recorded in
+[`../../UPSTREAM.toml`](../../UPSTREAM.toml).
 
 ## Render modes
 
@@ -47,7 +56,7 @@ Both are on by default and can be dropped for a smaller binary:
 - **`art`** — `--gif` playback, via [`rich-art`](../rich-art).
 
 ```bash
-cargo install rich-cli --no-default-features   # no network, no image decoders
+cargo install rs-rich-cli --no-default-features   # installs `rich`; no network or image decoders
 ```
 
 ## Licence

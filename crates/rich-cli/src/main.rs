@@ -10,7 +10,7 @@
 //! behind the default `fetch` feature), **paging** (`--pager`), and a capability
 //! demo — i.e. the whole common rich-cli surface.
 
-use std::io::{IsTerminal, Read};
+use std::io::{IsTerminal, Read, Write};
 use std::process::ExitCode;
 
 use rich::cells::cell_len;
@@ -223,7 +223,7 @@ fn parse_padding(value: &str) -> Result<(usize, usize, usize, usize), String> {
 fn set_mode(current: &mut Mode, mode: Mode) -> Result<(), String> {
     if *current != Mode::Auto && *current != mode {
         return Err(
-            "only one render mode (--print/--markdown/--json/--syntax/--csv/--ipynb/--rule) \
+            "only one render mode (--print/--markdown/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff) \
              may be given"
                 .into(),
         );
@@ -317,8 +317,10 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             }
             "--rule" => set_mode(&mut mode, Mode::Rule)?,
             "--left" => justify = Some(Justify::Left),
-            "--right" => justify = Some(Justify::Right),
-            "--center" => justify = Some(Justify::Center),
+            "--right" if justify != Some(Justify::Left) => justify = Some(Justify::Right),
+            "--right" => {}
+            "--center" if justify.is_none() => justify = Some(Justify::Center),
+            "--center" => {}
             "--no-color" => no_color = true,
             "--pager" => pager = true,
             // Upstream's `@click.option("--hyperlinks", "-y", is_flag=True,
@@ -395,9 +397,14 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     // goes through the export path: both accepted -o/--export-svg, wrote no
     // file, and exited 0. Everywhere else a bad export path is a hard error, so
     // silence here reads as success.
+    let effective_mode = if mode == Mode::Auto {
+        detect_mode(resources.first().map(String::as_str))
+    } else {
+        mode
+    };
     let exporting = export_html.is_some() || export_svg.is_some();
     if exporting {
-        let unsupported = if mode == Mode::Gif {
+        let unsupported = if effective_mode == Mode::Gif {
             Some("--gif")
         } else if mode == Mode::Auto && resources.is_empty() {
             Some("the capability demo")
@@ -427,7 +434,12 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--diff",
             mode == Mode::Diff,
         ),
-        ("--loop", loops.is_some(), "--gif", mode == Mode::Gif),
+        (
+            "--loop",
+            loops.is_some(),
+            "--gif",
+            effective_mode == Mode::Gif,
+        ),
         // `--title`/`--caption` are deliberately NOT here: upstream feeds them to
         // the CSV table as well as to the panel, so requiring `--panel` made
         // `rich --csv sales.csv --title Sales` — a documented upstream use —
@@ -454,8 +466,14 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
 
     // These decorate a single rendered resource; --diff composes its own report
     // and quietly dropped them, which reads as the flag having no effect.
-    if mode == Mode::Diff {
+    if matches!(effective_mode, Mode::Diff | Mode::Gif) {
+        let mode_name = if effective_mode == Mode::Gif {
+            "--gif"
+        } else {
+            "--diff"
+        };
         let unsupported = [
+            ("--pager", pager && effective_mode == Mode::Gif),
             ("--panel", panel.is_some()),
             ("--padding", padding.is_some()),
             ("--title", title.is_some()),
@@ -466,7 +484,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             ("--left/--center/--right", justify.is_some()),
         ];
         if let Some((flag, _)) = unsupported.iter().find(|(_, given)| *given) {
-            return Err(format!("{flag} cannot be combined with --diff"));
+            return Err(format!("{flag} cannot be combined with {mode_name}"));
         }
     }
     if mode != Mode::Gif && mode != Mode::Diff && resources.len() > 1 {
@@ -1166,6 +1184,8 @@ fn run(cli: Cli) -> ExitCode {
                 || cli.width.is_some()
                 || cli.pager;
             let json = json.expect("json parsed above").no_wrap(nested);
+            #[cfg(feature = "json-escape-safe")]
+            let json = json.escape_safe(true);
             let fit = measure_rendered(&console, &json);
             (Box::new(json), Some(fit))
         }
@@ -1187,6 +1207,39 @@ fn run(cli: Cli) -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             };
+            // Stream undecorated CSV rows: measuring or collecting the complete
+            // styled table first multiplies memory by hundreds on tall inputs.
+            // Containers, alignment, paging and exports still need the full view.
+            if cli.panel.is_none()
+                && cli.padding.is_none()
+                && cli.style.is_none()
+                && cli.justify.is_none()
+                && !cli.pager
+                && cli.export_html.is_none()
+                && cli.export_svg.is_none()
+            {
+                let mut options = console.options();
+                options.max_width = cli.width.unwrap_or_else(|| {
+                    table
+                        .measure(&console, &options)
+                        .maximum
+                        .min(options.max_width)
+                        .max(1)
+                });
+                let stdout = std::io::stdout();
+                let mut output = std::io::BufWriter::new(stdout.lock());
+                let result = table
+                    .try_for_each_line(&console, &options, |line| {
+                        let line = Segment::crop_lines(&line, console.width());
+                        writeln!(output, "{}", console.segments_to_string(&line))
+                    })
+                    .and_then(|()| output.flush());
+                if let Err(error) = result {
+                    eprintln!("rich: could not write CSV output: {error}");
+                    return ExitCode::FAILURE;
+                }
+                return ExitCode::SUCCESS;
+            }
             let fit = measure_rendered(&console, &table);
             (Box::new(table), Some(fit))
         }
@@ -2126,7 +2179,7 @@ fn render_output(console: &Console, output: &serde_json::Value, count: Option<i6
     match output["output_type"].as_str().unwrap_or("") {
         "stream" => print_ansi(console, &join_source(&output["text"])),
         "error" => print_ansi(console, &join_traceback(&output["traceback"])),
-        "execute_result" | "display_data" => {
+        "execute_result" => {
             console.print(&io_label("Out", count, "red", "#ee4b2b"));
             print_ansi(console, &join_source(&output["data"]["text/plain"]));
         }
@@ -2250,6 +2303,9 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
         let is_terminal = c.is_terminal();
         let mut mode = cli.image_mode;
         if mode == ImageMode::Auto {
+            if !has_color {
+                eprintln!("rich: auto image mode has no terminal colour, drawing the diff as ASCII instead");
+            }
             mode = if !has_color {
                 ImageMode::Ascii
             } else if is_terminal && rich_art::sixel::is_probably_supported() {
@@ -2408,6 +2464,10 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
         }
     }
 
+    if !console.is_terminal() {
+        eprintln!("rich: GIF animation needs a terminal; rendering the first frame only");
+    }
+
     // `play` needs its own console (it moves into the Live display).
     let mut builder = Console::builder().no_color(cli.no_color);
     if let Some(width) = cli.width {
@@ -2529,7 +2589,7 @@ by extension — anything else with a file extension is syntax-highlighted):
     -x, --syntax     Syntax-highlight RESOURCE (language from its extension)
         --csv        Render RESOURCE as a CSV/TSV table
         --ipynb      Render RESOURCE as a Jupyter notebook
-        --gif        Animate one or more GIFs (several play side by side)
+        --gif        Animate GIFs side by side; pipes receive the first frame
         --loop N     With --gif, repeat N times (0 = forever)
         --rule       Draw a horizontal rule (RESOURCE is its title)
         --diff       Perceptually compare two images (needs exactly two)
@@ -2567,7 +2627,7 @@ OPTIONS:
         --pager      Page the output through $PAGER (no pager, no paging)
         --no-color   Disable colored output (as does a non-empty NO_COLOR)
     -h, --help       Show this help
-    -V, --version    Show the version (mirrors upstream rich-cli)
+    -V, --version    Show the rs-rich-cli package version
 
 ENVIRONMENT:
     NO_COLOR         Any non-empty value disables colour

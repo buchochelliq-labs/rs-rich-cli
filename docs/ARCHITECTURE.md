@@ -1,7 +1,8 @@
 # Architecture
 
 A four-crate Cargo workspace with a strict, one-directional dependency rule.
-All crates are at `0.0.2` and version independently (see AGENTS.md → Versioning).
+Each crate versions independently. The [manifest-version table](index.md#versions-prepared-in-this-checkout)
+tracks this checkout; registry badges show published versions.
 
 ```
 ┌────────────┐     ┌────────────┐     ┌───────────────────────────┐

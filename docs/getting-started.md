@@ -29,7 +29,7 @@ than unsupported.
     cargo install rs-rich-cli
     ```
 
-=== "Both, in a Cargo.toml"
+=== "Cargo.toml (published 0.0.2 example)"
 
     ```toml
     [dependencies]
@@ -41,7 +41,7 @@ than unsupported.
     [`rs-rich`](https://crates.io/crates/rs-rich) ·
     [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) ·
     [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) ·
-    [`rs-rich-art`](https://crates.io/crates/rs-rich-art) — all at 0.0.2.
+    [`rs-rich-art`](https://crates.io/crates/rs-rich-art) — follow the links for current published versions.
     API documentation is on [docs.rs](https://docs.rs/rs-rich).
 
 ## Check the install worked
@@ -50,9 +50,9 @@ than unsupported.
 rich --version
 ```
 
-```text
-rich (rs-rich-cli) 0.0.2
-```
+The output reports the installed `rs-rich-cli` package version. For a build
+from this checkout, compare it with the [manifest-version table](index.md#versions-prepared-in-this-checkout).
+It does not report the Python upstream version or the core library version.
 
 If the shell reports "command not found", Cargo's binary directory is not on
 your `PATH`. It is `~/.cargo/bin` (`%USERPROFILE%\.cargo\bin` on Windows) — add
@@ -82,7 +82,7 @@ package carries an `rs-` prefix. The library target keeps the short name, so the
 dependency and the `use` line differ:
 
 ```toml
-rs-rich = "0.0.2"      # what you depend on
+rs-rich = "0.0.2"      # example using the published 0.0.2 release
 ```
 
 ```rust

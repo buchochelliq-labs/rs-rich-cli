@@ -16,31 +16,13 @@ Things that should work and do not.
 
 ### Narrow `--json` output is display output, not machine-readable JSON
 
-**Symptom.** A value wider than `--width` is cropped, so piping the displayed
-output through a JSON parser can still fail even though issue #67 no longer
-allows the crop boundary to bisect an escape sequence.
-
-**Scope.** Upstream rich-cli preserves `JSON.text.no_wrap` through its width
-wrapper and crops overlong lines. This port retains that behavior; the #67 fix
-only makes `\\"`, `\\\\`, control escapes, and `\\uXXXX` indivisible.
-
-**Workaround.** Use `jq` on the original file for machine-readable output, or
-render at a width that fits the longest value.
-
-**Status.** The misleading partial-escape defect is fixed; lossless narrow JSON
-rendering is not promised because `--json` is a presentation mode.
-
-### Markdown images: five smaller divergences remain
-
-Images carry upstream's marker and are hoisted above their paragraph, but an
-image **inside a table cell** is not hoisted, two images in one container split
-across rows, and consecutive hoisted images gain a blank row.
-
-**Scope.** Documents whose images sit in table cells — a README badge table is
-the common case.
-
-**Status.** Open —
-[#86 follow-ups](https://github.com/buchochelliq-labs/rs-rich-cli/issues).
+**Scope.** Default builds match upstream: narrow output may wrap or crop inside
+an escape, and `--width` crops overlong JSON lines. The optional, off-by-default
+`json-escape-safe` Cargo feature avoids partial escapes when cropping and keeps
+escapes together when folding at widths that can fit them. See
+[DIVERGENCES §22](DIVERGENCES.md#22-escape-safe-json-presentation-json-escape-safe).
+Neither mode promises machine-readable output; use the original JSON with `jq`
+when every value must survive.
 
 ---
 

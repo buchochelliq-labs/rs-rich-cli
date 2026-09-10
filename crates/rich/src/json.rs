@@ -9,13 +9,13 @@
 //! repeated key keeps its first position but its last value — what both
 //! `dict` and serde_json's `preserve_order` do. The one remaining caveat is
 //! **number formatting** for exotic values — exponent notation (`1e+20`,
-//! `1e-07`) and integers beyond i64/u64 can differ from CPython's `repr`.
+//! `1e-07`) can differ from CPython's `repr`.
 //! Custom indent/sort options are deferred — see docs/DIVERGENCES.md.
 //!
 //! ## Why the parser is hand-written
 //!
 //! Upstream's parser is Python's `json`, which differs from `serde_json` in two
-//! ways that this module has to reproduce:
+//! important ways this module reproduces:
 //!
 //! * `json.loads` accepts (and `json.dumps(allow_nan=True)` emits) the
 //!   non-finite literals `NaN`, `Infinity` and `-Infinity`. `serde_json` has no
@@ -25,9 +25,9 @@
 //!
 //! Raising a recursion limit only moves the failure to a stack overflow, so
 //! parsing, rendering and *dropping* the tree here are all iterative: nesting
-//! depth costs heap, never stack, and no document can crash the process. Scalar
-//! *decoding* is still delegated to `serde_json`, so string escapes and number
-//! formatting stay exactly as they were.
+//! depth costs heap, never stack. String decoding and finite floating-point
+//! formatting use `serde_json`; integer tokens retain their exact digits and
+//! overflowing exponents become signed Infinity as in Python.
 //!
 //! That leaves nesting *unbounded* where CPython eventually raises
 //! `RecursionError` — somewhere past 10 000 levels, at a depth that depends on
@@ -49,12 +49,14 @@ pub struct Json {
     styles: JsonStyles,
     /// See [`Json::no_wrap`].
     no_wrap: bool,
+    #[cfg(feature = "json-escape-safe")]
+    escape_safe: bool,
 }
 
 /// A parsed JSON value.
 ///
 /// Scalars keep the form they will be printed in: numbers are stored already
-/// formatted by `serde_json`, strings already decoded (upstream re-encodes them
+/// normalized where needed, strings already decoded (upstream re-encodes them
 /// through `json.dumps`, so `"A"` prints as `"A"`).
 #[derive(Debug)]
 enum Node {
@@ -137,7 +139,19 @@ impl Json {
             value: Parser::new(text).parse_document()?,
             styles: JsonStyles::defaults(),
             no_wrap: false,
+            #[cfg(feature = "json-escape-safe")]
+            escape_safe: false,
         })
+    }
+
+    /// Opt in to escape-aware display boundaries (requires `json-escape-safe`).
+    /// Cropping omits partial escapes. Folding preserves escapes that fit the
+    /// width; narrower widths split oversized escapes to avoid losing content.
+    /// The default remains Python rich's ordinary word folding/cropping.
+    #[cfg(feature = "json-escape-safe")]
+    pub fn escape_safe(mut self, enabled: bool) -> Self {
+        self.escape_safe = enabled;
+        self
     }
 
     /// Keep `rich.json.JSON`'s `self.text.no_wrap = True`, which **crops** each
@@ -263,140 +277,131 @@ impl Json {
 impl Renderable for Json {
     fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let segments = self.render_value();
+        #[cfg(feature = "json-escape-safe")]
+        if self.escape_safe {
+            return escape_safe_lines(&segments, options.max_width, self.no_wrap);
+        }
         if self.no_wrap {
             // `Text.wrap` with `no_wrap` keeps the line whole and then calls
             // `line.truncate(width, overflow="fold")`, which is a crop. See
             // [`Json::no_wrap`] for when upstream gets here.
-            crop_lines_escape_safe(&segments, options.max_width)
+            Segment::crop_lines(&segments, options.max_width)
         } else {
             // The break must land at a *word* boundary: the joined copy carries
             // no overflow either, so upstream wraps with the default `fold`
             // overflow and only splits mid-word when a single token is wider
             // than the line.
-            fold_lines_escape_safe(&segments, options.max_width)
+            Segment::fold_lines_words(&segments, options.max_width)
         }
     }
 }
 
-/// Return a nearby legal boundary when `boundary` falls inside a JSON escape.
-///
-/// A JSON escape is one lexical unit. Inserting a terminal line break between
-/// its backslash and its final character changes the data (and generally makes
-/// the displayed document invalid), so prefer the start of the escape. At
-/// extremely small widths where that would make no progress, keep the complete
-/// escape on the current line even though it exceeds the requested width.
-/// The input is always produced by [`quote`], so every backslash necessarily
-/// begins one of JSON's valid two-character escapes or a complete `\\uXXXX`.
-fn escape_safe_boundary(chars: &[char], line_start: usize, boundary: usize) -> usize {
-    let mut index = line_start;
-    while index < chars.len() {
-        if chars[index] != '\\' {
-            index += 1;
-            continue;
-        }
-        let end = if chars.get(index + 1) == Some(&'u') {
-            (index + 6).min(chars.len())
-        } else {
-            (index + 2).min(chars.len())
-        };
-        if index < boundary && boundary < end {
-            return if index > line_start { index } else { end };
-        }
-        index = end;
-    }
-    boundary
-}
-
-fn fold_lines_escape_safe(segments: &[Segment], width: usize) -> Vec<Segment> {
+/// Tokenize each physical line into JSON escapes and ordinary graphemes, then
+/// choose every boundary from the space actually remaining. No stale absolute
+/// wrap points survive an adjusted escape boundary (#98).
+#[cfg(feature = "json-escape-safe")]
+fn escape_safe_lines(segments: &[Segment], width: usize, crop: bool) -> Vec<Segment> {
     if width == 0 {
-        return segments.to_vec();
+        return Vec::new();
     }
-    let mut out = Vec::new();
     let lines = Segment::split_lines(segments);
     let last = lines.len().saturating_sub(1);
+    let mut out = Vec::new();
     for (line_index, line) in lines.into_iter().enumerate() {
         let plain: String = line
             .iter()
             .filter(|s| !s.control)
             .map(|s| s.text.as_str())
             .collect();
-        let chars: Vec<char> = plain.chars().collect();
-        let mut breaks = crate::wrap::divide_line(&plain, width, true);
-        let mut index = 0;
-        while index < chars.len() {
-            if chars[index] != '\\' {
-                index += 1;
-                continue;
-            }
-            let end = if chars.get(index + 1) == Some(&'u') {
-                (index + 6).min(chars.len())
+        // Keep upstream's exact behavior when there is no escape to protect.
+        if !plain.contains('\\') {
+            out.extend(if crop {
+                Segment::crop_lines(&line, width)
             } else {
-                (index + 2).min(chars.len())
-            };
-            if breaks.iter().any(|at| index < *at && *at < end) {
-                breaks.retain(|at| !(index < *at && *at < end));
-                breaks.push(index);
-            }
-            index = end;
-        }
-        breaks.sort_unstable();
-        breaks.dedup();
-        let mut position = 0;
-        let mut next = 0;
-        for segment in line {
-            if segment.control {
-                out.push(segment);
-                continue;
-            }
-            let mut buffer = String::new();
-            for ch in segment.text.chars() {
-                if breaks.get(next) == Some(&position) {
-                    if !buffer.is_empty() {
-                        out.push(Segment::new(
-                            std::mem::take(&mut buffer),
-                            segment.style.clone(),
-                        ));
+                Segment::fold_lines_words(&line, width)
+            });
+        } else {
+            let (spans, _) = crate::cells::split_graphemes(&plain);
+            let mut atoms = Vec::new();
+            let mut index = 0;
+            while index < spans.len() {
+                let (start, mut end, mut cells) = spans[index];
+                if plain.as_bytes()[start] == b'\\' {
+                    let escape_end = start
+                        + if plain.as_bytes().get(start + 1) == Some(&b'u') {
+                            6
+                        } else {
+                            2
+                        };
+                    while end < escape_end && index + 1 < spans.len() {
+                        index += 1;
+                        end = spans[index].1;
+                        cells += spans[index].2;
                     }
-                    out.push(Segment::line());
-                    next += 1;
+                    if !crop && cells > width {
+                        // An atom wider than the whole console cannot both fit
+                        // and stay atomic. Split its ASCII spelling rather than
+                        // overrun into Console's final crop and lose characters.
+                        for offset in start..escape_end {
+                            atoms.push((offset, offset + 1, 1));
+                        }
+                        if end > escape_end {
+                            atoms.push((escape_end, end, 0));
+                        }
+                        index += 1;
+                        continue;
+                    }
                 }
-                buffer.push(ch);
-                position += 1;
+                atoms.push((start, end, cells));
+                index += 1;
             }
-            if !buffer.is_empty() {
-                out.push(Segment::new(buffer, segment.style.clone()));
+            let mut breaks = Vec::new();
+            let mut cells = 0;
+            let mut stop = plain.len();
+            for (start, _, atom_width) in atoms {
+                if cells + atom_width > width {
+                    if crop {
+                        stop = start;
+                        break;
+                    }
+                    if cells > 0 {
+                        breaks.push(start);
+                        cells = 0;
+                    }
+                }
+                cells += atom_width;
+            }
+            let mut position = 0;
+            let mut next = 0;
+            for segment in line {
+                if segment.control {
+                    out.push(segment);
+                    continue;
+                }
+                let mut buffer = String::new();
+                for ch in segment.text.chars() {
+                    if position >= stop {
+                        break;
+                    }
+                    if breaks.get(next) == Some(&position) {
+                        if !buffer.is_empty() {
+                            out.push(Segment::new(
+                                std::mem::take(&mut buffer),
+                                segment.style.clone(),
+                            ));
+                        }
+                        out.push(Segment::line());
+                        next += 1;
+                    }
+                    buffer.push(ch);
+                    position += ch.len_utf8();
+                }
+                if !buffer.is_empty() {
+                    out.push(Segment::new(buffer, segment.style));
+                }
             }
         }
         if line_index != last {
-            out.push(Segment::line());
-        }
-    }
-    out
-}
-
-fn crop_lines_escape_safe(segments: &[Segment], width: usize) -> Vec<Segment> {
-    let lines = Segment::split_lines(segments);
-    let last = lines.len().saturating_sub(1);
-    let mut out = Vec::new();
-    for (index, line) in lines.into_iter().enumerate() {
-        let plain: String = line
-            .iter()
-            .filter(|s| !s.control)
-            .map(|s| s.text.as_str())
-            .collect();
-        let chars: Vec<char> = plain.chars().collect();
-        let mut cells = 0;
-        let nominal = chars
-            .iter()
-            .position(|ch| {
-                cells += crate::cells::cell_len(&ch.to_string());
-                cells > width
-            })
-            .unwrap_or(chars.len());
-        let boundary = escape_safe_boundary(&chars, 0, nominal);
-        let safe_width = crate::cells::cell_len(&chars[..boundary].iter().collect::<String>());
-        out.extend(Segment::crop_lines(&line, safe_width));
-        if index != last {
             out.push(Segment::line());
         }
     }
@@ -626,20 +631,78 @@ impl<'a> Parser<'a> {
         Ok(decoded)
     }
 
-    /// Read a number token and let `serde_json` decide whether it is one — this
-    /// keeps `float_roundtrip` parsing and `Number`'s formatting.
+    /// Validate JSON's number grammar before decoding, preserving arbitrary-size
+    /// integers and Python's float overflow to Infinity (#74).
     fn parse_number(&mut self) -> Result<Node> {
         let start = self.pos;
-        let mut end = self.pos;
+        let mut end = start;
         while matches!(
             self.bytes.get(end),
             Some(b'-' | b'+' | b'.' | b'e' | b'E' | b'0'..=b'9')
         ) {
             end += 1;
         }
-        let number: serde_json::Number = serde_json::from_str(&self.src[start..end])
-            .map_err(|error| self.error_at(start, &describe(&error)))?;
+        let token = &self.src[start..end];
+        let digits = token.as_bytes();
+        let mut i = usize::from(digits.first() == Some(&b'-'));
+        if digits.get(i) == Some(&b'0') {
+            i += 1;
+        } else {
+            let first = i;
+            while digits.get(i).is_some_and(u8::is_ascii_digit) {
+                i += 1;
+            }
+            if i == first {
+                return Err(self.error_at(start, "invalid number"));
+            }
+        }
+        let mut floating = false;
+        if digits.get(i) == Some(&b'.') {
+            floating = true;
+            i += 1;
+            let first = i;
+            while digits.get(i).is_some_and(u8::is_ascii_digit) {
+                i += 1;
+            }
+            if i == first {
+                return Err(self.error_at(start, "invalid number"));
+            }
+        }
+        if matches!(digits.get(i), Some(b'e' | b'E')) {
+            floating = true;
+            i += 1;
+            if matches!(digits.get(i), Some(b'+' | b'-')) {
+                i += 1;
+            }
+            let first = i;
+            while digits.get(i).is_some_and(u8::is_ascii_digit) {
+                i += 1;
+            }
+            if i == first {
+                return Err(self.error_at(start, "invalid number"));
+            }
+        }
+        if i != digits.len() {
+            return Err(self.error_at(start, "invalid number"));
+        }
         self.pos = end;
+        if !floating {
+            return Ok(Node::Number(
+                if token == "-0" { "0" } else { token }.to_string(),
+            ));
+        }
+        let value: f64 = token
+            .parse()
+            .map_err(|_| self.error_at(start, "invalid number"))?;
+        if value.is_infinite() {
+            return Ok(Node::NonFinite(if value.is_sign_negative() {
+                "-Infinity"
+            } else {
+                "Infinity"
+            }));
+        }
+        let number: serde_json::Number =
+            serde_json::from_str(token).map_err(|error| self.error_at(start, &describe(&error)))?;
         Ok(Node::Number(number.to_string()))
     }
 
@@ -781,11 +844,30 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "json-escape-safe")]
+    #[test]
+    fn adjusted_escape_boundaries_preserve_the_remaining_payload() {
+        let input = format!(r#"{{"v":"aa\u0001{}"}}"#, "b".repeat(40));
+        for width in 6..=20 {
+            let output = Console::builder()
+                .width(width)
+                .force_terminal(false)
+                .build()
+                .render_to_string(&Json::new(&input).unwrap().escape_safe(true));
+            assert_eq!(output.matches('b').count(), 40, "width {width}: {output:?}");
+        }
+    }
+
+    #[cfg(feature = "json-escape-safe")]
     #[test]
     fn wrapping_keeps_json_escapes_atomic_at_narrow_widths() {
         let payload = r#"{"v":"a\"b\\c\nd\u0001e"}"#;
         for width in 8..=14 {
-            let output = render_plain(payload, width);
+            let output = Console::builder()
+                .width(width)
+                .force_terminal(false)
+                .build()
+                .render_to_string(&Json::new(payload).unwrap().escape_safe(true));
             for line in output.lines() {
                 let bytes = line.as_bytes();
                 let mut index = 0;
@@ -806,6 +888,53 @@ mod tests {
                         index += 6;
                     } else {
                         index += 2;
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(feature = "json-escape-safe")]
+    #[test]
+    fn escape_folding_preserves_bytes_even_below_the_escape_width() {
+        let payload = r#"{"v":"a\"b\\c\nd\u0001eeeeeeeeeeee"}"#;
+        let wide = Console::builder()
+            .width(100)
+            .force_terminal(false)
+            .build()
+            .render_to_string(&Json::new(payload).unwrap().escape_safe(true))
+            .replace('\n', "");
+        for width in 1..=20 {
+            let output = Console::builder()
+                .width(width)
+                .force_terminal(false)
+                .build()
+                .render_to_string(&Json::new(payload).unwrap().escape_safe(true));
+            assert_eq!(output.replace('\n', ""), wide, "width {width}");
+            assert!(output
+                .lines()
+                .all(|line| crate::cells::cell_len(line) <= width));
+        }
+    }
+
+    #[cfg(feature = "json-escape-safe")]
+    #[test]
+    fn escape_cropping_never_emits_a_partial_escape() {
+        let payload = r#""a\"b\\c\nd\u0001eeee""#;
+        for width in 1..=24 {
+            let output = Console::builder()
+                .width(width)
+                .force_terminal(false)
+                .build()
+                .render_to_string(&Json::new(payload).unwrap().no_wrap(true).escape_safe(true));
+            let mut chars = output.chars();
+            while let Some(c) = chars.next() {
+                if c == '\\' {
+                    let next = chars.next().expect("complete short escape");
+                    if next == 'u' {
+                        for _ in 0..4 {
+                            assert!(chars.next().is_some_and(|c| c.is_ascii_hexdigit()));
+                        }
                     }
                 }
             }
@@ -945,7 +1074,7 @@ mod tests {
     }
 
     /// The hand-written reader must accept and reject exactly what serde_json
-    /// does — apart from the three Python constants it exists to add.
+    /// does for bounded numbers — Python also accepts overflowing exponents.
     #[test]
     fn acceptance_matches_serde_json() {
         let samples = [
@@ -960,7 +1089,6 @@ mod tests {
             "1e10",
             "1E+10",
             "1e-7",
-            "1e999",
             "12345678901234567890",
             "-12345678901234567890123456789012345",
             "01",
@@ -1006,6 +1134,22 @@ mod tests {
             let ours = Json::new(sample).is_ok();
             let theirs = serde_json::from_str::<serde_json::Value>(sample).is_ok();
             assert_eq!(ours, theirs, "disagreed about {sample:?}");
+        }
+    }
+
+    #[test]
+    fn python_numbers_preserve_large_integers_and_overflow() {
+        for number in [
+            "1234567890123456789012345678901234567890",
+            "-1234567890123456789012345678901234567890",
+        ] {
+            assert_eq!(render_plain(number, 100), number);
+        }
+        assert_eq!(render_plain("-0", 100), "0");
+        assert_eq!(render_plain("1e400", 100), "Infinity");
+        assert_eq!(render_plain("-1e999", 100), "-Infinity");
+        for invalid in ["01", "-01", "1.e2", "1e+", "1e400x", "--1", "1+2", ".1"] {
+            assert!(Json::new(invalid).is_err(), "accepted {invalid}");
         }
     }
 

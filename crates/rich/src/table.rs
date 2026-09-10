@@ -584,10 +584,22 @@ impl Table {
     }
 }
 
-impl Renderable for Table {
-    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+impl Table {
+    /// Render visual lines in order without retaining the full rendered table.
+    ///
+    /// Like upstream's `Table.__rich_console__` / `_render` generators, this
+    /// measures all columns first, then renders only one row block at a time.
+    /// Lines contain styled segments without a trailing newline. The callback
+    /// may write each line immediately; its first error stops rendering.
+    /// The table still owns its source rows for column-width measurement.
+    pub fn try_for_each_line<E>(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        mut emit: impl FnMut(Vec<Segment>) -> Result<(), E>,
+    ) -> Result<(), E> {
         if self.columns.is_empty() {
-            return Vec::new();
+            return emit(vec![Segment::new("", None)]);
         }
         // Fall back to a terminal-safe box on legacy Windows / non-UTF-8.
         let box_set = self.box_set.substitute(
@@ -607,20 +619,18 @@ impl Renderable for Table {
         // Full table width (for centering title/caption): columns + borders.
         let table_width: usize = rendered_widths.iter().sum::<usize>() + extra_width;
 
-        let mut lines: Vec<Vec<Segment>> = Vec::new();
-
         // Title, centered above the table.
         if let Some(title) = &self.title {
             let style = Style::parse("italic").expect("valid built-in style");
-            lines.push(vec![Segment::new(center(title, table_width), Some(style))]);
+            emit(vec![Segment::new(center(title, table_width), Some(style))])?;
         }
 
         let edge = self.show_edge;
         if edge {
-            lines.push(vec![Segment::new(
+            emit(vec![Segment::new(
                 box_set.get_top(&rendered_widths, edge),
                 border.clone(),
-            )]);
+            )])?;
         }
 
         let head_edges = (box_set.head_left, box_set.head_vertical, box_set.head_right);
@@ -628,62 +638,71 @@ impl Renderable for Table {
 
         if self.show_header {
             let headers: Vec<String> = self.columns.iter().map(|c| c.header.clone()).collect();
-            lines.extend(self.render_row(
+            for line in self.render_row(
                 console.theme(),
                 &headers,
                 &rendered_widths,
                 true,
                 head_edges,
-            ));
-            lines.push(vec![Segment::new(
+            ) {
+                emit(line)?;
+            }
+            emit(vec![Segment::new(
                 box_set.get_row(&rendered_widths, RowLevel::Head, edge),
                 border.clone(),
-            )]);
+            )])?;
         }
 
         let row_last = self.rows.len().saturating_sub(1);
         for (index, row) in self.rows.iter().enumerate() {
-            lines.extend(self.render_row(
-                console.theme(),
-                row,
-                &rendered_widths,
-                false,
-                body_edges,
-            ));
+            for line in self.render_row(console.theme(), row, &rendered_widths, false, body_edges) {
+                emit(line)?;
+            }
             if self.show_lines && index != row_last {
-                lines.push(vec![Segment::new(
+                emit(vec![Segment::new(
                     box_set.get_row(&rendered_widths, RowLevel::Row, edge),
                     border.clone(),
-                )]);
+                )])?;
             }
         }
 
         if edge {
-            lines.push(vec![Segment::new(
+            emit(vec![Segment::new(
                 box_set.get_bottom(&rendered_widths, edge),
                 border.clone(),
-            )]);
+            )])?;
         }
 
         // Caption, centered below the table.
         if let Some(caption) = &self.caption {
             let style = Style::parse("dim italic").expect("valid built-in style");
-            lines.push(vec![Segment::new(
+            emit(vec![Segment::new(
                 center(caption, table_width),
                 Some(style),
-            )]);
+            )])?;
         }
 
-        // Join visual lines with newline segments (no trailing newline).
+        Ok(())
+    }
+}
+
+impl Renderable for Table {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let mut segments = Vec::new();
-        let last = lines.len().saturating_sub(1);
-        for (index, line) in lines.into_iter().enumerate() {
-            segments.extend(line);
-            if index != last {
-                segments.push(Segment::line());
-            }
+        let mut first = true;
+        let result: Result<(), std::convert::Infallible> =
+            self.try_for_each_line(console, options, |line| {
+                if !first {
+                    segments.push(Segment::line());
+                }
+                first = false;
+                segments.extend(line);
+                Ok(())
+            });
+        match result {
+            Ok(()) => segments,
+            Err(never) => match never {},
         }
-        segments
     }
 }
 
@@ -893,6 +912,53 @@ mod tests {
             "└───────┴─────┘\n",
         );
         assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn streamed_lines_match_styled_table_output() {
+        let mut table = Table::new().box_set(SQUARE);
+        table.add_column("Name");
+        table.add_column("Age");
+        table.add_row(&["Alice", "30"]);
+        table.add_row(&["Bob", "7"]);
+        let console = console();
+        let mut streamed = String::new();
+        table
+            .try_for_each_line(&console, &console.options(), |line| {
+                assert!(line.iter().all(|segment| !segment.text.contains('\n')));
+                streamed.push_str(&console.segments_to_string(&line));
+                streamed.push('\n');
+                Ok::<_, std::convert::Infallible>(())
+            })
+            .unwrap();
+        // `simple_square_table` above fixes these bytes independently of the
+        // collection path, including distinct header-style segments.
+        assert_eq!(streamed, console.render_export(&table));
+        assert_eq!(streamed.lines().count(), 6);
+    }
+
+    #[test]
+    fn streamed_lines_stop_at_the_first_writer_error() {
+        let mut table = Table::new()
+            .box_set(SQUARE)
+            .title("People")
+            .caption("End")
+            .show_lines(true);
+        table.add_column("Name");
+        table.add_row(&["Alice\nBob"]);
+        table.add_row(&["Carol"]);
+        let console = console();
+        let mut visits = 0;
+        let result = table.try_for_each_line(&console, &console.options(), |_| {
+            visits += 1;
+            if visits == 5 {
+                Err("writer failed")
+            } else {
+                Ok(())
+            }
+        });
+        assert_eq!(result, Err("writer failed"));
+        assert_eq!(visits, 5);
     }
 
     /// A column squeezed below its own padding still emitted a full left and

@@ -228,6 +228,9 @@ impl Console {
     /// Write (or, while capturing, record) a rendered segment stream, adding a
     /// trailing newline. The single sink for every `print*` path.
     fn emit(&self, segments: Vec<Segment>) {
+        if segments.is_empty() {
+            return;
+        }
         if self.capturing.get() {
             let mut buffer = self.record_buffer.borrow_mut();
             buffer.extend(segments);
@@ -282,8 +285,11 @@ impl Console {
     /// returning the string (including the single trailing newline). For tests
     /// and export.
     pub fn render_export(&self, renderable: &dyn Renderable) -> String {
-        let mut out = self.render_to_string(renderable);
-        out.push('\n');
+        let segments = self.render_segments(renderable);
+        let mut out = self.segments_to_string(&segments);
+        if !segments.is_empty() {
+            out.push('\n');
+        }
         out
     }
 
@@ -617,6 +623,11 @@ fn segments_to_plain(segments: &[Segment]) -> String {
 
 impl Renderable for Text {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        // Empty Text still represents a printable blank line; an empty
+        // generator such as Markdown does not. Preserve that distinction.
+        if self.is_empty() {
+            return vec![Segment::new("", None)];
+        }
         // Wrap to the available width; the effective justify is this text's own
         // justify, falling back to the console options' justify.
         let justify = if self.get_justify() != Justify::Default {
@@ -891,6 +902,17 @@ mod tests {
 
     /// The strict path reports malformed markup where the lenient one prints it
     /// literally. Both must still agree on markup that is actually valid.
+    #[test]
+    fn empty_text_and_empty_renderables_have_distinct_endings() {
+        let console = Console::builder().force_terminal(false).build();
+        assert_eq!(console.render_export(&Text::new("")), "\n");
+        assert_eq!(
+            console.render_export(&crate::markdown::Markdown::new("")),
+            ""
+        );
+        assert_eq!(console.render_export(&crate::table::Table::new()), "\n");
+    }
+
     #[test]
     fn try_build_text_reports_bad_markup() {
         let console = test_console();

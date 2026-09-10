@@ -82,6 +82,7 @@ fn json_mode_pretty_prints_from_stdin() {
     assert!(out.contains("{\n  \"a\": 1"), "got: {out:?}");
 }
 
+#[cfg(feature = "json-escape-safe")]
 #[test]
 fn json_width_never_splits_an_escape_sequence() {
     fn assert_complete_escapes(line: &str, width: &str, output: &str) {
@@ -225,7 +226,7 @@ fn a_valid_threshold_still_gates() {
         "",
     );
     assert!(!over, "5.4% change against a 2% limit must fail");
-    let (_out, under) = run(
+    let (out, err, under) = run_full(
         &[
             "--diff",
             &before,
@@ -237,7 +238,10 @@ fn a_valid_threshold_still_gates() {
         ],
         "",
     );
-    assert!(under, "5.4% change against a 90% limit must pass");
+    assert!(
+        under,
+        "5.4% change against a 90% limit must pass; stdout: {out}; stderr: {err}"
+    );
 }
 
 /// The gate compared full precision against a one-decimal display, so a limit
@@ -247,7 +251,7 @@ fn a_valid_threshold_still_gates() {
 #[test]
 fn the_threshold_matches_the_percentage_it_prints() {
     let (before, after) = diff_fixtures();
-    let (out, ok) = run(
+    let (out, err, ok) = run_full(
         &[
             "--diff",
             &before,
@@ -261,7 +265,7 @@ fn the_threshold_matches_the_percentage_it_prints() {
     );
     assert!(
         ok,
-        "a limit equal to the reported figure must not fail; got: {out}"
+        "a limit equal to the reported figure must not fail; stdout: {out}; stderr: {err}"
     );
 }
 
@@ -1004,4 +1008,105 @@ fn the_hyperlinks_flag_is_accepted_and_documented() {
             "{args:?} lost the link text:\n{out}"
         );
     }
+}
+
+#[test]
+fn empty_markdown_has_no_output_but_empty_text_keeps_its_newline() {
+    assert_eq!(
+        run(&["--no-color", "--markdown", "-"], ""),
+        (String::new(), true)
+    );
+    assert_eq!(run(&["--no-color", "--print", ""], ""), ("\n".into(), true));
+}
+
+#[test]
+fn alignment_flags_follow_upstream_priority_in_any_order() {
+    for mode in ["--json", "--csv", "--syntax"] {
+        let input = match mode {
+            "--json" => "{\"a\":1}",
+            "--csv" => "a,b\n1,2",
+            _ => "hello",
+        };
+        let left = run(&["--no-color", mode, "-", "--width", "20", "--left"], input);
+        let right = run(
+            &["--no-color", mode, "-", "--width", "20", "--right"],
+            input,
+        );
+        assert_ne!(left.0, right.0, "alignment is inert for {mode}");
+        for flags in [
+            ["--left", "--center", "--right"],
+            ["--right", "--center", "--left"],
+        ] {
+            let mut args = vec!["--no-color", mode, "-", "--width", "20"];
+            args.extend(flags);
+            assert_eq!(run(&args, input), left);
+        }
+    }
+}
+
+#[test]
+fn gif_layout_and_export_flags_fail_before_reading_explicit_or_inferred_files() {
+    for flag in ["--center", "--pager", "--panel=rounded"] {
+        // Pass panel's value separately; this parser deliberately has no = form.
+        let extra: Vec<&str> = if flag == "--panel=rounded" {
+            vec!["--panel", "rounded"]
+        } else {
+            vec![flag]
+        };
+        for prefix in [vec!["--gif", "missing.gif"], vec!["missing.gif"]] {
+            let mut args = prefix;
+            args.extend(extra.iter().copied());
+            let (_, err, ok) = run_full(&args, "");
+            assert!(!ok);
+            assert!(err.contains("cannot be combined with --gif"), "{err}");
+        }
+    }
+    let (_, err, ok) = run_full(&["missing.gif", "--export-svg", "unused.svg"], "");
+    assert!(!ok && err.contains("cannot capture --gif"), "{err}");
+    let (_, err, ok) = run_full(&["--gif", "--diff", "a.gif", "b.gif"], "");
+    assert!(
+        !ok && err.contains("--gif") && err.contains("--diff"),
+        "{err}"
+    );
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn piped_gif_forever_exits_with_one_frame_and_a_diagnostic() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../rich-art/examples/assets/ball.gif"
+    );
+    let mut child = bin()
+        .args(["--gif", path, "--loop", "0", "--width", "12", "--no-color"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        if child.try_wait().unwrap().is_some() {
+            break;
+        }
+        if std::time::Instant::now() > deadline {
+            child.kill().unwrap();
+            let _ = child.wait();
+            panic!("piped GIF loop never exited");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+    assert!(!output.stdout.is_empty());
+    assert!(!output.stdout.contains(&27));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("first frame"));
+}
+
+#[test]
+fn notebook_streams_are_unlabelled_and_display_data_matches_upstream_omission() {
+    let notebook = r#"{"cells":[{"cell_type":"code","execution_count":2,"source":["print('hello')"],"outputs":[{"output_type":"stream","name":"stdout","text":["hello\n"]},{"output_type":"display_data","data":{"image/png":"ignored"},"metadata":{}}]}],"metadata":{},"nbformat":4,"nbformat_minor":5}"#;
+    let (out, ok) = run(&["--no-color", "--ipynb", "-"], notebook);
+    assert!(ok);
+    assert!(out.contains("hello"));
+    assert!(!out.contains("Out["), "{out}");
 }
