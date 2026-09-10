@@ -35,3 +35,19 @@ Actual CLI screenshots and raw implementation evidence are in the neighboring
 `v0.0.4-syntax` evidence directories, and the release page embeds the product
 screenshots. The syntax feature is off by default; its revised binary reproduces
 the retained CLI stdout and native SVG byte for byte.
+
+## Package dry run
+
+At clean preparation commit `0a7c35b7babfaef0158fcb9fba19d1f06f75f90b`,
+the release script completed the workspace package dry run with exit status 0:
+
+```bash
+RELEASE_SELECTION='{"rs-rich":"0.0.4","rs-rich-ext":"0.0.4","rs-rich-cli":"0.0.4","rs-rich-art":"0.0.4"}' \
+  python3 scripts/release.py publish --dry-run
+```
+
+`package-dry-run.log` retains Cargo's actual output. All four tarballs were
+packaged and compiled; sibling dependencies were verified through Cargo's
+local temporary registry. Every upload was aborted by dry-run mode. Package
+exclusions for examples/integration tests are existing policy; the complete
+source suite was tested separately before this run.
