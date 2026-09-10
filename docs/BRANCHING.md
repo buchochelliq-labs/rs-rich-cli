@@ -232,7 +232,10 @@ package/version. A hit or an unexpected registry response aborts the job;
 unchanged, unselected versions are not queried. Uploads are serialized across
 all release tags and manual dispatches.
 
-After publishing, verification waits for **each selected version** on crates.io
+After publishing, verification runs behind the same protected `crates-io`
+environment as upload: fresh registry consumers can execute build scripts too.
+It stays a separate job so verification can be retried without uploading again.
+Verification waits for **each selected version** on crates.io
 and fails if it does not appear. In fresh temporary directories outside the
 checkout, it installs the CLI with an exact version and `--locked`, or compiles
 a consumer with an exact registry dependency for each selected library. An

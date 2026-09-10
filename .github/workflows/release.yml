@@ -109,6 +109,9 @@ jobs:
     name: verify from crates.io
     needs: [gate, publish]
     runs-on: ubuntu-latest
+    # Fresh registry consumers execute build scripts too. Keep verification
+    # behind the same protection as upload, with a separate job for retries.
+    environment: crates-io
     env:
       RELEASE_SELECTION: ${{ needs.gate.outputs.selection }}
     steps:

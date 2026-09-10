@@ -77,7 +77,9 @@ No changes yet.
   independent per-crate versioning remains supported.
 - **Release tooling (all four crates):** retain coordinated `v*` releases and
   independent `<crate>-v*` releases, with selection-scoped exact-version
-  verification. Align the release checklist and skill with both paths.
+  verification. Protect registry consumer builds with the same `crates-io`
+  environment as upload, preserving separate verification retries. Align the
+  release checklist and skill with both paths.
 - **CI and docs (all four crates):** parse the upstream pin as TOML, check
   generated manifest versions and CLI help, and apply main-ancestry checks to
   `rc/*`, `release/*`, and `releases/*` integration branches.
