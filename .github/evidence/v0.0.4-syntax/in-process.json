@@ -1,0 +1,20 @@
+{
+  "first_render_ms": 317.392656,
+  "warm_render_ms": [
+    247.922586,
+    105.936075,
+    101.54065700000001,
+    108.561195,
+    106.45025700000001
+  ],
+  "output_bytes": 287142,
+  "input_sha256": "e47f5ecf3a58f4afe870e94076ff621ccfdbbd71d626bae6797d1699937a9458",
+  "input_bytes": 198940,
+  "output_sha256": "d9e3bea7aa473d32b8e7100ad5c7305e2270feea4fb56414e88101beabcd6b7b",
+  "width": 100,
+  "no_color": true,
+  "features": [
+    "syntax-cache"
+  ],
+  "revision": "f5ac2fb-plus-opt-in-bounded-reference"
+}

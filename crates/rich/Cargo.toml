@@ -33,6 +33,8 @@ name = "rich"
 workspace = true
 
 [features]
+# Optional parser reuse; disabled in the default mirror (DIVERGENCES #23).
+syntax-cache = []
 default = []
 # Explicit opt-in to JSON escape-aware display boundaries (DIVERGENCES #22).
 json-escape-safe = []

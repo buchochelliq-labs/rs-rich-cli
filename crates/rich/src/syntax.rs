@@ -12,10 +12,15 @@
 
 use std::sync::OnceLock;
 
-use syntect::easy::HighlightLines;
 use syntect::highlighting::{Color as SynColor, FontStyle, Style as SynStyle, Theme, ThemeSet};
 use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
+
+#[cfg(not(feature = "syntax-cache"))]
+use syntect::easy::HighlightLines;
+#[cfg(feature = "syntax-cache")]
+#[path = "syntax_cache.rs"]
+mod cache;
 
 use crate::cells::cell_len;
 use crate::color::Color;
@@ -194,7 +199,10 @@ impl Renderable for Syntax {
             })
             .unwrap_or_else(|| syntaxes.find_syntax_plain_text());
 
+        #[cfg(not(feature = "syntax-cache"))]
         let mut highlighter = HighlightLines::new(syntax, theme);
+        #[cfg(feature = "syntax-cache")]
+        let mut highlighter = cache::CachedHighlighter::new(syntax, theme);
         // The gutter eats into the space the code itself may occupy.
         let width = options.max_width;
         let code_width = width.saturating_sub(self.padding * 2);

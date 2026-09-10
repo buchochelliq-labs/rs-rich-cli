@@ -220,3 +220,38 @@ are committed with the implementation.
 Actual CLI output at width 64:
 
 ![Styled Markdown wrapping in the CLI](assets/releases/0.0.4-wrapping.jpg)
+
+## 0.0.4 repeated-source syntax results
+
+Profiling showed parsing/highlighting dominated syntax rendering. The optional
+`syntax-cache` Cargo feature reuses parse operations for exact repeated lines
+whose full parser state matches one small initial reference before and after
+parsing. Default builds retain the uncached Syntect path. Every line advances
+the live highlighter; grammars, themes and the regex engine are unchanged.
+Build with `cargo build -p rs-rich-cli --release --features syntax-cache`.
+The cache stores operations for at most 64 eligible lines per render and never
+clones later states containing potentially large captured openers.
+
+| Case | 0.0.3 median (ms) | Opt-in development median (ms) |
+|---|---:|---:|
+| Repetitive Rust, 46 KB | 185.1 | 72.3 |
+| Repetitive Rust, 199 KB | 629.9 | 159.3 |
+| Real CLI source | 445.0 | 442.0 |
+| Real Text source | 253.8 | 256.9 |
+
+These are five-run Linux medians using the same inputs and optimized settings.
+The repeated 199 KB fixture improves by 75%, exceeding the predeclared 20%
+target. Real-source controls are essentially unchanged: this is a benefit for
+repeated boilerplate, not a general syntax speedup. Source and output remain
+buffered. The cache takes at most one reference snapshot from a first source
+line of at most 4096 bytes; oversized first lines disable caching. Entry lines
+are limited to 4096 bytes and 256 operations each.
+
+All five benchmark output hashes and 144 output/export combinations match the
+pre-change binary. State-sensitive tests compare every bundled theme with
+uncached Syntect. Cold-process samples and a separate repeated-library-render
+probe are included in the [raw evidence](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/v0.0.4-syntax).
+
+Actual CLI syntax output, including identical text inside and outside a comment:
+
+![Syntax colors and comment context in the CLI](assets/releases/0.0.4-syntax.jpg)

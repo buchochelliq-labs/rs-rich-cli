@@ -33,6 +33,10 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+- `rs-rich`, `rs-rich-cli`: optional, off-by-default `syntax-cache` for repeated
+  lines matching a small initial parser state. No per-entry capture copies;
+  grammars and output remain unchanged, with workload-dependent gains (#45).
+
 - `rs-rich`: ownership-transfer protocol for table rows, preserving existing rendering.
 - `rs-rich-cli`: move parsed CSV rows into the table and compact completed rows;
   measured 100k-row peak RSS falls about 46%, with identical output (#74).

@@ -88,14 +88,16 @@ strict UTF-8. A recognized UTF-16 BOM gets an actionable hint. Headerless UTF-16
 is not guessed: select its byte order explicitly or convert to UTF-8. See
 [encoding troubleshooting](troubleshooting.md#text-encoding).
 
-### Syntax highlighting is the slowest path
+### Syntax parsing remains costly for varied source
 
-Measured at roughly **4.3 ms per KB** of source, which is what drags the CLI's
-advantage over Python `rich-cli` from about 27× down to about 3.8× on
-syntax-heavy input. Everything else is far faster; see
-[Benchmarks](benchmarks.md) for the method and the numbers.
-
-Tracked as [#45](https://github.com/buchochelliq-labs/rs-rich-cli/issues/45).
+The off-by-default 0.0.4 `syntax-cache` Cargo feature helps repeated boilerplate
+whose parser state stays unchanged. Default builds use uncached Syntect. Measured real-source files showed essentially unchanged runtime;
+loading and parsing new syntax still costs more than plain text. See the
+[workload-specific results](benchmarks.md#004-repeated-source-syntax-results).
+Historical 0.0.2 Windows/Python comparisons are retained separately in the
+benchmark page; they are not current 0.0.4 measurements. The implemented scope
+of [#45](https://github.com/buchochelliq-labs/rs-rich-cli/issues/45) is repeated-line
+parsing reuse, not a blanket syntax speedup.
 
 ---
 
