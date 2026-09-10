@@ -3,10 +3,10 @@
 # ⚠️  VERSION POLICY: this crate owns an independent Rust SemVer. It does not
 # mirror Python `rich`; UPSTREAM.toml records that separately. Bump it for
 # changes shipped in this crate, never to ship an extension-only feature. The
-# current release workflow coordinates all four crates; see docs/BRANCHING.md.
+# release tag selects a coordinated or per-crate upload; see docs/BRANCHING.md.
 [package]
 name = "rs-rich"
-version = "0.0.2"
+version = "0.0.3"
 description = "A faithful Rust port of the Python `rich` terminal-rendering library"
 edition.workspace = true
 license.workspace = true

@@ -41,7 +41,7 @@ If that ever fails, something was published that isn't on `main`.
 | `port/<module>` | fresh `origin/main` | `main` via PR | one PR — the `port-module` skill |
 | `sync/rich-<version>` | fresh `origin/main` | `main` via PR | one PR — the `sync-upstream` skill |
 | `rc/<X.Y.Z>` | fresh `origin/main` | `main` via PR, then tag on `main` | a release cycle |
-| `release/<X.Y.Z>` | fresh `origin/main` | `main` via PR, then tag `vX.Y.Z` on `main` | minutes |
+| `release/<X.Y.Z>` or `releases/<X.Y.Z>` | fresh `origin/main` | `main` via PR, then tag `vX.Y.Z` on `main` | minutes |
 | `hotfix/<X.Y.Z>` | the tag `vX.Y.(Z-1)` | nothing — tagged in place, forward-ported to `main` by PR | until forward-ported |
 
 A merged branch is **dead**. It is auto-deleted, and pushing to it is a bug, not
@@ -71,14 +71,22 @@ head. It is safe **only** while the rc stays a fast-forward of `main`. The momen
 `main` moves ahead, merging the rc either conflicts or silently reverts, and a
 release cut from it no longer contains what is on `main`.
 
-CI enforces that: the `rc not behind main` check fails any PR into an `rc/*`
-branch that has fallen behind. Keep it current with:
+CI enforces that: the `rc not behind main` check applies to `rc/*`, `release/*`,
+and `releases/*` (including `releases/v0.0.3-rc`). It tests the proposed merge
+result, so a PR bringing in current `main` can pass. Keep it current with:
 
 ```bash
-git switch rc/0.0.2 && git merge origin/main && git push
+git fetch origin
+git switch -c fix/refresh-release origin/releases/v0.0.3-rc
+git merge origin/main
+# Open a PR into releases/v0.0.3-rc.
 ```
 
 #### Protection
+
+The ruleset described below covers `rc/*`. Accepting `release/*` and `releases/*`
+in workflow checks does not extend that ruleset; verify server-side protections
+before creating another integration branch.
 
 `rc/*` is covered by its own ruleset (**"rc branches"**), matching `main`'s
 protection rather than being the soft underbelly of the release process:
@@ -119,7 +127,7 @@ gh pr edit <number> --base main
 ```
 
 CI enforces this: the `base branch` check fails any PR not targeting `main` or
-`release/*`.
+`rc/*`, `release/*`, or `releases/*`.
 
 ## Releases
 
@@ -174,10 +182,13 @@ updating the requirements used by its direct dependents (`rs-rich-ext`,
 requires updating `rs-rich-cli`. Cargo does **not** force unrelated crates to
 share a version. Our coordinated-tag policy does.
 
-### Coordinated `v0.0.3` (if selected)
+### Prepared 0.0.3 snapshot
 
-A plain `v0.0.3` still means a coordinated workspace release, with
-**publish** selected for every crate:
+This preparation includes the Markdown fix from `main`, requiring core 0.0.3.
+The ext package also changes its core dependency and must publish a new version.
+Together with the already-prepared CLI and art versions, all four manifests now
+say 0.0.3. This is the dependency closure for this release, not a lockstep policy.
+A plain `v0.0.3` would select all four:
 
 | package | decision | manifest change | internal requirement change |
 |---|---|---|---|
@@ -186,10 +197,11 @@ A plain `v0.0.3` still means a coordinated workspace release, with
 | `rs-rich-art` | publish `0.0.3` | `crates/rich-art/Cargo.toml`: `0.0.2` → `0.0.3` | root `rich-art` requirement: `0.0.2` → `0.0.3`; it consumes the updated root `rich` requirement |
 | `rs-rich-cli` | publish `0.0.3` | `crates/rich-cli/Cargo.toml`: `0.0.2` → `0.0.3` | it consumes all three updated root requirements |
 
-Those seven edits (four package versions and three workspace requirements), the
-lockfile refresh, changelog promotion, and README release-number update belong
-in the eventual release commit. They are recorded here **before** creating the
-tag; this policy change does not itself create `v0.0.3` or claim it was shipped.
+The manifest and lockfile updates are prepared now. Changelog promotion belongs
+in the final release PR; `Unreleased` remains populated until then. Regenerate
+version tables with `python3 scripts/gen_versions.py` and CLI help with
+`python3 scripts/gen_cli_reference.py` after building the release binary. CI
+checks both generated documents. No tag or registry upload is created by preparation.
 
 This coordinated option is separate from the independent CLI/art tags above.
 Do not publish a crate at `0.0.3` independently and then expect a coordinated

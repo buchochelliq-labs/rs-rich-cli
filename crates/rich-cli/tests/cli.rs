@@ -178,7 +178,7 @@ fn a_valid_threshold_still_gates() {
         "",
     );
     assert!(!over, "5.4% change against a 2% limit must fail");
-    let (_out, under) = run(
+    let (out, err, under) = run_full(
         &[
             "--diff",
             &before,
@@ -190,7 +190,10 @@ fn a_valid_threshold_still_gates() {
         ],
         "",
     );
-    assert!(under, "5.4% change against a 90% limit must pass");
+    assert!(
+        under,
+        "5.4% change against a 90% limit must pass; stdout: {out}; stderr: {err}"
+    );
 }
 
 /// The gate compared full precision against a one-decimal display, so a limit
@@ -200,7 +203,7 @@ fn a_valid_threshold_still_gates() {
 #[test]
 fn the_threshold_matches_the_percentage_it_prints() {
     let (before, after) = diff_fixtures();
-    let (out, ok) = run(
+    let (out, err, ok) = run_full(
         &[
             "--diff",
             &before,
@@ -214,7 +217,7 @@ fn the_threshold_matches_the_percentage_it_prints() {
     );
     assert!(
         ok,
-        "a limit equal to the reported figure must not fail; got: {out}"
+        "a limit equal to the reported figure must not fail; stdout: {out}; stderr: {err}"
     );
 }
 

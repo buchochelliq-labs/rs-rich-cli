@@ -10,6 +10,7 @@ what `--panel-style` now does. Re-run after any CLI change:
 The prose that cannot be derived from `--help` — defaults, interactions, exit
 codes — lives in `docs/cli.md` and is maintained by hand.
 """
+import argparse
 import pathlib
 import re
 import subprocess
@@ -52,13 +53,18 @@ FOOTER = """
 
 
 def main():
-    if not EXE.exists():
-        print(f"binary not found at {EXE}; run: cargo build --release -p rs-rich-cli",
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--binary", type=pathlib.Path, default=EXE)
+    parser.add_argument("--check", action="store_true")
+    args = parser.parse_args()
+    if not args.binary.exists():
+        print(f"binary not found at {args.binary}; run: cargo build --release -p rs-rich-cli",
               file=sys.stderr)
         return 1
 
     help_text = subprocess.run(
-        [str(EXE), "--help"], capture_output=True, text=True, encoding="utf-8"
+        [str(args.binary.resolve()), "--help"], capture_output=True, text=True,
+        encoding="utf-8", check=True
     ).stdout.replace("\r\n", "\n")
 
     # The help is our own artefact with a fixed set of sections. Splitting on
@@ -126,7 +132,14 @@ def main():
         parts.append("```text\n" + dedented.rstrip() + "\n```\n")
 
     parts.append(FOOTER)
-    OUT.write_text("\n".join(parts), encoding="utf-8")
+    rendered = "\n".join(parts)
+    if args.check:
+        if OUT.read_text(encoding="utf-8") != rendered:
+            print("docs/cli-reference.md is stale; regenerate with this binary", file=sys.stderr)
+            return 1
+        print("docs/cli-reference.md matches the CLI --help")
+        return 0
+    OUT.write_text(rendered, encoding="utf-8")
 
     flags = sorted(set(re.findall(r"--[a-z][a-z-]+", help_text)))
     print(f"wrote {OUT.relative_to(ROOT)}  ({len(flags)} long options)")

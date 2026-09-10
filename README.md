@@ -32,12 +32,24 @@ recorded separately in [`UPSTREAM.toml`](UPSTREAM.toml).
 A `vX.Y.Z` tag selects a coordinated workspace release; a `<crate>-vX.Y.Z`
 tag selects only that crate. See [the release documentation](docs/BRANCHING.md#releases).
 
-| crate | crates.io package | Manifest version | docs / installed name | what it is |
-|-------|-------------------|--------------|-----------------------|------------|
-| [`crates/rich`](crates/rich) | [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.2` | [docs.rs](https://docs.rs/rs-rich); `use rich` | faithful port of Python `rich` 15.0.0 |
-| [`crates/rich-ext`](crates/rich-ext) | [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.2` | [docs.rs](https://docs.rs/rs-rich-ext); `use rich_ext` | our additions + the plugin registry |
-| [`crates/rich-cli`](crates/rich-cli) | [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.3` | executable **`rich`** | port tracking Python `rich-cli` 1.8.1 |
-| [`crates/rich-art`](crates/rich-art) | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.3` | [docs.rs](https://docs.rs/rs-rich-art); `use rich_art` | FIGlet text, image→ASCII, animated GIFs |
+These are the versions prepared in this checkout. They do not imply that a
+release has been published; the crates.io links show available releases.
+
+<!-- BEGIN MANIFEST VERSIONS -->
+| Package | Manifest version |
+|---|---|
+| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.3` |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.3` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.3` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.3` |
+<!-- END MANIFEST VERSIONS -->
+
+| Package | Role | Import / installed name |
+|---|---|---|
+| `rs-rich` | faithful port of Python rich 15.0.0 | `use rich` |
+| `rs-rich-ext` | additions and plugin registry | `use rich_ext` |
+| `rs-rich-cli` | CLI tracking Python rich-cli 1.8.1 | executable `rich` |
+| `rs-rich-art` | FIGlet, image→ASCII, animated GIFs | `use rich_art` |
 
 The published package names carry an `rs-` prefix because `rich` is already taken
 on crates.io by an unrelated crate. The library targets keep the short names, so

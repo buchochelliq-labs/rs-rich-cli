@@ -33,7 +33,25 @@ Everything below this heading is the development history that led here.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+- **`rs-rich` (and rendering through `rs-rich-cli`): Markdown image hoisting is byte-parity in nested and adjacent containers**
+  (`markdown.rs`): images inside table cells are now hoisted ahead of the table
+  and leave their cells empty, multiple images in one container share a row, and
+  images hoisted from consecutive containers occupy adjacent rows without a blank
+  row. Goldens cover a table cell, a multi-image paragraph, and a README-style
+  badge table against Python `rich` 15.0.0.
+
+### Changed
+- **`rs-rich`, `rs-rich-ext`, `rs-rich-art`, `rs-rich-cli`:** prepare 0.0.3
+  manifests and internal requirements together. Core includes the Markdown fix;
+  ext needs a new package version for its dependency on core 0.0.3. Art and CLI
+  retain their already-prepared 0.0.3 versions. These versions are not yet released.
+- **Release tooling (all four crates):** retain coordinated `v*` releases and
+  independent `<crate>-v*` releases, with selection-scoped exact-version
+  verification. Align the release checklist and skill with both paths.
+- **CI and docs (all four crates):** parse the upstream pin as TOML, check
+  generated manifest versions and CLI help, and apply main-ancestry checks to
+  `rc/*`, `release/*`, and `releases/*` integration branches.
 
 ## [0.0.2] — 2026-08-11
 

@@ -21,8 +21,8 @@ rust-version = "1.90"
 # `rich` is taken by an unrelated crate; the `package = …` key maps them back to
 # the short names, so every `use rich::…` in this workspace is unaffected.
 # External users get the same short names via each crate's `[lib] name`.
-rich = { package = "rs-rich", path = "crates/rich", version = "0.0.2" }
-rich-ext = { package = "rs-rich-ext", path = "crates/rich-ext", version = "0.0.2" }
+rich = { package = "rs-rich", path = "crates/rich", version = "0.0.3" }
+rich-ext = { package = "rs-rich-ext", path = "crates/rich-ext", version = "0.0.3" }
 rich-art = { package = "rs-rich-art", path = "crates/rich-art", version = "0.0.3" }
 # Cargo's default caret requirement treats 0.0.x specially: `version = "0.0.2"`
 # means >=0.0.2,<0.0.3, not >=0.0.2,<0.1.0. Therefore any internal crate bump
