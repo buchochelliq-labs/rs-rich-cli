@@ -8,7 +8,9 @@ use std::io::{Read, Write};
 use std::process::{Command, Stdio};
 
 fn bin() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_rich"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rich"));
+    command.env_remove("NO_COLOR");
+    command
 }
 
 /// Run the CLI with `args`, feeding `stdin`, returning `(stdout, success)`.
@@ -1135,4 +1137,277 @@ fn notebook_streams_are_unlabelled_and_display_data_matches_upstream_omission() 
     assert!(ok);
     assert!(out.contains("hello"));
     assert!(!out.contains("Out["), "{out}");
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn diff_exports_keep_graphics_independent_of_redirected_stdout() {
+    let (before, after) = diff_fixtures();
+    let dir = std::env::temp_dir().join(format!("rich-diff-export-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let html = dir.join("report.html");
+    let svg = dir.join("report.svg");
+    for mode in ["auto", "blocks", "sixel", "ascii", "none"] {
+        let args = [
+            "--diff",
+            &before,
+            &after,
+            "--width",
+            "40",
+            "--image-mode",
+            mode,
+            "--threshold",
+            "100",
+        ];
+        let (plain, plain_err, plain_ok) = run_full(&args, "");
+        let mut exporting = args.to_vec();
+        exporting.extend([
+            "--export-html",
+            html.to_str().unwrap(),
+            "--export-svg",
+            svg.to_str().unwrap(),
+        ]);
+        let (out, err, ok) = run_full(&exporting, "");
+        assert!(plain_ok && ok, "{mode}: {err}");
+        assert_eq!(out, plain, "exports changed stdout for {mode}");
+        assert_eq!(
+            err, plain_err,
+            "export should not repeat terminal diagnostics"
+        );
+        assert!(!out.contains('\x1b'));
+        for path in [&html, &svg] {
+            let document = std::fs::read_to_string(path).unwrap();
+            assert_eq!(
+                document.contains('▀'),
+                matches!(mode, "auto" | "blocks" | "sixel"),
+                "{mode}: {}",
+                path.display()
+            );
+            assert!(document.contains("OK"));
+            assert!(
+                !document.contains('\x1b'),
+                "Sixel/ANSI must not enter exports"
+            );
+        }
+        exporting.push("--no-color");
+        assert!(run(&exporting, "").1);
+        assert!(!std::fs::read_to_string(&html).unwrap().contains('▀'));
+    }
+    let (out, err, ok) = run_full(
+        &[
+            "--diff",
+            &before,
+            &after,
+            "--threshold",
+            "0",
+            "--export-html",
+            html.to_str().unwrap(),
+        ],
+        "",
+    );
+    assert!(!ok, "threshold must still fail: {err}");
+    assert!(out.contains("FAIL"));
+    assert!(std::fs::read_to_string(&html).unwrap().contains("FAIL"));
+    let (_, err, ok) = run_full(
+        &[
+            "--diff",
+            &before,
+            &after,
+            "--threshold",
+            "100",
+            "--export-html",
+            dir.to_str().unwrap(),
+        ],
+        "",
+    );
+    assert!(!ok && err.contains("failed to save HTML"));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn notebook_decorators_alignment_and_export_apply_to_the_whole_group() {
+    let notebook = r#"{"cells":[{"cell_type":"raw","source":["hello"]},{"cell_type":"raw","source":["world"]}]}"#;
+    let dir = std::env::temp_dir().join(format!("rich-notebook-layout-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let html = dir.join("notebook.html");
+    let svg = dir.join("notebook.svg");
+    let (out, err, ok) = run_full(
+        &[
+            "--ipynb",
+            "-",
+            "--width",
+            "24",
+            "--right",
+            "--padding",
+            "0,1",
+            "--panel",
+            "rounded",
+            "--title",
+            "[bold]Notebook[/]",
+            "--caption",
+            "[italic]Done[/]",
+            "--style",
+            "red",
+            "--export-html",
+            html.to_str().unwrap(),
+            "--export-svg",
+            svg.to_str().unwrap(),
+        ],
+        notebook,
+    );
+    assert!(ok, "{err}");
+    assert!(out.contains("Notebook") && out.contains("Done"));
+    assert!(!out.contains("[bold]"));
+    assert!(
+        out.lines().all(|line| line.starts_with(&" ".repeat(56))),
+        "{out:?}"
+    );
+    assert!(
+        out.lines().all(|line| line.chars().count() == 80),
+        "{out:?}"
+    );
+    assert_eq!(out.matches('╭').count(), 1);
+    assert_eq!(out.matches("hello").count(), 1);
+    let exported = std::fs::read_to_string(html).unwrap();
+    assert!(
+        exported.contains("#800000"),
+        "--style must reach notebook output"
+    );
+    assert!(exported.contains("font-weight: bold"));
+    assert!(std::fs::read_to_string(svg).unwrap().contains("world"));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn notebook_group_uses_upstream_cell_spacing_and_output_execution_count() {
+    let notebook = r#"{"cells":[{"cell_type":"raw","source":["one"],"outputs":[{"output_type":"stream","text":["stream\n"]}]},{"cell_type":"raw","source":["two"],"outputs":[{"output_type":"execute_result","execution_count":7,"data":{"text/plain":"result"}}]},{"cell_type":"raw","source":["three"]}]}"#;
+    let (out, ok) = run(&["--ipynb", "-", "--no-color"], notebook);
+    assert!(ok);
+    assert_eq!(out, "\none\nstream\ntwo\nOut[7]:\nresult\n\nthree\n");
+}
+
+#[test]
+fn demo_refuses_unsupported_options_with_a_diagnostic() {
+    for flags in [
+        vec!["--center"],
+        vec!["--panel", "rounded"],
+        vec!["--padding", "1"],
+        vec!["--width", "40"],
+        vec!["--style", "red"],
+        vec!["--pager"],
+        vec!["--title", "Demo"],
+        vec!["--hyperlinks"],
+    ] {
+        let (out, err, ok) = run_full(&flags, "");
+        assert!(
+            !ok && out.is_empty() && err.contains("capability demo"),
+            "{flags:?}: {out:?} {err:?}"
+        );
+    }
+}
+
+#[test]
+fn title_markup_is_measured_visually_and_malformed_labels_fail_cleanly() {
+    let (plain, ok) = run(&["-p", "x", "--panel", "rounded", "--title", "Hello"], "");
+    assert!(ok);
+    let (styled, ok) = run(
+        &["-p", "x", "--panel", "rounded", "--title", "[bold]Hello[/]"],
+        "",
+    );
+    assert!(ok);
+    assert_eq!(plain, styled, "markup bytes must not widen the panel");
+    assert_eq!(plain.lines().next().unwrap(), "╭─ Hello ─╮");
+    for args in [
+        vec!["--rule", "[/bad]"],
+        vec!["-p", "x", "--panel", "rounded", "--title", "[/bad]"],
+        vec!["-p", "x", "--panel", "rounded", "--caption", "[/bad]"],
+    ] {
+        let (out, err, ok) = run_full(&args, "");
+        assert!(!ok && out.is_empty() && !err.is_empty() && !err.contains("panicked"));
+    }
+}
+
+#[test]
+fn help_documents_paging_environment_stdin_and_loop_defaults() {
+    let (help, ok) = run(&["--help"], "");
+    assert!(ok);
+    for phrase in [
+        "default 1; 0 = forever",
+        "more.com",
+        "MANPAGER",
+        "COLUMNS",
+        "FORCE_COLOR",
+        "stdin until EOF",
+        "last value",
+    ] {
+        assert!(help.contains(phrase), "missing {phrase}");
+    }
+    let (out, err, ok) = run_full(&["--markdown"], "hello");
+    assert!(
+        ok && out.contains("hello") && err.is_empty(),
+        "piped implicit stdin must remain quiet"
+    );
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn diff_export_respects_nonempty_no_color_but_not_an_empty_value() {
+    let (before, after) = diff_fixtures();
+    let html = std::env::temp_dir().join(format!("rich-diff-no-color-{}.html", std::process::id()));
+    for no_color in [None, Some(""), Some("1")] {
+        let mut command = bin();
+        command.args([
+            "--diff",
+            &before,
+            &after,
+            "--width",
+            "20",
+            "--export-html",
+            html.to_str().unwrap(),
+        ]);
+        if let Some(value) = no_color {
+            command.env("NO_COLOR", value);
+        }
+        let output = command.output().unwrap();
+        assert!(output.status.success());
+        assert!(!output.stdout.contains(&0x1b));
+        let document = std::fs::read_to_string(&html).unwrap();
+        assert_eq!(document.contains('▀'), no_color != Some("1"));
+    }
+    std::fs::remove_file(html).unwrap();
+}
+
+#[test]
+fn unused_label_markup_keeps_upstream_ignore_behavior() {
+    let (out, err, ok) = run_full(&["-p", "hello", "--title", "[/bad]"], "");
+    assert!(ok && err.is_empty());
+    assert_eq!(out, "hello\n");
+    let (out, err, ok) = run_full(
+        &["--ipynb", "-", "--caption", "[/bad]"],
+        r#"{"cells":[{"cell_type":"raw","source":"hello"}]}"#,
+    );
+    assert!(ok && err.is_empty() && out.contains("hello"));
+    let (out, err, ok) = run_full(
+        &["--csv", "-", "--title", "[/bad]"],
+        "name,value\nfirst,1\n",
+    );
+    assert!(!ok && out.is_empty() && !err.is_empty());
+}
+
+#[test]
+fn notebook_alignment_reaches_unequal_text_lines() {
+    let notebook = r#"{"cells":[{"cell_type":"raw","source":"short"},{"cell_type":"raw","source":"a longer line"}]}"#;
+    // Rich 15 Group + Console.print(justify=...) pads each Text member within
+    // the measured group, then positions the group in the 80-column console.
+    for (flag, short_left, long_left) in [("--right", 75, 67), ("--center", 37, 33)] {
+        let (out, ok) = run(&["--ipynb", "-", flag], notebook);
+        assert!(ok);
+        let short = out.lines().find(|line| line.contains("short")).unwrap();
+        let long = out
+            .lines()
+            .find(|line| line.contains("a longer line"))
+            .unwrap();
+        assert_eq!(short.find("short"), Some(short_left), "{out:?}");
+        assert_eq!(long.find("a longer line"), Some(long_left), "{out:?}");
+    }
 }

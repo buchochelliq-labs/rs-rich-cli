@@ -3,16 +3,15 @@
 //! Port of upstream `rich/rule.py`. A [`Rule`] draws a horizontal line across
 //! the available width, optionally with a centered title.
 //!
-//! Slice scope: center alignment (the default). `left`/`right` title alignment
-//! is deferred with the rest of `rule.py`.
+//! Titles support console markup and left, center or right alignment.
 
 use crate::align::HorizontalAlign;
-use crate::cells::{cell_len, set_cell_size, truncate};
-use crate::console::{Console, ConsoleOptions};
+use crate::cells::{cell_len, set_cell_size};
+use crate::console::{Console, ConsoleOptions, Overflow};
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::style::Style;
-use crate::text::Text;
+use crate::text::{Text, DEFAULT_TAB_SIZE};
 
 /// A horizontal rule, optionally titled. Mirrors `rich.rule.Rule`.
 pub struct Rule {
@@ -77,8 +76,8 @@ impl Rule {
         set_cell_size(&repeated, width)
     }
 
-    fn build_text(&self, width: usize) -> Text {
-        let Some(title) = &self.title else {
+    fn build_text(&self, console: &Console, width: usize) -> Text {
+        let Some(title) = self.title.as_ref().filter(|title| !title.is_empty()) else {
             return Text::styled(self.fill(width), self.style.clone());
         };
 
@@ -97,11 +96,22 @@ impl Rule {
             return Text::styled(self.fill(width), self.style.clone());
         }
 
+        // Upstream uses Console.render_str, so titles retain markup, emoji,
+        // the console's highlighter and the `rule.text` theme style.
+        let parsed = console.build_text(title);
+        let mut title = parsed.blank_copy();
+        title.append(&parsed.plain().replace('\n', " "), None);
+        for span in parsed.spans() {
+            title.push_span(span.clone());
+        }
+        title.set_base_style("rule.text");
+        title.expand_tabs(DEFAULT_TAB_SIZE);
+        title.truncate(truncate_width, Some(Overflow::Ellipsis), false);
+
         match self.align {
             HorizontalAlign::Center => {
                 // Title truncated (never padded) to leave room for the flanking spaces.
-                let title = truncate_ellipsis(title, truncate_width);
-                let title_len = cell_len(&title);
+                let title_len = title.cell_len();
 
                 let side_width = width.saturating_sub(title_len) / 2;
                 let left = self.fill(side_width.saturating_sub(1));
@@ -113,48 +123,33 @@ impl Rule {
 
                 let mut text = Text::new("");
                 text.append(&format!("{left} "), Some(self.style.clone().into()));
-                text.append(&title, None);
+                text = text.append_text(&title);
                 text.append(&format!(" {right}"), Some(self.style.clone().into()));
                 text
             }
             HorizontalAlign::Left => {
-                let title = truncate_ellipsis(title, truncate_width);
-                let fill_len = width.saturating_sub(cell_len(&title)).saturating_sub(1);
+                let fill_len = width.saturating_sub(title.cell_len()).saturating_sub(1);
                 let mut text = Text::new("");
-                text.append(&format!("{title} "), None);
+                text = text.append_text(&title);
+                text.append(" ", None);
                 text.append(&self.fill(fill_len), Some(self.style.clone().into()));
                 text
             }
             HorizontalAlign::Right => {
-                let title = truncate_ellipsis(title, truncate_width);
-                let fill_len = width.saturating_sub(cell_len(&title)).saturating_sub(1);
+                let fill_len = width.saturating_sub(title.cell_len()).saturating_sub(1);
                 let mut text = Text::new("");
                 text.append(&self.fill(fill_len), Some(self.style.clone().into()));
-                text.append(&format!(" {title}"), None);
+                text.append(" ", None);
+                text = text.append_text(&title);
                 text
             }
         }
     }
 }
 
-/// Truncate to `width` cells with upstream's `overflow="ellipsis"`: an over-long
-/// title loses its tail to a single `…` rather than being cut mid-word, which is
-/// what `Text.truncate(..., overflow="ellipsis")` does before a rule is drawn.
-fn truncate_ellipsis(text: &str, width: usize) -> String {
-    if cell_len(text) <= width {
-        return text.to_string();
-    }
-    if width == 0 {
-        return String::new();
-    }
-    let mut out = truncate(text, width.saturating_sub(1));
-    out.push('\u{2026}');
-    out
-}
-
 impl Renderable for Rule {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        let text = self.build_text(options.max_width);
+        let text = self.build_text(console, options.max_width);
         text.render(console.theme(), console.base_style())
     }
 }

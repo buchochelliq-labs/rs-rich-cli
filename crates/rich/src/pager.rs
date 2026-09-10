@@ -51,7 +51,9 @@ fn pager_command() -> Option<(String, Vec<String>)> {
         }
     }
     if cfg!(windows) {
-        Some(("more".to_string(), Vec::new()))
+        // Unlike pydoc's shell invocation, Command only fills in `.exe` on
+        // Windows. The system pager is `more.com`, so name it explicitly.
+        Some(("more.com".to_string(), Vec::new()))
     } else {
         // `less -R` keeps ANSI styling readable; pydoc tries `pager` then `less`.
         Some(("less".to_string(), vec!["-R".to_string()]))
@@ -140,10 +142,54 @@ mod tests {
     fn falls_back_to_a_platform_default() {
         let _guard = EnvGuard::set(&[("MANPAGER", None), ("PAGER", None)]);
         let (program, _) = pager_command().expect("a pager command");
-        assert_eq!(program, if cfg!(windows) { "more" } else { "less" });
+        assert_eq!(program, if cfg!(windows) { "more.com" } else { "less" });
     }
 
-    /// Set/restore env vars around a test. The two env tests share a lock so
+    #[test]
+    fn pager_env_var_wins_when_manpager_is_empty() {
+        let _guard = EnvGuard::set(&[("MANPAGER", Some("")), ("PAGER", Some("myp --plain"))]);
+        let (program, args) = pager_command().expect("a pager command");
+        assert_eq!(program, "myp");
+        assert_eq!(args, vec!["--plain".to_string()]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_default_pager_displays_piped_content() {
+        let _guard = EnvGuard::set(&[("MANPAGER", None), ("PAGER", None)]);
+        let (program, args) = pager_command().expect("a pager command");
+        // CI has no terminal, so exercise the selected executable directly:
+        // SystemPager::show would correctly take the plain-output fallback.
+        let mut child = Command::new(program)
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the default Windows pager must resolve and start");
+        let content = "rs-rich Windows pager smoke test\r\nsecond line reaches the pager\r\n";
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(content.as_bytes())
+            .unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert!(
+            output.status.success(),
+            "pager failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8(output.stdout)
+                .unwrap()
+                .replace("\r\n", "\n")
+                .trim_end_matches('\n'),
+            content.replace("\r\n", "\n").trim_end_matches('\n')
+        );
+    }
+
+    /// Set/restore env vars around a test. The environment tests share a lock so
     /// they can't interleave (tests run in parallel threads).
     struct EnvGuard {
         previous: Vec<(String, Option<String>)>,

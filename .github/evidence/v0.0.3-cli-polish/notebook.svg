@@ -1,0 +1,121 @@
+<svg class="rich-terminal" viewBox="0 0 994 391.59999999999997" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .rich-cli-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .rich-cli-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .rich-cli-r1 { fill: #c5c8c6 }
+.rich-cli-r2 { fill: #68a0b3 }
+.rich-cli-r3 { fill: #68a0b3;font-weight: bold }
+.rich-cli-r4 { fill: #c5c8c6;font-weight: bold;text-decoration: underline; }
+.rich-cli-r5 { fill: #c5c8c6;font-weight: bold }
+.rich-cli-r6 { fill: #98a84b }
+.rich-cli-r7 { fill: #66ff00 }
+.rich-cli-r8 { fill: #868887 }
+.rich-cli-r9 { fill: #c0c5ce }
+.rich-cli-r10 { fill: #a3be8c }
+.rich-cli-r11 { fill: #96b5b4 }
+.rich-cli-r12 { fill: #68a0b3;font-style: italic; }
+    </style>
+
+    <defs>
+    <clipPath id="rich-cli-clip-terminal">
+      <rect x="0" y="0" width="975.0" height="340.59999999999997" />
+    </clipPath>
+    <clipPath id="rich-cli-line-0">
+    <rect x="0" y="1.5" width="976" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-1">
+    <rect x="0" y="25.9" width="976" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-2">
+    <rect x="0" y="50.3" width="976" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-3">
+    <rect x="0" y="74.7" width="976" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-4">
+    <rect x="0" y="99.1" width="976" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-5">
+    <rect x="0" y="123.5" width="976" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-6">
+    <rect x="0" y="147.9" width="976" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-7">
+    <rect x="0" y="172.3" width="976" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-8">
+    <rect x="0" y="196.7" width="976" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-9">
+    <rect x="0" y="221.1" width="976" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-10">
+    <rect x="0" y="245.5" width="976" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-11">
+    <rect x="0" y="269.9" width="976" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-12">
+    <rect x="0" y="294.3" width="976" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="992" height="389.6" rx="8"/><text class="rich-cli-title" fill="#c5c8c6" text-anchor="middle" x="496" y="27">release.ipynb</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#rich-cli-clip-terminal)">
+    <rect fill="#2b303b" x="158.6" y="221.1" width="97.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="256.2" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="268.4" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="280.6" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="292.8" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="305" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="317.2" y="221.1" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="353.8" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="366" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="378.2" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="390.4" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="402.6" y="221.1" width="61" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="463.6" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="475.8" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="488" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="500.2" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="512.4" y="221.1" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="549" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="561.2" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="573.4" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="585.6" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="597.8" y="221.1" width="61" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="658.8" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="671" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="683.2" y="221.1" width="134.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="158.6" y="245.5" width="61" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="219.6" y="245.5" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="231.8" y="245.5" width="97.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="329.4" y="245.5" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="341.6" y="245.5" width="475.8" height="24.65" shape-rendering="crispEdges"/>
+    <g class="rich-cli-matrix">
+    <text class="rich-cli-r2" x="97.6" y="20" textLength="24.4" clip-path="url(#rich-cli-line-0)">╭─</text><text class="rich-cli-r2" x="122" y="20" textLength="256.2" clip-path="url(#rich-cli-line-0)">─────────────────────</text><text class="rich-cli-r3" x="390.4" y="20" textLength="195.2" clip-path="url(#rich-cli-line-0)">Release&#160;notebook</text><text class="rich-cli-r2" x="597.8" y="20" textLength="256.2" clip-path="url(#rich-cli-line-0)">─────────────────────</text><text class="rich-cli-r2" x="854" y="20" textLength="24.4" clip-path="url(#rich-cli-line-0)">─╮</text><text class="rich-cli-r1" x="976" y="20" textLength="12.2" clip-path="url(#rich-cli-line-0)">
+</text><text class="rich-cli-r2" x="97.6" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">│</text><text class="rich-cli-r2" x="866.2" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">│</text><text class="rich-cli-r1" x="976" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">
+</text><text class="rich-cli-r2" x="97.6" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">│</text><text class="rich-cli-r4" x="402.6" y="68.8" textLength="158.6" clip-path="url(#rich-cli-line-2)">Release&#160;notes</text><text class="rich-cli-r2" x="866.2" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">│</text><text class="rich-cli-r1" x="976" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">
+</text><text class="rich-cli-r2" x="97.6" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">│</text><text class="rich-cli-r2" x="866.2" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">│</text><text class="rich-cli-r1" x="976" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">
+</text><text class="rich-cli-r2" x="97.6" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">│</text><text class="rich-cli-r1" x="134.2" y="117.6" textLength="268.4" clip-path="url(#rich-cli-line-4)">Render&#160;notebooks&#160;with&#160;</text><text class="rich-cli-r5" x="402.6" y="117.6" textLength="158.6" clip-path="url(#rich-cli-line-4)">styled&#160;titles</text><text class="rich-cli-r1" x="561.2" y="117.6" textLength="170.8" clip-path="url(#rich-cli-line-4)">,&#160;padding&#160;and&#160;</text><text class="rich-cli-r2" x="866.2" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">│</text><text class="rich-cli-r1" x="976" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">
+</text><text class="rich-cli-r2" x="97.6" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">│</text><text class="rich-cli-r1" x="134.2" y="142" textLength="122" clip-path="url(#rich-cli-line-5)">alignment.</text><text class="rich-cli-r2" x="866.2" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">│</text><text class="rich-cli-r1" x="976" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">
+</text><text class="rich-cli-r2" x="97.6" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">│</text><text class="rich-cli-r2" x="866.2" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">│</text><text class="rich-cli-r1" x="976" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">
+</text><text class="rich-cli-r2" x="97.6" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">│</text><text class="rich-cli-r6" x="439.2" y="190.8" textLength="48.8" clip-path="url(#rich-cli-line-7)">In&#160;[</text><text class="rich-cli-r7" x="488" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">3</text><text class="rich-cli-r6" x="500.2" y="190.8" textLength="24.4" clip-path="url(#rich-cli-line-7)">]:</text><text class="rich-cli-r2" x="866.2" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">│</text><text class="rich-cli-r1" x="976" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">
+</text><text class="rich-cli-r2" x="97.6" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">│</text><text class="rich-cli-r8" x="134.2" y="215.2" textLength="707.6" clip-path="url(#rich-cli-line-8)">╭────────────────────────────────────────────────────────╮</text><text class="rich-cli-r2" x="866.2" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">│</text><text class="rich-cli-r1" x="976" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">
+</text><text class="rich-cli-r2" x="97.6" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">│</text><text class="rich-cli-r8" x="134.2" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">│</text><text class="rich-cli-r9" x="158.6" y="239.6" textLength="97.6" clip-path="url(#rich-cli-line-9)">versions</text><text class="rich-cli-r9" x="268.4" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">=</text><text class="rich-cli-r9" x="292.8" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">{</text><text class="rich-cli-r9" x="305" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">&quot;</text><text class="rich-cli-r10" x="317.2" y="239.6" textLength="36.6" clip-path="url(#rich-cli-line-9)">cli</text><text class="rich-cli-r9" x="353.8" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">&quot;</text><text class="rich-cli-r9" x="366" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">:</text><text class="rich-cli-r9" x="390.4" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">&quot;</text><text class="rich-cli-r10" x="402.6" y="239.6" textLength="61" clip-path="url(#rich-cli-line-9)">0.0.3</text><text class="rich-cli-r9" x="463.6" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">&quot;</text><text class="rich-cli-r9" x="475.8" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">,</text><text class="rich-cli-r9" x="500.2" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">&quot;</text><text class="rich-cli-r10" x="512.4" y="239.6" textLength="36.6" clip-path="url(#rich-cli-line-9)">art</text><text class="rich-cli-r9" x="549" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">&quot;</text><text class="rich-cli-r9" x="561.2" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">:</text><text class="rich-cli-r9" x="585.6" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">&quot;</text><text class="rich-cli-r10" x="597.8" y="239.6" textLength="61" clip-path="url(#rich-cli-line-9)">0.0.3</text><text class="rich-cli-r9" x="658.8" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">&quot;</text><text class="rich-cli-r9" x="671" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">}</text><text class="rich-cli-r8" x="829.6" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">│</text><text class="rich-cli-r2" x="866.2" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">│</text><text class="rich-cli-r1" x="976" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">
+</text><text class="rich-cli-r2" x="97.6" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">│</text><text class="rich-cli-r8" x="134.2" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">│</text><text class="rich-cli-r11" x="158.6" y="264" textLength="61" clip-path="url(#rich-cli-line-10)">print</text><text class="rich-cli-r9" x="219.6" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">(</text><text class="rich-cli-r9" x="231.8" y="264" textLength="97.6" clip-path="url(#rich-cli-line-10)">versions</text><text class="rich-cli-r9" x="329.4" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">)</text><text class="rich-cli-r8" x="829.6" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">│</text><text class="rich-cli-r2" x="866.2" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">│</text><text class="rich-cli-r1" x="976" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">
+</text><text class="rich-cli-r2" x="97.6" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">│</text><text class="rich-cli-r8" x="134.2" y="288.4" textLength="707.6" clip-path="url(#rich-cli-line-11)">╰────────────────────────────────────────────────────────╯</text><text class="rich-cli-r2" x="866.2" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">│</text><text class="rich-cli-r1" x="976" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">
+</text><text class="rich-cli-r2" x="97.6" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">│</text><text class="rich-cli-r1" x="292.8" y="312.8" textLength="390.4" clip-path="url(#rich-cli-line-12)">{&#x27;cli&#x27;:&#160;&#x27;0.0.3&#x27;,&#160;&#x27;art&#x27;:&#160;&#x27;0.0.3&#x27;}</text><text class="rich-cli-r2" x="866.2" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">│</text><text class="rich-cli-r1" x="976" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">
+</text><text class="rich-cli-r2" x="97.6" y="337.2" textLength="24.4" clip-path="url(#rich-cli-line-13)">╰─</text><text class="rich-cli-r2" x="122" y="337.2" textLength="244" clip-path="url(#rich-cli-line-13)">────────────────────</text><text class="rich-cli-r12" x="378.2" y="337.2" textLength="207.4" clip-path="url(#rich-cli-line-13)">rs-rich-cli&#160;0.0.3</text><text class="rich-cli-r2" x="597.8" y="337.2" textLength="256.2" clip-path="url(#rich-cli-line-13)">─────────────────────</text><text class="rich-cli-r2" x="854" y="337.2" textLength="24.4" clip-path="url(#rich-cli-line-13)">─╯</text><text class="rich-cli-r1" x="976" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">
+</text>
+    </g>
+    </g>
+</svg>

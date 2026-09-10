@@ -105,10 +105,17 @@ overflows, please
 the exact input — width handling is measured against Python `rich` and that
 class of defect is treated as a bug.
 
-### `rich` prints its help and exits 0 when I give it nothing
+### `rich` shows a demo when I give it nothing
 
-That is intended, and matches upstream `rich-cli`: with no resource and no mode
-flag there is nothing to render.
+With no resource and no mode flag, `rich` shows its capability demo. Use
+`rich --help` for options. Demo layout/style/paging/export flags are rejected
+with a diagnostic; add a resource or render mode to use those options.
+
+### A mode is waiting for input
+
+Input modes without a resource, or with `-`, read stdin until EOF. In a terminal,
+`rich` prints an input hint; finish with Ctrl-D on Unix or Ctrl-Z then Enter on
+Windows. Piped input keeps working without a hint.
 
 ---
 

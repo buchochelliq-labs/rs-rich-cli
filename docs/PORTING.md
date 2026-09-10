@@ -109,3 +109,13 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 
 *When you change a module's status, keep this table and the relevant roadmap
 issue in sync.*
+
+### 0.0.3 title and notebook follow-up
+
+Panel string labels parse markup/emoji, flatten newlines, expand tabs and measure
+visible cells. Rule labels use console markup/emoji handling; Table title/caption
+markup retains wrapped lines. Rich 15 goldens cover styled, wide, tiny, multiline
+and truncated labels. Text span offsets remain valid when Unicode truncation
+replaces a character with padding or an ellipsis. CLI notebooks compose the
+upstream cell/output group before applying the shared decorators and alignment.
+Windows paging selects `more.com` and has a required native CI launch test.
