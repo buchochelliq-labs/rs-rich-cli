@@ -7,12 +7,6 @@ absorbed and what our own crates did.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
-
-- `rs-rich-ext`: explicit strict UTF-8/UTF-16 decoder with BOM and byte-order validation.
-- `rs-rich-cli`: wire `--encoding` for text files, stdin and URLs; preserve default
-  decoding, add UTF-16 hints and clean actionable image errors (#62).
-
 ## [0.0.1] — first release
 
 The first published version of all four crates: `rs-rich`, `rs-rich-ext`,
@@ -39,7 +33,9 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
-No changes yet.
+- `rs-rich-ext`: explicit strict UTF-8/UTF-16 decoder with BOM and byte-order validation.
+- `rs-rich-cli`: wire `--encoding` for text files, stdin and URLs; preserve default
+  decoding, add UTF-16 hints and clean actionable image errors (#62).
 
 ## [0.0.3] — 2026-09-10
 
