@@ -35,6 +35,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Check manifest-version documentation
+        run: python3 scripts/gen_versions.py --check
+
       - name: Test release selection and registry verification
         run: python3 -m unittest discover -s scripts -p 'test_release*.py' -v
 
@@ -63,6 +66,11 @@ jobs:
       - name: Test
         run: cargo test --all
 
+      - name: Check generated CLI reference
+        run: |
+          cargo build -p rs-rich-cli --locked
+          python3 scripts/gen_cli_reference.py --binary target/debug/rich --check
+
   features:
     name: feature matrix
     runs-on: ubuntu-latest
@@ -70,6 +78,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - crate: rs-rich
+            args: "--all-features"
           # rich-art is zero-dependency by default; its image/GIF support is
           # opt-in, and each config compiles different code. `--all-features`
           # rather than naming them, so new features are covered automatically.
@@ -150,28 +160,14 @@ jobs:
 
       - name: Install the pinned upstream rich
         run: |
-          # Read `version` from within the [rich] section of UPSTREAM.toml.
-          # (The previous `grep -A2` stopped two lines short of it and silently
-          # produced an empty pin, so this job installed nothing and failed on
-          # `rich==`. Empty is now a hard error rather than a confusing one.)
-          version="$(awk '
-            /^\[rich\]$/       { in_section = 1; next }
-            /^\[/              { in_section = 0 }
-            in_section && /^version[[:space:]]*=/ {
-              gsub(/^version[[:space:]]*=[[:space:]]*"|"$/, ""); print; exit
-            }
-          ' UPSTREAM.toml)"
-          if [ -z "$version" ]; then
-            echo "::error::could not read [rich] version from UPSTREAM.toml"
-            exit 1
-          fi
+          version="$(python scripts/read_upstream_version.py)"
           echo "Pinned rich version: $version"
           python -m pip install "rich==$version"
 
       - name: Regenerate golden fixtures from real rich
         env:
           PYTHONUTF8: "1" # deterministic UTF-8 box glyphs (no ASCII substitution)
-        run: python scripts/capture_golden.py
+        run: env -u NO_COLOR TERM=xterm-256color python scripts/capture_golden.py
 
       - name: Fail if our fixtures drifted from upstream
         run: git diff --exit-code crates/rich/tests/golden

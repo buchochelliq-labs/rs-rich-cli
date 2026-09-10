@@ -159,7 +159,8 @@ impl Stage {
     /// correct. The stage sleeps until the *next* animation is due rather than
     /// polling, and only redraws when a frame actually changed.
     ///
-    /// The cursor is hidden during playback and restored on return; see
+    /// Non-terminal consoles write the initial composed frame once and return.
+    /// The cursor is hidden during terminal playback and restored on return; see
     /// [`AnimatedArt::play`] for the interrupt caveat.
     pub fn play<W: Write>(&self, console: Console, mut writer: W) -> std::io::Result<()> {
         if self.items.is_empty() {
@@ -172,6 +173,14 @@ impl Stage {
             .map(|art| Track::new(art.clone(), start))
             .collect();
 
+        if !console.is_terminal() {
+            writeln!(
+                writer,
+                "{}",
+                console.render_to_string(&self.compose(&tracks))
+            )?;
+            return writer.flush();
+        }
         let mut live = Live::new(Box::new(self.compose(&tracks)), console, &mut writer);
         live.start();
 
@@ -371,6 +380,26 @@ mod tests {
     }
 
     #[test]
+    fn redirected_stage_prints_first_frames_without_looping() {
+        let art = AnimatedArt::from_bytes(&make_gif(&[[0, 0, 0], [255, 255, 255]], 60_000))
+            .unwrap()
+            .width(4)
+            .height(1)
+            .repeat(Repeat::Forever);
+        let stage = Stage::new().with(art.clone()).with(art).gap(1);
+        let console = Console::builder().force_terminal(false).width(40).build();
+        let tracks: Vec<Track> = stage
+            .items
+            .iter()
+            .map(|art| Track::new(art.clone(), Instant::now()))
+            .collect();
+        let expected = format!("{}\n", console.render_to_string(&stage.compose(&tracks)));
+        let mut output = Vec::new();
+        stage.play(console, &mut output).unwrap();
+        assert_eq!(String::from_utf8(output).unwrap(), expected);
+    }
+
+    #[test]
     fn an_empty_stage_plays_nothing() {
         let console = Console::builder().width(20).build();
         let mut out = Vec::new();
@@ -395,7 +424,7 @@ mod tests {
             )
             .until(Until::Elapsed(Duration::from_millis(120)));
 
-        let console = Console::builder().width(40).build();
+        let console = Console::builder().force_terminal(true).width(40).build();
         let mut out = Vec::new();
         stage.play(console, &mut out).unwrap();
         let text = String::from_utf8(out).unwrap();

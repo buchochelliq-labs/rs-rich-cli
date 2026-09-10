@@ -36,11 +36,20 @@ This patch accepts only:
 No new features or speculative rewrites belong in `0.0.3`. Add a changelog entry
 under `Unreleased` only when a fix lands, and name every affected crate there.
 
-**Issue selection is a release gate.** Before `rc/0.0.3-rc.1` is cut, use an
-authenticated GitHub session to reproduce #67, triage every #86 follow-up, and
-check newer regression reports against current `main`. Close or explicitly defer
-each report, then replace this paragraph with the selected issue numbers. The RC
-must not be cut while that issue list is absent.
+### Selected scope (2026-09-10)
+
+| Work | Decision for this readiness PR |
+|---|---|
+| #86 Markdown image follow-ups | Include the existing fixes from `main`: table-cell image hoisting, multiple images per container, adjacent containers. Verify all three against rich 15.0.0 goldens. |
+| #102, #103, #106 | Retain the merged package-version and per-crate workflow fixes; prepare the dependency closure at 0.0.3. |
+| #99 oracle-pin parsing | Adopt TOML parsing independently; do not import its stacked JSON changes. |
+| Documentation and CI | Regenerate CLI help, check manifest-version tables, align release instructions, and gate all release branch aliases on main ancestry. |
+| #67 / #98 JSON wrapping | Follow-up requested: repair content loss and gate escape-safe layout off by default. |
+| #59, #72, #74 runtime reports | Follow-up requested: safe GIF redirection, CSV streaming and confirmed CLI/Markdown repairs. See [runtime audit](runtime-audit-0.0.3.md). |
+
+The release preparation branch is `releases/v0.0.3-rc`. Its name does not
+create a prerelease version or authorize publishing. The final release PR must
+land on `main` before any tag is created.
 
 Follow [the release procedure](BRANCHING.md): require a non-empty `Unreleased`
 section, reconcile all manifest pins with `Cargo.lock`, run the complete CI and
@@ -83,9 +92,9 @@ Without it, pre-Windows-10 terminals silently fall back to plain output.
 [§17](DIVERGENCES.md). A progress bar with no ETA is half a feature, and it is
 the most visible gap for anyone writing a CLI.
 
-`0.1.0` is also where **independent per-crate versioning** becomes meaningful.
-Below it, Cargo treats `^0.0.x` as an exact requirement, so lockstep is forced
-whether or not we choose it. See [BRANCHING.md](BRANCHING.md).
+Independent per-crate versioning already applies below `0.1.0`. A `0.0.x`
+dependency bump requires updating its dependents and publishing changed
+manifests; unrelated crates need not bump. See [BRANCHING.md](BRANCHING.md).
 
 ---
 

@@ -27,6 +27,8 @@ workspace = true
 
 [features]
 default = ["fetch", "art"]
+# Optional JSON display divergence; never enabled by default.
+json-escape-safe = ["rich/json-escape-safe"]
 # `fetch` enables the CLI's URL support (`rich <url>`); disable it
 # (`--no-default-features`) for a lean, network-free build.
 fetch = ["dep:ureq"]

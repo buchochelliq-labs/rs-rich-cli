@@ -116,15 +116,12 @@ Format: what differs · why · how to remove it (if temporary).
   feature fixes it, pinned by a unit test). What can still differ is
   exponent notation (CPython renders `1e+20` / `1e-07`; ryu via
   `serde_json` renders `1e20` / `1e-7`, and the two use different thresholds for
-  *when* to switch to exponent form), and integers beyond i64/u64 lose precision
-  (parsed as f64) where CPython keeps them exact.
+  *when* to switch to exponent form). Integers now retain all input digits, and
+  overflowing exponents render as signed Infinity, matching Python.
 - **Why:** matching CPython exactly means replicating its `float_repr`
   (shortest-round-trip *and* its decimal/exponent threshold + `e[+-]NN` padding),
-  which ryu formats differently; and exact big-integers need `serde_json`'s
-  `arbitrary_precision`, which in turn stops normalizing numbers. Both are a
-  rabbit hole disproportionate to how rarely JSON documents carry such values.
-- **Remove:** port CPython's `float_repr` and enable `arbitrary_precision` (with
-  its own normalization pass) under the JSON issue (#10).
+  which ryu formats differently.
+- **Remove:** port CPython's `float_repr` under the JSON issue (#10).
 
 ### 9. `Markdown` covers most elements (code blocks are non-parity)
 - **Differs:** paragraphs, ATX headings (h1–h6), bullet + ordered lists, block
@@ -316,5 +313,20 @@ Format: what differs · why · how to remove it (if temporary).
 
 ## Feature-flagged divergences
 
-*None yet.* If a future feature can only be built by changing core behavior, it
-must be behind a Cargo `feature` that is **off by default**, and listed here.
+### 22. Escape-safe JSON presentation (`json-escape-safe`)
+
+This Cargo feature is **off by default** in both `rs-rich` and `rs-rich-cli`.
+The default build keeps Python rich 15.0.0 folding and cropping, including
+boundaries inside escapes. Enable with `cargo build -p rs-rich-cli --features
+json-escape-safe`. Library callers additionally opt in with
+`Json::new(input)?.escape_safe(true)`; enabling the feature alone leaves existing
+library calls unchanged.
+
+Opted-in rendering groups short escapes and `\uXXXX` when they fit the available
+width. Cropping stops before an incomplete escape. Folding recalculates each
+boundary from the remaining content, preserving the suffix after an adjusted
+break (#98). At widths smaller than the escape itself, folding splits its ASCII
+spelling to preserve bytes within the width; atomicity is impossible there.
+Cropping remains intentionally lossy presentation output. This behavior requires
+JSON lexical context unavailable in generic Text rendering. Remove this special
+handling if upstream adopts the same escape-aware layout.

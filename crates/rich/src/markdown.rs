@@ -74,7 +74,12 @@ enum Block {
     /// list, code block or quote inside an item is simply part of that item.
     List { items: Vec<ListEntry> },
     /// A block quote, holding whatever blocks it contains.
-    Quote(Vec<Block>),
+    Quote {
+        blocks: Vec<Block>,
+        leading_break: bool,
+    },
+    /// An ignored HTML block still participates in upstream block spacing.
+    Html,
     /// A fenced/indented code block, syntax-highlighted via [`Syntax`].
     Code { language: String, code: String },
     /// A thematic break (horizontal rule).
@@ -452,7 +457,9 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
         }
         // Upstream's `new_line = element.new_line` bookkeeping, which runs for
         // every element that closes. Everything declares `new_line = True`
-        // except an image and a rule, and only an image ever reads the flag.
+        // except an image and a rule. Images and closing quotes read the
+        // preceding value before their own closing event changes it.
+        let preceding_new_line = new_line;
         match &event {
             Event::End(
                 TagEnd::Paragraph
@@ -464,12 +471,16 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
                 | TagEnd::Table
                 | TagEnd::TableHead
                 | TagEnd::TableRow
-                | TagEnd::TableCell,
+                | TagEnd::TableCell
+                | TagEnd::HtmlBlock,
             ) => new_line = true,
             Event::Rule => new_line = false,
             _ => {}
         }
         match event {
+            Event::End(TagEnd::HtmlBlock) => {
+                sink(&mut blocks, &mut stack).push(Block::Html);
+            }
             Event::Rule => {
                 flush_pending(&mut current, &mut blocks, &mut stack);
                 sink(&mut blocks, &mut stack).push(Block::Rule);
@@ -537,18 +548,11 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
                     }
                 }
             }
-            // KNOWN DIVERGENCE (not a design choice): an image inside a table
-            // cell keeps its alt text in the cell, where upstream hoists it out
-            // and leaves the cell empty — `TableDataElement` does not override
-            // `on_child_close`, so the base implementation renders the image
-            // immediately, above the table. This repo's own README badge table
-            // hits it: upstream prints four `🌆 …` rows and an empty column,
-            // while we keep the alt text and widen the table by 13 cells.
-            // Hoisting out of a cell needs the table accumulator to be able to
-            // emit blocks, which it cannot yet do. Tracked as a follow-up.
-            Event::Start(Tag::Image { dest_url, .. })
-                if !table.as_ref().is_some_and(|acc| acc.in_cell) =>
-            {
+            // Images are emitted immediately rather than appended to their
+            // parent element. `TableDataElement` uses that same base
+            // `on_child_close`, so an image in a cell is hoisted above the
+            // eventual table and contributes no text to the cell.
+            Event::Start(Tag::Image { dest_url, .. }) => {
                 image = Some(dest_url.to_string());
                 image_span = None;
             }
@@ -582,7 +586,10 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
                             ),
                             hyperlinks,
                         ),
-                        joins_next: stack.is_empty(),
+                        // A table is a container too, even though it uses a
+                        // dedicated accumulator rather than a `Frame`. Its own
+                        // render begins after the hoisted image's open row.
+                        joins_next: stack.is_empty() && table.is_none(),
                         leading_break: new_line,
                     });
                     new_line = false;
@@ -675,7 +682,10 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
                 if suppressed > 0 {
                     suppressed -= 1;
                 } else if let Some(Frame::Quote { blocks: quoted }) = stack.pop() {
-                    sink(&mut blocks, &mut stack).push(Block::Quote(quoted));
+                    sink(&mut blocks, &mut stack).push(Block::Quote {
+                        blocks: quoted,
+                        leading_break: preceding_new_line,
+                    });
                 }
             }
             Event::Start(Tag::List(first)) => {
@@ -941,7 +951,33 @@ fn render_blocks(
     let mut join_previous = false;
 
     for (index, block) in blocks.iter().enumerate() {
-        let merge = std::mem::take(&mut join_previous);
+        let mut merge = std::mem::take(&mut join_previous);
+        // Consecutive images share their open row even when hoisted from a
+        // container. A closed cell/item sets leading_break and ends that row.
+        if matches!(
+            block,
+            Block::Image {
+                leading_break: false,
+                ..
+            }
+        ) && index > 0
+            && matches!(blocks[index - 1], Block::Image { .. })
+        {
+            merge = true;
+        }
+        // `new_line` before an image is a single line break, not the blank-row
+        // separator used between ordinary blocks. In particular, images
+        // hoisted from consecutive table rows must occupy consecutive output
+        // rows. It also cancels the preceding image's open-row join.
+        if matches!(
+            block,
+            Block::Image {
+                leading_break: true,
+                ..
+            }
+        ) {
+            merge = false;
+        }
         // A blank line precedes every non-first block, and every
         // list/quote/table (which upstream renders with a leading gap).
         // Blank lines between blocks are a *document* convention. Upstream puts
@@ -954,17 +990,17 @@ fn render_blocks(
         let after_rule = index > 0 && matches!(blocks[index - 1], Block::Rule);
         // A list, quote or table carries its own leading gap, which survives even
         // after a rule; only the generic inter-block separator is suppressed.
-        let own_gap = matches!(
-            block,
-            Block::List { .. } | Block::Quote(_) | Block::Table { .. }
-        );
+        let own_gap = matches!(block, Block::List { .. } | Block::Table { .. });
         // An image emits no line break after itself, so the block that follows
         // one gets no separator at all — not even the leading gap a list, quote
         // or table would otherwise bring.
         let after_image = index > 0 && matches!(blocks[index - 1], Block::Image { .. });
         let separator = match block {
-            // An image carries its own decision, taken while parsing.
-            Block::Image { leading_break, .. } => top_level && *leading_break,
+            Block::Quote { leading_break, .. } => top_level && *leading_break && !after_image,
+            // After an ordinary element this is the usual blank-row gap;
+            // after an image (whose text has `end=""`) it is only a line break,
+            // represented above by declining to merge the two image rows.
+            Block::Image { leading_break, .. } => top_level && *leading_break && !after_image,
             _ if after_image => false,
             _ => top_level && (own_gap || (index > 0 && !after_rule)),
         };
@@ -1025,7 +1061,8 @@ fn render_blocks(
                     }
                 }
             }
-            Block::Quote(quoted) => {
+            Block::Html => {}
+            Block::Quote { blocks: quoted, .. } => {
                 let prefix_style = Style::parse("magenta").expect("valid style");
                 // Upstream renders quote content at `max_width - 4`.
                 let content_width = width.saturating_sub(4);
@@ -1131,6 +1168,54 @@ mod tests {
             .width(20)
             .build();
         console.render_to_string(&Markdown::new(source))
+    }
+
+    #[test]
+    fn a_code_only_list_item_keeps_the_bullet_on_its_padding_row() {
+        let console = Console::builder().width(30).no_color(true).build();
+        assert_eq!(console.render_export(&Markdown::new("- ```\n  code\n  ```")),
+            "\n •                            \n    code                      \n                              \n");
+    }
+
+    #[test]
+    fn table_cell_images_share_a_row_until_the_cell_closes() {
+        let console = Console::builder().width(30).no_color(true).build();
+        let output = console.render_to_string(&Markdown::new(
+            "| h |\n|---|\n| ![a](x) ![b](y) |\n| ![c](z) |",
+        ));
+        assert!(output.starts_with("\n🌆 a 🌆 b \n🌆 c \n"), "{output:?}");
+    }
+
+    #[test]
+    fn quoted_rule_spacing_uses_the_last_closed_child() {
+        let console = Console::builder().width(30).no_color(true).build();
+        assert_eq!(
+            console.render_to_string(&Markdown::new("> ---")),
+            "▌ --------------------------\n▌                           "
+        );
+        let output = console.render_to_string(&Markdown::new("> ---\n>\n> text"));
+        assert!(
+            output.starts_with("\n▌ --------------------------\n"),
+            "{output:?}"
+        );
+    }
+
+    #[test]
+    fn ignored_html_blocks_keep_upstream_paragraph_spacing() {
+        let console = Console::builder().width(30).no_color(true).build();
+        for (source, expected) in [
+            (
+                "<div>hidden</div>\n\nParagraph",
+                "\nParagraph                     ",
+            ),
+            ("<div>hidden</div>", ""),
+            (
+                "A\n\n<div>x</div>\n\nB",
+                "A                             \n\n\nB                             ",
+            ),
+        ] {
+            assert_eq!(console.render_to_string(&Markdown::new(source)), expected);
+        }
     }
 
     #[test]

@@ -383,15 +383,53 @@ RENDERABLE_CASES = [
     ("bar_half", 20, ProgressBar(total=100, completed=50, width=20)),
     ("bar_third", 20, ProgressBar(total=100, completed=33, width=20)),
     ("bar_full", 20, ProgressBar(total=100, completed=100, width=20)),
+    ("json_python_numbers", 80, JSON("[1234567890123456789012345678901234567890,-1234567890123456789012345678901234567890,1e400,-1e400,-0]")),
     ("json_object", 40, JSON(JSON_SAMPLE)),
     # Non-ASCII strings: rich's JSON defaults to ensure_ascii=False, so accented
     # characters and symbols render as UTF-8 (not \uXXXX). Keys keep input order.
     ("json_unicode", 40, JSON('{"name": "café", "emoji": "❤"}')),
+    # Narrow JSON lines exercise boundaries around every escape form emitted by
+    # json.dumps: quote, backslash, short control escapes, and \uXXXX controls.
+    ("json_escapes_w8", 8, JSON(r'{"v":"a\"b\\c\nd\u0001e"}')),
+    ("json_escapes_w10", 10, JSON(r'{"v":"a\"b\\c\nd\u0001e"}')),
+    ("json_escapes_w12", 12, JSON(r'{"v":"a\"b\\c\nd\u0001e"}')),
     ("markdown_doc", 24, Markdown("# Title\n\nHello **bold** and *italic* and `code`.")),
     ("markdown_list", 20, Markdown("Items:\n\n- one\n- two\n\n1. a\n2. b")),
     ("markdown_quote_hr", 20, Markdown("Note:\n\n> important\n\n---\n\ndone")),
     # A document ending with a thematic break emits one extra trailing blank line.
+    ("markdown_empty", 30, Markdown("", hyperlinks=False)),
+    ("markdown_rule_only_quote", 30, Markdown("> ---", hyperlinks=False)),
+    ("markdown_rule_then_quote_text", 30, Markdown("> ---\n>\n> text", hyperlinks=False)),
+    ("markdown_html_then_paragraph", 30, Markdown("<div>hidden</div>\n\nParagraph", hyperlinks=False)),
+    ("markdown_html_only", 30, Markdown("<div>hidden</div>", hyperlinks=False)),
+    ("markdown_html_between_paragraphs", 30, Markdown("A\n\n<div>x</div>\n\nB", hyperlinks=False)),
+    ("markdown_images_same_table_cell", 30, Markdown("| h |\n|---|\n| ![a](x) ![b](y) |\n| ![c](z) |", hyperlinks=False)),
     ("markdown_hr_end", 20, Markdown("a\n\n---")),
+    (
+        "markdown_image_table_cell",
+        44,
+        Markdown(
+            "| Icon | Name |\n| --- | --- |\n| ![crate](crate.svg) | rich |\n",
+            hyperlinks=False,
+        ),
+    ),
+    (
+        "markdown_images_one_container",
+        50,
+        Markdown(
+            "Before ![one](one.svg) + ![two](two.svg) after.",
+            hyperlinks=False,
+        ),
+    ),
+    (
+        "markdown_badge_table",
+        44,
+        Markdown(
+            "| Badge |\n| --- |\n| ![build](build.svg) |\n"
+            "| ![docs](docs.svg) |\n| ![crate](crate.svg) |\n",
+            hyperlinks=False,
+        ),
+    ),
     (
         "markdown_table",
         40,
@@ -1008,6 +1046,10 @@ def main() -> None:
         with rconsole.capture() as capture:
             rconsole.print(renderable)
         output = capture.get()
+        if name.startswith("json_escapes_"):
+            # The fixture format reserves literal `\\n` for a physical newline.
+            # Protect JSON backslashes before applying that transport encoding.
+            output = output.replace("\\", "\\x5c")
         # Guard: if the capture console's encoding isn't UTF-8, rich substitutes
         # box-drawing glyphs with ASCII, producing non-deterministic fixtures.
         # Fail loudly instead of writing a bad fixture.

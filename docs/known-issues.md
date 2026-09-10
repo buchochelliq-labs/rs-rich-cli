@@ -14,41 +14,15 @@ waiting for this page to be updated.
 
 Things that should work and do not.
 
-### `--json` can emit invalid JSON when a line is cropped
+### Narrow `--json` output is display output, not machine-readable JSON
 
-**Symptom.** Piping `rich --json` through a parser fails with something like
-`Invalid control character at: line 3 column 41`.
-
-**Scope.** Only when a value is wider than the render width, so the line is
-cropped mid-escape. Reproduces at any narrow width:
-
-```bash
-rich --json wide.json --width 40 | jq .
-```
-
-**Workaround.** Render at a width that fits the longest value, or drop `--width`
-and let it use the terminal's:
-
-```bash
-rich --json wide.json --width 200
-```
-
-**Status.** Open —
-[#67](https://github.com/buchochelliq-labs/rs-rich-cli/issues/67).
-`rich --json` is for reading, not for piping into a parser; use `jq` on the raw
-file when you need machine-readable output.
-
-### Markdown images: five smaller divergences remain
-
-Images carry upstream's marker and are hoisted above their paragraph, but an
-image **inside a table cell** is not hoisted, two images in one container split
-across rows, and consecutive hoisted images gain a blank row.
-
-**Scope.** Documents whose images sit in table cells — a README badge table is
-the common case.
-
-**Status.** Open —
-[#86 follow-ups](https://github.com/buchochelliq-labs/rs-rich-cli/issues).
+**Scope.** Default builds match upstream: narrow output may wrap or crop inside
+an escape, and `--width` crops overlong JSON lines. The optional, off-by-default
+`json-escape-safe` Cargo feature avoids partial escapes when cropping and keeps
+escapes together when folding at widths that can fit them. See
+[DIVERGENCES §22](DIVERGENCES.md#22-escape-safe-json-presentation-json-escape-safe).
+Neither mode promises machine-readable output; use the original JSON with `jq`
+when every value must survive.
 
 ---
 

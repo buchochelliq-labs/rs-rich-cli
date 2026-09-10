@@ -1,0 +1,14 @@
+                         Markdown image parity                          
+
+🌆 Build 
+🌆 Tests 
+        
+ Badges 
+ ────── 
+        
+        
+
+▌ --------------------------------------------------------------------
+▌                                                                     
+
+Visible paragraph after HTML.                                           

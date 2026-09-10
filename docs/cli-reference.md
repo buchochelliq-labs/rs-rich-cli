@@ -10,7 +10,7 @@ Looking for how to *do* something rather than what a flag is called? Start at
 [Using the CLI](cli.md).
 
 
-*rich 0.0.2 — Rust port of the rich-cli terminal toolbox*
+*rich 0.0.3 — Rust port of the rich-cli terminal toolbox*
 
 ## Usage
 
@@ -32,7 +32,7 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
 -x, --syntax     Syntax-highlight RESOURCE (language from its extension)
     --csv        Render RESOURCE as a CSV/TSV table
     --ipynb      Render RESOURCE as a Jupyter notebook
-    --gif        Animate one or more GIFs (several play side by side)
+    --gif        Animate GIFs side by side; pipes receive the first frame
     --loop N     With --gif, repeat N times (0 = forever)
     --rule       Draw a horizontal rule (RESOURCE is its title)
     --diff       Perceptually compare two images (needs exactly two)
@@ -73,7 +73,7 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
     --pager      Page the output through $PAGER (no pager, no paging)
     --no-color   Disable colored output (as does a non-empty NO_COLOR)
 -h, --help       Show this help
--V, --version    Show the version (mirrors upstream rich-cli)
+-V, --version    Show the rs-rich-cli package version
 ```
 
 ## Environment variables

@@ -63,12 +63,26 @@ bar_empty	20	\x1b[38;5;237m━━━━━━━━━━━━━━━━━�
 bar_half	20	\x1b[38;2;249;38;114m━━━━━━━━━━\x1b[0m\x1b[38;5;237m╺\x1b[0m\x1b[38;5;237m━━━━━━━━━\x1b[0m
 bar_third	20	\x1b[38;2;249;38;114m━━━━━━\x1b[0m\x1b[38;2;249;38;114m╸\x1b[0m\x1b[38;5;237m━━━━━━━━━━━━━\x1b[0m
 bar_full	20	\x1b[38;2;114;156;31m━━━━━━━━━━━━━━━━━━━━\x1b[0m
+json_python_numbers	80	\x1b[1m[\x1b[0m\n  \x1b[1;36m1234567890123456789012345678901234567890\x1b[0m,\n  \x1b[1;36m-1234567890123456789012345678901234567890\x1b[0m,\n  Infinity,\n  -Infinity,\n  \x1b[1;36m0\x1b[0m\n\x1b[1m]\x1b[0m\n
 json_object	40	\x1b[1m{\x1b[0m\n  \x1b[1;34m"name"\x1b[0m: \x1b[32m"Alice"\x1b[0m,\n  \x1b[1;34m"age"\x1b[0m: \x1b[1;36m30\x1b[0m,\n  \x1b[1;34m"admin"\x1b[0m: \x1b[3;92mtrue\x1b[0m,\n  \x1b[1;34m"tags"\x1b[0m: \x1b[1m[\x1b[0m\n    \x1b[32m"a"\x1b[0m,\n    \x1b[32m"b"\x1b[0m\n  \x1b[1m]\x1b[0m,\n  \x1b[1;34m"meta"\x1b[0m: \x1b[3;35mnull\x1b[0m\n\x1b[1m}\x1b[0m\n
 json_unicode	40	\x1b[1m{\x1b[0m\n  \x1b[1;34m"name"\x1b[0m: \x1b[32m"café"\x1b[0m,\n  \x1b[1;34m"emoji"\x1b[0m: \x1b[32m"❤"\x1b[0m\n\x1b[1m}\x1b[0m\n
+json_escapes_w8	8	\x1b[1m{\x1b[0m\n  \x1b[1;34m"v"\x1b[0m: \n\x1b[32m"a\x5c"b\x5c\x5cc\x1b[0m\n\x1b[32m\x5cnd\x5cu000\x1b[0m\n\x1b[32m1e"\x1b[0m\n\x1b[1m}\x1b[0m\n
+json_escapes_w10	10	\x1b[1m{\x1b[0m\n  \x1b[1;34m"v"\x1b[0m: \n\x1b[32m"a\x5c"b\x5c\x5cc\x5cn\x1b[0m\n\x1b[32md\x5cu0001e"\x1b[0m\n\x1b[1m}\x1b[0m\n
+json_escapes_w12	12	\x1b[1m{\x1b[0m\n  \x1b[1;34m"v"\x1b[0m: \n\x1b[32m"a\x5c"b\x5c\x5cc\x5cnd\x5c\x1b[0m\n\x1b[32mu0001e"\x1b[0m\n\x1b[1m}\x1b[0m\n
 markdown_doc	24	         \x1b[1;4mTitle\x1b[0m          \n\nHello \x1b[1mbold\x1b[0m and \x1b[3mitalic\x1b[0m   \nand \x1b[1;36;40mcode\x1b[0m.               \n
 markdown_list	20	Items:              \n\n\x1b[1m • \x1b[0mone              \n\x1b[1m • \x1b[0mtwo              \n\n\x1b[36m 1 \x1b[0ma                \n\x1b[36m 2 \x1b[0mb                \n
 markdown_quote_hr	20	Note:               \n\n\x1b[35m▌ \x1b[0m\x1b[35mimportant\x1b[0m\x1b[35m       \x1b[0m\n\n\x1b[2m--------------------\x1b[0m\n\ndone                \n
+markdown_empty	30	
+markdown_rule_only_quote	30	\x1b[35m▌ \x1b[0m\x1b[2;35m--------------------------\x1b[0m\n\x1b[35m▌ \x1b[0m\x1b[35m                          \x1b[0m\n
+markdown_rule_then_quote_text	30	\n\x1b[35m▌ \x1b[0m\x1b[2;35m--------------------------\x1b[0m\n\x1b[35m▌ \x1b[0m\x1b[35m                          \x1b[0m\n\x1b[35m▌ \x1b[0m\x1b[35mtext\x1b[0m\x1b[35m                      \x1b[0m\n
+markdown_html_then_paragraph	30	\nParagraph                     \n
+markdown_html_only	30	
+markdown_html_between_paragraphs	30	A                             \n\n\nB                             \n
+markdown_images_same_table_cell	30	\n🌆 a 🌆 b \n🌆 c \n\x1b[36m   \x1b[0m\n\x1b[36m \x1b[0m\x1b[36mh\x1b[0m\x1b[36m \x1b[0m\n\x1b[36m ─ \x1b[0m\n\x1b[36m \x1b[0m \x1b[36m \x1b[0m\n\x1b[36m \x1b[0m \x1b[36m \x1b[0m\n\x1b[36m   \x1b[0m\n
 markdown_hr_end	20	a                   \n\n\x1b[2m--------------------\x1b[0m\n\n
+markdown_image_table_cell	44	\n🌆 crate \n\x1b[36m            \x1b[0m\n\x1b[36m \x1b[0m\x1b[36mIcon\x1b[0m\x1b[1m \x1b[0m\x1b[36m \x1b[0m\x1b[36mName\x1b[0m\x1b[36m \x1b[0m\n\x1b[36m ────────── \x1b[0m\n\x1b[36m \x1b[0m     \x1b[36m \x1b[0mrich\x1b[36m \x1b[0m\n\x1b[36m            \x1b[0m\n
+markdown_images_one_container	50	🌆 one 🌆 two Before  +  after.                   \n
+markdown_badge_table	44	\n🌆 build \n🌆 docs \n🌆 crate \n\x1b[36m       \x1b[0m\n\x1b[36m \x1b[0m\x1b[36mBadge\x1b[0m\x1b[36m \x1b[0m\n\x1b[36m ───── \x1b[0m\n\x1b[36m \x1b[0m     \x1b[36m \x1b[0m\n\x1b[36m \x1b[0m     \x1b[36m \x1b[0m\n\x1b[36m \x1b[0m     \x1b[36m \x1b[0m\n\x1b[36m       \x1b[0m\n
 markdown_table	40	\n\x1b[36m            \x1b[0m\n\x1b[36m \x1b[0m\x1b[36mName\x1b[0m\x1b[1m \x1b[0m\x1b[1m \x1b[0m\x1b[36m \x1b[0m\x1b[36mAge\x1b[0m\x1b[36m \x1b[0m\n\x1b[36m ────────── \x1b[0m\n\x1b[36m \x1b[0mAlice \x1b[36m \x1b[0m 30\x1b[36m \x1b[0m\n\x1b[36m \x1b[0mBob   \x1b[36m \x1b[0m  7\x1b[36m \x1b[0m\n\x1b[36m            \x1b[0m\n
 hbar_full	20	\x1b[39;49m████████████████████\x1b[0m\n
 hbar_mid	20	\x1b[39;49m     ██████████     \x1b[0m\n
