@@ -33,6 +33,10 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+- `rs-rich-art`: explicit capability-aware half-block GIF frames and mixed-renderer stages.
+- `rs-rich-cli`: `--gif-mode ascii|blocks`, preserving ASCII defaults and safe
+  ASCII fallback without color and first-frame output when redirected (#65).
+
 - `rs-rich-ext`: explicit strict UTF-8/UTF-16 decoder with BOM and byte-order validation.
 - `rs-rich-cli`: wire `--encoding` for text files, stdin and URLs; preserve default
   decoding, add UTF-16 hints and clean actionable image errors (#62).

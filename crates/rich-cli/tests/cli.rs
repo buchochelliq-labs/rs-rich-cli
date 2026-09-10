@@ -1567,3 +1567,35 @@ fn explicit_stdin_consumes_only_one_bom() {
     );
     assert!(stdin.stdout.starts_with(b"\xef\xbb\xbfHello"));
 }
+
+#[test]
+fn gif_mode_rejects_invalid_values_and_unrelated_modes() {
+    for args in [
+        vec!["--gif-mode"],
+        vec!["--gif", "a.gif", "--gif-mode", "sixel"],
+        vec!["--gif-mode", "ascii"],
+        vec!["--diff", "a.png", "b.png", "--gif-mode", "blocks"],
+    ] {
+        let (out, err, ok) = run_full(&args, "");
+        assert!(!ok && out.is_empty() && err.contains("--gif-mode"), "{err}");
+    }
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn piped_block_gif_matches_the_existing_ascii_path() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../rich-art/examples/assets/ball.gif"
+    );
+    let (ascii, _, ok) = run_full(&["--gif", path, "--width", "12", "--loop", "0"], "");
+    assert!(ok);
+    for prefix in [vec!["--gif", path], vec![path]] {
+        let mut args = prefix;
+        args.extend(["--gif-mode", "blocks", "--width", "12", "--loop", "0"]);
+        let (blocks, err, ok) = run_full(&args, "");
+        assert!(ok && err.contains("first frame only"), "{err}");
+        assert_eq!(blocks, ascii);
+        assert!(!blocks.contains('\x1b') && !blocks.contains('▀'));
+    }
+}

@@ -15,7 +15,8 @@
 //!   *and* doubles the vertical detail — a ramp renderer has to throw half the
 //!   rows away to avoid a stretched image.
 //!
-//! It needs a truecolour (or at least 256-colour) terminal; with colour off
+//! Truecolour preserves the most detail; 256/16-colour terminals quantize the
+//! colors with reduced fidelity. With colour off
 //! there is nothing to see, so callers should fall back to `AsciiArt` there.
 
 use image::{imageops::FilterType, DynamicImage, GenericImageView};
@@ -31,13 +32,17 @@ const UPPER_HALF: &str = "\u{2580}";
 
 /// An image drawn with half-block characters.
 pub struct BlockArt {
-    image: DynamicImage,
+    image: std::sync::Arc<DynamicImage>,
     width: Option<usize>,
     height: Option<usize>,
 }
 
 impl BlockArt {
     pub fn new(image: DynamicImage) -> Self {
+        Self::from_shared(std::sync::Arc::new(image))
+    }
+
+    pub(crate) fn from_shared(image: std::sync::Arc<DynamicImage>) -> Self {
         Self {
             image,
             width: None,
@@ -64,7 +69,7 @@ impl BlockArt {
     }
 
     /// Columns and character rows for the available width.
-    fn grid(&self, available: usize) -> (usize, usize) {
+    pub(crate) fn grid(&self, available: usize) -> (usize, usize) {
         let (iw, ih) = self.image.dimensions();
         if iw == 0 || ih == 0 {
             return (1, 1);

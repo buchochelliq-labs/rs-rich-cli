@@ -29,8 +29,7 @@ use rich::protocol::Renderable;
 use rich::segment::Segment;
 use rich::Live;
 
-use crate::ascii::AsciiArt;
-use crate::gif::AnimatedArt;
+use crate::gif::{AnimatedArt, GifFrame};
 
 /// How long a stage keeps playing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -102,8 +101,8 @@ impl Track {
         true
     }
 
-    fn current(&self) -> Option<AsciiArt> {
-        self.art.frame(self.frame)
+    fn current(&self) -> Option<GifFrame> {
+        self.art.render_frame(self.frame)
     }
 }
 
@@ -249,7 +248,7 @@ impl Stage {
 /// Lays renderables out horizontally, padding each to its own width and each
 /// column block to the tallest. Used to place the animations side by side.
 struct Row {
-    cells: Vec<AsciiArt>,
+    cells: Vec<GifFrame>,
     gap: usize,
 }
 
@@ -263,7 +262,7 @@ impl Renderable for Row {
             .cells
             .iter()
             .map(|cell| {
-                let width = cell.columns(options.max_width);
+                let width = cell.columns(console, options.max_width);
                 let cell_options = options.update_width(width);
                 console.render_lines(cell, &cell_options, true)
             })
@@ -272,7 +271,7 @@ impl Renderable for Row {
         let widths: Vec<usize> = self
             .cells
             .iter()
-            .map(|cell| cell.columns(options.max_width))
+            .map(|cell| cell.columns(console, options.max_width))
             .collect();
         let height = blocks.iter().map(Vec::len).max().unwrap_or(0);
 
@@ -332,6 +331,43 @@ mod tests {
             text.lines().next().unwrap(),
             format!("{dark}{dark}{dark}{dark} {bright}{bright}{bright}{bright}")
         );
+    }
+
+    #[test]
+    fn mixed_stage_respects_height_capped_block_width_and_padding() {
+        let blocks = AnimatedArt::from_bytes(&make_gif(&[[200, 50, 0]], 10))
+            .unwrap()
+            .width(12)
+            .height(2)
+            .color(true)
+            .blocks(true);
+        let ascii = AnimatedArt::from_bytes(&make_gif(&[[255, 255, 255]], 10))
+            .unwrap()
+            .width(3)
+            .height(1);
+        let stage = Stage::new().with(blocks).with(ascii).gap(2);
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(rich::ColorSystem::Truecolor))
+            .width(40)
+            .build();
+        let tracks: Vec<_> = stage
+            .items
+            .iter()
+            .map(|art| Track::new(art.clone(), Instant::now()))
+            .collect();
+        let segments = stage
+            .compose(&tracks)
+            .rich_render(&console, &console.options());
+        let plain: String = segments
+            .iter()
+            .map(|segment| segment.text.as_str())
+            .collect();
+        let rows: Vec<_> = plain.lines().collect();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].chars().count(), 9);
+        assert!(rows[0].starts_with("▀▀▀▀  "));
+        assert_eq!(rows[1], "▀▀▀▀     ");
     }
 
     #[test]
