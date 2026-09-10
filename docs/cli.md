@@ -185,14 +185,18 @@ forever in a terminal. Pipes receive the first frame once, even with `--loop 0`.
 - [Troubleshooting](troubleshooting.md) — error messages and what to do about them
 - [Parity with Python rich](parity.md) — how close the output is, and where it differs
 
-## Reading UTF-16 text (0.0.4 development)
+<a id="reading-utf-16-text-004-development"></a>
+
+## Reading UTF-16 text (0.0.4)
 
 Use `rich notes.txt --encoding utf-16` for a BOM-marked file, or explicitly
 select `utf-16le` / `utf-16be` for headerless input. The same option works on
 stdin and URLs. See [text encoding](troubleshooting.md#text-encoding) for strict
 error handling and unchanged default decoding.
 
-## GIF half-block rendering (0.0.4 development)
+<a id="gif-half-block-rendering-004-development"></a>
+
+## GIF half-block rendering (0.0.4)
 
 ```bash
 rich --gif animation.gif --gif-mode blocks --width 40 --loop 2

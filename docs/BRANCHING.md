@@ -182,15 +182,21 @@ updating the requirements used by its direct dependents (`rs-rich-ext`,
 requires updating `rs-rich-cli`. Cargo does **not** force unrelated crates to
 share a version. Our coordinated-tag policy does.
 
-### Prepared 0.0.4 snapshot
+### Released 0.0.4 snapshot
 
-All four manifests select 0.0.4 because each package changes or consumes the new
-core version. Core adds an ownership extension point and performance changes;
-ext adds explicit text decoding; art adds GIF half-block rendering; the CLI wires
-these options and reduces CSV copies. Root internal requirements and the lockfile
-must agree with those independently selected versions. The coordinated `v0.0.4`
-scope is appropriate after final integration and verification; preparation does
-not create a tag or publish. See [release preparation](releases/0.0.4.md).
+All four packages published at 0.0.4 because each changed or consumed the new
+core version. Core adds an ownership extension point, wrapping improvements and
+an optional syntax cache; ext adds explicit text decoding; art adds GIF
+half-block rendering; the CLI wires these options and reduces CSV copies.
+
+The annotated `v0.0.4` tag selects all four and points to main commit
+`355a333b853606fcff830f498db1c35b9f94061d`. The
+[release workflow](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/34451499873) passed source, package and exact-version
+registry-consumer verification. See [release notes](releases/0.0.4.md).
+
+The [0.0.5 preparation plan](plans/0.0.5.md) does not preselect package versions.
+Assess each changed crate and its dependency closure before choosing coordinated
+or per-crate tags. Never repeat the upload path for an already published version.
 
 ### Prepared 0.0.3 snapshot
 

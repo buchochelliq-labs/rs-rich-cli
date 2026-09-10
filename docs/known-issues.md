@@ -4,7 +4,7 @@ What does not work yet, what was never meant to, and what works differently on
 purpose. Three different things, kept apart — a deliberate trade-off listed as a
 bug makes a considered decision look like neglect.
 
-**Applies to** the prepared `rich 0.0.4` / `rs-rich 0.0.4` source snapshot, reviewed
+**Applies to** the released `rs-rich-cli 0.0.4` / `rs-rich 0.0.4` packages, reviewed
 2026-09-10 against Python
 `rich` 15.0.0. Each entry links to its issue so you can check the status without
 waiting for this page to be updated.
@@ -56,8 +56,8 @@ export.
 
 ### GIF interruption and export limitations
 
-The 0.0.4 development build supports `--gif-mode blocks`; see the
-[capability matrix](cli.md#gif-half-block-rendering-004-development).
+0.0.4 supports `--gif-mode blocks`; see the
+[capability matrix](cli.md#gif-half-block-rendering-004).
 ASCII remains the default and the redirected/colorless fallback. Normal playback
 restores the cursor; Ctrl-C can leave it hidden, as before. GIF export and Sixel
 playback are unsupported.
@@ -65,7 +65,7 @@ playback are unsupported.
 ### CSV output still retains source rows
 
 Undecorated CSV output streams styled rows, reducing output-buffer overhead.
-The 0.0.4 development build removes duplicate parsed-cell storage and trims row
+0.0.4 removes duplicate parsed-cell storage and trims row
 capacity, reducing the measured 100k-row peak RSS by about 46%. Source rows remain
 in memory for measurement, so memory still scales with input.
 Decorated, aligned, paged and exported CSV output still buffers. The 0.0.4
@@ -74,7 +74,7 @@ retained memory; it does not provide bounded-memory processing.
 
 ### Long-line rendering still allocates memory
 
-The 0.0.4 development build removes repeated UTF-8 prefix scans during Text
+0.0.4 removes repeated UTF-8 prefix scans during Text
 wrapping. On the recorded Linux benchmark, the 5 MiB Markdown paragraph now
 finishes in 531 ms; it previously timed out after 10 seconds. Source and rendered
 lines still occupy memory. See [measured results](benchmarks.md#004-text-wrapping-results)
@@ -82,7 +82,7 @@ for input-path distinctions, output verification and reproducible samples.
 
 ### Headerless text encodings must be selected explicitly
 
-The development build supports `--encoding utf-16`, `utf-16le`, `utf-16be` and
+0.0.4 supports `--encoding utf-16`, `utf-16le`, `utf-16be` and
 `utf-8`. Default files retain UTF-8 replacement decoding; stdin and URLs remain
 strict UTF-8. A recognized UTF-16 BOM gets an actionable hint. Headerless UTF-16
 is not guessed: select its byte order explicitly or convert to UTF-8. See

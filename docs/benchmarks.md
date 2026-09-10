@@ -148,7 +148,7 @@ report short-input regressions and decorated-path limitations separately.
 
 ## 0.0.4 CSV ownership improvement
 
-The development build transfers parsed rows and their collection into `Table`
+The 0.0.4 implementation transfers parsed rows and their collection into `Table`
 through an ownership extension point, and trims completed row capacity. Global
 header/numeric inference and column measurement are unchanged. This removes a
 second full cell copy and duplicate row-container allocation; it is not

@@ -122,7 +122,7 @@ Windows. Piped input keeps working without a hint.
 
 ## Text encoding
 
-In the 0.0.4 development build, select a known encoding explicitly:
+In 0.0.4, select a known encoding explicitly:
 
 ```bash
 rich notes.txt --encoding utf-16

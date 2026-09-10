@@ -1,7 +1,7 @@
 # Architecture
 
 A four-crate Cargo workspace with a strict, one-directional dependency rule.
-Each crate versions independently. The [manifest-version table](index.md#versions-prepared-in-this-checkout)
+Each crate versions independently. The [manifest-version table](index.md#versions-in-this-checkout)
 tracks this checkout; registry badges show published versions.
 
 ```
