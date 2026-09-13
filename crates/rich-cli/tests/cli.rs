@@ -138,6 +138,51 @@ fn report_json_maps_usage_input_and_data_errors_to_stable_codes() {
 }
 
 #[test]
+fn report_parse_errors_honor_the_last_report_option() {
+    for args in [
+        &["--machine-json", "--report", "human", "--width", "nope"][..],
+        &["--report", "json", "--report", "human", "--width", "nope"][..],
+    ] {
+        let (out, err, status) = run_status(args, "");
+        assert_eq!(status.code(), Some(2), "stderr: {err:?}");
+        assert!(out.is_empty());
+        assert!(err.starts_with("rich: "), "stderr: {err:?}");
+        assert!(serde_json::from_str::<serde_json::Value>(err.trim()).is_err());
+    }
+}
+
+#[test]
+fn machine_report_stderr_is_one_json_envelope_on_export_failure() {
+    let html = std::env::temp_dir()
+        .join(format!("rich-missing-dir-{}", std::process::id()))
+        .join("out.html");
+    let (out, err, status) = run_status(
+        &[
+            "--report",
+            "json",
+            "--export-html",
+            html.to_str().unwrap(),
+            "-p",
+            "hi",
+        ],
+        "",
+    );
+    assert_eq!(status.code(), Some(3), "stderr: {err:?}");
+    assert_eq!(out, "hi\n");
+    assert_eq!(err.lines().count(), 1, "stderr: {err:?}");
+    let error: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
+    assert_eq!(error["ok"], false);
+    assert_eq!(error["code"], "input");
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("failed to save HTML"),
+        "stderr: {err:?}"
+    );
+}
+
+#[test]
 fn jsonl_streaming_renders_records_and_fails_fast_on_malformed_lines() {
     let (out, ok) = run(&["--no-color", "jsonl", "-"], "{\"a\":1}\n{\"b\":[2,3]}\n");
     assert!(ok);
@@ -173,6 +218,33 @@ fn jsonl_streaming_renders_records_and_fails_fast_on_malformed_lines() {
 }
 
 #[test]
+fn jsonl_streaming_stops_successfully_when_stdout_closes() {
+    let mut child = bin()
+        .args(["jsonl", "-", "--no-color"])
+        .env("COLUMNS", "80")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let writer = std::thread::spawn(move || {
+        for _ in 0..10_000 {
+            if stdin.write_all(b"{\"a\":1}\n").is_err() {
+                break;
+            }
+        }
+    });
+    let mut reader = child.stdout.take().unwrap();
+    reader.read_exact(&mut [0; 1]).unwrap();
+    drop(reader);
+    writer.join().unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success(), "stderr: {:?}", output.stderr);
+    assert!(output.stderr.is_empty(), "stderr: {:?}", output.stderr);
+}
+
+#[test]
 fn log_streaming_formats_common_fields() {
     let (out, ok) = run(
         &["--no-color", "log", "-"],
@@ -184,6 +256,16 @@ fn log_streaming_formats_common_fields() {
         "got: {out:?}"
     );
     assert!(out.contains(r#""request_id":"abc""#), "got: {out:?}");
+
+    let (out, ok) = run(
+        &["--no-color", "log", "-"],
+        r#"{"time":1690000000000,"level":30,"msg":"started","pid":42}"#,
+    );
+    assert!(ok);
+    assert!(
+        out.contains(r#"1690000000000 30 started {"pid":42}"#),
+        "got: {out:?}"
+    );
 }
 
 #[test]
@@ -1654,6 +1736,31 @@ fn unknown_image_extension_has_clean_punctuation() {
         "{err}"
     );
     assert!(!err.contains("\"\""));
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn image_diff_read_errors_follow_the_json_report_contract() {
+    let missing = std::env::temp_dir().join(format!("rich-missing-{}.png", std::process::id()));
+    let (out, err, status) = run_status(
+        &[
+            "--report",
+            "json",
+            "--diff",
+            missing.to_str().unwrap(),
+            missing.to_str().unwrap(),
+        ],
+        "",
+    );
+    assert_eq!(status.code(), Some(3), "stderr: {err:?}");
+    assert!(out.is_empty());
+    assert_eq!(err.lines().count(), 1, "stderr: {err:?}");
+    let error: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
+    assert_eq!(error["code"], "input");
+    assert!(
+        error["message"].as_str().unwrap().contains("cannot read"),
+        "stderr: {err:?}"
+    );
 }
 
 #[cfg(feature = "fetch")]

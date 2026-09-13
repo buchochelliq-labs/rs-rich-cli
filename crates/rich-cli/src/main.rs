@@ -277,17 +277,25 @@ fn success(cli: &Cli) -> ExitCode {
 }
 
 fn wants_json_report(args: &[String]) -> bool {
+    let mut format = ReportFormat::Human;
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
-            "--report" if iter.next().is_some_and(|value| value == "json") => return true,
-            "--report" => {}
-            "--machine-json" => return true,
-            "--" => return false,
+            "--report" => {
+                if let Some(value) = iter.next() {
+                    match value.as_str() {
+                        "human" => format = ReportFormat::Human,
+                        "json" => format = ReportFormat::Json,
+                        _ => {}
+                    }
+                }
+            }
+            "--machine-json" => format = ReportFormat::Json,
+            "--" => break,
             _ => {}
         }
     }
-    false
+    format == ReportFormat::Json
 }
 
 /// Map a `--panel` box name to a box set (port of rich-cli's `BOXES` +
@@ -1598,12 +1606,18 @@ fn exit_code(ok: bool) -> ExitCode {
     }
 }
 
-fn emit_exit_code(cli: &Cli, ok: bool) -> ExitCode {
-    if ok {
-        success(cli)
-    } else {
-        fail(cli, ExitClass::Input, "could not write output")
+fn emit_exit_code(cli: &Cli, result: Result<(), String>) -> ExitCode {
+    match result {
+        Ok(()) => success(cli),
+        Err(message) => fail(cli, ExitClass::Input, message),
     }
+}
+
+fn write_rendered_stdout(console: &Console, renderable: &dyn Renderable) -> std::io::Result<()> {
+    let output = console.render_export(renderable);
+    let stdout = std::io::stdout();
+    let mut lock = stdout.lock();
+    lock.write_all(output.as_bytes())
 }
 
 fn run_json_lines(cli: &Cli, console: &Console, log_mode: bool) -> ExitCode {
@@ -1686,14 +1700,21 @@ fn run_json_lines(cli: &Cli, console: &Console, log_mode: bool) -> ExitCode {
         }
         let wrote = if log_mode {
             let text = Text::new(format_log_record(&value));
-            emit(console, &Export::stdout_only(), |c| c.print(&text))
+            write_rendered_stdout(console, &text)
         } else {
             let source = serde_json::to_string(&value).expect("JSON value serializes");
             let json = Json::new(&source).expect("serialized JSON parses");
-            emit(console, &Export::stdout_only(), |c| c.print(&json))
+            write_rendered_stdout(console, &json)
         };
-        if !wrote {
-            return success(cli);
+        if let Err(error) = wrote {
+            if error.kind() == std::io::ErrorKind::BrokenPipe {
+                return success(cli);
+            }
+            return fail(
+                cli,
+                ExitClass::Input,
+                format!("could not write JSONL output: {error}"),
+            );
         }
     }
     success(cli)
@@ -1703,31 +1724,47 @@ fn format_log_record(value: &serde_json::Value) -> String {
     let Some(object) = value.as_object() else {
         return serde_json::to_string(value).expect("JSON value serializes");
     };
-    let take_string = |keys: &[&str]| {
-        keys.iter()
-            .find_map(|key| object.get(*key).and_then(|value| value.as_str()))
+    let take_value = |keys: &[&'static str]| {
+        keys.iter().find_map(|key| {
+            object.get(*key).map(|value| {
+                let display = value.as_str().map(str::to_string).unwrap_or_else(|| {
+                    serde_json::to_string(value).expect("JSON value serializes")
+                });
+                (*key, display, value.is_string())
+            })
+        })
     };
-    let timestamp = take_string(&["timestamp", "time", "@timestamp"]);
-    let level = take_string(&["level", "severity"]);
-    let message = take_string(&["message", "msg"]);
+    let timestamp = take_value(&["timestamp", "time", "@timestamp"]);
+    let level = take_value(&["level", "severity"]);
+    let message = take_value(&["message", "msg"]);
     let mut rest = serde_json::Map::new();
     for (key, value) in object {
-        if !matches!(
-            key.as_str(),
-            "timestamp" | "time" | "@timestamp" | "level" | "severity" | "message" | "msg"
-        ) {
+        let consumed = timestamp
+            .as_ref()
+            .is_some_and(|(consumed, _, _)| consumed == key)
+            || level
+                .as_ref()
+                .is_some_and(|(consumed, _, _)| consumed == key)
+            || message
+                .as_ref()
+                .is_some_and(|(consumed, _, _)| consumed == key);
+        if !consumed {
             rest.insert(key.clone(), value.clone());
         }
     }
     let mut parts = Vec::new();
-    if let Some(timestamp) = timestamp {
-        parts.push(timestamp.to_string());
+    if let Some((_, timestamp, _)) = timestamp {
+        parts.push(timestamp);
     }
-    if let Some(level) = level {
-        parts.push(level.to_ascii_uppercase());
+    if let Some((_, level, is_string)) = level {
+        parts.push(if is_string {
+            level.to_ascii_uppercase()
+        } else {
+            level
+        });
     }
-    if let Some(message) = message {
-        parts.push(message.to_string());
+    if let Some((_, message, _)) = message {
+        parts.push(message);
     }
     if !rest.is_empty() {
         parts.push(
@@ -2784,13 +2821,12 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     let (before_path, after_path) = (&cli.resources[0], &cli.resources[1]);
     // The directory check reached the plain read path but not this one, so
     // `rich --diff a.png somedir` still reported "Access is denied".
-    let open = |path: &String| {
+    let open = |path: &String| -> Result<_, String> {
         if std::path::Path::new(path).is_dir() {
-            eprintln!("rich: cannot read {path}: is a directory, not a file");
-            return None;
+            return Err(format!("cannot read {path}: is a directory, not a file"));
         }
         match rich_art::image::open(path) {
-            Ok(image) => Some(image),
+            Ok(image) => Ok(image),
             Err(err) => {
                 use rich_art::image::error::{ImageFormatHint, UnsupportedErrorKind};
                 let hint = match &err {
@@ -2801,24 +2837,25 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
                     },
                     _ => None,
                 };
-                eprintln!(
-                    "rich: cannot read {path}: {}",
+                Err(format!(
+                    "cannot read {path}: {}",
                     hint.unwrap_or_else(|| err.to_string())
-                );
-                None
+                ))
             }
         }
     };
-    let (Some(before), Some(after)) = (open(before_path), open(after_path)) else {
-        return ExitCode::FAILURE;
+    let before = match open(before_path) {
+        Ok(image) => image,
+        Err(message) => return fail(cli, ExitClass::Input, message),
+    };
+    let after = match open(after_path) {
+        Ok(image) => image,
+        Err(message) => return fail(cli, ExitClass::Input, message),
     };
 
     let report = match diff(&before, &after, &DiffSettings::default()) {
         Ok(report) => report,
-        Err(err) => {
-            eprintln!("rich: {err}");
-            return ExitCode::FAILURE;
-        }
+        Err(err) => return fail(cli, ExitClass::Data, err.to_string()),
     };
 
     let width = cli.width.unwrap_or_else(|| console.width());
@@ -2852,7 +2889,7 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
         let is_terminal = c.is_terminal();
         let mut mode = cli.image_mode;
         if mode == ImageMode::Auto {
-            if !has_color && !for_export {
+            if !has_color && !for_export && cli.report_format == ReportFormat::Human {
                 eprintln!("rich: auto image mode has no terminal colour, drawing the diff as ASCII instead");
             }
             mode = if !has_color {
@@ -2868,13 +2905,13 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
         // than emit a rectangle of identical blocks or nothing at all, and say
         // why on stderr so the change is visible rather than mysterious.
         if mode == ImageMode::Blocks && !has_color {
-            if !for_export {
+            if !for_export && cli.report_format == ReportFormat::Human {
                 eprintln!("rich: no colour available, drawing the diff as ASCII art");
             }
             mode = ImageMode::Ascii;
         }
         if mode == ImageMode::Sixel && !is_terminal {
-            if !for_export {
+            if !for_export && cli.report_format == ReportFormat::Human {
                 eprintln!(
                     "rich: Sixel graphics need a terminal, drawing the diff as {} instead",
                     if has_color { "blocks" } else { "ASCII art" }
@@ -2908,7 +2945,9 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
                 if art.encode(width).is_some() {
                     c.print(&art);
                 } else {
-                    eprintln!("rich: could not encode Sixel, drawing the diff as blocks");
+                    if cli.report_format == ReportFormat::Human {
+                        eprintln!("rich: could not encode Sixel, drawing the diff as blocks");
+                    }
                     c.print(
                         &BlockArt::new(report.heatmap())
                             .width(width)
@@ -2986,11 +3025,11 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
             .build();
         export_console.install_extensions();
         let segments = export_console.record_output(|c| render_report(c, true));
-        wrote = save_exports(&export_console, export, &segments) && wrote;
+        wrote = wrote.and_then(|()| save_exports(&export_console, export, &segments));
     }
 
-    if !wrote {
-        return fail(cli, ExitClass::Input, "could not write output");
+    if let Err(message) = wrote {
+        return fail(cli, ExitClass::Input, message);
     }
     if failed {
         return fail(cli, ExitClass::Gate, "diff threshold exceeded");
@@ -3004,8 +3043,7 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
     use rich_art::{AnimatedArt, Repeat, Stage};
 
     if cli.resources.is_empty() {
-        eprintln!("rich: --gif needs at least one GIF path");
-        return ExitCode::FAILURE;
+        return fail(cli, ExitClass::Usage, "--gif needs at least one GIF path");
     }
     let count = cli.resources.len();
     const GAP: usize = 2;
@@ -3038,13 +3076,12 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
                 );
             }
             Err(err) => {
-                eprintln!("rich: cannot read {path}: {err}");
-                return ExitCode::FAILURE;
+                return fail(cli, ExitClass::Input, format!("cannot read {path}: {err}"));
             }
         }
     }
 
-    if !console.is_terminal() {
+    if !console.is_terminal() && cli.report_format == ReportFormat::Human {
         eprintln!("rich: GIF animation needs a terminal; rendering the first frame only");
     }
 
@@ -3054,19 +3091,19 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
         builder = builder.width(width);
     }
     match stage.play_stdout(builder.build()) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(err) => {
-            eprintln!("rich: playback failed: {err}");
-            ExitCode::FAILURE
-        }
+        Ok(()) => success(cli),
+        Err(err) => fail(cli, ExitClass::Input, format!("playback failed: {err}")),
     }
 }
 
 /// Without the `art` feature there is no GIF support.
 #[cfg(not(feature = "art"))]
 fn play_gifs(_cli: &Cli, _console: &Console) -> ExitCode {
-    eprintln!("rich: this build has no GIF support (rebuild with the `art` feature)");
-    ExitCode::FAILURE
+    fail(
+        _cli,
+        ExitClass::Usage,
+        "this build has no GIF support (rebuild with the `art` feature)",
+    )
 }
 
 /// Where a render action's output goes: straight to the terminal, or captured
@@ -3082,17 +3119,6 @@ struct Export<'a> {
     pager: bool,
 }
 
-impl Export<'_> {
-    fn stdout_only() -> Self {
-        Self {
-            html_path: None,
-            svg_path: None,
-            svg_title: "rich",
-            pager: false,
-        }
-    }
-}
-
 /// Render once and deliver it everywhere it was asked for.
 ///
 /// The exports do **not** replace the terminal output — upstream prints the
@@ -3103,23 +3129,22 @@ impl Export<'_> {
 /// ordinary input renderables are recorded once here.
 ///
 /// Returns false if a file could not be written, so the caller can exit non-zero.
-fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) -> bool {
+fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) -> Result<(), String> {
     if export.html_path.is_none() && export.svg_path.is_none() {
         if export.pager {
             // Keep styles: unlike a plain `console.pager()`, the point of `rich
             // --pager` is to page *rich* output.
-            if let Err(err) = console.page(true, render) {
-                eprintln!("rich: cannot page output: {err}");
-                return false;
-            }
+            console
+                .page(true, render)
+                .map_err(|err| format!("cannot page output: {err}"))?;
         } else {
             render(console);
         }
-        return true;
+        return Ok(());
     }
 
     let segments = console.record_output(render);
-    let mut ok = true;
+    let mut first_error = None;
 
     // The terminal still gets the output, exports or not.
     let terminal = console.segments_to_string(&segments);
@@ -3127,24 +3152,26 @@ fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) -> bo
         // The text is already rendered, so hand it straight to the pager
         // rather than re-rendering through `Console::page`.
         if let Err(err) = rich::pager::Pager::show(&rich::pager::SystemPager, &terminal) {
-            eprintln!("rich: cannot page output: {err}");
-            ok = false;
+            first_error = Some(format!("cannot page output: {err}"));
         }
     } else {
-        print!("{terminal}");
+        let stdout = std::io::stdout();
+        let mut lock = stdout.lock();
+        if let Err(err) = lock.write_all(terminal.as_bytes()) {
+            first_error = Some(format!("could not write output: {err}"));
+        }
     }
 
-    save_exports(console, export, &segments) && ok
+    save_exports(console, export, &segments).and(first_error.map_or(Ok(()), Err))
 }
 
-fn save_exports(console: &Console, export: &Export, segments: &[Segment]) -> bool {
-    let mut ok = true;
+fn save_exports(console: &Console, export: &Export, segments: &[Segment]) -> Result<(), String> {
+    let mut first_error = None;
     if let Some(path) = export.html_path {
         // CSS-class stylesheet form, as upstream's `save_html` default.
         let html = rich::export::export_html_classes(segments, &DEFAULT_TERMINAL_THEME);
         if let Err(err) = std::fs::write(path, html) {
-            eprintln!("rich: failed to save HTML: {err}");
-            ok = false;
+            first_error = Some(format!("failed to save HTML: {err}"));
         }
     }
     if let Some(path) = export.svg_path {
@@ -3158,11 +3185,10 @@ fn save_exports(console: &Console, export: &Export, segments: &[Segment]) -> boo
             console.width(),
         );
         if let Err(err) = std::fs::write(path, svg) {
-            eprintln!("rich: failed to save SVG: {err}");
-            ok = false;
+            first_error.get_or_insert_with(|| format!("failed to save SVG: {err}"));
         }
     }
-    ok
+    first_error.map_or(Ok(()), Err)
 }
 
 fn print_help() {
