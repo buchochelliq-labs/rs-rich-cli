@@ -34,15 +34,11 @@ Looking for how to *do* something rather than what a flag is called? Start at
 """
 
 FOOTER = """
-## Exit codes
-
-| Code | Meaning |
-|------|---------|
-| `0` | The resource rendered. With `--diff --threshold`, also: change was within the threshold. |
-| `1` | The run failed: the resource could not be read or parsed, a flag was invalid or orphaned, or `--diff --threshold` found more change than allowed. |
-
 `rich` writes diagnostics to stderr and rendered output to stdout, so
 `rich --csv data.csv > table.txt` keeps the two apart.
+
+`--report json` writes the result/error envelope to stderr for the same reason:
+stdout remains the rendered payload.
 
 !!! note "A failure always exits non-zero"
 
@@ -71,7 +67,7 @@ def main():
     # those names beats inferring headings: a heading may wrap onto a second
     # line and carry a parenthetical, while the RESOURCE paragraph is prose that
     # merely starts in capitals — an inferring parser read it as a section.
-    KNOWN = ["USAGE", "RENDER MODE", "OPTIONS", "ENVIRONMENT"]
+    KNOWN = ["USAGE", "COMMANDS", "RENDER MODE", "OPTIONS", "ENVIRONMENT", "EXIT CODES"]
     lines = help_text.split("\n")
     sections, order = {}, []
     current, preamble = None, []
@@ -113,8 +109,10 @@ def main():
         "USAGE": "Usage",
         "RESOURCE": "The resource argument",
         "RENDER MODE": "Render modes",
+        "COMMANDS": "Commands",
         "OPTIONS": "Options",
         "ENVIRONMENT": "Environment variables",
+        "EXIT CODES": "Exit codes",
     }
 
     for name in order:

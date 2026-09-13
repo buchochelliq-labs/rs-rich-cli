@@ -5,7 +5,7 @@
 //! without depending on exact ANSI bytes (that parity lives in the `rich` crate).
 
 use std::io::{Read, Write};
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 
 fn bin() -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_rich"));
@@ -26,6 +26,11 @@ fn run(args: &[&str], stdin: &str) -> (String, bool) {
 
 /// As [`run`], but keeps stderr — a failure that says nothing is its own defect.
 fn run_full(args: &[&str], stdin: &str) -> (String, String, bool) {
+    let (out, err, status) = run_status(args, stdin);
+    (out, err, status.success())
+}
+
+fn run_status(args: &[&str], stdin: &str) -> (String, String, ExitStatus) {
     let mut child = bin()
         .args(args)
         .env("COLUMNS", "80")
@@ -44,7 +49,7 @@ fn run_full(args: &[&str], stdin: &str) -> (String, String, bool) {
     (
         String::from_utf8_lossy(&output.stdout).into_owned(),
         String::from_utf8_lossy(&output.stderr).into_owned(),
-        output.status.success(),
+        output.status,
     )
 }
 
@@ -89,6 +94,96 @@ fn print_mode_renders_markup() {
     let (out, ok) = run(&["--no-color", "-p", "[bold]hi[/] there"], "");
     assert!(ok);
     assert_eq!(out, "hi there\n");
+}
+
+#[test]
+fn subcommands_route_to_existing_modes_without_breaking_flat_flags() {
+    let (subcommand_out, ok) = run(&["--no-color", "json", "-"], r#"{"a": 1}"#);
+    assert!(ok);
+    assert!(
+        subcommand_out.contains("{\n  \"a\": 1\n}"),
+        "got: {subcommand_out:?}"
+    );
+
+    let (legacy_out, ok) = run(&["--no-color", "--json", "-"], r#"{"a": 1}"#);
+    assert!(ok);
+    assert_eq!(subcommand_out, legacy_out);
+
+    let (out, ok) = run(&["--no-color", "print", "[bold]hi[/]"], "");
+    assert!(ok);
+    assert_eq!(out, "hi\n");
+}
+
+#[test]
+fn report_json_maps_usage_input_and_data_errors_to_stable_codes() {
+    let (out, err, status) = run_status(&["--report", "json", "--width", "nope"], "");
+    assert_eq!(status.code(), Some(2), "stderr: {err:?}");
+    assert!(out.is_empty());
+    let usage: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
+    assert_eq!(usage["ok"], false);
+    assert_eq!(usage["code"], "usage");
+    assert_eq!(usage["exit_code"], 2);
+
+    let (out, err, status) = run_status(&["--report", "json", "missing.rs"], "");
+    assert_eq!(status.code(), Some(3), "stderr: {err:?}");
+    assert!(out.is_empty());
+    let input: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
+    assert_eq!(input["code"], "input");
+
+    let (out, err, status) = run_status(&["--report", "json", "--json", "-"], "{");
+    assert_eq!(status.code(), Some(4), "stderr: {err:?}");
+    assert!(out.is_empty());
+    let data: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
+    assert_eq!(data["code"], "data");
+}
+
+#[test]
+fn jsonl_streaming_renders_records_and_fails_fast_on_malformed_lines() {
+    let (out, ok) = run(&["--no-color", "jsonl", "-"], "{\"a\":1}\n{\"b\":[2,3]}\n");
+    assert!(ok);
+    assert!(out.contains("\"a\": 1"), "got: {out:?}");
+    assert!(out.contains("\"b\": ["), "got: {out:?}");
+
+    let (out, err, status) = run_status(
+        &["--no-color", "--report", "json", "jsonl", "-"],
+        "{\"ok\":true}\nnot-json\n{\"never\":true}\n",
+    );
+    assert_eq!(status.code(), Some(4), "stderr: {err:?}");
+    assert!(out.contains("\"ok\": true"), "got: {out:?}");
+    assert!(
+        !out.contains("never"),
+        "stream should fail before third record: {out:?}"
+    );
+    let error: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
+    assert_eq!(error["code"], "data");
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("invalid JSONL at line 2"),
+        "stderr: {err:?}"
+    );
+
+    let (_out, err, status) = run_status(&["jsonl", "--pager", "-"], "{}\n");
+    assert_eq!(status.code(), Some(2), "stderr: {err:?}");
+    assert!(
+        err.contains("--pager cannot be combined with jsonl"),
+        "stderr: {err:?}"
+    );
+}
+
+#[test]
+fn log_streaming_formats_common_fields() {
+    let (out, ok) = run(
+        &["--no-color", "log", "-"],
+        r#"{"timestamp":"2026-09-13T20:00:00Z","level":"info","message":"started","request_id":"abc"}"#,
+    );
+    assert!(ok);
+    assert!(
+        out.contains("2026-09-13T20:00:00Z INFO started"),
+        "got: {out:?}"
+    );
+    assert!(out.contains(r#""request_id":"abc""#), "got: {out:?}");
 }
 
 #[test]
@@ -289,7 +384,7 @@ fn a_nonsense_threshold_is_rejected_rather_than_disabling_the_gate() {
 #[test]
 fn a_valid_threshold_still_gates() {
     let (before, after) = diff_fixtures();
-    let (_out, over) = run(
+    let (_out, err, over) = run_status(
         &[
             "--diff",
             &before,
@@ -301,7 +396,11 @@ fn a_valid_threshold_still_gates() {
         ],
         "",
     );
-    assert!(!over, "5.4% change against a 2% limit must fail");
+    assert_eq!(
+        over.code(),
+        Some(5),
+        "5.4% change against a 2% limit must fail as a gate; stderr: {err}"
+    );
     let (out, err, under) = run_full(
         &[
             "--diff",

@@ -33,7 +33,18 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
-No changes yet.
+### Added
+
+- **`rs-rich-cli`:** added task-oriented subcommands (`rich json`,
+  `rich markdown`, `rich syntax`, `rich csv`, `rich ipynb`, `rich jsonl`,
+  `rich log`, `rich gif`, `rich diff`, `rich rule`) while preserving existing
+  flat flags without deprecation warnings.
+- **`rs-rich-cli`:** added streaming JSONL / NDJSON and structured-log rendering
+  from stdin or files with bounded per-record processing and fail-fast malformed
+  record handling.
+- **`rs-rich-cli`:** added stable automation exit-code classes plus
+  `--report json` / `--machine-json` for a common result/error envelope on
+  stderr, keeping rendered stdout separate.
 
 ## [0.0.5] — 2026-09-13
 

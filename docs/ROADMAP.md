@@ -86,6 +86,19 @@ manifest bumps and publication are not included in this documentation update.
 
 ---
 
+## 0.0.6 — CLI foundations and streaming automation
+
+The [0.0.6 plan](plans/0.0.6.md) scopes the next release to `rich-cli`
+automation: task-oriented subcommands that preserve existing flat flags,
+stable exit-code classes, a shared JSON report envelope, and bounded JSONL/log
+streaming from files and stdin.
+
+This deliberately defers the larger intuiTUIve/TUI, rich-art image workflow,
+watch, batch, config and dependency-upgrade work so the command/output contract
+can land first.
+
+---
+
 ## 0.0.2 planning record
 
 The milestone centered on rewriting the markup tag scanner against `RE_TAGS`.

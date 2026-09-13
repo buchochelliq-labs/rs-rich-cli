@@ -10,7 +10,7 @@
 //! behind the default `fetch` feature), **paging** (`--pager`), and a capability
 //! demo — i.e. the whole common rich-cli surface.
 
-use std::io::{IsTerminal, Read, Write};
+use std::io::{BufRead, IsTerminal, Read, Write};
 use std::process::ExitCode;
 
 use rich::cells::cell_len;
@@ -61,6 +61,51 @@ enum Mode {
     Diff,
     /// `--rule`: draw a horizontal rule (the resource, if any, is its title).
     Rule,
+    /// `--jsonl`: stream JSON Lines / NDJSON records.
+    JsonLines,
+    /// `--log`: stream common structured-log JSONL records.
+    Log,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReportFormat {
+    Human,
+    Json,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExitClass {
+    Success,
+    Usage,
+    Input,
+    Data,
+    Gate,
+}
+
+impl ExitClass {
+    fn code(self) -> u8 {
+        match self {
+            Self::Success => 0,
+            Self::Usage => 2,
+            Self::Input => 3,
+            Self::Data => 4,
+            Self::Gate => 5,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Success => "success",
+            Self::Usage => "usage",
+            Self::Input => "input",
+            Self::Data => "data",
+            Self::Gate => "gate",
+        }
+    }
+
+    fn exit_code(self) -> ExitCode {
+        ExitCode::from(self.code())
+    }
 }
 
 /// How `--diff` draws the image part of its report.
@@ -154,6 +199,9 @@ struct Cli {
     hyperlinks: bool,
     /// `--sanitize`: visibly neutralize terminal controls from input and labels.
     sanitize: bool,
+    /// `--report json`: emit a stable result/error envelope to stderr while
+    /// leaving stdout for rendered content.
+    report_format: ReportFormat,
 }
 
 /// Build the `-m/--markdown` renderable, honouring `-y/--hyperlinks`.
@@ -176,11 +224,69 @@ fn main() -> ExitCode {
     match parse(&args) {
         Ok(None) => ExitCode::SUCCESS, // help/version already printed
         Ok(Some(cli)) => run(cli),
-        Err(message) => {
-            eprintln!("rich: {message} (try --help)");
-            ExitCode::FAILURE
+        Err(message) => emit_error(
+            wants_json_report(&args),
+            ExitClass::Usage,
+            &format!("{message} (try --help)"),
+        ),
+    }
+}
+
+fn emit_error(json: bool, class: ExitClass, message: &str) -> ExitCode {
+    if json {
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "ok": false,
+                "code": class.name(),
+                "exit_code": class.code(),
+                "message": message,
+            })
+        );
+    } else {
+        eprintln!("rich: {message}");
+    }
+    class.exit_code()
+}
+
+fn emit_success_report(format: ReportFormat) {
+    if format == ReportFormat::Json {
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "ok": true,
+                "code": ExitClass::Success.name(),
+                "exit_code": ExitClass::Success.code(),
+            })
+        );
+    }
+}
+
+fn fail(cli: &Cli, class: ExitClass, message: impl AsRef<str>) -> ExitCode {
+    emit_error(
+        cli.report_format == ReportFormat::Json,
+        class,
+        message.as_ref(),
+    )
+}
+
+fn success(cli: &Cli) -> ExitCode {
+    emit_success_report(cli.report_format);
+    ExitClass::Success.exit_code()
+}
+
+fn wants_json_report(args: &[String]) -> bool {
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--report" if iter.next().is_some_and(|value| value == "json") => return true,
+            "--report" => {}
+            "--machine-json" => return true,
+            "--" => return false,
+            _ => {}
         }
     }
+    false
 }
 
 /// Map a `--panel` box name to a box set (port of rich-cli's `BOXES` +
@@ -227,10 +333,44 @@ fn parse_padding(value: &str) -> Result<(usize, usize, usize, usize), String> {
 }
 
 /// Set the render mode, rejecting a second, conflicting mode flag.
+fn mode_name(mode: Mode) -> &'static str {
+    match mode {
+        Mode::Auto => "auto",
+        Mode::Print => "print",
+        Mode::Markdown => "markdown",
+        Mode::Json => "json",
+        Mode::Syntax => "syntax",
+        Mode::Csv => "csv",
+        Mode::Ipynb => "ipynb",
+        Mode::Gif => "gif",
+        Mode::Diff => "diff",
+        Mode::Rule => "rule",
+        Mode::JsonLines => "jsonl",
+        Mode::Log => "log",
+    }
+}
+
+fn command_mode(command: &str) -> Option<Mode> {
+    match command {
+        "print" => Some(Mode::Print),
+        "markdown" | "md" => Some(Mode::Markdown),
+        "json" => Some(Mode::Json),
+        "syntax" | "code" => Some(Mode::Syntax),
+        "csv" | "tsv" => Some(Mode::Csv),
+        "ipynb" | "notebook" => Some(Mode::Ipynb),
+        "gif" => Some(Mode::Gif),
+        "diff" => Some(Mode::Diff),
+        "rule" => Some(Mode::Rule),
+        "jsonl" | "ndjson" => Some(Mode::JsonLines),
+        "log" | "logs" => Some(Mode::Log),
+        _ => None,
+    }
+}
+
 fn set_mode(current: &mut Mode, mode: Mode) -> Result<(), String> {
     if *current != Mode::Auto && *current != mode {
         return Err(
-            "only one render mode (--print/--markdown/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff) \
+            "only one render mode (--print/--markdown/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--jsonl/--log) \
              may be given"
                 .into(),
         );
@@ -262,6 +402,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut pager = false;
     let mut hyperlinks = false;
     let mut sanitize = false;
+    let mut report_format = ReportFormat::Human;
     // Set by `--`: everything after it is a positional argument, however much it
     // looks like a flag. Without this nothing beginning with `-` could be
     // printed or opened at all — `rich -p -- "-5 degrees"` and `rich -- -weird.md`
@@ -295,6 +436,17 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--ipynb" => set_mode(&mut mode, Mode::Ipynb)?,
             "--gif" => set_mode(&mut mode, Mode::Gif)?,
             "--diff" => set_mode(&mut mode, Mode::Diff)?,
+            "--jsonl" | "--ndjson" => set_mode(&mut mode, Mode::JsonLines)?,
+            "--log" => set_mode(&mut mode, Mode::Log)?,
+            "--report" => {
+                let value = iter.next().ok_or("--report requires one of: human, json")?;
+                report_format = match value.as_str() {
+                    "human" => ReportFormat::Human,
+                    "json" => ReportFormat::Json,
+                    _ => return Err(format!("unknown report format {value:?} (human, json)")),
+                };
+            }
+            "--machine-json" => report_format = ReportFormat::Json,
             "--image-mode" => {
                 let value = iter
                     .next()
@@ -397,6 +549,11 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             other if other.starts_with('-') && other != "-" => {
                 return Err(format!("unknown option {other:?}"));
             }
+            other
+                if mode == Mode::Auto && resources.is_empty() && command_mode(other).is_some() =>
+            {
+                set_mode(&mut mode, command_mode(other).expect("checked above"))?;
+            }
             other => resources.push(other.to_string()),
         }
     }
@@ -418,6 +575,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     extensions.validate(
         effective_mode == Mode::Gif,
         !(matches!(effective_mode, Mode::Gif | Mode::Diff | Mode::Rule)
+            || matches!(effective_mode, Mode::JsonLines | Mode::Log)
             || (mode == Mode::Auto && resources.is_empty())
             || (mode == Mode::Print && resources.first().is_some_and(|r| r != "-" && !is_url(r)))),
     )?;
@@ -486,18 +644,38 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     // These decorate a single rendered resource; --diff composes its own report
     // and quietly dropped them, which reads as the flag having no effect.
     let demo = mode == Mode::Auto && resources.is_empty();
-    if matches!(effective_mode, Mode::Diff | Mode::Gif) || demo {
+    if matches!(
+        effective_mode,
+        Mode::Diff | Mode::Gif | Mode::JsonLines | Mode::Log
+    ) || demo
+    {
         let mode_name = if effective_mode == Mode::Gif {
             "--gif"
+        } else if matches!(effective_mode, Mode::JsonLines | Mode::Log) {
+            mode_name(effective_mode)
         } else if demo {
             "the capability demo"
         } else {
             "--diff"
         };
         let unsupported = [
-            ("--pager", pager && (effective_mode == Mode::Gif || demo)),
+            (
+                "--pager",
+                pager
+                    && (effective_mode == Mode::Gif
+                        || matches!(effective_mode, Mode::JsonLines | Mode::Log)
+                        || demo),
+            ),
+            (
+                "--export-html/--export-svg",
+                (export_html.is_some() || export_svg.is_some())
+                    && matches!(effective_mode, Mode::JsonLines | Mode::Log),
+            ),
             ("--width", demo && width.is_some()),
-            ("--hyperlinks", demo && hyperlinks),
+            (
+                "--hyperlinks",
+                hyperlinks && (matches!(effective_mode, Mode::JsonLines | Mode::Log) || demo),
+            ),
             ("--panel", panel.is_some()),
             ("--padding", padding.is_some()),
             ("--title", title.is_some()),
@@ -539,6 +717,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         pager,
         hyperlinks,
         sanitize,
+        report_format,
     }))
 }
 
@@ -989,8 +1168,7 @@ fn decorate_and_emit(
 ) -> ExitCode {
     if cli.panel.is_some() {
         if let Err(err) = validate_labels(cli) {
-            eprintln!("rich: {err}");
-            return ExitCode::FAILURE;
+            return fail(cli, ExitClass::Data, err);
         }
     }
     let max_width = console.width();
@@ -1080,7 +1258,7 @@ fn decorate_and_emit(
         });
     }
 
-    exit_code(emit(console, export, |c| c.print(renderable.as_ref())))
+    emit_exit_code(cli, emit(console, export, |c| c.print(renderable.as_ref())))
 }
 
 fn run(mut cli: Cli) -> ExitCode {
@@ -1098,7 +1276,7 @@ fn run(mut cli: Cli) -> ExitCode {
     // With no flags and no resource, show the capability demo.
     if cli.mode == Mode::Auto && cli.resource.is_none() {
         run_demo(cli.no_color);
-        return ExitCode::SUCCESS;
+        return success(&cli);
     }
 
     let mut mode = match cli.mode {
@@ -1106,12 +1284,9 @@ fn run(mut cli: Cli) -> ExitCode {
         other => other,
     };
 
-    // `--gif` and `--diff` write a stream of renderables to the
-    // console themselves instead of composing one, so no wrapper can reach them:
-    // those two keep taking `--width` on the console. Everything else gets
-    // upstream's `ForceWidth` in `decorate_and_emit`, which is what keeps
-    // `--center` centring inside the terminal.
-    let width_on_console = matches!(mode, Mode::Gif | Mode::Diff);
+    // Modes that render incrementally write directly to the console instead of
+    // composing one renderable, so no `ForceWidth` wrapper can reach them.
+    let width_on_console = matches!(mode, Mode::Gif | Mode::Diff | Mode::JsonLines | Mode::Log);
     let mut builder = Console::builder().no_color(cli.no_color);
     if let Some(width) = cli.width.filter(|_| width_on_console) {
         builder = builder.width(width);
@@ -1122,8 +1297,7 @@ fn run(mut cli: Cli) -> ExitCode {
     if mode == Mode::Rule {
         if let Some(title) = &cli.resource {
             if let Err(err) = Text::from_markup(title) {
-                eprintln!("rich: {err}");
-                return ExitCode::FAILURE;
+                return fail(&cli, ExitClass::Data, err.to_string());
             }
         }
     }
@@ -1159,6 +1333,10 @@ fn run(mut cli: Cli) -> ExitCode {
         return run_diff(&cli, &console, &export);
     }
 
+    if matches!(mode, Mode::JsonLines | Mode::Log) {
+        return run_json_lines(&cli, &console, mode == Mode::Log);
+    }
+
     // A rule takes its optional title from the resource string directly (no
     // fetch/read) — but it still goes through the decorators, because upstream
     // wraps it like anything else, so `--rule --panel` really does draw a panel.
@@ -1183,8 +1361,7 @@ fn run(mut cli: Cli) -> ExitCode {
         match fetch_url(cli.resource.as_deref().unwrap(), cli.extensions.encoding) {
             Ok(fetched) => fetched,
             Err(err) => {
-                eprintln!("rich: {err}");
-                return ExitCode::FAILURE;
+                return fail(&cli, ExitClass::Input, err);
             }
         }
     } else if mode == Mode::Print && matches!(cli.resource.as_deref(), Some(r) if r != "-") {
@@ -1194,8 +1371,7 @@ fn run(mut cli: Cli) -> ExitCode {
             Ok(content) => (content, None),
             Err(err) => {
                 let name = cli.resource.as_deref().unwrap_or("<stdin>");
-                eprintln!("rich: cannot read {name}: {err}");
-                return ExitCode::FAILURE;
+                return fail(&cli, ExitClass::Input, format!("cannot read {name}: {err}"));
             }
         }
     };
@@ -1218,8 +1394,7 @@ fn run(mut cli: Cli) -> ExitCode {
         match sanitize_json_source(content.trim()) {
             Ok(content) => Some(content),
             Err(err) => {
-                eprintln!("rich: invalid JSON: {err}");
-                return ExitCode::FAILURE;
+                return fail(&cli, ExitClass::Data, format!("invalid JSON: {err}"));
             }
         }
     } else {
@@ -1231,8 +1406,7 @@ fn run(mut cli: Cli) -> ExitCode {
         match Json::new(source) {
             Ok(json) => Some(json),
             Err(err) => {
-                eprintln!("rich: invalid JSON: {err}");
-                return ExitCode::FAILURE;
+                return fail(&cli, ExitClass::Data, format!("invalid JSON: {err}"));
             }
         }
     } else {
@@ -1252,12 +1426,14 @@ fn run(mut cli: Cli) -> ExitCode {
                 value
             }
             Ok(_) => {
-                eprintln!("rich: not a notebook: no `cells` array");
-                return ExitCode::FAILURE;
+                return fail(&cli, ExitClass::Data, "not a notebook: no `cells` array");
             }
             Err(err) => {
-                eprintln!("rich: invalid notebook JSON: {err}");
-                return ExitCode::FAILURE;
+                return fail(
+                    &cli,
+                    ExitClass::Data,
+                    format!("invalid notebook JSON: {err}"),
+                );
             }
         };
         let renderable = build_ipynb(&notebook, cli.hyperlinks, cli.justify);
@@ -1270,8 +1446,7 @@ fn run(mut cli: Cli) -> ExitCode {
     // Checked up front because the render closure below cannot fail.
     if mode == Mode::Print {
         if let Err(err) = console.try_build_text(&content) {
-            eprintln!("rich: {err}");
-            return ExitCode::FAILURE;
+            return fail(&cli, ExitClass::Data, err.to_string());
         }
     }
 
@@ -1326,8 +1501,7 @@ fn run(mut cli: Cli) -> ExitCode {
         }
         Mode::Csv => {
             if let Err(err) = validate_labels(&cli) {
-                eprintln!("rich: {err}");
-                return ExitCode::FAILURE;
+                return fail(&cli, ExitClass::Data, err);
             }
             // `.tsv` only picks the fallback dialect; the sniffer reads the file
             // itself, so a comma-separated `.tsv` still renders as a table.
@@ -1342,8 +1516,7 @@ fn run(mut cli: Cli) -> ExitCode {
                 // Upstream's `on_error(str(error))`. The message is CPython's,
                 // verbatim, because it is the one a script would grep for.
                 None => {
-                    eprintln!("rich: Could not determine delimiter");
-                    return ExitCode::FAILURE;
+                    return fail(&cli, ExitClass::Data, "Could not determine delimiter");
                 }
             };
             // Stream undecorated CSV rows: measuring or collecting the complete
@@ -1377,12 +1550,15 @@ fn run(mut cli: Cli) -> ExitCode {
                     // A consumer such as `head` may finish before this table.
                     // Match the other stdout paths: a closed pipe is success.
                     if error.kind() == std::io::ErrorKind::BrokenPipe {
-                        return ExitCode::SUCCESS;
+                        return success(&cli);
                     }
-                    eprintln!("rich: could not write CSV output: {error}");
-                    return ExitCode::FAILURE;
+                    return fail(
+                        &cli,
+                        ExitClass::Input,
+                        format!("could not write CSV output: {error}"),
+                    );
                 }
-                return ExitCode::SUCCESS;
+                return success(&cli);
             }
             let fit = measure_rendered(&console, &table);
             (Box::new(table), Some(fit))
@@ -1412,11 +1588,155 @@ fn run(mut cli: Cli) -> ExitCode {
 
 /// Turn an "everything written successfully" flag into a process exit code.
 /// A failed `--export-html`/`--export-svg` write must not report success.
+#[allow(dead_code)]
 fn exit_code(ok: bool) -> ExitCode {
     if ok {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+fn emit_exit_code(cli: &Cli, ok: bool) -> ExitCode {
+    if ok {
+        success(cli)
+    } else {
+        fail(cli, ExitClass::Input, "could not write output")
+    }
+}
+
+fn run_json_lines(cli: &Cli, console: &Console, log_mode: bool) -> ExitCode {
+    if cli.extensions.encoding.is_some() {
+        return fail(
+            cli,
+            ExitClass::Usage,
+            "--encoding is not supported with streaming JSONL/log mode",
+        );
+    }
+    if matches!(cli.resource.as_deref(), Some(resource) if is_url(resource)) {
+        return fail(
+            cli,
+            ExitClass::Usage,
+            "streaming JSONL/log mode reads files or stdin, not URLs",
+        );
+    }
+
+    let mut input: Box<dyn BufRead> = match cli.resource.as_deref() {
+        Some(path) if path != "-" => {
+            let file = std::path::Path::new(path);
+            if file.is_dir() {
+                return fail(
+                    cli,
+                    ExitClass::Input,
+                    format!("cannot read {path}: is a directory, not a file"),
+                );
+            }
+            match std::fs::File::open(file) {
+                Ok(file) => Box::new(std::io::BufReader::new(file)),
+                Err(err) => {
+                    return fail(cli, ExitClass::Input, format!("cannot read {path}: {err}"));
+                }
+            }
+        }
+        _ => {
+            if std::io::stdin().is_terminal() {
+                let eof = if cfg!(windows) {
+                    "Ctrl-Z then Enter"
+                } else {
+                    "Ctrl-D"
+                };
+                eprintln!("rich: reading stdin; finish input with {eof}");
+            }
+            Box::new(std::io::BufReader::new(std::io::stdin()))
+        }
+    };
+
+    let mut line = String::new();
+    let mut line_number = 0usize;
+    loop {
+        line.clear();
+        let read = match input.read_line(&mut line) {
+            Ok(read) => read,
+            Err(err) => {
+                return fail(
+                    cli,
+                    ExitClass::Input,
+                    format!("cannot read JSONL stream: {err}"),
+                );
+            }
+        };
+        if read == 0 {
+            break;
+        }
+        line_number += 1;
+        let record = line.trim_end_matches(['\r', '\n']);
+        let mut value = match serde_json::from_str::<serde_json::Value>(record) {
+            Ok(value) => value,
+            Err(err) => {
+                return fail(
+                    cli,
+                    ExitClass::Data,
+                    format!("invalid JSONL at line {line_number}: {err}"),
+                );
+            }
+        };
+        if cli.sanitize {
+            sanitize_json_value(&mut value);
+        }
+        let wrote = if log_mode {
+            let text = Text::new(format_log_record(&value));
+            emit(console, &Export::stdout_only(), |c| c.print(&text))
+        } else {
+            let source = serde_json::to_string(&value).expect("JSON value serializes");
+            let json = Json::new(&source).expect("serialized JSON parses");
+            emit(console, &Export::stdout_only(), |c| c.print(&json))
+        };
+        if !wrote {
+            return success(cli);
+        }
+    }
+    success(cli)
+}
+
+fn format_log_record(value: &serde_json::Value) -> String {
+    let Some(object) = value.as_object() else {
+        return serde_json::to_string(value).expect("JSON value serializes");
+    };
+    let take_string = |keys: &[&str]| {
+        keys.iter()
+            .find_map(|key| object.get(*key).and_then(|value| value.as_str()))
+    };
+    let timestamp = take_string(&["timestamp", "time", "@timestamp"]);
+    let level = take_string(&["level", "severity"]);
+    let message = take_string(&["message", "msg"]);
+    let mut rest = serde_json::Map::new();
+    for (key, value) in object {
+        if !matches!(
+            key.as_str(),
+            "timestamp" | "time" | "@timestamp" | "level" | "severity" | "message" | "msg"
+        ) {
+            rest.insert(key.clone(), value.clone());
+        }
+    }
+    let mut parts = Vec::new();
+    if let Some(timestamp) = timestamp {
+        parts.push(timestamp.to_string());
+    }
+    if let Some(level) = level {
+        parts.push(level.to_ascii_uppercase());
+    }
+    if let Some(message) = message {
+        parts.push(message.to_string());
+    }
+    if !rest.is_empty() {
+        parts.push(
+            serde_json::to_string(&serde_json::Value::Object(rest)).expect("JSON value serializes"),
+        );
+    }
+    if parts.is_empty() {
+        serde_json::to_string(value).expect("JSON value serializes")
+    } else {
+        parts.join(" ")
     }
 }
 
@@ -2668,10 +2988,13 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
         wrote = save_exports(&export_console, export, &segments) && wrote;
     }
 
-    if !wrote || failed {
-        return ExitCode::FAILURE;
+    if !wrote {
+        return fail(cli, ExitClass::Input, "could not write output");
     }
-    ExitCode::SUCCESS
+    if failed {
+        return fail(cli, ExitClass::Gate, "diff threshold exceeded");
+    }
+    success(cli)
 }
 
 /// Animate every `--gif` resource at once, sharing the console width.
@@ -2758,6 +3081,17 @@ struct Export<'a> {
     pager: bool,
 }
 
+impl Export<'_> {
+    fn stdout_only() -> Self {
+        Self {
+            html_path: None,
+            svg_path: None,
+            svg_title: "rich",
+            pager: false,
+        }
+    }
+}
+
 /// Render once and deliver it everywhere it was asked for.
 ///
 /// The exports do **not** replace the terminal output — upstream prints the
@@ -2839,11 +3173,25 @@ fn print_help() {
 
 USAGE:
     rich [OPTIONS] [RESOURCE]
+    rich [OPTIONS] <COMMAND> [RESOURCE]
 
 RESOURCE is a file path, an http(s) URL, or `-` for stdin. Everything after a
 bare `--` is a RESOURCE, however much it looks like an option. Input modes with
 no RESOURCE read stdin until EOF; `-p -` reads markup from stdin too. Terminal
 stdin shows an input hint. Repeated scalar options use their last value.
+
+COMMANDS:
+    print       Treat RESOURCE as literal markup TEXT (`--print`)
+    markdown    Render Markdown (`--markdown`)
+    syntax      Syntax-highlight source (`--syntax`)
+    json        Pretty-print JSON (`--json`)
+    csv         Render CSV/TSV as a table (`--csv`)
+    ipynb       Render a Jupyter notebook (`--ipynb`)
+    jsonl       Stream JSON Lines / NDJSON records
+    log         Stream common structured-log JSONL records
+    gif         Animate GIFs (`--gif`)
+    diff        Perceptually compare two images (`--diff`)
+    rule        Draw a horizontal rule (`--rule`)
 
 RENDER MODE (choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb
 by extension — anything else with a file extension is syntax-highlighted):
@@ -2853,6 +3201,8 @@ by extension — anything else with a file extension is syntax-highlighted):
     -x, --syntax     Syntax-highlight RESOURCE (language from its extension)
         --csv        Render RESOURCE as a CSV/TSV table
         --ipynb      Render RESOURCE as a Jupyter notebook
+        --jsonl      Stream JSON Lines / NDJSON records
+        --log        Stream common structured-log JSONL records
         --gif        Animate GIFs side by side; pipes receive the first frame
         --loop N     With --gif, repeat N times (default 1; 0 = forever)
         --rule       Draw a horizontal rule (RESOURCE is its title)
@@ -2867,7 +3217,7 @@ OPTIONS:
 {extension_help}
         --threshold PCT
                      With --diff, exit non-zero above PCT% changed.
-                     Also sets the exit code: 0 within, 1 over.
+                     Also sets the exit code: 0 within, 5 over.
         --left       Left-justify output
         --center     Center output
         --right      Right-justify output
@@ -2892,6 +3242,9 @@ OPTIONS:
         --pager      Page via MANPAGER, then PAGER, then less/more.com
         --sanitize   Replace input terminal controls, JSON/notebook strings,
                      titles and captions with visible inert text
+        --report F   Emit a result/error envelope on stderr: human (default) or json.
+        --machine-json
+                     Alias for --report json
         --no-color   Disable colored output (as does a non-empty NO_COLOR)
     -h, --help       Show this help
     -V, --version    Show the rs-rich-cli package version
@@ -2905,6 +3258,13 @@ ENVIRONMENT:
 
 With no RESOURCE and no mode flag, a capability demo is shown. Layout, style,
 paging, hyperlinks and export options require a resource or render mode.
+
+EXIT CODES:
+    0 success
+    2 usage/config error
+    3 input/read/write error
+    4 parse/render data error
+    5 threshold/gate failure
 "#
     );
 }
