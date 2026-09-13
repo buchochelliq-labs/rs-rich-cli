@@ -158,9 +158,10 @@ jobs:
                 github.rest.issues.listComments,
                 { owner, repo, issue_number: pr.number, per_page: 100 }
               );
-              const handoffs = comments.filter((comment) =>
-                /^## Release handoff:/m.test(comment.body || '')
-              );
+              const handoffs = comments.filter((comment) => {
+                const body = (comment.body || '').replace(/^\uFEFF/, '');
+                return /^\s*## Release handoff:/m.test(body);
+              });
               const latest = handoffs.at(-1);
               if (!latest) {
                 problems.push('Release PR is missing a `## Release handoff:` PR comment.');
