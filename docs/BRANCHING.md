@@ -237,6 +237,52 @@ In outline:
 4. Soak. Fixes land on `main` as ordinary PRs, then cut another rc.
 5. Cut `release/X.Y.Z`, same shape, merge, tag `vX.Y.Z`.
 
+### Final PR readiness gate
+
+Green CI is necessary, but it is not enough. Before saying a release PR is ready,
+record a final readiness snapshot that proves review feedback and branch
+protection are accounted for:
+
+```bash
+gh pr checks <number> --watch --interval 15
+gh pr view <number> --json headRefOid,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup
+gh api graphql -f owner=<owner> -f name=<repo> -F number=<number> \
+  -f query='query($owner:String!,$name:String!,$number:Int!){ repository(owner:$owner,name:$name){ pullRequest(number:$number){ reviewThreads(first:100){ nodes{ isResolved } } } } }' \
+  --jq '.data.repository.pullRequest.reviewThreads.nodes | map(select(.isResolved == false)) | length'
+git status --short --branch
+```
+
+The ready state is: every required/expected check is green, unresolved review
+thread count is `0`, latest review comments have been inspected, the worktree is
+clean, and the PR's `headRefOid`, `mergeable`, `mergeStateStatus`, and
+`reviewDecision` are written into the handoff. If `mergeable` is `MERGEABLE` but
+`mergeStateStatus` is `BLOCKED`, say exactly which external branch-protection
+requirement remains, or state that maintainer review/merge is the only visible
+blocker.
+
+Post a release handoff note on the PR before stopping. It must include the exact
+head SHA, selected tag form, publish target, validation summary, unresolved
+thread count, and the remaining blocker. For an independent crate release, spell
+out the crate tag (for example `rs-rich-cli-v0.0.6`) and explicitly say not to
+use the coordinated `vX.Y.Z` tag unless all selected manifests match it.
+
+### Windows validation ordering
+
+Do not run Cargo commands that build the same binary in parallel on Windows when
+they share the default `target` directory. Windows can hold `target\debug\*.exe`
+open long enough for a concurrent Cargo invocation to fail with
+`Access is denied`. Serialize those commands, or isolate them with separate
+`CARGO_TARGET_DIR` values:
+
+```powershell
+$env:CARGO_TARGET_DIR = "target\check-cli"
+cargo test -p rs-rich-cli --test cli
+```
+
+Use isolation only for validation scratch builds; release packaging and locked
+workspace checks should continue to use the normal workspace target unless there
+is a specific reason to do otherwise.
+
 ### Publish order
 
 `cargo publish --workspace --locked` retains the coordinated path's topological

@@ -77,6 +77,36 @@ selection, then regenerate version docs and CLI help. Move only the selected
 changes from `Unreleased` under the appropriate release heading when finalizing
 the release. Record tests and actual screenshot evidence in the PR.
 
+Before calling the PR ready, take and report the final readiness snapshot:
+
+```bash
+gh pr checks <number> --watch --interval 15
+gh pr view <number> --json headRefOid,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup
+gh api graphql -f owner=<owner> -f name=<repo> -F number=<number> \
+  -f query='query($owner:String!,$name:String!,$number:Int!){ repository(owner:$owner,name:$name){ pullRequest(number:$number){ reviewThreads(first:100){ nodes{ isResolved } } } } }' \
+  --jq '.data.repository.pullRequest.reviewThreads.nodes | map(select(.isResolved == false)) | length'
+git status --short --branch
+```
+
+Ready means all expected checks are green, unresolved review thread count is `0`,
+latest review comments were inspected, the worktree is clean, and the PR's
+`headRefOid`, `mergeable`, `mergeStateStatus`, and `reviewDecision` are recorded.
+If `mergeable` is `MERGEABLE` but `mergeStateStatus` is `BLOCKED`, state the
+visible branch-protection blocker instead of calling it fully merge-ready.
+
+Post a release handoff note on the PR before stopping. Include the exact head
+SHA, selected tag form, publish target, validation summary, unresolved thread
+count, and remaining blocker. For independent releases, spell out the exact
+crate tag, e.g. `rs-rich-cli-v0.0.6`, and warn against using coordinated
+`vX.Y.Z` unless all selected manifests match.
+
+On Windows, do not run Cargo commands that build the same binary in parallel
+against the same `target` directory; a concurrent process can hold
+`target\debug\*.exe` and cause `Access is denied`. Serialize those commands, or
+give parallel validation jobs separate `CARGO_TARGET_DIR` values. Keep release
+packaging and locked workspace checks on the normal workspace target unless
+there is a specific reason not to.
+
 ## 3. Land on main, then tag
 
 After the release PR merges, fetch `origin/main` and verify the exact intended
