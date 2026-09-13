@@ -28,6 +28,7 @@ use rich::{
 };
 use rich_ext::cli::CliExtensions;
 use rich_ext::encoding::{has_utf16_bom, Encoding};
+use rich_ext::sanitize_terminal_controls;
 use rich_ext::ConsoleExt;
 
 /// Boxed `Text` helper to cut down on `Box::new(Text::new(...))` noise.
@@ -151,6 +152,8 @@ struct Cli {
     /// Upstream's flag, and upstream's default of **false** — see
     /// [`build_markdown`], which is where it is consumed.
     hyperlinks: bool,
+    /// `--sanitize`: visibly neutralize terminal controls from input and labels.
+    sanitize: bool,
 }
 
 /// Build the `-m/--markdown` renderable, honouring `-y/--hyperlinks`.
@@ -258,6 +261,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut expand = false;
     let mut pager = false;
     let mut hyperlinks = false;
+    let mut sanitize = false;
     // Set by `--`: everything after it is a positional argument, however much it
     // looks like a flag. Without this nothing beginning with `-` could be
     // printed or opened at all — `rich -p -- "-5 degrees"` and `rich -- -weird.md`
@@ -331,6 +335,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--center" => {}
             "--no-color" => no_color = true,
             "--pager" => pager = true,
+            "--sanitize" => sanitize = true,
             // Upstream's `@click.option("--hyperlinks", "-y", is_flag=True,
             // help="Render hyperlinks in markdown.")`. Accepted in every mode,
             // as click accepts it — it is read only where markdown is rendered.
@@ -533,6 +538,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         expand,
         pager,
         hyperlinks,
+        sanitize,
     }))
 }
 
@@ -601,6 +607,21 @@ fn read_resource(resource: Option<&str>, encoding: Option<Encoding>) -> std::io:
     } else {
         strip_bom(content)
     }))
+}
+
+fn sanitize_json_value(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::String(text) => *text = sanitize_terminal_controls(text),
+        serde_json::Value::Array(values) => values.iter_mut().for_each(sanitize_json_value),
+        serde_json::Value::Object(values) => values.values_mut().for_each(sanitize_json_value),
+        _ => {}
+    }
+}
+
+fn sanitize_json_source(content: &str) -> Result<String, serde_json::Error> {
+    let mut value = serde_json::from_str::<serde_json::Value>(content)?;
+    sanitize_json_value(&mut value);
+    serde_json::to_string(&value)
 }
 
 /// Strict stdin/URL input; the default file path separately retains replacement.
@@ -1062,7 +1083,18 @@ fn decorate_and_emit(
     exit_code(emit(console, export, |c| c.print(renderable.as_ref())))
 }
 
-fn run(cli: Cli) -> ExitCode {
+fn run(mut cli: Cli) -> ExitCode {
+    if cli.sanitize {
+        cli.title = cli
+            .title
+            .take()
+            .map(|title| sanitize_terminal_controls(&title));
+        cli.caption = cli
+            .caption
+            .take()
+            .map(|caption| sanitize_terminal_controls(&caption));
+    }
+
     // With no flags and no resource, show the capability demo.
     if cli.mode == Mode::Auto && cli.resource.is_none() {
         run_demo(cli.no_color);
@@ -1099,12 +1131,15 @@ fn run(cli: Cli) -> ExitCode {
     // SVG export needs a title (the resource's basename, else "rich") and a
     // stable id. Upstream's auto id hashes Python reprs, so we use a fixed one
     // (see the rich crate's svg module / DIVERGENCES #15).
-    let svg_title = cli
+    let mut svg_title = cli
         .resource
         .as_deref()
         .filter(|r| *r != "-")
         .map(|r| r.rsplit(['/', '\\']).next().unwrap_or(r).to_string())
         .unwrap_or_else(|| "rich".to_string());
+    if cli.sanitize {
+        svg_title = sanitize_terminal_controls(&svg_title);
+    }
     let export = Export {
         html_path: cli.export_html.as_deref(),
         svg_path: cli.export_svg.as_deref(),
@@ -1129,6 +1164,9 @@ fn run(cli: Cli) -> ExitCode {
     // wraps it like anything else, so `--rule --panel` really does draw a panel.
     if mode == Mode::Rule {
         let rule = match cli.resource.as_deref() {
+            Some(title) if title != "-" && cli.sanitize => {
+                Rule::new(sanitize_terminal_controls(title))
+            }
             Some(title) if title != "-" => Rule::new(title),
             _ => Rule::line(),
         };
@@ -1141,7 +1179,7 @@ fn run(cli: Cli) -> ExitCode {
     // treat it as a literal markup string under `--print`, else read the
     // file/stdin. A URL also yields a `Content-Type` used below.
     let resource_is_url = matches!(cli.resource.as_deref(), Some(r) if is_url(r));
-    let (content, content_type) = if resource_is_url {
+    let (mut content, content_type) = if resource_is_url {
         match fetch_url(cli.resource.as_deref().unwrap(), cli.extensions.encoding) {
             Ok(fetched) => fetched,
             Err(err) => {
@@ -1161,6 +1199,9 @@ fn run(cli: Cli) -> ExitCode {
             }
         }
     };
+    if cli.sanitize {
+        content = sanitize_terminal_controls(&content);
+    }
 
     // For a URL that neither a flag nor a telltale extension resolved: upstream
     // renders fetched content as syntax-highlighted source by default, unless the
@@ -1173,8 +1214,21 @@ fn run(cli: Cli) -> ExitCode {
     }
 
     // Pre-parse JSON so a parse error surfaces before any (HTML) rendering.
+    let json_content = if mode == Mode::Json && cli.sanitize {
+        match sanitize_json_source(content.trim()) {
+            Ok(content) => Some(content),
+            Err(err) => {
+                eprintln!("rich: invalid JSON: {err}");
+                return ExitCode::FAILURE;
+            }
+        }
+    } else {
+        None
+    };
+
     let json = if mode == Mode::Json {
-        match Json::new(content.trim()) {
+        let source = json_content.as_deref().unwrap_or_else(|| content.trim());
+        match Json::new(source) {
             Ok(json) => Some(json),
             Err(err) => {
                 eprintln!("rich: invalid JSON: {err}");
@@ -1191,7 +1245,12 @@ fn run(cli: Cli) -> ExitCode {
     // exited 1. A malformed input must not look like success to a script.
     if mode == Mode::Ipynb {
         let notebook = match serde_json::from_str::<serde_json::Value>(&content) {
-            Ok(value) if value.get("cells").and_then(|c| c.as_array()).is_some() => value,
+            Ok(mut value) if value.get("cells").and_then(|c| c.as_array()).is_some() => {
+                if cli.sanitize {
+                    sanitize_json_value(&mut value);
+                }
+                value
+            }
             Ok(_) => {
                 eprintln!("rich: not a notebook: no `cells` array");
                 return ExitCode::FAILURE;
@@ -2831,6 +2890,8 @@ OPTIONS:
     -S, --panel-style S
                      Panel border style, e.g. "dim" (with --panel)
         --pager      Page via MANPAGER, then PAGER, then less/more.com
+        --sanitize   Replace input terminal controls, JSON/notebook strings,
+                     titles and captions with visible inert text
         --no-color   Disable colored output (as does a non-empty NO_COLOR)
     -h, --help       Show this help
     -V, --version    Show the rs-rich-cli package version

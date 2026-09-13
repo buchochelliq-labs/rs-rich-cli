@@ -196,6 +196,13 @@ jobs:
       - name: Run parity tests
         run: cargo test -p rs-rich --test golden
 
+      - name: Run differential corpus
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          env -u NO_COLOR TERM=xterm-256color python -m unittest discover -s scripts -p 'test_diff*.py' -v
+          env -u NO_COLOR TERM=xterm-256color python scripts/diff_rich.py
+
   # One stable, aggregate context for branch protection to require.
   #
   # Requiring the individual jobs by name looks tighter but is a trap: the

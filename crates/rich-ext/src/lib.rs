@@ -24,10 +24,12 @@ pub mod cli;
 pub mod encoding;
 pub mod highlighter;
 pub mod registry;
+pub mod sanitize;
 pub mod theme;
 
 pub use highlighter::NumberHighlighter;
 pub use registry::{install_defaults, ExtensionRegistry};
+pub use sanitize::sanitize_terminal_controls;
 pub use theme::{extended_theme, EXTRA_STYLES};
 
 use rich::Console;

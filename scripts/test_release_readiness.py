@@ -1,6 +1,8 @@
 """Exercise docs drift, oracle pins, and release ancestry with real temp trees."""
 
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -12,17 +14,31 @@ from read_upstream_version import read_version
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def git_env():
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("GIT_CONFIG_")
+    }
+
+
 class ReadinessTests(unittest.TestCase):
     def test_release_tag_must_be_annotated_checked_out_and_on_main(self):
         with tempfile.TemporaryDirectory() as tmp:
             def git(*args):
-                return subprocess.run(["git", *args], cwd=tmp, check=True,
-                                      capture_output=True, text=True).stdout.strip()
+                proc = subprocess.run(["git", *args], cwd=tmp,
+                                      capture_output=True, text=True, env=git_env())
+                self.assertEqual(
+                    proc.returncode,
+                    0,
+                    f"git {' '.join(args)} failed\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}",
+                )
+                return proc.stdout.strip()
 
             def validate(tag):
                 return subprocess.run(
                     [sys.executable, str(ROOT / "scripts/release.py"), "validate-tag", tag],
-                    cwd=tmp, capture_output=True, text=True,
+                    cwd=tmp, capture_output=True, text=True, env=git_env(),
                 )
 
             git("init", "-q")
@@ -82,14 +98,27 @@ class ReadinessTests(unittest.TestCase):
                 read_version(path)
 
     def test_release_aliases_require_main_ancestry(self):
+        bash = shutil.which("bash")
+        if bash is None:
+            self.skipTest("bash is required to exercise scripts/check_pr_base.sh")
         with tempfile.TemporaryDirectory() as tmp:
             def git(*args):
-                return subprocess.run(["git", *args], cwd=tmp, check=True,
-                                      capture_output=True, text=True).stdout.strip()
+                proc = subprocess.run(["git", *args], cwd=tmp,
+                                      capture_output=True, text=True, env=git_env())
+                self.assertEqual(
+                    proc.returncode,
+                    0,
+                    f"git {' '.join(args)} failed\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}",
+                )
+                return proc.stdout.strip()
 
             def check(mode, base):
-                return subprocess.run(["bash", str(ROOT / "scripts/check_pr_base.sh"), mode, base],
-                                      cwd=tmp, capture_output=True).returncode
+                return subprocess.run(
+                    [bash, str(ROOT / "scripts/check_pr_base.sh"), mode, base],
+                    cwd=tmp,
+                    capture_output=True,
+                    env=git_env(),
+                ).returncode
 
             git("init", "-q")
             git("config", "user.name", "Test")

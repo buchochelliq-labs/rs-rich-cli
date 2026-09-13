@@ -92,6 +92,54 @@ fn print_mode_renders_markup() {
 }
 
 #[test]
+fn sanitize_neutralizes_esc_in_stdin_without_changing_default() {
+    let input = "A\x1b[2JB";
+    let (default_out, ok) = run(&["--no-color", "-"], input);
+    assert!(ok);
+    assert_eq!(default_out, "A\x1b[2JB\n");
+
+    let (sanitized, ok) = run(&["--no-color", "--sanitize", "-"], input);
+    assert!(ok);
+    assert_eq!(sanitized, "A␛[2JB\n");
+}
+
+#[test]
+fn sanitize_covers_decoded_json_strings() {
+    let (out, ok) = run(
+        &["--no-color", "--json", "--sanitize", "-"],
+        r#"{"v":"\u001b[2J"}"#,
+    );
+    assert!(ok);
+    assert!(out.contains("␛[2J"), "got: {out:?}");
+    assert!(!out.contains('\x1b'), "got raw ESC in {out:?}");
+}
+
+#[test]
+fn sanitize_covers_titles_and_captions() {
+    let (out, ok) = run(
+        &[
+            "--no-color",
+            "--sanitize",
+            "--width",
+            "30",
+            "--panel",
+            "square",
+            "--title",
+            "T\x1b[2J",
+            "--caption",
+            "C\x1b]0;x\u{7}",
+            "-p",
+            "body",
+        ],
+        "",
+    );
+    assert!(ok);
+    assert!(out.contains("T␛[2J"), "got: {out:?}");
+    assert!(out.contains("C␛]0;x␇"), "got: {out:?}");
+    assert!(!out.contains('\x1b'), "got raw ESC in {out:?}");
+}
+
+#[test]
 fn markdown_mode_from_stdin() {
     let (out, ok) = run(
         &["--no-color", "--width", "20", "-m", "-"],
