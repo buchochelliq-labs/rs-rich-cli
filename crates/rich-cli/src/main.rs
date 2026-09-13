@@ -79,6 +79,7 @@ enum ExitClass {
     Usage,
     Input,
     Data,
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
     Gate,
 }
 
