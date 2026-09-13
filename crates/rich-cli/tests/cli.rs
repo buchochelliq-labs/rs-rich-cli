@@ -39,12 +39,13 @@ fn run_status(args: &[&str], stdin: &str) -> (String, String, ExitStatus) {
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn rich");
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(stdin.as_bytes())
-        .unwrap();
+    if let Err(error) = child.stdin.take().unwrap().write_all(stdin.as_bytes()) {
+        assert_eq!(
+            error.kind(),
+            std::io::ErrorKind::BrokenPipe,
+            "write test stdin"
+        );
+    }
     let output = child.wait_with_output().expect("wait rich");
     (
         String::from_utf8_lossy(&output.stdout).into_owned(),
