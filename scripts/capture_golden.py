@@ -17,10 +17,12 @@ theme conveniences) are NOT upstream and must not be captured here.
 from __future__ import annotations
 
 import json
+import importlib.metadata
 import os
 import pathlib
 import subprocess
 import sys
+import tomllib
 
 from rich import box
 from rich.align import Align
@@ -1058,7 +1060,30 @@ def golden_dir() -> pathlib.Path:
     )
 
 
+def verify_upstream_version() -> str:
+    """Refuse to capture fixtures from a Python rich version other than the pin."""
+    upstream_path = pathlib.Path(__file__).resolve().parent.parent / "UPSTREAM.toml"
+    with upstream_path.open("rb") as stream:
+        expected = tomllib.load(stream)["rich"]["version"]
+    try:
+        installed = importlib.metadata.version("rich")
+    except importlib.metadata.PackageNotFoundError as exc:
+        raise SystemExit(
+            "Python package 'rich' is not installed; install the pinned version "
+            f"with: python -m pip install rich=={expected}"
+        ) from exc
+    if installed != expected:
+        raise SystemExit(
+            "wrong Python rich version for golden capture: "
+            f"installed {installed}, expected {expected} from UPSTREAM.toml; "
+            "do not capture fixtures until the environment is corrected"
+        )
+    return expected
+
+
 def main() -> None:
+    version = verify_upstream_version()
+    print(f"verified Python rich {version} against UPSTREAM.toml")
     # highlight=False so no ReprHighlighter styling leaks in — the Rust core
     # ships no default highlighter.
     console = Console(

@@ -139,6 +139,25 @@ original issue's 120-second observation to every input.
 CSV retains source rows for global measurement; decorated output additionally
 buffers rendered lines. Memory is not constant.
 
+## 0.0.5 library probe
+
+0.0.5 adds a small library-focused probe for the surfaces that process-level CLI
+benchmarks hide: markup parsing, Text wrap/justify, Table layout and a full
+Console render path. It uses no extra benchmark dependency; run it from the
+current checkout and store the JSON artifact with the revision being measured:
+
+```bash
+cargo run --release -p rs-rich --example library_bench -- \
+  --revision "$(git rev-parse HEAD)" --runs 20 --warmups 3
+```
+
+The output records revision, run counts, width, color system, active
+`syntax-cache` cfg state, per-case samples, medians, setup time where meaningful,
+rendered byte counts and output hashes. Compare default and `syntax-cache` builds
+as separate artifacts. Treat shared-runner timing as advisory until enough
+variance data exists; output hashes and successful rendering remain the blocking
+correctness signal.
+
 Before implementation, the targets are: reduce the 100k-row CSV peak RSS by at
 least 40%; halve the 1 MiB Markdown paragraph time and make the 5 MiB paragraph
 finish within 10 seconds; reduce the 199 KB syntax median by at least 20%.

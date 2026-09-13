@@ -42,7 +42,8 @@ With no flag the mode is picked from the file extension; a bare `-` reads stdin.
 
 Layout
 : `-w/--width`, `--left`/`--center`/`--right`, `--panel BOX` with
-  `--title`/`--caption`/`--style`, `--padding`, `--pager`, `--no-color`.
+  `--title`/`--caption`/`--style`, `--padding`, `--pager`, `--sanitize`,
+  `--no-color`.
 
 Export
 : `--export-html` and `--export-svg` emit a self-contained document instead of

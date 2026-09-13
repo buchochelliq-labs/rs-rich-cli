@@ -640,7 +640,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-cli"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "rs-rich",
  "rs-rich-art",
@@ -651,7 +651,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-ext"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "rs-rich",
 ]

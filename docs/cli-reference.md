@@ -10,7 +10,7 @@ Looking for how to *do* something rather than what a flag is called? Start at
 [Using the CLI](cli.md).
 
 
-*rich 0.0.4 — Rust port of the rich-cli terminal toolbox*
+*rich 0.0.5 — Rust port of the rich-cli terminal toolbox*
 
 ## Usage
 
@@ -77,6 +77,8 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
 -S, --panel-style S
                  Panel border style, e.g. "dim" (with --panel)
     --pager      Page via MANPAGER, then PAGER, then less/more.com
+    --sanitize   Replace input terminal controls, JSON/notebook strings,
+                 titles and captions with visible inert text
     --no-color   Disable colored output (as does a non-empty NO_COLOR)
 -h, --help       Show this help
 -V, --version    Show the rs-rich-cli package version

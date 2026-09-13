@@ -35,6 +35,33 @@ Entries below record subsequent releases and development.
 
 No changes yet.
 
+## [0.0.5] — 2026-09-13
+
+Prepared for independent `rs-rich-ext-v0.0.5` and `rs-rich-cli-v0.0.5` tags.
+`rs-rich` and `rs-rich-art` remain at 0.0.4.
+
+### Changed
+
+- **Parity tooling:** `scripts/capture_golden.py` now verifies that the
+  installed Python `rich` version matches the exact `UPSTREAM.toml` pin before
+  regenerating fixtures, preventing silent captures from the wrong oracle.
+
+- **Differential testing:** added a replayable `scripts/diff_rich.py` corpus
+  harness and Rust `diff_render` probe that compare selected markup/style/Text
+  cases against pinned Python `rich`, with bounded mismatch shrinking and CI
+  coverage for the deterministic corpus.
+
+- **Benchmarking:** added a `library_bench` Rust probe for repeatable markup
+  parsing, Text wrap/justify, Table layout and Console-render timings, including
+  setup timing, output hashes and active feature metadata.
+
+### Added
+
+- **`rs-rich-ext`, `rs-rich-cli`:** added an opt-in `--sanitize` path that
+  neutralizes terminal controls from decoded input, JSON/notebook strings,
+  titles and captions by rendering them as visible inert text while preserving
+  default upstream-compatible output.
+
 ## [0.0.4] — 2026-09-10
 
 All four independently versioned packages published at 0.0.4 for their code and

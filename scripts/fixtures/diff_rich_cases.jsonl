@@ -1,0 +1,7 @@
+{"kind":"markup","name":"basic_style","source":"[bold red]hi[/] there","width":20,"color_system":"truecolor"}
+{"kind":"markup","name":"emoji_and_escape","source":"cost \\[red] ok :rocket:","width":24,"color_system":"truecolor"}
+{"kind":"markup","name":"standard_downgrade","source":"[#ff8800]warm[/] [on #0044aa]bg[/]","width":30,"color_system":"standard"}
+{"kind":"text","name":"fold_words","source":"The quick brown fox jumps","width":10,"color_system":"truecolor","overflow":"fold","no_wrap":false}
+{"kind":"text","name":"crop_exact","source":"hello","width":5,"color_system":"truecolor","overflow":"crop","no_wrap":false}
+{"kind":"text","name":"ellipsis_exact","source":"áb́","width":2,"color_system":"256","overflow":"ellipsis","no_wrap":false}
+{"kind":"text","name":"styled_center","source":"ok","width":8,"color_system":"truecolor","style":"bold blue","justify":"center"}
