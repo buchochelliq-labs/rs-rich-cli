@@ -102,10 +102,16 @@ crate tag, e.g. `rs-rich-cli-v0.0.6`, and warn against using coordinated
 
 On Windows, do not run Cargo commands that build the same binary in parallel
 against the same `target` directory; a concurrent process can hold
-`target\debug\*.exe` and cause `Access is denied`. Serialize those commands, or
-give parallel validation jobs separate `CARGO_TARGET_DIR` values. Keep release
-packaging and locked workspace checks on the normal workspace target unless
-there is a specific reason not to.
+`target\debug\*.exe` and cause `Access is denied`. Prefer the serialized release
+wrapper:
+
+```bash
+python scripts/validate_release.py --tag rs-rich-cli-v0.0.6
+```
+
+For ad-hoc parallel validation, give jobs separate `CARGO_TARGET_DIR` values.
+Keep release packaging and locked workspace checks on the normal workspace
+target unless there is a specific reason not to.
 
 ## 3. Land on main, then tag
 

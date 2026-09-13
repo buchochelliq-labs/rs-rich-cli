@@ -9,6 +9,7 @@ import tempfile
 import unittest
 
 import gen_versions
+import validate_release
 from read_upstream_version import read_version
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -140,6 +141,20 @@ class ReadinessTests(unittest.TestCase):
             git("merge", "--no-ff", "--no-edit", main)
             for base in ["rc/0.0.3", "release/0.0.3", "releases/v0.0.3-rc"]:
                 self.assertEqual(check("current", base), 0)
+
+    def test_release_validation_wrapper_serializes_shared_target_cargo(self):
+        steps = validate_release.commands("rs-rich-cli-v0.0.6")
+        self.assertIn(["cargo", "test", "--all"], steps)
+        self.assertIn(["cargo", "build", "-p", "rs-rich-cli", "--locked"], steps)
+        self.assertEqual(
+            steps[-1],
+            [sys.executable, "scripts/release.py", "plan", "rs-rich-cli-v0.0.6"],
+        )
+        self.assertLess(
+            steps.index(["cargo", "test", "--all"]),
+            steps.index(["cargo", "build", "-p", "rs-rich-cli", "--locked"]),
+        )
+        self.assertTrue(validate_release.cli_binary().endswith(".exe") if os.name == "nt" else True)
 
 
 if __name__ == "__main__":

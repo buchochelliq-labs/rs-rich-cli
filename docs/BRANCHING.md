@@ -271,8 +271,14 @@ use the coordinated `vX.Y.Z` tag unless all selected manifests match it.
 Do not run Cargo commands that build the same binary in parallel on Windows when
 they share the default `target` directory. Windows can hold `target\debug\*.exe`
 open long enough for a concurrent Cargo invocation to fail with
-`Access is denied`. Serialize those commands, or isolate them with separate
-`CARGO_TARGET_DIR` values:
+`Access is denied`. For release prep, prefer the serialized wrapper:
+
+```bash
+python scripts/validate_release.py --tag rs-rich-cli-v0.0.6
+```
+
+For ad-hoc parallel validation, isolate jobs with separate `CARGO_TARGET_DIR`
+values:
 
 ```powershell
 $env:CARGO_TARGET_DIR = "target\check-cli"
