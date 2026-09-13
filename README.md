@@ -39,8 +39,8 @@ in the release notes; the crates.io links show available packages.
 | Package | Manifest version |
 |---|---|
 | [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.4` |
-| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.4` |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.4` |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.5` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.5` |
 | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.4` |
 <!-- END MANIFEST VERSIONS -->
 
@@ -120,7 +120,7 @@ cargo run -p rs-rich-cli -- FILE    # print a file (type auto-detected)
 
 The CLI covers `--markdown` · `--syntax` · `--json` · `--csv` · `--ipynb` ·
 `--print` · `--rule` · `--panel` · `--padding` · `--pager` · `--export-html` ·
-`--export-svg` · alignment and width flags, plus fetching an `http(s)` URL
+`--export-svg` · `--sanitize` · alignment and width flags, plus fetching an `http(s)` URL
 directly.
 
 Library usage:

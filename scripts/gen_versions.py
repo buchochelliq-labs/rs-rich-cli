@@ -11,10 +11,12 @@ END = "<!-- END MANIFEST VERSIONS -->"
 
 
 def table(root):
-    workspace = tomllib.loads((root / "Cargo.toml").read_text())
+    workspace = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))
     lines = [START, "| Package | Manifest version |", "|---|---|"]
     for member in workspace["workspace"]["members"]:
-        package = tomllib.loads((root / member / "Cargo.toml").read_text())["package"]
+        package = tomllib.loads(
+            (root / member / "Cargo.toml").read_text(encoding="utf-8")
+        )["package"]
         name, version = package["name"], package["version"]
         lines.append(f"| [`{name}`](https://crates.io/crates/{name}) | `{version}` |")
     return "\n".join([*lines, END])
