@@ -1,4 +1,4 @@
-"""Run release-prep validation in a platform-safe order.
+"""Run the full release-prep validation list in a platform-safe order.
 
 The command list is intentionally serial. On Windows, concurrent Cargo commands
 that build the same binary can race on target/debug/*.exe and fail with

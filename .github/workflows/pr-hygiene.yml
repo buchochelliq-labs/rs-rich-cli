@@ -98,13 +98,18 @@ jobs:
     # Bots do not run release prep and often cannot satisfy human handoff rules.
     if: github.event.pull_request.user.type != 'Bot'
     steps:
+      - uses: actions/checkout@v7
       - name: Check review threads and release handoff
         uses: actions/github-script@v7
         with:
           script: |
+            const fs = require('fs');
             const pr = context.payload.pull_request;
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            const policy = JSON.parse(
+              fs.readFileSync('.github/release-readiness.json', 'utf8')
+            );
             const { repository } = await github.graphql(`
               query($owner:String!,$repo:String!,$number:Int!) {
                 repository(owner:$owner,name:$repo) {
@@ -144,13 +149,10 @@ jobs:
               { owner, repo, pull_number: pr.number, per_page: 100 }
             );
             const text = [pr.title, pr.body || '', pr.head.ref].join('\n');
-            const versionSignal = /\b(?:rs-rich(?:-ext|-cli|-art)?-)?v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?\b/.test(text);
+            const versionSignal = new RegExp(policy.versionPattern).test(text);
             const releaseFiles = changed.some(({ filename }) =>
-              filename === 'CHANGELOG.md' ||
-              filename === 'Cargo.lock' ||
-              filename.endsWith('/Cargo.toml') ||
-              filename === 'docs/BRANCHING.md' ||
-              filename === '.claude/skills/release/SKILL.md'
+              policy.releaseFiles.includes(filename) ||
+              policy.releaseFileSuffixes.some((suffix) => filename.endsWith(suffix))
             );
             const needsHandoff = versionSignal || releaseFiles;
             if (needsHandoff) {
@@ -165,12 +167,24 @@ jobs:
               const latest = handoffs.at(-1);
               if (!latest) {
                 problems.push('Release PR is missing a `## Release handoff:` PR comment.');
-              } else if (!latest.body.includes(pr.head.sha)) {
-                problems.push(
-                  `Latest release handoff is stale: it does not mention current head ${pr.head.sha}.`
-                );
               } else {
-                core.info(`Release handoff is current for ${pr.head.sha}.`);
+                const body = (latest.body || '').replace(/^\uFEFF/, '');
+                if (!body.includes(pr.head.sha)) {
+                  problems.push(
+                    `Latest release handoff is stale: it does not mention current head ${pr.head.sha}.`
+                  );
+                }
+                const missingFields = policy.handoffRequiredText
+                  .filter((required) => !body.includes(required));
+                if (missingFields.length) {
+                  problems.push(
+                    'Latest release handoff is missing required snapshot field(s): ' +
+                    missingFields.join(', ')
+                  );
+                }
+                if (!problems.length) {
+                  core.info(`Release handoff is current for ${pr.head.sha}.`);
+                }
               }
             } else {
               core.info('No release handoff required for this PR.');

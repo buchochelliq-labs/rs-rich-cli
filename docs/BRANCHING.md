@@ -260,11 +260,17 @@ clean, and the PR's `headRefOid`, `mergeable`, `mergeStateStatus`, and
 requirement remains, or state that maintainer review/merge is the only visible
 blocker.
 
-Post a release handoff note on the PR before stopping. It must include the exact
-head SHA, selected tag form, publish target, validation summary, unresolved
-thread count, and the remaining blocker. For an independent crate release, spell
-out the crate tag (for example `rs-rich-cli-v0.0.6`) and explicitly say not to
-use the coordinated `vX.Y.Z` tag unless all selected manifests match it.
+Post a release handoff note on the PR before stopping. It must include these
+field labels exactly so CI can enforce the final snapshot:
+`Head SHA:`, `Selected publish tag`, `Publish target:`,
+`Validation summary:`, `Unresolved review threads:`, and
+`Remaining visible blocker:`. For an independent crate release, spell out the
+crate tag (for example `rs-rich-cli-v0.0.6`) and explicitly say not to use the
+coordinated `vX.Y.Z` tag unless all selected manifests match it.
+
+The release-readiness policy is centralized in
+`.github/release-readiness.json`; keep the workflow, tests, and this document
+using those fields rather than adding another release-file or handoff-field list.
 
 ### Windows validation ordering
 

@@ -1,6 +1,7 @@
 """Exercise docs drift, oracle pins, and release ancestry with real temp trees."""
 
 import os
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -158,8 +159,25 @@ class ReadinessTests(unittest.TestCase):
 
     def test_release_handoff_gate_catches_release_file_only_prs(self):
         workflow = (ROOT / ".github/workflows/pr-hygiene.yml").read_text()
+        policy = json.loads((ROOT / ".github/release-readiness.json").read_text())
         self.assertIn("const needsHandoff = versionSignal || releaseFiles;", workflow)
-        self.assertIn("filename === '.claude/skills/release/SKILL.md'", workflow)
+        self.assertIn("new RegExp(policy.versionPattern)", workflow)
+        self.assertIn("policy.releaseFiles.includes(filename)", workflow)
+        self.assertIn("policy.releaseFileSuffixes.some", workflow)
+        self.assertIn(".claude/skills/release/SKILL.md", policy["releaseFiles"])
+        self.assertIn("/Cargo.toml", policy["releaseFileSuffixes"])
+
+    def test_release_handoff_gate_enforces_final_snapshot_fields(self):
+        workflow = (ROOT / ".github/workflows/pr-hygiene.yml").read_text()
+        policy = json.loads((ROOT / ".github/release-readiness.json").read_text())
+        self.assertIn("reviewThreads(first:100)", workflow)
+        self.assertIn(".filter((thread) => !thread.isResolved)", workflow)
+        self.assertIn("unresolved review thread(s)", workflow)
+        self.assertIn("body.includes(pr.head.sha)", workflow)
+        self.assertIn("policy.handoffRequiredText", workflow)
+        self.assertIn("Head SHA:", policy["handoffRequiredText"])
+        self.assertIn("Unresolved review threads:", policy["handoffRequiredText"])
+        self.assertIn("Validation summary:", policy["handoffRequiredText"])
 
 
 if __name__ == "__main__":

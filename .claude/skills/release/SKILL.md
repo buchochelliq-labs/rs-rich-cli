@@ -94,9 +94,11 @@ latest review comments were inspected, the worktree is clean, and the PR's
 If `mergeable` is `MERGEABLE` but `mergeStateStatus` is `BLOCKED`, state the
 visible branch-protection blocker instead of calling it fully merge-ready.
 
-Post a release handoff note on the PR before stopping. Include the exact head
-SHA, selected tag form, publish target, validation summary, unresolved thread
-count, and remaining blocker. For independent releases, spell out the exact
+Post a release handoff note on the PR before stopping. Use the centralized
+policy in `.github/release-readiness.json`; CI requires these field labels:
+`Head SHA:`, `Selected publish tag`, `Publish target:`,
+`Validation summary:`, `Unresolved review threads:`, and
+`Remaining visible blocker:`. For independent releases, spell out the exact
 crate tag, e.g. `rs-rich-cli-v0.0.6`, and warn against using coordinated
 `vX.Y.Z` unless all selected manifests match.
 
