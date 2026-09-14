@@ -110,6 +110,7 @@ jobs:
             const policy = JSON.parse(
               fs.readFileSync('.github/release-readiness.json', 'utf8')
             );
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
             const reviewThreads = [];
             let snapshot = null;
             let cursor = null;
@@ -200,19 +201,38 @@ jobs:
               return triggerChecks[trigger];
             });
             if (needsHandoff) {
-              const comments = await github.paginate(
-                github.rest.issues.listComments,
-                { owner, repo, issue_number: pr.number, per_page: 100 }
-              );
-              const handoffs = comments.filter((comment) => {
-                const body = (comment.body || '').replace(/^\uFEFF/, '');
-                return /^\s*## Release handoff:/m.test(body);
-              });
-              const latest = handoffs.at(-1);
+              async function latestHandoff() {
+                const comments = await github.paginate(
+                  github.rest.issues.listComments,
+                  { owner, repo, issue_number: pr.number, per_page: 100 }
+                );
+                const handoffs = comments.filter((comment) => {
+                  const body = (comment.body || '').replace(/^\uFEFF/, '');
+                  return /^\s*## Release handoff:/m.test(body);
+                });
+                return handoffs.at(-1);
+              }
+
+              const deadline = Date.now() + (policy.handoffCommentWaitSeconds * 1000);
+              let latest = null;
+              let body = '';
+              do {
+                latest = await latestHandoff();
+                body = (latest?.body || '').replace(/^\uFEFF/, '');
+                if (!latest || !body.includes(pr.head.sha)) {
+                  const remaining = Math.max(0, deadline - Date.now());
+                  if (remaining > 0) {
+                    core.info(
+                      `Waiting up to ${Math.ceil(remaining / 1000)}s for a current release handoff.`
+                    );
+                    await sleep(Math.min(10000, remaining));
+                  }
+                }
+              } while ((!latest || !body.includes(pr.head.sha)) && Date.now() < deadline);
+
               if (!latest) {
                 problems.push('Release PR is missing a `## Release handoff:` PR comment.');
               } else {
-                const body = (latest.body || '').replace(/^\uFEFF/, '');
                 if (!body.includes(pr.head.sha)) {
                   problems.push(
                     `Latest release handoff is stale: it does not mention current head ${pr.head.sha}.`

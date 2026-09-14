@@ -13,6 +13,7 @@
     "versionSignal",
     "releaseFiles"
   ],
+  "handoffCommentWaitSeconds": 120,
   "handoffRequiredText": [
     "Head SHA:",
     "Mergeable:",

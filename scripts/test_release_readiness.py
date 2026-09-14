@@ -14,6 +14,7 @@ import validate_release
 from read_upstream_version import read_version
 
 ROOT = Path(__file__).resolve().parent.parent
+ALLOWED_HANDOFF_TRIGGERS = {"versionSignal", "releaseFiles"}
 
 
 def git_env():
@@ -32,6 +33,40 @@ def git(cwd, *args):
             f"git {' '.join(args)} failed\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
         )
     return proc.stdout.strip()
+
+
+def release_policy():
+    policy = json.loads((ROOT / ".github/release-readiness.json").read_text())
+    required_keys = {
+        "versionPattern",
+        "releaseFiles",
+        "releaseFileSuffixes",
+        "handoffTriggers",
+        "handoffCommentWaitSeconds",
+        "handoffRequiredText",
+    }
+    missing = required_keys - set(policy)
+    extra = set(policy) - required_keys
+    if missing or extra:
+        raise AssertionError(f"invalid release-readiness policy keys: missing={missing}, extra={extra}")
+    if not isinstance(policy["versionPattern"], str) or not policy["versionPattern"]:
+        raise AssertionError("versionPattern must be a non-empty string")
+    if not isinstance(policy["releaseFiles"], list) or not policy["releaseFiles"]:
+        raise AssertionError("releaseFiles must be a non-empty list")
+    if not isinstance(policy["releaseFileSuffixes"], list) or not policy["releaseFileSuffixes"]:
+        raise AssertionError("releaseFileSuffixes must be a non-empty list")
+    if not isinstance(policy["handoffTriggers"], list) or not policy["handoffTriggers"]:
+        raise AssertionError("handoffTriggers must be a non-empty list")
+    if not set(policy["handoffTriggers"]).issubset(ALLOWED_HANDOFF_TRIGGERS):
+        raise AssertionError("handoffTriggers contains unknown values")
+    if not isinstance(policy["handoffCommentWaitSeconds"], int) or policy["handoffCommentWaitSeconds"] < 0:
+        raise AssertionError("handoffCommentWaitSeconds must be a non-negative integer")
+    if not isinstance(policy["handoffRequiredText"], list) or not policy["handoffRequiredText"]:
+        raise AssertionError("handoffRequiredText must be a non-empty list")
+    for key in ["releaseFiles", "releaseFileSuffixes", "handoffRequiredText"]:
+        if any(not isinstance(value, str) or not value for value in policy[key]):
+            raise AssertionError(f"{key} must contain only non-empty strings")
+    return policy
 
 
 class ReadinessTests(unittest.TestCase):
@@ -167,10 +202,12 @@ class ReadinessTests(unittest.TestCase):
 
     def test_release_handoff_gate_catches_release_file_only_prs(self):
         workflow = (ROOT / ".github/workflows/pr-hygiene.yml").read_text()
-        policy = json.loads((ROOT / ".github/release-readiness.json").read_text())
+        policy = release_policy()
         self.assertIn("actions/checkout@v4", workflow)
         self.assertIn("policy.handoffTriggers.some", workflow)
         self.assertIn("Unknown release handoff trigger in policy", workflow)
+        self.assertIn("handoffCommentWaitSeconds", workflow)
+        self.assertIn("Waiting up to", workflow)
         self.assertIn("new RegExp(policy.versionPattern)", workflow)
         self.assertIn("policy.releaseFiles.includes(filename)", workflow)
         self.assertIn("policy.releaseFileSuffixes.some", workflow)
@@ -198,7 +235,7 @@ class ReadinessTests(unittest.TestCase):
 
     def test_release_handoff_gate_enforces_final_snapshot_fields(self):
         workflow = (ROOT / ".github/workflows/pr-hygiene.yml").read_text()
-        policy = json.loads((ROOT / ".github/release-readiness.json").read_text())
+        policy = release_policy()
         self.assertIn("while (hasNextPage)", workflow)
         self.assertIn("reviewThreads(first:100, after:$cursor)", workflow)
         self.assertIn("headRefOid", workflow)
@@ -210,6 +247,24 @@ class ReadinessTests(unittest.TestCase):
         self.assertIn("body.includes(pr.head.sha)", workflow)
         self.assertIn("policy.handoffRequiredText", workflow)
         self.assertGreaterEqual(len(policy["handoffRequiredText"]), 1)
+
+    def test_release_readiness_policy_schema_is_explicit(self):
+        policy = release_policy()
+        self.assertRegex("rs-rich-cli-v0.0.6", policy["versionPattern"])
+        self.assertEqual(["versionSignal", "releaseFiles"], policy["handoffTriggers"])
+        self.assertGreater(policy["handoffCommentWaitSeconds"], 0)
+        for required in [
+            "Head SHA:",
+            "Mergeable:",
+            "Merge state:",
+            "Review decision:",
+            "Selected publish tag",
+            "Publish target:",
+            "Unresolved review threads:",
+            "Validation summary:",
+            "Remaining visible blocker:",
+        ]:
+            self.assertIn(required, policy["handoffRequiredText"])
 
 
 if __name__ == "__main__":
