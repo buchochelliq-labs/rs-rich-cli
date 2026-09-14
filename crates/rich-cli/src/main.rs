@@ -67,6 +67,44 @@ enum Mode {
     Log,
 }
 
+const MODE_NAMES: &[(Mode, &str)] = &[
+    (Mode::Auto, "auto"),
+    (Mode::Print, "print"),
+    (Mode::Markdown, "markdown"),
+    (Mode::Json, "json"),
+    (Mode::Syntax, "syntax"),
+    (Mode::Csv, "csv"),
+    (Mode::Ipynb, "ipynb"),
+    (Mode::Gif, "gif"),
+    (Mode::Diff, "diff"),
+    (Mode::Rule, "rule"),
+    (Mode::JsonLines, "jsonl"),
+    (Mode::Log, "log"),
+];
+
+const COMMAND_MODES: &[(&str, Mode)] = &[
+    ("print", Mode::Print),
+    ("markdown", Mode::Markdown),
+    ("md", Mode::Markdown),
+    ("json", Mode::Json),
+    ("syntax", Mode::Syntax),
+    ("code", Mode::Syntax),
+    ("csv", Mode::Csv),
+    ("tsv", Mode::Csv),
+    ("ipynb", Mode::Ipynb),
+    ("notebook", Mode::Ipynb),
+    ("gif", Mode::Gif),
+    ("diff", Mode::Diff),
+    ("rule", Mode::Rule),
+    ("jsonl", Mode::JsonLines),
+    ("ndjson", Mode::JsonLines),
+    ("log", Mode::Log),
+    ("logs", Mode::Log),
+];
+
+const RENDER_MODE_FLAGS: &str =
+    "--print/--markdown/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--jsonl/--log";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReportFormat {
     Human,
@@ -347,46 +385,23 @@ fn parse_padding(value: &str) -> Result<(usize, usize, usize, usize), String> {
 
 /// Set the render mode, rejecting a second, conflicting mode flag.
 fn mode_name(mode: Mode) -> &'static str {
-    match mode {
-        Mode::Auto => "auto",
-        Mode::Print => "print",
-        Mode::Markdown => "markdown",
-        Mode::Json => "json",
-        Mode::Syntax => "syntax",
-        Mode::Csv => "csv",
-        Mode::Ipynb => "ipynb",
-        Mode::Gif => "gif",
-        Mode::Diff => "diff",
-        Mode::Rule => "rule",
-        Mode::JsonLines => "jsonl",
-        Mode::Log => "log",
-    }
+    MODE_NAMES
+        .iter()
+        .find_map(|(candidate, name)| (*candidate == mode).then_some(*name))
+        .unwrap_or("unknown")
 }
 
 fn command_mode(command: &str) -> Option<Mode> {
-    match command {
-        "print" => Some(Mode::Print),
-        "markdown" | "md" => Some(Mode::Markdown),
-        "json" => Some(Mode::Json),
-        "syntax" | "code" => Some(Mode::Syntax),
-        "csv" | "tsv" => Some(Mode::Csv),
-        "ipynb" | "notebook" => Some(Mode::Ipynb),
-        "gif" => Some(Mode::Gif),
-        "diff" => Some(Mode::Diff),
-        "rule" => Some(Mode::Rule),
-        "jsonl" | "ndjson" => Some(Mode::JsonLines),
-        "log" | "logs" => Some(Mode::Log),
-        _ => None,
-    }
+    COMMAND_MODES
+        .iter()
+        .find_map(|(name, mode)| (*name == command).then_some(*mode))
 }
 
 fn set_mode(current: &mut Mode, mode: Mode) -> Result<(), String> {
     if *current != Mode::Auto && *current != mode {
-        return Err(
-            "only one render mode (--print/--markdown/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--jsonl/--log) \
-             may be given"
-                .into(),
-        );
+        return Err(format!(
+            "only one render mode ({RENDER_MODE_FLAGS}) may be given"
+        ));
     }
     *current = mode;
     Ok(())

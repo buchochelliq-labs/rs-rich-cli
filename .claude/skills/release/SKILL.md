@@ -83,7 +83,7 @@ Before calling the PR ready, take and report the final readiness snapshot:
 gh pr checks <number> --watch --interval 15
 gh pr view <number> --json headRefOid,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup
 gh api graphql -f owner=<owner> -f name=<repo> -F number=<number> \
-  -f query='query($owner:String!,$name:String!,$number:Int!){ repository(owner:$owner,name:$name){ pullRequest(number:$number){ reviewThreads(first:100){ nodes{ isResolved } } } } }' \
+  -f query='query($owner:String!,$name:String!,$number:Int!,$cursor:String){ repository(owner:$owner,name:$name){ pullRequest(number:$number){ reviewThreads(first:100, after:$cursor){ nodes{ isResolved } pageInfo{ hasNextPage endCursor } } } } }' \
   --jq '.data.repository.pullRequest.reviewThreads.nodes | map(select(.isResolved == false)) | length'
 git status --short --branch
 ```
@@ -96,7 +96,8 @@ visible branch-protection blocker instead of calling it fully merge-ready.
 
 Post a release handoff note on the PR before stopping. Use the centralized
 policy in `.github/release-readiness.json`; CI requires these field labels:
-`Head SHA:`, `Selected publish tag`, `Publish target:`,
+`Head SHA:`, `Mergeable:`, `Merge state:`, `Review decision:`,
+`Selected publish tag`, `Publish target:`,
 `Validation summary:`, `Unresolved review threads:`, and
 `Remaining visible blocker:`. For independent releases, spell out the exact
 crate tag, e.g. `rs-rich-cli-v0.0.6`, and warn against using coordinated

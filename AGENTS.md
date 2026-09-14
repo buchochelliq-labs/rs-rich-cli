@@ -13,8 +13,11 @@ touching anything under `crates/`.
 
 ## The one rule everything follows
 
-> **The core (`crates/rich`, `crates/rich-cli`) is a faithful mirror. Our own
-> features go in `crates/rich-ext`. Never mix the two.**
+> **The core library (`crates/rich`) is a faithful mirror. New renderers and
+> library-facing features go in `crates/rich-ext`. `crates/rich-cli` mirrors
+> upstream commands, but may own documented binary-boundary conveniences when
+> they only compose public `rich` / `rich-ext` APIs and do not change core
+> behavior.**
 
 The dependency graph is one-directional and must stay that way:
 
@@ -25,6 +28,9 @@ rich-cli ──▶ rich-ext ──▶ rich
 
 If a change would make `crates/rich` diverge from upstream `rich`, it is almost
 certainly in the wrong place — see [Adding our own features](#adding-our-own-features).
+If a CLI-only feature changes the `rich` binary rather than the library, record
+it in the release plan and `docs/PORTING.md`, keep renderers in `rich-ext` where
+possible, and keep the boundary free of core back-dependencies.
 
 ---
 
@@ -56,17 +62,20 @@ only**, and is restated in the README. That file is still the source of truth fo
 a sync, and it is still updated as part of one — it just no longer drives a crate
 version.
 
-- **Never** bump a mirror crate to ship one of *our* features. Features still go
-  in `rich-ext`. The mirror/ext boundary is unchanged; only the numbering is.
+- **Never** bump `rs-rich` to ship one of *our* features. Features still go in
+  `rich-ext` unless they are documented `rich-cli` binary-boundary conveniences.
+  The mirror/ext boundary is unchanged; only the numbering is.
 
 ---
 
 ## Adding our own features
 
-1. **Default location: `crates/rich-ext`.** New renderables, highlighters, boxes,
-   themes, CLI conveniences — all go here. Register them onto a `Console` through
-   the extension registry (see [docs/PLUGINS.md](docs/PLUGINS.md)); do not reach
-   into core internals.
+1. **Default location: `crates/rich-ext`.** New renderables, highlighters, boxes
+   and themes go here. Register them onto a `Console` through the extension
+   registry (see [docs/PLUGINS.md](docs/PLUGINS.md)); do not reach into core
+   internals. CLI conveniences that are only command routing, exit/report
+   contracts, streaming orchestration, or release automation may live in
+   `crates/rich-cli` when their accepted release plan says so.
 2. **If a feature genuinely needs a core hook**, add it as a new *extension-point
    trait* in `crates/rich/src/protocol.rs` (the sanctioned seam), keeping core's
    own behavior unchanged. Extensions implement the trait from `rich-ext`.
@@ -75,8 +84,8 @@ version.
    in [docs/DIVERGENCES.md](docs/DIVERGENCES.md). A default build of `crates/rich`
    must always behave like upstream.
 
-If you find yourself editing a faithful-port module to add non-upstream behavior,
-stop and move it to `rich-ext`.
+If you find yourself editing a faithful-port library module to add non-upstream
+behavior, stop and move it to `rich-ext`.
 
 ---
 

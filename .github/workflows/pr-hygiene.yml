@@ -110,11 +110,20 @@ jobs:
             const policy = JSON.parse(
               fs.readFileSync('.github/release-readiness.json', 'utf8')
             );
-            const { repository } = await github.graphql(`
-              query($owner:String!,$repo:String!,$number:Int!) {
+            const reviewThreads = [];
+            let snapshot = null;
+            let cursor = null;
+            let hasNextPage = true;
+            while (hasNextPage) {
+              const { repository } = await github.graphql(`
+              query($owner:String!,$repo:String!,$number:Int!,$cursor:String) {
                 repository(owner:$owner,name:$repo) {
                   pullRequest(number:$number) {
-                    reviewThreads(first:100) {
+                    headRefOid
+                    mergeable
+                    mergeStateStatus
+                    reviewDecision
+                    reviewThreads(first:100, after:$cursor) {
                       nodes {
                         isResolved
                         path
@@ -123,16 +132,40 @@ jobs:
                           nodes { body }
                         }
                       }
+                      pageInfo {
+                        hasNextPage
+                        endCursor
+                      }
                     }
                   }
                 }
               }`,
-              { owner, repo, number: pr.number }
-            );
+                { owner, repo, number: pr.number, cursor }
+              );
+              const page = repository.pullRequest.reviewThreads;
+              snapshot ??= {
+                headRefOid: repository.pullRequest.headRefOid,
+                mergeable: repository.pullRequest.mergeable,
+                mergeStateStatus: repository.pullRequest.mergeStateStatus,
+                reviewDecision: repository.pullRequest.reviewDecision || '',
+              };
+              reviewThreads.push(...page.nodes);
+              hasNextPage = page.pageInfo.hasNextPage;
+              cursor = page.pageInfo.endCursor;
+            }
 
-            const unresolved = repository.pullRequest.reviewThreads.nodes
-              .filter((thread) => !thread.isResolved);
+            const unresolved = reviewThreads.filter((thread) => !thread.isResolved);
             const problems = [];
+            await core.summary
+              .addHeading('Release readiness snapshot')
+              .addList([
+                `Head SHA: ${snapshot.headRefOid}`,
+                `Mergeable: ${snapshot.mergeable}`,
+                `Merge state: ${snapshot.mergeStateStatus}`,
+                `Review decision: ${snapshot.reviewDecision || 'none'}`,
+                `Unresolved review threads: ${unresolved.length}`,
+              ])
+              .write();
             if (unresolved.length) {
               problems.push(
                 `${unresolved.length} unresolved review thread(s):\n` +

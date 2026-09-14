@@ -3,10 +3,11 @@
 Thanks for helping build the Rust `rich` port! The golden rule of this project is
 in **[AGENTS.md](AGENTS.md)** — please read it first. The short version:
 
-- **`crates/rich` and `crates/rich-cli` are faithful mirrors of upstream.** Match
-  upstream behavior exactly.
-- **Our own features go in `crates/rich-ext`** (or `crates/rich-art`), never in
-  the mirror crates.
+- **`crates/rich` is a faithful mirror of upstream.** Match upstream behavior
+  exactly.
+- **Our own renderers and library features go in `crates/rich-ext`** (or
+  `crates/rich-art`), never in core. Documented `rs-rich-cli` binary-boundary
+  conveniences may live in `crates/rich-cli` when they only compose public APIs.
 - The dependency arrow is one-way: `rich-cli → rich-ext → rich`.
 - All four crates share **one version**, bumped in lockstep at release time.
   Which upstream release we track lives in `UPSTREAM.toml`, not in a version

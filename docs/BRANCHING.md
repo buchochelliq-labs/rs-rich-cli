@@ -247,7 +247,7 @@ protection are accounted for:
 gh pr checks <number> --watch --interval 15
 gh pr view <number> --json headRefOid,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup
 gh api graphql -f owner=<owner> -f name=<repo> -F number=<number> \
-  -f query='query($owner:String!,$name:String!,$number:Int!){ repository(owner:$owner,name:$name){ pullRequest(number:$number){ reviewThreads(first:100){ nodes{ isResolved } } } } }' \
+  -f query='query($owner:String!,$name:String!,$number:Int!,$cursor:String){ repository(owner:$owner,name:$name){ pullRequest(number:$number){ reviewThreads(first:100, after:$cursor){ nodes{ isResolved } pageInfo{ hasNextPage endCursor } } } } }' \
   --jq '.data.repository.pullRequest.reviewThreads.nodes | map(select(.isResolved == false)) | length'
 git status --short --branch
 ```
@@ -262,7 +262,8 @@ blocker.
 
 Post a release handoff note on the PR before stopping. It must include these
 field labels exactly so CI can enforce the final snapshot:
-`Head SHA:`, `Selected publish tag`, `Publish target:`,
+`Head SHA:`, `Mergeable:`, `Merge state:`, `Review decision:`,
+`Selected publish tag`, `Publish target:`,
 `Validation summary:`, `Unresolved review threads:`, and
 `Remaining visible blocker:`. For an independent crate release, spell out the
 crate tag (for example `rs-rich-cli-v0.0.6`) and explicitly say not to use the
