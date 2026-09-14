@@ -108,6 +108,19 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | stable exit-code classes and `--report json` / `--machine-json` result/error envelopes | `main.rs` | 🟡 done |
 | JSONL / NDJSON and structured-log streaming from files/stdin | `main.rs` | 🟡 done |
 
+### Binary-boundary conveniences (not upstream `rich-cli`)
+
+Per [AGENTS.md](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/AGENTS.md)
+these are recorded because they live in the `rich`
+binary rather than in `rich-ext`. Each is command routing, planning or defaulting
+only: they compose public `rich` / `rich-ext` APIs and add no renderer, so the
+core mirror is untouched and a sync does not have to reconcile them.
+
+| convenience | rust `crates/rich-cli/src/…` | rationale |
+|-------------|------------------------------|-----------|
+| batch conversion (`--batch`, `--jobs`, `--overwrite`, `--collision`, `--continue-on-error`) over files, directories and globs | `main.rs` | plans outputs and replays each item through the existing single-resource render/export path; no format-specific rendering is duplicated |
+| versioned config profiles (`--config`, `--profile`, `--no-config`) with platform discovery and CLI-over-config precedence | `main.rs` | argument defaulting that happens strictly before parsing; the resulting `Cli` is indistinguishable from one typed by hand |
+
 ---
 
 *When you change a module's status, keep this table and the relevant roadmap
