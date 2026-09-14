@@ -124,6 +124,7 @@ fn report_json_maps_usage_input_and_data_errors_to_stable_codes() {
     assert_eq!(usage["ok"], false);
     assert_eq!(usage["code"], "usage");
     assert_eq!(usage["exit_code"], 2);
+    assert_eq!(usage["error"]["message"], usage["message"]);
 
     let (out, err, status) = run_status(&["--report", "json", "missing.rs"], "");
     assert_eq!(status.code(), Some(3), "stderr: {err:?}");
@@ -136,6 +137,20 @@ fn report_json_maps_usage_input_and_data_errors_to_stable_codes() {
     assert!(out.is_empty());
     let data: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
     assert_eq!(data["code"], "data");
+}
+
+#[test]
+fn report_json_success_uses_the_common_result_envelope_on_stderr() {
+    let (out, err, status) = run_status(&["--report", "json", "--no-color", "-p", "hi"], "");
+    assert_eq!(status.code(), Some(0), "stderr: {err:?}");
+    assert_eq!(out, "hi\n");
+    assert_eq!(err.lines().count(), 1, "stderr: {err:?}");
+    let report: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
+    assert_eq!(report["ok"], true);
+    assert_eq!(report["code"], "success");
+    assert_eq!(report["exit_code"], 0);
+    assert_eq!(report["result"], serde_json::json!({}));
+    assert!(report.get("error").is_none(), "stderr: {err:?}");
 }
 
 #[test]

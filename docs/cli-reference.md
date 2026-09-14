@@ -136,6 +136,11 @@ paging, hyperlinks and export options require a resource or render mode.
 `--report json` writes the result/error envelope to stderr for the same reason:
 stdout remains the rendered payload.
 
+Successful reports include `ok`, `code`, `exit_code` and a `result` object.
+Failures include the same status fields plus `message` and an `error` object.
+The top-level `message` is retained for simple shell consumers; structured
+consumers can read `error.message`.
+
 !!! note "A failure always exits non-zero"
 
     Earlier versions printed a fabricated table and exited `0` when a CSV's

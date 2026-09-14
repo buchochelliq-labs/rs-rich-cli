@@ -242,6 +242,9 @@ fn emit_error(json: bool, class: ExitClass, message: &str) -> ExitCode {
                 "code": class.name(),
                 "exit_code": class.code(),
                 "message": message,
+                "error": {
+                    "message": message,
+                },
             })
         );
     } else {
@@ -258,6 +261,7 @@ fn emit_success_report(format: ReportFormat) {
                 "ok": true,
                 "code": ExitClass::Success.name(),
                 "exit_code": ExitClass::Success.code(),
+                "result": {},
             })
         );
     }
