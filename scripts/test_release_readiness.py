@@ -24,43 +24,43 @@ def git_env():
     }
 
 
+def git(cwd, *args):
+    proc = subprocess.run(["git", *args], cwd=cwd,
+                          capture_output=True, text=True, env=git_env())
+    if proc.returncode != 0:
+        raise AssertionError(
+            f"git {' '.join(args)} failed\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+        )
+    return proc.stdout.strip()
+
+
 class ReadinessTests(unittest.TestCase):
     def test_release_tag_must_be_annotated_checked_out_and_on_main(self):
         with tempfile.TemporaryDirectory() as tmp:
-            def git(*args):
-                proc = subprocess.run(["git", *args], cwd=tmp,
-                                      capture_output=True, text=True, env=git_env())
-                self.assertEqual(
-                    proc.returncode,
-                    0,
-                    f"git {' '.join(args)} failed\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}",
-                )
-                return proc.stdout.strip()
-
             def validate(tag):
                 return subprocess.run(
                     [sys.executable, str(ROOT / "scripts/release.py"), "validate-tag", tag],
                     cwd=tmp, capture_output=True, text=True, env=git_env(),
                 )
 
-            git("init", "-q")
-            git("config", "user.name", "Test")
-            git("config", "user.email", "test@example.invalid")
-            git("commit", "--allow-empty", "-qm", "release")
-            main = git("rev-parse", "HEAD")
-            git("update-ref", "refs/remotes/origin/main", main)
+            git(tmp, "init", "-q")
+            git(tmp, "config", "user.name", "Test")
+            git(tmp, "config", "user.email", "test@example.invalid")
+            git(tmp, "commit", "--allow-empty", "-qm", "release")
+            main = git(tmp, "rev-parse", "HEAD")
+            git(tmp, "update-ref", "refs/remotes/origin/main", main)
             for tag in ("v0.0.3", "rs-rich-cli-v0.0.3", "rs-rich-art-v0.0.3-rc.1"):
-                git("tag", "-a", tag, "-m", "release")
+                git(tmp, "tag", "-a", tag, "-m", "release")
                 result = validate(tag)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout.strip(), main)
-            git("tag", "rs-rich-v0.0.3")
+            git(tmp, "tag", "rs-rich-v0.0.3")
             result = validate("rs-rich-v0.0.3")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("must be annotated", result.stderr)
-            git("commit", "--allow-empty", "-qm", "unmerged work")
+            git(tmp, "commit", "--allow-empty", "-qm", "unmerged work")
             self.assertNotEqual(validate("v0.0.3").returncode, 0)
-            git("tag", "-a", "v0.0.4", "-m", "not on main")
+            git(tmp, "tag", "-a", "v0.0.4", "-m", "not on main")
             self.assertNotEqual(validate("v0.0.4").returncode, 0)
             self.assertNotEqual(validate("main").returncode, 0)
 
@@ -104,16 +104,6 @@ class ReadinessTests(unittest.TestCase):
         if bash is None:
             self.skipTest("bash is required to exercise scripts/check_pr_base.sh")
         with tempfile.TemporaryDirectory() as tmp:
-            def git(*args):
-                proc = subprocess.run(["git", *args], cwd=tmp,
-                                      capture_output=True, text=True, env=git_env())
-                self.assertEqual(
-                    proc.returncode,
-                    0,
-                    f"git {' '.join(args)} failed\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}",
-                )
-                return proc.stdout.strip()
-
             def check(mode, base):
                 return subprocess.run(
                     [bash, str(ROOT / "scripts/check_pr_base.sh"), mode, base],
@@ -122,15 +112,15 @@ class ReadinessTests(unittest.TestCase):
                     env=git_env(),
                 ).returncode
 
-            git("init", "-q")
-            git("config", "user.name", "Test")
-            git("config", "user.email", "test@example.invalid")
-            git("commit", "--allow-empty", "-qm", "baseline")
-            baseline = git("rev-parse", "HEAD")
-            git("commit", "--allow-empty", "-qm", "main advances")
-            main = git("rev-parse", "HEAD")
-            git("update-ref", "refs/remotes/origin/main", main)
-            git("checkout", "--detach", baseline)
+            git(tmp, "init", "-q")
+            git(tmp, "config", "user.name", "Test")
+            git(tmp, "config", "user.email", "test@example.invalid")
+            git(tmp, "commit", "--allow-empty", "-qm", "baseline")
+            baseline = git(tmp, "rev-parse", "HEAD")
+            git(tmp, "commit", "--allow-empty", "-qm", "main advances")
+            main = git(tmp, "rev-parse", "HEAD")
+            git(tmp, "update-ref", "refs/remotes/origin/main", main)
+            git(tmp, "checkout", "--detach", baseline)
             for base in ["rc/0.0.3", "release/0.0.3", "releases/v0.0.3-rc"]:
                 with self.subTest(base=base):
                     self.assertEqual(check("base", base), 0)
@@ -138,8 +128,8 @@ class ReadinessTests(unittest.TestCase):
             self.assertEqual(check("current", "main"), 0)
             for base in ["fix/stacked", "releases/", "rc/", "release/", "releases-other"]:
                 self.assertNotEqual(check("base", base), 0)
-            git("commit", "--allow-empty", "-qm", "release work")
-            git("merge", "--no-ff", "--no-edit", main)
+            git(tmp, "commit", "--allow-empty", "-qm", "release work")
+            git(tmp, "merge", "--no-ff", "--no-edit", main)
             for base in ["rc/0.0.3", "release/0.0.3", "releases/v0.0.3-rc"]:
                 self.assertEqual(check("current", base), 0)
 
@@ -147,6 +137,24 @@ class ReadinessTests(unittest.TestCase):
         steps = validate_release.commands("rs-rich-cli-v0.0.6")
         self.assertIn(["cargo", "test", "--all"], steps)
         self.assertIn(["cargo", "build", "-p", "rs-rich-cli", "--locked"], steps)
+        self.assertIn(
+            [sys.executable, "-m", "unittest", "discover", "-s", "scripts", "-p", "test_release.py", "-v"],
+            steps,
+        )
+        self.assertIn(
+            [
+                sys.executable,
+                "-m",
+                "unittest",
+                "discover",
+                "-s",
+                "scripts",
+                "-p",
+                "test_release_readiness.py",
+                "-v",
+            ],
+            steps,
+        )
         self.assertEqual(
             steps[-1],
             [sys.executable, "scripts/release.py", "plan", "rs-rich-cli-v0.0.6"],
@@ -161,10 +169,12 @@ class ReadinessTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/pr-hygiene.yml").read_text()
         policy = json.loads((ROOT / ".github/release-readiness.json").read_text())
         self.assertIn("actions/checkout@v4", workflow)
-        self.assertIn("const needsHandoff = versionSignal || releaseFiles;", workflow)
+        self.assertIn("policy.handoffTriggers.some", workflow)
+        self.assertIn("Unknown release handoff trigger in policy", workflow)
         self.assertIn("new RegExp(policy.versionPattern)", workflow)
         self.assertIn("policy.releaseFiles.includes(filename)", workflow)
         self.assertIn("policy.releaseFileSuffixes.some", workflow)
+        self.assertEqual(["versionSignal", "releaseFiles"], policy["handoffTriggers"])
         self.assertIn(".claude/skills/release/SKILL.md", policy["releaseFiles"])
         self.assertIn("/Cargo.toml", policy["releaseFileSuffixes"])
 

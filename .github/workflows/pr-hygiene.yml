@@ -192,7 +192,13 @@ jobs:
               policy.releaseFiles.includes(filename) ||
               policy.releaseFileSuffixes.some((suffix) => filename.endsWith(suffix))
             );
-            const needsHandoff = versionSignal || releaseFiles;
+            const triggerChecks = { versionSignal, releaseFiles };
+            const needsHandoff = policy.handoffTriggers.some((trigger) => {
+              if (!(trigger in triggerChecks)) {
+                throw new Error(`Unknown release handoff trigger in policy: ${trigger}`);
+              }
+              return triggerChecks[trigger];
+            });
             if (needsHandoff) {
               const comments = await github.paginate(
                 github.rest.issues.listComments,

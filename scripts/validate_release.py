@@ -21,29 +21,32 @@ def cli_binary() -> str:
     return str(Path("target") / "debug" / ("rich.exe" if os.name == "nt" else "rich"))
 
 
-def commands(tag: str | None) -> list[list[str]]:
+def commands(tag: str) -> list[list[str]]:
     python = sys.executable
-    steps = [
+    return [
         ["cargo", "fmt", "--all", "--check"],
         ["cargo", "clippy", "--all-targets", "--", "-D", "warnings"],
         ["cargo", "clippy", "--all-targets", "--all-features", "--", "-D", "warnings"],
         ["cargo", "clippy", "-p", "rs-rich-cli", "--no-default-features", "--all-targets", "--", "-D", "warnings"],
         ["cargo", "test", "--all"],
         ["cargo", "test", "-p", "rs-rich-cli", "--no-default-features"],
-        [python, "-m", "unittest", "discover", "-s", "scripts", "-p", "test_release*.py", "-v"],
+        [python, "-m", "unittest", "discover", "-s", "scripts", "-p", "test_release.py", "-v"],
+        [python, "-m", "unittest", "discover", "-s", "scripts", "-p", "test_release_readiness.py", "-v"],
         [python, "scripts/gen_versions.py", "--check"],
         ["cargo", "build", "-p", "rs-rich-cli", "--locked"],
         [python, "scripts/gen_cli_reference.py", "--binary", cli_binary(), "--check"],
         ["cargo", "check", "--workspace", "--locked"],
+        [python, "scripts/release.py", "plan", tag],
     ]
-    if tag:
-        steps.append([python, "scripts/release.py", "plan", tag])
-    return steps
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--tag", help="release tag to audit with scripts/release.py plan")
+    parser.add_argument(
+        "--tag",
+        required=True,
+        help="release tag to audit with scripts/release.py plan",
+    )
     parser.add_argument(
         "--list",
         action="store_true",

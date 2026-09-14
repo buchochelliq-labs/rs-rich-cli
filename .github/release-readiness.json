@@ -9,6 +9,10 @@
   "releaseFileSuffixes": [
     "/Cargo.toml"
   ],
+  "handoffTriggers": [
+    "versionSignal",
+    "releaseFiles"
+  ],
   "handoffRequiredText": [
     "Head SHA:",
     "Mergeable:",

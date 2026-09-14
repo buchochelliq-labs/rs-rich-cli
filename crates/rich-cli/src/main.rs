@@ -67,6 +67,24 @@ enum Mode {
     Log,
 }
 
+impl Mode {
+    fn streams_records(self) -> bool {
+        matches!(self, Self::JsonLines | Self::Log)
+    }
+
+    fn draws_directly(self) -> bool {
+        matches!(self, Self::Gif | Self::Diff) || self.streams_records()
+    }
+
+    fn allows_extensions(self) -> bool {
+        !matches!(self, Self::Gif | Self::Diff | Self::Rule) && !self.streams_records()
+    }
+
+    fn accepts_multiple_resources(self) -> bool {
+        matches!(self, Self::Gif | Self::Diff)
+    }
+}
+
 struct ModeSpec {
     mode: Mode,
     primary: &'static str,
@@ -649,10 +667,9 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     };
     extensions.validate(
         effective_mode == Mode::Gif,
-        !(matches!(effective_mode, Mode::Gif | Mode::Diff | Mode::Rule)
-            || matches!(effective_mode, Mode::JsonLines | Mode::Log)
-            || (mode == Mode::Auto && resources.is_empty())
-            || (mode == Mode::Print && resources.first().is_some_and(|r| r != "-" && !is_url(r)))),
+        effective_mode.allows_extensions()
+            && !(mode == Mode::Auto && resources.is_empty())
+            && !(mode == Mode::Print && resources.first().is_some_and(|r| r != "-" && !is_url(r))),
     )?;
     let exporting = export_html.is_some() || export_svg.is_some();
     if exporting {
@@ -719,14 +736,10 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     // These decorate a single rendered resource; --diff composes its own report
     // and quietly dropped them, which reads as the flag having no effect.
     let demo = mode == Mode::Auto && resources.is_empty();
-    if matches!(
-        effective_mode,
-        Mode::Diff | Mode::Gif | Mode::JsonLines | Mode::Log
-    ) || demo
-    {
+    if effective_mode.draws_directly() || demo {
         let mode_name = if effective_mode == Mode::Gif {
             "--gif"
-        } else if matches!(effective_mode, Mode::JsonLines | Mode::Log) {
+        } else if effective_mode.streams_records() {
             mode_name(effective_mode)
         } else if demo {
             "the capability demo"
@@ -736,20 +749,16 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         let unsupported = [
             (
                 "--pager",
-                pager
-                    && (effective_mode == Mode::Gif
-                        || matches!(effective_mode, Mode::JsonLines | Mode::Log)
-                        || demo),
+                pager && (effective_mode == Mode::Gif || effective_mode.streams_records() || demo),
             ),
             (
                 "--export-html/--export-svg",
-                (export_html.is_some() || export_svg.is_some())
-                    && matches!(effective_mode, Mode::JsonLines | Mode::Log),
+                (export_html.is_some() || export_svg.is_some()) && effective_mode.streams_records(),
             ),
             ("--width", demo && width.is_some()),
             (
                 "--hyperlinks",
-                hyperlinks && (matches!(effective_mode, Mode::JsonLines | Mode::Log) || demo),
+                hyperlinks && (effective_mode.streams_records() || demo),
             ),
             ("--panel", panel.is_some()),
             ("--padding", padding.is_some()),
@@ -764,7 +773,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             return Err(format!("{flag} cannot be combined with {mode_name}"));
         }
     }
-    if mode != Mode::Gif && mode != Mode::Diff && resources.len() > 1 {
+    if !mode.accepts_multiple_resources() && resources.len() > 1 {
         return Err("only one resource may be given (except with --gif)".into());
     }
     let resource = resources.first().cloned();
@@ -1361,9 +1370,8 @@ fn run(mut cli: Cli) -> ExitCode {
 
     // Modes that render incrementally write directly to the console instead of
     // composing one renderable, so no `ForceWidth` wrapper can reach them.
-    let width_on_console = matches!(mode, Mode::Gif | Mode::Diff | Mode::JsonLines | Mode::Log);
     let mut builder = Console::builder().no_color(cli.no_color);
-    if let Some(width) = cli.width.filter(|_| width_on_console) {
+    if let Some(width) = cli.width.filter(|_| mode.draws_directly()) {
         builder = builder.width(width);
     }
     let mut console = builder.build();
@@ -1408,7 +1416,7 @@ fn run(mut cli: Cli) -> ExitCode {
         return run_diff(&cli, &console, &export);
     }
 
-    if matches!(mode, Mode::JsonLines | Mode::Log) {
+    if mode.streams_records() {
         return run_json_lines(&cli, &console, mode == Mode::Log);
     }
 
