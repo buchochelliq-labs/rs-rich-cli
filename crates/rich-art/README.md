@@ -1,13 +1,13 @@
 # rich-art
 
 ASCII-art renderables for [`rich`](../rich): **FIGlet-style text banners**
-(`figlet(6)` / `pyfiglet`), **image → ASCII/ANSI art** (`jp2a`), and **animated
+(`figlet(6)` / `pyfiglet`), **image → ASCII/ANSI/Braille art** (`jp2a`), and **animated
 GIF playback** in the terminal.
 
 | Feature | Default | Pulls in |
 | --- | --- | --- |
 | FIGlet banners | ✅ always | no optional dependencies — just `rs-rich` |
-| `image` — image → ASCII/ANSI art | off | `image` (png + jpeg decoders) |
+| `image` — image → ASCII/ANSI/Braille art | off | `image` (png + jpeg decoders) |
 | `gif` — animated GIF playback | off | `image` + its gif decoder |
 
 The default build has **one direct dependency**, `rs-rich` (imported as `rich`).
@@ -83,6 +83,11 @@ println!("{}", art.to_text(80));
 Cells are corrected for terminal aspect (they're about twice as tall as wide),
 so images aren't stretched. `invert()` suits light-on-dark terminals, and
 `ramp()` takes a custom density ramp.
+
+`ImageArt` is the reusable capability-aware facade for CLI and application
+code. It selects ASCII, half-block, Braille, or Sixel rendering from
+`ImageOptions` and `RenderCapabilities`; sizing and alpha handling remain in
+the individual renderers.
 
 Animated GIFs play in place, driven by `rich`'s `Live` display and honouring
 each frame's own delay. Frame disposal is handled by the decoder, so frames
