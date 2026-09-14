@@ -1395,6 +1395,18 @@ fn run_watch(mut cli: Cli) -> ExitCode {
             "--watch requires a local file or URL, not stdin or literal markup",
         );
     }
+    let effective_mode = if cli.mode == Mode::Auto {
+        detect_mode(Some(resource))
+    } else {
+        cli.mode
+    };
+    if effective_mode.draws_directly() || effective_mode == Mode::Rule {
+        return fail(
+            &cli,
+            ExitClass::Usage,
+            "--watch requires a resource-backed render mode",
+        );
+    }
     // Redirected output must be a finite, deterministic command. This also
     // keeps `rich --watch file > snapshot.txt` from hanging in a pipeline.
     if !std::io::stdout().is_terminal() {

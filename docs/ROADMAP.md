@@ -97,6 +97,16 @@ This deliberately defers the larger intuiTUIve/TUI, rich-art image workflow,
 watch, batch, config and dependency-upgrade work so the command/output contract
 can land first.
 
+## 0.0.7 — watch and workflow foundations
+
+The 0.0.7 CLI workstream adds the first binary-boundary watch convenience:
+`rich --watch RESOURCE` polls local files without busy-looping, keeps running
+through atomic-save gaps and parse failures, and recovers on a later valid
+frame. Fetch-enabled builds may poll URLs with configurable intervals and
+response caching. Redirected output remains a deterministic one-shot snapshot.
+Rendering stays in the existing CLI/core paths; no new core refresh behavior is
+introduced.
+
 ---
 
 ## 0.0.2 planning record
