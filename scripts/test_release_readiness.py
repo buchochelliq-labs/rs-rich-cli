@@ -175,6 +175,7 @@ class ReadinessTests(unittest.TestCase):
         self.assertIn("headRefOid", workflow)
         self.assertIn("mergeStateStatus", workflow)
         self.assertIn("Release readiness snapshot", workflow)
+        self.assertIn("Remaining visible blocker:", workflow)
         self.assertIn(".filter((thread) => !thread.isResolved)", workflow)
         self.assertIn("unresolved review thread(s)", workflow)
         self.assertIn("body.includes(pr.head.sha)", workflow)

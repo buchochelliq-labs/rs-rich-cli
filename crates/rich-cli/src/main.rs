@@ -67,39 +67,73 @@ enum Mode {
     Log,
 }
 
-const MODE_NAMES: &[(Mode, &str)] = &[
-    (Mode::Auto, "auto"),
-    (Mode::Print, "print"),
-    (Mode::Markdown, "markdown"),
-    (Mode::Json, "json"),
-    (Mode::Syntax, "syntax"),
-    (Mode::Csv, "csv"),
-    (Mode::Ipynb, "ipynb"),
-    (Mode::Gif, "gif"),
-    (Mode::Diff, "diff"),
-    (Mode::Rule, "rule"),
-    (Mode::JsonLines, "jsonl"),
-    (Mode::Log, "log"),
-];
+struct ModeSpec {
+    mode: Mode,
+    primary: &'static str,
+    aliases: &'static [&'static str],
+}
 
-const COMMAND_MODES: &[(&str, Mode)] = &[
-    ("print", Mode::Print),
-    ("markdown", Mode::Markdown),
-    ("md", Mode::Markdown),
-    ("json", Mode::Json),
-    ("syntax", Mode::Syntax),
-    ("code", Mode::Syntax),
-    ("csv", Mode::Csv),
-    ("tsv", Mode::Csv),
-    ("ipynb", Mode::Ipynb),
-    ("notebook", Mode::Ipynb),
-    ("gif", Mode::Gif),
-    ("diff", Mode::Diff),
-    ("rule", Mode::Rule),
-    ("jsonl", Mode::JsonLines),
-    ("ndjson", Mode::JsonLines),
-    ("log", Mode::Log),
-    ("logs", Mode::Log),
+const MODE_SPECS: &[ModeSpec] = &[
+    ModeSpec {
+        mode: Mode::Auto,
+        primary: "auto",
+        aliases: &[],
+    },
+    ModeSpec {
+        mode: Mode::Print,
+        primary: "print",
+        aliases: &["print"],
+    },
+    ModeSpec {
+        mode: Mode::Markdown,
+        primary: "markdown",
+        aliases: &["markdown", "md"],
+    },
+    ModeSpec {
+        mode: Mode::Json,
+        primary: "json",
+        aliases: &["json"],
+    },
+    ModeSpec {
+        mode: Mode::Syntax,
+        primary: "syntax",
+        aliases: &["syntax", "code"],
+    },
+    ModeSpec {
+        mode: Mode::Csv,
+        primary: "csv",
+        aliases: &["csv", "tsv"],
+    },
+    ModeSpec {
+        mode: Mode::Ipynb,
+        primary: "ipynb",
+        aliases: &["ipynb", "notebook"],
+    },
+    ModeSpec {
+        mode: Mode::Gif,
+        primary: "gif",
+        aliases: &["gif"],
+    },
+    ModeSpec {
+        mode: Mode::Diff,
+        primary: "diff",
+        aliases: &["diff"],
+    },
+    ModeSpec {
+        mode: Mode::Rule,
+        primary: "rule",
+        aliases: &["rule"],
+    },
+    ModeSpec {
+        mode: Mode::JsonLines,
+        primary: "jsonl",
+        aliases: &["jsonl", "ndjson"],
+    },
+    ModeSpec {
+        mode: Mode::Log,
+        primary: "log",
+        aliases: &["log", "logs"],
+    },
 ];
 
 const RENDER_MODE_FLAGS: &str =
@@ -109,6 +143,23 @@ const RENDER_MODE_FLAGS: &str =
 enum ReportFormat {
     Human,
     Json,
+}
+
+impl ReportFormat {
+    fn apply_option(&mut self, option: &str, value: Option<&str>) -> Result<(), String> {
+        match option {
+            "--report" => {
+                *self = match value.ok_or("--report requires one of: human, json")? {
+                    "human" => Self::Human,
+                    "json" => Self::Json,
+                    other => return Err(format!("unknown report format {other:?} (human, json)")),
+                };
+            }
+            "--machine-json" => *self = Self::Json,
+            _ => {}
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -325,14 +376,12 @@ fn wants_json_report(args: &[String]) -> bool {
         match arg.as_str() {
             "--report" => {
                 if let Some(value) = iter.next() {
-                    match value.as_str() {
-                        "human" => format = ReportFormat::Human,
-                        "json" => format = ReportFormat::Json,
-                        _ => {}
-                    }
+                    let _ = format.apply_option("--report", Some(value));
                 }
             }
-            "--machine-json" => format = ReportFormat::Json,
+            "--machine-json" => {
+                let _ = format.apply_option("--machine-json", None);
+            }
             "--" => break,
             _ => {}
         }
@@ -385,16 +434,16 @@ fn parse_padding(value: &str) -> Result<(usize, usize, usize, usize), String> {
 
 /// Set the render mode, rejecting a second, conflicting mode flag.
 fn mode_name(mode: Mode) -> &'static str {
-    MODE_NAMES
+    MODE_SPECS
         .iter()
-        .find_map(|(candidate, name)| (*candidate == mode).then_some(*name))
+        .find_map(|spec| (spec.mode == mode).then_some(spec.primary))
         .unwrap_or("unknown")
 }
 
 fn command_mode(command: &str) -> Option<Mode> {
-    COMMAND_MODES
+    MODE_SPECS
         .iter()
-        .find_map(|(name, mode)| (*name == command).then_some(*mode))
+        .find_map(|spec| spec.aliases.contains(&command).then_some(spec.mode))
 }
 
 fn set_mode(current: &mut Mode, mode: Mode) -> Result<(), String> {
@@ -467,14 +516,12 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--jsonl" | "--ndjson" => set_mode(&mut mode, Mode::JsonLines)?,
             "--log" => set_mode(&mut mode, Mode::Log)?,
             "--report" => {
-                let value = iter.next().ok_or("--report requires one of: human, json")?;
-                report_format = match value.as_str() {
-                    "human" => ReportFormat::Human,
-                    "json" => ReportFormat::Json,
-                    _ => return Err(format!("unknown report format {value:?} (human, json)")),
-                };
+                let value = iter.next().map(String::as_str);
+                report_format.apply_option("--report", value)?;
             }
-            "--machine-json" => report_format = ReportFormat::Json,
+            "--machine-json" => {
+                report_format.apply_option("--machine-json", None)?;
+            }
             "--image-mode" => {
                 let value = iter
                     .next()
