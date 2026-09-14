@@ -17,7 +17,7 @@ Looking for how to *do* something rather than what a flag is called? Start at
 ```text
 rich [OPTIONS] [RESOURCE]
 rich [OPTIONS] <COMMAND> [RESOURCE]
-rich --batch [OPTIONS] FILE...
+rich --batch [OPTIONS] RESOURCE...
 
 RESOURCE is a file path, an http(s) URL, or `-` for stdin. Everything after a
 bare `--` is a RESOURCE, however much it looks like an option. Input modes with
@@ -97,13 +97,13 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
 -S, --panel-style S
                  Panel border style, e.g. "dim" (with --panel)
     --pager      Page via MANPAGER, then PAGER, then less/more.com
-    --batch      Convert explicit files, directories, or simple globs as one plan
+    --batch      Convert explicit files, directories, or globs deterministically
     --jobs N     Bound batch workers (output remains deterministic)
     --continue-on-error
                  Process all planned inputs and aggregate failures
     --overwrite  Allow existing batch export destinations
     --collision P
-                 Batch collision policy: error (default), overwrite, suffix
+                 Batch policy: error (default), overwrite, or suffix
     --config PATH
                  Read versioned TOML defaults from PATH
     --profile NAME

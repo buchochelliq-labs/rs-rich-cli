@@ -3725,6 +3725,7 @@ fn print_help() {
 USAGE:
     rich [OPTIONS] [RESOURCE]
     rich [OPTIONS] <COMMAND> [RESOURCE]
+    rich --batch [OPTIONS] RESOURCE...
 
 RESOURCE is a file path, an http(s) URL, or `-` for stdin. Everything after a
 bare `--` is a RESOURCE, however much it looks like an option. Input modes with
@@ -3800,7 +3801,8 @@ OPTIONS:
                      Batch policy: error (default), overwrite, or suffix
         --config PATH
                      Read versioned TOML defaults from PATH
-        --profile NAME  Select a config profile (default: default)
+        --profile NAME
+                     Select a config profile (default: default)
         --no-config  Disable config discovery
         --sanitize   Replace input terminal controls, JSON/notebook strings,
                      titles and captions with visible inert text
