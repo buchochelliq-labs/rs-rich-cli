@@ -151,12 +151,37 @@ cargo run --release -p rs-rich --example library_bench -- \
   --revision "$(git rev-parse HEAD)" --runs 20 --warmups 3
 ```
 
+Width and color are injectable, so CI and local comparisons can use the same
+terminal profile rather than ambient settings:
+
+```bash
+cargo run --release -p rs-rich --example library_bench -- \
+  --revision "$(git rev-parse HEAD)" --width 80 --color-system standard
+```
+
 The output records revision, run counts, width, color system, active
 `syntax-cache` cfg state, per-case samples, medians, setup time where meaningful,
 rendered byte counts and output hashes. Compare default and `syntax-cache` builds
 as separate artifacts. Treat shared-runner timing as advisory until enough
 variance data exists; output hashes and successful rendering remain the blocking
 correctness signal.
+
+## Deterministic CLI snapshots
+
+`python scripts/snapshot_cli.py --update` captures the bounded cases in
+`scripts/fixtures/cli_snapshots.jsonl`; without `--update` it checks them and
+prints a unified diff on failure. The runner pins `COLUMNS`, `LINES`, `TERM`,
+`NO_COLOR`, and UTF-8 mode and passes `--width` unless a case supplies it:
+
+```bash
+python scripts/snapshot_cli.py --width 80 --profile plain --update
+python scripts/snapshot_cli.py --width 80 --profile plain
+```
+
+The `plain`, `standard`, and `truecolor` profiles are intentionally small.
+Batch/profile/watch/image command snapshots are deferred until those CLI
+surfaces have stable contracts; the helper can cover them without changing its
+comparison or artifact format once they land.
 
 Before implementation, the targets are: reduce the 100k-row CSV peak RSS by at
 least 40%; halve the 1 MiB Markdown paragraph time and make the 5 MiB paragraph

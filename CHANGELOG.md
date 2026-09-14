@@ -35,6 +35,13 @@ Entries below record subsequent releases and development.
 
 ### Added
 
+- **Confidence tooling:** added `scripts/snapshot_cli.py`, a deterministic CLI
+  snapshot runner with injectable width and terminal capability profiles,
+  PTY terminal forcing for color profiles, option-terminator (`--`) positioning,
+  newline normalization, and readable unified diffs. The differential corpus and
+  generator now cover box renderables (`Panel`) and safe-box capability
+  profiles, and `library_bench` accepts explicit `--width` and `--color-system`
+  values.
 - **`rs-rich-cli`:** added task-oriented subcommands (`rich json`,
   `rich markdown`, `rich syntax`, `rich csv`, `rich ipynb`, `rich jsonl`,
   `rich log`, `rich gif`, `rich diff`, `rich rule`) while preserving existing
