@@ -1444,6 +1444,8 @@ fn watch_fingerprint(resource: &str, cache_url: bool, encoding: Option<Encoding>
                 Err(error) => format!("url-error:{error}"),
             };
         }
+        #[cfg(not(feature = "fetch"))]
+        let _ = (cache_url, encoding);
         return "url".to_string();
     }
     match std::fs::metadata(resource) {
