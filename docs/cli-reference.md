@@ -10,13 +10,14 @@ Looking for how to *do* something rather than what a flag is called? Start at
 [Using the CLI](cli.md).
 
 
-*rich 0.0.6 — Rust port of the rich-cli terminal toolbox*
+*rich 0.0.7 — Rust port of the rich-cli terminal toolbox*
 
 ## Usage
 
 ```text
 rich [OPTIONS] [RESOURCE]
 rich [OPTIONS] <COMMAND> [RESOURCE]
+rich --batch [OPTIONS] FILE...
 
 RESOURCE is a file path, an http(s) URL, or `-` for stdin. Everything after a
 bare `--` is a RESOURCE, however much it looks like an option. Input modes with
@@ -96,6 +97,18 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
 -S, --panel-style S
                  Panel border style, e.g. "dim" (with --panel)
     --pager      Page via MANPAGER, then PAGER, then less/more.com
+    --batch      Convert explicit files, directories, or simple globs as one plan
+    --jobs N     Bound batch workers (output remains deterministic)
+    --continue-on-error
+                 Process all planned inputs and aggregate failures
+    --overwrite  Allow existing batch export destinations
+    --collision P
+                 Batch collision policy: error (default), overwrite, suffix
+    --config PATH
+                 Read versioned TOML defaults from PATH
+    --profile NAME
+                 Select a config profile (default: default)
+    --no-config  Disable config discovery
     --sanitize   Replace input terminal controls, JSON/notebook strings,
                  titles and captions with visible inert text
     --report F   Emit a result/error envelope on stderr: human (default) or json.

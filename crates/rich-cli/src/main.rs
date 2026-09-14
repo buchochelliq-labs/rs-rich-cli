@@ -11,6 +11,7 @@
 //! demo — i.e. the whole common rich-cli surface.
 
 use std::io::{BufRead, IsTerminal, Read, Write};
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use rich::cells::cell_len;
@@ -254,6 +255,7 @@ impl std::str::FromStr for ImageMode {
 }
 
 /// Parsed command line.
+#[derive(Clone)]
 struct Cli {
     mode: Mode,
     resource: Option<String>,
@@ -310,6 +312,18 @@ struct Cli {
     /// `--report json`: emit a stable result/error envelope to stderr while
     /// leaving stdout for rendered content.
     report_format: ReportFormat,
+    batch: bool,
+    continue_on_error: bool,
+    jobs: usize,
+    overwrite: bool,
+    collision: CollisionPolicy,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CollisionPolicy {
+    Error,
+    Overwrite,
+    Suffix,
 }
 
 /// Build the `-m/--markdown` renderable, honouring `-y/--hyperlinks`.
@@ -338,6 +352,199 @@ fn main() -> ExitCode {
             &format!("{message} (try --help)"),
         ),
     }
+}
+
+#[derive(Debug, Clone)]
+struct ConfigRoots {
+    home: Option<PathBuf>,
+    cwd: PathBuf,
+}
+
+impl Default for ConfigRoots {
+    fn default() -> Self {
+        Self {
+            home: std::env::var_os("HOME")
+                .or_else(|| std::env::var_os("USERPROFILE"))
+                .map(PathBuf::from),
+            cwd: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+        }
+    }
+}
+
+fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<String>, String> {
+    if args.iter().any(|a| a == "--no-config") {
+        let mut result = Vec::new();
+        let mut skip = false;
+        for arg in args {
+            if skip {
+                skip = false;
+                continue;
+            }
+            if arg == "--config" || arg == "--profile" {
+                skip = true;
+                continue;
+            }
+            if arg != "--no-config" {
+                result.push(arg.clone());
+            }
+        }
+        return Ok(result);
+    }
+    for flag in ["--config", "--profile"] {
+        if args
+            .iter()
+            .position(|a| a == flag)
+            .is_some_and(|i| i + 1 >= args.len())
+        {
+            return Err(format!("{flag} requires a value"));
+        }
+    }
+    let explicit = args
+        .windows(2)
+        .find(|w| w[0] == "--config")
+        .map(|w| PathBuf::from(&w[1]));
+    let profile = args
+        .windows(2)
+        .find(|w| w[0] == "--profile")
+        .map(|w| w[1].clone())
+        .unwrap_or_else(|| "default".into());
+    let path = explicit.or_else(|| {
+        let candidates = [
+            roots.cwd.join("rich.toml"),
+            roots
+                .home
+                .as_ref()
+                .map(|h| h.join(".config/rich/config.toml"))
+                .unwrap_or_default(),
+        ];
+        candidates.into_iter().find(|p| p.is_file())
+    });
+    let mut result = Vec::new();
+    let explicit_flags: std::collections::HashSet<&str> = args
+        .iter()
+        .filter_map(|arg| match arg.as_str() {
+            "--print" | "-p" => Some("--print"),
+            "--markdown" | "-m" => Some("--markdown"),
+            "--json" | "-j" => Some("--json"),
+            "--syntax" | "-x" => Some("--syntax"),
+            "--csv" => Some("--csv"),
+            "--ipynb" => Some("--ipynb"),
+            "--jsonl" | "--ndjson" => Some("--jsonl"),
+            "--log" => Some("--log"),
+            "--rule" => Some("--rule"),
+            "--width" | "-w" => Some("--width"),
+            "--pager" => Some("--pager"),
+            "--no-color" => Some("--no-color"),
+            "--export-html" | "-o" => Some("--export-html"),
+            "--export-svg" => Some("--export-svg"),
+            "--batch" => Some("--batch"),
+            "--continue-on-error" => Some("--continue-on-error"),
+            "--overwrite" => Some("--overwrite"),
+            "--jobs" => Some("--jobs"),
+            "--collision" => Some("--collision"),
+            "--panel" => Some("--panel"),
+            "--padding" => Some("--padding"),
+            _ => None,
+        })
+        .collect();
+    if let Some(path) = path {
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| format!("config {}: {e}", path.display()))?;
+        let mut section = String::new();
+        for (line_no, raw) in text.lines().enumerate() {
+            let line = raw.split('#').next().unwrap_or("").trim();
+            if line.is_empty() {
+                continue;
+            }
+            if line.starts_with('[') && line.ends_with(']') {
+                section = line[1..line.len() - 1].trim().to_string();
+                continue;
+            }
+            if section != "defaults"
+                && section != format!("profile.{profile}")
+                && section != format!("profiles.{profile}")
+            {
+                continue;
+            }
+            let Some((key, value)) = line.split_once('=') else {
+                return Err(format!(
+                    "config {}:{}: expected key = value",
+                    path.display(),
+                    line_no + 1
+                ));
+            };
+            let key = key.trim();
+            let value = value.trim().trim_matches('"').trim_matches('\'');
+            let flag = match key {
+                "mode" => match value {
+                    "print" => "--print",
+                    "markdown" => "--markdown",
+                    "json" => "--json",
+                    "syntax" => "--syntax",
+                    "csv" => "--csv",
+                    "ipynb" => "--ipynb",
+                    "jsonl" => "--jsonl",
+                    "log" => "--log",
+                    "rule" => "--rule",
+                    _ => {
+                        return Err(format!(
+                            "config {}:{}: unknown mode",
+                            path.display(),
+                            line_no + 1
+                        ))
+                    }
+                },
+                "width" => "--width",
+                "pager" => "--pager",
+                "no_color" => "--no-color",
+                "export_html" => "--export-html",
+                "export_svg" => "--export-svg",
+                "batch" => "--batch",
+                "continue_on_error" => "--continue-on-error",
+                "overwrite" => "--overwrite",
+                "jobs" => "--jobs",
+                "collision" => "--collision",
+                "panel" => "--panel",
+                "padding" => "--padding",
+                "profile" | "config" | "no_config" => continue,
+                _ => {
+                    return Err(format!(
+                        "config {}:{}: unknown key {key:?}",
+                        path.display(),
+                        line_no + 1
+                    ))
+                }
+            };
+            if explicit_flags.contains(flag) {
+                continue;
+            }
+            if matches!(
+                flag,
+                "--pager" | "--no-color" | "--batch" | "--continue-on-error" | "--overwrite"
+            ) {
+                if value != "true" {
+                    continue;
+                }
+                result.push(flag.into());
+            } else {
+                result.push(flag.into());
+                result.push(value.into());
+            }
+        }
+    }
+    let mut skip = false;
+    for arg in args {
+        if skip {
+            skip = false;
+            continue;
+        }
+        if arg == "--config" || arg == "--profile" {
+            skip = true;
+            continue;
+        }
+        result.push(arg.clone());
+    }
+    Ok(result)
 }
 
 fn emit_error(json: bool, class: ExitClass, message: &str) -> ExitCode {
@@ -385,6 +592,202 @@ fn fail(cli: &Cli, class: ExitClass, message: impl AsRef<str>) -> ExitCode {
 fn success(cli: &Cli) -> ExitCode {
     emit_success_report(cli.report_format);
     ExitClass::Success.exit_code()
+}
+
+fn expand_batch_resources(resources: &[String]) -> Result<Vec<String>, String> {
+    let mut out = Vec::new();
+    for resource in resources {
+        if resource == "-" || is_url(resource) {
+            return Err("batch resources must be local files or directories".into());
+        }
+        let path = Path::new(resource);
+        if !resource.contains('*') && !resource.contains('?') {
+            if path.is_file() {
+                out.push(resource.clone());
+            } else if path.is_dir() {
+                let mut stack = vec![path.to_path_buf()];
+                while let Some(dir) = stack.pop() {
+                    let entries = std::fs::read_dir(&dir)
+                        .map_err(|e| format!("cannot scan {}: {e}", dir.display()))?;
+                    for entry in entries {
+                        let entry = entry.map_err(|e| e.to_string())?;
+                        let p = entry.path();
+                        if p.is_dir() {
+                            stack.push(p);
+                        } else if p.is_file() {
+                            out.push(p.to_string_lossy().into_owned());
+                        }
+                    }
+                }
+            } else {
+                return Err(format!("batch resource does not exist: {resource}"));
+            }
+        } else {
+            let (prefix, pattern) = resource.split_once('*').unwrap_or((resource, resource));
+            let prefix = Path::new(prefix);
+            let root = if prefix.is_dir() {
+                prefix
+            } else {
+                prefix.parent().unwrap_or(Path::new("."))
+            };
+            let mut stack = vec![root.to_path_buf()];
+            while let Some(dir) = stack.pop() {
+                for entry in std::fs::read_dir(&dir)
+                    .map_err(|e| format!("cannot scan {}: {e}", dir.display()))?
+                {
+                    let p = entry.map_err(|e| e.to_string())?.path();
+                    if p.is_dir() {
+                        stack.push(p);
+                    } else if p.to_string_lossy().contains(pattern.trim_matches('*')) {
+                        out.push(p.to_string_lossy().into_owned());
+                    }
+                }
+            }
+        }
+    }
+    out.sort();
+    out.dedup();
+    if out.is_empty() {
+        return Err("batch plan contains no files".into());
+    }
+    Ok(out)
+}
+
+fn batch_export_path(
+    path: Option<&str>,
+    input: &str,
+    index: usize,
+    total: usize,
+) -> Option<String> {
+    let path = path?;
+    let p = Path::new(path);
+    if total == 1 {
+        return Some(path.into());
+    }
+    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or_default();
+    let stem = Path::new(input)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("output");
+    let name = if ext.is_empty() {
+        format!("{stem}-{index}")
+    } else {
+        format!("{stem}.{ext}")
+    };
+    Some(if p.is_dir() {
+        p.join(name).to_string_lossy().into_owned()
+    } else {
+        p.with_file_name(name).to_string_lossy().into_owned()
+    })
+}
+
+fn run_batch(cli: &Cli) -> ExitCode {
+    let resources = match expand_batch_resources(&cli.resources) {
+        Ok(v) => v,
+        Err(e) => return fail(cli, ExitClass::Input, e),
+    };
+    let mut planned = std::collections::BTreeSet::new();
+    let mut planned_outputs = Vec::with_capacity(resources.len());
+    for (index, input) in resources.iter().enumerate() {
+        let mut item_outputs = Vec::new();
+        for output in [
+            batch_export_path(cli.export_html.as_deref(), input, index, resources.len()),
+            batch_export_path(cli.export_svg.as_deref(), input, index, resources.len()),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            let mut output = output;
+            if !planned.insert(output.clone()) {
+                if cli.collision == CollisionPolicy::Error {
+                    return fail(
+                        cli,
+                        ExitClass::Usage,
+                        format!("batch output collision: {output}"),
+                    );
+                }
+                if cli.collision == CollisionPolicy::Suffix {
+                    let base = output.clone();
+                    let mut suffix = 2;
+                    loop {
+                        let path = Path::new(&base);
+                        output = path
+                            .with_file_name(format!(
+                                "{}-{suffix}.{}",
+                                path.file_stem()
+                                    .and_then(|s| s.to_str())
+                                    .unwrap_or("output"),
+                                path.extension().and_then(|s| s.to_str()).unwrap_or("")
+                            ))
+                            .to_string_lossy()
+                            .into_owned();
+                        if planned.insert(output.clone()) {
+                            break;
+                        }
+                        suffix += 1;
+                    }
+                }
+            }
+            if Path::new(&output).exists()
+                && !cli.overwrite
+                && cli.collision == CollisionPolicy::Error
+            {
+                return fail(
+                    cli,
+                    ExitClass::Input,
+                    format!("refusing to overwrite existing output: {output} (use --overwrite)"),
+                );
+            }
+            item_outputs.push(output);
+        }
+        planned_outputs.push(item_outputs);
+    }
+    let mut failures = Vec::new();
+    // Work is deliberately serialized for deterministic output and bounded
+    // memory; `jobs` is a validated upper bound reserved for future parallel
+    // workers without changing the planning contract.
+    let _concurrency_limit = cli.jobs;
+    for (index, input) in resources.iter().enumerate() {
+        let mut one = cli.clone();
+        one.batch = false;
+        one.resources = vec![input.clone()];
+        one.resource = Some(input.clone());
+        one.report_format = ReportFormat::Human;
+        one.export_html = planned_outputs[index]
+            .iter()
+            .find(|path| path.ends_with(".html"))
+            .cloned();
+        one.export_svg = planned_outputs[index]
+            .iter()
+            .find(|path| path.ends_with(".svg"))
+            .cloned();
+        let status = run(one);
+        if status != ExitCode::SUCCESS {
+            failures.push((
+                input.clone(),
+                if status == ExitCode::from(2) { 2 } else { 3 },
+            ));
+            if !cli.continue_on_error {
+                break;
+            }
+        }
+    }
+    if cli.report_format == ReportFormat::Json {
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "ok": failures.is_empty(), "code": if failures.is_empty() {"success"} else {"input"},
+                "exit_code": if failures.is_empty() {0} else {3},
+                "result": {"planned": resources.len(), "completed": resources.len() - failures.len(), "failed": failures.len(),
+                           "failures": failures.iter().map(|(p,c)| serde_json::json!({"resource":p,"exit_code":c})).collect::<Vec<_>>()},
+            })
+        );
+    }
+    if failures.is_empty() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(3)
+    }
 }
 
 fn wants_json_report(args: &[String]) -> bool {
@@ -476,6 +879,11 @@ fn set_mode(current: &mut Mode, mode: Mode) -> Result<(), String> {
 
 /// Parse args into a [`Cli`], or `Ok(None)` when `--help`/`--version` handled it.
 fn parse(args: &[String]) -> Result<Option<Cli>, String> {
+    let merged = config_args(args, &ConfigRoots::default())?;
+    parse_inner(&merged)
+}
+
+fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut mode = Mode::Auto;
     let mut resources: Vec<String> = Vec::new();
     let mut loops = None;
@@ -498,6 +906,11 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut hyperlinks = false;
     let mut sanitize = false;
     let mut report_format = ReportFormat::Human;
+    let mut batch = false;
+    let mut continue_on_error = false;
+    let mut jobs = 1usize;
+    let mut overwrite = false;
+    let mut collision = CollisionPolicy::Error;
     // Set by `--`: everything after it is a positional argument, however much it
     // looks like a flag. Without this nothing beginning with `-` could be
     // printed or opened at all — `rich -p -- "-5 degrees"` and `rich -- -weird.md`
@@ -580,6 +993,34 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--center" => {}
             "--no-color" => no_color = true,
             "--pager" => pager = true,
+            "--batch" => batch = true,
+            "--continue-on-error" => continue_on_error = true,
+            "--overwrite" => {
+                overwrite = true;
+                collision = CollisionPolicy::Overwrite;
+            }
+            "--collision" => {
+                collision = match iter
+                    .next()
+                    .ok_or("--collision requires error, overwrite, or suffix")?
+                    .as_str()
+                {
+                    "error" => CollisionPolicy::Error,
+                    "overwrite" => CollisionPolicy::Overwrite,
+                    "suffix" => CollisionPolicy::Suffix,
+                    other => return Err(format!("unknown collision policy {other:?}")),
+                };
+            }
+            "--jobs" => {
+                jobs = iter
+                    .next()
+                    .ok_or("--jobs requires a positive number")?
+                    .parse()
+                    .map_err(|_| "--jobs requires a positive number".to_string())?;
+                if jobs == 0 {
+                    return Err("--jobs must be at least 1".into());
+                }
+            }
             "--sanitize" => sanitize = true,
             // Upstream's `@click.option("--hyperlinks", "-y", is_flag=True,
             // help="Render hyperlinks in markdown.")`. Accepted in every mode,
@@ -773,7 +1214,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             return Err(format!("{flag} cannot be combined with {mode_name}"));
         }
     }
-    if !mode.accepts_multiple_resources() && resources.len() > 1 {
+    if !mode.accepts_multiple_resources() && resources.len() > 1 && !batch {
         return Err("only one resource may be given (except with --gif)".into());
     }
     let resource = resources.first().cloned();
@@ -802,6 +1243,11 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         hyperlinks,
         sanitize,
         report_format,
+        batch,
+        continue_on_error,
+        jobs,
+        overwrite,
+        collision,
     }))
 }
 
@@ -1355,6 +1801,10 @@ fn run(mut cli: Cli) -> ExitCode {
             .caption
             .take()
             .map(|caption| sanitize_terminal_controls(&caption));
+    }
+
+    if cli.batch {
+        return run_batch(&cli);
     }
 
     // With no flags and no resource, show the capability demo.
@@ -3341,6 +3791,17 @@ OPTIONS:
     -S, --panel-style S
                      Panel border style, e.g. "dim" (with --panel)
         --pager      Page via MANPAGER, then PAGER, then less/more.com
+        --batch      Convert explicit files, directories, or globs deterministically
+        --jobs N     Bound batch workers (output remains deterministic)
+        --continue-on-error
+                     Process all planned inputs and aggregate failures
+        --overwrite  Allow existing batch export destinations
+        --collision P
+                     Batch policy: error (default), overwrite, or suffix
+        --config PATH
+                     Read versioned TOML defaults from PATH
+        --profile NAME  Select a config profile (default: default)
+        --no-config  Disable config discovery
         --sanitize   Replace input terminal controls, JSON/notebook strings,
                      titles and captions with visible inert text
         --report F   Emit a result/error envelope on stderr: human (default) or json.
@@ -3946,6 +4407,104 @@ mod tests {
         let s = |v: &str| v.to_string();
         assert!(parse(&[s("--pager"), s("x")]).unwrap().unwrap().pager);
         assert!(!parse(&[s("x")]).unwrap().unwrap().pager);
+    }
+
+    #[test]
+    fn parses_batch_controls_and_cli_values_override_config_defaults() {
+        let s = |v: &str| v.to_string();
+        let cli = parse(&[
+            s("--no-config"),
+            s("--batch"),
+            s("--jobs"),
+            s("3"),
+            s("--continue-on-error"),
+            s("--collision"),
+            s("suffix"),
+            s("input"),
+        ])
+        .unwrap()
+        .unwrap();
+        assert!(cli.batch);
+        assert_eq!(cli.jobs, 3);
+        assert!(cli.continue_on_error);
+        assert_eq!(cli.collision, CollisionPolicy::Suffix);
+    }
+
+    #[test]
+    fn batch_expansion_is_recursive_sorted_and_deduplicated() {
+        let root = std::env::temp_dir().join(format!("rich-batch-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let nested = root.join("nested");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(root.join("richbatchonly.md"), "# b").unwrap();
+        std::fs::write(nested.join("richbatchnested.md"), "# a").unwrap();
+
+        let root_arg = root.to_string_lossy().into_owned();
+        let glob_arg = root
+            .join("*richbatchonly.md")
+            .to_string_lossy()
+            .into_owned();
+        let inputs = expand_batch_resources(&[root_arg, glob_arg]).unwrap();
+        assert_eq!(inputs.len(), 2);
+        assert!(inputs[0].ends_with("richbatchnested.md"));
+        assert!(inputs[1].ends_with("richbatchonly.md"));
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn batch_output_suffixes_are_deterministic_for_collisions() {
+        let inputs = ["one.md", "two.md"];
+        let first = batch_export_path(Some("out.html"), inputs[0], 0, 2).unwrap();
+        let second = batch_export_path(Some("out.html"), inputs[1], 1, 2).unwrap();
+        assert_eq!(first, "one.html");
+        assert_eq!(second, "two.html");
+        assert_eq!(
+            Path::new("one.html")
+                .with_file_name("one-2.html")
+                .to_string_lossy(),
+            "one-2.html"
+        );
+    }
+
+    #[test]
+    fn config_profiles_support_profiles_section_and_source_errors() {
+        let root = std::env::temp_dir().join(format!("rich-config-test-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let config = root.join("config.toml");
+        std::fs::write(&config, "[profiles.ci]\nmode = \"json\"\njobs = 4\n").unwrap();
+        let args = vec![
+            "--config".to_string(),
+            config.to_string_lossy().into_owned(),
+            "--profile".to_string(),
+            "ci".to_string(),
+        ];
+        let merged = config_args(
+            &args,
+            &ConfigRoots {
+                home: None,
+                cwd: root.clone(),
+            },
+        )
+        .unwrap();
+        assert!(merged.windows(1).any(|arg| arg[0] == "--json"));
+        assert!(merged
+            .windows(2)
+            .any(|pair| pair[0] == "--jobs" && pair[1] == "4"));
+
+        let bad = root.join("bad.toml");
+        std::fs::write(&bad, "[defaults]\nnot-a-setting = true\n").unwrap();
+        let error = config_args(
+            &["--config".to_string(), bad.to_string_lossy().into_owned()],
+            &ConfigRoots {
+                home: None,
+                cwd: root.clone(),
+            },
+        )
+        .unwrap_err();
+        assert!(error.contains("config "));
+        assert!(error.contains("unknown key"));
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
