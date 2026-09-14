@@ -21,7 +21,7 @@ rich jsonl events.ndjson    # streaming JSON Lines / NDJSON
 rich log app.jsonl          # structured-log JSONL
 ```
 
-The Rust package is currently version **`0.0.6`** and follows independent
+The Rust package is currently version **`0.0.7`** and follows independent
 SemVer; its version does not mirror Python `rich-cli`. The tracked upstream
 release is **`rich-cli` 1.8.1**, recorded in
 [`../../UPSTREAM.toml`](../../UPSTREAM.toml).
@@ -56,6 +56,14 @@ Layout
 Export
 : `--export-html` and `--export-svg` emit a self-contained document instead of
   writing to the terminal — any render mode can be captured this way.
+
+Watch
+: `--watch` polls a local file or URL and re-renders changes. Use
+  `--watch-interval SEC` to change the polling interval. `--watch-cache`
+  avoids re-rendering unchanged URL responses. Watch mode is intentionally
+  finite when stdout is redirected: it renders one snapshot and exits, making
+  pipelines deterministic. Builds without the `fetch` feature reject URL
+  watches with the same stable URL-support error as one-shot URL input.
 
 ## Features
 

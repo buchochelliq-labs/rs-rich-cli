@@ -3,7 +3,7 @@
 use crate::encoding::Encoding;
 
 /// Options owned by the extension layer; the executable supplies input/mode facts.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct CliExtensions {
     pub encoding: Option<Encoding>,
     gif_blocks: Option<bool>,
