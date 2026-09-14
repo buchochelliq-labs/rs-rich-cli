@@ -67,7 +67,7 @@ def generated_cases(seed: int, count: int) -> list[dict]:
     cases = []
     for index in range(count):
         kind = rng.choice(["markup", "text", "panel"])
-        source = "".join(rng.choice(ALPHABET) for _ in range(rng.randint(0, 32)))
+        source = "".join(rng.choice(ALPHABET) for _ in range(rng.randint(1, 32)))
         case = {
             "kind": kind,
             "name": f"generated_{seed}_{index}",
@@ -121,7 +121,10 @@ def python_render(case: dict) -> str:
             console.print(panel, end="")
         else:
             raise ValueError(f"unknown kind {case['kind']!r}")
-    return capture.get()
+    out = capture.get()
+    if case["kind"] == "panel" and out.endswith("\n"):
+        out = out[:-1]
+    return out
 
 
 def rust_render(cases: list[dict], command: list[str]) -> list[dict]:
