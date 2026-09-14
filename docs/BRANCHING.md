@@ -237,6 +237,84 @@ In outline:
 4. Soak. Fixes land on `main` as ordinary PRs, then cut another rc.
 5. Cut `release/X.Y.Z`, same shape, merge, tag `vX.Y.Z`.
 
+### Final PR readiness gate
+
+Green CI is necessary, but it is not enough. Before saying a release PR is ready,
+record a final readiness snapshot that proves review feedback and branch
+protection are accounted for:
+
+```bash
+gh pr checks <number> --watch --interval 15
+gh pr view <number> --json headRefOid,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup
+gh api graphql -f owner=<owner> -f name=<repo> -F number=<number> \
+  -f query='query($owner:String!,$name:String!,$number:Int!,$cursor:String){ repository(owner:$owner,name:$name){ pullRequest(number:$number){ reviewThreads(first:100, after:$cursor){ nodes{ isResolved } pageInfo{ hasNextPage endCursor } } } } }' \
+  --jq '.data.repository.pullRequest.reviewThreads.nodes | map(select(.isResolved == false)) | length'
+git status --short --branch
+```
+
+The ready state is: every required/expected check is green, unresolved review
+thread count is `0`, latest review comments have been inspected, the worktree is
+clean, and the PR's `headRefOid`, `mergeable`, `mergeStateStatus`, and
+`reviewDecision` are written into the handoff. If `mergeable` is `MERGEABLE` but
+`mergeStateStatus` is `BLOCKED`, say exactly which external branch-protection
+requirement remains, or state that maintainer review/merge is the only visible
+blocker.
+
+Post a release handoff note on the PR before stopping. It must include these
+field labels exactly so CI can enforce the final snapshot:
+`Head SHA:`, `Mergeable:`, `Merge state:`, `Review decision:`,
+`Selected publish tag`, `Publish target:`,
+`Validation summary:`, `Unresolved review threads:`, and
+`Remaining visible blocker:`. For an independent crate release, spell out the
+crate tag (for example `rs-rich-cli-v0.0.6`) and explicitly say not to use the
+coordinated `vX.Y.Z` tag unless all selected manifests match it.
+
+The release-readiness policy is centralized in
+`.github/release-readiness.json`; keep the workflow, tests, and this document
+using those fields rather than adding another release-file, trigger, or
+handoff-field list. The policy owns:
+
+- `versionPattern`: text that marks a PR as release-related.
+- `releaseFiles` / `releaseFileSuffixes`: changed files that require a release
+  handoff even if no version appears in the title, body, or branch.
+- `handoffTriggers`: the allowed trigger checks the workflow may combine.
+- `handoffCommentWaitSeconds`: the bounded wait that lets CI observe a
+  just-posted current-SHA handoff comment before failing as stale.
+- `handoffRequiredText`: the exact handoff labels CI requires.
+
+Update `scripts/test_release_readiness.py` with any policy-shape change so the
+schema fails locally before the workflow fails remotely.
+
+### Windows validation ordering
+
+Do not run Cargo commands that build the same binary in parallel on Windows when
+they share the default `target` directory. Windows can hold `target\debug\*.exe`
+open long enough for a concurrent Cargo invocation to fail with
+`Access is denied`. For release prep, prefer the serialized wrapper:
+
+```bash
+python scripts/validate_release.py --tag rs-rich-cli-v0.0.6
+```
+
+`--tag` is required. The wrapper always ends by running
+`scripts/release.py plan <tag>`, so the local validation list proves the selected
+release tag as well as build/test health. Its Python release checks are listed
+explicitly (`test_release.py` and `test_release_readiness.py`) instead of through
+a glob, so adding another release test module requires updating the wrapper on
+purpose.
+
+For ad-hoc parallel validation, isolate jobs with separate `CARGO_TARGET_DIR`
+values:
+
+```powershell
+$env:CARGO_TARGET_DIR = "target\check-cli"
+cargo test -p rs-rich-cli --test cli
+```
+
+Use isolation only for validation scratch builds; release packaging and locked
+workspace checks should continue to use the normal workspace target unless there
+is a specific reason to do otherwise.
+
 ### Publish order
 
 `cargo publish --workspace --locked` retains the coordinated path's topological

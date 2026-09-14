@@ -16,9 +16,12 @@ rich data.csv               # rendered as a table
 rich notebook.ipynb         # Jupyter notebook, cells and outputs
 rich https://example.com    # fetched and syntax-highlighted
 rich -p "[bold red]hi[/]"   # console markup
+rich json data.json         # preferred subcommand form
+rich jsonl events.ndjson    # streaming JSON Lines / NDJSON
+rich log app.jsonl          # structured-log JSONL
 ```
 
-The Rust package is currently version **`0.0.4`** and follows independent
+The Rust package is currently version **`0.0.6`** and follows independent
 SemVer; its version does not mirror Python `rich-cli`. The tracked upstream
 release is **`rich-cli` 1.8.1**, recorded in
 [`../../UPSTREAM.toml`](../../UPSTREAM.toml).
@@ -33,17 +36,22 @@ release is **`rich-cli` 1.8.1**, recorded in
 | `-x`, `--syntax` | syntax-highlighted source |
 | `--csv` | a CSV/TSV table, with numeric columns right-aligned |
 | `--ipynb` | a Jupyter notebook |
+| `--jsonl` | streaming JSON Lines / NDJSON |
+| `--log` | streaming structured-log JSONL |
 | `--gif` | animated GIFs, several at once |
 | `--rule` | a horizontal rule |
 
 With no flag the mode is picked from the file extension; a bare `-` reads stdin.
+Preferred subcommands such as `rich json`, `rich markdown`, `rich csv`,
+`rich jsonl` and `rich log` are aliases over the same renderers. Existing flat
+flags remain supported.
 
 ## Options
 
 Layout
 : `-w/--width`, `--left`/`--center`/`--right`, `--panel BOX` with
   `--title`/`--caption`/`--style`, `--padding`, `--pager`, `--sanitize`,
-  `--no-color`.
+  `--report json`, `--no-color`.
 
 Export
 : `--export-html` and `--export-svg` emit a self-contained document instead of

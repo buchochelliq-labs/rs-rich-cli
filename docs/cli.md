@@ -27,12 +27,15 @@ Force a renderer when the extension is missing or misleading:
 ```bash
 rich --markdown CHANGELOG
 rich --syntax --width 100 script
+rich markdown CHANGELOG
+rich syntax --width 100 script
 ```
 
 Read from standard input with `-` (including `-p -` for markup):
 
 ```bash
 cat data.csv | rich --csv -
+cat data.csv | rich csv -
 ```
 
 Input modes without a resource also read stdin until EOF. Interactive input
@@ -47,6 +50,24 @@ Repeated scalar options use the last value, including `--width` and export paths
 
     Everything after a bare `--` is treated as the resource, however much it
     looks like an option: `rich -- -weird-name.md`.
+
+## Use preferred subcommands
+
+0.0.6 adds task-oriented subcommands while keeping every existing flat flag
+working without warnings:
+
+```bash
+rich markdown README.md
+rich json data.json
+rich csv data.csv
+rich ipynb notebook.ipynb
+rich diff before.png after.png --threshold 2
+```
+
+The subcommands route through the same renderers as `--markdown`, `--json`,
+`--csv`, `--ipynb` and `--diff`. Common options such as `--width`,
+`--no-color`, `--sanitize`, `--panel`, `--padding`, exports and alignment keep
+their existing behavior where the mode supports them.
 
 ## Neutralize terminal controls in input
 
@@ -84,6 +105,28 @@ rich --csv team.csv --title "Team"
 The delimiter and whether row 1 is a header are **detected**, not assumed, so
 semicolon- and tab-separated exports work without a flag. Numeric columns are
 right-aligned automatically.
+
+## Stream JSONL and logs
+
+Use `jsonl` / `--jsonl` for newline-delimited JSON. Each line is parsed and
+rendered independently, so the command can consume long streams without holding
+the complete input in memory:
+
+```bash
+tail -f app.jsonl | rich jsonl -
+rich --jsonl events.ndjson
+```
+
+Malformed records fail fast by default and report the line number. Use `log` /
+`--log` when records follow common structured-log shapes:
+
+```bash
+tail -f app.jsonl | rich log -
+```
+
+Objects with `timestamp`, `time` or `@timestamp`, `level` or `severity`, and
+`message` or `msg` are flattened into a readable log line; remaining fields are
+printed as compact JSON. Other values fall back to compact JSON.
 
 If the delimiter cannot be determined and the file is not `.csv`/`.tsv`, `rich`
 reports it and **exits non-zero** rather than inventing a one-column table:
@@ -160,7 +203,7 @@ requests use blocks in exported documents.
 rich --diff before.png after.png --threshold 2
 ```
 
-Reports the regions that changed, and exits `1` when more than `2%` of the image
+Reports the regions that changed, and exits `5` when more than `2%` of the image
 differs — which makes it usable as a CI gate. See
 [Comparing images](image-diff.md) for the modes and how the comparison works.
 
@@ -173,8 +216,17 @@ can be separated:
 rich --csv data.csv > table.txt 2> errors.txt
 ```
 
-Exit codes are `0` for success and `1` for failure — including a resource that
-cannot be read or parsed. Check them:
+Exit codes are stable by failure class:
+
+| Code | Meaning |
+|---|---|
+| `0` | Success. With `--diff --threshold`, the change is within the threshold. |
+| `2` | Usage/config error, such as an invalid flag or unsupported combination. |
+| `3` | Input/read/write error, such as a missing file or failed output write. |
+| `4` | Parse/render data error, such as malformed JSON or JSONL. |
+| `5` | Threshold/gate failure, such as `--diff --threshold` exceeded. |
+
+Check them:
 
 ```bash
 if rich --csv "$f" > /dev/null 2>&1; then
@@ -183,6 +235,21 @@ else
   echo "could not render $f" >&2
 fi
 ```
+
+For automation, `--report json` emits a result/error envelope on stderr while
+leaving stdout for rendered content:
+
+```bash
+rich --report json jsonl events.ndjson > rendered.txt 2> report.json
+```
+
+Successful reports include `ok`, `code`, `exit_code` and a `result` object.
+Failures include the same status fields plus `message` and an `error` object.
+The top-level `message` is retained for simple shell consumers; structured
+consumers can read `error.message`. Informational exits such as `--help` and
+`--version` print their normal text and do not emit a report envelope.
+
+`--machine-json` is an alias for `--report json`.
 
 Colour is disabled automatically when output is not a terminal, and by
 a non-empty `NO_COLOR` or `--no-color` when it is. `FORCE_COLOR` is unsupported;

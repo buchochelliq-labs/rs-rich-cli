@@ -1,6 +1,7 @@
 """Exercise docs drift, oracle pins, and release ancestry with real temp trees."""
 
 import os
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -9,9 +10,11 @@ import tempfile
 import unittest
 
 import gen_versions
+import validate_release
 from read_upstream_version import read_version
 
 ROOT = Path(__file__).resolve().parent.parent
+ALLOWED_HANDOFF_TRIGGERS = {"versionSignal", "releaseFiles"}
 
 
 def git_env():
@@ -22,43 +25,77 @@ def git_env():
     }
 
 
+def git(cwd, *args):
+    proc = subprocess.run(["git", *args], cwd=cwd,
+                          capture_output=True, text=True, env=git_env())
+    if proc.returncode != 0:
+        raise AssertionError(
+            f"git {' '.join(args)} failed\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+        )
+    return proc.stdout.strip()
+
+
+def release_policy():
+    policy = json.loads((ROOT / ".github/release-readiness.json").read_text())
+    required_keys = {
+        "versionPattern",
+        "releaseFiles",
+        "releaseFileSuffixes",
+        "handoffTriggers",
+        "handoffCommentWaitSeconds",
+        "handoffRequiredText",
+    }
+    missing = required_keys - set(policy)
+    extra = set(policy) - required_keys
+    if missing or extra:
+        raise AssertionError(f"invalid release-readiness policy keys: missing={missing}, extra={extra}")
+    if not isinstance(policy["versionPattern"], str) or not policy["versionPattern"]:
+        raise AssertionError("versionPattern must be a non-empty string")
+    if not isinstance(policy["releaseFiles"], list) or not policy["releaseFiles"]:
+        raise AssertionError("releaseFiles must be a non-empty list")
+    if not isinstance(policy["releaseFileSuffixes"], list) or not policy["releaseFileSuffixes"]:
+        raise AssertionError("releaseFileSuffixes must be a non-empty list")
+    if not isinstance(policy["handoffTriggers"], list) or not policy["handoffTriggers"]:
+        raise AssertionError("handoffTriggers must be a non-empty list")
+    if not set(policy["handoffTriggers"]).issubset(ALLOWED_HANDOFF_TRIGGERS):
+        raise AssertionError("handoffTriggers contains unknown values")
+    if not isinstance(policy["handoffCommentWaitSeconds"], int) or policy["handoffCommentWaitSeconds"] < 0:
+        raise AssertionError("handoffCommentWaitSeconds must be a non-negative integer")
+    if not isinstance(policy["handoffRequiredText"], list) or not policy["handoffRequiredText"]:
+        raise AssertionError("handoffRequiredText must be a non-empty list")
+    for key in ["releaseFiles", "releaseFileSuffixes", "handoffRequiredText"]:
+        if any(not isinstance(value, str) or not value for value in policy[key]):
+            raise AssertionError(f"{key} must contain only non-empty strings")
+    return policy
+
+
 class ReadinessTests(unittest.TestCase):
     def test_release_tag_must_be_annotated_checked_out_and_on_main(self):
         with tempfile.TemporaryDirectory() as tmp:
-            def git(*args):
-                proc = subprocess.run(["git", *args], cwd=tmp,
-                                      capture_output=True, text=True, env=git_env())
-                self.assertEqual(
-                    proc.returncode,
-                    0,
-                    f"git {' '.join(args)} failed\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}",
-                )
-                return proc.stdout.strip()
-
             def validate(tag):
                 return subprocess.run(
                     [sys.executable, str(ROOT / "scripts/release.py"), "validate-tag", tag],
                     cwd=tmp, capture_output=True, text=True, env=git_env(),
                 )
 
-            git("init", "-q")
-            git("config", "user.name", "Test")
-            git("config", "user.email", "test@example.invalid")
-            git("commit", "--allow-empty", "-qm", "release")
-            main = git("rev-parse", "HEAD")
-            git("update-ref", "refs/remotes/origin/main", main)
+            git(tmp, "init", "-q")
+            git(tmp, "config", "user.name", "Test")
+            git(tmp, "config", "user.email", "test@example.invalid")
+            git(tmp, "commit", "--allow-empty", "-qm", "release")
+            main = git(tmp, "rev-parse", "HEAD")
+            git(tmp, "update-ref", "refs/remotes/origin/main", main)
             for tag in ("v0.0.3", "rs-rich-cli-v0.0.3", "rs-rich-art-v0.0.3-rc.1"):
-                git("tag", "-a", tag, "-m", "release")
+                git(tmp, "tag", "-a", tag, "-m", "release")
                 result = validate(tag)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout.strip(), main)
-            git("tag", "rs-rich-v0.0.3")
+            git(tmp, "tag", "rs-rich-v0.0.3")
             result = validate("rs-rich-v0.0.3")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("must be annotated", result.stderr)
-            git("commit", "--allow-empty", "-qm", "unmerged work")
+            git(tmp, "commit", "--allow-empty", "-qm", "unmerged work")
             self.assertNotEqual(validate("v0.0.3").returncode, 0)
-            git("tag", "-a", "v0.0.4", "-m", "not on main")
+            git(tmp, "tag", "-a", "v0.0.4", "-m", "not on main")
             self.assertNotEqual(validate("v0.0.4").returncode, 0)
             self.assertNotEqual(validate("main").returncode, 0)
 
@@ -102,16 +139,6 @@ class ReadinessTests(unittest.TestCase):
         if bash is None:
             self.skipTest("bash is required to exercise scripts/check_pr_base.sh")
         with tempfile.TemporaryDirectory() as tmp:
-            def git(*args):
-                proc = subprocess.run(["git", *args], cwd=tmp,
-                                      capture_output=True, text=True, env=git_env())
-                self.assertEqual(
-                    proc.returncode,
-                    0,
-                    f"git {' '.join(args)} failed\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}",
-                )
-                return proc.stdout.strip()
-
             def check(mode, base):
                 return subprocess.run(
                     [bash, str(ROOT / "scripts/check_pr_base.sh"), mode, base],
@@ -120,15 +147,15 @@ class ReadinessTests(unittest.TestCase):
                     env=git_env(),
                 ).returncode
 
-            git("init", "-q")
-            git("config", "user.name", "Test")
-            git("config", "user.email", "test@example.invalid")
-            git("commit", "--allow-empty", "-qm", "baseline")
-            baseline = git("rev-parse", "HEAD")
-            git("commit", "--allow-empty", "-qm", "main advances")
-            main = git("rev-parse", "HEAD")
-            git("update-ref", "refs/remotes/origin/main", main)
-            git("checkout", "--detach", baseline)
+            git(tmp, "init", "-q")
+            git(tmp, "config", "user.name", "Test")
+            git(tmp, "config", "user.email", "test@example.invalid")
+            git(tmp, "commit", "--allow-empty", "-qm", "baseline")
+            baseline = git(tmp, "rev-parse", "HEAD")
+            git(tmp, "commit", "--allow-empty", "-qm", "main advances")
+            main = git(tmp, "rev-parse", "HEAD")
+            git(tmp, "update-ref", "refs/remotes/origin/main", main)
+            git(tmp, "checkout", "--detach", baseline)
             for base in ["rc/0.0.3", "release/0.0.3", "releases/v0.0.3-rc"]:
                 with self.subTest(base=base):
                     self.assertEqual(check("base", base), 0)
@@ -136,10 +163,108 @@ class ReadinessTests(unittest.TestCase):
             self.assertEqual(check("current", "main"), 0)
             for base in ["fix/stacked", "releases/", "rc/", "release/", "releases-other"]:
                 self.assertNotEqual(check("base", base), 0)
-            git("commit", "--allow-empty", "-qm", "release work")
-            git("merge", "--no-ff", "--no-edit", main)
+            git(tmp, "commit", "--allow-empty", "-qm", "release work")
+            git(tmp, "merge", "--no-ff", "--no-edit", main)
             for base in ["rc/0.0.3", "release/0.0.3", "releases/v0.0.3-rc"]:
                 self.assertEqual(check("current", base), 0)
+
+    def test_release_validation_wrapper_serializes_shared_target_cargo(self):
+        steps = validate_release.commands("rs-rich-cli-v0.0.6")
+        self.assertIn(["cargo", "test", "--all"], steps)
+        self.assertIn(["cargo", "build", "-p", "rs-rich-cli", "--locked"], steps)
+        self.assertIn(
+            [sys.executable, "-m", "unittest", "discover", "-s", "scripts", "-p", "test_release.py", "-v"],
+            steps,
+        )
+        self.assertIn(
+            [
+                sys.executable,
+                "-m",
+                "unittest",
+                "discover",
+                "-s",
+                "scripts",
+                "-p",
+                "test_release_readiness.py",
+                "-v",
+            ],
+            steps,
+        )
+        self.assertEqual(
+            steps[-1],
+            [sys.executable, "scripts/release.py", "plan", "rs-rich-cli-v0.0.6"],
+        )
+        self.assertLess(
+            steps.index(["cargo", "test", "--all"]),
+            steps.index(["cargo", "build", "-p", "rs-rich-cli", "--locked"]),
+        )
+        self.assertTrue(validate_release.cli_binary().endswith(".exe") if os.name == "nt" else True)
+
+    def test_release_handoff_gate_catches_release_file_only_prs(self):
+        workflow = (ROOT / ".github/workflows/pr-hygiene.yml").read_text()
+        policy = release_policy()
+        self.assertIn("actions/checkout@v4", workflow)
+        self.assertIn("policy.handoffTriggers.some", workflow)
+        self.assertIn("Unknown release handoff trigger in policy", workflow)
+        self.assertIn("handoffCommentWaitSeconds", workflow)
+        self.assertIn("Waiting up to", workflow)
+        self.assertIn("new RegExp(policy.versionPattern)", workflow)
+        self.assertIn("policy.releaseFiles.includes(filename)", workflow)
+        self.assertIn("policy.releaseFileSuffixes.some", workflow)
+        self.assertEqual(["versionSignal", "releaseFiles"], policy["handoffTriggers"])
+        self.assertIn(".claude/skills/release/SKILL.md", policy["releaseFiles"])
+        self.assertIn("/Cargo.toml", policy["releaseFileSuffixes"])
+
+    def test_workflows_use_published_checkout_major(self):
+        workflow_dir = ROOT / ".github/workflows"
+        checkout_refs = [
+            (path, line)
+            for path in workflow_dir.glob("*.yml")
+            for line in path.read_text().splitlines()
+            if "uses: actions/checkout@" in line
+        ]
+        self.assertGreaterEqual(len(checkout_refs), 1)
+        self.assertEqual(
+            [],
+            [
+                f"{path.relative_to(ROOT)}: {line.strip()}"
+                for path, line in checkout_refs
+                if "actions/checkout@v4" not in line
+            ],
+        )
+
+    def test_release_handoff_gate_enforces_final_snapshot_fields(self):
+        workflow = (ROOT / ".github/workflows/pr-hygiene.yml").read_text()
+        policy = release_policy()
+        self.assertIn("while (hasNextPage)", workflow)
+        self.assertIn("reviewThreads(first:100, after:$cursor)", workflow)
+        self.assertIn("headRefOid", workflow)
+        self.assertIn("mergeStateStatus", workflow)
+        self.assertIn("Release readiness snapshot", workflow)
+        self.assertIn("Remaining visible blocker:", workflow)
+        self.assertIn(".filter((thread) => !thread.isResolved)", workflow)
+        self.assertIn("unresolved review thread(s)", workflow)
+        self.assertIn("body.includes(pr.head.sha)", workflow)
+        self.assertIn("policy.handoffRequiredText", workflow)
+        self.assertGreaterEqual(len(policy["handoffRequiredText"]), 1)
+
+    def test_release_readiness_policy_schema_is_explicit(self):
+        policy = release_policy()
+        self.assertRegex("rs-rich-cli-v0.0.6", policy["versionPattern"])
+        self.assertEqual(["versionSignal", "releaseFiles"], policy["handoffTriggers"])
+        self.assertGreater(policy["handoffCommentWaitSeconds"], 0)
+        for required in [
+            "Head SHA:",
+            "Mergeable:",
+            "Merge state:",
+            "Review decision:",
+            "Selected publish tag",
+            "Publish target:",
+            "Unresolved review threads:",
+            "Validation summary:",
+            "Remaining visible blocker:",
+        ]:
+            self.assertIn(required, policy["handoffRequiredText"])
 
 
 if __name__ == "__main__":

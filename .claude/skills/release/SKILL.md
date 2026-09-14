@@ -37,17 +37,17 @@ prerelease versions and update the dependency requirements accordingly.
 
 Start from fresh `origin/main`, or update the selected integration branch by PR
 so it contains `origin/main`. Keep the checkout clean before release operations.
-Run the complete CI gate:
+Run the complete CI gate. Prefer the serialized wrapper for release prep,
+especially on Windows where parallel Cargo commands can lock the same binary:
 
 ```bash
-cargo fmt --all --check
-cargo clippy --all-targets -- -D warnings
-cargo test --all
-python3 -m unittest discover -s scripts -p 'test_release*.py' -v
-python3 scripts/gen_versions.py --check
-cargo build -p rs-rich-cli --locked
-python3 scripts/gen_cli_reference.py --binary target/debug/rich --check
+python scripts/validate_release.py --tag rs-rich-cli-v0.0.6
 ```
+
+`--tag` is required because the wrapper always includes
+`scripts/release.py plan <tag>` as the final release-plan audit. If you run the
+steps manually, keep them in the wrapper's order and run both explicit Python
+release test modules: `test_release.py` and `test_release_readiness.py`.
 
 Also require the CI feature matrix and declared MSRV check. In a dedicated
 Python environment, install `rich==$(python3 scripts/read_upstream_version.py)`;
@@ -76,6 +76,51 @@ These commands plan only; they do not create a tag or publish. Confirm the JSON
 selection, then regenerate version docs and CLI help. Move only the selected
 changes from `Unreleased` under the appropriate release heading when finalizing
 the release. Record tests and actual screenshot evidence in the PR.
+
+Before calling the PR ready, take and report the final readiness snapshot:
+
+```bash
+gh pr checks <number> --watch --interval 15
+gh pr view <number> --json headRefOid,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup
+gh api graphql -f owner=<owner> -f name=<repo> -F number=<number> \
+  -f query='query($owner:String!,$name:String!,$number:Int!,$cursor:String){ repository(owner:$owner,name:$name){ pullRequest(number:$number){ reviewThreads(first:100, after:$cursor){ nodes{ isResolved } pageInfo{ hasNextPage endCursor } } } } }' \
+  --jq '.data.repository.pullRequest.reviewThreads.nodes | map(select(.isResolved == false)) | length'
+git status --short --branch
+```
+
+Ready means all expected checks are green, unresolved review thread count is `0`,
+latest review comments were inspected, the worktree is clean, and the PR's
+`headRefOid`, `mergeable`, `mergeStateStatus`, and `reviewDecision` are recorded.
+If `mergeable` is `MERGEABLE` but `mergeStateStatus` is `BLOCKED`, state the
+visible branch-protection blocker instead of calling it fully merge-ready.
+
+Post a release handoff note on the PR before stopping. Use the centralized
+policy in `.github/release-readiness.json`; CI requires these field labels:
+`Head SHA:`, `Mergeable:`, `Merge state:`, `Review decision:`,
+`Selected publish tag`, `Publish target:`,
+`Validation summary:`, `Unresolved review threads:`, and
+`Remaining visible blocker:`. For independent releases, spell out the exact
+crate tag, e.g. `rs-rich-cli-v0.0.6`, and warn against using coordinated
+`vX.Y.Z` unless all selected manifests match.
+
+The same policy file owns the handoff triggers and
+`handoffCommentWaitSeconds`. Post the current-SHA handoff as soon as possible
+after pushing; the readiness job waits briefly for the comment to appear, but
+the wait is only a race cushion, not a substitute for a real handoff. If the
+head changes after the handoff, post a fresh handoff and wait for CI again.
+
+On Windows, do not run Cargo commands that build the same binary in parallel
+against the same `target` directory; a concurrent process can hold
+`target\debug\*.exe` and cause `Access is denied`. Prefer the serialized release
+wrapper:
+
+```bash
+python scripts/validate_release.py --tag rs-rich-cli-v0.0.6
+```
+
+For ad-hoc parallel validation, give jobs separate `CARGO_TARGET_DIR` values.
+Keep release packaging and locked workspace checks on the normal workspace
+target unless there is a specific reason not to.
 
 ## 3. Land on main, then tag
 

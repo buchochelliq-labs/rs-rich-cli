@@ -10,17 +10,34 @@ Looking for how to *do* something rather than what a flag is called? Start at
 [Using the CLI](cli.md).
 
 
-*rich 0.0.5 — Rust port of the rich-cli terminal toolbox*
+*rich 0.0.6 — Rust port of the rich-cli terminal toolbox*
 
 ## Usage
 
 ```text
 rich [OPTIONS] [RESOURCE]
+rich [OPTIONS] <COMMAND> [RESOURCE]
 
 RESOURCE is a file path, an http(s) URL, or `-` for stdin. Everything after a
 bare `--` is a RESOURCE, however much it looks like an option. Input modes with
 no RESOURCE read stdin until EOF; `-p -` reads markup from stdin too. Terminal
 stdin shows an input hint. Repeated scalar options use their last value.
+```
+
+## Commands
+
+```text
+print       Treat RESOURCE as literal markup TEXT (`--print`)
+markdown    Render Markdown (`--markdown`)
+syntax      Syntax-highlight source (`--syntax`)
+json        Pretty-print JSON (`--json`)
+csv         Render CSV/TSV as a table (`--csv`)
+ipynb       Render a Jupyter notebook (`--ipynb`)
+jsonl       Stream JSON Lines / NDJSON records
+log         Stream common structured-log JSONL records
+gif         Animate GIFs (`--gif`)
+diff        Perceptually compare two images (`--diff`)
+rule        Draw a horizontal rule (`--rule`)
 ```
 
 ## Render modes
@@ -34,6 +51,8 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
 -x, --syntax     Syntax-highlight RESOURCE (language from its extension)
     --csv        Render RESOURCE as a CSV/TSV table
     --ipynb      Render RESOURCE as a Jupyter notebook
+    --jsonl      Stream JSON Lines / NDJSON records
+    --log        Stream common structured-log JSONL records
     --gif        Animate GIFs side by side; pipes receive the first frame
     --loop N     With --gif, repeat N times (default 1; 0 = forever)
     --rule       Draw a horizontal rule (RESOURCE is its title)
@@ -54,7 +73,7 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
                  utf-16le or utf-16be. Strict; files, stdin and URLs only.
     --threshold PCT
                  With --diff, exit non-zero above PCT% changed.
-                 Also sets the exit code: 0 within, 1 over.
+                 Also sets the exit code: 0 within, 5 over.
     --left       Left-justify output
     --center     Center output
     --right      Right-justify output
@@ -79,6 +98,9 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
     --pager      Page via MANPAGER, then PAGER, then less/more.com
     --sanitize   Replace input terminal controls, JSON/notebook strings,
                  titles and captions with visible inert text
+    --report F   Emit a result/error envelope on stderr: human (default) or json.
+    --machine-json
+                 Alias for --report json
     --no-color   Disable colored output (as does a non-empty NO_COLOR)
 -h, --help       Show this help
 -V, --version    Show the rs-rich-cli package version
@@ -97,16 +119,28 @@ With no RESOURCE and no mode flag, a capability demo is shown. Layout, style,
 paging, hyperlinks and export options require a resource or render mode.
 ```
 
-
 ## Exit codes
 
-| Code | Meaning |
-|------|---------|
-| `0` | The resource rendered. With `--diff --threshold`, also: change was within the threshold. |
-| `1` | The run failed: the resource could not be read or parsed, a flag was invalid or orphaned, or `--diff --threshold` found more change than allowed. |
+```text
+0 success
+2 usage/config error
+3 input/read/write error
+4 parse/render data error
+5 threshold/gate failure
+```
+
 
 `rich` writes diagnostics to stderr and rendered output to stdout, so
 `rich --csv data.csv > table.txt` keeps the two apart.
+
+`--report json` writes the result/error envelope to stderr for the same reason:
+stdout remains the rendered payload.
+
+Successful reports include `ok`, `code`, `exit_code` and a `result` object.
+Failures include the same status fields plus `message` and an `error` object.
+The top-level `message` is retained for simple shell consumers; structured
+consumers can read `error.message`. Informational exits such as `--help` and
+`--version` print their normal text and do not emit a report envelope.
 
 !!! note "A failure always exits non-zero"
 

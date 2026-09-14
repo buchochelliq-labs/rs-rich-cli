@@ -10,7 +10,7 @@
 //! behind the default `fetch` feature), **paging** (`--pager`), and a capability
 //! demo — i.e. the whole common rich-cli surface.
 
-use std::io::{IsTerminal, Read, Write};
+use std::io::{BufRead, IsTerminal, Read, Write};
 use std::process::ExitCode;
 
 use rich::cells::cell_len;
@@ -61,6 +61,159 @@ enum Mode {
     Diff,
     /// `--rule`: draw a horizontal rule (the resource, if any, is its title).
     Rule,
+    /// `--jsonl`: stream JSON Lines / NDJSON records.
+    JsonLines,
+    /// `--log`: stream common structured-log JSONL records.
+    Log,
+}
+
+impl Mode {
+    fn streams_records(self) -> bool {
+        matches!(self, Self::JsonLines | Self::Log)
+    }
+
+    fn draws_directly(self) -> bool {
+        matches!(self, Self::Gif | Self::Diff) || self.streams_records()
+    }
+
+    fn allows_extensions(self) -> bool {
+        !matches!(self, Self::Gif | Self::Diff | Self::Rule) && !self.streams_records()
+    }
+
+    fn accepts_multiple_resources(self) -> bool {
+        matches!(self, Self::Gif | Self::Diff)
+    }
+}
+
+struct ModeSpec {
+    mode: Mode,
+    primary: &'static str,
+    aliases: &'static [&'static str],
+}
+
+const MODE_SPECS: &[ModeSpec] = &[
+    ModeSpec {
+        mode: Mode::Auto,
+        primary: "auto",
+        aliases: &[],
+    },
+    ModeSpec {
+        mode: Mode::Print,
+        primary: "print",
+        aliases: &["print"],
+    },
+    ModeSpec {
+        mode: Mode::Markdown,
+        primary: "markdown",
+        aliases: &["markdown", "md"],
+    },
+    ModeSpec {
+        mode: Mode::Json,
+        primary: "json",
+        aliases: &["json"],
+    },
+    ModeSpec {
+        mode: Mode::Syntax,
+        primary: "syntax",
+        aliases: &["syntax", "code"],
+    },
+    ModeSpec {
+        mode: Mode::Csv,
+        primary: "csv",
+        aliases: &["csv", "tsv"],
+    },
+    ModeSpec {
+        mode: Mode::Ipynb,
+        primary: "ipynb",
+        aliases: &["ipynb", "notebook"],
+    },
+    ModeSpec {
+        mode: Mode::Gif,
+        primary: "gif",
+        aliases: &["gif"],
+    },
+    ModeSpec {
+        mode: Mode::Diff,
+        primary: "diff",
+        aliases: &["diff"],
+    },
+    ModeSpec {
+        mode: Mode::Rule,
+        primary: "rule",
+        aliases: &["rule"],
+    },
+    ModeSpec {
+        mode: Mode::JsonLines,
+        primary: "jsonl",
+        aliases: &["jsonl", "ndjson"],
+    },
+    ModeSpec {
+        mode: Mode::Log,
+        primary: "log",
+        aliases: &["log", "logs"],
+    },
+];
+
+const RENDER_MODE_FLAGS: &str =
+    "--print/--markdown/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--jsonl/--log";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReportFormat {
+    Human,
+    Json,
+}
+
+impl ReportFormat {
+    fn apply_option(&mut self, option: &str, value: Option<&str>) -> Result<(), String> {
+        match option {
+            "--report" => {
+                *self = match value.ok_or("--report requires one of: human, json")? {
+                    "human" => Self::Human,
+                    "json" => Self::Json,
+                    other => return Err(format!("unknown report format {other:?} (human, json)")),
+                };
+            }
+            "--machine-json" => *self = Self::Json,
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExitClass {
+    Success,
+    Usage,
+    Input,
+    Data,
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    Gate,
+}
+
+impl ExitClass {
+    fn code(self) -> u8 {
+        match self {
+            Self::Success => 0,
+            Self::Usage => 2,
+            Self::Input => 3,
+            Self::Data => 4,
+            Self::Gate => 5,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Success => "success",
+            Self::Usage => "usage",
+            Self::Input => "input",
+            Self::Data => "data",
+            Self::Gate => "gate",
+        }
+    }
+
+    fn exit_code(self) -> ExitCode {
+        ExitCode::from(self.code())
+    }
 }
 
 /// How `--diff` draws the image part of its report.
@@ -154,6 +307,9 @@ struct Cli {
     hyperlinks: bool,
     /// `--sanitize`: visibly neutralize terminal controls from input and labels.
     sanitize: bool,
+    /// `--report json`: emit a stable result/error envelope to stderr while
+    /// leaving stdout for rendered content.
+    report_format: ReportFormat,
 }
 
 /// Build the `-m/--markdown` renderable, honouring `-y/--hyperlinks`.
@@ -176,11 +332,79 @@ fn main() -> ExitCode {
     match parse(&args) {
         Ok(None) => ExitCode::SUCCESS, // help/version already printed
         Ok(Some(cli)) => run(cli),
-        Err(message) => {
-            eprintln!("rich: {message} (try --help)");
-            ExitCode::FAILURE
+        Err(message) => emit_error(
+            wants_json_report(&args),
+            ExitClass::Usage,
+            &format!("{message} (try --help)"),
+        ),
+    }
+}
+
+fn emit_error(json: bool, class: ExitClass, message: &str) -> ExitCode {
+    if json {
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "ok": false,
+                "code": class.name(),
+                "exit_code": class.code(),
+                "message": message,
+                "error": {
+                    "message": message,
+                },
+            })
+        );
+    } else {
+        eprintln!("rich: {message}");
+    }
+    class.exit_code()
+}
+
+fn emit_success_report(format: ReportFormat) {
+    if format == ReportFormat::Json {
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "ok": true,
+                "code": ExitClass::Success.name(),
+                "exit_code": ExitClass::Success.code(),
+                "result": {},
+            })
+        );
+    }
+}
+
+fn fail(cli: &Cli, class: ExitClass, message: impl AsRef<str>) -> ExitCode {
+    emit_error(
+        cli.report_format == ReportFormat::Json,
+        class,
+        message.as_ref(),
+    )
+}
+
+fn success(cli: &Cli) -> ExitCode {
+    emit_success_report(cli.report_format);
+    ExitClass::Success.exit_code()
+}
+
+fn wants_json_report(args: &[String]) -> bool {
+    let mut format = ReportFormat::Human;
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--report" => {
+                if let Some(value) = iter.next() {
+                    let _ = format.apply_option("--report", Some(value));
+                }
+            }
+            "--machine-json" => {
+                let _ = format.apply_option("--machine-json", None);
+            }
+            "--" => break,
+            _ => {}
         }
     }
+    format == ReportFormat::Json
 }
 
 /// Map a `--panel` box name to a box set (port of rich-cli's `BOXES` +
@@ -227,13 +451,24 @@ fn parse_padding(value: &str) -> Result<(usize, usize, usize, usize), String> {
 }
 
 /// Set the render mode, rejecting a second, conflicting mode flag.
+fn mode_name(mode: Mode) -> &'static str {
+    MODE_SPECS
+        .iter()
+        .find_map(|spec| (spec.mode == mode).then_some(spec.primary))
+        .unwrap_or("unknown")
+}
+
+fn command_mode(command: &str) -> Option<Mode> {
+    MODE_SPECS
+        .iter()
+        .find_map(|spec| spec.aliases.contains(&command).then_some(spec.mode))
+}
+
 fn set_mode(current: &mut Mode, mode: Mode) -> Result<(), String> {
     if *current != Mode::Auto && *current != mode {
-        return Err(
-            "only one render mode (--print/--markdown/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff) \
-             may be given"
-                .into(),
-        );
+        return Err(format!(
+            "only one render mode ({RENDER_MODE_FLAGS}) may be given"
+        ));
     }
     *current = mode;
     Ok(())
@@ -262,6 +497,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut pager = false;
     let mut hyperlinks = false;
     let mut sanitize = false;
+    let mut report_format = ReportFormat::Human;
     // Set by `--`: everything after it is a positional argument, however much it
     // looks like a flag. Without this nothing beginning with `-` could be
     // printed or opened at all — `rich -p -- "-5 degrees"` and `rich -- -weird.md`
@@ -295,6 +531,15 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--ipynb" => set_mode(&mut mode, Mode::Ipynb)?,
             "--gif" => set_mode(&mut mode, Mode::Gif)?,
             "--diff" => set_mode(&mut mode, Mode::Diff)?,
+            "--jsonl" | "--ndjson" => set_mode(&mut mode, Mode::JsonLines)?,
+            "--log" => set_mode(&mut mode, Mode::Log)?,
+            "--report" => {
+                let value = iter.next().map(String::as_str);
+                report_format.apply_option("--report", value)?;
+            }
+            "--machine-json" => {
+                report_format.apply_option("--machine-json", None)?;
+            }
             "--image-mode" => {
                 let value = iter
                     .next()
@@ -397,6 +642,11 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             other if other.starts_with('-') && other != "-" => {
                 return Err(format!("unknown option {other:?}"));
             }
+            other
+                if mode == Mode::Auto && resources.is_empty() && command_mode(other).is_some() =>
+            {
+                set_mode(&mut mode, command_mode(other).expect("checked above"))?;
+            }
             other => resources.push(other.to_string()),
         }
     }
@@ -417,9 +667,9 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     };
     extensions.validate(
         effective_mode == Mode::Gif,
-        !(matches!(effective_mode, Mode::Gif | Mode::Diff | Mode::Rule)
-            || (mode == Mode::Auto && resources.is_empty())
-            || (mode == Mode::Print && resources.first().is_some_and(|r| r != "-" && !is_url(r)))),
+        effective_mode.allows_extensions()
+            && !(mode == Mode::Auto && resources.is_empty())
+            && !(mode == Mode::Print && resources.first().is_some_and(|r| r != "-" && !is_url(r))),
     )?;
     let exporting = export_html.is_some() || export_svg.is_some();
     if exporting {
@@ -486,18 +736,30 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     // These decorate a single rendered resource; --diff composes its own report
     // and quietly dropped them, which reads as the flag having no effect.
     let demo = mode == Mode::Auto && resources.is_empty();
-    if matches!(effective_mode, Mode::Diff | Mode::Gif) || demo {
+    if effective_mode.draws_directly() || demo {
         let mode_name = if effective_mode == Mode::Gif {
             "--gif"
+        } else if effective_mode.streams_records() {
+            mode_name(effective_mode)
         } else if demo {
             "the capability demo"
         } else {
             "--diff"
         };
         let unsupported = [
-            ("--pager", pager && (effective_mode == Mode::Gif || demo)),
+            (
+                "--pager",
+                pager && (effective_mode == Mode::Gif || effective_mode.streams_records() || demo),
+            ),
+            (
+                "--export-html/--export-svg",
+                (export_html.is_some() || export_svg.is_some()) && effective_mode.streams_records(),
+            ),
             ("--width", demo && width.is_some()),
-            ("--hyperlinks", demo && hyperlinks),
+            (
+                "--hyperlinks",
+                hyperlinks && (effective_mode.streams_records() || demo),
+            ),
             ("--panel", panel.is_some()),
             ("--padding", padding.is_some()),
             ("--title", title.is_some()),
@@ -511,7 +773,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             return Err(format!("{flag} cannot be combined with {mode_name}"));
         }
     }
-    if mode != Mode::Gif && mode != Mode::Diff && resources.len() > 1 {
+    if !mode.accepts_multiple_resources() && resources.len() > 1 {
         return Err("only one resource may be given (except with --gif)".into());
     }
     let resource = resources.first().cloned();
@@ -539,6 +801,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         pager,
         hyperlinks,
         sanitize,
+        report_format,
     }))
 }
 
@@ -989,8 +1252,7 @@ fn decorate_and_emit(
 ) -> ExitCode {
     if cli.panel.is_some() {
         if let Err(err) = validate_labels(cli) {
-            eprintln!("rich: {err}");
-            return ExitCode::FAILURE;
+            return fail(cli, ExitClass::Data, err);
         }
     }
     let max_width = console.width();
@@ -1080,7 +1342,7 @@ fn decorate_and_emit(
         });
     }
 
-    exit_code(emit(console, export, |c| c.print(renderable.as_ref())))
+    emit_exit_code(cli, emit(console, export, |c| c.print(renderable.as_ref())))
 }
 
 fn run(mut cli: Cli) -> ExitCode {
@@ -1098,7 +1360,7 @@ fn run(mut cli: Cli) -> ExitCode {
     // With no flags and no resource, show the capability demo.
     if cli.mode == Mode::Auto && cli.resource.is_none() {
         run_demo(cli.no_color);
-        return ExitCode::SUCCESS;
+        return success(&cli);
     }
 
     let mut mode = match cli.mode {
@@ -1106,14 +1368,10 @@ fn run(mut cli: Cli) -> ExitCode {
         other => other,
     };
 
-    // `--gif` and `--diff` write a stream of renderables to the
-    // console themselves instead of composing one, so no wrapper can reach them:
-    // those two keep taking `--width` on the console. Everything else gets
-    // upstream's `ForceWidth` in `decorate_and_emit`, which is what keeps
-    // `--center` centring inside the terminal.
-    let width_on_console = matches!(mode, Mode::Gif | Mode::Diff);
+    // Modes that render incrementally write directly to the console instead of
+    // composing one renderable, so no `ForceWidth` wrapper can reach them.
     let mut builder = Console::builder().no_color(cli.no_color);
-    if let Some(width) = cli.width.filter(|_| width_on_console) {
+    if let Some(width) = cli.width.filter(|_| mode.draws_directly()) {
         builder = builder.width(width);
     }
     let mut console = builder.build();
@@ -1122,8 +1380,7 @@ fn run(mut cli: Cli) -> ExitCode {
     if mode == Mode::Rule {
         if let Some(title) = &cli.resource {
             if let Err(err) = Text::from_markup(title) {
-                eprintln!("rich: {err}");
-                return ExitCode::FAILURE;
+                return fail(&cli, ExitClass::Data, err.to_string());
             }
         }
     }
@@ -1159,6 +1416,10 @@ fn run(mut cli: Cli) -> ExitCode {
         return run_diff(&cli, &console, &export);
     }
 
+    if mode.streams_records() {
+        return run_json_lines(&cli, &console, mode == Mode::Log);
+    }
+
     // A rule takes its optional title from the resource string directly (no
     // fetch/read) — but it still goes through the decorators, because upstream
     // wraps it like anything else, so `--rule --panel` really does draw a panel.
@@ -1183,8 +1444,7 @@ fn run(mut cli: Cli) -> ExitCode {
         match fetch_url(cli.resource.as_deref().unwrap(), cli.extensions.encoding) {
             Ok(fetched) => fetched,
             Err(err) => {
-                eprintln!("rich: {err}");
-                return ExitCode::FAILURE;
+                return fail(&cli, ExitClass::Input, err);
             }
         }
     } else if mode == Mode::Print && matches!(cli.resource.as_deref(), Some(r) if r != "-") {
@@ -1194,8 +1454,7 @@ fn run(mut cli: Cli) -> ExitCode {
             Ok(content) => (content, None),
             Err(err) => {
                 let name = cli.resource.as_deref().unwrap_or("<stdin>");
-                eprintln!("rich: cannot read {name}: {err}");
-                return ExitCode::FAILURE;
+                return fail(&cli, ExitClass::Input, format!("cannot read {name}: {err}"));
             }
         }
     };
@@ -1218,8 +1477,7 @@ fn run(mut cli: Cli) -> ExitCode {
         match sanitize_json_source(content.trim()) {
             Ok(content) => Some(content),
             Err(err) => {
-                eprintln!("rich: invalid JSON: {err}");
-                return ExitCode::FAILURE;
+                return fail(&cli, ExitClass::Data, format!("invalid JSON: {err}"));
             }
         }
     } else {
@@ -1231,8 +1489,7 @@ fn run(mut cli: Cli) -> ExitCode {
         match Json::new(source) {
             Ok(json) => Some(json),
             Err(err) => {
-                eprintln!("rich: invalid JSON: {err}");
-                return ExitCode::FAILURE;
+                return fail(&cli, ExitClass::Data, format!("invalid JSON: {err}"));
             }
         }
     } else {
@@ -1252,12 +1509,14 @@ fn run(mut cli: Cli) -> ExitCode {
                 value
             }
             Ok(_) => {
-                eprintln!("rich: not a notebook: no `cells` array");
-                return ExitCode::FAILURE;
+                return fail(&cli, ExitClass::Data, "not a notebook: no `cells` array");
             }
             Err(err) => {
-                eprintln!("rich: invalid notebook JSON: {err}");
-                return ExitCode::FAILURE;
+                return fail(
+                    &cli,
+                    ExitClass::Data,
+                    format!("invalid notebook JSON: {err}"),
+                );
             }
         };
         let renderable = build_ipynb(&notebook, cli.hyperlinks, cli.justify);
@@ -1270,8 +1529,7 @@ fn run(mut cli: Cli) -> ExitCode {
     // Checked up front because the render closure below cannot fail.
     if mode == Mode::Print {
         if let Err(err) = console.try_build_text(&content) {
-            eprintln!("rich: {err}");
-            return ExitCode::FAILURE;
+            return fail(&cli, ExitClass::Data, err.to_string());
         }
     }
 
@@ -1326,8 +1584,7 @@ fn run(mut cli: Cli) -> ExitCode {
         }
         Mode::Csv => {
             if let Err(err) = validate_labels(&cli) {
-                eprintln!("rich: {err}");
-                return ExitCode::FAILURE;
+                return fail(&cli, ExitClass::Data, err);
             }
             // `.tsv` only picks the fallback dialect; the sniffer reads the file
             // itself, so a comma-separated `.tsv` still renders as a table.
@@ -1342,8 +1599,7 @@ fn run(mut cli: Cli) -> ExitCode {
                 // Upstream's `on_error(str(error))`. The message is CPython's,
                 // verbatim, because it is the one a script would grep for.
                 None => {
-                    eprintln!("rich: Could not determine delimiter");
-                    return ExitCode::FAILURE;
+                    return fail(&cli, ExitClass::Data, "Could not determine delimiter");
                 }
             };
             // Stream undecorated CSV rows: measuring or collecting the complete
@@ -1377,12 +1633,15 @@ fn run(mut cli: Cli) -> ExitCode {
                     // A consumer such as `head` may finish before this table.
                     // Match the other stdout paths: a closed pipe is success.
                     if error.kind() == std::io::ErrorKind::BrokenPipe {
-                        return ExitCode::SUCCESS;
+                        return success(&cli);
                     }
-                    eprintln!("rich: could not write CSV output: {error}");
-                    return ExitCode::FAILURE;
+                    return fail(
+                        &cli,
+                        ExitClass::Input,
+                        format!("could not write CSV output: {error}"),
+                    );
                 }
-                return ExitCode::SUCCESS;
+                return success(&cli);
             }
             let fit = measure_rendered(&console, &table);
             (Box::new(table), Some(fit))
@@ -1412,11 +1671,184 @@ fn run(mut cli: Cli) -> ExitCode {
 
 /// Turn an "everything written successfully" flag into a process exit code.
 /// A failed `--export-html`/`--export-svg` write must not report success.
+#[allow(dead_code)]
 fn exit_code(ok: bool) -> ExitCode {
     if ok {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+fn emit_exit_code(cli: &Cli, result: Result<(), String>) -> ExitCode {
+    match result {
+        Ok(()) => success(cli),
+        Err(message) => fail(cli, ExitClass::Input, message),
+    }
+}
+
+fn write_rendered_stdout(console: &Console, renderable: &dyn Renderable) -> std::io::Result<()> {
+    let output = console.render_export(renderable);
+    let stdout = std::io::stdout();
+    let mut lock = stdout.lock();
+    lock.write_all(output.as_bytes())
+}
+
+fn run_json_lines(cli: &Cli, console: &Console, log_mode: bool) -> ExitCode {
+    if cli.extensions.encoding.is_some() {
+        return fail(
+            cli,
+            ExitClass::Usage,
+            "--encoding is not supported with streaming JSONL/log mode",
+        );
+    }
+    if matches!(cli.resource.as_deref(), Some(resource) if is_url(resource)) {
+        return fail(
+            cli,
+            ExitClass::Usage,
+            "streaming JSONL/log mode reads files or stdin, not URLs",
+        );
+    }
+
+    let mut input: Box<dyn BufRead> = match cli.resource.as_deref() {
+        Some(path) if path != "-" => {
+            let file = std::path::Path::new(path);
+            if file.is_dir() {
+                return fail(
+                    cli,
+                    ExitClass::Input,
+                    format!("cannot read {path}: is a directory, not a file"),
+                );
+            }
+            match std::fs::File::open(file) {
+                Ok(file) => Box::new(std::io::BufReader::new(file)),
+                Err(err) => {
+                    return fail(cli, ExitClass::Input, format!("cannot read {path}: {err}"));
+                }
+            }
+        }
+        _ => {
+            if std::io::stdin().is_terminal() {
+                let eof = if cfg!(windows) {
+                    "Ctrl-Z then Enter"
+                } else {
+                    "Ctrl-D"
+                };
+                eprintln!("rich: reading stdin; finish input with {eof}");
+            }
+            Box::new(std::io::BufReader::new(std::io::stdin()))
+        }
+    };
+
+    let mut line = String::new();
+    let mut line_number = 0usize;
+    loop {
+        line.clear();
+        let read = match input.read_line(&mut line) {
+            Ok(read) => read,
+            Err(err) => {
+                return fail(
+                    cli,
+                    ExitClass::Input,
+                    format!("cannot read JSONL stream: {err}"),
+                );
+            }
+        };
+        if read == 0 {
+            break;
+        }
+        line_number += 1;
+        let record = line.trim_end_matches(['\r', '\n']);
+        let mut value = match serde_json::from_str::<serde_json::Value>(record) {
+            Ok(value) => value,
+            Err(err) => {
+                return fail(
+                    cli,
+                    ExitClass::Data,
+                    format!("invalid JSONL at line {line_number}: {err}"),
+                );
+            }
+        };
+        if cli.sanitize {
+            sanitize_json_value(&mut value);
+        }
+        let wrote = if log_mode {
+            let text = Text::new(format_log_record(&value));
+            write_rendered_stdout(console, &text)
+        } else {
+            let source = serde_json::to_string(&value).expect("JSON value serializes");
+            let json = Json::new(&source).expect("serialized JSON parses");
+            write_rendered_stdout(console, &json)
+        };
+        if let Err(error) = wrote {
+            if error.kind() == std::io::ErrorKind::BrokenPipe {
+                return success(cli);
+            }
+            return fail(
+                cli,
+                ExitClass::Input,
+                format!("could not write JSONL output: {error}"),
+            );
+        }
+    }
+    success(cli)
+}
+
+fn format_log_record(value: &serde_json::Value) -> String {
+    let Some(object) = value.as_object() else {
+        return serde_json::to_string(value).expect("JSON value serializes");
+    };
+    let take_value = |keys: &[&'static str]| {
+        keys.iter().find_map(|key| {
+            object.get(*key).map(|value| {
+                let display = value.as_str().map(str::to_string).unwrap_or_else(|| {
+                    serde_json::to_string(value).expect("JSON value serializes")
+                });
+                (*key, display, value.is_string())
+            })
+        })
+    };
+    let timestamp = take_value(&["timestamp", "time", "@timestamp"]);
+    let level = take_value(&["level", "severity"]);
+    let message = take_value(&["message", "msg"]);
+    let mut rest = serde_json::Map::new();
+    for (key, value) in object {
+        let consumed = timestamp
+            .as_ref()
+            .is_some_and(|(consumed, _, _)| consumed == key)
+            || level
+                .as_ref()
+                .is_some_and(|(consumed, _, _)| consumed == key)
+            || message
+                .as_ref()
+                .is_some_and(|(consumed, _, _)| consumed == key);
+        if !consumed {
+            rest.insert(key.clone(), value.clone());
+        }
+    }
+    let mut parts = Vec::new();
+    if let Some((_, timestamp, _)) = timestamp {
+        parts.push(timestamp);
+    }
+    if let Some((_, level, is_string)) = level {
+        parts.push(if is_string {
+            level.to_ascii_uppercase()
+        } else {
+            level
+        });
+    }
+    if let Some((_, message, _)) = message {
+        parts.push(message);
+    }
+    if !rest.is_empty() {
+        parts.push(
+            serde_json::to_string(&serde_json::Value::Object(rest)).expect("JSON value serializes"),
+        );
+    }
+    if parts.is_empty() {
+        serde_json::to_string(value).expect("JSON value serializes")
+    } else {
+        parts.join(" ")
     }
 }
 
@@ -2463,13 +2895,12 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     let (before_path, after_path) = (&cli.resources[0], &cli.resources[1]);
     // The directory check reached the plain read path but not this one, so
     // `rich --diff a.png somedir` still reported "Access is denied".
-    let open = |path: &String| {
+    let open = |path: &String| -> Result<_, String> {
         if std::path::Path::new(path).is_dir() {
-            eprintln!("rich: cannot read {path}: is a directory, not a file");
-            return None;
+            return Err(format!("cannot read {path}: is a directory, not a file"));
         }
         match rich_art::image::open(path) {
-            Ok(image) => Some(image),
+            Ok(image) => Ok(image),
             Err(err) => {
                 use rich_art::image::error::{ImageFormatHint, UnsupportedErrorKind};
                 let hint = match &err {
@@ -2480,24 +2911,25 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
                     },
                     _ => None,
                 };
-                eprintln!(
-                    "rich: cannot read {path}: {}",
+                Err(format!(
+                    "cannot read {path}: {}",
                     hint.unwrap_or_else(|| err.to_string())
-                );
-                None
+                ))
             }
         }
     };
-    let (Some(before), Some(after)) = (open(before_path), open(after_path)) else {
-        return ExitCode::FAILURE;
+    let before = match open(before_path) {
+        Ok(image) => image,
+        Err(message) => return fail(cli, ExitClass::Input, message),
+    };
+    let after = match open(after_path) {
+        Ok(image) => image,
+        Err(message) => return fail(cli, ExitClass::Input, message),
     };
 
     let report = match diff(&before, &after, &DiffSettings::default()) {
         Ok(report) => report,
-        Err(err) => {
-            eprintln!("rich: {err}");
-            return ExitCode::FAILURE;
-        }
+        Err(err) => return fail(cli, ExitClass::Data, err.to_string()),
     };
 
     let width = cli.width.unwrap_or_else(|| console.width());
@@ -2531,7 +2963,7 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
         let is_terminal = c.is_terminal();
         let mut mode = cli.image_mode;
         if mode == ImageMode::Auto {
-            if !has_color && !for_export {
+            if !has_color && !for_export && cli.report_format == ReportFormat::Human {
                 eprintln!("rich: auto image mode has no terminal colour, drawing the diff as ASCII instead");
             }
             mode = if !has_color {
@@ -2547,13 +2979,13 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
         // than emit a rectangle of identical blocks or nothing at all, and say
         // why on stderr so the change is visible rather than mysterious.
         if mode == ImageMode::Blocks && !has_color {
-            if !for_export {
+            if !for_export && cli.report_format == ReportFormat::Human {
                 eprintln!("rich: no colour available, drawing the diff as ASCII art");
             }
             mode = ImageMode::Ascii;
         }
         if mode == ImageMode::Sixel && !is_terminal {
-            if !for_export {
+            if !for_export && cli.report_format == ReportFormat::Human {
                 eprintln!(
                     "rich: Sixel graphics need a terminal, drawing the diff as {} instead",
                     if has_color { "blocks" } else { "ASCII art" }
@@ -2587,7 +3019,9 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
                 if art.encode(width).is_some() {
                     c.print(&art);
                 } else {
-                    eprintln!("rich: could not encode Sixel, drawing the diff as blocks");
+                    if cli.report_format == ReportFormat::Human {
+                        eprintln!("rich: could not encode Sixel, drawing the diff as blocks");
+                    }
                     c.print(
                         &BlockArt::new(report.heatmap())
                             .width(width)
@@ -2665,13 +3099,16 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
             .build();
         export_console.install_extensions();
         let segments = export_console.record_output(|c| render_report(c, true));
-        wrote = save_exports(&export_console, export, &segments) && wrote;
+        wrote = wrote.and_then(|()| save_exports(&export_console, export, &segments));
     }
 
-    if !wrote || failed {
-        return ExitCode::FAILURE;
+    if let Err(message) = wrote {
+        return fail(cli, ExitClass::Input, message);
     }
-    ExitCode::SUCCESS
+    if failed {
+        return fail(cli, ExitClass::Gate, "diff threshold exceeded");
+    }
+    success(cli)
 }
 
 /// Animate every `--gif` resource at once, sharing the console width.
@@ -2680,8 +3117,7 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
     use rich_art::{AnimatedArt, Repeat, Stage};
 
     if cli.resources.is_empty() {
-        eprintln!("rich: --gif needs at least one GIF path");
-        return ExitCode::FAILURE;
+        return fail(cli, ExitClass::Usage, "--gif needs at least one GIF path");
     }
     let count = cli.resources.len();
     const GAP: usize = 2;
@@ -2714,13 +3150,12 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
                 );
             }
             Err(err) => {
-                eprintln!("rich: cannot read {path}: {err}");
-                return ExitCode::FAILURE;
+                return fail(cli, ExitClass::Input, format!("cannot read {path}: {err}"));
             }
         }
     }
 
-    if !console.is_terminal() {
+    if !console.is_terminal() && cli.report_format == ReportFormat::Human {
         eprintln!("rich: GIF animation needs a terminal; rendering the first frame only");
     }
 
@@ -2730,19 +3165,19 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
         builder = builder.width(width);
     }
     match stage.play_stdout(builder.build()) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(err) => {
-            eprintln!("rich: playback failed: {err}");
-            ExitCode::FAILURE
-        }
+        Ok(()) => success(cli),
+        Err(err) => fail(cli, ExitClass::Input, format!("playback failed: {err}")),
     }
 }
 
 /// Without the `art` feature there is no GIF support.
 #[cfg(not(feature = "art"))]
 fn play_gifs(_cli: &Cli, _console: &Console) -> ExitCode {
-    eprintln!("rich: this build has no GIF support (rebuild with the `art` feature)");
-    ExitCode::FAILURE
+    fail(
+        _cli,
+        ExitClass::Usage,
+        "this build has no GIF support (rebuild with the `art` feature)",
+    )
 }
 
 /// Where a render action's output goes: straight to the terminal, or captured
@@ -2768,23 +3203,22 @@ struct Export<'a> {
 /// ordinary input renderables are recorded once here.
 ///
 /// Returns false if a file could not be written, so the caller can exit non-zero.
-fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) -> bool {
+fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) -> Result<(), String> {
     if export.html_path.is_none() && export.svg_path.is_none() {
         if export.pager {
             // Keep styles: unlike a plain `console.pager()`, the point of `rich
             // --pager` is to page *rich* output.
-            if let Err(err) = console.page(true, render) {
-                eprintln!("rich: cannot page output: {err}");
-                return false;
-            }
+            console
+                .page(true, render)
+                .map_err(|err| format!("cannot page output: {err}"))?;
         } else {
             render(console);
         }
-        return true;
+        return Ok(());
     }
 
     let segments = console.record_output(render);
-    let mut ok = true;
+    let mut first_error = None;
 
     // The terminal still gets the output, exports or not.
     let terminal = console.segments_to_string(&segments);
@@ -2792,24 +3226,26 @@ fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) -> bo
         // The text is already rendered, so hand it straight to the pager
         // rather than re-rendering through `Console::page`.
         if let Err(err) = rich::pager::Pager::show(&rich::pager::SystemPager, &terminal) {
-            eprintln!("rich: cannot page output: {err}");
-            ok = false;
+            first_error = Some(format!("cannot page output: {err}"));
         }
     } else {
-        print!("{terminal}");
+        let stdout = std::io::stdout();
+        let mut lock = stdout.lock();
+        if let Err(err) = lock.write_all(terminal.as_bytes()) {
+            first_error = Some(format!("could not write output: {err}"));
+        }
     }
 
-    save_exports(console, export, &segments) && ok
+    save_exports(console, export, &segments).and(first_error.map_or(Ok(()), Err))
 }
 
-fn save_exports(console: &Console, export: &Export, segments: &[Segment]) -> bool {
-    let mut ok = true;
+fn save_exports(console: &Console, export: &Export, segments: &[Segment]) -> Result<(), String> {
+    let mut first_error = None;
     if let Some(path) = export.html_path {
         // CSS-class stylesheet form, as upstream's `save_html` default.
         let html = rich::export::export_html_classes(segments, &DEFAULT_TERMINAL_THEME);
         if let Err(err) = std::fs::write(path, html) {
-            eprintln!("rich: failed to save HTML: {err}");
-            ok = false;
+            first_error = Some(format!("failed to save HTML: {err}"));
         }
     }
     if let Some(path) = export.svg_path {
@@ -2823,11 +3259,10 @@ fn save_exports(console: &Console, export: &Export, segments: &[Segment]) -> boo
             console.width(),
         );
         if let Err(err) = std::fs::write(path, svg) {
-            eprintln!("rich: failed to save SVG: {err}");
-            ok = false;
+            first_error.get_or_insert_with(|| format!("failed to save SVG: {err}"));
         }
     }
-    ok
+    first_error.map_or(Ok(()), Err)
 }
 
 fn print_help() {
@@ -2839,11 +3274,25 @@ fn print_help() {
 
 USAGE:
     rich [OPTIONS] [RESOURCE]
+    rich [OPTIONS] <COMMAND> [RESOURCE]
 
 RESOURCE is a file path, an http(s) URL, or `-` for stdin. Everything after a
 bare `--` is a RESOURCE, however much it looks like an option. Input modes with
 no RESOURCE read stdin until EOF; `-p -` reads markup from stdin too. Terminal
 stdin shows an input hint. Repeated scalar options use their last value.
+
+COMMANDS:
+    print       Treat RESOURCE as literal markup TEXT (`--print`)
+    markdown    Render Markdown (`--markdown`)
+    syntax      Syntax-highlight source (`--syntax`)
+    json        Pretty-print JSON (`--json`)
+    csv         Render CSV/TSV as a table (`--csv`)
+    ipynb       Render a Jupyter notebook (`--ipynb`)
+    jsonl       Stream JSON Lines / NDJSON records
+    log         Stream common structured-log JSONL records
+    gif         Animate GIFs (`--gif`)
+    diff        Perceptually compare two images (`--diff`)
+    rule        Draw a horizontal rule (`--rule`)
 
 RENDER MODE (choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb
 by extension — anything else with a file extension is syntax-highlighted):
@@ -2853,6 +3302,8 @@ by extension — anything else with a file extension is syntax-highlighted):
     -x, --syntax     Syntax-highlight RESOURCE (language from its extension)
         --csv        Render RESOURCE as a CSV/TSV table
         --ipynb      Render RESOURCE as a Jupyter notebook
+        --jsonl      Stream JSON Lines / NDJSON records
+        --log        Stream common structured-log JSONL records
         --gif        Animate GIFs side by side; pipes receive the first frame
         --loop N     With --gif, repeat N times (default 1; 0 = forever)
         --rule       Draw a horizontal rule (RESOURCE is its title)
@@ -2867,7 +3318,7 @@ OPTIONS:
 {extension_help}
         --threshold PCT
                      With --diff, exit non-zero above PCT% changed.
-                     Also sets the exit code: 0 within, 1 over.
+                     Also sets the exit code: 0 within, 5 over.
         --left       Left-justify output
         --center     Center output
         --right      Right-justify output
@@ -2892,6 +3343,9 @@ OPTIONS:
         --pager      Page via MANPAGER, then PAGER, then less/more.com
         --sanitize   Replace input terminal controls, JSON/notebook strings,
                      titles and captions with visible inert text
+        --report F   Emit a result/error envelope on stderr: human (default) or json.
+        --machine-json
+                     Alias for --report json
         --no-color   Disable colored output (as does a non-empty NO_COLOR)
     -h, --help       Show this help
     -V, --version    Show the rs-rich-cli package version
@@ -2905,6 +3359,13 @@ ENVIRONMENT:
 
 With no RESOURCE and no mode flag, a capability demo is shown. Layout, style,
 paging, hyperlinks and export options require a resource or render mode.
+
+EXIT CODES:
+    0 success
+    2 usage/config error
+    3 input/read/write error
+    4 parse/render data error
+    5 threshold/gate failure
 "#
     );
 }

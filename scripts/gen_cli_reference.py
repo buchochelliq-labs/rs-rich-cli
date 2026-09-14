@@ -34,15 +34,17 @@ Looking for how to *do* something rather than what a flag is called? Start at
 """
 
 FOOTER = """
-## Exit codes
-
-| Code | Meaning |
-|------|---------|
-| `0` | The resource rendered. With `--diff --threshold`, also: change was within the threshold. |
-| `1` | The run failed: the resource could not be read or parsed, a flag was invalid or orphaned, or `--diff --threshold` found more change than allowed. |
-
 `rich` writes diagnostics to stderr and rendered output to stdout, so
 `rich --csv data.csv > table.txt` keeps the two apart.
+
+`--report json` writes the result/error envelope to stderr for the same reason:
+stdout remains the rendered payload.
+
+Successful reports include `ok`, `code`, `exit_code` and a `result` object.
+Failures include the same status fields plus `message` and an `error` object.
+The top-level `message` is retained for simple shell consumers; structured
+consumers can read `error.message`. Informational exits such as `--help` and
+`--version` print their normal text and do not emit a report envelope.
 
 !!! note "A failure always exits non-zero"
 
@@ -71,7 +73,7 @@ def main():
     # those names beats inferring headings: a heading may wrap onto a second
     # line and carry a parenthetical, while the RESOURCE paragraph is prose that
     # merely starts in capitals — an inferring parser read it as a section.
-    KNOWN = ["USAGE", "RENDER MODE", "OPTIONS", "ENVIRONMENT"]
+    KNOWN = ["USAGE", "COMMANDS", "RENDER MODE", "OPTIONS", "ENVIRONMENT", "EXIT CODES"]
     lines = help_text.split("\n")
     sections, order = {}, []
     current, preamble = None, []
@@ -113,8 +115,10 @@ def main():
         "USAGE": "Usage",
         "RESOURCE": "The resource argument",
         "RENDER MODE": "Render modes",
+        "COMMANDS": "Commands",
         "OPTIONS": "Options",
         "ENVIRONMENT": "Environment variables",
+        "EXIT CODES": "Exit codes",
     }
 
     for name in order:

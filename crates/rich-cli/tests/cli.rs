@@ -5,7 +5,7 @@
 //! without depending on exact ANSI bytes (that parity lives in the `rich` crate).
 
 use std::io::{Read, Write};
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 
 fn bin() -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_rich"));
@@ -26,6 +26,11 @@ fn run(args: &[&str], stdin: &str) -> (String, bool) {
 
 /// As [`run`], but keeps stderr — a failure that says nothing is its own defect.
 fn run_full(args: &[&str], stdin: &str) -> (String, String, bool) {
+    let (out, err, status) = run_status(args, stdin);
+    (out, err, status.success())
+}
+
+fn run_status(args: &[&str], stdin: &str) -> (String, String, ExitStatus) {
     let mut child = bin()
         .args(args)
         .env("COLUMNS", "80")
@@ -34,18 +39,32 @@ fn run_full(args: &[&str], stdin: &str) -> (String, String, bool) {
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn rich");
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(stdin.as_bytes())
-        .unwrap();
+    if let Err(error) = child.stdin.take().unwrap().write_all(stdin.as_bytes()) {
+        assert_eq!(
+            error.kind(),
+            std::io::ErrorKind::BrokenPipe,
+            "write test stdin"
+        );
+    }
     let output = child.wait_with_output().expect("wait rich");
     (
         String::from_utf8_lossy(&output.stdout).into_owned(),
         String::from_utf8_lossy(&output.stderr).into_owned(),
-        output.status.success(),
+        output.status,
     )
+}
+
+fn parse_json_report(stderr: &str) -> serde_json::Value {
+    assert_eq!(stderr.lines().count(), 1, "stderr: {stderr:?}");
+    serde_json::from_str(stderr.trim()).unwrap()
+}
+
+fn assert_error_report(report: &serde_json::Value, code: &str, exit_code: i32) {
+    assert_eq!(report["ok"], false);
+    assert_eq!(report["code"], code);
+    assert_eq!(report["exit_code"], exit_code);
+    assert_eq!(report["error"]["message"], report["message"]);
+    assert!(report.get("result").is_none(), "report: {report:?}");
 }
 
 #[test]
@@ -89,6 +108,187 @@ fn print_mode_renders_markup() {
     let (out, ok) = run(&["--no-color", "-p", "[bold]hi[/] there"], "");
     assert!(ok);
     assert_eq!(out, "hi there\n");
+}
+
+#[test]
+fn subcommands_route_to_existing_modes_without_breaking_flat_flags() {
+    let (subcommand_out, ok) = run(&["--no-color", "json", "-"], r#"{"a": 1}"#);
+    assert!(ok);
+    assert!(
+        subcommand_out.contains("{\n  \"a\": 1\n}"),
+        "got: {subcommand_out:?}"
+    );
+
+    let (legacy_out, ok) = run(&["--no-color", "--json", "-"], r#"{"a": 1}"#);
+    assert!(ok);
+    assert_eq!(subcommand_out, legacy_out);
+
+    let (out, ok) = run(&["--no-color", "print", "[bold]hi[/]"], "");
+    assert!(ok);
+    assert_eq!(out, "hi\n");
+}
+
+#[test]
+fn report_json_maps_usage_input_and_data_errors_to_stable_codes() {
+    let (out, err, status) = run_status(&["--report", "json", "--width", "nope"], "");
+    assert_eq!(status.code(), Some(2), "stderr: {err:?}");
+    assert!(out.is_empty());
+    let usage = parse_json_report(&err);
+    assert_error_report(&usage, "usage", 2);
+
+    let (out, err, status) = run_status(&["--report", "json", "missing.rs"], "");
+    assert_eq!(status.code(), Some(3), "stderr: {err:?}");
+    assert!(out.is_empty());
+    let input = parse_json_report(&err);
+    assert_error_report(&input, "input", 3);
+
+    let (out, err, status) = run_status(&["--report", "json", "--json", "-"], "{");
+    assert_eq!(status.code(), Some(4), "stderr: {err:?}");
+    assert!(out.is_empty());
+    let data = parse_json_report(&err);
+    assert_error_report(&data, "data", 4);
+}
+
+#[test]
+fn report_json_success_uses_the_common_result_envelope_on_stderr() {
+    let (out, err, status) = run_status(&["--report", "json", "--no-color", "-p", "hi"], "");
+    assert_eq!(status.code(), Some(0), "stderr: {err:?}");
+    assert_eq!(out, "hi\n");
+    let report = parse_json_report(&err);
+    assert_eq!(report["ok"], true);
+    assert_eq!(report["code"], "success");
+    assert_eq!(report["exit_code"], 0);
+    assert_eq!(report["result"], serde_json::json!({}));
+    assert!(report.get("error").is_none(), "stderr: {err:?}");
+}
+
+#[test]
+fn report_parse_errors_honor_the_last_report_option() {
+    for args in [
+        &["--machine-json", "--report", "human", "--width", "nope"][..],
+        &["--report", "json", "--report", "human", "--width", "nope"][..],
+    ] {
+        let (out, err, status) = run_status(args, "");
+        assert_eq!(status.code(), Some(2), "stderr: {err:?}");
+        assert!(out.is_empty());
+        assert!(err.starts_with("rich: "), "stderr: {err:?}");
+        assert!(serde_json::from_str::<serde_json::Value>(err.trim()).is_err());
+    }
+}
+
+#[test]
+fn machine_report_stderr_is_one_json_envelope_on_export_failure() {
+    let html = std::env::temp_dir()
+        .join(format!("rich-missing-dir-{}", std::process::id()))
+        .join("out.html");
+    let (out, err, status) = run_status(
+        &[
+            "--report",
+            "json",
+            "--export-html",
+            html.to_str().unwrap(),
+            "-p",
+            "hi",
+        ],
+        "",
+    );
+    assert_eq!(status.code(), Some(3), "stderr: {err:?}");
+    assert_eq!(out, "hi\n");
+    let error = parse_json_report(&err);
+    assert_error_report(&error, "input", 3);
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("failed to save HTML"),
+        "stderr: {err:?}"
+    );
+}
+
+#[test]
+fn jsonl_streaming_renders_records_and_fails_fast_on_malformed_lines() {
+    let (out, ok) = run(&["--no-color", "jsonl", "-"], "{\"a\":1}\n{\"b\":[2,3]}\n");
+    assert!(ok);
+    assert!(out.contains("\"a\": 1"), "got: {out:?}");
+    assert!(out.contains("\"b\": ["), "got: {out:?}");
+
+    let (out, err, status) = run_status(
+        &["--no-color", "--report", "json", "jsonl", "-"],
+        "{\"ok\":true}\nnot-json\n{\"never\":true}\n",
+    );
+    assert_eq!(status.code(), Some(4), "stderr: {err:?}");
+    assert!(out.contains("\"ok\": true"), "got: {out:?}");
+    assert!(
+        !out.contains("never"),
+        "stream should fail before third record: {out:?}"
+    );
+    let error: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
+    assert_eq!(error["code"], "data");
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("invalid JSONL at line 2"),
+        "stderr: {err:?}"
+    );
+
+    let (_out, err, status) = run_status(&["jsonl", "--pager", "-"], "{}\n");
+    assert_eq!(status.code(), Some(2), "stderr: {err:?}");
+    assert!(
+        err.contains("--pager cannot be combined with jsonl"),
+        "stderr: {err:?}"
+    );
+}
+
+#[test]
+fn jsonl_streaming_stops_successfully_when_stdout_closes() {
+    let mut child = bin()
+        .args(["jsonl", "-", "--no-color"])
+        .env("COLUMNS", "80")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let writer = std::thread::spawn(move || {
+        for _ in 0..10_000 {
+            if stdin.write_all(b"{\"a\":1}\n").is_err() {
+                break;
+            }
+        }
+    });
+    let mut reader = child.stdout.take().unwrap();
+    reader.read_exact(&mut [0; 1]).unwrap();
+    drop(reader);
+    writer.join().unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success(), "stderr: {:?}", output.stderr);
+    assert!(output.stderr.is_empty(), "stderr: {:?}", output.stderr);
+}
+
+#[test]
+fn log_streaming_formats_common_fields() {
+    let (out, ok) = run(
+        &["--no-color", "log", "-"],
+        r#"{"timestamp":"2026-09-13T20:00:00Z","level":"info","message":"started","request_id":"abc"}"#,
+    );
+    assert!(ok);
+    assert!(
+        out.contains("2026-09-13T20:00:00Z INFO started"),
+        "got: {out:?}"
+    );
+    assert!(out.contains(r#""request_id":"abc""#), "got: {out:?}");
+
+    let (out, ok) = run(
+        &["--no-color", "log", "-"],
+        r#"{"time":1690000000000,"level":30,"msg":"started","pid":42}"#,
+    );
+    assert!(ok);
+    assert!(
+        out.contains(r#"1690000000000 30 started {"pid":42}"#),
+        "got: {out:?}"
+    );
 }
 
 #[test]
@@ -289,7 +489,7 @@ fn a_nonsense_threshold_is_rejected_rather_than_disabling_the_gate() {
 #[test]
 fn a_valid_threshold_still_gates() {
     let (before, after) = diff_fixtures();
-    let (_out, over) = run(
+    let (_out, err, over) = run_status(
         &[
             "--diff",
             &before,
@@ -301,7 +501,11 @@ fn a_valid_threshold_still_gates() {
         ],
         "",
     );
-    assert!(!over, "5.4% change against a 2% limit must fail");
+    assert_eq!(
+        over.code(),
+        Some(5),
+        "5.4% change against a 2% limit must fail as a gate; stderr: {err}"
+    );
     let (out, err, under) = run_full(
         &[
             "--diff",
@@ -1555,6 +1759,30 @@ fn unknown_image_extension_has_clean_punctuation() {
         "{err}"
     );
     assert!(!err.contains("\"\""));
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn image_diff_read_errors_follow_the_json_report_contract() {
+    let missing = std::env::temp_dir().join(format!("rich-missing-{}.png", std::process::id()));
+    let (out, err, status) = run_status(
+        &[
+            "--report",
+            "json",
+            "--diff",
+            missing.to_str().unwrap(),
+            missing.to_str().unwrap(),
+        ],
+        "",
+    );
+    assert_eq!(status.code(), Some(3), "stderr: {err:?}");
+    assert!(out.is_empty());
+    let error = parse_json_report(&err);
+    assert_error_report(&error, "input", 3);
+    assert!(
+        error["message"].as_str().unwrap().contains("cannot read"),
+        "stderr: {err:?}"
+    );
 }
 
 #[cfg(feature = "fetch")]

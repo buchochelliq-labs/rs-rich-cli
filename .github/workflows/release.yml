@@ -36,7 +36,7 @@ jobs:
       selection: ${{ steps.plan.outputs.selection }}
       sha: ${{ steps.commit.outputs.sha }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0                       # need main to test ancestry
           ref: ${{ format('refs/tags/{0}', inputs.tag || github.ref_name) }}
@@ -90,7 +90,7 @@ jobs:
     env:
       RELEASE_SELECTION: ${{ needs.gate.outputs.selection }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
         with:
           ref: ${{ needs.gate.outputs.sha }}
 
