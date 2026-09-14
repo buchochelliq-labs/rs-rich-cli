@@ -110,7 +110,8 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 
 ### Binary-boundary conveniences (not upstream `rich-cli`)
 
-Per [AGENTS.md](../AGENTS.md) these are recorded because they live in the `rich`
+Per [AGENTS.md](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/AGENTS.md)
+these are recorded because they live in the `rich`
 binary rather than in `rich-ext`. Each is command routing, planning or defaulting
 only: they compose public `rich` / `rich-ext` APIs and add no renderer, so the
 core mirror is untouched and a sync does not have to reconcile them.
