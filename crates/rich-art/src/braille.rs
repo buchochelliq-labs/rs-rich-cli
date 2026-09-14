@@ -65,7 +65,7 @@ impl BrailleArt {
                 (rows * 4) as u32,
                 FilterType::Triangle,
             )
-            .to_luma8();
+            .to_rgba8();
         (0..rows)
             .map(|row| {
                 (0..columns)
@@ -75,7 +75,13 @@ impl BrailleArt {
                             for (dx, dot) in dots.iter().enumerate() {
                                 let x = column * 2 + dx;
                                 let y = row * 4 + dy;
-                                if scaled.get_pixel(x as u32, y as u32)[0] >= 128 {
+                                let [red, green, blue, alpha] =
+                                    scaled.get_pixel(x as u32, y as u32).0;
+                                let luminance = (0.299 * f32::from(red)
+                                    + 0.587 * f32::from(green)
+                                    + 0.114 * f32::from(blue))
+                                    * (f32::from(alpha) / 255.0);
+                                if luminance >= 128.0 {
                                     bits |= 1 << dot;
                                 }
                             }
@@ -119,5 +125,14 @@ mod tests {
             .width(1)
             .height(1);
         assert_eq!(art.to_text(1), "\u{2801}");
+    }
+
+    #[test]
+    fn transparent_white_pixels_are_not_rendered() {
+        let image = image::RgbaImage::from_pixel(2, 4, image::Rgba([255, 255, 255, 0]));
+        let art = BrailleArt::new(DynamicImage::ImageRgba8(image))
+            .width(1)
+            .height(1);
+        assert_eq!(art.to_text(1), "\u{2800}");
     }
 }

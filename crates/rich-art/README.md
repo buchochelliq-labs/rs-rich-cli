@@ -89,6 +89,12 @@ code. It selects ASCII, half-block, Braille, or Sixel rendering from
 `ImageOptions` and `RenderCapabilities`; sizing and alpha handling remain in
 the individual renderers.
 
+The image APIs intentionally live in `rich-art`, the repository's dedicated
+art crate, rather than `rich-ext`: `rich-ext` provides console/plugin
+extensions, while `rich-art` owns image decoding, raster renderers, GIFs, and
+terminal graphics. The CLI depends on this public crate and contains only
+argument mapping and output policy.
+
 Animated GIFs play in place, driven by `rich`'s `Live` display and honouring
 each frame's own delay. Frame disposal is handled by the decoder, so frames
 never smear.

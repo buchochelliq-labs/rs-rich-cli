@@ -128,6 +128,8 @@ pub enum ImageArtError {
     /// Sixel encoding failed for this image/size. The image itself is fine —
     /// this is an encoder limitation, not a decode error.
     SixelEncodeFailed,
+    /// Sixel output requires a real terminal destination.
+    NonTerminalDestination,
 }
 
 impl std::fmt::Display for ImageArtError {
@@ -140,6 +142,9 @@ impl std::fmt::Display for ImageArtError {
             ),
             Self::SixelEncodeFailed => {
                 write!(f, "could not encode this image as Sixel graphics")
+            }
+            Self::NonTerminalDestination => {
+                write!(f, "Sixel graphics require a terminal destination; use ASCII, Braille, or blocks when redirecting output")
             }
         }
     }
@@ -312,6 +317,9 @@ impl ImageArt {
     ) -> Result<Vec<Segment>, ImageArtError> {
         use crate::sixel::SixelArt;
 
+        if !console.is_terminal() {
+            return Err(ImageArtError::NonTerminalDestination);
+        }
         let mut art = SixelArt::new((*self.image).clone()).width(width);
         if let Some(height) = self.options.height {
             art = art.height(height);
@@ -513,6 +521,18 @@ mod tests {
         assert!(
             out.contains('q'),
             "expected a Sixel DCS selector, got:\n{out}"
+        );
+    }
+
+    #[cfg(feature = "sixel")]
+    #[test]
+    fn explicit_sixel_rejects_non_terminal_destinations() {
+        let console = Console::builder().force_terminal(false).width(8).build();
+        let options = console.options();
+        let art = ImageArt::new(solid(8, 8, [10, 20, 30])).mode(ImageMode::Sixel);
+        assert_eq!(
+            art.render(&console, &options),
+            Err(ImageArtError::NonTerminalDestination)
         );
     }
 }
