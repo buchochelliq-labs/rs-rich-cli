@@ -131,12 +131,15 @@ fn report_json_maps_usage_input_and_data_errors_to_stable_codes() {
     assert!(out.is_empty());
     let input: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
     assert_eq!(input["code"], "input");
+    assert_eq!(input["error"]["message"], input["message"]);
 
     let (out, err, status) = run_status(&["--report", "json", "--json", "-"], "{");
     assert_eq!(status.code(), Some(4), "stderr: {err:?}");
     assert!(out.is_empty());
     let data: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
     assert_eq!(data["code"], "data");
+    assert_eq!(data["error"]["message"], data["message"]);
+    assert!(data.get("result").is_none(), "stderr: {err:?}");
 }
 
 #[test]

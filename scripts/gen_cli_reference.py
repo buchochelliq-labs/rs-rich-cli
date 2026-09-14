@@ -43,7 +43,8 @@ stdout remains the rendered payload.
 Successful reports include `ok`, `code`, `exit_code` and a `result` object.
 Failures include the same status fields plus `message` and an `error` object.
 The top-level `message` is retained for simple shell consumers; structured
-consumers can read `error.message`.
+consumers can read `error.message`. Informational exits such as `--help` and
+`--version` print their normal text and do not emit a report envelope.
 
 !!! note "A failure always exits non-zero"
 
