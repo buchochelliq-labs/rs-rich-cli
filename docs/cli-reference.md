@@ -10,7 +10,7 @@ Looking for how to *do* something rather than what a flag is called? Start at
 [Using the CLI](cli.md).
 
 
-*rich 0.0.6 — Rust port of the rich-cli terminal toolbox*
+*rich 0.0.7 — Rust port of the rich-cli terminal toolbox*
 
 ## Usage
 
@@ -96,6 +96,10 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
 -S, --panel-style S
                  Panel border style, e.g. "dim" (with --panel)
     --pager      Page via MANPAGER, then PAGER, then less/more.com
+    --watch      Re-render a changing file or URL while stdout is a terminal
+    --watch-interval SEC
+                 Poll interval in seconds (default 1)
+    --watch-cache With URLs, render only when the response body changes
     --sanitize   Replace input terminal controls, JSON/notebook strings,
                  titles and captions with visible inert text
     --report F   Emit a result/error envelope on stderr: human (default) or json.
