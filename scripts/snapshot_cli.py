@@ -16,6 +16,16 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
+
+try:
+    import fcntl
+    import pty
+    import select
+    import struct
+    import termios
+except ImportError:
+    pty = None
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CASES = ROOT / "scripts" / "fixtures" / "cli_snapshots.jsonl"
@@ -23,8 +33,8 @@ DEFAULT_SNAPSHOTS = ROOT / "scripts" / "fixtures" / "snapshots"
 
 PROFILES = {
     "plain": {"TERM": "dumb", "NO_COLOR": "1", "RICH_ASCII_ONLY": "1"},
-    "standard": {"TERM": "xterm", "NO_COLOR": ""},
-    "truecolor": {"TERM": "xterm-truecolor", "NO_COLOR": ""},
+    "standard": {"TERM": "xterm-256color", "NO_COLOR": ""},
+    "truecolor": {"TERM": "xterm-256color", "COLORTERM": "truecolor", "NO_COLOR": ""},
 }
 
 
@@ -53,23 +63,102 @@ def environment(profile: str, width: int) -> dict[str, str]:
     return env
 
 
-def render(command: list[str], case: dict, width: int, profile: str) -> str:
-    args = [str(value) for value in case["args"]]
+def prepare_args(case_args: list[str], width: int) -> list[str]:
+    args = [str(value) for value in case_args]
     if "--width" not in args and "-w" not in args:
-        args.extend(["--width", str(width)])
-    process = subprocess.run(
-        [*command, *args],
-        cwd=ROOT,
-        input=case.get("stdin", ""),
-        text=True,
-        encoding="utf-8",
-        capture_output=True,
-        env=environment(profile, width),
-    )
+        if "--" in args:
+            terminator_index = args.index("--")
+            args = args[:terminator_index] + ["--width", str(width)] + args[terminator_index:]
+        else:
+            args.extend(["--width", str(width)])
+    return args
+
+
+def run_pty(command: list[str], args: list[str], stdin_data: str, env: dict[str, str], width: int) -> tuple[int, str, str]:
+    master, slave = pty.openpty()
+    try:
+        winsize = struct.pack("HHHH", 25, width, 0, 0)
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, winsize)
+    except Exception:
+        pass
+
+    try:
+        child = subprocess.Popen(
+            [*command, *args],
+            cwd=ROOT,
+            stdin=subprocess.PIPE if stdin_data else subprocess.DEVNULL,
+            stdout=slave,
+            stderr=subprocess.PIPE,
+            env=env,
+        )
+    finally:
+        os.close(slave)
+
+    if stdin_data and child.stdin:
+        try:
+            child.stdin.write(stdin_data.encode("utf-8"))
+            child.stdin.flush()
+        except BrokenPipeError:
+            pass
+        finally:
+            child.stdin.close()
+
+    stdout_bytes = bytearray()
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        try:
+            r, _, _ = select.select([master], [], [], 0.05)
+            if master in r:
+                chunk = os.read(master, 65536)
+                if not chunk:
+                    break
+                stdout_bytes.extend(chunk)
+            elif child.poll() is not None:
+                while True:
+                    r, _, _ = select.select([master], [], [], 0.02)
+                    if master in r:
+                        chunk = os.read(master, 65536)
+                        if not chunk:
+                            break
+                        stdout_bytes.extend(chunk)
+                    else:
+                        break
+                break
+        except OSError as e:
+            if getattr(e, "errno", None) == 5:  # EIO on Linux
+                break
+            break
+
+    os.close(master)
+    _, stderr = child.communicate(timeout=5)
+    return child.returncode, stdout_bytes.decode("utf-8", errors="replace"), stderr.decode("utf-8", errors="replace")
+
+
+def render(command: list[str], case: dict, width: int, profile: str) -> str:
+    args = prepare_args(case["args"], width)
+    env = environment(profile, width)
+    stdin_data = case.get("stdin", "")
+
+    if profile != "plain" and pty is not None:
+        returncode, stdout, stderr = run_pty(command, args, stdin_data, env, width)
+    else:
+        process = subprocess.run(
+            [*command, *args],
+            cwd=ROOT,
+            input=stdin_data,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            env=env,
+        )
+        returncode = process.returncode
+        stdout = process.stdout
+        stderr = process.stderr
+
     record = {
-        "status": process.returncode,
-        "stdout": process.stdout.replace("\r\n", "\n"),
-        "stderr": process.stderr.replace("\r\n", "\n"),
+        "status": returncode,
+        "stdout": stdout.replace("\r\n", "\n"),
+        "stderr": stderr.replace("\r\n", "\n"),
     }
     return json.dumps(record, ensure_ascii=False, indent=2) + "\n"
 

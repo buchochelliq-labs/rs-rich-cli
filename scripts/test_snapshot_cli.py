@@ -26,6 +26,14 @@ class SnapshotCliTests(unittest.TestCase):
         self.assertIn("19", output)
         self.assertNotIn("\\r\\n", output)
 
+    def test_terminator_inserts_width_before_double_dash(self):
+        args = snapshot_cli.prepare_args(["--print", "--", "-literal"], 80)
+        self.assertEqual(args, ["--print", "--width", "80", "--", "-literal"])
+
+    def test_prepare_args_appends_width_when_no_terminator(self):
+        args = snapshot_cli.prepare_args(["--markdown", "doc.md"], 80)
+        self.assertEqual(args, ["--markdown", "doc.md", "--width", "80"])
+
     def test_diff_is_readable_and_named(self):
         output = snapshot_cli.diff('{"status": 0}\\n', '{"status": 1}\\n', "case")
         self.assertIn("--- case.expected", output)

@@ -5,3 +5,6 @@
 {"kind":"text","name":"crop_exact","source":"hello","width":5,"color_system":"truecolor","overflow":"crop","no_wrap":false}
 {"kind":"text","name":"ellipsis_exact","source":"áb́","width":2,"color_system":"256","overflow":"ellipsis","no_wrap":false}
 {"kind":"text","name":"styled_center","source":"ok","width":8,"color_system":"truecolor","style":"bold blue","justify":"center"}
+{"kind":"panel","name":"panel_rounded_safe","source":"content","width":20,"color_system":"truecolor","box":"rounded","safe_box":true}
+{"kind":"panel","name":"panel_heavy_unsafe","source":"alert","width":16,"color_system":"truecolor","box":"heavy","safe_box":false}
+{"kind":"panel","name":"panel_ascii_profile","source":"boxed","width":18,"color_system":"standard","box":"ascii","safe_box":true,"ascii_only":true}

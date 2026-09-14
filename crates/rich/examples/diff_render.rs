@@ -1,7 +1,21 @@
 use std::io::{self, BufRead};
 
+use rich::panel::Panel;
+use rich::r#box::{ASCII, DOUBLE, HEAVY, MINIMAL, ROUNDED, SQUARE};
 use rich::{ColorSystem, Console, Justify, Overflow, Style, Text};
 use serde_json::{json, Value};
+
+fn box_set(name: &str) -> Result<rich::r#box::Box, String> {
+    match name {
+        "square" => Ok(SQUARE),
+        "rounded" => Ok(ROUNDED),
+        "heavy" => Ok(HEAVY),
+        "double" => Ok(DOUBLE),
+        "ascii" => Ok(ASCII),
+        "minimal" => Ok(MINIMAL),
+        other => Err(format!("unknown box {other:?}")),
+    }
+}
 
 fn color_system(name: &str) -> Result<ColorSystem, String> {
     match name {
@@ -83,6 +97,15 @@ fn render(case: &Value) -> Result<String, String> {
                 text.set_justify(justify(value)?);
             }
             Ok(console.render_to_string(&text))
+        }
+        "panel" => {
+            let box_type = case.get("box").and_then(Value::as_str).unwrap_or("rounded");
+            let mut panel =
+                Panel::new(Box::new(Text::new(field(case, "source")?))).box_set(box_set(box_type)?);
+            if let Some(title) = case.get("title").and_then(Value::as_str) {
+                panel = panel.title(title);
+            }
+            Ok(console.render_to_string(&panel))
         }
         other => Err(format!("unknown kind {other:?}")),
     }
