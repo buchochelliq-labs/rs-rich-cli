@@ -97,6 +97,28 @@ This deliberately defers the larger intuiTUIve/TUI, rich-art image workflow,
 watch, batch, config and dependency-upgrade work so the command/output contract
 can land first.
 
+## 0.0.7 — confidence tooling for expanded CLI surfaces
+
+The confidence slice adds bounded, deterministic support around the selected
+batch/profile/watch/image work:
+
+- **#150/#135:** `scripts/snapshot_cli.py` provides injectable width and
+  terminal capability profiles, stable environment variables, newline
+  normalization, and readable failure diffs. The initial corpus covers the
+  currently stable Markdown and JSON stdin paths.
+- **#34:** the differential corpus now varies the safe-box capability profile
+  in addition to width, color, markup, styles and overflow. Broader CLI
+  differential fuzzing is deferred because batch/profile/watch/image contracts
+  are not yet stable on this base branch.
+- **#35:** `library_bench` accepts explicit width and color-system arguments and
+  records them in its JSON artifact. CI publication and threshold enforcement
+  remain deferred; output hashes stay the blocking correctness signal.
+
+Image behavior remains covered by the existing focused `rich-cli` integration
+tests. Snapshot cases for batch/profile/watch/image should be added when the
+corresponding subcommands and capability/RenderTarget decisions (#147/#148)
+are merged, rather than baking provisional flags into this helper.
+
 ---
 
 ## 0.0.2 planning record

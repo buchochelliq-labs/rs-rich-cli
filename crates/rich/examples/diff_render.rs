@@ -49,6 +49,16 @@ fn render(case: &Value) -> Result<String, String> {
         .color_system(Some(color_system(field(case, "color_system")?)?))
         .width(width)
         .highlight(false)
+        .safe_box(
+            case.get("safe_box")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        )
+        .ascii_only(
+            case.get("ascii_only")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        )
         .no_color(false)
         .build();
 

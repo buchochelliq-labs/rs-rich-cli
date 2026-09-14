@@ -24,6 +24,10 @@ from rich.text import Text
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CORPUS = ROOT / "scripts" / "fixtures" / "diff_rich_cases.jsonl"
 COLOR_SYSTEMS = ["truecolor", "256", "standard"]
+CAPABILITY_PROFILES = [
+    {"name": "utf8", "safe_box": False, "ascii_only": False},
+    {"name": "safe-box", "safe_box": True, "ascii_only": False},
+]
 OVERFLOWS = ["fold", "crop", "ellipsis", "ignore"]
 JUSTIFY = ["default", "left", "center", "right", "full"]
 ALPHABET = "abc xyz[]/#:-_é界🙂\t"
@@ -69,6 +73,7 @@ def generated_cases(seed: int, count: int) -> list[dict]:
             "width": rng.randint(1, 30),
             "color_system": rng.choice(COLOR_SYSTEMS),
         }
+        case.update(rng.choice(CAPABILITY_PROFILES))
         if kind == "markup" and rng.random() < 0.35:
             case["source"] = f"[{rng.choice(['red', 'bold blue', '#ff8800'])}]{source}[/]"
         if kind == "text":
@@ -87,7 +92,7 @@ def python_render(case: dict) -> str:
         color_system=case["color_system"],
         width=case["width"],
         highlight=False,
-        safe_box=False,
+        safe_box=case.get("safe_box", False),
         legacy_windows=False,
         no_color=False,
     )
