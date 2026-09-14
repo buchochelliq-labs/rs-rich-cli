@@ -107,6 +107,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | preferred subcommands (`print`, `markdown`, `syntax`, `json`, `csv`/`tsv`, `ipynb`, `jsonl`, `log`, `gif`, `diff`, `rule`) while preserving flat flags | `main.rs` | 🟡 done |
 | stable exit-code classes and `--report json` / `--machine-json` result/error envelopes | `main.rs` | 🟡 done |
 | JSONL / NDJSON and structured-log streaming from files/stdin | `main.rs` | 🟡 done |
+| 0.0.7 binary-boundary `--watch` polling for files and fetch-enabled URLs | `main.rs` | 🟡 done; deliberate CLI convenience |
 
 ---
 

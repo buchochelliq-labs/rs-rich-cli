@@ -1424,13 +1424,31 @@ fn run_watch(mut cli: Cli) -> ExitCode {
     let interval = std::time::Duration::from_secs_f64(cli.watch_interval);
     let mut previous = None;
     loop {
-        let fingerprint = watch_fingerprint(resource, cli.watch_cache, cli.extensions.encoding);
+        #[cfg(feature = "fetch")]
+        let cached = if is_url(resource) && cli.watch_cache {
+            Some(fetch_url(resource, cli.extensions.encoding))
+        } else {
+            None
+        };
+        #[cfg(not(feature = "fetch"))]
+        let cached: Option<Result<(String, Option<String>), String>> = None;
+        let fingerprint = match cached.as_ref() {
+            Some(Ok((body, content_type))) => {
+                use std::hash::{Hash, Hasher};
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                body.hash(&mut hasher);
+                content_type.hash(&mut hasher);
+                format!("url:{:x}", hasher.finish())
+            }
+            Some(Err(error)) => format!("url-error:{error}"),
+            None => watch_fingerprint(resource, false, cli.extensions.encoding),
+        };
         let changed = previous.as_ref() != Some(&fingerprint);
         if changed || (is_url(resource) && !cli.watch_cache) {
             previous = Some(fingerprint);
             let mut iteration = cli.clone();
             iteration.watch = false;
-            let status = run_once(iteration);
+            let status = run_once_with_fetch(iteration, cached.and_then(Result::ok));
             if status != ExitClass::Success.exit_code() {
                 // A temporary disappearance or parse failure is a frame error,
                 // not a reason to abandon a watch that may recover.
@@ -1475,7 +1493,11 @@ fn watch_fingerprint(resource: &str, cache_url: bool, encoding: Option<Encoding>
     }
 }
 
-fn run_once(mut cli: Cli) -> ExitCode {
+fn run_once(cli: Cli) -> ExitCode {
+    run_once_with_fetch(cli, None)
+}
+
+fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)>) -> ExitCode {
     if cli.sanitize {
         cli.title = cli
             .title
@@ -1570,7 +1592,9 @@ fn run_once(mut cli: Cli) -> ExitCode {
     // treat it as a literal markup string under `--print`, else read the
     // file/stdin. A URL also yields a `Content-Type` used below.
     let resource_is_url = matches!(cli.resource.as_deref(), Some(r) if is_url(r));
-    let (mut content, content_type) = if resource_is_url {
+    let (mut content, content_type) = if let Some(fetched) = prefetched {
+        fetched
+    } else if resource_is_url {
         match fetch_url(cli.resource.as_deref().unwrap(), cli.extensions.encoding) {
             Ok(fetched) => fetched,
             Err(err) => {
