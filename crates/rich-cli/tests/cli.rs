@@ -54,6 +54,19 @@ fn run_status(args: &[&str], stdin: &str) -> (String, String, ExitStatus) {
     )
 }
 
+fn parse_json_report(stderr: &str) -> serde_json::Value {
+    assert_eq!(stderr.lines().count(), 1, "stderr: {stderr:?}");
+    serde_json::from_str(stderr.trim()).unwrap()
+}
+
+fn assert_error_report(report: &serde_json::Value, code: &str, exit_code: i32) {
+    assert_eq!(report["ok"], false);
+    assert_eq!(report["code"], code);
+    assert_eq!(report["exit_code"], exit_code);
+    assert_eq!(report["error"]["message"], report["message"]);
+    assert!(report.get("result").is_none(), "report: {report:?}");
+}
+
 #[test]
 fn version_flag() {
     let (out, ok) = run(&["--version"], "");
@@ -120,26 +133,20 @@ fn report_json_maps_usage_input_and_data_errors_to_stable_codes() {
     let (out, err, status) = run_status(&["--report", "json", "--width", "nope"], "");
     assert_eq!(status.code(), Some(2), "stderr: {err:?}");
     assert!(out.is_empty());
-    let usage: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
-    assert_eq!(usage["ok"], false);
-    assert_eq!(usage["code"], "usage");
-    assert_eq!(usage["exit_code"], 2);
-    assert_eq!(usage["error"]["message"], usage["message"]);
+    let usage = parse_json_report(&err);
+    assert_error_report(&usage, "usage", 2);
 
     let (out, err, status) = run_status(&["--report", "json", "missing.rs"], "");
     assert_eq!(status.code(), Some(3), "stderr: {err:?}");
     assert!(out.is_empty());
-    let input: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
-    assert_eq!(input["code"], "input");
-    assert_eq!(input["error"]["message"], input["message"]);
+    let input = parse_json_report(&err);
+    assert_error_report(&input, "input", 3);
 
     let (out, err, status) = run_status(&["--report", "json", "--json", "-"], "{");
     assert_eq!(status.code(), Some(4), "stderr: {err:?}");
     assert!(out.is_empty());
-    let data: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
-    assert_eq!(data["code"], "data");
-    assert_eq!(data["error"]["message"], data["message"]);
-    assert!(data.get("result").is_none(), "stderr: {err:?}");
+    let data = parse_json_report(&err);
+    assert_error_report(&data, "data", 4);
 }
 
 #[test]
@@ -147,8 +154,7 @@ fn report_json_success_uses_the_common_result_envelope_on_stderr() {
     let (out, err, status) = run_status(&["--report", "json", "--no-color", "-p", "hi"], "");
     assert_eq!(status.code(), Some(0), "stderr: {err:?}");
     assert_eq!(out, "hi\n");
-    assert_eq!(err.lines().count(), 1, "stderr: {err:?}");
-    let report: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
+    let report = parse_json_report(&err);
     assert_eq!(report["ok"], true);
     assert_eq!(report["code"], "success");
     assert_eq!(report["exit_code"], 0);
@@ -188,10 +194,8 @@ fn machine_report_stderr_is_one_json_envelope_on_export_failure() {
     );
     assert_eq!(status.code(), Some(3), "stderr: {err:?}");
     assert_eq!(out, "hi\n");
-    assert_eq!(err.lines().count(), 1, "stderr: {err:?}");
-    let error: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
-    assert_eq!(error["ok"], false);
-    assert_eq!(error["code"], "input");
+    let error = parse_json_report(&err);
+    assert_error_report(&error, "input", 3);
     assert!(
         error["message"]
             .as_str()
@@ -1773,9 +1777,8 @@ fn image_diff_read_errors_follow_the_json_report_contract() {
     );
     assert_eq!(status.code(), Some(3), "stderr: {err:?}");
     assert!(out.is_empty());
-    assert_eq!(err.lines().count(), 1, "stderr: {err:?}");
-    let error: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
-    assert_eq!(error["code"], "input");
+    let error = parse_json_report(&err);
+    assert_error_report(&error, "input", 3);
     assert!(
         error["message"].as_str().unwrap().contains("cannot read"),
         "stderr: {err:?}"

@@ -152,7 +152,7 @@ jobs:
               filename === 'docs/BRANCHING.md' ||
               filename === '.claude/skills/release/SKILL.md'
             );
-            const needsHandoff = versionSignal && releaseFiles;
+            const needsHandoff = versionSignal || releaseFiles;
             if (needsHandoff) {
               const comments = await github.paginate(
                 github.rest.issues.listComments,

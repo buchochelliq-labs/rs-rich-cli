@@ -156,6 +156,11 @@ class ReadinessTests(unittest.TestCase):
         )
         self.assertTrue(validate_release.cli_binary().endswith(".exe") if os.name == "nt" else True)
 
+    def test_release_handoff_gate_catches_release_file_only_prs(self):
+        workflow = (ROOT / ".github/workflows/pr-hygiene.yml").read_text()
+        self.assertIn("const needsHandoff = versionSignal || releaseFiles;", workflow)
+        self.assertIn("filename === '.claude/skills/release/SKILL.md'", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
