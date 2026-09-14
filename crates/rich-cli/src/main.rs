@@ -371,6 +371,114 @@ impl Default for ConfigRoots {
     }
 }
 
+/// Options that consume the following argument as their value. Needed to tell a
+/// positional subcommand from an option's value when scanning raw arguments.
+const VALUE_OPTIONS: &[&str] = &[
+    "-w",
+    "--width",
+    "-o",
+    "--export-html",
+    "--export-svg",
+    "--panel",
+    "--padding",
+    "--title",
+    "--caption",
+    "-s",
+    "--style",
+    "-S",
+    "--panel-style",
+    "--report",
+    "--image-mode",
+    "--gif-mode",
+    "--encoding",
+    "--threshold",
+    "--loop",
+    "--jobs",
+    "--collision",
+    "--config",
+    "--profile",
+];
+
+/// Whether the command line already picks a render mode, by flag *or* by the
+/// positional subcommand form. Config must not inject a `mode` default over
+/// `rich json file.json`, which selects JSON without ever naming `--json`.
+fn selects_mode_explicitly(args: &[String]) -> bool {
+    let mut iter = args.iter();
+    let mut seen_positional = false;
+    while let Some(arg) = iter.next() {
+        if arg == "--" {
+            break;
+        }
+        if VALUE_OPTIONS.contains(&arg.as_str()) {
+            iter.next();
+            continue;
+        }
+        if arg.starts_with('-') && arg.len() > 1 {
+            if mode_flag_alias(arg).is_some() {
+                return true;
+            }
+            continue;
+        }
+        if !seen_positional {
+            seen_positional = true;
+            if command_mode(arg).is_some() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// The canonical long flag for a render-mode option, or `None` for anything else.
+fn mode_flag_alias(arg: &str) -> Option<&'static str> {
+    Some(match arg {
+        "--print" | "-p" => "--print",
+        "--markdown" | "-m" => "--markdown",
+        "--json" | "-j" => "--json",
+        "--syntax" | "-x" => "--syntax",
+        "--csv" => "--csv",
+        "--ipynb" => "--ipynb",
+        "--jsonl" | "--ndjson" => "--jsonl",
+        "--log" => "--log",
+        "--rule" => "--rule",
+        _ => return None,
+    })
+}
+
+/// Drop a trailing `#` comment, ignoring a `#` that sits inside a quoted string.
+///
+/// Splitting on the first `#` unconditionally silently truncates a legitimate
+/// value: `export_html = "report#ci.html"` became `report`, so the export
+/// landed on a path the user never wrote.
+fn strip_config_comment(line: &str) -> &str {
+    let mut quote: Option<u8> = None;
+    for (index, byte) in line.bytes().enumerate() {
+        match quote {
+            Some(open) if byte == open => quote = None,
+            Some(_) => {}
+            None => match byte {
+                b'"' | b'\'' => quote = Some(byte),
+                b'#' => return &line[..index],
+                _ => {}
+            },
+        }
+    }
+    line
+}
+
+/// Unquote a config scalar, preserving everything the quotes were protecting.
+fn config_value(raw: &str) -> &str {
+    let trimmed = raw.trim();
+    let bytes = trimmed.as_bytes();
+    if bytes.len() >= 2 {
+        let first = bytes[0];
+        if (first == b'"' || first == b'\'') && bytes[bytes.len() - 1] == first {
+            return &trimmed[1..trimmed.len() - 1];
+        }
+    }
+    trimmed
+}
+
 fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<String>, String> {
     if args.iter().any(|a| a == "--no-config") {
         let mut result = Vec::new();
@@ -420,31 +528,25 @@ fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<String>, Stri
         candidates.into_iter().find(|p| p.is_file())
     });
     let mut result = Vec::new();
+    let explicit_mode = selects_mode_explicitly(args);
     let explicit_flags: std::collections::HashSet<&str> = args
         .iter()
-        .filter_map(|arg| match arg.as_str() {
-            "--print" | "-p" => Some("--print"),
-            "--markdown" | "-m" => Some("--markdown"),
-            "--json" | "-j" => Some("--json"),
-            "--syntax" | "-x" => Some("--syntax"),
-            "--csv" => Some("--csv"),
-            "--ipynb" => Some("--ipynb"),
-            "--jsonl" | "--ndjson" => Some("--jsonl"),
-            "--log" => Some("--log"),
-            "--rule" => Some("--rule"),
-            "--width" | "-w" => Some("--width"),
-            "--pager" => Some("--pager"),
-            "--no-color" => Some("--no-color"),
-            "--export-html" | "-o" => Some("--export-html"),
-            "--export-svg" => Some("--export-svg"),
-            "--batch" => Some("--batch"),
-            "--continue-on-error" => Some("--continue-on-error"),
-            "--overwrite" => Some("--overwrite"),
-            "--jobs" => Some("--jobs"),
-            "--collision" => Some("--collision"),
-            "--panel" => Some("--panel"),
-            "--padding" => Some("--padding"),
-            _ => None,
+        .filter_map(|arg| {
+            mode_flag_alias(arg).or(match arg.as_str() {
+                "--width" | "-w" => Some("--width"),
+                "--pager" => Some("--pager"),
+                "--no-color" => Some("--no-color"),
+                "--export-html" | "-o" => Some("--export-html"),
+                "--export-svg" => Some("--export-svg"),
+                "--batch" => Some("--batch"),
+                "--continue-on-error" => Some("--continue-on-error"),
+                "--overwrite" => Some("--overwrite"),
+                "--jobs" => Some("--jobs"),
+                "--collision" => Some("--collision"),
+                "--panel" => Some("--panel"),
+                "--padding" => Some("--padding"),
+                _ => None,
+            })
         })
         .collect();
     if let Some(path) = path {
@@ -452,7 +554,7 @@ fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<String>, Stri
             .map_err(|e| format!("config {}: {e}", path.display()))?;
         let mut section = String::new();
         for (line_no, raw) in text.lines().enumerate() {
-            let line = raw.split('#').next().unwrap_or("").trim();
+            let line = strip_config_comment(raw).trim();
             if line.is_empty() {
                 continue;
             }
@@ -474,7 +576,7 @@ fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<String>, Stri
                 ));
             };
             let key = key.trim();
-            let value = value.trim().trim_matches('"').trim_matches('\'');
+            let value = config_value(value);
             let flag = match key {
                 "mode" => match value {
                     "print" => "--print",
@@ -515,7 +617,7 @@ fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<String>, Stri
                     ))
                 }
             };
-            if explicit_flags.contains(flag) {
+            if explicit_flags.contains(flag) || (key == "mode" && explicit_mode) {
                 continue;
             }
             if matches!(
@@ -547,7 +649,37 @@ fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<String>, Stri
     Ok(result)
 }
 
+/// A batch child's diagnostics, captured rather than printed.
+///
+/// Two things depend on this. `--report json` documents exactly one envelope on
+/// stderr, so a child that printed its own `rich: …` line would put unparseable
+/// text in front of the aggregate object. And the child's [`ExitClass`] is the
+/// only place the real failure class survives — without it every batch failure
+/// collapses to one hard-coded code and the stable exit contract is lost.
+#[derive(Default)]
+struct ChildOutcome {
+    capturing: bool,
+    class: Option<ExitClass>,
+    message: Option<String>,
+}
+
+thread_local! {
+    static CHILD_OUTCOME: std::cell::RefCell<ChildOutcome> =
+        std::cell::RefCell::new(ChildOutcome::default());
+}
+
 fn emit_error(json: bool, class: ExitClass, message: &str) -> ExitCode {
+    let captured = CHILD_OUTCOME.with(|cell| {
+        let mut outcome = cell.borrow_mut();
+        if outcome.capturing && outcome.class.is_none() {
+            outcome.class = Some(class);
+            outcome.message = Some(message.to_string());
+        }
+        outcome.capturing
+    });
+    if captured {
+        return class.exit_code();
+    }
     if json {
         eprintln!(
             "{}",
@@ -568,6 +700,9 @@ fn emit_error(json: bool, class: ExitClass, message: &str) -> ExitCode {
 }
 
 fn emit_success_report(format: ReportFormat) {
+    if CHILD_OUTCOME.with(|cell| cell.borrow().capturing) {
+        return;
+    }
     if format == ReportFormat::Json {
         eprintln!(
             "{}",
@@ -594,55 +729,121 @@ fn success(cli: &Cli) -> ExitCode {
     ExitClass::Success.exit_code()
 }
 
+/// Match `text` against a simple glob supporting `*` (any run of characters)
+/// and `?` (exactly one). Both apply within a single path segment.
+///
+/// Substring containment is not a glob: `*.md` used that way also matched
+/// `notes.md.bak`, and a `?` pattern matched nothing at all because the literal
+/// `?` was still being searched for.
+fn glob_match(pattern: &str, text: &str) -> bool {
+    let pattern: Vec<char> = pattern.chars().collect();
+    let text: Vec<char> = text.chars().collect();
+    let (mut p, mut t) = (0usize, 0usize);
+    let (mut star, mut retry) = (None, 0usize);
+    while t < text.len() {
+        if p < pattern.len() && (pattern[p] == '?' || pattern[p] == text[t]) {
+            p += 1;
+            t += 1;
+        } else if p < pattern.len() && pattern[p] == '*' {
+            star = Some(p);
+            retry = t;
+            p += 1;
+        } else if let Some(open) = star {
+            p = open + 1;
+            retry += 1;
+            t = retry;
+        } else {
+            return false;
+        }
+    }
+    while p < pattern.len() && pattern[p] == '*' {
+        p += 1;
+    }
+    p == pattern.len()
+}
+
+fn has_glob_meta(value: &str) -> bool {
+    value.contains('*') || value.contains('?')
+}
+
+/// Split `dir/sub/*.md` into its literal directory and its name pattern.
+fn split_glob(resource: &str) -> (PathBuf, String) {
+    let meta = resource.find(['*', '?']).unwrap_or(0);
+    match resource[..meta].rfind(['/', '\\']) {
+        Some(cut) => (
+            PathBuf::from(&resource[..cut]),
+            resource[cut + 1..].to_string(),
+        ),
+        None => (PathBuf::from("."), resource.to_string()),
+    }
+}
+
+/// Collect every file under `dir`, skipping symlinks.
+///
+/// `Path::is_dir` follows links, so a directory containing a link to itself or
+/// to an ancestor pushed that directory back onto the stack forever, building
+/// ever longer paths until the process ran out of memory. Not following links
+/// at all keeps the walk finite without having to track device/inode identity,
+/// which is not portable.
+fn collect_files(dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        let entries = std::fs::read_dir(&current)
+            .map_err(|error| format!("cannot scan {}: {error}", current.display()))?;
+        for entry in entries {
+            let entry = entry.map_err(|error| format!("cannot scan {}: {error}", dir.display()))?;
+            let path = entry.path();
+            let kind = std::fs::symlink_metadata(&path)
+                .map_err(|error| format!("cannot read {}: {error}", path.display()))?
+                .file_type();
+            if kind.is_symlink() {
+                continue;
+            }
+            if kind.is_dir() {
+                stack.push(path);
+            } else if kind.is_file() {
+                out.push(path.to_string_lossy().into_owned());
+            }
+        }
+    }
+    Ok(())
+}
+
 fn expand_batch_resources(resources: &[String]) -> Result<Vec<String>, String> {
     let mut out = Vec::new();
     for resource in resources {
         if resource == "-" || is_url(resource) {
             return Err("batch resources must be local files or directories".into());
         }
+        if has_glob_meta(resource) {
+            let (dir, pattern) = split_glob(resource);
+            if pattern.contains('/') || pattern.contains('\\') {
+                return Err(format!(
+                    "batch glob {resource:?} may only use * and ? in the final path segment"
+                ));
+            }
+            let entries = std::fs::read_dir(&dir)
+                .map_err(|error| format!("cannot scan {}: {error}", dir.display()))?;
+            for entry in entries {
+                let entry =
+                    entry.map_err(|error| format!("cannot scan {}: {error}", dir.display()))?;
+                let path = entry.path();
+                if !path.is_file() {
+                    continue;
+                }
+                if glob_match(&pattern, &entry.file_name().to_string_lossy()) {
+                    out.push(path.to_string_lossy().into_owned());
+                }
+            }
+            continue;
+        }
         let path = Path::new(resource);
-        if !resource.contains('*') && !resource.contains('?') {
-            if path.is_file() {
-                out.push(resource.clone());
-            } else if path.is_dir() {
-                let mut stack = vec![path.to_path_buf()];
-                while let Some(dir) = stack.pop() {
-                    let entries = std::fs::read_dir(&dir)
-                        .map_err(|e| format!("cannot scan {}: {e}", dir.display()))?;
-                    for entry in entries {
-                        let entry = entry.map_err(|e| e.to_string())?;
-                        let p = entry.path();
-                        if p.is_dir() {
-                            stack.push(p);
-                        } else if p.is_file() {
-                            out.push(p.to_string_lossy().into_owned());
-                        }
-                    }
-                }
-            } else {
-                return Err(format!("batch resource does not exist: {resource}"));
-            }
+        if path.is_file() {
+            out.push(resource.clone());
+        } else if path.is_dir() {
+            collect_files(path, &mut out)?;
         } else {
-            let (prefix, pattern) = resource.split_once('*').unwrap_or((resource, resource));
-            let prefix = Path::new(prefix);
-            let root = if prefix.is_dir() {
-                prefix
-            } else {
-                prefix.parent().unwrap_or(Path::new("."))
-            };
-            let mut stack = vec![root.to_path_buf()];
-            while let Some(dir) = stack.pop() {
-                for entry in std::fs::read_dir(&dir)
-                    .map_err(|e| format!("cannot scan {}: {e}", dir.display()))?
-                {
-                    let p = entry.map_err(|e| e.to_string())?.path();
-                    if p.is_dir() {
-                        stack.push(p);
-                    } else if p.to_string_lossy().contains(pattern.trim_matches('*')) {
-                        out.push(p.to_string_lossy().into_owned());
-                    }
-                }
-            }
+            return Err(format!("batch resource does not exist: {resource}"));
         }
     }
     out.sort();
@@ -651,6 +852,17 @@ fn expand_batch_resources(resources: &[String]) -> Result<Vec<String>, String> {
         return Err("batch plan contains no files".into());
     }
     Ok(out)
+}
+
+/// Where one batch item's exports are written.
+///
+/// The kind of each export is carried explicitly. Recovering it by sniffing the
+/// path extension silently dropped exports whose name did not end in `.html` or
+/// `.svg`, so `--export-html result.out` planned a path and then wrote nothing.
+#[derive(Default, Clone)]
+struct BatchOutputs {
+    html: Option<String>,
+    svg: Option<String>,
 }
 
 fn batch_export_path(
@@ -681,68 +893,115 @@ fn batch_export_path(
     })
 }
 
+/// `out.html` -> `out-2.html`, keeping an extension-less name intact.
+fn suffixed_path(path: &Path, suffix: usize) -> String {
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("output");
+    let name = match path.extension().and_then(|s| s.to_str()) {
+        Some(ext) => format!("{stem}-{suffix}.{ext}"),
+        None => format!("{stem}-{suffix}"),
+    };
+    path.with_file_name(name).to_string_lossy().into_owned()
+}
+
+/// Settle one planned output against the rest of the plan and against the disk.
+///
+/// `suffix` has to consider existing files too, not just in-plan duplicates:
+/// a policy whose whole purpose is to avoid clobbering must not quietly
+/// overwrite a file that was already there.
+fn resolve_destination(
+    cli: &Cli,
+    candidate: String,
+    taken: &mut std::collections::BTreeSet<String>,
+) -> Result<String, (ExitClass, String)> {
+    let occupied = |path: &str, taken: &std::collections::BTreeSet<String>| {
+        taken.contains(path) || (!cli.overwrite && Path::new(path).exists())
+    };
+    match cli.collision {
+        CollisionPolicy::Overwrite => {
+            taken.insert(candidate.clone());
+            Ok(candidate)
+        }
+        CollisionPolicy::Suffix => {
+            let mut chosen = candidate.clone();
+            let mut suffix = 2;
+            while occupied(&chosen, taken) {
+                chosen = suffixed_path(Path::new(&candidate), suffix);
+                suffix += 1;
+            }
+            taken.insert(chosen.clone());
+            Ok(chosen)
+        }
+        CollisionPolicy::Error => {
+            if taken.contains(&candidate) {
+                return Err((
+                    ExitClass::Usage,
+                    format!("batch output collision: {candidate}"),
+                ));
+            }
+            if !cli.overwrite && Path::new(&candidate).exists() {
+                return Err((
+                    ExitClass::Input,
+                    format!("refusing to overwrite existing output: {candidate} (use --overwrite)"),
+                ));
+            }
+            taken.insert(candidate.clone());
+            Ok(candidate)
+        }
+    }
+}
+
+/// Run one batch item with its diagnostics captured, yielding its failure class.
+fn run_captured(item: Cli) -> Option<(ExitClass, Option<String>)> {
+    CHILD_OUTCOME.with(|cell| {
+        *cell.borrow_mut() = ChildOutcome {
+            capturing: true,
+            ..ChildOutcome::default()
+        }
+    });
+    let status = run(item);
+    let outcome = CHILD_OUTCOME.with(|cell| std::mem::take(&mut *cell.borrow_mut()));
+    if status == ExitCode::SUCCESS {
+        return None;
+    }
+    Some((
+        outcome.class.unwrap_or(ExitClass::Input),
+        outcome.message.clone(),
+    ))
+}
+
 fn run_batch(cli: &Cli) -> ExitCode {
     let resources = match expand_batch_resources(&cli.resources) {
         Ok(v) => v,
         Err(e) => return fail(cli, ExitClass::Input, e),
     };
-    let mut planned = std::collections::BTreeSet::new();
+    let mut taken = std::collections::BTreeSet::new();
     let mut planned_outputs = Vec::with_capacity(resources.len());
     for (index, input) in resources.iter().enumerate() {
-        let mut item_outputs = Vec::new();
-        for output in [
-            batch_export_path(cli.export_html.as_deref(), input, index, resources.len()),
-            batch_export_path(cli.export_svg.as_deref(), input, index, resources.len()),
-        ]
-        .into_iter()
-        .flatten()
-        {
-            let mut output = output;
-            if !planned.insert(output.clone()) {
-                if cli.collision == CollisionPolicy::Error {
-                    return fail(
-                        cli,
-                        ExitClass::Usage,
-                        format!("batch output collision: {output}"),
-                    );
-                }
-                if cli.collision == CollisionPolicy::Suffix {
-                    let base = output.clone();
-                    let mut suffix = 2;
-                    loop {
-                        let path = Path::new(&base);
-                        output = path
-                            .with_file_name(format!(
-                                "{}-{suffix}.{}",
-                                path.file_stem()
-                                    .and_then(|s| s.to_str())
-                                    .unwrap_or("output"),
-                                path.extension().and_then(|s| s.to_str()).unwrap_or("")
-                            ))
-                            .to_string_lossy()
-                            .into_owned();
-                        if planned.insert(output.clone()) {
-                            break;
-                        }
-                        suffix += 1;
-                    }
-                }
+        let mut outputs = BatchOutputs::default();
+        for (candidate, slot) in [
+            (
+                batch_export_path(cli.export_html.as_deref(), input, index, resources.len()),
+                &mut outputs.html,
+            ),
+            (
+                batch_export_path(cli.export_svg.as_deref(), input, index, resources.len()),
+                &mut outputs.svg,
+            ),
+        ] {
+            let Some(candidate) = candidate else { continue };
+            match resolve_destination(cli, candidate, &mut taken) {
+                Ok(path) => *slot = Some(path),
+                Err((class, message)) => return fail(cli, class, message),
             }
-            if Path::new(&output).exists()
-                && !cli.overwrite
-                && cli.collision == CollisionPolicy::Error
-            {
-                return fail(
-                    cli,
-                    ExitClass::Input,
-                    format!("refusing to overwrite existing output: {output} (use --overwrite)"),
-                );
-            }
-            item_outputs.push(output);
         }
-        planned_outputs.push(item_outputs);
+        planned_outputs.push(outputs);
     }
-    let mut failures = Vec::new();
+
+    let mut failures: Vec<(String, ExitClass, Option<String>)> = Vec::new();
+    let mut attempted = 0usize;
     // Work is deliberately serialized for deterministic output and bounded
     // memory; `jobs` is a validated upper bound reserved for future parallel
     // workers without changing the planning contract.
@@ -753,41 +1012,57 @@ fn run_batch(cli: &Cli) -> ExitCode {
         one.resources = vec![input.clone()];
         one.resource = Some(input.clone());
         one.report_format = ReportFormat::Human;
-        one.export_html = planned_outputs[index]
-            .iter()
-            .find(|path| path.ends_with(".html"))
-            .cloned();
-        one.export_svg = planned_outputs[index]
-            .iter()
-            .find(|path| path.ends_with(".svg"))
-            .cloned();
-        let status = run(one);
-        if status != ExitCode::SUCCESS {
-            failures.push((
-                input.clone(),
-                if status == ExitCode::from(2) { 2 } else { 3 },
-            ));
+        one.export_html = planned_outputs[index].html.clone();
+        one.export_svg = planned_outputs[index].svg.clone();
+        attempted += 1;
+        if let Some((class, message)) = run_captured(one) {
+            if cli.report_format != ReportFormat::Json {
+                match &message {
+                    Some(message) => eprintln!("rich: {input}: {message}"),
+                    None => eprintln!("rich: {input}: failed ({})", class.name()),
+                }
+            }
+            failures.push((input.clone(), class, message));
             if !cli.continue_on_error {
                 break;
             }
         }
     }
+
+    // The aggregate takes the most severe child class so a data error (4) or a
+    // gate (5) is not flattened into a generic input failure.
+    let class = failures
+        .iter()
+        .map(|(_, class, _)| *class)
+        .max_by_key(|class| class.code())
+        .unwrap_or(ExitClass::Success);
     if cli.report_format == ReportFormat::Json {
         eprintln!(
             "{}",
             serde_json::json!({
-                "ok": failures.is_empty(), "code": if failures.is_empty() {"success"} else {"input"},
-                "exit_code": if failures.is_empty() {0} else {3},
-                "result": {"planned": resources.len(), "completed": resources.len() - failures.len(), "failed": failures.len(),
-                           "failures": failures.iter().map(|(p,c)| serde_json::json!({"resource":p,"exit_code":c})).collect::<Vec<_>>()},
+                "ok": failures.is_empty(),
+                "code": class.name(),
+                "exit_code": class.code(),
+                "result": {
+                    "planned": resources.len(),
+                    "attempted": attempted,
+                    "completed": attempted - failures.len(),
+                    "failed": failures.len(),
+                    "skipped": resources.len() - attempted,
+                    "failures": failures
+                        .iter()
+                        .map(|(resource, class, message)| serde_json::json!({
+                            "resource": resource,
+                            "code": class.name(),
+                            "exit_code": class.code(),
+                            "message": message,
+                        }))
+                        .collect::<Vec<_>>(),
+                },
             })
         );
     }
-    if failures.is_empty() {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(3)
-    }
+    class.exit_code()
 }
 
 fn wants_json_report(args: &[String]) -> bool {
@@ -1089,6 +1364,29 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                 set_mode(&mut mode, command_mode(other).expect("checked above"))?;
             }
             other => resources.push(other.to_string()),
+        }
+    }
+
+    // `--gif`/`--diff` consume their whole resource list as one unit (a diff is
+    // a pair), but a batch rewrites each item to a single resource — `run_diff`
+    // would then index `resources[1]` and panic. Reject the combination.
+    if batch {
+        if mode.accepts_multiple_resources() {
+            return Err(format!(
+                "--batch cannot be combined with {}",
+                if mode == Mode::Diff {
+                    "--diff"
+                } else {
+                    "--gif"
+                }
+            ));
+        }
+        if resources.is_empty() {
+            return Err("--batch needs at least one file, directory or glob".into());
+        }
+        // One pager per item would be N interactive pagers over one plan.
+        if pager {
+            return Err("--pager cannot be combined with --batch".into());
         }
     }
 
@@ -4507,6 +4805,167 @@ mod tests {
         assert!(error.contains("config "));
         assert!(error.contains("unknown key"));
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn batch_rejects_modes_that_consume_their_whole_resource_list() {
+        let s = |v: &str| v.to_string();
+        let error = parse(&[s("--no-config"), s("--batch"), s("--diff"), s("a"), s("b")])
+            .err()
+            .unwrap();
+        assert!(error.contains("--batch cannot be combined with --diff"));
+        let error = parse(&[s("--no-config"), s("--batch"), s("--gif"), s("a")])
+            .err()
+            .unwrap();
+        assert!(error.contains("--batch cannot be combined with --gif"));
+        // One pager per item would open N interactive pagers over one plan.
+        let error = parse(&[s("--no-config"), s("--batch"), s("--pager"), s("a")])
+            .err()
+            .unwrap();
+        assert!(error.contains("--pager cannot be combined with --batch"));
+    }
+
+    #[test]
+    fn glob_matches_metacharacters_rather_than_substrings() {
+        assert!(glob_match("*.md", "notes.md"));
+        // `.md` appears in the name, but the pattern anchors at the end.
+        assert!(!glob_match("*.md", "notes.md.bak"));
+        assert!(glob_match("a?c.md", "abc.md"));
+        assert!(!glob_match("a?c.md", "ac.md"));
+        assert!(glob_match("*", "anything"));
+        assert!(glob_match("a*b*c", "axxbyyc"));
+        assert!(!glob_match("a*b*c", "axxbyy"));
+    }
+
+    #[test]
+    fn batch_expansion_skips_symlinked_directories() {
+        let root = std::env::temp_dir().join(format!("rich-batch-link-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("a.md"), "# a").unwrap();
+        // A link back to the containing directory used to be walked forever.
+        #[cfg(unix)]
+        let linked = std::os::unix::fs::symlink(&root, root.join("loop")).is_ok();
+        #[cfg(windows)]
+        let linked = std::os::windows::fs::symlink_dir(&root, root.join("loop")).is_ok();
+        let inputs = expand_batch_resources(&[root.to_string_lossy().into_owned()]).unwrap();
+        if linked {
+            assert_eq!(inputs.len(), 1, "symlinked directory must not be followed");
+        }
+        assert!(inputs[0].ends_with("a.md"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn config_values_keep_hashes_inside_quotes() {
+        assert_eq!(
+            strip_config_comment("mode = \"json\" # note"),
+            "mode = \"json\" "
+        );
+        // A `#` inside quotes is part of the value, not the start of a comment.
+        assert_eq!(
+            strip_config_comment("export_html = \"report#ci.html\""),
+            "export_html = \"report#ci.html\""
+        );
+        assert_eq!(config_value(" \"report#ci.html\" "), "report#ci.html");
+        // Only a matched surrounding pair is stripped.
+        assert_eq!(config_value("\"quoted"), "\"quoted");
+    }
+
+    #[test]
+    fn subcommand_mode_wins_over_config_mode_default() {
+        let s = |v: &str| v.to_string();
+        assert!(selects_mode_explicitly(&[s("json"), s("file.json")]));
+        assert!(selects_mode_explicitly(&[s("--markdown"), s("file.md")]));
+        // A value that happens to look like a subcommand is not a subcommand.
+        assert!(!selects_mode_explicitly(&[
+            s("--title"),
+            s("json"),
+            s("file")
+        ]));
+        assert!(!selects_mode_explicitly(&[s("file.md")]));
+
+        let root = std::env::temp_dir().join(format!("rich-config-mode-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let config = root.join("config.toml");
+        std::fs::write(&config, "[defaults]\nmode = \"markdown\"\n").unwrap();
+        let merged = config_args(
+            &[
+                "--config".to_string(),
+                config.to_string_lossy().into_owned(),
+                "json".to_string(),
+                "file.json".to_string(),
+            ],
+            &ConfigRoots {
+                home: None,
+                cwd: root.clone(),
+            },
+        )
+        .unwrap();
+        assert!(
+            !merged.iter().any(|arg| arg == "--markdown"),
+            "config mode must not override an explicit subcommand: {merged:?}"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn suffix_collisions_step_past_files_already_on_disk() {
+        let root = std::env::temp_dir().join(format!("rich-batch-suffix-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let target = root.join("out.html");
+        std::fs::write(&target, "existing").unwrap();
+        let target = target.to_string_lossy().into_owned();
+
+        let cli = parse(&[
+            "--no-config".to_string(),
+            "--batch".to_string(),
+            "--collision".to_string(),
+            "suffix".to_string(),
+            "x".to_string(),
+        ])
+        .unwrap()
+        .unwrap();
+        let mut taken = std::collections::BTreeSet::new();
+        let first = resolve_destination(&cli, target.clone(), &mut taken).unwrap();
+        assert!(
+            first.ends_with("out-2.html"),
+            "existing file must be kept: {first}"
+        );
+        let second = resolve_destination(&cli, target.clone(), &mut taken).unwrap();
+        assert!(second.ends_with("out-3.html"));
+
+        // `error` refuses rather than clobbering, and says how to proceed.
+        let mut cli_error = cli.clone();
+        cli_error.collision = CollisionPolicy::Error;
+        let mut taken = std::collections::BTreeSet::new();
+        let (class, message) =
+            resolve_destination(&cli_error, target.clone(), &mut taken).unwrap_err();
+        assert_eq!(class, ExitClass::Input);
+        assert!(message.contains("--overwrite"));
+
+        // `--overwrite` opts in explicitly.
+        let mut cli_overwrite = cli.clone();
+        cli_overwrite.overwrite = true;
+        let mut taken = std::collections::BTreeSet::new();
+        assert_eq!(
+            resolve_destination(&cli_overwrite, target.clone(), &mut taken).unwrap(),
+            target
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn batch_outputs_keep_their_export_kind() {
+        // The planned path need not end in `.html`; the kind is carried, not sniffed.
+        let outputs = BatchOutputs {
+            html: batch_export_path(Some("result.out"), "a.md", 0, 1),
+            ..BatchOutputs::default()
+        };
+        assert_eq!(outputs.html.as_deref(), Some("result.out"));
+        assert!(outputs.svg.is_none());
     }
 
     #[test]
