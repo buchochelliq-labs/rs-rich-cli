@@ -271,7 +271,19 @@ coordinated `vX.Y.Z` tag unless all selected manifests match it.
 
 The release-readiness policy is centralized in
 `.github/release-readiness.json`; keep the workflow, tests, and this document
-using those fields rather than adding another release-file or handoff-field list.
+using those fields rather than adding another release-file, trigger, or
+handoff-field list. The policy owns:
+
+- `versionPattern`: text that marks a PR as release-related.
+- `releaseFiles` / `releaseFileSuffixes`: changed files that require a release
+  handoff even if no version appears in the title, body, or branch.
+- `handoffTriggers`: the allowed trigger checks the workflow may combine.
+- `handoffCommentWaitSeconds`: the bounded wait that lets CI observe a
+  just-posted current-SHA handoff comment before failing as stale.
+- `handoffRequiredText`: the exact handoff labels CI requires.
+
+Update `scripts/test_release_readiness.py` with any policy-shape change so the
+schema fails locally before the workflow fails remotely.
 
 ### Windows validation ordering
 
@@ -283,6 +295,13 @@ open long enough for a concurrent Cargo invocation to fail with
 ```bash
 python scripts/validate_release.py --tag rs-rich-cli-v0.0.6
 ```
+
+`--tag` is required. The wrapper always ends by running
+`scripts/release.py plan <tag>`, so the local validation list proves the selected
+release tag as well as build/test health. Its Python release checks are listed
+explicitly (`test_release.py` and `test_release_readiness.py`) instead of through
+a glob, so adding another release test module requires updating the wrapper on
+purpose.
 
 For ad-hoc parallel validation, isolate jobs with separate `CARGO_TARGET_DIR`
 values:

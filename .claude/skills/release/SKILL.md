@@ -37,17 +37,17 @@ prerelease versions and update the dependency requirements accordingly.
 
 Start from fresh `origin/main`, or update the selected integration branch by PR
 so it contains `origin/main`. Keep the checkout clean before release operations.
-Run the complete CI gate:
+Run the complete CI gate. Prefer the serialized wrapper for release prep,
+especially on Windows where parallel Cargo commands can lock the same binary:
 
 ```bash
-cargo fmt --all --check
-cargo clippy --all-targets -- -D warnings
-cargo test --all
-python3 -m unittest discover -s scripts -p 'test_release*.py' -v
-python3 scripts/gen_versions.py --check
-cargo build -p rs-rich-cli --locked
-python3 scripts/gen_cli_reference.py --binary target/debug/rich --check
+python scripts/validate_release.py --tag rs-rich-cli-v0.0.6
 ```
+
+`--tag` is required because the wrapper always includes
+`scripts/release.py plan <tag>` as the final release-plan audit. If you run the
+steps manually, keep them in the wrapper's order and run both explicit Python
+release test modules: `test_release.py` and `test_release_readiness.py`.
 
 Also require the CI feature matrix and declared MSRV check. In a dedicated
 Python environment, install `rich==$(python3 scripts/read_upstream_version.py)`;
@@ -102,6 +102,12 @@ policy in `.github/release-readiness.json`; CI requires these field labels:
 `Remaining visible blocker:`. For independent releases, spell out the exact
 crate tag, e.g. `rs-rich-cli-v0.0.6`, and warn against using coordinated
 `vX.Y.Z` unless all selected manifests match.
+
+The same policy file owns the handoff triggers and
+`handoffCommentWaitSeconds`. Post the current-SHA handoff as soon as possible
+after pushing; the readiness job waits briefly for the comment to appear, but
+the wait is only a race cushion, not a substitute for a real handoff. If the
+head changes after the handoff, post a fresh handoff and wait for CI again.
 
 On Windows, do not run Cargo commands that build the same binary in parallel
 against the same `target` directory; a concurrent process can hold
