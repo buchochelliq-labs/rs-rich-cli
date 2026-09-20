@@ -1,0 +1,559 @@
+{
+  "version": "rich (rs-rich-cli) 0.0.8",
+  "binary_path": "/workspace/scratch/02a46fd2d12a/rs-rich-cli/target/release/rich",
+  "binary_sha256": "b39020cd74cd1a76295690c67361b4103b7de243da226d906cb2af103ab691a6",
+  "source_sha256": "0105d5331a879d517b063fbdddc710cc247f7815e6f622b987f236a15bc3779f",
+  "source_digest_recipe": "Sorted crates/**/*.rs, crates/**/Cargo.toml, Cargo.toml, Cargo.lock; relative path + NUL + bytes",
+  "git_head": "15fcc469752aff5faedc836ec73e1265448ff3d6",
+  "git_worktree_changes": [
+    " M .github/workflows/ci.yml",
+    " M CHANGELOG.md",
+    " M Cargo.lock",
+    " M Cargo.toml",
+    " M README.md",
+    " M crates/rich-art/Cargo.toml",
+    " M crates/rich-art/README.md",
+    " M crates/rich-art/src/image_art.rs",
+    " M crates/rich-art/src/lib.rs",
+    " M crates/rich-cli/Cargo.toml",
+    " M crates/rich-cli/README.md",
+    " M crates/rich-cli/src/main.rs",
+    " M crates/rich-cli/tests/image_options.rs",
+    " M docs/PORTING.md",
+    " M docs/cli.md",
+    " M docs/demos.md",
+    " M docs/index.md",
+    " M docs/recipes.md",
+    " M docs/releases/0.0.7.md",
+    " M mkdocs.yml",
+    " M scripts/capture_release_demos.py",
+    " M scripts/test_release_readiness.py",
+    " M scripts/validate_release.py",
+    "?? .github/evidence/0.0.8/",
+    "?? crates/rich-cli/src/batch.rs",
+    "?? crates/rich-cli/src/config.rs",
+    "?? crates/rich-cli/tests/batch_v8.rs",
+    "?? crates/rich-cli/tests/pager_v8.rs",
+    "?? docs/assets/demos/v8-batch.gif",
+    "?? docs/assets/demos/v8-batch.mp4",
+    "?? docs/assets/demos/v8-batch.png",
+    "?? docs/assets/demos/v8-config.gif",
+    "?? docs/assets/demos/v8-config.mp4",
+    "?? docs/assets/demos/v8-config.png",
+    "?? docs/assets/demos/v8-crop-anchors.gif",
+    "?? docs/assets/demos/v8-crop-anchors.mp4",
+    "?? docs/assets/demos/v8-crop-anchors.png",
+    "?? docs/plans/0.0.8.md",
+    "?? docs/releases/0.0.8.md",
+    "?? scripts/bench_batch.py",
+    "?? scripts/capture_v8_demos.py",
+    "?? scripts/check_packages.py",
+    "?? scripts/release_evidence.py",
+    "?? scripts/test_release_packages.py"
+  ],
+  "cases": [
+    {
+      "case": "wide-top-left",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.8/asymmetric.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "cover",
+        "--image-anchor",
+        "top-left",
+        "--width",
+        "60",
+        "--height",
+        "12"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "197fd7929327e8301a51814701e107f4eb289f258948a8fb95d0177dd8ac898e",
+      "bytes": 29702
+    },
+    {
+      "case": "wide-top",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.8/asymmetric.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "cover",
+        "--image-anchor",
+        "top",
+        "--width",
+        "60",
+        "--height",
+        "12"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "197fd7929327e8301a51814701e107f4eb289f258948a8fb95d0177dd8ac898e",
+      "bytes": 29702
+    },
+    {
+      "case": "wide-top-right",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.8/asymmetric.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "cover",
+        "--image-anchor",
+        "top-right",
+        "--width",
+        "60",
+        "--height",
+        "12"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "197fd7929327e8301a51814701e107f4eb289f258948a8fb95d0177dd8ac898e",
+      "bytes": 29702
+    },
+    {
+      "case": "wide-left",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.8/asymmetric.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "cover",
+        "--image-anchor",
+        "left",
+        "--width",
+        "60",
+        "--height",
+        "12"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "efa32b0dcafab4022209022a598ee585c2a96b62924f8603354c6cfb883634d8",
+      "bytes": 30018
+    },
+    {
+      "case": "wide-center",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.8/asymmetric.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "cover",
+        "--image-anchor",
+        "center",
+        "--width",
+        "60",
+        "--height",
+        "12"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "efa32b0dcafab4022209022a598ee585c2a96b62924f8603354c6cfb883634d8",
+      "bytes": 30018
+    },
+    {
+      "case": "wide-right",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.8/asymmetric.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "cover",
+        "--image-anchor",
+        "right",
+        "--width",
+        "60",
+        "--height",
+        "12"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "efa32b0dcafab4022209022a598ee585c2a96b62924f8603354c6cfb883634d8",
+      "bytes": 30018
+    },
+    {
+      "case": "wide-bottom-left",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.8/asymmetric.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "cover",
+        "--image-anchor",
+        "bottom-left",
+        "--width",
+        "60",
+        "--height",
+        "12"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "0ad7a67f17755d5cc8421896fc7a59d7b993072f38996ee06e785460d6c855a5",
+      "bytes": 30223
+    },
+    {
+      "case": "wide-bottom",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.8/asymmetric.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "cover",
+        "--image-anchor",
+        "bottom",
+        "--width",
+        "60",
+        "--height",
+        "12"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "0ad7a67f17755d5cc8421896fc7a59d7b993072f38996ee06e785460d6c855a5",
+      "bytes": 30223
+    },
+    {
+      "case": "wide-bottom-right",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.8/asymmetric.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "cover",
+        "--image-anchor",
+        "bottom-right",
+        "--width",
+        "60",
+        "--height",
+        "12"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "0ad7a67f17755d5cc8421896fc7a59d7b993072f38996ee06e785460d6c855a5",
+      "bytes": 30223
+    },
+    {
+      "case": "tall-top-left",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.8/asymmetric.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "cover",
+        "--image-anchor",
+        "top-left",
+        "--width",
+        "20",
+        "--height",
+        "22"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "cb00d244c3dab5e1c44b8be1d9ea332a068e0fc71b1b2a6bfbb74b59828a7971",
+      "bytes": 17810
+    },
+    {
+      "case": "tall-top",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.8/asymmetric.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "cover",
+        "--image-anchor",
+        "top",
+        "--width",
+        "20",
+        "--height",
+        "22"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "34a57626d00e65bc22bbba32623aeee280f48fe87565f76c4fc7031450eaeb39",
+      "bytes": 18589
+    },
+    {
+      "case": "tall-top-right",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.8/asymmetric.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "cover",
+        "--image-anchor",
+        "top-right",
+        "--width",
+        "20",
+        "--height",
+        "22"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "f5be58bdb27351f8dec97321d6151b7f19c896e720737419c4f0da4b0b16bdea",
+      "bytes": 18469
+    },
+    {
+      "case": "tall-left",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.8/asymmetric.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "cover",
+        "--image-anchor",
+        "left",
+        "--width",
+        "20",
+        "--height",
+        "22"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "cb00d244c3dab5e1c44b8be1d9ea332a068e0fc71b1b2a6bfbb74b59828a7971",
+      "bytes": 17810
+    },
+    {
+      "case": "tall-center",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.8/asymmetric.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "cover",
+        "--image-anchor",
+        "center",
+        "--width",
+        "20",
+        "--height",
+        "22"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "34a57626d00e65bc22bbba32623aeee280f48fe87565f76c4fc7031450eaeb39",
+      "bytes": 18589
+    },
+    {
+      "case": "tall-right",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.8/asymmetric.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "cover",
+        "--image-anchor",
+        "right",
+        "--width",
+        "20",
+        "--height",
+        "22"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "f5be58bdb27351f8dec97321d6151b7f19c896e720737419c4f0da4b0b16bdea",
+      "bytes": 18469
+    },
+    {
+      "case": "tall-bottom-left",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.8/asymmetric.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "cover",
+        "--image-anchor",
+        "bottom-left",
+        "--width",
+        "20",
+        "--height",
+        "22"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "cb00d244c3dab5e1c44b8be1d9ea332a068e0fc71b1b2a6bfbb74b59828a7971",
+      "bytes": 17810
+    },
+    {
+      "case": "tall-bottom",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.8/asymmetric.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "cover",
+        "--image-anchor",
+        "bottom",
+        "--width",
+        "20",
+        "--height",
+        "22"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "34a57626d00e65bc22bbba32623aeee280f48fe87565f76c4fc7031450eaeb39",
+      "bytes": 18589
+    },
+    {
+      "case": "tall-bottom-right",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.8/asymmetric.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "cover",
+        "--image-anchor",
+        "bottom-right",
+        "--width",
+        "20",
+        "--height",
+        "22"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "f5be58bdb27351f8dec97321d6151b7f19c896e720737419c4f0da4b0b16bdea",
+      "bytes": 18469
+    },
+    {
+      "case": "batch-plan",
+      "args": [
+        "--no-config",
+        "json",
+        "--batch",
+        "scripts/fixtures/workflows/a.json",
+        "scripts/fixtures/workflows/b.json",
+        "--export-html",
+        "/tmp/rich-v8-demo-4q5nkyb2/document.html",
+        "--jobs",
+        "2",
+        "--width",
+        "60",
+        "--dry-run"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "ffab52e0ea8272cb0dc2286393fc323fec0f1d8f3ea5a780a0f70f0cd8455462",
+      "bytes": 207
+    },
+    {
+      "case": "batch-export",
+      "args": [
+        "--no-config",
+        "json",
+        "--batch",
+        "scripts/fixtures/workflows/a.json",
+        "scripts/fixtures/workflows/b.json",
+        "--export-html",
+        "/tmp/rich-v8-demo-4q5nkyb2/document.html",
+        "--jobs",
+        "2",
+        "--width",
+        "60",
+        "--report",
+        "json"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "6823aec7c8ba30629737d540f3fd15ba871cff2f287622f3a4a4e71ccf97d66e",
+      "bytes": 329
+    },
+    {
+      "case": "config-validate",
+      "args": [
+        "config",
+        "validate",
+        "--config",
+        ".github/evidence/0.0.8/demo.toml"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "f0b74ab5777df6959f35b3c41aaa328c4be7a42c63064871094eef7029bddf72",
+      "bytes": 271
+    },
+    {
+      "case": "config-defaults",
+      "args": [
+        "config",
+        "show",
+        "--config",
+        ".github/evidence/0.0.8/demo.toml"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "f0b74ab5777df6959f35b3c41aaa328c4be7a42c63064871094eef7029bddf72",
+      "bytes": 271
+    },
+    {
+      "case": "config-profile",
+      "args": [
+        "config",
+        "show",
+        "--profile",
+        "preview",
+        "--config",
+        ".github/evidence/0.0.8/demo.toml"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "0975c02fc20e1b16d4b10381cebc110eefce0127fc2d170ebc48f28b3d7eba3b",
+      "bytes": 272
+    },
+    {
+      "case": "config-overrides",
+      "args": [
+        "config",
+        "show",
+        "--profile",
+        "preview",
+        "--width",
+        "64",
+        "--color",
+        "--no-pager",
+        "--config",
+        ".github/evidence/0.0.8/demo.toml"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "3a3becf097c62f49a0d156af822080c37ab9ceb634928b1f47a4c1aec02000f8",
+      "bytes": 273
+    }
+  ],
+  "fixtures": {
+    "asymmetric.png": "04d9da863f91dad94eca51e6f51a541890441f01108fb09e35d604f17537d23d",
+    "demo.toml": "07de2acfd3a305d7467e1472b22e2bce9738177f5b656aaa8df6d0c383486bec"
+  },
+  "exports": {
+    "a.html": "6755f342231d1c054b107b5b478bd753925a92dbd3deb69bd2f84c9961b1f616",
+    "b.html": "4ae97c64b7a1b0c9e79d99acca417ed58ad80e5f63b8093a90e74d3ae9e08b92"
+  },
+  "dry_run_no_writes_verified": true,
+  "terminal": {
+    "width": 88,
+    "height": 28,
+    "TERM": "xterm-256color",
+    "COLORTERM": "truecolor",
+    "RICH_SIXEL": "0"
+  },
+  "presentation": "Actual PTY bytes replayed with command captions; completed results held 2 seconds; 10 fps; no audio. Nine anchors shown in both wide and tall cover viewports because cover crops only one axis at a time.",
+  "media": {
+    "v8-batch.gif": "02b9d8fbc188da913d7cf704b96426aea6002bdc5e85050c86a9f385ef2bef24",
+    "v8-batch.mp4": "29262c3c18a3575665727066eb9babb4ba346df856220d1175ee6b915dc81a6c",
+    "v8-batch.png": "dd29f5018d37588c74695527876cedf89c2ab7a7ac6ce6fd86fe686308b62158",
+    "v8-config.gif": "aef1dd28ffb51ab25379db4d7805006886d10fdb00242db0bc64fd717f235cb8",
+    "v8-config.mp4": "ad0118bc0a0b854e7c27e1c0cc5ed4c6d0566182f02ce260e7c85d7b66965b63",
+    "v8-config.png": "bb78558f3cb6047290402ba54de9187d94a041fa61bf4369d09b8c86c300df92",
+    "v8-crop-anchors.gif": "caad37b651304a5a51209a0035bf2b39f8ff1f75ac4c0a739ffffffb6879a45e",
+    "v8-crop-anchors.mp4": "9404b469195f20270f3f0f831eb0926b71b5bd4dd4b3409aa84ad78dab77435d",
+    "v8-crop-anchors.png": "4c255bc805ce22826775f0ccd35a7e37e31869ed9a04514037a90e42c4e14784"
+  }
+}

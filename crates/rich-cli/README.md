@@ -21,7 +21,7 @@ rich jsonl events.ndjson    # streaming JSON Lines / NDJSON
 rich log app.jsonl          # structured-log JSONL
 ```
 
-The Rust package is currently version **`0.0.7`** and follows independent
+The source package targets **`0.0.8`** (release preparation) and follows independent
 SemVer; its version does not mirror Python `rich-cli`. The tracked upstream
 release is **`rich-cli` 1.8.1**, recorded in
 [`../../UPSTREAM.toml`](../../UPSTREAM.toml).
@@ -52,7 +52,9 @@ flags remain supported.
 Layout
 : `-w/--width`, `--left`/`--center`/`--right`, `--panel BOX` with
   `--title`/`--caption`/`--style`, `--padding`, `--pager`, `--sanitize`,
-  `--report json`, `--no-color`.
+  `--report json`, `--no-color`. `--auto-pager` pages terminal output only when
+  it exceeds the viewport height; `--no-pager` disables configured paging.
+  Redirected stdout is never paged.
 
 Export
 : `--export-html` and `--export-svg` emit a self-contained document instead of
@@ -65,6 +67,32 @@ Watch
   finite when stdout is redirected: it renders one snapshot and exits, making
   pipelines deterministic. Builds without the `fetch` feature reject URL
   watches with the same stable URL-support error as one-shot URL input.
+  Watch cannot be combined with batch or explicit/automatic paging.
+
+Batch
+: `--batch` plans local files, directories and globs. `--dry-run` reports the
+  plan and planning errors without writing outputs. `--jobs N` bounds subprocess
+  workers for file exports; disk-spooled output is replayed in input order.
+  Terminal-only batches remain serial. Fail-fast stops new scheduling while
+  in-flight workers finish; `--continue-on-error` permits later scheduling.
+
+Configuration
+: `--config PATH` and `--profile NAME` select strict TOML defaults and profiles.
+  Precedence is defaults, selected profile, then explicit CLI settings; profile
+  `false` and inverse flags can disable inherited booleans. Unknown keys and
+  invalid values fail even in inactive profiles. `rich config show` and
+  `rich config validate` return JSON; `settings` includes configured values and
+  explicit overrides, not every built-in default. `--no-config` disables config.
+
+Still-image crop
+: `--image-fit contain|cover` fits the image into an explicit height and bounded
+  width. `--image-background '#RRGGBB'` composites transparency. With cover,
+  `--image-anchor` selects center (default), top, bottom, left, right or a corner
+  such as `top-left`. Contain stays centered.
+
+See the [workflow recipes](https://buchochelliq-labs.github.io/rs-rich-cli/recipes/)
+and [0.0.8 preparation notes](https://buchochelliq-labs.github.io/rs-rich-cli/releases/0.0.8/)
+for examples and pending release gates. Source versions do not imply publication.
 
 ## Features
 

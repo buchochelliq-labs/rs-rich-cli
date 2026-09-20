@@ -119,8 +119,16 @@ core mirror is untouched and a sync does not have to reconcile them.
 
 | convenience | rust `crates/rich-cli/src/…` | rationale |
 |-------------|------------------------------|-----------|
-| batch conversion (`--batch`, `--jobs`, `--overwrite`, `--collision`, `--continue-on-error`) over files, directories and globs | `main.rs` | plans outputs and replays each item through the existing single-resource render/export path; no format-specific rendering is duplicated |
-| versioned config profiles (`--config`, `--profile`, `--no-config`) with platform discovery and CLI-over-config precedence | `main.rs` | argument defaulting that happens strictly before parsing; the resulting `Cli` is indistinguishable from one typed by hand |
+| batch planning and `--dry-run`, with `--jobs` concurrency for file exports | `batch.rs` + `main.rs` | subprocess workers reuse the single-resource renderer; disk-spooled output is replayed in input order; terminal-only batches remain serial |
+| strict TOML profiles, inverse booleans, `config show` / `config validate` | `config.rs` + `main.rs` | validated defaults/profile/CLI precedence and JSON inspection compose existing options without changing core |
+| `--auto-pager` and `--no-pager` | `main.rs` | CLI destination/height policy composes public pager APIs; redirected stdout is never paged |
+| `--image-anchor` for still-image cover fitting | `main.rs` | routes to public `rich-art::ImageArt::anchor`; crop implementation and `ImageAnchor` remain in art |
+
+These 0.0.8 additions are prepared source changes; final validation and publication
+are tracked in [release notes](releases/0.0.8.md). Dry-run does not write exports
+or parent directories. Parallel fail-fast stops scheduling after observed failures
+but lets in-flight workers finish. Config inspection includes configured settings
+and explicit overrides, not a materialized list of built-in defaults.
 
 ---
 

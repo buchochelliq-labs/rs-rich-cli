@@ -1,0 +1,19 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Checking rustix v1.1.4
+    Checking toml_datetime v0.6.11
+    Checking serde_spanned v0.6.9
+    Checking toml_write v0.1.2
+    Checking winnow v0.7.15
+    Checking getrandom v0.4.3
+    Checking fastrand v2.5.0
+    Checking toml_edit v0.22.27
+    Checking terminal_size v0.4.4
+    Checking tempfile v3.27.0
+    Checking rs-rich v0.0.4 (/workspace/scratch/02a46fd2d12a/rs-rich-v8/crates/rich)
+    Checking toml v0.8.23
+    Checking rs-rich-art v0.0.6 (/workspace/scratch/02a46fd2d12a/rs-rich-v8/crates/rich-art)
+    Checking rs-rich-ext v0.0.6 (/workspace/scratch/02a46fd2d12a/rs-rich-v8/crates/rich-ext)
+    Checking rs-rich-cli v0.0.8 (/workspace/scratch/02a46fd2d12a/rs-rich-v8/crates/rich-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.11s

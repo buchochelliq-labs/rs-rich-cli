@@ -33,13 +33,35 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
-### rs-rich-ext 0.0.6 release preparation
+### CLI 0.0.8 / art 0.0.6 preparation
 
-- Publish the existing `Clone` implementation for `CliExtensions`, required by
-  CLI watch and batch execution. The registry copy of 0.0.5 lacks this API.
-- Update the CLI workspace dependency to require ext 0.0.6. The CLI 0.0.7
-  release failed its package dry run before upload; publish and verify ext
-  0.0.6 before retrying CLI from the corrected source commit.
+- Full TOML configuration with strict validation, default/profile/CLI precedence,
+  explicit boolean overrides and JSON `config show` / `config validate`.
+  Inspection lists configured settings, not every built-in default.
+- Batch dry-run without output writes; bounded subprocess concurrency for file
+  exports with disk-spooled output replayed in input order. Fail-fast stops new
+  scheduling while in-flight workers finish; terminal batches remain serial.
+- Opt-in terminal-height automatic paging and explicit no-pager controls.
+- Nine public `ImageAnchor` positions and an `ImageArt::anchor` builder, exposed
+  by `--image-anchor` for cover fitting. Center remains the default and contain
+  behavior is unchanged.
+- Registry package-content checks and staged sibling package verification;
+  staged success does not establish publication readiness. Updated recipes,
+  benchmark/demo work and release handoff documentation.
+
+These are prepared changes, not shipped versions. CLI 0.0.8 and art 0.0.6 release
+independently, art first; ext 0.0.6 and core 0.0.4 remain unchanged. Final gates
+are tracked in [the 0.0.8 notes](docs/releases/0.0.8.md).
+
+## CLI 0.0.7 / art 0.0.5 / ext 0.0.6 — published
+
+The art release succeeded first. The initial CLI package dry run failed because
+registry ext 0.0.5 lacked the workspace `CliExtensions: Clone` implementation.
+Publishing ext 0.0.6 and correcting the CLI dependency completed recovery:
+[art workflow](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35531841822),
+[ext workflow](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35533288812),
+[CLI workflow](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35533304887).
+Core remained 0.0.4.
 
 ### CLI finishing
 
@@ -52,17 +74,13 @@ Entries below record subsequent releases and development.
 - Add real CLI workflow snapshots and terminal regressions, fresh demo capture
   tooling, workflow recipes, and truthful serial `--jobs` help.
 
-### Release preparation
+### Release scope
 
-The current source workstream targets `rs-rich-cli` 0.0.7 and `rs-rich-art`
-0.0.5, with `rs-rich-ext` 0.0.6 required and `rs-rich` 0.0.4 unchanged. These independent
-source versions do not imply tags or registry publication. See
-[`docs/releases/0.0.7.md`](docs/releases/0.0.7.md) for pending release gates.
-
-The bounded finish scope includes still-image `contain`/`cover` fitting with
-explicit height, background compositing, regression coverage, fresh captures,
-workflow recipes, truthful serial `--jobs` help, and dependency reconciliation.
-Completion and validation evidence are tracked separately from this scope.
+CLI 0.0.7 and art 0.0.5 shipped still-image fitting, background compositing,
+watch fixes, deterministic serial batch conversion and scalar config profiles.
+The [0.0.7 release notes](docs/releases/0.0.7.md) record validation and dependency
+recovery. Serial `--jobs` and limited TOML/boolean semantics below describe that
+release; the 0.0.8 preparation above replaces them.
 
 ### Added
 

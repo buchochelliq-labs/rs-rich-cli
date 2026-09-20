@@ -54,7 +54,8 @@ Watch a local file while editing it:
 rich --watch --watch-interval 0.5 report.md
 ```
 
-The watcher polls metadata rather than busy-looping. Atomic saves, temporary
+The watcher checks local file contents at the polling interval using a bounded
+buffer, so same-size edits with preserved timestamps are detected. Atomic saves, temporary
 disappearance, malformed intermediate content, and later recovery are handled
 as successive frames; a failed frame is reported and the watcher keeps
 running. `Ctrl-C` terminates the interactive watch. URLs can be watched when
@@ -68,7 +69,8 @@ rich --watch --watch-cache --watch-interval 5 https://example.com/data.json
 Without it, URLs are fetched and rendered every interval. When stdout is
 redirected or piped, `--watch` renders exactly one snapshot and exits instead
 of entering an interactive loop. A binary built with `--no-default-features`
-does not support URL fetching, including URL watches.
+does not support URL fetching, including URL watches. Watch cannot be combined
+with batch or explicit/automatic paging.
 
 !!! tip "Filenames that begin with a dash"
 
@@ -251,12 +253,15 @@ comparison report to fall back on. See
 
 ```bash
 rich image photo.png --image-mode blocks --width 44 --height 12 --image-fit contain
-rich image photo.png --image-mode blocks --width 44 --height 12 --image-fit cover
+rich image photo.png --image-mode blocks --width 44 --height 12 --image-fit cover --image-anchor top
 rich image logo.png --image-fit contain --width 44 --height 12 --image-background '#542080'
 ```
 
 `contain` centres the whole image in a padded rectangle; `cover` fills the
-rectangle and centre-crops excess edges. Both preserve aspect ratio assuming
+rectangle and crops excess edges around `--image-anchor` (default `center`).
+Anchors are `center`, `top`, `bottom`, `left`, `right`, `top-left`, `top-right`,
+`bottom-left` and `bottom-right`. An explicit anchor requires cover fitting;
+contain always keeps the whole image centered. Both preserve aspect ratio assuming
 terminal cells are twice as tall as they are wide. Fitting requires `--height`;
 width defaults to the terminal width and is capped by available columns.
 
@@ -270,11 +275,12 @@ aspect ratios may therefore require a smaller size. These options apply to
 Library equivalent:
 
 ```rust
-use rich_art::{ImageArt, ImageFit, ImageMode};
+use rich_art::{ImageAnchor, ImageArt, ImageFit, ImageMode};
 let art = ImageArt::from_path("logo.png")?
     .mode(ImageMode::Blocks)
     .width(44).height(12)
-    .fit(ImageFit::Contain)
+    .fit(ImageFit::Cover)
+    .anchor(ImageAnchor::Top)
     .background([84, 32, 128]);
 ```
 
@@ -344,18 +350,26 @@ setting it does not add escape sequences to redirected stdout. `COLUMNS` sets
 the console width (80 when neither terminal width nor the variable is available).
 
 `--pager` tries a non-empty `MANPAGER`, then `PAGER`, then `less` on Unix or
-`more.com` on Windows. GIF playback repeats once by default; `--loop 0` repeats
+`more.com` on Windows. `--auto-pager` opts into paging only when stdout is a
+terminal and output exceeds its viewport height; redirected stdout is never
+paged. `--no-pager` disables configured explicit and automatic paging, while
+`--no-auto-pager` disables only automatic paging.
+
+GIF playback repeats once by default; `--loop 0` repeats
 forever in a terminal. Pipes receive the first frame once, even with `--loop 0`.
 
 ---
 
-## Convert many files at once (0.0.7)
+The system pager also requires terminal stdin; piped input and `TERM=dumb`
+fall back to printing directly. `LINES` sets the viewport height when provided.
+
+## Convert many files at once (0.0.8 preparation)
 
 `--batch` takes files, directories (walked recursively) and globs, and runs each
 one through the same render and export path a single-resource invocation uses:
 
 ```bash
-rich --batch --markdown --export-html out.html docs/
+rich --batch --markdown --export-html out.html --jobs 4 docs/
 rich --batch --json 'reports/*.json' --continue-on-error
 ```
 
@@ -370,10 +384,25 @@ with exit code 3 and tells you to pass `--overwrite`. `--collision suffix` write
 files already on disk; `--collision overwrite` (or `--overwrite`) opts in
 explicitly.
 
-A batch stops at the first failure unless `--continue-on-error` is given.
-`--jobs N` reserves a positive worker limit; execution is currently serial. `--batch` cannot be combined with `--diff` or
-`--gif`, which consume their whole resource list as one unit, nor with `--pager`,
-which would open one pager per item.
+`--jobs N` bounds concurrent subprocess workers for file exports. Their output
+is spooled to temporary files to bound parent buffering, then replayed in input
+order. Terminal-only batches stay serial. Default fail-fast stops scheduling new
+work after an observed failure; in-flight workers finish. `--continue-on-error`
+allows later scheduling. Worker startup and disk I/O mean more jobs do not
+guarantee a speedup.
+
+Batch cannot be combined with `--diff`, `--gif`, `--watch`, `--pager` or
+`--auto-pager`. Use `--no-pager` to disable configured paging.
+
+Add `--dry-run` to report the plan without creating directories, export files or
+worker spools:
+
+```bash
+rich --batch --markdown --export-html out.html --dry-run 'docs/tutorial/*.md'
+```
+
+Dry-run reports planning errors, including missing destination directories, but
+does not render or validate each document's contents.
 
 With `--report json` a batch emits exactly one envelope, and its `code` /
 `exit_code` are the most severe class any item reached — so a data error stays 4
@@ -389,7 +418,7 @@ rather than collapsing into a generic input failure:
 `attempted` counts items the run actually reached and `skipped` those it never
 got to after a fail-fast stop, so the numbers stay honest.
 
-## Config profiles (0.0.7)
+## Config profiles (0.0.8 preparation)
 
 Defaults can live in a `rich.toml` discovered in the working directory or the
 platform config directory, or named explicitly with `--config PATH`:
@@ -400,15 +429,40 @@ mode = "markdown"
 width = 100
 
 [profiles.ci]
-report = "json"
+no_color = true
+pager = false
 collision = "suffix"
 ```
 
 Select a named profile with `--profile ci`, and ignore every config file with
-`--no-config`. Command-line flags always win over config values, and an explicit
-subcommand (`rich json file.json`) outranks a config `mode`. Parse errors name
-the file they came from. Values are read as written — a `#` inside quotes is part
-of the value, not the start of a comment.
+`--no-config`. Discovery checks `./rich.toml`, then
+`$HOME/.config/rich/config.toml` (falling back to `USERPROFILE` when needed).
+Both `[profiles.NAME]` and `[profile.NAME]` are accepted; the default selected
+name is `default`.
+
+Full TOML syntax is parsed against a strict schema: unknown keys, invalid types
+and invalid values fail validation even in inactive profiles. Missing requested
+profiles also fail. Defaults are merged first, then the selected profile,
+regardless of table order. Explicit CLI values win, and an explicit subcommand
+(`rich json file.json`) outranks configured `mode`. Profile `false` values cancel
+inherited `true`. Inverse CLI flags such as `--no-watch`, `--no-overwrite`,
+`--no-batch`, `--no-continue-on-error`, `--no-sanitize` and `--color` override
+configured booleans. Option-looking values and operands after `--` remain data.
+Parse errors identify the config file. A quoted `#` remains part of the value.
+
+Inspect and validate without rendering:
+
+```bash
+rich config validate --config rich.toml --profile ci
+rich config show --config rich.toml --profile ci --width 64
+```
+
+Both return JSON. `settings` includes configured values after profile and CLI
+overrides, not all built-in CLI defaults. The schema supports image fit/anchor/
+background, watch, sanitization, paging and batch options; see the
+[workflow recipes](recipes.md) for complete examples. Machine reporting remains
+a CLI option (`--report json`), not a config key. Release and validation status
+are recorded in the [0.0.8 preparation notes](releases/0.0.8.md).
 
 ---
 

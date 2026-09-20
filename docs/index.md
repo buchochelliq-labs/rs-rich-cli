@@ -15,13 +15,14 @@ A Rust port of Python's [`rich`](https://github.com/Textualize/rich) — rich te
 colour, tables, markdown and progress bars in the terminal — plus a port of the
 [`rich-cli`](https://github.com/Textualize/rich-cli) tool.
 
-![Rich-art half-block, Braille and ASCII output](assets/demos/release-image-modes.gif)
+![Rich-art cover cropping with nine anchors](assets/demos/v8-crop-anchors.gif)
 
 **[Watch the rich-art videos](demos.md)** · [Browse the gallery](gallery.md) ·
 [Start with the CLI](cli.md) · [Learn the library](tutorial/index.md)
 
-The preview replays fresh CLI output from the current 0.0.7 optimized release build. See the [capture details](demos.md#fresh-cli-demos)
-for its version, timing and reproduction commands.
+The preview shows crop anchors from the optimized CLI 0.0.8 preparation build.
+See the [new workflow videos](demos.md#cli-008-workflows) for batch dry-run,
+parallel exports, config inspection and reproduction commands.
 
 ```bash
 cargo install rs-rich-cli
@@ -40,7 +41,7 @@ Progress and spinner animations replay exported library frames. The
 
 ## Release history and development
 
-[Release notes](releases/0.0.4.md) describe the coordinated 0.0.4 release.
+[CLI 0.0.8 preparation](releases/0.0.8.md) follows the [shipped 0.0.7 release](releases/0.0.7.md).
 The [roadmap](ROADMAP.md) tracks subsequent work. Manifest versions below
 identify this checkout; the crates.io badges identify published packages.
 
@@ -107,8 +108,8 @@ Each crate versions independently; see [Branching and releases](BRANCHING.md).
 |---|---|
 | [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.4` |
 | [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.6` |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.7` |
-| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.5` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.8` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.6` |
 <!-- END MANIFEST VERSIONS -->
 
 ## Install

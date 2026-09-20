@@ -14,6 +14,11 @@ use std::io::{BufRead, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+mod batch;
+mod config;
+use batch::run_batch;
+use config::{config_args, ConfigRoots};
+
 use rich::cells::cell_len;
 use rich::markdown::Markdown;
 use rich::measure::Measurement;
@@ -288,6 +293,8 @@ struct Cli {
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_fit: Option<String>,
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    image_anchor: Option<String>,
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_background: Option<[u8; 3]>,
     /// `--height N`: with `--image`, render this many rows instead of the
     /// backend's default.
@@ -322,6 +329,7 @@ struct Cli {
     expand: bool,
     /// `--pager`: page the output through the system pager.
     pager: bool,
+    auto_pager: bool,
     /// `-y/--hyperlinks`: render a Markdown link as an OSC 8 hyperlink.
     /// Upstream's flag, and upstream's default of **false** — see
     /// [`build_markdown`], which is where it is consumed.
@@ -340,6 +348,8 @@ struct Cli {
     batch: bool,
     continue_on_error: bool,
     jobs: usize,
+    dry_run: bool,
+    worker_args: Vec<String>,
     overwrite: bool,
     collision: CollisionPolicy,
 }
@@ -379,23 +389,6 @@ fn main() -> ExitCode {
     }
 }
 
-#[derive(Debug, Clone)]
-struct ConfigRoots {
-    home: Option<PathBuf>,
-    cwd: PathBuf,
-}
-
-impl Default for ConfigRoots {
-    fn default() -> Self {
-        Self {
-            home: std::env::var_os("HOME")
-                .or_else(|| std::env::var_os("USERPROFILE"))
-                .map(PathBuf::from),
-            cwd: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
-        }
-    }
-}
-
 /// Options that consume the following argument as their value. Needed to tell a
 /// positional subcommand from an option's value when scanning raw arguments.
 const VALUE_OPTIONS: &[&str] = &[
@@ -415,9 +408,11 @@ const VALUE_OPTIONS: &[&str] = &[
     "--report",
     "--image-mode",
     "--image-fit",
+    "--image-anchor",
     "--image-background",
     "--height",
     "--watch-interval",
+    "--interval",
     "--gif-mode",
     "--encoding",
     "--threshold",
@@ -470,212 +465,11 @@ fn mode_flag_alias(arg: &str) -> Option<&'static str> {
         "--jsonl" | "--ndjson" => "--jsonl",
         "--log" => "--log",
         "--rule" => "--rule",
+        "--image" => "--image",
+        "--gif" => "--gif",
+        "--diff" => "--diff",
         _ => return None,
     })
-}
-
-/// Drop a trailing `#` comment, ignoring a `#` that sits inside a quoted string.
-///
-/// Splitting on the first `#` unconditionally silently truncates a legitimate
-/// value: `export_html = "report#ci.html"` became `report`, so the export
-/// landed on a path the user never wrote.
-fn strip_config_comment(line: &str) -> &str {
-    let mut quote: Option<u8> = None;
-    for (index, byte) in line.bytes().enumerate() {
-        match quote {
-            Some(open) if byte == open => quote = None,
-            Some(_) => {}
-            None => match byte {
-                b'"' | b'\'' => quote = Some(byte),
-                b'#' => return &line[..index],
-                _ => {}
-            },
-        }
-    }
-    line
-}
-
-/// Unquote a config scalar, preserving everything the quotes were protecting.
-fn config_value(raw: &str) -> &str {
-    let trimmed = raw.trim();
-    let bytes = trimmed.as_bytes();
-    if bytes.len() >= 2 {
-        let first = bytes[0];
-        if (first == b'"' || first == b'\'') && bytes[bytes.len() - 1] == first {
-            return &trimmed[1..trimmed.len() - 1];
-        }
-    }
-    trimmed
-}
-
-fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<String>, String> {
-    if args.iter().any(|a| a == "--no-config") {
-        let mut result = Vec::new();
-        let mut skip = false;
-        for arg in args {
-            if skip {
-                skip = false;
-                continue;
-            }
-            if arg == "--config" || arg == "--profile" {
-                skip = true;
-                continue;
-            }
-            if arg != "--no-config" {
-                result.push(arg.clone());
-            }
-        }
-        return Ok(result);
-    }
-    for flag in ["--config", "--profile"] {
-        if args
-            .iter()
-            .position(|a| a == flag)
-            .is_some_and(|i| i + 1 >= args.len())
-        {
-            return Err(format!("{flag} requires a value"));
-        }
-    }
-    let explicit = args
-        .windows(2)
-        .find(|w| w[0] == "--config")
-        .map(|w| PathBuf::from(&w[1]));
-    let profile = args
-        .windows(2)
-        .find(|w| w[0] == "--profile")
-        .map(|w| w[1].clone())
-        .unwrap_or_else(|| "default".into());
-    let path = explicit.or_else(|| {
-        let candidates = [
-            roots.cwd.join("rich.toml"),
-            roots
-                .home
-                .as_ref()
-                .map(|h| h.join(".config/rich/config.toml"))
-                .unwrap_or_default(),
-        ];
-        candidates.into_iter().find(|p| p.is_file())
-    });
-    let mut result = Vec::new();
-    let explicit_mode = selects_mode_explicitly(args);
-    let explicit_flags: std::collections::HashSet<&str> = args
-        .iter()
-        .filter_map(|arg| {
-            mode_flag_alias(arg).or(match arg.as_str() {
-                "--width" | "-w" => Some("--width"),
-                "--pager" => Some("--pager"),
-                "--no-color" => Some("--no-color"),
-                "--export-html" | "-o" => Some("--export-html"),
-                "--export-svg" => Some("--export-svg"),
-                "--batch" => Some("--batch"),
-                "--continue-on-error" => Some("--continue-on-error"),
-                "--overwrite" => Some("--overwrite"),
-                "--jobs" => Some("--jobs"),
-                "--collision" => Some("--collision"),
-                "--panel" => Some("--panel"),
-                "--padding" => Some("--padding"),
-                _ => None,
-            })
-        })
-        .collect();
-    if let Some(path) = path {
-        let text = std::fs::read_to_string(&path)
-            .map_err(|e| format!("config {}: {e}", path.display()))?;
-        let mut section = String::new();
-        for (line_no, raw) in text.lines().enumerate() {
-            let line = strip_config_comment(raw).trim();
-            if line.is_empty() {
-                continue;
-            }
-            if line.starts_with('[') && line.ends_with(']') {
-                section = line[1..line.len() - 1].trim().to_string();
-                continue;
-            }
-            if section != "defaults"
-                && section != format!("profile.{profile}")
-                && section != format!("profiles.{profile}")
-            {
-                continue;
-            }
-            let Some((key, value)) = line.split_once('=') else {
-                return Err(format!(
-                    "config {}:{}: expected key = value",
-                    path.display(),
-                    line_no + 1
-                ));
-            };
-            let key = key.trim();
-            let value = config_value(value);
-            let flag = match key {
-                "mode" => match value {
-                    "print" => "--print",
-                    "markdown" => "--markdown",
-                    "json" => "--json",
-                    "syntax" => "--syntax",
-                    "csv" => "--csv",
-                    "ipynb" => "--ipynb",
-                    "jsonl" => "--jsonl",
-                    "log" => "--log",
-                    "rule" => "--rule",
-                    _ => {
-                        return Err(format!(
-                            "config {}:{}: unknown mode",
-                            path.display(),
-                            line_no + 1
-                        ))
-                    }
-                },
-                "width" => "--width",
-                "pager" => "--pager",
-                "no_color" => "--no-color",
-                "export_html" => "--export-html",
-                "export_svg" => "--export-svg",
-                "batch" => "--batch",
-                "continue_on_error" => "--continue-on-error",
-                "overwrite" => "--overwrite",
-                "jobs" => "--jobs",
-                "collision" => "--collision",
-                "panel" => "--panel",
-                "padding" => "--padding",
-                "profile" | "config" | "no_config" => continue,
-                _ => {
-                    return Err(format!(
-                        "config {}:{}: unknown key {key:?}",
-                        path.display(),
-                        line_no + 1
-                    ))
-                }
-            };
-            if explicit_flags.contains(flag) || (key == "mode" && explicit_mode) {
-                continue;
-            }
-            if matches!(
-                flag,
-                "--pager" | "--no-color" | "--batch" | "--continue-on-error" | "--overwrite"
-            ) {
-                if value != "true" {
-                    continue;
-                }
-                result.push(flag.into());
-            } else {
-                result.push(flag.into());
-                result.push(value.into());
-            }
-        }
-    }
-    let mut skip = false;
-    for arg in args {
-        if skip {
-            skip = false;
-            continue;
-        }
-        if arg == "--config" || arg == "--profile" {
-            skip = true;
-            continue;
-        }
-        result.push(arg.clone());
-    }
-    Ok(result)
 }
 
 /// A batch child's diagnostics, captured rather than printed.
@@ -1001,97 +795,59 @@ fn run_captured(item: Cli) -> Option<(ExitClass, Option<String>)> {
     ))
 }
 
-fn run_batch(cli: &Cli) -> ExitCode {
-    let resources = match expand_batch_resources(&cli.resources) {
-        Ok(v) => v,
-        Err(e) => return fail(cli, ExitClass::Input, e),
-    };
-    let mut taken = std::collections::BTreeSet::new();
-    let mut planned_outputs = Vec::with_capacity(resources.len());
-    for (index, input) in resources.iter().enumerate() {
-        let mut outputs = BatchOutputs::default();
-        for (candidate, slot) in [
-            (
-                batch_export_path(cli.export_html.as_deref(), input, index, resources.len()),
-                &mut outputs.html,
-            ),
-            (
-                batch_export_path(cli.export_svg.as_deref(), input, index, resources.len()),
-                &mut outputs.svg,
-            ),
-        ] {
-            let Some(candidate) = candidate else { continue };
-            match resolve_destination(cli, candidate, &mut taken) {
-                Ok(path) => *slot = Some(path),
-                Err((class, message)) => return fail(cli, class, message),
-            }
+/// Reuse resolved rendering flags without re-reading config in batch workers.
+fn worker_args(args: &[String]) -> Vec<String> {
+    let mut result = vec!["--no-config".into()];
+    let mut iter = args.iter();
+    let mut seen_resource = false;
+    let mut selected_mode = false;
+    while let Some(arg) = iter.next() {
+        if arg == "--" {
+            break;
         }
-        planned_outputs.push(outputs);
-    }
-
-    let mut failures: Vec<(String, ExitClass, Option<String>)> = Vec::new();
-    let mut attempted = 0usize;
-    // Work is deliberately serialized for deterministic output and bounded
-    // memory; `jobs` is a validated upper bound reserved for future parallel
-    // workers without changing the planning contract.
-    let _concurrency_limit = cli.jobs;
-    for (index, input) in resources.iter().enumerate() {
-        let mut one = cli.clone();
-        one.batch = false;
-        one.resources = vec![input.clone()];
-        one.resource = Some(input.clone());
-        one.report_format = ReportFormat::Human;
-        one.export_html = planned_outputs[index].html.clone();
-        one.export_svg = planned_outputs[index].svg.clone();
-        attempted += 1;
-        if let Some((class, message)) = run_captured(one) {
-            if cli.report_format != ReportFormat::Json {
-                match &message {
-                    Some(message) => eprintln!("rich: {input}: {message}"),
-                    None => eprintln!("rich: {input}: failed ({})", class.name()),
+        if VALUE_OPTIONS.contains(&arg.as_str()) {
+            let value = iter.next();
+            if !matches!(
+                arg.as_str(),
+                "--jobs"
+                    | "--collision"
+                    | "--report"
+                    | "-o"
+                    | "--export-html"
+                    | "--export-svg"
+                    | "--config"
+                    | "--profile"
+            ) {
+                result.push(arg.clone());
+                if let Some(value) = value {
+                    result.push(value.clone());
                 }
             }
-            failures.push((input.clone(), class, message));
-            if !cli.continue_on_error {
-                break;
+        } else if arg.starts_with('-') && arg != "-" {
+            selected_mode |= mode_flag_alias(arg).is_some();
+            if !matches!(
+                arg.as_str(),
+                "--batch"
+                    | "--no-batch"
+                    | "--dry-run"
+                    | "--continue-on-error"
+                    | "--no-continue-on-error"
+                    | "--overwrite"
+                    | "--no-overwrite"
+                    | "--machine-json"
+            ) {
+                result.push(arg.clone());
+            }
+        } else if !seen_resource {
+            if let Some(mode) = command_mode(arg).filter(|_| !selected_mode) {
+                selected_mode = true;
+                result.push(format!("--{}", mode_name(mode)));
+            } else {
+                seen_resource = true;
             }
         }
     }
-
-    // The aggregate takes the most severe child class so a data error (4) or a
-    // gate (5) is not flattened into a generic input failure.
-    let class = failures
-        .iter()
-        .map(|(_, class, _)| *class)
-        .max_by_key(|class| class.code())
-        .unwrap_or(ExitClass::Success);
-    if cli.report_format == ReportFormat::Json {
-        eprintln!(
-            "{}",
-            serde_json::json!({
-                "ok": failures.is_empty(),
-                "code": class.name(),
-                "exit_code": class.code(),
-                "result": {
-                    "planned": resources.len(),
-                    "attempted": attempted,
-                    "completed": attempted - failures.len(),
-                    "failed": failures.len(),
-                    "skipped": resources.len() - attempted,
-                    "failures": failures
-                        .iter()
-                        .map(|(resource, class, message)| serde_json::json!({
-                            "resource": resource,
-                            "code": class.name(),
-                            "exit_code": class.code(),
-                            "message": message,
-                        }))
-                        .collect::<Vec<_>>(),
-                },
-            })
-        );
-    }
-    class.exit_code()
+    result
 }
 
 fn wants_json_report(args: &[String]) -> bool {
@@ -1183,7 +939,12 @@ fn set_mode(current: &mut Mode, mode: Mode) -> Result<(), String> {
 
 /// Parse args into a [`Cli`], or `Ok(None)` when `--help`/`--version` handled it.
 fn parse(args: &[String]) -> Result<Option<Cli>, String> {
-    let merged = config_args(args, &ConfigRoots::default())?;
+    let roots = ConfigRoots::default();
+    if let Some(output) = config::inspect(args, &roots)? {
+        println!("{output}");
+        return Ok(None);
+    }
+    let merged = config_args(args, &roots)?;
     parse_inner(&merged)
 }
 
@@ -1194,6 +955,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut diff_threshold = None;
     let mut image_mode = ImageMode::Auto;
     let mut image_fit = None;
+    let mut image_anchor = None;
     let mut image_background = None;
     let mut height = None;
     let mut extensions = CliExtensions::default();
@@ -1210,6 +972,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut style = None;
     let mut expand = false;
     let mut pager = false;
+    let mut auto_pager = false;
     let mut hyperlinks = false;
     let mut sanitize = false;
     let mut report_format = ReportFormat::Human;
@@ -1219,6 +982,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut batch = false;
     let mut continue_on_error = false;
     let mut jobs = 1usize;
+    let mut dry_run = false;
     let mut overwrite = false;
     let mut collision = CollisionPolicy::Error;
     // Set by `--`: everything after it is a positional argument, however much it
@@ -1276,6 +1040,24 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                     return Err("--image-fit requires contain or cover".into());
                 }
                 image_fit = Some(value.clone());
+            }
+            "--image-anchor" => {
+                let value = iter.next().ok_or("--image-anchor requires a position")?;
+                if !matches!(
+                    value.as_str(),
+                    "center"
+                        | "top"
+                        | "bottom"
+                        | "left"
+                        | "right"
+                        | "top-left"
+                        | "top-right"
+                        | "bottom-left"
+                        | "bottom-right"
+                ) {
+                    return Err("--image-anchor requires center/top/bottom/left/right/top-left/top-right/bottom-left/bottom-right".into());
+                }
+                image_anchor = Some(value.clone());
             }
             "--image-background" => {
                 let value = iter.next().ok_or("--image-background requires #RRGGBB")?;
@@ -1336,7 +1118,30 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--center" if justify.is_none() => justify = Some(Justify::Center),
             "--center" => {}
             "--no-color" => no_color = true,
-            "--pager" => pager = true,
+            "--pager" => {
+                pager = true;
+                auto_pager = false;
+            }
+            "--auto-pager" => {
+                auto_pager = true;
+                pager = false;
+            }
+            "--no-pager" => {
+                pager = false;
+                auto_pager = false;
+            }
+            "--no-auto-pager" => auto_pager = false,
+            "--color" => no_color = false,
+            "--no-watch" => watch = false,
+            "--no-watch-cache" => watch_cache = false,
+            "--no-batch" => batch = false,
+            "--no-continue-on-error" => continue_on_error = false,
+            "--no-overwrite" => {
+                overwrite = false;
+                collision = CollisionPolicy::Error;
+            }
+            "--no-sanitize" => sanitize = false,
+            "--dry-run" => dry_run = true,
             "--watch" => watch = true,
             "--watch-cache" => watch_cache = true,
             "--watch-interval" | "--interval" => {
@@ -1367,6 +1172,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                     "suffix" => CollisionPolicy::Suffix,
                     other => return Err(format!("unknown collision policy {other:?}")),
                 };
+                overwrite = collision == CollisionPolicy::Overwrite;
             }
             "--jobs" => {
                 jobs = iter
@@ -1449,6 +1255,10 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         }
     }
 
+    if watch && (batch || pager || auto_pager) {
+        return Err("--watch cannot be combined with --batch or paging".into());
+    }
+
     // `--gif`/`--diff` consume their whole resource list as one unit (a diff is
     // a pair), but a batch rewrites each item to a single resource — `run_diff`
     // would then index `resources[1]` and panic. Reject the combination.
@@ -1467,7 +1277,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             return Err("--batch needs at least one file, directory or glob".into());
         }
         // One pager per item would be N interactive pagers over one plan.
-        if pager {
+        if pager || auto_pager {
             return Err("--pager cannot be combined with --batch".into());
         }
     }
@@ -1489,6 +1299,15 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                     .into(),
             );
         }
+    }
+    if image_anchor.is_some() && image_fit.as_deref() != Some("cover") {
+        return Err("--image-anchor requires --image-fit cover".into());
+    }
+    if dry_run && !batch {
+        return Err("--dry-run requires --batch".into());
+    }
+    if jobs > 1 && (!batch || (export_html.is_none() && export_svg.is_none())) {
+        return Err("--jobs greater than 1 requires --batch with a file export".into());
     }
     if image_fit.is_some() && height.is_none() {
         return Err("--image-fit requires --height to define the target rectangle".into());
@@ -1605,7 +1424,8 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         let unsupported = [
             (
                 "--pager",
-                pager && (effective_mode == Mode::Gif || effective_mode.streams_records() || demo),
+                (pager || auto_pager)
+                    && (effective_mode == Mode::Gif || effective_mode.streams_records() || demo),
             ),
             (
                 "--export-html/--export-svg",
@@ -1642,6 +1462,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         diff_threshold,
         image_mode,
         image_fit,
+        image_anchor,
         image_background,
         height,
         extensions,
@@ -1658,6 +1479,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         style,
         expand,
         pager,
+        auto_pager,
         hyperlinks,
         sanitize,
         report_format,
@@ -1667,6 +1489,8 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         batch,
         continue_on_error,
         jobs,
+        dry_run,
+        worker_args: worker_args(args),
         overwrite,
         collision,
     }))
@@ -2386,6 +2210,11 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     // Modes that render incrementally write directly to the console instead of
     // composing one renderable, so no `ForceWidth` wrapper can reach them.
     let mut builder = Console::builder().no_color(cli.no_color);
+    // Parallel workers spool output, but render for the parent's destination.
+    // Pager policy still checks the real stdout handle before starting a pager.
+    if let Ok(terminal) = std::env::var("RS_RICH_BATCH_TERMINAL") {
+        builder = builder.force_terminal(terminal == "1");
+    }
     if let Some(width) = cli.width.filter(|_| mode.draws_directly()) {
         builder = builder.width(width);
     }
@@ -2417,6 +2246,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         svg_path: cli.export_svg.as_deref(),
         svg_title: &svg_title,
         pager: cli.pager,
+        auto_pager: cli.auto_pager,
     };
 
     // GIF playback consumes the resource list itself (it can take several) and
@@ -2607,7 +2437,8 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 || cli.panel.is_some()
                 || cli.style.is_some()
                 || cli.width.is_some()
-                || cli.pager;
+                || cli.pager
+                || cli.auto_pager;
             let json = json.expect("json parsed above").no_wrap(nested);
             #[cfg(feature = "json-escape-safe")]
             let json = json.escape_safe(true);
@@ -2642,6 +2473,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 && cli.style.is_none()
                 && cli.justify.is_none()
                 && !cli.pager
+                && !cli.auto_pager
                 && cli.export_html.is_none()
                 && cli.export_svg.is_none()
             {
@@ -4022,6 +3854,20 @@ fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
             _ => rich_art::ImageFit::Contain,
         });
     }
+    if let Some(anchor) = cli.image_anchor.as_deref() {
+        use rich_art::ImageAnchor;
+        art = art.anchor(match anchor {
+            "top" => ImageAnchor::Top,
+            "bottom" => ImageAnchor::Bottom,
+            "left" => ImageAnchor::Left,
+            "right" => ImageAnchor::Right,
+            "top-left" => ImageAnchor::TopLeft,
+            "top-right" => ImageAnchor::TopRight,
+            "bottom-left" => ImageAnchor::BottomLeft,
+            "bottom-right" => ImageAnchor::BottomRight,
+            _ => ImageAnchor::Center,
+        });
+    }
     if let Some(background) = cli.image_background {
         art = art.background(background);
     }
@@ -4299,6 +4145,11 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
 
     // `play` needs its own console (it moves into the Live display).
     let mut builder = Console::builder().no_color(cli.no_color);
+    // Parallel workers spool output, but render for the parent's destination.
+    // Pager policy still checks the real stdout handle before starting a pager.
+    if let Ok(terminal) = std::env::var("RS_RICH_BATCH_TERMINAL") {
+        builder = builder.force_terminal(terminal == "1");
+    }
     if let Some(width) = cli.width {
         builder = builder.width(width);
     }
@@ -4329,6 +4180,7 @@ struct Export<'a> {
     svg_title: &'a str,
     /// `--pager`: page the terminal output instead of writing it straight out.
     pager: bool,
+    auto_pager: bool,
 }
 
 /// Render once and deliver it everywhere it was asked for.
@@ -4341,17 +4193,23 @@ struct Export<'a> {
 /// ordinary input renderables are recorded once here.
 ///
 /// Returns false if a file could not be written, so the caller can exit non-zero.
+fn should_page(
+    explicit: bool,
+    automatic: bool,
+    terminal: bool,
+    lines: usize,
+    height: usize,
+) -> bool {
+    terminal && (explicit || (automatic && lines > height.saturating_sub(1)))
+}
+
 fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) -> Result<(), String> {
-    if export.html_path.is_none() && export.svg_path.is_none() {
-        if export.pager {
-            // Keep styles: unlike a plain `console.pager()`, the point of `rich
-            // --pager` is to page *rich* output.
-            console
-                .page(true, render)
-                .map_err(|err| format!("cannot page output: {err}"))?;
-        } else {
-            render(console);
-        }
+    if export.html_path.is_none()
+        && export.svg_path.is_none()
+        && !export.pager
+        && !export.auto_pager
+    {
+        render(console);
         return Ok(());
     }
 
@@ -4360,7 +4218,13 @@ fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) -> Re
 
     // The terminal still gets the output, exports or not.
     let terminal = console.segments_to_string(&segments);
-    if export.pager {
+    if should_page(
+        export.pager,
+        export.auto_pager,
+        std::io::stdout().is_terminal(),
+        terminal.lines().count(),
+        console.height(),
+    ) {
         // The text is already rendered, so hand it straight to the pager
         // rather than re-rendering through `Console::page`.
         if let Err(err) = rich::pager::Pager::show(&rich::pager::SystemPager, &terminal) {
@@ -4421,6 +4285,8 @@ no RESOURCE read stdin until EOF; `-p -` reads markup from stdin too. Terminal
 stdin shows an input hint. Repeated scalar options use their last value.
 
 COMMANDS:
+    config show     Show configured settings with CLI overrides as JSON
+    config validate Validate TOML, all profiles and explicit setting values
     print       Treat RESOURCE as literal markup TEXT (`--print`)
     markdown    Render Markdown (`--markdown`)
     syntax      Syntax-highlight source (`--syntax`)
@@ -4455,8 +4321,10 @@ OPTIONS:
                      own width, so --left/--center/--right still use it)
         --height N   With --image, render this many rows instead of the
                      backend's default
+        --image-anchor A Cover crop anchor: center (default), top, bottom, left,
+                         right, top-left, top-right, bottom-left, bottom-right
         --image-fit M With --image and --height: contain (letterbox) or cover
-                     (centre-crop); preserves aspect ratio in terminal cells
+                     (crop at --image-anchor); preserves aspect ratio in terminal cells
         --image-background #RRGGBB
                      With --image: flatten transparency onto this RGB colour
                      (also colours contain padding; quote the # in your shell)
@@ -4489,13 +4357,18 @@ OPTIONS:
     -s, --style S    Style laid under the whole output, e.g. "bold red"
     -S, --panel-style S
                      Panel border style, e.g. "dim" (with --panel)
-        --pager      Page via MANPAGER, then PAGER, then less/more.com
+        --pager      Page terminal output via MANPAGER, PAGER, then less/more.com
+        --no-pager   Disable explicit and automatic paging
+        --auto-pager Page only terminal output taller than the viewport
+        --no-auto-pager Disable automatic paging
         --watch      Re-render a changing file or URL while stdout is a terminal
         --watch-interval SEC
                      Poll interval in seconds (default 1)
         --watch-cache With URLs, render only when the response body changes
         --batch      Convert explicit files, directories, or globs deterministically
-        --jobs N     Reserved worker limit; execution is currently serial
+        --jobs N     Parallel file-export workers (default 1); requires --batch
+                     Terminal output stays in input order; active jobs finish on error.
+        --dry-run    Validate and show the batch plan without writing files
         --continue-on-error
                      Process all planned inputs and aggregate failures
         --overwrite  Allow existing batch export destinations
@@ -4512,6 +4385,10 @@ OPTIONS:
         --machine-json
                      Alias for --report json
         --no-color   Disable colored output (as does a non-empty NO_COLOR)
+        --color      Override a config no_color setting (pipes remain plain)
+        --no-batch, --no-continue-on-error, --no-overwrite
+        --no-watch, --no-watch-cache, --no-sanitize
+                     Disable the corresponding config/default boolean
     -h, --help       Show this help
     -V, --version    Show the rs-rich-cli package version
 
@@ -5107,6 +4984,46 @@ mod tests {
     }
 
     #[test]
+    fn paging_policy_respects_viewport_and_redirection() {
+        assert!(!should_page(true, true, false, 100, 24));
+        assert!(!should_page(false, true, true, 23, 24));
+        assert!(should_page(false, true, true, 24, 24));
+        assert!(should_page(true, false, true, 1, 24));
+        assert!(!should_page(false, false, true, 100, 24));
+    }
+
+    #[test]
+    fn worker_arguments_preserve_resources_named_like_commands() {
+        for source in [["--markdown", "json", "b.md"], ["markdown", "json", "b.md"]] {
+            let args: Vec<String> = source.into_iter().map(str::to_string).collect();
+            assert_eq!(worker_args(&args), ["--no-config", "--markdown"]);
+        }
+    }
+
+    #[test]
+    fn worker_arguments_keep_option_values_and_remove_batch_operands() {
+        let args: Vec<String> = [
+            "--batch",
+            "--title",
+            "--batch",
+            "--jobs",
+            "2",
+            "json",
+            "--export-html",
+            "out.html",
+            "--",
+            "--pager",
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+        assert_eq!(
+            worker_args(&args),
+            ["--no-config", "--title", "--batch", "--json"]
+        );
+    }
+
+    #[test]
     fn parses_pager_flag() {
         let s = |v: &str| v.to_string();
         assert!(parse(&[s("--pager"), s("x")]).unwrap().unwrap().pager);
@@ -5155,6 +5072,8 @@ mod tests {
             s("--batch"),
             s("--jobs"),
             s("3"),
+            s("-o"),
+            s("out.html"),
             s("--continue-on-error"),
             s("--collision"),
             s("suffix"),
@@ -5292,22 +5211,6 @@ mod tests {
         }
         assert!(inputs[0].ends_with("a.md"));
         let _ = std::fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn config_values_keep_hashes_inside_quotes() {
-        assert_eq!(
-            strip_config_comment("mode = \"json\" # note"),
-            "mode = \"json\" "
-        );
-        // A `#` inside quotes is part of the value, not the start of a comment.
-        assert_eq!(
-            strip_config_comment("export_html = \"report#ci.html\""),
-            "export_html = \"report#ci.html\""
-        );
-        assert_eq!(config_value(" \"report#ci.html\" "), "report#ci.html");
-        // Only a matched surrounding pair is stripped.
-        assert_eq!(config_value("\"quoted"), "\"quoted");
     }
 
     #[test]

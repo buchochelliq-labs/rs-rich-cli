@@ -35,11 +35,34 @@ jobs:
         with:
           python-version: "3.12"
 
+      - uses: dtolnay/rust-toolchain@stable
+
       - name: Check manifest-version documentation
         run: python3 scripts/gen_versions.py --check
 
       - name: Test release selection and registry verification
         run: python3 -m unittest discover -s scripts -p 'test_release*.py' -v
+
+  packages:
+    name: registry source identity and staged packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Needs live crates.io access; registry failures are failures, never skips.
+      # Unpublished siblings are staged by Cargo. This is not a publish dry run.
+      - name: Verify registry identity before staged artifact builds
+        run: python3 scripts/check_packages.py
 
   check:
     name: fmt · clippy · test
@@ -223,7 +246,7 @@ jobs:
   # then never touches branch protection again.
   ci-ok:
     name: ci-ok
-    needs: [check, features, msrv, parity, release-tests, windows-pager]
+    needs: [check, features, msrv, parity, release-tests, windows-pager, packages]
     # `always()` so this reports failure rather than being skipped when a
     # dependency fails — a skipped required check blocks the PR forever.
     if: always()
