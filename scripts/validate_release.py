@@ -32,10 +32,12 @@ def commands(tag: str) -> list[list[str]]:
         ["cargo", "test", "-p", "rs-rich-cli", "--no-default-features"],
         [python, "-m", "unittest", "discover", "-s", "scripts", "-p", "test_release.py", "-v"],
         [python, "-m", "unittest", "discover", "-s", "scripts", "-p", "test_release_readiness.py", "-v"],
+        [python, "-m", "unittest", "discover", "-s", "scripts", "-p", "test_release_packages.py", "-v"],
         [python, "scripts/gen_versions.py", "--check"],
         ["cargo", "build", "-p", "rs-rich-cli", "--locked"],
         [python, "scripts/gen_cli_reference.py", "--binary", cli_binary(), "--check"],
         ["cargo", "check", "--workspace", "--locked"],
+        [python, "scripts/check_packages.py"],
         [python, "scripts/release.py", "plan", tag],
     ]
 

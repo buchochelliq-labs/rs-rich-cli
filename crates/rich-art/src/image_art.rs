@@ -60,8 +60,35 @@ pub enum ImageMode {
 pub enum ImageFit {
     /// Preserve the entire image, centering it with background padding.
     Contain,
-    /// Fill the rectangle, cropping equally from opposite edges.
+    /// Fill the rectangle, cropping around the selected [`ImageAnchor`].
     Cover,
+}
+
+/// Which part of the image to retain when using [`ImageFit::Cover`].
+///
+/// Edge anchors center the other axis. Contain fitting and unfitted images
+/// ignore this setting. Center crops round down when the excess is odd.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ImageAnchor {
+    /// Keep the center (the default).
+    #[default]
+    Center,
+    /// Keep the top edge, centered horizontally.
+    Top,
+    /// Keep the bottom edge, centered horizontally.
+    Bottom,
+    /// Keep the left edge, centered vertically.
+    Left,
+    /// Keep the right edge, centered vertically.
+    Right,
+    /// Keep the top-left corner.
+    TopLeft,
+    /// Keep the top-right corner.
+    TopRight,
+    /// Keep the bottom-left corner.
+    BottomLeft,
+    /// Keep the bottom-right corner.
+    BottomRight,
 }
 
 /// What the destination can actually do, used only to resolve
@@ -186,6 +213,7 @@ pub struct ImageArt {
     image: Arc<DynamicImage>,
     options: ImageOptions,
     fit: Option<ImageFit>,
+    anchor: ImageAnchor,
     background: Option<[u8; 3]>,
 }
 
@@ -201,6 +229,7 @@ impl ImageArt {
             image,
             options: ImageOptions::default(),
             fit: None,
+            anchor: ImageAnchor::default(),
             background: None,
         }
     }
@@ -215,7 +244,7 @@ impl ImageArt {
         Ok(ImageArt::new(image::open(path)?))
     }
 
-    /// Replace backend options, leaving fit and background settings unchanged.
+    /// Replace backend options, leaving fit, anchor and background settings unchanged.
     pub fn options(mut self, options: ImageOptions) -> Self {
         self.options = options;
         self
@@ -248,6 +277,13 @@ impl ImageArt {
     /// even when the final rectangle fits.
     pub fn fit(mut self, fit: ImageFit) -> Self {
         self.fit = Some(fit);
+        self
+    }
+
+    /// Select the part retained by [`ImageFit::Cover`] (default: center).
+    /// Has no effect with [`ImageFit::Contain`] or without fitting.
+    pub fn anchor(mut self, anchor: ImageAnchor) -> Self {
+        self.anchor = anchor;
         self
     }
 
@@ -394,12 +430,23 @@ impl ImageArt {
                 }
                 // The positive pixel-count bound also guarantees u32 dimensions.
                 let (rw, rh) = (rw as u32, rh as u32);
-                source.resize_exact(rw, rh, FilterType::Triangle).crop_imm(
-                    (rw - width) / 2,
-                    (rh - height) / 2,
-                    width,
-                    height,
-                )
+                let x = match self.anchor {
+                    ImageAnchor::Left | ImageAnchor::TopLeft | ImageAnchor::BottomLeft => 0,
+                    ImageAnchor::Right | ImageAnchor::TopRight | ImageAnchor::BottomRight => {
+                        rw - width
+                    }
+                    _ => (rw - width) / 2,
+                };
+                let y = match self.anchor {
+                    ImageAnchor::Top | ImageAnchor::TopLeft | ImageAnchor::TopRight => 0,
+                    ImageAnchor::Bottom | ImageAnchor::BottomLeft | ImageAnchor::BottomRight => {
+                        rh - height
+                    }
+                    _ => (rh - height) / 2,
+                };
+                source
+                    .resize_exact(rw, rh, FilterType::Triangle)
+                    .crop_imm(x, y, width, height)
             }
         };
         Ok(Arc::new(result))
@@ -528,6 +575,131 @@ mod tests {
             .width(8)
             .no_color(!color)
             .build()
+    }
+
+    const ANCHORS: [(ImageAnchor, u32, u32); 9] = [
+        (ImageAnchor::Center, 1, 1),
+        (ImageAnchor::Top, 1, 0),
+        (ImageAnchor::Bottom, 1, 3),
+        (ImageAnchor::Left, 0, 1),
+        (ImageAnchor::Right, 3, 1),
+        (ImageAnchor::TopLeft, 0, 0),
+        (ImageAnchor::TopRight, 3, 0),
+        (ImageAnchor::BottomLeft, 0, 3),
+        (ImageAnchor::BottomRight, 3, 3),
+    ];
+
+    fn asymmetric(width: u32, height: u32) -> DynamicImage {
+        DynamicImage::ImageRgb8(RgbImage::from_fn(width, height, |x, y| {
+            Rgb([(x * 31) as u8, (y * 37) as u8, (x + y * width) as u8])
+        }))
+    }
+
+    #[test]
+    fn all_cover_anchors_select_the_expected_source_pixels() {
+        // No resampling: a 4x4 crop loses three columns or rows. This also
+        // checks that center retains the existing floor rounding for odd excess.
+        for (sw, sh) in [(7, 4), (4, 7)] {
+            let source = asymmetric(sw, sh);
+            for (anchor, x_offset, y_offset) in ANCHORS {
+                let pixels = ImageArt::new(source.clone())
+                    .width(4)
+                    .height(2)
+                    .fit(ImageFit::Cover)
+                    .anchor(anchor)
+                    .prepare_image(ImageMode::Blocks, 8)
+                    .unwrap()
+                    .to_rgb8();
+                assert_eq!(pixels.dimensions(), (4, 4));
+                for (x, y, pixel) in pixels.enumerate_pixels() {
+                    let sx = x + if sw > 4 { x_offset } else { 0 };
+                    let sy = y + if sh > 4 { y_offset } else { 0 };
+                    assert_eq!(
+                        pixel.0,
+                        source.to_rgb8().get_pixel(sx, sy).0,
+                        "{anchor:?}, source {sw}x{sh}, pixel ({x}, {y})"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn anchor_defaults_to_center_and_options_preserve_preprocessing_settings() {
+        let source = asymmetric(7, 4);
+        let default = ImageArt::new(source.clone())
+            .width(4)
+            .height(2)
+            .fit(ImageFit::Cover);
+        assert_eq!(ImageAnchor::default(), ImageAnchor::Center);
+        assert_eq!(default.anchor, ImageAnchor::Center);
+        let explicit = ImageArt::new(source)
+            .anchor(ImageAnchor::Center)
+            .fit(ImageFit::Cover)
+            .background([12, 34, 56])
+            .options(ImageOptions {
+                width: Some(4),
+                height: Some(2),
+                ..ImageOptions::default()
+            });
+        assert_eq!(explicit.fit, Some(ImageFit::Cover));
+        assert_eq!(explicit.background, Some([12, 34, 56]));
+        assert_eq!(
+            default
+                .prepare_image(ImageMode::Blocks, 8)
+                .unwrap()
+                .to_rgb8(),
+            explicit
+                .prepare_image(ImageMode::Blocks, 8)
+                .unwrap()
+                .to_rgb8()
+        );
+        let right = explicit.anchor(ImageAnchor::Right).options(ImageOptions {
+            width: Some(4),
+            height: Some(2),
+            ..ImageOptions::default()
+        });
+        assert_eq!(right.anchor, ImageAnchor::Right);
+        assert_eq!(
+            right
+                .prepare_image(ImageMode::Blocks, 8)
+                .unwrap()
+                .to_rgb8()
+                .get_pixel(0, 0)
+                .0,
+            [93, 0, 3]
+        );
+    }
+
+    #[test]
+    fn anchors_leave_contain_padding_and_unfitted_images_unchanged() {
+        for (sw, sh) in [(7, 4), (4, 7)] {
+            let source = asymmetric(sw, sh);
+            let baseline = ImageArt::new(source.clone())
+                .width(4)
+                .height(2)
+                .fit(ImageFit::Contain)
+                .background([12, 34, 56])
+                .prepare_image(ImageMode::Blocks, 8)
+                .unwrap()
+                .to_rgb8();
+            for (anchor, _, _) in ANCHORS {
+                let art = ImageArt::new(source.clone()).anchor(anchor);
+                assert!(Arc::ptr_eq(
+                    &art.image,
+                    &art.prepare_image(ImageMode::Blocks, 8).unwrap()
+                ));
+                let contained = art
+                    .width(4)
+                    .height(2)
+                    .fit(ImageFit::Contain)
+                    .background([12, 34, 56])
+                    .prepare_image(ImageMode::Blocks, 8)
+                    .unwrap()
+                    .to_rgb8();
+                assert_eq!(contained, baseline, "{anchor:?}");
+            }
+        }
     }
 
     #[test]

@@ -1,0 +1,8 @@
+test_atomic_replacement_invalid_json_and_missing_file_recover (__main__.WatchRecoveryTests.test_atomic_replacement_invalid_json_and_missing_file_recover) ... ok
+test_same_size_atomic_save_with_preserved_timestamp_refreshes (__main__.WatchRecoveryTests.test_same_size_atomic_save_with_preserved_timestamp_refreshes) ... ok
+test_same_size_in_place_save_with_preserved_timestamp_refreshes (__main__.WatchRecoveryTests.test_same_size_in_place_save_with_preserved_timestamp_refreshes) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.319s
+
+OK

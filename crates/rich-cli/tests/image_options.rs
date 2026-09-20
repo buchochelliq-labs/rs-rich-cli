@@ -1,4 +1,4 @@
-//! Public image fitting and serial batch help contracts.
+//! Public image fitting and batch help contracts.
 use std::process::Command;
 
 fn run(args: &[&str]) -> std::process::Output {
@@ -49,12 +49,12 @@ fn image_options_reject_invalid_values_and_other_modes() {
 }
 
 #[test]
-fn jobs_help_states_that_execution_is_serial() {
+fn jobs_help_states_parallel_export_requirement() {
     let out = run(&["--help"]);
     assert!(out.status.success());
     let text = String::from_utf8(out.stdout).unwrap();
     let jobs = text.lines().find(|line| line.contains("--jobs N")).unwrap();
-    assert!(jobs.contains("serial"), "{jobs}");
+    assert!(jobs.contains("Parallel file-export workers"), "{jobs}");
 }
 
 #[cfg(feature = "art")]
@@ -117,4 +117,69 @@ fn image_fit_cli_routes_to_library_and_background_is_applied() {
         "contain and cover must visibly differ"
     );
     std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn crop_anchor_requires_cover_and_rejects_invalid_names() {
+    for (args, expected) in [
+        (
+            vec!["image", "missing.png", "--image-anchor", "top"],
+            "requires --image-fit cover",
+        ),
+        (
+            vec![
+                "image",
+                "missing.png",
+                "--image-fit",
+                "contain",
+                "--height",
+                "8",
+                "--image-anchor",
+                "top",
+            ],
+            "requires --image-fit cover",
+        ),
+        (
+            vec!["image", "missing.png", "--image-anchor", "banana"],
+            "--image-anchor requires center",
+        ),
+    ] {
+        let output = run(&args);
+        assert_eq!(output.status.code(), Some(2));
+        assert!(String::from_utf8_lossy(&output.stderr).contains(expected));
+    }
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn cli_crop_anchors_keep_different_edges_of_the_image() {
+    use rich_art::image;
+    let source = image::DynamicImage::ImageRgba8(image::RgbaImage::from_fn(24, 4, |x, _| {
+        let value = if x < 12 { 0 } else { 255 };
+        image::Rgba([value, value, value, 255])
+    }));
+    let root = std::env::temp_dir().join(format!("rich-anchor-cli-{}.png", std::process::id()));
+    source.save(&root).unwrap();
+    let mut results = Vec::new();
+    for anchor in ["left", "right"] {
+        let output = run(&[
+            "image",
+            root.to_str().unwrap(),
+            "--image-mode",
+            "ascii",
+            "--width",
+            "4",
+            "--height",
+            "2",
+            "--image-fit",
+            "cover",
+            "--image-anchor",
+            anchor,
+            "--no-color",
+        ]);
+        assert!(output.status.success(), "{output:?}");
+        results.push(output.stdout);
+    }
+    std::fs::remove_file(root).unwrap();
+    assert_ne!(results[0], results[1]);
 }

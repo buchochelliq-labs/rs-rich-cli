@@ -1,6 +1,6 @@
 # CLI workflow recipes
 
-These recipes target the 0.0.7 source workstream. Build the current CLI with
+These recipes target the 0.0.8 source preparation. Build the current CLI with
 `cargo build -p rs-rich-cli` and put the resulting `rich` binary on your PATH.
 Commands below use a POSIX shell; run them from the repository root unless
 using your own input paths.
@@ -39,7 +39,7 @@ Create the output directory before rendering. The quoted glob is expanded by
 mkdir -p rendered
 rich markdown --no-config --batch 'docs/tutorial/*.md' \
   --export-html rendered/document.html --collision suffix \
-  --continue-on-error --jobs 1 --width 88 --report json \
+  --continue-on-error --jobs 4 --width 88 --report json \
   > rendered/terminal.txt 2> rendered/report.json
 ```
 
@@ -54,18 +54,32 @@ and existing files. The default policy is `error`; `--overwrite` permits
 replacing existing files, while `--collision overwrite` also permits planned
 items to share a destination. Choose these only when replacement is intended.
 
-`--continue-on-error` attempts later files after a render failure; the default
-stops at the first failure. Planning errors still stop before rendering.
+`--continue-on-error` attempts later files after a render failure. By default,
+a failure stops scheduling new work; workers already running finish. Planning
+errors still stop before rendering.
 The aggregate JSON report goes to stderr and the rendered text to stdout.
 A failing item still causes a nonzero batch exit status.
 
-**Batch execution is serial in 0.0.7.** `--jobs N` accepts a positive integer
-reserved as a future concurrency limit; increasing it does not create parallel
-workers or improve throughput in this implementation.
+`--jobs N` bounds concurrent subprocess workers for file exports. Their output
+is spooled to temporary files to bound parent buffering and replayed in input
+order. Terminal-only batches stay serial. Startup and I/O costs can outweigh
+parallelism on small inputs; increasing jobs does not guarantee a speedup.
+
+Preview the input/destination plan without writing exports:
+
+```bash
+rich markdown --no-config --batch 'docs/tutorial/*.md' \
+  --export-html rendered/document.html --collision suffix --dry-run
+```
+
+Dry-run reports planned inputs, destinations and planning errors without creating
+parent directories, export files or worker spools. It does not render or validate
+each document's contents. Missing destination directories are reported as planning
+errors; create them separately before an actual export.
 
 ## Reuse compact, CI, and documentation profiles
 
-Save this as `rich.toml`. Keep `[defaults]` before the named profiles:
+Save this as `rich.toml`. Table order does not affect precedence:
 
 ```toml
 [defaults]
@@ -107,13 +121,65 @@ Without `--config`, discovery checks `./rich.toml`, then
 sections may use `[profiles.NAME]` or `[profile.NAME]`; the default selected
 name is `default`.
 
-The parser supports scalar settings for `mode`, `width`, `pager`, `no_color`,
-`export_html`, `export_svg`, `batch`, `continue_on_error`, `overwrite`, `jobs`,
-`collision`, `panel`, and `padding`. Keep watch, machine-report, and image
-options on the command line. This is a supported TOML-style subset, not a
-validated versioned schema or a general TOML parser. Boolean `false` does not
-cancel a `true` setting already enabled by defaults; put opt-in booleans in the
-specific profiles that need them.
+The config file uses full TOML syntax with a strict schema. Unknown keys,
+wrong types and invalid values are errors, including in unselected profiles.
+Defaults are merged first, then the selected profile, then explicit CLI values.
+Profile `false` values cancel inherited `true` values. Inverse CLI flags such as
+`--no-pager`, `--no-watch`, `--no-overwrite`, `--no-batch`,
+`--no-continue-on-error`, `--no-sanitize` and `--color` override configured
+booleans. Arguments after `--` remain operands.
+
+Inspect or validate configuration without rendering an input:
+
+```bash
+rich config validate --config rich.toml --profile ci
+rich config show --config rich.toml --profile compact --width 64
+rich json status.json --config rich.toml --profile compact --no-pager
+```
+
+Both config commands return JSON. The `settings` object contains configured
+settings after profile and explicit CLI overrides; it does not expand every
+built-in CLI default. An empty object does not mean the renderer has no defaults.
+
+Supported settings include the earlier mode, width, export, batch and decoration
+options, plus `height`, `watch`, `watch_cache`, `watch_interval`, `sanitize`,
+`auto_pager`, `image_fit`, `image_anchor` and `image_background`. Use a still-image
+command explicitly when configuring image geometry:
+
+```toml
+[profiles.thumbnail]
+width = 40
+height = 12
+image_fit = "cover"
+image_anchor = "top-left"
+image_background = "#202830"
+```
+
+## Page tall terminal output automatically
+
+```bash
+rich markdown README.md --no-config --auto-pager
+rich markdown README.md --no-config --auto-pager > readme.txt
+rich markdown README.md --config rich.toml --no-pager
+```
+
+Automatic paging is opt-in and applies only when stdout is a terminal and the
+rendered output exceeds its viewport height. Redirected stdout is never paged.
+`--no-pager` disables configured explicit or automatic paging; `--no-auto-pager`
+disables only automatic paging. Existing explicit `--pager` remains available.
+
+## Keep a subject near an image edge
+
+```bash
+rich image photo.png --no-config --image-mode blocks --width 40 --height 12 \
+  --image-fit cover --image-anchor top-left --image-background '#202830'
+```
+
+Choose `center`, `top`, `bottom`, `left`, `right`, `top-left`, `top-right`,
+`bottom-left` or `bottom-right`. Center remains the default. The CLI requires
+`--image-fit cover` when an anchor is supplied; `contain` always centers the
+whole image with padding. In the library, `ImageArt::anchor(ImageAnchor::TopLeft)`
+is ignored for contain or unfitted images.
 
 See [Using the CLI](cli.md) for individual options and the
-[0.0.7 preparation notes](releases/0.0.7.md) for release status.
+[0.0.8 preparation notes](releases/0.0.8.md) for release status.

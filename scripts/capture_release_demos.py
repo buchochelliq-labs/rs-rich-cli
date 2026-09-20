@@ -36,14 +36,15 @@ WIDTH, HEIGHT = 88, 28
 FPS = 10
 
 
-def capture(binary, args, changes=()):
+def capture(binary, args, changes=(), *, no_config=True):
     master, slave = pty.openpty()
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', HEIGHT, WIDTH, 0, 0))
     env = dict(os.environ, TERM='xterm-256color', COLORTERM='truecolor',
                COLUMNS=str(WIDTH), LINES=str(HEIGHT), RICH_SIXEL='0')
     env.pop('NO_COLOR', None)
     start = time.monotonic()
-    process = subprocess.Popen([str(binary), '--no-config', *args], cwd=ROOT,
+    prefix = ['--no-config'] if no_config else []
+    process = subprocess.Popen([str(binary), *prefix, *args], cwd=ROOT,
                                env=env, stdin=subprocess.DEVNULL, stdout=slave, stderr=slave)
     os.close(slave)
     events, raw = [], bytearray()

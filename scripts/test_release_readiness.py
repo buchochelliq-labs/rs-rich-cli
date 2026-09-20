@@ -190,6 +190,11 @@ class ReadinessTests(unittest.TestCase):
             ],
             steps,
         )
+        self.assertIn([sys.executable, "scripts/check_packages.py"], steps)
+        self.assertIn(
+            [sys.executable, "-m", "unittest", "discover", "-s", "scripts", "-p", "test_release_packages.py", "-v"],
+            steps,
+        )
         self.assertEqual(
             steps[-1],
             [sys.executable, "scripts/release.py", "plan", "rs-rich-cli-v0.0.6"],

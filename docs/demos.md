@@ -1,6 +1,71 @@
 # Rich-art videos
 
-## Fresh CLI demos
+## CLI 0.0.8 workflows
+
+These clips replay actual output captured from an optimized `rich (rs-rich-cli)
+0.0.8` binary in an 88 × 28 PTY. Command captions are added, each completed
+result is held for two seconds, and there is no audio.
+
+### All nine crop anchors
+
+A deterministic asymmetric source makes the crop position visible. Every anchor
+is recorded in a wide and a tall viewport: cover preserves the source aspect
+ratio, so a particular viewport crops only one axis. Positions on the other
+axis therefore produce the same crop.
+
+<video controls playsinline preload="none" poster="../assets/demos/v8-crop-anchors.png" style="width:100%;max-width:1100px" aria-label="Nine crop anchors in wide and tall viewports">
+  <source src="../assets/demos/v8-crop-anchors.mp4" type="video/mp4">
+  Your browser cannot play this video. Use the download below.
+</video>
+
+[Download MP4](assets/demos/v8-crop-anchors.mp4) · [Looping GIF](assets/demos/v8-crop-anchors.gif)
+
+### Plan a batch, then export in parallel
+
+The first command uses `--dry-run`; the capture script checks that the destination
+is still empty. The second exports both documents with `--jobs 2`, checks the
+resulting HTML files, and records the real JSON completion report.
+
+<video controls playsinline preload="none" poster="../assets/demos/v8-batch.png" style="width:100%;max-width:1100px" aria-label="Batch dry-run followed by parallel HTML export">
+  <source src="../assets/demos/v8-batch.mp4" type="video/mp4">
+  Your browser cannot play this video. Use the download below.
+</video>
+
+[Download MP4](assets/demos/v8-batch.mp4) · [Looping GIF](assets/demos/v8-batch.gif)
+
+### Inspect configuration and overrides
+
+`config validate`, default settings, the `preview` profile, and explicit CLI
+width/color/pager overrides are shown in sequence. The fixture deliberately
+places the profile before defaults to demonstrate that TOML document order does
+not change precedence.
+
+<video controls playsinline preload="none" poster="../assets/demos/v8-config.png" style="width:100%;max-width:1100px" aria-label="Configuration validation, profile selection and explicit overrides">
+  <source src="../assets/demos/v8-config.mp4" type="video/mp4">
+  Your browser cannot play this video. Use the download below.
+</video>
+
+[Download MP4](assets/demos/v8-config.mp4) · [Looping GIF](assets/demos/v8-config.gif)
+
+[Capture evidence and benchmark results](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/0.0.8)
+include source/binary hashes, exact arguments, exit codes, raw ANSI/asciinema
+recordings, fixtures and exported HTML. Reproduce from the repository root:
+
+```bash
+cargo build --release -p rs-rich-cli --locked
+python -m pip install -r scripts/requirements-docs-media.txt
+python scripts/capture_v8_demos.py
+python scripts/bench_batch.py
+```
+
+The benchmark compares jobs 1, 2 and 4 using generated JSON inputs and fresh
+HTML destinations. It checks that all exports are byte-identical across job
+counts. Timings include process startup and disk writes; results depend on host,
+input size and filesystem caches, and do not promise a parallel speedup. PTY
+capture requires POSIX, FFmpeg and DejaVu fonts; the benchmark uses Python's
+standard library only.
+
+## CLI 0.0.7 demos
 
 These clips were captured from the built `rich (rs-rich-cli) 0.0.7` binary (`target/release/rich`, default features).
 They replay its actual PTY output; captions are added, still results are held

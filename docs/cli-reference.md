@@ -10,7 +10,7 @@ Looking for how to *do* something rather than what a flag is called? Start at
 [Using the CLI](cli.md).
 
 
-*rich 0.0.7 — Rust port of the rich-cli terminal toolbox*
+*rich 0.0.8 — Rust port of the rich-cli terminal toolbox*
 
 ## Usage
 
@@ -28,6 +28,8 @@ stdin shows an input hint. Repeated scalar options use their last value.
 ## Commands
 
 ```text
+config show     Show configured settings with CLI overrides as JSON
+config validate Validate TOML, all profiles and explicit setting values
 print       Treat RESOURCE as literal markup TEXT (`--print`)
 markdown    Render Markdown (`--markdown`)
 syntax      Syntax-highlight source (`--syntax`)
@@ -69,8 +71,10 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
                  own width, so --left/--center/--right still use it)
     --height N   With --image, render this many rows instead of the
                  backend's default
+    --image-anchor A Cover crop anchor: center (default), top, bottom, left,
+                     right, top-left, top-right, bottom-left, bottom-right
     --image-fit M With --image and --height: contain (letterbox) or cover
-                 (centre-crop); preserves aspect ratio in terminal cells
+                 (crop at --image-anchor); preserves aspect ratio in terminal cells
     --image-background #RRGGBB
                  With --image: flatten transparency onto this RGB colour
                  (also colours contain padding; quote the # in your shell)
@@ -106,13 +110,18 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
 -s, --style S    Style laid under the whole output, e.g. "bold red"
 -S, --panel-style S
                  Panel border style, e.g. "dim" (with --panel)
-    --pager      Page via MANPAGER, then PAGER, then less/more.com
+    --pager      Page terminal output via MANPAGER, PAGER, then less/more.com
+    --no-pager   Disable explicit and automatic paging
+    --auto-pager Page only terminal output taller than the viewport
+    --no-auto-pager Disable automatic paging
     --watch      Re-render a changing file or URL while stdout is a terminal
     --watch-interval SEC
                  Poll interval in seconds (default 1)
     --watch-cache With URLs, render only when the response body changes
     --batch      Convert explicit files, directories, or globs deterministically
-    --jobs N     Reserved worker limit; execution is currently serial
+    --jobs N     Parallel file-export workers (default 1); requires --batch
+                 Terminal output stays in input order; active jobs finish on error.
+    --dry-run    Validate and show the batch plan without writing files
     --continue-on-error
                  Process all planned inputs and aggregate failures
     --overwrite  Allow existing batch export destinations
@@ -129,6 +138,10 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
     --machine-json
                  Alias for --report json
     --no-color   Disable colored output (as does a non-empty NO_COLOR)
+    --color      Override a config no_color setting (pipes remain plain)
+    --no-batch, --no-continue-on-error, --no-overwrite
+    --no-watch, --no-watch-cache, --no-sanitize
+                 Disable the corresponding config/default boolean
 -h, --help       Show this help
 -V, --version    Show the rs-rich-cli package version
 ```

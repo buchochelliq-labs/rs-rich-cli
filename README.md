@@ -16,13 +16,14 @@ color, and beautiful formatting in the terminal.
 Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
 (see [`UPSTREAM.toml`](UPSTREAM.toml)).
 
-![Rich-art: the same image rendered as half-blocks, Braille and ASCII](docs/assets/demos/release-image-modes.gif)
+![Rich-art cover cropping with nine anchors](docs/assets/demos/v8-crop-anchors.gif)
 
 **[Watch the rich-art videos](https://buchochelliq-labs.github.io/rs-rich-cli/demos/)** ·
 [Output gallery](docs/gallery.md) · [CLI guide](docs/cli.md)
 
-This preview replays fresh terminal output from the current CLI image command.
-[Capture details and reproduction](docs/demos.md#fresh-cli-demos).
+This preview shows crop anchors from the optimized CLI 0.0.8 preparation build.
+[New workflows and reproduction](docs/demos.md#cli-008-workflows) ·
+[0.0.8 release notes](docs/releases/0.0.8.md).
 
 ## Install and try
 
@@ -62,8 +63,8 @@ in the release notes; the crates.io links show available packages.
 |---|---|
 | [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.4` |
 | [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.6` |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.7` |
-| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.5` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.8` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.6` |
 <!-- END MANIFEST VERSIONS -->
 
 | Package | Role | Import / installed name |

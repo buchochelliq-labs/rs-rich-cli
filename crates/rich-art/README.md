@@ -40,7 +40,7 @@ merge conflict.
 This crate is deliberately self-contained so it can be lifted into its own
 repository unchanged:
 
-- its only direct dependency is `rs-rich`, imported as `rich`, and used for the
+- its default build depends directly only on `rs-rich`, imported as `rich`, for the
   `Renderable` trait;
 - like every crate in this repository, it follows an **independent SemVer** that
   started at `0.0.1`; its version is bumped only when `rs-rich-art` is selected
@@ -86,8 +86,36 @@ so images aren't stretched. `invert()` suits light-on-dark terminals, and
 
 `ImageArt` is the reusable capability-aware facade for CLI and application
 code. It selects ASCII, half-block, Braille, or Sixel rendering from
-`ImageOptions` and `RenderCapabilities`; sizing and alpha handling remain in
-the individual renderers.
+`ImageOptions` and `RenderCapabilities`. By default, sizing and alpha handling
+remain in the individual renderers. Optional fitting and background compositing
+preprocess still images consistently across backends:
+
+```rust
+use rich_art::{ImageAnchor, ImageArt, ImageFit, ImageMode};
+
+let art = ImageArt::from_path("photo.png")?
+    .mode(ImageMode::Blocks)
+    .width(40)
+    .height(12)
+    .fit(ImageFit::Cover)
+    .anchor(ImageAnchor::TopLeft)
+    .background([32, 40, 48]);
+```
+
+`ImageFit::Contain` centers the entire image with background padding;
+`ImageFit::Cover` fills the rectangle and crops around the selected anchor.
+`ImageAnchor` offers `Center` (default), `Top`, `Bottom`, `Left`, `Right`,
+`TopLeft`, `TopRight`, `BottomLeft` and `BottomRight`. Anchor selection affects
+only cover fitting; contain and unfitted images retain their existing behavior.
+Calling `options()` preserves fit, anchor and background settings.
+
+Fitting requires positive explicit width and height, clamps width to the
+available terminal columns, and preserves aspect ratio assuming cells are twice
+as tall as wide. Output and intermediate rasters are limited to 16 megapixels.
+`background()` composites transparency before resizing and colors contain
+padding; fitting without a background uses black. Use `render()` to receive
+validation errors. These APIs require the `image` feature; crop anchors are part
+of the independently versioned art 0.0.6 source preparation.
 
 The image APIs intentionally live in `rich-art`, the repository's dedicated
 art crate, rather than `rich-ext`: `rich-ext` provides console/plugin

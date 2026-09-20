@@ -5,7 +5,7 @@
 # upstream release is recorded in UPSTREAM.toml. This package installs `rich`.
 [package]
 name = "rs-rich-cli"
-version = "0.0.7"
+version = "0.0.8"
 description = "The `rich` executable: a Rust port of Python `rich-cli` 1.8.1"
 edition.workspace = true
 license.workspace = true
@@ -45,3 +45,6 @@ rich-ext.workspace = true
 serde_json.workspace = true
 ureq = { workspace = true, optional = true }
 rich-art = { workspace = true, optional = true, features = ["gif", "sixel"] }
+
+toml = "0.8"
+tempfile = "3"
