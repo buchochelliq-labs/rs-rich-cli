@@ -62,10 +62,11 @@ rich json data.json
 rich csv data.csv
 rich ipynb notebook.ipynb
 rich diff before.png after.png --threshold 2
+rich image photo.png --width 60
 ```
 
 The subcommands route through the same renderers as `--markdown`, `--json`,
-`--csv`, `--ipynb` and `--diff`. Common options such as `--width`,
+`--csv`, `--ipynb`, `--diff` and `--image`. Common options such as `--width`,
 `--no-color`, `--sanitize`, `--panel`, `--padding`, exports and alignment keep
 their existing behavior where the mode supports them.
 
@@ -207,6 +208,21 @@ Reports the regions that changed, and exits `5` when more than `2%` of the image
 differs — which makes it usable as a CI gate. See
 [Comparing images](image-diff.md) for the modes and how the comparison works.
 
+## Render a still image
+
+```bash
+rich --image photo.png --width 60
+rich image photo.png --image-mode blocks --height 20
+```
+
+Renders a single picture instead of a comparison: `--diff` needs exactly two
+images, `--image` needs exactly one. It shares the same `--image-mode`
+(auto/sixel/blocks/braille/ascii) and capability auto-detection as `--diff`, plus a new
+`--height N` to bound the rendered rows independently of `--width`. `none` is
+rejected for `--image`, because it means "draw nothing" and there is no
+comparison report to fall back on. See
+[Comparing images](image-diff.md) for how the renderer picks a mode.
+
 ## Use it in a script or CI
 
 `rich` writes rendered output to stdout and diagnostics to stderr, so the two
@@ -259,6 +275,69 @@ the console width (80 when neither terminal width nor the variable is available)
 `--pager` tries a non-empty `MANPAGER`, then `PAGER`, then `less` on Unix or
 `more.com` on Windows. GIF playback repeats once by default; `--loop 0` repeats
 forever in a terminal. Pipes receive the first frame once, even with `--loop 0`.
+
+---
+
+## Convert many files at once (0.0.7)
+
+`--batch` takes files, directories (walked recursively) and globs, and runs each
+one through the same render and export path a single-resource invocation uses:
+
+```bash
+rich --batch --markdown --export-html out.html docs/
+rich --batch --json 'reports/*.json' --continue-on-error
+```
+
+The plan is computed before anything is written, and it is deterministic: inputs
+are sorted and de-duplicated, and each output path is decided up front. Symlinked
+directories are not followed, so a link pointing at its own parent cannot make
+the walk run forever. Globs apply `*` and `?` to the final path segment only.
+
+Nothing is overwritten silently. If a planned output already exists the run stops
+with exit code 3 and tells you to pass `--overwrite`. `--collision suffix` writes
+`out-2.html`, `out-3.html`, … instead, stepping past both in-plan duplicates and
+files already on disk; `--collision overwrite` (or `--overwrite`) opts in
+explicitly.
+
+A batch stops at the first failure unless `--continue-on-error` is given.
+`--jobs N` bounds concurrency. `--batch` cannot be combined with `--diff` or
+`--gif`, which consume their whole resource list as one unit, nor with `--pager`,
+which would open one pager per item.
+
+With `--report json` a batch emits exactly one envelope, and its `code` /
+`exit_code` are the most severe class any item reached — so a data error stays 4
+rather than collapsing into a generic input failure:
+
+```json
+{"ok": false, "code": "data", "exit_code": 4,
+ "result": {"planned": 2, "attempted": 2, "completed": 1, "failed": 1, "skipped": 0,
+            "failures": [{"resource": "b.json", "code": "data", "exit_code": 4,
+                          "message": "invalid JSON: …"}]}}
+```
+
+`attempted` counts items the run actually reached and `skipped` those it never
+got to after a fail-fast stop, so the numbers stay honest.
+
+## Config profiles (0.0.7)
+
+Defaults can live in a `rich.toml` discovered in the working directory or the
+platform config directory, or named explicitly with `--config PATH`:
+
+```toml
+[defaults]
+mode = "markdown"
+width = 100
+
+[profiles.ci]
+report = "json"
+collision = "suffix"
+```
+
+Select a named profile with `--profile ci`, and ignore every config file with
+`--no-config`. Command-line flags always win over config values, and an explicit
+subcommand (`rich json file.json`) outranks a config `mode`. Parse errors name
+the file they came from. Values are read as written — a `#` inside quotes is part
+of the value, not the start of a comment.
 
 ---
 

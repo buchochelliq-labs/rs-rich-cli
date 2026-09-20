@@ -1875,3 +1875,486 @@ fn piped_block_gif_matches_the_existing_ascii_path() {
         assert!(!blocks.contains('\x1b') && !blocks.contains('▀'));
     }
 }
+
+/// A throwaway directory unique to one test, removed by the caller.
+fn scratch(tag: &str) -> std::path::PathBuf {
+    let root = std::env::temp_dir().join(format!("rich-cli-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).expect("create scratch dir");
+    root
+}
+
+#[test]
+fn batch_json_report_is_a_single_envelope_that_keeps_child_exit_classes() {
+    let root = scratch("batch-json");
+    // Valid first, invalid second, so ordering cannot hide the failure.
+    std::fs::write(root.join("a.json"), "{\"ok\": true}").unwrap();
+    std::fs::write(root.join("b.json"), "{not json").unwrap();
+    let dir = root.to_string_lossy().into_owned();
+
+    let (_out, err, status) = run_status(
+        &[
+            "--no-config",
+            "--batch",
+            "--json",
+            "--continue-on-error",
+            "--report",
+            "json",
+            &dir,
+        ],
+        "",
+    );
+    // Exactly one line: a child printing its own `rich: ...` diagnostic would
+    // put unparseable text in front of the aggregate object.
+    let report = parse_json_report(&err);
+    assert_eq!(report["ok"], false);
+    // Invalid JSON is a data error (4), not a generic input failure (3).
+    assert_eq!(report["code"], "data");
+    assert_eq!(report["exit_code"], 4);
+    assert_eq!(status.code(), Some(4));
+    let result = &report["result"];
+    assert_eq!(result["planned"], 2);
+    assert_eq!(result["attempted"], 2);
+    assert_eq!(result["completed"], 1);
+    assert_eq!(result["failed"], 1);
+    assert_eq!(result["skipped"], 0);
+    let failures = result["failures"].as_array().unwrap();
+    assert_eq!(failures.len(), 1);
+    assert!(failures[0]["resource"]
+        .as_str()
+        .unwrap()
+        .ends_with("b.json"));
+    assert_eq!(failures[0]["code"], "data");
+    assert_eq!(failures[0]["exit_code"], 4);
+    assert!(failures[0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("invalid JSON"));
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn batch_fails_fast_by_default_and_counts_unattempted_items_as_skipped() {
+    let root = scratch("batch-failfast");
+    std::fs::write(root.join("a.json"), "{oops").unwrap();
+    std::fs::write(root.join("b.json"), "{\"ok\": true}").unwrap();
+    let dir = root.to_string_lossy().into_owned();
+
+    let (_out, err, status) = run_status(
+        &["--no-config", "--batch", "--json", "--report", "json", &dir],
+        "",
+    );
+    let report = parse_json_report(&err);
+    assert_eq!(status.code(), Some(4));
+    let result = &report["result"];
+    assert_eq!(result["planned"], 2);
+    assert_eq!(result["attempted"], 1);
+    // The second item was never tried, so it is skipped — not completed.
+    assert_eq!(result["completed"], 0);
+    assert_eq!(result["skipped"], 1);
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn batch_refuses_to_silently_overwrite_and_honours_the_collision_policy() {
+    let root = scratch("batch-collide");
+    std::fs::write(root.join("a.md"), "# a").unwrap();
+    std::fs::write(root.join("b.md"), "# b").unwrap();
+    let dir = root.to_string_lossy().into_owned();
+    let existing = root.join("a.html");
+    std::fs::write(&existing, "existing").unwrap();
+    let out_html = root.join("out.html").to_string_lossy().into_owned();
+
+    let (_out, err, status) = run_status(
+        &[
+            "--no-config",
+            "--batch",
+            "--markdown",
+            "--report",
+            "json",
+            "-o",
+            &out_html,
+            &dir,
+        ],
+        "",
+    );
+    let report = parse_json_report(&err);
+    assert_eq!(status.code(), Some(3));
+    assert_eq!(report["code"], "input");
+    assert!(report["message"].as_str().unwrap().contains("--overwrite"));
+    assert_eq!(std::fs::read_to_string(&existing).unwrap(), "existing");
+
+    // `suffix` steps past the existing file instead of clobbering it.
+    let (_out, _err, status) = run_status(
+        &[
+            "--no-config",
+            "--batch",
+            "--markdown",
+            "--collision",
+            "suffix",
+            "-o",
+            &out_html,
+            &dir,
+        ],
+        "",
+    );
+    assert!(status.success());
+    assert_eq!(std::fs::read_to_string(&existing).unwrap(), "existing");
+    assert!(root.join("a-2.html").exists(), "suffixed output missing");
+    assert!(root.join("b.html").exists());
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn batch_export_path_need_not_end_in_a_known_extension() {
+    let root = scratch("batch-ext");
+    std::fs::write(root.join("only.md"), "# a").unwrap();
+    let dir = root.to_string_lossy().into_owned();
+    let out = root.join("result.out").to_string_lossy().into_owned();
+
+    // A single item keeps the exact path it was given; the export kind comes
+    // from the flag, not from sniffing the extension.
+    let (_out, _err, status) = run_status(
+        &["--no-config", "--batch", "--markdown", "-o", &out, &dir],
+        "",
+    );
+    assert!(status.success());
+    let written = std::fs::read_to_string(&out).unwrap();
+    assert!(
+        written.contains("<html"),
+        "expected HTML export: {written:.80?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn batch_rejects_pairwise_and_paged_modes() {
+    for (args, needle) in [
+        (
+            vec!["--batch", "--diff", "a.png", "b.png"],
+            "--batch cannot be combined with --diff",
+        ),
+        (
+            vec!["--batch", "--pager", "a.md"],
+            "--pager cannot be combined with --batch",
+        ),
+    ] {
+        let mut full = vec!["--no-config"];
+        full.extend(args);
+        let (out, err, status) = run_status(&full, "");
+        assert_eq!(status.code(), Some(2), "stderr: {err}");
+        assert!(out.is_empty());
+        assert!(err.contains(needle), "stderr: {err}");
+    }
+}
+
+#[test]
+fn config_values_and_subcommands_survive_the_config_layer() {
+    let root = scratch("config-precedence");
+    std::fs::write(root.join("doc.json"), "{\"ok\": true}").unwrap();
+    let config = root.join("rich.toml");
+    // The `#` is part of the value, and `mode` must not beat a subcommand.
+    std::fs::write(
+        &config,
+        "[defaults]\nmode = \"markdown\"\nwidth = 40 # comment\n",
+    )
+    .unwrap();
+    let config_path = config.to_string_lossy().into_owned();
+    let doc = root.join("doc.json").to_string_lossy().into_owned();
+
+    let (out, _err, status) = run_status(&["--config", &config_path, "json", &doc], "");
+    assert!(status.success());
+    // Rendered as JSON (a markdown render of this file would not show the key).
+    assert!(out.contains("ok"), "out: {out:?}");
+
+    // `--no-config` ignores the file entirely, so the width default is gone.
+    let (_out, _err, status) = run_status(&["--no-config", "json", &doc], "");
+    assert!(status.success());
+
+    // A missing explicit config is an error naming its source.
+    let missing = root.join("nope.toml").to_string_lossy().into_owned();
+    let (_out, err, status) = run_status(&["--config", &missing, "json", &doc], "");
+    assert_eq!(status.code(), Some(2), "stderr: {err}");
+    assert!(err.contains("nope.toml"), "stderr: {err}");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+// --- `--image`: still-image rendering via rich-art's ImageArt facade -------
+
+/// The image fixture used by `--image` tests (the same one `--diff` compares).
+#[cfg(feature = "art")]
+fn image_fixture() -> String {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("rich-art/tests/fixtures/halo-before.png")
+        .display()
+        .to_string()
+}
+
+/// `--image-mode ascii` draws a character ramp with no colour required, and
+/// takes `--width`/`--height` from the facade rather than reimplementing
+/// sizing here.
+#[cfg(feature = "art")]
+#[test]
+fn image_ascii_mode_renders_a_sized_ascii_picture() {
+    let path = image_fixture();
+    let (out, err, ok) = run_full(
+        &[
+            "--image",
+            &path,
+            "--image-mode",
+            "ascii",
+            "--width",
+            "20",
+            "--height",
+            "8",
+            "--no-color",
+        ],
+        "",
+    );
+    assert!(ok, "stderr: {err}");
+    assert!(!out.contains('\x1b'), "ASCII output must carry no escapes");
+    let lines: Vec<&str> = out.lines().filter(|l| !l.is_empty()).collect();
+    assert_eq!(lines.len(), 8, "--height 8 should yield exactly 8 rows");
+    assert!(
+        lines.iter().all(|l| l.chars().count() == 20),
+        "--width 20 should yield 20 columns per row: {lines:?}"
+    );
+}
+
+/// `--image-mode blocks` draws half-block characters, and the `image`
+/// command alias (rather than the `--image` flag) must reach the same
+/// backend. Piped stdout is never a terminal, so — like every other mode in
+/// this CLI (see `diff_export_respects_nonempty_no_color_...` above) — no
+/// colour escapes reach it either way; what must hold is that the picture
+/// itself renders.
+#[cfg(feature = "art")]
+#[test]
+fn image_blocks_mode_via_the_command_alias_renders_half_blocks() {
+    let path = image_fixture();
+    let (out, err, ok) = run_full(
+        &["image", &path, "--image-mode", "blocks", "--width", "10"],
+        "",
+    );
+    assert!(ok, "stderr: {err}");
+    assert!(!out.contains('\x1b'), "piped stdout must carry no escapes");
+    assert!(
+        out.contains('▀'),
+        "blocks mode should draw half-block glyphs: {out:?}"
+    );
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn image_braille_mode_renders_unicode_cells() {
+    let path = image_fixture();
+    let (out, err, ok) = run_full(
+        &[
+            "--image",
+            &path,
+            "--image-mode",
+            "braille",
+            "--width",
+            "12",
+            "--height",
+            "6",
+            "--no-color",
+        ],
+        "",
+    );
+    assert!(ok, "stderr: {err}");
+    assert!(
+        out.contains('⣿')
+            || out
+                .chars()
+                .any(|character| ('\u{2800}'..='\u{28ff}').contains(&character))
+    );
+}
+
+/// `--no-color` is accepted alongside `--image-mode blocks` (colour is
+/// already absent from piped output; this just confirms the flag combination
+/// is not rejected and the picture still renders).
+#[cfg(feature = "art")]
+#[test]
+fn image_blocks_mode_accepts_no_color() {
+    let path = image_fixture();
+    let (out, err, ok) = run_full(
+        &[
+            "--image",
+            &path,
+            "--image-mode",
+            "blocks",
+            "--width",
+            "10",
+            "--no-color",
+        ],
+        "",
+    );
+    assert!(ok, "stderr: {err}");
+    assert!(out.contains('▀'), "{out:?}");
+}
+
+/// An unknown `--image-mode` value is rejected before any file is touched.
+#[cfg(feature = "art")]
+#[test]
+fn image_rejects_an_unknown_image_mode() {
+    let (out, err, ok) = run_full(&["--image", "missing.png", "--image-mode", "bogus"], "");
+    assert!(!ok && out.is_empty());
+    assert!(err.contains("unknown image mode"), "{err}");
+}
+
+/// `--image-mode none` means "print no picture at all", which `--diff` can
+/// honour (it still has numbers to report) but `--image` cannot — there
+/// would be nothing left to draw. Rejected rather than silently printing
+/// nothing at exit 0.
+#[cfg(feature = "art")]
+#[test]
+fn image_rejects_image_mode_none() {
+    let path = image_fixture();
+    let (out, err, ok) = run_full(&["--image", &path, "--image-mode", "none"], "");
+    assert!(!ok && out.is_empty());
+    assert!(
+        err.contains("--image-mode none") && err.contains("--image"),
+        "{err}"
+    );
+}
+
+/// `--height 0` is as meaningless as `--width 0` and must be refused, not
+/// silently treated as "no rows".
+#[cfg(feature = "art")]
+#[test]
+fn image_rejects_a_zero_height() {
+    let path = image_fixture();
+    let (out, ok) = run(&["--image", &path, "--height", "0"], "");
+    assert!(!ok, "--height 0 should be rejected");
+    assert!(out.is_empty());
+}
+
+/// A non-numeric `--height` is rejected with a message naming the bad value,
+/// matching `--width`'s existing diagnostic.
+#[cfg(feature = "art")]
+#[test]
+fn image_rejects_a_non_numeric_height() {
+    let path = image_fixture();
+    let (_out, err, ok) = run_full(&["--image", &path, "--height", "nope"], "");
+    assert!(!ok);
+    assert!(err.contains("invalid height 'nope'"), "{err}");
+}
+
+/// `--height` and `--image-mode` only have an effect with `--image` (or, for
+/// `--image-mode`, `--diff`); given without either they are refused rather
+/// than silently ignored, matching the existing `--threshold`/`--loop` rule.
+#[cfg(feature = "art")]
+#[test]
+fn image_flags_are_refused_without_image_mode() {
+    for args in [vec!["--height", "5"], vec!["--image-mode", "ascii"]] {
+        let mut full = args.clone();
+        full.push("README.md");
+        let (out, ok) = run(&full, "");
+        assert!(
+            !ok && out.is_empty(),
+            "{args:?} without --image/--diff should be refused, not ignored"
+        );
+    }
+}
+
+/// `--image` with no resource is a clear usage error, not a stdin hang or a
+/// panic — mirroring `--diff`'s exactly-two-resources check.
+#[cfg(feature = "art")]
+#[test]
+fn image_without_a_resource_is_a_clear_error() {
+    let (out, err, ok) = run_full(&["--image"], "");
+    assert!(!ok && out.is_empty());
+    assert!(err.contains("--image requires an image file"), "{err}");
+}
+
+/// A missing file reports a clean, actionable message via the same
+/// `open_image_path` helper `--diff` uses — no renderer-specific duplication.
+#[cfg(feature = "art")]
+#[test]
+fn image_missing_file_is_a_clear_input_error() {
+    let missing = std::env::temp_dir().join(format!("rich-missing-{}.png", std::process::id()));
+    let (out, err, ok) = run_full(&["--image", missing.to_str().unwrap()], "");
+    assert!(!ok && out.is_empty());
+    assert!(err.contains("cannot read"), "{err}");
+}
+
+/// Decoration flags that only make sense around a single rendered value are
+/// refused with `--image`, matching the existing `--diff` behaviour rather
+/// than being silently dropped.
+#[cfg(feature = "art")]
+#[test]
+fn image_decoration_flags_are_refused_rather_than_ignored() {
+    let path = image_fixture();
+    for flag in [
+        vec!["--panel", "rounded"],
+        vec!["--padding", "2"],
+        vec!["--center"],
+    ] {
+        let mut args = vec!["--image", path.as_str()];
+        args.extend(flag.iter().copied());
+        let (_out, ok) = run(&args, "");
+        assert!(
+            !ok,
+            "{flag:?} with --image should be an error, not a silent no-op"
+        );
+    }
+}
+
+/// `--export-html`/`--export-svg` are not implemented for `--image` (unlike
+/// `--diff`), so combining them is a clear error rather than a silently
+/// skipped export.
+#[cfg(feature = "art")]
+#[test]
+fn image_export_flags_are_rejected() {
+    let path = image_fixture();
+    let out_path =
+        std::env::temp_dir().join(format!("rich-image-export-{}.html", std::process::id()));
+    let (out, err, ok) = run_full(
+        &[
+            "--image",
+            &path,
+            "--export-html",
+            out_path.to_str().unwrap(),
+        ],
+        "",
+    );
+    assert!(!ok && out.is_empty());
+    assert!(err.contains("--image"), "{err}");
+    assert!(!out_path.exists());
+}
+
+/// Reading raw image bytes from stdin (`--image -`) works the same way every
+/// other mode's stdin path does.
+#[cfg(feature = "art")]
+#[test]
+fn image_reads_raw_bytes_from_stdin() {
+    let path = image_fixture();
+    let bytes = std::fs::read(&path).unwrap();
+    let mut child = bin()
+        .args([
+            "--image",
+            "-",
+            "--image-mode",
+            "ascii",
+            "--width",
+            "10",
+            "--no-color",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(&bytes).unwrap();
+    let result = child.wait_with_output().unwrap();
+    assert!(result.status.success());
+    let out = String::from_utf8_lossy(&result.stdout);
+    assert!(!out.trim().is_empty());
+}

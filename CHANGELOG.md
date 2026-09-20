@@ -35,6 +35,12 @@ Entries below record subsequent releases and development.
 
 ### Added
 
+- **`rs-rich-cli` 0.0.7 workstream:** deterministic `--batch` conversion for
+  files, directories, and globs with bounded execution, explicit collision and
+  overwrite policy, fail-fast/continue-on-error modes, and aggregate JSON
+  status reports. Added versioned TOML config profiles with platform discovery,
+  explicit `--config`/`--profile`/`--no-config`, and CLI-over-config precedence.
+
 - **`rs-rich-cli`:** added task-oriented subcommands (`rich json`,
   `rich markdown`, `rich syntax`, `rich csv`, `rich ipynb`, `rich jsonl`,
   `rich log`, `rich gif`, `rich diff`, `rich rule`) while preserving existing
@@ -45,6 +51,13 @@ Entries below record subsequent releases and development.
 - **`rs-rich-cli`:** added stable automation exit-code classes plus
   `--report json` / `--machine-json` for a common result/error envelope on
   stderr, keeping rendered stdout separate.
+- **`rs-rich-art`:** added an `ImageArt` facade (`ImageMode`, `ImageOptions`,
+  `RenderCapabilities`) plus a reusable Braille renderer so consumers can
+  render a single still image without duplicating renderer selection logic.
+- **`rs-rich-cli`:** added a first-class `--image` flag / `rich image` command
+  for rendering a single still image (reusing `rich-art`'s `ImageArt` facade),
+  plus a new `--height N` option; `--image-mode` now also applies to `--image`
+  and accepts `braille`.
 
 ## [0.0.5] — 2026-09-13
 

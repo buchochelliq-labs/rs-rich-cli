@@ -93,9 +93,25 @@ automation: task-oriented subcommands that preserve existing flat flags,
 stable exit-code classes, a shared JSON report envelope, and bounded JSONL/log
 streaming from files and stdin.
 
-This deliberately defers the larger intuiTUIve/TUI, rich-art image workflow,
-watch, batch, config and dependency-upgrade work so the command/output contract
-can land first.
+This deliberately defers the larger intuiTUIve/TUI, watch, batch, config and
+dependency-upgrade work so the command/output contract can land first.
+
+## 0.0.7 — rich-art image commands
+
+The image workstream adds the reusable `rich-art::ImageArt` capability facade,
+ASCII, Braille, half-block and Sixel backends, and `rich image` / `--image`
+CLI routing with width, height and explicit mode selection. Existing GIF and
+diff report envelopes remain unchanged; unsupported graphics modes downgrade
+only where documented or return an actionable error.
+
+## 0.0.7 — batch and configuration
+
+The CLI now plans explicit files, directories, and globs deterministically,
+reuses the existing render/export pipeline per item, refuses silent overwrites,
+and reports aggregate machine-readable status. TOML profiles are discovered
+from platform roots (or selected explicitly), with command-line values taking
+precedence. Work is serialized by default to keep memory bounded; `--jobs` is a
+validated concurrency bound reserved for future parallel workers.
 
 ---
 
