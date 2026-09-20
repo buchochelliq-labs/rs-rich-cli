@@ -28,6 +28,12 @@ pub mod ascii;
 pub mod block;
 
 #[cfg(feature = "image")]
+pub mod braille;
+
+#[cfg(feature = "image")]
+pub mod image_art;
+
+#[cfg(feature = "image")]
 pub mod imagediff;
 
 #[cfg(feature = "sixel")]
@@ -52,8 +58,14 @@ pub use crate::ascii::{AsciiArt, DEFAULT_RAMP};
 #[cfg(feature = "image")]
 pub use crate::block::BlockArt;
 
+#[cfg(feature = "image")]
+pub use crate::braille::BrailleArt;
+
 #[cfg(feature = "sixel")]
 pub use crate::sixel::SixelArt;
+
+#[cfg(feature = "image")]
+pub use crate::image_art::{ImageArt, ImageArtError, ImageMode, ImageOptions, RenderCapabilities};
 
 #[cfg(feature = "image")]
 pub use crate::imagediff::{diff, DiffError, DiffReport, DiffSettings, Region};

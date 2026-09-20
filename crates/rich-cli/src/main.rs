@@ -59,6 +59,8 @@ enum Mode {
     Gif,
     /// `--diff`: perceptually compare two images (takes exactly two resources).
     Diff,
+    /// `--image`: render a single still image as ASCII art, half-blocks, or Sixel.
+    Image,
     /// `--rule`: draw a horizontal rule (the resource, if any, is its title).
     Rule,
     /// `--jsonl`: stream JSON Lines / NDJSON records.
@@ -73,11 +75,12 @@ impl Mode {
     }
 
     fn draws_directly(self) -> bool {
-        matches!(self, Self::Gif | Self::Diff) || self.streams_records()
+        matches!(self, Self::Gif | Self::Diff | Self::Image) || self.streams_records()
     }
 
     fn allows_extensions(self) -> bool {
-        !matches!(self, Self::Gif | Self::Diff | Self::Rule) && !self.streams_records()
+        !matches!(self, Self::Gif | Self::Diff | Self::Image | Self::Rule)
+            && !self.streams_records()
     }
 
     fn accepts_multiple_resources(self) -> bool {
@@ -138,6 +141,11 @@ const MODE_SPECS: &[ModeSpec] = &[
         aliases: &["diff"],
     },
     ModeSpec {
+        mode: Mode::Image,
+        primary: "image",
+        aliases: &["image"],
+    },
+    ModeSpec {
         mode: Mode::Rule,
         primary: "rule",
         aliases: &["rule"],
@@ -155,7 +163,7 @@ const MODE_SPECS: &[ModeSpec] = &[
 ];
 
 const RENDER_MODE_FLAGS: &str =
-    "--print/--markdown/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--jsonl/--log";
+    "--print/--markdown/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--image/--jsonl/--log";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReportFormat {
@@ -230,6 +238,8 @@ enum ImageMode {
     Sixel,
     /// Half-block characters — works in any truecolour terminal.
     Blocks,
+    /// Unicode Braille cells.
+    Braille,
     /// A character ramp, the jp2a-style rendering. No colour required.
     Ascii,
     /// Skip the picture; print only the numbers.
@@ -243,7 +253,8 @@ impl std::str::FromStr for ImageMode {
         match value.to_ascii_lowercase().as_str() {
             "auto" => Ok(Self::Auto),
             "sixel" => Ok(Self::Sixel),
-            "blocks" | "block" => Ok(Self::Blocks),
+            "blocks" | "block" | "half-block" | "half-blocks" => Ok(Self::Blocks),
+            "braille" => Ok(Self::Braille),
             "ascii" | "art" => Ok(Self::Ascii),
             "none" | "off" => Ok(Self::None),
             other => Err(format!(
@@ -269,9 +280,13 @@ struct Cli {
     /// percentage of the canvas exceeds this. Makes the tool a CI gate.
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     diff_threshold: Option<f32>,
-    /// `--image-mode`: how `--diff` draws its picture.
+    /// `--image-mode`: how `--diff`/`--image` draws its picture.
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_mode: ImageMode,
+    /// `--height N`: with `--image`, render this many rows instead of the
+    /// backend's default.
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    height: Option<usize>,
     extensions: CliExtensions,
     width: Option<usize>,
     justify: Option<Justify>,
@@ -481,6 +496,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut loops = None;
     let mut diff_threshold = None;
     let mut image_mode = ImageMode::Auto;
+    let mut height = None;
     let mut extensions = CliExtensions::default();
     let mut width = None;
     let mut justify = None;
@@ -531,6 +547,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--ipynb" => set_mode(&mut mode, Mode::Ipynb)?,
             "--gif" => set_mode(&mut mode, Mode::Gif)?,
             "--diff" => set_mode(&mut mode, Mode::Diff)?,
+            "--image" => set_mode(&mut mode, Mode::Image)?,
             "--jsonl" | "--ndjson" => set_mode(&mut mode, Mode::JsonLines)?,
             "--log" => set_mode(&mut mode, Mode::Log)?,
             "--report" => {
@@ -541,10 +558,20 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
                 report_format.apply_option("--machine-json", None)?;
             }
             "--image-mode" => {
-                let value = iter
-                    .next()
-                    .ok_or("--image-mode requires one of: auto, sixel, blocks, ascii, none")?;
+                let value = iter.next().ok_or(
+                    "--image-mode requires one of: auto, sixel, blocks, braille, ascii, none",
+                )?;
                 image_mode = value.parse()?;
+            }
+            "--height" => {
+                let value = iter.next().ok_or("--height requires a number")?;
+                let rows: usize = value
+                    .parse()
+                    .map_err(|_| format!("invalid height '{value}'"))?;
+                if rows == 0 {
+                    return Err("--height must be at least 1".into());
+                }
+                height = Some(rows);
             }
             "--threshold" => {
                 let value = iter
@@ -656,6 +683,19 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     if mode == Mode::Diff && resources.len() != 2 {
         return Err("--diff needs exactly two images: --diff before.png after.png".into());
     }
+    if mode == Mode::Image {
+        if resources.is_empty() {
+            return Err(
+                "--image requires an image file: rich --image photo.png (or `-` for stdin)".into(),
+            );
+        }
+        if image_mode == ImageMode::None {
+            return Err(
+                "--image-mode none has no effect with --image; use auto, ascii, blocks, or sixel"
+                    .into(),
+            );
+        }
+    }
     // `--gif` animates in place and the demo writes its own console, so neither
     // goes through the export path: both accepted -o/--export-svg, wrote no
     // file, and exited 0. Everywhere else a bad export path is a hard error, so
@@ -675,6 +715,8 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     if exporting {
         let unsupported = if effective_mode == Mode::Gif {
             Some("--gif")
+        } else if effective_mode == Mode::Image {
+            Some("--image")
         } else if mode == Mode::Auto && resources.is_empty() {
             Some("the capability demo")
         } else {
@@ -700,9 +742,10 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         (
             "--image-mode",
             image_mode != ImageMode::Auto,
-            "--diff",
-            mode == Mode::Diff,
+            "--diff/--image",
+            mode == Mode::Diff || mode == Mode::Image,
         ),
+        ("--height", height.is_some(), "--image", mode == Mode::Image),
         (
             "--loop",
             loops.is_some(),
@@ -739,6 +782,8 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     if effective_mode.draws_directly() || demo {
         let mode_name = if effective_mode == Mode::Gif {
             "--gif"
+        } else if effective_mode == Mode::Image {
+            "--image"
         } else if effective_mode.streams_records() {
             mode_name(effective_mode)
         } else if demo {
@@ -785,6 +830,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         loops,
         diff_threshold,
         image_mode,
+        height,
         extensions,
         width,
         justify,
@@ -845,7 +891,8 @@ fn read_resource(resource: Option<&str>, encoding: Option<Encoding>) -> std::io:
                 Err(_) if looks_like_image(path) => {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        "looks like an image; use `rich --diff <before> <after>` to compare images",
+                        "looks like an image; use `rich --image <path>` to view it, or \
+                         `rich --diff <before> <after>` to compare two images",
                     ))
                 }
                 Err(err) => String::from_utf8_lossy(err.as_bytes()).into_owned(),
@@ -938,7 +985,8 @@ fn normalize_newlines(text: String) -> String {
 /// Windows editors write one by default and it is invisible: it made valid JSON
 /// fail to parse at "column 1", and Markdown render its first heading as
 /// literal text at exit 0 — in both cases with nothing pointing at the cause.
-/// Whether a path's extension names an image format `--diff` could read.
+/// Whether a path's extension names an image format `--diff`/`--image` could
+/// read.
 ///
 /// Used only to improve an error message, so a false negative costs nothing.
 fn looks_like_image(path: &str) -> bool {
@@ -1414,6 +1462,21 @@ fn run(mut cli: Cli) -> ExitCode {
     #[cfg(feature = "art")]
     if mode == Mode::Diff {
         return run_diff(&cli, &console, &export);
+    }
+
+    // `--image` renders a single still image directly through rich-art's
+    // `ImageArt` facade rather than composing a decorated renderable.
+    #[cfg(feature = "art")]
+    if mode == Mode::Image {
+        return run_image(&cli, &console, &export);
+    }
+    #[cfg(not(feature = "art"))]
+    if mode == Mode::Image {
+        return fail(
+            &cli,
+            ExitClass::Usage,
+            "this build has no image support (rebuild with the `art` feature)",
+        );
     }
 
     if mode.streams_records() {
@@ -2886,43 +2949,131 @@ fn diff_threshold_exceeded(changed: f32, limit: f32) -> bool {
 ///
 /// With `--threshold`, exits non-zero when the changed percentage exceeds it,
 /// which is what makes this usable as a visual-regression gate.
+/// Open an image file, translating a few common failure modes (a directory
+/// instead of a file, an unrecognized extension) into one actionable message.
+/// Shared by `--diff` (which loads two images) and `--image` (which loads
+/// one) so neither reimplements the other's error handling.
+///
+/// The directory check reached the plain read path but not this one, so
+/// `rich --diff a.png somedir` still reported "Access is denied".
+#[cfg(feature = "art")]
+fn open_image_path(path: &str) -> Result<rich_art::image::DynamicImage, String> {
+    if std::path::Path::new(path).is_dir() {
+        return Err(format!("cannot read {path}: is a directory, not a file"));
+    }
+    match rich_art::image::open(path) {
+        Ok(image) => Ok(image),
+        Err(err) => {
+            use rich_art::image::error::{ImageFormatHint, UnsupportedErrorKind};
+            let hint = match &err {
+                rich_art::image::ImageError::Unsupported(error) => match error.kind() {
+                    UnsupportedErrorKind::Format(ImageFormatHint::PathExtension(ext)) =>
+                        Some(format!("unsupported image extension {}; use a supported image format such as PNG or JPEG", ext.display())),
+                    _ => None,
+                },
+                _ => None,
+            };
+            Err(format!(
+                "cannot read {path}: {}",
+                hint.unwrap_or_else(|| err.to_string())
+            ))
+        }
+    }
+}
+
+/// Map the CLI's own `ImageMode` (which also carries `None`, meaning "print no
+/// picture at all") onto `rich_art`'s `ImageMode` (which has no such variant ?
+/// a facade that always draws something has no notion of "nothing"). Argument
+/// parsing rejects `--image-mode none` together with `--image` before this can
+/// ever see it.
+#[cfg(feature = "art")]
+fn to_art_image_mode(mode: ImageMode) -> rich_art::ImageMode {
+    match mode {
+        ImageMode::Auto => rich_art::ImageMode::Auto,
+        ImageMode::Sixel => rich_art::ImageMode::Sixel,
+        ImageMode::Blocks => rich_art::ImageMode::Blocks,
+        ImageMode::Braille => rich_art::ImageMode::Braille,
+        ImageMode::Ascii => rich_art::ImageMode::Ascii,
+        ImageMode::None => unreachable!("--image-mode none is rejected during argument parsing"),
+    }
+}
+
+/// Render one still image through rich-art's [`rich_art::ImageArt`] facade.
+///
+/// This function only opens the file and maps CLI flags onto the facade's
+/// builder; picking a backend, sizing and colour handling all stay inside
+/// [`rich_art::ImageArt`]; nothing here reimplements that logic (see
+/// AGENTS.md's mirror/ext boundary).
+#[cfg(feature = "art")]
+fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
+    use rich_art::ImageArt;
+
+    let Some(resource) = cli.resource.as_deref() else {
+        return fail(
+            cli,
+            ExitClass::Usage,
+            "--image requires an image file: rich --image photo.png (or `-` for stdin)",
+        );
+    };
+
+    let image = if resource == "-" {
+        let mut buffer = Vec::new();
+        if let Err(err) = std::io::stdin().read_to_end(&mut buffer) {
+            return fail(cli, ExitClass::Input, format!("cannot read stdin: {err}"));
+        }
+        match rich_art::image::load_from_memory(&buffer) {
+            Ok(image) => image,
+            Err(err) => {
+                return fail(
+                    cli,
+                    ExitClass::Input,
+                    format!("cannot decode image from stdin: {err}"),
+                )
+            }
+        }
+    } else {
+        match open_image_path(resource) {
+            Ok(image) => image,
+            Err(message) => return fail(cli, ExitClass::Input, message),
+        }
+    };
+
+    let width = cli.width.unwrap_or_else(|| console.width());
+    let mut art = ImageArt::new(image)
+        .mode(to_art_image_mode(cli.image_mode))
+        .width(width)
+        .color(!cli.no_color);
+    if let Some(height) = cli.height {
+        art = art.height(height);
+    }
+
+    // Validate up front: `Renderable::rich_render` cannot fail and would
+    // silently fall back to ASCII, which is the wrong answer for a CLI that
+    // promised a clear error (e.g. `--image-mode sixel` on a build without
+    // the `sixel` feature, or an image Sixel cannot encode).
+    let options = console.options();
+    if let Err(err) = art.render(console, &options) {
+        return fail(cli, ExitClass::Input, err.to_string());
+    }
+
+    if let Err(message) = emit(console, export, |c| c.print(&art)) {
+        return fail(cli, ExitClass::Input, message);
+    }
+    success(cli)
+}
+
 #[cfg(feature = "art")]
 fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     use rich::Table;
     use rich_art::imagediff::{diff, DiffSettings};
-    use rich_art::{AsciiArt, BlockArt, SixelArt};
+    use rich_art::{AsciiArt, BlockArt, BrailleArt, SixelArt};
 
     let (before_path, after_path) = (&cli.resources[0], &cli.resources[1]);
-    // The directory check reached the plain read path but not this one, so
-    // `rich --diff a.png somedir` still reported "Access is denied".
-    let open = |path: &String| -> Result<_, String> {
-        if std::path::Path::new(path).is_dir() {
-            return Err(format!("cannot read {path}: is a directory, not a file"));
-        }
-        match rich_art::image::open(path) {
-            Ok(image) => Ok(image),
-            Err(err) => {
-                use rich_art::image::error::{ImageFormatHint, UnsupportedErrorKind};
-                let hint = match &err {
-                    rich_art::image::ImageError::Unsupported(error) => match error.kind() {
-                        UnsupportedErrorKind::Format(ImageFormatHint::PathExtension(ext)) =>
-                            Some(format!("unsupported image extension {}; use a supported image format such as PNG or JPEG", ext.display())),
-                        _ => None,
-                    },
-                    _ => None,
-                };
-                Err(format!(
-                    "cannot read {path}: {}",
-                    hint.unwrap_or_else(|| err.to_string())
-                ))
-            }
-        }
-    };
-    let before = match open(before_path) {
+    let before = match open_image_path(before_path) {
         Ok(image) => image,
         Err(message) => return fail(cli, ExitClass::Input, message),
     };
-    let after = match open(after_path) {
+    let after = match open_image_path(after_path) {
         Ok(image) => image,
         Err(message) => return fail(cli, ExitClass::Input, message),
     };
@@ -2985,7 +3136,10 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
             mode = ImageMode::Ascii;
         }
         if mode == ImageMode::Sixel && !is_terminal {
-            if !for_export && cli.report_format == ReportFormat::Human {
+            if cli.image_mode != ImageMode::Sixel
+                && !for_export
+                && cli.report_format == ReportFormat::Human
+            {
                 eprintln!(
                     "rich: Sixel graphics need a terminal, drawing the diff as {} instead",
                     if has_color { "blocks" } else { "ASCII art" }
@@ -3007,6 +3161,11 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
             ),
             ImageMode::Blocks => c.print(
                 &BlockArt::new(report.heatmap())
+                    .width(width)
+                    .height(rows_cap),
+            ),
+            ImageMode::Braille => c.print(
+                &BrailleArt::new(report.heatmap())
                     .width(width)
                     .height(rows_cap),
             ),
@@ -3292,6 +3451,7 @@ COMMANDS:
     log         Stream common structured-log JSONL records
     gif         Animate GIFs (`--gif`)
     diff        Perceptually compare two images (`--diff`)
+    image       Render a still image as ASCII/Braille/blocks/Sixel (`--image`)
     rule        Draw a horizontal rule (`--rule`)
 
 RENDER MODE (choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb
@@ -3308,13 +3468,17 @@ by extension — anything else with a file extension is syntax-highlighted):
         --loop N     With --gif, repeat N times (default 1; 0 = forever)
         --rule       Draw a horizontal rule (RESOURCE is its title)
         --diff       Perceptually compare two images (needs exactly two)
+        --image      Render RESOURCE as a still image (ASCII/Braille/blocks/Sixel)
 
 OPTIONS:
     -w, --width N    Render the output N columns wide (the console keeps its
                      own width, so --left/--center/--right still use it)
+        --height N   With --image, render this many rows instead of the
+                     backend's default
         --image-mode M
-                     With --diff, how to draw the picture: auto (default),
-                     sixel (real pixels), blocks, ascii, none
+                     With --diff/--image, how to draw the picture: auto
+                     (default), sixel (real pixels), blocks, braille, ascii, none
+                     (--image rejects none: there would be nothing to draw)
 {extension_help}
         --threshold PCT
                      With --diff, exit non-zero above PCT% changed.
