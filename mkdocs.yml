@@ -75,11 +75,15 @@ nav:
       - 5. Progress and live output: tutorial/05-live.md
       - 6. The CLI: tutorial/06-cli.md
   - Gallery: gallery.md
+  - Rich-art videos: demos.md
   - Using the CLI: cli.md
   - CLI reference: cli-reference.md
   - Comparing images: image-diff.md
   - Troubleshooting: troubleshooting.md
   - Known issues: known-issues.md
+  - Development plans:
+      - CLI usability: plans/0.0.7.md
+      - Performance and confidence: plans/0.0.6.md
   - Releases:
       - 0.0.5 preparation plan: plans/0.0.5.md
       - 0.0.4: releases/0.0.4.md
