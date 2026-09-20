@@ -39,6 +39,7 @@ release is **`rich-cli` 1.8.1**, recorded in
 | `--jsonl` | streaming JSON Lines / NDJSON |
 | `--log` | streaming structured-log JSONL |
 | `--gif` | animated GIFs, several at once |
+| `--image` | a still image as ASCII, Braille, half-blocks, or Sixel |
 | `--rule` | a horizontal rule |
 
 With no flag the mode is picked from the file extension; a bare `-` reads stdin.
@@ -70,7 +71,7 @@ Watch
 Both are on by default and can be dropped for a smaller binary:
 
 - **`fetch`** — URL support (`rich <url>`), via `ureq` with bundled TLS roots.
-- **`art`** — `--gif` playback, via [`rich-art`](../rich-art).
+- **`art`** — `--gif` playback and `--diff`/`--image` picture rendering, via [`rich-art`](../rich-art).
 
 ```bash
 cargo install rs-rich-cli --no-default-features   # installs `rich`; no network or image decoders

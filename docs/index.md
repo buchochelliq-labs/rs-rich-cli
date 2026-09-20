@@ -103,7 +103,7 @@ Each crate versions independently; see [Branching and releases](BRANCHING.md).
 | [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.4` |
 | [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.5` |
 | [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.7` |
-| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.4` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.5` |
 <!-- END MANIFEST VERSIONS -->
 
 ## Install

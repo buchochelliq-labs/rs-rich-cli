@@ -49,6 +49,13 @@ Entries below record subsequent releases and development.
   fetch-enabled URLs, including atomic-save/disappearance recovery, parse-error
   frames, configurable intervals, URL response caching, and deterministic
   one-shot behavior when stdout is redirected.
+- **`rs-rich-art`:** added an `ImageArt` facade (`ImageMode`, `ImageOptions`,
+  `RenderCapabilities`) plus a reusable Braille renderer so consumers can
+  render a single still image without duplicating renderer selection logic.
+- **`rs-rich-cli`:** added a first-class `--image` flag / `rich image` command
+  for rendering a single still image (reusing `rich-art`'s `ImageArt` facade),
+  plus a new `--height N` option; `--image-mode` now also applies to `--image`
+  and accepts `braille`.
 
 ## [0.0.5] — 2026-09-13
 
