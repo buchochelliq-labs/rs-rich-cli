@@ -16,7 +16,29 @@ color, and beautiful formatting in the terminal.
 Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
 (see [`UPSTREAM.toml`](UPSTREAM.toml)).
 
-![Console markup](docs/assets/markup.svg)
+![Rich-art: the same bouncing ball rendered as half-blocks and ASCII](docs/assets/demos/rich-art-comparison.gif)
+
+**[Watch the rich-art videos](https://buchochelliq-labs.github.io/rs-rich-cli/demos/)** ·
+[Output gallery](docs/gallery.md) · [CLI guide](docs/cli.md)
+
+This preview replays our archived terminal output from the GIF renderer.
+[Capture details and reproduction](docs/demos.md#how-these-videos-were-made).
+
+## Install and try
+
+```bash
+cargo install rs-rich-cli
+rich --print '[bold magenta]Hello[/] [green]World[/]'
+rich --help
+```
+
+For Rust applications, use `cargo add rs-rich` and import `rich::Console`.
+See [Getting started](docs/getting-started.md) for library examples.
+
+![Progress output exported by rs-rich](docs/assets/demos/progress.gif)
+
+Progress and spinner GIFs replay exported library frames; the gallery includes
+[tables, panels, trees, Markdown and JSON](docs/gallery.md).
 
 > **Early releases, and the versions say so.** The crates version independently
 > by ordinary SemVer; the number is *not* tied to the upstream release. Expect
@@ -87,15 +109,12 @@ Per-module detail is in [docs/PORTING.md](docs/PORTING.md). What comes next, and
 why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 [#16](https://github.com/buchochelliq-labs/rs-rich-cli/issues/16).
 
-## 0.0.4 — released
+## Release history and development
 
-All four crates are published at 0.0.4. The [release notes](docs/releases/0.0.4.md)
-cover explicit text encoding, GIF half-block rendering, CSV/wrapping improvements
-and the optional syntax cache, with actual CLI screenshots and verified results.
-
-The [0.0.5 preparation plan](docs/plans/0.0.5.md) proposes targeted goldens,
-differential fuzzing, library benchmarks and opt-in input sanitization.
-That work is planned; the manifests remain at the released 0.0.4 versions.
+The [release notes](docs/releases/0.0.4.md) document the coordinated 0.0.4
+release. Later source changes are tracked in the [roadmap](docs/ROADMAP.md)
+and development plans. The manifest table above describes this checkout;
+crates.io is the source for available published versions.
 
 ## 0.0.3 release notes
 

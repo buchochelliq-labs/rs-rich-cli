@@ -11,33 +11,34 @@ A Rust port of Python's [`rich`](https://github.com/Textualize/rich) — rich te
 colour, tables, markdown and progress bars in the terminal — plus a port of the
 [`rich-cli`](https://github.com/Textualize/rich-cli) tool.
 
-![Markup](assets/markup.svg)
+![Rich-art half-block and ASCII animation](assets/demos/rich-art-comparison.gif)
 
-Renderings on this site come from the library or CLI itself. SVG exports and
-browser screenshots are committed snapshots of actual output.
+**[Watch the rich-art videos](demos.md)** · [Browse the gallery](gallery.md) ·
+[Start with the CLI](cli.md) · [Learn the library](tutorial/index.md)
 
----
+The preview replays archived CLI output. See the [capture details](demos.md#how-these-videos-were-made)
+for its version, timing and reproduction commands.
 
-## 0.0.4 is released
+```bash
+cargo install rs-rich-cli
+rich --print '[bold magenta]Hello[/] [green]World[/]'
+```
 
-All four crates are published at 0.0.4 and passed exact-version registry
-verification. The [release notes](releases/0.0.4.md) cover explicit text encoding,
-GIF half-block rendering, measured CSV/wrapping improvements and an optional
-syntax cache, with actual CLI screenshots and the release workflow results.
+For Rust applications: `cargo add rs-rich`. Read [Getting started](getting-started.md)
+for a complete library example.
 
-The [0.0.5 preparation plan](plans/0.0.5.md) proposes four focused workstreams:
-targeted goldens, differential fuzzing, library benchmarks and opt-in input
-sanitization. Implementation and version changes are still ahead.
+## Output in motion
 
-## What changed in 0.0.3
+![Progress frames exported by rs-rich](assets/demos/progress.gif)
 
-Graphical diff exports retain color with redirected stdout; notebooks support
-panels and alignment; styled titles render correctly; Windows paging uses
-`more.com`. JSON precision and GIF/CSV redirection also improve.
+Progress and spinner animations replay exported library frames. The
+[gallery](gallery.md) pairs output with links to the relevant guides.
 
-Read the [0.0.3 release notes](releases/0.0.3.md) for actual CLI screenshots,
-per-package changes and remaining limitations. Package badges below show what
-is currently available on crates.io.
+## Release history and development
+
+[Release notes](releases/0.0.4.md) describe the coordinated 0.0.4 release.
+The [roadmap](ROADMAP.md) tracks subsequent work. Manifest versions below
+identify this checkout; the crates.io badges identify published packages.
 
 ## What it does
 
@@ -65,9 +66,9 @@ is currently available on crates.io.
 
 ## Byte-parity with Python rich
 
-This is a port, not a re-imagining. The promise is that output is **byte-identical**
-to Python `rich` 15.0.0 for everything implemented — enforced by golden fixtures
-captured from the real library and asserted in CI.
+Golden fixtures compare covered output against Python `rich` 15.0.0 in CI.
+Coverage and known differences are documented in [Module status](PORTING.md)
+and [Divergences](DIVERGENCES.md); not every implemented feature is byte-identical.
 
 That promise is why the honest bits matter:
 
