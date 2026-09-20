@@ -74,6 +74,12 @@ jobs:
       - name: Verify interactive stdin and NO_COLOR in a terminal
         run: python3 scripts/test_cli_terminal.py --binary target/debug/rich
 
+      - name: Verify workflow output snapshots
+        run: python3 scripts/snapshot_cli.py --cases scripts/fixtures/workflow_snapshots.jsonl --snapshots scripts/fixtures/workflow_snapshots --command target/debug/rich
+
+      - name: Verify watch recovery in a terminal
+        run: python3 scripts/test_watch_workflows.py --binary target/debug/rich -v
+
   features:
     name: feature matrix
     runs-on: ubuntu-latest

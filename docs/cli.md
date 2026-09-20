@@ -247,6 +247,53 @@ rejected for `--image`, because it means "draw nothing" and there is no
 comparison report to fall back on. See
 [Comparing images](image-diff.md) for how the renderer picks a mode.
 
+### Fit, crop and transparent backgrounds
+
+```bash
+rich image photo.png --image-mode blocks --width 44 --height 12 --image-fit contain
+rich image photo.png --image-mode blocks --width 44 --height 12 --image-fit cover
+rich image logo.png --image-fit contain --width 44 --height 12 --image-background '#542080'
+```
+
+`contain` centres the whole image in a padded rectangle; `cover` fills the
+rectangle and centre-crops excess edges. Both preserve aspect ratio assuming
+terminal cells are twice as tall as they are wide. Fitting requires `--height`;
+width defaults to the terminal width and is capped by available columns.
+
+`--image-background '#RRGGBB'` composites transparent pixels before resizing and
+colours contain padding. Fit padding defaults to black. Without either option,
+existing renderer behaviour is preserved. Fitting rejects empty/zero dimensions
+and rasters above 16 megapixels, including cover's intermediate resize; extreme
+aspect ratios may therefore require a smaller size. These options apply to
+`image`, not GIF playback or image comparisons.
+
+Library equivalent:
+
+```rust
+use rich_art::{ImageArt, ImageFit, ImageMode};
+let art = ImageArt::from_path("logo.png")?
+    .mode(ImageMode::Blocks)
+    .width(44).height(12)
+    .fit(ImageFit::Contain)
+    .background([84, 32, 128]);
+```
+
+[See the actual renderings](demos.md) and [workflow recipes](recipes.md).
+
+## Watch a changing file
+
+```bash
+rich json status.json --no-config --watch --watch-interval 0.5
+```
+
+Interactive watch clears and repaints the terminal viewport for each changed
+frame. It leaves the cursor visible and uses the existing console controls.
+Invalid input or a missing file is recoverable. Local regular files are read
+with a fixed 64 KiB buffer on every poll so same-size edits and atomic saves
+are detected even when timestamps are preserved. For large files, choose a
+longer interval to reduce disk I/O. Redirected stdout renders once and exits
+without terminal clear codes. See [watch recipes](recipes.md#watch-json-while-editing).
+
 ## Use it in a script or CI
 
 `rich` writes rendered output to stdout and diagnostics to stderr, so the two
@@ -324,7 +371,7 @@ files already on disk; `--collision overwrite` (or `--overwrite`) opts in
 explicitly.
 
 A batch stops at the first failure unless `--continue-on-error` is given.
-`--jobs N` bounds concurrency. `--batch` cannot be combined with `--diff` or
+`--jobs N` reserves a positive worker limit; execution is currently serial. `--batch` cannot be combined with `--diff` or
 `--gif`, which consume their whole resource list as one unit, nor with `--pager`,
 which would open one pager per item.
 
@@ -392,7 +439,7 @@ rich --gif first.gif second.gif --gif-mode blocks --loop 0
 ```
 
 `--gif-mode` selects the GIF renderer independently of the image-diff-only
-`--image-mode` flag. Existing invocations default to ASCII. Blocks pack two
+`--image-mode` flag (used by still images and diffs). Existing invocations default to ASCII. Blocks pack two
 pixel rows into each terminal cell. GIF decoding retains the existing full-canvas
 transparency/disposal handling, and animations keep their individual clocks.
 

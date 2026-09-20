@@ -285,6 +285,10 @@ struct Cli {
     /// `--image-mode`: how `--diff`/`--image` draws its picture.
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_mode: ImageMode,
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    image_fit: Option<String>,
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    image_background: Option<[u8; 3]>,
     /// `--height N`: with `--image`, render this many rows instead of the
     /// backend's default.
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
@@ -410,6 +414,10 @@ const VALUE_OPTIONS: &[&str] = &[
     "--panel-style",
     "--report",
     "--image-mode",
+    "--image-fit",
+    "--image-background",
+    "--height",
+    "--watch-interval",
     "--gif-mode",
     "--encoding",
     "--threshold",
@@ -1185,6 +1193,8 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut loops = None;
     let mut diff_threshold = None;
     let mut image_mode = ImageMode::Auto;
+    let mut image_fit = None;
+    let mut image_background = None;
     let mut height = None;
     let mut extensions = CliExtensions::default();
     let mut width = None;
@@ -1259,6 +1269,29 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                     "--image-mode requires one of: auto, sixel, blocks, braille, ascii, none",
                 )?;
                 image_mode = value.parse()?;
+            }
+            "--image-fit" => {
+                let value = iter.next().ok_or("--image-fit requires contain or cover")?;
+                if !matches!(value.as_str(), "contain" | "cover") {
+                    return Err("--image-fit requires contain or cover".into());
+                }
+                image_fit = Some(value.clone());
+            }
+            "--image-background" => {
+                let value = iter.next().ok_or("--image-background requires #RRGGBB")?;
+                let bytes = value.as_bytes();
+                if bytes.len() != 7
+                    || bytes[0] != b'#'
+                    || !bytes[1..].iter().all(u8::is_ascii_hexdigit)
+                {
+                    return Err("--image-background requires #RRGGBB".into());
+                }
+                let mut rgb = [0; 3];
+                for (index, channel) in rgb.iter_mut().enumerate() {
+                    *channel = u8::from_str_radix(&value[1 + index * 2..3 + index * 2], 16)
+                        .map_err(|_| "--image-background requires #RRGGBB")?;
+                }
+                image_background = Some(rgb);
             }
             "--height" => {
                 let value = iter.next().ok_or("--height requires a number")?;
@@ -1457,6 +1490,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             );
         }
     }
+    if image_fit.is_some() && height.is_none() {
+        return Err("--image-fit requires --height to define the target rectangle".into());
+    }
     // `--gif` animates in place and the demo writes its own console, so neither
     // goes through the export path: both accepted -o/--export-svg, wrote no
     // file, and exited 0. Everywhere else a bad export path is a hard error, so
@@ -1507,6 +1543,18 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             mode == Mode::Diff || mode == Mode::Image,
         ),
         ("--height", height.is_some(), "--image", mode == Mode::Image),
+        (
+            "--image-fit",
+            image_fit.is_some(),
+            "--image",
+            mode == Mode::Image,
+        ),
+        (
+            "--image-background",
+            image_background.is_some(),
+            "--image",
+            mode == Mode::Image,
+        ),
         (
             "--loop",
             loops.is_some(),
@@ -1593,6 +1641,8 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         loops,
         diff_threshold,
         image_mode,
+        image_fit,
+        image_background,
         height,
         extensions,
         width,
@@ -2237,6 +2287,12 @@ fn run_watch(mut cli: Cli) -> ExitCode {
         let changed = previous.as_ref() != Some(&fingerprint);
         if changed || (is_url(resource) && !cli.watch_cache) {
             previous = Some(fingerprint);
+            // Each watch frame owns the viewport; clear stale rows when a
+            // replacement is shorter, then start the new frame at the top.
+            let console = Console::new();
+            console.clear();
+            console.control(&Control::home());
+            let _ = std::io::stdout().flush();
             let mut iteration = cli.clone();
             iteration.watch = false;
             let status = run_once_with_fetch(iteration, cached.and_then(Result::ok));
@@ -2270,16 +2326,28 @@ fn watch_fingerprint(resource: &str, cache_url: bool, encoding: Option<Encoding>
         return "url".to_string();
     }
     match std::fs::metadata(resource) {
-        Ok(metadata) => format!(
-            "{}:{}:{}",
-            metadata.len(),
-            metadata
-                .modified()
-                .ok()
-                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
-                .map_or(0, |duration| duration.as_nanos()),
-            metadata.is_file()
-        ),
+        Ok(metadata) if metadata.is_file() => {
+            use std::hash::Hasher;
+            // Atomic saves and in-place writes may preserve both size and
+            // mtime. Read regular files each poll using a fixed-size buffer,
+            // so detection is portable and memory does not grow with input.
+            let mut file = match std::fs::File::open(resource) {
+                Ok(file) => file,
+                Err(error) => return format!("file-error:{error}"),
+            };
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            let mut buffer = [0u8; 64 * 1024];
+            loop {
+                match file.read(&mut buffer) {
+                    Ok(0) => break,
+                    Ok(count) => hasher.write(&buffer[..count]),
+                    Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                    Err(error) => return format!("file-error:{error}"),
+                }
+            }
+            format!("file:{:x}", hasher.finish())
+        }
+        Ok(_) => "not-file".to_string(),
         Err(_) => "missing".to_string(),
     }
 }
@@ -3948,6 +4016,16 @@ fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
         art = art.height(height);
     }
 
+    if let Some(fit) = cli.image_fit.as_deref() {
+        art = art.fit(match fit {
+            "cover" => rich_art::ImageFit::Cover,
+            _ => rich_art::ImageFit::Contain,
+        });
+    }
+    if let Some(background) = cli.image_background {
+        art = art.background(background);
+    }
+
     // Validate up front: `Renderable::rich_render` cannot fail and would
     // silently fall back to ASCII, which is the wrong answer for a CLI that
     // promised a clear error (e.g. `--image-mode sixel` on a build without
@@ -4377,6 +4455,11 @@ OPTIONS:
                      own width, so --left/--center/--right still use it)
         --height N   With --image, render this many rows instead of the
                      backend's default
+        --image-fit M With --image and --height: contain (letterbox) or cover
+                     (centre-crop); preserves aspect ratio in terminal cells
+        --image-background #RRGGBB
+                     With --image: flatten transparency onto this RGB colour
+                     (also colours contain padding; quote the # in your shell)
         --image-mode M
                      With --diff/--image, how to draw the picture: auto
                      (default), sixel (real pixels), blocks, braille, ascii, none
@@ -4412,7 +4495,7 @@ OPTIONS:
                      Poll interval in seconds (default 1)
         --watch-cache With URLs, render only when the response body changes
         --batch      Convert explicit files, directories, or globs deterministically
-        --jobs N     Bound batch workers (output remains deterministic)
+        --jobs N     Reserved worker limit; execution is currently serial
         --continue-on-error
                      Process all planned inputs and aggregate failures
         --overwrite  Allow existing batch export destinations

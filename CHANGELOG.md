@@ -33,6 +33,27 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+- Fix watch refresh after same-size edits/atomic saves with preserved timestamps;
+  read local contents using bounded memory on each poll. Repaint the terminal
+  viewport instead of appending each changed frame. Redirected watch stays finite.
+- Add `ImageFit::{Contain,Cover}` and `ImageArt::background` for still-image
+  letterboxing, centre-cropping and alpha compositing; expose CLI fit/background
+  options with positive-dimension and allocation-limit validation.
+- Add real CLI workflow snapshots and terminal regressions, fresh demo capture
+  tooling, workflow recipes, and truthful serial `--jobs` help.
+
+### Release preparation
+
+The current source workstream targets `rs-rich-cli` 0.0.7 and `rs-rich-art`
+0.0.5, with `rs-rich-ext` 0.0.5 and `rs-rich` 0.0.4 unchanged. These independent
+source versions do not imply tags or registry publication. See
+[`docs/releases/0.0.7.md`](docs/releases/0.0.7.md) for pending release gates.
+
+The bounded finish scope includes still-image `contain`/`cover` fitting with
+explicit height, background compositing, regression coverage, fresh captures,
+workflow recipes, truthful serial `--jobs` help, and dependency reconciliation.
+Completion and validation evidence are tracked separately from this scope.
+
 ### Added
 
 - **Confidence tooling:** added `scripts/snapshot_cli.py`, a deterministic CLI
@@ -43,9 +64,10 @@ Entries below record subsequent releases and development.
   profiles, and `library_bench` accepts explicit `--width` and `--color-system`
   values.
 - **`rs-rich-cli` 0.0.7 workstream:** deterministic `--batch` conversion for
-  files, directories, and globs with bounded execution, explicit collision and
+  files, directories, and globs with deterministic serial execution, explicit collision and
   overwrite policy, fail-fast/continue-on-error modes, and aggregate JSON
-  status reports. Added versioned TOML config profiles with platform discovery,
+  status reports. `--jobs` reserves a future concurrency limit; it does not
+  enable parallel workers. Added TOML-style scalar config profiles with local/home discovery,
   explicit `--config`/`--profile`/`--no-config`, and CLI-over-config precedence.
 
 - **`rs-rich-cli`:** added task-oriented subcommands (`rich json`,
