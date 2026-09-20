@@ -21,7 +21,7 @@ Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
 **[Watch the rich-art videos](https://buchochelliq-labs.github.io/rs-rich-cli/demos/)** ·
 [Output gallery](docs/gallery.md) · [CLI guide](docs/cli.md)
 
-This preview shows crop anchors from the optimized CLI 0.0.8 preparation build.
+This preview shows crop anchors from the optimized CLI 0.0.8 build.
 [New workflows and reproduction](docs/demos.md#cli-008-workflows) ·
 [0.0.8 release notes](docs/releases/0.0.8.md).
 
@@ -64,8 +64,8 @@ in the release notes; the crates.io links show available packages.
 |---|---|
 | [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.4` |
 | [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.6` |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.8` |
-| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.6` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.9` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.7` |
 <!-- END MANIFEST VERSIONS -->
 
 | Package | Role | Import / installed name |
@@ -117,6 +117,12 @@ The [release notes](docs/releases/0.0.4.md) document the coordinated 0.0.4
 release. Later source changes are tracked in the [roadmap](docs/ROADMAP.md)
 and development plans. The manifest table above describes this checkout;
 crates.io is the source for available published versions.
+
+CLI 0.0.8 and art 0.0.6 are [published and registry-verified](docs/releases/0.0.8.md).
+The [0.0.9 source preparation](docs/releases/0.0.9.md) adds named themes, batch
+progress/cancellation, selected demo sections, `rich doctor` and opt-in ANSI256
+image dithering. Combined validation is pending; source versions do not imply
+publication. See [copyable workflows](docs/recipes.md).
 
 ## 0.0.3 release notes
 

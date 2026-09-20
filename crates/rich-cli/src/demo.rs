@@ -16,7 +16,7 @@ pub(super) fn requested(args: &[String]) -> bool {
             iter.next();
             continue;
         }
-        if arg == "--demo" {
+        if matches!(arg.as_str(), "--demo" | "--demo-list") {
             return true;
         }
     }
@@ -24,42 +24,84 @@ pub(super) fn requested(args: &[String]) -> bool {
 }
 
 pub(super) fn dispatch(args: &[String]) -> ExitCode {
-    let options = options(args);
-    let (no_color, delay) = match options {
+    let options = match options(args) {
         Ok(options) => options,
         Err(message) => return emit_error(false, ExitClass::Usage, &message),
     };
-    match tour(no_color, delay) {
+    if options.list {
+        println!("core       Core renderables and extensions");
+        println!("workflows  Configuration, batch, exports and watch");
+        println!(
+            "art        {}",
+            if cfg!(feature = "art") {
+                "Banners, images, image diff and GIF"
+            } else {
+                "unavailable (build without art feature)"
+            }
+        );
+        return ExitCode::SUCCESS;
+    }
+    match tour(options.no_color, options.delay, options.group.as_deref()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => emit_error(false, ExitClass::Input, &format!("demo: {error}")),
     }
 }
 
-fn options(args: &[String]) -> Result<(bool, Duration), String> {
+struct Options {
+    no_color: bool,
+    delay: Duration,
+    group: Option<String>,
+    list: bool,
+}
+
+fn options(args: &[String]) -> Result<Options, String> {
     let mut no_color = std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty());
     let mut seconds = 3.0;
+    let mut group = None;
+    let mut list = false;
+    let mut play = false;
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
-            "--demo" | "--no-config" => {}
+            "--demo" => play = true,
+            "--demo-list" => list = true,
+            "--no-config" => {}
             "--no-color" => no_color = true,
+            "--demo-section" => {
+                let value = iter.next().ok_or("--demo-section requires core, workflows, art")?;
+                if !matches!(value.as_str(), "core" | "workflows" | "art") {
+                    return Err(format!("unknown demo section {value:?}; choose core, workflows, art"));
+                }
+                group = Some(value.clone());
+            }
             "--demo-delay" => {
                 seconds = iter.next().and_then(|value| value.parse::<f64>().ok())
                     .filter(|value| value.is_finite() && (0.0..=60.0).contains(value))
                     .ok_or("--demo-delay expects seconds between 0 and 60")?;
             }
-            _ => return Err(format!("--demo accepts only --demo-delay SECONDS, --no-color and --no-config; unexpected {arg}")),
+            _ => return Err(format!("demo accepts only --demo, --demo-list, --demo-section NAME, --demo-delay SECONDS, --no-color and --no-config; unexpected {arg}")),
         }
     }
+    if list && (play || group.is_some()) {
+        return Err("--demo-list cannot be combined with --demo or --demo-section".into());
+    }
+    if !list && !play {
+        return Err("--demo-section requires --demo".into());
+    }
+    if group.as_deref() == Some("art") && !cfg!(feature = "art") {
+        return Err("art demo is unavailable in this build; rebuild with the art feature".into());
+    }
     // A pipe gets a finite transcript, without terminal pauses or controls.
-    Ok((
+    Ok(Options {
         no_color,
-        if std::io::stdout().is_terminal() {
+        delay: if std::io::stdout().is_terminal() {
             Duration::from_secs_f64(seconds)
         } else {
             Duration::ZERO
         },
-    ))
+        group,
+        list,
+    })
 }
 
 pub(super) fn section(console: &Console, delay: Duration, title: &str) {
@@ -98,7 +140,7 @@ fn strings(args: &[&str]) -> Vec<String> {
     args.iter().map(|arg| (*arg).to_owned()).collect()
 }
 
-fn tour(no_color: bool, delay: Duration) -> std::io::Result<()> {
+fn tour(no_color: bool, delay: Duration, group: Option<&str>) -> std::io::Result<()> {
     println!("rich --demo: guided suite tour (3 seconds per section by default). Ctrl+C to stop.");
     println!("Examples are offline; exports use a temporary directory. Configuration is ignored.");
     let root = tempfile::tempdir()?;
@@ -137,10 +179,19 @@ fn tour(no_color: bool, delay: Duration) -> std::io::Result<()> {
         std::process::exit(130);
     })
     .map_err(std::io::Error::other)?;
-    let console = run_demo(no_color, delay);
-    let file = |name: &str| root.path().join(name).to_string_lossy().into_owned();
-    for (name, contents) in [
-        ("first.json", "{\"release\":\"0.0.8\",\"ready\":true}"),
+    let console = if group.is_none() || group == Some("core") {
+        run_demo(no_color, delay)
+    } else {
+        build_demo_console(no_color)
+    };
+    if group.is_none() || group == Some("workflows") {
+        let file = |name: &str| root.path().join(name).to_string_lossy().into_owned();
+        let release_json = format!(
+            "{{\"release\":\"{}\",\"ready\":true}}",
+            env!("CARGO_PKG_VERSION")
+        );
+        for (name, contents) in [
+        ("first.json", release_json.as_str()),
         ("second.json", "{\"features\":[\"config\",\"batch\",\"art\"]}"),
         ("events.jsonl", "{\"event\":\"start\",\"count\":1}\n{\"event\":\"finish\",\"count\":2}\n"),
         ("logs.jsonl", "{\"level\":\"info\",\"message\":\"Tour started\"}\n{\"level\":\"warn\",\"message\":\"Example warning\"}\n"),
@@ -148,115 +199,118 @@ fn tour(no_color: bool, delay: Duration) -> std::io::Result<()> {
         ("demo.toml", "[defaults]\nwidth = 60\n[profiles.preview]\npanel = 'rounded'\n"),
     ] { std::fs::write(file(name), contents)?; }
 
-    for (title, mode, name) in [
-        ("JSON Lines", "--jsonl", "events.jsonl"),
-        ("Structured logs", "--log", "logs.jsonl"),
-        ("Notebook", "--ipynb", "notes.ipynb"),
-    ] {
-        section(&console, delay, title);
-        command(
-            &console,
-            no_color,
-            &format!("{mode} {name}"),
-            vec![mode.into(), file(name)],
-        )?;
-    }
-    section(&console, delay, "Configuration profiles");
-    console.print(&Text::new(
-        "$ rich --config demo.toml --profile preview config show",
-    ));
-    let args = vec![
-        "--config".into(),
-        file("demo.toml"),
-        "--profile".into(),
-        "preview".into(),
-        "config".into(),
-        "show".into(),
-    ];
-    let output = config::inspect(&args, &ConfigRoots::default())
-        .map_err(std::io::Error::other)?
-        .ok_or_else(|| std::io::Error::other("config example produced no result"))?;
-    console.print(&Json::new(&output).map_err(std::io::Error::other)?);
-    command(
-        &console,
-        no_color,
-        "--config demo.toml --profile preview first.json",
-        vec![
+        for (title, mode, name) in [
+            ("JSON Lines", "--jsonl", "events.jsonl"),
+            ("Structured logs", "--log", "logs.jsonl"),
+            ("Notebook", "--ipynb", "notes.ipynb"),
+        ] {
+            section(&console, delay, title);
+            command(
+                &console,
+                no_color,
+                &format!("{mode} {name}"),
+                vec![mode.into(), file(name)],
+            )?;
+        }
+        section(&console, delay, "Configuration profiles");
+        console.print(&Text::new(
+            "$ rich --config demo.toml --profile preview config show",
+        ));
+        let args = vec![
             "--config".into(),
             file("demo.toml"),
             "--profile".into(),
             "preview".into(),
-            file("first.json"),
-        ],
-    )?;
+            "config".into(),
+            "show".into(),
+        ];
+        let output = config::inspect(&args, &ConfigRoots::default())
+            .map_err(std::io::Error::other)?
+            .ok_or_else(|| std::io::Error::other("config example produced no result"))?;
+        console.print(&Json::new(&output).map_err(std::io::Error::other)?);
+        command(
+            &console,
+            no_color,
+            "--config demo.toml --profile preview first.json",
+            vec![
+                "--config".into(),
+                file("demo.toml"),
+                "--profile".into(),
+                "preview".into(),
+                file("first.json"),
+            ],
+        )?;
 
-    section(&console, delay, "Batch planning");
-    let exports = root.path().join("exports");
-    std::fs::create_dir(&exports)?;
-    let export = exports.join("out.html").to_string_lossy().into_owned();
-    command(
-        &console,
-        no_color,
-        "--batch --dry-run --export-html exports/out.html first.json second.json",
-        vec![
-            "--batch".into(),
-            "--dry-run".into(),
-            "--export-html".into(),
-            export.clone(),
-            file("first.json"),
-            file("second.json"),
-        ],
-    )?;
-    section(&console, delay, "Parallel exports");
-    command(
-        &console,
-        no_color,
-        "--batch --jobs 2 --export-html exports/out.html first.json second.json",
-        vec![
-            "--batch".into(),
-            "--jobs".into(),
-            "2".into(),
-            "--export-html".into(),
-            export,
-            file("first.json"),
-            file("second.json"),
-        ],
-    )?;
-    console.print(&Text::new(
-        "Created first.html and second.html in the temporary demo directory.",
-    ));
-    command(
-        &console,
-        no_color,
-        "--json first.json --export-svg preview.svg",
-        vec![
-            "--json".into(),
-            file("first.json"),
-            "--export-svg".into(),
-            file("preview.svg"),
-        ],
-    )?;
-    console.print(&Text::new(
-        "Created preview.svg; all demo exports are removed when the tour finishes.",
-    ));
+        section(&console, delay, "Batch planning");
+        let exports = root.path().join("exports");
+        std::fs::create_dir(&exports)?;
+        let export = exports.join("out.html").to_string_lossy().into_owned();
+        command(
+            &console,
+            no_color,
+            "--batch --dry-run --export-html exports/out.html first.json second.json",
+            vec![
+                "--batch".into(),
+                "--dry-run".into(),
+                "--export-html".into(),
+                export.clone(),
+                file("first.json"),
+                file("second.json"),
+            ],
+        )?;
+        section(&console, delay, "Parallel exports");
+        command(
+            &console,
+            no_color,
+            "--batch --jobs 2 --export-html exports/out.html first.json second.json",
+            vec![
+                "--batch".into(),
+                "--jobs".into(),
+                "2".into(),
+                "--export-html".into(),
+                export,
+                file("first.json"),
+                file("second.json"),
+            ],
+        )?;
+        console.print(&Text::new(
+            "Created first.html and second.html in the temporary demo directory.",
+        ));
+        command(
+            &console,
+            no_color,
+            "--json first.json --export-svg preview.svg",
+            vec![
+                "--json".into(),
+                file("first.json"),
+                "--export-svg".into(),
+                file("preview.svg"),
+            ],
+        )?;
+        console.print(&Text::new(
+            "Created preview.svg; all demo exports are removed when the tour finishes.",
+        ));
 
-    section(&console, delay, "Watch updates");
-    watch(&console, no_color, &file("first.json"), &watch_child)?;
-    section(&console, delay, "Pager, input and confidence controls");
-    console.print(&Text::new("--auto-pager opens a pager for tall TTY output; --no-pager opts out.\nURL fetch, encoding, sanitization and JSON reports support scripts and CI.\nThe tour stays offline and does not open an external pager."));
-    command(
-        &console,
-        no_color,
-        "--print --sanitize '<ESC>[31m visible controls'",
-        strings(&["--print", "--sanitize", "\x1b[31m visible controls"]),
-    )?;
+        section(&console, delay, "Watch updates");
+        watch(&console, no_color, &file("first.json"), &watch_child)?;
+        section(&console, delay, "Pager, input and confidence controls");
+        console.print(&Text::new("--auto-pager opens a pager for tall TTY output; --no-pager opts out.\nURL fetch, encoding, sanitization and JSON reports support scripts and CI.\nThe tour stays offline and does not open an external pager."));
+        command(
+            &console,
+            no_color,
+            "--print --sanitize '<ESC>[31m visible controls'",
+            strings(&["--print", "--sanitize", "\x1b[31m visible controls"]),
+        )?;
+    }
 
-    #[cfg(feature = "art")]
-    art(&console, no_color, delay, root.path())?;
-    #[cfg(not(feature = "art"))]
-    {
-        section(&console, delay, "Rich art");
-        console.print(&Text::new("The art feature is disabled in this build; enable it for FIGlet, images, GIF and image diff."));
+    if group.is_none() || group == Some("art") {
+        #[cfg(feature = "art")]
+        art(&console, no_color, delay, root.path())?;
+        #[cfg(not(feature = "art"))]
+        {
+            section(&console, delay, "Rich art");
+            console.print(&Text::new("The art feature is disabled in this build; enable it for FIGlet, images, GIF and image diff."));
+        }
     }
     section(&console, delay, "Tour complete");
     console.print(&Text::new(

@@ -17,6 +17,7 @@ use std::process::ExitCode;
 mod batch;
 mod config;
 mod demo;
+mod doctor;
 use batch::run_batch;
 use config::{config_args, ConfigRoots};
 
@@ -297,6 +298,11 @@ struct Cli {
     image_anchor: Option<String>,
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_background: Option<[u8; 3]>,
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    image_color: Option<String>,
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    image_dither: Option<String>,
+    theme_styles: std::collections::BTreeMap<String, Style>,
     /// `--height N`: with `--image`, render this many rows instead of the
     /// backend's default.
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
@@ -347,6 +353,7 @@ struct Cli {
     /// Avoid emitting unchanged URL responses.
     watch_cache: bool,
     batch: bool,
+    progress: bool,
     continue_on_error: bool,
     jobs: usize,
     dry_run: bool,
@@ -382,9 +389,23 @@ fn main() -> ExitCode {
     if demo::requested(&args) {
         return demo::dispatch(&args);
     }
+    if doctor::requested(&args) {
+        return doctor::dispatch(&args);
+    }
     match parse(&args) {
         Ok(None) => ExitCode::SUCCESS, // help/version already printed
-        Ok(Some(cli)) => run(cli),
+        Ok(Some(cli)) => {
+            if cli.batch {
+                if let Err(error) = batch::install_interrupt_handler() {
+                    return fail(
+                        &cli,
+                        ExitClass::Input,
+                        format!("cannot install batch interruption handler: {error}"),
+                    );
+                }
+            }
+            run(cli)
+        }
         Err(message) => emit_error(
             wants_json_report(&args),
             ExitClass::Usage,
@@ -415,6 +436,11 @@ const VALUE_OPTIONS: &[&str] = &[
     "--image-anchor",
     "--image-background",
     "--height",
+    "--theme",
+    "--theme-style",
+    "--image-color",
+    "--image-dither",
+    "--demo-section",
     "--demo-delay",
     "--watch-interval",
     "--interval",
@@ -477,37 +503,7 @@ fn mode_flag_alias(arg: &str) -> Option<&'static str> {
     })
 }
 
-/// A batch child's diagnostics, captured rather than printed.
-///
-/// Two things depend on this. `--report json` documents exactly one envelope on
-/// stderr, so a child that printed its own `rich: …` line would put unparseable
-/// text in front of the aggregate object. And the child's [`ExitClass`] is the
-/// only place the real failure class survives — without it every batch failure
-/// collapses to one hard-coded code and the stable exit contract is lost.
-#[derive(Default)]
-struct ChildOutcome {
-    capturing: bool,
-    class: Option<ExitClass>,
-    message: Option<String>,
-}
-
-thread_local! {
-    static CHILD_OUTCOME: std::cell::RefCell<ChildOutcome> =
-        std::cell::RefCell::new(ChildOutcome::default());
-}
-
 fn emit_error(json: bool, class: ExitClass, message: &str) -> ExitCode {
-    let captured = CHILD_OUTCOME.with(|cell| {
-        let mut outcome = cell.borrow_mut();
-        if outcome.capturing && outcome.class.is_none() {
-            outcome.class = Some(class);
-            outcome.message = Some(message.to_string());
-        }
-        outcome.capturing
-    });
-    if captured {
-        return class.exit_code();
-    }
     if json {
         eprintln!(
             "{}",
@@ -528,9 +524,6 @@ fn emit_error(json: bool, class: ExitClass, message: &str) -> ExitCode {
 }
 
 fn emit_success_report(format: ReportFormat) {
-    if CHILD_OUTCOME.with(|cell| cell.borrow().capturing) {
-        return;
-    }
     if format == ReportFormat::Json {
         eprintln!(
             "{}",
@@ -616,9 +609,11 @@ fn split_glob(resource: &str) -> (PathBuf, String) {
 fn collect_files(dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
     let mut stack = vec![dir.to_path_buf()];
     while let Some(current) = stack.pop() {
+        batch::check_interrupted()?;
         let entries = std::fs::read_dir(&current)
             .map_err(|error| format!("cannot scan {}: {error}", current.display()))?;
         for entry in entries {
+            batch::check_interrupted()?;
             let entry = entry.map_err(|error| format!("cannot scan {}: {error}", dir.display()))?;
             let path = entry.path();
             let kind = std::fs::symlink_metadata(&path)
@@ -640,6 +635,7 @@ fn collect_files(dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
 fn expand_batch_resources(resources: &[String]) -> Result<Vec<String>, String> {
     let mut out = Vec::new();
     for resource in resources {
+        batch::check_interrupted()?;
         if resource == "-" || is_url(resource) {
             return Err("batch resources must be local files or directories".into());
         }
@@ -653,6 +649,7 @@ fn expand_batch_resources(resources: &[String]) -> Result<Vec<String>, String> {
             let entries = std::fs::read_dir(&dir)
                 .map_err(|error| format!("cannot scan {}: {error}", dir.display()))?;
             for entry in entries {
+                batch::check_interrupted()?;
                 let entry =
                     entry.map_err(|error| format!("cannot scan {}: {error}", dir.display()))?;
                 let path = entry.path();
@@ -674,8 +671,10 @@ fn expand_batch_resources(resources: &[String]) -> Result<Vec<String>, String> {
             return Err(format!("batch resource does not exist: {resource}"));
         }
     }
+    batch::check_interrupted()?;
     out.sort();
     out.dedup();
+    batch::check_interrupted()?;
     if out.is_empty() {
         return Err("batch plan contains no files".into());
     }
@@ -756,6 +755,7 @@ fn resolve_destination(
             let mut chosen = candidate.clone();
             let mut suffix = 2;
             while occupied(&chosen, taken) {
+                batch::check_interrupted().map_err(|message| (ExitClass::Input, message))?;
                 chosen = suffixed_path(Path::new(&candidate), suffix);
                 suffix += 1;
             }
@@ -782,24 +782,6 @@ fn resolve_destination(
 }
 
 /// Run one batch item with its diagnostics captured, yielding its failure class.
-fn run_captured(item: Cli) -> Option<(ExitClass, Option<String>)> {
-    CHILD_OUTCOME.with(|cell| {
-        *cell.borrow_mut() = ChildOutcome {
-            capturing: true,
-            ..ChildOutcome::default()
-        }
-    });
-    let status = run(item);
-    let outcome = CHILD_OUTCOME.with(|cell| std::mem::take(&mut *cell.borrow_mut()));
-    if status == ExitCode::SUCCESS {
-        return None;
-    }
-    Some((
-        outcome.class.unwrap_or(ExitClass::Input),
-        outcome.message.clone(),
-    ))
-}
-
 /// Reuse resolved rendering flags without re-reading config in batch workers.
 fn worker_args(args: &[String]) -> Vec<String> {
     let mut result = vec!["--no-config".into()];
@@ -835,6 +817,8 @@ fn worker_args(args: &[String]) -> Vec<String> {
                 "--batch"
                     | "--no-batch"
                     | "--dry-run"
+                    | "--progress"
+                    | "--no-progress"
                     | "--continue-on-error"
                     | "--no-continue-on-error"
                     | "--overwrite"
@@ -962,6 +946,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut image_fit = None;
     let mut image_anchor = None;
     let mut image_background = None;
+    let mut image_color = None;
+    let mut image_dither = None;
+    let mut theme_styles = std::collections::BTreeMap::new();
     let mut height = None;
     let mut extensions = CliExtensions::default();
     let mut width = None;
@@ -985,6 +972,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut watch_interval = 1.0;
     let mut watch_cache = false;
     let mut batch = false;
+    let mut progress = true;
     let mut continue_on_error = false;
     let mut jobs = 1usize;
     let mut dry_run = false;
@@ -1032,6 +1020,36 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             }
             "--machine-json" => {
                 report_format.apply_option("--machine-json", None)?;
+            }
+            "--progress" => progress = true,
+            "--no-progress" => progress = false,
+            "--theme-style" => {
+                let binding = iter.next().ok_or("--theme-style requires NAME=STYLE")?;
+                let (name, value) = binding
+                    .split_once('=')
+                    .ok_or("--theme-style requires NAME=STYLE")?;
+                config::validate_theme_binding(name, value)?;
+                let style = Style::parse(value)
+                    .map_err(|error| format!("invalid theme style {name}: {error}"))?;
+                theme_styles.insert(name.to_owned(), style);
+            }
+            "--image-color" => {
+                let value = iter
+                    .next()
+                    .ok_or("--image-color requires truecolor or ansi256")?;
+                if !matches!(value.as_str(), "truecolor" | "ansi256") {
+                    return Err("--image-color requires truecolor or ansi256".into());
+                }
+                image_color = Some(value.clone());
+            }
+            "--image-dither" => {
+                let value = iter
+                    .next()
+                    .ok_or("--image-dither requires none or floyd-steinberg")?;
+                if !matches!(value.as_str(), "none" | "floyd-steinberg") {
+                    return Err("--image-dither requires none or floyd-steinberg".into());
+                }
+                image_dither = Some(value.clone());
             }
             "--image-mode" => {
                 let value = iter.next().ok_or(
@@ -1305,6 +1323,20 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             );
         }
     }
+    if (image_color.as_deref() == Some("ansi256")
+        || image_dither.as_deref() == Some("floyd-steinberg"))
+        && !matches!(
+            image_mode,
+            ImageMode::Auto | ImageMode::Ascii | ImageMode::Blocks
+        )
+    {
+        return Err("image color processing supports only --image-mode ascii or blocks".into());
+    }
+    if image_dither.as_deref() == Some("floyd-steinberg")
+        && image_color.as_deref() != Some("ansi256")
+    {
+        return Err("--image-dither floyd-steinberg requires --image-color ansi256".into());
+    }
     if image_anchor.is_some() && image_fit.as_deref() != Some("cover") {
         return Err("--image-anchor requires --image-fit cover".into());
     }
@@ -1367,6 +1399,18 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             mode == Mode::Diff || mode == Mode::Image,
         ),
         ("--height", height.is_some(), "--image", mode == Mode::Image),
+        (
+            "--image-color",
+            image_color.is_some(),
+            "--image",
+            mode == Mode::Image,
+        ),
+        (
+            "--image-dither",
+            image_dither.is_some(),
+            "--image",
+            mode == Mode::Image,
+        ),
         (
             "--image-fit",
             image_fit.is_some(),
@@ -1437,6 +1481,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                 (export_html.is_some() || export_svg.is_some()) && effective_mode.streams_records(),
             ),
             ("--width", demo && width.is_some()),
+            ("--theme-style", demo && !theme_styles.is_empty()),
             (
                 "--hyperlinks",
                 hyperlinks && (effective_mode.streams_records() || demo),
@@ -1469,6 +1514,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         image_fit,
         image_anchor,
         image_background,
+        image_color,
+        image_dither,
+        theme_styles,
         height,
         extensions,
         width,
@@ -1492,6 +1540,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         watch_interval,
         watch_cache,
         batch,
+        progress,
         continue_on_error,
         jobs,
         dry_run,
@@ -2185,6 +2234,14 @@ fn run_once(cli: Cli) -> ExitCode {
     run_once_with_fetch(cli, None)
 }
 
+fn cli_theme(cli: &Cli) -> rich::Theme {
+    let mut theme = rich::Theme::default_theme();
+    for (name, style) in &cli.theme_styles {
+        theme.insert(name.clone(), style.clone());
+    }
+    theme
+}
+
 fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)>) -> ExitCode {
     if cli.sanitize {
         cli.title = cli
@@ -2215,6 +2272,9 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     // Modes that render incrementally write directly to the console instead of
     // composing one renderable, so no `ForceWidth` wrapper can reach them.
     let mut builder = Console::builder().no_color(cli.no_color);
+    if !cli.theme_styles.is_empty() {
+        builder = builder.theme(cli_theme(&cli));
+    }
     // Parallel workers spool output, but render for the parent's destination.
     // Pager policy still checks the real stdout handle before starting a pager.
     if let Ok(terminal) = std::env::var("RS_RICH_BATCH_TERMINAL") {
@@ -3876,6 +3936,18 @@ fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     if let Some(background) = cli.image_background {
         art = art.background(background);
     }
+    if let Some(color) = cli.image_color.as_deref() {
+        art = art.color_mode(match color {
+            "ansi256" => rich_art::ImageColorMode::Ansi256,
+            _ => rich_art::ImageColorMode::TrueColor,
+        });
+    }
+    if let Some(dither) = cli.image_dither.as_deref() {
+        art = art.dither(match dither {
+            "floyd-steinberg" => rich_art::Dither::FloydSteinberg,
+            _ => rich_art::Dither::None,
+        });
+    }
 
     // Validate up front: `Renderable::rich_render` cannot fail and would
     // silently fall back to ASCII, which is the wrong answer for a CLI that
@@ -4150,6 +4222,9 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
 
     // `play` needs its own console (it moves into the Live display).
     let mut builder = Console::builder().no_color(cli.no_color);
+    if !cli.theme_styles.is_empty() {
+        builder = builder.theme(cli_theme(cli));
+    }
     // Parallel workers spool output, but render for the parent's destination.
     // Pager policy still checks the real stdout handle before starting a pager.
     if let Ok(terminal) = std::env::var("RS_RICH_BATCH_TERMINAL") {
@@ -4333,6 +4408,8 @@ OPTIONS:
         --image-background #RRGGBB
                      With --image: flatten transparency onto this RGB colour
                      (also colours contain padding; quote the # in your shell)
+        --image-color M Truecolor (default) or ansi256, with ASCII/blocks images
+        --image-dither M None (default) or floyd-steinberg; requires ansi256
         --image-mode M
                      With --diff/--image, how to draw the picture: auto
                      (default), sixel (real pixels), blocks, braille, ascii, none
@@ -4373,6 +4450,9 @@ OPTIONS:
         --batch      Convert explicit files, directories, or globs deterministically
         --jobs N     Parallel file-export workers (default 1); requires --batch
                      Terminal output stays in input order; active jobs finish on error.
+        --progress, --no-progress
+                     Enable/disable batch counts on terminal stderr (default on);
+                     hidden for redirected stderr, JSON reports and dry runs
         --dry-run    Validate and show the batch plan without writing files
         --continue-on-error
                      Process all planned inputs and aggregate failures
@@ -4383,6 +4463,9 @@ OPTIONS:
                      Read versioned TOML defaults from PATH
         --profile NAME
                      Select a config profile (default: default)
+        --theme NAME Select a named theme from config
+        --theme-style NAME=STYLE
+                     Override a theme binding; repeatable and worker-safe
         --no-config  Disable config discovery
         --sanitize   Replace input terminal controls, JSON/notebook strings,
                      titles and captions with visible inert text
@@ -4395,9 +4478,14 @@ OPTIONS:
         --no-watch, --no-watch-cache, --no-sanitize
                      Disable the corresponding config/default boolean
     --demo          Guided suite tour; pauses 3 seconds between sections on a TTY
+    --demo-list     List stable tour sections: core, workflows, art
+    --demo-section NAME
+                    With --demo, play one section only
     --demo-delay SECONDS
                     Tour pause (0–60); no pauses when redirected; Ctrl+C stops
                     Self-contained examples; ignores config; accepts --no-color
+    doctor          Read-only build, terminal, config and pager diagnostics;
+                    --report json writes diagnostic data to stdout
     -h, --help       Show this help
     -V, --version    Show the rs-rich-cli package version
 
@@ -4421,7 +4509,7 @@ EXIT CODES:
     );
 }
 
-fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
+fn build_demo_console(no_color: bool) -> Console {
     // Force truecolor so the demo looks the same regardless of TERM — but only
     // when it is actually going to a terminal. Forcing it unconditionally wrote
     // escape sequences into a pipe, and made `--no-color` a no-op on this path
@@ -4440,6 +4528,12 @@ fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
         .theme(rich_ext::extended_theme())
         .build();
     console.install_extensions();
+    console
+}
+
+fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
+    let to_terminal = std::io::stdout().is_terminal() && !no_color;
+    let console = build_demo_console(no_color);
 
     demo::section(&console, delay, "rs-rich-cli");
     console.print_str("[bold magenta]rs-rich-cli[/] — a Rust port of [italic]rich[/]");

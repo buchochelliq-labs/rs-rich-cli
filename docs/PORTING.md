@@ -125,11 +125,28 @@ core mirror is untouched and a sync does not have to reconcile them.
 | `--auto-pager` and `--no-pager` | `main.rs` | CLI destination/height policy composes public pager APIs; redirected stdout is never paged |
 | `--image-anchor` for still-image cover fitting | `main.rs` | routes to public `rich-art::ImageArt::anchor`; crop implementation and `ImageAnchor` remain in art |
 
-These 0.0.8 additions are prepared source changes; final validation and publication
-are tracked in [release notes](releases/0.0.8.md). Dry-run does not write exports
+The 0.0.8 additions are published; workflow and registry-consumer evidence is
+recorded in [release notes](releases/0.0.8.md). Dry-run does not write exports
 or parent directories. Parallel fail-fast stops scheduling after observed failures
 but lets in-flight workers finish. Config inspection includes configured settings
 and explicit overrides, not a materialized list of built-in defaults.
+
+
+### CLI 0.0.9 preparation boundaries
+
+| Convenience | Owner | Boundary |
+|---|---|---|
+| Named TOML themes, `--theme`, `--theme-style` | CLI config + main | Validated data builds public `rich::Theme`; resolved bindings pass to workers; no core theme-stack change |
+| Batch progress and Ctrl+C | CLI batch + main | Human-report stderr TTY only; kill/wait workers and exit 130; no core Live/progress behavior changes |
+| `--demo-list`, `--demo-section` | CLI demo + main | Routes stable groups of existing renderers; preserves cleanup and finite pipes |
+| `rich doctor` | CLI doctor + main | Read-only selected diagnostics; JSON stdout; no terminal probes, network fetch or pager execution |
+| `--image-color`, `--image-dither` | CLI routing; art implementation | Public `ImageColorMode`, `Dither`, `ImageArt::color_mode`/`dither`; ASCII/blocks preprocessing only |
+
+Art 0.0.7 owns fixed ANSI256 quantisation and optional Floyd–Steinberg diffusion
+on the final sampled image. Truecolor/no-dither defaults remain unchanged and
+`ImageOptions` remains source-compatible. CLI 0.0.9 composes these APIs; core
+0.0.4 and ext 0.0.6 remain unchanged. Combined validation is pending in the
+[0.0.9 preparation notes](releases/0.0.9.md).
 
 ---
 

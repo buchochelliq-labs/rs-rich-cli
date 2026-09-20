@@ -10,7 +10,7 @@ Looking for how to *do* something rather than what a flag is called? Start at
 [Using the CLI](cli.md).
 
 
-*rich 0.0.8 — Rust port of the rich-cli terminal toolbox*
+*rich 0.0.9 — Rust port of the rich-cli terminal toolbox*
 
 ## Usage
 
@@ -78,6 +78,8 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
     --image-background #RRGGBB
                  With --image: flatten transparency onto this RGB colour
                  (also colours contain padding; quote the # in your shell)
+    --image-color M Truecolor (default) or ansi256, with ASCII/blocks images
+    --image-dither M None (default) or floyd-steinberg; requires ansi256
     --image-mode M
                  With --diff/--image, how to draw the picture: auto
                  (default), sixel (real pixels), blocks, braille, ascii, none
@@ -121,6 +123,9 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
     --batch      Convert explicit files, directories, or globs deterministically
     --jobs N     Parallel file-export workers (default 1); requires --batch
                  Terminal output stays in input order; active jobs finish on error.
+    --progress, --no-progress
+                 Enable/disable batch counts on terminal stderr (default on);
+                 hidden for redirected stderr, JSON reports and dry runs
     --dry-run    Validate and show the batch plan without writing files
     --continue-on-error
                  Process all planned inputs and aggregate failures
@@ -131,6 +136,9 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
                  Read versioned TOML defaults from PATH
     --profile NAME
                  Select a config profile (default: default)
+    --theme NAME Select a named theme from config
+    --theme-style NAME=STYLE
+                 Override a theme binding; repeatable and worker-safe
     --no-config  Disable config discovery
     --sanitize   Replace input terminal controls, JSON/notebook strings,
                  titles and captions with visible inert text
@@ -143,9 +151,14 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
     --no-watch, --no-watch-cache, --no-sanitize
                  Disable the corresponding config/default boolean
 --demo          Guided suite tour; pauses 3 seconds between sections on a TTY
+--demo-list     List stable tour sections: core, workflows, art
+--demo-section NAME
+                With --demo, play one section only
 --demo-delay SECONDS
                 Tour pause (0–60); no pauses when redirected; Ctrl+C stops
                 Self-contained examples; ignores config; accepts --no-color
+doctor          Read-only build, terminal, config and pager diagnostics;
+                --report json writes diagnostic data to stdout
 -h, --help       Show this help
 -V, --version    Show the rs-rich-cli package version
 ```
@@ -178,7 +191,8 @@ paging, hyperlinks and export options require a resource or render mode.
 `rich --csv data.csv > table.txt` keeps the two apart.
 
 `--report json` writes the result/error envelope to stderr for the same reason:
-stdout remains the rendered payload.
+stdout remains the rendered payload. `rich doctor --report json` is an
+informational command: its diagnostic document is written to stdout instead.
 
 Successful reports include `ok`, `code`, `exit_code` and a `result` object.
 Failures include the same status fields plus `message` and an `error` object.

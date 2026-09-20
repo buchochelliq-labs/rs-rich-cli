@@ -120,8 +120,31 @@ The CLI now plans explicit files, directories, and globs deterministically,
 reuses the existing render/export pipeline per item, refuses silent overwrites,
 and reports aggregate machine-readable status. TOML profiles are discovered
 from platform roots (or selected explicitly), with command-line values taking
-precedence. Work is serialized by default to keep memory bounded; `--jobs` is a
-validated concurrency bound reserved for future parallel workers.
+precedence. Since CLI 0.0.8, full TOML and every inactive profile are strictly
+validated; scalar-only parsing is historical. `--jobs N` runs bounded subprocess
+workers for file exports, spooling output to disk and replaying in input order.
+Terminal-only batches remain serial. `--dry-run` inspects plans without writing
+exports; `config show` / `config validate` expose effective configured settings.
+
+## 0.0.8 — published workflow and crop controls
+
+[CLI 0.0.8 / art 0.0.6](releases/0.0.8.md) completed independent publication and
+exact-version registry verification. It shipped strict TOML profiles, parallel
+file-export batches, dry-run/config inspection, automatic paging, crop anchors
+and the guided suite tour. Core 0.0.4 and ext 0.0.6 stayed unchanged.
+
+## 0.0.9 — themes, diagnostics and bounded image quality
+
+The [accepted plan](plans/0.0.9.md) prepares CLI 0.0.9 and art 0.0.7: named themes
+and explicit style overrides, terminal-only human batch progress, Ctrl+C worker
+cleanup, listable/selectable demo sections and read-only doctor diagnostics.
+Art adds opt-in ANSI256 and Floyd–Steinberg preprocessing for ASCII/half-block
+still images. Truecolor/no-dither remains the default; GIF, diff, Braille and
+Sixel preprocessing remain outside this slice of #125.
+
+[Release notes](releases/0.0.9.md) track pending combined validation, recordings,
+review and package handoff. This preparation does not publish or tag packages;
+core and ext remain unchanged.
 
 ### Confidence tooling for expanded CLI surfaces
 

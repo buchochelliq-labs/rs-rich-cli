@@ -5,7 +5,60 @@
 use super::*;
 use std::io::{Read, Seek, SeekFrom};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
+
+static INTERRUPTED: AtomicBool = AtomicBool::new(false);
+
+pub(super) fn install_interrupt_handler() -> Result<(), ctrlc::Error> {
+    ctrlc::set_handler(|| INTERRUPTED.store(true, Ordering::Relaxed))
+}
+
+fn interrupted() -> bool {
+    INTERRUPTED.load(Ordering::Relaxed)
+}
+
+pub(super) fn check_interrupted() -> Result<(), String> {
+    if interrupted() {
+        Err("batch interrupted".into())
+    } else {
+        Ok(())
+    }
+}
+
+fn progress(cli: &Cli, completed: usize, failed: usize, total: usize) {
+    if cli.progress
+        && !cli.dry_run
+        && cli.report_format == ReportFormat::Human
+        && std::io::stderr().is_terminal()
+    {
+        eprintln!("Batch: {completed} completed, {failed} failed, {total} total");
+    }
+}
+
+fn interrupted_report(
+    cli: &Cli,
+    planned: usize,
+    attempted: usize,
+    settled: usize,
+    failures: &[Failure],
+) -> ExitCode {
+    if cli.report_format == ReportFormat::Json {
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "ok": false, "code": "interrupted", "exit_code": 130,
+                "result": {"planned": planned, "attempted": attempted,
+                    "completed": settled - failures.len(), "failed": failures.len(),
+                    "interrupted": attempted - settled, "skipped": planned - attempted,
+                    "failures": failure_json(failures)}
+            })
+        );
+    } else {
+        eprintln!("rich: batch interrupted");
+    }
+    ExitCode::from(130)
+}
 
 type Failure = (String, ExitClass, Option<String>);
 
@@ -66,20 +119,34 @@ fn failure_json(failures: &[Failure]) -> Vec<serde_json::Value> {
 }
 
 pub(super) fn run_batch(cli: &Cli) -> ExitCode {
+    if interrupted() {
+        return interrupted_report(cli, cli.resources.len(), 0, 0, &[]);
+    }
     let resources = match expand_batch_resources(&cli.resources) {
         Ok(resources) => resources,
-        Err(message) => return fail(cli, ExitClass::Input, message),
+        Err(message) => {
+            if interrupted() {
+                return interrupted_report(cli, cli.resources.len(), 0, 0, &[]);
+            }
+            return fail(cli, ExitClass::Input, message);
+        }
     };
     let mut taken = std::collections::BTreeSet::new();
     let mut keys = std::collections::BTreeSet::new();
     let mut existing_outputs: Vec<String> = Vec::new();
-    let input_keys: std::collections::BTreeSet<_> = resources
-        .iter()
-        .map(|input| destination_key(input))
-        .collect();
+    let mut input_keys = std::collections::BTreeSet::new();
+    for input in &resources {
+        if interrupted() {
+            return interrupted_report(cli, resources.len(), 0, 0, &[]);
+        }
+        input_keys.insert(destination_key(input));
+    }
     let mut plans = Vec::with_capacity(resources.len());
     let mut errors = Vec::new();
     for (index, input) in resources.iter().enumerate() {
+        if interrupted() {
+            return interrupted_report(cli, resources.len(), 0, 0, &[]);
+        }
         let mut outputs = BatchOutputs::default();
         for (candidate, slot) in [
             (
@@ -91,6 +158,9 @@ pub(super) fn run_batch(cli: &Cli) -> ExitCode {
                 &mut outputs.svg,
             ),
         ] {
+            if interrupted() {
+                return interrupted_report(cli, resources.len(), 0, 0, &[]);
+            }
             let Some(candidate) = candidate else { continue };
             *slot = Some(candidate.clone());
             match resolve_destination(cli, candidate, &mut taken) {
@@ -99,6 +169,7 @@ pub(super) fn run_batch(cli: &Cli) -> ExitCode {
                     if input_keys.contains(&key)
                         || resources
                             .iter()
+                            .take_while(|_| !interrupted())
                             .any(|input| same_file::is_same_file(input, &path).unwrap_or(false))
                     {
                         errors.push((
@@ -109,9 +180,16 @@ pub(super) fn run_batch(cli: &Cli) -> ExitCode {
                             )),
                         ));
                     }
+                    if interrupted() {
+                        return interrupted_report(cli, resources.len(), 0, 0, &[]);
+                    }
                     let hard_link_collision = existing_outputs
                         .iter()
+                        .take_while(|_| !interrupted())
                         .any(|output| same_file::is_same_file(output, &path).unwrap_or(false));
+                    if interrupted() {
+                        return interrupted_report(cli, resources.len(), 0, 0, &[]);
+                    }
                     existing_outputs.push(path.clone());
                     if (!keys.insert(key) || hard_link_collision)
                         && (cli.jobs > 1 || cli.collision == CollisionPolicy::Error)
@@ -148,6 +226,9 @@ pub(super) fn run_batch(cli: &Cli) -> ExitCode {
             }
         }
         plans.push(outputs);
+    }
+    if interrupted() {
+        return interrupted_report(cli, resources.len(), 0, 0, &[]);
     }
     if cli.dry_run {
         let class = failure_class(&errors);
@@ -193,29 +274,11 @@ pub(super) fn run_batch(cli: &Cli) -> ExitCode {
             message.as_deref().unwrap_or("invalid batch plan"),
         );
     }
-    let (attempted, failures) = if cli.jobs > 1 {
-        parallel(cli, &resources, &plans)
-    } else {
-        let mut failures = Vec::new();
-        let mut attempted = 0;
-        for (input, outputs) in resources.iter().zip(&plans) {
-            let mut one = cli.clone();
-            one.batch = false;
-            one.resources = vec![input.clone()];
-            one.resource = Some(input.clone());
-            one.report_format = ReportFormat::Human;
-            one.export_html = outputs.html.clone();
-            one.export_svg = outputs.svg.clone();
-            attempted += 1;
-            if let Some((class, message)) = run_captured(one) {
-                failures.push((input.clone(), class, message));
-                if !cli.continue_on_error {
-                    break;
-                }
-            }
-        }
-        (attempted, failures)
-    };
+    progress(cli, 0, 0, resources.len());
+    let (attempted, settled, failures) = execute(cli, &resources, &plans);
+    if interrupted() {
+        return interrupted_report(cli, resources.len(), attempted, settled, &failures);
+    }
     let class = failure_class(&failures);
     if cli.report_format == ReportFormat::Json {
         eprintln!(
@@ -241,8 +304,16 @@ pub(super) fn run_batch(cli: &Cli) -> ExitCode {
 struct Worker {
     index: usize,
     child: Child,
-    stdout: std::fs::File,
+    stdout: Option<std::fs::File>,
     stderr: std::fs::File,
+}
+
+// Every exit path, including cancellation and replay errors, reaps started workers.
+impl Drop for Worker {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
 }
 
 // Spooling changes the child's physical stdout, so forward the parent's
@@ -277,7 +348,7 @@ fn spawn(cli: &Cli, index: usize, input: &str, outputs: &BatchOutputs) -> std::i
     Ok(Worker {
         index,
         child,
-        stdout,
+        stdout: Some(stdout),
         stderr,
     })
 }
@@ -310,13 +381,75 @@ fn child_failure(
     Some((class, message))
 }
 
-fn parallel(cli: &Cli, resources: &[String], plans: &[BatchOutputs]) -> (usize, Vec<Failure>) {
+// Keep a blocked pipe consumer from preventing SIGINT cleanup. The copy thread
+// owns a duplicate descriptor, not Rust's global stdout lock (which shutdown
+// must acquire). On cancellation the CLI exits after workers have been reaped;
+// on every normal path we join the copy thread before replaying the next item.
+fn replay_output(mut output: std::fs::File) -> std::io::Result<()> {
+    #[cfg(unix)]
+    let mut destination = {
+        use std::os::fd::AsFd;
+        std::fs::File::from(std::io::stdout().as_fd().try_clone_to_owned()?)
+    };
+    #[cfg(windows)]
+    let mut destination: Box<dyn std::io::Write + Send> = {
+        use std::os::windows::io::AsHandle;
+        // Rust's console writer transcodes UTF-8 to UTF-16 for WriteConsoleW.
+        // Raw handles are appropriate only for redirected stdout on Windows.
+        if std::io::stdout().is_terminal() {
+            Box::new(std::io::stdout())
+        } else {
+            Box::new(std::fs::File::from(
+                std::io::stdout().as_handle().try_clone_to_owned()?,
+            ))
+        }
+    };
+    #[cfg(not(any(unix, windows)))]
+    let mut destination = std::io::stdout();
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    let thread = std::thread::Builder::new()
+        .name("batch-replay".into())
+        .spawn(move || {
+            let result = output
+                .seek(SeekFrom::Start(0))
+                .and_then(|_| std::io::copy(&mut output, &mut destination))
+                .map(|_| ());
+            let _ = sender.send(result);
+        })?;
+    loop {
+        if interrupted() {
+            return Ok(());
+        }
+        match receiver.recv_timeout(Duration::from_millis(5)) {
+            Ok(result) => {
+                let _ = thread.join();
+                return result;
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                let _ = thread.join();
+                return Err(std::io::Error::other("worker output replay thread failed"));
+            }
+        }
+    }
+}
+
+fn execute(
+    cli: &Cli,
+    resources: &[String],
+    plans: &[BatchOutputs],
+) -> (usize, usize, Vec<Failure>) {
     let mut active: Vec<Worker> = Vec::new();
     let mut finished = std::collections::BTreeMap::new();
     let mut failures = Vec::new();
     let (mut next, mut replay) = (0, 0);
     let mut stopped = false;
+    let mut settled = 0;
     loop {
+        if interrupted() {
+            break;
+        }
+        let previous_settled = settled;
         // Poll every active child before scheduling, including later inputs.
         let mut i = 0;
         while i < active.len() {
@@ -345,13 +478,23 @@ fn parallel(cli: &Cli, resources: &[String], plans: &[BatchOutputs]) -> (usize, 
                 failures.push((resources[worker.index].clone(), class, message));
                 stopped |= !cli.continue_on_error;
             }
-            finished.insert(worker.index, Some(worker.stdout));
+            settled += 1;
+            finished.insert(worker.index, worker.stdout.take());
         }
-        while let Some(output) = finished.remove(&replay) {
-            if let Some(mut output) = output {
-                let result = output
-                    .seek(SeekFrom::Start(0))
-                    .and_then(|_| std::io::copy(&mut output, &mut std::io::stdout().lock()));
+        if settled != previous_settled {
+            progress(
+                cli,
+                settled - failures.len(),
+                failures.len(),
+                resources.len(),
+            );
+        }
+        while !interrupted() {
+            let Some(output) = finished.remove(&replay) else {
+                break;
+            };
+            if let Some(output) = output {
+                let result = replay_output(output);
                 if let Err(error) = result {
                     if !failures
                         .iter()
@@ -368,7 +511,7 @@ fn parallel(cli: &Cli, resources: &[String], plans: &[BatchOutputs]) -> (usize, 
             }
             replay += 1;
         }
-        while !stopped && next < resources.len() && next - replay < cli.jobs {
+        while !interrupted() && !stopped && next < resources.len() && next - replay < cli.jobs {
             match spawn(cli, next, &resources[next], &plans[next]) {
                 Ok(worker) => active.push(worker),
                 Err(error) => {
@@ -377,6 +520,13 @@ fn parallel(cli: &Cli, resources: &[String], plans: &[BatchOutputs]) -> (usize, 
                         ExitClass::Input,
                         Some(format!("cannot start worker: {error}")),
                     ));
+                    settled += 1;
+                    progress(
+                        cli,
+                        settled - failures.len(),
+                        failures.len(),
+                        resources.len(),
+                    );
                     finished.insert(next, None);
                     stopped |= !cli.continue_on_error;
                 }
@@ -391,7 +541,7 @@ fn parallel(cli: &Cli, resources: &[String], plans: &[BatchOutputs]) -> (usize, 
         }
     }
     failures.sort_by(|a, b| a.0.cmp(&b.0));
-    (next, failures)
+    (next, settled, failures)
 }
 
 #[cfg(test)]

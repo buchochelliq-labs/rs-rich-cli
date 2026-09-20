@@ -6,13 +6,16 @@ by what you are trying to do. For the complete list of options, see the
 [CLI reference](cli-reference.md).
 
 **Assumes** you can run commands in a terminal. Examples use real CLI output;
-new 0.0.8 workflows are documented below and in the release notes.
+0.0.9 source-preparation workflows are documented below. See the
+[release notes](releases/0.0.9.md) for validation and publication status.
 
 ---
 
 ## Take the guided tour
 
 ```bash
+rich --demo-list              # list core, workflows, art
+rich --demo --demo-section workflows  # play one group
 rich --demo                   # one pass, 3 seconds between sections
 rich --demo --demo-delay 5    # a slower tour
 rich --demo --demo-delay 0    # skip section pauses
@@ -34,7 +37,10 @@ It never writes into your current directory. `--demo-delay` accepts 0–60
 seconds and only affects section pauses on a terminal; watch/GIF examples
 have their own short playback. Redirected output has no pauses or animation.
 A build without the `art` feature explains that the art sections are unavailable.
-Use `--demo` on its own, optionally with `--demo-delay`, `--no-color` or
+`--demo-list` lists stable section names without playback. Use
+`--demo --demo-section core|workflows|art` to select a group (supply one name);
+unknown names fail before playback. Use `--demo` on its own for the full tour,
+optionally with `--demo-section`, `--demo-delay`, `--no-color` or
 `--no-config`; other rendering options and resources are rejected.
 
 ## Read a file
@@ -313,6 +319,39 @@ let art = ImageArt::from_path("logo.png")?
 
 [See the actual renderings](demos.md) and [workflow recipes](recipes.md).
 
+### ANSI256 colour and dithering
+
+```bash
+rich image photo.png --image-mode blocks --width 60 --image-color ansi256
+rich image photo.png --image-mode ascii --width 60 --image-color ansi256 --image-dither floyd-steinberg
+```
+
+Truecolor and no dithering remain the defaults (`--image-color truecolor`,
+`--image-dither none`). Opt-in ANSI256 preprocessing supports ASCII and half-block
+still images; Floyd–Steinberg requires ANSI256. Unsupported combinations are
+rejected rather than ignored. Auto mode is allowed when it resolves to ASCII
+or blocks; select a supported mode explicitly for predictable behavior. These
+controls do not apply to Braille, Sixel, GIF playback or image comparisons.
+
+Preprocessing runs on the final sampled raster after fitting and background
+compositing, before glyph selection. It uses fixed ANSI256 entries 16–255,
+excluding the first 16 terminal-theme-dependent colours. Nearest colour uses
+squared distance in encoded RGB, with ties choosing the lowest palette index.
+Floyd–Steinberg visits left-to-right, top-to-bottom and discards diffusion error
+at image boundaries. This is a deterministic bounded palette policy, not a
+perceptual colour-distance model.
+
+```rust
+use rich_art::{Dither, ImageArt, ImageColorMode, ImageMode};
+let art = ImageArt::from_path("photo.png")?
+    .mode(ImageMode::Blocks)
+    .width(60)
+    .color_mode(ImageColorMode::Ansi256)
+    .dither(Dither::FloydSteinberg);
+```
+
+The reusable builders live in art; `ImageOptions` remains source-compatible.
+
 ## Watch a changing file
 
 ```bash
@@ -345,6 +384,7 @@ Exit codes are stable by failure class:
 | `3` | Input/read/write error, such as a missing file or failed output write. |
 | `4` | Parse/render data error, such as malformed JSON or JSONL. |
 | `5` | Threshold/gate failure, such as `--diff --threshold` exceeded. |
+| `130` | Batch interrupted with Ctrl+C. Started workers are stopped and reaped. |
 
 Check them:
 
@@ -369,7 +409,8 @@ The top-level `message` is retained for simple shell consumers; structured
 consumers can read `error.message`. Informational exits such as `--help` and
 `--version` print their normal text and do not emit a report envelope.
 
-`--machine-json` is an alias for `--report json`.
+`--machine-json` is an alias for `--report json`. Doctor is an informational
+exception: its JSON diagnostics are the stdout document; see below.
 
 Colour is disabled automatically when output is not a terminal, and by
 a non-empty `NO_COLOR` or `--no-color` when it is. `FORCE_COLOR` is unsupported;
@@ -390,7 +431,7 @@ forever in a terminal. Pipes receive the first frame once, even with `--loop 0`.
 The system pager also requires terminal stdin; piped input and `TERM=dumb`
 fall back to printing directly. `LINES` sets the viewport height when provided.
 
-## Convert many files at once (0.0.8 preparation)
+## Convert many files at once
 
 `--batch` takes files, directories (walked recursively) and globs, and runs each
 one through the same render and export path a single-resource invocation uses:
@@ -417,6 +458,14 @@ order. Terminal-only batches stay serial. Default fail-fast stops scheduling new
 work after an observed failure; in-flight workers finish. `--continue-on-error`
 allows later scheduling. Worker startup and disk I/O mean more jobs do not
 guarantee a speedup.
+
+Batch progress shows completed, failed and total counts on stderr only when
+stderr is a terminal and the report format is human. `--no-progress` disables
+it; `--progress` enables the preference but still respects these destination
+and report gates. Redirected stderr and `--report json` never receive progress.
+Ctrl+C stops scheduling, kills and waits for started workers, and exits 130.
+Machine reporting emits one interrupted envelope. Cancellation is not rollback:
+exports already completed may remain; inputs are preserved.
 
 Batch cannot be combined with `--diff`, `--gif`, `--watch`, `--pager` or
 `--auto-pager`. Use `--no-pager` to disable configured paging.
@@ -445,7 +494,7 @@ rather than collapsing into a generic input failure:
 `attempted` counts items the run actually reached and `skipped` those it never
 got to after a fail-fast stop, so the numbers stay honest.
 
-## Config profiles (0.0.8 preparation)
+## Config profiles
 
 Defaults can live in a `rich.toml` discovered in the working directory or the
 platform config directory, or named explicitly with `--config PATH`:
@@ -489,9 +538,57 @@ overrides, not all built-in CLI defaults. The schema supports image fit/anchor/
 background, watch, sanitization, paging and batch options; see the
 [workflow recipes](recipes.md) for complete examples. Machine reporting remains
 a CLI option (`--report json`), not a config key. Release and validation status
-are recorded in the [0.0.8 preparation notes](releases/0.0.8.md).
+are recorded in the [0.0.9 preparation notes](releases/0.0.9.md).
 
 ---
+
+## Reuse named themes
+
+Theme tables map style names to Rich style strings:
+
+```toml
+[defaults]
+theme = "night"
+
+[themes.night]
+notice = "bold cyan"
+warning = "bold yellow"
+"markdown.h1" = "bold magenta"
+```
+
+```bash
+rich --config rich.toml --theme night --print '[notice]Ready[/]'
+rich --config rich.toml --theme night --theme-style 'notice=bold green' --print '[notice]Ready[/]'
+```
+
+Defaults, the selected profile's `theme`, then `--theme NAME` determine the
+selected theme. Repeated `--theme-style NAME=STYLE` bindings override configured
+bindings. Theme and style names start with an ASCII letter, digit or underscore;
+subsequent characters may also be dots or hyphens. All definitions and references
+are validated, including inactive profiles and themes. `rich config show` exposes
+the selected theme. Batch workers receive the resolved bindings so parallel
+exports use the same theme. These are CLI mappings onto the public `rich::Theme`
+API; they add no core theme-stack behavior. `--no-color` and `NO_COLOR` still apply.
+
+## Inspect your environment
+
+```bash
+rich doctor
+rich doctor --report json > doctor.json
+rich doctor --config rich.toml --profile ci
+```
+
+Doctor reports package/build features, stdout terminal status, dimensions and
+colour policy, inferred Sixel support and selected image mode, selected
+config/profile and pager choice. It distinguishes detection from inference;
+Sixel inference does not prove terminal support. It performs no terminal probes,
+URL fetches or pager launches and does not dump the environment. It validates
+configuration, so malformed config produces an actionable usage error.
+
+Successful `doctor --report json` writes the diagnostics document to stdout,
+not the rendered-content/report split used by rendering commands. Errors retain
+the existing usage/error reporting contract. `--no-config` helps diagnose an
+invalid local configuration independently.
 
 ## Where to go next
 

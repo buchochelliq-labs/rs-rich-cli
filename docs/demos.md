@@ -2,7 +2,7 @@
 
 ## Run the suite in your terminal
 
-CLI 0.0.8 preparation includes `rich --demo`: a single guided pass through the
+CLI 0.0.8 introduced `rich --demo`: a single guided pass through the
 suite with three-second section pauses. Use `--demo-delay 5` to slow it down;
 Ctrl+C stops cleanly. See [the tour instructions](cli.md#take-the-guided-tour).
 
@@ -18,6 +18,25 @@ than the default three-second pace. Playback and command output are captured
 from the optimized build, with a caption added and no audio. Reproduce with
 `python scripts/capture_demo_tour.py --binary target/release/rich` after installing
 the docs-media dependencies listed below.
+
+## CLI 0.0.9 workflows
+
+The optimized 0.0.9 preparation build demonstrates ANSI256 image rendering with
+and without Floyd–Steinberg dithering, a named theme, read-only doctor diagnostics,
+available demo sections and terminal batch progress. Each scene uses actual
+recorded terminal output, with captions and three-second holds; no audio.
+
+<video controls playsinline preload="none" poster="../assets/demos/v9-workflows.png" style="width:100%;max-width:1100px" aria-label="CLI 0.0.9 themes, image dithering and workflow diagnostics">
+  <source src="../assets/demos/v9-workflows.mp4" type="video/mp4">
+  Your browser cannot play this video. Use the download below.
+</video>
+
+[Download MP4](assets/demos/v9-workflows.mp4) · [Looping GIF](assets/demos/v9-workflows.gif)
+
+Reproduce with `python scripts/capture_v9_demos.py --binary target/release/rich`.
+The raw recordings, fixture, export checks and source/binary hashes are committed
+in `.github/evidence/0.0.9/`. See [release notes](releases/0.0.9.md) for the bounded
+feature scope and [recipes](recipes.md) for copyable commands.
 
 ## CLI 0.0.8 workflows
 
