@@ -4,6 +4,35 @@ use std::path::PathBuf;
 use toml::Value;
 
 type Settings = BTreeMap<String, Value>;
+type ThemeStyles = BTreeMap<String, String>;
+
+#[derive(Default)]
+struct Configuration {
+    settings: Settings,
+    themes: BTreeMap<String, ThemeStyles>,
+}
+
+pub(crate) fn validate_theme_name(name: &str) -> Result<(), String> {
+    if name
+        .bytes()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphanumeric() || c == b'_')
+        && name
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-' | b'.'))
+    {
+        Ok(())
+    } else {
+        Err(format!("invalid theme or style name {name:?}: expected letters, digits, underscores, dots or hyphens"))
+    }
+}
+
+pub(crate) fn validate_theme_binding(name: &str, style: &str) -> Result<(), String> {
+    validate_theme_name(name)?;
+    rich::Style::parse(style)
+        .map(|_| ())
+        .map_err(|e| format!("invalid style for {name:?}: {e}"))
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct ConfigRoots {
@@ -27,11 +56,16 @@ struct Arguments {
     cleaned: Vec<String>,
     path: Option<PathBuf>,
     profile: Option<String>,
+    theme: Option<String>,
     disabled: bool,
 }
 
 fn takes_value(arg: &str) -> bool {
-    super::VALUE_OPTIONS.contains(&arg) || matches!(arg, "--image-anchor" | "--interval")
+    super::VALUE_OPTIONS.contains(&arg)
+        || matches!(
+            arg,
+            "--image-anchor" | "--interval" | "--theme-style" | "--image-color" | "--image-dither"
+        )
 }
 
 fn arguments(args: &[String]) -> Result<Arguments, String> {
@@ -45,12 +79,15 @@ fn arguments(args: &[String]) -> Result<Arguments, String> {
                 break;
             }
             "--no-config" => result.disabled = true,
-            "--config" | "--profile" => {
+            "--config" | "--profile" | "--theme" => {
                 let value = iter
                     .next()
                     .ok_or_else(|| format!("{arg} requires a value"))?;
                 if arg == "--config" {
                     result.path = Some(PathBuf::from(value));
+                } else if arg == "--theme" {
+                    validate_theme_name(value)?;
+                    result.theme = Some(value.clone());
                 } else {
                     result.profile = Some(value.clone());
                 }
@@ -80,6 +117,7 @@ fn boolean_flags(key: &str) -> Option<(&'static str, &'static str)> {
         "watch" => ("--watch", "--no-watch"),
         "watch_cache" => ("--watch-cache", "--no-watch-cache"),
         "sanitize" => ("--sanitize", "--no-sanitize"),
+        "progress" => ("--progress", "--no-progress"),
         _ => return None,
     })
 }
@@ -94,6 +132,7 @@ const BOOLEAN_KEYS: &[&str] = &[
     "watch",
     "watch_cache",
     "sanitize",
+    "progress",
 ];
 const VALUE_KEYS: &[&str] = &[
     "width",
@@ -108,6 +147,8 @@ const VALUE_KEYS: &[&str] = &[
     "image_fit",
     "image_anchor",
     "image_background",
+    "image_color",
+    "image_dither",
 ];
 
 fn validate_value(key: &str, value: &Value) -> Result<(), String> {
@@ -142,6 +183,15 @@ fn validate_value(key: &str, value: &Value) -> Result<(), String> {
             "collision" => value
                 .as_str()
                 .is_some_and(|v| matches!(v, "error" | "overwrite" | "suffix")),
+            "theme" => value
+                .as_str()
+                .is_some_and(|v| validate_theme_name(v).is_ok()),
+            "image_color" => value
+                .as_str()
+                .is_some_and(|v| matches!(v, "truecolor" | "ansi256")),
+            "image_dither" => value
+                .as_str()
+                .is_some_and(|v| matches!(v, "none" | "floyd-steinberg")),
             "image_fit" => value
                 .as_str()
                 .is_some_and(|v| matches!(v, "contain" | "cover")),
@@ -212,16 +262,35 @@ fn section(value: &Value, name: &str) -> Result<Settings, String> {
     Ok(settings)
 }
 
-fn decode(text: &str, selected: Option<&str>) -> Result<Settings, String> {
+fn decode_configuration(text: &str, selected: Option<&str>) -> Result<Configuration, String> {
     let document: Value = toml::from_str(text).map_err(|e| e.to_string())?;
     let table = document.as_table().ok_or("configuration must be a table")?;
     let mut defaults = Settings::new();
     let mut profiles = BTreeMap::new();
+    let mut themes = BTreeMap::new();
     for (key, value) in table {
         match key.as_str() {
             "version" if value.as_integer() == Some(1) => {}
             "version" => return Err("version must be integer 1".into()),
             "defaults" => defaults = section(value, "defaults")?,
+            "themes" => {
+                for (name, bindings) in value.as_table().ok_or("themes must be a table")? {
+                    validate_theme_name(name)?;
+                    let mut styles = ThemeStyles::new();
+                    for (style_name, style) in bindings
+                        .as_table()
+                        .ok_or_else(|| format!("themes.{name} must be a table"))?
+                    {
+                        let style = style.as_str().ok_or_else(|| {
+                            format!("themes.{name}.{style_name} must be a style string")
+                        })?;
+                        validate_theme_binding(style_name, style)
+                            .map_err(|e| format!("themes.{name}: {e}"))?;
+                        styles.insert(style_name.clone(), style.into());
+                    }
+                    themes.insert(name.clone(), styles);
+                }
+            }
             "profile" | "profiles" => {
                 for (name, settings) in value
                     .as_table()
@@ -238,18 +307,34 @@ fn decode(text: &str, selected: Option<&str>) -> Result<Settings, String> {
             _ => return Err(format!("unknown key {key:?}")),
         }
     }
+    // Validate references in every layer, including profiles not selected now.
+    for settings in std::iter::once(&defaults).chain(profiles.values()) {
+        if let Some(name) = settings.get("theme").and_then(Value::as_str) {
+            if !themes.contains_key(name) {
+                return Err(format!("unknown theme {name:?}"));
+            }
+        }
+    }
     let name = selected.unwrap_or("default");
     if let Some(profile) = profiles.remove(name) {
         defaults.extend(profile);
     } else if selected.is_some() {
         return Err(format!("unknown profile {name:?}"));
     }
-    Ok(defaults)
+    Ok(Configuration {
+        settings: defaults,
+        themes,
+    })
 }
 
-fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Settings, Option<PathBuf>), String> {
+#[cfg(test)]
+fn decode(text: &str, selected: Option<&str>) -> Result<Settings, String> {
+    decode_configuration(text, selected).map(|configuration| configuration.settings)
+}
+
+fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<PathBuf>), String> {
     if args.disabled {
-        return Ok((Settings::new(), None));
+        return Ok((Configuration::default(), None));
     }
     let path = args
         .path
@@ -275,11 +360,11 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Settings, Option<PathB
         if let Some(profile) = &args.profile {
             return Err(format!("unknown profile {profile:?}: no config found"));
         }
-        return Ok((Settings::new(), None));
+        return Ok((Configuration::default(), None));
     };
     let text =
         std::fs::read_to_string(&path).map_err(|e| format!("config {}: {e}", path.display()))?;
-    let settings = decode(&text, args.profile.as_deref())
+    let settings = decode_configuration(&text, args.profile.as_deref())
         .map_err(|e| format!("config {}: {e}", path.display()))?;
     Ok((settings, Some(path)))
 }
@@ -410,13 +495,60 @@ fn normalize_watch(settings: &mut Settings, explicit: &Settings) -> Result<(), S
     Ok(())
 }
 
+fn selected_theme(
+    configuration: &mut Configuration,
+    args: &Arguments,
+) -> Result<ThemeStyles, String> {
+    if let Some(name) = &args.theme {
+        configuration
+            .settings
+            .insert("theme".into(), Value::String(name.clone()));
+    }
+    let Some(name) = configuration.settings.get("theme").and_then(Value::as_str) else {
+        return Ok(ThemeStyles::new());
+    };
+    configuration
+        .themes
+        .get(name)
+        .cloned()
+        .ok_or_else(|| format!("unknown theme {name:?}"))
+}
+
+fn explicit_theme_styles(args: &[String]) -> Result<ThemeStyles, String> {
+    let mut result = ThemeStyles::new();
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        if arg == "--" {
+            break;
+        }
+        if arg == "--theme-style" {
+            let binding = iter.next().ok_or("--theme-style requires NAME=STYLE")?;
+            let (name, style) = binding
+                .split_once('=')
+                .ok_or("--theme-style requires NAME=STYLE")?;
+            validate_theme_binding(name, style)?;
+            result.insert(name.into(), style.into());
+        } else if takes_value(arg) {
+            iter.next();
+        }
+    }
+    Ok(result)
+}
+
 pub(crate) fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<String>, String> {
     let args = arguments(args)?;
-    let (mut settings, _) = load(&args, roots)?;
+    let (mut configuration, _) = load(&args, roots)?;
+    let theme_styles = selected_theme(&mut configuration, &args)?;
+    explicit_theme_styles(&args.cleaned)?;
+    let mut settings = configuration.settings;
     let overrides = overrides(&args.cleaned);
     normalize_watch(&mut settings, &overrides)?;
     let explicit: BTreeSet<_> = overrides.into_keys().collect();
     let mut result = Vec::new();
+    for (name, style) in theme_styles {
+        result.extend(["--theme-style".into(), format!("{name}={style}")]);
+    }
+    settings.remove("theme");
     let mut settings: Vec<_> = settings.into_iter().collect();
     // Inverse flags reset related state: emit the final policy after its reset.
     settings.sort_by_key(|(key, _)| match key.as_str() {
@@ -486,7 +618,7 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
         let value_option = VALUE_KEYS
             .iter()
             .any(|key| format!("--{}", key.replace('_', "-")) == *arg)
-            || matches!(arg.as_str(), "-w" | "-o" | "--interval");
+            || matches!(arg.as_str(), "-w" | "-o" | "--interval" | "--theme-style");
         if value_option {
             iter.next();
         } else if arg == "--report" {
@@ -497,7 +629,10 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
             return Err(format!("unknown config inspection option {arg:?}"));
         }
     }
-    let (mut settings, source) = load(&args, roots)?;
+    let (mut configuration, source) = load(&args, roots)?;
+    let mut theme_styles = selected_theme(&mut configuration, &args)?;
+    theme_styles.extend(explicit_theme_styles(&args.cleaned)?);
+    let mut settings = configuration.settings;
     let overrides = overrides(&args.cleaned);
     for (key, value) in &overrides {
         validate_value(key, value)?;
@@ -509,6 +644,8 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
         "source": source.map(|p| p.to_string_lossy().into_owned()),
         "profile": if args.disabled { None } else { Some(args.profile.as_deref().unwrap_or("default")) },
         "disabled": args.disabled,
+        "theme": settings.get("theme").and_then(Value::as_str),
+        "theme_styles": theme_styles,
         "settings": settings,
     });
     serde_json::to_string_pretty(&output)
@@ -521,6 +658,45 @@ mod tests {
     use super::*;
     fn strings(items: &[&str]) -> Vec<String> {
         items.iter().map(|s| (*s).into()).collect()
+    }
+
+    #[test]
+    fn themes_expand_to_a_self_contained_worker_snapshot() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(
+            root.path().join("rich.toml"),
+            "[defaults]\ntheme = 'day'\n[themes.day]\nalert = 'red'\n",
+        )
+        .unwrap();
+        let roots = ConfigRoots {
+            home: None,
+            cwd: root.path().into(),
+        };
+        let expanded = config_args(
+            &strings(&[
+                "--theme-style",
+                "alert=green",
+                "--print",
+                "[alert]hello[/alert]",
+            ]),
+            &roots,
+        )
+        .unwrap();
+        assert_eq!(
+            expanded,
+            strings(&[
+                "--theme-style",
+                "alert=red",
+                "--theme-style",
+                "alert=green",
+                "--print",
+                "[alert]hello[/alert]"
+            ])
+        );
+        std::fs::remove_file(root.path().join("rich.toml")).unwrap();
+        let mut worker = strings(&["--no-config"]);
+        worker.extend(expanded.clone());
+        assert_eq!(config_args(&worker, &roots).unwrap(), expanded);
     }
 
     #[test]

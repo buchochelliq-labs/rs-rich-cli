@@ -35,6 +35,7 @@ use rich::segment::Segment;
 use crate::ascii::AsciiArt;
 use crate::block::BlockArt;
 use crate::braille::BrailleArt;
+use crate::{Dither, ImageColorMode};
 
 /// Which backend renders the image.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -170,11 +171,14 @@ pub enum ImageArtError {
     /// Fitting requires positive width and height, a nonempty image and
     /// destination, and raster canvases no larger than 16 megapixels.
     InvalidFitDimensions,
+    /// Quantization supports ASCII/blocks only; dithering requires ANSI256.
+    UnsupportedColorOptions,
 }
 
 impl std::fmt::Display for ImageArtError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::UnsupportedColorOptions => write!(f, "image color processing requires ASCII or blocks; Floyd–Steinberg dithering requires ANSI256"),
             Self::FeatureNotEnabled { mode, feature } => write!(
                 f,
                 "image mode {mode:?} is not available in this build; \
@@ -215,6 +219,8 @@ pub struct ImageArt {
     fit: Option<ImageFit>,
     anchor: ImageAnchor,
     background: Option<[u8; 3]>,
+    color_mode: ImageColorMode,
+    dither: Dither,
 }
 
 impl ImageArt {
@@ -231,6 +237,8 @@ impl ImageArt {
             fit: None,
             anchor: ImageAnchor::default(),
             background: None,
+            color_mode: ImageColorMode::default(),
+            dither: Dither::default(),
         }
     }
 
@@ -244,7 +252,7 @@ impl ImageArt {
         Ok(ImageArt::new(image::open(path)?))
     }
 
-    /// Replace backend options, leaving fit, anchor and background settings unchanged.
+    /// Replace backend options, preserving fit, anchor, background and colour processing.
     pub fn options(mut self, options: ImageOptions) -> Self {
         self.options = options;
         self
@@ -299,6 +307,21 @@ impl ImageArt {
     /// Sixel, which are always in colour.
     pub fn color(mut self, color: bool) -> Self {
         self.options.color = color;
+        self
+    }
+
+    /// Select truecolor (default) or the fixed ANSI256 palette for ASCII/blocks.
+    /// Processing occurs after fit/background handling and final sampling,
+    /// before ASCII luminance normalization and glyph selection.
+    pub fn color_mode(mut self, mode: ImageColorMode) -> Self {
+        self.color_mode = mode;
+        self
+    }
+
+    /// Select optional error diffusion. Floyd–Steinberg requires ANSI256 and
+    /// ASCII/blocks; unsupported combinations are errors from [`Self::render`].
+    pub fn dither(mut self, dither: Dither) -> Self {
+        self.dither = dither;
         self
     }
 
@@ -459,6 +482,12 @@ impl ImageArt {
         console: &Console,
         options: &ConsoleOptions,
     ) -> Result<Vec<Segment>, ImageArtError> {
+        if (self.dither != Dither::None && self.color_mode != ImageColorMode::Ansi256)
+            || ((self.color_mode != ImageColorMode::TrueColor || self.dither != Dither::None)
+                && !matches!(mode, ImageMode::Ascii | ImageMode::Blocks))
+        {
+            return Err(ImageArtError::UnsupportedColorOptions);
+        }
         let image = self.prepare_image(mode, options.max_width)?;
         let width = self.options.width.unwrap_or(options.max_width);
         let width = if self.fit.is_some() {
@@ -479,14 +508,17 @@ impl ImageArt {
             ImageMode::Ascii => {
                 let mut art = AsciiArt::from_shared(Arc::clone(&image))
                     .width(width)
-                    .color(self.options.color);
+                    .color(self.options.color)
+                    .color_processing(self.color_mode, self.dither);
                 if let Some(height) = self.options.height {
                     art = art.height(height);
                 }
                 Ok(art.rich_render(console, options))
             }
             ImageMode::Blocks => {
-                let mut art = BlockArt::from_shared(Arc::clone(&image)).width(width);
+                let mut art = BlockArt::from_shared(Arc::clone(&image))
+                    .width(width)
+                    .color_processing(self.color_mode, self.dither);
                 if let Some(height) = self.options.height {
                     art = art.height(height);
                 }

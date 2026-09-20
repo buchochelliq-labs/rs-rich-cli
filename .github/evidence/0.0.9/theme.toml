@@ -1,0 +1,8 @@
+[defaults]
+theme = "release"
+pager = false
+
+[themes.release]
+title = "bold #bba0ff"
+success = "bold #55dda0"
+detail = "#80c7ff"

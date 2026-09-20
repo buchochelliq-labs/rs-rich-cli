@@ -83,11 +83,13 @@ nav:
   - Troubleshooting: troubleshooting.md
   - Known issues: known-issues.md
   - Development plans:
+      - Themes, diagnostics and image quality: plans/0.0.9.md
       - CLI workflows and crop controls: plans/0.0.8.md
       - CLI usability: plans/0.0.7.md
       - Performance and confidence: plans/0.0.6.md
   - Releases:
-      - 0.0.8 preparation notes: releases/0.0.8.md
+      - 0.0.9 preparation notes: releases/0.0.9.md
+      - 0.0.8: releases/0.0.8.md
       - 0.0.7: releases/0.0.7.md
       - 0.0.5 preparation plan: plans/0.0.5.md
       - 0.0.4: releases/0.0.4.md

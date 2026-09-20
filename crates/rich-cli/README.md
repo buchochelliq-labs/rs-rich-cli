@@ -22,7 +22,7 @@ rich jsonl events.ndjson    # streaming JSON Lines / NDJSON
 rich log app.jsonl          # structured-log JSONL
 ```
 
-The source package targets **`0.0.8`** (release preparation) and follows independent
+The source package targets **`0.0.9`** (source preparation; validation pending) and follows independent
 SemVer; its version does not mirror Python `rich-cli`. The tracked upstream
 release is **`rich-cli` 1.8.1**, recorded in
 [`../../UPSTREAM.toml`](../../UPSTREAM.toml).
@@ -76,6 +76,10 @@ Batch
   workers for file exports; disk-spooled output is replayed in input order.
   Terminal-only batches remain serial. Fail-fast stops new scheduling while
   in-flight workers finish; `--continue-on-error` permits later scheduling.
+  Human-report stderr terminals show completed/failed/total progress;
+  `--no-progress` disables it. JSON reports and redirected stderr never contain
+  progress. Ctrl+C stops scheduling, kills and reaps started workers and exits
+  130; completed exports may remain.
 
 Configuration
 : `--config PATH` and `--profile NAME` select strict TOML defaults and profiles.
@@ -84,6 +88,9 @@ Configuration
   invalid values fail even in inactive profiles. `rich config show` and
   `rich config validate` return JSON; `settings` includes configured values and
   explicit overrides, not every built-in default. `--no-config` disables config.
+  `[themes.NAME]` maps style names to styles. Select with defaults/profile `theme`
+  or `--theme NAME`; `--theme-style NAME=STYLE` overrides individual bindings.
+  Workers inherit resolved bindings for consistent exports.
 
 Still-image crop
 : `--image-fit contain|cover` fits the image into an explicit height and bounded
@@ -91,8 +98,21 @@ Still-image crop
   `--image-anchor` selects center (default), top, bottom, left, right or a corner
   such as `top-left`. Contain stays centered.
 
+Image palette
+: `--image-color ansi256` opts ASCII/half-block still images into fixed ANSI256
+  palette reduction. Add `--image-dither floyd-steinberg` for diffusion.
+  Truecolor/no-dither remains the default. Unsupported combinations are rejected;
+  GIF, diff, Braille and Sixel preprocessing are outside this feature.
+
+Discovery and diagnostics
+: `--demo-list` lists `core`, `workflows`, `art`;
+  `--demo --demo-section workflows` plays one group. `rich doctor` inspects build,
+  terminal, selected config and pager settings without terminal probes, network
+  requests or pager execution. Its successful `--report json` document goes to
+  stdout. Sixel capability is inferred, not tested.
+
 See the [workflow recipes](https://buchochelliq-labs.github.io/rs-rich-cli/recipes/)
-and [0.0.8 preparation notes](https://buchochelliq-labs.github.io/rs-rich-cli/releases/0.0.8/)
+and [0.0.9 preparation notes](https://buchochelliq-labs.github.io/rs-rich-cli/releases/0.0.9/)
 for examples and pending release gates. Source versions do not imply publication.
 
 ## Features

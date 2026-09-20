@@ -19,6 +19,7 @@
 //! colors with reduced fidelity. With colour off
 //! there is nothing to see, so callers should fall back to `AsciiArt` there.
 
+use crate::{image_color::preprocess, Dither, ImageColorMode};
 use image::{imageops::FilterType, DynamicImage, GenericImageView};
 use rich::color::Color;
 use rich::console::{Console, ConsoleOptions};
@@ -35,6 +36,8 @@ pub struct BlockArt {
     image: std::sync::Arc<DynamicImage>,
     width: Option<usize>,
     height: Option<usize>,
+    color_mode: ImageColorMode,
+    dither: Dither,
 }
 
 impl BlockArt {
@@ -47,7 +50,15 @@ impl BlockArt {
             image,
             width: None,
             height: None,
+            color_mode: ImageColorMode::default(),
+            dither: Dither::default(),
         }
+    }
+
+    pub(crate) fn color_processing(mut self, mode: ImageColorMode, dither: Dither) -> Self {
+        self.color_mode = mode;
+        self.dither = dither;
+        self
     }
 
     pub fn from_path(path: impl AsRef<std::path::Path>) -> Result<Self, image::ImageError> {
@@ -95,16 +106,20 @@ impl BlockArt {
     /// The rendered rows as `(upper, lower)` colour pairs.
     fn cells(&self, available: usize) -> Vec<Vec<(Color, Color)>> {
         let (columns, rows) = self.grid(available);
-        let scaled = self
+        let mut scaled = self
             .image
             .resize_exact(columns as u32, (rows * 2) as u32, FilterType::Triangle)
             .to_rgba8();
+        let indices = preprocess(&mut scaled, self.color_mode, self.dither);
 
         (0..rows)
             .map(|row| {
                 (0..columns)
                     .map(|col| {
                         let sample = |y: u32| {
+                            if let Some(indices) = &indices {
+                                return Color::from_ansi(indices[y as usize * columns + col]);
+                            }
                             let p = scaled.get_pixel(col as u32, y.min(scaled.height() - 1));
                             let [r, g, b, a] = p.0;
                             // Composite onto black so transparency reads as

@@ -1,6 +1,6 @@
 # CLI workflow recipes
 
-These recipes target the 0.0.8 source preparation. Build the current CLI with
+These recipes target the 0.0.9 source preparation. Build the current CLI with
 `cargo build -p rs-rich-cli` and put the resulting `rich` binary on your PATH.
 Commands below use a POSIX shell; run them from the repository root unless
 using your own input paths.
@@ -182,4 +182,90 @@ whole image with padding. In the library, `ImageArt::anchor(ImageAnchor::TopLeft
 is ignored for contain or unfitted images.
 
 See [Using the CLI](cli.md) for individual options and the
-[0.0.8 preparation notes](releases/0.0.8.md) for release status.
+[0.0.9 preparation notes](releases/0.0.9.md) for release status.
+
+
+## Style a team notice and its export
+
+```bash
+cat > team-theme.toml <<'TOML'
+[defaults]
+theme = "team"
+
+[themes.team]
+notice = "bold cyan"
+warning = "bold yellow"
+"markdown.h1" = "bold magenta"
+
+[profiles.review]
+theme = "team"
+width = 88
+TOML
+rich config validate --config team-theme.toml --profile review
+rich --config team-theme.toml --profile review --print '[notice]Ready for review[/]'
+rich --config team-theme.toml --theme team --theme-style 'notice=bold green' \
+  --print '[notice]Approved[/]' --export-html notice.html
+```
+
+CLI bindings override the selected theme's bindings. Named theme selection uses
+default/profile/CLI precedence. Batch exports inherit a resolved snapshot of
+those bindings. Invalid definitions fail even when their theme is not selected.
+
+## Monitor and cancel a batch
+
+```bash
+mkdir -p rendered
+rich markdown --no-config --batch 'docs/tutorial/*.md' --jobs 4 \
+  --export-html rendered/document.html --collision suffix
+```
+
+On an interactive stderr terminal, human reports include completed/failed/total
+progress. Press Ctrl+C during a long batch to stop scheduling and terminate and
+reap started workers; the command exits 130. Inputs remain intact; completed
+exports may remain. To suppress status updates, add `--no-progress`.
+
+A machine report stays exactly one JSON document on stderr, with no progress
+mixed in, including when interrupted:
+
+```bash
+rich markdown --no-config --batch 'docs/tutorial/*.md' --jobs 4 \
+  --export-html rendered/document.html --collision suffix --report json \
+  > rendered/content.txt 2> rendered/report.json
+```
+
+## Diagnose a terminal or play one tour section
+
+```bash
+rich doctor --no-config
+rich doctor --no-config --report json > doctor.json
+rich --demo-list
+rich --demo --demo-section core --demo-delay 0
+rich --demo --demo-section workflows --no-color > workflows.txt
+rich --demo --demo-section art
+```
+
+Doctor's successful JSON document is on stdout. It reports selected capabilities,
+configuration and pager choice without probing the terminal, fetching URLs or
+launching the pager. Sixel support is inferred, not tested. The selected tour
+runs once; redirected output stays finite and Ctrl+C restores terminal state.
+Lean builds explain the unavailable art section.
+
+## Compare palette reduction with dithering
+
+Use any local `photo.png` with gradients. Explicit ASCII/blocks mode keeps the
+comparison independent of terminal graphics detection:
+
+```bash
+rich image photo.png --no-config --image-mode blocks --width 60 --image-color truecolor
+rich image photo.png --no-config --image-mode blocks --width 60 --image-color ansi256
+rich image photo.png --no-config --image-mode blocks --width 60 \
+  --image-color ansi256 --image-dither floyd-steinberg
+rich image photo.png --no-config --image-mode ascii --width 60 \
+  --image-color ansi256 --image-dither floyd-steinberg --export-html dither.html
+```
+
+Dithering requires ANSI256 and only supports ASCII/half-block still images.
+GIF, diff, Braille and Sixel are outside this slice. Palette reduction uses fixed
+entries 16–255 and encoded-RGB distance; it is not a perceptual colour model.
+`--image-dither none` restores the default no-diffusion path; truecolor/no-dither
+preserves the existing rendering policy. These controls require the `art` feature.

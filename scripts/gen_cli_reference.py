@@ -38,7 +38,8 @@ FOOTER = """
 `rich --csv data.csv > table.txt` keeps the two apart.
 
 `--report json` writes the result/error envelope to stderr for the same reason:
-stdout remains the rendered payload.
+stdout remains the rendered payload. `rich doctor --report json` is an
+informational command: its diagnostic document is written to stdout instead.
 
 Successful reports include `ok`, `code`, `exit_code` and a `result` object.
 Failures include the same status fields plus `message` and an `error` object.

@@ -115,7 +115,34 @@ as tall as wide. Output and intermediate rasters are limited to 16 megapixels.
 `background()` composites transparency before resizing and colors contain
 padding; fitting without a background uses black. Use `render()` to receive
 validation errors. These APIs require the `image` feature; crop anchors are part
-of the independently versioned art 0.0.6 source preparation.
+of the independently published art 0.0.6 release.
+
+Art 0.0.7 source preparation adds optional palette reduction and diffusion:
+
+```rust
+use rich_art::{Dither, ImageArt, ImageColorMode, ImageMode};
+
+let art = ImageArt::from_path("photo.png")?
+    .mode(ImageMode::Blocks)
+    .width(60)
+    .color_mode(ImageColorMode::Ansi256)
+    .dither(Dither::FloydSteinberg);
+```
+
+`ImageColorMode::TrueColor` and `Dither::None` remain the defaults. Nondefault
+preprocessing supports ASCII and half-block still images. Auto mode must resolve
+to one of those backends; unsupported modes return a validation error from
+`render()`. Floyd–Steinberg requires ANSI256. The builders preserve the public
+`ImageOptions` struct shape and require the `image` feature.
+
+Palette reduction runs after fitting, background compositing and final sampling,
+before glyph selection. It chooses fixed ANSI256 entries 16–255 with squared
+encoded-RGB distance and lowest-index ties; terminal-dependent entries 0–15 are
+excluded. Diffusion scans left-to-right, top-to-bottom and discards error at image
+boundaries. This is deterministic rather than perceptually calibrated. GIF,
+Braille and Sixel preprocessing remain outside this slice. The
+[0.0.9 CLI / 0.0.7 art preparation notes](../../docs/releases/0.0.9.md) track pending
+combined validation and publication gates.
 
 The image APIs intentionally live in `rich-art`, the repository's dedicated
 art crate, rather than `rich-ext`: `rich-ext` provides console/plugin

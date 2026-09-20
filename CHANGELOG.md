@@ -33,7 +33,25 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
-### CLI 0.0.8 / art 0.0.6 preparation
+No additional changes pending.
+
+## CLI 0.0.9 / art 0.0.7 — prepared
+
+- Named TOML themes, default/profile/CLI selection, explicit style overrides and
+  resolved theme bindings for batch workers and exports.
+- Human-report stderr-terminal batch progress and `--no-progress`; Ctrl+C stops
+  scheduling, kills/reaps workers, exits 130 and preserves one machine report.
+- Listable `core`, `workflows`, `art` demo sections and selectable playback.
+- Read-only `rich doctor` diagnostics with JSON stdout, selected config/pager
+  details and explicit inferred capability reporting.
+- Public art `ImageColorMode`/`Dither` builders and CLI opt-in ANSI256/
+  Floyd–Steinberg for ASCII/half-block still images. Default truecolor/no-dither
+  and the `ImageOptions` struct shape remain unchanged.
+
+Local validation and review passed; see [0.0.9 preparation notes](docs/releases/0.0.9.md).
+Core 0.0.4 and ext 0.0.6 are unchanged. No publication is claimed.
+
+## CLI 0.0.8 / art 0.0.6 — published
 
 - Guided `rich --demo` suite tour with adjustable pacing, real CLI workflow and
   art examples, finite redirected output and clean Ctrl+C interruption.
@@ -53,9 +71,11 @@ Entries below record subsequent releases and development.
   staged success does not establish publication readiness. Updated recipes,
   benchmark/demo work and release handoff documentation.
 
-These are prepared changes, not shipped versions. CLI 0.0.8 and art 0.0.6 release
-independently, art first; ext 0.0.6 and core 0.0.4 remain unchanged. Final gates
-are tracked in [the 0.0.8 notes](docs/releases/0.0.8.md).
+Independent publication succeeded for
+[art 0.0.6](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35541438821)
+and [CLI 0.0.8](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35542000274),
+including exact-version registry consumers. Ext 0.0.6 and core 0.0.4 stayed
+unchanged. Evidence is recorded in [0.0.8 notes](docs/releases/0.0.8.md).
 
 ## CLI 0.0.7 / art 0.0.5 / ext 0.0.6 — published
 
@@ -84,7 +104,7 @@ CLI 0.0.7 and art 0.0.5 shipped still-image fitting, background compositing,
 watch fixes, deterministic serial batch conversion and scalar config profiles.
 The [0.0.7 release notes](docs/releases/0.0.7.md) record validation and dependency
 recovery. Serial `--jobs` and limited TOML/boolean semantics below describe that
-release; the 0.0.8 preparation above replaces them.
+release; the published 0.0.8 release above replaces them.
 
 ### Added
 

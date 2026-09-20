@@ -34,6 +34,12 @@ pub mod braille;
 pub mod image_art;
 
 #[cfg(feature = "image")]
+mod image_color;
+
+#[cfg(feature = "image")]
+pub use image_color::{Dither, ImageColorMode};
+
+#[cfg(feature = "image")]
 pub mod imagediff;
 
 #[cfg(feature = "sixel")]
