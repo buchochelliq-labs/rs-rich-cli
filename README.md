@@ -31,6 +31,7 @@ This preview shows crop anchors from the optimized CLI 0.0.8 preparation build.
 cargo install rs-rich-cli
 rich --print '[bold magenta]Hello[/] [green]World[/]'
 rich --help
+rich --demo  # guided suite tour; Ctrl+C stops
 ```
 
 For Rust applications, use `cargo add rs-rich` and import `rich::Console`.

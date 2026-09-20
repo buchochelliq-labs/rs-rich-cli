@@ -16,6 +16,7 @@ use std::process::ExitCode;
 
 mod batch;
 mod config;
+mod demo;
 use batch::run_batch;
 use config::{config_args, ConfigRoots};
 
@@ -378,6 +379,9 @@ fn build_markdown(source: &str, hyperlinks: bool) -> Markdown {
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if demo::requested(&args) {
+        return demo::dispatch(&args);
+    }
     match parse(&args) {
         Ok(None) => ExitCode::SUCCESS, // help/version already printed
         Ok(Some(cli)) => run(cli),
@@ -411,6 +415,7 @@ const VALUE_OPTIONS: &[&str] = &[
     "--image-anchor",
     "--image-background",
     "--height",
+    "--demo-delay",
     "--watch-interval",
     "--interval",
     "--gif-mode",
@@ -2198,7 +2203,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
 
     // With no flags and no resource, show the capability demo.
     if cli.mode == Mode::Auto && cli.resource.is_none() {
-        run_demo(cli.no_color);
+        run_demo(cli.no_color, std::time::Duration::ZERO);
         return success(&cli);
     }
 
@@ -4389,6 +4394,10 @@ OPTIONS:
         --no-batch, --no-continue-on-error, --no-overwrite
         --no-watch, --no-watch-cache, --no-sanitize
                      Disable the corresponding config/default boolean
+    --demo          Guided suite tour; pauses 3 seconds between sections on a TTY
+    --demo-delay SECONDS
+                    Tour pause (0–60); no pauses when redirected; Ctrl+C stops
+                    Self-contained examples; ignores config; accepts --no-color
     -h, --help       Show this help
     -V, --version    Show the rs-rich-cli package version
 
@@ -4412,7 +4421,7 @@ EXIT CODES:
     );
 }
 
-fn run_demo(no_color: bool) {
+fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
     // Force truecolor so the demo looks the same regardless of TERM — but only
     // when it is actually going to a terminal. Forcing it unconditionally wrote
     // escape sequences into a pipe, and made `--no-color` a no-op on this path
@@ -4432,12 +4441,14 @@ fn run_demo(no_color: bool) {
         .build();
     console.install_extensions();
 
-    console.print(&Rule::new("rs-rich-cli"));
+    demo::section(&console, delay, "rs-rich-cli");
     console.print_str("[bold magenta]rs-rich-cli[/] — a Rust port of [italic]rich[/]");
-    console.print_str("Everything below is byte-parity-tested against Python rich 15.0.0.");
+    console.print_str(
+        "Core renderables track Python rich 15.0.0; Rust extensions add more workflows.",
+    );
 
     // Markup, color, theme, and the rich-ext highlighter.
-    console.print(&Rule::new("markup · color · theme · extension"));
+    demo::section(&console, delay, "markup · color · theme · extension");
     console.print_str(
         "Styles:   [bold]bold[/] [dim]dim[/] [italic]italic[/] [underline]underline[/] [reverse]reverse[/]",
     );
@@ -4469,14 +4480,14 @@ fn run_demo(no_color: bool) {
     console.print_str("Emoji:     :rocket: :fire: :sparkles: :thumbs_up: :snake: :coffee:");
 
     // Rule variants (title alignment).
-    console.print(&Rule::new("rule"));
+    demo::section(&console, delay, "rule");
     console.print(&Rule::line());
-    console.print(&Rule::new("centered"));
+    demo::section(&console, delay, "centered");
     console.print(&Rule::new("left").align(HorizontalAlign::Left));
     console.print(&Rule::new("right").align(HorizontalAlign::Right));
 
     // Panels with different boxes.
-    console.print(&Rule::new("panel"));
+    demo::section(&console, delay, "panel");
     console.print(&Panel::new(text("rounded box (default)")).title("rounded"));
     console.print(
         &Panel::new(text("square box"))
@@ -4495,47 +4506,52 @@ fn run_demo(no_color: bool) {
     );
     // Legacy-Windows box substitution: a ROUNDED panel falls back to SQUARE.
     let legacy = Console::builder()
-        .force_terminal(true)
-        .color_system(Some(ColorSystem::Truecolor))
+        .force_terminal(to_terminal)
+        .no_color(no_color)
+        .color_system(if to_terminal {
+            Some(ColorSystem::Truecolor)
+        } else {
+            None
+        })
         .width(console.width())
         .legacy_windows(true)
         .build();
     legacy.print(&Panel::new(text("rounded → square on legacy Windows")).title("legacy"));
 
     // Padding (shown inside a panel so the blank space is visible).
-    console.print(&Rule::new("padding"));
+    demo::section(&console, delay, "padding");
     console.print(
         &Panel::new(Box::new(Padding::new(text("padded (1, 4)"), (1, 4, 1, 4)))).title("padding"),
     );
 
     // Styled — lay one style under an entire renderable.
-    console.print(&Rule::new("styled"));
+    demo::section(&console, delay, "styled");
     console.print(&Styled::new(
         Box::new(Panel::new(text("green under the whole panel")).title("styled")),
         Style::parse("green").unwrap(),
     ));
 
     // Horizontal alignment (fills the console width).
-    console.print(&Rule::new("align"));
+    demo::section(&console, delay, "align");
     console.print(&Align::left(text("← left")));
     console.print(&Align::center(text("center")));
     console.print(&Align::right(text("right →")));
 
     // Text justify (via print(justify=…)).
-    console.print(&Rule::new("justify"));
+    demo::section(&console, delay, "justify");
     console.print_justified("left justified", Justify::Left);
     console.print_justified("centered", Justify::Center);
     console.print_justified("right justified", Justify::Right);
 
     // Constrain — same panel, capped to 24 cells.
-    console.print(&Rule::new("constrain (width 24)"));
+    demo::section(&console, delay, "constrain (width 24)");
     console.print(&Constrain::new(
         Box::new(Panel::new(text("constrained")).title("≤24")),
         Some(24),
     ));
 
     // Table.
-    console.print(&Rule::new("table"));
+    demo::section(&console, delay, "table");
     let mut table = Table::new().title("ported renderables");
     // A styled column and a fixed-width column (content wraps with ellipsis).
     table
@@ -4560,7 +4576,7 @@ fn run_demo(no_color: bool) {
     console.print(&table);
 
     // Columns — packs items into as many columns as fit the width.
-    console.print(&Rule::new("columns"));
+    demo::section(&console, delay, "columns");
     let months = [
         "January",
         "February",
@@ -4580,7 +4596,7 @@ fn run_demo(no_color: bool) {
     ));
 
     // Tree.
-    console.print(&Rule::new("tree"));
+    demo::section(&console, delay, "tree");
     let mut tree = Tree::new("rs-rich-cli");
     let core = tree.add("crates/rich (core, mirrors rich 15.0.0)");
     core.add("color · style · text · console");
@@ -4591,13 +4607,13 @@ fn run_demo(no_color: bool) {
     console.print(&tree);
 
     // Progress bars at a few completion levels (0 → 100%).
-    console.print(&Rule::new("progress bar"));
+    demo::section(&console, delay, "progress bar");
     for pct in [0.0, 33.0, 66.0, 100.0] {
         console.print(&ProgressBar::new(100.0, pct).width(48));
     }
 
     // Progress display — description + flexing bar + percentage (static frame).
-    console.print(&Rule::new("progress"));
+    demo::section(&console, delay, "progress");
     let mut progress = Progress::new();
     progress.add_task("Downloading", 100.0, 50.0);
     progress.add_task("Processing", 100.0, 100.0);
@@ -4624,7 +4640,7 @@ fn run_demo(no_color: bool) {
     console.print(&download);
 
     // JSON — pretty-printed and highlighted.
-    console.print(&Rule::new("json"));
+    demo::section(&console, delay, "json");
     if let Ok(json) = Json::new(
         r#"{"port": "rich", "version": "15.0.0", "parity": true, "widgets": ["panel", "table", "tree"]}"#,
     ) {
@@ -4632,12 +4648,12 @@ fn run_demo(no_color: bool) {
     }
 
     // Pretty — colorize a Rust value's Debug output (Rust-native rich.pretty).
-    console.print(&Rule::new("pretty"));
+    demo::section(&console, delay, "pretty");
     let value = vec![("panel", 1u32), ("table", 2), ("tree", 3)];
     console.print(&Pretty::new(&value));
 
     // Log records — a severity-colored line per record (Rust-native rich.logging).
-    console.print(&Rule::new("log"));
+    demo::section(&console, delay, "log");
     for (level, message) in [
         (LogLevel::Info, "server started on port 8080"),
         (LogLevel::Debug, "cache warm: 128 entries"),
@@ -4652,32 +4668,32 @@ fn run_demo(no_color: bool) {
     }
 
     // Traceback — render an error + its source chain (Rust-native rich.traceback).
-    console.print(&Rule::new("traceback"));
+    demo::section(&console, delay, "traceback");
     let cause = std::io::Error::new(std::io::ErrorKind::NotFound, "no such file: config.toml");
     let err = std::io::Error::other(cause);
     console.print(&Traceback::new(&err));
 
     // Bar — a filled span within a range (eighth-block resolution).
-    console.print(&Rule::new("bar (range)"));
+    demo::section(&console, delay, "bar (range)");
     for (begin, end) in [(0.0, 100.0), (0.0, 62.0), (20.0, 80.0), (55.0, 100.0)] {
         console.print(&Bar::new(100.0, begin, end).width(48));
     }
 
     // Markdown — headings, inline styles, lists, block quotes, tables, and rules.
-    console.print(&Rule::new("markdown"));
+    demo::section(&console, delay, "markdown");
     console.print(&Markdown::new(
         "# Heading\n\nA paragraph with **bold**, *italic*, `code`, and a [link](https://example.com).\n\n- bullet item\n- another\n\n1. first\n2. second\n\n> a block quote\n\n| Name | Age |\n| :--- | ---: |\n| Alice | 30 |\n| Bob | 7 |\n\n```rust\nfn main() {\n    println!(\"hi\");\n}\n```\n\n---",
     ));
 
     // Syntax highlighting (via syntect — functional, not byte-parity with rich).
-    console.print(&Rule::new("syntax"));
+    demo::section(&console, delay, "syntax");
     console.print(&Syntax::new(
         "fn main() {\n    let msg = \"hello, rich\";\n    println!(\"{msg}\");\n}",
         "rust",
     ));
 
     // Control codes — cursor/screen sequences (shown escaped, not executed).
-    console.print(&Rule::new("control codes"));
+    demo::section(&console, delay, "control codes");
     let show_escape = |label: &str, control: &Control| {
         // Escaped so the sequence is visible (and its `[` isn't read as markup).
         let escaped = control
@@ -4715,7 +4731,7 @@ fn run_demo(no_color: bool) {
     console.print(&Text::new(format!("  {:>14}: {stream}", "live stream")));
 
     // ANSI decoder — parse a raw SGR string back into styled Text, then re-render.
-    console.print(&Rule::new("ansi decoder"));
+    demo::section(&console, delay, "ansi decoder");
     let raw =
         "\x1b[1;31mred bold\x1b[0m \x1b[38;5;214morange\x1b[0m \x1b[3;4mitalic underline\x1b[0m";
     console.print(&Text::new(format!(
@@ -4728,7 +4744,7 @@ fn run_demo(no_color: bool) {
     }
 
     // Capture / export — record a rendering to a buffer, then strip its styles.
-    console.print(&Rule::new("capture · export_text"));
+    demo::section(&console, delay, "capture · export_text");
     let plain = console.export_text(|c| {
         c.print(&Panel::new(text("captured panel")).box_set(SQUARE));
     });
@@ -4746,7 +4762,7 @@ fn run_demo(no_color: bool) {
 
     // Layout — split a region into ratioed rows/columns; Panel leaves expand
     // to fill their region (rendered here at a fixed size).
-    console.print(&Rule::new("layout"));
+    demo::section(&console, delay, "layout");
     let panel_leaf = |title: &str, body: &str| {
         Layout::with_renderable(Box::new(
             Panel::new(text(body))
@@ -4775,7 +4791,7 @@ fn run_demo(no_color: bool) {
     }
 
     // Spinners — a few frames of each built-in (animation needs a Live loop).
-    console.print(&Rule::new("spinner (frames)"));
+    demo::section(&console, delay, "spinner (frames)");
     for name in ["dots", "line", "arrow", "simpleDots"] {
         let spinner = Spinner::new(name);
         let frames: String = (0..6)
@@ -4789,18 +4805,19 @@ fn run_demo(no_color: bool) {
     console.print(&Text::new("       status: ").append_text(&status));
 
     // CSV rendered as a table (blue border, numeric columns bold-green + right).
-    console.print(&Rule::new("csv"));
+    demo::section(&console, delay, "csv");
     let csv = "Product,Qty,Price\nWidget,3,9.99\nGadget,12,19.50\nGizmo,1,4.25";
     if let Some(table) = build_csv_table(csv, Some(','), None, None) {
         console.print(&table);
     }
 
     // filesize.
-    console.print(&Rule::new("filesize"));
+    demo::section(&console, delay, "filesize");
     for bytes in [1u64, 999, 1_000, 1_500, 1_000_000, 1_500_000_000] {
         console.print_str(&format!("  {bytes:>13} → {}", filesize::decimal(bytes)));
     }
     console.print(&Rule::line());
+    console
 }
 
 #[cfg(test)]

@@ -5,10 +5,37 @@ CSV, source code, notebooks — and can compare two images. This page is organis
 by what you are trying to do. For the complete list of options, see the
 [CLI reference](cli-reference.md).
 
-**Assumes** you can run commands in a terminal. Every example below was run
-against `rich 0.0.2` and shows its real output, with colour removed for print.
+**Assumes** you can run commands in a terminal. Examples use real CLI output;
+new 0.0.8 workflows are documented below and in the release notes.
 
 ---
+
+## Take the guided tour
+
+```bash
+rich --demo                   # one pass, 3 seconds between sections
+rich --demo --demo-delay 5    # a slower tour
+rich --demo --demo-delay 0    # skip section pauses
+rich --demo --no-color > tour.txt  # finite, colour-free transcript
+```
+
+The tour walks through markup, tables, panels, layouts, Markdown, syntax,
+progress, notebooks, JSON Lines, logs, config profiles, batch planning and
+parallel HTML/SVG exports, watch updates, and rich-art's banners, Braille,
+half-blocks, ASCII, crop/background controls, image diffs and GIF playback.
+It shows commands alongside the CLI examples. URL fetching, external paging
+and terminal-specific Sixel support are explained without opening a browser,
+fetching a URL or launching a pager.
+
+It runs once and exits. **Ctrl+C stops the tour**, restores the cursor and
+cleans up temporary examples. Config files are ignored so the tour works
+without setup; its profile example uses an isolated bundled configuration.
+It never writes into your current directory. `--demo-delay` accepts 0–60
+seconds and only affects section pauses on a terminal; watch/GIF examples
+have their own short playback. Redirected output has no pauses or animation.
+A build without the `art` feature explains that the art sections are unavailable.
+Use `--demo` on its own, optionally with `--demo-delay`, `--no-color` or
+`--no-config`; other rendering options and resources are rejected.
 
 ## Read a file
 

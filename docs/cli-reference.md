@@ -142,6 +142,10 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
     --no-batch, --no-continue-on-error, --no-overwrite
     --no-watch, --no-watch-cache, --no-sanitize
                  Disable the corresponding config/default boolean
+--demo          Guided suite tour; pauses 3 seconds between sections on a TTY
+--demo-delay SECONDS
+                Tour pause (0–60); no pauses when redirected; Ctrl+C stops
+                Self-contained examples; ignores config; accepts --no-color
 -h, --help       Show this help
 -V, --version    Show the rs-rich-cli package version
 ```

@@ -97,6 +97,9 @@ jobs:
       - name: Verify interactive stdin and NO_COLOR in a terminal
         run: python3 scripts/test_cli_terminal.py --binary target/debug/rich
 
+      - name: Verify guided tour playback and interruption
+        run: python3 scripts/test_demo_pty.py --binary target/debug/rich
+
       - name: Verify workflow output snapshots
         run: python3 scripts/snapshot_cli.py --cases scripts/fixtures/workflow_snapshots.jsonl --snapshots scripts/fixtures/workflow_snapshots --command target/debug/rich
 
@@ -164,7 +167,7 @@ jobs:
       - name: Test Windows batch paths and CLI pager controls
         run: |
           cargo test -p rs-rich-cli --locked --bin rich batch::tests
-          cargo test -p rs-rich-cli --locked --test batch_v8 --test pager_v8
+          cargo test -p rs-rich-cli --locked --test batch_v8 --test pager_v8 --test demo
 
   msrv:
     name: minimum supported Rust version

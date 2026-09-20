@@ -1,0 +1,47 @@
+{
+  "version": "rich (rs-rich-cli) 0.0.8",
+  "binary_path": "/workspace/scratch/02a46fd2d12a/rs-rich-cli/target/release/rich",
+  "binary_sha256": "4fcb05bde6d6e9d23bd3d06129f33340da8c084754e688fa7088e40ad0e6a5e2",
+  "source_sha256": "0adae8d8a8a63993322759265128a11fb65e222fad028c4f4c8e345630c891d3",
+  "source_digest_recipe": "Sorted crates/**/*.rs, crates/**/Cargo.toml, Cargo.toml, Cargo.lock; relative path + NUL + bytes",
+  "git_head": "85eb44732cc628bf9ee020be4556463567294398",
+  "git_worktree_changes": [
+    " M .github/workflows/ci.yml",
+    " M CHANGELOG.md",
+    " M Cargo.lock",
+    " M README.md",
+    " M crates/rich-cli/Cargo.toml",
+    " M crates/rich-cli/README.md",
+    " M crates/rich-cli/src/batch.rs",
+    " M crates/rich-cli/src/main.rs",
+    " M crates/rich-cli/tests/batch_v8.rs",
+    " M docs/PORTING.md",
+    " M docs/cli-reference.md",
+    " M docs/cli.md",
+    " M docs/demos.md",
+    " M docs/plans/0.0.8.md",
+    " M docs/releases/0.0.8.md",
+    " M scripts/build_docs_media.py",
+    "?? .github/evidence/0.0.8/demo-tour/",
+    "?? crates/rich-cli/src/demo.rs",
+    "?? crates/rich-cli/tests/demo.rs",
+    "?? docs/assets/demos/v8-demo-tour.gif",
+    "?? docs/assets/demos/v8-demo-tour.mp4",
+    "?? docs/assets/demos/v8-demo-tour.png",
+    "?? scripts/capture_demo_tour.py",
+    "?? scripts/test_demo_pty.py"
+  ],
+  "args": [
+    "--demo",
+    "--demo-delay",
+    "0.5"
+  ],
+  "exit_code": 0,
+  "recording_sha256": "616b86662b1892f2bfcd049203f5a7be33d962b884477ac2068fa2e7a524342e",
+  "presentation": "Actual 88x28 PTY playback at half-second section pacing; captions added, no audio.",
+  "media": {
+    "v8-demo-tour.png": "f547a1b51c8fc413af2505a9b3d4f9bf5659e12abf276fbdc616de6108badcaf",
+    "v8-demo-tour.gif": "801d1ea8b14b3a3b5c4447c32f6099f2f4dbc852b711182a6636265cf082e0ed",
+    "v8-demo-tour.mp4": "8233a9e2edf39636640647abbdc94bed4b1310e4e12705bf3416aefb40a49b58"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "workspace_all_features_tests": 561,
+  "lean_cli_tests": 126,
+  "hard_link_regressions": "two tests; failed before fix, passed afterward",
+  "final_handler_checks": "four optimized-build PTY checks and default/lean demo tests repeated after stdout-handle fix",
+  "review": "Independent reviewer approved; separately reran all four optimized-build PTY checks",
+  "other_validation": [
+    "formatting",
+    "all-feature Clippy",
+    "Rust 1.90 all-target/all-feature check",
+    "strict docs build",
+    "generated CLI and version reference checks",
+    "registry identity and staged package checks"
+  ],
+  "prior_merge": "85eb44732cc628bf9ee020be4556463567294398",
+  "prior_post_merge_checks": "All 19 successful, including docs deployment",
+  "publication": "Not authorized; no tags or uploads",
+  "remote_followup_checks": "See follow-up PR checks for final committed source"
+}
