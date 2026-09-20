@@ -1,8 +1,24 @@
 # Gallery
 
-Everything here is rendered by the library and exported with
-`Console::export_svg`, by `scripts/capture_screenshots.sh`. If rendering changes,
-these images change with it — they cannot go stale.
+These are committed snapshots of actual library output, exported with
+`Console::export_svg` by `scripts/capture_screenshots.sh`. Regenerate them when
+rendering changes. Progress and spinner GIFs replay the exported SVG frames.
+
+| What you want to do | Start here |
+|---|---|
+| Animate images in the terminal | [Rich-art videos and commands](demos.md) |
+| Style text | [Markup tutorial](tutorial/02-markup.md) |
+| Present structured data | [Table tutorial](tutorial/03-tables.md) |
+| Arrange output | [Layout tutorial](tutorial/04-layout.md) |
+| Show running work | [Progress and live output](tutorial/05-live.md) |
+| Format files from the shell | [CLI guide](cli.md) |
+
+## Rich-art in motion
+
+![Half-block and ASCII renderings of the same GIF](assets/demos/rich-art-comparison.gif)
+
+[Watch or download the videos](demos.md), including individual half-block and
+ASCII clips. These replay archived CLI recordings; capture details are on that page.
 
 ## Markup
 
@@ -71,11 +87,11 @@ Items are packed into as many equal columns as the width allows.
 
 ## Progress
 
-![Progress](assets/progress-animated.svg)
+![Progress](assets/demos/progress.gif)
 
 ## Spinners
 
-![Spinner](assets/spinner-animated.svg)
+![Spinner](assets/demos/spinner.gif)
 
 ## Text overflow
 
