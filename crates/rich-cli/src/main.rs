@@ -327,6 +327,12 @@ struct Cli {
     /// `--report json`: emit a stable result/error envelope to stderr while
     /// leaving stdout for rendered content.
     report_format: ReportFormat,
+    /// Re-render a changing local file or URL while stdout is a terminal.
+    watch: bool,
+    /// Polling interval for `--watch`, in seconds.
+    watch_interval: f64,
+    /// Avoid emitting unchanged URL responses.
+    watch_cache: bool,
     batch: bool,
     continue_on_error: bool,
     jobs: usize,
@@ -1197,6 +1203,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut hyperlinks = false;
     let mut sanitize = false;
     let mut report_format = ReportFormat::Human;
+    let mut watch = false;
+    let mut watch_interval = 1.0;
+    let mut watch_cache = false;
     let mut batch = false;
     let mut continue_on_error = false;
     let mut jobs = 1usize;
@@ -1295,6 +1304,19 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--center" => {}
             "--no-color" => no_color = true,
             "--pager" => pager = true,
+            "--watch" => watch = true,
+            "--watch-cache" => watch_cache = true,
+            "--watch-interval" | "--interval" => {
+                let value = iter
+                    .next()
+                    .ok_or("--watch-interval requires seconds greater than zero")?;
+                watch_interval = value
+                    .parse::<f64>()
+                    .map_err(|_| format!("invalid watch interval {value:?}"))?;
+                if !watch_interval.is_finite() || watch_interval <= 0.0 {
+                    return Err("--watch-interval must be greater than zero".into());
+                }
+            }
             "--batch" => batch = true,
             "--continue-on-error" => continue_on_error = true,
             "--overwrite" => {
@@ -1507,6 +1529,8 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--panel/--padding",
             panel.is_some() || padding.is_some(),
         ),
+        ("--watch-interval", watch_interval != 1.0, "--watch", watch),
+        ("--watch-cache", watch_cache, "--watch", watch),
     ];
     if let Some((flag, _, needs, _)) = orphans
         .iter()
@@ -1587,6 +1611,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         hyperlinks,
         sanitize,
         report_format,
+        watch,
+        watch_interval,
+        watch_cache,
         batch,
         continue_on_error,
         jobs,
@@ -2137,7 +2164,131 @@ fn decorate_and_emit(
     emit_exit_code(cli, emit(console, export, |c| c.print(renderable.as_ref())))
 }
 
-fn run(mut cli: Cli) -> ExitCode {
+fn run(cli: Cli) -> ExitCode {
+    if cli.watch {
+        return run_watch(cli);
+    }
+    run_once(cli)
+}
+
+fn run_watch(mut cli: Cli) -> ExitCode {
+    let Some(resource) = cli.resource.as_deref() else {
+        return fail(
+            &cli,
+            ExitClass::Usage,
+            "--watch requires a file path or URL",
+        );
+    };
+    if resource == "-" || (cli.mode == Mode::Print && !is_url(resource)) {
+        return fail(
+            &cli,
+            ExitClass::Usage,
+            "--watch requires a local file or URL, not stdin or literal markup",
+        );
+    }
+    let effective_mode = if cli.mode == Mode::Auto {
+        detect_mode(Some(resource))
+    } else {
+        cli.mode
+    };
+    if effective_mode.draws_directly() || effective_mode == Mode::Rule {
+        return fail(
+            &cli,
+            ExitClass::Usage,
+            "--watch requires a resource-backed render mode",
+        );
+    }
+    // Redirected output must be a finite, deterministic command. This also
+    // keeps `rich --watch file > snapshot.txt` from hanging in a pipeline.
+    if !std::io::stdout().is_terminal() {
+        cli.watch = false;
+        return run_once(cli);
+    }
+    if is_url(resource) {
+        #[cfg(not(feature = "fetch"))]
+        {
+            cli.watch = false;
+            return run_once(cli);
+        }
+    }
+
+    let interval = std::time::Duration::from_secs_f64(cli.watch_interval);
+    let mut previous = None;
+    loop {
+        #[cfg(feature = "fetch")]
+        let cached = if is_url(resource) && cli.watch_cache {
+            Some(fetch_url(resource, cli.extensions.encoding))
+        } else {
+            None
+        };
+        #[cfg(not(feature = "fetch"))]
+        let cached: Option<Result<(String, Option<String>), String>> = None;
+        let fingerprint = match cached.as_ref() {
+            Some(Ok((body, content_type))) => {
+                use std::hash::{Hash, Hasher};
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                body.hash(&mut hasher);
+                content_type.hash(&mut hasher);
+                format!("url:{:x}", hasher.finish())
+            }
+            Some(Err(error)) => format!("url-error:{error}"),
+            None => watch_fingerprint(resource, false, cli.extensions.encoding),
+        };
+        let changed = previous.as_ref() != Some(&fingerprint);
+        if changed || (is_url(resource) && !cli.watch_cache) {
+            previous = Some(fingerprint);
+            let mut iteration = cli.clone();
+            iteration.watch = false;
+            let status = run_once_with_fetch(iteration, cached.and_then(Result::ok));
+            if status != ExitClass::Success.exit_code() {
+                // A temporary disappearance or parse failure is a frame error,
+                // not a reason to abandon a watch that may recover.
+                eprintln!("rich: watch will retry after the next change");
+            }
+        }
+        std::thread::sleep(interval);
+    }
+}
+
+fn watch_fingerprint(resource: &str, cache_url: bool, encoding: Option<Encoding>) -> String {
+    if is_url(resource) {
+        #[cfg(feature = "fetch")]
+        if cache_url {
+            return match fetch_url(resource, encoding) {
+                Ok((body, content_type)) => {
+                    use std::hash::{Hash, Hasher};
+                    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                    body.hash(&mut hasher);
+                    content_type.hash(&mut hasher);
+                    format!("url:{:x}", hasher.finish())
+                }
+                Err(error) => format!("url-error:{error}"),
+            };
+        }
+        #[cfg(not(feature = "fetch"))]
+        let _ = (cache_url, encoding);
+        return "url".to_string();
+    }
+    match std::fs::metadata(resource) {
+        Ok(metadata) => format!(
+            "{}:{}:{}",
+            metadata.len(),
+            metadata
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |duration| duration.as_nanos()),
+            metadata.is_file()
+        ),
+        Err(_) => "missing".to_string(),
+    }
+}
+
+fn run_once(cli: Cli) -> ExitCode {
+    run_once_with_fetch(cli, None)
+}
+
+fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)>) -> ExitCode {
     if cli.sanitize {
         cli.title = cli
             .title
@@ -2251,7 +2402,9 @@ fn run(mut cli: Cli) -> ExitCode {
     // treat it as a literal markup string under `--print`, else read the
     // file/stdin. A URL also yields a `Content-Type` used below.
     let resource_is_url = matches!(cli.resource.as_deref(), Some(r) if is_url(r));
-    let (mut content, content_type) = if resource_is_url {
+    let (mut content, content_type) = if let Some(fetched) = prefetched {
+        fetched
+    } else if resource_is_url {
         match fetch_url(cli.resource.as_deref().unwrap(), cli.extensions.encoding) {
             Ok(fetched) => fetched,
             Err(err) => {
@@ -4254,6 +4407,10 @@ OPTIONS:
     -S, --panel-style S
                      Panel border style, e.g. "dim" (with --panel)
         --pager      Page via MANPAGER, then PAGER, then less/more.com
+        --watch      Re-render a changing file or URL while stdout is a terminal
+        --watch-interval SEC
+                     Poll interval in seconds (default 1)
+        --watch-cache With URLs, render only when the response body changes
         --batch      Convert explicit files, directories, or globs deterministically
         --jobs N     Bound batch workers (output remains deterministic)
         --continue-on-error
@@ -4871,6 +5028,40 @@ mod tests {
         let s = |v: &str| v.to_string();
         assert!(parse(&[s("--pager"), s("x")]).unwrap().unwrap().pager);
         assert!(!parse(&[s("x")]).unwrap().unwrap().pager);
+    }
+
+    #[test]
+    fn parses_watch_options_and_rejects_orphans() {
+        let s = |v: &str| v.to_string();
+        let cli = parse(&[
+            s("--watch"),
+            s("--watch-interval"),
+            s("0.25"),
+            s("--watch-cache"),
+            s("file.md"),
+        ])
+        .unwrap()
+        .unwrap();
+        assert!(cli.watch);
+        assert_eq!(cli.watch_interval, 0.25);
+        assert!(cli.watch_cache);
+        assert!(parse(&[s("--watch-cache"), s("file.md")]).is_err());
+        assert!(parse(&[s("--watch-interval"), s("2"), s("file.md")]).is_err());
+    }
+
+    #[test]
+    fn watch_fingerprint_distinguishes_missing_and_replaced_files() {
+        let path = std::env::temp_dir().join(format!("rs-rich-watch-{}.txt", std::process::id(),));
+        let _ = std::fs::remove_file(&path);
+        let missing = watch_fingerprint(path.to_str().unwrap(), false, None);
+        std::fs::write(&path, "first").unwrap();
+        let first = watch_fingerprint(path.to_str().unwrap(), false, None);
+        std::fs::write(&path, "second content").unwrap();
+        let second = watch_fingerprint(path.to_str().unwrap(), false, None);
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(missing, "missing");
+        assert_ne!(first, missing);
+        assert_ne!(first, second);
     }
 
     #[test]

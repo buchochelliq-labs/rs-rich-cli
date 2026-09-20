@@ -51,6 +51,10 @@ Entries below record subsequent releases and development.
 - **`rs-rich-cli`:** added stable automation exit-code classes plus
   `--report json` / `--machine-json` for a common result/error envelope on
   stderr, keeping rendered stdout separate.
+- **`rs-rich-cli`:** added non-busy `--watch` polling for local files and
+  fetch-enabled URLs, including atomic-save/disappearance recovery, parse-error
+  frames, configurable intervals, URL response caching, and deterministic
+  one-shot behavior when stdout is redirected.
 - **`rs-rich-art`:** added an `ImageArt` facade (`ImageMode`, `ImageOptions`,
   `RenderCapabilities`) plus a reusable Braille renderer so consumers can
   render a single still image without duplicating renderer selection logic.

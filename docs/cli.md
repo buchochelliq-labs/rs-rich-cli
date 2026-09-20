@@ -46,6 +46,30 @@ resource or render mode and are rejected for the demo.
 
 Repeated scalar options use the last value, including `--width` and export paths.
 
+## Watch a resource
+
+Watch a local file while editing it:
+
+```bash
+rich --watch --watch-interval 0.5 report.md
+```
+
+The watcher polls metadata rather than busy-looping. Atomic saves, temporary
+disappearance, malformed intermediate content, and later recovery are handled
+as successive frames; a failed frame is reported and the watcher keeps
+running. `Ctrl-C` terminates the interactive watch. URLs can be watched when
+the default `fetch` feature is enabled:
+
+```bash
+rich --watch --watch-cache --watch-interval 5 https://example.com/data.json
+```
+
+`--watch-cache` hashes each fetched response and only renders changed bodies.
+Without it, URLs are fetched and rendered every interval. When stdout is
+redirected or piped, `--watch` renders exactly one snapshot and exits instead
+of entering an interactive loop. A binary built with `--no-default-features`
+does not support URL fetching, including URL watches.
+
 !!! tip "Filenames that begin with a dash"
 
     Everything after a bare `--` is treated as the resource, however much it
