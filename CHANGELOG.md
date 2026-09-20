@@ -33,6 +33,16 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### rs-rich-ext 0.0.6 release preparation
+
+- Publish the existing `Clone` implementation for `CliExtensions`, required by
+  CLI watch and batch execution. The registry copy of 0.0.5 lacks this API.
+- Update the CLI workspace dependency to require ext 0.0.6. The CLI 0.0.7
+  release failed its package dry run before upload; publish and verify ext
+  0.0.6 before retrying CLI from the corrected source commit.
+
+### CLI finishing
+
 - Fix watch refresh after same-size edits/atomic saves with preserved timestamps;
   read local contents using bounded memory on each poll. Repaint the terminal
   viewport instead of appending each changed frame. Redirected watch stays finite.
@@ -45,7 +55,7 @@ Entries below record subsequent releases and development.
 ### Release preparation
 
 The current source workstream targets `rs-rich-cli` 0.0.7 and `rs-rich-art`
-0.0.5, with `rs-rich-ext` 0.0.5 and `rs-rich` 0.0.4 unchanged. These independent
+0.0.5, with `rs-rich-ext` 0.0.6 required and `rs-rich` 0.0.4 unchanged. These independent
 source versions do not imply tags or registry publication. See
 [`docs/releases/0.0.7.md`](docs/releases/0.0.7.md) for pending release gates.
 
