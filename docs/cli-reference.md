@@ -102,6 +102,10 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
 -S, --panel-style S
                  Panel border style, e.g. "dim" (with --panel)
     --pager      Page via MANPAGER, then PAGER, then less/more.com
+    --watch      Re-render a changing file or URL while stdout is a terminal
+    --watch-interval SEC
+                 Poll interval in seconds (default 1)
+    --watch-cache With URLs, render only when the response body changes
     --batch      Convert explicit files, directories, or globs deterministically
     --jobs N     Bound batch workers (output remains deterministic)
     --continue-on-error

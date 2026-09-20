@@ -78,6 +78,27 @@ fn version_flag() {
 }
 
 #[test]
+fn watch_is_one_snapshot_when_stdout_is_redirected() {
+    let path = std::env::temp_dir().join(format!("rich-watch-{}.txt", std::process::id()));
+    std::fs::write(&path, "snapshot").unwrap();
+    let (out, err, status) = run_status(
+        &[
+            "--watch",
+            "--watch-interval",
+            "0.01",
+            "--no-color",
+            path.to_str().unwrap(),
+        ],
+        "",
+    );
+    let _ = std::fs::remove_file(&path);
+    assert!(status.success(), "stderr: {err:?}");
+    assert!(out.starts_with("snapshot"), "stdout: {out:?}");
+    assert_eq!(out.matches("snapshot").count(), 1);
+    assert!(err.is_empty(), "stderr: {err:?}");
+}
+
+#[test]
 fn csv_consumer_closing_the_pipe_is_successful_termination() {
     let mut child = bin()
         .args(["--csv", "-", "--no-color"])

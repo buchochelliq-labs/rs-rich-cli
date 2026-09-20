@@ -104,7 +104,17 @@ CLI routing with width, height and explicit mode selection. Existing GIF and
 diff report envelopes remain unchanged; unsupported graphics modes downgrade
 only where documented or return an actionable error.
 
-## 0.0.7 — batch and configuration
+## 0.0.7 — watch and workflow foundations
+
+The 0.0.7 CLI workstream adds the first binary-boundary watch convenience:
+`rich --watch RESOURCE` polls local files without busy-looping, keeps running
+through atomic-save gaps and parse failures, and recovers on a later valid
+frame. Fetch-enabled builds may poll URLs with configurable intervals and
+response caching. Redirected output remains a deterministic one-shot snapshot.
+Rendering stays in the existing CLI/core paths; no new core refresh behavior is
+introduced.
+
+### Batch and configuration
 
 The CLI now plans explicit files, directories, and globs deterministically,
 reuses the existing render/export pipeline per item, refuses silent overwrites,
