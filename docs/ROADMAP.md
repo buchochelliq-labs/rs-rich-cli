@@ -104,7 +104,26 @@ CLI routing with width, height and explicit mode selection. Existing GIF and
 diff report envelopes remain unchanged; unsupported graphics modes downgrade
 only where documented or return an actionable error.
 
-## 0.0.7 — confidence tooling for expanded CLI surfaces
+## 0.0.7 — watch and workflow foundations
+
+The 0.0.7 CLI workstream adds the first binary-boundary watch convenience:
+`rich --watch RESOURCE` polls local files without busy-looping, keeps running
+through atomic-save gaps and parse failures, and recovers on a later valid
+frame. Fetch-enabled builds may poll URLs with configurable intervals and
+response caching. Redirected output remains a deterministic one-shot snapshot.
+Rendering stays in the existing CLI/core paths; no new core refresh behavior is
+introduced.
+
+### Batch and configuration
+
+The CLI now plans explicit files, directories, and globs deterministically,
+reuses the existing render/export pipeline per item, refuses silent overwrites,
+and reports aggregate machine-readable status. TOML profiles are discovered
+from platform roots (or selected explicitly), with command-line values taking
+precedence. Work is serialized by default to keep memory bounded; `--jobs` is a
+validated concurrency bound reserved for future parallel workers.
+
+### Confidence tooling for expanded CLI surfaces
 
 The confidence slice adds bounded, deterministic support around the selected
 batch/profile/watch/image work:
@@ -117,16 +136,14 @@ batch/profile/watch/image work:
 - **#34:** the differential corpus and generator now include box renderables
   (`Panel` box variations) and vary the safe-box capability profile in addition
   to width, color, markup, styles and overflow. Broader CLI differential
-  fuzzing is deferred because batch/profile/watch/image contracts are not yet
-  stable on this base branch.
+  fuzzing remains follow-up work beyond this bounded corpus.
 - **#35:** `library_bench` accepts explicit width and color-system arguments and
   records them in its JSON artifact. CI publication and threshold enforcement
   remain deferred; output hashes stay the blocking correctness signal.
 
 Image behavior remains covered by the existing focused `rich-cli` integration
-tests. Snapshot cases for batch/profile/watch/image should be added when the
-corresponding subcommands and capability/RenderTarget decisions (#147/#148)
-are merged, rather than baking provisional flags into this helper.
+tests. Snapshot cases for the merged batch/profile/watch/image workflows remain
+follow-up work; capability/RenderTarget decisions (#147/#148) remain separate.
 
 ---
 

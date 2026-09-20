@@ -46,6 +46,30 @@ resource or render mode and are rejected for the demo.
 
 Repeated scalar options use the last value, including `--width` and export paths.
 
+## Watch a resource
+
+Watch a local file while editing it:
+
+```bash
+rich --watch --watch-interval 0.5 report.md
+```
+
+The watcher polls metadata rather than busy-looping. Atomic saves, temporary
+disappearance, malformed intermediate content, and later recovery are handled
+as successive frames; a failed frame is reported and the watcher keeps
+running. `Ctrl-C` terminates the interactive watch. URLs can be watched when
+the default `fetch` feature is enabled:
+
+```bash
+rich --watch --watch-cache --watch-interval 5 https://example.com/data.json
+```
+
+`--watch-cache` hashes each fetched response and only renders changed bodies.
+Without it, URLs are fetched and rendered every interval. When stdout is
+redirected or piped, `--watch` renders exactly one snapshot and exits instead
+of entering an interactive loop. A binary built with `--no-default-features`
+does not support URL fetching, including URL watches.
+
 !!! tip "Filenames that begin with a dash"
 
     Everything after a bare `--` is treated as the resource, however much it
@@ -275,6 +299,69 @@ the console width (80 when neither terminal width nor the variable is available)
 `--pager` tries a non-empty `MANPAGER`, then `PAGER`, then `less` on Unix or
 `more.com` on Windows. GIF playback repeats once by default; `--loop 0` repeats
 forever in a terminal. Pipes receive the first frame once, even with `--loop 0`.
+
+---
+
+## Convert many files at once (0.0.7)
+
+`--batch` takes files, directories (walked recursively) and globs, and runs each
+one through the same render and export path a single-resource invocation uses:
+
+```bash
+rich --batch --markdown --export-html out.html docs/
+rich --batch --json 'reports/*.json' --continue-on-error
+```
+
+The plan is computed before anything is written, and it is deterministic: inputs
+are sorted and de-duplicated, and each output path is decided up front. Symlinked
+directories are not followed, so a link pointing at its own parent cannot make
+the walk run forever. Globs apply `*` and `?` to the final path segment only.
+
+Nothing is overwritten silently. If a planned output already exists the run stops
+with exit code 3 and tells you to pass `--overwrite`. `--collision suffix` writes
+`out-2.html`, `out-3.html`, … instead, stepping past both in-plan duplicates and
+files already on disk; `--collision overwrite` (or `--overwrite`) opts in
+explicitly.
+
+A batch stops at the first failure unless `--continue-on-error` is given.
+`--jobs N` bounds concurrency. `--batch` cannot be combined with `--diff` or
+`--gif`, which consume their whole resource list as one unit, nor with `--pager`,
+which would open one pager per item.
+
+With `--report json` a batch emits exactly one envelope, and its `code` /
+`exit_code` are the most severe class any item reached — so a data error stays 4
+rather than collapsing into a generic input failure:
+
+```json
+{"ok": false, "code": "data", "exit_code": 4,
+ "result": {"planned": 2, "attempted": 2, "completed": 1, "failed": 1, "skipped": 0,
+            "failures": [{"resource": "b.json", "code": "data", "exit_code": 4,
+                          "message": "invalid JSON: …"}]}}
+```
+
+`attempted` counts items the run actually reached and `skipped` those it never
+got to after a fail-fast stop, so the numbers stay honest.
+
+## Config profiles (0.0.7)
+
+Defaults can live in a `rich.toml` discovered in the working directory or the
+platform config directory, or named explicitly with `--config PATH`:
+
+```toml
+[defaults]
+mode = "markdown"
+width = 100
+
+[profiles.ci]
+report = "json"
+collision = "suffix"
+```
+
+Select a named profile with `--profile ci`, and ignore every config file with
+`--no-config`. Command-line flags always win over config values, and an explicit
+subcommand (`rich json file.json`) outranks a config `mode`. Parse errors name
+the file they came from. Values are read as written — a `#` inside quotes is part
+of the value, not the start of a comment.
 
 ---
 

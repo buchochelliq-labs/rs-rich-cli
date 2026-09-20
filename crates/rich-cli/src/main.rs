@@ -11,6 +11,7 @@
 //! demo — i.e. the whole common rich-cli surface.
 
 use std::io::{BufRead, IsTerminal, Read, Write};
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use rich::cells::cell_len;
@@ -265,6 +266,7 @@ impl std::str::FromStr for ImageMode {
 }
 
 /// Parsed command line.
+#[derive(Clone)]
 struct Cli {
     mode: Mode,
     resource: Option<String>,
@@ -325,6 +327,24 @@ struct Cli {
     /// `--report json`: emit a stable result/error envelope to stderr while
     /// leaving stdout for rendered content.
     report_format: ReportFormat,
+    /// Re-render a changing local file or URL while stdout is a terminal.
+    watch: bool,
+    /// Polling interval for `--watch`, in seconds.
+    watch_interval: f64,
+    /// Avoid emitting unchanged URL responses.
+    watch_cache: bool,
+    batch: bool,
+    continue_on_error: bool,
+    jobs: usize,
+    overwrite: bool,
+    collision: CollisionPolicy,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CollisionPolicy {
+    Error,
+    Overwrite,
+    Suffix,
 }
 
 /// Build the `-m/--markdown` renderable, honouring `-y/--hyperlinks`.
@@ -355,7 +375,332 @@ fn main() -> ExitCode {
     }
 }
 
+#[derive(Debug, Clone)]
+struct ConfigRoots {
+    home: Option<PathBuf>,
+    cwd: PathBuf,
+}
+
+impl Default for ConfigRoots {
+    fn default() -> Self {
+        Self {
+            home: std::env::var_os("HOME")
+                .or_else(|| std::env::var_os("USERPROFILE"))
+                .map(PathBuf::from),
+            cwd: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+        }
+    }
+}
+
+/// Options that consume the following argument as their value. Needed to tell a
+/// positional subcommand from an option's value when scanning raw arguments.
+const VALUE_OPTIONS: &[&str] = &[
+    "-w",
+    "--width",
+    "-o",
+    "--export-html",
+    "--export-svg",
+    "--panel",
+    "--padding",
+    "--title",
+    "--caption",
+    "-s",
+    "--style",
+    "-S",
+    "--panel-style",
+    "--report",
+    "--image-mode",
+    "--gif-mode",
+    "--encoding",
+    "--threshold",
+    "--loop",
+    "--jobs",
+    "--collision",
+    "--config",
+    "--profile",
+];
+
+/// Whether the command line already picks a render mode, by flag *or* by the
+/// positional subcommand form. Config must not inject a `mode` default over
+/// `rich json file.json`, which selects JSON without ever naming `--json`.
+fn selects_mode_explicitly(args: &[String]) -> bool {
+    let mut iter = args.iter();
+    let mut seen_positional = false;
+    while let Some(arg) = iter.next() {
+        if arg == "--" {
+            break;
+        }
+        if VALUE_OPTIONS.contains(&arg.as_str()) {
+            iter.next();
+            continue;
+        }
+        if arg.starts_with('-') && arg.len() > 1 {
+            if mode_flag_alias(arg).is_some() {
+                return true;
+            }
+            continue;
+        }
+        if !seen_positional {
+            seen_positional = true;
+            if command_mode(arg).is_some() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// The canonical long flag for a render-mode option, or `None` for anything else.
+fn mode_flag_alias(arg: &str) -> Option<&'static str> {
+    Some(match arg {
+        "--print" | "-p" => "--print",
+        "--markdown" | "-m" => "--markdown",
+        "--json" | "-j" => "--json",
+        "--syntax" | "-x" => "--syntax",
+        "--csv" => "--csv",
+        "--ipynb" => "--ipynb",
+        "--jsonl" | "--ndjson" => "--jsonl",
+        "--log" => "--log",
+        "--rule" => "--rule",
+        _ => return None,
+    })
+}
+
+/// Drop a trailing `#` comment, ignoring a `#` that sits inside a quoted string.
+///
+/// Splitting on the first `#` unconditionally silently truncates a legitimate
+/// value: `export_html = "report#ci.html"` became `report`, so the export
+/// landed on a path the user never wrote.
+fn strip_config_comment(line: &str) -> &str {
+    let mut quote: Option<u8> = None;
+    for (index, byte) in line.bytes().enumerate() {
+        match quote {
+            Some(open) if byte == open => quote = None,
+            Some(_) => {}
+            None => match byte {
+                b'"' | b'\'' => quote = Some(byte),
+                b'#' => return &line[..index],
+                _ => {}
+            },
+        }
+    }
+    line
+}
+
+/// Unquote a config scalar, preserving everything the quotes were protecting.
+fn config_value(raw: &str) -> &str {
+    let trimmed = raw.trim();
+    let bytes = trimmed.as_bytes();
+    if bytes.len() >= 2 {
+        let first = bytes[0];
+        if (first == b'"' || first == b'\'') && bytes[bytes.len() - 1] == first {
+            return &trimmed[1..trimmed.len() - 1];
+        }
+    }
+    trimmed
+}
+
+fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<String>, String> {
+    if args.iter().any(|a| a == "--no-config") {
+        let mut result = Vec::new();
+        let mut skip = false;
+        for arg in args {
+            if skip {
+                skip = false;
+                continue;
+            }
+            if arg == "--config" || arg == "--profile" {
+                skip = true;
+                continue;
+            }
+            if arg != "--no-config" {
+                result.push(arg.clone());
+            }
+        }
+        return Ok(result);
+    }
+    for flag in ["--config", "--profile"] {
+        if args
+            .iter()
+            .position(|a| a == flag)
+            .is_some_and(|i| i + 1 >= args.len())
+        {
+            return Err(format!("{flag} requires a value"));
+        }
+    }
+    let explicit = args
+        .windows(2)
+        .find(|w| w[0] == "--config")
+        .map(|w| PathBuf::from(&w[1]));
+    let profile = args
+        .windows(2)
+        .find(|w| w[0] == "--profile")
+        .map(|w| w[1].clone())
+        .unwrap_or_else(|| "default".into());
+    let path = explicit.or_else(|| {
+        let candidates = [
+            roots.cwd.join("rich.toml"),
+            roots
+                .home
+                .as_ref()
+                .map(|h| h.join(".config/rich/config.toml"))
+                .unwrap_or_default(),
+        ];
+        candidates.into_iter().find(|p| p.is_file())
+    });
+    let mut result = Vec::new();
+    let explicit_mode = selects_mode_explicitly(args);
+    let explicit_flags: std::collections::HashSet<&str> = args
+        .iter()
+        .filter_map(|arg| {
+            mode_flag_alias(arg).or(match arg.as_str() {
+                "--width" | "-w" => Some("--width"),
+                "--pager" => Some("--pager"),
+                "--no-color" => Some("--no-color"),
+                "--export-html" | "-o" => Some("--export-html"),
+                "--export-svg" => Some("--export-svg"),
+                "--batch" => Some("--batch"),
+                "--continue-on-error" => Some("--continue-on-error"),
+                "--overwrite" => Some("--overwrite"),
+                "--jobs" => Some("--jobs"),
+                "--collision" => Some("--collision"),
+                "--panel" => Some("--panel"),
+                "--padding" => Some("--padding"),
+                _ => None,
+            })
+        })
+        .collect();
+    if let Some(path) = path {
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| format!("config {}: {e}", path.display()))?;
+        let mut section = String::new();
+        for (line_no, raw) in text.lines().enumerate() {
+            let line = strip_config_comment(raw).trim();
+            if line.is_empty() {
+                continue;
+            }
+            if line.starts_with('[') && line.ends_with(']') {
+                section = line[1..line.len() - 1].trim().to_string();
+                continue;
+            }
+            if section != "defaults"
+                && section != format!("profile.{profile}")
+                && section != format!("profiles.{profile}")
+            {
+                continue;
+            }
+            let Some((key, value)) = line.split_once('=') else {
+                return Err(format!(
+                    "config {}:{}: expected key = value",
+                    path.display(),
+                    line_no + 1
+                ));
+            };
+            let key = key.trim();
+            let value = config_value(value);
+            let flag = match key {
+                "mode" => match value {
+                    "print" => "--print",
+                    "markdown" => "--markdown",
+                    "json" => "--json",
+                    "syntax" => "--syntax",
+                    "csv" => "--csv",
+                    "ipynb" => "--ipynb",
+                    "jsonl" => "--jsonl",
+                    "log" => "--log",
+                    "rule" => "--rule",
+                    _ => {
+                        return Err(format!(
+                            "config {}:{}: unknown mode",
+                            path.display(),
+                            line_no + 1
+                        ))
+                    }
+                },
+                "width" => "--width",
+                "pager" => "--pager",
+                "no_color" => "--no-color",
+                "export_html" => "--export-html",
+                "export_svg" => "--export-svg",
+                "batch" => "--batch",
+                "continue_on_error" => "--continue-on-error",
+                "overwrite" => "--overwrite",
+                "jobs" => "--jobs",
+                "collision" => "--collision",
+                "panel" => "--panel",
+                "padding" => "--padding",
+                "profile" | "config" | "no_config" => continue,
+                _ => {
+                    return Err(format!(
+                        "config {}:{}: unknown key {key:?}",
+                        path.display(),
+                        line_no + 1
+                    ))
+                }
+            };
+            if explicit_flags.contains(flag) || (key == "mode" && explicit_mode) {
+                continue;
+            }
+            if matches!(
+                flag,
+                "--pager" | "--no-color" | "--batch" | "--continue-on-error" | "--overwrite"
+            ) {
+                if value != "true" {
+                    continue;
+                }
+                result.push(flag.into());
+            } else {
+                result.push(flag.into());
+                result.push(value.into());
+            }
+        }
+    }
+    let mut skip = false;
+    for arg in args {
+        if skip {
+            skip = false;
+            continue;
+        }
+        if arg == "--config" || arg == "--profile" {
+            skip = true;
+            continue;
+        }
+        result.push(arg.clone());
+    }
+    Ok(result)
+}
+
+/// A batch child's diagnostics, captured rather than printed.
+///
+/// Two things depend on this. `--report json` documents exactly one envelope on
+/// stderr, so a child that printed its own `rich: …` line would put unparseable
+/// text in front of the aggregate object. And the child's [`ExitClass`] is the
+/// only place the real failure class survives — without it every batch failure
+/// collapses to one hard-coded code and the stable exit contract is lost.
+#[derive(Default)]
+struct ChildOutcome {
+    capturing: bool,
+    class: Option<ExitClass>,
+    message: Option<String>,
+}
+
+thread_local! {
+    static CHILD_OUTCOME: std::cell::RefCell<ChildOutcome> =
+        std::cell::RefCell::new(ChildOutcome::default());
+}
+
 fn emit_error(json: bool, class: ExitClass, message: &str) -> ExitCode {
+    let captured = CHILD_OUTCOME.with(|cell| {
+        let mut outcome = cell.borrow_mut();
+        if outcome.capturing && outcome.class.is_none() {
+            outcome.class = Some(class);
+            outcome.message = Some(message.to_string());
+        }
+        outcome.capturing
+    });
+    if captured {
+        return class.exit_code();
+    }
     if json {
         eprintln!(
             "{}",
@@ -376,6 +721,9 @@ fn emit_error(json: bool, class: ExitClass, message: &str) -> ExitCode {
 }
 
 fn emit_success_report(format: ReportFormat) {
+    if CHILD_OUTCOME.with(|cell| cell.borrow().capturing) {
+        return;
+    }
     if format == ReportFormat::Json {
         eprintln!(
             "{}",
@@ -400,6 +748,342 @@ fn fail(cli: &Cli, class: ExitClass, message: impl AsRef<str>) -> ExitCode {
 fn success(cli: &Cli) -> ExitCode {
     emit_success_report(cli.report_format);
     ExitClass::Success.exit_code()
+}
+
+/// Match `text` against a simple glob supporting `*` (any run of characters)
+/// and `?` (exactly one). Both apply within a single path segment.
+///
+/// Substring containment is not a glob: `*.md` used that way also matched
+/// `notes.md.bak`, and a `?` pattern matched nothing at all because the literal
+/// `?` was still being searched for.
+fn glob_match(pattern: &str, text: &str) -> bool {
+    let pattern: Vec<char> = pattern.chars().collect();
+    let text: Vec<char> = text.chars().collect();
+    let (mut p, mut t) = (0usize, 0usize);
+    let (mut star, mut retry) = (None, 0usize);
+    while t < text.len() {
+        if p < pattern.len() && (pattern[p] == '?' || pattern[p] == text[t]) {
+            p += 1;
+            t += 1;
+        } else if p < pattern.len() && pattern[p] == '*' {
+            star = Some(p);
+            retry = t;
+            p += 1;
+        } else if let Some(open) = star {
+            p = open + 1;
+            retry += 1;
+            t = retry;
+        } else {
+            return false;
+        }
+    }
+    while p < pattern.len() && pattern[p] == '*' {
+        p += 1;
+    }
+    p == pattern.len()
+}
+
+fn has_glob_meta(value: &str) -> bool {
+    value.contains('*') || value.contains('?')
+}
+
+/// Split `dir/sub/*.md` into its literal directory and its name pattern.
+fn split_glob(resource: &str) -> (PathBuf, String) {
+    let meta = resource.find(['*', '?']).unwrap_or(0);
+    match resource[..meta].rfind(['/', '\\']) {
+        Some(cut) => (
+            PathBuf::from(&resource[..cut]),
+            resource[cut + 1..].to_string(),
+        ),
+        None => (PathBuf::from("."), resource.to_string()),
+    }
+}
+
+/// Collect every file under `dir`, skipping symlinks.
+///
+/// `Path::is_dir` follows links, so a directory containing a link to itself or
+/// to an ancestor pushed that directory back onto the stack forever, building
+/// ever longer paths until the process ran out of memory. Not following links
+/// at all keeps the walk finite without having to track device/inode identity,
+/// which is not portable.
+fn collect_files(dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        let entries = std::fs::read_dir(&current)
+            .map_err(|error| format!("cannot scan {}: {error}", current.display()))?;
+        for entry in entries {
+            let entry = entry.map_err(|error| format!("cannot scan {}: {error}", dir.display()))?;
+            let path = entry.path();
+            let kind = std::fs::symlink_metadata(&path)
+                .map_err(|error| format!("cannot read {}: {error}", path.display()))?
+                .file_type();
+            if kind.is_symlink() {
+                continue;
+            }
+            if kind.is_dir() {
+                stack.push(path);
+            } else if kind.is_file() {
+                out.push(path.to_string_lossy().into_owned());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn expand_batch_resources(resources: &[String]) -> Result<Vec<String>, String> {
+    let mut out = Vec::new();
+    for resource in resources {
+        if resource == "-" || is_url(resource) {
+            return Err("batch resources must be local files or directories".into());
+        }
+        if has_glob_meta(resource) {
+            let (dir, pattern) = split_glob(resource);
+            if pattern.contains('/') || pattern.contains('\\') {
+                return Err(format!(
+                    "batch glob {resource:?} may only use * and ? in the final path segment"
+                ));
+            }
+            let entries = std::fs::read_dir(&dir)
+                .map_err(|error| format!("cannot scan {}: {error}", dir.display()))?;
+            for entry in entries {
+                let entry =
+                    entry.map_err(|error| format!("cannot scan {}: {error}", dir.display()))?;
+                let path = entry.path();
+                if !path.is_file() {
+                    continue;
+                }
+                if glob_match(&pattern, &entry.file_name().to_string_lossy()) {
+                    out.push(path.to_string_lossy().into_owned());
+                }
+            }
+            continue;
+        }
+        let path = Path::new(resource);
+        if path.is_file() {
+            out.push(resource.clone());
+        } else if path.is_dir() {
+            collect_files(path, &mut out)?;
+        } else {
+            return Err(format!("batch resource does not exist: {resource}"));
+        }
+    }
+    out.sort();
+    out.dedup();
+    if out.is_empty() {
+        return Err("batch plan contains no files".into());
+    }
+    Ok(out)
+}
+
+/// Where one batch item's exports are written.
+///
+/// The kind of each export is carried explicitly. Recovering it by sniffing the
+/// path extension silently dropped exports whose name did not end in `.html` or
+/// `.svg`, so `--export-html result.out` planned a path and then wrote nothing.
+#[derive(Default, Clone)]
+struct BatchOutputs {
+    html: Option<String>,
+    svg: Option<String>,
+}
+
+fn batch_export_path(
+    path: Option<&str>,
+    input: &str,
+    index: usize,
+    total: usize,
+) -> Option<String> {
+    let path = path?;
+    let p = Path::new(path);
+    if total == 1 {
+        return Some(path.into());
+    }
+    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or_default();
+    let stem = Path::new(input)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("output");
+    let name = if ext.is_empty() {
+        format!("{stem}-{index}")
+    } else {
+        format!("{stem}.{ext}")
+    };
+    Some(if p.is_dir() {
+        p.join(name).to_string_lossy().into_owned()
+    } else {
+        p.with_file_name(name).to_string_lossy().into_owned()
+    })
+}
+
+/// `out.html` -> `out-2.html`, keeping an extension-less name intact.
+fn suffixed_path(path: &Path, suffix: usize) -> String {
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("output");
+    let name = match path.extension().and_then(|s| s.to_str()) {
+        Some(ext) => format!("{stem}-{suffix}.{ext}"),
+        None => format!("{stem}-{suffix}"),
+    };
+    path.with_file_name(name).to_string_lossy().into_owned()
+}
+
+/// Settle one planned output against the rest of the plan and against the disk.
+///
+/// `suffix` has to consider existing files too, not just in-plan duplicates:
+/// a policy whose whole purpose is to avoid clobbering must not quietly
+/// overwrite a file that was already there.
+fn resolve_destination(
+    cli: &Cli,
+    candidate: String,
+    taken: &mut std::collections::BTreeSet<String>,
+) -> Result<String, (ExitClass, String)> {
+    let occupied = |path: &str, taken: &std::collections::BTreeSet<String>| {
+        taken.contains(path) || (!cli.overwrite && Path::new(path).exists())
+    };
+    match cli.collision {
+        CollisionPolicy::Overwrite => {
+            taken.insert(candidate.clone());
+            Ok(candidate)
+        }
+        CollisionPolicy::Suffix => {
+            let mut chosen = candidate.clone();
+            let mut suffix = 2;
+            while occupied(&chosen, taken) {
+                chosen = suffixed_path(Path::new(&candidate), suffix);
+                suffix += 1;
+            }
+            taken.insert(chosen.clone());
+            Ok(chosen)
+        }
+        CollisionPolicy::Error => {
+            if taken.contains(&candidate) {
+                return Err((
+                    ExitClass::Usage,
+                    format!("batch output collision: {candidate}"),
+                ));
+            }
+            if !cli.overwrite && Path::new(&candidate).exists() {
+                return Err((
+                    ExitClass::Input,
+                    format!("refusing to overwrite existing output: {candidate} (use --overwrite)"),
+                ));
+            }
+            taken.insert(candidate.clone());
+            Ok(candidate)
+        }
+    }
+}
+
+/// Run one batch item with its diagnostics captured, yielding its failure class.
+fn run_captured(item: Cli) -> Option<(ExitClass, Option<String>)> {
+    CHILD_OUTCOME.with(|cell| {
+        *cell.borrow_mut() = ChildOutcome {
+            capturing: true,
+            ..ChildOutcome::default()
+        }
+    });
+    let status = run(item);
+    let outcome = CHILD_OUTCOME.with(|cell| std::mem::take(&mut *cell.borrow_mut()));
+    if status == ExitCode::SUCCESS {
+        return None;
+    }
+    Some((
+        outcome.class.unwrap_or(ExitClass::Input),
+        outcome.message.clone(),
+    ))
+}
+
+fn run_batch(cli: &Cli) -> ExitCode {
+    let resources = match expand_batch_resources(&cli.resources) {
+        Ok(v) => v,
+        Err(e) => return fail(cli, ExitClass::Input, e),
+    };
+    let mut taken = std::collections::BTreeSet::new();
+    let mut planned_outputs = Vec::with_capacity(resources.len());
+    for (index, input) in resources.iter().enumerate() {
+        let mut outputs = BatchOutputs::default();
+        for (candidate, slot) in [
+            (
+                batch_export_path(cli.export_html.as_deref(), input, index, resources.len()),
+                &mut outputs.html,
+            ),
+            (
+                batch_export_path(cli.export_svg.as_deref(), input, index, resources.len()),
+                &mut outputs.svg,
+            ),
+        ] {
+            let Some(candidate) = candidate else { continue };
+            match resolve_destination(cli, candidate, &mut taken) {
+                Ok(path) => *slot = Some(path),
+                Err((class, message)) => return fail(cli, class, message),
+            }
+        }
+        planned_outputs.push(outputs);
+    }
+
+    let mut failures: Vec<(String, ExitClass, Option<String>)> = Vec::new();
+    let mut attempted = 0usize;
+    // Work is deliberately serialized for deterministic output and bounded
+    // memory; `jobs` is a validated upper bound reserved for future parallel
+    // workers without changing the planning contract.
+    let _concurrency_limit = cli.jobs;
+    for (index, input) in resources.iter().enumerate() {
+        let mut one = cli.clone();
+        one.batch = false;
+        one.resources = vec![input.clone()];
+        one.resource = Some(input.clone());
+        one.report_format = ReportFormat::Human;
+        one.export_html = planned_outputs[index].html.clone();
+        one.export_svg = planned_outputs[index].svg.clone();
+        attempted += 1;
+        if let Some((class, message)) = run_captured(one) {
+            if cli.report_format != ReportFormat::Json {
+                match &message {
+                    Some(message) => eprintln!("rich: {input}: {message}"),
+                    None => eprintln!("rich: {input}: failed ({})", class.name()),
+                }
+            }
+            failures.push((input.clone(), class, message));
+            if !cli.continue_on_error {
+                break;
+            }
+        }
+    }
+
+    // The aggregate takes the most severe child class so a data error (4) or a
+    // gate (5) is not flattened into a generic input failure.
+    let class = failures
+        .iter()
+        .map(|(_, class, _)| *class)
+        .max_by_key(|class| class.code())
+        .unwrap_or(ExitClass::Success);
+    if cli.report_format == ReportFormat::Json {
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "ok": failures.is_empty(),
+                "code": class.name(),
+                "exit_code": class.code(),
+                "result": {
+                    "planned": resources.len(),
+                    "attempted": attempted,
+                    "completed": attempted - failures.len(),
+                    "failed": failures.len(),
+                    "skipped": resources.len() - attempted,
+                    "failures": failures
+                        .iter()
+                        .map(|(resource, class, message)| serde_json::json!({
+                            "resource": resource,
+                            "code": class.name(),
+                            "exit_code": class.code(),
+                            "message": message,
+                        }))
+                        .collect::<Vec<_>>(),
+                },
+            })
+        );
+    }
+    class.exit_code()
 }
 
 fn wants_json_report(args: &[String]) -> bool {
@@ -491,6 +1175,11 @@ fn set_mode(current: &mut Mode, mode: Mode) -> Result<(), String> {
 
 /// Parse args into a [`Cli`], or `Ok(None)` when `--help`/`--version` handled it.
 fn parse(args: &[String]) -> Result<Option<Cli>, String> {
+    let merged = config_args(args, &ConfigRoots::default())?;
+    parse_inner(&merged)
+}
+
+fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut mode = Mode::Auto;
     let mut resources: Vec<String> = Vec::new();
     let mut loops = None;
@@ -514,6 +1203,14 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let mut hyperlinks = false;
     let mut sanitize = false;
     let mut report_format = ReportFormat::Human;
+    let mut watch = false;
+    let mut watch_interval = 1.0;
+    let mut watch_cache = false;
+    let mut batch = false;
+    let mut continue_on_error = false;
+    let mut jobs = 1usize;
+    let mut overwrite = false;
+    let mut collision = CollisionPolicy::Error;
     // Set by `--`: everything after it is a positional argument, however much it
     // looks like a flag. Without this nothing beginning with `-` could be
     // printed or opened at all — `rich -p -- "-5 degrees"` and `rich -- -weird.md`
@@ -607,6 +1304,47 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--center" => {}
             "--no-color" => no_color = true,
             "--pager" => pager = true,
+            "--watch" => watch = true,
+            "--watch-cache" => watch_cache = true,
+            "--watch-interval" | "--interval" => {
+                let value = iter
+                    .next()
+                    .ok_or("--watch-interval requires seconds greater than zero")?;
+                watch_interval = value
+                    .parse::<f64>()
+                    .map_err(|_| format!("invalid watch interval {value:?}"))?;
+                if !watch_interval.is_finite() || watch_interval <= 0.0 {
+                    return Err("--watch-interval must be greater than zero".into());
+                }
+            }
+            "--batch" => batch = true,
+            "--continue-on-error" => continue_on_error = true,
+            "--overwrite" => {
+                overwrite = true;
+                collision = CollisionPolicy::Overwrite;
+            }
+            "--collision" => {
+                collision = match iter
+                    .next()
+                    .ok_or("--collision requires error, overwrite, or suffix")?
+                    .as_str()
+                {
+                    "error" => CollisionPolicy::Error,
+                    "overwrite" => CollisionPolicy::Overwrite,
+                    "suffix" => CollisionPolicy::Suffix,
+                    other => return Err(format!("unknown collision policy {other:?}")),
+                };
+            }
+            "--jobs" => {
+                jobs = iter
+                    .next()
+                    .ok_or("--jobs requires a positive number")?
+                    .parse()
+                    .map_err(|_| "--jobs requires a positive number".to_string())?;
+                if jobs == 0 {
+                    return Err("--jobs must be at least 1".into());
+                }
+            }
             "--sanitize" => sanitize = true,
             // Upstream's `@click.option("--hyperlinks", "-y", is_flag=True,
             // help="Render hyperlinks in markdown.")`. Accepted in every mode,
@@ -675,6 +1413,29 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
                 set_mode(&mut mode, command_mode(other).expect("checked above"))?;
             }
             other => resources.push(other.to_string()),
+        }
+    }
+
+    // `--gif`/`--diff` consume their whole resource list as one unit (a diff is
+    // a pair), but a batch rewrites each item to a single resource — `run_diff`
+    // would then index `resources[1]` and panic. Reject the combination.
+    if batch {
+        if mode.accepts_multiple_resources() {
+            return Err(format!(
+                "--batch cannot be combined with {}",
+                if mode == Mode::Diff {
+                    "--diff"
+                } else {
+                    "--gif"
+                }
+            ));
+        }
+        if resources.is_empty() {
+            return Err("--batch needs at least one file, directory or glob".into());
+        }
+        // One pager per item would be N interactive pagers over one plan.
+        if pager {
+            return Err("--pager cannot be combined with --batch".into());
         }
     }
 
@@ -768,6 +1529,8 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             "--panel/--padding",
             panel.is_some() || padding.is_some(),
         ),
+        ("--watch-interval", watch_interval != 1.0, "--watch", watch),
+        ("--watch-cache", watch_cache, "--watch", watch),
     ];
     if let Some((flag, _, needs, _)) = orphans
         .iter()
@@ -818,7 +1581,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
             return Err(format!("{flag} cannot be combined with {mode_name}"));
         }
     }
-    if !mode.accepts_multiple_resources() && resources.len() > 1 {
+    if !mode.accepts_multiple_resources() && resources.len() > 1 && !batch {
         return Err("only one resource may be given (except with --gif)".into());
     }
     let resource = resources.first().cloned();
@@ -848,6 +1611,14 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         hyperlinks,
         sanitize,
         report_format,
+        watch,
+        watch_interval,
+        watch_cache,
+        batch,
+        continue_on_error,
+        jobs,
+        overwrite,
+        collision,
     }))
 }
 
@@ -1393,7 +2164,131 @@ fn decorate_and_emit(
     emit_exit_code(cli, emit(console, export, |c| c.print(renderable.as_ref())))
 }
 
-fn run(mut cli: Cli) -> ExitCode {
+fn run(cli: Cli) -> ExitCode {
+    if cli.watch {
+        return run_watch(cli);
+    }
+    run_once(cli)
+}
+
+fn run_watch(mut cli: Cli) -> ExitCode {
+    let Some(resource) = cli.resource.as_deref() else {
+        return fail(
+            &cli,
+            ExitClass::Usage,
+            "--watch requires a file path or URL",
+        );
+    };
+    if resource == "-" || (cli.mode == Mode::Print && !is_url(resource)) {
+        return fail(
+            &cli,
+            ExitClass::Usage,
+            "--watch requires a local file or URL, not stdin or literal markup",
+        );
+    }
+    let effective_mode = if cli.mode == Mode::Auto {
+        detect_mode(Some(resource))
+    } else {
+        cli.mode
+    };
+    if effective_mode.draws_directly() || effective_mode == Mode::Rule {
+        return fail(
+            &cli,
+            ExitClass::Usage,
+            "--watch requires a resource-backed render mode",
+        );
+    }
+    // Redirected output must be a finite, deterministic command. This also
+    // keeps `rich --watch file > snapshot.txt` from hanging in a pipeline.
+    if !std::io::stdout().is_terminal() {
+        cli.watch = false;
+        return run_once(cli);
+    }
+    if is_url(resource) {
+        #[cfg(not(feature = "fetch"))]
+        {
+            cli.watch = false;
+            return run_once(cli);
+        }
+    }
+
+    let interval = std::time::Duration::from_secs_f64(cli.watch_interval);
+    let mut previous = None;
+    loop {
+        #[cfg(feature = "fetch")]
+        let cached = if is_url(resource) && cli.watch_cache {
+            Some(fetch_url(resource, cli.extensions.encoding))
+        } else {
+            None
+        };
+        #[cfg(not(feature = "fetch"))]
+        let cached: Option<Result<(String, Option<String>), String>> = None;
+        let fingerprint = match cached.as_ref() {
+            Some(Ok((body, content_type))) => {
+                use std::hash::{Hash, Hasher};
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                body.hash(&mut hasher);
+                content_type.hash(&mut hasher);
+                format!("url:{:x}", hasher.finish())
+            }
+            Some(Err(error)) => format!("url-error:{error}"),
+            None => watch_fingerprint(resource, false, cli.extensions.encoding),
+        };
+        let changed = previous.as_ref() != Some(&fingerprint);
+        if changed || (is_url(resource) && !cli.watch_cache) {
+            previous = Some(fingerprint);
+            let mut iteration = cli.clone();
+            iteration.watch = false;
+            let status = run_once_with_fetch(iteration, cached.and_then(Result::ok));
+            if status != ExitClass::Success.exit_code() {
+                // A temporary disappearance or parse failure is a frame error,
+                // not a reason to abandon a watch that may recover.
+                eprintln!("rich: watch will retry after the next change");
+            }
+        }
+        std::thread::sleep(interval);
+    }
+}
+
+fn watch_fingerprint(resource: &str, cache_url: bool, encoding: Option<Encoding>) -> String {
+    if is_url(resource) {
+        #[cfg(feature = "fetch")]
+        if cache_url {
+            return match fetch_url(resource, encoding) {
+                Ok((body, content_type)) => {
+                    use std::hash::{Hash, Hasher};
+                    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                    body.hash(&mut hasher);
+                    content_type.hash(&mut hasher);
+                    format!("url:{:x}", hasher.finish())
+                }
+                Err(error) => format!("url-error:{error}"),
+            };
+        }
+        #[cfg(not(feature = "fetch"))]
+        let _ = (cache_url, encoding);
+        return "url".to_string();
+    }
+    match std::fs::metadata(resource) {
+        Ok(metadata) => format!(
+            "{}:{}:{}",
+            metadata.len(),
+            metadata
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |duration| duration.as_nanos()),
+            metadata.is_file()
+        ),
+        Err(_) => "missing".to_string(),
+    }
+}
+
+fn run_once(cli: Cli) -> ExitCode {
+    run_once_with_fetch(cli, None)
+}
+
+fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)>) -> ExitCode {
     if cli.sanitize {
         cli.title = cli
             .title
@@ -1403,6 +2298,10 @@ fn run(mut cli: Cli) -> ExitCode {
             .caption
             .take()
             .map(|caption| sanitize_terminal_controls(&caption));
+    }
+
+    if cli.batch {
+        return run_batch(&cli);
     }
 
     // With no flags and no resource, show the capability demo.
@@ -1503,7 +2402,9 @@ fn run(mut cli: Cli) -> ExitCode {
     // treat it as a literal markup string under `--print`, else read the
     // file/stdin. A URL also yields a `Content-Type` used below.
     let resource_is_url = matches!(cli.resource.as_deref(), Some(r) if is_url(r));
-    let (mut content, content_type) = if resource_is_url {
+    let (mut content, content_type) = if let Some(fetched) = prefetched {
+        fetched
+    } else if resource_is_url {
         match fetch_url(cli.resource.as_deref().unwrap(), cli.extensions.encoding) {
             Ok(fetched) => fetched,
             Err(err) => {
@@ -3434,6 +4335,7 @@ fn print_help() {
 USAGE:
     rich [OPTIONS] [RESOURCE]
     rich [OPTIONS] <COMMAND> [RESOURCE]
+    rich --batch [OPTIONS] RESOURCE...
 
 RESOURCE is a file path, an http(s) URL, or `-` for stdin. Everything after a
 bare `--` is a RESOURCE, however much it looks like an option. Input modes with
@@ -3505,6 +4407,22 @@ OPTIONS:
     -S, --panel-style S
                      Panel border style, e.g. "dim" (with --panel)
         --pager      Page via MANPAGER, then PAGER, then less/more.com
+        --watch      Re-render a changing file or URL while stdout is a terminal
+        --watch-interval SEC
+                     Poll interval in seconds (default 1)
+        --watch-cache With URLs, render only when the response body changes
+        --batch      Convert explicit files, directories, or globs deterministically
+        --jobs N     Bound batch workers (output remains deterministic)
+        --continue-on-error
+                     Process all planned inputs and aggregate failures
+        --overwrite  Allow existing batch export destinations
+        --collision P
+                     Batch policy: error (default), overwrite, or suffix
+        --config PATH
+                     Read versioned TOML defaults from PATH
+        --profile NAME
+                     Select a config profile (default: default)
+        --no-config  Disable config discovery
         --sanitize   Replace input terminal controls, JSON/notebook strings,
                      titles and captions with visible inert text
         --report F   Emit a result/error envelope on stderr: human (default) or json.
@@ -4110,6 +5028,299 @@ mod tests {
         let s = |v: &str| v.to_string();
         assert!(parse(&[s("--pager"), s("x")]).unwrap().unwrap().pager);
         assert!(!parse(&[s("x")]).unwrap().unwrap().pager);
+    }
+
+    #[test]
+    fn parses_watch_options_and_rejects_orphans() {
+        let s = |v: &str| v.to_string();
+        let cli = parse(&[
+            s("--watch"),
+            s("--watch-interval"),
+            s("0.25"),
+            s("--watch-cache"),
+            s("file.md"),
+        ])
+        .unwrap()
+        .unwrap();
+        assert!(cli.watch);
+        assert_eq!(cli.watch_interval, 0.25);
+        assert!(cli.watch_cache);
+        assert!(parse(&[s("--watch-cache"), s("file.md")]).is_err());
+        assert!(parse(&[s("--watch-interval"), s("2"), s("file.md")]).is_err());
+    }
+
+    #[test]
+    fn watch_fingerprint_distinguishes_missing_and_replaced_files() {
+        let path = std::env::temp_dir().join(format!("rs-rich-watch-{}.txt", std::process::id(),));
+        let _ = std::fs::remove_file(&path);
+        let missing = watch_fingerprint(path.to_str().unwrap(), false, None);
+        std::fs::write(&path, "first").unwrap();
+        let first = watch_fingerprint(path.to_str().unwrap(), false, None);
+        std::fs::write(&path, "second content").unwrap();
+        let second = watch_fingerprint(path.to_str().unwrap(), false, None);
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(missing, "missing");
+        assert_ne!(first, missing);
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn parses_batch_controls_and_cli_values_override_config_defaults() {
+        let s = |v: &str| v.to_string();
+        let cli = parse(&[
+            s("--no-config"),
+            s("--batch"),
+            s("--jobs"),
+            s("3"),
+            s("--continue-on-error"),
+            s("--collision"),
+            s("suffix"),
+            s("input"),
+        ])
+        .unwrap()
+        .unwrap();
+        assert!(cli.batch);
+        assert_eq!(cli.jobs, 3);
+        assert!(cli.continue_on_error);
+        assert_eq!(cli.collision, CollisionPolicy::Suffix);
+    }
+
+    #[test]
+    fn batch_expansion_is_recursive_sorted_and_deduplicated() {
+        let root = std::env::temp_dir().join(format!("rich-batch-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let nested = root.join("nested");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(root.join("richbatchonly.md"), "# b").unwrap();
+        std::fs::write(nested.join("richbatchnested.md"), "# a").unwrap();
+
+        let root_arg = root.to_string_lossy().into_owned();
+        let glob_arg = root
+            .join("*richbatchonly.md")
+            .to_string_lossy()
+            .into_owned();
+        let inputs = expand_batch_resources(&[root_arg, glob_arg]).unwrap();
+        assert_eq!(inputs.len(), 2);
+        assert!(inputs[0].ends_with("richbatchnested.md"));
+        assert!(inputs[1].ends_with("richbatchonly.md"));
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn batch_output_suffixes_are_deterministic_for_collisions() {
+        let inputs = ["one.md", "two.md"];
+        let first = batch_export_path(Some("out.html"), inputs[0], 0, 2).unwrap();
+        let second = batch_export_path(Some("out.html"), inputs[1], 1, 2).unwrap();
+        assert_eq!(first, "one.html");
+        assert_eq!(second, "two.html");
+        assert_eq!(
+            Path::new("one.html")
+                .with_file_name("one-2.html")
+                .to_string_lossy(),
+            "one-2.html"
+        );
+    }
+
+    #[test]
+    fn config_profiles_support_profiles_section_and_source_errors() {
+        let root = std::env::temp_dir().join(format!("rich-config-test-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let config = root.join("config.toml");
+        std::fs::write(&config, "[profiles.ci]\nmode = \"json\"\njobs = 4\n").unwrap();
+        let args = vec![
+            "--config".to_string(),
+            config.to_string_lossy().into_owned(),
+            "--profile".to_string(),
+            "ci".to_string(),
+        ];
+        let merged = config_args(
+            &args,
+            &ConfigRoots {
+                home: None,
+                cwd: root.clone(),
+            },
+        )
+        .unwrap();
+        assert!(merged.windows(1).any(|arg| arg[0] == "--json"));
+        assert!(merged
+            .windows(2)
+            .any(|pair| pair[0] == "--jobs" && pair[1] == "4"));
+
+        let bad = root.join("bad.toml");
+        std::fs::write(&bad, "[defaults]\nnot-a-setting = true\n").unwrap();
+        let error = config_args(
+            &["--config".to_string(), bad.to_string_lossy().into_owned()],
+            &ConfigRoots {
+                home: None,
+                cwd: root.clone(),
+            },
+        )
+        .unwrap_err();
+        assert!(error.contains("config "));
+        assert!(error.contains("unknown key"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn batch_rejects_modes_that_consume_their_whole_resource_list() {
+        let s = |v: &str| v.to_string();
+        let error = parse(&[s("--no-config"), s("--batch"), s("--diff"), s("a"), s("b")])
+            .err()
+            .unwrap();
+        assert!(error.contains("--batch cannot be combined with --diff"));
+        let error = parse(&[s("--no-config"), s("--batch"), s("--gif"), s("a")])
+            .err()
+            .unwrap();
+        assert!(error.contains("--batch cannot be combined with --gif"));
+        // One pager per item would open N interactive pagers over one plan.
+        let error = parse(&[s("--no-config"), s("--batch"), s("--pager"), s("a")])
+            .err()
+            .unwrap();
+        assert!(error.contains("--pager cannot be combined with --batch"));
+    }
+
+    #[test]
+    fn glob_matches_metacharacters_rather_than_substrings() {
+        assert!(glob_match("*.md", "notes.md"));
+        // `.md` appears in the name, but the pattern anchors at the end.
+        assert!(!glob_match("*.md", "notes.md.bak"));
+        assert!(glob_match("a?c.md", "abc.md"));
+        assert!(!glob_match("a?c.md", "ac.md"));
+        assert!(glob_match("*", "anything"));
+        assert!(glob_match("a*b*c", "axxbyyc"));
+        assert!(!glob_match("a*b*c", "axxbyy"));
+    }
+
+    #[test]
+    fn batch_expansion_skips_symlinked_directories() {
+        let root = std::env::temp_dir().join(format!("rich-batch-link-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("a.md"), "# a").unwrap();
+        // A link back to the containing directory used to be walked forever.
+        #[cfg(unix)]
+        let linked = std::os::unix::fs::symlink(&root, root.join("loop")).is_ok();
+        #[cfg(windows)]
+        let linked = std::os::windows::fs::symlink_dir(&root, root.join("loop")).is_ok();
+        let inputs = expand_batch_resources(&[root.to_string_lossy().into_owned()]).unwrap();
+        if linked {
+            assert_eq!(inputs.len(), 1, "symlinked directory must not be followed");
+        }
+        assert!(inputs[0].ends_with("a.md"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn config_values_keep_hashes_inside_quotes() {
+        assert_eq!(
+            strip_config_comment("mode = \"json\" # note"),
+            "mode = \"json\" "
+        );
+        // A `#` inside quotes is part of the value, not the start of a comment.
+        assert_eq!(
+            strip_config_comment("export_html = \"report#ci.html\""),
+            "export_html = \"report#ci.html\""
+        );
+        assert_eq!(config_value(" \"report#ci.html\" "), "report#ci.html");
+        // Only a matched surrounding pair is stripped.
+        assert_eq!(config_value("\"quoted"), "\"quoted");
+    }
+
+    #[test]
+    fn subcommand_mode_wins_over_config_mode_default() {
+        let s = |v: &str| v.to_string();
+        assert!(selects_mode_explicitly(&[s("json"), s("file.json")]));
+        assert!(selects_mode_explicitly(&[s("--markdown"), s("file.md")]));
+        // A value that happens to look like a subcommand is not a subcommand.
+        assert!(!selects_mode_explicitly(&[
+            s("--title"),
+            s("json"),
+            s("file")
+        ]));
+        assert!(!selects_mode_explicitly(&[s("file.md")]));
+
+        let root = std::env::temp_dir().join(format!("rich-config-mode-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let config = root.join("config.toml");
+        std::fs::write(&config, "[defaults]\nmode = \"markdown\"\n").unwrap();
+        let merged = config_args(
+            &[
+                "--config".to_string(),
+                config.to_string_lossy().into_owned(),
+                "json".to_string(),
+                "file.json".to_string(),
+            ],
+            &ConfigRoots {
+                home: None,
+                cwd: root.clone(),
+            },
+        )
+        .unwrap();
+        assert!(
+            !merged.iter().any(|arg| arg == "--markdown"),
+            "config mode must not override an explicit subcommand: {merged:?}"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn suffix_collisions_step_past_files_already_on_disk() {
+        let root = std::env::temp_dir().join(format!("rich-batch-suffix-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let target = root.join("out.html");
+        std::fs::write(&target, "existing").unwrap();
+        let target = target.to_string_lossy().into_owned();
+
+        let cli = parse(&[
+            "--no-config".to_string(),
+            "--batch".to_string(),
+            "--collision".to_string(),
+            "suffix".to_string(),
+            "x".to_string(),
+        ])
+        .unwrap()
+        .unwrap();
+        let mut taken = std::collections::BTreeSet::new();
+        let first = resolve_destination(&cli, target.clone(), &mut taken).unwrap();
+        assert!(
+            first.ends_with("out-2.html"),
+            "existing file must be kept: {first}"
+        );
+        let second = resolve_destination(&cli, target.clone(), &mut taken).unwrap();
+        assert!(second.ends_with("out-3.html"));
+
+        // `error` refuses rather than clobbering, and says how to proceed.
+        let mut cli_error = cli.clone();
+        cli_error.collision = CollisionPolicy::Error;
+        let mut taken = std::collections::BTreeSet::new();
+        let (class, message) =
+            resolve_destination(&cli_error, target.clone(), &mut taken).unwrap_err();
+        assert_eq!(class, ExitClass::Input);
+        assert!(message.contains("--overwrite"));
+
+        // `--overwrite` opts in explicitly.
+        let mut cli_overwrite = cli.clone();
+        cli_overwrite.overwrite = true;
+        let mut taken = std::collections::BTreeSet::new();
+        assert_eq!(
+            resolve_destination(&cli_overwrite, target.clone(), &mut taken).unwrap(),
+            target
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn batch_outputs_keep_their_export_kind() {
+        // The planned path need not end in `.html`; the kind is carried, not sniffed.
+        let outputs = BatchOutputs {
+            html: batch_export_path(Some("result.out"), "a.md", 0, 1),
+            ..BatchOutputs::default()
+        };
+        assert_eq!(outputs.html.as_deref(), Some("result.out"));
+        assert!(outputs.svg.is_none());
     }
 
     #[test]

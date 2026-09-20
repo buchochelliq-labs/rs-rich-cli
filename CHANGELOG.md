@@ -42,6 +42,12 @@ Entries below record subsequent releases and development.
   generator now cover box renderables (`Panel`) and safe-box capability
   profiles, and `library_bench` accepts explicit `--width` and `--color-system`
   values.
+- **`rs-rich-cli` 0.0.7 workstream:** deterministic `--batch` conversion for
+  files, directories, and globs with bounded execution, explicit collision and
+  overwrite policy, fail-fast/continue-on-error modes, and aggregate JSON
+  status reports. Added versioned TOML config profiles with platform discovery,
+  explicit `--config`/`--profile`/`--no-config`, and CLI-over-config precedence.
+
 - **`rs-rich-cli`:** added task-oriented subcommands (`rich json`,
   `rich markdown`, `rich syntax`, `rich csv`, `rich ipynb`, `rich jsonl`,
   `rich log`, `rich gif`, `rich diff`, `rich rule`) while preserving existing
@@ -52,6 +58,10 @@ Entries below record subsequent releases and development.
 - **`rs-rich-cli`:** added stable automation exit-code classes plus
   `--report json` / `--machine-json` for a common result/error envelope on
   stderr, keeping rendered stdout separate.
+- **`rs-rich-cli`:** added non-busy `--watch` polling for local files and
+  fetch-enabled URLs, including atomic-save/disappearance recovery, parse-error
+  frames, configurable intervals, URL response caching, and deterministic
+  one-shot behavior when stdout is redirected.
 - **`rs-rich-art`:** added an `ImageArt` facade (`ImageMode`, `ImageOptions`,
   `RenderCapabilities`) plus a reusable Braille renderer so consumers can
   render a single still image without duplicating renderer selection logic.

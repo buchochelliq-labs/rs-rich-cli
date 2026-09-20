@@ -58,6 +58,14 @@ Export
 : `--export-html` and `--export-svg` emit a self-contained document instead of
   writing to the terminal — any render mode can be captured this way.
 
+Watch
+: `--watch` polls a local file or URL and re-renders changes. Use
+  `--watch-interval SEC` to change the polling interval. `--watch-cache`
+  avoids re-rendering unchanged URL responses. Watch mode is intentionally
+  finite when stdout is redirected: it renders one snapshot and exits, making
+  pipelines deterministic. Builds without the `fetch` feature reject URL
+  watches with the same stable URL-support error as one-shot URL input.
+
 ## Features
 
 Both are on by default and can be dropped for a smaller binary:
