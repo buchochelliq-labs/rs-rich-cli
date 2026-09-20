@@ -1,6 +1,6 @@
 {
-  "workspace_all_features_tests": 554,
-  "lean_cli_tests": 119,
+  "workspace_all_features_tests": 556,
+  "lean_cli_tests": 121,
   "release_python_tests": 33,
   "fmt": "passed",
   "clippy_all_features": "passed",
@@ -23,5 +23,7 @@
   "independent_review": "symlink input overwrite and command-like worker operands fixed and release-binary reproductions passed; no remaining blockers",
   "publication": "not performed",
   "ci": "pending PR checks",
-  "golden_regeneration": "rich 15.0.0; fixtures byte-identical"
+  "golden_regeneration": "rich 15.0.0; fixtures byte-identical",
+  "config_review_fix": "watch=false suppresses inherited interval/cache; two regressions and independent review passed",
+  "windows_ci": "native pager, CLI batch/pager and case-insensitive path regressions passed on PR head 7382d426c83595b1ba6ef00bcf72165b46b8d77e"
 }

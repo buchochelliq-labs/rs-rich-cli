@@ -1,8 +1,2 @@
-    Checking simd-adler32 v0.3.10
-    Checking miniz_oxide v0.8.9
-    Checking flate2 v1.1.9
-    Checking syntect v5.3.0
-    Checking rs-rich v0.0.4 (/workspace/scratch/02a46fd2d12a/rs-rich-v8/crates/rich)
-    Checking rs-rich-ext v0.0.6 (/workspace/scratch/02a46fd2d12a/rs-rich-v8/crates/rich-ext)
     Checking rs-rich-cli v0.0.8 (/workspace/scratch/02a46fd2d12a/rs-rich-v8/crates/rich-cli)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.40s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.40s

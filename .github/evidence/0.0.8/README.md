@@ -44,9 +44,9 @@ current evidence and regenerates temporary paths and timings.
 
 | Jobs | Median | Minimum | Maximum |
 |---:|---:|---:|---:|
-| 1 | 58.2 ms | 54.6 ms | 70.8 ms |
-| 2 | 71.8 ms | 66.9 ms | 72.3 ms |
-| 4 | 36.3 ms | 35.8 ms | 41.1 ms |
+| 1 | 58.2 ms | 55.9 ms | 83.6 ms |
+| 2 | 69.7 ms | 66.4 ms | 89.0 ms |
+| 4 | 45.5 ms | 37.1 ms | 176.5 ms |
 
 The two-worker result is slower than serial for this small workload. More workers
 do not imply proportional throughput; use the raw samples and remeasure for
@@ -54,14 +54,8 @@ your inputs. All 18 invocations exited 0 and produced the same twelve HTML files
 
 ## Validation
 
-`validation.json` and accompanying logs record 554 all-feature workspace tests,
-119 lean CLI tests, 33 release regression tests, Clippy, Rust 1.90, docs,
+`validation.json` and accompanying logs record 556 all-feature workspace tests,
+121 lean CLI tests, 33 release regression tests, Clippy, Rust 1.90, docs,
 terminal/watch/pager checks, snapshots and staged package verification. Golden
 fixtures regenerated with rich 15.0.0 without changes. Remote CI is recorded on
 the release PR; these local results do not claim publication.
-
-The subsequent Windows CI follow-up changes only the workflow and a dry-run
-test assertion to compare native paths instead of Unix path strings. Production
-Rust sources, manifests, lockfile and recorded release binary are unchanged.
-The capture source digest includes test files, so it intentionally identifies
-the capture-time tree before that portable assertion update.

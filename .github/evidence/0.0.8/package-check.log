@@ -8,10 +8,8 @@ warning: ignoring test `golden` as `tests/golden.rs` is not included in the publ
     Packaged 61 files, 1.1MiB (223.7KiB compressed)
    Packaging rs-rich-art v0.0.6 (/workspace/scratch/02a46fd2d12a/rs-rich-v8/crates/rich-art)
     Updating crates.io index
-    Blocking waiting for file lock on package cache
     Packaged 33 files, 820.0KiB (638.2KiB compressed)
    Packaging rs-rich-ext v0.0.6 (/workspace/scratch/02a46fd2d12a/rs-rich-v8/crates/rich-ext)
-    Blocking waiting for file lock on package cache
     Updating crates.io index
     Packaged 13 files, 35.5KiB (12.4KiB compressed)
    Packaging rs-rich-cli v0.0.8 (/workspace/scratch/02a46fd2d12a/rs-rich-v8/crates/rich-cli)
@@ -21,7 +19,7 @@ warning: ignoring test `image_options` as `tests/image_options.rs` is not includ
 warning: ignoring test `pager_v8` as `tests/pager_v8.rs` is not included in the published package
 warning: ignoring test `release_workflows` as `tests/release_workflows.rs` is not included in the published package
     Updating crates.io index
-    Packaged 9 files, 284.4KiB (79.8KiB compressed)
+    Packaged 9 files, 288.0KiB (80.4KiB compressed)
 Registry contents match: rs-rich@0.0.4
 Registry contents match: rs-rich-ext@0.0.6
 STAGED ONLY: rs-rich-cli@0.0.8 is unpublished
@@ -47,151 +45,18 @@ warning: ignoring test `image_options` as `tests/image_options.rs` is not includ
 warning: ignoring test `pager_v8` as `tests/pager_v8.rs` is not included in the published package
 warning: ignoring test `release_workflows` as `tests/release_workflows.rs` is not included in the published package
     Updating crates.io index
-    Packaged 9 files, 284.4KiB (79.8KiB compressed)
+    Packaged 9 files, 288.0KiB (80.4KiB compressed)
    Verifying rs-rich v0.0.4 (/workspace/scratch/02a46fd2d12a/rs-rich-v8/crates/rich)
-   Compiling memchr v2.8.3
-   Compiling proc-macro2 v1.0.107
-   Compiling serde_core v1.0.229
-   Compiling unicode-ident v1.0.24
-   Compiling quote v1.0.47
-   Compiling serde v1.0.229
-   Compiling bit-vec v0.8.0
-   Compiling equivalent v1.0.2
-   Compiling regex-syntax v0.8.11
-   Compiling zmij v1.0.23
-   Compiling hashbrown v0.17.1
-   Compiling crc32fast v1.5.0
-   Compiling bit-set v0.8.0
-   Compiling adler2 v2.0.1
-   Compiling cfg-if v1.0.4
-   Compiling deranged v0.5.8
-   Compiling thiserror v2.0.19
-   Compiling num-conv v0.2.2
-   Compiling aho-corasick v1.1.4
-   Compiling powerfmt v0.2.0
-   Compiling indexmap v2.14.0
-   Compiling serde_json v1.0.151
-   Compiling simd-adler32 v0.3.10
-   Compiling syn v3.0.3
-   Compiling time-core v0.1.9
-   Compiling bitflags v2.13.1
-   Compiling rustix v1.1.4
-   Compiling miniz_oxide v0.8.9
-   Compiling quick-xml v0.41.0
-   Compiling time v0.3.54
-   Compiling regex-automata v0.4.16
-   Compiling linked-hash-map v0.5.6
-   Compiling base64 v0.22.1
-   Compiling itoa v1.0.18
-   Compiling linux-raw-sys v0.12.1
-   Compiling pulldown-cmark v0.13.4
-   Compiling same-file v1.0.6
-   Compiling bincode v1.3.3
-   Compiling walkdir v2.5.0
-   Compiling yaml-rust v0.4.5
-   Compiling flate2 v1.1.9
-   Compiling once_cell v1.21.4
-   Compiling thiserror-impl v2.0.19
-   Compiling serde_derive v1.0.229
-   Compiling unicase v2.9.0
-   Compiling fnv v1.0.7
-   Compiling terminal_size v0.4.4
-   Compiling plist v1.10.0
-   Compiling anstyle-query v1.1.5
-   Compiling fancy-regex v0.16.2
-   Compiling fancy-regex v0.19.2
-   Compiling syntect v5.3.0
    Compiling rs-rich v0.0.4 (/tmp/v8-packages-target/package/rs-rich-0.0.4)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 24.60s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 18.82s
    Verifying rs-rich-art v0.0.6 (/workspace/scratch/02a46fd2d12a/rs-rich-v8/crates/rich-art)
-   Unpacking rs-rich v0.0.4 (registry `/tmp/v8-packages-target/package/tmp-registry`)
-   Compiling libm v0.2.16
-   Compiling autocfg v1.5.1
-   Compiling simd-adler32 v0.3.10
-   Compiling bytemuck_derive v1.12.0
-   Compiling radium v0.7.0
-   Compiling syn v2.0.119
-   Compiling by_address v1.2.1
-   Compiling ref-cast v1.0.26
-   Compiling rand_core v0.10.1
-   Compiling miniz_oxide v0.8.9
-   Compiling tap v1.0.1
-   Compiling wyz v0.5.1
-   Compiling ref-cast-impl v1.0.26
-   Compiling num-traits v0.2.19
-   Compiling funty v2.0.0
-   Compiling rand v0.10.2
-   Compiling rand_xoshiro v0.8.1
-   Compiling flate2 v1.1.9
-   Compiling bitvec v1.1.1
-   Compiling fdeflate v0.3.7
-   Compiling zune-core v0.5.1
-   Compiling bytemuck v1.25.2
-   Compiling palette_math v0.7.7
-   Compiling weezl v0.1.12
-   Compiling pxfm v0.1.30
-   Compiling safe_arch v1.1.0
-   Compiling color_quant v1.1.0
-   Compiling png v0.18.1
-   Compiling wide v1.6.1
-   Compiling ordered-float v5.3.0
-   Compiling gif v0.14.2
-   Compiling syntect v5.3.0
-   Compiling zune-jpeg v0.5.15
-   Compiling byteorder-lite v0.1.0
-   Compiling palette_derive v0.7.7
-   Compiling rs-rich v0.0.4
-   Compiling palette v0.7.7
-   Compiling moxcms v0.8.1
-   Compiling image v0.25.10
-   Compiling quantette v0.6.0
-   Compiling icy_sixel v0.5.1
    Compiling rs-rich-art v0.0.6 (/tmp/v8-packages-target/package/rs-rich-art-0.0.6)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 32.86s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 19.04s
    Verifying rs-rich-ext v0.0.6 (/workspace/scratch/02a46fd2d12a/rs-rich-v8/crates/rich-ext)
-   Compiling rs-rich v0.0.4
    Compiling rs-rich-ext v0.0.6 (/tmp/v8-packages-target/package/rs-rich-ext-0.0.6)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 34.90s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 19.12s
    Verifying rs-rich-cli v0.0.8 (/workspace/scratch/02a46fd2d12a/rs-rich-v8/crates/rich-cli)
     Updating crates.io index
-   Unpacking rs-rich-art v0.0.6 (registry `/tmp/v8-packages-target/package/tmp-registry`)
-   Unpacking rs-rich-ext v0.0.6 (registry `/tmp/v8-packages-target/package/tmp-registry`)
-   Compiling libc v0.2.189
-   Compiling shlex v2.0.1
-   Compiling find-msvc-tools v0.1.9
-   Compiling rustix v1.1.4
-   Compiling zeroize v1.9.0
-   Compiling untrusted v0.9.0
-   Compiling httparse v1.10.1
-   Compiling bytes v1.12.1
-   Compiling rustls-pki-types v1.15.1
-   Compiling getrandom v0.4.3
-   Compiling cc v1.4.0
-   Compiling log v0.4.33
-   Compiling rustls v0.23.43
-   Compiling serde_spanned v0.6.9
-   Compiling toml_datetime v0.6.11
-   Compiling subtle v2.6.1
-   Compiling http v1.5.0
-   Compiling base64 v0.23.1
-   Compiling toml_write v0.1.2
-   Compiling winnow v0.7.15
-   Compiling webpki-roots v1.0.9
-   Compiling percent-encoding v2.3.2
-   Compiling utf8-zero v0.8.1
-   Compiling fastrand v2.5.0
-   Compiling ring v0.17.14
-   Compiling ureq-proto v0.6.3
-   Compiling getrandom v0.2.17
-   Compiling toml_edit v0.22.27
-   Compiling terminal_size v0.4.4
-   Compiling tempfile v3.27.0
-   Compiling rs-rich v0.0.4
-   Compiling toml v0.8.23
-   Compiling rs-rich-art v0.0.6
-   Compiling rs-rich-ext v0.0.6
-   Compiling rustls-webpki v0.103.13
-   Compiling ureq v3.4.2
    Compiling rs-rich-cli v0.0.8 (/tmp/v8-packages-target/package/rs-rich-cli-0.0.8)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 47.49s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 21.06s
 Staged package verification passed. This does not establish registry publication readiness.

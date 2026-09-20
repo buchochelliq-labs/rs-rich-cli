@@ -532,3 +532,7 @@ For repetitive source files, build the CLI with
 off by default and changes no CLI flags. It reuses parsing work within one
 render; varied source files may see no speedup. See the
 [measurements](benchmarks.md#004-repeated-source-syntax-results).
+
+Disabling configured watch with `watch = false` or `--no-watch` also suppresses
+inherited `watch_interval` and `watch_cache`. Explicitly passing those watch
+options without enabling watch remains a usage error.

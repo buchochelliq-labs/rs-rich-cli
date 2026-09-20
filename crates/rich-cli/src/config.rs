@@ -379,10 +379,43 @@ fn overrides(args: &[String]) -> Settings {
     result
 }
 
+/// Disabling watch drops inherited tuning, but explicit contradictory CLI
+/// requests keep their usage error. Run after all layers so --watch can still
+/// enable the tuning inherited through a profile that normally disables watch.
+fn normalize_watch(settings: &mut Settings, explicit: &Settings) -> Result<(), String> {
+    let watch = explicit
+        .get("watch")
+        .or_else(|| settings.get("watch"))
+        .and_then(Value::as_bool);
+    if watch == Some(false) {
+        settings.remove("watch_interval");
+        settings.remove("watch_cache");
+    }
+    if watch != Some(true) {
+        if explicit.get("watch_cache").and_then(Value::as_bool) == Some(true) {
+            return Err("--watch-cache requires --watch".into());
+        }
+        if explicit
+            .get("watch_interval")
+            .and_then(|value| {
+                value
+                    .as_float()
+                    .or_else(|| value.as_integer().map(|v| v as f64))
+            })
+            .is_some_and(|interval| interval != 1.0)
+        {
+            return Err("--watch-interval requires --watch".into());
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<String>, String> {
     let args = arguments(args)?;
-    let (settings, _) = load(&args, roots)?;
-    let explicit: BTreeSet<_> = overrides(&args.cleaned).into_keys().collect();
+    let (mut settings, _) = load(&args, roots)?;
+    let overrides = overrides(&args.cleaned);
+    normalize_watch(&mut settings, &overrides)?;
+    let explicit: BTreeSet<_> = overrides.into_keys().collect();
     let mut result = Vec::new();
     let mut settings: Vec<_> = settings.into_iter().collect();
     // Inverse flags reset related state: emit the final policy after its reset.
@@ -469,6 +502,7 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
     for (key, value) in &overrides {
         validate_value(key, value)?;
     }
+    normalize_watch(&mut settings, &overrides)?;
     settings.extend(overrides);
     let output = serde_json::json!({
         "valid": true,
@@ -647,6 +681,65 @@ mod tests {
         assert_eq!(settings["pager"].as_bool(), Some(false));
         assert_eq!(settings["auto_pager"].as_bool(), Some(true));
         assert_eq!(settings["overwrite"].as_bool(), Some(false));
+    }
+
+    #[test]
+    fn disabling_watch_suppresses_inherited_watch_dependencies() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("rich.toml"), "[defaults]\nwatch = true\nwatch_interval = 0.2\nwatch_cache = true\n[profiles.once]\nwatch = false\n").unwrap();
+        let roots = ConfigRoots {
+            home: None,
+            cwd: root.path().into(),
+        };
+        for flags in [vec!["--profile", "once"], vec!["--no-watch"]] {
+            let mut args = strings(&flags);
+            args.push("input.txt".into());
+            let merged = config_args(&args, &roots).unwrap();
+            assert!(
+                !merged
+                    .iter()
+                    .any(|arg| arg == "--watch-interval" || arg == "--watch-cache"),
+                "{merged:?}"
+            );
+            let cli = super::super::parse_inner(&merged).unwrap().unwrap();
+            assert!(!cli.watch);
+            assert!(!cli.watch_cache);
+            assert_eq!(cli.watch_interval, 1.0);
+            let mut args = strings(&["config", "show"]);
+            args.extend(strings(&flags));
+            let output: serde_json::Value =
+                serde_json::from_str(&inspect(&args, &roots).unwrap().unwrap()).unwrap();
+            assert_eq!(output["settings"]["watch"], false);
+            assert!(output["settings"].get("watch_interval").is_none());
+            assert!(output["settings"].get("watch_cache").is_none());
+        }
+    }
+
+    #[test]
+    fn explicitly_requested_watch_dependencies_still_require_watch() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(
+            root.path().join("rich.toml"),
+            "[defaults]\nwatch = true\nwatch_interval = 0.2\nwatch_cache = true\n",
+        )
+        .unwrap();
+        let roots = ConfigRoots {
+            home: None,
+            cwd: root.path().into(),
+        };
+        for flags in [
+            vec!["--no-watch", "--watch-cache"],
+            vec!["--no-watch", "--watch-interval", "0.5"],
+        ] {
+            let mut args = strings(&["config", "validate"]);
+            args.extend(strings(&flags));
+            assert!(inspect(&args, &roots)
+                .unwrap_err()
+                .contains("requires --watch"));
+            let result = config_args(&strings(&flags), &roots)
+                .and_then(|merged| super::super::parse_inner(&merged).map(|_| ()));
+            assert!(result.unwrap_err().contains("requires --watch"));
+        }
     }
 
     #[test]
