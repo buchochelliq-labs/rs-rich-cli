@@ -123,6 +123,28 @@ from platform roots (or selected explicitly), with command-line values taking
 precedence. Work is serialized by default to keep memory bounded; `--jobs` is a
 validated concurrency bound reserved for future parallel workers.
 
+### Confidence tooling for expanded CLI surfaces
+
+The confidence slice adds bounded, deterministic support around the selected
+batch/profile/watch/image work:
+
+- **#150/#135:** `scripts/snapshot_cli.py` provides injectable width and
+  terminal capability profiles with PTY terminal forcing for color modes,
+  option-terminator (`--`) positioning, stable environment variables, newline
+  normalization, and readable failure diffs. The initial corpus covers the
+  currently stable Markdown and JSON stdin paths.
+- **#34:** the differential corpus and generator now include box renderables
+  (`Panel` box variations) and vary the safe-box capability profile in addition
+  to width, color, markup, styles and overflow. Broader CLI differential
+  fuzzing remains follow-up work beyond this bounded corpus.
+- **#35:** `library_bench` accepts explicit width and color-system arguments and
+  records them in its JSON artifact. CI publication and threshold enforcement
+  remain deferred; output hashes stay the blocking correctness signal.
+
+Image behavior remains covered by the existing focused `rich-cli` integration
+tests. Snapshot cases for the merged batch/profile/watch/image workflows remain
+follow-up work; capability/RenderTarget decisions (#147/#148) remain separate.
+
 ---
 
 ## 0.0.2 planning record
