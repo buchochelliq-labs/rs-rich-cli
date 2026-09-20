@@ -1,6 +1,6 @@
 # Release finishing evidence
 
-The recordings were freshly captured from the local default-feature CLI build,
+The recordings were freshly captured from the optimized release CLI build with default features,
 not reconstructed from historical release output. See `results.json` for the
 binary version, binary/source SHA-256 digests, exact arguments, exit codes and
 per-stream hashes. The source digest covers sorted crate Rust sources, manifests
@@ -14,7 +14,7 @@ JSON, then recovers, before deliberate SIGINT (exit -2).
 Reproduce from the repository root:
 
 ```bash
-cargo build -p rs-rich-cli --locked
+cargo build --release -p rs-rich-cli --locked
 python -m pip install -r scripts/requirements-docs-media.txt
 python scripts/capture_release_demos.py
 ```

@@ -2,7 +2,7 @@
 
 ## Fresh CLI demos
 
-These clips were captured from the built `rich (rs-rich-cli) 0.0.7` binary (`target/debug/rich`, default features).
+These clips were captured from the built `rich (rs-rich-cli) 0.0.7` binary (`target/release/rich`, default features).
 They replay its actual PTY output; captions are added, still results are held
 for two seconds, and watch output retains event timing sampled at 10 fps.
 There is no audio.
@@ -44,7 +44,7 @@ A file changes, becomes invalid and recovers; batch then exports two HTML files.
 [Commands and source/binary hashes](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/release-finish)
 are committed with raw ANSI/asciinema recordings and the exported HTML files.
 The alpha fixture is generated deterministically by the capture script.
-Run `cargo build -p rs-rich-cli`, install the media requirements below, then
+Run `cargo build --release -p rs-rich-cli --locked`, install the media requirements below, then
 `python scripts/capture_release_demos.py` to capture and encode again.
 The capture needs a POSIX PTY, FFmpeg and the DejaVu fonts.
 See [workflow recipes](recipes.md) and [image fitting options](cli.md#fit-crop-and-transparent-backgrounds).

@@ -1,6 +1,7 @@
 {
   "version": "rich (rs-rich-cli) 0.0.7",
-  "binary_sha256": "16aed30e57c16dd8923cd6114c3e6dd16a002f6cd0659dc84f8f10cb456e1f08",
+  "binary_path": "target/release/rich",
+  "binary_sha256": "a2497e0029ffbe666fef35309af8c2bfba09b7ccf61904cd21547c9505243244",
   "source_sha256": "b6a87a160e47a6615ce14c4723b8ab73bed6ce7a414c9a710b2a912465ad6c31",
   "terminal": {
     "width": 88,
@@ -130,7 +131,7 @@
       "args": [
         "--no-config",
         "json",
-        "/tmp/rich-release-demos-b4khj95f/status.json",
+        "/tmp/rich-release-demos-5ygl5466/status.json",
         "--watch",
         "--watch-interval",
         "0.1",
@@ -150,7 +151,7 @@
         "scripts/fixtures/workflows/a.json",
         "scripts/fixtures/workflows/b.json",
         "--export-html",
-        "/tmp/rich-release-demos-b4khj95f/rendered/document.html",
+        "/tmp/rich-release-demos-5ygl5466/rendered/document.html",
         "--report",
         "json",
         "--width",
