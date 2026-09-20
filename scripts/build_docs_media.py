@@ -49,7 +49,10 @@ def svg_animation(name, duration):
 
 def color(value, default):
     palette = {'black':'000000','red':'cd0000','green':'00cd00','brown':'cdcd00',
-               'blue':'0000ee','magenta':'cd00cd','cyan':'00cdcd','white':'e5e5e5'}
+               'blue':'0000ee','magenta':'cd00cd','cyan':'00cdcd','white':'e5e5e5',
+               'brightblack':'7f7f7f','brightred':'ff0000','brightgreen':'00ff00',
+               'brightbrown':'ffff00','brightyellow':'ffff00','brightblue':'5c5cff',
+               'brightmagenta':'ff00ff','brightcyan':'00ffff','brightwhite':'ffffff'}
     if value == 'default': return default
     return '#' + palette.get(value, value)
 

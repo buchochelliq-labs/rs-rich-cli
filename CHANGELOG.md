@@ -35,6 +35,10 @@ Entries below record subsequent releases and development.
 
 ### CLI 0.0.8 / art 0.0.6 preparation
 
+- Guided `rich --demo` suite tour with adjustable pacing, real CLI workflow and
+  art examples, finite redirected output and clean Ctrl+C interruption.
+- Batch planning also rejects hard-linked input/output aliases before writing.
+
 - Full TOML configuration with strict validation, default/profile/CLI precedence,
   explicit boolean overrides and JSON `config show` / `config validate`.
   Inspection lists configured settings, not every built-in default.

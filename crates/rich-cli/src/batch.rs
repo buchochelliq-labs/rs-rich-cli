@@ -72,6 +72,7 @@ pub(super) fn run_batch(cli: &Cli) -> ExitCode {
     };
     let mut taken = std::collections::BTreeSet::new();
     let mut keys = std::collections::BTreeSet::new();
+    let mut existing_outputs: Vec<String> = Vec::new();
     let input_keys: std::collections::BTreeSet<_> = resources
         .iter()
         .map(|input| destination_key(input))
@@ -95,7 +96,11 @@ pub(super) fn run_batch(cli: &Cli) -> ExitCode {
             match resolve_destination(cli, candidate, &mut taken) {
                 Ok(path) => {
                     let key = destination_key(&path);
-                    if input_keys.contains(&key) {
+                    if input_keys.contains(&key)
+                        || resources
+                            .iter()
+                            .any(|input| same_file::is_same_file(input, &path).unwrap_or(false))
+                    {
                         errors.push((
                             input.clone(),
                             ExitClass::Usage,
@@ -104,7 +109,11 @@ pub(super) fn run_batch(cli: &Cli) -> ExitCode {
                             )),
                         ));
                     }
-                    if !keys.insert(key)
+                    let hard_link_collision = existing_outputs
+                        .iter()
+                        .any(|output| same_file::is_same_file(output, &path).unwrap_or(false));
+                    existing_outputs.push(path.clone());
+                    if (!keys.insert(key) || hard_link_collision)
                         && (cli.jobs > 1 || cli.collision == CollisionPolicy::Error)
                     {
                         errors.push((input.clone(), ExitClass::Usage, Some(format!("batch output collision: {path}; use --collision suffix (repeated overwrite destinations require --jobs 1)"))));

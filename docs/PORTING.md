@@ -119,6 +119,7 @@ core mirror is untouched and a sync does not have to reconcile them.
 
 | convenience | rust `crates/rich-cli/src/…` | rationale |
 |-------------|------------------------------|-----------|
+| `--demo` and `--demo-delay` | `demo.rs` + `main.rs` | bounded, offline tour composes existing public renderers and CLI workflows; uses temporary examples and restores terminal state on interruption |
 | batch planning and `--dry-run`, with `--jobs` concurrency for file exports | `batch.rs` + `main.rs` | subprocess workers reuse the single-resource renderer; disk-spooled output is replayed in input order; terminal-only batches remain serial |
 | strict TOML profiles, inverse booleans, `config show` / `config validate` | `config.rs` + `main.rs` | validated defaults/profile/CLI precedence and JSON inspection compose existing options without changing core |
 | `--auto-pager` and `--no-pager` | `main.rs` | CLI destination/height policy composes public pager APIs; redirected stdout is never paged |

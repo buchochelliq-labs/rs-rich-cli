@@ -8,6 +8,7 @@ crates.io with Cargo; the executable it installs is named `rich`:
 ```bash
 cargo install rs-rich-cli
 rich --help
+rich --demo  # guided suite tour; Ctrl+C stops
 ```
 
 ```bash

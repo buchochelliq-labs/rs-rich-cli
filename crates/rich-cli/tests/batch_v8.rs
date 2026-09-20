@@ -322,3 +322,67 @@ fn symlink_parent_traversal_cannot_overwrite_a_batch_input() {
         "protected source"
     );
 }
+
+#[test]
+fn hard_linked_input_exports_are_rejected_before_writing() {
+    for dry_run in [true, false] {
+        for jobs in ["1", "2"] {
+            let root = tempfile::tempdir().unwrap();
+            let input = root.path().join("a.json");
+            std::fs::write(&input, "{\"keep\":true}").unwrap();
+            std::fs::hard_link(&input, root.path().join("out.html")).unwrap();
+            let mut args = vec![
+                "--batch",
+                "--json",
+                "a.json",
+                "--export-html",
+                "out.html",
+                "--overwrite",
+                "--jobs",
+                jobs,
+                "--report",
+                "json",
+            ];
+            if dry_run {
+                args.push("--dry-run");
+            }
+            let result = run(root.path(), &args);
+            assert_eq!(result.status.code(), Some(2), "{result:?}");
+            assert_eq!(std::fs::read_to_string(input).unwrap(), "{\"keep\":true}");
+            assert!(result.stdout.is_empty());
+        }
+    }
+}
+
+#[test]
+fn hard_linked_parallel_destinations_are_rejected_before_writing() {
+    for dry_run in [true, false] {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("a.txt"), "alpha").unwrap();
+        std::fs::write(root.path().join("b.txt"), "beta").unwrap();
+        std::fs::write(root.path().join("a.html"), "keep").unwrap();
+        std::fs::hard_link(root.path().join("a.html"), root.path().join("b.html")).unwrap();
+        let mut args = vec![
+            "--batch",
+            "a.txt",
+            "b.txt",
+            "--export-html",
+            "out.html",
+            "--overwrite",
+            "--jobs",
+            "2",
+            "--report",
+            "json",
+        ];
+        if dry_run {
+            args.push("--dry-run");
+        }
+        let result = run(root.path(), &args);
+        assert_eq!(result.status.code(), Some(2), "{result:?}");
+        assert_eq!(
+            std::fs::read_to_string(root.path().join("a.html")).unwrap(),
+            "keep"
+        );
+        assert!(result.stdout.is_empty());
+    }
+}
