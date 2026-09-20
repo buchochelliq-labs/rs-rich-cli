@@ -14,7 +14,7 @@ JSON, then recovers, before deliberate SIGINT (exit -2).
 Reproduce from the repository root:
 
 ```bash
-cargo build --release -p rs-rich-cli --locked --locked
+cargo build --release -p rs-rich-cli --locked
 python -m pip install -r scripts/requirements-docs-media.txt
 python scripts/capture_release_demos.py
 ```
