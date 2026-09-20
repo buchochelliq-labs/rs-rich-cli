@@ -59,3 +59,9 @@ your inputs. All 18 invocations exited 0 and produced the same twelve HTML files
 terminal/watch/pager checks, snapshots and staged package verification. Golden
 fixtures regenerated with rich 15.0.0 without changes. Remote CI is recorded on
 the release PR; these local results do not claim publication.
+
+The subsequent Windows CI follow-up changes only the workflow and a dry-run
+test assertion to compare native paths instead of Unix path strings. Production
+Rust sources, manifests, lockfile and recorded release binary are unchanged.
+The capture source digest includes test files, so it intentionally identifies
+the capture-time tree before that portable assertion update.

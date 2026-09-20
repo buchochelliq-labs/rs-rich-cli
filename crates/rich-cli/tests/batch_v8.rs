@@ -282,8 +282,15 @@ fn successful_dry_run_reports_sorted_matches_and_does_not_render() {
     assert!(output.status.success(), "{output:?}");
     let json = report(&output);
     assert_eq!(json["result"]["planned"], 2);
-    assert_eq!(json["result"]["resources"][0]["resource"], "./a.json");
-    assert_eq!(json["result"]["resources"][1]["resource"], "./b.json");
+    for (index, name) in ["a.json", "b.json"].iter().enumerate() {
+        let resource = json["result"]["resources"][index]["resource"]
+            .as_str()
+            .unwrap();
+        assert_eq!(
+            std::path::Path::new(resource),
+            std::path::Path::new(".").join(name)
+        );
+    }
     assert!(output.stdout.is_empty());
     assert!(!root.path().join("a.html").exists());
     assert!(!root.path().join("b.html").exists());
