@@ -114,6 +114,15 @@ response caching. Redirected output remains a deterministic one-shot snapshot.
 Rendering stays in the existing CLI/core paths; no new core refresh behavior is
 introduced.
 
+### Batch and configuration
+
+The CLI now plans explicit files, directories, and globs deterministically,
+reuses the existing render/export pipeline per item, refuses silent overwrites,
+and reports aggregate machine-readable status. TOML profiles are discovered
+from platform roots (or selected explicitly), with command-line values taking
+precedence. Work is serialized by default to keep memory bounded; `--jobs` is a
+validated concurrency bound reserved for future parallel workers.
+
 ---
 
 ## 0.0.2 planning record
