@@ -161,6 +161,11 @@ jobs:
       - name: Test pager selection and launch the native Windows pager
         run: cargo test -p rs-rich --locked --lib pager::tests -- --test-threads=1
 
+      - name: Test Windows batch paths and CLI pager controls
+        run: |
+          cargo test -p rs-rich-cli --locked --bin rich batch::tests
+          cargo test -p rs-rich-cli --locked --test batch_v8 --test pager_v8
+
   msrv:
     name: minimum supported Rust version
     runs-on: ubuntu-latest
