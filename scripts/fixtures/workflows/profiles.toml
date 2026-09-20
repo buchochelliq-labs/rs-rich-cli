@@ -1,0 +1,4 @@
+[defaults]
+width = 48
+[profiles.ci]
+no_color = true

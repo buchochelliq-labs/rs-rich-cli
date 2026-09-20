@@ -1,5 +1,7 @@
 # rs-rich
 
+<div class="project-badges" markdown="1">
+
 [![CI](https://github.com/buchochelliq-labs/rs-rich-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/buchochelliq-labs/rs-rich-cli/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/rs-rich.svg)](https://crates.io/crates/rs-rich)
 [![docs.rs](https://img.shields.io/docsrs/rs-rich)](https://docs.rs/rs-rich)
@@ -7,16 +9,18 @@
 [![License](https://img.shields.io/crates/l/rs-rich.svg)](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/LICENSE)
 [![GitHub](https://img.shields.io/badge/github-repo-blue)](https://github.com/buchochelliq-labs/rs-rich-cli)
 
+</div>
+
 A Rust port of Python's [`rich`](https://github.com/Textualize/rich) — rich text,
 colour, tables, markdown and progress bars in the terminal — plus a port of the
 [`rich-cli`](https://github.com/Textualize/rich-cli) tool.
 
-![Rich-art half-block and ASCII animation](assets/demos/rich-art-comparison.gif)
+![Rich-art half-block, Braille and ASCII output](assets/demos/release-image-modes.gif)
 
 **[Watch the rich-art videos](demos.md)** · [Browse the gallery](gallery.md) ·
 [Start with the CLI](cli.md) · [Learn the library](tutorial/index.md)
 
-The preview replays archived CLI output. See the [capture details](demos.md#how-these-videos-were-made)
+The preview replays fresh CLI output from the current 0.0.7 debug build. See the [capture details](demos.md#fresh-cli-demos)
 for its version, timing and reproduction commands.
 
 ```bash

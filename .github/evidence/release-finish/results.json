@@ -1,0 +1,164 @@
+{
+  "version": "rich (rs-rich-cli) 0.0.7",
+  "binary_sha256": "16aed30e57c16dd8923cd6114c3e6dd16a002f6cd0659dc84f8f10cb456e1f08",
+  "source_sha256": "b6a87a160e47a6615ce14c4723b8ab73bed6ce7a414c9a710b2a912465ad6c31",
+  "terminal": {
+    "width": 88,
+    "height": 28,
+    "TERM": "xterm-256color",
+    "COLORTERM": "truecolor",
+    "RICH_SIXEL": "0"
+  },
+  "presentation": "Still captures held 2 seconds; watch sampled at 10fps, original event times. Captions added. No audio.",
+  "cases": [
+    {
+      "case": "image-blocks",
+      "args": [
+        "--no-config",
+        "image",
+        "crates/rich-art/examples/assets/cat.gif",
+        "--image-mode",
+        "blocks",
+        "--width",
+        "44",
+        "--height",
+        "22"
+      ],
+      "exit_code": 0,
+      "sha256": "4df232de7beba537d1799139d22f113e8f25ca7a242384a7b8c22747535d94b7",
+      "bytes": 37549
+    },
+    {
+      "case": "image-braille",
+      "args": [
+        "--no-config",
+        "image",
+        "crates/rich-art/examples/assets/cat.gif",
+        "--image-mode",
+        "braille",
+        "--width",
+        "44",
+        "--height",
+        "22"
+      ],
+      "exit_code": 0,
+      "sha256": "9cc131c56aca686f32662cfee3e9c78b787a0553f8e6c4c054ec4fb529bff750",
+      "bytes": 2948
+    },
+    {
+      "case": "image-ascii",
+      "args": [
+        "--no-config",
+        "image",
+        "crates/rich-art/examples/assets/cat.gif",
+        "--image-mode",
+        "ascii",
+        "--width",
+        "44",
+        "--height",
+        "22"
+      ],
+      "exit_code": 0,
+      "sha256": "faed7b21c34ef354e9faa83e22ae0679715f6853a9038d9cb4c8eb8aaf5cd052",
+      "bytes": 9607
+    },
+    {
+      "case": "fit-contain",
+      "args": [
+        "--no-config",
+        "image",
+        "crates/rich-art/examples/assets/cat.gif",
+        "--image-mode",
+        "blocks",
+        "--width",
+        "44",
+        "--height",
+        "12",
+        "--image-fit",
+        "contain",
+        "--image-background",
+        "#542080"
+      ],
+      "exit_code": 0,
+      "sha256": "15720fded27879540df904ff2ed629838a0001ca41905e93af7bea45763c93ae",
+      "bytes": 20540
+    },
+    {
+      "case": "fit-cover",
+      "args": [
+        "--no-config",
+        "image",
+        "crates/rich-art/examples/assets/cat.gif",
+        "--image-mode",
+        "blocks",
+        "--width",
+        "44",
+        "--height",
+        "12",
+        "--image-fit",
+        "cover",
+        "--image-background",
+        "#542080"
+      ],
+      "exit_code": 0,
+      "sha256": "5320870b7ff686a81f3e540411db06ff1e61755fa7122dbce62651ab7a41cd9f",
+      "bytes": 20639
+    },
+    {
+      "case": "alpha-background",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/release-finish/alpha.png",
+        "--image-mode",
+        "blocks",
+        "--width",
+        "44",
+        "--height",
+        "12",
+        "--image-fit",
+        "contain",
+        "--image-background",
+        "#542080"
+      ],
+      "exit_code": 0,
+      "sha256": "f52d55859fcc91f6aaa784818c7e6e2822de61d6005db9bc594daa4ba4f0f839",
+      "bytes": 20869
+    },
+    {
+      "case": "watch",
+      "args": [
+        "--no-config",
+        "json",
+        "/tmp/rich-release-demos-b4khj95f/status.json",
+        "--watch",
+        "--watch-interval",
+        "0.1",
+        "--width",
+        "72"
+      ],
+      "exit_code": -2,
+      "sha256": "8f2a2d47d2dbd4b0514a2625ed0545ba478a94b1562db676b11d0dfb4e4a671d",
+      "bytes": 475
+    },
+    {
+      "case": "batch",
+      "args": [
+        "--no-config",
+        "json",
+        "--batch",
+        "scripts/fixtures/workflows/a.json",
+        "scripts/fixtures/workflows/b.json",
+        "--export-html",
+        "/tmp/rich-release-demos-b4khj95f/rendered/document.html",
+        "--report",
+        "json",
+        "--width",
+        "72"
+      ],
+      "exit_code": 0,
+      "sha256": "6823aec7c8ba30629737d540f3fd15ba871cff2f287622f3a4a4e71ccf97d66e",
+      "bytes": 329
+    }
+  ]
+}

@@ -65,7 +65,9 @@ pub use crate::braille::BrailleArt;
 pub use crate::sixel::SixelArt;
 
 #[cfg(feature = "image")]
-pub use crate::image_art::{ImageArt, ImageArtError, ImageMode, ImageOptions, RenderCapabilities};
+pub use crate::image_art::{
+    ImageArt, ImageArtError, ImageFit, ImageMode, ImageOptions, RenderCapabilities,
+};
 
 #[cfg(feature = "image")]
 pub use crate::imagediff::{diff, DiffError, DiffReport, DiffSettings, Region};

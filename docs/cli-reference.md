@@ -69,6 +69,11 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
                  own width, so --left/--center/--right still use it)
     --height N   With --image, render this many rows instead of the
                  backend's default
+    --image-fit M With --image and --height: contain (letterbox) or cover
+                 (centre-crop); preserves aspect ratio in terminal cells
+    --image-background #RRGGBB
+                 With --image: flatten transparency onto this RGB colour
+                 (also colours contain padding; quote the # in your shell)
     --image-mode M
                  With --diff/--image, how to draw the picture: auto
                  (default), sixel (real pixels), blocks, braille, ascii, none
@@ -107,7 +112,7 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
                  Poll interval in seconds (default 1)
     --watch-cache With URLs, render only when the response body changes
     --batch      Convert explicit files, directories, or globs deterministically
-    --jobs N     Bound batch workers (output remains deterministic)
+    --jobs N     Reserved worker limit; execution is currently serial
     --continue-on-error
                  Process all planned inputs and aggregate failures
     --overwrite  Allow existing batch export destinations

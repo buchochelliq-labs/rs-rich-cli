@@ -16,13 +16,13 @@ color, and beautiful formatting in the terminal.
 Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
 (see [`UPSTREAM.toml`](UPSTREAM.toml)).
 
-![Rich-art: the same bouncing ball rendered as half-blocks and ASCII](docs/assets/demos/rich-art-comparison.gif)
+![Rich-art: the same image rendered as half-blocks, Braille and ASCII](docs/assets/demos/release-image-modes.gif)
 
 **[Watch the rich-art videos](https://buchochelliq-labs.github.io/rs-rich-cli/demos/)** ·
 [Output gallery](docs/gallery.md) · [CLI guide](docs/cli.md)
 
-This preview replays our archived terminal output from the GIF renderer.
-[Capture details and reproduction](docs/demos.md#how-these-videos-were-made).
+This preview replays fresh terminal output from the current CLI image command.
+[Capture details and reproduction](docs/demos.md#fresh-cli-demos).
 
 ## Install and try
 

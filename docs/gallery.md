@@ -15,10 +15,9 @@ rendering changes. Progress and spinner GIFs replay the exported SVG frames.
 
 ## Rich-art in motion
 
-![Half-block and ASCII renderings of the same GIF](assets/demos/rich-art-comparison.gif)
+![Half-block, Braille and ASCII renderings of the same image](assets/demos/release-image-modes.gif)
 
-[Watch or download the videos](demos.md), including individual half-block and
-ASCII clips. These replay archived CLI recordings; capture details are on that page.
+[Watch or download the videos](demos.md), including fresh image, fit/crop, watch and batch clips. Capture details are on that page.
 
 ## Markup
 

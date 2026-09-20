@@ -1,5 +1,56 @@
 # Rich-art videos
 
+## Fresh CLI demos
+
+These clips were captured from the built `rich (rs-rich-cli) 0.0.7` binary (`target/debug/rich`, default features).
+They replay its actual PTY output; captions are added, still results are held
+for two seconds, and watch output retains event timing sampled at 10 fps.
+There is no audio.
+
+
+### Image render modes
+
+The same bundled cat image rendered as half-blocks, Braille and ASCII.
+
+<video controls playsinline preload="none" poster="../assets/demos/release-image-modes.png" style="width:100%;max-width:1100px" aria-label="Image render modes">
+  <source src="../assets/demos/release-image-modes.mp4" type="video/mp4">
+  Your browser cannot play this video. Use the download below.
+</video>
+
+[Download MP4](assets/demos/release-image-modes.mp4)
+
+### Fit, crop and transparency
+
+Contain, cover, then a translucent input composited over a purple background.
+
+<video controls playsinline preload="none" poster="../assets/demos/release-image-fit.png" style="width:100%;max-width:1100px" aria-label="Fit, crop and transparency">
+  <source src="../assets/demos/release-image-fit.mp4" type="video/mp4">
+  Your browser cannot play this video. Use the download below.
+</video>
+
+[Download MP4](assets/demos/release-image-fit.mp4)
+
+### Watch and batch workflows
+
+A file changes, becomes invalid and recovers; batch then exports two HTML files.
+
+<video controls playsinline preload="none" poster="../assets/demos/release-workflows.png" style="width:100%;max-width:1100px" aria-label="Watch and batch workflows">
+  <source src="../assets/demos/release-workflows.mp4" type="video/mp4">
+  Your browser cannot play this video. Use the download below.
+</video>
+
+[Download MP4](assets/demos/release-workflows.mp4)
+
+[Commands and source/binary hashes](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/release-finish)
+are committed with raw ANSI/asciinema recordings and the exported HTML files.
+The alpha fixture is generated deterministically by the capture script.
+Run `cargo build -p rs-rich-cli`, install the media requirements below, then
+`python scripts/capture_release_demos.py` to capture and encode again.
+The capture needs a POSIX PTY, FFmpeg and the DejaVu fonts.
+See [workflow recipes](recipes.md) and [image fitting options](cli.md#fit-crop-and-transparent-backgrounds).
+
+## Archived GIF playback
+
 The same bouncing-ball GIF rendered with truecolor half-blocks and colored ASCII.
 These clips replay real output from our archived CLI recordings. They have no audio.
 

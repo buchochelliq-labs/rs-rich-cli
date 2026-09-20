@@ -10,10 +10,9 @@
 //! [`ImageArt`] is that picker, lifted out so it can be reused: it owns the
 //! decoded image once, wraps [`ImageOptions`] (mode, width, height, colour),
 //! and dispatches to whichever backend the resolved [`ImageMode`] names.
-//! Sizing and colour/alpha behaviour are never reimplemented here — they are
-//! delegated entirely to the backing renderer, so this module's only job is
-//! choosing *which* renderer runs and reporting when that choice cannot be
-//! honoured.
+//! By default sizing and alpha handling are delegated to the backing renderer.
+//! Optional fitting and background compositing preprocess the image consistently
+//! across backends before dispatch.
 //!
 //! `Sixel` is only available when this crate's `sixel` feature is enabled.
 //! Selecting it explicitly without that feature — or when a terminal can't
@@ -22,10 +21,12 @@
 //! for callers (such as a CLI) that want to know why and say so. The
 //! [`Renderable`] impl, which cannot fail, falls back to ASCII in that case
 //! since ASCII has no requirements beyond this module's own `image` feature.
+//! Invalid fit dimensions produce no segments through this infallible trait;
+//! use [`ImageArt::render`] to receive the validation error.
 
 use std::sync::Arc;
 
-use image::DynamicImage;
+use image::{imageops::FilterType, DynamicImage, GenericImageView, Rgb, RgbImage};
 
 use rich::console::{Console, ConsoleOptions};
 use rich::protocol::Renderable;
@@ -52,6 +53,15 @@ pub enum ImageMode {
     /// Real pixels via the Sixel graphics protocol. Requires this crate's
     /// `sixel` feature.
     Sixel,
+}
+
+/// How an image fills an explicit rectangle of terminal cells.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ImageFit {
+    /// Preserve the entire image, centering it with background padding.
+    Contain,
+    /// Fill the rectangle, cropping equally from opposite edges.
+    Cover,
 }
 
 /// What the destination can actually do, used only to resolve
@@ -130,6 +140,9 @@ pub enum ImageArtError {
     SixelEncodeFailed,
     /// Sixel output requires a real terminal destination.
     NonTerminalDestination,
+    /// Fitting requires positive width and height, a nonempty image and
+    /// destination, and raster canvases no larger than 16 megapixels.
+    InvalidFitDimensions,
 }
 
 impl std::fmt::Display for ImageArtError {
@@ -142,6 +155,9 @@ impl std::fmt::Display for ImageArtError {
             ),
             Self::SixelEncodeFailed => {
                 write!(f, "could not encode this image as Sixel graphics")
+            }
+            Self::InvalidFitDimensions => {
+                write!(f, "image fit requires positive width and height, a nonempty image and destination, and at most 16 megapixels")
             }
             Self::NonTerminalDestination => {
                 write!(f, "Sixel graphics require a terminal destination; use ASCII, Braille, or blocks when redirecting output")
@@ -169,6 +185,8 @@ impl std::error::Error for ImageArtError {}
 pub struct ImageArt {
     image: Arc<DynamicImage>,
     options: ImageOptions,
+    fit: Option<ImageFit>,
+    background: Option<[u8; 3]>,
 }
 
 impl ImageArt {
@@ -182,6 +200,8 @@ impl ImageArt {
         ImageArt {
             image,
             options: ImageOptions::default(),
+            fit: None,
+            background: None,
         }
     }
 
@@ -195,7 +215,7 @@ impl ImageArt {
         Ok(ImageArt::new(image::open(path)?))
     }
 
-    /// Replace every option at once.
+    /// Replace backend options, leaving fit and background settings unchanged.
     pub fn options(mut self, options: ImageOptions) -> Self {
         self.options = options;
         self
@@ -217,6 +237,25 @@ impl ImageArt {
     /// Render this many rows instead of the backend's default.
     pub fn height(mut self, height: usize) -> Self {
         self.options.height = Some(height);
+        self
+    }
+
+    /// Fit into an explicit width and height, assuming cells are twice as
+    /// tall as they are wide. Width is clamped to the console's available
+    /// width. Invalid dimensions are reported by [`Self::render`]. The
+    /// output and cover intermediate rasters are limited to 16 megapixels
+    /// each (Sixel: 8×16 per cell). Extreme aspect ratios may exceed this limit
+    /// even when the final rectangle fits.
+    pub fn fit(mut self, fit: ImageFit) -> Self {
+        self.fit = Some(fit);
+        self
+    }
+
+    /// Composite transparency over this RGB colour before resizing. Also
+    /// colours contain padding; fitting without a background uses black.
+    /// Without fitting or a background, backend alpha handling is unchanged.
+    pub fn background(mut self, background: [u8; 3]) -> Self {
+        self.background = Some(background);
         self
     }
 
@@ -263,6 +302,109 @@ impl ImageArt {
         self.render_as(mode, console, options)
     }
 
+    fn prepare_image(
+        &self,
+        mode: ImageMode,
+        available: usize,
+    ) -> Result<Arc<DynamicImage>, ImageArtError> {
+        if self.fit.is_none() && self.background.is_none() {
+            return Ok(Arc::clone(&self.image));
+        }
+        let target = if self.fit.is_some() {
+            let columns = self
+                .options
+                .width
+                .ok_or(ImageArtError::InvalidFitDimensions)?
+                .min(available);
+            let rows = self
+                .options
+                .height
+                .ok_or(ImageArtError::InvalidFitDimensions)?;
+            let (sx, sy) = match mode {
+                ImageMode::Braille => (2, 4),
+                ImageMode::Sixel => (8, 16),
+                _ => (1, 2),
+            };
+            let width = columns.checked_mul(sx).and_then(|v| u32::try_from(v).ok());
+            let height = rows.checked_mul(sy).and_then(|v| u32::try_from(v).ok());
+            match (width, height) {
+                (Some(w), Some(h))
+                    if w > 0
+                        && h > 0
+                        && u64::from(w) * u64::from(h) <= 16 * 1024 * 1024
+                        && self.image.width() > 0
+                        && self.image.height() > 0 =>
+                {
+                    Some((w, h))
+                }
+                _ => return Err(ImageArtError::InvalidFitDimensions),
+            }
+        } else {
+            None
+        };
+        let background = self.background.unwrap_or([0, 0, 0]);
+        let mut flattened = RgbImage::new(self.image.width(), self.image.height());
+        for (x, y, pixel) in flattened.enumerate_pixels_mut() {
+            let rgba = self.image.get_pixel(x, y).0;
+            let alpha = u32::from(rgba[3]);
+            for channel in 0..3 {
+                pixel.0[channel] = ((u32::from(rgba[channel]) * alpha
+                    + u32::from(background[channel]) * (255 - alpha)
+                    + 127)
+                    / 255) as u8;
+            }
+        }
+        let source = DynamicImage::ImageRgb8(flattened);
+        let Some((width, height)) = target else {
+            return Ok(Arc::new(source));
+        };
+        let result = match self.fit.expect("target is present only with fit") {
+            ImageFit::Contain => {
+                let fitted = source.resize(width, height, FilterType::Triangle).to_rgb8();
+                let mut canvas = RgbImage::from_pixel(width, height, Rgb(background));
+                image::imageops::replace(
+                    &mut canvas,
+                    &fitted,
+                    i64::from((width - fitted.width()) / 2),
+                    i64::from((height - fitted.height()) / 2),
+                );
+                DynamicImage::ImageRgb8(canvas)
+            }
+            ImageFit::Cover => {
+                // Resize proportionally before cropping: integer source crops
+                // would discard subpixel detail and distort very small images.
+                let (sw, sh) = source.dimensions();
+                let (rw, rh) =
+                    if u64::from(sw) * u64::from(height) > u64::from(sh) * u64::from(width) {
+                        (
+                            (u64::from(sw) * u64::from(height)).div_ceil(u64::from(sh)),
+                            u64::from(height),
+                        )
+                    } else {
+                        (
+                            u64::from(width),
+                            (u64::from(sh) * u64::from(width)).div_ceil(u64::from(sw)),
+                        )
+                    };
+                if !rw
+                    .checked_mul(rh)
+                    .is_some_and(|pixels| pixels <= 16 * 1024 * 1024)
+                {
+                    return Err(ImageArtError::InvalidFitDimensions);
+                }
+                // The positive pixel-count bound also guarantees u32 dimensions.
+                let (rw, rh) = (rw as u32, rh as u32);
+                source.resize_exact(rw, rh, FilterType::Triangle).crop_imm(
+                    (rw - width) / 2,
+                    (rh - height) / 2,
+                    width,
+                    height,
+                )
+            }
+        };
+        Ok(Arc::new(result))
+    }
+
     /// Render with an explicit, already-resolved mode (no `Auto` handling).
     fn render_as(
         &self,
@@ -270,7 +412,13 @@ impl ImageArt {
         console: &Console,
         options: &ConsoleOptions,
     ) -> Result<Vec<Segment>, ImageArtError> {
+        let image = self.prepare_image(mode, options.max_width)?;
         let width = self.options.width.unwrap_or(options.max_width);
+        let width = if self.fit.is_some() {
+            width.min(options.max_width)
+        } else {
+            width
+        };
         match mode {
             ImageMode::Auto => {
                 // `render` always resolves Auto before dispatching here, but
@@ -282,7 +430,7 @@ impl ImageArt {
                 )
             }
             ImageMode::Ascii => {
-                let mut art = AsciiArt::from_shared(Arc::clone(&self.image))
+                let mut art = AsciiArt::from_shared(Arc::clone(&image))
                     .width(width)
                     .color(self.options.color);
                 if let Some(height) = self.options.height {
@@ -291,26 +439,27 @@ impl ImageArt {
                 Ok(art.rich_render(console, options))
             }
             ImageMode::Blocks => {
-                let mut art = BlockArt::from_shared(Arc::clone(&self.image)).width(width);
+                let mut art = BlockArt::from_shared(Arc::clone(&image)).width(width);
                 if let Some(height) = self.options.height {
                     art = art.height(height);
                 }
                 Ok(art.rich_render(console, options))
             }
             ImageMode::Braille => {
-                let mut art = BrailleArt::from_shared(Arc::clone(&self.image)).width(width);
+                let mut art = BrailleArt::from_shared(Arc::clone(&image)).width(width);
                 if let Some(height) = self.options.height {
                     art = art.height(height);
                 }
                 Ok(art.rich_render(console, options))
             }
-            ImageMode::Sixel => self.render_sixel(width, console, options),
+            ImageMode::Sixel => self.render_sixel(image, width, console, options),
         }
     }
 
     #[cfg(feature = "sixel")]
     fn render_sixel(
         &self,
+        image: Arc<DynamicImage>,
         width: usize,
         console: &Console,
         options: &ConsoleOptions,
@@ -320,7 +469,7 @@ impl ImageArt {
         if !console.is_terminal() {
             return Err(ImageArtError::NonTerminalDestination);
         }
-        let mut art = SixelArt::new((*self.image).clone()).width(width);
+        let mut art = SixelArt::new((*image).clone()).width(width);
         if let Some(height) = self.options.height {
             art = art.height(height);
         }
@@ -333,6 +482,7 @@ impl ImageArt {
     #[cfg(not(feature = "sixel"))]
     fn render_sixel(
         &self,
+        _image: Arc<DynamicImage>,
         _width: usize,
         _console: &Console,
         _options: &ConsoleOptions,
@@ -352,7 +502,7 @@ impl Renderable for ImageArt {
             // *why* Sixel (or another explicit mode) was unavailable should
             // call `render` directly instead of going through this trait.
             self.render_as(ImageMode::Ascii, console, options)
-                .expect("ASCII rendering never fails")
+                .unwrap_or_default()
         })
     }
 }
@@ -378,6 +528,196 @@ mod tests {
             .width(8)
             .no_color(!color)
             .build()
+    }
+
+    #[test]
+    fn contain_letterboxes_and_cover_crops_the_center() {
+        let mut source = RgbImage::from_pixel(8, 4, Rgb([255, 0, 0]));
+        for y in 0..4 {
+            for x in 2..6 {
+                source.put_pixel(x, y, Rgb([0, 255, 0]));
+            }
+        }
+        let contain = ImageArt::new(DynamicImage::ImageRgb8(source.clone()))
+            .width(4)
+            .height(2)
+            .fit(ImageFit::Contain);
+        let pixels = contain
+            .prepare_image(ImageMode::Blocks, 8)
+            .unwrap()
+            .to_rgb8();
+        assert_eq!(pixels.dimensions(), (4, 4));
+        assert_eq!(pixels.get_pixel(0, 0).0, [0, 0, 0]);
+        assert_eq!(pixels.get_pixel(0, 3).0, [0, 0, 0]);
+        assert!(pixels.get_pixel(0, 1).0[0] > 200);
+        assert!(pixels.get_pixel(2, 1).0[1] > 200);
+        let cover = ImageArt::new(DynamicImage::ImageRgb8(source))
+            .width(4)
+            .height(2)
+            .fit(ImageFit::Cover);
+        let pixels = cover.prepare_image(ImageMode::Blocks, 8).unwrap().to_rgb8();
+        assert_eq!(pixels.dimensions(), (4, 4));
+        assert!(pixels.pixels().all(|p| p.0 == [0, 255, 0]));
+    }
+
+    #[test]
+    fn cover_preserves_subpixel_detail_in_small_sources() {
+        let mut source = RgbImage::from_pixel(2, 2, Rgb([255, 0, 0]));
+        for x in 0..2 {
+            source.put_pixel(x, 1, Rgb([0, 0, 255]));
+        }
+        let art = ImageArt::new(DynamicImage::ImageRgb8(source))
+            .width(3)
+            .height(1)
+            .fit(ImageFit::Cover);
+        let pixels = art.prepare_image(ImageMode::Blocks, 8).unwrap().to_rgb8();
+        assert_eq!(pixels.dimensions(), (3, 2));
+        // Proportional upscaling retains both source rows in the centre sample;
+        // cropping to an integer source row first loses blue altogether.
+        let middle = pixels.get_pixel(1, 1).0;
+        assert!(middle[0] > 100 && middle[2] > 100, "{middle:?}");
+    }
+
+    #[test]
+    fn cover_rejects_an_oversized_intermediate_before_allocating() {
+        let art = ImageArt::new(solid(1, 32, [0, 0, 0]))
+            .width(10_000)
+            .height(1)
+            .fit(ImageFit::Cover);
+        assert!(matches!(
+            art.prepare_image(ImageMode::Blocks, 10_000),
+            Err(ImageArtError::InvalidFitDimensions)
+        ));
+    }
+
+    #[test]
+    fn background_blends_alpha_before_resizing() {
+        let mut source = image::RgbaImage::new(3, 1);
+        source.put_pixel(0, 0, image::Rgba([200, 100, 0, 128]));
+        source.put_pixel(1, 0, image::Rgba([255, 0, 255, 0]));
+        source.put_pixel(2, 0, image::Rgba([1, 2, 3, 255]));
+        let art = ImageArt::new(DynamicImage::ImageRgba8(source)).background([20, 40, 60]);
+        let pixels = art.prepare_image(ImageMode::Blocks, 8).unwrap().to_rgb8();
+        assert_eq!(pixels.get_pixel(0, 0).0, [110, 70, 30]);
+        assert_eq!(pixels.get_pixel(1, 0).0, [20, 40, 60]);
+        assert_eq!(pixels.get_pixel(2, 0).0, [1, 2, 3]);
+        let source = image::RgbaImage::from_pixel(8, 8, image::Rgba([255, 0, 255, 0]));
+        let art = ImageArt::new(DynamicImage::ImageRgba8(source))
+            .background([20, 40, 60])
+            .fit(ImageFit::Contain)
+            .width(4)
+            .height(1);
+        assert!(art
+            .prepare_image(ImageMode::Blocks, 8)
+            .unwrap()
+            .to_rgb8()
+            .pixels()
+            .all(|p| p.0 == [20, 40, 60]));
+    }
+
+    #[test]
+    fn fitted_text_modes_fill_the_bounded_cell_grid() {
+        let console = console(false);
+        for mode in [ImageMode::Ascii, ImageMode::Blocks, ImageMode::Braille] {
+            for fit in [ImageFit::Contain, ImageFit::Cover] {
+                let art = ImageArt::new(solid(10, 30, [255, 255, 255]))
+                    .mode(mode)
+                    .width(20)
+                    .height(3)
+                    .fit(fit);
+                let segments = art.render(&console, &console.options()).unwrap();
+                let text: String = segments.iter().map(|s| s.text.as_str()).collect();
+                assert_eq!(text.lines().count(), 3, "{mode:?} {fit:?}");
+                assert!(
+                    text.lines().all(|line| line.chars().count() == 8),
+                    "{mode:?} {fit:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_fit_dimensions_return_an_error_without_panicking_in_renderable() {
+        let console = console(false);
+        for (width, height) in [
+            (None, Some(2)),
+            (Some(2), None),
+            (Some(0), Some(2)),
+            (Some(2), Some(0)),
+            (Some(2), Some(usize::MAX)),
+            (Some(2), Some(9_000_000)),
+        ] {
+            let art = ImageArt::new(solid(4, 4, [0, 0, 0]))
+                .options(ImageOptions {
+                    width,
+                    height,
+                    ..ImageOptions::default()
+                })
+                .fit(ImageFit::Contain);
+            assert_eq!(
+                art.render(&console, &console.options()),
+                Err(ImageArtError::InvalidFitDimensions)
+            );
+            assert!(art.rich_render(&console, &console.options()).is_empty());
+        }
+    }
+
+    #[test]
+    fn fit_rejects_empty_source_or_destination() {
+        let art = ImageArt::new(solid(4, 4, [0, 0, 0]))
+            .width(4)
+            .height(2)
+            .fit(ImageFit::Contain);
+        assert!(matches!(
+            art.prepare_image(ImageMode::Blocks, 0),
+            Err(ImageArtError::InvalidFitDimensions)
+        ));
+        let art = ImageArt::new(solid(0, 0, [0, 0, 0]))
+            .width(4)
+            .height(2)
+            .fit(ImageFit::Cover);
+        assert!(matches!(
+            art.prepare_image(ImageMode::Blocks, 8),
+            Err(ImageArtError::InvalidFitDimensions)
+        ));
+    }
+
+    #[test]
+    fn background_reaches_the_rendered_cells() {
+        let console = console(true);
+        let source = image::RgbaImage::from_pixel(4, 4, image::Rgba([255, 0, 255, 0]));
+        let art = ImageArt::new(DynamicImage::ImageRgba8(source))
+            .background([20, 40, 60])
+            .mode(ImageMode::Blocks)
+            .width(2);
+        let out = console.render_to_string(&art);
+        assert!(out.contains("38;2;20;40;60") && out.contains("48;2;20;40;60"));
+    }
+
+    #[cfg(feature = "sixel")]
+    #[test]
+    fn fitted_sixel_uses_pixel_geometry_for_the_bounded_rectangle() {
+        let art = ImageArt::new(solid(16, 16, [255, 255, 255]))
+            .mode(ImageMode::Sixel)
+            .width(4)
+            .height(2)
+            .fit(ImageFit::Contain);
+        let pixels = art.prepare_image(ImageMode::Sixel, 8).unwrap();
+        assert_eq!(pixels.dimensions(), (32, 32));
+        let console = console(true);
+        let segments = art.render(&console, &console.options()).unwrap();
+        let text: String = segments.iter().map(|s| s.text.as_str()).collect();
+        assert!(
+            text.contains(";32;32"),
+            "expected Sixel raster dimensions, got {text:?}"
+        );
+    }
+
+    #[test]
+    fn default_preprocessing_preserves_the_original_shared_image() {
+        let art = ImageArt::new(solid(4, 4, [5, 10, 20]));
+        let prepared = art.prepare_image(ImageMode::Blocks, 8).unwrap();
+        assert!(Arc::ptr_eq(&prepared, &art.image));
     }
 
     #[test]
