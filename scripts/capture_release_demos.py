@@ -2,7 +2,7 @@
 """Capture the built CLI in a real PTY, then encode those bytes as docs media.
 
 Linux (DejaVu font paths); requires requirements-docs-media.txt and FFmpeg. Run after
-cargo build -p rs-rich-cli. Captures contain actual stdout/stderr; presentation
+cargo build --release -p rs-rich-cli --locked. Captures contain actual stdout/stderr; presentation
 adds a command caption and holds completed still output for two seconds.
 """
 import argparse
@@ -137,7 +137,7 @@ def encode(frames, name):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--binary',type=Path,default=ROOT/'target/debug/rich')
+    parser.add_argument('--binary',type=Path,default=ROOT/'target/release/rich')
     args=parser.parse_args()
     binary=args.binary.resolve()
     OUT.mkdir(parents=True,exist_ok=True);EVIDENCE.mkdir(parents=True,exist_ok=True)
@@ -194,6 +194,7 @@ def main():
         if 'target' in f.parts:continue
         source.update(str(f.relative_to(ROOT)).encode()+b'\0'+f.read_bytes())
     manifest={'version':subprocess.check_output([str(binary),'--no-config','--version'],text=True).strip(),
+              'binary_path':str(binary.relative_to(ROOT)) if binary.is_relative_to(ROOT) else str(binary),
               'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'source_sha256':source.hexdigest(),
               'terminal':{'width':WIDTH,'height':HEIGHT,'TERM':'xterm-256color','COLORTERM':'truecolor','RICH_SIXEL':'0'},
               'presentation':'Still captures held 2 seconds; watch sampled at 10fps, original event times. Captions added. No audio.',

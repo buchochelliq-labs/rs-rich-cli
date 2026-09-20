@@ -20,7 +20,7 @@ colour, tables, markdown and progress bars in the terminal — plus a port of th
 **[Watch the rich-art videos](demos.md)** · [Browse the gallery](gallery.md) ·
 [Start with the CLI](cli.md) · [Learn the library](tutorial/index.md)
 
-The preview replays fresh CLI output from the current 0.0.7 debug build. See the [capture details](demos.md#fresh-cli-demos)
+The preview replays fresh CLI output from the current 0.0.7 optimized release build. See the [capture details](demos.md#fresh-cli-demos)
 for its version, timing and reproduction commands.
 
 ```bash
