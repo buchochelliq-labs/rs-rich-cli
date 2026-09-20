@@ -104,6 +104,15 @@ CLI routing with width, height and explicit mode selection. Existing GIF and
 diff report envelopes remain unchanged; unsupported graphics modes downgrade
 only where documented or return an actionable error.
 
+## 0.0.7 — batch and configuration
+
+The CLI now plans explicit files, directories, and globs deterministically,
+reuses the existing render/export pipeline per item, refuses silent overwrites,
+and reports aggregate machine-readable status. TOML profiles are discovered
+from platform roots (or selected explicitly), with command-line values taking
+precedence. Work is serialized by default to keep memory bounded; `--jobs` is a
+validated concurrency bound reserved for future parallel workers.
+
 ---
 
 ## 0.0.2 planning record

@@ -1876,6 +1876,214 @@ fn piped_block_gif_matches_the_existing_ascii_path() {
     }
 }
 
+/// A throwaway directory unique to one test, removed by the caller.
+fn scratch(tag: &str) -> std::path::PathBuf {
+    let root = std::env::temp_dir().join(format!("rich-cli-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).expect("create scratch dir");
+    root
+}
+
+#[test]
+fn batch_json_report_is_a_single_envelope_that_keeps_child_exit_classes() {
+    let root = scratch("batch-json");
+    // Valid first, invalid second, so ordering cannot hide the failure.
+    std::fs::write(root.join("a.json"), "{\"ok\": true}").unwrap();
+    std::fs::write(root.join("b.json"), "{not json").unwrap();
+    let dir = root.to_string_lossy().into_owned();
+
+    let (_out, err, status) = run_status(
+        &[
+            "--no-config",
+            "--batch",
+            "--json",
+            "--continue-on-error",
+            "--report",
+            "json",
+            &dir,
+        ],
+        "",
+    );
+    // Exactly one line: a child printing its own `rich: ...` diagnostic would
+    // put unparseable text in front of the aggregate object.
+    let report = parse_json_report(&err);
+    assert_eq!(report["ok"], false);
+    // Invalid JSON is a data error (4), not a generic input failure (3).
+    assert_eq!(report["code"], "data");
+    assert_eq!(report["exit_code"], 4);
+    assert_eq!(status.code(), Some(4));
+    let result = &report["result"];
+    assert_eq!(result["planned"], 2);
+    assert_eq!(result["attempted"], 2);
+    assert_eq!(result["completed"], 1);
+    assert_eq!(result["failed"], 1);
+    assert_eq!(result["skipped"], 0);
+    let failures = result["failures"].as_array().unwrap();
+    assert_eq!(failures.len(), 1);
+    assert!(failures[0]["resource"]
+        .as_str()
+        .unwrap()
+        .ends_with("b.json"));
+    assert_eq!(failures[0]["code"], "data");
+    assert_eq!(failures[0]["exit_code"], 4);
+    assert!(failures[0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("invalid JSON"));
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn batch_fails_fast_by_default_and_counts_unattempted_items_as_skipped() {
+    let root = scratch("batch-failfast");
+    std::fs::write(root.join("a.json"), "{oops").unwrap();
+    std::fs::write(root.join("b.json"), "{\"ok\": true}").unwrap();
+    let dir = root.to_string_lossy().into_owned();
+
+    let (_out, err, status) = run_status(
+        &["--no-config", "--batch", "--json", "--report", "json", &dir],
+        "",
+    );
+    let report = parse_json_report(&err);
+    assert_eq!(status.code(), Some(4));
+    let result = &report["result"];
+    assert_eq!(result["planned"], 2);
+    assert_eq!(result["attempted"], 1);
+    // The second item was never tried, so it is skipped — not completed.
+    assert_eq!(result["completed"], 0);
+    assert_eq!(result["skipped"], 1);
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn batch_refuses_to_silently_overwrite_and_honours_the_collision_policy() {
+    let root = scratch("batch-collide");
+    std::fs::write(root.join("a.md"), "# a").unwrap();
+    std::fs::write(root.join("b.md"), "# b").unwrap();
+    let dir = root.to_string_lossy().into_owned();
+    let existing = root.join("a.html");
+    std::fs::write(&existing, "existing").unwrap();
+    let out_html = root.join("out.html").to_string_lossy().into_owned();
+
+    let (_out, err, status) = run_status(
+        &[
+            "--no-config",
+            "--batch",
+            "--markdown",
+            "--report",
+            "json",
+            "-o",
+            &out_html,
+            &dir,
+        ],
+        "",
+    );
+    let report = parse_json_report(&err);
+    assert_eq!(status.code(), Some(3));
+    assert_eq!(report["code"], "input");
+    assert!(report["message"].as_str().unwrap().contains("--overwrite"));
+    assert_eq!(std::fs::read_to_string(&existing).unwrap(), "existing");
+
+    // `suffix` steps past the existing file instead of clobbering it.
+    let (_out, _err, status) = run_status(
+        &[
+            "--no-config",
+            "--batch",
+            "--markdown",
+            "--collision",
+            "suffix",
+            "-o",
+            &out_html,
+            &dir,
+        ],
+        "",
+    );
+    assert!(status.success());
+    assert_eq!(std::fs::read_to_string(&existing).unwrap(), "existing");
+    assert!(root.join("a-2.html").exists(), "suffixed output missing");
+    assert!(root.join("b.html").exists());
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn batch_export_path_need_not_end_in_a_known_extension() {
+    let root = scratch("batch-ext");
+    std::fs::write(root.join("only.md"), "# a").unwrap();
+    let dir = root.to_string_lossy().into_owned();
+    let out = root.join("result.out").to_string_lossy().into_owned();
+
+    // A single item keeps the exact path it was given; the export kind comes
+    // from the flag, not from sniffing the extension.
+    let (_out, _err, status) = run_status(
+        &["--no-config", "--batch", "--markdown", "-o", &out, &dir],
+        "",
+    );
+    assert!(status.success());
+    let written = std::fs::read_to_string(&out).unwrap();
+    assert!(
+        written.contains("<html"),
+        "expected HTML export: {written:.80?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn batch_rejects_pairwise_and_paged_modes() {
+    for (args, needle) in [
+        (
+            vec!["--batch", "--diff", "a.png", "b.png"],
+            "--batch cannot be combined with --diff",
+        ),
+        (
+            vec!["--batch", "--pager", "a.md"],
+            "--pager cannot be combined with --batch",
+        ),
+    ] {
+        let mut full = vec!["--no-config"];
+        full.extend(args);
+        let (out, err, status) = run_status(&full, "");
+        assert_eq!(status.code(), Some(2), "stderr: {err}");
+        assert!(out.is_empty());
+        assert!(err.contains(needle), "stderr: {err}");
+    }
+}
+
+#[test]
+fn config_values_and_subcommands_survive_the_config_layer() {
+    let root = scratch("config-precedence");
+    std::fs::write(root.join("doc.json"), "{\"ok\": true}").unwrap();
+    let config = root.join("rich.toml");
+    // The `#` is part of the value, and `mode` must not beat a subcommand.
+    std::fs::write(
+        &config,
+        "[defaults]\nmode = \"markdown\"\nwidth = 40 # comment\n",
+    )
+    .unwrap();
+    let config_path = config.to_string_lossy().into_owned();
+    let doc = root.join("doc.json").to_string_lossy().into_owned();
+
+    let (out, _err, status) = run_status(&["--config", &config_path, "json", &doc], "");
+    assert!(status.success());
+    // Rendered as JSON (a markdown render of this file would not show the key).
+    assert!(out.contains("ok"), "out: {out:?}");
+
+    // `--no-config` ignores the file entirely, so the width default is gone.
+    let (_out, _err, status) = run_status(&["--no-config", "json", &doc], "");
+    assert!(status.success());
+
+    // A missing explicit config is an error naming its source.
+    let missing = root.join("nope.toml").to_string_lossy().into_owned();
+    let (_out, err, status) = run_status(&["--config", &missing, "json", &doc], "");
+    assert_eq!(status.code(), Some(2), "stderr: {err}");
+    assert!(err.contains("nope.toml"), "stderr: {err}");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 // --- `--image`: still-image rendering via rich-art's ImageArt facade -------
 
 /// The image fixture used by `--image` tests (the same one `--diff` compares).

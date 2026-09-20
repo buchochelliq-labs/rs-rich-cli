@@ -35,6 +35,12 @@ Entries below record subsequent releases and development.
 
 ### Added
 
+- **`rs-rich-cli` 0.0.7 workstream:** deterministic `--batch` conversion for
+  files, directories, and globs with bounded execution, explicit collision and
+  overwrite policy, fail-fast/continue-on-error modes, and aggregate JSON
+  status reports. Added versioned TOML config profiles with platform discovery,
+  explicit `--config`/`--profile`/`--no-config`, and CLI-over-config precedence.
+
 - **`rs-rich-cli`:** added task-oriented subcommands (`rich json`,
   `rich markdown`, `rich syntax`, `rich csv`, `rich ipynb`, `rich jsonl`,
   `rich log`, `rich gif`, `rich diff`, `rich rule`) while preserving existing
