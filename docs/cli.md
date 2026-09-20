@@ -62,10 +62,11 @@ rich json data.json
 rich csv data.csv
 rich ipynb notebook.ipynb
 rich diff before.png after.png --threshold 2
+rich image photo.png --width 60
 ```
 
 The subcommands route through the same renderers as `--markdown`, `--json`,
-`--csv`, `--ipynb` and `--diff`. Common options such as `--width`,
+`--csv`, `--ipynb`, `--diff` and `--image`. Common options such as `--width`,
 `--no-color`, `--sanitize`, `--panel`, `--padding`, exports and alignment keep
 their existing behavior where the mode supports them.
 
@@ -206,6 +207,21 @@ rich --diff before.png after.png --threshold 2
 Reports the regions that changed, and exits `5` when more than `2%` of the image
 differs — which makes it usable as a CI gate. See
 [Comparing images](image-diff.md) for the modes and how the comparison works.
+
+## Render a still image
+
+```bash
+rich --image photo.png --width 60
+rich image photo.png --image-mode blocks --height 20
+```
+
+Renders a single picture instead of a comparison: `--diff` needs exactly two
+images, `--image` needs exactly one. It shares the same `--image-mode`
+(auto/sixel/blocks/braille/ascii) and capability auto-detection as `--diff`, plus a new
+`--height N` to bound the rendered rows independently of `--width`. `none` is
+rejected for `--image`, because it means "draw nothing" and there is no
+comparison report to fall back on. See
+[Comparing images](image-diff.md) for how the renderer picks a mode.
 
 ## Use it in a script or CI
 

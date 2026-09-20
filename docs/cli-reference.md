@@ -38,6 +38,7 @@ jsonl       Stream JSON Lines / NDJSON records
 log         Stream common structured-log JSONL records
 gif         Animate GIFs (`--gif`)
 diff        Perceptually compare two images (`--diff`)
+image       Render a still image as ASCII/Braille/blocks/Sixel (`--image`)
 rule        Draw a horizontal rule (`--rule`)
 ```
 
@@ -58,6 +59,7 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
     --loop N     With --gif, repeat N times (default 1; 0 = forever)
     --rule       Draw a horizontal rule (RESOURCE is its title)
     --diff       Perceptually compare two images (needs exactly two)
+    --image      Render RESOURCE as a still image (ASCII/Braille/blocks/Sixel)
 ```
 
 ## Options
@@ -65,9 +67,12 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
 ```text
 -w, --width N    Render the output N columns wide (the console keeps its
                  own width, so --left/--center/--right still use it)
+    --height N   With --image, render this many rows instead of the
+                 backend's default
     --image-mode M
-                 With --diff, how to draw the picture: auto (default),
-                 sixel (real pixels), blocks, ascii, none
+                 With --diff/--image, how to draw the picture: auto
+                 (default), sixel (real pixels), blocks, braille, ascii, none
+                 (--image rejects none: there would be nothing to draw)
     --gif-mode M With --gif: ascii (default) or blocks (half-block pixels).
                  Blocks fall back to ASCII without color or when piped.
     --encoding E Explicit text encoding: utf-8, utf-16 (BOM required),

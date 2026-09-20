@@ -2083,3 +2083,278 @@ fn config_values_and_subcommands_survive_the_config_layer() {
 
     let _ = std::fs::remove_dir_all(&root);
 }
+
+// --- `--image`: still-image rendering via rich-art's ImageArt facade -------
+
+/// The image fixture used by `--image` tests (the same one `--diff` compares).
+#[cfg(feature = "art")]
+fn image_fixture() -> String {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("rich-art/tests/fixtures/halo-before.png")
+        .display()
+        .to_string()
+}
+
+/// `--image-mode ascii` draws a character ramp with no colour required, and
+/// takes `--width`/`--height` from the facade rather than reimplementing
+/// sizing here.
+#[cfg(feature = "art")]
+#[test]
+fn image_ascii_mode_renders_a_sized_ascii_picture() {
+    let path = image_fixture();
+    let (out, err, ok) = run_full(
+        &[
+            "--image",
+            &path,
+            "--image-mode",
+            "ascii",
+            "--width",
+            "20",
+            "--height",
+            "8",
+            "--no-color",
+        ],
+        "",
+    );
+    assert!(ok, "stderr: {err}");
+    assert!(!out.contains('\x1b'), "ASCII output must carry no escapes");
+    let lines: Vec<&str> = out.lines().filter(|l| !l.is_empty()).collect();
+    assert_eq!(lines.len(), 8, "--height 8 should yield exactly 8 rows");
+    assert!(
+        lines.iter().all(|l| l.chars().count() == 20),
+        "--width 20 should yield 20 columns per row: {lines:?}"
+    );
+}
+
+/// `--image-mode blocks` draws half-block characters, and the `image`
+/// command alias (rather than the `--image` flag) must reach the same
+/// backend. Piped stdout is never a terminal, so — like every other mode in
+/// this CLI (see `diff_export_respects_nonempty_no_color_...` above) — no
+/// colour escapes reach it either way; what must hold is that the picture
+/// itself renders.
+#[cfg(feature = "art")]
+#[test]
+fn image_blocks_mode_via_the_command_alias_renders_half_blocks() {
+    let path = image_fixture();
+    let (out, err, ok) = run_full(
+        &["image", &path, "--image-mode", "blocks", "--width", "10"],
+        "",
+    );
+    assert!(ok, "stderr: {err}");
+    assert!(!out.contains('\x1b'), "piped stdout must carry no escapes");
+    assert!(
+        out.contains('▀'),
+        "blocks mode should draw half-block glyphs: {out:?}"
+    );
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn image_braille_mode_renders_unicode_cells() {
+    let path = image_fixture();
+    let (out, err, ok) = run_full(
+        &[
+            "--image",
+            &path,
+            "--image-mode",
+            "braille",
+            "--width",
+            "12",
+            "--height",
+            "6",
+            "--no-color",
+        ],
+        "",
+    );
+    assert!(ok, "stderr: {err}");
+    assert!(
+        out.contains('⣿')
+            || out
+                .chars()
+                .any(|character| ('\u{2800}'..='\u{28ff}').contains(&character))
+    );
+}
+
+/// `--no-color` is accepted alongside `--image-mode blocks` (colour is
+/// already absent from piped output; this just confirms the flag combination
+/// is not rejected and the picture still renders).
+#[cfg(feature = "art")]
+#[test]
+fn image_blocks_mode_accepts_no_color() {
+    let path = image_fixture();
+    let (out, err, ok) = run_full(
+        &[
+            "--image",
+            &path,
+            "--image-mode",
+            "blocks",
+            "--width",
+            "10",
+            "--no-color",
+        ],
+        "",
+    );
+    assert!(ok, "stderr: {err}");
+    assert!(out.contains('▀'), "{out:?}");
+}
+
+/// An unknown `--image-mode` value is rejected before any file is touched.
+#[cfg(feature = "art")]
+#[test]
+fn image_rejects_an_unknown_image_mode() {
+    let (out, err, ok) = run_full(&["--image", "missing.png", "--image-mode", "bogus"], "");
+    assert!(!ok && out.is_empty());
+    assert!(err.contains("unknown image mode"), "{err}");
+}
+
+/// `--image-mode none` means "print no picture at all", which `--diff` can
+/// honour (it still has numbers to report) but `--image` cannot — there
+/// would be nothing left to draw. Rejected rather than silently printing
+/// nothing at exit 0.
+#[cfg(feature = "art")]
+#[test]
+fn image_rejects_image_mode_none() {
+    let path = image_fixture();
+    let (out, err, ok) = run_full(&["--image", &path, "--image-mode", "none"], "");
+    assert!(!ok && out.is_empty());
+    assert!(
+        err.contains("--image-mode none") && err.contains("--image"),
+        "{err}"
+    );
+}
+
+/// `--height 0` is as meaningless as `--width 0` and must be refused, not
+/// silently treated as "no rows".
+#[cfg(feature = "art")]
+#[test]
+fn image_rejects_a_zero_height() {
+    let path = image_fixture();
+    let (out, ok) = run(&["--image", &path, "--height", "0"], "");
+    assert!(!ok, "--height 0 should be rejected");
+    assert!(out.is_empty());
+}
+
+/// A non-numeric `--height` is rejected with a message naming the bad value,
+/// matching `--width`'s existing diagnostic.
+#[cfg(feature = "art")]
+#[test]
+fn image_rejects_a_non_numeric_height() {
+    let path = image_fixture();
+    let (_out, err, ok) = run_full(&["--image", &path, "--height", "nope"], "");
+    assert!(!ok);
+    assert!(err.contains("invalid height 'nope'"), "{err}");
+}
+
+/// `--height` and `--image-mode` only have an effect with `--image` (or, for
+/// `--image-mode`, `--diff`); given without either they are refused rather
+/// than silently ignored, matching the existing `--threshold`/`--loop` rule.
+#[cfg(feature = "art")]
+#[test]
+fn image_flags_are_refused_without_image_mode() {
+    for args in [vec!["--height", "5"], vec!["--image-mode", "ascii"]] {
+        let mut full = args.clone();
+        full.push("README.md");
+        let (out, ok) = run(&full, "");
+        assert!(
+            !ok && out.is_empty(),
+            "{args:?} without --image/--diff should be refused, not ignored"
+        );
+    }
+}
+
+/// `--image` with no resource is a clear usage error, not a stdin hang or a
+/// panic — mirroring `--diff`'s exactly-two-resources check.
+#[cfg(feature = "art")]
+#[test]
+fn image_without_a_resource_is_a_clear_error() {
+    let (out, err, ok) = run_full(&["--image"], "");
+    assert!(!ok && out.is_empty());
+    assert!(err.contains("--image requires an image file"), "{err}");
+}
+
+/// A missing file reports a clean, actionable message via the same
+/// `open_image_path` helper `--diff` uses — no renderer-specific duplication.
+#[cfg(feature = "art")]
+#[test]
+fn image_missing_file_is_a_clear_input_error() {
+    let missing = std::env::temp_dir().join(format!("rich-missing-{}.png", std::process::id()));
+    let (out, err, ok) = run_full(&["--image", missing.to_str().unwrap()], "");
+    assert!(!ok && out.is_empty());
+    assert!(err.contains("cannot read"), "{err}");
+}
+
+/// Decoration flags that only make sense around a single rendered value are
+/// refused with `--image`, matching the existing `--diff` behaviour rather
+/// than being silently dropped.
+#[cfg(feature = "art")]
+#[test]
+fn image_decoration_flags_are_refused_rather_than_ignored() {
+    let path = image_fixture();
+    for flag in [
+        vec!["--panel", "rounded"],
+        vec!["--padding", "2"],
+        vec!["--center"],
+    ] {
+        let mut args = vec!["--image", path.as_str()];
+        args.extend(flag.iter().copied());
+        let (_out, ok) = run(&args, "");
+        assert!(
+            !ok,
+            "{flag:?} with --image should be an error, not a silent no-op"
+        );
+    }
+}
+
+/// `--export-html`/`--export-svg` are not implemented for `--image` (unlike
+/// `--diff`), so combining them is a clear error rather than a silently
+/// skipped export.
+#[cfg(feature = "art")]
+#[test]
+fn image_export_flags_are_rejected() {
+    let path = image_fixture();
+    let out_path =
+        std::env::temp_dir().join(format!("rich-image-export-{}.html", std::process::id()));
+    let (out, err, ok) = run_full(
+        &[
+            "--image",
+            &path,
+            "--export-html",
+            out_path.to_str().unwrap(),
+        ],
+        "",
+    );
+    assert!(!ok && out.is_empty());
+    assert!(err.contains("--image"), "{err}");
+    assert!(!out_path.exists());
+}
+
+/// Reading raw image bytes from stdin (`--image -`) works the same way every
+/// other mode's stdin path does.
+#[cfg(feature = "art")]
+#[test]
+fn image_reads_raw_bytes_from_stdin() {
+    let path = image_fixture();
+    let bytes = std::fs::read(&path).unwrap();
+    let mut child = bin()
+        .args([
+            "--image",
+            "-",
+            "--image-mode",
+            "ascii",
+            "--width",
+            "10",
+            "--no-color",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(&bytes).unwrap();
+    let result = child.wait_with_output().unwrap();
+    assert!(result.status.success());
+    let out = String::from_utf8_lossy(&result.stdout);
+    assert!(!out.trim().is_empty());
+}
