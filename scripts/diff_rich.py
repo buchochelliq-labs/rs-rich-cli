@@ -18,12 +18,18 @@ import subprocess
 import sys
 import tomllib
 
+from rich import box
 from rich.console import Console
+from rich.panel import Panel
 from rich.text import Text
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CORPUS = ROOT / "scripts" / "fixtures" / "diff_rich_cases.jsonl"
 COLOR_SYSTEMS = ["truecolor", "256", "standard"]
+CAPABILITY_PROFILES = [
+    {"name": "utf8", "safe_box": False, "ascii_only": False},
+    {"name": "safe-box", "safe_box": True, "ascii_only": False},
+]
 OVERFLOWS = ["fold", "crop", "ellipsis", "ignore"]
 JUSTIFY = ["default", "left", "center", "right", "full"]
 ALPHABET = "abc xyz[]/#:-_é界🙂\t"
@@ -60,15 +66,16 @@ def generated_cases(seed: int, count: int) -> list[dict]:
     rng = random.Random(seed)
     cases = []
     for index in range(count):
-        kind = rng.choice(["markup", "text"])
-        source = "".join(rng.choice(ALPHABET) for _ in range(rng.randint(0, 32)))
+        kind = rng.choice(["markup", "text", "panel"])
+        source = "".join(rng.choice(ALPHABET) for _ in range(rng.randint(1, 32)))
         case = {
             "kind": kind,
             "name": f"generated_{seed}_{index}",
             "source": source,
-            "width": rng.randint(1, 30),
+            "width": rng.randint(4, 40),
             "color_system": rng.choice(COLOR_SYSTEMS),
         }
+        case.update(rng.choice(CAPABILITY_PROFILES))
         if kind == "markup" and rng.random() < 0.35:
             case["source"] = f"[{rng.choice(['red', 'bold blue', '#ff8800'])}]{source}[/]"
         if kind == "text":
@@ -77,6 +84,10 @@ def generated_cases(seed: int, count: int) -> list[dict]:
             case["justify"] = rng.choice(JUSTIFY)
             if rng.random() < 0.4:
                 case["style"] = rng.choice(["red", "bold blue", "on green"])
+        if kind == "panel":
+            case["box"] = rng.choice(["square", "rounded", "heavy", "double", "ascii", "minimal"])
+            if rng.random() < 0.3:
+                case["title"] = rng.choice(["title", "Box Title", ""])
         cases.append(case)
     return cases
 
@@ -87,7 +98,7 @@ def python_render(case: dict) -> str:
         color_system=case["color_system"],
         width=case["width"],
         highlight=False,
-        safe_box=False,
+        safe_box=case.get("safe_box", False),
         legacy_windows=False,
         no_color=False,
     )
@@ -103,9 +114,17 @@ def python_render(case: dict) -> str:
                 justify=case.get("justify"),
             )
             console.print(text, end="")
+        elif case["kind"] == "panel":
+            box_name = case.get("box", "rounded")
+            box_set = getattr(box, box_name.upper(), box.ROUNDED)
+            panel = Panel(case["source"], box=box_set, title=case.get("title"))
+            console.print(panel, end="")
         else:
             raise ValueError(f"unknown kind {case['kind']!r}")
-    return capture.get()
+    out = capture.get()
+    if case["kind"] == "panel" and out.endswith("\n"):
+        out = out[:-1]
+    return out
 
 
 def rust_render(cases: list[dict], command: list[str]) -> list[dict]:

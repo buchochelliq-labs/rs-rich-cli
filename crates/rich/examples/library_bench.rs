@@ -12,10 +12,19 @@ fn digest(text: &str) -> String {
     format!("{:016x}", hasher.finish())
 }
 
-fn console(width: usize) -> Console {
+fn color_system(name: &str) -> ColorSystem {
+    match name {
+        "standard" => ColorSystem::Standard,
+        "256" => ColorSystem::EightBit,
+        "truecolor" => ColorSystem::Truecolor,
+        other => panic!("unknown --color-system {other:?} (standard, 256, truecolor)"),
+    }
+}
+
+fn console(width: usize, color: &str) -> Console {
     Console::builder()
         .force_terminal(true)
-        .color_system(Some(ColorSystem::Truecolor))
+        .color_system(Some(color_system(color)))
         .width(width)
         .highlight(false)
         .no_color(false)
@@ -73,7 +82,9 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let runs = parse_count(&args, "--runs", 20);
     let warmups = parse_count(&args, "--warmups", 3);
+    let width = parse_count(&args, "--width", 100);
     let revision = parse_string(&args, "--revision", "unknown");
+    let color = parse_string(&args, "--color-system", "truecolor");
 
     let markup = "[bold red]error[/]: [#ff8800]value[/] ".repeat(128);
     let started = Instant::now();
@@ -85,7 +96,7 @@ fn main() {
     markup_case["setup_ms"] = json!(setup_markup_ms);
     markup_case["output_hash"] = json!(digest(&markup));
 
-    let render_console = console(100);
+    let render_console = console(width, &color);
     let text = Text::styled(
         "hello world ".repeat(512),
         Style::parse("bold blue").expect("valid style"),
@@ -125,8 +136,8 @@ fn main() {
             "revision": revision,
             "runs": runs,
             "warmup_runs": warmups,
-            "width": 100,
-            "color_system": "truecolor",
+            "width": width,
+            "color_system": color,
             "features": {"syntax_cache": cfg!(feature = "syntax-cache")},
             "cases": [markup_case, text_case, table_case, console_case],
         })
