@@ -2,8 +2,8 @@
   "workspace_all_features_tests": 561,
   "lean_cli_tests": 126,
   "hard_link_regressions": "two tests; failed before fix, passed afterward",
-  "final_handler_checks": "four optimized-build PTY checks and default/lean demo tests repeated after stdout-handle fix",
-  "review": "Independent reviewer approved; separately reran all four optimized-build PTY checks",
+  "final_handler_checks": "Five optimized-build process checks: portable playback with Sixel advertised, watch/GIF/redirected interruption and pacing; default/lean demo tests repeated after fixes",
+  "review": "Independent reviewer approved final source including portable contain and redirected-interrupt fixes; five optimized-build process checks passed",
   "other_validation": [
     "formatting",
     "all-feature Clippy",

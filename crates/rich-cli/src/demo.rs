@@ -103,38 +103,40 @@ fn tour(no_color: bool, delay: Duration) -> std::io::Result<()> {
     println!("Examples are offline; exports use a temporary directory. Configuration is ignored.");
     let root = tempfile::tempdir()?;
     let watch_child: WatchChild = Arc::new(Mutex::new(None));
-    if std::io::stdout().is_terminal() {
-        // Write through a duplicated OS handle: GIF playback owns the Rust
-        // stdout lock for its entire animation, so taking that lock here can
-        // delay interruption until playback has already returned.
+    // GIF playback owns Rust's stdout lock. Duplicate the OS handle so
+    // terminal restoration never waits for that lock; pipes need no controls.
+    let mut terminal = if std::io::stdout().is_terminal() {
         #[cfg(unix)]
-        let mut terminal = {
+        let terminal = {
             use std::os::fd::AsFd;
             std::fs::File::from(std::io::stdout().as_fd().try_clone_to_owned()?)
         };
         #[cfg(windows)]
-        let mut terminal = {
+        let terminal = {
             use std::os::windows::io::AsHandle;
             std::fs::File::from(std::io::stdout().as_handle().try_clone_to_owned()?)
         };
-        let cleanup = root.path().to_owned();
-        let child = Arc::clone(&watch_child);
-        ctrlc::set_handler(move || {
-            if let Ok(mut slot) = child.lock() {
-                if let Some(mut child) = slot.take() {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                }
+        Some(terminal)
+    } else {
+        None
+    };
+    let cleanup = root.path().to_owned();
+    let child = Arc::clone(&watch_child);
+    ctrlc::set_handler(move || {
+        if let Ok(mut slot) = child.lock() {
+            if let Some(mut child) = slot.take() {
+                let _ = child.kill();
+                let _ = child.wait();
             }
-            let _ = std::fs::remove_dir_all(&cleanup);
-            // GIF playback hides the cursor. Restore it even if interrupted
-            // mid-frame, before exiting without Rust destructors.
+        }
+        let _ = std::fs::remove_dir_all(&cleanup);
+        if let Some(terminal) = terminal.as_mut() {
             let _ = terminal.write_all(b"\x1b[?25h\x1b[0m\n");
             let _ = terminal.flush();
-            std::process::exit(130);
-        })
-        .map_err(std::io::Error::other)?;
-    }
+        }
+        std::process::exit(130);
+    })
+    .map_err(std::io::Error::other)?;
     let console = run_demo(no_color, delay);
     let file = |name: &str| root.path().join(name).to_string_lossy().into_owned();
     for (name, contents) in [
@@ -368,10 +370,12 @@ fn art(console: &Console, no_color: bool, delay: Duration, root: &Path) -> std::
     command(
         console,
         no_color,
-        "--image art.png --image-fit contain --width 40 --height 10",
+        "--image art.png --image-mode blocks --image-fit contain --width 40 --height 10",
         vec![
             "--image".into(),
             source.clone(),
+            "--image-mode".into(),
+            "blocks".into(),
             "--image-fit".into(),
             "contain".into(),
             "--width".into(),

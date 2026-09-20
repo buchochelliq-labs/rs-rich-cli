@@ -36,6 +36,7 @@ stills = [frame.resize((880, 528)) for frame in frames[::media.FPS]]
 stills[0].save(media.OUT / 'v8-demo-tour.gif', save_all=True, append_images=stills[1:], duration=1000, loop=0)
 verify_unchanged(binary, manifest)
 manifest.update({'args': ['--demo', '--demo-delay', '0.5'], 'exit_code': 0,
+                 'terminal': {'width': 88, 'height': 28, 'RICH_SIXEL': '1'},
                  'recording_sha256': sha256(evidence / 'tour.cast'),
                  'presentation': 'Actual 88x28 PTY playback at half-second section pacing; captions added, no audio.',
                  'media': {p.name: sha256(p) for p in media.OUT.glob('v8-demo-tour.*')}})

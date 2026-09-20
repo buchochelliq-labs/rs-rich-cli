@@ -21,7 +21,7 @@ def capture(binary, stop_at=None, delay='0'):
     with tempfile.TemporaryDirectory() as directory:
         master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 28, 88, 0, 0))
-        env = dict(os.environ, TERM='xterm-256color', COLORTERM='truecolor', RICH_SIXEL='0', COLUMNS='88', LINES='28', TMPDIR=directory)
+        env = dict(os.environ, TERM='xterm-256color', COLORTERM='truecolor', RICH_SIXEL='1', COLUMNS='88', LINES='28', TMPDIR=directory)
         env.pop('NO_COLOR', None)
         process = subprocess.Popen([str(binary), '--demo', '--demo-delay', delay],
                                    stdin=subprocess.DEVNULL, stdout=slave, stderr=slave, env=env)
@@ -60,10 +60,37 @@ def capture(binary, stop_at=None, delay='0'):
         if stop_at:
             assert sent and b'\x1b[?25h\x1b[0m' in raw, 'interrupt must restore terminal state'
         else:
+            assert b'\x1bP' not in raw, 'tour must stay portable even when Sixel is advertised'
             assert b'Tour complete' in raw
             assert b'live_update' in raw
         assert not list(Path(directory).iterdir()), 'demo must clean temporary exports on completion/interruption'
         return events, bytes(raw)
+
+
+def redirected_interrupt(binary):
+    with tempfile.TemporaryDirectory() as directory:
+        env = dict(os.environ, TMPDIR=directory)
+        process = subprocess.Popen([str(binary), '--demo'], env=env,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        output = bytearray()
+        start = time.monotonic()
+        try:
+            while b'markup' not in output:
+                assert time.monotonic() - start < 10, 'redirected tour made no progress'
+                if select.select([process.stdout], [], [], .1)[0]:
+                    data = os.read(process.stdout.fileno(), 4096)
+                    assert data, 'tour ended before interrupt point'
+                    output.extend(data)
+            process.send_signal(signal.SIGINT)
+            remainder, stderr = process.communicate(timeout=10)
+            output.extend(remainder)
+            assert process.returncode == 130, (process.returncode, stderr)
+            assert b'\x1b' not in output, 'pipe cleanup must not emit terminal controls'
+            assert not list(Path(directory).iterdir()), 'interrupted pipe left temporary exports'
+        finally:
+            if process.poll() is None:
+                process.kill()
+            process.wait()
 
 
 def main():
@@ -82,7 +109,8 @@ def main():
     if args.record:
         args.record.write_text(json.dumps({'version': 2, 'width': 88, 'height': 28}) + '\n' + ''.join(json.dumps(event)+'\n' for event in events))
         args.record.with_suffix('.ansi').write_bytes(raw)
-    print('4 PTY demo checks passed: playback, watch interrupt, GIF interrupt, pacing')
+    redirected_interrupt(binary)
+    print('5 demo process checks passed: portable playback, watch/GIF/pipe interruption, pacing')
 
 
 if __name__ == '__main__':
