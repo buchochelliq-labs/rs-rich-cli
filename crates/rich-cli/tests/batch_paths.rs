@@ -131,3 +131,20 @@ fn suffix_collisions_and_invalid_templates_are_settled_before_workers() {
     assert!(out.join("same.html").exists());
     assert!(out.join("same-2.html").exists());
 }
+
+#[test]
+fn failed_worker_does_not_replace_existing_exports() {
+    let temp = tempfile::tempdir().unwrap();
+    let input = temp.path().join("invalid.json");
+    let output = temp.path().join("out.html");
+    std::fs::write(&input, "{broken json").unwrap();
+    std::fs::write(&output, "existing export").unwrap();
+    let result = Command::new(env!("CARGO_BIN_EXE_rich"))
+        .args(["--no-config", "--batch", "--overwrite", "--export-html"])
+        .arg(&output)
+        .arg(&input)
+        .output()
+        .unwrap();
+    assert!(!result.status.success(), "{result:?}");
+    assert_eq!(std::fs::read_to_string(&output).unwrap(), "existing export");
+}

@@ -118,6 +118,52 @@ fn failure_json(failures: &[Failure]) -> Vec<serde_json::Value> {
     })).collect()
 }
 
+struct OutputRoots {
+    html: Option<batch_output::OutputRoot>,
+    svg: Option<batch_output::OutputRoot>,
+}
+
+impl OutputRoots {
+    fn capture(cli: &Cli, total: usize) -> std::io::Result<Self> {
+        let capture = |configured: Option<&str>| {
+            configured
+                .map(|path| {
+                    let path = Path::new(path);
+                    let directory_mode =
+                        cli.batch_paths.preserve_dirs || cli.batch_paths.template.is_some();
+                    let root = if directory_mode || (total > 1 && path.is_dir()) {
+                        path
+                    } else {
+                        path.parent().unwrap_or_else(|| Path::new("."))
+                    };
+                    batch_output::OutputRoot::capture(root)
+                })
+                .transpose()
+        };
+        Ok(Self {
+            html: capture(cli.export_html.as_deref())?,
+            svg: capture(cli.export_svg.as_deref())?,
+        })
+    }
+
+    fn prepare(
+        &self,
+        outputs: &BatchOutputs,
+        create: bool,
+    ) -> std::io::Result<Vec<(&'static str, batch_output::Destination)>> {
+        let mut destinations = Vec::new();
+        for (kind, root, path) in [
+            ("html", &self.html, &outputs.html),
+            ("svg", &self.svg, &outputs.svg),
+        ] {
+            if let (Some(root), Some(path)) = (root, path) {
+                destinations.push((kind, root.destination(Path::new(path), create)?));
+            }
+        }
+        Ok(destinations)
+    }
+}
+
 pub(super) fn run_batch(cli: &Cli) -> ExitCode {
     if interrupted() {
         return interrupted_report(cli, cli.resources.len(), 0, 0, &[]);
@@ -129,6 +175,16 @@ pub(super) fn run_batch(cli: &Cli) -> ExitCode {
                 return interrupted_report(cli, cli.resources.len(), 0, 0, &[]);
             }
             return fail(cli, ExitClass::Input, message);
+        }
+    };
+    let roots = match OutputRoots::capture(cli, resources.len()) {
+        Ok(roots) => roots,
+        Err(error) => {
+            return fail(
+                cli,
+                ExitClass::Input,
+                format!("cannot acquire export directory: {error}"),
+            )
         }
     };
     let mut taken = std::collections::BTreeSet::new();
@@ -314,17 +370,17 @@ pub(super) fn run_batch(cli: &Cli) -> ExitCode {
             message.as_deref().unwrap_or("invalid batch plan"),
         );
     }
-    for directory in &planned_directories {
-        if let Err(error) = std::fs::create_dir_all(directory) {
+    for outputs in &plans {
+        if let Err(error) = roots.prepare(outputs, cli.batch_paths.preserve_dirs) {
             return fail(
                 cli,
                 ExitClass::Input,
-                format!("cannot create {}: {error}", directory.display()),
+                format!("cannot prepare export directory: {error}"),
             );
         }
     }
     progress(cli, 0, 0, resources.len());
-    let (attempted, settled, failures) = execute(cli, &resources, &plans);
+    let (attempted, settled, failures) = execute(cli, &resources, &plans, &roots);
     if interrupted() {
         return interrupted_report(cli, resources.len(), attempted, settled, &failures);
     }
@@ -355,6 +411,8 @@ struct Worker {
     child: Child,
     stdout: Option<std::fs::File>,
     stderr: std::fs::File,
+    exports: Vec<(batch_output::Destination, PathBuf)>,
+    _staging: tempfile::TempDir,
 }
 
 // Every exit path, including cancellation and replay errors, reaps started workers.
@@ -378,6 +436,7 @@ fn spawn(
     input: &str,
     outputs: &BatchOutputs,
     resources: &[String],
+    roots: &OutputRoots,
 ) -> std::io::Result<Worker> {
     for path in [outputs.html.as_deref(), outputs.svg.as_deref()]
         .into_iter()
@@ -413,11 +472,12 @@ fn spawn(
         Console::new().width(),
     );
     command.args(&cli.worker_args).args(["--report", "json"]);
-    if let Some(path) = &outputs.html {
-        command.args(["--export-html", path]);
-    }
-    if let Some(path) = &outputs.svg {
-        command.args(["--export-svg", path]);
+    let staging = tempfile::tempdir()?;
+    let mut exports = Vec::new();
+    for (kind, destination) in roots.prepare(outputs, false)? {
+        let path = staging.path().join(format!("export.{kind}"));
+        command.arg(format!("--export-{kind}")).arg(&path);
+        exports.push((destination, path));
     }
     let child = command
         .args(["--", input])
@@ -430,6 +490,8 @@ fn spawn(
         child,
         stdout: Some(stdout),
         stderr,
+        exports,
+        _staging: staging,
     })
 }
 
@@ -518,6 +580,7 @@ fn execute(
     cli: &Cli,
     resources: &[String],
     plans: &[BatchOutputs],
+    roots: &OutputRoots,
 ) -> (usize, usize, Vec<Failure>) {
     let mut active: Vec<Worker> = Vec::new();
     let mut finished = std::collections::BTreeMap::new();
@@ -543,7 +606,7 @@ fn execute(
                 continue;
             };
             let mut worker = active.swap_remove(i);
-            let failure = match status {
+            let mut failure = match status {
                 Ok(status) => child_failure(status, &mut worker.stderr),
                 Err(error) => {
                     let _ = worker.child.kill();
@@ -554,6 +617,23 @@ fn execute(
                     ))
                 }
             };
+            if failure.is_none() && !interrupted() {
+                for (destination, path) in &worker.exports {
+                    let result = std::fs::File::open(path).and_then(|mut source| {
+                        destination.publish(
+                            &mut source,
+                            cli.overwrite || cli.collision == CollisionPolicy::Overwrite,
+                        )
+                    });
+                    if let Err(error) = result {
+                        failure = Some((
+                            ExitClass::Input,
+                            Some(format!("cannot publish batch export: {error}")),
+                        ));
+                        break;
+                    }
+                }
+            }
             if let Some((class, message)) = failure {
                 failures.push((resources[worker.index].clone(), class, message));
                 stopped |= !cli.continue_on_error;
@@ -592,7 +672,7 @@ fn execute(
             replay += 1;
         }
         while !interrupted() && !stopped && next < resources.len() && next - replay < cli.jobs {
-            match spawn(cli, next, &resources[next], &plans[next], resources) {
+            match spawn(cli, next, &resources[next], &plans[next], resources, roots) {
                 Ok(worker) => active.push(worker),
                 Err(error) => {
                     failures.push((

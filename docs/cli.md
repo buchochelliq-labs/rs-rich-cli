@@ -739,9 +739,34 @@ one complete leaf using `{stem}`, `{input_ext}`, `{output_ext}`, and one-based
 `{index}`; `{{` and `}}` emit braces. Parent traversal, separators and invalid
 platform names fail before rendering. Relative subdirectories come from the
 canonical input root. Dry runs report missing directories without creating them.
-Collision policies remain `error`, `suffix`, `overwrite`. Destinations cannot alias
-an input or escape through symlink parents. Workers revalidate planned paths before
-writing. Concurrent hostile filesystem mutation is outside the CLI's guarantees.
+Collision policies remain `error`, `suffix`, `overwrite`. Preflight rejects input
+aliases. Batch exports retain directory handles in the parent and render into
+private worker staging files. Publication uses those handles, rejects symlink or
+junction traversal below the acquired root, and never truncates an existing file
+through a symlink or hard link. Overwrite replaces the destination entry; other
+hard links retain their original contents. Without overwrite permission, a file
+that appears after planning causes an error, including in `suffix` mode: the
+planned name is not silently changed or overwritten.
+
+Only successful workers publish exports. HTML and SVG are published individually,
+not as a transaction. Failed/cancelled batches retain completed exports and created
+directories. A copy failure while creating a new output may leave a partial new
+file; overwrite prepares a complete temporary file before replacement. Replacement
+creates a new inode: on Unix replacement exports are owner-readable/writable only
+(mode `0600`); on Windows a protected owner-only DACL is installed while the empty
+temporary file is exclusively held, before copying any content. Other existing inode metadata is not
+preserved. Publication checks cancellation between 64 KiB chunks and before
+replacement; an individual operating-system filesystem call can still block.
+
+Authority attaches to the directory objects acquired at batch startup (or the
+nearest existing ancestor for a missing root). A later pathname replacement cannot
+redirect the export. Renaming an acquired directory may relocate that same object
+and its exports; the CLI does not freeze the filesystem namespace. This is not
+input snapshotting, a sandbox for a compromised CLI account/private temporary
+storage, or protection against privileged mount changes. Existing symlink roots
+are resolved at initial acquisition; symlink subdirectories below that boundary
+are rejected, even when their target is inside the root. See
+[filesystem hardening #196](https://github.com/buchochelliq-labs/rs-rich-cli/issues/196).
 The CLI currently requires UTF-8 output paths; it rejects unsupported paths rather
 than silently replacing bytes. Legacy flat naming remains unchanged.
 

@@ -103,6 +103,9 @@ jobs:
       - name: Verify coordinated Live resize and cleanup
         run: python3 scripts/test_live_regions_pty.py
 
+      - name: Verify batch cancellation and progress
+        run: python3 scripts/test_batch_v9.py target/debug/rich
+
       - name: Verify workflow output snapshots
         run: python3 scripts/snapshot_cli.py --cases scripts/fixtures/workflow_snapshots.jsonl --snapshots scripts/fixtures/workflow_snapshots --command target/debug/rich
 
@@ -174,7 +177,8 @@ jobs:
       - name: Test Windows batch paths and CLI pager controls
         run: |
           cargo test -p rs-rich-cli --locked --bin rich batch::tests
-          cargo test -p rs-rich-cli --locked --test batch_v8 --test pager_v8 --test demo
+          cargo test -p rs-rich-cli --locked --bin rich batch_races
+          cargo test -p rs-rich-cli --locked --test batch_v8 --test batch_paths --test pager_v8 --test demo
 
   msrv:
     name: minimum supported Rust version

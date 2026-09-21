@@ -137,6 +137,7 @@ and explicit overrides, not a materialized list of built-in defaults.
 | Convenience | Owner | Boundary |
 |---|---|---|
 | Named TOML themes, `--theme`, `--theme-style` | CLI config + main | Validated data builds public `rich::Theme`; resolved bindings pass to workers; no core theme-stack change |
+| Batch export filesystem hardening (#196) | CLI `batch_output.rs` + `batch.rs` | Parent retains directory handles; workers render to private staging; no-follow descendant traversal, exclusive creation and entry replacement; see CLI contract for directory-object authority and metadata semantics |
 | Batch progress and Ctrl+C | CLI batch + main | Human-report stderr TTY only; kill/wait workers and exit 130; no core Live/progress behavior changes |
 | `--demo-list`, `--demo-section` | CLI demo + main | Routes stable groups of existing renderers; preserves cleanup and finite pipes |
 | `rich doctor` | CLI doctor + main | Read-only selected diagnostics; JSON stdout; no terminal probes, network fetch or pager execution |

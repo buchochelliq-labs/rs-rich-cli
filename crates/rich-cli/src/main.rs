@@ -15,7 +15,10 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 mod batch;
+mod batch_output;
 mod batch_paths;
+#[cfg(test)]
+mod batch_races;
 mod config;
 mod demo;
 mod doctor;
