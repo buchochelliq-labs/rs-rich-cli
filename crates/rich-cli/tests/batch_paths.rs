@@ -51,7 +51,8 @@ fn dry_run_plans_missing_directories_and_execution_matches_across_workers() {
     assert!(report["result"]["directories"].as_array().unwrap().len() >= 3);
     let serial = t.path().join("serial");
     let parallel = t.path().join("parallel");
-    assert!(run(&root, &serial, &["--jobs", "1"]).status.success());
+    let serial_result = run(&root, &serial, &["--jobs", "1"]);
+    assert!(serial_result.status.success(), "{serial_result:?}");
     let p = run(&root, &parallel, &["--jobs", "4"]);
     assert!(p.status.success(), "{}", String::from_utf8_lossy(&p.stderr));
     for path in ["a/1-report.html", "b/2-report.html"] {

@@ -1,5 +1,5 @@
 use rich::protocol::{Support, TargetCapabilities};
-use rich::{ColorSystem, Segment, Theme};
+use rich::{ColorSystem, Theme};
 use rich_ext::target::{RenderTarget, TargetKind};
 fn target(kind: TargetKind, width: usize, height: usize) -> RenderTarget {
     RenderTarget::new(
@@ -19,6 +19,7 @@ fn target(kind: TargetKind, width: usize, height: usize) -> RenderTarget {
 #[cfg(feature = "art")]
 #[test]
 fn nested_transformed_image_respects_capture_target_and_layout_bounds() {
+    use rich::Segment;
     use rich_art::{image, ImageArt, ImageTransforms, Rotation};
     use rich_ext::layout::{Axis, Constraint, LayoutNode};
     let image = image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
