@@ -100,6 +100,9 @@ jobs:
       - name: Verify guided tour playback and interruption
         run: python3 scripts/test_demo_pty.py --binary target/debug/rich
 
+      - name: Verify coordinated Live resize and cleanup
+        run: python3 scripts/test_live_regions_pty.py
+
       - name: Verify workflow output snapshots
         run: python3 scripts/snapshot_cli.py --cases scripts/fixtures/workflow_snapshots.jsonl --snapshots scripts/fixtures/workflow_snapshots --command target/debug/rich
 
@@ -118,6 +121,10 @@ jobs:
           # rich-art is zero-dependency by default; its image/GIF support is
           # opt-in, and each config compiles different code. `--all-features`
           # rather than naming them, so new features are covered automatically.
+          - crate: rs-rich-ext
+            args: "--all-features"
+          - crate: rs-rich-ext
+            args: "--no-default-features"
           - crate: rs-rich-art
             args: ""
           - crate: rs-rich-art

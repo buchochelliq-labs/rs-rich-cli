@@ -29,7 +29,7 @@ use std::sync::Arc;
 use image::{imageops::FilterType, DynamicImage, GenericImageView, Rgb, RgbImage};
 
 use rich::console::{Console, ConsoleOptions};
-use rich::protocol::Renderable;
+use rich::protocol::{ConsoleEnvironment, RenderEnvironment, Renderable, Support};
 use rich::segment::Segment;
 
 use crate::ascii::AsciiArt;
@@ -221,6 +221,7 @@ pub struct ImageArt {
     background: Option<[u8; 3]>,
     color_mode: ImageColorMode,
     dither: Dither,
+    transforms: crate::ImageTransforms,
 }
 
 impl ImageArt {
@@ -239,6 +240,7 @@ impl ImageArt {
             background: None,
             color_mode: ImageColorMode::default(),
             dither: Dither::default(),
+            transforms: crate::ImageTransforms::default(),
         }
     }
 
@@ -325,6 +327,12 @@ impl ImageArt {
         self
     }
 
+    /// Apply still-image transforms before fitting, sampling and quantization.
+    pub fn transforms(mut self, transforms: crate::ImageTransforms) -> Self {
+        self.transforms = transforms;
+        self
+    }
+
     /// Resolve [`ImageMode::Auto`] into a concrete backend given what the
     /// destination can do. An explicit mode is returned unchanged — this
     /// picker never overrides the caller.
@@ -356,8 +364,42 @@ impl ImageArt {
         console: &Console,
         options: &ConsoleOptions,
     ) -> Result<Vec<Segment>, ImageArtError> {
+        if let Some(environment) = console.render_environment() {
+            return self.render_with_environment(console, options, environment);
+        }
         let capabilities = RenderCapabilities::from_console(console);
         let mode = self.resolve_mode(capabilities);
+        self.render_as(mode, console, options)
+    }
+
+    /// Render using supplied capabilities without environment detection.
+    pub fn render_with_environment(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        environment: &dyn RenderEnvironment,
+    ) -> Result<Vec<Segment>, ImageArtError> {
+        let caps = environment.capabilities();
+        if caps.width == 0
+            || caps.height == 0
+            || options.max_width == 0
+            || options.height == Some(0)
+        {
+            return Ok(Vec::new());
+        }
+        if self.options.mode == ImageMode::Sixel
+            && (!caps.interactive || caps.sixel == Support::Unsupported)
+        {
+            return Err(ImageArtError::NonTerminalDestination);
+        }
+        let mode = if self.options.mode == ImageMode::Auto && !caps.unicode {
+            ImageMode::Ascii
+        } else {
+            self.resolve_mode(RenderCapabilities {
+                color: caps.color_system.is_some(),
+                sixel_supported: caps.interactive && caps.sixel != Support::Unsupported,
+            })
+        };
         self.render_as(mode, console, options)
     }
 
@@ -366,8 +408,21 @@ impl ImageArt {
         mode: ImageMode,
         available: usize,
     ) -> Result<Arc<DynamicImage>, ImageArtError> {
+        let (image, background) = if self.transforms == crate::ImageTransforms::default() {
+            (
+                Arc::clone(&self.image),
+                self.background.unwrap_or([0, 0, 0]),
+            )
+        } else {
+            let (image, background) = crate::transform::prepare(
+                &self.image,
+                self.transforms,
+                self.background.unwrap_or([0, 0, 0]),
+            );
+            (Arc::new(image), background)
+        };
         if self.fit.is_none() && self.background.is_none() {
-            return Ok(Arc::clone(&self.image));
+            return Ok(image);
         }
         let target = if self.fit.is_some() {
             let columns = self
@@ -391,8 +446,8 @@ impl ImageArt {
                     if w > 0
                         && h > 0
                         && u64::from(w) * u64::from(h) <= 16 * 1024 * 1024
-                        && self.image.width() > 0
-                        && self.image.height() > 0 =>
+                        && image.width() > 0
+                        && image.height() > 0 =>
                 {
                     Some((w, h))
                 }
@@ -401,10 +456,9 @@ impl ImageArt {
         } else {
             None
         };
-        let background = self.background.unwrap_or([0, 0, 0]);
-        let mut flattened = RgbImage::new(self.image.width(), self.image.height());
+        let mut flattened = RgbImage::new(image.width(), image.height());
         for (x, y, pixel) in flattened.enumerate_pixels_mut() {
-            let rgba = self.image.get_pixel(x, y).0;
+            let rgba = image.get_pixel(x, y).0;
             let alpha = u32::from(rgba[3]);
             for channel in 0..3 {
                 pixel.0[channel] = ((u32::from(rgba[channel]) * alpha

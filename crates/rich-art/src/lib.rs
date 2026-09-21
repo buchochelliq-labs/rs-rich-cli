@@ -208,3 +208,9 @@ mod tests {
         assert!(banner.to_text(80).starts_with(" _   _ _ \n"));
     }
 }
+
+#[cfg(feature = "image")]
+mod transform;
+
+#[cfg(feature = "image")]
+pub use transform::{ImageTransforms, Rotation};

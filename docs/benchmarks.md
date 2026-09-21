@@ -299,3 +299,14 @@ probe are included in the [raw evidence](https://github.com/buchochelliq-labs/rs
 Actual CLI syntax output, including identical text inside and outside a comment:
 
 ![Syntax colors and comment context in the CLI](assets/releases/0.0.4-syntax.jpg)
+
+## Downstream render snapshots
+
+Enable `rs-rich-ext`'s optional `testing` feature and use
+`testing::RenderSnapshot::capture(&target, &renderable)`. The versioned JSON
+includes fixed dimensions, plain/ANSI output and owned segment style metadata.
+`diff` reports the first changed line or style path, including style-only changes.
+Snapshots preserve renderer line endings; they do not append Console.print's
+newline. Run `cargo run -p rs-rich-ext --features testing --example snapshot`
+for a deterministic example. These extension snapshots are separate from the
+Python upstream parity goldens.

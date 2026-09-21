@@ -2328,12 +2328,10 @@ fn image_decoration_flags_are_refused_rather_than_ignored() {
     }
 }
 
-/// `--export-html`/`--export-svg` are not implemented for `--image` (unlike
-/// `--diff`), so combining them is a clear error rather than a silently
-/// skipped export.
+/// Still-image exports render for an explicit noninteractive destination.
 #[cfg(feature = "art")]
 #[test]
-fn image_export_flags_are_rejected() {
+fn image_export_flags_write_a_real_document() {
     let path = image_fixture();
     let out_path =
         std::env::temp_dir().join(format!("rich-image-export-{}.html", std::process::id()));
@@ -2346,9 +2344,12 @@ fn image_export_flags_are_rejected() {
         ],
         "",
     );
-    assert!(!ok && out.is_empty());
-    assert!(err.contains("--image"), "{err}");
-    assert!(!out_path.exists());
+    assert!(ok, "{err}");
+    assert!(!out.is_empty());
+    assert!(std::fs::read_to_string(&out_path)
+        .unwrap()
+        .contains("<html>"));
+    std::fs::remove_file(out_path).unwrap();
 }
 
 /// Reading raw image bytes from stdin (`--image -`) works the same way every

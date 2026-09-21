@@ -48,11 +48,14 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                 );
                 println!("Build features: {}", report["features"]);
                 println!(
-                    "Terminal: stdout TTY={}, {}×{} cells, colour={} (detected); NO_COLOR={}",
+                    "Terminal: stdout TTY={}, {}×{} cells, colour={} ({}); NO_COLOR={}",
                     report["terminal"]["stdout_tty"],
                     report["terminal"]["width"],
                     report["terminal"]["height"],
                     report["terminal"]["color"].as_str().unwrap(),
+                    report["terminal"]["provenance"]["color_system"]
+                        .as_str()
+                        .unwrap(),
                     report["terminal"]["no_color"]
                 );
                 println!(
@@ -117,6 +120,27 @@ fn report(args: &[String]) -> Result<serde_json::Value, String> {
         builder = builder.height(height as usize);
     }
     let console = builder.build();
+    let resolved = render_target::observe(
+        &console,
+        rich_ext::target::TargetOverrides {
+            width: settings["width"].as_u64().map(|v| v as usize),
+            height: settings["height"].as_u64().map(|v| v as usize),
+            color_system: (settings["no_color"].is_boolean()
+                || std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()))
+            .then_some(console.color_system()),
+            ..Default::default()
+        },
+    );
+    let provenance: serde_json::Map<String, serde_json::Value> = resolved
+        .origins
+        .into_iter()
+        .map(|(key, origin)| {
+            (
+                key,
+                serde_json::Value::String(format!("{origin:?}").to_lowercase()),
+            )
+        })
+        .collect();
     let color = if no_color {
         "none".into()
     } else {
@@ -168,7 +192,7 @@ fn report(args: &[String]) -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({
         "package": {"name": env!("CARGO_PKG_NAME"), "version": env!("CARGO_PKG_VERSION")},
         "features": {"art": cfg!(feature="art"), "fetch": cfg!(feature="fetch"), "syntax-cache": cfg!(feature="syntax-cache"), "json-escape-safe": cfg!(feature="json-escape-safe")},
-        "terminal": {"stdout_tty": console.is_terminal(), "width": console.width(), "height": console.height(), "color": color, "no_color": no_color, "detection": "local terminal and environment; no probe"},
+        "terminal": {"stdout_tty": console.is_terminal(), "width": console.width(), "height": console.height(), "color": color, "no_color": no_color, "detection": "local terminal and environment; no probe", "provenance": provenance},
         "image": {"requested_mode": requested_mode, "selected_mode": selected_mode, "sixel_inferred": sixel, "detection": "inferred from environment; no probe"},
         "config": {"source": config["source"], "profile": config["profile"], "disabled": config["disabled"]},
         "pager": {"source": pager_source, "program": pager_program, "availability": "not checked", "terminal_eligible": pager_eligible, "explicit": settings["pager"].as_bool().unwrap_or(false), "automatic": settings["auto_pager"].as_bool().unwrap_or(false)}

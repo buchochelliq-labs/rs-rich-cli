@@ -25,6 +25,7 @@ pub mod encoding;
 pub mod highlighter;
 pub mod registry;
 pub mod sanitize;
+pub mod target;
 pub mod theme;
 
 pub use highlighter::NumberHighlighter;
@@ -48,3 +49,17 @@ impl ConsoleExt for Console {
         self
     }
 }
+
+#[cfg(feature = "testing")]
+pub mod testing;
+
+pub mod layout;
+
+pub mod event;
+
+pub mod diagnostic;
+
+#[cfg(any(feature = "log", feature = "tracing"))]
+pub mod adapters;
+
+pub mod live;

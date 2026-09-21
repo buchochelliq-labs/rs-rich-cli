@@ -212,6 +212,18 @@ fn tour(no_color: bool, delay: Duration, group: Option<&str>) -> std::io::Result
                 vec![mode.into(), file(name)],
             )?;
         }
+        section(&console, delay, "Typed event presentation");
+        command(
+            &console,
+            no_color,
+            "--log logs.jsonl --log-presentation rich",
+            vec![
+                "--log".into(),
+                file("logs.jsonl"),
+                "--log-presentation".into(),
+                "rich".into(),
+            ],
+        )?;
         section(&console, delay, "Configuration profiles");
         console.print(&Text::new(
             "$ rich --config demo.toml --profile preview config show",
@@ -395,6 +407,8 @@ fn art(console: &Console, no_color: bool, delay: Duration, root: &Path) -> std::
         section(console, delay, label);
         command(console, no_color, &format!("--image art.png --image-mode {mode} --width {width} --height 12 --image-background '#142032'"), vec!["--image".into(), source.clone(), "--image-mode".into(), mode.into(), "--width".into(), width.clone(), "--height".into(), "12".into(), "--image-background".into(), "#142032".into()])?;
     }
+    section(console, delay, "Rotation, grayscale and Bayer dithering");
+    command(console, no_color, "--image art.png --image-rotate 90 --image-grayscale --image-color ansi256 --image-dither bayer4x4", vec!["--image".into(), source.clone(), "--image-mode".into(), "blocks".into(), "--width".into(), width.clone(), "--image-rotate".into(), "90".into(), "--image-grayscale".into(), "--image-color".into(), "ansi256".into(), "--image-dither".into(), "bayer4x4".into()])?;
     section(console, delay, "Crop anchors and transparent backgrounds");
     for anchor in ["left", "center", "right"] {
         command(

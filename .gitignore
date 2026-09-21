@@ -30,3 +30,5 @@ crates/rich-art/examples/assets/waving_cat.gif
 # Benchmark venv (holds an older `rich` than UPSTREAM.toml pins) and fixtures
 /.benchvenv/
 /target/bench-fixtures/
+
+.worktrees/

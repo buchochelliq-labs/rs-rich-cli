@@ -87,6 +87,7 @@ impl ConsoleOptions {
 /// The high-level interface for rendering to a terminal. Mirrors
 /// `rich.console.Console`.
 pub struct Console {
+    render_environment: Option<std::sync::Arc<dyn crate::protocol::RenderEnvironment>>,
     color_system: Option<ColorSystem>,
     width: usize,
     height: usize,
@@ -781,6 +782,7 @@ impl ConsoleBuilder {
         let width = self.width.unwrap_or_else(detect_width);
         let height = self.height.unwrap_or_else(detect_height);
         Console {
+            render_environment: None,
             color_system,
             width,
             height,
@@ -885,6 +887,18 @@ fn detect_height() -> usize {
         }
     }
     DEFAULT_HEIGHT
+}
+
+impl crate::protocol::ConsoleEnvironment for Console {
+    fn set_render_environment(
+        &mut self,
+        value: Option<std::sync::Arc<dyn crate::protocol::RenderEnvironment>>,
+    ) {
+        self.render_environment = value;
+    }
+    fn render_environment(&self) -> Option<&dyn crate::protocol::RenderEnvironment> {
+        self.render_environment.as_deref()
+    }
 }
 
 #[cfg(test)]

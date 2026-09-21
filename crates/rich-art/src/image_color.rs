@@ -14,7 +14,7 @@ pub enum ImageColorMode {
     Ansi256,
 }
 
-/// Error diffusion applied after sizing and compositing, before glyph selection.
+/// Dithering applied after sizing and compositing, before glyph selection.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Dither {
     /// Map each pixel independently.
@@ -23,6 +23,9 @@ pub enum Dither {
     /// Scan left-to-right, top-to-bottom with 7/16, 3/16, 5/16, 1/16 weights.
     /// Discard error outside the raster; do not wrap or renormalize edge weights.
     FloydSteinberg,
+    /// Ordered 4×4 Bayer matrix, anchored at the final raster origin.
+    /// Offset each encoded RGB channel by twice the matrix entry minus 15.
+    Bayer4x4,
 }
 
 /// Squared Euclidean distance in encoded RGB (not linear-light RGB).
@@ -73,8 +76,15 @@ pub(crate) fn preprocess(
         for x in 0..width {
             let pixel = raster.get_pixel_mut(x as u32, y);
             let alpha = f64::from(pixel.0[3]) / 255.0;
+            const BAYER: [[u8; 4]; 4] =
+                [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+            let offset = if dither == Dither::Bayer4x4 {
+                2.0 * f64::from(BAYER[y as usize % 4][x % 4]) - 15.0
+            } else {
+                0.0
+            };
             let rgb = std::array::from_fn(|c| {
-                (f64::from(pixel.0[c]) * alpha + current[x][c]).clamp(0.0, 255.0)
+                (f64::from(pixel.0[c]) * alpha + current[x][c] + offset).clamp(0.0, 255.0)
             });
             let (index, color) = nearest(rgb);
             indices.push(index);

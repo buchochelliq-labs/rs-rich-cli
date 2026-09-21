@@ -7,6 +7,22 @@ absorbed and what our own crates did.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## Expanded CLI 0.0.9 preparation (unpublished)
+
+- Core 0.0.5: optional immutable rendering-environment extension seam; unchanged
+  default parity and public ConsoleOptions/Renderable requirements.
+- Ext 0.0.7: explicit targets/capabilities, deterministic optional snapshots,
+  constrained layouts/overflow, typed events/diagnostics, optional log/tracing
+  adapters and single-writer coordinated Live regions.
+- Art 0.0.7: still-image rotation, flips, grayscale and ordered Bayer dithering;
+  exact Braille/half-block edge regressions and same-source output examples.
+- CLI 0.0.9: directory-preserving/template batch names, config/worker routing,
+  typed log presentation, still-image exports, updated guided demo and real media.
+- Migration: exhaustive matches must include `Dither::Bayer4x4` and the added
+  unsigned/128-bit `Value` variants. New batch naming modes take output directories.
+- Proposed cohort verified absent from crates.io on 2026-09-21; no tags or registry
+  publication performed. Publish core → ext/art → CLI after merge and CI.
+
 ## [0.0.1] — first release
 
 The first published version of all four crates: `rs-rich`, `rs-rich-ext`,

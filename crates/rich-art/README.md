@@ -178,3 +178,32 @@ cargo run -p rs-rich-art --example banner -- "your text"
 cargo run -p rs-rich-art --features gif --example make_demo_gif
 cargo run -p rs-rich-art --features gif --example gif -- cat.gif 3
 ```
+
+Explicit destinations can call `ImageArt::render_with_environment` with the
+shared `rich::protocol::RenderEnvironment`. Nested ImageArt renderables also
+consume a context attached to their Console. Only legacy consoles without a
+context detect terminal support. Capture/export contexts reject explicit Sixel;
+the infallible Renderable path falls back to safe text.
+
+`ImageArt::transforms(ImageTransforms { .. })` adds clockwise quarter-turns,
+horizontal then vertical flips, and grayscale before fitting and final sampling.
+Geometry-only transforms preserve RGBA; grayscale composites against the chosen
+background and converts that background for contain padding too. Unselected
+transforms keep the existing shared-image fast path and ImageOptions stays unchanged.
+
+### Still-image transformations
+
+`ImageArt::transforms(ImageTransforms { rotation: Rotation::Clockwise90,
+flip_horizontal: true, flip_vertical: false, grayscale: true })` applies clockwise
+rotation, horizontal flip, vertical flip, alpha compositing and grayscale, then
+fit/anchor, final sampling, palette quantization and glyph selection. Geometry
+alone retains alpha. Grayscale uses `(77R + 150G + 29B + 128) >> 8` after
+compositing; contain padding uses the same grayscale background.
+
+`Dither::Bayer4x4` is an opt-in, origin-anchored ordered dither for ANSI256 ASCII
+and half-block output. Truecolor, Braille and Sixel reject this combination.
+Exhaustive matches on `Dither` must handle the new variant. Defaults retain the
+previous output. Still-image transforms do not apply to animation or image diff.
+
+Explicit-context Auto selects ASCII for `unicode=false`. Explicit Blocks/Braille
+remain caller opt-ins and may emit Unicode; choose ASCII for restricted sinks.
