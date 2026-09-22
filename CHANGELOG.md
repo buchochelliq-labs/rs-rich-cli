@@ -20,7 +20,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   typed log presentation, still-image exports, updated guided demo and real media.
 - Migration: exhaustive matches must include `Dither::Bayer4x4` and the added
   unsigned/128-bit `Value` variants. New batch naming modes take output directories.
-- Proposed cohort verified absent from crates.io on 2026-09-21; no tags or registry
+- Fixed before merge: Live `print` no longer drops ordinary writes at interactive
+  widths 0/1, and diagnostic snippets strip CRLF carriage returns.
+- Release test passed on 2026-09-22 (full validation, golden parity, per-tag plans,
+  packaged consumer install, installed-binary screenshots); see
+  [expanded notes](docs/releases/0.0.9-expanded.md#release-test-2026-09-22).
+- Proposed cohort verified absent from crates.io on 2026-09-22; no tags or registry
   publication performed. Publish core → ext/art → CLI after merge and CI.
 
 ## [0.0.1] — first release
@@ -65,7 +70,7 @@ No additional changes pending.
   and the `ImageOptions` struct shape remain unchanged.
 
 Local validation and review passed; see [0.0.9 preparation notes](docs/releases/0.0.9.md).
-Core 0.0.4 and ext 0.0.6 are unchanged. No publication is claimed.
+The expanded scope above also moves core to 0.0.5 and ext to 0.0.7. No publication is claimed.
 
 ## CLI 0.0.8 / art 0.0.6 — published
 

@@ -1,0 +1,10 @@
+{
+  "name": "terminal-shots",
+  "private": true,
+  "description": "Replay real PTY output into xterm.js and screenshot it",
+  "dependencies": {
+    "@xterm/xterm": "^5.5.0",
+    "node-pty": "^1.1.0",
+    "playwright-core": "^1.63.0"
+  }
+}

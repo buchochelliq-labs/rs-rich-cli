@@ -1,0 +1,112 @@
+{
+  "binary": "rich (rs-rich-cli) 0.0.9 installed with cargo install from target/package/rs-rich-cli-0.0.9.crate, siblings patched to their packaged .crate sources",
+  "source_commit": "6485c9015196597016a2d0bdab75c763ad485eaf",
+  "renderer": "xterm.js 5 in headless Chromium replaying the captured PTY bytes verbatim",
+  "reproduce": "scripts/terminal_shots/make_cases.py + shoot.js",
+  "cases": [
+    {
+      "name": "01-version-doctor",
+      "title": "Installed from the packaged crates: version and read-only diagnostics",
+      "exit_code": 0,
+      "pty": {
+        "cols": 100,
+        "rows": 11,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "8f662fa30929ad58a3ad2a925eba40ec46adf3b275c5f84831809f32f49962ab",
+      "png_sha256": "772bb48393d2fb65175166a3181afbbd8309edca0aa6c77d5be73beccb5b48a1"
+    },
+    {
+      "name": "02-themes",
+      "title": "Named theme from config, then an explicit --theme-style override",
+      "exit_code": 0,
+      "pty": {
+        "cols": 100,
+        "rows": 13,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "bcb7df007b87452cd1f5e77c7af8aaf94a3219156d3311cddf97111a147eea71",
+      "png_sha256": "92869e8133d6344fc665cfc6624bf5fdef005b5c868a92574747fa1a8cf79a34"
+    },
+    {
+      "name": "03-batch-dry-run",
+      "title": "Batch dry run: preserved directories and a filename template",
+      "exit_code": 0,
+      "pty": {
+        "cols": 110,
+        "rows": 17,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "d2fc1b41bf084c87c52f12b6e27d487d93d934a3e7e49697daca19119a357065",
+      "png_sha256": "d38b1fb315b8f64111ed36943c2d11f25f4d829ede91a1911abc1d737125ef5f"
+    },
+    {
+      "name": "04-batch-jobs",
+      "title": "Parallel batch export with --jobs 4; progress drawn on terminal stderr",
+      "exit_code": 0,
+      "pty": {
+        "cols": 110,
+        "rows": 16,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "6862869dc5cd1b115d697404a7eb43b1ec0a53266ca7e7cd37d3ebaa78a3d87a",
+      "png_sha256": "71b75c1123934c217c26768a761d1ba06b7478ef93f13212748189a9b42710b2"
+    },
+    {
+      "name": "05-image-default",
+      "title": "Image: truecolor half-blocks (default)",
+      "exit_code": 0,
+      "pty": {
+        "cols": 72,
+        "rows": 18,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "4eaabae5e26fbec22add953e8c2fe0798d8afd0fc9e726bbad6050accfd98b9c",
+      "png_sha256": "18cd60973748b7c4de56f11499c1e2dbacdda6818734061194ef13bcfaadd33b"
+    },
+    {
+      "name": "06-image-ansi256-bayer",
+      "title": "Image: ANSI256 + ordered Bayer 4x4 dithering",
+      "exit_code": 0,
+      "pty": {
+        "cols": 72,
+        "rows": 18,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "e49a034e87cc3927466588030d3fc446b518129cb6b695191079ff8749c300ff",
+      "png_sha256": "cd12114b07bfc7147048ee71ca1ed9a8bd9b4ea5acc94a987204843cbcb9171e"
+    },
+    {
+      "name": "07-image-rotate-gray",
+      "title": "Image: rotate 90, flip horizontally, grayscale",
+      "exit_code": 0,
+      "pty": {
+        "cols": 72,
+        "rows": 18,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "3253edf3924a2adab1394c8ff4385f4798d343ee12f51c3bcc00be6b3784f150",
+      "png_sha256": "4f4a3a1273b6d4481a1a0fba758ff8c339510e0fdda9b3507b18fd5da944b400"
+    },
+    {
+      "name": "08-demo-list",
+      "title": "Guided tour sections",
+      "exit_code": 0,
+      "pty": {
+        "cols": 100,
+        "rows": 6,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "0da31fe955d961382b096e4c8828aae6dd340e5e3ec0e0f0af056c3ae9cd9860",
+      "png_sha256": "d85be9ceec9d7c7111ccb16ad94864887d54d996ec03cba51177cf6425ae56b2"
+    }
+  ]
+}
