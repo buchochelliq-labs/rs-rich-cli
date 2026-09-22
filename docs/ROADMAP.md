@@ -148,7 +148,7 @@ regions, render snapshots, batch naming and hardened publication (#196), and ima
 transforms with Bayer dithering. All four packages were published on 2026-09-22;
 see the [expanded release notes](releases/0.0.9-expanded.md).
 
-## 0.0.10 — progress you can ship with (proposed)
+## 0.0.10 — progress you can ship with (in progress)
 
 The [0.0.10 plan](plans/0.0.10.md) targets core parity over new surface area:
 Progress time, rate and spinner columns with a task-driving API (#6), upstream's
