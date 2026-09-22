@@ -36,7 +36,7 @@ jobs:
       selection: ${{ steps.plan.outputs.selection }}
       sha: ${{ steps.commit.outputs.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0                       # need main to test ancestry
           ref: ${{ format('refs/tags/{0}', inputs.tag || github.ref_name) }}
@@ -86,11 +86,16 @@ jobs:
     name: publish and verify from crates.io
     needs: [gate, ci]
     runs-on: ubuntu-latest
-    environment: crates-io          # gate the credential behind an environment
+    environment: crates-io          # trusted publisher is bound to this environment
+    # crates.io Trusted Publishing: GitHub's OIDC token is exchanged for a
+    # short-lived crates.io token, so no long-lived registry secret exists.
+    permissions:
+      contents: read
+      id-token: write
     env:
       RELEASE_SELECTION: ${{ needs.gate.outputs.selection }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.gate.outputs.sha }}
 
@@ -108,10 +113,17 @@ jobs:
         if: ${{ inputs.verify_only != true }}
         run: python3 scripts/release.py publish --dry-run
 
+      # Exchange only after the preflight and dry run pass; a failed exchange
+      # stops the job before anything is uploaded.
+      - name: Authenticate with crates.io Trusted Publishing
+        id: crates-io-auth
+        if: ${{ inputs.verify_only != true }}
+        uses: rust-lang/crates-io-auth-action@v1
+
       - name: Publish selected packages
         if: ${{ inputs.verify_only != true }}
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
         run: python3 scripts/release.py publish
 
       # Reuse the protected, validated checkout. Registry consumers still build
