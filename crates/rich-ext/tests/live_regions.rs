@@ -117,3 +117,17 @@ fn narrow_plain_print_preserves_every_character_and_normal_newlines() {
     drop(live);
     assert_eq!(bytes, b"a\nb\nc\n");
 }
+#[test]
+fn tiny_interactive_viewports_still_deliver_ordinary_writes() {
+    for w in [0, 1] {
+        let mut bytes = Vec::new();
+        let mut live = LiveCoordinator::new(&mut bytes, target(w, 10, true));
+        live.add(row("hidden")).unwrap();
+        live.print(&row("abc")).unwrap();
+        live.finish().unwrap();
+        drop(live);
+        let text = String::from_utf8(bytes).unwrap();
+        assert!(text.contains("a\n\rb\n\rc\n\r"), "width {w}: {text:?}");
+        assert!(!text.contains("hidden"), "width {w}: {text:?}");
+    }
+}

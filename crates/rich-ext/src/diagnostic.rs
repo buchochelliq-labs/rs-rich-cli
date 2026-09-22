@@ -51,7 +51,14 @@ impl SourceSnippet {
             } else {
                 self.span.start <= end && self.span.end > offset
             };
-            lines.push((i + 1, offset, line, active));
+            // Offsets follow the raw source; a CRLF's `\r` must not reach the
+            // terminal, where it would move the cursor back over the row.
+            lines.push((
+                i + 1,
+                offset,
+                line.strip_suffix('\r').unwrap_or(line),
+                active,
+            ));
             offset = end.saturating_add(1);
         }
         let first = lines.iter().position(|l| l.3).unwrap_or(0);

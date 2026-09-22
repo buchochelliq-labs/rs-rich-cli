@@ -82,3 +82,28 @@ fn a_span_inside_a_combining_cluster_marks_its_visible_cell() {
     assert!(text.contains("1 | e\u{301}X\n  | ^"), "{text}");
     assert!(!text.contains("  |  ^"));
 }
+
+#[test]
+fn crlf_sources_render_without_carriage_returns() {
+    let source = "let a = 1;\r\nlet b = oops;\r\nlet c = 3;\r\n";
+    let start = source.find("oops").unwrap();
+    let d = Diagnostic::new("crlf")
+        .view(EventView::Expanded)
+        .snippet(SourceSnippet::new("x".into(), source.into(), start..start + 4, 1).unwrap());
+    let text = output(&d, 80);
+    assert!(!text.contains('\r'), "{text:?}");
+    assert!(
+        text.contains("2 | let b = oops;\n  |         ^^^^"),
+        "{text}"
+    );
+    assert!(text.contains("1 | let a = 1;\n"), "{text}");
+    assert!(text.contains("3 | let c = 3;"), "{text}");
+    // A span covering only the line terminator still gets one bounded marker.
+    let cr = source.find('\r').unwrap();
+    let d = Diagnostic::new("eol")
+        .view(EventView::Expanded)
+        .snippet(SourceSnippet::new("x".into(), source.into(), cr..cr + 2, 0).unwrap());
+    let text = output(&d, 80);
+    assert!(!text.contains('\r'), "{text:?}");
+    assert!(text.contains("1 | let a = 1;\n  |           ^"), "{text}");
+}

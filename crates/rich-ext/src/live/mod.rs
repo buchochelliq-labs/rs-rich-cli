@@ -242,11 +242,14 @@ impl<W: Write> LiveCoordinator<W> {
         let result = (|| {
             self.clear()?;
             let interactive = self.target.capabilities().interactive;
+            // Tiny viewports suspend dynamic regions, but ordinary writes must
+            // still reach the terminal: fold to at least one column.
             let width = if interactive {
                 self.width.saturating_sub(1)
             } else {
                 self.width
-            };
+            }
+            .max(1);
             for row in fit_segments(content, width, OverflowPolicy::Fold) {
                 let text = self.row_string(row);
                 self.writer.write_all(text.as_bytes())?;
