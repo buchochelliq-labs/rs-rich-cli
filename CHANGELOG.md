@@ -7,7 +7,7 @@ absorbed and what our own crates did.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
-## Expanded CLI 0.0.9 preparation (unpublished)
+## Core 0.0.5 / ext 0.0.7 / art 0.0.7 / CLI 0.0.9 — published 2026-09-22
 
 - Core 0.0.5: optional immutable rendering-environment extension seam; unchanged
   default parity and public ConsoleOptions/Renderable requirements.
@@ -25,8 +25,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - Release test passed on 2026-09-22 (full validation, golden parity, per-tag plans,
   packaged consumer install, installed-binary screenshots); see
   [expanded notes](docs/releases/0.0.9-expanded.md#release-test-2026-09-22).
-- Proposed cohort verified absent from crates.io on 2026-09-22; no tags or registry
-  publication performed. Publish core → ext/art → CLI after merge and CI.
+- Published from `main` at `c645220` in dependency order by the protected release
+  workflow: [`rs-rich-v0.0.5`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35789282880), [`rs-rich-ext-v0.0.7`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35792283558), [`rs-rich-art-v0.0.7`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35792299240), [`rs-rich-cli-v0.0.9`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35792320939). The core
+  upload first failed because crates.io required Trusted Publishing; it succeeded
+  after the crate setting was adjusted. The workflow still uses a stored token
+  (tracked for 0.0.10).
 
 ## [0.0.1] — first release
 
@@ -56,7 +59,7 @@ Entries below record subsequent releases and development.
 
 No additional changes pending.
 
-## CLI 0.0.9 / art 0.0.7 — prepared
+## CLI 0.0.9 / art 0.0.7 — published with the cohort above
 
 - Named TOML themes, default/profile/CLI selection, explicit style overrides and
   resolved theme bindings for batch workers and exports.
@@ -70,7 +73,7 @@ No additional changes pending.
   and the `ImageOptions` struct shape remain unchanged.
 
 Local validation and review passed; see [0.0.9 preparation notes](docs/releases/0.0.9.md).
-The expanded scope above also moves core to 0.0.5 and ext to 0.0.7. No publication is claimed.
+The expanded scope above also moves core to 0.0.5 and ext to 0.0.7; all four published on 2026-09-22.
 
 ## CLI 0.0.8 / art 0.0.6 — published
 

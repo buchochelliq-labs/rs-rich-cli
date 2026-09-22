@@ -133,19 +133,20 @@ exact-version registry verification. It shipped strict TOML profiles, parallel
 file-export batches, dry-run/config inspection, automatic paging, crop anchors
 and the guided suite tour. Core 0.0.4 and ext 0.0.6 stayed unchanged.
 
-## 0.0.9 — themes, diagnostics and bounded image quality
+## 0.0.9 — published 2026-09-22
 
-The [accepted plan](plans/0.0.9.md) prepares CLI 0.0.9 and art 0.0.7: named themes
+The [accepted plan](plans/0.0.9.md) delivered CLI 0.0.9 and art 0.0.7: named themes
 and explicit style overrides, terminal-only human batch progress, Ctrl+C worker
 cleanup, listable/selectable demo sections and read-only doctor diagnostics.
 Art adds opt-in ANSI256 and Floyd–Steinberg preprocessing for ASCII/half-block
 still images. Truecolor/no-dither remains the default; GIF, diff, Braille and
 Sixel preprocessing remain outside this slice of #125.
 
-[Release notes](releases/0.0.9.md) track pending combined validation, recordings,
-review and package handoff. The expanded scope (#192) adds core 0.0.5 and ext 0.0.7
-to the cohort; its [release test](releases/0.0.9-expanded.md#release-test-2026-09-22)
-passed. This preparation does not publish or tag packages.
+The expanded scope (#192) added core 0.0.5 and ext 0.0.7: render targets and
+capabilities, layout constraints, typed events and diagnostics, coordinated Live
+regions, render snapshots, batch naming and hardened publication (#196), and image
+transforms with Bayer dithering. All four packages were published on 2026-09-22;
+see the [expanded release notes](releases/0.0.9-expanded.md).
 
 ### Confidence tooling for expanded CLI surfaces
 
