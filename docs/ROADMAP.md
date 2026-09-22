@@ -154,7 +154,9 @@ The [0.0.10 plan](plans/0.0.10.md) targets core parity over new surface area:
 Progress time, rate and spinner columns with a task-driving API (#6), upstream's
 theme stack (#3), wider golden and differential coverage around both (#15, #34),
 the four 0.0.9 leftovers (#134, #146, #149, #151) and release hardening (Trusted
-Publishing, Node 24 actions, pending dependency bumps). Core moves to 0.0.6, so
+Publishing, Node 24 actions, pending dependency bumps). Also in scope: multi-file
+debounced watch (#139), ANSI16/grayscale image modes, image adjustments and quadrant
+blocks (#125, #126, #124 follow-up), and `~~~` strikethrough parity (#9). Core moves to 0.0.6, so
 ext, art and CLI move with it (0.0.8, 0.0.8, 0.0.10). The Python wrapper (#197)
 proceeds as a separate spike.
 
