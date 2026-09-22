@@ -82,4 +82,4 @@ workspace = true
 [dependencies]
 rich.workspace = true
 image = { workspace = true, optional = true }
-icy_sixel = { version = "0.5.1", optional = true }
+icy_sixel = { version = "0.7.0", optional = true }
