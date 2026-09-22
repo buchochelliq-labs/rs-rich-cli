@@ -47,7 +47,7 @@ serde_json.workspace = true
 ureq = { workspace = true, optional = true }
 rich-art = { workspace = true, optional = true, features = ["gif", "sixel"] }
 
-toml = "0.8"
+toml = "1.1"
 tempfile = "3"
 same-file = "1"
 ctrlc = "3.4"
