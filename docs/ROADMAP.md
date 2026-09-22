@@ -148,6 +148,16 @@ regions, render snapshots, batch naming and hardened publication (#196), and ima
 transforms with Bayer dithering. All four packages were published on 2026-09-22;
 see the [expanded release notes](releases/0.0.9-expanded.md).
 
+## 0.0.10 — progress you can ship with (proposed)
+
+The [0.0.10 plan](plans/0.0.10.md) targets core parity over new surface area:
+Progress time, rate and spinner columns with a task-driving API (#6), upstream's
+theme stack (#3), wider golden and differential coverage around both (#15, #34),
+the four 0.0.9 leftovers (#134, #146, #149, #151) and release hardening (Trusted
+Publishing, Node 24 actions, pending dependency bumps). Core moves to 0.0.6, so
+ext, art and CLI move with it (0.0.8, 0.0.8, 0.0.10). The Python wrapper (#197)
+proceeds as a separate spike.
+
 ### Confidence tooling for expanded CLI surfaces
 
 The confidence slice adds bounded, deterministic support around the selected
