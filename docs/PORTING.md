@@ -25,7 +25,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `markup.py`                           | `markup.rs`              | 🟡 | ✅ |
 | `text.py` (+ justify, overflow)       | `text.rs`                | 🟡 | ✅ |
 | `_wrap.py`                            | `wrap.rs`                | 🟢 | ✅ 0 / 30,680 wrap cases |
-| `theme.py`, `themes.py`, `default_styles.py` | `theme.rs` | 🟡 | — |
+| `theme.py`, `themes.py`, `default_styles.py` | `theme.rs` | ✅ | ✅ |
 | `terminal_theme.py` | `terminal_theme.rs` | 🟡 | ✅ |
 | `console.py` (+ `ConsoleOptions`, `render_lines`) | `console.rs`  | 🟡 | ✅ |
 | `protocol.py`, `abc.py`, `_extension.py` | `protocol.rs`         | 🟡 | — |

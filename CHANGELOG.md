@@ -64,6 +64,11 @@ checked against unpublished versions; nothing is published yet.
   `upload-pages-artifact` v5, `deploy-pages` v5).
 - Art: `icy_sixel` 0.7 for the optional Sixel backend.
 - CLI: `toml` 1.1 for configuration parsing; strict-config behaviour unchanged.
+- Core: upstream's theme stack — `Console::push_theme`, `pop_theme` and a
+  `use_theme` guard (`ThemeContext`) that pops on drop — plus `Theme::from_styles`,
+  `config`, `from_file` and `read` for upstream theme files. Golden
+  `theme_stack.tsv` checks them against rich 15.0.0; DIVERGENCES §14 resolved (#3).
+  `RichError` gains `ThemeStack` and `ThemeConfig`; exhaustive matches need them.
 
 ## CLI 0.0.9 / art 0.0.7 — prepared
 

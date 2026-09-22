@@ -1003,6 +1003,112 @@ TEXT_OPS_HEADER = """\
 """
 
 
+THEME_STACK_HEADER = """\
+# Golden parity fixtures for the THEME STACK — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<steps json>\t<escaped output>
+# Steps run on one Console(width=40, truecolor, highlight=False):
+#   ["push", {name: style}, inherit]  Console.push_theme(Theme(styles, inherit=False), inherit=inherit)
+#   ["pop"]                           Console.pop_theme(); a ThemeStackError prints "ERR:ThemeStackError:<msg>"
+#   ["use", {name: style}, [steps]]   with Console.use_theme(Theme(styles, inherit=False)): <steps>
+#   ["print", markup]                 Console.print(markup)
+#   ["config", {name: style}, inherit] print Theme(styles, inherit).config when inherit is False,
+#                                      else the number of styles
+#   ["from_file", text, inherit]      print sorted "name=str(style)" of Theme.from_file(text), or
+#                                      "ERR:<ExceptionType>" when it raises
+"""
+
+#: Keep in sync with `theme_stack_parity` in crates/rich/tests/golden.rs.
+THEME_STACK_CASES: list[tuple[str, list]] = [
+    ("push_inherits", [
+        ["print", "[warning]w[/] [repr.number]1[/]"],
+        ["push", {"warning": "bold red"}, True],
+        ["print", "[warning]w[/] [repr.number]1[/]"],
+    ]),
+    ("push_without_inherit_drops_defaults", [
+        ["push", {"warning": "bold red"}, False],
+        ["print", "[warning]w[/] [repr.number]1[/] [bold]b[/]"],
+    ]),
+    ("nested_push_and_pop_restore", [
+        ["push", {"warning": "red"}, True],
+        ["push", {"warning": "green"}, True],
+        ["print", "[warning]two[/]"],
+        ["pop"],
+        ["print", "[warning]one[/]"],
+        ["pop"],
+        ["print", "[warning]base[/]"],
+    ]),
+    ("pop_base_is_an_error", [
+        ["pop"],
+        ["push", {"x": "blue"}, True],
+        ["pop"],
+        ["pop"],
+    ]),
+    ("use_theme_scopes_and_ignores_inherit", [
+        ["use", {"warning": "underline magenta"}, [
+            ["print", "[warning]in[/] [repr.number]2[/]"],
+        ]],
+        ["print", "[warning]out[/]"],
+    ]),
+    ("theme_names_shadow_style_words", [
+        ["push", {"red": "blue"}, True],
+        ["print", "[red]r[/]"],
+    ]),
+    ("config_is_sorted_definitions", [
+        ["config", {"b": "bold", "a": "red on blue", "c": "not italic link https://e.x", "d": "none"}, False],
+        ["config", {"b": "bold"}, True],
+    ]),
+    ("from_file_parses_like_configparser", [
+        ["from_file", "[DEFAULT]\nq = blue\n[styles]\nFoo = bold  red\nbar: green on black\n# c\n; c2\nurl = link https://x.y/%%20\nlong = bold\n  italic\nref = %(q)s\n", False],
+    ]),
+    ("from_file_errors", [
+        ["from_file", "[other]\na = red\n", False],
+        ["from_file", "[styles]\na = red\na = blue\n", False],
+        ["from_file", "[styles]\nnovalue\n", False],
+        ["from_file", "[styles]\nu = x%y\n", False],
+        ["from_file", "[styles]\na = notacolor\n", False],
+    ]),
+]
+
+
+def run_theme_steps(console, steps) -> None:
+    import io
+
+    from rich.theme import Theme, ThemeStackError
+
+    for step in steps:
+        op = step[0]
+        if op == "push":
+            console.push_theme(Theme(step[1], inherit=False), inherit=step[2])
+        elif op == "pop":
+            try:
+                console.pop_theme()
+            except ThemeStackError as error:
+                console.print(f"ERR:ThemeStackError:{error}", markup=False)
+        elif op == "use":
+            with console.use_theme(Theme(step[1], inherit=False)):
+                run_theme_steps(console, step[2])
+        elif op == "print":
+            console.print(step[1])
+        elif op == "config":
+            theme = Theme(step[1], inherit=step[2])
+            if step[2]:
+                console.print(str(len(theme.styles)), markup=False)
+            else:
+                console.print(theme.config, markup=False)
+        elif op == "from_file":
+            try:
+                theme = Theme.from_file(io.StringIO(step[1]), inherit=step[2])
+            except Exception as error:  # noqa: BLE001 - the type is the fixture
+                console.print(f"ERR:{type(error).__name__}", markup=False)
+            else:
+                lines = sorted(f"{k}={v}" for k, v in theme.styles.items())
+                console.print("\n".join(lines), markup=False)
+        else:
+            raise SystemExit(f"unknown theme step {op!r}")
+
+
 def escape(text: str) -> str:
     """Render ESC and newline as the literal markers the Rust test unescapes."""
     return (
@@ -1310,6 +1416,23 @@ def main() -> None:
         )
     functions_path.write_text("\n".join(flines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(FUNCTION_CASES)} function cases to {functions_path}")
+
+    # --- theme stack -----------------------------------------------------
+    stack_path = golden_dir() / "theme_stack.tsv"
+    slines = [THEME_STACK_HEADER.rstrip("\n")]
+    for name, steps in THEME_STACK_CASES:
+        sconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=40,
+            highlight=False,
+            no_color=False,
+        )
+        with sconsole.capture() as capture:
+            run_theme_steps(sconsole, steps)
+        slines.append(f"{name}\t{json.dumps(steps)}\t{escape(capture.get())}")
+    stack_path.write_text("\n".join(slines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(THEME_STACK_CASES)} theme stack cases to {stack_path}")
 
     # --- terminal themes -------------------------------------------------
     import rich.terminal_theme as _tt
