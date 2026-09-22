@@ -183,3 +183,97 @@ fn cli_crop_anchors_keep_different_edges_of_the_image() {
     std::fs::remove_file(root).unwrap();
     assert_ne!(results[0], results[1]);
 }
+
+#[cfg(feature = "art")]
+#[test]
+fn still_transforms_and_bayer_export_and_worker_options_are_effective() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("source.png");
+    rich_art::image::RgbImage::from_pixel(4, 2, rich_art::image::Rgb([128, 64, 192]))
+        .save(&source)
+        .unwrap();
+    let export = temp.path().join("transformed.html");
+    let output = run(&[
+        "image",
+        source.to_str().unwrap(),
+        "--image-mode",
+        "blocks",
+        "--image-rotate",
+        "90",
+        "--image-flip-horizontal",
+        "--image-grayscale",
+        "--image-color",
+        "ansi256",
+        "--image-dither",
+        "bayer4x4",
+        "--width",
+        "4",
+        "--export-html",
+        export.to_str().unwrap(),
+    ]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let html = std::fs::read_to_string(export).unwrap();
+    assert!(html.contains("▀"));
+    assert!(!html.contains("\x1bP"));
+    let invalid = run(&["image", source.to_str().unwrap(), "--image-rotate", "45"]);
+    assert_eq!(invalid.status.code(), Some(2));
+    let invalid = run(&["gif", "missing.gif", "--image-grayscale"]);
+    assert_eq!(invalid.status.code(), Some(2));
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn transform_config_and_cli_override_match_explicit_options() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("source.png");
+    rich_art::image::RgbImage::from_fn(6, 2, |x, y| {
+        rich_art::image::Rgb([x as u8 * 40, y as u8 * 200, 40])
+    })
+    .save(&source)
+    .unwrap();
+    let config = temp.path().join("config.toml");
+    std::fs::write(&config, "[defaults]\nimage_rotate = 90\nimage_flip_horizontal = true\nimage_grayscale = true\nimage_color = 'ansi256'\nimage_dither = 'bayer4x4'\n").unwrap();
+    let configured = std::process::Command::new(env!("CARGO_BIN_EXE_rich"))
+        .args([
+            "--config",
+            config.to_str().unwrap(),
+            "image",
+            source.to_str().unwrap(),
+            "--image-mode",
+            "blocks",
+            "--width",
+            "6",
+            "--no-image-grayscale",
+            "--image-rotate",
+            "270",
+        ])
+        .env_remove("NO_COLOR")
+        .output()
+        .unwrap();
+    let explicit = run(&[
+        "image",
+        source.to_str().unwrap(),
+        "--image-mode",
+        "blocks",
+        "--width",
+        "6",
+        "--image-rotate",
+        "270",
+        "--image-flip-horizontal",
+        "--image-color",
+        "ansi256",
+        "--image-dither",
+        "bayer4x4",
+    ]);
+    assert!(
+        configured.status.success(),
+        "{}",
+        String::from_utf8_lossy(&configured.stderr)
+    );
+    assert!(explicit.status.success());
+    assert_eq!(configured.stdout, explicit.stdout);
+}

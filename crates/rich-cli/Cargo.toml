@@ -42,6 +42,7 @@ art = ["dep:rich-art"]
 [dependencies]
 rich.workspace = true
 rich-ext.workspace = true
+terminal_size.workspace = true
 serde_json.workspace = true
 ureq = { workspace = true, optional = true }
 rich-art = { workspace = true, optional = true, features = ["gif", "sixel"] }
@@ -50,3 +51,9 @@ toml = "0.8"
 tempfile = "3"
 same-file = "1"
 ctrlc = "3.4"
+cap-std = "4"
+cap-fs-ext = "4"
+fastrand = "2"
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization"] }

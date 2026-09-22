@@ -7,6 +7,27 @@ absorbed and what our own crates did.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## Expanded CLI 0.0.9 preparation (unpublished)
+
+- Core 0.0.5: optional immutable rendering-environment extension seam; unchanged
+  default parity and public ConsoleOptions/Renderable requirements.
+- Ext 0.0.7: explicit targets/capabilities, deterministic optional snapshots,
+  constrained layouts/overflow, typed events/diagnostics, optional log/tracing
+  adapters and single-writer coordinated Live regions.
+- Art 0.0.7: still-image rotation, flips, grayscale and ordered Bayer dithering;
+  exact Braille/half-block edge regressions and same-source output examples.
+- CLI 0.0.9: directory-preserving/template batch names, config/worker routing,
+  typed log presentation, still-image exports, updated guided demo and real media.
+- Migration: exhaustive matches must include `Dither::Bayer4x4` and the added
+  unsigned/128-bit `Value` variants. New batch naming modes take output directories.
+- Fixed before merge: Live `print` no longer drops ordinary writes at interactive
+  widths 0/1, and diagnostic snippets strip CRLF carriage returns.
+- Release test passed on 2026-09-22 (full validation, golden parity, per-tag plans,
+  packaged consumer install, installed-binary screenshots); see
+  [expanded notes](docs/releases/0.0.9-expanded.md#release-test-2026-09-22).
+- Proposed cohort verified absent from crates.io on 2026-09-22; no tags or registry
+  publication performed. Publish core → ext/art → CLI after merge and CI.
+
 ## [0.0.1] — first release
 
 The first published version of all four crates: `rs-rich`, `rs-rich-ext`,
@@ -49,7 +70,7 @@ No additional changes pending.
   and the `ImageOptions` struct shape remain unchanged.
 
 Local validation and review passed; see [0.0.9 preparation notes](docs/releases/0.0.9.md).
-Core 0.0.4 and ext 0.0.6 are unchanged. No publication is claimed.
+The expanded scope above also moves core to 0.0.5 and ext to 0.0.7. No publication is claimed.
 
 ## CLI 0.0.8 / art 0.0.6 — published
 

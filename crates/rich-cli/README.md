@@ -137,3 +137,9 @@ For repetitive source files, build the CLI with
 off by default and changes no CLI flags. It reuses parsing work within one
 render; varied source files may see no speedup. See the
 [measurements](https://buchochelliq-labs.github.io/rs-rich-cli/benchmarks/#004-repeated-source-syntax-results).
+
+The expanded 0.0.9 preparation adds `--log-presentation rich`, still-image
+rotation/flips/grayscale and `--image-dither bayer4x4`, HTML/SVG still-image exports,
+and batch `--batch-preserve-dirs`, `--batch-input-root`, `--batch-name-template`.
+Run `rich --help` for accepted values; flags are opt-in. New batch naming modes
+treat export paths as directories, while legacy flat export naming is unchanged.

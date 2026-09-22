@@ -57,6 +57,7 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
     --ipynb      Render RESOURCE as a Jupyter notebook
     --jsonl      Stream JSON Lines / NDJSON records
     --log        Stream common structured-log JSONL records
+    --log-presentation plain|rich  Select log presentation (default: plain)
     --gif        Animate GIFs side by side; pipes receive the first frame
     --loop N     With --gif, repeat N times (default 1; 0 = forever)
     --rule       Draw a horizontal rule (RESOURCE is its title)
@@ -79,7 +80,10 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
                  With --image: flatten transparency onto this RGB colour
                  (also colours contain padding; quote the # in your shell)
     --image-color M Truecolor (default) or ansi256, with ASCII/blocks images
-    --image-dither M None (default) or floyd-steinberg; requires ansi256
+    --image-dither M none (default), floyd-steinberg, or bayer4x4 (ansi256)
+    --image-rotate N Rotate still images clockwise: 0, 90, 180, 270
+    --image-flip-horizontal / --image-flip-vertical Flip after rotation
+    --image-grayscale Composite and convert still images to grayscale
     --image-mode M
                  With --diff/--image, how to draw the picture: auto
                  (default), sixel (real pixels), blocks, braille, ascii, none
@@ -121,6 +125,8 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
                  Poll interval in seconds (default 1)
     --watch-cache With URLs, render only when the response body changes
     --batch      Convert explicit files, directories, or globs deterministically
+    --batch-preserve-dirs  Preserve paths under --batch-input-root PATH
+    --batch-name-template TEMPLATE  Name export leaves; export paths become directories
     --jobs N     Parallel file-export workers (default 1); requires --batch
                  Terminal output stays in input order; active jobs finish on error.
     --progress, --no-progress

@@ -67,3 +67,34 @@ pub trait Highlighter {
     /// Inspect `text` and apply any style spans in place.
     fn highlight(&self, text: &mut Text);
 }
+
+/// Evidence for an optional output protocol; inference is not confirmation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Support {
+    Unsupported,
+    Inferred,
+    Confirmed,
+}
+
+/// Immutable destination capabilities supplied by an extension. No detection or I/O.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TargetCapabilities {
+    pub width: usize,
+    pub height: usize,
+    pub color_system: Option<crate::color::ColorSystem>,
+    pub interactive: bool,
+    pub unicode: bool,
+    pub hyperlinks: bool,
+    pub sixel: Support,
+}
+
+/// Optional context shared by nested renderables without changing their protocol.
+pub trait RenderEnvironment: Send + Sync {
+    fn capabilities(&self) -> TargetCapabilities;
+}
+
+/// Attach/query a per-console immutable extension environment.
+pub trait ConsoleEnvironment {
+    fn set_render_environment(&mut self, value: Option<std::sync::Arc<dyn RenderEnvironment>>);
+    fn render_environment(&self) -> Option<&dyn RenderEnvironment>;
+}

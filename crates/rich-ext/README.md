@@ -41,3 +41,74 @@ third-party plugin loading, is tracked as its own roadmap issue.
 ## Licence
 
 MIT.
+
+### Explicit render destinations
+
+`target::RenderTarget` constructs a fully configured console from
+`rich::protocol::TargetCapabilities` and a theme. It never detects the process
+terminal. `segments` and `text` apply destination policy: plain streams strip
+colour, links and controls; capture and HTML/SVG disable interactive protocols.
+A zero-sized viewport returns empty without rendering children. An attached
+`ConsoleEnvironment` carries this immutable context through nested renderables;
+legacy consoles remain unchanged. Custom writers declare their own capabilities.
+
+### Bounded layouts
+
+`layout::LayoutNode` composes horizontal/vertical splits with `Constraint`
+(min/max/preferred/flex), intrinsic `content_width`/`content_height`, alignment,
+and explicit Wrap/Fold/Crop/Ellipsis/Visible overflow. Allocation shrinks requested
+sizes under viewport pressure, reports relaxed requests, and keeps capped surplus
+as padding. Zero cells skip children. Containers always clip at their boundary,
+including Visible overflow. Core Layout and ratio behaviour remain unchanged.
+
+### Structured events
+
+`event::StructuredEvent` retains typed `Value` fields until render time. Field
+replacement preserves insertion position; explicit ordering and hiding are opt-in.
+Messages are literal unless constructed as `Message::Markup`. Compact/expanded
+views share bounded overflow and resolve `event.message`, `event.field`,
+`event.value` and `event.severity.*` against the supplied theme. EventContext
+never reads a clock, thread or environment implicitly.
+
+### Diagnostics
+
+`diagnostic::Diagnostic` supports causes, labels, supplied source snippets,
+metadata, notes and help. `from_error` bounds the cause walk and marks cycles or
+truncation. `SourceSnippet::new` validates UTF-8 byte spans. Source/underline rows
+are cropped together at narrow widths to preserve column meaning; other content
+uses the selected overflow policy. No source files are opened implicitly.
+Attach multiple diagnostic blocks with `StructuredEvent::diagnostic`.
+
+Enable optional `log` or `tracing` features for `adapters::LogAdapter` or
+`adapters::EventLayer`. Supply an `Arc<dyn EventSink>` and install/filter the
+facade yourself. Sink errors are not recursively logged. Typed tracing visitors
+retain signed/unsigned 64/128-bit numbers; Debug-only fields become strings.
+See examples `log_adapter` and `tracing_adapter`. Layer integration follows
+[tracing-subscriber Layer](https://docs.rs/tracing-subscriber/0.3.23/tracing_subscriber/layer/trait.Layer.html).
+
+### Coordinated Live regions
+
+`live::LiveCoordinator` owns one writer and opaque region IDs. Call `refresh`
+explicitly; `handle().print` coordinates ordinary messages with the display.
+Do not share that writer with another Live loop or bypass it with Console.print.
+The inline viewport reserves one row for insertion and one guard column to avoid
+terminal auto-wrap. Control/raster content is rejected. Noninteractive output
+emits a finite final snapshot. Call `finish` to observe cleanup errors; Drop is
+best effort and cannot restore state after process abort or SIGKILL.
+
+Live interactivity and writer ownership are fixed for a coordinator lifetime.
+Finish and create a new coordinator to switch between terminal and pipe. Resize
+updates the safe viewport; applications must rerender their region content for
+new dimensions. Cursor cleanup covers ordinary errors and Rust unwinding, not
+process termination that prevents destructors from running.
+
+### Downstream render snapshots
+
+Enable `testing`, construct an explicit `RenderTarget`, then use
+`testing::RenderSnapshot::capture(&target, &renderable)`. `to_json()` serializes
+schema version, dimensions, plain text, ANSI and styled segment metadata;
+`expected.diff(&actual)` reports the first changed line or metadata path. Raw
+renderable line endings are preserved, without adding Console.print's newline.
+The `snapshot` example demonstrates a downstream test fixture. No framework is
+required. New `Value` unsigned and 128-bit variants must be handled by exhaustive
+matches before upgrading.

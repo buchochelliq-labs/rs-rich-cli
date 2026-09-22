@@ -137,6 +137,7 @@ and explicit overrides, not a materialized list of built-in defaults.
 | Convenience | Owner | Boundary |
 |---|---|---|
 | Named TOML themes, `--theme`, `--theme-style` | CLI config + main | Validated data builds public `rich::Theme`; resolved bindings pass to workers; no core theme-stack change |
+| Batch export filesystem hardening (#196) | CLI `batch_output.rs` + `batch.rs` | Parent retains directory handles; workers render to private staging; no-follow descendant traversal, exclusive creation and entry replacement; see CLI contract for directory-object authority and metadata semantics |
 | Batch progress and Ctrl+C | CLI batch + main | Human-report stderr TTY only; kill/wait workers and exit 130; no core Live/progress behavior changes |
 | `--demo-list`, `--demo-section` | CLI demo + main | Routes stable groups of existing renderers; preserves cleanup and finite pipes |
 | `rich doctor` | CLI doctor + main | Read-only selected diagnostics; JSON stdout; no terminal probes, network fetch or pager execution |
@@ -162,3 +163,23 @@ and truncated labels. Text span offsets remain valid when Unicode truncation
 replaces a character with padding or an ellipsis. CLI notebooks compose the
 upstream cell/output group before applying the shared decorators and alignment.
 Windows paging selects `more.com` and has a required native CI launch test.
+
+Expanded CLI 0.0.9 adds opt-in `--log-presentation rich` at the binary boundary.
+JSONL conversion composes rich-ext StructuredEvent; the default log formatter and
+core LogRender remain unchanged. Optional rich-ext `log`/`tracing` adapters never
+install global state. Their external facade dependencies are disabled by default.
+
+`rich-ext::live` owns extension region coordination; faithful core Live remains
+unchanged. The coordinator uses core Control encoders, reserves an insertion row
+and guard column, rejects supplied control content, and closes a failed session.
+The virtual-screen regressions and `scripts/test_live_regions_pty.py` exercise
+actual terminal writes, log retention, resize suspension and cursor restoration.
+
+Batch directory preservation and leaf templates are CLI planning conveniences.
+They reuse collision checks, worker bounds, ordered replay and cancellation.
+Legacy flat export naming and dry-run parent requirements remain unchanged.
+
+The expanded 0.0.9 still-image flags compose public `rich-art` transform and dither
+builders at the CLI boundary. Transform order is rotation, H/V flips, optional
+composite/grayscale, fit/anchor, sampling, palette processing and glyph selection.
+They are not upstream behavior and do not change core renderers or goldens.

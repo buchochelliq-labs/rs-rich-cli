@@ -15,9 +15,15 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 mod batch;
+mod batch_output;
+mod batch_paths;
+#[cfg(test)]
+mod batch_races;
 mod config;
 mod demo;
 mod doctor;
+mod render_target;
+mod structured_log;
 use batch::run_batch;
 use config::{config_args, ConfigRoots};
 
@@ -302,6 +308,15 @@ struct Cli {
     image_color: Option<String>,
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_dither: Option<String>,
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    image_rotate: Option<u16>,
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    image_flip_horizontal: bool,
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    image_flip_vertical: bool,
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    image_grayscale: bool,
+    log_presentation: String,
     theme_styles: std::collections::BTreeMap<String, Style>,
     /// `--height N`: with `--image`, render this many rows instead of the
     /// backend's default.
@@ -357,6 +372,7 @@ struct Cli {
     continue_on_error: bool,
     jobs: usize,
     dry_run: bool,
+    batch_paths: batch_paths::BatchPathOptions,
     worker_args: Vec<String>,
     overwrite: bool,
     collision: CollisionPolicy,
@@ -417,6 +433,9 @@ fn main() -> ExitCode {
 /// Options that consume the following argument as their value. Needed to tell a
 /// positional subcommand from an option's value when scanning raw arguments.
 const VALUE_OPTIONS: &[&str] = &[
+    "--batch-input-root",
+    "--batch-name-template",
+    "--log-presentation",
     "-w",
     "--width",
     "-o",
@@ -440,6 +459,7 @@ const VALUE_OPTIONS: &[&str] = &[
     "--theme-style",
     "--image-color",
     "--image-dither",
+    "--image-rotate",
     "--demo-section",
     "--demo-delay",
     "--watch-interval",
@@ -797,6 +817,8 @@ fn worker_args(args: &[String]) -> Vec<String> {
             if !matches!(
                 arg.as_str(),
                 "--jobs"
+                    | "--batch-input-root"
+                    | "--batch-name-template"
                     | "--collision"
                     | "--report"
                     | "-o"
@@ -815,6 +837,8 @@ fn worker_args(args: &[String]) -> Vec<String> {
             if !matches!(
                 arg.as_str(),
                 "--batch"
+                    | "--batch-preserve-dirs"
+                    | "--no-batch-preserve-dirs"
                     | "--no-batch"
                     | "--dry-run"
                     | "--progress"
@@ -948,6 +972,11 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut image_background = None;
     let mut image_color = None;
     let mut image_dither = None;
+    let mut image_rotate = None;
+    let mut image_flip_horizontal = false;
+    let mut image_flip_vertical = false;
+    let mut image_grayscale = false;
+    let mut log_presentation = String::from("plain");
     let mut theme_styles = std::collections::BTreeMap::new();
     let mut height = None;
     let mut extensions = CliExtensions::default();
@@ -976,6 +1005,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut continue_on_error = false;
     let mut jobs = 1usize;
     let mut dry_run = false;
+    let mut batch_paths = batch_paths::BatchPathOptions::default();
     let mut overwrite = false;
     let mut collision = CollisionPolicy::Error;
     // Set by `--`: everything after it is a positional argument, however much it
@@ -1014,6 +1044,15 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--image" => set_mode(&mut mode, Mode::Image)?,
             "--jsonl" | "--ndjson" => set_mode(&mut mode, Mode::JsonLines)?,
             "--log" => set_mode(&mut mode, Mode::Log)?,
+            "--log-presentation" => {
+                let value = iter
+                    .next()
+                    .ok_or("--log-presentation requires plain or rich")?;
+                if !matches!(value.as_str(), "plain" | "rich") {
+                    return Err("--log-presentation requires plain or rich".into());
+                }
+                log_presentation = value.clone();
+            }
             "--report" => {
                 let value = iter.next().map(String::as_str);
                 report_format.apply_option("--report", value)?;
@@ -1042,12 +1081,30 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                 }
                 image_color = Some(value.clone());
             }
+            "--image-flip-horizontal" => image_flip_horizontal = true,
+            "--no-image-flip-horizontal" => image_flip_horizontal = false,
+            "--image-flip-vertical" => image_flip_vertical = true,
+            "--no-image-flip-vertical" => image_flip_vertical = false,
+            "--image-grayscale" => image_grayscale = true,
+            "--no-image-grayscale" => image_grayscale = false,
+            "--image-rotate" => {
+                let value = iter
+                    .next()
+                    .ok_or("--image-rotate requires 0, 90, 180 or 270")?;
+                image_rotate = Some(match value.as_str() {
+                    "0" => 0,
+                    "90" => 90,
+                    "180" => 180,
+                    "270" => 270,
+                    _ => return Err("--image-rotate requires 0, 90, 180 or 270".into()),
+                });
+            }
             "--image-dither" => {
                 let value = iter
                     .next()
-                    .ok_or("--image-dither requires none or floyd-steinberg")?;
-                if !matches!(value.as_str(), "none" | "floyd-steinberg") {
-                    return Err("--image-dither requires none or floyd-steinberg".into());
+                    .ok_or("--image-dither requires none, floyd-steinberg or bayer4x4")?;
+                if !matches!(value.as_str(), "none" | "floyd-steinberg" | "bayer4x4") {
+                    return Err("--image-dither requires none, floyd-steinberg or bayer4x4".into());
                 }
                 image_dither = Some(value.clone());
             }
@@ -1165,6 +1222,22 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             }
             "--no-sanitize" => sanitize = false,
             "--dry-run" => dry_run = true,
+            "--batch-preserve-dirs" => batch_paths.preserve_dirs = true,
+            "--no-batch-preserve-dirs" => batch_paths.preserve_dirs = false,
+            "--batch-input-root" => {
+                batch_paths.input_root = Some(PathBuf::from(
+                    iter.next().ok_or("--batch-input-root requires a path")?,
+                ))
+            }
+            "--batch-name-template" => {
+                batch_paths.template = Some(
+                    batch_paths::FilenameTemplate::parse(
+                        iter.next()
+                            .ok_or("--batch-name-template requires a template")?,
+                    )
+                    .map_err(|e| e.to_string())?,
+                )
+            }
             "--watch" => watch = true,
             "--watch-cache" => watch_cache = true,
             "--watch-interval" | "--interval" => {
@@ -1324,7 +1397,10 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         }
     }
     if (image_color.as_deref() == Some("ansi256")
-        || image_dither.as_deref() == Some("floyd-steinberg"))
+        || matches!(
+            image_dither.as_deref(),
+            Some("floyd-steinberg" | "bayer4x4")
+        ))
         && !matches!(
             image_mode,
             ImageMode::Auto | ImageMode::Ascii | ImageMode::Blocks
@@ -1332,13 +1408,28 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     {
         return Err("image color processing supports only --image-mode ascii or blocks".into());
     }
-    if image_dither.as_deref() == Some("floyd-steinberg")
-        && image_color.as_deref() != Some("ansi256")
+    if matches!(
+        image_dither.as_deref(),
+        Some("floyd-steinberg" | "bayer4x4")
+    ) && image_color.as_deref() != Some("ansi256")
     {
-        return Err("--image-dither floyd-steinberg requires --image-color ansi256".into());
+        return Err(format!(
+            "--image-dither {} requires --image-color ansi256",
+            image_dither.as_deref().unwrap()
+        ));
     }
     if image_anchor.is_some() && image_fit.as_deref() != Some("cover") {
         return Err("--image-anchor requires --image-fit cover".into());
+    }
+    if (batch_paths.preserve_dirs
+        || batch_paths.template.is_some()
+        || batch_paths.input_root.is_some())
+        && !batch
+    {
+        return Err("batch path options require --batch".into());
+    }
+    if batch_paths.preserve_dirs && batch_paths.input_root.is_none() {
+        return Err("--batch-preserve-dirs requires --batch-input-root".into());
     }
     if dry_run && !batch {
         return Err("--dry-run requires --batch".into());
@@ -1368,8 +1459,6 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     if exporting {
         let unsupported = if effective_mode == Mode::Gif {
             Some("--gif")
-        } else if effective_mode == Mode::Image {
-            Some("--image")
         } else if mode == Mode::Auto && resources.is_empty() {
             Some("the capability demo")
         } else {
@@ -1399,6 +1488,30 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             mode == Mode::Diff || mode == Mode::Image,
         ),
         ("--height", height.is_some(), "--image", mode == Mode::Image),
+        (
+            "--image-rotate",
+            image_rotate.is_some(),
+            "--image",
+            mode == Mode::Image,
+        ),
+        (
+            "--image-flip-horizontal",
+            image_flip_horizontal,
+            "--image",
+            mode == Mode::Image,
+        ),
+        (
+            "--image-flip-vertical",
+            image_flip_vertical,
+            "--image",
+            mode == Mode::Image,
+        ),
+        (
+            "--image-grayscale",
+            image_grayscale,
+            "--image",
+            mode == Mode::Image,
+        ),
         (
             "--image-color",
             image_color.is_some(),
@@ -1516,6 +1629,11 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         image_background,
         image_color,
         image_dither,
+        image_rotate,
+        image_flip_horizontal,
+        image_flip_vertical,
+        image_grayscale,
+        log_presentation,
         theme_styles,
         height,
         extensions,
@@ -1544,6 +1662,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         continue_on_error,
         jobs,
         dry_run,
+        batch_paths,
         worker_args: worker_args(args),
         overwrite,
         collision,
@@ -2284,6 +2403,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         builder = builder.width(width);
     }
     let mut console = builder.build();
+    render_target::attach(&mut console);
     console.install_extensions();
 
     if mode == Mode::Rule {
@@ -2702,8 +2822,12 @@ fn run_json_lines(cli: &Cli, console: &Console, log_mode: bool) -> ExitCode {
             sanitize_json_value(&mut value);
         }
         let wrote = if log_mode {
-            let text = Text::new(format_log_record(&value));
-            write_rendered_stdout(console, &text)
+            if cli.log_presentation == "rich" {
+                write_rendered_stdout(console, &structured_log::event(&value))
+            } else {
+                let text = Text::new(format_log_record(&value));
+                write_rendered_stdout(console, &text)
+            }
         } else {
             let source = serde_json::to_string(&value).expect("JSON value serializes");
             let json = Json::new(&source).expect("serialized JSON parses");
@@ -3906,6 +4030,17 @@ fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
 
     let width = cli.width.unwrap_or_else(|| console.width());
     let mut art = ImageArt::new(image)
+        .transforms(rich_art::ImageTransforms {
+            rotation: match cli.image_rotate {
+                Some(90) => rich_art::Rotation::Clockwise90,
+                Some(180) => rich_art::Rotation::Clockwise180,
+                Some(270) => rich_art::Rotation::Clockwise270,
+                _ => rich_art::Rotation::None,
+            },
+            flip_horizontal: cli.image_flip_horizontal,
+            flip_vertical: cli.image_flip_vertical,
+            grayscale: cli.image_grayscale,
+        })
         .mode(to_art_image_mode(cli.image_mode))
         .width(width)
         .color(!cli.no_color);
@@ -3945,6 +4080,7 @@ fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     if let Some(dither) = cli.image_dither.as_deref() {
         art = art.dither(match dither {
             "floyd-steinberg" => rich_art::Dither::FloydSteinberg,
+            "bayer4x4" => rich_art::Dither::Bayer4x4,
             _ => rich_art::Dither::None,
         });
     }
@@ -3958,8 +4094,35 @@ fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
         return fail(cli, ExitClass::Input, err.to_string());
     }
 
-    if let Err(message) = emit(console, export, |c| c.print(&art)) {
+    let terminal_only = Export {
+        html_path: None,
+        svg_path: None,
+        ..*export
+    };
+    if let Err(message) = emit(console, &terminal_only, |c| c.print(&art)) {
         return fail(cli, ExitClass::Input, message);
+    }
+    if export.html_path.is_some() || export.svg_path.is_some() {
+        use rich::protocol::RenderEnvironment;
+        use rich_ext::target::{RenderTarget, TargetKind, TargetOverrides};
+        let mut caps = render_target::observe(console, TargetOverrides::default()).capabilities;
+        caps.color_system = if cli.no_color {
+            None
+        } else {
+            Some(ColorSystem::Truecolor)
+        };
+        let target = RenderTarget::new(TargetKind::Html, caps, console.theme().clone());
+        let export_console = target.console();
+        if let Err(err) =
+            art.render_with_environment(&export_console, &export_console.options(), &target)
+        {
+            return fail(cli, ExitClass::Input, err.to_string());
+        }
+        let segments = target.segments(&art);
+        debug_assert!(!target.capabilities().interactive);
+        if let Err(message) = save_exports(&export_console, export, &segments) {
+            return fail(cli, ExitClass::Input, message);
+        }
     }
     success(cli)
 }
@@ -4322,6 +4485,8 @@ fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) -> Re
 }
 
 fn save_exports(console: &Console, export: &Export, segments: &[Segment]) -> Result<(), String> {
+    let filtered: Vec<Segment> = segments.iter().filter(|s| !s.control).cloned().collect();
+    let segments = filtered.as_slice();
     let mut first_error = None;
     if let Some(path) = export.html_path {
         // CSS-class stylesheet form, as upstream's `save_html` default.
@@ -4390,6 +4555,7 @@ by extension — anything else with a file extension is syntax-highlighted):
         --ipynb      Render RESOURCE as a Jupyter notebook
         --jsonl      Stream JSON Lines / NDJSON records
         --log        Stream common structured-log JSONL records
+        --log-presentation plain|rich  Select log presentation (default: plain)
         --gif        Animate GIFs side by side; pipes receive the first frame
         --loop N     With --gif, repeat N times (default 1; 0 = forever)
         --rule       Draw a horizontal rule (RESOURCE is its title)
@@ -4409,7 +4575,10 @@ OPTIONS:
                      With --image: flatten transparency onto this RGB colour
                      (also colours contain padding; quote the # in your shell)
         --image-color M Truecolor (default) or ansi256, with ASCII/blocks images
-        --image-dither M None (default) or floyd-steinberg; requires ansi256
+        --image-dither M none (default), floyd-steinberg, or bayer4x4 (ansi256)
+        --image-rotate N Rotate still images clockwise: 0, 90, 180, 270
+        --image-flip-horizontal / --image-flip-vertical Flip after rotation
+        --image-grayscale Composite and convert still images to grayscale
         --image-mode M
                      With --diff/--image, how to draw the picture: auto
                      (default), sixel (real pixels), blocks, braille, ascii, none
@@ -4448,6 +4617,8 @@ OPTIONS:
                      Poll interval in seconds (default 1)
         --watch-cache With URLs, render only when the response body changes
         --batch      Convert explicit files, directories, or globs deterministically
+        --batch-preserve-dirs  Preserve paths under --batch-input-root PATH
+        --batch-name-template TEMPLATE  Name export leaves; export paths become directories
         --jobs N     Parallel file-export workers (default 1); requires --batch
                      Terminal output stays in input order; active jobs finish on error.
         --progress, --no-progress

@@ -112,6 +112,10 @@ fn boolean_flags(key: &str) -> Option<(&'static str, &'static str)> {
         "auto_pager" => ("--auto-pager", "--no-auto-pager"),
         "no_color" => ("--no-color", "--color"),
         "batch" => ("--batch", "--no-batch"),
+        "image_flip_horizontal" => ("--image-flip-horizontal", "--no-image-flip-horizontal"),
+        "image_flip_vertical" => ("--image-flip-vertical", "--no-image-flip-vertical"),
+        "image_grayscale" => ("--image-grayscale", "--no-image-grayscale"),
+        "batch_preserve_dirs" => ("--batch-preserve-dirs", "--no-batch-preserve-dirs"),
         "continue_on_error" => ("--continue-on-error", "--no-continue-on-error"),
         "overwrite" => ("--overwrite", "--no-overwrite"),
         "watch" => ("--watch", "--no-watch"),
@@ -123,6 +127,10 @@ fn boolean_flags(key: &str) -> Option<(&'static str, &'static str)> {
 }
 
 const BOOLEAN_KEYS: &[&str] = &[
+    "image_flip_horizontal",
+    "image_flip_vertical",
+    "image_grayscale",
+    "batch_preserve_dirs",
     "pager",
     "auto_pager",
     "no_color",
@@ -135,6 +143,9 @@ const BOOLEAN_KEYS: &[&str] = &[
     "progress",
 ];
 const VALUE_KEYS: &[&str] = &[
+    "image_rotate",
+    "batch_input_root",
+    "batch_name_template",
     "width",
     "height",
     "jobs",
@@ -149,6 +160,7 @@ const VALUE_KEYS: &[&str] = &[
     "image_background",
     "image_color",
     "image_dither",
+    "log_presentation",
 ];
 
 fn validate_value(key: &str, value: &Value) -> Result<(), String> {
@@ -156,6 +168,9 @@ fn validate_value(key: &str, value: &Value) -> Result<(), String> {
         value.is_bool()
     } else {
         match key {
+            "image_rotate" => value
+                .as_integer()
+                .is_some_and(|v| matches!(v, 0 | 90 | 180 | 270)),
             "width" | "height" | "jobs" => value
                 .as_integer()
                 .is_some_and(|v| v > 0 && usize::try_from(v).is_ok()),
@@ -186,12 +201,15 @@ fn validate_value(key: &str, value: &Value) -> Result<(), String> {
             "theme" => value
                 .as_str()
                 .is_some_and(|v| validate_theme_name(v).is_ok()),
+            "log_presentation" => value
+                .as_str()
+                .is_some_and(|v| matches!(v, "plain" | "rich")),
             "image_color" => value
                 .as_str()
                 .is_some_and(|v| matches!(v, "truecolor" | "ansi256")),
             "image_dither" => value
                 .as_str()
-                .is_some_and(|v| matches!(v, "none" | "floyd-steinberg")),
+                .is_some_and(|v| matches!(v, "none" | "floyd-steinberg" | "bayer4x4")),
             "image_fit" => value
                 .as_str()
                 .is_some_and(|v| matches!(v, "contain" | "cover")),
@@ -225,7 +243,9 @@ fn validate_value(key: &str, value: &Value) -> Result<(), String> {
                 matches!(parts.len(), 1 | 2 | 4)
                     && parts.iter().all(|p| p.trim().parse::<usize>().is_ok())
             }),
-            "export_html" | "export_svg" => value.is_str(),
+            "export_html" | "export_svg" | "batch_input_root" | "batch_name_template" => {
+                value.is_str()
+            }
             _ => return Err(format!("unknown key {key:?}")),
         }
     };
@@ -429,7 +449,7 @@ fn overrides(args: &[String]) -> Settings {
                     .find(|k| format!("--{}", k.replace('_', "-")) == canonical)
                 {
                     let value = match *key {
-                        "width" | "height" | "jobs" => value
+                        "image_rotate" | "width" | "height" | "jobs" => value
                             .parse::<i64>()
                             .map(Value::Integer)
                             .unwrap_or_else(|_| Value::String(value.clone())),

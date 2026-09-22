@@ -2,6 +2,7 @@
 # Keeps byte-sensitive golden fixtures and cross-platform CI consistent.
 * text=auto eol=lf
 
-# Explicitly binary (none yet, but future assets should be listed here).
+# Binary artifacts retain exact capture bytes.
 *.png binary
 *.ico binary
+*.sixel binary

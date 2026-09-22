@@ -660,3 +660,131 @@ render; varied source files may see no speedup. See the
 Disabling configured watch with `watch = false` or `--no-watch` also suppresses
 inherited `watch_interval` and `watch_cache`. Explicitly passing those watch
 options without enabling watch remains a usage error.
+
+### Destination capabilities
+
+The CLI snapshots its selected console's capabilities for nested image rendering.
+Image HTML/SVG exports render the decoded image for a noninteractive destination;
+terminal raster controls are excluded. `doctor --report json` includes
+`terminal.provenance` with configured, detected and inferred capability origins.
+Library applications can supply an explicit `rich_ext::target::RenderTarget`
+without consulting the process environment.
+
+### Rich log presentation
+
+`rich log events.jsonl --log-presentation rich` renders typed fields and themed
+severity labels. The default `plain` presentation preserves existing output.
+Configuration uses `log_presentation = "rich"`; an explicit flag overrides it.
+Messages remain literal, and machine report envelopes are unchanged.
+
+The library's coordinated Live example (`cargo run -p rs-rich-ext --example
+live_regions`) demonstrates ordinary messages between independently updated
+regions. Resize dimensions are supplied explicitly. Empty viewports suspend
+drawing and restore the cursor; growing establishes a fresh bounded area.
+
+### Batch directories and filename templates
+
+```sh
+rich --batch --batch-preserve-dirs --batch-input-root input \
+  --batch-name-template '{index}-{stem}.{output_ext}' \
+  --export-html output --dry-run input
+```
+
+With directory preservation or a name template enabled, each export path names
+an **output directory**. `{stem}`, `{input_ext}`, `{output_ext}` and one-based
+`{index}` supply the complete filename; no extra extension is appended. Double
+braces (`{{`/`}}`) escape literal braces. Templates cannot introduce paths.
+`--batch-preserve-dirs` requires local inputs under `--batch-input-root`.
+Missing directories are listed by dry-run and created once before execution;
+dry-run never creates them. Template-only mode requires existing parents.
+Existing error/suffix/overwrite policies apply after expansion. Alias checks are
+repeated before worker startup; they do not guarantee protection against another
+process swapping symlinks during a write. Cancellation retains created directories
+and completed exports. Config keys are `batch_preserve_dirs`, `batch_input_root`
+and `batch_name_template`; explicit flags override configuration.
+
+### Still-image transforms and exports (0.0.9)
+
+```sh
+rich image photo.png --image-mode blocks --image-rotate 90 \
+  --image-flip-horizontal --image-grayscale --image-color ansi256 \
+  --image-dither bayer4x4 --export-html photo.html --export-svg photo.svg
+```
+
+Rotation accepts 0, 90, 180 or 270 clockwise degrees. Flips follow rotation;
+`--image-flip-vertical` is also available. Grayscale composites alpha before
+conversion and includes contain padding. Transform flags require still-image
+mode. Bayer requires ANSI256 ASCII or blocks. Defaults remain unchanged.
+
+Config keys are `image_rotate` (integer), `image_flip_horizontal`,
+`image_flip_vertical`, `image_grayscale` (booleans), and `image_dither` (string).
+CLI flags override config, including `--no-image-flip-horizontal`,
+`--no-image-flip-vertical` and `--no-image-grayscale`. Batch workers inherit the
+resolved options. HTML/SVG exports render against an explicit noninteractive
+text target; Auto never selects Sixel for an export, and explicit Sixel fails.
+
+### Directory-preserving batch names
+
+```sh
+rich --batch input/ --batch-preserve-dirs --batch-input-root input/ \
+  --batch-name-template '{index}-{stem}.{output_ext}' --export-html rendered/ --dry-run
+rich --batch input/ --batch-preserve-dirs --batch-input-root input/ \
+  --batch-name-template '{index}-{stem}.{output_ext}' --export-html rendered/ --jobs 4
+rich --batch input/*.json --batch-name-template '{stem}.{output_ext}' --export-svg rendered/
+```
+
+Shells expand unquoted globs; directory traversal is performed by the CLI. In
+these new naming modes export arguments identify directories. Templates produce
+one complete leaf using `{stem}`, `{input_ext}`, `{output_ext}`, and one-based
+`{index}`; `{{` and `}}` emit braces. Parent traversal, separators and invalid
+platform names fail before rendering. Relative subdirectories come from the
+canonical input root. Dry runs report missing directories without creating them.
+Collision policies remain `error`, `suffix`, `overwrite`. Preflight rejects input
+aliases. Batch exports retain directory handles in the parent and render into
+private worker staging files. Publication uses those handles, rejects symlink or
+junction traversal below the acquired root, and never truncates an existing file
+through a symlink or hard link. Overwrite replaces the destination entry; other
+hard links retain their original contents. Without overwrite permission, a file
+that appears after planning causes an error, including in `suffix` mode: the
+planned name is not silently changed or overwritten.
+
+Only successful workers publish exports. HTML and SVG are published individually,
+not as a transaction. Failed/cancelled batches retain completed exports and created
+directories. A copy failure while creating a new output may leave a partial new
+file; overwrite prepares a complete temporary file before replacement. Replacement
+creates a new inode: on Unix replacement exports are owner-readable/writable only
+(mode `0600`); on Windows a protected owner-only DACL is installed while the empty
+temporary file is exclusively held, before copying any content. Other existing inode metadata is not
+preserved. Publication checks cancellation between 64 KiB chunks and before
+replacement; an individual operating-system filesystem call can still block.
+
+Authority attaches to the directory objects acquired at batch startup (or the
+nearest existing ancestor for a missing root). A later pathname replacement cannot
+redirect the export. Renaming an acquired directory may relocate that same object
+and its exports; the CLI does not freeze the filesystem namespace. This is not
+input snapshotting, a sandbox for a compromised CLI account/private temporary
+storage, or protection against privileged mount changes. Existing symlink roots
+are resolved at initial acquisition; symlink subdirectories below that boundary
+are rejected, even when their target is inside the root. See
+[filesystem hardening #196](https://github.com/buchochelliq-labs/rs-rich-cli/issues/196).
+The CLI currently requires UTF-8 output paths; it rejects unsupported paths rather
+than silently replacing bytes. Legacy flat naming remains unchanged.
+
+### Typed log presentation
+
+`rich log events.jsonl --log-presentation rich` renders typed JSON fields using
+`rich-ext::StructuredEvent`. The default `plain` presentation is unchanged.
+Library users can attach caller-supplied diagnostics and opt into `log`/`tracing`
+adapters without installing a global logger automatically.
+
+![Actual same-source image exports](media/cli-v9-image-transforms.png)
+
+![Actual structured diagnostic and layout export](media/expanded-v9/cli-v9-diagnostics.png)
+
+These are real renderer outputs; reproduce them with
+`python scripts/capture_expanded_v9.py --binary target/debug/rich` after building.
+Raw HTML/SVG exports, source fixture and provenance accompany the previews.
+Braille uses fixed luminance thresholding with 2×4 dot cells; half-block uses top
+foreground/bottom background pairs. Tests enumerate all eight Braille positions,
+partial transparent cells and odd block heights. Quadrants remain optional future
+work; GIF block playback continues to consume the existing block renderer.

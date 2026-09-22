@@ -143,8 +143,9 @@ still images. Truecolor/no-dither remains the default; GIF, diff, Braille and
 Sixel preprocessing remain outside this slice of #125.
 
 [Release notes](releases/0.0.9.md) track pending combined validation, recordings,
-review and package handoff. This preparation does not publish or tag packages;
-core and ext remain unchanged.
+review and package handoff. The expanded scope (#192) adds core 0.0.5 and ext 0.0.7
+to the cohort; its [release test](releases/0.0.9-expanded.md#release-test-2026-09-22)
+passed. This preparation does not publish or tag packages.
 
 ### Confidence tooling for expanded CLI surfaces
 

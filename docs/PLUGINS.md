@@ -67,3 +67,29 @@ holds *factories* so one registry can be installed onto many consoles.
 
 Whatever we add, the invariant holds: **the core never learns about a specific
 extension.**
+
+`rich_ext::layout` offers bounded composition independently of core Layout.
+`allocate` validates constraints and returns sizes, padding and relaxed request
+indices. `fit_segments` shares Unicode-aware overflow across extension renderables.
+See `cargo run -p rs-rich-ext --example layout -- 20` for a narrow sidebar layout.
+
+### Explicit rendering environment
+
+The sanctioned `protocol::RenderEnvironment` trait and optional
+`protocol::ConsoleEnvironment` let a Console carry an immutable capability snapshot
+through nested renderables. This is the only new core seam; a Console without it
+keeps upstream-compatible behavior. `rich-ext::target::RenderTarget` implements
+destination policy and creates configured consoles. Core has no dependency on ext,
+art or CLI. Prefer one observation at the application boundary followed by explicit
+capabilities; never redetect stdout inside an explicit render.
+
+`TargetKind` covers Terminal, PlainStream, Capture, Html, Svg and Custom.
+Detection provenance is separate from the rendering snapshot. `Support::Inferred`
+is a conservative hint; protocol rendering can require `Confirmed`. Unicode and
+hyperlink policy are declared by the caller. Legacy renderers may still have their
+own sizing choices; wrap them in bounded `LayoutNode` containers for strict cells.
+
+Enable `rs-rich-ext` features `testing`, `log` and `tracing` independently. The
+snapshot helper has no process environment dependency or assertion-framework
+requirement. See the `snapshot`, `diagnostic`, `log_adapter`, `tracing_adapter`,
+`layout`, `live_regions` and `expanded_release` examples in the crate.
