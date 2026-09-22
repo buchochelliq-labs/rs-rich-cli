@@ -87,6 +87,56 @@ fn symlink_escape_and_input_alias_are_rejected_without_writes() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn serial_suffix_never_writes_through_output_aliases() {
+    use std::os::unix::fs::symlink;
+    let t = fixture();
+    let root = t.path().join("input");
+    std::fs::write(root.join("a/report.txt"), "from a").unwrap();
+    std::fs::write(root.join("b/report.txt"), "from b").unwrap();
+    let preserve = |out: &Path, extra: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_rich"))
+            .args([
+                "--no-config",
+                "--no-color",
+                "--batch",
+                "--batch-preserve-dirs",
+            ])
+            .args(["--batch-input-root", root.to_str().unwrap()])
+            .args(["--collision", "suffix", "--jobs", "1"])
+            .args(["--export-html", out.to_str().unwrap()])
+            .args(extra)
+            .arg(&root)
+            .output()
+            .unwrap()
+    };
+    // A directory alias fails closed before any worker writes.
+    let out = t.path().join("dir-alias");
+    std::fs::create_dir_all(out.join("a")).unwrap();
+    symlink("a", out.join("b")).unwrap();
+    let result = preserve(&out, &[]);
+    assert_eq!(result.status.code(), Some(3), "{result:?}");
+    assert!(String::from_utf8_lossy(&result.stderr).contains("cannot prepare export directory"));
+    assert_eq!(std::fs::read_dir(out.join("a")).unwrap().count(), 0);
+    // A file alias is replaced, not written through, so each input keeps its output.
+    let out = t.path().join("file-alias");
+    std::fs::create_dir_all(out.join("a")).unwrap();
+    std::fs::create_dir_all(out.join("b")).unwrap();
+    std::fs::write(out.join("a/report.html"), "old").unwrap();
+    symlink("../a/report.html", out.join("b/report.html")).unwrap();
+    let result = preserve(&out, &["--overwrite"]);
+    assert!(result.status.success(), "{result:?}");
+    let a = std::fs::read_to_string(out.join("a/report.html")).unwrap();
+    let b = std::fs::read_to_string(out.join("b/report.html")).unwrap();
+    assert!(a.contains("from a") && !a.contains("from b"), "{a}");
+    assert!(b.contains("from b") && !b.contains("from a"), "{b}");
+    assert!(!std::fs::symlink_metadata(out.join("b/report.html"))
+        .unwrap()
+        .file_type()
+        .is_symlink());
+}
+
 #[test]
 fn suffix_collisions_and_invalid_templates_are_settled_before_workers() {
     let t = fixture();
