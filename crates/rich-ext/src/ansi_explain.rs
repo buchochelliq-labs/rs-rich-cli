@@ -1197,7 +1197,13 @@ impl Renderable for ExplanationView<'_> {
                 raw
             };
             let offset = t.offset.to_string();
-            table.add_row(&[&offset, &raw, t.token.kind(), &t.token.meaning()]);
+            // Captured text and escapes are data: `[info]` must not become a style.
+            table.add_row_text(vec![
+                Text::new(offset),
+                Text::new(raw),
+                Text::new(t.token.kind()),
+                Text::new(t.token.meaning()),
+            ]);
         }
         let mut out = table.rich_render(console, options);
         if out.last().is_some_and(|s| !s.text.ends_with('\n')) {

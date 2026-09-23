@@ -236,6 +236,17 @@ impl Renderable for Clipper {
     }
 }
 
+/// Claims it fits in five cells, but never renders narrower than eight.
+struct Underclaimer;
+impl Renderable for Underclaimer {
+    fn rich_render(&self, _: &Console, o: &ConsoleOptions) -> Vec<Segment> {
+        vec![Segment::new("x".repeat(o.max_width.clamp(8, 12)), None)]
+    }
+    fn measure(&self, _: &Console, _: &ConsoleOptions) -> rich::measure::Measurement {
+        rich::measure::Measurement::new(2, 5)
+    }
+}
+
 /// The same words on more lines when wider.
 struct Growing;
 impl Renderable for Growing {
@@ -269,6 +280,25 @@ fn stress_finds_broken_renderables() {
         .issues
         .iter()
         .any(|i| i.detail.contains("7 characters lost")));
+
+    // Wider than it measures is fine (an expanding panel is); failing to fit
+    // at its own measured maximum is not.
+    let report = stress(&Underclaimer, &StressOptions::widths([20, 40]));
+    let details: Vec<&str> = report
+        .of(IssueKind::MeasureMismatch)
+        .map(|i| i.detail.as_str())
+        .collect();
+    assert_eq!(
+        details,
+        ["measure maximum is 5 but a render at that width is 8 cells wide"; 2]
+    );
+    let panel = Panel::new(Box::new(Text::new("short")));
+    assert_eq!(
+        stress(&panel, &StressOptions::widths([20, 40]))
+            .of(IssueKind::MeasureMismatch)
+            .count(),
+        0
+    );
 
     let report = stress(&Growing, &StressOptions::widths([10, 20, 40, 80]));
     let unstable: Vec<&str> = report

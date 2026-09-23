@@ -10,8 +10,8 @@
 //!
 //! [`fuzz`] renders each case at its random width and checks the
 //! [`Invariants`]: no panic, no line wider than the width, an identical
-//! second render, `measure()` bounds (minimum ≤ maximum, visible width ≤
-//! maximum), and any custom checks. A failure is shrunk greedily — hoisting
+//! second render, `measure()` bounds (minimum ≤ maximum, and a render at the
+//! measured maximum fits in it), and any custom checks. A failure is shrunk greedily — hoisting
 //! children, dropping rows, columns, chunks and children, shortening text,
 //! clearing options and narrowing the width — while the same invariant keeps
 //! failing, within [`GenOptions::shrink_budget`] checks.
@@ -954,8 +954,10 @@ pub struct Invariants {
     pub fits_width: bool,
     /// A second render of a fresh build is identical.
     pub deterministic: bool,
-    /// `measure()` has minimum ≤ maximum and no line's content (first to
-    /// last non-space cell) is wider than the maximum clamped to the width.
+    /// `measure()` has minimum ≤ maximum, and when a line's content (first
+    /// to last non-space cell) is wider than the maximum clamped to the
+    /// width, a render at that maximum fits in it. Expanding panels and
+    /// tables fill the width whatever they measure, as upstream's do.
     /// Skipped for text with tabs, which upstream measures unexpanded.
     pub measure_bounds: bool,
     custom: Vec<(String, Check)>,
@@ -1087,15 +1089,27 @@ impl Invariants {
                     ))
                 }
                 Ok(m) => {
+                    // An expanding panel or table fills the width whatever it
+                    // measures, as upstream's do; what containers rely on is
+                    // that a render at the measured maximum fits in it.
                     let visible = lines.iter().map(|l| visible_width(l)).max().unwrap_or(0);
-                    if visible > m.maximum.min(width) && visible <= width {
-                        return Some((
-                            "measure_bounds".into(),
-                            format!(
-                                "rendered {visible} cells wide but measure maximum is {}",
-                                m.maximum
-                            ),
-                        ));
+                    let at = m.maximum.min(width);
+                    if visible > at && visible <= width && at >= 1 && !node.allows_overflow() {
+                        let narrow = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            Probe::new(at).segments(&*node.build())
+                        }))
+                        .map(|s| plain_lines(&s))
+                        .unwrap_or_default();
+                        if let Some(line) = narrow.iter().find(|l| cell_len(l) > at) {
+                            return Some((
+                                "measure_bounds".into(),
+                                format!(
+                                    "measure maximum is {} but a render at that width is {} cells wide",
+                                    m.maximum,
+                                    cell_len(line)
+                                ),
+                            ));
+                        }
                     }
                 }
             }

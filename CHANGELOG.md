@@ -111,6 +111,12 @@ Both were found while writing the user guide and checked against rich 15.0.0.
   CLI CSV headers and cells now parse markup and emoji codes, as rich-cli 1.8.1
   does (`table.add_row(*row)` with `str` cells). Malformed markup prints
   literally rather than raising (DIVERGENCES §2).
+  The 0.0.11 ext views that show data (ANSI explain, capability, contrast and
+  test reports) pass `Text` too, so `[info]` or `test_x[a]` stays literal.
+- **QA measure checks** follow upstream's contract now that containers
+  measure: an expanding `Panel` or `Table` fills the width whatever it
+  measures, so fuzz, stress and lint flag a measure only when a render at its
+  own measured maximum overflows it.
 - Goldens: `table_markup_*`, `tree_markup`, `tree_highlight`, `columns_markup`,
   `table_nested`, `table_renderable_cells*`, `table_tree_cell`,
   `columns_panels*`, `columns_tables`, `panel_fit_*`, `panel_width`,

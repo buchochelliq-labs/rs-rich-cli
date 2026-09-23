@@ -19,7 +19,9 @@
 //! * **measure mismatch** — `measure()` returning `minimum > maximum`, or a
 //!   line whose content (first to last non-space cell, so justification
 //!   padding does not count) is wider than the measured maximum clamped to
-//!   the width. With [`StressOptions::strict_minimum`],
+//!   the width while a render at that maximum overflows it. (An expanding
+//!   panel or table fills the width whatever it measures, as upstream's do.)
+//!   With [`StressOptions::strict_minimum`],
 //!   also a render that fits a width below the measured minimum.
 
 use rich::cells::cell_len;
@@ -173,6 +175,19 @@ pub(crate) fn lost_chars(reference: &[String], lines: &[String], ascii: bool) ->
     lost
 }
 
+/// The widest line of `renderable` rendered at `width` like `probe`, when it
+/// is wider than `width`.
+fn overflow_at(renderable: &dyn Renderable, probe: &Probe, width: usize) -> Option<usize> {
+    let mut narrow = probe.clone();
+    narrow.width = width;
+    let lines = plain_lines(&narrow.try_segments(renderable).ok()?);
+    lines
+        .iter()
+        .map(|l| cell_len(l))
+        .max()
+        .filter(|&w| w > width)
+}
+
 /// Stress `renderable` (see the [module docs](self)).
 pub fn stress(renderable: &dyn Renderable, options: &StressOptions) -> StressReport {
     let mut report = StressReport::default();
@@ -234,11 +249,18 @@ pub fn stress(renderable: &dyn Renderable, options: &StressOptions) -> StressRep
                         IssueKind::MeasureMismatch,
                         format!("measure minimum {} > maximum {}", m.minimum, m.maximum),
                     ));
-                } else if visible > m.maximum.min(width) && visible <= width {
+                } else if let Some(wide) =
+                    (visible > m.maximum.min(width) && visible <= width && m.maximum >= 1)
+                        .then(|| overflow_at(renderable, &probe, m.maximum.min(width)))
+                        .flatten()
+                {
+                    // An expanding panel or table fills the width whatever it
+                    // measures, as upstream's do; containers rely on a render
+                    // at the measured maximum fitting in it.
                     report.issues.push(issue(
                         IssueKind::MeasureMismatch,
                         format!(
-                            "rendered {visible} cells wide but measure maximum is {}",
+                            "measure maximum is {} but a render at that width is {wide} cells wide",
                             m.maximum
                         ),
                     ));
