@@ -117,7 +117,9 @@ impl RenderCapabilities {
     /// `rich-cli` uses.
     pub fn from_console(console: &Console) -> Self {
         RenderCapabilities {
-            color: console.color_system().is_some(),
+            // No-colour mode keeps the colour system (as upstream does) but
+            // strips every colour on output, so it counts as no colour here.
+            color: console.color_system().is_some() && !console.no_color(),
             sixel_supported: Self::sixel_supported(console),
         }
     }

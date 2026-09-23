@@ -71,6 +71,19 @@ impl Segment {
         out
     }
 
+    /// Remove all colour from a segment stream, keeping every other attribute.
+    /// Port of `Segment.remove_color`.
+    pub fn remove_color(segments: &[Segment]) -> Vec<Segment> {
+        segments
+            .iter()
+            .map(|segment| Segment {
+                text: segment.text.clone(),
+                style: segment.style.as_ref().map(Style::without_color),
+                control: segment.control,
+            })
+            .collect()
+    }
+
     /// Apply `style` as a base *under* each segment's own style (that segment's
     /// style wins on top). Control segments are left untouched. Port of
     /// `Segment.apply_style` (the `style`-only path).

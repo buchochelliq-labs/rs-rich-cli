@@ -7,7 +7,7 @@
 //! Reading is behind the [`InputSource`] trait so the whole loop — including the
 //! re-ask path — is testable without a terminal. [`StdinInput`] is the default.
 
-use std::io::{BufRead, Write};
+use std::io::BufRead;
 
 use crate::console::Console;
 use crate::text::Text;
@@ -154,10 +154,10 @@ impl PromptBase {
         default: Option<&str>,
     ) -> std::io::Result<Option<String>> {
         let prompt = self.make_prompt(console, default);
-        // `end=""` upstream: the answer is typed on the same line as the question.
-        print!("{}", console.render_to_string(&prompt));
-        std::io::stdout().flush()?;
-        input.read_line()
+        // `PromptBase.get_input` → `console.input(prompt, stream=…)`: the
+        // question goes through the console (`end=""`, so the answer is typed
+        // on the same line), where capture and export see it.
+        console.input_from(&prompt, input)
     }
 
     /// Report a rejected answer. Port of `PromptBase.on_validate_error`.

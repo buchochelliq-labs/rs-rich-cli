@@ -200,7 +200,7 @@ mod tests {
     #[test]
     fn a_title_that_cannot_fit_falls_back_to_a_plain_rule() {
         for width in [1usize, 2, 3, 4] {
-            let console = Console::builder().width(width).no_color(true).build();
+            let console = Console::builder().width(width).color_system(None).build();
             let out = console.render_to_string(&Rule::new("TITLE"));
             assert_eq!(
                 out.trim_end_matches('\n'),
@@ -213,7 +213,7 @@ mod tests {
     /// Upstream truncates an over-long title with `overflow="ellipsis"`.
     #[test]
     fn an_over_long_title_is_ellipsised() {
-        let console = Console::builder().width(5).no_color(true).build();
+        let console = Console::builder().width(5).color_system(None).build();
         let out = console.render_to_string(&Rule::new("TITLE"));
         assert_eq!(out.trim_end_matches('\n'), "\u{2500} \u{2026} \u{2500}");
     }

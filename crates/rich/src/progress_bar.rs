@@ -7,7 +7,7 @@
 //! Windows consoles get upstream's `-` glyphs.
 
 use crate::color::{Color, ColorSystem, ColorTriplet};
-use crate::console::{Console, ConsoleOptions};
+use crate::console::{monotonic, Console, ConsoleOptions};
 use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
@@ -188,15 +188,6 @@ fn blend_rgb(first: ColorTriplet, second: ColorTriplet, cross_fade: f64) -> Colo
         mix(first.green, second.green),
         mix(first.blue, second.blue),
     )
-}
-
-/// Seconds on a monotonic clock (upstream `time.monotonic`).
-fn monotonic() -> f64 {
-    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-    START
-        .get_or_init(std::time::Instant::now)
-        .elapsed()
-        .as_secs_f64()
 }
 
 impl Renderable for ProgressBar {

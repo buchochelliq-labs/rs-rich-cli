@@ -598,6 +598,15 @@ fn explain_reports_colour_unicode_links_and_capabilities() {
     assert!(e.has(EventKind::ColorRemoved));
     assert_eq!(e.events[0].summary, "fidelity plain");
 
+    // A no_color console keeps its colour system but prints no colour.
+    let console = Console::builder()
+        .color_system(Some(ColorSystem::EightBit))
+        .no_color(true)
+        .build();
+    let e = rich_ext::qa::explain::explain_console(&Text::styled("hi", "#ff8800"), &console, 40);
+    assert!(e.has(EventKind::ColorRemoved), "{:?}", e.events);
+    assert!(!e.has(EventKind::ColorDowngraded), "{:?}", e.events);
+
     let panel = Panel::new(Box::new(Text::new("✔ done")));
     let e = explain(&panel, &target(20, ColorDepth::TrueColor, false, false));
     let fallbacks: Vec<&str> = e

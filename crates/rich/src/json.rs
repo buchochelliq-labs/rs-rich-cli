@@ -787,7 +787,7 @@ mod tests {
     }
 
     fn render_plain(text: &str, width: usize) -> String {
-        let console = Console::builder().width(width).no_color(true).build();
+        let console = Console::builder().width(width).color_system(None).build();
         console.render_to_string(&Json::new(text).expect("valid json"))
     }
 
@@ -965,7 +965,7 @@ mod tests {
     #[test]
     fn a_nested_document_is_cropped_rather_than_wrapped() {
         let payload = r#"{"k": "the quick brown fox jumps over the lazy dog and keeps running for a very long time indeed"}"#;
-        let console = Console::builder().width(40).no_color(true).build();
+        let console = Console::builder().width(40).color_system(None).build();
         let json = Json::new(payload).expect("valid json").no_wrap(true);
         assert_eq!(
             console.render_to_string(&json),
@@ -987,7 +987,7 @@ mod tests {
     /// never one cell over.
     #[test]
     fn cropping_never_splits_a_wide_character() {
-        let console = Console::builder().width(12).no_color(true).build();
+        let console = Console::builder().width(12).color_system(None).build();
         let json = Json::new("{\"k\": \"\u{1f306}\u{1f306}\u{1f306}\"}")
             .expect("valid json")
             .no_wrap(true);
@@ -1042,7 +1042,7 @@ mod tests {
                 .unwrap_or_else(|error| panic!("depth {depth} rejected: {error}"));
             let console = Console::builder()
                 .width(4 * depth + 8)
-                .no_color(true)
+                .color_system(None)
                 .build();
             let out = console.render_to_string(&json);
             assert_eq!(
