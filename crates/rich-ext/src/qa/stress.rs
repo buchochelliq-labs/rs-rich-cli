@@ -19,8 +19,10 @@
 //! * **measure mismatch** — `measure()` returning `minimum > maximum`, or a
 //!   line whose content (first to last non-space cell, so justification
 //!   padding does not count) is wider than the measured maximum clamped to
-//!   the width while a render at that maximum overflows it. (An expanding
-//!   panel or table fills the width whatever it measures, as upstream's do.)
+//!   the width while a render at that maximum panics, overflows it, or wraps
+//!   onto more lines. A render that widens when given more room is an
+//!   expanding panel or table, which takes any width whatever it measures as
+//!   upstream's do, and is not held to the line count.
 //!   With [`StressOptions::strict_minimum`],
 //!   also a render that fits a width below the measured minimum.
 
@@ -29,8 +31,8 @@ use rich::{Console, ConsoleOptions, Renderable, Segment, Table, Text};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    content_chars, is_ellipsis, max_width, plain_lines, plural, table_then_line, visible_width,
-    Probe,
+    content_chars, is_ellipsis, max_width, measure_shortfall, plain_lines, plural, table_then_line,
+    visible_width, Probe,
 };
 
 /// What [`stress`] renders.
@@ -175,19 +177,6 @@ pub(crate) fn lost_chars(reference: &[String], lines: &[String], ascii: bool) ->
     lost
 }
 
-/// The widest line of `renderable` rendered at `width` like `probe`, when it
-/// is wider than `width`.
-fn overflow_at(renderable: &dyn Renderable, probe: &Probe, width: usize) -> Option<usize> {
-    let mut narrow = probe.clone();
-    narrow.width = width;
-    let lines = plain_lines(&narrow.try_segments(renderable).ok()?);
-    lines
-        .iter()
-        .map(|l| cell_len(l))
-        .max()
-        .filter(|&w| w > width)
-}
-
 /// Stress `renderable` (see the [module docs](self)).
 pub fn stress(renderable: &dyn Renderable, options: &StressOptions) -> StressReport {
     let mut report = StressReport::default();
@@ -249,21 +238,17 @@ pub fn stress(renderable: &dyn Renderable, options: &StressOptions) -> StressRep
                         IssueKind::MeasureMismatch,
                         format!("measure minimum {} > maximum {}", m.minimum, m.maximum),
                     ));
-                } else if let Some(wide) =
-                    (visible > m.maximum.min(width) && visible <= width && m.maximum >= 1)
-                        .then(|| overflow_at(renderable, &probe, m.maximum.min(width)))
-                        .flatten()
+                } else if let Some(why) = (visible > m.maximum.min(width)
+                    && visible <= width
+                    && m.maximum >= 1)
+                    .then(|| {
+                        measure_shortfall(renderable, &probe, m.maximum.min(width), &lines, true)
+                    })
+                    .flatten()
                 {
-                    // An expanding panel or table fills the width whatever it
-                    // measures, as upstream's do; containers rely on a render
-                    // at the measured maximum fitting in it.
-                    report.issues.push(issue(
-                        IssueKind::MeasureMismatch,
-                        format!(
-                            "measure maximum is {} but a render at that width is {wide} cells wide",
-                            m.maximum
-                        ),
-                    ));
+                    // Wider than it measures is fine for an expanding panel
+                    // or table; see `measure_shortfall` for what is not.
+                    report.issues.push(issue(IssueKind::MeasureMismatch, why));
                 } else if options.strict_minimum && m.minimum > width && max_width(&lines) <= width
                 {
                     report.issues.push(issue(

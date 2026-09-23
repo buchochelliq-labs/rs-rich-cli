@@ -128,6 +128,59 @@ impl Probe {
     }
 }
 
+/// Why a measured maximum of `at` is too small for `renderable`, whose
+/// render at `probe`'s wider width produced `full`: rendered like `probe` at
+/// `at`, it panics, overflows `at` (when `overflow_counts`), or needs more
+/// lines than `full` while it does not expand.
+///
+/// An expanding panel or table takes any width it is given but measures its
+/// content, as upstream's do, and an expanding table may then give a column
+/// more than its `max_width`, so it wraps less than at its measure (again as
+/// upstream does). Such a render widens when given more room, which is how
+/// it is told apart from content whose measure is too small and has to wrap
+/// at it.
+pub(crate) fn measure_shortfall(
+    renderable: &dyn Renderable,
+    probe: &Probe,
+    at: usize,
+    full: &[String],
+    overflow_counts: bool,
+) -> Option<String> {
+    let mut narrow = probe.clone();
+    narrow.width = at;
+    let lines = match narrow.try_segments(renderable) {
+        Ok(segments) => plain_lines(&segments),
+        Err(message) => {
+            return Some(format!(
+                "a render at the measured maximum {at} panicked: {message}"
+            ))
+        }
+    };
+    if overflow_counts {
+        if let Some(wide) = lines.iter().map(|l| cell_len(l)).max().filter(|&w| w > at) {
+            return Some(format!(
+                "measure maximum is {at} but a render at that width is {wide} cells wide"
+            ));
+        }
+    }
+    if lines.len() <= full.len() {
+        return None;
+    }
+    let widest = |lines: &[String]| lines.iter().map(|l| visible_width(l)).max().unwrap_or(0);
+    let mut wider = probe.clone();
+    wider.width = probe.width + 4;
+    let expands = wider
+        .try_segments(renderable)
+        .is_ok_and(|segments| widest(&plain_lines(&segments)) > widest(full));
+    (!expands).then(|| {
+        format!(
+            "measure maximum is {at} but a render at that width takes {} lines, not {}",
+            lines.len(),
+            full.len()
+        )
+    })
+}
+
 /// The message of a caught panic.
 pub(crate) fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
     if let Some(s) = payload.downcast_ref::<&str>() {

@@ -11,7 +11,8 @@
 //! [`fuzz`] renders each case at its random width and checks the
 //! [`Invariants`]: no panic, no line wider than the width, an identical
 //! second render, `measure()` bounds (minimum ≤ maximum, and a render at the
-//! measured maximum fits in it), and any custom checks. A failure is shrunk greedily — hoisting
+//! measured maximum neither overflows it nor wraps more), and any custom
+//! checks. A failure is shrunk greedily — hoisting
 //! children, dropping rows, columns, chunks and children, shortening text,
 //! clearing options and narrowing the width — while the same invariant keeps
 //! failing, within [`GenOptions::shrink_budget`] checks.
@@ -32,7 +33,9 @@ use rich::{
     Renderable, Segment, Table, Text, Tree,
 };
 
-use super::{panic_message, plain_lines, plural, table_then_line, visible_width, Probe};
+use super::{
+    measure_shortfall, panic_message, plain_lines, plural, table_then_line, visible_width, Probe,
+};
 
 /// SplitMix64: small, fast and good enough for test-case generation.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -956,8 +959,9 @@ pub struct Invariants {
     pub deterministic: bool,
     /// `measure()` has minimum ≤ maximum, and when a line's content (first
     /// to last non-space cell) is wider than the maximum clamped to the
-    /// width, a render at that maximum fits in it. Expanding panels and
-    /// tables fill the width whatever they measure, as upstream's do.
+    /// width, a render at that maximum neither overflows it nor (unless the
+    /// render expands with the width, as an expanding panel or table does
+    /// whatever it measures, like upstream's) wraps onto more lines.
     /// Skipped for text with tabs, which upstream measures unexpanded.
     pub measure_bounds: bool,
     custom: Vec<(String, Check)>,
@@ -1089,26 +1093,17 @@ impl Invariants {
                     ))
                 }
                 Ok(m) => {
-                    // An expanding panel or table fills the width whatever it
-                    // measures, as upstream's do; what containers rely on is
-                    // that a render at the measured maximum fits in it.
+                    // Wider than it measures is fine for an expanding panel or
+                    // table; see `measure_shortfall` for what is not.
                     let visible = lines.iter().map(|l| visible_width(l)).max().unwrap_or(0);
                     let at = m.maximum.min(width);
-                    if visible > at && visible <= width && at >= 1 && !node.allows_overflow() {
-                        let narrow = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            Probe::new(at).segments(&*node.build())
-                        }))
-                        .map(|s| plain_lines(&s))
-                        .unwrap_or_default();
-                        if let Some(line) = narrow.iter().find(|l| cell_len(l) > at) {
-                            return Some((
-                                "measure_bounds".into(),
-                                format!(
-                                    "measure maximum is {} but a render at that width is {} cells wide",
-                                    m.maximum,
-                                    cell_len(line)
-                                ),
-                            ));
+                    if visible > at && visible <= width && at >= 1 {
+                        let built = node.build();
+                        let overflow_counts = at >= node.floor() && !node.allows_overflow();
+                        if let Some(why) =
+                            measure_shortfall(&*built, &probe, at, &lines, overflow_counts)
+                        {
+                            return Some(("measure_bounds".into(), why));
                         }
                     }
                 }

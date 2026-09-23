@@ -247,6 +247,29 @@ impl Renderable for Underclaimer {
     }
 }
 
+/// Wrappable text that claims it needs only five cells.
+struct Undermeasured(Text);
+impl Renderable for Undermeasured {
+    fn rich_render(&self, c: &Console, o: &ConsoleOptions) -> Vec<Segment> {
+        self.0.rich_render(c, o)
+    }
+    fn measure(&self, _: &Console, _: &ConsoleOptions) -> rich::measure::Measurement {
+        rich::measure::Measurement::new(2, 5)
+    }
+}
+
+/// Measures honestly, but panics when rendered narrower than eight cells.
+struct NarrowPanic;
+impl Renderable for NarrowPanic {
+    fn rich_render(&self, _: &Console, o: &ConsoleOptions) -> Vec<Segment> {
+        assert!(o.max_width >= 8, "too narrow: {}", o.max_width);
+        vec![Segment::new("x".repeat(12), None)]
+    }
+    fn measure(&self, _: &Console, _: &ConsoleOptions) -> rich::measure::Measurement {
+        rich::measure::Measurement::new(2, 5)
+    }
+}
+
 /// The same words on more lines when wider.
 struct Growing;
 impl Renderable for Growing {
@@ -291,6 +314,26 @@ fn stress_finds_broken_renderables() {
     assert_eq!(
         details,
         ["measure maximum is 5 but a render at that width is 8 cells wide"; 2]
+    );
+    // Too small a measure for text that can wrap: it fits at five cells,
+    // but only on more lines.
+    let wraps = Undermeasured(Text::new("hello world again abcdefghij"));
+    let report = stress(&wraps, &StressOptions::widths([20, 40]));
+    let details: Vec<&str> = report
+        .of(IssueKind::MeasureMismatch)
+        .map(|i| i.detail.as_str())
+        .collect();
+    assert_eq!(details.len(), 2, "{details:?}");
+    assert!(
+        details[1].starts_with("measure maximum is 5 but a render at that width takes "),
+        "{details:?}"
+    );
+    let report = stress(&NarrowPanic, &StressOptions::widths([20]));
+    assert!(
+        report
+            .of(IssueKind::MeasureMismatch)
+            .any(|i| i.detail.contains("panicked: too narrow: 5")),
+        "{report:?}"
     );
     let panel = Panel::new(Box::new(Text::new("short")));
     assert_eq!(
@@ -807,6 +850,11 @@ fn matrix_structural_checks_pass() {
         }
     }
     assert!(render(&report, 80).contains('✖'));
+
+    // Fixture names are data: brackets stay literal in the header.
+    let report = matrix::regression(&[("text[wide]", fixture_text)], &profiles[..1], 40);
+    let out = render(&report, 80);
+    assert!(out.contains("text[wide]"), "{out}");
 }
 
 #[test]
