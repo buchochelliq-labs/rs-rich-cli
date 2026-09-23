@@ -1,0 +1,154 @@
+<svg class="rich-terminal" viewBox="0 0 1165 220.79999999999998" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .guide_gifs-color-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .guide_gifs-color-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .guide_gifs-color-r1 { fill: #c5c8c6;font-weight: bold }
+.guide_gifs-color-r2 { fill: #c5c8c6 }
+.guide_gifs-color-r3 { fill: #14183c }
+.guide_gifs-color-r4 { fill: #15183c }
+.guide_gifs-color-r5 { fill: #15193c }
+.guide_gifs-color-r6 { fill: #22223b }
+.guide_gifs-color-r7 { fill: #5e5036 }
+.guide_gifs-color-r8 { fill: #8a7232 }
+.guide_gifs-color-r9 { fill: #8c7432 }
+.guide_gifs-color-r10 { fill: #665735 }
+.guide_gifs-color-r11 { fill: #25253b }
+.guide_gifs-color-r12 { fill: #1b1d3b }
+.guide_gifs-color-r13 { fill: #514737 }
+.guide_gifs-color-r14 { fill: #877032 }
+.guide_gifs-color-r15 { fill: #8e7531 }
+.guide_gifs-color-r16 { fill: #715f34 }
+.guide_gifs-color-r17 { fill: #2d2b3a }
+.guide_gifs-color-r18 { fill: #181b3c }
+.guide_gifs-color-r19 { fill: #453e38 }
+.guide_gifs-color-r20 { fill: #816c32 }
+.guide_gifs-color-r21 { fill: #8f7631 }
+.guide_gifs-color-r22 { fill: #796633 }
+.guide_gifs-color-r23 { fill: #373339 }
+.guide_gifs-color-r24 { fill: #7a6633 }
+.guide_gifs-color-r25 { fill: #f0c129 }
+.guide_gifs-color-r26 { fill: #fac828 }
+.guide_gifs-color-r27 { fill: #f3c329 }
+.guide_gifs-color-r28 { fill: #866f32 }
+.guide_gifs-color-r29 { fill: #514637 }
+.guide_gifs-color-r30 { fill: #e7ba2a }
+.guide_gifs-color-r31 { fill: #f6c528 }
+.guide_gifs-color-r32 { fill: #a6872f }
+.guide_gifs-color-r33 { fill: #1a1d3b }
+.guide_gifs-color-r34 { fill: #3a3539 }
+.guide_gifs-color-r35 { fill: #daaf2b }
+.guide_gifs-color-r36 { fill: #f9c728 }
+.guide_gifs-color-r37 { fill: #f8c628 }
+.guide_gifs-color-r38 { fill: #bf9b2d }
+.guide_gifs-color-r39 { fill: #c29d2d }
+.guide_gifs-color-r40 { fill: #e4b72a }
+.guide_gifs-color-r41 { fill: #e5b82a }
+.guide_gifs-color-r42 { fill: #caa42c }
+.guide_gifs-color-r43 { fill: #5a4e36 }
+.guide_gifs-color-r44 { fill: #373239 }
+.guide_gifs-color-r45 { fill: #b4922e }
+.guide_gifs-color-r46 { fill: #e2b62a }
+.guide_gifs-color-r47 { fill: #d3aa2b }
+.guide_gifs-color-r48 { fill: #726034 }
+.guide_gifs-color-r49 { fill: #171a3c }
+.guide_gifs-color-r50 { fill: #29283a }
+.guide_gifs-color-r51 { fill: #a38530 }
+.guide_gifs-color-r52 { fill: #dfb32a }
+.guide_gifs-color-r53 { fill: #e6b92a }
+.guide_gifs-color-r54 { fill: #887132 }
+.guide_gifs-color-r55 { fill: #1c1e3b }
+.guide_gifs-color-r56 { fill: #29524b }
+.guide_gifs-color-r57 { fill: #385e4a }
+.guide_gifs-color-r58 { fill: #4d6e48 }
+.guide_gifs-color-r59 { fill: #4e6f48 }
+.guide_gifs-color-r60 { fill: #3c6149 }
+.guide_gifs-color-r61 { fill: #29534b }
+.guide_gifs-color-r62 { fill: #28524b }
+.guide_gifs-color-r63 { fill: #345b4a }
+.guide_gifs-color-r64 { fill: #4b6d48 }
+.guide_gifs-color-r65 { fill: #4f7048 }
+.guide_gifs-color-r66 { fill: #406449 }
+.guide_gifs-color-r67 { fill: #2a544b }
+.guide_gifs-color-r68 { fill: #30584a }
+.guide_gifs-color-r69 { fill: #486a48 }
+.guide_gifs-color-r70 { fill: #507147 }
+.guide_gifs-color-r71 { fill: #446749 }
+.guide_gifs-color-r72 { fill: #2c554b }
+.guide_gifs-color-r73 { fill: #3c8c5a }
+    </style>
+
+    <defs>
+    <clipPath id="guide_gifs-color-clip-terminal">
+      <rect x="0" y="0" width="1145.8" height="169.79999999999998" />
+    </clipPath>
+    <clipPath id="guide_gifs-color-line-0">
+    <rect x="0" y="1.5" width="1146.8" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_gifs-color-line-1">
+    <rect x="0" y="25.9" width="1146.8" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_gifs-color-line-2">
+    <rect x="0" y="50.3" width="1146.8" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_gifs-color-line-3">
+    <rect x="0" y="74.7" width="1146.8" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_gifs-color-line-4">
+    <rect x="0" y="99.1" width="1146.8" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_gifs-color-line-5">
+    <rect x="0" y="123.5" width="1146.8" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="1163" height="218.8" rx="8"/><text class="guide_gifs-color-title" fill="#c5c8c6" text-anchor="middle" x="581" y="27">Coloured&#160;ASCII&#160;frames</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#guide_gifs-color-clip-terminal)">
+    
+    <g class="guide_gifs-color-matrix">
+    <text class="guide_gifs-color-r1" x="0" y="20" textLength="341.6" clip-path="url(#guide_gifs-color-line-0)">frame&#160;0&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_gifs-color-r1" x="366" y="20" textLength="341.6" clip-path="url(#guide_gifs-color-line-0)">frame&#160;2&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_gifs-color-r1" x="732" y="20" textLength="341.6" clip-path="url(#guide_gifs-color-line-0)">frame&#160;4&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_gifs-color-r2" x="1146.8" y="20" textLength="12.2" clip-path="url(#guide_gifs-color-line-0)">
+</text><text class="guide_gifs-color-r2" x="1146.8" y="44.4" textLength="12.2" clip-path="url(#guide_gifs-color-line-1)">
+</text><text class="guide_gifs-color-r7" x="12.2" y="68.8" textLength="12.2" clip-path="url(#guide_gifs-color-line-2)">,</text><text class="guide_gifs-color-r8" x="24.4" y="68.8" textLength="12.2" clip-path="url(#guide_gifs-color-line-2)">l</text><text class="guide_gifs-color-r9" x="36.6" y="68.8" textLength="12.2" clip-path="url(#guide_gifs-color-line-2)">l</text><text class="guide_gifs-color-r10" x="48.8" y="68.8" textLength="12.2" clip-path="url(#guide_gifs-color-line-2)">;</text><text class="guide_gifs-color-r13" x="475.8" y="68.8" textLength="12.2" clip-path="url(#guide_gifs-color-line-2)">&#x27;</text><text class="guide_gifs-color-r14" x="488" y="68.8" textLength="12.2" clip-path="url(#guide_gifs-color-line-2)">l</text><text class="guide_gifs-color-r15" x="500.2" y="68.8" textLength="12.2" clip-path="url(#guide_gifs-color-line-2)">o</text><text class="guide_gifs-color-r16" x="512.4" y="68.8" textLength="12.2" clip-path="url(#guide_gifs-color-line-2)">:</text><text class="guide_gifs-color-r19" x="939.4" y="68.8" textLength="12.2" clip-path="url(#guide_gifs-color-line-2)">.</text><text class="guide_gifs-color-r20" x="951.6" y="68.8" textLength="12.2" clip-path="url(#guide_gifs-color-line-2)">c</text><text class="guide_gifs-color-r21" x="963.8" y="68.8" textLength="12.2" clip-path="url(#guide_gifs-color-line-2)">o</text><text class="guide_gifs-color-r22" x="976" y="68.8" textLength="12.2" clip-path="url(#guide_gifs-color-line-2)">c</text><text class="guide_gifs-color-r23" x="988.2" y="68.8" textLength="12.2" clip-path="url(#guide_gifs-color-line-2)">.</text><text class="guide_gifs-color-r2" x="1146.8" y="68.8" textLength="12.2" clip-path="url(#guide_gifs-color-line-2)">
+</text><text class="guide_gifs-color-r24" x="0" y="93.2" textLength="12.2" clip-path="url(#guide_gifs-color-line-3)">c</text><text class="guide_gifs-color-r25" x="12.2" y="93.2" textLength="12.2" clip-path="url(#guide_gifs-color-line-3)">W</text><text class="guide_gifs-color-r26" x="24.4" y="93.2" textLength="24.4" clip-path="url(#guide_gifs-color-line-3)">MM</text><text class="guide_gifs-color-r27" x="48.8" y="93.2" textLength="12.2" clip-path="url(#guide_gifs-color-line-3)">W</text><text class="guide_gifs-color-r28" x="61" y="93.2" textLength="12.2" clip-path="url(#guide_gifs-color-line-3)">l</text><text class="guide_gifs-color-r29" x="463.6" y="93.2" textLength="12.2" clip-path="url(#guide_gifs-color-line-3)">&#x27;</text><text class="guide_gifs-color-r30" x="475.8" y="93.2" textLength="12.2" clip-path="url(#guide_gifs-color-line-3)">N</text><text class="guide_gifs-color-r26" x="488" y="93.2" textLength="24.4" clip-path="url(#guide_gifs-color-line-3)">MM</text><text class="guide_gifs-color-r31" x="512.4" y="93.2" textLength="12.2" clip-path="url(#guide_gifs-color-line-3)">M</text><text class="guide_gifs-color-r32" x="524.6" y="93.2" textLength="12.2" clip-path="url(#guide_gifs-color-line-3)">x</text><text class="guide_gifs-color-r34" x="927.2" y="93.2" textLength="12.2" clip-path="url(#guide_gifs-color-line-3)">.</text><text class="guide_gifs-color-r35" x="939.4" y="93.2" textLength="12.2" clip-path="url(#guide_gifs-color-line-3)">X</text><text class="guide_gifs-color-r36" x="951.6" y="93.2" textLength="12.2" clip-path="url(#guide_gifs-color-line-3)">M</text><text class="guide_gifs-color-r26" x="963.8" y="93.2" textLength="12.2" clip-path="url(#guide_gifs-color-line-3)">M</text><text class="guide_gifs-color-r37" x="976" y="93.2" textLength="12.2" clip-path="url(#guide_gifs-color-line-3)">M</text><text class="guide_gifs-color-r38" x="988.2" y="93.2" textLength="12.2" clip-path="url(#guide_gifs-color-line-3)">O</text><text class="guide_gifs-color-r2" x="1146.8" y="93.2" textLength="12.2" clip-path="url(#guide_gifs-color-line-3)">
+</text><text class="guide_gifs-color-r13" x="0" y="117.6" textLength="12.2" clip-path="url(#guide_gifs-color-line-4)">&#x27;</text><text class="guide_gifs-color-r39" x="12.2" y="117.6" textLength="12.2" clip-path="url(#guide_gifs-color-line-4)">0</text><text class="guide_gifs-color-r40" x="24.4" y="117.6" textLength="12.2" clip-path="url(#guide_gifs-color-line-4)">N</text><text class="guide_gifs-color-r41" x="36.6" y="117.6" textLength="12.2" clip-path="url(#guide_gifs-color-line-4)">N</text><text class="guide_gifs-color-r42" x="48.8" y="117.6" textLength="12.2" clip-path="url(#guide_gifs-color-line-4)">0</text><text class="guide_gifs-color-r43" x="61" y="117.6" textLength="12.2" clip-path="url(#guide_gifs-color-line-4)">,</text><text class="guide_gifs-color-r44" x="463.6" y="117.6" textLength="12.2" clip-path="url(#guide_gifs-color-line-4)">.</text><text class="guide_gifs-color-r45" x="475.8" y="117.6" textLength="12.2" clip-path="url(#guide_gifs-color-line-4)">k</text><text class="guide_gifs-color-r46" x="488" y="117.6" textLength="12.2" clip-path="url(#guide_gifs-color-line-4)">N</text><text class="guide_gifs-color-r41" x="500.2" y="117.6" textLength="12.2" clip-path="url(#guide_gifs-color-line-4)">N</text><text class="guide_gifs-color-r47" x="512.4" y="117.6" textLength="12.2" clip-path="url(#guide_gifs-color-line-4)">K</text><text class="guide_gifs-color-r48" x="524.6" y="117.6" textLength="12.2" clip-path="url(#guide_gifs-color-line-4)">:</text><text class="guide_gifs-color-r51" x="939.4" y="117.6" textLength="12.2" clip-path="url(#guide_gifs-color-line-4)">x</text><text class="guide_gifs-color-r52" x="951.6" y="117.6" textLength="12.2" clip-path="url(#guide_gifs-color-line-4)">X</text><text class="guide_gifs-color-r53" x="963.8" y="117.6" textLength="12.2" clip-path="url(#guide_gifs-color-line-4)">N</text><text class="guide_gifs-color-r35" x="976" y="117.6" textLength="12.2" clip-path="url(#guide_gifs-color-line-4)">X</text><text class="guide_gifs-color-r54" x="988.2" y="117.6" textLength="12.2" clip-path="url(#guide_gifs-color-line-4)">l</text><text class="guide_gifs-color-r2" x="1146.8" y="117.6" textLength="12.2" clip-path="url(#guide_gifs-color-line-4)">
+</text><text class="guide_gifs-color-r56" x="0" y="142" textLength="12.2" clip-path="url(#guide_gifs-color-line-5)">.</text><text class="guide_gifs-color-r57" x="12.2" y="142" textLength="12.2" clip-path="url(#guide_gifs-color-line-5)">,</text><text class="guide_gifs-color-r58" x="24.4" y="142" textLength="12.2" clip-path="url(#guide_gifs-color-line-5)">:</text><text class="guide_gifs-color-r59" x="36.6" y="142" textLength="12.2" clip-path="url(#guide_gifs-color-line-5)">:</text><text class="guide_gifs-color-r60" x="48.8" y="142" textLength="12.2" clip-path="url(#guide_gifs-color-line-5)">,</text><text class="guide_gifs-color-r61" x="61" y="142" textLength="12.2" clip-path="url(#guide_gifs-color-line-5)">&#x27;</text><text class="guide_gifs-color-r62" x="73.2" y="142" textLength="268.4" clip-path="url(#guide_gifs-color-line-5)">......................</text><text class="guide_gifs-color-r62" x="366" y="142" textLength="109.8" clip-path="url(#guide_gifs-color-line-5)">.........</text><text class="guide_gifs-color-r63" x="475.8" y="142" textLength="12.2" clip-path="url(#guide_gifs-color-line-5)">,</text><text class="guide_gifs-color-r64" x="488" y="142" textLength="12.2" clip-path="url(#guide_gifs-color-line-5)">:</text><text class="guide_gifs-color-r65" x="500.2" y="142" textLength="12.2" clip-path="url(#guide_gifs-color-line-5)">:</text><text class="guide_gifs-color-r66" x="512.4" y="142" textLength="12.2" clip-path="url(#guide_gifs-color-line-5)">;</text><text class="guide_gifs-color-r67" x="524.6" y="142" textLength="12.2" clip-path="url(#guide_gifs-color-line-5)">&#x27;</text><text class="guide_gifs-color-r62" x="536.8" y="142" textLength="170.8" clip-path="url(#guide_gifs-color-line-5)">..............</text><text class="guide_gifs-color-r62" x="732" y="142" textLength="207.4" clip-path="url(#guide_gifs-color-line-5)">.................</text><text class="guide_gifs-color-r68" x="939.4" y="142" textLength="12.2" clip-path="url(#guide_gifs-color-line-5)">&#x27;</text><text class="guide_gifs-color-r69" x="951.6" y="142" textLength="12.2" clip-path="url(#guide_gifs-color-line-5)">;</text><text class="guide_gifs-color-r70" x="963.8" y="142" textLength="12.2" clip-path="url(#guide_gifs-color-line-5)">:</text><text class="guide_gifs-color-r71" x="976" y="142" textLength="12.2" clip-path="url(#guide_gifs-color-line-5)">;</text><text class="guide_gifs-color-r72" x="988.2" y="142" textLength="12.2" clip-path="url(#guide_gifs-color-line-5)">&#x27;</text><text class="guide_gifs-color-r62" x="1000.4" y="142" textLength="73.2" clip-path="url(#guide_gifs-color-line-5)">......</text><text class="guide_gifs-color-r2" x="1146.8" y="142" textLength="12.2" clip-path="url(#guide_gifs-color-line-5)">
+</text><text class="guide_gifs-color-r73" x="0" y="166.4" textLength="341.6" clip-path="url(#guide_gifs-color-line-6)">llllllllllllllllllllllllllll</text><text class="guide_gifs-color-r73" x="366" y="166.4" textLength="341.6" clip-path="url(#guide_gifs-color-line-6)">llllllllllllllllllllllllllll</text><text class="guide_gifs-color-r73" x="732" y="166.4" textLength="341.6" clip-path="url(#guide_gifs-color-line-6)">llllllllllllllllllllllllllll</text><text class="guide_gifs-color-r2" x="1146.8" y="166.4" textLength="12.2" clip-path="url(#guide_gifs-color-line-6)">
+</text>
+    </g>
+    </g>
+</svg>

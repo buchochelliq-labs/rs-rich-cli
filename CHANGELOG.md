@@ -60,6 +60,31 @@ Entries below record subsequent releases and development.
 Cohort versions for 0.0.11 (not published): core 0.0.7, ext 0.0.9, art 0.0.9,
 CLI 0.0.11. Core changes below, so every dependent moves with it.
 
+### Documentation: the user guide
+
+- **`docs/guide/`** walks through every component: an overview of the crates,
+  how they fit together and how one render flows; the core (console, text and
+  style, tables, layout, trees, progress and live displays, code and data,
+  logging, prompts, export); every rs-rich-ext module (extensions and links,
+  diagnostics, logging, live regions and layouts, macros, structured data, CLI
+  authoring, diffs and test reports, QA tooling, capabilities, accessibility,
+  ANSI explain); rs-rich-art (banners, images, GIFs, image diffs); and the `rich`
+  CLI (overview, a hands-on walkthrough of every command, the smoke test).
+- **Every code sample is compiled.** Pages include sections of the
+  `guide_*` example programs in each crate's `examples/`, and every screenshot
+  is that example's real output exported to SVG. `scripts/capture_guide.py`
+  regenerates them (`--check` fails on a stale image).
+- **`scripts/smoke_cli.py`** runs every CLI command and mode end to end against
+  generated fixtures (75 cases, no network or terminal needed), checks exit codes
+  and output, and regenerates the CLI screenshots with `--screenshots`.
+- **Fixes to existing docs:** the tutorial's `Live` example used an API that does
+  not exist (it now includes the compiled one); a markup error exits 4, not 1;
+  getting started pins the current release; the VS Code link template in
+  `Hyperlinker::editor`'s docs produced a double slash; rich-art's README, crate
+  docs and description now cover images, GIFs, Sixel and the current colour and
+  dithering rules; docs.rs builds rs-rich-ext and rs-rich-art with all features,
+  so feature-gated APIs are documented there.
+
 ### Core: no_color, spinner time and prompt output match rich
 
 Three gaps found while writing the user guide, each verified against rich

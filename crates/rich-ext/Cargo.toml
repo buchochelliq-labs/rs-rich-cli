@@ -23,6 +23,11 @@ keywords = ["terminal", "console", "plugin", "extension", "highlighter"]
 categories = ["command-line-interface", "text-processing"]
 include = ["src/**/*", "examples/**/*", "README.md", "LICENSE", "Cargo.toml"]
 
+
+[package.metadata.docs.rs]
+# Show every feature-gated module (data, qa, testing, adapters, macros…) on docs.rs.
+all-features = true
+
 [lib]
 # The package is `rs-rich-ext` on crates.io (plain `rich` is taken), but the
 # library target keeps the short name so users write `use rich_ext::…`.
@@ -107,3 +112,41 @@ required-features = ["data"]
 [[example]]
 name = "clap_help"
 required-features = ["clap"]
+
+# User-guide examples for docs/guide/ext (output, diagnostics, authoring).
+[[example]]
+name = "guide_diagnostics"
+required-features = ["anyhow"]
+
+[[example]]
+name = "guide_logging"
+required-features = ["log", "tracing"]
+
+[[example]]
+name = "guide_macros"
+required-features = ["macros"]
+
+# User-guide examples for docs/guide/ext (data, CLI, diffs, QA, capabilities).
+[[example]]
+name = "guide_data"
+required-features = ["data", "yaml", "toml", "xml", "jsonpath"]
+
+[[example]]
+name = "guide_clap"
+required-features = ["clap"]
+
+[[example]]
+name = "guide_diff"
+required-features = ["testing", "test-report"]
+
+[[example]]
+name = "guide_qa"
+required-features = ["testing"]
+
+[[example]]
+name = "guide_capabilities"
+required-features = ["serde"]
+
+[[example]]
+name = "guide_a11y"
+required-features = ["serde"]

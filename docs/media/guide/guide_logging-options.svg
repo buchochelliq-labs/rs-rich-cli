@@ -1,0 +1,63 @@
+<svg class="rich-terminal" viewBox="0 0 1116 74.4" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .guide_logging-options-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .guide_logging-options-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .guide_logging-options-r1 { fill: #d0b344 }
+.guide_logging-options-r2 { fill: #c5c8c6 }
+.guide_logging-options-r3 { fill: #d0b344;font-weight: bold }
+.guide_logging-options-r4 { fill: #c5c8c6;font-weight: bold }
+.guide_logging-options-r5 { fill: #68a0b3;font-weight: bold }
+    </style>
+
+    <defs>
+    <clipPath id="guide_logging-options-clip-terminal">
+      <rect x="0" y="0" width="1097.0" height="23.4" />
+    </clipPath>
+    
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="1114" height="72.4" rx="8"/><text class="guide_logging-options-title" fill="#c5c8c6" text-anchor="middle" x="557" y="27">rich-ext</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#guide_logging-options-clip-terminal)">
+    
+    <g class="guide_logging-options-matrix">
+    <text class="guide_logging-options-r1" x="0" y="20" textLength="97.6" clip-path="url(#guide_logging-options-line-0)">WARNING&#160;</text><text class="guide_logging-options-r3" x="109.8" y="20" textLength="73.2" clip-path="url(#guide_logging-options-line-0)">DEPLOY</text><text class="guide_logging-options-r4" x="195.2" y="20" textLength="36.6" clip-path="url(#guide_logging-options-line-0)">v2.</text><text class="guide_logging-options-r5" x="231.8" y="20" textLength="36.6" clip-path="url(#guide_logging-options-line-0)">4.1</text><text class="guide_logging-options-r2" x="268.4" y="20" textLength="48.8" clip-path="url(#guide_logging-options-line-0)">&#160;to&#160;</text><text class="guide_logging-options-r5" x="317.2" y="20" textLength="12.2" clip-path="url(#guide_logging-options-line-0)">3</text><text class="guide_logging-options-r2" x="329.4" y="20" textLength="768.6" clip-path="url(#guide_logging-options-line-0)">&#160;hosts&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_logging-options-r2" x="1098" y="20" textLength="12.2" clip-path="url(#guide_logging-options-line-0)">
+</text>
+    </g>
+    </g>
+</svg>

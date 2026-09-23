@@ -8,7 +8,8 @@
 //!
 //! File links use `file://` URLs (`file:///abs/path#12`, the form core's
 //! `LogRender` uses) unless an editor template such as
-//! `vscode://file/{path}:{line}:{column}` is set. Relative paths resolve
+//! `vscode://file{path}:{line}:{column}` is set (`{path}` is absolute, so it
+//! already starts with `/`). Relative paths resolve
 //! against a base directory when one is given.
 //!
 //! It is a [`Highlighter`], so it plugs into anything that takes one, such as
@@ -131,8 +132,9 @@ impl Hyperlinker {
     }
 
     /// Link files through an editor URL template instead of `file://`, for
-    /// example `vscode://file/{path}:{line}:{column}`. `{line}` and `{column}`
-    /// default to 1 when a location has none.
+    /// example `vscode://file{path}:{line}:{column}`. `{path}` is absolute and
+    /// already starts with `/`, so the template has no slash of its own before
+    /// it. `{line}` and `{column}` default to 1 when a location has none.
     pub fn editor(mut self, template: impl Into<String>) -> Self {
         self.editor = Some(template.into());
         self
@@ -366,10 +368,10 @@ mod tests {
 
     #[test]
     fn editor_templates_fill_line_and_column() {
-        let linker = Hyperlinker::new().editor("vscode://file/{path}:{line}:{column}");
+        let linker = Hyperlinker::new().editor("vscode://file{path}:{line}:{column}");
         assert_eq!(
             linker.file_url("/a b/c.rs", Some(3), None).unwrap(),
-            "vscode://file//a%20b/c.rs:3:1"
+            "vscode://file/a%20b/c.rs:3:1"
         );
     }
 

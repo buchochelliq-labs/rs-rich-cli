@@ -1,7 +1,7 @@
 //! Re-encode a GIF smaller, for use as a repository demo asset.
 //!
 //! ```text
-//! cargo run -p rich-art --features gif --example shrink_asset -- in.gif out.gif [width] [step]
+//! cargo run -p rs-rich-art --features gif --example shrink_asset -- in.gif out.gif [width] [step]
 //! ```
 //!
 //! Terminal art samples down to a few dozen columns anyway, so a large source

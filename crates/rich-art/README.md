@@ -9,6 +9,7 @@ GIF playback** in the terminal.
 | FIGlet banners | ✅ always | no optional dependencies — just `rs-rich` |
 | `image` — image → ASCII/ANSI/Braille art | off | `image` (png + jpeg decoders) |
 | `gif` — animated GIF playback | off | `image` + its gif decoder |
+| `sixel` — real pixels through the Sixel graphics protocol | off | `image` + `icy_sixel` |
 
 The default build has **one direct dependency**, `rs-rich` (imported as `rich`).
 Its transitive dependency graph is determined by `rs-rich`; banners add no
@@ -129,11 +130,13 @@ let art = ImageArt::from_path("photo.png")?
     .dither(Dither::FloydSteinberg);
 ```
 
-`ImageColorMode::TrueColor` and `Dither::None` remain the defaults. Nondefault
-preprocessing supports ASCII and half-block still images. Auto mode must resolve
-to one of those backends; unsupported modes return a validation error from
-`render()`. Floyd–Steinberg requires ANSI256. The builders preserve the public
-`ImageOptions` struct shape and require the `image` feature.
+`ImageColorMode::TrueColor` and `Dither::None` remain the defaults. The reduced
+palettes (`Ansi256`, `Ansi16`, `Grayscale`) and both dithers (Floyd–Steinberg,
+Bayer 4×4) work with the ASCII, half-block and quadrant backends; dithering needs
+a reduced palette. Braille and Sixel reject them, and so does an Auto mode that
+resolves to one of those, with a validation error from `render()`. The builders
+preserve the public `ImageOptions` struct shape and require the `image` feature.
+The [images guide](../../docs/guide/art/images.md) shows every mode and option.
 
 Palette reduction runs after fitting, background compositing and final sampling,
 before glyph selection. It chooses fixed ANSI256 entries 16–255 with squared

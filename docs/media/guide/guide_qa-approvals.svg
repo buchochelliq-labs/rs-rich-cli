@@ -1,0 +1,138 @@
+<svg class="rich-terminal" viewBox="0 0 897 562.4" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .guide_qa-approvals-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .guide_qa-approvals-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .guide_qa-approvals-r1 { fill: #c5c8c6 }
+    </style>
+
+    <defs>
+    <clipPath id="guide_qa-approvals-clip-terminal">
+      <rect x="0" y="0" width="877.4" height="511.4" />
+    </clipPath>
+    <clipPath id="guide_qa-approvals-line-0">
+    <rect x="0" y="1.5" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-approvals-line-1">
+    <rect x="0" y="25.9" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-approvals-line-2">
+    <rect x="0" y="50.3" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-approvals-line-3">
+    <rect x="0" y="74.7" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-approvals-line-4">
+    <rect x="0" y="99.1" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-approvals-line-5">
+    <rect x="0" y="123.5" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-approvals-line-6">
+    <rect x="0" y="147.9" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-approvals-line-7">
+    <rect x="0" y="172.3" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-approvals-line-8">
+    <rect x="0" y="196.7" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-approvals-line-9">
+    <rect x="0" y="221.1" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-approvals-line-10">
+    <rect x="0" y="245.5" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-approvals-line-11">
+    <rect x="0" y="269.9" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-approvals-line-12">
+    <rect x="0" y="294.3" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-approvals-line-13">
+    <rect x="0" y="318.7" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-approvals-line-14">
+    <rect x="0" y="343.1" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-approvals-line-15">
+    <rect x="0" y="367.5" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-approvals-line-16">
+    <rect x="0" y="391.9" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-approvals-line-17">
+    <rect x="0" y="416.3" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-approvals-line-18">
+    <rect x="0" y="440.7" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-approvals-line-19">
+    <rect x="0" y="465.1" width="878.4" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="895" height="560.4" rx="8"/><text class="guide_qa-approvals-title" fill="#c5c8c6" text-anchor="middle" x="447" y="27">Approvals::check</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#guide_qa-approvals-clip-terminal)">
+    
+    <g class="guide_qa-approvals-matrix">
+    <text class="guide_qa-approvals-r1" x="0" y="20" textLength="414.8" clip-path="url(#guide_qa-approvals-line-0)">0&#160;matched,&#160;2&#160;mismatched,&#160;0&#160;missing</text><text class="guide_qa-approvals-r1" x="878.4" y="20" textLength="12.2" clip-path="url(#guide_qa-approvals-line-0)">
+</text><text class="guide_qa-approvals-r1" x="0" y="44.4" textLength="524.6" clip-path="url(#guide_qa-approvals-line-1)">mismatch:&#160;status-table@60.truecolor.unicode</text><text class="guide_qa-approvals-r1" x="878.4" y="44.4" textLength="12.2" clip-path="url(#guide_qa-approvals-line-1)">
+</text><text class="guide_qa-approvals-r1" x="0" y="68.8" textLength="146.4" clip-path="url(#guide_qa-approvals-line-2)">---&#160;approved</text><text class="guide_qa-approvals-r1" x="878.4" y="68.8" textLength="12.2" clip-path="url(#guide_qa-approvals-line-2)">
+</text><text class="guide_qa-approvals-r1" x="0" y="93.2" textLength="122" clip-path="url(#guide_qa-approvals-line-3)">+++&#160;actual</text><text class="guide_qa-approvals-r1" x="878.4" y="93.2" textLength="12.2" clip-path="url(#guide_qa-approvals-line-3)">
+</text><text class="guide_qa-approvals-r1" x="0" y="117.6" textLength="183" clip-path="url(#guide_qa-approvals-line-4)">@@&#160;-4,4&#160;+4,5&#160;@@</text><text class="guide_qa-approvals-r1" x="878.4" y="117.6" textLength="12.2" clip-path="url(#guide_qa-approvals-line-4)">
+</text><text class="guide_qa-approvals-r1" x="0" y="142" textLength="488" clip-path="url(#guide_qa-approvals-line-5)">4&#160;4&#160;&#160;&#160;┡━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━┩</text><text class="guide_qa-approvals-r1" x="878.4" y="142" textLength="12.2" clip-path="url(#guide_qa-approvals-line-5)">
+</text><text class="guide_qa-approvals-r1" x="0" y="166.4" textLength="488" clip-path="url(#guide_qa-approvals-line-6)">5&#160;5&#160;&#160;&#160;│&#160;api&#160;&#160;&#160;&#160;&#160;│&#160;eu-west-1&#160;│&#160;✔&#160;ok&#160;&#160;&#160;&#160;&#160;│</text><text class="guide_qa-approvals-r1" x="878.4" y="166.4" textLength="12.2" clip-path="url(#guide_qa-approvals-line-6)">
+</text><text class="guide_qa-approvals-r1" x="0" y="190.8" textLength="488" clip-path="url(#guide_qa-approvals-line-7)">6&#160;6&#160;&#160;&#160;│&#160;worker&#160;&#160;│&#160;us-east-2&#160;│&#160;✖&#160;failed&#160;│</text><text class="guide_qa-approvals-r1" x="878.4" y="190.8" textLength="12.2" clip-path="url(#guide_qa-approvals-line-7)">
+</text><text class="guide_qa-approvals-r1" x="0" y="215.2" textLength="488" clip-path="url(#guide_qa-approvals-line-8)">&#160;&#160;7&#160;+&#160;│&#160;cron&#160;&#160;&#160;&#160;│&#160;eu-west-1&#160;│&#160;paused&#160;&#160;&#160;│</text><text class="guide_qa-approvals-r1" x="878.4" y="215.2" textLength="12.2" clip-path="url(#guide_qa-approvals-line-8)">
+</text><text class="guide_qa-approvals-r1" x="0" y="239.6" textLength="488" clip-path="url(#guide_qa-approvals-line-9)">7&#160;8&#160;&#160;&#160;└─────────┴───────────┴──────────┘</text><text class="guide_qa-approvals-r1" x="878.4" y="239.6" textLength="12.2" clip-path="url(#guide_qa-approvals-line-9)">
+</text><text class="guide_qa-approvals-r1" x="0" y="264" textLength="402.6" clip-path="url(#guide_qa-approvals-line-10)">&#160;&#160;&#160;&#160;&#160;&#160;\&#160;No&#160;newline&#160;at&#160;end&#160;of&#160;file</text><text class="guide_qa-approvals-r1" x="878.4" y="264" textLength="12.2" clip-path="url(#guide_qa-approvals-line-10)">
+</text><text class="guide_qa-approvals-r1" x="0" y="288.4" textLength="463.6" clip-path="url(#guide_qa-approvals-line-11)">mismatch:&#160;status-table@60.none.unicode</text><text class="guide_qa-approvals-r1" x="878.4" y="288.4" textLength="12.2" clip-path="url(#guide_qa-approvals-line-11)">
+</text><text class="guide_qa-approvals-r1" x="0" y="312.8" textLength="146.4" clip-path="url(#guide_qa-approvals-line-12)">---&#160;approved</text><text class="guide_qa-approvals-r1" x="878.4" y="312.8" textLength="12.2" clip-path="url(#guide_qa-approvals-line-12)">
+</text><text class="guide_qa-approvals-r1" x="0" y="337.2" textLength="122" clip-path="url(#guide_qa-approvals-line-13)">+++&#160;actual</text><text class="guide_qa-approvals-r1" x="878.4" y="337.2" textLength="12.2" clip-path="url(#guide_qa-approvals-line-13)">
+</text><text class="guide_qa-approvals-r1" x="0" y="361.6" textLength="183" clip-path="url(#guide_qa-approvals-line-14)">@@&#160;-4,4&#160;+4,5&#160;@@</text><text class="guide_qa-approvals-r1" x="878.4" y="361.6" textLength="12.2" clip-path="url(#guide_qa-approvals-line-14)">
+</text><text class="guide_qa-approvals-r1" x="0" y="386" textLength="488" clip-path="url(#guide_qa-approvals-line-15)">4&#160;4&#160;&#160;&#160;┡━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━┩</text><text class="guide_qa-approvals-r1" x="878.4" y="386" textLength="12.2" clip-path="url(#guide_qa-approvals-line-15)">
+</text><text class="guide_qa-approvals-r1" x="0" y="410.4" textLength="488" clip-path="url(#guide_qa-approvals-line-16)">5&#160;5&#160;&#160;&#160;│&#160;api&#160;&#160;&#160;&#160;&#160;│&#160;eu-west-1&#160;│&#160;✔&#160;ok&#160;&#160;&#160;&#160;&#160;│</text><text class="guide_qa-approvals-r1" x="878.4" y="410.4" textLength="12.2" clip-path="url(#guide_qa-approvals-line-16)">
+</text><text class="guide_qa-approvals-r1" x="0" y="434.8" textLength="488" clip-path="url(#guide_qa-approvals-line-17)">6&#160;6&#160;&#160;&#160;│&#160;worker&#160;&#160;│&#160;us-east-2&#160;│&#160;✖&#160;failed&#160;│</text><text class="guide_qa-approvals-r1" x="878.4" y="434.8" textLength="12.2" clip-path="url(#guide_qa-approvals-line-17)">
+</text><text class="guide_qa-approvals-r1" x="0" y="459.2" textLength="488" clip-path="url(#guide_qa-approvals-line-18)">&#160;&#160;7&#160;+&#160;│&#160;cron&#160;&#160;&#160;&#160;│&#160;eu-west-1&#160;│&#160;paused&#160;&#160;&#160;│</text><text class="guide_qa-approvals-r1" x="878.4" y="459.2" textLength="12.2" clip-path="url(#guide_qa-approvals-line-18)">
+</text><text class="guide_qa-approvals-r1" x="0" y="483.6" textLength="488" clip-path="url(#guide_qa-approvals-line-19)">7&#160;8&#160;&#160;&#160;└─────────┴───────────┴──────────┘</text><text class="guide_qa-approvals-r1" x="878.4" y="483.6" textLength="12.2" clip-path="url(#guide_qa-approvals-line-19)">
+</text><text class="guide_qa-approvals-r1" x="0" y="508" textLength="402.6" clip-path="url(#guide_qa-approvals-line-20)">&#160;&#160;&#160;&#160;&#160;&#160;\&#160;No&#160;newline&#160;at&#160;end&#160;of&#160;file</text><text class="guide_qa-approvals-r1" x="878.4" y="508" textLength="12.2" clip-path="url(#guide_qa-approvals-line-20)">
+</text>
+    </g>
+    </g>
+</svg>

@@ -55,7 +55,10 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
-  - pymdownx.snippets
+  - pymdownx.snippets:
+      # Guide snippets come from compiled examples; drop their source indent.
+      dedent_subsections: true
+      check_paths: true
 
 plugins:
   - search
@@ -74,6 +77,44 @@ nav:
       - 4. Layout: tutorial/04-layout.md
       - 5. Progress and live output: tutorial/05-live.md
       - 6. The CLI: tutorial/06-cli.md
+  - Guide:
+      - guide/index.md
+      - Core (rs-rich):
+          - guide/core/index.md
+          - Console and printing: guide/core/console.md
+          - Text, markup and style: guide/core/text-and-style.md
+          - Tables: guide/core/tables.md
+          - Layout: guide/core/layout.md
+          - Trees: guide/core/tree.md
+          - Progress and live displays: guide/core/progress-and-live.md
+          - Code and data: guide/core/code-and-data.md
+          - Logging and errors: guide/core/logging-and-errors.md
+          - Prompts: guide/core/prompts.md
+          - Export: guide/core/export.md
+      - Extensions (rs-rich-ext):
+          - guide/ext/index.md
+          - Extensions, highlighters and links: guide/ext/extensions.md
+          - Diagnostics and stack traces: guide/ext/diagnostics.md
+          - Logging: guide/ext/logging.md
+          - Live regions, layouts and targets: guide/ext/live-and-layout.md
+          - Macros and derive: guide/ext/macros.md
+          - Structured data: guide/ext/structured-data.md
+          - CLI authoring: guide/ext/cli-authoring.md
+          - Diffs and test reports: guide/ext/diffs-and-test-reports.md
+          - QA tooling: guide/ext/qa.md
+          - Capabilities and fidelity: guide/ext/capabilities.md
+          - Accessibility: guide/ext/accessibility.md
+          - ANSI explain: guide/ext/ansi.md
+      - Art (rs-rich-art):
+          - guide/art/index.md
+          - Banners: guide/art/banners.md
+          - Images: guide/art/images.md
+          - GIFs: guide/art/gifs.md
+          - Image diff: guide/art/image-diff.md
+      - The rich CLI:
+          - guide/cli/index.md
+          - Walkthrough: guide/cli/walkthrough.md
+          - Smoke test: guide/cli/smoke.md
   - Gallery: gallery.md
   - Rich-art videos: demos.md
   - Using the CLI: cli.md

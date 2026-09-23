@@ -91,21 +91,13 @@ current frame. `Spinner::text` is console markup.
 output rather than scrolling:
 
 ```rust
-use rich::{Console, Live, Spinner, Text};
-use std::time::{Duration, Instant};
-
-let console = Console::new();
-let started = Instant::now();
-let mut live = Live::new(&console);
-let spinner = Spinner::new("dots");
-
-for _ in 0..50 {
-    let frame = spinner.render(started.elapsed().as_secs_f64());
-    live.update(&Text::new("  ").append_text(&frame));
-    std::thread::sleep(Duration::from_millis(80));
-}
-live.finish();
+--8<-- "crates/rich/examples/guide_progress.rs:live"
 ```
+
+`Live::new` takes the renderable to show, the console and the writer; `start`
+begins drawing, `update` swaps in a new renderable, and `stop` draws the last
+frame. [Progress and live displays](../guide/core/progress-and-live.md) covers
+the automatic-refresh mode and `Progress` on top of it.
 
 !!! warning "One live display at a time"
 

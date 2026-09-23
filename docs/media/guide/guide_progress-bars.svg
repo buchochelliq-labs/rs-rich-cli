@@ -1,0 +1,83 @@
+<svg class="rich-terminal" viewBox="0 0 750 147.6" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .guide_progress-bars-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .guide_progress-bars-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .guide_progress-bars-r1 { fill: #f92672 }
+.guide_progress-bars-r2 { fill: #3a3a3a }
+.guide_progress-bars-r3 { fill: #c5c8c6 }
+.guide_progress-bars-r4 { fill: #d0b344 }
+.guide_progress-bars-r5 { fill: #729c1f }
+.guide_progress-bars-r6 { fill: #b72c5e }
+.guide_progress-bars-r7 { fill: #993056 }
+.guide_progress-bars-r8 { fill: #7b334d }
+.guide_progress-bars-r9 { fill: #613545 }
+.guide_progress-bars-r10 { fill: #4c383f }
+.guide_progress-bars-r11 { fill: #3e393b }
+.guide_progress-bars-r12 { fill: #d12a66 }
+.guide_progress-bars-r13 { fill: #e6276c }
+.guide_progress-bars-r14 { fill: #f42670 }
+    </style>
+
+    <defs>
+    <clipPath id="guide_progress-bars-clip-terminal">
+      <rect x="0" y="0" width="731.0" height="96.6" />
+    </clipPath>
+    <clipPath id="guide_progress-bars-line-0">
+    <rect x="0" y="1.5" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_progress-bars-line-1">
+    <rect x="0" y="25.9" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_progress-bars-line-2">
+    <rect x="0" y="50.3" width="732" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="748" height="145.6" rx="8"/><text class="guide_progress-bars-title" fill="#c5c8c6" text-anchor="middle" x="374" y="27">guide_progress-bars</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#guide_progress-bars-clip-terminal)">
+    
+    <g class="guide_progress-bars-matrix">
+    <text class="guide_progress-bars-r1" x="0" y="20" textLength="122" clip-path="url(#guide_progress-bars-line-0)">━━━━━━━━━━</text><text class="guide_progress-bars-r2" x="122" y="20" textLength="12.2" clip-path="url(#guide_progress-bars-line-0)">╺</text><text class="guide_progress-bars-r2" x="134.2" y="20" textLength="353.8" clip-path="url(#guide_progress-bars-line-0)">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</text><text class="guide_progress-bars-r3" x="732" y="20" textLength="12.2" clip-path="url(#guide_progress-bars-line-0)">
+</text><text class="guide_progress-bars-r4" x="0" y="44.4" textLength="341.6" clip-path="url(#guide_progress-bars-line-1)">━━━━━━━━━━━━━━━━━━━━━━━━━━━━</text><text class="guide_progress-bars-r2" x="341.6" y="44.4" textLength="12.2" clip-path="url(#guide_progress-bars-line-1)">╺</text><text class="guide_progress-bars-r2" x="353.8" y="44.4" textLength="134.2" clip-path="url(#guide_progress-bars-line-1)">━━━━━━━━━━━</text><text class="guide_progress-bars-r3" x="732" y="44.4" textLength="12.2" clip-path="url(#guide_progress-bars-line-1)">
+</text><text class="guide_progress-bars-r5" x="0" y="68.8" textLength="488" clip-path="url(#guide_progress-bars-line-2)">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</text><text class="guide_progress-bars-r3" x="732" y="68.8" textLength="12.2" clip-path="url(#guide_progress-bars-line-2)">
+</text><text class="guide_progress-bars-r6" x="0" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r7" x="12.2" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r8" x="24.4" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r9" x="36.6" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r10" x="48.8" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r11" x="61" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r2" x="73.2" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r11" x="85.4" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r10" x="97.6" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r9" x="109.8" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r8" x="122" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r7" x="134.2" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r6" x="146.4" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r12" x="158.6" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r13" x="170.8" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r14" x="183" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r1" x="195.2" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r14" x="207.4" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r13" x="219.6" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r12" x="231.8" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r6" x="244" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r7" x="256.2" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r8" x="268.4" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r9" x="280.6" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r10" x="292.8" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r11" x="305" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r2" x="317.2" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r11" x="329.4" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r10" x="341.6" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r9" x="353.8" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r8" x="366" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r7" x="378.2" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r6" x="390.4" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r12" x="402.6" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r13" x="414.8" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r14" x="427" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r1" x="439.2" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r14" x="451.4" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r13" x="463.6" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r12" x="475.8" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">━</text><text class="guide_progress-bars-r3" x="732" y="93.2" textLength="12.2" clip-path="url(#guide_progress-bars-line-3)">
+</text>
+    </g>
+    </g>
+</svg>

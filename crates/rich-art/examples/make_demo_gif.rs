@@ -2,8 +2,8 @@
 //! GIF examples.
 //!
 //! ```text
-//! cargo run -p rich-art --features gif --example make_demo_gif
-//! cargo run -p rich-art --features gif --example gif -- crates/rich-art/examples/assets/cat.gif 3
+//! cargo run -p rs-rich-art --features gif --example make_demo_gif
+//! cargo run -p rs-rich-art --features gif --example gif -- crates/rich-art/examples/assets/cat.gif 3
 //! ```
 //!
 //! Drawn procedurally so the repository needs no binary fixture. Shapes are
