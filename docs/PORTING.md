@@ -125,6 +125,7 @@ core mirror is untouched and a sync does not have to reconcile them.
 | `--auto-pager` and `--no-pager` | `main.rs` | CLI destination/height policy composes public pager APIs; redirected stdout is never paged |
 | `--image-anchor` for still-image cover fitting | `main.rs` | routes to public `rich-art::ImageArt::anchor`; crop implementation and `ImageAnchor` remain in art |
 | multi-file `--watch` with `--watch-debounce`, `--watch-poll`, `--watch-exit-on-error` (0.0.10, #139) | `watch.rs` + `main.rs` + `config.rs` | `notify` file events on each parent directory, polling fallback; several files repaint as public `rich-ext` `LiveCoordinator` regions; no core change |
+| rich-rendered `--help`, `rich <command> --help`, `rich completions`, `rich docs markdown\|man\|config`, `rich config explain\|reference` (0.0.11 WS6) | `cli_spec.rs` + `authoring.rs` + `config.rs` | one `rich_ext::cli_doc::CommandSpec` feeds help, completion scripts, Markdown/man pages and the config reference; a unit test keeps it in step with the hand-written parser; upstream prints click's help, and core is untouched |
 
 The 0.0.8 additions are published; workflow and registry-consumer evidence is
 recorded in [release notes](releases/0.0.8.md). Dry-run does not write exports

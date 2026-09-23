@@ -14,11 +14,13 @@ use std::io::{BufRead, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+mod authoring;
 mod batch;
 mod batch_output;
 mod batch_paths;
 #[cfg(test)]
 mod batch_races;
+mod cli_spec;
 mod config;
 mod demo;
 mod doctor;
@@ -1008,6 +1010,9 @@ fn set_mode(current: &mut Mode, mode: Mode) -> Result<(), String> {
 /// Parse args into a [`Cli`], or `Ok(None)` when `--help`/`--version` handled it.
 fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let roots = ConfigRoots::default();
+    if authoring::dispatch(args)? {
+        return Ok(None);
+    }
     if let Some(output) = config::inspect(args, &roots)? {
         println!("{output}");
         return Ok(None);
@@ -1093,7 +1098,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         match arg.as_str() {
             "--" => end_of_options = true,
             "-h" | "--help" => {
-                print_help();
+                print_help(no_color || cli_spec::no_color_requested(args));
                 return Ok(None);
             }
             "-V" | "--version" => {
@@ -4806,188 +4811,9 @@ fn save_exports(console: &Console, export: &Export, segments: &[Segment]) -> Res
     first_error.map_or(Ok(()), Err)
 }
 
-fn print_help() {
-    let extension_help = rich_ext::cli::HELP;
-    // A RAW string: `\`-continuations would eat the leading spaces of every
-    // line and print the whole thing flush-left.
-    println!(
-        r#"rich {VERSION} — Rust port of the rich-cli terminal toolbox
-
-USAGE:
-    rich [OPTIONS] [RESOURCE]
-    rich [OPTIONS] <COMMAND> [RESOURCE]
-    rich --batch [OPTIONS] RESOURCE...
-    rich --watch [OPTIONS] FILE...
-
-RESOURCE is a file path, an http(s) URL, or `-` for stdin. Everything after a
-bare `--` is a RESOURCE, however much it looks like an option. Input modes with
-no RESOURCE read stdin until EOF; `-p -` reads markup from stdin too. Terminal
-stdin shows an input hint. Repeated scalar options use their last value.
-
-COMMANDS:
-    config show     Show configured settings with CLI overrides as JSON
-    config validate Validate TOML, all profiles and explicit setting values
-    print       Treat RESOURCE as literal markup TEXT (`--print`)
-    markdown    Render Markdown (`--markdown`)
-    syntax      Syntax-highlight source (`--syntax`)
-    json        Pretty-print JSON (`--json`)
-    csv         Render CSV/TSV as a table (`--csv`)
-    ipynb       Render a Jupyter notebook (`--ipynb`)
-    jsonl       Stream JSON Lines / NDJSON records
-    log         Stream common structured-log JSONL records
-    gif         Animate GIFs (`--gif`)
-    diff        Perceptually compare two images (`--diff`)
-    image       Render a still image as ASCII/Braille/blocks/Sixel (`--image`)
-    rule        Draw a horizontal rule (`--rule`)
-
-RENDER MODE (choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb
-by extension — anything else with a file extension is syntax-highlighted):
-    -p, --print      Treat RESOURCE as literal markup TEXT, not a file path
-    -m, --markdown   Render RESOURCE as Markdown
-    -j, --json       Pretty-print RESOURCE as JSON
-    -x, --syntax     Syntax-highlight RESOURCE (language from its extension)
-        --csv        Render RESOURCE as a CSV/TSV table
-        --ipynb      Render RESOURCE as a Jupyter notebook
-        --jsonl      Stream JSON Lines / NDJSON records
-        --log        Stream common structured-log JSONL records
-        --log-presentation plain|rich  Select log presentation (default: plain)
-        --gif        Animate GIFs side by side; pipes receive the first frame
-        --loop N     With --gif, repeat N times (default 1; 0 = forever)
-        --rule       Draw a horizontal rule (RESOURCE is its title)
-        --diff       Perceptually compare two images (needs exactly two)
-        --image      Render RESOURCE as a still image (ASCII/Braille/blocks/Sixel)
-
-OPTIONS:
-    -w, --width N    Render the output N columns wide (the console keeps its
-                     own width, so --left/--center/--right still use it)
-        --height N   With --image, render this many rows instead of the
-                     backend's default
-        --image-anchor A Cover crop anchor: center (default), top, bottom, left,
-                         right, top-left, top-right, bottom-left, bottom-right
-        --image-fit M With --image and --height: contain (letterbox), cover
-                     (crop at --image-anchor), or stretch (fill, ignoring aspect)
-        --image-max-width N / --image-max-height N
-                     With --image, never exceed N columns / rows (aspect kept)
-        --image-background #RRGGBB
-                     With --image: flatten transparency onto this RGB colour
-                     (also colours contain padding; quote the # in your shell)
-        --image-color M truecolor (default), ansi256, ansi16 or grayscale, with
-                     ASCII/blocks/quadrants images
-        --image-dither M none (default), floyd-steinberg, or bayer4x4 (needs a
-                     non-truecolor --image-color)
-        --image-brightness F / --image-contrast F / --image-gamma F
-                     Tone adjustments (1.0 = unchanged), applied in that order
-                     after rotation/flips and before grayscale and colour
-        --image-rotate N Rotate still images clockwise: 0, 90, 180, 270
-        --image-flip-horizontal / --image-flip-vertical Flip after rotation
-        --image-grayscale Composite and convert still images to grayscale
-        --image-mode M
-                     With --diff/--image, how to draw the picture: auto
-                     (default), sixel (real pixels), blocks, quadrants, braille,
-                     ascii, none
-                     (--image rejects none: there would be nothing to draw)
-{extension_help}
-        --threshold PCT
-                     With --diff, exit non-zero above PCT% changed.
-                     Also sets the exit code: 0 within, 5 over.
-        --left       Left-justify output
-        --center     Center output
-        --right      Right-justify output
-    -o, --export-html PATH
-                     Also write a self-contained HTML document to PATH
-        --export-svg PATH
-                     Also write an SVG document to PATH. Unlike the HTML,
-                     it references its font from a CDN, so it is not
-                     self-contained offline.
-        --panel BOX  Wrap output in a panel, shrunk to fit its content
-                     (ascii/ascii2/square/rounded/heavy/double; none = no panel)
-        --padding P  Wrap output in padding (1, 2, or 4 comma-separated ints)
-    -e, --expand     Make --panel/--padding fill the width instead of fitting
-                     (implied by --width)
-        --title T    Panel title; also the CSV table's title
-        --caption T  Panel subtitle; also the CSV table's caption
-    -y, --hyperlinks Render a Markdown link as a clickable OSC 8 hyperlink.
-                     Off by default, which shows the URL as `text (url)`
-    -s, --style S    Style laid under the whole output, e.g. "bold red"
-    -S, --panel-style S
-                     Panel border style, e.g. "dim" (with --panel)
-        --pager      Page terminal output via MANPAGER, PAGER, then less/more.com
-        --no-pager   Disable explicit and automatic paging
-        --auto-pager Page only terminal output taller than the viewport
-        --no-auto-pager Disable automatic paging
-        --watch      Re-render changing files (several allowed) or one URL while
-                     stdout is a terminal; each file gets its own live region
-        --watch-interval SEC
-                     Poll interval in seconds (default 1)
-        --watch-debounce SEC
-                     Quiet period collapsing a burst of file events (default 0.1)
-        --watch-poll Poll local files at --watch-interval instead of file events
-        --watch-exit-on-error
-                     End the watch with a non-zero exit when a render fails
-        --watch-cache With URLs, render only when the response body changes
-        --batch      Convert explicit files, directories, or globs deterministically
-        --batch-preserve-dirs  Preserve paths under --batch-input-root PATH
-        --batch-name-template TEMPLATE  Name export leaves; export paths become directories
-        --jobs N     Parallel file-export workers (default 1); requires --batch
-                     Terminal output stays in input order; active jobs finish on error.
-        --progress, --no-progress
-                     Enable/disable batch counts on terminal stderr (default on);
-                     hidden for redirected stderr, JSON reports and dry runs
-        --dry-run    Validate and show the batch plan without writing files
-        --continue-on-error
-                     Process all planned inputs and aggregate failures
-        --overwrite  Allow existing batch export destinations
-        --collision P
-                     Batch policy: error (default), overwrite, or suffix
-        --config PATH
-                     Read versioned TOML defaults from PATH
-        --profile NAME
-                     Select a config profile (default: default)
-        --theme NAME Select a named theme from config
-        --theme-style NAME=STYLE
-                     Override a theme binding; repeatable and worker-safe
-        --no-config  Disable config discovery
-        --sanitize   Replace input terminal controls, JSON/notebook strings,
-                     titles and captions with visible inert text
-        --report F   Emit a result/error envelope on stderr: human (default) or json.
-        --machine-json
-                     Alias for --report json
-        --no-color   Disable colored output (as does a non-empty NO_COLOR)
-        --color      Override a config no_color setting (pipes remain plain)
-        --no-batch, --no-continue-on-error, --no-overwrite
-        --no-watch, --no-watch-cache, --no-watch-poll, --no-watch-exit-on-error,
-        --no-sanitize
-                     Disable the corresponding config/default boolean
-    --demo          Guided suite tour; pauses 3 seconds between sections on a TTY
-    --demo-list     List stable tour sections: core, workflows, art
-    --demo-section NAME
-                    With --demo, play one section only
-    --demo-delay SECONDS
-                    Tour pause (0–60); no pauses when redirected; Ctrl+C stops
-                    Self-contained examples; ignores config; accepts --no-color
-    doctor          Read-only build, terminal, config and pager diagnostics;
-                    --report json writes diagnostic data to stdout
-    -h, --help       Show this help
-    -V, --version    Show the rs-rich-cli package version
-
-ENVIRONMENT:
-    NO_COLOR         Any non-empty value disables colour
-    COLUMNS          Console width (default 80 when unavailable)
-    MANPAGER, PAGER   Pager command; fallback is less (Unix), more.com (Windows)
-    FORCE_COLOR      Not supported; redirected stdout stays plain
-    RICH_SIXEL       0/1 overrides Sixel detection for --image-mode auto
-
-With no RESOURCE and no mode flag, a capability demo is shown. Layout, style,
-paging, hyperlinks and export options require a resource or render mode.
-
-EXIT CODES:
-    0 success
-    2 usage/config error
-    3 input/read/write error
-    4 parse/render data error
-    5 threshold/gate failure
-"#
-    );
+/// `--help`: the [`cli_spec`] help, through a stdout console.
+fn print_help(no_color: bool) {
+    cli_spec::print_help(no_color);
 }
 
 fn build_demo_console(no_color: bool) -> Console {

@@ -1612,6 +1612,8 @@ fn title_markup_is_measured_visually_and_malformed_labels_fail_cleanly() {
 fn help_documents_paging_environment_stdin_and_loop_defaults() {
     let (help, ok) = run(&["--help"], "");
     assert!(ok);
+    // Help wraps to the console width, so a phrase may span lines.
+    let help = help.split_whitespace().collect::<Vec<_>>().join(" ");
     for phrase in [
         "default 1; 0 = forever",
         "more.com",

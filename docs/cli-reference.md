@@ -3,211 +3,686 @@
 
 # CLI reference
 
-Every option the `rich` command accepts, taken from the binary's own `--help` so
-that this page cannot drift from it.
+Every option the `rich` command accepts, generated from the same command
+description as the binary's own `--help` (`rich docs markdown` and
+`rich docs config`) so that this page cannot drift from it.
 
 Looking for how to *do* something rather than what a flag is called? Start at
 [Using the CLI](cli.md).
 
+## rich
 
-*rich 0.0.11 — Rust port of the rich-cli terminal toolbox*
+rich 0.0.11 — Rust port of the rich-cli terminal toolbox
 
-## Usage
+RESOURCE is a file path, an http(s) URL, or `-` for stdin. Everything after a bare `--` is a RESOURCE, however much it looks like an option. Input modes with no RESOURCE read stdin until EOF; `-p -` reads markup from stdin too. Terminal stdin shows an input hint. Repeated scalar options use their last value.
+
+A `--no-…` spelling (such as --no-watch) disables the corresponding config/default boolean.
+
+### Usage
 
 ```text
 rich [OPTIONS] [RESOURCE]
 rich [OPTIONS] <COMMAND> [RESOURCE]
 rich --batch [OPTIONS] RESOURCE...
 rich --watch [OPTIONS] FILE...
-
-RESOURCE is a file path, an http(s) URL, or `-` for stdin. Everything after a
-bare `--` is a RESOURCE, however much it looks like an option. Input modes with
-no RESOURCE read stdin until EOF; `-p -` reads markup from stdin too. Terminal
-stdin shows an input hint. Repeated scalar options use their last value.
 ```
 
-## Commands
+### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]...` | A file path, an http(s) URL, or `-` for stdin (several with --batch, --watch or --gif) |
+
+### Render mode
+
+Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by extension — anything else with a file extension is syntax-highlighted.
+
+| Option | Description |
+| --- | --- |
+| `-p`, `--print` | Treat RESOURCE as literal markup TEXT, not a file path. |
+| `-m`, `--markdown` | Render RESOURCE as Markdown. |
+| `-j`, `--json` | Pretty-print RESOURCE as JSON. |
+| `-x`, `--syntax` | Syntax-highlight RESOURCE (language from its extension) |
+| `--csv` | Render RESOURCE as a CSV/TSV table. |
+| `--ipynb` | Render RESOURCE as a Jupyter notebook. |
+| `--jsonl`, `--ndjson` | Stream JSON Lines / NDJSON records. |
+| `--log` | Stream common structured-log JSONL records. |
+| `--gif` | Animate GIFs side by side; pipes receive the first frame. |
+| `--rule` | Draw a horizontal rule (RESOURCE is its title) |
+| `--diff` | Perceptually compare two images (needs exactly two) |
+| `--image` | Render RESOURCE as a still image (ASCII/Braille/blocks/Sixel) |
+| `--inspect` | Explore structured data (JSON, YAML, TOML, XML, INI, dotenv) as a tree. |
+
+### Input
+
+| Option | Description |
+| --- | --- |
+| `--format <F>` | Input format. With --inspect, the parser (default auto-detect); otherwise `auto` detects piped or extensionless input and routes it (JSON to --json, other formats to highlighting, anything else to plain text), and a named format overrides the extension. Default: `auto`. Config: `format`. Possible values: `auto`, `json`, `yaml`, `toml`, `xml`, `ini`, `env`. |
+| `--encoding <E>` | Explicit text encoding: utf-8, utf-16 (BOM required), utf-16le or utf-16be. Strict; files, stdin and URLs only. Possible values: `utf-8`, `utf-16`, `utf-16le`, `utf-16be`. |
+
+### Layout
+
+| Option | Description |
+| --- | --- |
+| `-w`, `--width <N>` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) Config: `width`. |
+| `--left` | Left-justify output. |
+| `--center` | Center output. |
+| `--right` | Right-justify output. |
+| `--panel <BOX>` | Wrap output in a panel, shrunk to fit its content (none = no panel) Config: `panel`. Possible values: `ascii`, `ascii2`, `square`, `rounded`, `heavy`, `double`, `none`. |
+| `--padding <P>` | Wrap output in padding (1, 2, or 4 comma-separated ints) Config: `padding`. |
+| `-e`, `--expand` | Make --panel/--padding fill the width instead of fitting (implied by --width) |
+| `--title <T>` | Panel title; also the CSV table's title. |
+| `--caption <T>` | Panel subtitle; also the CSV table's caption. |
+| `-s`, `--style <S>` | Style laid under the whole output, e.g. "bold red". |
+| `-S`, `--panel-style <S>` | Panel border style, e.g. "dim" (with --panel) |
+| `-y`, `--hyperlinks` | Render a Markdown link as a clickable OSC 8 hyperlink. Off by default, which shows the URL as `text (url)`. |
+
+### Mode options
+
+| Option | Description |
+| --- | --- |
+| `--log-presentation <MODE>` | With --log, select log presentation. Default: `plain`. Config: `log_presentation`. Possible values: `plain`, `rich`. |
+| `--loop <N>` | With --gif, repeat N times (default 1; 0 = forever) |
+| `--gif-mode <M>` | With --gif: ascii or blocks (half-block pixels). Blocks fall back to ASCII without color or when piped. Default: `ascii`. Possible values: `ascii`, `blocks`. |
+
+### Image
+
+| Option | Description |
+| --- | --- |
+| `--image-mode <M>` | With --diff/--image, how to draw the picture: sixel draws real pixels; blocks, quadrants, braille and ascii draw characters (--image rejects none: there would be nothing to draw) Default: `auto`. Possible values: `auto`, `sixel`, `blocks`, `quadrants`, `braille`, `ascii`, `none`. |
+| `--height <N>` | With --image, render this many rows instead of the backend's default. Config: `height`. |
+| `--image-fit <M>` | With --image and --height: contain letterboxes, cover crops at --image-anchor, stretch fills ignoring aspect. Config: `image_fit`. Possible values: `contain`, `cover`, `stretch`. |
+| `--image-anchor <A>` | Cover crop anchor. Default: `center`. Config: `image_anchor`. Possible values: `center`, `top`, `bottom`, `left`, `right`, `top-left`, `top-right`, `bottom-left`, `bottom-right`. |
+| `--image-max-width <N>` | With --image, never exceed N columns (aspect kept) Config: `image_max_width`. |
+| `--image-max-height <N>` | With --image, never exceed N rows (aspect kept) Config: `image_max_height`. |
+| `--image-background <#RRGGBB>` | With --image: flatten transparency onto this RGB colour (also colours contain padding; quote the # in your shell) Config: `image_background`. |
+| `--image-color <M>` | Colour depth, with ASCII/blocks/quadrants images. Default: `truecolor`. Config: `image_color`. Possible values: `truecolor`, `ansi256`, `ansi16`, `grayscale`. |
+| `--image-dither <M>` | Dithering (needs a non-truecolor --image-color) Default: `none`. Config: `image_dither`. Possible values: `none`, `floyd-steinberg`, `bayer4x4`. |
+| `--image-brightness <F>` | Tone adjustment (1.0 = unchanged). Brightness, contrast and gamma apply in that order, after rotation/flips and before grayscale and colour. Default: `1.0`. Config: `image_brightness`. |
+| `--image-contrast <F>` | Tone adjustment (1.0 = unchanged) Default: `1.0`. Config: `image_contrast`. |
+| `--image-gamma <F>` | Tone adjustment (1.0 = unchanged) Default: `1.0`. Config: `image_gamma`. |
+| `--image-rotate <N>` | Rotate still images clockwise. Default: `0`. Config: `image_rotate`. Possible values: `0`, `90`, `180`, `270`. |
+| `--image-flip-horizontal`, `--no-image-flip-horizontal` | Flip still images horizontally, after rotation. Config: `image_flip_horizontal`. |
+| `--image-flip-vertical`, `--no-image-flip-vertical` | Flip still images vertically, after rotation. Config: `image_flip_vertical`. |
+| `--image-grayscale`, `--no-image-grayscale` | Composite and convert still images to grayscale. Config: `image_grayscale`. |
+| `--threshold <PCT>` | With --diff, exit non-zero above PCT% changed. Also sets the exit code: 0 within, 5 over. |
+
+### Inspect
+
+| Option | Description |
+| --- | --- |
+| `--select <EXPR>` | Show only what a JSONPath expression selects, e.g. `$.servers[*].name`. |
+| `--find <TEXT>` | Search keys and values (case-insensitive), highlighting matches. |
+| `--flatten` | Show `path = value` rows instead of a tree. |
+| `--table` | Show records, or a path/value table, instead of a tree. |
+| `--max-depth <N>` | Fold containers deeper than N levels. |
+| `--max-length <N>` | Show at most N items per container. |
+| `--show-paths` | Append each value's path. |
+| `--redact` | Mask secret-looking keys such as password, token and api_key. |
+| `--compare <PATH>` | Show added, removed and changed values against another document. |
+
+### Export
+
+| Option | Description |
+| --- | --- |
+| `-o`, `--export-html <PATH>` | Also write a self-contained HTML document to PATH. Config: `export_html`. |
+| `--export-svg <PATH>` | Also write an SVG document to PATH. Unlike the HTML, it references its font from a CDN, so it is not self-contained offline. Config: `export_svg`. |
+
+### Paging
+
+| Option | Description |
+| --- | --- |
+| `--pager` | Page terminal output via MANPAGER, PAGER, then less/more.com. Config: `pager`. |
+| `--no-pager` | Disable explicit and automatic paging. |
+| `--auto-pager` | Page only terminal output taller than the viewport. Config: `auto_pager`. |
+| `--no-auto-pager` | Disable automatic paging. |
+
+### Watch
+
+| Option | Description |
+| --- | --- |
+| `--watch`, `--no-watch` | Re-render changing files (several allowed) or one URL while stdout is a terminal; each file gets its own live region. Config: `watch`. |
+| `--watch-interval`, `--interval <SEC>` | Poll interval in seconds. Default: `1`. Config: `watch_interval`. |
+| `--watch-debounce <SEC>` | Quiet period collapsing a burst of file events. Default: `0.1`. Config: `watch_debounce`. |
+| `--watch-poll`, `--no-watch-poll` | Poll local files at --watch-interval instead of file events. Config: `watch_poll`. |
+| `--watch-exit-on-error`, `--no-watch-exit-on-error` | End the watch with a non-zero exit when a render fails. Config: `watch_exit_on_error`. |
+| `--watch-cache`, `--no-watch-cache` | With URLs, render only when the response body changes. Config: `watch_cache`. |
+
+### Batch
+
+| Option | Description |
+| --- | --- |
+| `--batch`, `--no-batch` | Convert explicit files, directories, or globs deterministically. Config: `batch`. |
+| `--batch-input-root <PATH>` | The directory --batch-preserve-dirs keeps paths relative to. Config: `batch_input_root`. |
+| `--batch-preserve-dirs`, `--no-batch-preserve-dirs` | Preserve paths under --batch-input-root PATH. Config: `batch_preserve_dirs`. |
+| `--batch-name-template <TEMPLATE>` | Name export leaves; export paths become directories. Config: `batch_name_template`. |
+| `--jobs <N>` | Parallel file-export workers; requires --batch. Terminal output stays in input order; active jobs finish on error. Default: `1`. Config: `jobs`. |
+| `--progress`, `--no-progress` | Enable/disable batch counts on terminal stderr; hidden for redirected stderr, JSON reports and dry runs. Default: `true`. Config: `progress`. |
+| `--dry-run` | Validate and show the batch plan without writing files. |
+| `--continue-on-error`, `--no-continue-on-error` | Process all planned inputs and aggregate failures. Config: `continue_on_error`. |
+| `--overwrite`, `--no-overwrite` | Allow existing batch export destinations. Config: `overwrite`. |
+| `--collision <P>` | Batch policy for existing destinations. Default: `error`. Config: `collision`. Possible values: `error`, `overwrite`, `suffix`. |
+
+### Config & theme
+
+| Option | Description |
+| --- | --- |
+| `--config <PATH>` | Read versioned TOML defaults from PATH. |
+| `--profile <NAME>` | Select a config profile. Default: `default`. |
+| `--no-config` | Disable config discovery. |
+| `--theme <NAME>` | Select a named theme from config. Config: `theme`. |
+| `--theme-style <NAME=STYLE>...` | Override a theme binding; repeatable and worker-safe. |
+
+### Output & reports
+
+| Option | Description |
+| --- | --- |
+| `--no-color` | Disable colored output (as does a non-empty NO_COLOR) Environment: `NO_COLOR`. Config: `no_color`. |
+| `--color` | Override a config no_color setting (pipes remain plain) |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. Config: `sanitize`. |
+| `--report <F>` | Emit a result/error envelope on stderr. Default: `human`. Possible values: `human`, `json`. |
+| `--machine-json` | Alias for --report json. |
+
+### Demo
+
+Self-contained examples; ignores config; accepts --no-color.
+
+| Option | Description |
+| --- | --- |
+| `--demo` | Guided suite tour; pauses 3 seconds between sections on a TTY. |
+| `--demo-list` | List stable tour sections: core, workflows, art. |
+| `--demo-section <NAME>` | With --demo, play one section only. Possible values: `core`, `workflows`, `art`. |
+| `--demo-delay <SECONDS>` | Tour pause (0–60); no pauses when redirected; Ctrl+C stops. Default: `3`. |
+
+### General
+
+| Option | Description |
+| --- | --- |
+| `-h`, `--help` | Show this help. |
+| `-V`, `--version` | Show the rs-rich-cli package version. |
+
+### Commands
+
+| Command | Description |
+| --- | --- |
+| `print` | Treat RESOURCE as literal markup TEXT (`--print`) |
+| `markdown`, `md` | Render Markdown (`--markdown`) |
+| `syntax`, `code` | Syntax-highlight source (`--syntax`) |
+| `json` | Pretty-print JSON (`--json`) |
+| `csv`, `tsv` | Render CSV/TSV as a table (`--csv`) |
+| `ipynb`, `notebook` | Render a Jupyter notebook (`--ipynb`) |
+| `jsonl`, `ndjson` | Stream JSON Lines / NDJSON records (`--jsonl`) |
+| `log`, `logs` | Stream common structured-log JSONL records (`--log`) |
+| `gif` | Animate GIFs (`--gif`) |
+| `diff` | Perceptually compare two images (`--diff`) |
+| `image` | Render a still image as ASCII/Braille/blocks/Sixel (`--image`) |
+| `rule` | Draw a horizontal rule (`--rule`) |
+| `inspect` | Explore structured data (JSON, YAML, TOML, XML, INI, dotenv) as a tree (`--inspect`) |
+| `config` | Show, validate, explain or document configuration |
+| `completions` | Print a shell completion script |
+| `docs` | Print reference documentation generated from this help |
+| `doctor` | Read-only build, terminal, config and pager diagnostics; --report json writes diagnostic data to stdout |
+
+### Environment
+
+- NO_COLOR: any non-empty value disables colour
+- COLUMNS: console width (default 80 when unavailable)
+- MANPAGER, PAGER: pager command; fallback is less (Unix), more.com (Windows)
+- FORCE_COLOR: not supported; redirected stdout stays plain
+- RICH_SIXEL: 0/1 overrides Sixel detection for --image-mode auto
+
+With no RESOURCE and no mode flag, a capability demo is shown. Layout, style, paging, hyperlinks and export options require a resource or render mode.
+
+### Exit codes
+
+- 0: success
+- 2: usage/config error
+- 3: input/read/write error
+- 4: parse/render data error
+- 5: threshold/gate failure
+
+### rich print
+
+Treat RESOURCE as literal markup TEXT (`--print`)
+
+#### Usage
 
 ```text
-config show     Show configured settings with CLI overrides as JSON
-config validate Validate TOML, all profiles and explicit setting values
-print       Treat RESOURCE as literal markup TEXT (`--print`)
-markdown    Render Markdown (`--markdown`)
-syntax      Syntax-highlight source (`--syntax`)
-json        Pretty-print JSON (`--json`)
-csv         Render CSV/TSV as a table (`--csv`)
-ipynb       Render a Jupyter notebook (`--ipynb`)
-jsonl       Stream JSON Lines / NDJSON records
-log         Stream common structured-log JSONL records
-gif         Animate GIFs (`--gif`)
-diff        Perceptually compare two images (`--diff`)
-image       Render a still image as ASCII/Braille/blocks/Sixel (`--image`)
-rule        Draw a horizontal rule (`--rule`)
+rich print [OPTIONS] [RESOURCE]
 ```
 
-## Render modes
+#### Arguments
 
-Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension — anything else with a file extension is syntax-highlighted.
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich markdown
+
+Render Markdown (`--markdown`)
+
+#### Usage
 
 ```text
--p, --print      Treat RESOURCE as literal markup TEXT, not a file path
--m, --markdown   Render RESOURCE as Markdown
--j, --json       Pretty-print RESOURCE as JSON
--x, --syntax     Syntax-highlight RESOURCE (language from its extension)
-    --csv        Render RESOURCE as a CSV/TSV table
-    --ipynb      Render RESOURCE as a Jupyter notebook
-    --jsonl      Stream JSON Lines / NDJSON records
-    --log        Stream common structured-log JSONL records
-    --log-presentation plain|rich  Select log presentation (default: plain)
-    --gif        Animate GIFs side by side; pipes receive the first frame
-    --loop N     With --gif, repeat N times (default 1; 0 = forever)
-    --rule       Draw a horizontal rule (RESOURCE is its title)
-    --diff       Perceptually compare two images (needs exactly two)
-    --image      Render RESOURCE as a still image (ASCII/Braille/blocks/Sixel)
+rich markdown [OPTIONS] [RESOURCE]
 ```
 
-## Options
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich syntax
+
+Syntax-highlight source (`--syntax`)
+
+#### Usage
 
 ```text
--w, --width N    Render the output N columns wide (the console keeps its
-                 own width, so --left/--center/--right still use it)
-    --height N   With --image, render this many rows instead of the
-                 backend's default
-    --image-anchor A Cover crop anchor: center (default), top, bottom, left,
-                     right, top-left, top-right, bottom-left, bottom-right
-    --image-fit M With --image and --height: contain (letterbox), cover
-                 (crop at --image-anchor), or stretch (fill, ignoring aspect)
-    --image-max-width N / --image-max-height N
-                 With --image, never exceed N columns / rows (aspect kept)
-    --image-background #RRGGBB
-                 With --image: flatten transparency onto this RGB colour
-                 (also colours contain padding; quote the # in your shell)
-    --image-color M truecolor (default), ansi256, ansi16 or grayscale, with
-                 ASCII/blocks/quadrants images
-    --image-dither M none (default), floyd-steinberg, or bayer4x4 (needs a
-                 non-truecolor --image-color)
-    --image-brightness F / --image-contrast F / --image-gamma F
-                 Tone adjustments (1.0 = unchanged), applied in that order
-                 after rotation/flips and before grayscale and colour
-    --image-rotate N Rotate still images clockwise: 0, 90, 180, 270
-    --image-flip-horizontal / --image-flip-vertical Flip after rotation
-    --image-grayscale Composite and convert still images to grayscale
-    --image-mode M
-                 With --diff/--image, how to draw the picture: auto
-                 (default), sixel (real pixels), blocks, quadrants, braille,
-                 ascii, none
-                 (--image rejects none: there would be nothing to draw)
-    --gif-mode M With --gif: ascii (default) or blocks (half-block pixels).
-                 Blocks fall back to ASCII without color or when piped.
-    --encoding E Explicit text encoding: utf-8, utf-16 (BOM required),
-                 utf-16le or utf-16be. Strict; files, stdin and URLs only.
-    --threshold PCT
-                 With --diff, exit non-zero above PCT% changed.
-                 Also sets the exit code: 0 within, 5 over.
-    --left       Left-justify output
-    --center     Center output
-    --right      Right-justify output
--o, --export-html PATH
-                 Also write a self-contained HTML document to PATH
-    --export-svg PATH
-                 Also write an SVG document to PATH. Unlike the HTML,
-                 it references its font from a CDN, so it is not
-                 self-contained offline.
-    --panel BOX  Wrap output in a panel, shrunk to fit its content
-                 (ascii/ascii2/square/rounded/heavy/double; none = no panel)
-    --padding P  Wrap output in padding (1, 2, or 4 comma-separated ints)
--e, --expand     Make --panel/--padding fill the width instead of fitting
-                 (implied by --width)
-    --title T    Panel title; also the CSV table's title
-    --caption T  Panel subtitle; also the CSV table's caption
--y, --hyperlinks Render a Markdown link as a clickable OSC 8 hyperlink.
-                 Off by default, which shows the URL as `text (url)`
--s, --style S    Style laid under the whole output, e.g. "bold red"
--S, --panel-style S
-                 Panel border style, e.g. "dim" (with --panel)
-    --pager      Page terminal output via MANPAGER, PAGER, then less/more.com
-    --no-pager   Disable explicit and automatic paging
-    --auto-pager Page only terminal output taller than the viewport
-    --no-auto-pager Disable automatic paging
-    --watch      Re-render changing files (several allowed) or one URL while
-                 stdout is a terminal; each file gets its own live region
-    --watch-interval SEC
-                 Poll interval in seconds (default 1)
-    --watch-debounce SEC
-                 Quiet period collapsing a burst of file events (default 0.1)
-    --watch-poll Poll local files at --watch-interval instead of file events
-    --watch-exit-on-error
-                 End the watch with a non-zero exit when a render fails
-    --watch-cache With URLs, render only when the response body changes
-    --batch      Convert explicit files, directories, or globs deterministically
-    --batch-preserve-dirs  Preserve paths under --batch-input-root PATH
-    --batch-name-template TEMPLATE  Name export leaves; export paths become directories
-    --jobs N     Parallel file-export workers (default 1); requires --batch
-                 Terminal output stays in input order; active jobs finish on error.
-    --progress, --no-progress
-                 Enable/disable batch counts on terminal stderr (default on);
-                 hidden for redirected stderr, JSON reports and dry runs
-    --dry-run    Validate and show the batch plan without writing files
-    --continue-on-error
-                 Process all planned inputs and aggregate failures
-    --overwrite  Allow existing batch export destinations
-    --collision P
-                 Batch policy: error (default), overwrite, or suffix
-    --config PATH
-                 Read versioned TOML defaults from PATH
-    --profile NAME
-                 Select a config profile (default: default)
-    --theme NAME Select a named theme from config
-    --theme-style NAME=STYLE
-                 Override a theme binding; repeatable and worker-safe
-    --no-config  Disable config discovery
-    --sanitize   Replace input terminal controls, JSON/notebook strings,
-                 titles and captions with visible inert text
-    --report F   Emit a result/error envelope on stderr: human (default) or json.
-    --machine-json
-                 Alias for --report json
-    --no-color   Disable colored output (as does a non-empty NO_COLOR)
-    --color      Override a config no_color setting (pipes remain plain)
-    --no-batch, --no-continue-on-error, --no-overwrite
-    --no-watch, --no-watch-cache, --no-watch-poll, --no-watch-exit-on-error,
-    --no-sanitize
-                 Disable the corresponding config/default boolean
---demo          Guided suite tour; pauses 3 seconds between sections on a TTY
---demo-list     List stable tour sections: core, workflows, art
---demo-section NAME
-                With --demo, play one section only
---demo-delay SECONDS
-                Tour pause (0–60); no pauses when redirected; Ctrl+C stops
-                Self-contained examples; ignores config; accepts --no-color
-doctor          Read-only build, terminal, config and pager diagnostics;
-                --report json writes diagnostic data to stdout
--h, --help       Show this help
--V, --version    Show the rs-rich-cli package version
+rich syntax [OPTIONS] [RESOURCE]
 ```
 
-## Environment variables
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich json
+
+Pretty-print JSON (`--json`)
+
+#### Usage
 
 ```text
-NO_COLOR         Any non-empty value disables colour
-COLUMNS          Console width (default 80 when unavailable)
-MANPAGER, PAGER   Pager command; fallback is less (Unix), more.com (Windows)
-FORCE_COLOR      Not supported; redirected stdout stays plain
-RICH_SIXEL       0/1 overrides Sixel detection for --image-mode auto
-
-With no RESOURCE and no mode flag, a capability demo is shown. Layout, style,
-paging, hyperlinks and export options require a resource or render mode.
+rich json [OPTIONS] [RESOURCE]
 ```
 
-## Exit codes
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich csv
+
+Render CSV/TSV as a table (`--csv`)
+
+#### Usage
 
 ```text
-0 success
-2 usage/config error
-3 input/read/write error
-4 parse/render data error
-5 threshold/gate failure
+rich csv [OPTIONS] [RESOURCE]
 ```
 
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich ipynb
+
+Render a Jupyter notebook (`--ipynb`)
+
+#### Usage
+
+```text
+rich ipynb [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich jsonl
+
+Stream JSON Lines / NDJSON records (`--jsonl`)
+
+#### Usage
+
+```text
+rich jsonl [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich log
+
+Stream common structured-log JSONL records (`--log`)
+
+#### Usage
+
+```text
+rich log [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich gif
+
+Animate GIFs (`--gif`)
+
+#### Usage
+
+```text
+rich gif [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich diff
+
+Perceptually compare two images (`--diff`)
+
+#### Usage
+
+```text
+rich diff [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich image
+
+Render a still image as ASCII/Braille/blocks/Sixel (`--image`)
+
+#### Usage
+
+```text
+rich image [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich rule
+
+Draw a horizontal rule (`--rule`)
+
+#### Usage
+
+```text
+rich rule [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich inspect
+
+Explore structured data (JSON, YAML, TOML, XML, INI, dotenv) as a tree (`--inspect`)
+
+#### Usage
+
+```text
+rich inspect [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich config
+
+Show, validate, explain or document configuration.
+
+Each subcommand accepts --config PATH, --profile NAME, --no-config, --theme NAME and the setting flags (--width, --pager, ...) that `rich` itself accepts, as command-line overrides.
+
+#### Usage
+
+```text
+rich config <COMMAND>
+```
+
+#### Commands
+
+| Command | Description |
+| --- | --- |
+| `show` | Show configured settings with CLI overrides as JSON |
+| `validate` | Validate TOML, all profiles and explicit setting values |
+| `explain` | Show which layer sets each setting — defaults, environment, config file, profile, command line — and what it overrides |
+| `reference` | List every configuration source and key |
+
+#### rich config show
+
+Show configured settings with CLI overrides as JSON
+
+##### Usage
+
+```text
+rich config show [OPTIONS]
+```
+
+#### rich config validate
+
+Validate TOML, all profiles and explicit setting values
+
+##### Usage
+
+```text
+rich config validate [OPTIONS]
+```
+
+#### rich config explain
+
+Show which layer sets each setting — defaults, environment, config file, profile, command line — and what it overrides
+
+##### Usage
+
+```text
+rich config explain [OPTIONS] [KEY]
+```
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[KEY]` | Explain one setting instead of all of them. Possible values: `mode`, `format`, `width`, `panel`, `padding`, `log_presentation`, `height`, `image_fit`, `image_anchor`, `image_max_width`, `image_max_height`, `image_background`, `image_color`, `image_dither`, `image_brightness`, `image_contrast`, `image_gamma`, `image_rotate`, `image_flip_horizontal`, `image_flip_vertical`, `image_grayscale`, `export_html`, `export_svg`, `pager`, `auto_pager`, `watch`, `watch_interval`, `watch_debounce`, `watch_poll`, `watch_exit_on_error`, `watch_cache`, `batch`, `batch_input_root`, `batch_preserve_dirs`, `batch_name_template`, `jobs`, `progress`, `continue_on_error`, `overwrite`, `collision`, `theme`, `no_color`, `sanitize`. |
+
+#### rich config reference
+
+List every configuration source and key
+
+##### Usage
+
+```text
+rich config reference [OPTIONS]
+```
+
+### rich completions
+
+Print a shell completion script
+
+#### Usage
+
+```text
+rich completions <SHELL>
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `<SHELL>` | The shell to complete for (pwsh is accepted for powershell) Possible values: `bash`, `zsh`, `fish`, `powershell`. |
+
+#### Examples
+
+Bash
+
+```sh
+rich completions bash > ~/.local/share/bash-completion/completions/rich
+```
+
+Zsh
+
+```sh
+rich completions zsh > "${fpath[1]}/_rich"
+```
+
+Fish
+
+```sh
+rich completions fish > ~/.config/fish/completions/rich.fish
+```
+
+PowerShell
+
+```sh
+rich completions powershell | Out-String | Invoke-Expression
+```
+
+### rich docs
+
+Print reference documentation generated from this help
+
+#### Usage
+
+```text
+rich docs <COMMAND>
+```
+
+#### Commands
+
+| Command | Description |
+| --- | --- |
+| `markdown` | Print the command reference as Markdown |
+| `man` | Print the rich(1) man page, or write every page to a directory |
+| `config` | Print the configuration reference as Markdown |
+
+#### rich docs markdown
+
+Print the command reference as Markdown
+
+##### Usage
+
+```text
+rich docs markdown
+```
+
+#### rich docs man
+
+Print the rich(1) man page, or write every page to a directory
+
+##### Usage
+
+```text
+rich docs man [OPTIONS]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--output <DIR>` | Write rich.1 and one page per subcommand into DIR (created if missing) and list them. |
+
+#### rich docs config
+
+Print the configuration reference as Markdown
+
+##### Usage
+
+```text
+rich docs config
+```
+
+### rich doctor
+
+Read-only build, terminal, config and pager diagnostics; --report json writes diagnostic data to stdout
+
+#### Usage
+
+```text
+rich doctor [--report json] [--config PATH] [--profile NAME] [--no-config] [--no-color]
+```
+
+## rich configuration
+
+Settings are TOML: `version = 1`, a `[defaults]` table, optional `[profile.NAME]` tables and `[themes.NAME]` style tables. `rich config explain` shows where each effective value comes from.
+
+### Sources
+
+Settings are read from these sources, lowest precedence first; a later source overrides an earlier one:
+
+1. **defaults** — Built-in defaults
+2. **environment** (`NO_COLOR`) — A non-empty value sets no_color = true
+3. **config file** (`./rich.toml, else ~/.config/rich/config.toml`) — The [defaults] table. Only the first file found is read; --config PATH reads that file instead and --no-config reads none
+4. **profile** (`[profile.NAME]`) — The profile selected with --profile (default: default) overrides the [defaults] table
+5. **command line** — Explicit flags override every other source
+
+### Keys
+
+| Key | Type | Default | Environment | Flag | Description |
+| --- | --- | --- | --- | --- | --- |
+| `mode` | enum: `print`, `markdown`, `json`, `syntax`, `csv`, `ipynb`, `jsonl`, `log`, `rule`, `image`, `gif`, `diff` | `auto` | | `--print, --markdown, ... or a command word` | Render mode, as the flag or command of the same name |
+| `format` | enum: `auto`, `json`, `yaml`, `toml`, `xml`, `ini`, `env` | `auto` | | `--format` | Input format. With --inspect, the parser (default auto-detect); otherwise `auto` detects piped or extensionless input and routes it (JSON to --json, other formats to highlighting, anything else to plain text), and a named format overrides the extension |
+| `width` | positive integer | | | `--width` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) |
+| `panel` | enum: `ascii`, `ascii2`, `square`, `rounded`, `heavy`, `double`, `none` | | | `--panel` | Wrap output in a panel, shrunk to fit its content (none = no panel) |
+| `padding` | string | | | `--padding` | Wrap output in padding (1, 2, or 4 comma-separated ints) |
+| `log_presentation` | enum: `plain`, `rich` | `plain` | | `--log-presentation` | With --log, select log presentation |
+| `height` | positive integer | | | `--height` | With --image, render this many rows instead of the backend's default |
+| `image_fit` | enum: `contain`, `cover`, `stretch` | | | `--image-fit` | With --image and --height: contain letterboxes, cover crops at --image-anchor, stretch fills ignoring aspect |
+| `image_anchor` | enum: `center`, `top`, `bottom`, `left`, `right`, `top-left`, `top-right`, `bottom-left`, `bottom-right` | `center` | | `--image-anchor` | Cover crop anchor |
+| `image_max_width` | positive integer | | | `--image-max-width` | With --image, never exceed N columns (aspect kept) |
+| `image_max_height` | positive integer | | | `--image-max-height` | With --image, never exceed N rows (aspect kept) |
+| `image_background` | string | | | `--image-background` | With --image: flatten transparency onto this RGB colour (also colours contain padding; quote the # in your shell) |
+| `image_color` | enum: `truecolor`, `ansi256`, `ansi16`, `grayscale` | `truecolor` | | `--image-color` | Colour depth, with ASCII/blocks/quadrants images |
+| `image_dither` | enum: `none`, `floyd-steinberg`, `bayer4x4` | `none` | | `--image-dither` | Dithering (needs a non-truecolor --image-color) |
+| `image_brightness` | number | `1.0` | | `--image-brightness` | Tone adjustment (1.0 = unchanged). Brightness, contrast and gamma apply in that order, after rotation/flips and before grayscale and colour |
+| `image_contrast` | number | `1.0` | | `--image-contrast` | Tone adjustment (1.0 = unchanged) |
+| `image_gamma` | number | `1.0` | | `--image-gamma` | Tone adjustment (1.0 = unchanged) |
+| `image_rotate` | enum: `0`, `90`, `180`, `270` | `0` | | `--image-rotate` | Rotate still images clockwise |
+| `image_flip_horizontal` | bool | | | `--image-flip-horizontal` | Flip still images horizontally, after rotation |
+| `image_flip_vertical` | bool | | | `--image-flip-vertical` | Flip still images vertically, after rotation |
+| `image_grayscale` | bool | | | `--image-grayscale` | Composite and convert still images to grayscale |
+| `export_html` | path | | | `--export-html` | Also write a self-contained HTML document to PATH |
+| `export_svg` | path | | | `--export-svg` | Also write an SVG document to PATH. Unlike the HTML, it references its font from a CDN, so it is not self-contained offline. |
+| `pager` | bool | | | `--pager` | Page terminal output via MANPAGER, PAGER, then less/more.com |
+| `auto_pager` | bool | | | `--auto-pager` | Page only terminal output taller than the viewport |
+| `watch` | bool | | | `--watch` | Re-render changing files (several allowed) or one URL while stdout is a terminal; each file gets its own live region |
+| `watch_interval` | number | `1` | | `--watch-interval` | Poll interval in seconds |
+| `watch_debounce` | number | `0.1` | | `--watch-debounce` | Quiet period collapsing a burst of file events |
+| `watch_poll` | bool | | | `--watch-poll` | Poll local files at --watch-interval instead of file events |
+| `watch_exit_on_error` | bool | | | `--watch-exit-on-error` | End the watch with a non-zero exit when a render fails |
+| `watch_cache` | bool | | | `--watch-cache` | With URLs, render only when the response body changes |
+| `batch` | bool | | | `--batch` | Convert explicit files, directories, or globs deterministically |
+| `batch_input_root` | path | | | `--batch-input-root` | The directory --batch-preserve-dirs keeps paths relative to |
+| `batch_preserve_dirs` | bool | | | `--batch-preserve-dirs` | Preserve paths under --batch-input-root PATH |
+| `batch_name_template` | string | | | `--batch-name-template` | Name export leaves; export paths become directories |
+| `jobs` | positive integer | `1` | | `--jobs` | Parallel file-export workers; requires --batch. Terminal output stays in input order; active jobs finish on error. |
+| `progress` | bool | `true` | | `--progress` | Enable/disable batch counts on terminal stderr; hidden for redirected stderr, JSON reports and dry runs |
+| `continue_on_error` | bool | | | `--continue-on-error` | Process all planned inputs and aggregate failures |
+| `overwrite` | bool | | | `--overwrite` | Allow existing batch export destinations |
+| `collision` | enum: `error`, `overwrite`, `suffix` | `error` | | `--collision` | Batch policy for existing destinations |
+| `theme` | string | | | `--theme` | Select a named theme from config |
+| `no_color` | bool | | `NO_COLOR` | `--no-color` | Disable colored output (as does a non-empty NO_COLOR) |
+| `sanitize` | bool | | | `--sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text |
 
 `rich` writes diagnostics to stderr and rendered output to stdout, so
 `rich --csv data.csv > table.txt` keeps the two apart.

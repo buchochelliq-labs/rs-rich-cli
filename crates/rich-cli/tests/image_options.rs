@@ -53,7 +53,10 @@ fn jobs_help_states_parallel_export_requirement() {
     let out = run(&["--help"]);
     assert!(out.status.success());
     let text = String::from_utf8(out.stdout).unwrap();
-    let jobs = text.lines().find(|line| line.contains("--jobs N")).unwrap();
+    let jobs = text
+        .lines()
+        .find(|line| line.contains("--jobs <N>"))
+        .unwrap();
     assert!(jobs.contains("Parallel file-export workers"), "{jobs}");
 }
 

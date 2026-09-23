@@ -704,6 +704,20 @@ background, watch, sanitization, paging and batch options; see the
 a CLI option (`--report json`), not a config key. Release and validation status
 are recorded in the [0.0.9 preparation notes](releases/0.0.9.md).
 
+To see where each value comes from, and what it overrides:
+
+```bash
+rich config explain --config rich.toml --profile ci --width 64
+rich config explain width --profile ci
+rich config reference
+```
+
+`explain` tables every key across the layers the binary applies, lowest first:
+built-in defaults, `NO_COLOR`, the config file's `[defaults]`, the selected
+profile, then the command line. A config `no_color = false` therefore overrides
+`NO_COLOR`, exactly as rendering does. With a KEY it prints that key's chain.
+`reference` lists every source and key with its type, default and flag.
+
 ---
 
 ## Reuse named themes
@@ -754,9 +768,23 @@ not the rendered-content/report split used by rendering commands. Errors retain
 the existing usage/error reporting contract. `--no-config` helps diagnose an
 invalid local configuration independently.
 
+## Shell completions and generated docs
+
+```bash
+rich completions bash > ~/.local/share/bash-completion/completions/rich
+rich completions zsh > "${fpath[1]}/_rich"
+rich docs man --output man/     # rich.1 plus one page per subcommand
+rich docs markdown > rich.md
+```
+
+`--help`, the completion scripts (bash, zsh, fish, PowerShell), the Markdown and
+man pages and `rich config reference` all come from one description of the
+command line, so they cannot disagree. `rich <command> --help` shows one
+command, such as `rich config explain --help`.
+
 ## Where to go next
 
-- [CLI reference](cli-reference.md) — every option, generated from `--help`
+- [CLI reference](cli-reference.md) — every option, generated from the description behind `--help`
 - [Comparing images](image-diff.md) — the `--diff` workflow in depth
 - [Troubleshooting](troubleshooting.md) — error messages and what to do about them
 - [Parity with Python rich](parity.md) — how close the output is, and where it differs
