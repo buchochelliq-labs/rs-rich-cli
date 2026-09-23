@@ -85,6 +85,14 @@ checked against unpublished versions; nothing is published yet.
   Progress cell styles now resolve against the console theme.
 - CLI: the capability demo's progress section shows speed, ETA, elapsed and a
   spinner from a simulated clock.
+- Parity tooling (#34): `scripts/diff_rich.py` generates Table, Rule, Padding
+  and Align cases alongside markup, text and panels. The Python oracle renders
+  each colour system in its own interpreter, because rich memoises a Style's
+  escape codes and a shared process misreported colours. Markup compares the
+  strict parser on both sides. The shrinker keeps the failure kind and reduces
+  rows, cells, columns and options. A nightly workflow runs 20,000 generated
+  cases on `main`. First findings are filed as #442–#449, with repros in
+  `scripts/fixtures/diff_rich_known.jsonl`; triage steps are in `docs/parity.md`.
 
 ## CLI 0.0.9 / art 0.0.7 — prepared
 
