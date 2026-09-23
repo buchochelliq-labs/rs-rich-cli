@@ -57,6 +57,9 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+Cohort versions for 0.0.11 (not published): core 0.0.7, ext 0.0.9, art 0.0.9,
+CLI 0.0.11. Core changes below, so every dependent moves with it.
+
 ### Core parity fixes (0.0.11 workstream 1)
 
 This fixes every divergence family the 0.0.10 differential fuzzer found, each
