@@ -308,6 +308,33 @@ fn collapse_table() -> Table {
     table
 }
 
+/// Vertical padding by row position (`_get_cells`' `get_padding`).
+fn vpad_table(
+    grid: bool,
+    (top, right, bottom, left): (usize, usize, usize, usize),
+    collapse: bool,
+    pad_edge: bool,
+    header: bool,
+    rows: usize,
+) -> Table {
+    let base = if grid {
+        Table::grid()
+    } else {
+        Table::new().box_set(SQUARE)
+    };
+    let mut table = base
+        .padding(top, right, bottom, left)
+        .collapse_padding(collapse)
+        .pad_edge(pad_edge)
+        .show_header(header);
+    table.add_column("h1");
+    table.add_column("h2");
+    for index in 0..rows {
+        table.add_row(&[format!("a{index}").as_str(), "b"]);
+    }
+    table
+}
+
 fn table_style_table() -> Table {
     let mut table = Table::new()
         .box_set(SQUARE)
@@ -499,6 +526,16 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "table_pad_edge" => Box::new(edge_table(false, true)),
         "table_no_edge" => Box::new(edge_table(true, false)),
         "table_collapse" => Box::new(collapse_table()),
+        "table_vpad_grid" => Box::new(vpad_table(true, (0, 2, 1, 0), true, false, true, 3)),
+        "table_vpad_boxed" => Box::new(vpad_table(false, (1, 1, 1, 1), false, true, true, 3)),
+        "table_vpad_collapse" => Box::new(vpad_table(false, (2, 0, 1, 0), true, true, true, 3)),
+        "table_vpad_no_edge" => Box::new(vpad_table(false, (1, 1, 2, 1), false, false, true, 3)),
+        "table_vpad_header_only" => {
+            Box::new(vpad_table(false, (1, 1, 1, 1), false, false, true, 0))
+        }
+        "table_vpad_no_header" => {
+            Box::new(vpad_table(true, (1, 0, 2, 0), true, false, false, 3))
+        }
         "table_style" => Box::new(table_style_table()),
         "table_csv_style" => Box::new(csv_style_table()),
         "table_ratio" => Box::new(table_ratio_table()),

@@ -332,6 +332,33 @@ def _collapse_table() -> Table:
     return table
 
 
+def _vpad_table(
+    grid: bool,
+    padding: tuple,
+    collapse: bool = False,
+    pad_edge: bool = True,
+    header: bool = True,
+    rows: int = 3,
+) -> Table:
+    """Vertical padding by row position (`_get_cells`' `get_padding`)."""
+    if grid:
+        table = Table.grid(padding=padding, collapse_padding=collapse, pad_edge=pad_edge)
+        table.show_header = header
+    else:
+        table = Table(
+            box=box.SQUARE,
+            padding=padding,
+            collapse_padding=collapse,
+            pad_edge=pad_edge,
+            show_header=header,
+        )
+    table.add_column("h1")
+    table.add_column("h2")
+    for index in range(rows):
+        table.add_row(f"a{index}", "b")
+    return table
+
+
 def _table_style() -> Table:
     table = Table(box=box.SQUARE, style="blue")
     table.add_column("Name")
@@ -515,6 +542,12 @@ RENDERABLE_CASES = [
     ("table_pad_edge", 40, _pad_edge_table()),
     ("table_no_edge", 40, _no_edge_table()),
     ("table_collapse", 40, _collapse_table()),
+    ("table_vpad_grid", 40, _vpad_table(True, (0, 2, 1, 0), collapse=True, pad_edge=False)),
+    ("table_vpad_boxed", 40, _vpad_table(False, (1, 1, 1, 1))),
+    ("table_vpad_collapse", 40, _vpad_table(False, (2, 0, 1, 0), collapse=True)),
+    ("table_vpad_no_edge", 40, _vpad_table(False, (1, 1, 2, 1), pad_edge=False)),
+    ("table_vpad_header_only", 40, _vpad_table(False, (1, 1, 1, 1), pad_edge=False, rows=0)),
+    ("table_vpad_no_header", 40, _vpad_table(True, (1, 0, 2, 0), collapse=True, pad_edge=False, header=False)),
     ("table_style", 40, _table_style()),
     ("table_csv_style", 40, _csv_table()),
     ("table_ratio", 30, _table_ratio()),
