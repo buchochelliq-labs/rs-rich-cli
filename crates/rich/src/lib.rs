@@ -86,7 +86,7 @@ pub use crate::json::Json;
 pub use crate::layout::Layout;
 pub use crate::live::{AutoLive, Live};
 pub use crate::live_render::LiveRender;
-pub use crate::log_render::{LogLevel, LogRender};
+pub use crate::log_render::{level_text, LogLevel, LogRecord, LogRender};
 pub use crate::padding::Padding;
 pub use crate::pager::{Pager, SystemPager};
 pub use crate::panel::Panel;

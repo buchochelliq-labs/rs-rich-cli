@@ -69,8 +69,13 @@ fn table(case: &Value) -> Result<Table, String> {
         .get("box")
         .and_then(Value::as_str)
         .unwrap_or("heavy_head");
-    let mut table = Table::new()
-        .box_set(box_set(box_type)?)
+    // `box: "none"` is upstream's `box=None` (what `Table.grid` uses).
+    let base = if box_type == "none" {
+        Table::new().without_box()
+    } else {
+        Table::new().box_set(box_set(box_type)?)
+    };
+    let mut table = base
         .show_header(flag(case, "show_header", true))
         .show_lines(flag(case, "show_lines", false))
         .show_edge(flag(case, "show_edge", true))

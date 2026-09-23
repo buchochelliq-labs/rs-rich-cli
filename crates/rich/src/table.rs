@@ -49,6 +49,9 @@ struct Column {
     max_width: Option<usize>,
     /// When set, cells are never wrapped — they crop to one line (with ellipsis).
     no_wrap: bool,
+    /// How over-long cell text is handled (upstream `Column.overflow`,
+    /// default `"ellipsis"`). A cell `Text`'s own overflow wins.
+    overflow: Overflow,
 }
 
 /// A grid of cells rendered inside a box. Mirrors `rich.table.Table`.
@@ -56,6 +59,8 @@ pub struct Table {
     columns: Vec<Column>,
     rows: Vec<Vec<Text>>,
     box_set: BoxSet,
+    /// `box=None`: no borders and no column dividers (see [`Table::grid`]).
+    no_box: bool,
     show_header: bool,
     show_lines: bool,
     show_edge: bool,
@@ -76,6 +81,7 @@ impl Default for Table {
             columns: Vec::new(),
             rows: Vec::new(),
             box_set: HEAVY_HEAD,
+            no_box: false,
             show_header: true,
             show_lines: false,
             show_edge: true,
@@ -95,6 +101,33 @@ impl Default for Table {
 impl Table {
     pub fn new() -> Self {
         Table::default()
+    }
+
+    /// A table with no borders, for laying out columns. Port of `Table.grid`:
+    /// `box=None`, no header or edge, `padding=0`, `collapse_padding=True` and
+    /// `pad_edge=False`.
+    pub fn grid() -> Self {
+        Table {
+            no_box: true,
+            show_header: false,
+            show_edge: false,
+            pad_edge: false,
+            collapse_padding: true,
+            padding: (0, 0, 0, 0),
+            ..Table::default()
+        }
+    }
+
+    /// Draw no borders and no column dividers (upstream `box=None`).
+    pub fn without_box(mut self) -> Self {
+        self.no_box = true;
+        self
+    }
+
+    /// Cell padding as `(top, right, bottom, left)` (upstream `padding`).
+    pub fn padding(mut self, top: usize, right: usize, bottom: usize, left: usize) -> Self {
+        self.padding = (top, right, bottom, left);
+        self
     }
 
     /// Choose the box-drawing set.
@@ -217,6 +250,7 @@ impl Table {
             min_width: None,
             max_width: None,
             no_wrap: false,
+            overflow: Overflow::Ellipsis,
         });
         self
     }
@@ -284,6 +318,15 @@ impl Table {
     pub fn column_header_fill(&mut self, style: Style) -> &mut Self {
         if let Some(column) = self.columns.last_mut() {
             column.header_fill = Some(style);
+        }
+        self
+    }
+
+    /// Set how the most-recently-added column handles over-long text (upstream
+    /// `Column.overflow`, default ellipsis). Chain after `add_column`.
+    pub fn column_overflow(&mut self, overflow: Overflow) -> &mut Self {
+        if let Some(column) = self.columns.last_mut() {
+            column.overflow = overflow;
         }
         self
     }
@@ -512,12 +555,11 @@ impl Table {
         cells: &[Text],
         rendered_widths: &[usize],
         is_header: bool,
-        edges: (char, char, char),
+        edges: Option<(char, char, char)>,
     ) -> Vec<Vec<Segment>> {
         // Horizontal padding is per-column (see `cell_padding`); only the
         // top/bottom vertical padding is uniform.
         let (pt, _, pb, _) = self.padding;
-        let (edge_left, edge_vertical, edge_right) = edges;
         let border = Some(self.style.combine(&self.border_style));
         let ncols = self.columns.len();
         // Derived here rather than by the caller so the padding used to lay the
@@ -550,7 +592,9 @@ impl Table {
                 Justify::Default => column.map(|c| c.justify).unwrap_or(Justify::Left),
                 own => own,
             };
-            let overflow = text.get_overflow().unwrap_or(Overflow::Ellipsis);
+            let overflow = text
+                .get_overflow()
+                .unwrap_or_else(|| column.map_or(Overflow::Ellipsis, |c| c.overflow));
             let no_wrap = text
                 .get_no_wrap()
                 .unwrap_or_else(|| column.map(|c| c.no_wrap).unwrap_or(false));
@@ -634,11 +678,14 @@ impl Table {
         #[allow(clippy::needless_range_loop)]
         for r in 0..height {
             let mut row = Vec::new();
-            if self.show_edge {
+            if let (Some((edge_left, _, _)), true) = (edges, self.show_edge) {
                 row.push(Segment::new(edge_left.to_string(), border.clone()));
             }
             for (c, column_lines) in cell_lines.iter().enumerate() {
                 row.extend(column_lines[r].clone());
+                let Some((_, edge_vertical, edge_right)) = edges else {
+                    continue;
+                };
                 if c != last {
                     row.push(Segment::new(edge_vertical.to_string(), border.clone()));
                 } else if self.show_edge {
@@ -675,9 +722,13 @@ impl LineRenderable for Table {
             console.ascii_only(),
         );
         let ncols = self.columns.len();
-        // Borders occupy: (ncols-1) dividers, plus 2 outer edges when shown.
-        // Port of `_extra_width`.
-        let extra_width = (if self.show_edge { 2 } else { 0 }) + ncols.saturating_sub(1);
+        // Borders occupy: (ncols-1) dividers, plus 2 outer edges when shown;
+        // no box, no border. Port of `_extra_width`.
+        let extra_width = if self.no_box {
+            0
+        } else {
+            (if self.show_edge { 2 } else { 0 }) + ncols.saturating_sub(1)
+        };
         let available = options.max_width.saturating_sub(extra_width);
 
         let rendered_widths = self.column_widths(available);
@@ -694,15 +745,18 @@ impl LineRenderable for Table {
         }
 
         let edge = self.show_edge;
-        if edge {
+        let boxed = !self.no_box;
+        if boxed && edge {
             emit(vec![Segment::new(
                 box_set.get_top(&rendered_widths, edge),
                 border.clone(),
             )])?;
         }
 
-        let head_edges = (box_set.head_left, box_set.head_vertical, box_set.head_right);
-        let body_edges = (box_set.mid_left, box_set.mid_vertical, box_set.mid_right);
+        let head_edges =
+            boxed.then_some((box_set.head_left, box_set.head_vertical, box_set.head_right));
+        let body_edges =
+            boxed.then_some((box_set.mid_left, box_set.mid_vertical, box_set.mid_right));
 
         if self.show_header {
             let headers: Vec<Text> = self.columns.iter().map(|c| c.header.clone()).collect();
@@ -715,10 +769,12 @@ impl LineRenderable for Table {
             ) {
                 emit(line)?;
             }
-            emit(vec![Segment::new(
-                box_set.get_row(&rendered_widths, RowLevel::Head, edge),
-                border.clone(),
-            )])?;
+            if boxed {
+                emit(vec![Segment::new(
+                    box_set.get_row(&rendered_widths, RowLevel::Head, edge),
+                    border.clone(),
+                )])?;
+            }
         }
 
         let row_last = self.rows.len().saturating_sub(1);
@@ -726,7 +782,7 @@ impl LineRenderable for Table {
             for line in self.render_row(console.theme(), row, &rendered_widths, false, body_edges) {
                 emit(line)?;
             }
-            if self.show_lines && index != row_last {
+            if boxed && self.show_lines && index != row_last {
                 emit(vec![Segment::new(
                     box_set.get_row(&rendered_widths, RowLevel::Row, edge),
                     border.clone(),
@@ -734,7 +790,7 @@ impl LineRenderable for Table {
             }
         }
 
-        if edge {
+        if boxed && edge {
             emit(vec![Segment::new(
                 box_set.get_bottom(&rendered_widths, edge),
                 border.clone(),

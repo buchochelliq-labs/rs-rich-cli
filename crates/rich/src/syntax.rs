@@ -141,7 +141,7 @@ impl Syntax {
 }
 
 impl Syntax {
-    /// Highlight the code into a [`Text`] rather than a padded block. Port of
+    /// Highlight the code into a [`Text`](crate::text::Text) rather than a padded block. Port of
     /// `Syntax.highlight`: the theme background is the text's base style and
     /// every token carries its own style. Tabs are expanded first, as
     /// `_process_code` does. Used by `Markdown(inline_code_lexer=…)`.

@@ -5189,19 +5189,24 @@ fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
     let value = vec![("panel", 1u32), ("table", 2), ("tree", 3)];
     console.print(&Pretty::new(&value));
 
-    // Log records — a severity-colored line per record (Rust-native rich.logging).
+    // Log records — upstream's LogRender grid: a repeated time is blanked.
     demo::section(&console, delay, "log");
+    let log = LogRender::new().show_level(true);
     for (level, message) in [
         (LogLevel::Info, "server started on port 8080"),
         (LogLevel::Debug, "cache warm: 128 entries"),
         (LogLevel::Warn, "disk usage at 85%"),
         (LogLevel::Error, "connection reset by peer"),
     ] {
-        console.print(
-            &LogRender::new(level, message)
-                .time("12:00:00")
-                .path("main.rs:42"),
-        );
+        console.print(&log.render(
+            &console,
+            Text::new(message),
+            Some(Text::new("[12:00:00]")),
+            level.text(),
+            Some("main.rs"),
+            Some(42),
+            None,
+        ));
     }
 
     // Traceback — render an error + its source chain (Rust-native rich.traceback).

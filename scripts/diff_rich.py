@@ -43,6 +43,8 @@ ALPHABET = "abc xyz[]/#:-_é界🙂\t"
 WORD_ALPHABET = "abc xyzé界🙂-_"
 KINDS = ["markup", "text", "panel", "table", "rule", "padding", "align"]
 BOXES = ["square", "rounded", "heavy", "double", "ascii", "minimal"]
+# Tables also take `box=None`, the borderless layout `Table.grid` builds on.
+TABLE_BOXES = BOXES + ["none"]
 ALIGNS = ["left", "center", "right"]
 
 
@@ -120,7 +122,7 @@ def generated_cases(seed: int, count: int) -> list[dict]:
             case["rows"] = [
                 [word(rng) for _ in range(columns)] for _ in range(rng.randint(0, 3))
             ]
-            case["box"] = rng.choice(BOXES)
+            case["box"] = rng.choice(TABLE_BOXES)
             for flag, chance in [
                 ("show_header", 0.8),
                 ("show_lines", 0.3),
@@ -178,7 +180,11 @@ def python_render(case: dict) -> str:
             console.print(panel, end="")
         elif case["kind"] == "table":
             table = Table(
-                box=getattr(box, case.get("box", "heavy_head").upper()),
+                box=(
+                    None
+                    if case.get("box") == "none"
+                    else getattr(box, case.get("box", "heavy_head").upper())
+                ),
                 show_header=case.get("show_header", True),
                 show_lines=case.get("show_lines", False),
                 show_edge=case.get("show_edge", True),
