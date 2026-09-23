@@ -230,8 +230,8 @@ impl DiffReport {
             let low = (pos.floor() as usize).min(STOPS.len() - 2);
             let frac = pos - low as f32;
             let mut rgb = [0u8; 3];
-            for c in 0..3 {
-                rgb[c] = (STOPS[low][c] * (1.0 - frac) + STOPS[low + 1][c] * frac) as u8;
+            for (c, channel) in rgb.iter_mut().enumerate() {
+                *channel = (STOPS[low][c] * (1.0 - frac) + STOPS[low + 1][c] * frac) as u8;
             }
             *pixel = image::Rgb(rgb);
         }

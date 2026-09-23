@@ -9,6 +9,10 @@ const VARIANT_EMOJI: &str = "\u{fe0f}";
 const VARIANT_TEXT: &str = "\u{fe0e}";
 
 /// Replace `:name:` emoji shortcodes in `text`. Port of `_emoji_replace`.
+///
+/// Mirrors one `re.sub` over `(:(\S*?)(?:(?:\-)(emoji|text))?:)`: every match,
+/// including an unknown code or an empty `::`, is consumed, and scanning
+/// resumes after its closing colon.
 pub fn replace(text: &str) -> String {
     let chars: Vec<char> = text.chars().collect();
     let len = chars.len();
@@ -17,18 +21,20 @@ pub fn replace(text: &str) -> String {
 
     while index < len {
         if chars[index] == ':' {
-            // Scan a non-whitespace, colon-free body up to the closing ':'.
+            // The lazy `\S*?` stops at the first ':' that follows only
+            // non-whitespace characters.
             let mut end = index + 1;
-            while end < len && !chars[end].is_whitespace() && chars[end] != ':' {
+            while end < len && !is_python_space(chars[end]) && chars[end] != ':' {
                 end += 1;
             }
-            if end < len && chars[end] == ':' && end > index + 1 {
+            if end < len && chars[end] == ':' {
                 let body: String = chars[index + 1..end].iter().collect();
-                if let Some(replacement) = lookup(&body) {
-                    out.push_str(&replacement);
-                    index = end + 1;
-                    continue;
+                match lookup(&body) {
+                    Some(replacement) => out.push_str(&replacement),
+                    None => out.extend(&chars[index..=end]),
                 }
+                index = end + 1;
+                continue;
             }
         }
         out.push(chars[index]);
@@ -37,9 +43,15 @@ pub fn replace(text: &str) -> String {
     out
 }
 
+/// Python's `str.isspace()`, which `\s` follows for `str` patterns. Unlike
+/// `char::is_whitespace` it includes the separators U+001C..=U+001F.
+fn is_python_space(c: char) -> bool {
+    c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
+}
+
 /// Resolve a shortcode body (with optional variant suffix) to its replacement.
 fn lookup(body: &str) -> Option<String> {
-    let lower = body.to_ascii_lowercase();
+    let lower = body.to_lowercase();
     let (name, variant) = if let Some(name) = lower.strip_suffix("-emoji") {
         (name, VARIANT_EMOJI)
     } else if let Some(name) = lower.strip_suffix("-text") {
@@ -78,5 +90,17 @@ mod tests {
     fn variant_selectors() {
         assert_eq!(replace(":rocket-emoji:"), "\u{1f680}\u{fe0f}");
         assert_eq!(replace(":rocket-text:"), "\u{1f680}\u{fe0e}");
+    }
+
+    #[test]
+    fn scanning_resumes_after_every_match() {
+        // Captured from real rich 15.0.0 `_emoji_replace` (#448).
+        assert_eq!(replace(" -:界[ba:b: x"), " -:界[ba:b: x");
+        assert_eq!(replace("::rocket:"), "::rocket:");
+        assert_eq!(replace(":x:rocket:"), "\u{274c}rocket:");
+        assert_eq!(replace(":rocket:rocket:"), "\u{1f680}rocket:");
+        assert_eq!(replace(":ROCKET:"), "\u{1f680}");
+        assert_eq!(replace("a:\u{1c}rocket:"), "a:\u{1c}rocket:");
+        assert_eq!(replace(":\u{212a}rocket:"), ":\u{212a}rocket:");
     }
 }

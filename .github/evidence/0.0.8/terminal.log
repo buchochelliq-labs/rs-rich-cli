@@ -1,0 +1,8 @@
+test_interactive_stdin_hint_and_eof (__main__.TerminalTests.test_interactive_stdin_hint_and_eof) ... ok
+test_no_color_unset_or_empty_preserves_terminal_color (__main__.TerminalTests.test_no_color_unset_or_empty_preserves_terminal_color) ... ok
+test_nonempty_no_color_disables_terminal_color (__main__.TerminalTests.test_nonempty_no_color_disables_terminal_color) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.098s
+
+OK

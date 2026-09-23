@@ -51,7 +51,14 @@ impl Renderable for Padding {
         let child_width = width.saturating_sub(left).saturating_sub(right);
 
         let child_options = options.update_width(child_width);
-        let lines = console.render_lines(self.child.as_ref(), &child_options, true);
+        // Upstream renders the child with `style=style`, so the padding style
+        // also sits under the content and its fill (#442).
+        let lines = console.render_lines_styled(
+            self.child.as_ref(),
+            &child_options,
+            Some(&self.style),
+            true,
+        );
 
         let style = Some(self.style.clone());
         let blank = || Segment::new(" ".repeat(width), style.clone());
@@ -124,5 +131,24 @@ mod tests {
         let padding = Padding::new(Box::new(Text::new("hi")), (0, 1, 0, 1));
         let out = console().render_export(&padding);
         assert_eq!(out, " hi       \n");
+    }
+
+    #[test]
+    fn empty_content_keeps_its_line_and_the_style_reaches_the_content() {
+        // Captured from real rich 15.0.0 (#442).
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(crate::color::ColorSystem::Truecolor))
+            .width(5)
+            .highlight(false)
+            .build();
+        let empty = Padding::new(Box::new(Text::new("")), (1, 0, 0, 0));
+        assert_eq!(console.render_export(&empty), "     \n     \n");
+        let styled = Padding::new(Box::new(Text::new("ab")), (0, 0, 0, 1))
+            .style(Style::parse("on blue").unwrap());
+        assert_eq!(
+            console.render_export(&styled),
+            "\x1b[44m \x1b[0m\x1b[44mab\x1b[0m\x1b[44m  \x1b[0m\n"
+        );
     }
 }

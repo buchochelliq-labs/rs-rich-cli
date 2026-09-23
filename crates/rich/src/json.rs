@@ -7,15 +7,15 @@
 //! Non-ASCII strings render as UTF-8, matching upstream (`rich.json.JSON`
 //! defaults to `ensure_ascii=False`); object keys keep input order, and a
 //! repeated key keeps its first position but its last value — what both
-//! `dict` and serde_json's `preserve_order` do. The one remaining caveat is
-//! **number formatting** for exotic values — exponent notation (`1e+20`,
-//! `1e-07`) and integers beyond i64/u64 can differ from CPython's `repr`.
+//! `dict` and serde_json's `preserve_order` do. Number formatting follows
+//! `json.dumps` too: floats are written
+//! with Python's `float.__repr__` ([`crate::pyformat::float_repr`]).
 //! Custom indent/sort options are deferred — see docs/DIVERGENCES.md.
 //!
 //! ## Why the parser is hand-written
 //!
 //! Upstream's parser is Python's `json`, which differs from `serde_json` in two
-//! ways that this module has to reproduce:
+//! important ways this module reproduces:
 //!
 //! * `json.loads` accepts (and `json.dumps(allow_nan=True)` emits) the
 //!   non-finite literals `NaN`, `Infinity` and `-Infinity`. `serde_json` has no
@@ -25,9 +25,9 @@
 //!
 //! Raising a recursion limit only moves the failure to a stack overflow, so
 //! parsing, rendering and *dropping* the tree here are all iterative: nesting
-//! depth costs heap, never stack, and no document can crash the process. Scalar
-//! *decoding* is still delegated to `serde_json`, so string escapes and number
-//! formatting stay exactly as they were.
+//! depth costs heap, never stack. String decoding uses `serde_json`; integer
+//! tokens retain their exact digits, finite floats use Python's `repr`, and
+//! overflowing exponents become signed Infinity as in Python.
 //!
 //! That leaves nesting *unbounded* where CPython eventually raises
 //! `RecursionError` — somewhere past 10 000 levels, at a depth that depends on
@@ -39,6 +39,7 @@ use std::collections::HashMap;
 
 use crate::console::{Console, ConsoleOptions};
 use crate::errors::{Result, RichError};
+use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::style::Style;
@@ -49,12 +50,14 @@ pub struct Json {
     styles: JsonStyles,
     /// See [`Json::no_wrap`].
     no_wrap: bool,
+    #[cfg(feature = "json-escape-safe")]
+    escape_safe: bool,
 }
 
 /// A parsed JSON value.
 ///
 /// Scalars keep the form they will be printed in: numbers are stored already
-/// formatted by `serde_json`, strings already decoded (upstream re-encodes them
+/// normalized where needed, strings already decoded (upstream re-encodes them
 /// through `json.dumps`, so `"A"` prints as `"A"`).
 #[derive(Debug)]
 enum Node {
@@ -137,7 +140,19 @@ impl Json {
             value: Parser::new(text).parse_document()?,
             styles: JsonStyles::defaults(),
             no_wrap: false,
+            #[cfg(feature = "json-escape-safe")]
+            escape_safe: false,
         })
+    }
+
+    /// Opt in to escape-aware display boundaries (requires `json-escape-safe`).
+    /// Cropping omits partial escapes. Folding preserves escapes that fit the
+    /// width; narrower widths split oversized escapes to avoid losing content.
+    /// The default remains Python rich's ordinary word folding/cropping.
+    #[cfg(feature = "json-escape-safe")]
+    pub fn escape_safe(mut self, enabled: bool) -> Self {
+        self.escape_safe = enabled;
+        self
     }
 
     /// Keep `rich.json.JSON`'s `self.text.no_wrap = True`, which **crops** each
@@ -261,8 +276,24 @@ impl Json {
 }
 
 impl Renderable for Json {
+    /// Upstream `JSON.__rich__` returns its highlighted `Text`, so measuring a
+    /// `JSON` is `Text.__rich_measure__` over the formatted document.
+    fn measure(&self, _console: &Console, _options: &ConsoleOptions) -> Measurement {
+        let plain: String = self
+            .render_value()
+            .iter()
+            .map(|s| s.text.as_str())
+            .collect();
+        let (minimum, maximum) = crate::text::Text::new(plain).measurement();
+        Measurement::new(minimum, maximum)
+    }
+
     fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let segments = self.render_value();
+        #[cfg(feature = "json-escape-safe")]
+        if self.escape_safe {
+            return escape_safe_lines(&segments, options.max_width, self.no_wrap);
+        }
         if self.no_wrap {
             // `Text.wrap` with `no_wrap` keeps the line whole and then calls
             // `line.truncate(width, overflow="fold")`, which is a crop. See
@@ -276,6 +307,118 @@ impl Renderable for Json {
             Segment::fold_lines_words(&segments, options.max_width)
         }
     }
+}
+
+/// Tokenize each physical line into JSON escapes and ordinary graphemes, then
+/// choose every boundary from the space actually remaining. No stale absolute
+/// wrap points survive an adjusted escape boundary (#98).
+#[cfg(feature = "json-escape-safe")]
+fn escape_safe_lines(segments: &[Segment], width: usize, crop: bool) -> Vec<Segment> {
+    if width == 0 {
+        return Vec::new();
+    }
+    let lines = Segment::split_lines(segments);
+    let last = lines.len().saturating_sub(1);
+    let mut out = Vec::new();
+    for (line_index, line) in lines.into_iter().enumerate() {
+        let plain: String = line
+            .iter()
+            .filter(|s| !s.control)
+            .map(|s| s.text.as_str())
+            .collect();
+        // Keep upstream's exact behavior when there is no escape to protect.
+        if !plain.contains('\\') {
+            out.extend(if crop {
+                Segment::crop_lines(&line, width)
+            } else {
+                Segment::fold_lines_words(&line, width)
+            });
+        } else {
+            let (spans, _) = crate::cells::split_graphemes(&plain);
+            let mut atoms = Vec::new();
+            let mut index = 0;
+            while index < spans.len() {
+                let (start, mut end, mut cells) = spans[index];
+                if plain.as_bytes()[start] == b'\\' {
+                    let escape_end = start
+                        + if plain.as_bytes().get(start + 1) == Some(&b'u') {
+                            6
+                        } else {
+                            2
+                        };
+                    while end < escape_end && index + 1 < spans.len() {
+                        index += 1;
+                        end = spans[index].1;
+                        cells += spans[index].2;
+                    }
+                    if !crop && cells > width {
+                        // An atom wider than the whole console cannot both fit
+                        // and stay atomic. Split its ASCII spelling rather than
+                        // overrun into Console's final crop and lose characters.
+                        for offset in start..escape_end {
+                            atoms.push((offset, offset + 1, 1));
+                        }
+                        if end > escape_end {
+                            atoms.push((escape_end, end, 0));
+                        }
+                        index += 1;
+                        continue;
+                    }
+                }
+                atoms.push((start, end, cells));
+                index += 1;
+            }
+            let mut breaks = Vec::new();
+            let mut cells = 0;
+            let mut stop = plain.len();
+            for (start, _, atom_width) in atoms {
+                if cells + atom_width > width {
+                    if crop {
+                        stop = start;
+                        break;
+                    }
+                    if cells > 0 {
+                        breaks.push(start);
+                        cells = 0;
+                    }
+                }
+                cells += atom_width;
+            }
+            let mut position = 0;
+            let mut next = 0;
+            for segment in line {
+                if segment.control {
+                    out.push(segment);
+                    continue;
+                }
+                let mut buffer = String::new();
+                for ch in segment.text.chars() {
+                    if position >= stop {
+                        break;
+                    }
+                    if breaks.get(next) == Some(&position) {
+                        if !buffer.is_empty() {
+                            out.push(Segment::new(
+                                std::mem::take(&mut buffer),
+                                segment.style.clone(),
+                            ));
+                        }
+                        out.push(Segment::line());
+                        next += 1;
+                    }
+                    buffer.push(ch);
+                    position += ch.len_utf8();
+                }
+                if !buffer.is_empty() {
+                    out.push(Segment::new(buffer, segment.style));
+                }
+            }
+        }
+        if line_index != last {
+            out.push(Segment::line());
+        }
+    }
+    out
 }
 
 /// Serialize a string as a JSON string literal (quoted + escaped).
@@ -501,21 +644,78 @@ impl<'a> Parser<'a> {
         Ok(decoded)
     }
 
-    /// Read a number token and let `serde_json` decide whether it is one — this
-    /// keeps `float_roundtrip` parsing and `Number`'s formatting.
+    /// Validate JSON's number grammar before decoding, preserving arbitrary-size
+    /// integers and Python's float overflow to Infinity (#74).
     fn parse_number(&mut self) -> Result<Node> {
         let start = self.pos;
-        let mut end = self.pos;
+        let mut end = start;
         while matches!(
             self.bytes.get(end),
             Some(b'-' | b'+' | b'.' | b'e' | b'E' | b'0'..=b'9')
         ) {
             end += 1;
         }
-        let number: serde_json::Number = serde_json::from_str(&self.src[start..end])
-            .map_err(|error| self.error_at(start, &describe(&error)))?;
+        let token = &self.src[start..end];
+        let digits = token.as_bytes();
+        let mut i = usize::from(digits.first() == Some(&b'-'));
+        if digits.get(i) == Some(&b'0') {
+            i += 1;
+        } else {
+            let first = i;
+            while digits.get(i).is_some_and(u8::is_ascii_digit) {
+                i += 1;
+            }
+            if i == first {
+                return Err(self.error_at(start, "invalid number"));
+            }
+        }
+        let mut floating = false;
+        if digits.get(i) == Some(&b'.') {
+            floating = true;
+            i += 1;
+            let first = i;
+            while digits.get(i).is_some_and(u8::is_ascii_digit) {
+                i += 1;
+            }
+            if i == first {
+                return Err(self.error_at(start, "invalid number"));
+            }
+        }
+        if matches!(digits.get(i), Some(b'e' | b'E')) {
+            floating = true;
+            i += 1;
+            if matches!(digits.get(i), Some(b'+' | b'-')) {
+                i += 1;
+            }
+            let first = i;
+            while digits.get(i).is_some_and(u8::is_ascii_digit) {
+                i += 1;
+            }
+            if i == first {
+                return Err(self.error_at(start, "invalid number"));
+            }
+        }
+        if i != digits.len() {
+            return Err(self.error_at(start, "invalid number"));
+        }
         self.pos = end;
-        Ok(Node::Number(number.to_string()))
+        if !floating {
+            return Ok(Node::Number(
+                if token == "-0" { "0" } else { token }.to_string(),
+            ));
+        }
+        let value: f64 = token
+            .parse()
+            .map_err(|_| self.error_at(start, "invalid number"))?;
+        if value.is_infinite() {
+            return Ok(Node::NonFinite(if value.is_sign_negative() {
+                "-Infinity"
+            } else {
+                "Infinity"
+            }));
+        }
+        // `json.dumps` writes a float with `float.__repr__`.
+        Ok(Node::Number(crate::pyformat::float_repr(value)))
     }
 
     fn expect_literal(&mut self, literal: &str) -> Result<()> {
@@ -656,6 +856,103 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "json-escape-safe")]
+    #[test]
+    fn adjusted_escape_boundaries_preserve_the_remaining_payload() {
+        let input = format!(r#"{{"v":"aa\u0001{}"}}"#, "b".repeat(40));
+        for width in 6..=20 {
+            let output = Console::builder()
+                .width(width)
+                .force_terminal(false)
+                .build()
+                .render_to_string(&Json::new(&input).unwrap().escape_safe(true));
+            assert_eq!(output.matches('b').count(), 40, "width {width}: {output:?}");
+        }
+    }
+
+    #[cfg(feature = "json-escape-safe")]
+    #[test]
+    fn wrapping_keeps_json_escapes_atomic_at_narrow_widths() {
+        let payload = r#"{"v":"a\"b\\c\nd\u0001e"}"#;
+        for width in 8..=14 {
+            let output = Console::builder()
+                .width(width)
+                .force_terminal(false)
+                .build()
+                .render_to_string(&Json::new(payload).unwrap().escape_safe(true));
+            for line in output.lines() {
+                let bytes = line.as_bytes();
+                let mut index = 0;
+                while index < bytes.len() {
+                    if bytes[index] != b'\\' {
+                        index += 1;
+                        continue;
+                    }
+                    assert!(
+                        index + 1 < bytes.len(),
+                        "split escape at width {width}: {output:?}"
+                    );
+                    if bytes[index + 1] == b'u' {
+                        assert!(
+                            index + 6 <= bytes.len(),
+                            "split unicode escape at width {width}: {output:?}"
+                        );
+                        index += 6;
+                    } else {
+                        index += 2;
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(feature = "json-escape-safe")]
+    #[test]
+    fn escape_folding_preserves_bytes_even_below_the_escape_width() {
+        let payload = r#"{"v":"a\"b\\c\nd\u0001eeeeeeeeeeee"}"#;
+        let wide = Console::builder()
+            .width(100)
+            .force_terminal(false)
+            .build()
+            .render_to_string(&Json::new(payload).unwrap().escape_safe(true))
+            .replace('\n', "");
+        for width in 1..=20 {
+            let output = Console::builder()
+                .width(width)
+                .force_terminal(false)
+                .build()
+                .render_to_string(&Json::new(payload).unwrap().escape_safe(true));
+            assert_eq!(output.replace('\n', ""), wide, "width {width}");
+            assert!(output
+                .lines()
+                .all(|line| crate::cells::cell_len(line) <= width));
+        }
+    }
+
+    #[cfg(feature = "json-escape-safe")]
+    #[test]
+    fn escape_cropping_never_emits_a_partial_escape() {
+        let payload = r#""a\"b\\c\nd\u0001eeee""#;
+        for width in 1..=24 {
+            let output = Console::builder()
+                .width(width)
+                .force_terminal(false)
+                .build()
+                .render_to_string(&Json::new(payload).unwrap().no_wrap(true).escape_safe(true));
+            let mut chars = output.chars();
+            while let Some(c) = chars.next() {
+                if c == '\\' {
+                    let next = chars.next().expect("complete short escape");
+                    if next == 'u' {
+                        for _ in 0..4 {
+                            assert!(chars.next().is_some_and(|c| c.is_ascii_hexdigit()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// Nested inside another renderable, `JSON.text.no_wrap` survives and each
     /// line is **cropped** at the width rather than wrapped — see
     /// [`Json::no_wrap`]. Wrapping here instead was silent content loss: with
@@ -789,7 +1086,7 @@ mod tests {
     }
 
     /// The hand-written reader must accept and reject exactly what serde_json
-    /// does — apart from the three Python constants it exists to add.
+    /// does for bounded numbers — Python also accepts overflowing exponents.
     #[test]
     fn acceptance_matches_serde_json() {
         let samples = [
@@ -804,7 +1101,6 @@ mod tests {
             "1e10",
             "1E+10",
             "1e-7",
-            "1e999",
             "12345678901234567890",
             "-12345678901234567890123456789012345",
             "01",
@@ -853,6 +1149,22 @@ mod tests {
         }
     }
 
+    #[test]
+    fn python_numbers_preserve_large_integers_and_overflow() {
+        for number in [
+            "1234567890123456789012345678901234567890",
+            "-1234567890123456789012345678901234567890",
+        ] {
+            assert_eq!(render_plain(number, 100), number);
+        }
+        assert_eq!(render_plain("-0", 100), "0");
+        assert_eq!(render_plain("1e400", 100), "Infinity");
+        assert_eq!(render_plain("-1e999", 100), "-Infinity");
+        for invalid in ["01", "-01", "1.e2", "1e+", "1e400x", "--1", "1+2", ".1"] {
+            assert!(Json::new(invalid).is_err(), "accepted {invalid}");
+        }
+    }
+
     /// And the tree it builds must be the tree serde_json would have built.
     /// `serde_json::to_string_pretty` happens to use the very layout upstream's
     /// `json.dumps(indent=2)` does, so it doubles as a reference dump: key
@@ -865,7 +1177,7 @@ mod tests {
             r#"{"a": 1, "b": 2, "a": 3}"#,
             r#"{"a": {"b": {"c": [1, [], {}, [[2]]]}}}"#,
             r#"{"k": "A\t\"x\"A\\\/é"}"#,
-            r#"[0, -0.5, 1e10, 1E+10, 1e-7, 12345678901234567890, 1.7976931348623157e308]"#,
+            r#"[0, 12345678901234567890, -7]"#,
             r#"{"café": "❤", "": ""}"#,
             "[]",
             "{}",
@@ -881,6 +1193,32 @@ mod tests {
                 "diverged on {sample}"
             );
         }
+    }
+
+    /// Floats are written with Python's `float.__repr__`, as `json.dumps` does,
+    /// not serde_json's spelling (`1e-7`, `10000000000.0`).
+    #[test]
+    fn floats_render_as_python_repr() {
+        let out = render_plain(
+            "[-0.5, 1e10, 1E+10, 1e-7, 1.7976931348623157e308, 1e16]",
+            10_000,
+        );
+        let values: Vec<&str> = out
+            .lines()
+            .filter_map(|line| line.trim().strip_suffix(',').or(Some(line.trim())))
+            .filter(|value| !matches!(*value, "[" | "]"))
+            .collect();
+        assert_eq!(
+            values,
+            [
+                "-0.5",
+                "10000000000.0",
+                "10000000000.0",
+                "1e-07",
+                "1.7976931348623157e+308",
+                "1e+16"
+            ]
+        );
     }
 
     /// A repeated key collapses to one entry — first position, last value —

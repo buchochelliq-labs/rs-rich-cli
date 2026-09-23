@@ -1,0 +1,37 @@
+{
+  "version": "rich (rs-rich-cli) 0.0.10",
+  "binary_path": "/home/user/rs-rich-cli/target/release/rich",
+  "binary_sha256": "194cfeff67cdec2a8bd9471bbd0179fc1cbab7fd894359df7e62237081f57a14",
+  "source_sha256": "d132b17a8c0aa0343891f65cce83d593d72a1fd55c553a0cf4dc7a66854effe0",
+  "source_digest_recipe": "Sorted crates/**/*.rs, crates/**/Cargo.toml, Cargo.toml, Cargo.lock; relative path + NUL + bytes",
+  "git_head": "48f62c9fd4a442c391eb4dcf21b37be02f1dd1fc",
+  "git_worktree_changes": [
+    " M README.md",
+    " M docs/ROADMAP.md",
+    " M docs/cli.md",
+    " M docs/index.md",
+    " M mkdocs.yml",
+    " M scripts/build_docs_media.py",
+    "?? .github/evidence/0.0.10/",
+    "?? docs/media/release-0.0.10/",
+    "?? docs/releases/0.0.10.md"
+  ],
+  "args": [
+    "--demo",
+    "--demo-delay",
+    "0.5"
+  ],
+  "exit_code": 0,
+  "terminal": {
+    "width": 88,
+    "height": 28,
+    "RICH_SIXEL": "1"
+  },
+  "recording_sha256": "633d84fdd4c52164960d1ce032e180b475a3129ac96522b202ba04d578ccd8dd",
+  "presentation": "Actual 88x28 PTY playback at half-second section pacing; captions added, no audio.",
+  "media": {
+    "v10-demo-tour.png": "f547a1b51c8fc413af2505a9b3d4f9bf5659e12abf276fbdc616de6108badcaf",
+    "v10-demo-tour.mp4": "b08e198fd8fa643d4b3c54fb4b7e1ad4852adec6299f4f26d098bc2a254c951a",
+    "v10-demo-tour.gif": "1d47e6b41b026ba816bddba0d62e0e169fefb63e454f453e945cc294354c61ed"
+  }
+}

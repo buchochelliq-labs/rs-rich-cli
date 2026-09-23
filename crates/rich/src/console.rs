@@ -87,6 +87,7 @@ impl ConsoleOptions {
 /// The high-level interface for rendering to a terminal. Mirrors
 /// `rich.console.Console`.
 pub struct Console {
+    render_environment: Option<std::sync::Arc<dyn crate::protocol::RenderEnvironment>>,
     color_system: Option<ColorSystem>,
     width: usize,
     height: usize,
@@ -97,13 +98,43 @@ pub struct Console {
     legacy_windows: bool,
     safe_box: bool,
     ascii_only: bool,
-    theme: Theme,
+    /// Upstream's `ThemeStack`: the builder's theme at the bottom, pushed
+    /// themes above it. Never empty; styles resolve against the top entry.
+    theme_stack: Vec<Theme>,
     base_style: Style,
     highlighters: Vec<Box<dyn Highlighter + Send>>,
     /// While capturing, print paths append their segments here instead of
     /// writing to stdout. Mirrors `Console._record_buffer` under `capture()`.
     record_buffer: std::cell::RefCell<Vec<Segment>>,
     capturing: std::cell::Cell<bool>,
+}
+
+/// A theme in use on a [`Console`] until this guard drops. Returned by
+/// [`Console::use_theme`]; upstream's `ThemeContext`.
+pub struct ThemeContext<'a> {
+    console: &'a mut Console,
+}
+
+impl std::ops::Deref for ThemeContext<'_> {
+    type Target = Console;
+
+    fn deref(&self) -> &Console {
+        self.console
+    }
+}
+
+impl std::ops::DerefMut for ThemeContext<'_> {
+    fn deref_mut(&mut self) -> &mut Console {
+        self.console
+    }
+}
+
+impl Drop for ThemeContext<'_> {
+    fn drop(&mut self) {
+        // Upstream's `__exit__` pops unconditionally. This only fails if the
+        // caller already popped back down to the base through the guard.
+        let _ = self.console.pop_theme();
+    }
 }
 
 impl Default for Console {
@@ -130,6 +161,11 @@ impl Console {
         } else {
             self.color_system
         }
+    }
+
+    /// Whether colour output is disabled. Port of `Console.no_color`.
+    pub fn no_color(&self) -> bool {
+        self.no_color
     }
 
     /// The detected (or configured) width in cells.
@@ -163,15 +199,75 @@ impl Console {
         self.ascii_only
     }
 
-    /// The active theme.
+    /// The active theme: the top of the theme stack.
     pub fn theme(&self) -> &Theme {
-        &self.theme
+        self.theme_stack
+            .last()
+            .expect("the theme stack always holds its base theme")
     }
 
     /// Resolve a style name (or pass a style through) against this console's
     /// theme. Port of `Console.get_style`.
     pub fn get_style(&self, style: &crate::style::StyleType) -> crate::errors::Result<Style> {
-        self.theme.get_style(style)
+        self.theme().get_style(style)
+    }
+
+    /// Push a theme on to the top of the stack. Port of `Console.push_theme`.
+    ///
+    /// With `inherit` the new top is the current top's styles overridden by
+    /// `theme`'s; without it, the new top is exactly `theme`. Prefer
+    /// [`use_theme`](Self::use_theme), which pops again automatically.
+    pub fn push_theme(&mut self, theme: Theme, inherit: bool) {
+        let top = if inherit {
+            let mut merged = self.theme().clone();
+            merged.extend_from(&theme);
+            merged
+        } else {
+            theme
+        };
+        self.theme_stack.push(top);
+    }
+
+    /// Remove the top theme, restoring the previous one. Port of
+    /// `Console.pop_theme`; popping the base theme is an error
+    /// (upstream's `ThemeStackError("Unable to pop base theme")`).
+    pub fn pop_theme(&mut self) -> crate::errors::Result<()> {
+        if self.theme_stack.len() == 1 {
+            return Err(crate::errors::RichError::ThemeStack(
+                "Unable to pop base theme".to_string(),
+            ));
+        }
+        self.theme_stack.pop();
+        Ok(())
+    }
+
+    /// Use a theme until the returned guard is dropped. Port of
+    /// `Console.use_theme`, Python's context manager as an RAII guard.
+    ///
+    /// The guard dereferences to the console, so print *through the guard*
+    /// while it is alive; dropping it pops the theme, including during a
+    /// panic unwind.
+    ///
+    /// ```
+    /// # use rich::{Console, Theme, Style};
+    /// let mut console = Console::builder().width(20).build();
+    /// let mut theme = Theme::new();
+    /// theme.insert("warning", Style::parse("bold red").unwrap());
+    /// {
+    ///     let themed = console.use_theme(theme);
+    ///     assert!(themed.theme().get("warning").is_some());
+    /// }
+    /// assert!(console.theme().get("warning").is_none());
+    /// ```
+    ///
+    /// Upstream's `use_theme` also takes `inherit`, but its `ThemeContext`
+    /// never passes it on to `push_theme`, so a used theme always inherits
+    /// (verified against rich 15.0.0). This port keeps that behaviour and
+    /// omits the ignored parameter; call [`push_theme`](Self::push_theme) to
+    /// replace the styles outright.
+    pub fn use_theme(&mut self, theme: Theme) -> ThemeContext<'_> {
+        self.push_theme(theme, true);
+        ThemeContext { console: self }
     }
 
     /// The whole-output base style.
@@ -209,11 +305,32 @@ impl Console {
         self.segments_to_string(&segments)
     }
 
-    /// Render a renderable to segments, applying top-level measurement-fit when
-    /// no explicit justify is set (shared by the string and print paths).
+    /// Render a renderable to segments as `Console.print` does (shared by the
+    /// string and print paths): a printed `Text` goes through upstream's
+    /// `Text.join`, and an extension that opts into measurement-fit is shrunk
+    /// to its measured width when no explicit justify is set.
     fn render_segments(&self, renderable: &dyn Renderable) -> Vec<Segment> {
-        let mut options = self.options();
-        if options.justify == Justify::Default {
+        self.render_segments_with(renderable, &self.options())
+    }
+
+    /// [`render_segments`](Self::render_segments) with explicit render options,
+    /// as upstream's `Console.print(…, justify=, overflow=, no_wrap=)` builds
+    /// them.
+    fn render_segments_with(
+        &self,
+        renderable: &dyn Renderable,
+        options: &ConsoleOptions,
+    ) -> Vec<Segment> {
+        let mut options = options.clone();
+        let joined;
+        let renderable = match renderable.printed_text() {
+            Some(text) => {
+                joined = text;
+                &joined as &dyn Renderable
+            }
+            None => renderable,
+        };
+        if options.justify == Justify::Default && renderable.fit_to_measurement() {
             let measurement = renderable.measure(self, &options);
             options.max_width = measurement.maximum.min(options.max_width).max(1);
         }
@@ -228,6 +345,9 @@ impl Console {
     /// Write (or, while capturing, record) a rendered segment stream, adding a
     /// trailing newline. The single sink for every `print*` path.
     fn emit(&self, segments: Vec<Segment>) {
+        if segments.is_empty() {
+            return;
+        }
         if self.capturing.get() {
             let mut buffer = self.record_buffer.borrow_mut();
             buffer.extend(segments);
@@ -252,11 +372,46 @@ impl Console {
         options: &ConsoleOptions,
         pad: bool,
     ) -> Vec<Vec<Segment>> {
-        let segments = renderable.rich_render(self, options);
+        self.render_lines_styled(renderable, options, None, pad)
+    }
+
+    /// [`render_lines`](Self::render_lines) with upstream's `style=` argument:
+    /// the style is applied under every rendered segment and to the padding
+    /// that fills each line, as `Panel` and `Padding` use it.
+    pub fn render_lines_styled(
+        &self,
+        renderable: &dyn Renderable,
+        options: &ConsoleOptions,
+        style: Option<&Style>,
+        pad: bool,
+    ) -> Vec<Vec<Segment>> {
+        let style = style.filter(|style| !style.is_null());
+        // Upstream `Console.render` yields nothing when `max_width < 1`, so a
+        // renderable squeezed to zero width contributes no lines (#449).
+        let mut segments = if options.max_width < 1 {
+            Vec::new()
+        } else {
+            renderable.rich_render(self, options)
+        };
+        if let Some(style) = style {
+            segments = Segment::apply_style(&segments, style);
+        }
         let mut lines = Segment::split_lines(&segments);
+        // An empty `Text` renders as a lone empty segment: upstream renders it
+        // as its `end` newline, which `split_and_crop_lines` turns into one
+        // blank line (#442).
+        if lines.is_empty()
+            && !segments.is_empty()
+            && segments
+                .iter()
+                .all(|segment| !segment.control && segment.text.is_empty())
+        {
+            lines.push(Vec::new());
+        }
+        let pad_style = Some(style.cloned().unwrap_or_default());
         if pad {
             for line in &mut lines {
-                *line = Segment::adjust_line_length(line, options.max_width, Some(Style::new()));
+                *line = Segment::adjust_line_length(line, options.max_width, pad_style.clone());
             }
         }
         // Honor an explicit height by cropping/padding to exactly that many rows
@@ -268,7 +423,7 @@ impl Console {
                 lines.push(if pad {
                     vec![Segment::new(
                         " ".repeat(options.max_width),
-                        Some(Style::new()),
+                        pad_style.clone(),
                     )]
                 } else {
                     Vec::new()
@@ -282,8 +437,11 @@ impl Console {
     /// returning the string (including the single trailing newline). For tests
     /// and export.
     pub fn render_export(&self, renderable: &dyn Renderable) -> String {
-        let mut out = self.render_to_string(renderable);
-        out.push('\n');
+        let segments = self.render_segments(renderable);
+        let mut out = self.segments_to_string(&segments);
+        if !segments.is_empty() {
+            out.push('\n');
+        }
         out
     }
 
@@ -291,6 +449,31 @@ impl Console {
     pub fn print(&self, renderable: &dyn Renderable) {
         let segments = self.render_segments(renderable);
         self.emit(segments);
+    }
+
+    /// Print with explicit render options, the equivalent of upstream's
+    /// `Console.print(renderable, justify=…, overflow=…, no_wrap=…)`. Start
+    /// from [`options`](Self::options) and set the fields to override. A
+    /// printed `Text` defers to these options, because upstream's `Text.join`
+    /// drops the text's own `justify`, `overflow` and `no_wrap`.
+    pub fn print_with(&self, renderable: &dyn Renderable, options: &ConsoleOptions) {
+        let segments = self.render_segments_with(renderable, options);
+        self.emit(segments);
+    }
+
+    /// Like [`render_export`](Self::render_export), with explicit render
+    /// options as for [`print_with`](Self::print_with).
+    pub fn render_export_with(
+        &self,
+        renderable: &dyn Renderable,
+        options: &ConsoleOptions,
+    ) -> String {
+        let segments = self.render_segments_with(renderable, options);
+        let mut out = self.segments_to_string(&segments);
+        if !segments.is_empty() {
+            out.push('\n');
+        }
+        out
     }
 
     /// Write a terminal control sequence to stdout.
@@ -543,7 +726,7 @@ impl Console {
 
     /// Expand `:emoji:` shortcodes. Runs before markup parsing (matching
     /// upstream's default `emoji=True`); `:name:` and `[tag]` don't overlap.
-    fn expand_emoji(&self, content: &str) -> String {
+    pub(crate) fn expand_emoji(&self, content: &str) -> String {
         if self.emoji {
             crate::emoji::replace(content)
         } else {
@@ -616,7 +799,20 @@ fn segments_to_plain(segments: &[Segment]) -> String {
 }
 
 impl Renderable for Text {
+    fn printed_text(&self) -> Option<Text> {
+        // `Text("").join([self])`: the text and its spans survive; justify,
+        // overflow and no_wrap come from the blank separator (#446).
+        let mut text = self.clone();
+        text.clear_layout_options();
+        Some(text)
+    }
+
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        // Empty Text still represents a printable blank line; an empty
+        // generator such as Markdown does not. Preserve that distinction.
+        if self.is_empty() {
+            return vec![Segment::new("", None)];
+        }
         // Wrap to the available width; the effective justify is this text's own
         // justify, falling back to the console options' justify.
         let justify = if self.get_justify() != Justify::Default {
@@ -770,6 +966,7 @@ impl ConsoleBuilder {
         let width = self.width.unwrap_or_else(detect_width);
         let height = self.height.unwrap_or_else(detect_height);
         Console {
+            render_environment: None,
             color_system,
             width,
             height,
@@ -784,7 +981,7 @@ impl ConsoleBuilder {
             legacy_windows: self.legacy_windows.unwrap_or(false),
             safe_box: self.safe_box.unwrap_or(true),
             ascii_only: self.ascii_only.unwrap_or(false),
-            theme: self.theme.unwrap_or_else(Theme::default_theme),
+            theme_stack: vec![self.theme.unwrap_or_else(Theme::default_theme)],
             base_style: Style::new(),
             highlighters: Vec::new(),
             record_buffer: std::cell::RefCell::new(Vec::new()),
@@ -876,6 +1073,18 @@ fn detect_height() -> usize {
     DEFAULT_HEIGHT
 }
 
+impl crate::protocol::ConsoleEnvironment for Console {
+    fn set_render_environment(
+        &mut self,
+        value: Option<std::sync::Arc<dyn crate::protocol::RenderEnvironment>>,
+    ) {
+        self.render_environment = value;
+    }
+    fn render_environment(&self) -> Option<&dyn crate::protocol::RenderEnvironment> {
+        self.render_environment.as_deref()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -891,6 +1100,17 @@ mod tests {
 
     /// The strict path reports malformed markup where the lenient one prints it
     /// literally. Both must still agree on markup that is actually valid.
+    #[test]
+    fn empty_text_and_empty_renderables_have_distinct_endings() {
+        let console = Console::builder().force_terminal(false).build();
+        assert_eq!(console.render_export(&Text::new("")), "\n");
+        assert_eq!(
+            console.render_export(&crate::markdown::Markdown::new("")),
+            ""
+        );
+        assert_eq!(console.render_export(&crate::table::Table::new()), "\n");
+    }
+
     #[test]
     fn try_build_text_reports_bad_markup() {
         let console = test_console();
@@ -1155,5 +1375,63 @@ mod tests {
             .color_system(None)
             .build();
         assert_eq!(console.render_str_to_string("[bold red]hi[/]"), "hi");
+    }
+
+    #[test]
+    fn used_theme_applies_through_the_guard_and_pops_on_drop() {
+        let mut console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(20)
+            .highlight(false)
+            .build();
+        let theme = Theme::from_styles([("accent", "bold red")], false).unwrap();
+        {
+            let themed = console.use_theme(theme);
+            let out = themed.capture(|c| c.print_str("[accent]x[/]"));
+            assert_eq!(out, "\x1b[1;31mx\x1b[0m\n");
+        }
+        assert!(console.theme().get("accent").is_none());
+        assert!(console.pop_theme().is_err(), "the base theme must remain");
+    }
+
+    #[test]
+    fn used_theme_is_popped_during_a_panic_unwind() {
+        let mut console = Console::builder().width(20).build();
+        let theme = Theme::from_styles([("accent", "bold")], false).unwrap();
+        let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _themed = console.use_theme(theme);
+            panic!("render failed");
+        }));
+        assert!(unwound.is_err());
+        assert!(console.theme().get("accent").is_none());
+    }
+
+    #[test]
+    fn a_printed_text_defers_layout_to_the_print_options() {
+        // Captured from real rich 15.0.0 (#446, #447): `Text.join` drops the
+        // text's own overflow and justify; print-level options still apply.
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(crate::color::ColorSystem::Truecolor))
+            .width(6)
+            .highlight(false)
+            .build();
+        let text = Text::new("abcdefghij").overflow(Overflow::Ellipsis);
+        assert_eq!(console.render_export(&text), "abcdef\nghij\n");
+        let mut options = console.options();
+        options.overflow = Some(Overflow::Ellipsis);
+        assert_eq!(
+            console.render_export_with(&Text::new("abcdefghij"), &options),
+            "abcde…\n"
+        );
+        let wide = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(crate::color::ColorSystem::Truecolor))
+            .width(20)
+            .highlight(false)
+            .build();
+        let tabbed = Text::new("a\tb").justify(Justify::Right);
+        assert_eq!(wide.render_export(&tabbed), "a       b\n");
     }
 }

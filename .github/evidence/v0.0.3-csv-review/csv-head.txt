@@ -1,0 +1,8 @@
+┏━━━━━━━━━┳━━━━━━━┓
+┃ name    ┃ value ┃
+┡━━━━━━━━━╇━━━━━━━┩
+│ example │ 12345 │
+│ example │ 12345 │
+│ example │ 12345 │
+│ example │ 12345 │
+│ example │ 12345 │

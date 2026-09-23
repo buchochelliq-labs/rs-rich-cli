@@ -1,0 +1,32 @@
+{
+  "version": "rich (rs-rich-cli) 0.0.8",
+  "binary_path": "/workspace/scratch/02a46fd2d12a/rs-rich-cli/target/release/rich",
+  "binary_sha256": "43fee89406723787177612abc5a7d9e1a220d3eb66578964193e0b7d94407f12",
+  "source_sha256": "ab1d3a30a39320fea4947c55b8223bcd68353ad81a2a4d9236040d5007dbe099",
+  "source_digest_recipe": "Sorted crates/**/*.rs, crates/**/Cargo.toml, Cargo.toml, Cargo.lock; relative path + NUL + bytes",
+  "git_head": "33268020fd4191a8b102dbc19c29fad04ccf1b32",
+  "git_worktree_changes": [
+    " M .github/evidence/0.0.8/demo-tour/validation.json",
+    " M crates/rich-cli/src/demo.rs",
+    " M scripts/capture_demo_tour.py",
+    " M scripts/test_demo_pty.py"
+  ],
+  "args": [
+    "--demo",
+    "--demo-delay",
+    "0.5"
+  ],
+  "exit_code": 0,
+  "terminal": {
+    "width": 88,
+    "height": 28,
+    "RICH_SIXEL": "1"
+  },
+  "recording_sha256": "b6853281bc59d0dfbb60993bb02ece4c46ead019efb5bcd8b30ab36ffc2cb5b3",
+  "presentation": "Actual 88x28 PTY playback at half-second section pacing; captions added, no audio.",
+  "media": {
+    "v8-demo-tour.png": "f547a1b51c8fc413af2505a9b3d4f9bf5659e12abf276fbdc616de6108badcaf",
+    "v8-demo-tour.gif": "5327a79d005459a4d1a4b48c9bfee8756f1990ae70ad70c59cda56179b0f1c24",
+    "v8-demo-tour.mp4": "151896d0081e5b170ba648c61307e16fd9fa9398d5c7168dfae10dc096d4f2dd"
+  }
+}

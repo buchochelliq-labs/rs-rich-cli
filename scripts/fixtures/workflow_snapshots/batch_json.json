@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "{\n  \"state\": \"ready\",\n  \"count\": 1\n}\n{\n  \"state\": \"done\",\n  \"count\": 2\n}\n",
+  "stderr": "{\"ok\":true,\"code\":\"success\",\"exit_code\":0,\"result\":{\"planned\":2,\"attempted\":2,\"completed\":2,\"failed\":0,\"skipped\":0,\"failures\":[]}}\n"
+}

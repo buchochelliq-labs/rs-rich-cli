@@ -6,6 +6,7 @@
 //!
 //! Requires the non-default `image` feature.
 
+use crate::{image_color::preprocess, Dither, ImageColorMode};
 use image::imageops::FilterType;
 use image::{DynamicImage, GenericImageView, ImageError, Rgba};
 
@@ -29,9 +30,11 @@ fn fg_style(color: Color) -> Style {
 
 /// An image rendered as ASCII (or ANSI) art.
 pub struct AsciiArt {
-    image: DynamicImage,
+    image: std::sync::Arc<DynamicImage>,
     width: Option<usize>,
     height: Option<usize>,
+    color_mode: ImageColorMode,
+    dither: Dither,
     ramp: Vec<char>,
     invert: bool,
     color: bool,
@@ -41,10 +44,16 @@ pub struct AsciiArt {
 impl AsciiArt {
     /// Build from an already-decoded image.
     pub fn new(image: DynamicImage) -> Self {
+        Self::from_shared(std::sync::Arc::new(image))
+    }
+
+    pub(crate) fn from_shared(image: std::sync::Arc<DynamicImage>) -> Self {
         AsciiArt {
             image,
             width: None,
             height: None,
+            color_mode: ImageColorMode::default(),
+            dither: Dither::default(),
             ramp: DEFAULT_RAMP.chars().collect(),
             invert: false,
             color: false,
@@ -55,6 +64,12 @@ impl AsciiArt {
     /// Decode an image from bytes (PNG or JPEG).
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, ImageError> {
         Ok(AsciiArt::new(image::load_from_memory(bytes)?))
+    }
+
+    pub(crate) fn color_processing(mut self, mode: ImageColorMode, dither: Dither) -> Self {
+        self.color_mode = mode;
+        self.dither = dither;
+        self
     }
 
     /// Decode an image from a file.
@@ -116,7 +131,7 @@ impl AsciiArt {
     }
 
     /// The output grid for a given available width.
-    fn grid(&self, available: usize) -> (usize, usize) {
+    pub(crate) fn grid(&self, available: usize) -> (usize, usize) {
         let (image_width, image_height) = self.image.dimensions();
         let columns = self.width.unwrap_or(available).max(1);
         let rows = self.height.unwrap_or_else(|| {
@@ -154,11 +169,12 @@ impl AsciiArt {
     /// Render to rows of `(char, colour)` pairs.
     fn cells(&self, available: usize) -> Vec<Vec<(char, Option<Color>)>> {
         let (columns, rows) = self.grid(available);
-        // One resize does the sampling; nearest keeps it cheap and predictable.
-        let scaled = self
+        // Finish sampling before colour processing and glyph selection.
+        let mut scaled = self
             .image
             .resize_exact(columns as u32, rows as u32, FilterType::Triangle)
             .to_rgba8();
+        let indices = preprocess(&mut scaled, self.color_mode, self.dither);
 
         // Auto-levels: find the luminance range actually present so it can be
         // stretched across the ramp. A flat image (min == max) is left alone.
@@ -188,7 +204,10 @@ impl AsciiArt {
                         let glyph = self.glyph(level(Self::luminance(pixel)));
                         let colour = if self.color {
                             let [r, g, b, _] = pixel.0;
-                            Some(Color::from_rgb(r, g, b))
+                            Some(match &indices {
+                                Some(indices) => Color::from_ansi(indices[y * columns + x]),
+                                None => Color::from_rgb(r, g, b),
+                            })
                         } else {
                             None
                         };

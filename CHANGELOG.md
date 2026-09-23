@@ -7,6 +7,30 @@ absorbed and what our own crates did.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## Core 0.0.5 / ext 0.0.7 / art 0.0.7 / CLI 0.0.9 — published 2026-09-22
+
+- Core 0.0.5: optional immutable rendering-environment extension seam; unchanged
+  default parity and public ConsoleOptions/Renderable requirements.
+- Ext 0.0.7: explicit targets/capabilities, deterministic optional snapshots,
+  constrained layouts/overflow, typed events/diagnostics, optional log/tracing
+  adapters and single-writer coordinated Live regions.
+- Art 0.0.7: still-image rotation, flips, grayscale and ordered Bayer dithering;
+  exact Braille/half-block edge regressions and same-source output examples.
+- CLI 0.0.9: directory-preserving/template batch names, config/worker routing,
+  typed log presentation, still-image exports, updated guided demo and real media.
+- Migration: exhaustive matches must include `Dither::Bayer4x4` and the added
+  unsigned/128-bit `Value` variants. New batch naming modes take output directories.
+- Fixed before merge: Live `print` no longer drops ordinary writes at interactive
+  widths 0/1, and diagnostic snippets strip CRLF carriage returns.
+- Release test passed on 2026-09-22 (full validation, golden parity, per-tag plans,
+  packaged consumer install, installed-binary screenshots); see
+  [expanded notes](docs/releases/0.0.9-expanded.md#release-test-2026-09-22).
+- Published from `main` at `c645220` in dependency order by the protected release
+  workflow: [`rs-rich-v0.0.5`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35789282880), [`rs-rich-ext-v0.0.7`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35792283558), [`rs-rich-art-v0.0.7`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35792299240), [`rs-rich-cli-v0.0.9`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35792320939). The core
+  upload first failed because crates.io required Trusted Publishing; it succeeded
+  after the crate setting was adjusted. The workflow still uses a stored token
+  (tracked for 0.0.10).
+
 ## [0.0.1] — first release
 
 The first published version of all four crates: `rs-rich`, `rs-rich-ext`,
@@ -29,9 +53,461 @@ Two things worth knowing up front:
   API as `15.0.0` would have been a lie, and the first breaking change would have
   collided with upstream's next major.
 
-Everything below this heading is the development history that led here.
+Entries below record subsequent releases and development.
 
 ## [Unreleased]
+
+Cohort versions for 0.0.11 (not published): core 0.0.7, ext 0.0.9, art 0.0.9,
+CLI 0.0.11. Core changes below, so every dependent moves with it.
+
+### Progress: pulse, format columns and live display (#6)
+
+- **Pulse bar.** `ProgressBar` pulses when `pulse` is set or the total is
+  unknown: `ProgressBar::indeterminate`, `.pulse`, `.animation_time`. It uses
+  upstream's cosine fade, including the quirk that 256-colour consoles get the
+  two-tone fallback. It also has the ASCII (legacy/`ascii_only`) glyphs and
+  no-colour fallbacks. The bar column pulses for unstarted and indeterminate
+  tasks.
+- **Determinate bar fixes.** A zero total draws a full finished bar, and the
+  background is left out without colour, as upstream does.
+- **Text and renderable columns.** `TextColumn` formats strings against the
+  task (`{task.completed:>6.1f}`, `{task.fields[name]}`) through the new
+  `rich::pyformat`, a port of Python's format mini-language. It also takes
+  style, justify and markup. Per-task fields come through
+  `Progress::add_task_with` and `TaskUpdate::field`. `ProgressColumn::Renderable`
+  shows any renderable, and rows grow to fit multi-line cells.
+- **Live display.** `Progress::start(console, writer, refresh_per_second)`
+  returns a `LiveProgress`. It redraws on the `Live` thread and refreshes
+  where upstream does: `add_task`, `reset`, and `update(refresh=True)`.
+  `stop()` commits the final frame.
+- **`track()`.** `LiveProgress::track` and the module-level `rich::track`
+  advance a task per item, after the loop body, as upstream does.
+- **Live changes.** `Live::spawn` waits for the first frame. The new
+  `AutoLive::refresh_wait` redraws synchronously. The final newline is written
+  only after a non-empty render.
+- **API changes.** `TaskUpdate` gains `fields` and `refresh` (struct literals
+  need `..TaskUpdate::default()`). `ProgressColumn` gains `TextFormat` and
+  `Renderable`. New `Console::no_color()`.
+- **Goldens.** New `progress_bar.tsv` (15 cases) and `progress_live.tsv`
+  (3 cases), plus 4 more `progress_time.tsv` cases: pulse, format fields and
+  renderable columns. All match rich 15.0.0.
+
+### Logging: `LogRender` port and `RichHandler` (#10)
+
+- **`LogRender` is now a port of `_log_render.py`.** It lays a record out as a
+  `Table::grid` row: time (blanked when it repeats the previous record's),
+  level, message (ratio 1, folding) and `path:line` linked to the file. It
+  remembers the last time across calls, as upstream's instance does.
+  `rich::level_text` builds upstream's padded `logging.level.<name>` column, and
+  `LogLevel` spells `WARN` as Python's `WARNING`.
+- **Migration.** The old one-line `LogRender::new(level, message).time(..).path(..)`
+  is now `LogRecord`, with the same builders plus `.line(n)`. `LogRender::new()`
+  takes no arguments; call `.render(console, message, time, level, path, line,
+  link_path)` for each record.
+- **Table.** `Table::grid()` now has upstream's defaults: no padding and
+  `collapse_padding`. New `Table::without_box()` (upstream `box=None`),
+  `Table::padding(top, right, bottom, left)` and `column_overflow`; a
+  column's overflow applies to cells that set none.
+- **JSON floats** are written with Python's `float.__repr__` (`1e+20`, `1e-07`,
+  `10000000000.0`), as `json.dumps` does. This resolves DIVERGENCES §8.
+- **Ext: `RichHandler`** (`rich_ext::RichHandler`) is the counterpart of
+  upstream's `logging.RichHandler`. It prints events with the level column,
+  `ReprHighlighter`, HTTP-method keywords in `logging.keyword`, optional
+  markup, the file name linked to its full path, and structured fields as
+  `key=value`. With the `log` or `tracing` feature it is an `EventSink`, so
+  `LogAdapter` and `EventLayer` print through it. See the `rich_handler` example.
+- **Goldens.** New `log_render.tsv` (4 cases) and `json_python_floats` match
+  rich 15.0.0. The differential fuzzer now generates `box=None` tables.
+
+### Markdown: styled table cells and constructor options (#9)
+
+- `Table` headers and cells can be styled `Text`, via the new
+  `Table::add_column_text` and `Table::add_row_text`. A cell's own `justify`,
+  `overflow` and `no_wrap` override the column's, as `Text.__rich_console__`
+  prefers them.
+- Markdown table cells now carry their strong, emphasis, code, strike and link
+  runs, as upstream's `TableDataElement` appends them under the current style.
+  Headers keep `markdown.table.header` over their inline spans.
+- A single `~` inside a table cell is appended to the cell, like other literal text.
+- `Markdown` gains upstream's constructor options: `justify`, `style`,
+  `code_theme`, `inline_code_lexer` and `inline_code_theme`. `style` is the root
+  of the style stack, as upstream's context uses it: under every text run,
+  under list-item content and padding, and under the block-quote colour. Code
+  themes are `syntect` names (DIVERGENCES #18).
+- New `Syntax::highlight` returns the highlighted code as `Text` (upstream
+  `Syntax.highlight`); inline code uses it when a lexer is set.
+- Fix: a wrapped list item's continuation rows are padded in the marker's own
+  style (bold bullet, cyan number), as upstream's `render_bullet` and
+  `render_number` do.
+- New goldens: `markdown_table_inline.tsv` (8 cases) and
+  `markdown_options.tsv` (8 cases: justify, style, and wrapped items) match
+  rich 15.0.0.
+
+### Core parity fixes (0.0.11 workstream 1)
+
+This fixes every divergence family the 0.0.10 differential fuzzer found, each
+verified against rich 15.0.0. The known-divergence queue is now empty, and every
+repro is in the pull-request corpus.
+
+- **Padding (#442):** empty content keeps its line, and the padding style sits
+  under the content, as upstream's `render_lines(style=…)` does. The same fix
+  gives `Panel("")` its blank body row.
+- **Align (#443):** the rendered block is aligned as a whole
+  (`Constrain` + `Segment.set_shape`), not line by line.
+- **Rule (#444):** a right-aligned title with a multi-cell fill is dropped, as
+  upstream drops it.
+- **Table (#445):**
+  - header cells are bottom-aligned, and row shaping follows upstream's
+    `align_cell` + `set_shape`
+  - cells render through `Text` wrap, justify and truncate
+  - `_measure_column` is ported, including columns with no cells, the
+    `maximum or 1` floor, the re-measure after collapsing, and no expand once a
+    table has collapsed
+- **Printed `Text` (#446):** `Console::print` renders at the full width and
+  applies upstream's `Text.join` semantics, so a printed `Text`'s own `justify`,
+  `overflow` and `no_wrap` defer to the print options. The top-level
+  shrink-to-measurement that stood in for this is gone.
+  - `Renderable::fit_to_measurement` now defaults to `false`.
+  - New `Console::print_with` and `render_export_with` take explicit options, the
+    equivalent of `console.print(…, overflow=…, no_wrap=…)`.
+- **Tabs (#447):** `Text` measures the raw string, as upstream does. A tab
+  measures zero cells until render.
+- **Emoji (#448):** scanning resumes after every `:…:` match, including unknown
+  codes and `::`, as upstream's single `re.sub` does.
+- **Zero-width content (#449):** a renderable given less than one cell renders
+  nothing (upstream `Console.render`), so a squeezed `Panel` has no body rows.
+- **API:** `Console::render_lines_styled` ports `render_lines(style=…)`.
+
+Before the fix, three seeds of 2,000 generated cases had 1,193 mismatches.
+After it, 40,000 generated cases across 20 seeds match.
+
+## Core 0.0.6 / ext 0.0.8 / art 0.0.8 / CLI 0.0.10 — published 2026-09-23
+
+Every workstream in the [0.0.10 plan](docs/plans/0.0.10.md) is merged to `main`, and the
+release test passed on the integrated tree; see the
+[0.0.10 release notes](docs/releases/0.0.10.md). All four crates were published through
+Trusted Publishing, each with a passing exact-version registry consumer:
+[core](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35818053978), [ext](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35818015980), [art](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35818038760) and
+[CLI](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35818067984). The tags were first pushed out of order; the release notes
+record the recovery. Each version was uploaded once.
+
+- Release tooling: `check_packages.py` drops Cargo's cached copies of staged-only
+  versions before verifying. Cargo reused a core 0.0.6 unpacked and built before
+  `fit_to_measurement` existed, which failed a good tree and could pass a bad one.
+- CLI: a multi-file `--watch` with `--watch-exit-on-error` no longer promises a retry
+  in the failing region.
+- Demo: the tour shows a pushed theme, `~~~` strikethrough and a two-file watch that
+  ends through `--watch-exit-on-error`; it is re-recorded from the 0.0.10 build.
+
+- Release: crates.io Trusted Publishing replaces the stored registry token; the
+  OIDC exchange runs only after preflight and dry run (`docs/BRANCHING.md`).
+- CI: GitHub Actions moved to Node 24 majors (`checkout` v7, `github-script` v9,
+  `upload-pages-artifact` v5, `deploy-pages` v5).
+- Art: `icy_sixel` 0.7 for the optional Sixel backend.
+- CLI: `toml` 1.1 for configuration parsing; strict-config behaviour unchanged.
+- Core parity (#15): `Spinner` follows upstream's animation state. The first
+  `render` fixes the start time, `Spinner::update` changes text, style or speed
+  (a new speed continues from the current frame), the text is console markup,
+  and the frame style may be a theme name. `Status` keeps one stateful spinner,
+  parses its message as markup, defaults to the `status.spinner` theme style and
+  gains `update`; `Status::renderable` now returns `&Spinner`.
+  `ProgressColumn::Spinner` delegates its start time to the spinner, as
+  upstream's `SpinnerColumn` does. The new golden `live_status.tsv` has 8 step
+  programs covering spinner and status frames and LiveRender control sequences;
+  PORTING gains parity cells for Live and progress.
+- Core: Progress time, rate and spinner columns and upstream's task model (#6):
+  an injectable clock, `add_task` returning a `TaskId`, `update`/`advance`/
+  `reset`/`start_task`/`stop_task`/`remove_task`, the 30 s speed window, and
+  `TimeElapsed`, `TimeRemaining`, `TransferSpeed`, `FileSize`, `TotalFileSize`,
+  `Spinner`, `TaskProgress` and binary `Download` columns. Golden
+  `progress_time.tsv` replays identical step programs against rich 15.0.0.
+  `Progress::new()` now uses upstream's default columns (adds time remaining);
+  `add_task` takes `impl Into<Option<f64>>` totals and returns a `TaskId`.
+  Progress cell styles now resolve against the console theme.
+- CLI: the capability demo's progress section shows speed, ETA, elapsed and a
+  spinner from a simulated clock.
+- Ext: `Diagnostic::from_error` no longer reports an ordinary error chain as a
+  `[cycle]` when a wrapper stores its source as its first field (same address);
+  cause identity now compares address *and* type (#146, #151). New regressions
+  cover a three-level chain, and checked-in `RenderSnapshot` fixtures cover
+  multiline, chained and source-context diagnostics. A nested-panel layout
+  regression evidences #134.
+- Ext (behaviour change): `LayoutNode` leaves now receive their region's height,
+  as upstream `Layout` passes it, so height-aware renderables such as `Panel`
+  fill their region instead of rendering at natural height above blank rows.
+  The nested-panel regression is byte-identical to rich 15.0.0's `Layout`.
+  Wrap a leaf in `.content_height()` to keep a panel at its natural height.
+- Core: `Syntax` and `Json` port upstream `__rich_measure__` (Syntax measures its
+  raw source plus padding; JSON measures as its `Text`), with `Measurement::get`,
+  `normalize` and `with_maximum`, parity-tested by the new `measure.tsv` golden.
+  A printed `Syntax` still renders at the full console width, as upstream does:
+  the new `Renderable::fit_to_measurement` (default `true`) opts it out of the
+  top-level shrink that stands in for upstream's `str`/`Text` joining.
+- Ext: `layout::Overflowing` applies one explicit `OverflowPolicy` (wrap, fold,
+  crop, ellipsis, visible) to Syntax, JSON or Text lines; fitting output is
+  unchanged byte for byte, and padded Syntax rows keep their background (#149).
+- Art 0.0.8 image modes (#125, #126, #199) and CLI routing (#144):
+  - `ImageColorMode::Ansi16` (rich's standard palette) and `Grayscale` (neutral
+    ANSI256 entries by luma). Floyd–Steinberg and Bayer 4×4 now work with every
+    quantized mode.
+  - `ImageMode::Quadrants` / `QuadrantArt`: 2×2 pixels per cell, choosing the
+    cheapest two-colour split. Also available for `--diff` heatmaps.
+  - `ImageFit::Stretch`, `ImageArt::max_width`/`max_height`, and brightness,
+    contrast and gamma in `ImageTransforms`, applied in a documented fixed order.
+  - CLI flags `--image-color ansi16|grayscale`, `--image-mode quadrants`,
+    `--image-fit stretch`, `--image-max-width`, `--image-max-height`,
+    `--image-brightness`, `--image-contrast` and `--image-gamma`, plus matching
+    config keys. Invalid values and unsupported combinations are usage errors.
+  - Unset options leave output byte-identical: 149 pre-existing mode, colour,
+    dither, fit and transform invocations compared equal against the previous
+    binary, stdout plus HTML and SVG exports.
+  - Migration: exhaustive matches need `ImageMode::Quadrants`,
+    `ImageFit::Stretch`, `ImageColorMode::{Ansi16, Grayscale}` and
+    `ImageArtError::InvalidAdjustment`. `ImageTransforms` gained three `f32`
+    fields, so it is no longer `Eq`, and struct literals need `..Default::default()`.
+  - The guided demo's art section and a same-source comparison image
+    (`docs/media/cli-010-image-modes.png`) show the new modes from actual output.
+- CLI: `--watch` accepts several local files; a change re-renders only that
+  file, in its own `rich-ext` Live region, with errors shown per file until it
+  recovers. File events come from `notify` (parent-directory watches, so atomic
+  rename-over saves and delete-and-recreate are seen), debounced by
+  `--watch-debounce` (default 0.1 s); `--watch-poll` and watcher failures use
+  the polling loop. `--watch-exit-on-error` ends the watch non-zero on a failed
+  render. New config keys: `watch_debounce`, `watch_poll`,
+  `watch_exit_on_error`. Redirected output and URL watching are unchanged (#139).
+- Parity tooling (#34): `scripts/diff_rich.py` generates Table, Rule, Padding
+  and Align cases alongside markup, text and panels. The Python oracle renders
+  each colour system in its own interpreter, because rich memoises a Style's
+  escape codes and a shared process misreported colours. Markup compares the
+  strict parser on both sides. The shrinker keeps the failure kind and reduces
+  rows, cells, columns and options. A nightly workflow runs 20,000 generated
+  cases on `main`. First findings are filed as #442–#449, with repros in
+  `scripts/fixtures/diff_rich_known.jsonl`; triage steps are in `docs/parity.md`.
+- Core: Markdown strikethrough pairs tilde runs as upstream's markdown-it does, so
+  runs of three or more (`a ~~~x~~~ b` → `a ~` + struck `x` + `~ b`) and uneven
+  runs match rich 15.0.0. Golden `markdown_strike.tsv` (24 cases); DIVERGENCES §21
+  narrowed to tilde pairs crossing a later emphasis span (#9).
+- Core: upstream's theme stack — `Console::push_theme`, `pop_theme` and a
+  `use_theme` guard (`ThemeContext`) that pops on drop — plus `Theme::from_styles`,
+  `config`, `from_file` and `read` for upstream theme files. Golden
+  `theme_stack.tsv` checks them against rich 15.0.0; DIVERGENCES §14 resolved (#3).
+  `RichError` gains `ThemeStack` and `ThemeConfig`; exhaustive matches need them.
+
+## CLI 0.0.9 / art 0.0.7 — published with the cohort above
+
+- Named TOML themes, default/profile/CLI selection, explicit style overrides and
+  resolved theme bindings for batch workers and exports.
+- Human-report stderr-terminal batch progress and `--no-progress`; Ctrl+C stops
+  scheduling, kills/reaps workers, exits 130 and preserves one machine report.
+- Listable `core`, `workflows`, `art` demo sections and selectable playback.
+- Read-only `rich doctor` diagnostics with JSON stdout, selected config/pager
+  details and explicit inferred capability reporting.
+- Public art `ImageColorMode`/`Dither` builders and CLI opt-in ANSI256/
+  Floyd–Steinberg for ASCII/half-block still images. Default truecolor/no-dither
+  and the `ImageOptions` struct shape remain unchanged.
+
+Local validation and review passed; see [0.0.9 preparation notes](docs/releases/0.0.9.md).
+The expanded scope above also moves core to 0.0.5 and ext to 0.0.7; all four published on 2026-09-22.
+
+## CLI 0.0.8 / art 0.0.6 — published
+
+- Guided `rich --demo` suite tour with adjustable pacing, real CLI workflow and
+  art examples, finite redirected output and clean Ctrl+C interruption.
+- Batch planning also rejects hard-linked input/output aliases before writing.
+
+- Full TOML configuration with strict validation, default/profile/CLI precedence,
+  explicit boolean overrides and JSON `config show` / `config validate`.
+  Inspection lists configured settings, not every built-in default.
+- Batch dry-run without output writes; bounded subprocess concurrency for file
+  exports with disk-spooled output replayed in input order. Fail-fast stops new
+  scheduling while in-flight workers finish; terminal batches remain serial.
+- Opt-in terminal-height automatic paging and explicit no-pager controls.
+- Nine public `ImageAnchor` positions and an `ImageArt::anchor` builder, exposed
+  by `--image-anchor` for cover fitting. Center remains the default and contain
+  behavior is unchanged.
+- Registry package-content checks and staged sibling package verification;
+  staged success does not establish publication readiness. Updated recipes,
+  benchmark/demo work and release handoff documentation.
+
+Independent publication succeeded for
+[art 0.0.6](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35541438821)
+and [CLI 0.0.8](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35542000274),
+including exact-version registry consumers. Ext 0.0.6 and core 0.0.4 stayed
+unchanged. Evidence is recorded in [0.0.8 notes](docs/releases/0.0.8.md).
+
+## CLI 0.0.7 / art 0.0.5 / ext 0.0.6 — published
+
+The art release succeeded first. The initial CLI package dry run failed because
+registry ext 0.0.5 lacked the workspace `CliExtensions: Clone` implementation.
+Publishing ext 0.0.6 and correcting the CLI dependency completed recovery:
+[art workflow](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35531841822),
+[ext workflow](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35533288812),
+[CLI workflow](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35533304887).
+Core remained 0.0.4.
+
+### CLI finishing
+
+- Fix watch refresh after same-size edits/atomic saves with preserved timestamps;
+  read local contents using bounded memory on each poll. Repaint the terminal
+  viewport instead of appending each changed frame. Redirected watch stays finite.
+- Add `ImageFit::{Contain,Cover}` and `ImageArt::background` for still-image
+  letterboxing, centre-cropping and alpha compositing; expose CLI fit/background
+  options with positive-dimension and allocation-limit validation.
+- Add real CLI workflow snapshots and terminal regressions, fresh demo capture
+  tooling, workflow recipes, and truthful serial `--jobs` help.
+
+### Release scope
+
+CLI 0.0.7 and art 0.0.5 shipped still-image fitting, background compositing,
+watch fixes, deterministic serial batch conversion and scalar config profiles.
+The [0.0.7 release notes](docs/releases/0.0.7.md) record validation and dependency
+recovery. Serial `--jobs` and limited TOML/boolean semantics below describe that
+release; the published 0.0.8 release above replaces them.
+
+### Added
+
+- **Confidence tooling:** added `scripts/snapshot_cli.py`, a deterministic CLI
+  snapshot runner with injectable width and terminal capability profiles,
+  PTY terminal forcing for color profiles, option-terminator (`--`) positioning,
+  newline normalization, and readable unified diffs. The differential corpus and
+  generator now cover box renderables (`Panel`) and safe-box capability
+  profiles, and `library_bench` accepts explicit `--width` and `--color-system`
+  values.
+- **`rs-rich-cli` 0.0.7 workstream:** deterministic `--batch` conversion for
+  files, directories, and globs with deterministic serial execution, explicit collision and
+  overwrite policy, fail-fast/continue-on-error modes, and aggregate JSON
+  status reports. `--jobs` reserves a future concurrency limit; it does not
+  enable parallel workers. Added TOML-style scalar config profiles with local/home discovery,
+  explicit `--config`/`--profile`/`--no-config`, and CLI-over-config precedence.
+
+- **`rs-rich-cli`:** added task-oriented subcommands (`rich json`,
+  `rich markdown`, `rich syntax`, `rich csv`, `rich ipynb`, `rich jsonl`,
+  `rich log`, `rich gif`, `rich diff`, `rich rule`) while preserving existing
+  flat flags without deprecation warnings.
+- **`rs-rich-cli`:** added streaming JSONL / NDJSON and structured-log rendering
+  from stdin or files with bounded per-record processing and fail-fast malformed
+  record handling.
+- **`rs-rich-cli`:** added stable automation exit-code classes plus
+  `--report json` / `--machine-json` for a common result/error envelope on
+  stderr, keeping rendered stdout separate.
+- **`rs-rich-cli`:** added non-busy `--watch` polling for local files and
+  fetch-enabled URLs, including atomic-save/disappearance recovery, parse-error
+  frames, configurable intervals, URL response caching, and deterministic
+  one-shot behavior when stdout is redirected.
+- **`rs-rich-art`:** added an `ImageArt` facade (`ImageMode`, `ImageOptions`,
+  `RenderCapabilities`) plus a reusable Braille renderer so consumers can
+  render a single still image without duplicating renderer selection logic.
+- **`rs-rich-cli`:** added a first-class `--image` flag / `rich image` command
+  for rendering a single still image (reusing `rich-art`'s `ImageArt` facade),
+  plus a new `--height N` option; `--image-mode` now also applies to `--image`
+  and accepts `braille`.
+
+## [0.0.5] — 2026-09-13
+
+Prepared for independent `rs-rich-ext-v0.0.5` and `rs-rich-cli-v0.0.5` tags.
+`rs-rich` and `rs-rich-art` remain at 0.0.4.
+
+### Changed
+
+- **Parity tooling:** `scripts/capture_golden.py` now verifies that the
+  installed Python `rich` version matches the exact `UPSTREAM.toml` pin before
+  regenerating fixtures, preventing silent captures from the wrong oracle.
+
+- **Differential testing:** added a replayable `scripts/diff_rich.py` corpus
+  harness and Rust `diff_render` probe that compare selected markup/style/Text
+  cases against pinned Python `rich`, with bounded mismatch shrinking and CI
+  coverage for the deterministic corpus.
+
+- **Benchmarking:** added a `library_bench` Rust probe for repeatable markup
+  parsing, Text wrap/justify, Table layout and Console-render timings, including
+  setup timing, output hashes and active feature metadata.
+
+### Added
+
+- **`rs-rich-ext`, `rs-rich-cli`:** added an opt-in `--sanitize` path that
+  neutralizes terminal controls from decoded input, JSON/notebook strings,
+  titles and captions by rendering them as visible inert text while preserving
+  default upstream-compatible output.
+
+## [0.0.4] — 2026-09-10
+
+All four independently versioned packages published at 0.0.4 for their code and
+internal dependency changes. The annotated tag is on main; the protected release
+workflow passed full source checks and exact-version registry verification.
+
+- `rs-rich`, `rs-rich-cli`: optional, off-by-default `syntax-cache` for repeated
+  lines matching a small initial parser state. No per-entry capture copies;
+  grammars and output remain unchanged, with workload-dependent gains (#45).
+
+- `rs-rich`: ownership-transfer protocol for table rows, preserving existing rendering.
+- `rs-rich-cli`: move parsed CSV rows into the table and compact completed rows;
+  measured 100k-row peak RSS falls about 46%, with identical output (#74).
+
+- `rs-rich`: translate successive Text wrapping breaks incrementally, removing
+  repeated scans of long UTF-8 line prefixes while preserving wrapping output (#74).
+
+- `rs-rich-art`: explicit capability-aware half-block GIF frames and mixed-renderer stages.
+- `rs-rich-cli`: `--gif-mode ascii|blocks`, preserving ASCII defaults and safe
+  ASCII fallback without color and first-frame output when redirected (#65).
+
+- `rs-rich-ext`: explicit strict UTF-8/UTF-16 decoder with BOM and byte-order validation.
+- `rs-rich-cli`: wire `--encoding` for text files, stdin and URLs; preserve default
+  decoding, add UTF-16 hints and clean actionable image errors (#62).
+
+## [0.0.3] — 2026-09-10
+
+### Fixed
+- **`rs-rich-cli` diff thresholds:** compare both percentages with the same
+  one-decimal formatting used by the report, including fractional limits and
+  rounding ties, so the displayed verdict agrees with the process exit status.
+- **`rs-rich-cli`:** render diff HTML/SVG using destination color capabilities
+  while preserving plain piped stdout and threshold exit codes. Apply notebook
+  decorators to the whole cell group; reject ignored demo options, explain
+  interactive stdin, and document environment, paging and GIF repeat defaults.
+  Honor non-empty `NO_COLOR` in all CLI modes.
+- **`rs-rich`:** parse Panel, Rule and Table title/caption markup with visible
+  width measurement; preserve styled Unicode truncation without invalid span
+  offsets. New fixtures are captured from pinned Python Rich 15.0.0.
+- **`rs-rich`:** select `more.com` as the Windows pager fallback. Required Windows
+  CI launches the native pager and verifies its output as well as env precedence.
+- **`rs-rich`, `rs-rich-cli`:** expose table streaming through the `LineRenderable`
+  protocol trait; treat an early-closing CSV consumer as successful termination.
+  Regression test covers a 10,000-row producer whose pipe is closed after one byte.
+- **`rs-rich`, `rs-rich-cli`:** preserve arbitrary-size JSON integers and render
+  overflowing exponents as signed Infinity, matching Python. Repair #98 escape
+  folding without losing suffix bytes; keep the divergence behind the off-default
+  `json-escape-safe` feature. Default golden fixtures are captured from Python.
+- **`rs-rich-art`, `rs-rich-cli`:** piped GIFs emit their first frame once, including
+  infinite repeats, without cursor controls. Reject unsupported GIF decorators,
+  paging and exports; explain image-mode downgrades on stderr (#59, #72).
+- **`rs-rich`, `rs-rich-cli`:** stream undecorated CSV rows to reduce peak memory;
+  preserve upstream alignment-flag priority and notebook display-data omission.
+  Fix empty Markdown output, HTML/quoted-rule spacing, and adjacent images in one
+  table cell (#72, #74). Empty text and CSV retain their newline.
+- **`rs-rich` (and rendering through `rs-rich-cli`): Markdown image hoisting is byte-parity in nested and adjacent containers**
+  (`markdown.rs`): images inside table cells are now hoisted ahead of the table
+  and leave their cells empty, multiple images in one container share a row, and
+  images hoisted from consecutive containers occupy adjacent rows without a blank
+  row. Goldens cover a table cell, a multi-image paragraph, and a README-style
+  badge table against Python `rich` 15.0.0.
+
+### Changed
+- **`rs-rich`, `rs-rich-ext`, `rs-rich-art`, `rs-rich-cli`:** set 0.0.3
+  manifests and internal requirements together. Core includes the Markdown fix;
+  ext needs a new package version for its dependency on core 0.0.3. Art and CLI
+  retain their 0.0.3 versions. This dependency closure is specific to this release;
+  independent per-crate versioning remains supported.
+- **Release tooling (all four crates):** retain coordinated `v*` releases and
+  independent `<crate>-v*` releases, with selection-scoped exact-version
+  verification. Protect registry consumer builds with the same `crates-io`
+  environment as upload, with a manual verification-only recovery mode. Reject
+  lightweight tags and require the tag's exact checked-out commit on main. Align the
+  release checklist and skill with both paths.
+- **CI and docs (all four crates):** parse the upstream pin as TOML, check
+  generated manifest versions and CLI help, and apply main-ancestry checks to
+  `rc/*`, `release/*`, and `releases/*` integration branches.
+
+## [0.0.2] — 2026-08-11
 
 ### Fixed
 - **`Color::downgrade` was wrong for 8-bit and standard targets** (`color.rs`) —

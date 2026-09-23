@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "width": 20,
+  "height": 8,
+  "plain": "cannot open config\ncaused by: \npermission denied",
+  "ansi": "\u001b[1;31mcannot open config\u001b[0m\ncaused by: \npermission denied",
+  "segments": [
+    {
+      "text": "cannot open config",
+      "control": false,
+      "foreground": "800000",
+      "background": null,
+      "attributes": [
+        "bold"
+      ],
+      "link": null
+    },
+    {
+      "text": "\n",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "caused by: ",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "\n",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "permission denied",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    }
+  ]
+}

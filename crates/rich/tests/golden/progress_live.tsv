@@ -1,0 +1,10 @@
+# Golden parity fixtures for a live Progress display's byte stream — captured from
+# real Python `rich` (auto_refresh=False, explicit refreshes). Regenerate with:
+# python scripts/capture_golden.py
+#
+# Format: <name>	<case JSON>	<escaped bytes written between start() and stop()>
+# Steps: ["time", t] | ["add", description, total, completed] | ["advance", id, n]
+#   | ["update", id, {fields}] | ["refresh"]
+one_task	{"columns": [["description"], ["bar"], ["percentage"]], "width": 40, "steps": [["time", 0], ["add", "copy", 4, 0], ["refresh"], ["time", 1], ["advance", 0, 2], ["refresh"], ["advance", 0, 2]]}	\x1b[?25l\x1b[2Kcopy \x1b[38;5;237m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m \x1b[35m  0%\x1b[0m\x1b[2Kcopy \x1b[38;5;237m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m \x1b[35m  0%\x1b[0m\x1b[2Kcopy \x1b[38;2;249;38;114m━━━━━━━━━━━━━━━\x1b[0m\x1b[38;5;237m╺\x1b[0m\x1b[38;5;237m━━━━━━━━━━━━━━\x1b[0m \x1b[35m 50%\x1b[0m\x1b[2Kcopy \x1b[38;2;114;156;31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m \x1b[35m100%\x1b[0m\n\x1b[?25h
+two_tasks_grow	{"columns": [["description"], ["mofn"]], "width": 30, "steps": [["time", 0], ["add", "a", 3, 0], ["refresh"], ["add", "bb", 5, 1], ["refresh"], ["update", 0, {"completed": 3, "description": "a done"}], ["refresh"]]}	\x1b[?25l\x1b[2Ka \x1b[32m0/3\x1b[0m\x1b[2Ka \x1b[32m0/3\x1b[0m\x1b[2Ka  \x1b[32m0/3\x1b[0m\nbb \x1b[32m1/5\x1b[0m\x1b[2K\x1b[1A\x1b[2Ka  \x1b[32m0/3\x1b[0m\nbb \x1b[32m1/5\x1b[0m\x1b[2K\x1b[1A\x1b[2Ka done \x1b[32m3/3\x1b[0m\nbb     \x1b[32m1/5\x1b[0m\x1b[2K\x1b[1A\x1b[2Ka done \x1b[32m3/3\x1b[0m\nbb     \x1b[32m1/5\x1b[0m\n\x1b[?25h
+empty	{"columns": [["description"]], "width": 20, "steps": []}	\x1b[?25l\x1b[2K\x1b[?25h

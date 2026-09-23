@@ -7,11 +7,12 @@
 //! Scope: paragraphs, ATX headings (h1–h6), bullet + ordered lists, block quotes,
 //! thematic breaks, fenced/indented **code blocks** (syntax-highlighted via
 //! [`Syntax`]), **links** (OSC 8 hyperlinks), inline strong/emphasis/code, and
-//! **GFM tables** (rendered via [`Table`]). Inline styling *within* a table cell
-//! is a documented follow-up (see the Markdown issue).
+//! **GFM tables** (rendered via [`Table`], each cell a styled [`Text`] carrying
+//! its inline strong/emphasis/code/link/strike runs, as upstream's
+//! `TableDataElement` builds it).
 
 use pulldown_cmark::{
-    Alignment, CodeBlockKind, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd,
+    Alignment, CodeBlockKind, CowStr, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd,
 };
 
 use crate::cells::cell_len;
@@ -25,6 +26,7 @@ use crate::table::Table;
 use crate::text::Text;
 
 const CODE_STYLE: &str = "bold cyan on black"; // markdown.code
+const QUOTE_STYLE: &str = "magenta"; // markdown.block_quote
 /// The placeholder upstream's `ImageItem` puts in front of an image
 /// (`Text.assemble("🌆 ", title, " ")`). U+1F306 measures two cells.
 const IMAGE_MARKER: &str = "\u{1f306} ";
@@ -74,9 +76,19 @@ enum Block {
     /// list, code block or quote inside an item is simply part of that item.
     List { items: Vec<ListEntry> },
     /// A block quote, holding whatever blocks it contains.
-    Quote(Vec<Block>),
+    Quote {
+        blocks: Vec<Block>,
+        leading_break: bool,
+    },
+    /// An ignored HTML block still participates in upstream block spacing.
+    Html,
     /// A fenced/indented code block, syntax-highlighted via [`Syntax`].
-    Code { language: String, code: String },
+    Code {
+        language: String,
+        code: String,
+        /// `Markdown(code_theme=…)`; `None` keeps the `Syntax` default.
+        theme: Option<String>,
+    },
     /// A thematic break (horizontal rule).
     Rule,
     /// An image placeholder. Upstream's `ImageItem` renders `🌆 <title> ` and
@@ -100,8 +112,8 @@ enum Block {
     /// and body rows. Rendered via [`Table`], matching upstream's construction.
     Table {
         alignments: Vec<Justify>,
-        headers: Vec<String>,
-        rows: Vec<Vec<String>>,
+        headers: Vec<Text>,
+        rows: Vec<Vec<Text>>,
     },
 }
 
@@ -109,12 +121,26 @@ enum Block {
 #[derive(Default)]
 struct TableAccum {
     alignments: Vec<Justify>,
-    headers: Vec<String>,
-    rows: Vec<Vec<String>>,
+    headers: Vec<Text>,
+    rows: Vec<Vec<Text>>,
     in_head: bool,
     in_cell: bool,
-    cur_row: Vec<String>,
-    cur_cell: String,
+    cur_row: Vec<Text>,
+    /// The open cell's content: upstream's `TableDataElement.content`, which
+    /// appends each text run under the context's current style.
+    cur_cell: Text,
+}
+
+/// Where an inline run lands: the open table cell if there is one (upstream's
+/// `TableDataElement.on_text`), else the open paragraph-level buffer.
+fn inline_target<'a>(
+    current: &'a mut Option<Text>,
+    table: &'a mut Option<TableAccum>,
+) -> &'a mut Text {
+    match table.as_mut().filter(|acc| acc.in_cell) {
+        Some(acc) => &mut acc.cur_cell,
+        None => current.get_or_insert_with(|| Text::new("")),
+    }
 }
 
 fn alignment_justify(alignment: Alignment) -> Justify {
@@ -129,8 +155,27 @@ fn alignment_justify(alignment: Alignment) -> Justify {
 /// A rendered Markdown document. Mirrors `rich.markdown.Markdown`.
 pub struct Markdown {
     source: String,
-    hyperlinks: bool,
+    options: MarkdownOptions,
     blocks: Vec<Block>,
+}
+
+/// The constructor options of `rich.markdown.Markdown` that change what the
+/// parsed blocks contain, so changing one re-parses the document.
+#[derive(Clone, Default)]
+struct MarkdownOptions {
+    /// `hyperlinks` (see [`Markdown::hyperlinks`]); stored inverted so the
+    /// derived default matches upstream's `True`.
+    no_hyperlinks: bool,
+    /// `justify` for paragraphs; `None` is upstream's `markdown.justify or "left"`.
+    justify: Option<Justify>,
+    /// `style`, the root of upstream's style stack; `None` is `"none"`.
+    style: Option<Style>,
+    /// `code_theme` for fenced and indented code blocks.
+    code_theme: Option<String>,
+    /// `inline_code_lexer`: when set, inline code is highlighted as this language.
+    inline_code_lexer: Option<String>,
+    /// `inline_code_theme`, defaulting to `code_theme`.
+    inline_code_theme: Option<String>,
 }
 
 impl Markdown {
@@ -139,10 +184,11 @@ impl Markdown {
     /// Hyperlinks are on, matching `rich.markdown.Markdown(hyperlinks=True)`.
     /// **The CLI wants them off** — see [`hyperlinks`](Self::hyperlinks).
     pub fn new(source: &str) -> Self {
+        let options = MarkdownOptions::default();
         Markdown {
             source: source.to_string(),
-            hyperlinks: true,
-            blocks: parse(source, true),
+            blocks: parse(source, &options),
+            options,
         }
     }
 
@@ -168,10 +214,47 @@ impl Markdown {
     pub fn hyperlinks(mut self, hyperlinks: bool) -> Self {
         // The flag changes what the *text* of a paragraph or table cell is, not
         // just how it is painted, so the document has to be re-parsed.
-        if hyperlinks != self.hyperlinks {
-            self.blocks = parse(&self.source, hyperlinks);
-            self.hyperlinks = hyperlinks;
-        }
+        self.options.no_hyperlinks = !hyperlinks;
+        self.reparse()
+    }
+
+    /// Justify every paragraph. Port of `Markdown(justify=…)`; by default
+    /// paragraphs are left-justified. Headings keep their own alignment.
+    pub fn justify(mut self, justify: Justify) -> Self {
+        self.options.justify = Some(justify);
+        self.reparse()
+    }
+
+    /// The root style every run of text is drawn in. Port of
+    /// `Markdown(style=…)`, default `"none"`.
+    pub fn style(mut self, style: Style) -> Self {
+        self.options.style = Some(style).filter(|style| !style.is_null());
+        self.reparse()
+    }
+
+    /// The theme for code blocks. Port of `Markdown(code_theme=…)`. Names are
+    /// `syntect` theme names, not Pygments styles (see DIVERGENCES #18).
+    pub fn code_theme(mut self, theme: impl Into<String>) -> Self {
+        self.options.code_theme = Some(theme.into());
+        self.reparse()
+    }
+
+    /// Highlight inline code as `lexer`. Port of `Markdown(inline_code_lexer=…)`;
+    /// by default inline code is not highlighted.
+    pub fn inline_code_lexer(mut self, lexer: impl Into<String>) -> Self {
+        self.options.inline_code_lexer = Some(lexer.into());
+        self.reparse()
+    }
+
+    /// The theme for highlighted inline code. Port of
+    /// `Markdown(inline_code_theme=…)`, defaulting to the code theme.
+    pub fn inline_code_theme(mut self, theme: impl Into<String>) -> Self {
+        self.options.inline_code_theme = Some(theme.into());
+        self.reparse()
+    }
+
+    fn reparse(mut self) -> Self {
+        self.blocks = parse(&self.source, &self.options);
         self
     }
 }
@@ -238,14 +321,39 @@ fn link_style(url: &str) -> Style {
 ///
 /// `extra` is the run's own style (`markdown.code` for a code span), pushed last
 /// because upstream enters it after the link.
+/// The bottom of upstream's style stack at this point in the parse: the
+/// document `style`, with `markdown.block_quote` pushed for each enclosing quote
+/// (`markdown.item` is `none`).
+fn quote_root(md: &MarkdownOptions, stack: &[Frame]) -> Option<Style> {
+    let mut root = md.style.clone();
+    if stack
+        .iter()
+        .any(|frame| matches!(frame, Frame::Quote { .. }))
+    {
+        let quote = Style::parse(QUOTE_STYLE).expect("valid style");
+        root = Some(match root {
+            Some(root) => root.combine(&quote),
+            None => quote,
+        });
+    }
+    root
+}
+
 fn stack_style(
+    root: Option<&Style>,
     heading: Option<&Style>,
     inline: Option<Style>,
     link: Option<&str>,
     extra: Option<Style>,
 ) -> Option<Style> {
     let mut current: Option<Style> = None;
-    for layer in [heading.cloned(), inline, link.map(link_style), extra] {
+    for layer in [
+        root.cloned(),
+        heading.cloned(),
+        inline,
+        link.map(link_style),
+        extra,
+    ] {
         let Some(next) = layer else { continue };
         current = Some(match current {
             Some(previous) => previous.combine(&next),
@@ -344,7 +452,12 @@ const MAX_NESTING: usize = 20;
 /// block-level start must call this first, or it overwrites that text — which
 /// silently deleted the item's own content and reordered code blocks ahead of
 /// the paragraph introducing them.
-fn flush_pending(current: &mut Option<Text>, blocks: &mut Vec<Block>, stack: &mut [Frame]) {
+fn flush_pending(
+    current: &mut Option<Text>,
+    blocks: &mut Vec<Block>,
+    stack: &mut [Frame],
+    justify: Justify,
+) {
     let Some(mut text) = current.take() else {
         return;
     };
@@ -353,7 +466,7 @@ fn flush_pending(current: &mut Option<Text>, blocks: &mut Vec<Block>, stack: &mu
     if text.plain().is_empty() {
         return;
     }
-    text.set_justify(Justify::Left);
+    text.set_justify(justify);
     sink(blocks, stack).push(Block::Text(text));
 }
 
@@ -365,13 +478,15 @@ fn flush_pending(current: &mut Option<Text>, blocks: &mut Vec<Block>, stack: &mu
 /// rendered as `~~a label`, characters reordered rather than restyled. Outside
 /// one the buffer may not be open yet, so it still has to be created — routing
 /// through a plain `as_mut()` silently DROPPED the tilde instead.
-fn push_tilde(current: &mut Option<Text>, link_label: &mut Option<String>) {
+fn push_tilde(
+    current: &mut Option<Text>,
+    table: &mut Option<TableAccum>,
+    link_label: &mut Option<String>,
+) {
     if let Some(label) = link_label.as_mut() {
         label.push('~');
     } else {
-        current
-            .get_or_insert_with(|| Text::new(""))
-            .append("~", None);
+        inline_target(current, table).append("~", None);
     }
 }
 
@@ -390,7 +505,306 @@ fn append_break(
     }
 }
 
-fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
+/// One inline token while pairing tildes: an untouched event, literal source
+/// text, a `~~` delimiter, or a delimiter that has been paired.
+enum Piece<'a> {
+    Event(Event<'a>, std::ops::Range<usize>),
+    Literal(std::ops::Range<usize>),
+    Tilde(std::ops::Range<usize>),
+    Open(std::ops::Range<usize>),
+    Close(std::ops::Range<usize>),
+}
+
+/// A `~~` delimiter in markdown-it's `Delimiter` sense. `length` is always 0
+/// for strikethrough (upstream disables the "rule of 3"), so it is omitted.
+struct Delimiter {
+    piece: usize,
+    open: bool,
+    close: bool,
+    end: Option<usize>,
+    /// Innermost emphasis/strong span containing the delimiter. markdown-it
+    /// pairs `*`/`_` and `~` in one pass, and a matched pair's jump hides every
+    /// delimiter inside it from later closers; tildes are never paired across
+    /// an emphasis span here for the same reason (see DIVERGENCES §21).
+    emphasis: usize,
+}
+
+fn is_md_ascii_punct(c: char) -> bool {
+    c.is_ascii_punctuation()
+}
+
+/// markdown-it's `isPunctChar`: ASCII punctuation or a Unicode punctuation
+/// category. `char::is_ascii_punctuation` plus general punctuation/symbols is
+/// the closest std-only equivalent.
+fn is_punct_char(c: char) -> bool {
+    c.is_ascii_punctuation() || (!c.is_alphanumeric() && !c.is_whitespace() && !c.is_control())
+}
+
+/// Port of markdown-it's `StateInline.scanDelims` for a tilde run
+/// (`canSplitWord = True`), returning `(can_open, can_close)`.
+fn scan_delims(last: char, next: char) -> (bool, bool) {
+    let last_punct = is_md_ascii_punct(last) || is_punct_char(last);
+    let next_punct = is_md_ascii_punct(next) || is_punct_char(next);
+    let last_space = last.is_whitespace();
+    let next_space = next.is_whitespace();
+    let left_flanking = !(next_space || (next_punct && !(last_space || last_punct)));
+    let right_flanking = !(last_space || (last_punct && !(next_space || next_punct)));
+    (left_flanking, right_flanking)
+}
+
+/// Port of markdown-it's `balance_pairs.processDelimiters` for one delimiter
+/// list (a single marker, lengths 0).
+fn process_delimiters(delimiters: &mut [Delimiter]) {
+    if delimiters.is_empty() {
+        return;
+    }
+    // `openersBottom[marker]`, indexed by `closer.open ? 3 : 0` (length % 3 = 0).
+    let mut openers_bottom = [-1isize; 6];
+    let mut header = 0usize;
+    let mut last_piece: isize = -2;
+    let mut jumps: Vec<usize> = Vec::with_capacity(delimiters.len());
+    for closer_index in 0..delimiters.len() {
+        jumps.push(0);
+        if last_piece != delimiters[closer_index].piece as isize - 1 {
+            header = closer_index;
+        }
+        last_piece = delimiters[closer_index].piece as isize;
+        if !delimiters[closer_index].close {
+            continue;
+        }
+        let slot = if delimiters[closer_index].open { 3 } else { 0 };
+        let min_opener = openers_bottom[slot];
+        let mut opener_index = header as isize - jumps[header] as isize - 1;
+        let mut new_min = opener_index;
+        while opener_index > min_opener {
+            let i = opener_index as usize;
+            let usable = delimiters[i].open
+                && delimiters[i].end.is_none()
+                && delimiters[i].emphasis == delimiters[closer_index].emphasis;
+            if usable {
+                let last_jump = if i > 0 && !delimiters[i - 1].open {
+                    jumps[i - 1] + 1
+                } else {
+                    0
+                };
+                jumps[closer_index] = closer_index - i + last_jump;
+                jumps[i] = last_jump;
+                delimiters[closer_index].open = false;
+                delimiters[i].end = Some(closer_index);
+                delimiters[i].close = false;
+                new_min = -1;
+                last_piece = -2;
+                break;
+            }
+            opener_index -= jumps[i] as isize + 1;
+        }
+        if new_min != -1 {
+            openers_bottom[slot] = new_min;
+        }
+    }
+}
+
+/// Pair tilde runs the way upstream's markdown-it does (its `strikethrough`
+/// tokenize + `balance_pairs` + postProcess), over pulldown-cmark events parsed
+/// *without* strikethrough.
+///
+/// Per inline run (a paragraph, heading, table cell or tight list item, with a
+/// link label as its own nested scope, as markdown-it scopes delimiters per
+/// opening token): each run of two or more tildes in literal text becomes an
+/// optional leading `~` (odd runs) plus `~~` delimiters; paired delimiters turn
+/// into `Strikethrough` events, and a lone `~` left before a closer moves after
+/// it. `a ~~~x~~~ b` renders `a ~` + struck `x` + `~ b`, as upstream does.
+fn pair_strikethrough<'a>(
+    source: &'a str,
+    events: impl Iterator<Item = (Event<'a>, std::ops::Range<usize>)>,
+) -> Vec<(Event<'a>, std::ops::Range<usize>)> {
+    let mut pieces: Vec<Piece<'a>> = Vec::new();
+    // Delimiter lists: one per open scope; a link pushes a nested one.
+    let mut scopes: Vec<Vec<Delimiter>> = vec![Vec::new()];
+    let mut finished: Vec<Vec<Delimiter>> = Vec::new();
+    let mut emphasis_stack: Vec<usize> = Vec::new();
+    let mut next_emphasis = 1usize;
+    let mut in_code = false;
+    let mut in_cell = false;
+    let mut image_depth = 0usize;
+
+    let neighbour = |c: Option<char>, in_cell: bool| match c {
+        None => ' ',
+        // markdown-it parses a trimmed cell, so a pipe reads as the edge.
+        Some('|') if in_cell => ' ',
+        Some(c) => c,
+    };
+
+    for (event, range) in events {
+        if image_depth > 0 {
+            match &event {
+                Event::Start(Tag::Image { .. }) => image_depth += 1,
+                Event::End(TagEnd::Image) => image_depth -= 1,
+                _ => {}
+            }
+            pieces.push(Piece::Event(event, range));
+            continue;
+        }
+        match &event {
+            Event::Text(text) if !in_code && **text == source[range.clone()] => {
+                // Merge with a directly preceding literal so a run split across
+                // two text events is scanned as one.
+                let mut start = range.start;
+                if let Some(Piece::Literal(previous)) = pieces.last() {
+                    if previous.end == range.start {
+                        start = previous.start;
+                        pieces.pop();
+                    }
+                }
+                let end = range.end;
+                let bytes = source.as_bytes();
+                let mut at = start;
+                let mut literal_from = start;
+                while at < end {
+                    if bytes[at] != b'~' {
+                        at += 1;
+                        continue;
+                    }
+                    let run_start = at;
+                    while at < end && bytes[at] == b'~' {
+                        at += 1;
+                    }
+                    let length = at - run_start;
+                    if length < 2 {
+                        continue;
+                    }
+                    if literal_from < run_start {
+                        pieces.push(Piece::Literal(literal_from..run_start));
+                    }
+                    let last = neighbour(source[..run_start].chars().next_back(), in_cell);
+                    let next = neighbour(source[at..].chars().next(), in_cell);
+                    let (open, close) = scan_delims(last, next);
+                    let mut from = run_start;
+                    if length % 2 == 1 {
+                        pieces.push(Piece::Literal(from..from + 1));
+                        from += 1;
+                    }
+                    let emphasis = emphasis_stack.last().copied().unwrap_or(0);
+                    while from < at {
+                        pieces.push(Piece::Tilde(from..from + 2));
+                        scopes.last_mut().expect("scope").push(Delimiter {
+                            piece: pieces.len() - 1,
+                            open,
+                            close,
+                            end: None,
+                            emphasis,
+                        });
+                        from += 2;
+                    }
+                    literal_from = at;
+                }
+                if literal_from < end {
+                    pieces.push(Piece::Literal(literal_from..end));
+                }
+                continue;
+            }
+            Event::Start(Tag::Emphasis | Tag::Strong) => {
+                emphasis_stack.push(next_emphasis);
+                next_emphasis += 1;
+            }
+            Event::End(TagEnd::Emphasis | TagEnd::Strong) => {
+                emphasis_stack.pop();
+            }
+            Event::Start(Tag::Link { .. }) => scopes.push(Vec::new()),
+            Event::End(TagEnd::Link) => {
+                if scopes.len() > 1 {
+                    finished.push(scopes.pop().expect("link scope"));
+                }
+            }
+            Event::Start(Tag::Image { .. }) => image_depth = 1,
+            Event::Text(_)
+            | Event::Code(_)
+            | Event::InlineHtml(_)
+            | Event::SoftBreak
+            | Event::HardBreak
+            | Event::FootnoteReference(_)
+            | Event::InlineMath(_) => {}
+            // Anything else is block structure: the inline run ends here.
+            _ => {
+                match &event {
+                    Event::Start(Tag::CodeBlock(_)) => in_code = true,
+                    Event::End(TagEnd::CodeBlock) => in_code = false,
+                    Event::Start(Tag::TableCell) => in_cell = true,
+                    Event::End(TagEnd::TableCell) => in_cell = false,
+                    _ => {}
+                }
+                finished.append(&mut scopes);
+                scopes.push(Vec::new());
+                emphasis_stack.clear();
+            }
+        }
+        pieces.push(Piece::Event(event, range));
+    }
+    finished.append(&mut scopes);
+
+    // Pair, then mark: markdown-it's strikethrough `_postProcess`.
+    let mut lone_markers: Vec<usize> = Vec::new();
+    for mut delimiters in finished {
+        process_delimiters(&mut delimiters);
+        for delimiter in &delimiters {
+            let Some(end) = delimiter.end else { continue };
+            let closer = delimiters[end].piece;
+            if let Piece::Tilde(range) = &pieces[delimiter.piece] {
+                pieces[delimiter.piece] = Piece::Open(range.clone());
+            }
+            if let Piece::Tilde(range) = &pieces[closer] {
+                pieces[closer] = Piece::Close(range.clone());
+            }
+            if let Some(Piece::Literal(range)) = closer.checked_sub(1).map(|i| &pieces[i]) {
+                if &source[range.clone()] == "~" {
+                    lone_markers.push(closer - 1);
+                }
+            }
+        }
+    }
+    // An odd run is split as `~` + `~~`…, so a closer can leave its lone `~`
+    // in front of it: move it after the closing tags.
+    while let Some(i) = lone_markers.pop() {
+        let mut j = i + 1;
+        while j < pieces.len() && matches!(pieces[j], Piece::Close(_)) {
+            j += 1;
+        }
+        j -= 1;
+        if i != j {
+            pieces.swap(i, j);
+        }
+    }
+
+    // markdown-it's `fragments_join`: adjacent text tokens become one, so a
+    // run like `a ~` renders as a single span rather than one per piece.
+    let mut out: Vec<(Event<'a>, std::ops::Range<usize>)> = Vec::with_capacity(pieces.len());
+    for piece in pieces {
+        let (event, range) = match piece {
+            Piece::Event(event, range) => (event, range),
+            Piece::Literal(range) | Piece::Tilde(range) => {
+                (Event::Text(CowStr::Borrowed(&source[range.clone()])), range)
+            }
+            Piece::Open(range) => (Event::Start(Tag::Strikethrough), range),
+            Piece::Close(range) => (Event::End(TagEnd::Strikethrough), range),
+        };
+        if let (Event::Text(text), Some((Event::Text(previous), previous_range))) =
+            (&event, out.last_mut())
+        {
+            let mut joined = previous.to_string();
+            joined.push_str(text);
+            *previous = CowStr::Boxed(joined.into_boxed_str());
+            *previous_range =
+                previous_range.start.min(range.start)..previous_range.end.max(range.end);
+            continue;
+        }
+        out.push((event, range));
+    }
+    out
+}
+
+fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
+    let hyperlinks = !md.no_hyperlinks;
+    let paragraph_justify = md.justify.unwrap_or(Justify::Left);
     let mut blocks: Vec<Block> = Vec::new();
     let mut current: Option<Text> = None;
     let mut heading_style: Option<Style> = None;
@@ -432,12 +846,15 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
     // The table being assembled while inside a GFM table.
     let mut table: Option<TableAccum> = None;
 
-    let options = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH;
-    // Offsets, not just events: pulldown-cmark accepts a *single* tilde as a
-    // strikethrough delimiter, while upstream's markdown-it requires two. Prose
-    // like `costs ~5~10` was silently restyled and its tildes deleted. The
-    // source range is the only way to tell `~x~` from `~~x~~` after parsing.
-    for (event, range) in Parser::new_ext(source, options).into_offset_iter() {
+    // Strikethrough is *not* enabled in pulldown-cmark: it pairs tilde runs by
+    // GFM rules (equal-length runs, single tildes allowed), while upstream's
+    // markdown-it splits runs into `~~` delimiters and pairs those. The
+    // tildes arrive as literal text and `pair_strikethrough` reproduces
+    // markdown-it's pairing, emitting ordinary `Strikethrough` events whose
+    // range is the `~~` delimiter.
+    let options = Options::ENABLE_TABLES;
+    let events = Parser::new_ext(source, options).into_offset_iter();
+    for (event, range) in pair_strikethrough(source, events) {
         // Everything between an image's brackets is its alt text, and upstream
         // takes that from the *raw* markdown (`token.content`) rather than from
         // parsed inline events: `![alt *em*](u)` shows `alt *em*`, asterisks and
@@ -452,7 +869,9 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
         }
         // Upstream's `new_line = element.new_line` bookkeeping, which runs for
         // every element that closes. Everything declares `new_line = True`
-        // except an image and a rule, and only an image ever reads the flag.
+        // except an image and a rule. Images and closing quotes read the
+        // preceding value before their own closing event changes it.
+        let preceding_new_line = new_line;
         match &event {
             Event::End(
                 TagEnd::Paragraph
@@ -464,14 +883,18 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
                 | TagEnd::Table
                 | TagEnd::TableHead
                 | TagEnd::TableRow
-                | TagEnd::TableCell,
+                | TagEnd::TableCell
+                | TagEnd::HtmlBlock,
             ) => new_line = true,
             Event::Rule => new_line = false,
             _ => {}
         }
         match event {
+            Event::End(TagEnd::HtmlBlock) => {
+                sink(&mut blocks, &mut stack).push(Block::Html);
+            }
             Event::Rule => {
-                flush_pending(&mut current, &mut blocks, &mut stack);
+                flush_pending(&mut current, &mut blocks, &mut stack, paragraph_justify);
                 sink(&mut blocks, &mut stack).push(Block::Rule);
             }
             Event::Start(Tag::Link {
@@ -507,48 +930,36 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
                 if let Some(url) = url.filter(|_| !hyperlinks) {
                     let label = label.unwrap_or_default();
                     let inline = inline_style(strong, emphasis, strike);
-                    if let Some(acc) = table.as_mut().filter(|a| a.in_cell) {
-                        // The URL is part of the cell's *text*, so it counts
-                        // towards the column width — a table of links laid out
-                        // against the bare label is far too narrow.
-                        acc.cur_cell.push_str(&label);
-                        acc.cur_cell.push_str(" (");
-                        acc.cur_cell.push_str(&url);
-                        acc.cur_cell.push(')');
-                    } else {
-                        let block = current.get_or_insert_with(|| Text::new(""));
-                        let layer = |style: Option<Style>| {
-                            stack_style(heading_style.as_ref(), inline.clone(), None, style)
-                        };
-                        // An empty label appends a zero-length span upstream,
-                        // which renders as nothing at all.
-                        if !label.is_empty() {
-                            block.append(
-                                &label,
-                                layer(Style::parse(LINK_STYLE).ok()).map(Into::into),
-                            );
-                        }
-                        block.append(" (", layer(None).map(Into::into));
-                        block.append(
-                            &url,
-                            layer(Style::parse(LINK_URL_STYLE).ok()).map(Into::into),
-                        );
-                        block.append(")", layer(None).map(Into::into));
+                    // In a table cell the URL is part of the cell's text, so it
+                    // counts towards the column width, as upstream measures it.
+                    let block = inline_target(&mut current, &mut table);
+                    let layer = |style: Option<Style>| {
+                        stack_style(
+                            quote_root(md, &stack).as_ref(),
+                            heading_style.as_ref(),
+                            inline.clone(),
+                            None,
+                            style,
+                        )
+                    };
+                    // An empty label appends a zero-length span upstream,
+                    // which renders as nothing at all.
+                    if !label.is_empty() {
+                        block.append(&label, layer(Style::parse(LINK_STYLE).ok()).map(Into::into));
                     }
+                    block.append(" (", layer(None).map(Into::into));
+                    block.append(
+                        &url,
+                        layer(Style::parse(LINK_URL_STYLE).ok()).map(Into::into),
+                    );
+                    block.append(")", layer(None).map(Into::into));
                 }
             }
-            // KNOWN DIVERGENCE (not a design choice): an image inside a table
-            // cell keeps its alt text in the cell, where upstream hoists it out
-            // and leaves the cell empty — `TableDataElement` does not override
-            // `on_child_close`, so the base implementation renders the image
-            // immediately, above the table. This repo's own README badge table
-            // hits it: upstream prints four `🌆 …` rows and an empty column,
-            // while we keep the alt text and widen the table by 13 cells.
-            // Hoisting out of a cell needs the table accumulator to be able to
-            // emit blocks, which it cannot yet do. Tracked as a follow-up.
-            Event::Start(Tag::Image { dest_url, .. })
-                if !table.as_ref().is_some_and(|acc| acc.in_cell) =>
-            {
+            // Images are emitted immediately rather than appended to their
+            // parent element. `TableDataElement` uses that same base
+            // `on_child_close`, so an image in a cell is hoisted above the
+            // eventual table and contributes no text to the cell.
+            Event::Start(Tag::Image { dest_url, .. }) => {
                 image = Some(dest_url.to_string());
                 image_span = None;
             }
@@ -575,6 +986,7 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
                             alt,
                             link.as_deref(),
                             stack_style(
+                                quote_root(md, &stack).as_ref(),
                                 heading_style.as_ref(),
                                 inline_style(strong, emphasis, strike),
                                 link.as_deref().filter(|_| hyperlinks),
@@ -582,14 +994,17 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
                             ),
                             hyperlinks,
                         ),
-                        joins_next: stack.is_empty(),
+                        // A table is a container too, even though it uses a
+                        // dedicated accumulator rather than a `Frame`. Its own
+                        // render begins after the hoisted image's open row.
+                        joins_next: stack.is_empty() && table.is_none(),
                         leading_break: new_line,
                     });
                     new_line = false;
                 }
             }
             Event::Start(Tag::CodeBlock(kind)) => {
-                flush_pending(&mut current, &mut blocks, &mut stack);
+                flush_pending(&mut current, &mut blocks, &mut stack, paragraph_justify);
                 let language = match kind {
                     CodeBlockKind::Fenced(info) => {
                         // The info string is `lang` (possibly with extra tokens).
@@ -608,11 +1023,12 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
                     sink(&mut blocks, &mut stack).push(Block::Code {
                         language,
                         code: source,
+                        theme: md.code_theme.clone(),
                     });
                 }
             }
             Event::Start(Tag::Table(aligns)) => {
-                flush_pending(&mut current, &mut blocks, &mut stack);
+                flush_pending(&mut current, &mut blocks, &mut stack, paragraph_justify);
                 table = Some(TableAccum {
                     alignments: aligns.into_iter().map(alignment_justify).collect(),
                     ..TableAccum::default()
@@ -653,7 +1069,7 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
             Event::Start(Tag::TableCell) => {
                 if let Some(acc) = table.as_mut() {
                     acc.in_cell = true;
-                    acc.cur_cell = String::new();
+                    acc.cur_cell = Text::new("");
                 }
             }
             Event::End(TagEnd::TableCell) => {
@@ -664,7 +1080,7 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
                 }
             }
             Event::Start(Tag::BlockQuote(_)) => {
-                flush_pending(&mut current, &mut blocks, &mut stack);
+                flush_pending(&mut current, &mut blocks, &mut stack, paragraph_justify);
                 if stack.len() >= MAX_NESTING {
                     suppressed += 1;
                 } else {
@@ -675,11 +1091,14 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
                 if suppressed > 0 {
                     suppressed -= 1;
                 } else if let Some(Frame::Quote { blocks: quoted }) = stack.pop() {
-                    sink(&mut blocks, &mut stack).push(Block::Quote(quoted));
+                    sink(&mut blocks, &mut stack).push(Block::Quote {
+                        blocks: quoted,
+                        leading_break: preceding_new_line,
+                    });
                 }
             }
             Event::Start(Tag::List(first)) => {
-                flush_pending(&mut current, &mut blocks, &mut stack);
+                flush_pending(&mut current, &mut blocks, &mut stack, paragraph_justify);
                 if stack.len() >= MAX_NESTING {
                     suppressed += 1;
                 } else {
@@ -708,13 +1127,15 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
                 // in. A loose item simply resets this at its Start(Paragraph).
                 current = Some(Text::new(""));
                 heading_style = None;
-                justify = Justify::Left;
+                justify = paragraph_justify;
             }
             Event::End(TagEnd::Item) => {
                 // A *tight* list emits its item text without a Paragraph, so
-                // anything still pending belongs to this item.
+                // anything still pending belongs to this item. markdown-it still
+                // emits a (hidden) paragraph for it, so upstream justifies it as
+                // a paragraph.
                 if let Some(mut text) = current.take() {
-                    text.set_justify(Justify::Left);
+                    text.set_justify(paragraph_justify);
                     sink(&mut blocks, &mut stack).push(Block::Text(text));
                 }
                 if item_suppressed > 0 {
@@ -738,13 +1159,14 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
                 }
             }
             Event::Start(Tag::Paragraph) => {
-                flush_pending(&mut current, &mut blocks, &mut stack);
+                flush_pending(&mut current, &mut blocks, &mut stack, paragraph_justify);
                 current = Some(Text::new(""));
                 heading_style = None;
-                justify = Justify::Left;
+                // `Paragraph.create`: `markdown.justify or "left"`.
+                justify = paragraph_justify;
             }
             Event::Start(Tag::Heading { level, .. }) => {
-                flush_pending(&mut current, &mut blocks, &mut stack);
+                flush_pending(&mut current, &mut blocks, &mut stack, paragraph_justify);
                 let (style, heading_justify) = heading_format(heading_level(level));
                 current = Some(Text::new(""));
                 heading_style = Some(style);
@@ -757,8 +1179,11 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
                         .rposition(|f| matches!(f, Frame::Item { .. } | Frame::Quote { .. }))
                         .is_some_and(|i| matches!(stack[i], Frame::Quote { .. }));
                     if in_quote {
-                        // Quote paragraph: magenta base so its padding is magenta too.
-                        text.set_base_style(Style::parse("magenta").expect("valid style"));
+                        // Quote paragraph: the quote style (over the document
+                        // style) as its base, so its padding carries it too.
+                        if let Some(root) = quote_root(md, &stack) {
+                            text.set_base_style(root);
+                        }
                     }
                     // A heading's style rides on each run (upstream pushes
                     // `markdown.h<n>` onto the style stack at `heading_open`, so
@@ -790,13 +1215,13 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
                     // front of the label — `[~a~ label]` came out as
                     // `~~a label`, characters reordered rather than restyled.
                     single_tilde += 1;
-                    push_tilde(&mut current, &mut link_label);
+                    push_tilde(&mut current, &mut table, &mut link_label);
                 }
             }
             Event::End(TagEnd::Strikethrough) => {
                 if single_tilde > 0 {
                     single_tilde -= 1;
-                    push_tilde(&mut current, &mut link_label);
+                    push_tilde(&mut current, &mut table, &mut link_label);
                 } else {
                     strike = strike.saturating_sub(1);
                 }
@@ -806,19 +1231,17 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
             Event::Text(text) => {
                 if let Some(label) = link_label.as_mut() {
                     label.push_str(&text);
-                } else if let Some(acc) = table.as_mut().filter(|a| a.in_cell) {
-                    // Table cells collect plain text; inline styling within a cell
-                    // is a documented follow-up (see the Markdown issue).
-                    acc.cur_cell.push_str(&text);
                 } else if let Some((_, source)) = code.as_mut() {
                     source.push_str(&text);
                 } else {
-                    // Open a buffer if none is active. In a tight list item the
+                    // A table cell appends under the current style, exactly as
+                    // a paragraph does (`TableDataElement.on_text`). Otherwise
+                    // open a buffer if none is active: in a tight list item the
                     // text after a nested block arrives bare, with the previous
-                    // buffer already flushed by that block's start — matching
-                    // on `as_mut()` here silently dropped it.
-                    let block = current.get_or_insert_with(|| Text::new(""));
+                    // buffer already flushed by that block's start.
+                    let block = inline_target(&mut current, &mut table);
                     let style = stack_style(
+                        quote_root(md, &stack).as_ref(),
                         heading_style.as_ref(),
                         inline_style(strong, emphasis, strike),
                         link.as_deref().filter(|_| hyperlinks),
@@ -830,19 +1253,41 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
             Event::Code(text) => {
                 if let Some(label) = link_label.as_mut() {
                     label.push_str(&text);
-                } else if let Some(acc) = table.as_mut().filter(|a| a.in_cell) {
-                    acc.cur_cell.push_str(&text);
                 } else {
-                    // Open a buffer if none is active. In a tight list item the
-                    // text after a nested block arrives bare, with the previous
-                    // buffer already flushed by that block's start — matching
-                    // on `as_mut()` here silently dropped it.
-                    let block = current.get_or_insert_with(|| Text::new(""));
+                    // A table cell or the open buffer, as for plain text.
+                    let block = inline_target(&mut current, &mut table);
                     // `markdown.code` is pushed on TOP of the link, so a link
                     // whose whole label is inline code — ``[`rich`](url)`` —
                     // keeps its destination. Applying the code style alone
                     // discarded it.
+                    if let Some(lexer) = &md.inline_code_lexer {
+                        // `MarkdownContext.on_text` for `code_inline` with a
+                        // lexer: the highlighted text, right-stripped, assembled
+                        // under the current style (no `markdown.code` layer).
+                        let theme = md.inline_code_theme.as_ref().or(md.code_theme.as_ref());
+                        let mut syntax = Syntax::new(text.to_string(), lexer.as_str());
+                        if let Some(theme) = theme {
+                            syntax = syntax.theme(theme.as_str());
+                        }
+                        let mut highlighted = syntax.highlight();
+                        highlighted.rstrip();
+                        let style = stack_style(
+                            quote_root(md, &stack).as_ref(),
+                            heading_style.as_ref(),
+                            inline_style(strong, emphasis, strike),
+                            link.as_deref().filter(|_| hyperlinks),
+                            None,
+                        );
+                        let mut fragment = Text::new("");
+                        if let Some(style) = style {
+                            fragment.set_base_style(style);
+                        }
+                        let fragment = fragment.append_text(&highlighted);
+                        *block = std::mem::take(block).append_text(&fragment);
+                        continue;
+                    }
                     let style = stack_style(
+                        quote_root(md, &stack).as_ref(),
                         heading_style.as_ref(),
                         inline_style(strong, emphasis, strike),
                         link.as_deref().filter(|_| hyperlinks),
@@ -859,6 +1304,7 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
                 link_label.as_mut(),
                 " ",
                 stack_style(
+                    quote_root(md, &stack).as_ref(),
                     heading_style.as_ref(),
                     inline_style(strong, emphasis, strike),
                     link.as_deref().filter(|_| hyperlinks),
@@ -870,6 +1316,7 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
                 link_label.as_mut(),
                 "\n",
                 stack_style(
+                    quote_root(md, &stack).as_ref(),
                     heading_style.as_ref(),
                     inline_style(strong, emphasis, strike),
                     link.as_deref().filter(|_| hyperlinks),
@@ -884,7 +1331,14 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
 
 impl Renderable for Markdown {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        let mut lines = render_blocks(&self.blocks, console, options, options.max_width, true);
+        let mut lines = render_blocks(
+            &self.blocks,
+            console,
+            options,
+            options.max_width,
+            true,
+            self.options.style.as_ref(),
+        );
 
         // Upstream's thematic-break element emits a trailing line break, which is
         // only observable when the rule is the document's last block: it adds one
@@ -933,6 +1387,7 @@ fn render_blocks(
     options: &ConsoleOptions,
     width: usize,
     top_level: bool,
+    root: Option<&Style>,
 ) -> Vec<Vec<Segment>> {
     let base = console.base_style();
     let mut lines: Vec<Vec<Segment>> = Vec::new();
@@ -941,7 +1396,33 @@ fn render_blocks(
     let mut join_previous = false;
 
     for (index, block) in blocks.iter().enumerate() {
-        let merge = std::mem::take(&mut join_previous);
+        let mut merge = std::mem::take(&mut join_previous);
+        // Consecutive images share their open row even when hoisted from a
+        // container. A closed cell/item sets leading_break and ends that row.
+        if matches!(
+            block,
+            Block::Image {
+                leading_break: false,
+                ..
+            }
+        ) && index > 0
+            && matches!(blocks[index - 1], Block::Image { .. })
+        {
+            merge = true;
+        }
+        // `new_line` before an image is a single line break, not the blank-row
+        // separator used between ordinary blocks. In particular, images
+        // hoisted from consecutive table rows must occupy consecutive output
+        // rows. It also cancels the preceding image's open-row join.
+        if matches!(
+            block,
+            Block::Image {
+                leading_break: true,
+                ..
+            }
+        ) {
+            merge = false;
+        }
         // A blank line precedes every non-first block, and every
         // list/quote/table (which upstream renders with a leading gap).
         // Blank lines between blocks are a *document* convention. Upstream puts
@@ -954,17 +1435,17 @@ fn render_blocks(
         let after_rule = index > 0 && matches!(blocks[index - 1], Block::Rule);
         // A list, quote or table carries its own leading gap, which survives even
         // after a rule; only the generic inter-block separator is suppressed.
-        let own_gap = matches!(
-            block,
-            Block::List { .. } | Block::Quote(_) | Block::Table { .. }
-        );
+        let own_gap = matches!(block, Block::List { .. } | Block::Table { .. });
         // An image emits no line break after itself, so the block that follows
         // one gets no separator at all — not even the leading gap a list, quote
         // or table would otherwise bring.
         let after_image = index > 0 && matches!(blocks[index - 1], Block::Image { .. });
         let separator = match block {
-            // An image carries its own decision, taken while parsing.
-            Block::Image { leading_break, .. } => top_level && *leading_break,
+            Block::Quote { leading_break, .. } => top_level && *leading_break && !after_image,
+            // After an ordinary element this is the usual blank-row gap;
+            // after an image (whose text has `end=""`) it is only a line break,
+            // represented above by declining to merge the two image rows.
+            Block::Image { leading_break, .. } => top_level && *leading_break && !after_image,
             _ if after_image => false,
             _ => top_level && (own_gap || (index > 0 && !after_rule)),
         };
@@ -1006,6 +1487,7 @@ fn render_blocks(
                         options,
                         width.saturating_sub(prefix_width),
                         false,
+                        root,
                     );
                     // A leading blank row would push the marker off its content.
                     let mut item_lines: Vec<Vec<Segment>> = item_lines
@@ -1015,21 +1497,46 @@ fn render_blocks(
                     pad_lines(&mut item_lines, width.saturating_sub(prefix_width));
                     for (line_index, line) in item_lines.into_iter().enumerate() {
                         let mut row = Vec::new();
+                        // `render_bullet`/`render_number`: continuation rows are
+                        // padded in the marker's own style.
                         if line_index == 0 {
                             row.push(Segment::new(prefix.clone(), Some(prefix_style.clone())));
                         } else {
-                            row.push(Segment::new(" ".repeat(prefix_width), None));
+                            row.push(Segment::new(
+                                " ".repeat(prefix_width),
+                                Some(prefix_style.clone()),
+                            ));
                         }
-                        row.extend(line);
+                        // `render_lines(self.elements, …, style=self.style)`: the
+                        // item style (the document style under `markdown.item`)
+                        // sits under its content and padding.
+                        match root {
+                            Some(root) => row.extend(Segment::apply_style(&line, root)),
+                            None => row.extend(line),
+                        }
                         lines.push(row);
                     }
                 }
             }
-            Block::Quote(quoted) => {
-                let prefix_style = Style::parse("magenta").expect("valid style");
+            Block::Html => {}
+            Block::Quote { blocks: quoted, .. } => {
+                // `context.enter_style("markdown.block_quote")`: the quote style
+                // over the enclosing style.
+                let quote = Style::parse(QUOTE_STYLE).expect("valid style");
+                let prefix_style = match root {
+                    Some(root) => root.combine(&quote),
+                    None => quote,
+                };
                 // Upstream renders quote content at `max_width - 4`.
                 let content_width = width.saturating_sub(4);
-                let quoted_lines = render_blocks(quoted, console, options, content_width, false);
+                let quoted_lines = render_blocks(
+                    quoted,
+                    console,
+                    options,
+                    content_width,
+                    false,
+                    Some(&prefix_style),
+                );
                 let mut quoted_lines: Vec<Vec<Segment>> = quoted_lines
                     .into_iter()
                     .skip_while(|line| line.is_empty())
@@ -1048,7 +1555,11 @@ fn render_blocks(
                     lines.push(row);
                 }
             }
-            Block::Code { language, code } => {
+            Block::Code {
+                language,
+                code,
+                theme,
+            } => {
                 // Render the code block via the Syntax renderable (functional,
                 // not byte-parity — see DIVERGENCES). Split its segment stream
                 // back into per-line rows for the shared join below.
@@ -1057,9 +1568,12 @@ fn render_blocks(
                 // Without word_wrap a long line was cropped dead at the console
                 // width and its tail discarded entirely — a README's install
                 // command lost half its flags, with no marker that anything went.
-                let syntax = Syntax::new(code.as_str(), language.as_str())
+                let mut syntax = Syntax::new(code.as_str(), language.as_str())
                     .word_wrap(true)
                     .padding(1);
+                if let Some(theme) = theme {
+                    syntax = syntax.theme(theme.as_str());
+                }
                 let inner = options.update_width(width);
                 let segments = syntax.rich_render(console, &inner);
                 lines.extend(Segment::split_lines(&segments));
@@ -1097,12 +1611,13 @@ fn render_blocks(
                 let header_style = Style::parse(TABLE_HEADER_STYLE).expect("valid style");
                 for (col, header) in headers.iter().enumerate() {
                     let justify = alignments.get(col).copied().unwrap_or(Justify::Left);
-                    table.add_column_justify(header.as_str(), justify);
+                    // `heading.stylize("markdown.table.header")`: a span over the
+                    // header's own inline spans, applied at render.
+                    table.add_column_text(header.clone(), justify);
                     table.column_header_style(header_style.clone());
                 }
                 for row in rows {
-                    let refs: Vec<&str> = row.iter().map(String::as_str).collect();
-                    table.add_row(&refs);
+                    table.add_row_text(row.clone());
                 }
                 let inner = options.update_width(width);
                 lines.extend(Segment::split_lines(&table.rich_render(console, &inner)));
@@ -1131,6 +1646,106 @@ mod tests {
             .width(20)
             .build();
         console.render_to_string(&Markdown::new(source))
+    }
+
+    fn render_with(markdown: &Markdown) -> String {
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(30)
+            .build();
+        console.render_to_string(markdown)
+    }
+
+    #[test]
+    fn code_theme_changes_the_code_block_colours() {
+        let source = "```rust\nfn main() {}\n```";
+        let default = render_with(&Markdown::new(source));
+        let themed = render_with(&Markdown::new(source).code_theme("InspiredGitHub"));
+        assert_ne!(default, themed);
+        // An unknown theme falls back to the default, as `Syntax::theme` does.
+        assert_eq!(
+            default,
+            render_with(&Markdown::new(source).code_theme("no-such-theme"))
+        );
+    }
+
+    #[test]
+    fn inline_code_lexer_highlights_instead_of_the_code_style() {
+        let source = "Call `fn main() {}` now.";
+        let plain = render_with(&Markdown::new(source));
+        // `markdown.code` (bold cyan on black) without a lexer.
+        assert!(plain.contains("\x1b[1;36;40m"), "{plain:?}");
+        let highlighted = render_with(&Markdown::new(source).inline_code_lexer("rust"));
+        assert!(!highlighted.contains("\x1b[1;36;40m"), "{highlighted:?}");
+        assert_ne!(plain, highlighted);
+        let text = Console::builder().width(30).no_color(true).build();
+        assert_eq!(
+            text.render_to_string(&Markdown::new(source).inline_code_lexer("rust")),
+            text.render_to_string(&Markdown::new(source)),
+            "highlighting changes colours only, never the text"
+        );
+        // `inline_code_theme` defaults to `code_theme`, and overrides it.
+        let by_code_theme = render_with(
+            &Markdown::new(source)
+                .inline_code_lexer("rust")
+                .code_theme("InspiredGitHub"),
+        );
+        let by_inline_theme = render_with(
+            &Markdown::new(source)
+                .inline_code_lexer("rust")
+                .inline_code_theme("InspiredGitHub"),
+        );
+        assert_ne!(highlighted, by_code_theme);
+        assert_eq!(by_code_theme, by_inline_theme);
+    }
+
+    #[test]
+    fn a_code_only_list_item_keeps_the_bullet_on_its_padding_row() {
+        let console = Console::builder().width(30).no_color(true).build();
+        assert_eq!(console.render_export(&Markdown::new("- ```\n  code\n  ```")),
+            "\n •                            \n    code                      \n                              \n");
+    }
+
+    #[test]
+    fn table_cell_images_share_a_row_until_the_cell_closes() {
+        let console = Console::builder().width(30).no_color(true).build();
+        let output = console.render_to_string(&Markdown::new(
+            "| h |\n|---|\n| ![a](x) ![b](y) |\n| ![c](z) |",
+        ));
+        assert!(output.starts_with("\n🌆 a 🌆 b \n🌆 c \n"), "{output:?}");
+    }
+
+    #[test]
+    fn quoted_rule_spacing_uses_the_last_closed_child() {
+        let console = Console::builder().width(30).no_color(true).build();
+        assert_eq!(
+            console.render_to_string(&Markdown::new("> ---")),
+            "▌ --------------------------\n▌                           "
+        );
+        let output = console.render_to_string(&Markdown::new("> ---\n>\n> text"));
+        assert!(
+            output.starts_with("\n▌ --------------------------\n"),
+            "{output:?}"
+        );
+    }
+
+    #[test]
+    fn ignored_html_blocks_keep_upstream_paragraph_spacing() {
+        let console = Console::builder().width(30).no_color(true).build();
+        for (source, expected) in [
+            (
+                "<div>hidden</div>\n\nParagraph",
+                "\nParagraph                     ",
+            ),
+            ("<div>hidden</div>", ""),
+            (
+                "A\n\n<div>x</div>\n\nB",
+                "A                             \n\n\nB                             ",
+            ),
+        ] {
+            assert_eq!(console.render_to_string(&Markdown::new(source)), expected);
+        }
     }
 
     #[test]
@@ -1867,5 +2482,31 @@ mod hyperlink_tests {
         let out = plain("~5~10 and ~x~\n", 40, false);
         assert!(out.contains("~5~10"), "tilde dropped: {out:?}");
         assert!(out.contains("~x~"), "tilde dropped: {out:?}");
+    }
+
+    /// Table cells render unstyled (#9), but their tildes still pair by
+    /// markdown-it's rules: upstream shows `~c~` with the `c` struck.
+    #[test]
+    fn table_cell_tildes_pair_like_markdown_it() {
+        let out = plain("| h |\n|---|\n| ~~~c~~~ |\n", 20, false);
+        assert!(out.contains("~c~"), "{out:?}");
+        assert!(!out.contains("~~"), "{out:?}");
+    }
+
+    /// Tildes in a fenced block are code, not delimiters.
+    #[test]
+    fn code_block_tildes_are_untouched() {
+        let out = plain("```\na ~~~x~~~ b\n```\n", 30, false);
+        assert!(out.contains("a ~~~x~~~ b"), "{out:?}");
+    }
+
+    /// DIVERGENCES §21: when a tilde pair would cross an emphasis span whose
+    /// opener comes after the tilde opener, upstream dissolves the emphasis
+    /// (`~~a *b~~ c*` strikes `a *b`); this port keeps pulldown-cmark's emphasis
+    /// and leaves the tildes literal. Pinned so a fix shows up here.
+    #[test]
+    fn tildes_crossing_a_later_emphasis_stay_literal() {
+        let out = plain("~~a *b~~ c*", 30, false);
+        assert!(out.contains("~~a b~~ c"), "{out:?}");
     }
 }

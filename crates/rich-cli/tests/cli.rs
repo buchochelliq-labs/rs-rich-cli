@@ -4,11 +4,13 @@
 //! (`--no-color`) output, so they check argument routing and library wiring
 //! without depending on exact ANSI bytes (that parity lives in the `rich` crate).
 
-use std::io::Write;
-use std::process::{Command, Stdio};
+use std::io::{Read, Write};
+use std::process::{Command, ExitStatus, Stdio};
 
 fn bin() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_rich"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rich"));
+    command.env_remove("NO_COLOR");
+    command
 }
 
 /// Run the CLI with `args`, feeding `stdin`, returning `(stdout, success)`.
@@ -24,6 +26,11 @@ fn run(args: &[&str], stdin: &str) -> (String, bool) {
 
 /// As [`run`], but keeps stderr — a failure that says nothing is its own defect.
 fn run_full(args: &[&str], stdin: &str) -> (String, String, bool) {
+    let (out, err, status) = run_status(args, stdin);
+    (out, err, status.success())
+}
+
+fn run_status(args: &[&str], stdin: &str) -> (String, String, ExitStatus) {
     let mut child = bin()
         .args(args)
         .env("COLUMNS", "80")
@@ -32,18 +39,32 @@ fn run_full(args: &[&str], stdin: &str) -> (String, String, bool) {
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn rich");
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(stdin.as_bytes())
-        .unwrap();
+    if let Err(error) = child.stdin.take().unwrap().write_all(stdin.as_bytes()) {
+        assert_eq!(
+            error.kind(),
+            std::io::ErrorKind::BrokenPipe,
+            "write test stdin"
+        );
+    }
     let output = child.wait_with_output().expect("wait rich");
     (
         String::from_utf8_lossy(&output.stdout).into_owned(),
         String::from_utf8_lossy(&output.stderr).into_owned(),
-        output.status.success(),
+        output.status,
     )
+}
+
+fn parse_json_report(stderr: &str) -> serde_json::Value {
+    assert_eq!(stderr.lines().count(), 1, "stderr: {stderr:?}");
+    serde_json::from_str(stderr.trim()).unwrap()
+}
+
+fn assert_error_report(report: &serde_json::Value, code: &str, exit_code: i32) {
+    assert_eq!(report["ok"], false);
+    assert_eq!(report["code"], code);
+    assert_eq!(report["exit_code"], exit_code);
+    assert_eq!(report["error"]["message"], report["message"]);
+    assert!(report.get("result").is_none(), "report: {report:?}");
 }
 
 #[test]
@@ -57,10 +78,286 @@ fn version_flag() {
 }
 
 #[test]
+fn watch_is_one_snapshot_when_stdout_is_redirected() {
+    let path = std::env::temp_dir().join(format!("rich-watch-{}.txt", std::process::id()));
+    std::fs::write(&path, "snapshot").unwrap();
+    let (out, err, status) = run_status(
+        &[
+            "--watch",
+            "--watch-interval",
+            "0.01",
+            "--no-color",
+            path.to_str().unwrap(),
+        ],
+        "",
+    );
+    let _ = std::fs::remove_file(&path);
+    assert!(status.success(), "stderr: {err:?}");
+    assert!(out.starts_with("snapshot"), "stdout: {out:?}");
+    assert_eq!(out.matches("snapshot").count(), 1);
+    assert!(err.is_empty(), "stderr: {err:?}");
+}
+
+#[test]
+fn csv_consumer_closing_the_pipe_is_successful_termination() {
+    let mut child = bin()
+        .args(["--csv", "-", "--no-color"])
+        .env("COLUMNS", "80")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let input = format!("name,value\n{}", "example,12345\n".repeat(10_000));
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
+    // Like `head`: consume a little, then close stdout while more rows remain.
+    let mut reader = child.stdout.take().unwrap();
+    reader.read_exact(&mut [0; 1]).unwrap();
+    drop(reader);
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success(), "stderr: {:?}", output.stderr);
+    assert!(output.stderr.is_empty(), "stderr: {:?}", output.stderr);
+}
+
+#[test]
 fn print_mode_renders_markup() {
     let (out, ok) = run(&["--no-color", "-p", "[bold]hi[/] there"], "");
     assert!(ok);
     assert_eq!(out, "hi there\n");
+}
+
+#[test]
+fn subcommands_route_to_existing_modes_without_breaking_flat_flags() {
+    let (subcommand_out, ok) = run(&["--no-color", "json", "-"], r#"{"a": 1}"#);
+    assert!(ok);
+    assert!(
+        subcommand_out.contains("{\n  \"a\": 1\n}"),
+        "got: {subcommand_out:?}"
+    );
+
+    let (legacy_out, ok) = run(&["--no-color", "--json", "-"], r#"{"a": 1}"#);
+    assert!(ok);
+    assert_eq!(subcommand_out, legacy_out);
+
+    let (out, ok) = run(&["--no-color", "print", "[bold]hi[/]"], "");
+    assert!(ok);
+    assert_eq!(out, "hi\n");
+}
+
+#[test]
+fn report_json_maps_usage_input_and_data_errors_to_stable_codes() {
+    let (out, err, status) = run_status(&["--report", "json", "--width", "nope"], "");
+    assert_eq!(status.code(), Some(2), "stderr: {err:?}");
+    assert!(out.is_empty());
+    let usage = parse_json_report(&err);
+    assert_error_report(&usage, "usage", 2);
+
+    let (out, err, status) = run_status(&["--report", "json", "missing.rs"], "");
+    assert_eq!(status.code(), Some(3), "stderr: {err:?}");
+    assert!(out.is_empty());
+    let input = parse_json_report(&err);
+    assert_error_report(&input, "input", 3);
+
+    let (out, err, status) = run_status(&["--report", "json", "--json", "-"], "{");
+    assert_eq!(status.code(), Some(4), "stderr: {err:?}");
+    assert!(out.is_empty());
+    let data = parse_json_report(&err);
+    assert_error_report(&data, "data", 4);
+}
+
+#[test]
+fn report_json_success_uses_the_common_result_envelope_on_stderr() {
+    let (out, err, status) = run_status(&["--report", "json", "--no-color", "-p", "hi"], "");
+    assert_eq!(status.code(), Some(0), "stderr: {err:?}");
+    assert_eq!(out, "hi\n");
+    let report = parse_json_report(&err);
+    assert_eq!(report["ok"], true);
+    assert_eq!(report["code"], "success");
+    assert_eq!(report["exit_code"], 0);
+    assert_eq!(report["result"], serde_json::json!({}));
+    assert!(report.get("error").is_none(), "stderr: {err:?}");
+}
+
+#[test]
+fn report_parse_errors_honor_the_last_report_option() {
+    for args in [
+        &["--machine-json", "--report", "human", "--width", "nope"][..],
+        &["--report", "json", "--report", "human", "--width", "nope"][..],
+    ] {
+        let (out, err, status) = run_status(args, "");
+        assert_eq!(status.code(), Some(2), "stderr: {err:?}");
+        assert!(out.is_empty());
+        assert!(err.starts_with("rich: "), "stderr: {err:?}");
+        assert!(serde_json::from_str::<serde_json::Value>(err.trim()).is_err());
+    }
+}
+
+#[test]
+fn machine_report_stderr_is_one_json_envelope_on_export_failure() {
+    let html = std::env::temp_dir()
+        .join(format!("rich-missing-dir-{}", std::process::id()))
+        .join("out.html");
+    let (out, err, status) = run_status(
+        &[
+            "--report",
+            "json",
+            "--export-html",
+            html.to_str().unwrap(),
+            "-p",
+            "hi",
+        ],
+        "",
+    );
+    assert_eq!(status.code(), Some(3), "stderr: {err:?}");
+    assert_eq!(out, "hi\n");
+    let error = parse_json_report(&err);
+    assert_error_report(&error, "input", 3);
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("failed to save HTML"),
+        "stderr: {err:?}"
+    );
+}
+
+#[test]
+fn jsonl_streaming_renders_records_and_fails_fast_on_malformed_lines() {
+    let (out, ok) = run(&["--no-color", "jsonl", "-"], "{\"a\":1}\n{\"b\":[2,3]}\n");
+    assert!(ok);
+    assert!(out.contains("\"a\": 1"), "got: {out:?}");
+    assert!(out.contains("\"b\": ["), "got: {out:?}");
+
+    let (out, err, status) = run_status(
+        &["--no-color", "--report", "json", "jsonl", "-"],
+        "{\"ok\":true}\nnot-json\n{\"never\":true}\n",
+    );
+    assert_eq!(status.code(), Some(4), "stderr: {err:?}");
+    assert!(out.contains("\"ok\": true"), "got: {out:?}");
+    assert!(
+        !out.contains("never"),
+        "stream should fail before third record: {out:?}"
+    );
+    let error: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
+    assert_eq!(error["code"], "data");
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("invalid JSONL at line 2"),
+        "stderr: {err:?}"
+    );
+
+    let (_out, err, status) = run_status(&["jsonl", "--pager", "-"], "{}\n");
+    assert_eq!(status.code(), Some(2), "stderr: {err:?}");
+    assert!(
+        err.contains("--pager cannot be combined with jsonl"),
+        "stderr: {err:?}"
+    );
+}
+
+#[test]
+fn jsonl_streaming_stops_successfully_when_stdout_closes() {
+    let mut child = bin()
+        .args(["jsonl", "-", "--no-color"])
+        .env("COLUMNS", "80")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let writer = std::thread::spawn(move || {
+        for _ in 0..10_000 {
+            if stdin.write_all(b"{\"a\":1}\n").is_err() {
+                break;
+            }
+        }
+    });
+    let mut reader = child.stdout.take().unwrap();
+    reader.read_exact(&mut [0; 1]).unwrap();
+    drop(reader);
+    writer.join().unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success(), "stderr: {:?}", output.stderr);
+    assert!(output.stderr.is_empty(), "stderr: {:?}", output.stderr);
+}
+
+#[test]
+fn log_streaming_formats_common_fields() {
+    let (out, ok) = run(
+        &["--no-color", "log", "-"],
+        r#"{"timestamp":"2026-09-13T20:00:00Z","level":"info","message":"started","request_id":"abc"}"#,
+    );
+    assert!(ok);
+    assert!(
+        out.contains("2026-09-13T20:00:00Z INFO started"),
+        "got: {out:?}"
+    );
+    assert!(out.contains(r#""request_id":"abc""#), "got: {out:?}");
+
+    let (out, ok) = run(
+        &["--no-color", "log", "-"],
+        r#"{"time":1690000000000,"level":30,"msg":"started","pid":42}"#,
+    );
+    assert!(ok);
+    assert!(
+        out.contains(r#"1690000000000 30 started {"pid":42}"#),
+        "got: {out:?}"
+    );
+}
+
+#[test]
+fn sanitize_neutralizes_esc_in_stdin_without_changing_default() {
+    let input = "A\x1b[2JB";
+    let (default_out, ok) = run(&["--no-color", "-"], input);
+    assert!(ok);
+    assert_eq!(default_out, "A\x1b[2JB\n");
+
+    let (sanitized, ok) = run(&["--no-color", "--sanitize", "-"], input);
+    assert!(ok);
+    assert_eq!(sanitized, "A␛[2JB\n");
+}
+
+#[test]
+fn sanitize_covers_decoded_json_strings() {
+    let (out, ok) = run(
+        &["--no-color", "--json", "--sanitize", "-"],
+        r#"{"v":"\u001b[2J"}"#,
+    );
+    assert!(ok);
+    assert!(out.contains("␛[2J"), "got: {out:?}");
+    assert!(!out.contains('\x1b'), "got raw ESC in {out:?}");
+}
+
+#[test]
+fn sanitize_covers_titles_and_captions() {
+    let (out, ok) = run(
+        &[
+            "--no-color",
+            "--sanitize",
+            "--width",
+            "30",
+            "--panel",
+            "square",
+            "--title",
+            "T\x1b[2J",
+            "--caption",
+            "C\x1b]0;x\u{7}",
+            "-p",
+            "body",
+        ],
+        "",
+    );
+    assert!(ok);
+    assert!(out.contains("T␛[2J"), "got: {out:?}");
+    assert!(out.contains("C␛]0;x␇"), "got: {out:?}");
+    assert!(!out.contains('\x1b'), "got raw ESC in {out:?}");
 }
 
 #[test]
@@ -80,6 +377,54 @@ fn json_mode_pretty_prints_from_stdin() {
     assert!(ok);
     // Pretty-printed with 2-space indent.
     assert!(out.contains("{\n  \"a\": 1"), "got: {out:?}");
+}
+
+#[cfg(feature = "json-escape-safe")]
+#[test]
+fn json_width_never_splits_an_escape_sequence() {
+    fn assert_complete_escapes(line: &str, width: &str, output: &str) {
+        let bytes = line.as_bytes();
+        let mut index = 0;
+        while index < bytes.len() {
+            if bytes[index] != b'\\' {
+                index += 1;
+                continue;
+            }
+            assert!(
+                index + 1 < bytes.len(),
+                "split escape at width {width}: {output:?}"
+            );
+            match bytes[index + 1] {
+                b'u' => {
+                    assert!(
+                        index + 6 <= bytes.len(),
+                        "split Unicode escape at width {width}: {output:?}"
+                    );
+                    assert!(bytes[index + 2..index + 6]
+                        .iter()
+                        .all(u8::is_ascii_hexdigit));
+                    index += 6;
+                }
+                b'"' | b'\\' | b'/' | b'b' | b'f' | b'n' | b'r' | b't' => index += 2,
+                other => panic!("invalid JSON escape {other:?} at width {width}: {output:?}"),
+            }
+        }
+    }
+
+    let input = r#"{"v":"a\"b\\c\nd\u0001e"}"#;
+    for (width, expected) in [
+        (8, "{\n  \"v\": \"\n}\n"),
+        (10, "{\n  \"v\": \"a\n}\n"),
+        (12, "{\n  \"v\": \"a\\\"b\n}\n"),
+    ] {
+        let width = width.to_string();
+        let (out, ok) = run(&["--no-color", "--json", "--width", &width, "-"], input);
+        assert!(ok, "--json failed at width {width}");
+        assert_eq!(out, expected, "unexpected display at width {width}");
+        for line in out.lines() {
+            assert_complete_escapes(line, &width, &out);
+        }
+    }
 }
 
 #[test]
@@ -165,7 +510,7 @@ fn a_nonsense_threshold_is_rejected_rather_than_disabling_the_gate() {
 #[test]
 fn a_valid_threshold_still_gates() {
     let (before, after) = diff_fixtures();
-    let (_out, over) = run(
+    let (_out, err, over) = run_status(
         &[
             "--diff",
             &before,
@@ -177,8 +522,12 @@ fn a_valid_threshold_still_gates() {
         ],
         "",
     );
-    assert!(!over, "5.4% change against a 2% limit must fail");
-    let (_out, under) = run(
+    assert_eq!(
+        over.code(),
+        Some(5),
+        "5.4% change against a 2% limit must fail as a gate; stderr: {err}"
+    );
+    let (out, err, under) = run_full(
         &[
             "--diff",
             &before,
@@ -190,7 +539,10 @@ fn a_valid_threshold_still_gates() {
         ],
         "",
     );
-    assert!(under, "5.4% change against a 90% limit must pass");
+    assert!(
+        under,
+        "5.4% change against a 90% limit must pass; stdout: {out}; stderr: {err}"
+    );
 }
 
 /// The gate compared full precision against a one-decimal display, so a limit
@@ -200,22 +552,30 @@ fn a_valid_threshold_still_gates() {
 #[test]
 fn the_threshold_matches_the_percentage_it_prints() {
     let (before, after) = diff_fixtures();
-    let (out, ok) = run(
-        &[
-            "--diff",
-            &before,
-            &after,
-            "--image-mode",
-            "none",
-            "--threshold",
-            "5.4",
-        ],
-        "",
-    );
-    assert!(
-        ok,
-        "a limit equal to the reported figure must not fail; got: {out}"
-    );
+    for (limit, expected_ok, verdict) in [
+        ("5.4", true, "OK 5.4% changed, within 5.4%"),
+        ("5.39", true, "OK 5.4% changed, within 5.4%"),
+        ("5.34", false, "FAIL 5.4% changed, limit 5.3%"),
+    ] {
+        let (out, err, ok) = run_full(
+            &[
+                "--diff",
+                &before,
+                &after,
+                "--image-mode",
+                "none",
+                "--no-color",
+                "--threshold",
+                limit,
+            ],
+            "",
+        );
+        assert_eq!(
+            ok, expected_ok,
+            "limit {limit}; stdout: {out}; stderr: {err}"
+        );
+        assert!(out.contains(verdict), "limit {limit}; stdout: {out}");
+    }
 }
 
 /// Redirected output has no colour, and half-blocks without colour are a
@@ -957,4 +1317,1066 @@ fn the_hyperlinks_flag_is_accepted_and_documented() {
             "{args:?} lost the link text:\n{out}"
         );
     }
+}
+
+#[test]
+fn empty_markdown_has_no_output_but_empty_text_keeps_its_newline() {
+    assert_eq!(
+        run(&["--no-color", "--markdown", "-"], ""),
+        (String::new(), true)
+    );
+    assert_eq!(run(&["--no-color", "--print", ""], ""), ("\n".into(), true));
+}
+
+#[test]
+fn alignment_flags_follow_upstream_priority_in_any_order() {
+    for mode in ["--json", "--csv", "--syntax"] {
+        let input = match mode {
+            "--json" => "{\"a\":1}",
+            "--csv" => "a,b\n1,2",
+            _ => "hello",
+        };
+        let left = run(&["--no-color", mode, "-", "--width", "20", "--left"], input);
+        let right = run(
+            &["--no-color", mode, "-", "--width", "20", "--right"],
+            input,
+        );
+        assert_ne!(left.0, right.0, "alignment is inert for {mode}");
+        for flags in [
+            ["--left", "--center", "--right"],
+            ["--right", "--center", "--left"],
+        ] {
+            let mut args = vec!["--no-color", mode, "-", "--width", "20"];
+            args.extend(flags);
+            assert_eq!(run(&args, input), left);
+        }
+    }
+}
+
+#[test]
+fn gif_layout_and_export_flags_fail_before_reading_explicit_or_inferred_files() {
+    for flag in ["--center", "--pager", "--panel=rounded"] {
+        // Pass panel's value separately; this parser deliberately has no = form.
+        let extra: Vec<&str> = if flag == "--panel=rounded" {
+            vec!["--panel", "rounded"]
+        } else {
+            vec![flag]
+        };
+        for prefix in [vec!["--gif", "missing.gif"], vec!["missing.gif"]] {
+            let mut args = prefix;
+            args.extend(extra.iter().copied());
+            let (_, err, ok) = run_full(&args, "");
+            assert!(!ok);
+            assert!(err.contains("cannot be combined with --gif"), "{err}");
+        }
+    }
+    let (_, err, ok) = run_full(&["missing.gif", "--export-svg", "unused.svg"], "");
+    assert!(!ok && err.contains("cannot capture --gif"), "{err}");
+    let (_, err, ok) = run_full(&["--gif", "--diff", "a.gif", "b.gif"], "");
+    assert!(
+        !ok && err.contains("--gif") && err.contains("--diff"),
+        "{err}"
+    );
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn piped_gif_forever_exits_with_one_frame_and_a_diagnostic() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../rich-art/examples/assets/ball.gif"
+    );
+    let mut child = bin()
+        .args(["--gif", path, "--loop", "0", "--width", "12", "--no-color"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        if child.try_wait().unwrap().is_some() {
+            break;
+        }
+        if std::time::Instant::now() > deadline {
+            child.kill().unwrap();
+            let _ = child.wait();
+            panic!("piped GIF loop never exited");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+    assert!(!output.stdout.is_empty());
+    assert!(!output.stdout.contains(&27));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("first frame"));
+}
+
+#[test]
+fn notebook_streams_are_unlabelled_and_display_data_matches_upstream_omission() {
+    let notebook = r#"{"cells":[{"cell_type":"code","execution_count":2,"source":["print('hello')"],"outputs":[{"output_type":"stream","name":"stdout","text":["hello\n"]},{"output_type":"display_data","data":{"image/png":"ignored"},"metadata":{}}]}],"metadata":{},"nbformat":4,"nbformat_minor":5}"#;
+    let (out, ok) = run(&["--no-color", "--ipynb", "-"], notebook);
+    assert!(ok);
+    assert!(out.contains("hello"));
+    assert!(!out.contains("Out["), "{out}");
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn diff_exports_keep_graphics_independent_of_redirected_stdout() {
+    let (before, after) = diff_fixtures();
+    let dir = std::env::temp_dir().join(format!("rich-diff-export-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let html = dir.join("report.html");
+    let svg = dir.join("report.svg");
+    for mode in ["auto", "blocks", "sixel", "ascii", "none"] {
+        let args = [
+            "--diff",
+            &before,
+            &after,
+            "--width",
+            "40",
+            "--image-mode",
+            mode,
+            "--threshold",
+            "100",
+        ];
+        let (plain, plain_err, plain_ok) = run_full(&args, "");
+        let mut exporting = args.to_vec();
+        exporting.extend([
+            "--export-html",
+            html.to_str().unwrap(),
+            "--export-svg",
+            svg.to_str().unwrap(),
+        ]);
+        let (out, err, ok) = run_full(&exporting, "");
+        assert!(plain_ok && ok, "{mode}: {err}");
+        assert_eq!(out, plain, "exports changed stdout for {mode}");
+        assert_eq!(
+            err, plain_err,
+            "export should not repeat terminal diagnostics"
+        );
+        assert!(!out.contains('\x1b'));
+        for path in [&html, &svg] {
+            let document = std::fs::read_to_string(path).unwrap();
+            assert_eq!(
+                document.contains('▀'),
+                matches!(mode, "auto" | "blocks" | "sixel"),
+                "{mode}: {}",
+                path.display()
+            );
+            assert!(document.contains("OK"));
+            assert!(
+                !document.contains('\x1b'),
+                "Sixel/ANSI must not enter exports"
+            );
+        }
+        exporting.push("--no-color");
+        assert!(run(&exporting, "").1);
+        assert!(!std::fs::read_to_string(&html).unwrap().contains('▀'));
+    }
+    let (out, err, ok) = run_full(
+        &[
+            "--diff",
+            &before,
+            &after,
+            "--threshold",
+            "0",
+            "--export-html",
+            html.to_str().unwrap(),
+        ],
+        "",
+    );
+    assert!(!ok, "threshold must still fail: {err}");
+    assert!(out.contains("FAIL"));
+    assert!(std::fs::read_to_string(&html).unwrap().contains("FAIL"));
+    let (_, err, ok) = run_full(
+        &[
+            "--diff",
+            &before,
+            &after,
+            "--threshold",
+            "100",
+            "--export-html",
+            dir.to_str().unwrap(),
+        ],
+        "",
+    );
+    assert!(!ok && err.contains("failed to save HTML"));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn notebook_decorators_alignment_and_export_apply_to_the_whole_group() {
+    let notebook = r#"{"cells":[{"cell_type":"raw","source":["hello"]},{"cell_type":"raw","source":["world"]}]}"#;
+    let dir = std::env::temp_dir().join(format!("rich-notebook-layout-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let html = dir.join("notebook.html");
+    let svg = dir.join("notebook.svg");
+    let (out, err, ok) = run_full(
+        &[
+            "--ipynb",
+            "-",
+            "--width",
+            "24",
+            "--right",
+            "--padding",
+            "0,1",
+            "--panel",
+            "rounded",
+            "--title",
+            "[bold]Notebook[/]",
+            "--caption",
+            "[italic]Done[/]",
+            "--style",
+            "red",
+            "--export-html",
+            html.to_str().unwrap(),
+            "--export-svg",
+            svg.to_str().unwrap(),
+        ],
+        notebook,
+    );
+    assert!(ok, "{err}");
+    assert!(out.contains("Notebook") && out.contains("Done"));
+    assert!(!out.contains("[bold]"));
+    assert!(
+        out.lines().all(|line| line.starts_with(&" ".repeat(56))),
+        "{out:?}"
+    );
+    assert!(
+        out.lines().all(|line| line.chars().count() == 80),
+        "{out:?}"
+    );
+    assert_eq!(out.matches('╭').count(), 1);
+    assert_eq!(out.matches("hello").count(), 1);
+    let exported = std::fs::read_to_string(html).unwrap();
+    assert!(
+        exported.contains("#800000"),
+        "--style must reach notebook output"
+    );
+    assert!(exported.contains("font-weight: bold"));
+    assert!(std::fs::read_to_string(svg).unwrap().contains("world"));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn notebook_group_uses_upstream_cell_spacing_and_output_execution_count() {
+    let notebook = r#"{"cells":[{"cell_type":"raw","source":["one"],"outputs":[{"output_type":"stream","text":["stream\n"]}]},{"cell_type":"raw","source":["two"],"outputs":[{"output_type":"execute_result","execution_count":7,"data":{"text/plain":"result"}}]},{"cell_type":"raw","source":["three"]}]}"#;
+    let (out, ok) = run(&["--ipynb", "-", "--no-color"], notebook);
+    assert!(ok);
+    assert_eq!(out, "\none\nstream\ntwo\nOut[7]:\nresult\n\nthree\n");
+}
+
+#[test]
+fn demo_refuses_unsupported_options_with_a_diagnostic() {
+    for flags in [
+        vec!["--center"],
+        vec!["--panel", "rounded"],
+        vec!["--padding", "1"],
+        vec!["--width", "40"],
+        vec!["--style", "red"],
+        vec!["--pager"],
+        vec!["--title", "Demo"],
+        vec!["--hyperlinks"],
+    ] {
+        let (out, err, ok) = run_full(&flags, "");
+        assert!(
+            !ok && out.is_empty() && err.contains("capability demo"),
+            "{flags:?}: {out:?} {err:?}"
+        );
+    }
+}
+
+#[test]
+fn title_markup_is_measured_visually_and_malformed_labels_fail_cleanly() {
+    let (plain, ok) = run(&["-p", "x", "--panel", "rounded", "--title", "Hello"], "");
+    assert!(ok);
+    let (styled, ok) = run(
+        &["-p", "x", "--panel", "rounded", "--title", "[bold]Hello[/]"],
+        "",
+    );
+    assert!(ok);
+    assert_eq!(plain, styled, "markup bytes must not widen the panel");
+    assert_eq!(plain.lines().next().unwrap(), "╭─ Hello ─╮");
+    for args in [
+        vec!["--rule", "[/bad]"],
+        vec!["-p", "x", "--panel", "rounded", "--title", "[/bad]"],
+        vec!["-p", "x", "--panel", "rounded", "--caption", "[/bad]"],
+    ] {
+        let (out, err, ok) = run_full(&args, "");
+        assert!(!ok && out.is_empty() && !err.is_empty() && !err.contains("panicked"));
+    }
+}
+
+#[test]
+fn help_documents_paging_environment_stdin_and_loop_defaults() {
+    let (help, ok) = run(&["--help"], "");
+    assert!(ok);
+    for phrase in [
+        "default 1; 0 = forever",
+        "more.com",
+        "MANPAGER",
+        "COLUMNS",
+        "FORCE_COLOR",
+        "stdin until EOF",
+        "last value",
+    ] {
+        assert!(help.contains(phrase), "missing {phrase}");
+    }
+    let (out, err, ok) = run_full(&["--markdown"], "hello");
+    assert!(
+        ok && out.contains("hello") && err.is_empty(),
+        "piped implicit stdin must remain quiet"
+    );
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn diff_export_respects_nonempty_no_color_but_not_an_empty_value() {
+    let (before, after) = diff_fixtures();
+    let html = std::env::temp_dir().join(format!("rich-diff-no-color-{}.html", std::process::id()));
+    for no_color in [None, Some(""), Some("1")] {
+        let mut command = bin();
+        command.args([
+            "--diff",
+            &before,
+            &after,
+            "--width",
+            "20",
+            "--export-html",
+            html.to_str().unwrap(),
+        ]);
+        if let Some(value) = no_color {
+            command.env("NO_COLOR", value);
+        }
+        let output = command.output().unwrap();
+        assert!(output.status.success());
+        assert!(!output.stdout.contains(&0x1b));
+        let document = std::fs::read_to_string(&html).unwrap();
+        assert_eq!(document.contains('▀'), no_color != Some("1"));
+    }
+    std::fs::remove_file(html).unwrap();
+}
+
+#[test]
+fn unused_label_markup_keeps_upstream_ignore_behavior() {
+    let (out, err, ok) = run_full(&["-p", "hello", "--title", "[/bad]"], "");
+    assert!(ok && err.is_empty());
+    assert_eq!(out, "hello\n");
+    let (out, err, ok) = run_full(
+        &["--ipynb", "-", "--caption", "[/bad]"],
+        r#"{"cells":[{"cell_type":"raw","source":"hello"}]}"#,
+    );
+    assert!(ok && err.is_empty() && out.contains("hello"));
+    let (out, err, ok) = run_full(
+        &["--csv", "-", "--title", "[/bad]"],
+        "name,value\nfirst,1\n",
+    );
+    assert!(!ok && out.is_empty() && !err.is_empty());
+}
+
+#[test]
+fn notebook_alignment_reaches_unequal_text_lines() {
+    let notebook = r#"{"cells":[{"cell_type":"raw","source":"short"},{"cell_type":"raw","source":"a longer line"}]}"#;
+    // Rich 15 Group + Console.print(justify=...) pads each Text member within
+    // the measured group, then positions the group in the 80-column console.
+    for (flag, short_left, long_left) in [("--right", 75, 67), ("--center", 37, 33)] {
+        let (out, ok) = run(&["--ipynb", "-", flag], notebook);
+        assert!(ok);
+        let short = out.lines().find(|line| line.contains("short")).unwrap();
+        let long = out
+            .lines()
+            .find(|line| line.contains("a longer line"))
+            .unwrap();
+        assert_eq!(short.find("short"), Some(short_left), "{out:?}");
+        assert_eq!(long.find("a longer line"), Some(long_left), "{out:?}");
+    }
+}
+
+#[test]
+fn explicit_encoding_decodes_files_and_stdin_without_changing_defaults() {
+    let text = "Hello 漢字 🙂\r\n";
+    for (name, little) in [("utf-16le", true), ("utf-16be", false)] {
+        let bytes: Vec<u8> = text
+            .encode_utf16()
+            .flat_map(|unit| {
+                if little {
+                    unit.to_le_bytes()
+                } else {
+                    unit.to_be_bytes()
+                }
+            })
+            .collect();
+        let path = fixture(&format!("v004-{name}.txt"), &bytes);
+        let (out, err, ok) = run_full(&[path.to_str().unwrap(), "--encoding", name], "");
+        assert!(ok && err.is_empty(), "{err}");
+        assert!(
+            out.lines().any(|line| line.trim_end() == "Hello 漢字 🙂"),
+            "{out:?}"
+        );
+        let mut child = bin()
+            .args(["-p", "-", "--encoding", name])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child.stdin.take().unwrap().write_all(&bytes).unwrap();
+        let result = child.wait_with_output().unwrap();
+        assert!(result.status.success());
+        assert!(String::from_utf8_lossy(&result.stdout).contains("Hello 漢字 🙂"));
+        let (out, err, ok) = run_full(&[path.to_str().unwrap(), "--encoding", "utf-16"], "");
+        assert!(!ok && out.is_empty() && err.contains("BOM"));
+    }
+    let bom = fixture("v004-bom.txt", b"\xff\xfeH\0i\0");
+    let (out, err, ok) = run_full(&[bom.to_str().unwrap()], "");
+    assert!(ok && out.contains('\u{fffd}') && err.contains("--encoding utf-16"));
+    let (out, err, ok) = run_full(&[bom.to_str().unwrap(), "--encoding", "utf-16"], "");
+    assert!(ok && err.is_empty() && out.trim() == "Hi");
+    let malformed = fixture("v004-malformed.txt", b"\xff");
+    let (out, err, ok) = run_full(&[malformed.to_str().unwrap(), "--encoding", "utf-8"], "");
+    assert!(!ok && out.is_empty() && err.contains("UTF-8"));
+}
+
+#[test]
+fn encoding_rejects_unused_or_unknown_options() {
+    for args in [
+        vec!["--encoding", "utf-16"],
+        vec!["--rule", "hello", "--encoding", "utf-16"],
+        vec!["-p", "hello", "--encoding", "utf-16"],
+        vec!["--gif", "a.gif", "--encoding", "utf-16"],
+        vec!["--diff", "a.png", "b.png", "--encoding", "utf-16"],
+        vec!["-", "--encoding", "latin-1"],
+        vec!["-", "--encoding"],
+    ] {
+        let (out, err, ok) = run_full(&args, "");
+        assert!(!ok && out.is_empty() && !err.is_empty(), "{args:?}: {err}");
+    }
+}
+
+#[test]
+fn image_read_error_is_one_actionable_line_and_suffix_alone_is_not_an_error() {
+    let path = fixture("v004-binary.png", b"\x89PNG\r\n\x1a\n");
+    let (out, err, ok) = run_full(&[path.to_str().unwrap()], "");
+    assert!(!ok && out.is_empty());
+    assert_eq!(err.lines().count(), 1, "{err}");
+    assert!(err.contains("looks like an image") && err.contains("rich --diff"));
+    assert!(!err.contains("UTF-8"));
+    let path = fixture("v004-text.png", b"ordinary text\n");
+    let (out, err, ok) = run_full(&[path.to_str().unwrap()], "");
+    assert!(ok && err.is_empty() && out.contains("ordinary text"));
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn unknown_image_extension_has_clean_punctuation() {
+    let path = fixture("v004-image.unsupported", b"not an image");
+    let (_, err, ok) = run_full(
+        &["--diff", path.to_str().unwrap(), path.to_str().unwrap()],
+        "",
+    );
+    assert!(
+        !ok && err.contains("unsupported image extension unsupported;"),
+        "{err}"
+    );
+    assert!(!err.contains("\"\""));
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn image_diff_read_errors_follow_the_json_report_contract() {
+    let missing = std::env::temp_dir().join(format!("rich-missing-{}.png", std::process::id()));
+    let (out, err, status) = run_status(
+        &[
+            "--report",
+            "json",
+            "--diff",
+            missing.to_str().unwrap(),
+            missing.to_str().unwrap(),
+        ],
+        "",
+    );
+    assert_eq!(status.code(), Some(3), "stderr: {err:?}");
+    assert!(out.is_empty());
+    let error = parse_json_report(&err);
+    assert_error_report(&error, "input", 3);
+    assert!(
+        error["message"].as_str().unwrap().contains("cannot read"),
+        "stderr: {err:?}"
+    );
+}
+
+#[cfg(feature = "fetch")]
+#[test]
+fn explicit_encoding_applies_to_url_bodies() {
+    use std::net::TcpListener;
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/document.txt", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        let (mut socket, _) = listener.accept().unwrap();
+        socket
+            .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+            .unwrap();
+        let mut request = Vec::new();
+        while !request.ends_with(b"\r\n\r\n") {
+            let mut byte = [0];
+            socket.read_exact(&mut byte).unwrap();
+            request.push(byte[0]);
+            assert!(request.len() < 16_384);
+        }
+        socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 6\r\nConnection: close\r\n\r\n\xff\xfeH\0i\0").unwrap();
+    });
+    let output = bin()
+        .args([&url, "--encoding", "utf-16"])
+        .env("NO_PROXY", "127.0.0.1")
+        .env("no_proxy", "127.0.0.1")
+        .output()
+        .unwrap();
+    server.join().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Hi"));
+}
+
+#[test]
+fn explicit_stdin_consumes_only_one_bom() {
+    let bytes = b"\xef\xbb\xbf\xef\xbb\xbfHello";
+    let path = fixture("v004-double-bom.txt", bytes);
+    let file = bin()
+        .args([path.to_str().unwrap(), "--encoding", "utf-8"])
+        .output()
+        .unwrap();
+    let mut child = bin()
+        .args(["-", "--encoding", "utf-8"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(bytes).unwrap();
+    let stdin = child.wait_with_output().unwrap();
+    assert!(file.status.success() && stdin.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&file.stdout).trim_end(),
+        String::from_utf8_lossy(&stdin.stdout).trim_end()
+    );
+    assert!(stdin.stdout.starts_with(b"\xef\xbb\xbfHello"));
+}
+
+#[test]
+fn gif_mode_rejects_invalid_values_and_unrelated_modes() {
+    for args in [
+        vec!["--gif-mode"],
+        vec!["--gif", "a.gif", "--gif-mode", "sixel"],
+        vec!["--gif-mode", "ascii"],
+        vec!["--diff", "a.png", "b.png", "--gif-mode", "blocks"],
+    ] {
+        let (out, err, ok) = run_full(&args, "");
+        assert!(!ok && out.is_empty() && err.contains("--gif-mode"), "{err}");
+    }
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn piped_block_gif_matches_the_existing_ascii_path() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../rich-art/examples/assets/ball.gif"
+    );
+    let (ascii, _, ok) = run_full(&["--gif", path, "--width", "12", "--loop", "0"], "");
+    assert!(ok);
+    for prefix in [vec!["--gif", path], vec![path]] {
+        let mut args = prefix;
+        args.extend(["--gif-mode", "blocks", "--width", "12", "--loop", "0"]);
+        let (blocks, err, ok) = run_full(&args, "");
+        assert!(ok && err.contains("first frame only"), "{err}");
+        assert_eq!(blocks, ascii);
+        assert!(!blocks.contains('\x1b') && !blocks.contains('▀'));
+    }
+}
+
+/// A throwaway directory unique to one test, removed by the caller.
+fn scratch(tag: &str) -> std::path::PathBuf {
+    let root = std::env::temp_dir().join(format!("rich-cli-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).expect("create scratch dir");
+    root
+}
+
+#[test]
+fn batch_json_report_is_a_single_envelope_that_keeps_child_exit_classes() {
+    let root = scratch("batch-json");
+    // Valid first, invalid second, so ordering cannot hide the failure.
+    std::fs::write(root.join("a.json"), "{\"ok\": true}").unwrap();
+    std::fs::write(root.join("b.json"), "{not json").unwrap();
+    let dir = root.to_string_lossy().into_owned();
+
+    let (_out, err, status) = run_status(
+        &[
+            "--no-config",
+            "--batch",
+            "--json",
+            "--continue-on-error",
+            "--report",
+            "json",
+            &dir,
+        ],
+        "",
+    );
+    // Exactly one line: a child printing its own `rich: ...` diagnostic would
+    // put unparseable text in front of the aggregate object.
+    let report = parse_json_report(&err);
+    assert_eq!(report["ok"], false);
+    // Invalid JSON is a data error (4), not a generic input failure (3).
+    assert_eq!(report["code"], "data");
+    assert_eq!(report["exit_code"], 4);
+    assert_eq!(status.code(), Some(4));
+    let result = &report["result"];
+    assert_eq!(result["planned"], 2);
+    assert_eq!(result["attempted"], 2);
+    assert_eq!(result["completed"], 1);
+    assert_eq!(result["failed"], 1);
+    assert_eq!(result["skipped"], 0);
+    let failures = result["failures"].as_array().unwrap();
+    assert_eq!(failures.len(), 1);
+    assert!(failures[0]["resource"]
+        .as_str()
+        .unwrap()
+        .ends_with("b.json"));
+    assert_eq!(failures[0]["code"], "data");
+    assert_eq!(failures[0]["exit_code"], 4);
+    assert!(failures[0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("invalid JSON"));
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn batch_fails_fast_by_default_and_counts_unattempted_items_as_skipped() {
+    let root = scratch("batch-failfast");
+    std::fs::write(root.join("a.json"), "{oops").unwrap();
+    std::fs::write(root.join("b.json"), "{\"ok\": true}").unwrap();
+    let dir = root.to_string_lossy().into_owned();
+
+    let (_out, err, status) = run_status(
+        &["--no-config", "--batch", "--json", "--report", "json", &dir],
+        "",
+    );
+    let report = parse_json_report(&err);
+    assert_eq!(status.code(), Some(4));
+    let result = &report["result"];
+    assert_eq!(result["planned"], 2);
+    assert_eq!(result["attempted"], 1);
+    // The second item was never tried, so it is skipped — not completed.
+    assert_eq!(result["completed"], 0);
+    assert_eq!(result["skipped"], 1);
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn batch_refuses_to_silently_overwrite_and_honours_the_collision_policy() {
+    let root = scratch("batch-collide");
+    std::fs::write(root.join("a.md"), "# a").unwrap();
+    std::fs::write(root.join("b.md"), "# b").unwrap();
+    let dir = root.to_string_lossy().into_owned();
+    let existing = root.join("a.html");
+    std::fs::write(&existing, "existing").unwrap();
+    let out_html = root.join("out.html").to_string_lossy().into_owned();
+
+    let (_out, err, status) = run_status(
+        &[
+            "--no-config",
+            "--batch",
+            "--markdown",
+            "--report",
+            "json",
+            "-o",
+            &out_html,
+            &dir,
+        ],
+        "",
+    );
+    let report = parse_json_report(&err);
+    assert_eq!(status.code(), Some(3));
+    assert_eq!(report["code"], "input");
+    assert!(report["message"].as_str().unwrap().contains("--overwrite"));
+    assert_eq!(std::fs::read_to_string(&existing).unwrap(), "existing");
+
+    // `suffix` steps past the existing file instead of clobbering it.
+    let (_out, _err, status) = run_status(
+        &[
+            "--no-config",
+            "--batch",
+            "--markdown",
+            "--collision",
+            "suffix",
+            "-o",
+            &out_html,
+            &dir,
+        ],
+        "",
+    );
+    assert!(status.success());
+    assert_eq!(std::fs::read_to_string(&existing).unwrap(), "existing");
+    assert!(root.join("a-2.html").exists(), "suffixed output missing");
+    assert!(root.join("b.html").exists());
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn batch_export_path_need_not_end_in_a_known_extension() {
+    let root = scratch("batch-ext");
+    std::fs::write(root.join("only.md"), "# a").unwrap();
+    let dir = root.to_string_lossy().into_owned();
+    let out = root.join("result.out").to_string_lossy().into_owned();
+
+    // A single item keeps the exact path it was given; the export kind comes
+    // from the flag, not from sniffing the extension.
+    let (_out, _err, status) = run_status(
+        &["--no-config", "--batch", "--markdown", "-o", &out, &dir],
+        "",
+    );
+    assert!(status.success());
+    let written = std::fs::read_to_string(&out).unwrap();
+    assert!(
+        written.contains("<html"),
+        "expected HTML export: {written:.80?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn batch_rejects_pairwise_and_paged_modes() {
+    for (args, needle) in [
+        (
+            vec!["--batch", "--diff", "a.png", "b.png"],
+            "--batch cannot be combined with --diff",
+        ),
+        (
+            vec!["--batch", "--pager", "a.md"],
+            "--pager cannot be combined with --batch",
+        ),
+    ] {
+        let mut full = vec!["--no-config"];
+        full.extend(args);
+        let (out, err, status) = run_status(&full, "");
+        assert_eq!(status.code(), Some(2), "stderr: {err}");
+        assert!(out.is_empty());
+        assert!(err.contains(needle), "stderr: {err}");
+    }
+}
+
+#[test]
+fn config_values_and_subcommands_survive_the_config_layer() {
+    let root = scratch("config-precedence");
+    std::fs::write(root.join("doc.json"), "{\"ok\": true}").unwrap();
+    let config = root.join("rich.toml");
+    // The `#` is part of the value, and `mode` must not beat a subcommand.
+    std::fs::write(
+        &config,
+        "[defaults]\nmode = \"markdown\"\nwidth = 40 # comment\n",
+    )
+    .unwrap();
+    let config_path = config.to_string_lossy().into_owned();
+    let doc = root.join("doc.json").to_string_lossy().into_owned();
+
+    let (out, _err, status) = run_status(&["--config", &config_path, "json", &doc], "");
+    assert!(status.success());
+    // Rendered as JSON (a markdown render of this file would not show the key).
+    assert!(out.contains("ok"), "out: {out:?}");
+
+    // `--no-config` ignores the file entirely, so the width default is gone.
+    let (_out, _err, status) = run_status(&["--no-config", "json", &doc], "");
+    assert!(status.success());
+
+    // A missing explicit config is an error naming its source.
+    let missing = root.join("nope.toml").to_string_lossy().into_owned();
+    let (_out, err, status) = run_status(&["--config", &missing, "json", &doc], "");
+    assert_eq!(status.code(), Some(2), "stderr: {err}");
+    assert!(err.contains("nope.toml"), "stderr: {err}");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+// --- `--image`: still-image rendering via rich-art's ImageArt facade -------
+
+/// The image fixture used by `--image` tests (the same one `--diff` compares).
+#[cfg(feature = "art")]
+fn image_fixture() -> String {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("rich-art/tests/fixtures/halo-before.png")
+        .display()
+        .to_string()
+}
+
+/// `--image-mode ascii` draws a character ramp with no colour required, and
+/// takes `--width`/`--height` from the facade rather than reimplementing
+/// sizing here.
+#[cfg(feature = "art")]
+#[test]
+fn image_ascii_mode_renders_a_sized_ascii_picture() {
+    let path = image_fixture();
+    let (out, err, ok) = run_full(
+        &[
+            "--image",
+            &path,
+            "--image-mode",
+            "ascii",
+            "--width",
+            "20",
+            "--height",
+            "8",
+            "--no-color",
+        ],
+        "",
+    );
+    assert!(ok, "stderr: {err}");
+    assert!(!out.contains('\x1b'), "ASCII output must carry no escapes");
+    let lines: Vec<&str> = out.lines().filter(|l| !l.is_empty()).collect();
+    assert_eq!(lines.len(), 8, "--height 8 should yield exactly 8 rows");
+    assert!(
+        lines.iter().all(|l| l.chars().count() == 20),
+        "--width 20 should yield 20 columns per row: {lines:?}"
+    );
+}
+
+/// `--image-mode blocks` draws half-block characters, and the `image`
+/// command alias (rather than the `--image` flag) must reach the same
+/// backend. Piped stdout is never a terminal, so — like every other mode in
+/// this CLI (see `diff_export_respects_nonempty_no_color_...` above) — no
+/// colour escapes reach it either way; what must hold is that the picture
+/// itself renders.
+#[cfg(feature = "art")]
+#[test]
+fn image_blocks_mode_via_the_command_alias_renders_half_blocks() {
+    let path = image_fixture();
+    let (out, err, ok) = run_full(
+        &["image", &path, "--image-mode", "blocks", "--width", "10"],
+        "",
+    );
+    assert!(ok, "stderr: {err}");
+    assert!(!out.contains('\x1b'), "piped stdout must carry no escapes");
+    assert!(
+        out.contains('▀'),
+        "blocks mode should draw half-block glyphs: {out:?}"
+    );
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn image_braille_mode_renders_unicode_cells() {
+    let path = image_fixture();
+    let (out, err, ok) = run_full(
+        &[
+            "--image",
+            &path,
+            "--image-mode",
+            "braille",
+            "--width",
+            "12",
+            "--height",
+            "6",
+            "--no-color",
+        ],
+        "",
+    );
+    assert!(ok, "stderr: {err}");
+    assert!(
+        out.contains('⣿')
+            || out
+                .chars()
+                .any(|character| ('\u{2800}'..='\u{28ff}').contains(&character))
+    );
+}
+
+/// `--no-color` is accepted alongside `--image-mode blocks` (colour is
+/// already absent from piped output; this just confirms the flag combination
+/// is not rejected and the picture still renders).
+#[cfg(feature = "art")]
+#[test]
+fn image_blocks_mode_accepts_no_color() {
+    let path = image_fixture();
+    let (out, err, ok) = run_full(
+        &[
+            "--image",
+            &path,
+            "--image-mode",
+            "blocks",
+            "--width",
+            "10",
+            "--no-color",
+        ],
+        "",
+    );
+    assert!(ok, "stderr: {err}");
+    assert!(out.contains('▀'), "{out:?}");
+}
+
+/// An unknown `--image-mode` value is rejected before any file is touched.
+#[cfg(feature = "art")]
+#[test]
+fn image_rejects_an_unknown_image_mode() {
+    let (out, err, ok) = run_full(&["--image", "missing.png", "--image-mode", "bogus"], "");
+    assert!(!ok && out.is_empty());
+    assert!(err.contains("unknown image mode"), "{err}");
+}
+
+/// `--image-mode none` means "print no picture at all", which `--diff` can
+/// honour (it still has numbers to report) but `--image` cannot — there
+/// would be nothing left to draw. Rejected rather than silently printing
+/// nothing at exit 0.
+#[cfg(feature = "art")]
+#[test]
+fn image_rejects_image_mode_none() {
+    let path = image_fixture();
+    let (out, err, ok) = run_full(&["--image", &path, "--image-mode", "none"], "");
+    assert!(!ok && out.is_empty());
+    assert!(
+        err.contains("--image-mode none") && err.contains("--image"),
+        "{err}"
+    );
+}
+
+/// `--height 0` is as meaningless as `--width 0` and must be refused, not
+/// silently treated as "no rows".
+#[cfg(feature = "art")]
+#[test]
+fn image_rejects_a_zero_height() {
+    let path = image_fixture();
+    let (out, ok) = run(&["--image", &path, "--height", "0"], "");
+    assert!(!ok, "--height 0 should be rejected");
+    assert!(out.is_empty());
+}
+
+/// A non-numeric `--height` is rejected with a message naming the bad value,
+/// matching `--width`'s existing diagnostic.
+#[cfg(feature = "art")]
+#[test]
+fn image_rejects_a_non_numeric_height() {
+    let path = image_fixture();
+    let (_out, err, ok) = run_full(&["--image", &path, "--height", "nope"], "");
+    assert!(!ok);
+    assert!(err.contains("invalid height 'nope'"), "{err}");
+}
+
+/// `--height` and `--image-mode` only have an effect with `--image` (or, for
+/// `--image-mode`, `--diff`); given without either they are refused rather
+/// than silently ignored, matching the existing `--threshold`/`--loop` rule.
+#[cfg(feature = "art")]
+#[test]
+fn image_flags_are_refused_without_image_mode() {
+    for args in [vec!["--height", "5"], vec!["--image-mode", "ascii"]] {
+        let mut full = args.clone();
+        full.push("README.md");
+        let (out, ok) = run(&full, "");
+        assert!(
+            !ok && out.is_empty(),
+            "{args:?} without --image/--diff should be refused, not ignored"
+        );
+    }
+}
+
+/// `--image` with no resource is a clear usage error, not a stdin hang or a
+/// panic — mirroring `--diff`'s exactly-two-resources check.
+#[cfg(feature = "art")]
+#[test]
+fn image_without_a_resource_is_a_clear_error() {
+    let (out, err, ok) = run_full(&["--image"], "");
+    assert!(!ok && out.is_empty());
+    assert!(err.contains("--image requires an image file"), "{err}");
+}
+
+/// A missing file reports a clean, actionable message via the same
+/// `open_image_path` helper `--diff` uses — no renderer-specific duplication.
+#[cfg(feature = "art")]
+#[test]
+fn image_missing_file_is_a_clear_input_error() {
+    let missing = std::env::temp_dir().join(format!("rich-missing-{}.png", std::process::id()));
+    let (out, err, ok) = run_full(&["--image", missing.to_str().unwrap()], "");
+    assert!(!ok && out.is_empty());
+    assert!(err.contains("cannot read"), "{err}");
+}
+
+/// Decoration flags that only make sense around a single rendered value are
+/// refused with `--image`, matching the existing `--diff` behaviour rather
+/// than being silently dropped.
+#[cfg(feature = "art")]
+#[test]
+fn image_decoration_flags_are_refused_rather_than_ignored() {
+    let path = image_fixture();
+    for flag in [
+        vec!["--panel", "rounded"],
+        vec!["--padding", "2"],
+        vec!["--center"],
+    ] {
+        let mut args = vec!["--image", path.as_str()];
+        args.extend(flag.iter().copied());
+        let (_out, ok) = run(&args, "");
+        assert!(
+            !ok,
+            "{flag:?} with --image should be an error, not a silent no-op"
+        );
+    }
+}
+
+/// Still-image exports render for an explicit noninteractive destination.
+#[cfg(feature = "art")]
+#[test]
+fn image_export_flags_write_a_real_document() {
+    let path = image_fixture();
+    let out_path =
+        std::env::temp_dir().join(format!("rich-image-export-{}.html", std::process::id()));
+    let (out, err, ok) = run_full(
+        &[
+            "--image",
+            &path,
+            "--export-html",
+            out_path.to_str().unwrap(),
+        ],
+        "",
+    );
+    assert!(ok, "{err}");
+    assert!(!out.is_empty());
+    assert!(std::fs::read_to_string(&out_path)
+        .unwrap()
+        .contains("<html>"));
+    std::fs::remove_file(out_path).unwrap();
+}
+
+/// Reading raw image bytes from stdin (`--image -`) works the same way every
+/// other mode's stdin path does.
+#[cfg(feature = "art")]
+#[test]
+fn image_reads_raw_bytes_from_stdin() {
+    let path = image_fixture();
+    let bytes = std::fs::read(&path).unwrap();
+    let mut child = bin()
+        .args([
+            "--image",
+            "-",
+            "--image-mode",
+            "ascii",
+            "--width",
+            "10",
+            "--no-color",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(&bytes).unwrap();
+    let result = child.wait_with_output().unwrap();
+    assert!(result.status.success());
+    let out = String::from_utf8_lossy(&result.stdout);
+    assert!(!out.trim().is_empty());
 }
