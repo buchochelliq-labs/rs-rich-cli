@@ -85,6 +85,26 @@ checked against unpublished versions; nothing is published yet.
   Progress cell styles now resolve against the console theme.
 - CLI: the capability demo's progress section shows speed, ETA, elapsed and a
   spinner from a simulated clock.
+- Ext: `Diagnostic::from_error` no longer reports an ordinary error chain as a
+  `[cycle]` when a wrapper stores its source as its first field (same address);
+  cause identity now compares address *and* type (#146, #151). New regressions
+  cover a three-level chain, and checked-in `RenderSnapshot` fixtures cover
+  multiline, chained and source-context diagnostics. A nested-panel layout
+  regression evidences #134.
+- Ext (behaviour change): `LayoutNode` leaves now receive their region's height,
+  as upstream `Layout` passes it, so height-aware renderables such as `Panel`
+  fill their region instead of rendering at natural height above blank rows.
+  The nested-panel regression is byte-identical to rich 15.0.0's `Layout`.
+  Wrap a leaf in `.content_height()` to keep a panel at its natural height.
+- Core: `Syntax` and `Json` port upstream `__rich_measure__` (Syntax measures its
+  raw source plus padding; JSON measures as its `Text`), with `Measurement::get`,
+  `normalize` and `with_maximum`, parity-tested by the new `measure.tsv` golden.
+  A printed `Syntax` still renders at the full console width, as upstream does:
+  the new `Renderable::fit_to_measurement` (default `true`) opts it out of the
+  top-level shrink that stands in for upstream's `str`/`Text` joining.
+- Ext: `layout::Overflowing` applies one explicit `OverflowPolicy` (wrap, fold,
+  crop, ellipsis, visible) to Syntax, JSON or Text lines; fitting output is
+  unchanged byte for byte, and padded Syntax rows keep their background (#149).
 - Art 0.0.8 image modes (#125, #126, #199) and CLI routing (#144):
   - `ImageColorMode::Ansi16` (rich's standard palette) and `Grayscale` (neutral
     ANSI256 entries by luma). Floyd–Steinberg and Bayer 4×4 now work with every

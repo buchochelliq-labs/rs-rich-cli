@@ -39,6 +39,7 @@ use std::collections::HashMap;
 
 use crate::console::{Console, ConsoleOptions};
 use crate::errors::{Result, RichError};
+use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::style::Style;
@@ -275,6 +276,18 @@ impl Json {
 }
 
 impl Renderable for Json {
+    /// Upstream `JSON.__rich__` returns its highlighted `Text`, so measuring a
+    /// `JSON` is `Text.__rich_measure__` over the formatted document.
+    fn measure(&self, _console: &Console, _options: &ConsoleOptions) -> Measurement {
+        let plain: String = self
+            .render_value()
+            .iter()
+            .map(|s| s.text.as_str())
+            .collect();
+        let (minimum, maximum) = crate::text::Text::new(plain).measurement();
+        Measurement::new(minimum, maximum)
+    }
+
     fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let segments = self.render_value();
         #[cfg(feature = "json-escape-safe")]

@@ -198,8 +198,10 @@ impl LayoutNode {
         }
         let mut rows = match &self.content {
             Content::Leaf(value) => {
+                // Like upstream Layout, a leaf is told its region's height so
+                // height-aware renderables (Panel) fill it.
                 let mut opts = options.clone();
-                opts.height = None;
+                opts.height = Some(height);
                 opts.overflow = Some(rich::Overflow::Ignore);
                 opts.no_wrap = Some(true);
                 let segments = value.rich_render(console, &opts);
