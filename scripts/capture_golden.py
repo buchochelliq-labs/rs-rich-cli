@@ -36,6 +36,7 @@ from rich.control import Control
 from rich.json import JSON
 from rich.layout import Layout
 from rich.markdown import Markdown
+from rich.measure import Measurement
 from rich.padding import Padding
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
@@ -47,6 +48,7 @@ JSON_SAMPLE = (
 )
 from rich.rule import Rule
 from rich.styled import Styled
+from rich.syntax import Syntax
 from rich.table import Table
 from rich.prompt import Confirm as RichConfirm
 from rich.prompt import FloatPrompt as RichFloatPrompt
@@ -1003,6 +1005,387 @@ TEXT_OPS_HEADER = """\
 """
 
 
+PROGRESS_TIME_HEADER = """\
+# Golden parity fixtures for PROGRESS time/rate/spinner columns and the task API
+# — captured from real Python `rich` with an injected clock.
+# Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<case json>\t<escaped output>
+# Case: {"columns": [spec, ...] | null (upstream defaults), "steps": [step, ...]}
+# Specs: ["description"] ["bar"] ["percentage"] ["task_progress", show_speed]
+#   ["mofn"] ["download", binary_units] ["elapsed"] ["remaining", compact,
+#   elapsed_when_finished] ["speed"] ["filesize"] ["total_filesize"]
+#   ["spinner", name, finished_text]
+# Steps: ["time", t] ["add", description, total|null, completed, start]
+#   ["update", id, {"total", "completed", "advance", "description", "visible"}]
+#   ["advance", id, amount] ["start", id] ["stop", id]
+#   ["reset", id, {"start", "total", "completed"}] ["remove", id] ["render", width]
+"""
+
+#: Keep in sync with `progress_time_parity` in crates/rich/tests/golden.rs.
+PROGRESS_TIME_CASES: list[tuple[str, dict]] = [
+    ("speed_and_eta", {
+        "columns": [["description"], ["bar"], ["percentage"], ["remaining", False, False], ["elapsed"], ["speed"]],
+        "steps": [["time", 0], ["add", "Download", 100, 0, True], ["render", 80],
+                  ["time", 2], ["advance", 0, 10], ["time", 4], ["advance", 0, 20], ["render", 80]],
+    }),
+    ("finishing", {
+        "columns": [["description"], ["remaining", False, False], ["remaining", True, True], ["elapsed"], ["speed"]],
+        "steps": [["time", 0], ["add", "Job", 50, 0, True], ["time", 1], ["advance", 0, 20],
+                  ["time", 3], ["advance", 0, 30], ["time", 9], ["render", 60]],
+    }),
+    ("compact_and_hours", {
+        "columns": [["description"], ["remaining", True, False], ["remaining", False, False]],
+        "steps": [["time", 0], ["add", "Slow", 50000, 0, True], ["add", "Fast", 100, 0, True],
+                  ["time", 10], ["advance", 0, 1], ["advance", 1, 50], ["time", 20], ["advance", 0, 1],
+                  ["advance", 1, 10], ["render", 60]],
+    }),
+    ("unstarted", {
+        "columns": [["description"], ["elapsed"], ["remaining", False, False], ["remaining", True, False], ["speed"], ["mofn"]],
+        "steps": [["time", 5], ["add", "Queued", 10, 0, False], ["render", 60],
+                  ["time", 8], ["start", 0], ["time", 11], ["render", 60]],
+    }),
+    ("indeterminate", {
+        "columns": [["description"], ["task_progress", True], ["task_progress", False], ["remaining", False, False], ["mofn"], ["download", False]],
+        "steps": [["time", 0], ["add", "Stream", None, 0, True], ["render", 70],
+                  ["time", 2], ["advance", 0, 3000], ["time", 4], ["advance", 0, 5000], ["render", 70]],
+    }),
+    ("file_sizes", {
+        "columns": [["description"], ["filesize"], ["total_filesize"], ["download", False], ["download", True], ["speed"]],
+        "steps": [["time", 0], ["add", "iso", 3500000000, 0, True], ["time", 1], ["advance", 0, 1250000],
+                  ["time", 3], ["advance", 0, 2500000], ["render", 80]],
+    }),
+    ("spinner_frames", {
+        "columns": [["spinner", "dots", " "], ["description"], ["spinner", "line", "[green]done"]],
+        "steps": [["time", 100], ["add", "a", 10, 0, True], ["add", "b", 10, 0, True], ["render", 40],
+                  ["time", 100.25], ["render", 40], ["time", 101], ["update", 1, {"completed": 10}], ["render", 40]],
+    }),
+    ("update_reset_stop_remove", {
+        "columns": [["description"], ["percentage"], ["elapsed"], ["remaining", False, False], ["speed"]],
+        "steps": [["time", 0], ["add", "one", 100, 0, True], ["add", "two", 100, 0, True],
+                  ["time", 2], ["update", 0, {"completed": 40}], ["update", 1, {"advance": 5, "description": "TWO"}],
+                  ["time", 4], ["update", 0, {"completed": 60}], ["render", 70],
+                  ["update", 0, {"total": 200}], ["render", 70],
+                  ["time", 6], ["stop", 1], ["time", 9], ["render", 70],
+                  ["reset", 1, {"start": True, "total": 50, "completed": 5}], ["time", 12], ["render", 70],
+                  ["update", 1, {"visible": False}], ["render", 70],
+                  ["remove", 0], ["update", 1, {"visible": True}], ["render", 70]],
+    }),
+    ("sample_window", {
+        "columns": [["description"], ["speed"], ["remaining", False, False]],
+        "steps": [["time", 0], ["add", "w", 1000, 0, True], ["time", 1], ["advance", 0, 100],
+                  ["time", 20], ["advance", 0, 10], ["time", 40], ["advance", 0, 10], ["render", 50],
+                  ["time", 55], ["advance", 0, 10], ["render", 50]],
+    }),
+    ("long_elapsed", {
+        "columns": [["description"], ["elapsed"]],
+        "steps": [["time", 0], ["add", "d", 10, 0, True], ["time", 90061], ["render", 40],
+                  ["time", 180000], ["render", 40]],
+    }),
+    ("defaults", {
+        "columns": None,
+        "steps": [["time", 0], ["add", "Downloading", 100, 0, True], ["add", "Done", 100, 0, True],
+                  ["time", 1], ["advance", 0, 25], ["time", 2], ["advance", 0, 25], ["advance", 1, 100],
+                  ["render", 70]],
+    }),
+]
+
+
+def progress_columns(specs):
+    from rich.progress import (
+        BarColumn, DownloadColumn, FileSizeColumn, MofNCompleteColumn, SpinnerColumn,
+        TaskProgressColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn,
+        TotalFileSizeColumn, TransferSpeedColumn,
+    )
+
+    build = {
+        "description": lambda: TextColumn("[progress.description]{task.description}"),
+        "bar": lambda: BarColumn(),
+        "percentage": lambda: TaskProgressColumn(),
+        "task_progress": lambda show_speed: TaskProgressColumn(show_speed=show_speed),
+        "mofn": lambda: MofNCompleteColumn(),
+        "download": lambda binary: DownloadColumn(binary_units=binary),
+        "elapsed": lambda: TimeElapsedColumn(),
+        "remaining": lambda compact, when: TimeRemainingColumn(compact=compact, elapsed_when_finished=when),
+        "speed": lambda: TransferSpeedColumn(),
+        "filesize": lambda: FileSizeColumn(),
+        "total_filesize": lambda: TotalFileSizeColumn(),
+        "spinner": lambda name, finished: SpinnerColumn(name, finished_text=finished),
+    }
+    return [build[spec[0]](*spec[1:]) for spec in specs]
+
+
+LIVE_STATUS_HEADER = """\
+# Golden parity fixtures for Spinner / Status frames and LiveRender control
+# sequences (#15), captured from real Python `rich` by running step programs.
+# Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<case JSON>\t<JSON list of outputs, one per output step>
+# spinner: {"kind": "spinner", "name", "text", "style", "speed", "width",
+#   "steps": [["render", t] | ["update", {"text", "style", "speed"}]]}
+# status: {"kind": "status", "message", "spinner", "style", "speed", "width",
+#   "steps": [["render", t] | ["update", {"status", "spinner", "spinner_style", "speed"}]]}
+# live: {"kind": "live", "markup", "style", "width", "height",
+#   "steps": [["render"] | ["position"] | ["restore"] | ["set", markup]]}
+"""
+
+LIVE_STATUS_CASES: list[tuple[str, dict]] = [
+    ("spinner_from_zero", {"kind": "spinner", "name": "dots", "text": "", "style": None,
+     "speed": 1.0, "width": 30, "steps": [["render", 0], ["render", 0.08], ["render", 0.25], ["render", 1.0]]}),
+    ("spinner_starts_at_first_render", {"kind": "spinner", "name": "dots", "text": "work",
+     "style": "green", "speed": 1.0, "width": 30,
+     "steps": [["render", 5.0], ["render", 5.05], ["render", 5.3], ["render", 12.34]]}),
+    ("spinner_speed_and_markup", {"kind": "spinner", "name": "line", "text": "[bold]busy[/] now",
+     "style": "red", "speed": 2.5, "width": 30,
+     "steps": [["render", 1.0], ["render", 1.1], ["render", 1.37]]}),
+    ("spinner_update_speed", {"kind": "spinner", "name": "dots", "text": "a", "style": None,
+     "speed": 1.0, "width": 30,
+     "steps": [["render", 0], ["render", 0.25], ["update", {"speed": 3.0}], ["render", 0.3],
+               ["render", 0.5], ["update", {"text": "b", "style": "blue"}], ["render", 0.6]]}),
+    ("status_default", {"kind": "status", "message": "Loading [i]data[/]", "spinner": "dots",
+     "style": "status.spinner", "speed": 1.0, "width": 40,
+     "steps": [["render", 2.0], ["render", 2.4]]}),
+    ("status_updates", {"kind": "status", "message": "Step 1", "spinner": "dots", "style": "status.spinner",
+     "speed": 1.0, "width": 40,
+     "steps": [["render", 0], ["update", {"status": "Step 2"}], ["render", 0.2],
+               ["update", {"spinner": "line", "spinner_style": "magenta"}], ["render", 0.4], ["render", 0.9],
+               ["update", {"speed": 2.0}], ["render", 1.0], ["render", 1.3]]}),
+    ("live_render_cursor", {"kind": "live", "markup": "one\n[red]two[/]\nthree", "style": None,
+     "width": 20, "height": 25,
+     "steps": [["position"], ["restore"], ["render"], ["position"], ["restore"],
+               ["set", "short"], ["position"], ["render"], ["position"]]}),
+    ("live_render_style_wrap", {"kind": "live", "markup": "a line that wraps at twelve", "style": "on blue",
+     "width": 12, "height": 25, "steps": [["render"], ["position"], ["restore"]]}),
+]
+
+
+def run_live_status_case(case) -> list[str]:
+    from rich.live_render import LiveRender
+    from rich.spinner import Spinner
+    from rich.status import Status
+
+    console = Console(force_terminal=True, color_system="truecolor", width=case["width"],
+                      height=case.get("height", 25), highlight=False, legacy_windows=False,
+                      no_color=False)
+
+    def capture(renderable) -> str:
+        with console.capture() as cap:
+            console.print(renderable, end="")
+        return cap.get()
+
+    outputs = []
+    if case["kind"] == "spinner":
+        spinner = Spinner(case["name"], text=case["text"], style=case["style"], speed=case["speed"])
+        for step in case["steps"]:
+            if step[0] == "render":
+                outputs.append(capture(spinner.render(step[1])))
+            else:
+                spinner.update(**step[1])
+    elif case["kind"] == "status":
+        status = Status(case["message"], console=console, spinner=case["spinner"],
+                        spinner_style=case["style"], speed=case["speed"])
+        for step in case["steps"]:
+            if step[0] == "render":
+                outputs.append(capture(status.renderable.render(step[1])))
+            else:
+                status.update(**step[1])
+    else:
+        live = LiveRender(Text.from_markup(case["markup"]), style=case["style"] or "")
+        for step in case["steps"]:
+            if step[0] == "render":
+                outputs.append(capture(live))
+            elif step[0] == "position":
+                outputs.append(capture(live.position_cursor()))
+            elif step[0] == "restore":
+                outputs.append(capture(live.restore_cursor()))
+            else:
+                live.set_renderable(Text.from_markup(step[1]))
+    return outputs
+
+
+def run_progress_case(case) -> str:
+    from rich.progress import Progress
+
+    now = [0.0]
+    columns = [] if case["columns"] is None else progress_columns(case["columns"])
+    progress = Progress(*columns, get_time=lambda: now[0], auto_refresh=False)
+    out = []
+    for step in case["steps"]:
+        op = step[0]
+        if op == "time":
+            now[0] = float(step[1])
+        elif op == "add":
+            progress.add_task(step[1], total=step[2], completed=step[3], start=step[4])
+        elif op == "update":
+            progress.update(step[1], **step[2])
+        elif op == "advance":
+            progress.advance(step[1], step[2])
+        elif op == "start":
+            progress.start_task(step[1])
+        elif op == "stop":
+            progress.stop_task(step[1])
+        elif op == "reset":
+            progress.reset(step[1], **step[2])
+        elif op == "remove":
+            progress.remove_task(step[1])
+        elif op == "render":
+            rconsole = Console(
+                force_terminal=True, color_system="truecolor", width=step[1],
+                highlight=False, no_color=False,
+            )
+            with rconsole.capture() as capture:
+                rconsole.print(progress.make_tasks_table(progress.tasks))
+            out.append(capture.get())
+        else:
+            raise SystemExit(f"unknown progress step {op!r}")
+    return "".join(out)
+
+
+MARKDOWN_STRIKE_HEADER = """\
+# Golden parity fixtures for MARKDOWN STRIKETHROUGH delimiter pairing (markdown-it)
+# — captured from real Python `rich`. Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<markdown source as json>\t<escaped output of\n#   Markdown(source, hyperlinks=False) at width 40> (hyperlinks off: upstream's OSC 8\n#   links carry a random id= that is not reproducible)
+"""
+
+#: Keep the Rust side data-driven: `markdown_strike_parity` reads the source from
+#: the fixture, so cases are added here only.
+MARKDOWN_STRIKE_CASES: list[tuple[str, str]] = [
+    ("double", "a ~~x~~ b"),
+    ("single_is_literal", "a ~x~ b ~~y~~"),
+    ("triple", "a ~~~x~~~ b"),
+    ("quadruple", "a ~~~~x~~~~ b"),
+    ("quintuple", "a ~~~~~x~~~~~ b"),
+    ("two_then_three", "a ~~x~~~ b"),
+    ("three_then_two", "a ~~~x~~ b"),
+    ("one_then_two", "a ~x~~ b"),
+    ("spaced_delimiters_do_not_flank", "a ~~ x ~~ b"),
+    ("intraword", "x~~y~~z"),
+    ("adjacent_spans", "~~a~~~~b~~ c"),
+    ("chained", "~~a~~b~~c~~"),
+    ("around_emphasis", "~~a *b* c~~"),
+    ("inside_emphasis", "*a ~~b~~ c*"),
+    ("crossing_emphasis", "*a ~~b* c~~"),
+    ("code_is_opaque", "~~a `c~~` d~~"),
+    ("escaped_tilde", "a \\~~~x~~ b"),
+    ("soft_break", "a ~~b\nc~~ d"),
+    ("unclosed", "a ~~~x b"),
+    ("heading", "# H ~~~x~~~"),
+    ("tight_list", "- a ~~~i~~~\n- ~~j~~"),
+    # Table cells are left out: the port renders cell text unstyled (#9), so
+    # their pairing is unit-tested on plain text in markdown.rs instead.
+    ("link_label_scope", "~~a [b~~](http://x) c~~"),
+    ("inside_link", "[~~~l~~~](http://x)"),
+    ("punctuation_neighbours", "(~~~x~~~).~~y~~!"),
+]
+
+
+THEME_STACK_HEADER = """\
+# Golden parity fixtures for the THEME STACK — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<steps json>\t<escaped output>
+# Steps run on one Console(width=40, truecolor, highlight=False):
+#   ["push", {name: style}, inherit]  Console.push_theme(Theme(styles, inherit=False), inherit=inherit)
+#   ["pop"]                           Console.pop_theme(); a ThemeStackError prints "ERR:ThemeStackError:<msg>"
+#   ["use", {name: style}, [steps]]   with Console.use_theme(Theme(styles, inherit=False)): <steps>
+#   ["print", markup]                 Console.print(markup)
+#   ["config", {name: style}, inherit] print Theme(styles, inherit).config when inherit is False,
+#                                      else the number of styles
+#   ["from_file", text, inherit]      print sorted "name=str(style)" of Theme.from_file(text), or
+#                                      "ERR:<ExceptionType>" when it raises
+"""
+
+#: Keep in sync with `theme_stack_parity` in crates/rich/tests/golden.rs.
+THEME_STACK_CASES: list[tuple[str, list]] = [
+    ("push_inherits", [
+        ["print", "[warning]w[/] [repr.number]1[/]"],
+        ["push", {"warning": "bold red"}, True],
+        ["print", "[warning]w[/] [repr.number]1[/]"],
+    ]),
+    ("push_without_inherit_drops_defaults", [
+        ["push", {"warning": "bold red"}, False],
+        ["print", "[warning]w[/] [repr.number]1[/] [bold]b[/]"],
+    ]),
+    ("nested_push_and_pop_restore", [
+        ["push", {"warning": "red"}, True],
+        ["push", {"warning": "green"}, True],
+        ["print", "[warning]two[/]"],
+        ["pop"],
+        ["print", "[warning]one[/]"],
+        ["pop"],
+        ["print", "[warning]base[/]"],
+    ]),
+    ("pop_base_is_an_error", [
+        ["pop"],
+        ["push", {"x": "blue"}, True],
+        ["pop"],
+        ["pop"],
+    ]),
+    ("use_theme_scopes_and_ignores_inherit", [
+        ["use", {"warning": "underline magenta"}, [
+            ["print", "[warning]in[/] [repr.number]2[/]"],
+        ]],
+        ["print", "[warning]out[/]"],
+    ]),
+    ("theme_names_shadow_style_words", [
+        ["push", {"red": "blue"}, True],
+        ["print", "[red]r[/]"],
+    ]),
+    ("config_is_sorted_definitions", [
+        ["config", {"b": "bold", "a": "red on blue", "c": "not italic link https://e.x", "d": "none"}, False],
+        ["config", {"b": "bold"}, True],
+    ]),
+    ("from_file_parses_like_configparser", [
+        ["from_file", "[DEFAULT]\nq = blue\n[styles]\nFoo = bold  red\nbar: green on black\n# c\n; c2\nurl = link https://x.y/%%20\nlong = bold\n  italic\nref = %(q)s\n", False],
+    ]),
+    ("from_file_errors", [
+        ["from_file", "[other]\na = red\n", False],
+        ["from_file", "[styles]\na = red\na = blue\n", False],
+        ["from_file", "[styles]\nnovalue\n", False],
+        ["from_file", "[styles]\nu = x%y\n", False],
+        ["from_file", "[styles]\na = notacolor\n", False],
+    ]),
+]
+
+
+def run_theme_steps(console, steps) -> None:
+    import io
+
+    from rich.theme import Theme, ThemeStackError
+
+    for step in steps:
+        op = step[0]
+        if op == "push":
+            console.push_theme(Theme(step[1], inherit=False), inherit=step[2])
+        elif op == "pop":
+            try:
+                console.pop_theme()
+            except ThemeStackError as error:
+                console.print(f"ERR:ThemeStackError:{error}", markup=False)
+        elif op == "use":
+            with console.use_theme(Theme(step[1], inherit=False)):
+                run_theme_steps(console, step[2])
+        elif op == "print":
+            console.print(step[1])
+        elif op == "config":
+            theme = Theme(step[1], inherit=step[2])
+            if step[2]:
+                console.print(str(len(theme.styles)), markup=False)
+            else:
+                console.print(theme.config, markup=False)
+        elif op == "from_file":
+            try:
+                theme = Theme.from_file(io.StringIO(step[1]), inherit=step[2])
+            except Exception as error:  # noqa: BLE001 - the type is the fixture
+                console.print(f"ERR:{type(error).__name__}", markup=False)
+            else:
+                lines = sorted(f"{k}={v}" for k, v in theme.styles.items())
+                console.print("\n".join(lines), markup=False)
+        else:
+            raise SystemExit(f"unknown theme step {op!r}")
+
+
 def escape(text: str) -> str:
     """Render ESC and newline as the literal markers the Rust test unescapes."""
     return (
@@ -1081,9 +1464,52 @@ def verify_upstream_version() -> str:
     return expected
 
 
+MEASURE_HEADER = """\
+# Measurement.get of Syntax / JSON (#149), captured from Python rich.
+# Columns: name<TAB>max_width<TAB>input (JSON: kind, source, padding)<TAB>minimum<TAB>maximum
+"""
+
+# Syntax measures its raw source (a tab counts zero cells) plus horizontal
+# padding; JSON measures as its formatted Text (min = widest word).
+MEASURE_CASES = [
+    ("syntax_simple", 80, "syntax", "def f():\n    return 1\n", 0),
+    ("syntax_padding", 80, "syntax", "x = 1\nlonger_line = 2", 2),
+    ("syntax_tabs", 80, "syntax", "a\tb\n\tindented", 0),
+    ("syntax_wide", 80, "syntax", "print('日本語テキスト')", 1),
+    ("syntax_emoji_zwj", 80, "syntax", "👨\u200d👩\u200d👧 = 1", 0),
+    ("syntax_empty", 80, "syntax", "", 0),
+    ("syntax_blank_lines", 80, "syntax", "\n\n", 3),
+    ("syntax_cr_lines", 80, "syntax", "ab\rabcdef\r\nabc", 0),
+    ("syntax_clamped", 10, "syntax", "a_very_long_identifier = 1", 1),
+    ("syntax_zero_width", 0, "syntax", "abc", 0),
+    ("json_object", 80, "json", '{"name": "value text", "items": [1, 2, 3]}', 0),
+    ("json_long_word", 80, "json", '{"k": "supercalifragilistic"}', 0),
+    ("json_wide", 80, "json", '{"名前": "日本語 テキスト"}', 0),
+    ("json_scalar", 80, "json", "42", 0),
+    ("json_clamped", 12, "json", '{"alpha": "beta gamma delta"}', 0),
+]
+
+
+def _measure_input(kind: str, source: str, padding: int):
+    if kind == "syntax":
+        return Syntax(source, "python", padding=padding)
+    return JSON(source)
+
+
 def main() -> None:
     version = verify_upstream_version()
     print(f"verified Python rich {version} against UPSTREAM.toml")
+
+    measure_path = golden_dir() / "measure.tsv"
+    mlines = [MEASURE_HEADER.rstrip("\n")]
+    for name, width, kind, source, padding in MEASURE_CASES:
+        mconsole = Console(width=max(width, 1), highlight=False, no_color=False)
+        options = mconsole.options.update_width(width)
+        m = Measurement.get(mconsole, options, _measure_input(kind, source, padding))
+        spec = json.dumps({"kind": kind, "source": source, "padding": padding}, ensure_ascii=False)
+        mlines.append(f"{name}\t{width}\t{spec}\t{m.minimum}\t{m.maximum}")
+    measure_path.write_text("\n".join(mlines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(MEASURE_CASES)} measure cases to {measure_path}")
     # highlight=False so no ReprHighlighter styling leaks in — the Rust core
     # ships no default highlighter.
     console = Console(
@@ -1310,6 +1736,57 @@ def main() -> None:
         )
     functions_path.write_text("\n".join(flines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(FUNCTION_CASES)} function cases to {functions_path}")
+
+    # --- progress time columns -------------------------------------------
+    ptime_path = golden_dir() / "progress_time.tsv"
+    plines = [PROGRESS_TIME_HEADER.rstrip("\n")]
+    for name, case in PROGRESS_TIME_CASES:
+        plines.append(f"{name}\t{json.dumps(case)}\t{escape(run_progress_case(case))}")
+    ptime_path.write_text("\n".join(plines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(PROGRESS_TIME_CASES)} progress time cases to {ptime_path}")
+
+    # --- spinner / status frames and live render -------------------------
+    live_path = golden_dir() / "live_status.tsv"
+    llines = [LIVE_STATUS_HEADER.rstrip("\n")]
+    for name, case in LIVE_STATUS_CASES:
+        outputs = run_live_status_case(case)
+        llines.append(f"{name}\t{json.dumps(case, ensure_ascii=False)}\t{json.dumps(outputs, ensure_ascii=False)}")
+    live_path.write_text("\n".join(llines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(LIVE_STATUS_CASES)} spinner/status/live cases to {live_path}")
+
+    # --- markdown strikethrough --------------------------------------------
+    strike_path = golden_dir() / "markdown_strike.tsv"
+    klines = [MARKDOWN_STRIKE_HEADER.rstrip("\n")]
+    for name, source in MARKDOWN_STRIKE_CASES:
+        kconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=40,
+            highlight=False,
+            no_color=False,
+        )
+        with kconsole.capture() as capture:
+            kconsole.print(Markdown(source, hyperlinks=False))
+        klines.append(f"{name}\t{json.dumps(source)}\t{escape(capture.get())}")
+    strike_path.write_text("\n".join(klines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(MARKDOWN_STRIKE_CASES)} markdown strike cases to {strike_path}")
+
+    # --- theme stack -----------------------------------------------------
+    stack_path = golden_dir() / "theme_stack.tsv"
+    slines = [THEME_STACK_HEADER.rstrip("\n")]
+    for name, steps in THEME_STACK_CASES:
+        sconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=40,
+            highlight=False,
+            no_color=False,
+        )
+        with sconsole.capture() as capture:
+            run_theme_steps(sconsole, steps)
+        slines.append(f"{name}\t{json.dumps(steps)}\t{escape(capture.get())}")
+    stack_path.write_text("\n".join(slines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(THEME_STACK_CASES)} theme stack cases to {stack_path}")
 
     # --- terminal themes -------------------------------------------------
     import rich.terminal_theme as _tt

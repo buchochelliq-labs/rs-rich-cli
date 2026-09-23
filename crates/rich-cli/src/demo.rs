@@ -409,6 +409,57 @@ fn art(console: &Console, no_color: bool, delay: Duration, root: &Path) -> std::
     }
     section(console, delay, "Rotation, grayscale and Bayer dithering");
     command(console, no_color, "--image art.png --image-rotate 90 --image-grayscale --image-color ansi256 --image-dither bayer4x4", vec!["--image".into(), source.clone(), "--image-mode".into(), "blocks".into(), "--width".into(), width.clone(), "--image-rotate".into(), "90".into(), "--image-grayscale".into(), "--image-color".into(), "ansi256".into(), "--image-dither".into(), "bayer4x4".into()])?;
+    section(
+        console,
+        delay,
+        "Quadrant blocks, ANSI16 and tone adjustments",
+    );
+    for (shown, extra) in [
+        ("--image-mode quadrants", vec![]),
+        (
+            "--image-mode quadrants --image-color ansi16 --image-dither floyd-steinberg",
+            vec![
+                "--image-color",
+                "ansi16",
+                "--image-dither",
+                "floyd-steinberg",
+            ],
+        ),
+        (
+            "--image-mode quadrants --image-brightness 1.3 --image-contrast 1.6 --image-gamma 0.7",
+            vec![
+                "--image-brightness",
+                "1.3",
+                "--image-contrast",
+                "1.6",
+                "--image-gamma",
+                "0.7",
+            ],
+        ),
+    ] {
+        let mut args: Vec<String> = [
+            "--image",
+            &source,
+            "--image-mode",
+            "quadrants",
+            "--width",
+            &width,
+            "--height",
+            "12",
+            "--image-background",
+            "#142032",
+        ]
+        .iter()
+        .map(|arg| arg.to_string())
+        .collect();
+        args.extend(extra.iter().map(|arg| arg.to_string()));
+        command(
+            console,
+            no_color,
+            &format!("--image art.png {shown} --width {width} --height 12"),
+            args,
+        )?;
+    }
     section(console, delay, "Crop anchors and transparent backgrounds");
     for anchor in ["left", "center", "right"] {
         command(

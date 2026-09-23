@@ -62,10 +62,10 @@ in the release notes; the crates.io links show available packages.
 <!-- BEGIN MANIFEST VERSIONS -->
 | Package | Manifest version |
 |---|---|
-| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.5` |
-| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.7` |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.9` |
-| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.7` |
+| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.6` |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.8` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.10` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.8` |
 <!-- END MANIFEST VERSIONS -->
 
 | Package | Role | Import / installed name |

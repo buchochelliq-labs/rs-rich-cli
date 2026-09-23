@@ -31,6 +31,9 @@ pub mod block;
 pub mod braille;
 
 #[cfg(feature = "image")]
+pub mod quadrant;
+
+#[cfg(feature = "image")]
 pub mod image_art;
 
 #[cfg(feature = "image")]
@@ -66,6 +69,9 @@ pub use crate::block::BlockArt;
 
 #[cfg(feature = "image")]
 pub use crate::braille::BrailleArt;
+
+#[cfg(feature = "image")]
+pub use crate::quadrant::QuadrantArt;
 
 #[cfg(feature = "sixel")]
 pub use crate::sixel::SixelArt;

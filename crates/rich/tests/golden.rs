@@ -7,11 +7,12 @@
 //! guarantee described in AGENTS.md.
 
 use rich::markdown::Markdown;
+use rich::measure::Measurement;
 use rich::r#box::{Box as BoxSet, DOUBLE_EDGE, HEAVY_HEAD, SIMPLE, SQUARE};
 use rich::{
     Align, AnsiDecoder, Bar, ColorSystem, Columns, Console, Constrain, Control, HorizontalAlign,
     Json, Justify, Layout, Overflow, Padding, Panel, ProgressBar, Renderable, Rule, Style, Styled,
-    Table, Text, Tree,
+    Syntax, Table, Text, Tree,
 };
 
 /// Build the layout matching a `layout_*` fixture name. Must stay in sync with
@@ -444,7 +445,13 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
             Style::parse("green").unwrap(),
         )),
         "progress_three" => {
-            let mut progress = rich::Progress::new();
+            // Explicit columns, as `_progress_table` in capture_golden.py:
+            // upstream's default set also has a time-remaining column.
+            let mut progress = rich::Progress::new().columns(vec![
+                rich::ProgressColumn::Description,
+                rich::ProgressColumn::Bar,
+                rich::ProgressColumn::Percentage,
+            ]);
             progress.add_task("Downloading", 100.0, 50.0);
             progress.add_task("Processing", 100.0, 100.0);
             progress.add_task("Waiting", 100.0, 0.0);
@@ -1146,4 +1153,377 @@ fn layout_parity() {
         checked += 1;
     }
     assert!(checked > 0, "no layout cases were checked");
+}
+
+/// Build a progress column from a `progress_time.tsv` spec. Keep in sync with
+/// `progress_columns` in scripts/capture_golden.py.
+fn progress_column(spec: &serde_json::Value) -> rich::ProgressColumn {
+    use rich::{ProgressColumn, SpinnerColumn, TimeRemainingColumn};
+    let spec = spec.as_array().expect("column spec");
+    let flag = |i: usize| spec[i].as_bool().expect("bool");
+    match spec[0].as_str().expect("column name") {
+        "description" => ProgressColumn::Description,
+        "bar" => ProgressColumn::Bar,
+        "percentage" => ProgressColumn::Percentage,
+        "task_progress" => ProgressColumn::TaskProgress {
+            show_speed: flag(1),
+        },
+        "mofn" => ProgressColumn::MofN,
+        "download" if flag(1) => ProgressColumn::BinaryDownload,
+        "download" => ProgressColumn::Download,
+        "elapsed" => ProgressColumn::TimeElapsed,
+        "remaining" => ProgressColumn::TimeRemaining(TimeRemainingColumn::new(flag(1), flag(2))),
+        "speed" => ProgressColumn::TransferSpeed,
+        "filesize" => ProgressColumn::FileSize,
+        "total_filesize" => ProgressColumn::TotalFileSize,
+        "spinner" => ProgressColumn::Spinner(SpinnerColumn::new(
+            spec[1].as_str().unwrap(),
+            spec[2].as_str().unwrap(),
+        )),
+        other => panic!("unknown progress column {other:?}"),
+    }
+}
+
+/// Progress time/rate/spinner columns and the task API, driven by the same step
+/// programs as upstream with a shared fake clock.
+#[test]
+fn progress_time_parity() {
+    use rich::{Progress, TaskId, TaskUpdate};
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
+
+    let data = include_str!("golden/progress_time.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let case: serde_json::Value =
+            serde_json::from_str(parts.next().expect("case")).expect("case json");
+        let expected = unescape(parts.next().expect("expected"));
+
+        let now = Arc::new(AtomicU64::new(0f64.to_bits()));
+        let clock = now.clone();
+        let mut progress =
+            Progress::new().clock(move || f64::from_bits(clock.load(Ordering::SeqCst)));
+        if let Some(columns) = case["columns"].as_array() {
+            progress = progress.columns(columns.iter().map(progress_column).collect());
+        }
+        let id = |v: &serde_json::Value| TaskId(v.as_u64().expect("task id") as usize);
+        let mut got = String::new();
+        for step in case["steps"].as_array().expect("steps") {
+            let step = step.as_array().expect("step");
+            match step[0].as_str().expect("op") {
+                "time" => now.store(step[1].as_f64().unwrap().to_bits(), Ordering::SeqCst),
+                "add" => {
+                    let (description, total, completed) = (
+                        step[1].as_str().unwrap(),
+                        step[2].as_f64(),
+                        step[3].as_f64().unwrap(),
+                    );
+                    if step[4].as_bool().unwrap() {
+                        progress.add_task(description, total, completed);
+                    } else {
+                        progress.add_unstarted_task(description, total, completed);
+                    }
+                }
+                "update" => {
+                    let fields = &step[2];
+                    let update = TaskUpdate {
+                        total: fields["total"].as_f64(),
+                        completed: fields["completed"].as_f64(),
+                        advance: fields["advance"].as_f64(),
+                        description: fields["description"].as_str().map(String::from),
+                        visible: fields["visible"].as_bool(),
+                    };
+                    progress.update(id(&step[1]), update);
+                }
+                "advance" => progress.advance(id(&step[1]), step[2].as_f64().unwrap()),
+                "start" => progress.start_task(id(&step[1])),
+                "stop" => progress.stop_task(id(&step[1])),
+                "reset" => {
+                    let fields = &step[2];
+                    progress.reset(
+                        id(&step[1]),
+                        fields["start"].as_bool().unwrap_or(true),
+                        fields["total"].as_f64(),
+                        fields["completed"].as_f64().unwrap_or(0.0),
+                    );
+                }
+                "remove" => progress.remove_task(id(&step[1])),
+                "render" => {
+                    let console = truecolor_console(step[1].as_u64().unwrap() as usize);
+                    got.push_str(&console.capture(|c| c.print(&progress)));
+                }
+                op => panic!("unknown progress step {op:?}"),
+            }
+        }
+        assert_eq!(
+            got,
+            expected,
+            "progress case {name:?} (line {}) diverged",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 11, "expected every progress time case to run");
+}
+
+/// Spinner and Status frames and LiveRender control sequences (#15): the same
+/// step programs as upstream, one expected output per `render`/`position`/
+/// `restore` step.
+#[test]
+fn live_status_parity() {
+    use rich::style::StyleType;
+    use rich::{LiveRender, Spinner, Status};
+    use serde_json::Value;
+
+    let data = include_str!("golden/live_status.tsv");
+    let mut checked = 0;
+    for line in data.lines().filter(|l| !l.starts_with('#')) {
+        let cols: Vec<&str> = line.split('\t').collect();
+        let [name, case, expected] = cols[..] else {
+            panic!("malformed live_status row: {line:?}");
+        };
+        let case: Value = serde_json::from_str(case).unwrap();
+        let expected: Vec<String> = serde_json::from_str(expected).unwrap();
+        let str_of = |v: &Value, key: &str| v.get(key).and_then(Value::as_str).map(str::to_owned);
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(case["width"].as_u64().unwrap() as usize)
+            .height(case["height"].as_u64().unwrap_or(25) as usize)
+            .no_color(false)
+            .build();
+        let steps = case["steps"].as_array().unwrap();
+        let mut outputs = Vec::new();
+        match case["kind"].as_str().unwrap() {
+            "spinner" => {
+                let mut spinner = Spinner::new(case["name"].as_str().unwrap())
+                    .text(case["text"].as_str().unwrap())
+                    .speed(case["speed"].as_f64().unwrap());
+                if let Some(style) = str_of(&case, "style") {
+                    spinner = spinner.style(style);
+                }
+                for step in steps {
+                    match step[0].as_str().unwrap() {
+                        "render" => outputs.push(
+                            console.render_to_string(&spinner.render(step[1].as_f64().unwrap())),
+                        ),
+                        _ => spinner.update(
+                            str_of(&step[1], "text").as_deref(),
+                            str_of(&step[1], "style").map(StyleType::from),
+                            step[1].get("speed").and_then(Value::as_f64),
+                        ),
+                    }
+                }
+            }
+            "status" => {
+                let mut status = Status::new(case["message"].as_str().unwrap())
+                    .spinner(case["spinner"].as_str().unwrap())
+                    .spinner_style(case["style"].as_str().unwrap())
+                    .speed(case["speed"].as_f64().unwrap());
+                for step in steps {
+                    match step[0].as_str().unwrap() {
+                        "render" => outputs.push(console.render_to_string(
+                            &status.renderable().render(step[1].as_f64().unwrap()),
+                        )),
+                        _ => status.update(
+                            str_of(&step[1], "status").as_deref(),
+                            str_of(&step[1], "spinner").as_deref(),
+                            str_of(&step[1], "spinner_style").map(StyleType::from),
+                            step[1].get("speed").and_then(Value::as_f64),
+                        ),
+                    }
+                }
+            }
+            _ => {
+                let text = |markup: &str| Box::new(Text::from_markup(markup).unwrap());
+                let mut live = LiveRender::new(text(case["markup"].as_str().unwrap()));
+                if let Some(style) = str_of(&case, "style") {
+                    live = live.style(Style::parse(&style).unwrap());
+                }
+                for step in steps {
+                    match step[0].as_str().unwrap() {
+                        "render" => outputs.push(console.render_to_string(&live)),
+                        "position" => {
+                            outputs.push(console.render_to_string(&live.position_cursor()))
+                        }
+                        "restore" => outputs.push(console.render_to_string(&live.restore_cursor())),
+                        _ => live.set_renderable(text(step[1].as_str().unwrap())),
+                    }
+                }
+            }
+        }
+        assert_eq!(outputs, expected, "live_status case {name}");
+        checked += 1;
+    }
+    assert_eq!(checked, 8);
+}
+
+/// `Measurement.get` of `Syntax` and `JSON` (#149). The inputs travel in the
+/// fixture as JSON, so no case list needs to stay in sync by name.
+#[test]
+fn measure_parity() {
+    let data = include_str!("golden/measure.tsv");
+    let console = Console::builder().width(80).build();
+    let mut checked = 0;
+    for line in data.lines().filter(|l| !l.starts_with('#')) {
+        let cols: Vec<&str> = line.split('\t').collect();
+        let [name, width, spec, minimum, maximum] = cols[..] else {
+            panic!("malformed measure row: {line:?}");
+        };
+        let spec: serde_json::Value = serde_json::from_str(spec).unwrap();
+        let source = spec["source"].as_str().unwrap();
+        let padding = spec["padding"].as_u64().unwrap() as usize;
+        let renderable: Box<dyn Renderable> = match spec["kind"].as_str().unwrap() {
+            "syntax" => Box::new(Syntax::new(source, "python").padding(padding)),
+            _ => Box::new(Json::new(source).unwrap()),
+        };
+        let options = console.options().update_width(width.parse().unwrap());
+        let got = Measurement::get(&console, &options, renderable.as_ref());
+        assert_eq!(
+            (got.minimum, got.maximum),
+            (minimum.parse().unwrap(), maximum.parse().unwrap()),
+            "measure case {name}"
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 15);
+}
+
+/// Markdown strikethrough delimiter pairing (markdown-it's rules), checked
+/// against upstream. Data-driven: each fixture line carries its own source.
+#[test]
+fn markdown_strike_parity() {
+    let data = include_str!("golden/markdown_strike.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let source: String =
+            serde_json::from_str(parts.next().expect("source")).expect("source json");
+        let expected = unescape(parts.next().expect("expected"));
+        let console = truecolor_console(40);
+        let got = console.capture(|c| c.print(&Markdown::new(&source).hyperlinks(false)));
+        assert_eq!(
+            got,
+            expected,
+            "markdown strike case {name:?} (line {}) diverged: {source:?}",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 24, "expected every markdown strike case to run");
+}
+
+/// Run one `theme_stack.tsv` step list. Keep in sync with `run_theme_steps` in
+/// scripts/capture_golden.py.
+fn run_theme_steps(console: &mut Console, steps: &[serde_json::Value], out: &mut String) {
+    use rich::errors::RichError;
+    use rich::Theme;
+
+    fn theme_of(styles: &serde_json::Value, inherit: bool) -> Theme {
+        let pairs = styles
+            .as_object()
+            .expect("styles object")
+            .iter()
+            .map(|(name, style)| (name.clone(), style.as_str().expect("style").to_string()));
+        Theme::from_styles(pairs, inherit).expect("fixture styles parse")
+    }
+    fn plain(console: &Console, text: &str, out: &mut String) {
+        out.push_str(&console.capture(|c| c.print(&Text::new(text))));
+    }
+
+    for step in steps {
+        let step = step.as_array().expect("step array");
+        match step[0].as_str().expect("op") {
+            "push" => console.push_theme(theme_of(&step[1], false), step[2].as_bool().unwrap()),
+            "pop" => {
+                if let Err(RichError::ThemeStack(message)) = console.pop_theme() {
+                    plain(console, &format!("ERR:ThemeStackError:{message}"), out);
+                }
+            }
+            "use" => {
+                let mut themed = console.use_theme(theme_of(&step[1], false));
+                run_theme_steps(&mut themed, step[2].as_array().expect("nested steps"), out);
+            }
+            "print" => {
+                let markup = step[1].as_str().expect("markup");
+                out.push_str(&console.capture(|c| c.print_str(markup)));
+            }
+            "config" => {
+                let inherit = step[2].as_bool().unwrap();
+                let theme = theme_of(&step[1], inherit);
+                let text = if inherit {
+                    theme.len().to_string()
+                } else {
+                    theme.config()
+                };
+                plain(console, &text, out);
+            }
+            "from_file" => {
+                let text = step[1].as_str().expect("config text");
+                let line = match Theme::from_file(text, step[2].as_bool().unwrap()) {
+                    Ok(theme) => {
+                        let mut lines: Vec<String> = theme
+                            .names()
+                            .map(|name| format!("{name}={}", theme.get(name).unwrap().definition()))
+                            .collect();
+                        lines.sort();
+                        lines.join("\n")
+                    }
+                    Err(RichError::ThemeConfig(message)) => {
+                        format!("ERR:{}", message.split(':').next().unwrap())
+                    }
+                    // Upstream's `Style.parse` wraps a bad colour in
+                    // `StyleSyntaxError`; `Style::parse` reports it as
+                    // `ColorParse`. Both are the style-parse failure here.
+                    Err(RichError::StyleSyntax(_) | RichError::ColorParse(_)) => {
+                        "ERR:StyleSyntaxError".to_string()
+                    }
+                    Err(other) => panic!("unexpected error {other:?}"),
+                };
+                plain(console, &line, out);
+            }
+            op => panic!("unknown theme step {op:?}"),
+        }
+    }
+}
+
+/// The theme stack (`push_theme`/`pop_theme`/`use_theme`) and theme config
+/// files (`Theme.config`/`Theme.from_file`), checked against upstream.
+#[test]
+fn theme_stack_parity() {
+    let data = include_str!("golden/theme_stack.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let steps: serde_json::Value =
+            serde_json::from_str(parts.next().expect("steps")).expect("steps json");
+        let expected = unescape(parts.next().expect("expected"));
+        let mut console = truecolor_console(40);
+        let mut got = String::new();
+        run_theme_steps(&mut console, steps.as_array().unwrap(), &mut got);
+        assert_eq!(
+            got,
+            expected,
+            "theme stack case {name:?} (line {}) diverged",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 9, "expected every theme stack case to run");
 }

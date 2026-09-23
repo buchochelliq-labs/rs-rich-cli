@@ -21,6 +21,12 @@ pub enum RichError {
     /// equivalent — it lets `re.error` propagate — but a caller-supplied pattern
     /// has to fail somewhere, and returning it beats panicking.
     Regex(String),
+    /// The console's base theme cannot be popped (`rich.theme.ThemeStackError`).
+    ThemeStack(String),
+    /// A theme config file could not be read or parsed. Upstream surfaces
+    /// Python's `configparser` errors (`NoSectionError`, `DuplicateOptionError`,
+    /// `ParsingError`, `InterpolationSyntaxError`) and `OSError` here.
+    ThemeConfig(String),
 }
 
 impl fmt::Display for RichError {
@@ -31,6 +37,8 @@ impl fmt::Display for RichError {
             RichError::Markup(msg) => write!(f, "markup error: {msg}"),
             RichError::Json(msg) => write!(f, "json parse error: {msg}"),
             RichError::Regex(msg) => write!(f, "regex error: {msg}"),
+            RichError::ThemeStack(msg) => write!(f, "theme stack error: {msg}"),
+            RichError::ThemeConfig(msg) => write!(f, "theme config error: {msg}"),
         }
     }
 }

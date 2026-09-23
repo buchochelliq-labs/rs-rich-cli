@@ -120,6 +120,8 @@ fn boolean_flags(key: &str) -> Option<(&'static str, &'static str)> {
         "overwrite" => ("--overwrite", "--no-overwrite"),
         "watch" => ("--watch", "--no-watch"),
         "watch_cache" => ("--watch-cache", "--no-watch-cache"),
+        "watch_poll" => ("--watch-poll", "--no-watch-poll"),
+        "watch_exit_on_error" => ("--watch-exit-on-error", "--no-watch-exit-on-error"),
         "sanitize" => ("--sanitize", "--no-sanitize"),
         "progress" => ("--progress", "--no-progress"),
         _ => return None,
@@ -139,6 +141,8 @@ const BOOLEAN_KEYS: &[&str] = &[
     "overwrite",
     "watch",
     "watch_cache",
+    "watch_poll",
+    "watch_exit_on_error",
     "sanitize",
     "progress",
 ];
@@ -150,6 +154,7 @@ const VALUE_KEYS: &[&str] = &[
     "height",
     "jobs",
     "watch_interval",
+    "watch_debounce",
     "export_html",
     "export_svg",
     "panel",
@@ -160,6 +165,11 @@ const VALUE_KEYS: &[&str] = &[
     "image_background",
     "image_color",
     "image_dither",
+    "image_max_width",
+    "image_max_height",
+    "image_brightness",
+    "image_contrast",
+    "image_gamma",
     "log_presentation",
 ];
 
@@ -171,13 +181,17 @@ fn validate_value(key: &str, value: &Value) -> Result<(), String> {
             "image_rotate" => value
                 .as_integer()
                 .is_some_and(|v| matches!(v, 0 | 90 | 180 | 270)),
-            "width" | "height" | "jobs" => value
+            "width" | "height" | "jobs" | "image_max_width" | "image_max_height" => value
                 .as_integer()
                 .is_some_and(|v| v > 0 && usize::try_from(v).is_ok()),
             "watch_interval" => value
                 .as_float()
                 .or_else(|| value.as_integer().map(|v| v as f64))
                 .is_some_and(|v| v.is_finite() && v > 0.0),
+            "watch_debounce" => value
+                .as_float()
+                .or_else(|| value.as_integer().map(|v| v as f64))
+                .is_some_and(|v| v.is_finite() && (0.0..=3600.0).contains(&v)),
             "mode" => value.as_str().is_some_and(|v| {
                 matches!(
                     v,
@@ -206,13 +220,21 @@ fn validate_value(key: &str, value: &Value) -> Result<(), String> {
                 .is_some_and(|v| matches!(v, "plain" | "rich")),
             "image_color" => value
                 .as_str()
-                .is_some_and(|v| matches!(v, "truecolor" | "ansi256")),
+                .is_some_and(|v| matches!(v, "truecolor" | "ansi256" | "ansi16" | "grayscale")),
+            "image_brightness" | "image_contrast" => value
+                .as_float()
+                .or_else(|| value.as_integer().map(|v| v as f64))
+                .is_some_and(|v| v.is_finite() && v >= 0.0),
+            "image_gamma" => value
+                .as_float()
+                .or_else(|| value.as_integer().map(|v| v as f64))
+                .is_some_and(|v| v.is_finite() && v > 0.0),
             "image_dither" => value
                 .as_str()
                 .is_some_and(|v| matches!(v, "none" | "floyd-steinberg" | "bayer4x4")),
             "image_fit" => value
                 .as_str()
-                .is_some_and(|v| matches!(v, "contain" | "cover")),
+                .is_some_and(|v| matches!(v, "contain" | "cover" | "stretch")),
             "image_anchor" => value.as_str().is_some_and(|v| {
                 matches!(
                     v,
@@ -453,7 +475,7 @@ fn overrides(args: &[String]) -> Settings {
                             .parse::<i64>()
                             .map(Value::Integer)
                             .unwrap_or_else(|_| Value::String(value.clone())),
-                        "watch_interval" => value
+                        "watch_interval" | "watch_debounce" => value
                             .parse::<f64>()
                             .map(Value::Float)
                             .unwrap_or_else(|_| Value::String(value.clone())),
@@ -493,12 +515,28 @@ fn normalize_watch(settings: &mut Settings, explicit: &Settings) -> Result<(), S
         .or_else(|| settings.get("watch"))
         .and_then(Value::as_bool);
     if watch == Some(false) {
-        settings.remove("watch_interval");
-        settings.remove("watch_cache");
+        for key in [
+            "watch_interval",
+            "watch_cache",
+            "watch_debounce",
+            "watch_poll",
+            "watch_exit_on_error",
+        ] {
+            settings.remove(key);
+        }
     }
     if watch != Some(true) {
-        if explicit.get("watch_cache").and_then(Value::as_bool) == Some(true) {
-            return Err("--watch-cache requires --watch".into());
+        for (key, flag) in [
+            ("watch_cache", "--watch-cache"),
+            ("watch_poll", "--watch-poll"),
+            ("watch_exit_on_error", "--watch-exit-on-error"),
+        ] {
+            if explicit.get(key).and_then(Value::as_bool) == Some(true) {
+                return Err(format!("{flag} requires --watch"));
+            }
+        }
+        if explicit.contains_key("watch_debounce") {
+            return Err("--watch-debounce requires --watch".into());
         }
         if explicit
             .get("watch_interval")
@@ -732,7 +770,7 @@ mod tests {
         for text in [
             "[profiles.unused]\nwat = true",
             "[profiles.unused]\npager = 'false'",
-            "[profiles.unused]\nimage_fit = 'stretch'",
+            "[profiles.unused]\nimage_fit = 'squash'",
             "version = 2",
             "[defaults]\nwidth = -1",
             "[defaults]\nwatch_interval = nan",
@@ -908,6 +946,65 @@ mod tests {
             assert_eq!(output["settings"]["watch"], false);
             assert!(output["settings"].get("watch_interval").is_none());
             assert!(output["settings"].get("watch_cache").is_none());
+        }
+    }
+
+    #[test]
+    fn watch_debounce_poll_and_exit_on_error_are_configurable() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(
+            root.path().join("rich.toml"),
+            "[defaults]\nwatch = true\nwatch_debounce = 0.25\nwatch_poll = true\nwatch_exit_on_error = true\n[profiles.once]\nwatch = false\n",
+        )
+        .unwrap();
+        let roots = ConfigRoots {
+            home: None,
+            cwd: root.path().into(),
+        };
+        let merged = config_args(&strings(&["a.md", "b.md"]), &roots).unwrap();
+        let cli = super::super::parse_inner(&merged).unwrap().unwrap();
+        assert!(cli.watch && cli.watch_poll && cli.watch_exit_on_error);
+        assert_eq!(cli.watch_debounce, 0.25);
+        assert_eq!(cli.resources, ["a.md", "b.md"]);
+
+        // Explicit flags win over configured values.
+        let merged = config_args(
+            &strings(&["--watch-debounce", "0", "--no-watch-poll", "a.md"]),
+            &roots,
+        )
+        .unwrap();
+        let cli = super::super::parse_inner(&merged).unwrap().unwrap();
+        assert_eq!(cli.watch_debounce, 0.0);
+        assert!(!cli.watch_poll);
+
+        // Disabling watch drops the inherited tuning.
+        for flags in [vec!["--profile", "once"], vec!["--no-watch"]] {
+            let mut args = strings(&flags);
+            args.push("input.txt".into());
+            let merged = config_args(&args, &roots).unwrap();
+            let cli = super::super::parse_inner(&merged).unwrap().unwrap();
+            assert!(!cli.watch && !cli.watch_poll && !cli.watch_exit_on_error);
+        }
+
+        // Explicit requests without watch remain usage errors.
+        for flags in [
+            vec!["--no-watch", "--watch-debounce", "0.5"],
+            vec!["--no-watch", "--watch-poll"],
+            vec!["--no-watch", "--watch-exit-on-error"],
+        ] {
+            let result = config_args(&strings(&flags), &roots)
+                .and_then(|merged| super::super::parse_inner(&merged).map(|_| ()));
+            assert!(
+                result.unwrap_err().contains("requires --watch"),
+                "{flags:?}"
+            );
+        }
+
+        for bad in ["-1", "nan", "\"fast\"", "3601"] {
+            assert!(
+                decode(&format!("[defaults]\nwatch_debounce = {bad}"), None).is_err(),
+                "{bad}"
+            );
         }
     }
 

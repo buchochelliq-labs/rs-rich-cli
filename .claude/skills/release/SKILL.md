@@ -94,6 +94,11 @@ latest review comments were inspected, the worktree is clean, and the PR's
 If `mergeable` is `MERGEABLE` but `mergeStateStatus` is `BLOCKED`, state the
 visible branch-protection blocker instead of calling it fully merge-ready.
 
+Before calling a PR ready, also read every review *summary* (the review body), not
+just inline threads: a bot finding written in a review body is not a thread, so
+the readiness job's unresolved-thread count does not see it. Verify each such
+finding and record its disposition on the PR.
+
 Post a release handoff note on the PR before stopping. Use the centralized
 policy in `.github/release-readiness.json`; CI requires these field labels:
 `Head SHA:`, `Mergeable:`, `Merge state:`, `Review decision:`,
@@ -138,6 +143,12 @@ SHA to the complete CI gate, and uses the protected `crates-io` environment.
 Do not bypass that workflow by publishing separately from a local checkout.
 
 ## 4. Observe publication and verification
+
+Publication uses crates.io Trusted Publishing (see `docs/BRANCHING.md`,
+"Registry authentication"); every selected crate must have a publisher entry for
+this repository, `release.yml` and the `crates-io` environment. To publish an
+existing tag with a fixed workflow, dispatch from `main` with that tag instead of
+moving the tag.
 
 The workflow checks each selected package/version on crates.io and aborts if
 one exists or the registry response is unexpected. It runs a dry run, then

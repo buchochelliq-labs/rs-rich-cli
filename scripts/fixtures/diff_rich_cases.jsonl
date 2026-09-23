@@ -8,3 +8,14 @@
 {"kind":"panel","name":"panel_rounded_safe","source":"content","width":20,"color_system":"truecolor","box":"rounded","safe_box":true}
 {"kind":"panel","name":"panel_heavy_unsafe","source":"alert","width":16,"color_system":"truecolor","box":"heavy","safe_box":false}
 {"kind":"panel","name":"panel_ascii_profile","source":"boxed","width":18,"color_system":"standard","box":"ascii","safe_box":true,"ascii_only":true}
+{"kind":"table","name":"table_basic","source":"","width":30,"color_system":"truecolor","columns":[{"header":"Name","justify":"left"},{"header":"Qty","justify":"right"}],"rows":[["apple","3"],["界 pear","12"]],"box":"heavy_head","show_header":true,"show_lines":false,"show_edge":true,"pad_edge":true,"expand":false}
+{"kind":"table","name":"table_wrap_lines","source":"","width":18,"color_system":"256","columns":[{"header":"a","justify":"left"},{"header":"b","justify":"center"}],"rows":[["one two three","x"],["🙂🙂","yz"]],"box":"rounded","show_header":true,"show_lines":true,"show_edge":true,"pad_edge":true,"expand":false}
+{"kind":"table","name":"table_no_edge_title","source":"","width":24,"color_system":"standard","columns":[{"header":"k","justify":"left"},{"header":"v","justify":"left"}],"rows":[["é","1"]],"box":"square","show_header":false,"show_lines":false,"show_edge":false,"pad_edge":false,"expand":true,"title":"Totals"}
+{"kind":"table","name":"table_max_width_nowrap","source":"","width":30,"color_system":"truecolor","columns":[{"header":"id","justify":"left","no_wrap":true,"max_width":4},{"header":"text","justify":"left","min_width":6}],"rows":[["abcdefgh","wrap me please"]],"box":"ascii","show_header":true,"show_lines":false,"show_edge":true,"pad_edge":true,"expand":false}
+{"kind":"rule","name":"rule_center_title","source":"Section","width":30,"color_system":"truecolor","characters":"─","align":"center"}
+{"kind":"rule","name":"rule_left_wide_title","source":"界 title","width":20,"color_system":"256","characters":"=","align":"left"}
+{"kind":"rule","name":"rule_plain","source":"","width":12,"color_system":"standard","characters":"-~","align":"center"}
+{"kind":"padding","name":"padding_uniform","source":"hello world","width":12,"color_system":"truecolor","pad":[1,2,1,2]}
+{"kind":"padding","name":"padding_wide_glyphs","source":"界🙂é","width":10,"color_system":"256","pad":[0,1,0,3]}
+{"kind":"align","name":"align_center_single","source":"mid","width":11,"color_system":"truecolor","align":"center"}
+{"kind":"align","name":"align_right_wide","source":"界🙂","width":9,"color_system":"standard","align":"right"}

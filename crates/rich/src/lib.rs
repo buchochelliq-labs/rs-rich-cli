@@ -76,7 +76,7 @@ pub use crate::ansi::AnsiDecoder;
 pub use crate::bar::Bar;
 pub use crate::color::{Color, ColorSystem, ColorTriplet};
 pub use crate::columns::Columns;
-pub use crate::console::{Console, ConsoleOptions, Justify, Overflow};
+pub use crate::console::{Console, ConsoleOptions, Justify, Overflow, ThemeContext};
 pub use crate::constrain::Constrain;
 pub use crate::control::{Control, ControlType};
 pub use crate::errors::{Result, RichError};
@@ -90,7 +90,9 @@ pub use crate::padding::Padding;
 pub use crate::pager::{Pager, SystemPager};
 pub use crate::panel::Panel;
 pub use crate::pretty::Pretty;
-pub use crate::progress::{Progress, ProgressColumn};
+pub use crate::progress::{
+    Progress, ProgressColumn, SpinnerColumn, Task, TaskId, TaskUpdate, TimeRemainingColumn,
+};
 pub use crate::progress_bar::ProgressBar;
 pub use crate::protocol::{Highlighter, LineRenderable, Renderable};
 pub use crate::rule::Rule;

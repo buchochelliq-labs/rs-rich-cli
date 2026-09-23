@@ -172,8 +172,10 @@ batch/profile/watch/image work:
   currently stable Markdown and JSON stdin paths.
 - **#34:** the differential corpus and generator now include box renderables
   (`Panel` box variations) and vary the safe-box capability profile in addition
-  to width, color, markup, styles and overflow. Broader CLI differential
-  fuzzing remains follow-up work beyond this bounded corpus.
+  to width, color, markup, styles and overflow. 0.0.10 adds Table, Rule,
+  Padding and Align generators, per-colour-system oracle isolation, a
+  failure-kind-preserving shrinker and a nightly 20,000-case run on `main`.
+  Its first runs filed #442–#449 (see [parity](parity.md#differential-fuzzing)).
 - **#35:** `library_bench` accepts explicit width and color-system arguments and
   records them in its JSON artifact. CI publication and threshold enforcement
   remain deferred; output hashes stay the blocking correctness signal.
@@ -204,11 +206,8 @@ One rewrite closes all three, and closes
 
 ## 0.1.0 — the gaps that block real adoption
 
-**Theme stack** (`push_theme` / `pop_theme`) — [§14](DIVERGENCES.md).
-Any application with themed output needs it. The work is a design pass, not
-typing: an RAII guard borrowing the `Console` mutably makes `console.print(…)`
-*inside* the guard a borrow error, which is the entire use case, and a `RefCell`
-stack breaks `Console::theme() -> &Theme`.
+~~**Theme stack**~~ — done in 0.0.10 (core 0.0.6): `push_theme`, `pop_theme`
+and a `use_theme` guard that derefs to the console; see [§14](DIVERGENCES.md).
 
 **Windows legacy console** — [#12](https://github.com/buchochelliq-labs/rs-rich-cli/issues/12).
 Needs an explicit `unsafe` opt-in, since the workspace denies `unsafe_code`.

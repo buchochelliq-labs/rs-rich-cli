@@ -69,6 +69,9 @@ def release_policy():
     return policy
 
 
+# The one published actions/checkout major every workflow must use.
+CHECKOUT_MAJOR = "actions/checkout@v7"
+
 class ReadinessTests(unittest.TestCase):
     def test_release_tag_must_be_annotated_checked_out_and_on_main(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -208,7 +211,7 @@ class ReadinessTests(unittest.TestCase):
     def test_release_handoff_gate_catches_release_file_only_prs(self):
         workflow = (ROOT / ".github/workflows/pr-hygiene.yml").read_text()
         policy = release_policy()
-        self.assertIn("actions/checkout@v4", workflow)
+        self.assertIn(CHECKOUT_MAJOR, workflow)
         self.assertIn("policy.handoffTriggers.some", workflow)
         self.assertIn("Unknown release handoff trigger in policy", workflow)
         self.assertIn("handoffCommentWaitSeconds", workflow)
@@ -234,9 +237,24 @@ class ReadinessTests(unittest.TestCase):
             [
                 f"{path.relative_to(ROOT)}: {line.strip()}"
                 for path, line in checkout_refs
-                if "actions/checkout@v4" not in line
+                if CHECKOUT_MAJOR not in line
             ],
         )
+
+    def test_release_publishes_with_trusted_publishing_only(self):
+        workflow = (ROOT / ".github/workflows/release.yml").read_text()
+        # No long-lived registry secret: the upload token comes from the OIDC
+        # exchange, which is requested only by the publish job.
+        self.assertNotIn("secrets.CARGO_REGISTRY_TOKEN", workflow)
+        self.assertIn("uses: rust-lang/crates-io-auth-action@v1", workflow)
+        self.assertIn("CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}", workflow)
+        self.assertEqual(1, workflow.count("id-token: write"))
+        publish = workflow[workflow.index("  publish:"):]
+        self.assertIn("id-token: write", publish)
+        # The exchange happens after the preflight and dry run, never before.
+        self.assertLess(publish.index("release.py preflight"), publish.index("crates-io-auth-action"))
+        self.assertLess(publish.index("publish --dry-run"), publish.index("crates-io-auth-action"))
+        self.assertLess(publish.index("crates-io-auth-action"), publish.index("run: python3 scripts/release.py publish\n"))
 
     def test_release_handoff_gate_enforces_final_snapshot_fields(self):
         workflow = (ROOT / ".github/workflows/pr-hygiene.yml").read_text()

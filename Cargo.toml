@@ -21,9 +21,9 @@ rust-version = "1.90"
 # `rich` is taken by an unrelated crate; the `package = …` key maps them back to
 # the short names, so every `use rich::…` in this workspace is unaffected.
 # External users get the same short names via each crate's `[lib] name`.
-rich = { package = "rs-rich", path = "crates/rich", version = "0.0.5" }
-rich-ext = { package = "rs-rich-ext", path = "crates/rich-ext", version = "0.0.7" }
-rich-art = { package = "rs-rich-art", path = "crates/rich-art", version = "0.0.7" }
+rich = { package = "rs-rich", path = "crates/rich", version = "0.0.6" }
+rich-ext = { package = "rs-rich-ext", path = "crates/rich-ext", version = "0.0.8" }
+rich-art = { package = "rs-rich-art", path = "crates/rich-art", version = "0.0.8" }
 # Cargo's default caret requirement treats 0.0.x specially: `version = "0.0.2"`
 # means >=0.0.2,<0.0.3, not >=0.0.2,<0.1.0. Therefore any internal crate bump
 # must also update every direct dependent's workspace requirement.
@@ -54,6 +54,10 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 # (No version pin needed: ureq 3.3 wants rustc 1.85, comfortably under the
 # workspace MSRV of 1.90.)
 ureq = "3"
+
+# Event-driven file watching for the CLI's `--watch` (inotify, FSEvents,
+# ReadDirectoryChangesW, kqueue). The polling loop remains the fallback.
+notify = "8"
 
 # Core stays safe by default; the future Windows-console port may opt back in
 # per-item with an explicit `#[allow(unsafe_code)]` + justification.
