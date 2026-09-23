@@ -14,12 +14,14 @@ fn run_in(dir: &std::path::Path, args: &[&str], stdin: &str) -> Output {
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(stdin.as_bytes())
-        .unwrap();
+    // The binary may exit (a usage error, say) before it reads stdin.
+    if let Err(error) = child.stdin.take().unwrap().write_all(stdin.as_bytes()) {
+        assert_eq!(
+            error.kind(),
+            std::io::ErrorKind::BrokenPipe,
+            "write test stdin"
+        );
+    }
     child.wait_with_output().unwrap()
 }
 
