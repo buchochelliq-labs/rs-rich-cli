@@ -146,6 +146,11 @@ checked against unpublished versions; nothing is published yet.
   runs of three or more (`a ~~~x~~~ b` → `a ~` + struck `x` + `~ b`) and uneven
   runs match rich 15.0.0. Golden `markdown_strike.tsv` (24 cases); DIVERGENCES §21
   narrowed to tilde pairs crossing a later emphasis span (#9).
+- Core: upstream's theme stack — `Console::push_theme`, `pop_theme` and a
+  `use_theme` guard (`ThemeContext`) that pops on drop — plus `Theme::from_styles`,
+  `config`, `from_file` and `read` for upstream theme files. Golden
+  `theme_stack.tsv` checks them against rich 15.0.0; DIVERGENCES §14 resolved (#3).
+  `RichError` gains `ThemeStack` and `ThemeConfig`; exhaustive matches need them.
 
 ## CLI 0.0.9 / art 0.0.7 — prepared
 

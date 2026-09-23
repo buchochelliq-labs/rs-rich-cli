@@ -1423,3 +1423,107 @@ fn markdown_strike_parity() {
     }
     assert_eq!(checked, 24, "expected every markdown strike case to run");
 }
+
+/// Run one `theme_stack.tsv` step list. Keep in sync with `run_theme_steps` in
+/// scripts/capture_golden.py.
+fn run_theme_steps(console: &mut Console, steps: &[serde_json::Value], out: &mut String) {
+    use rich::errors::RichError;
+    use rich::Theme;
+
+    fn theme_of(styles: &serde_json::Value, inherit: bool) -> Theme {
+        let pairs = styles
+            .as_object()
+            .expect("styles object")
+            .iter()
+            .map(|(name, style)| (name.clone(), style.as_str().expect("style").to_string()));
+        Theme::from_styles(pairs, inherit).expect("fixture styles parse")
+    }
+    fn plain(console: &Console, text: &str, out: &mut String) {
+        out.push_str(&console.capture(|c| c.print(&Text::new(text))));
+    }
+
+    for step in steps {
+        let step = step.as_array().expect("step array");
+        match step[0].as_str().expect("op") {
+            "push" => console.push_theme(theme_of(&step[1], false), step[2].as_bool().unwrap()),
+            "pop" => {
+                if let Err(RichError::ThemeStack(message)) = console.pop_theme() {
+                    plain(console, &format!("ERR:ThemeStackError:{message}"), out);
+                }
+            }
+            "use" => {
+                let mut themed = console.use_theme(theme_of(&step[1], false));
+                run_theme_steps(&mut themed, step[2].as_array().expect("nested steps"), out);
+            }
+            "print" => {
+                let markup = step[1].as_str().expect("markup");
+                out.push_str(&console.capture(|c| c.print_str(markup)));
+            }
+            "config" => {
+                let inherit = step[2].as_bool().unwrap();
+                let theme = theme_of(&step[1], inherit);
+                let text = if inherit {
+                    theme.len().to_string()
+                } else {
+                    theme.config()
+                };
+                plain(console, &text, out);
+            }
+            "from_file" => {
+                let text = step[1].as_str().expect("config text");
+                let line = match Theme::from_file(text, step[2].as_bool().unwrap()) {
+                    Ok(theme) => {
+                        let mut lines: Vec<String> = theme
+                            .names()
+                            .map(|name| format!("{name}={}", theme.get(name).unwrap().definition()))
+                            .collect();
+                        lines.sort();
+                        lines.join("\n")
+                    }
+                    Err(RichError::ThemeConfig(message)) => {
+                        format!("ERR:{}", message.split(':').next().unwrap())
+                    }
+                    // Upstream's `Style.parse` wraps a bad colour in
+                    // `StyleSyntaxError`; `Style::parse` reports it as
+                    // `ColorParse`. Both are the style-parse failure here.
+                    Err(RichError::StyleSyntax(_) | RichError::ColorParse(_)) => {
+                        "ERR:StyleSyntaxError".to_string()
+                    }
+                    Err(other) => panic!("unexpected error {other:?}"),
+                };
+                plain(console, &line, out);
+            }
+            op => panic!("unknown theme step {op:?}"),
+        }
+    }
+}
+
+/// The theme stack (`push_theme`/`pop_theme`/`use_theme`) and theme config
+/// files (`Theme.config`/`Theme.from_file`), checked against upstream.
+#[test]
+fn theme_stack_parity() {
+    let data = include_str!("golden/theme_stack.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let steps: serde_json::Value =
+            serde_json::from_str(parts.next().expect("steps")).expect("steps json");
+        let expected = unescape(parts.next().expect("expected"));
+        let mut console = truecolor_console(40);
+        let mut got = String::new();
+        run_theme_steps(&mut console, steps.as_array().unwrap(), &mut got);
+        assert_eq!(
+            got,
+            expected,
+            "theme stack case {name:?} (line {}) diverged",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 9, "expected every theme stack case to run");
+}

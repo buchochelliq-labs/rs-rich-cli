@@ -180,21 +180,23 @@ Format: what differs · why · how to remove it (if temporary).
   same strings the conditional does. Byte-parity with real rich 15.0.0 across
   compact/basic/ordinal/week/split forms (unit-tested).
 
-### 14. No theme *stack* (`push_theme`/`pop_theme`)
-- **Differs:** style names on spans now resolve against the rendering console's
-  theme, as upstream does — that half is **done** (`StyleType`, `Theme::get_style`).
-  What is missing is upstream's per-console theme *stack*: `Console.push_theme`,
-  `pop_theme` and the `use_theme` context manager. Names resolve against the
-  console's single current theme instead.
-- **Why:** the stack forces a `&mut self`-vs-interior-mutability decision that
-  this port should not make casually. An RAII guard borrowing the `Console`
-  mutably makes `console.print(...)` *inside* the guard a borrow error — which is
-  the entire use case — and a `RefCell` stack breaks `Console::theme() -> &Theme`
-  and adds an `already borrowed` panic class on re-entrant renders. Upstream's
-  stack is also thread-local, which sits awkwardly with a `Console` that gets
-  *moved* between threads by `Live::spawn`.
-- **Remove:** design the stack against those constraints, under its own issue.
-  Late-bound span names are a strict prerequisite and are now in place.
+### 14. ~~No theme *stack* (`push_theme`/`pop_theme`)~~ (resolved)
+- **Resolved (0.0.10, core 0.0.6):** `Console::push_theme(theme, inherit)`,
+  `pop_theme()` (an error on the base theme, as upstream's `ThemeStackError`)
+  and `use_theme(theme)`, which returns a `ThemeContext` guard that derefs to the
+  console and pops on drop — including during a panic unwind. Printing *through
+  the guard* avoids the borrow problem that previously blocked the design, and
+  `Console::theme()` still returns `&Theme` (the top of the stack).
+  `Theme::from_styles`, `config`, `from_file` and `read` port upstream's theme
+  files, including `configparser`'s lower-cased keys, `[DEFAULT]`, continuation
+  lines, `%` interpolation and error classes.
+- **Behaviour kept from upstream:** `use_theme` always inherits; upstream's
+  `ThemeContext` never forwards its `inherit` argument (verified against rich
+  15.0.0), so this port omits the ignored parameter.
+- **Remaining difference:** upstream's stack is thread-local; here the stack
+  belongs to the `Console` value, which fits a console that `Live::spawn` moves
+  to another thread. Golden `theme_stack.tsv` covers push, pop, nested push,
+  `use_theme`, `Theme.config` and `from_file` byte for byte.
 
 ### 14a. `Style::parse` results are not cached
 - **Differs:** upstream LRU-caches style-definition parsing; we re-resolve names

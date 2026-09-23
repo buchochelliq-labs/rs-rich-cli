@@ -98,13 +98,43 @@ pub struct Console {
     legacy_windows: bool,
     safe_box: bool,
     ascii_only: bool,
-    theme: Theme,
+    /// Upstream's `ThemeStack`: the builder's theme at the bottom, pushed
+    /// themes above it. Never empty; styles resolve against the top entry.
+    theme_stack: Vec<Theme>,
     base_style: Style,
     highlighters: Vec<Box<dyn Highlighter + Send>>,
     /// While capturing, print paths append their segments here instead of
     /// writing to stdout. Mirrors `Console._record_buffer` under `capture()`.
     record_buffer: std::cell::RefCell<Vec<Segment>>,
     capturing: std::cell::Cell<bool>,
+}
+
+/// A theme in use on a [`Console`] until this guard drops. Returned by
+/// [`Console::use_theme`]; upstream's `ThemeContext`.
+pub struct ThemeContext<'a> {
+    console: &'a mut Console,
+}
+
+impl std::ops::Deref for ThemeContext<'_> {
+    type Target = Console;
+
+    fn deref(&self) -> &Console {
+        self.console
+    }
+}
+
+impl std::ops::DerefMut for ThemeContext<'_> {
+    fn deref_mut(&mut self) -> &mut Console {
+        self.console
+    }
+}
+
+impl Drop for ThemeContext<'_> {
+    fn drop(&mut self) {
+        // Upstream's `__exit__` pops unconditionally. This only fails if the
+        // caller already popped back down to the base through the guard.
+        let _ = self.console.pop_theme();
+    }
 }
 
 impl Default for Console {
@@ -164,15 +194,75 @@ impl Console {
         self.ascii_only
     }
 
-    /// The active theme.
+    /// The active theme: the top of the theme stack.
     pub fn theme(&self) -> &Theme {
-        &self.theme
+        self.theme_stack
+            .last()
+            .expect("the theme stack always holds its base theme")
     }
 
     /// Resolve a style name (or pass a style through) against this console's
     /// theme. Port of `Console.get_style`.
     pub fn get_style(&self, style: &crate::style::StyleType) -> crate::errors::Result<Style> {
-        self.theme.get_style(style)
+        self.theme().get_style(style)
+    }
+
+    /// Push a theme on to the top of the stack. Port of `Console.push_theme`.
+    ///
+    /// With `inherit` the new top is the current top's styles overridden by
+    /// `theme`'s; without it, the new top is exactly `theme`. Prefer
+    /// [`use_theme`](Self::use_theme), which pops again automatically.
+    pub fn push_theme(&mut self, theme: Theme, inherit: bool) {
+        let top = if inherit {
+            let mut merged = self.theme().clone();
+            merged.extend_from(&theme);
+            merged
+        } else {
+            theme
+        };
+        self.theme_stack.push(top);
+    }
+
+    /// Remove the top theme, restoring the previous one. Port of
+    /// `Console.pop_theme`; popping the base theme is an error
+    /// (upstream's `ThemeStackError("Unable to pop base theme")`).
+    pub fn pop_theme(&mut self) -> crate::errors::Result<()> {
+        if self.theme_stack.len() == 1 {
+            return Err(crate::errors::RichError::ThemeStack(
+                "Unable to pop base theme".to_string(),
+            ));
+        }
+        self.theme_stack.pop();
+        Ok(())
+    }
+
+    /// Use a theme until the returned guard is dropped. Port of
+    /// `Console.use_theme`, Python's context manager as an RAII guard.
+    ///
+    /// The guard dereferences to the console, so print *through the guard*
+    /// while it is alive; dropping it pops the theme, including during a
+    /// panic unwind.
+    ///
+    /// ```
+    /// # use rich::{Console, Theme, Style};
+    /// let mut console = Console::builder().width(20).build();
+    /// let mut theme = Theme::new();
+    /// theme.insert("warning", Style::parse("bold red").unwrap());
+    /// {
+    ///     let themed = console.use_theme(theme);
+    ///     assert!(themed.theme().get("warning").is_some());
+    /// }
+    /// assert!(console.theme().get("warning").is_none());
+    /// ```
+    ///
+    /// Upstream's `use_theme` also takes `inherit`, but its `ThemeContext`
+    /// never passes it on to `push_theme`, so a used theme always inherits
+    /// (verified against rich 15.0.0). This port keeps that behaviour and
+    /// omits the ignored parameter; call [`push_theme`](Self::push_theme) to
+    /// replace the styles outright.
+    pub fn use_theme(&mut self, theme: Theme) -> ThemeContext<'_> {
+        self.push_theme(theme, true);
+        ThemeContext { console: self }
     }
 
     /// The whole-output base style.
@@ -797,7 +887,7 @@ impl ConsoleBuilder {
             legacy_windows: self.legacy_windows.unwrap_or(false),
             safe_box: self.safe_box.unwrap_or(true),
             ascii_only: self.ascii_only.unwrap_or(false),
-            theme: self.theme.unwrap_or_else(Theme::default_theme),
+            theme_stack: vec![self.theme.unwrap_or_else(Theme::default_theme)],
             base_style: Style::new(),
             highlighters: Vec::new(),
             record_buffer: std::cell::RefCell::new(Vec::new()),
@@ -1191,5 +1281,35 @@ mod tests {
             .color_system(None)
             .build();
         assert_eq!(console.render_str_to_string("[bold red]hi[/]"), "hi");
+    }
+
+    #[test]
+    fn used_theme_applies_through_the_guard_and_pops_on_drop() {
+        let mut console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(20)
+            .highlight(false)
+            .build();
+        let theme = Theme::from_styles([("accent", "bold red")], false).unwrap();
+        {
+            let themed = console.use_theme(theme);
+            let out = themed.capture(|c| c.print_str("[accent]x[/]"));
+            assert_eq!(out, "\x1b[1;31mx\x1b[0m\n");
+        }
+        assert!(console.theme().get("accent").is_none());
+        assert!(console.pop_theme().is_err(), "the base theme must remain");
+    }
+
+    #[test]
+    fn used_theme_is_popped_during_a_panic_unwind() {
+        let mut console = Console::builder().width(20).build();
+        let theme = Theme::from_styles([("accent", "bold")], false).unwrap();
+        let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _themed = console.use_theme(theme);
+            panic!("render failed");
+        }));
+        assert!(unwound.is_err());
+        assert!(console.theme().get("accent").is_none());
     }
 }

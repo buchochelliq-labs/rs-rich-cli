@@ -193,11 +193,8 @@ One rewrite closes all three, and closes
 
 ## 0.1.0 — the gaps that block real adoption
 
-**Theme stack** (`push_theme` / `pop_theme`) — [§14](DIVERGENCES.md).
-Any application with themed output needs it. The work is a design pass, not
-typing: an RAII guard borrowing the `Console` mutably makes `console.print(…)`
-*inside* the guard a borrow error, which is the entire use case, and a `RefCell`
-stack breaks `Console::theme() -> &Theme`.
+~~**Theme stack**~~ — done in 0.0.10 (core 0.0.6): `push_theme`, `pop_theme`
+and a `use_theme` guard that derefs to the console; see [§14](DIVERGENCES.md).
 
 **Windows legacy console** — [#12](https://github.com/buchochelliq-labs/rs-rich-cli/issues/12).
 Needs an explicit `unsafe` opt-in, since the workspace denies `unsafe_code`.
