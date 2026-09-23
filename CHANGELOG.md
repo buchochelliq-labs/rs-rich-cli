@@ -64,6 +64,27 @@ checked against unpublished versions; nothing is published yet.
   `upload-pages-artifact` v5, `deploy-pages` v5).
 - Art: `icy_sixel` 0.7 for the optional Sixel backend.
 - CLI: `toml` 1.1 for configuration parsing; strict-config behaviour unchanged.
+- Art 0.0.8 image modes (#125, #126, #199) and CLI routing (#144):
+  - `ImageColorMode::Ansi16` (rich's standard palette) and `Grayscale` (neutral
+    ANSI256 entries by luma). Floyd–Steinberg and Bayer 4×4 now work with every
+    quantized mode.
+  - `ImageMode::Quadrants` / `QuadrantArt`: 2×2 pixels per cell, choosing the
+    cheapest two-colour split. Also available for `--diff` heatmaps.
+  - `ImageFit::Stretch`, `ImageArt::max_width`/`max_height`, and brightness,
+    contrast and gamma in `ImageTransforms`, applied in a documented fixed order.
+  - CLI flags `--image-color ansi16|grayscale`, `--image-mode quadrants`,
+    `--image-fit stretch`, `--image-max-width`, `--image-max-height`,
+    `--image-brightness`, `--image-contrast` and `--image-gamma`, plus matching
+    config keys. Invalid values and unsupported combinations are usage errors.
+  - Unset options leave output byte-identical: 149 pre-existing mode, colour,
+    dither, fit and transform invocations compared equal against the previous
+    binary, stdout plus HTML and SVG exports.
+  - Migration: exhaustive matches need `ImageMode::Quadrants`,
+    `ImageFit::Stretch`, `ImageColorMode::{Ansi16, Grayscale}` and
+    `ImageArtError::InvalidAdjustment`. `ImageTransforms` gained three `f32`
+    fields, so it is no longer `Eq`, and struct literals need `..Default::default()`.
+  - The guided demo's art section and a same-source comparison image
+    (`docs/media/cli-010-image-modes.png`) show the new modes from actual output.
 
 ## CLI 0.0.9 / art 0.0.7 — prepared
 

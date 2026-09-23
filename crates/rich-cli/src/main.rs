@@ -254,6 +254,8 @@ enum ImageMode {
     Blocks,
     /// Unicode Braille cells.
     Braille,
+    /// Unicode quadrant blocks: 2×2 pixels, two colours per cell.
+    Quadrants,
     /// A character ramp, the jp2a-style rendering. No colour required.
     Ascii,
     /// Skip the picture; print only the numbers.
@@ -269,10 +271,11 @@ impl std::str::FromStr for ImageMode {
             "sixel" => Ok(Self::Sixel),
             "blocks" | "block" | "half-block" | "half-blocks" => Ok(Self::Blocks),
             "braille" => Ok(Self::Braille),
+            "quadrants" | "quadrant" => Ok(Self::Quadrants),
             "ascii" | "art" => Ok(Self::Ascii),
             "none" | "off" => Ok(Self::None),
             other => Err(format!(
-                "unknown image mode {other:?} (auto, sixel, blocks, ascii, none)"
+                "unknown image mode {other:?} (auto, sixel, blocks, quadrants, braille, ascii, none)"
             )),
         }
     }
@@ -316,6 +319,17 @@ struct Cli {
     image_flip_vertical: bool,
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_grayscale: bool,
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    image_max_width: Option<usize>,
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    image_max_height: Option<usize>,
+    /// `--image-brightness`, `--image-contrast`, `--image-gamma` (1.0 = unchanged).
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    image_brightness: Option<f32>,
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    image_contrast: Option<f32>,
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    image_gamma: Option<f32>,
     log_presentation: String,
     theme_styles: std::collections::BTreeMap<String, Style>,
     /// `--height N`: with `--image`, render this many rows instead of the
@@ -460,6 +474,11 @@ const VALUE_OPTIONS: &[&str] = &[
     "--image-color",
     "--image-dither",
     "--image-rotate",
+    "--image-max-width",
+    "--image-max-height",
+    "--image-brightness",
+    "--image-contrast",
+    "--image-gamma",
     "--demo-section",
     "--demo-delay",
     "--watch-interval",
@@ -976,6 +995,11 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut image_flip_horizontal = false;
     let mut image_flip_vertical = false;
     let mut image_grayscale = false;
+    let mut image_max_width = None;
+    let mut image_max_height = None;
+    let mut image_brightness = None;
+    let mut image_contrast = None;
+    let mut image_gamma = None;
     let mut log_presentation = String::from("plain");
     let mut theme_styles = std::collections::BTreeMap::new();
     let mut height = None;
@@ -1073,13 +1097,47 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                 theme_styles.insert(name.to_owned(), style);
             }
             "--image-color" => {
-                let value = iter
-                    .next()
-                    .ok_or("--image-color requires truecolor or ansi256")?;
-                if !matches!(value.as_str(), "truecolor" | "ansi256") {
-                    return Err("--image-color requires truecolor or ansi256".into());
+                const USAGE: &str =
+                    "--image-color requires truecolor, ansi256, ansi16 or grayscale";
+                let value = iter.next().ok_or(USAGE)?;
+                if !matches!(
+                    value.as_str(),
+                    "truecolor" | "ansi256" | "ansi16" | "grayscale"
+                ) {
+                    return Err(USAGE.into());
                 }
                 image_color = Some(value.clone());
+            }
+            flag @ ("--image-max-width" | "--image-max-height") => {
+                let usage = format!("{flag} requires a positive integer");
+                let value = iter
+                    .next()
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .filter(|v| *v > 0)
+                    .ok_or(usage)?;
+                if flag == "--image-max-width" {
+                    image_max_width = Some(value);
+                } else {
+                    image_max_height = Some(value);
+                }
+            }
+            flag @ ("--image-brightness" | "--image-contrast" | "--image-gamma") => {
+                let gamma = flag == "--image-gamma";
+                let usage = if gamma {
+                    format!("{flag} requires a finite number greater than 0 (1.0 = unchanged)")
+                } else {
+                    format!("{flag} requires a finite number of at least 0 (1.0 = unchanged)")
+                };
+                let value = iter
+                    .next()
+                    .and_then(|v| v.parse::<f32>().ok())
+                    .filter(|v| v.is_finite() && (*v > 0.0 || (!gamma && *v == 0.0)))
+                    .ok_or(usage)?;
+                match flag {
+                    "--image-brightness" => image_brightness = Some(value),
+                    "--image-contrast" => image_contrast = Some(value),
+                    _ => image_gamma = Some(value),
+                }
             }
             "--image-flip-horizontal" => image_flip_horizontal = true,
             "--no-image-flip-horizontal" => image_flip_horizontal = false,
@@ -1110,14 +1168,16 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             }
             "--image-mode" => {
                 let value = iter.next().ok_or(
-                    "--image-mode requires one of: auto, sixel, blocks, braille, ascii, none",
+                    "--image-mode requires one of: auto, sixel, blocks, quadrants, braille, ascii, none",
                 )?;
                 image_mode = value.parse()?;
             }
             "--image-fit" => {
-                let value = iter.next().ok_or("--image-fit requires contain or cover")?;
-                if !matches!(value.as_str(), "contain" | "cover") {
-                    return Err("--image-fit requires contain or cover".into());
+                let value = iter
+                    .next()
+                    .ok_or("--image-fit requires contain, cover or stretch")?;
+                if !matches!(value.as_str(), "contain" | "cover" | "stretch") {
+                    return Err("--image-fit requires contain, cover or stretch".into());
                 }
                 image_fit = Some(value.clone());
             }
@@ -1396,25 +1456,31 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             );
         }
     }
-    if (image_color.as_deref() == Some("ansi256")
+    let quantized = matches!(
+        image_color.as_deref(),
+        Some("ansi256" | "ansi16" | "grayscale")
+    );
+    if (quantized
         || matches!(
             image_dither.as_deref(),
             Some("floyd-steinberg" | "bayer4x4")
         ))
         && !matches!(
             image_mode,
-            ImageMode::Auto | ImageMode::Ascii | ImageMode::Blocks
+            ImageMode::Auto | ImageMode::Ascii | ImageMode::Blocks | ImageMode::Quadrants
         )
     {
-        return Err("image color processing supports only --image-mode ascii or blocks".into());
+        return Err(
+            "image color processing supports only --image-mode ascii, blocks or quadrants".into(),
+        );
     }
     if matches!(
         image_dither.as_deref(),
         Some("floyd-steinberg" | "bayer4x4")
-    ) && image_color.as_deref() != Some("ansi256")
+    ) && !quantized
     {
         return Err(format!(
-            "--image-dither {} requires --image-color ansi256",
+            "--image-dither {} requires --image-color ansi256, ansi16 or grayscale",
             image_dither.as_deref().unwrap()
         ));
     }
@@ -1515,6 +1581,36 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         (
             "--image-color",
             image_color.is_some(),
+            "--image",
+            mode == Mode::Image,
+        ),
+        (
+            "--image-max-width",
+            image_max_width.is_some(),
+            "--image",
+            mode == Mode::Image,
+        ),
+        (
+            "--image-max-height",
+            image_max_height.is_some(),
+            "--image",
+            mode == Mode::Image,
+        ),
+        (
+            "--image-brightness",
+            image_brightness.is_some(),
+            "--image",
+            mode == Mode::Image,
+        ),
+        (
+            "--image-contrast",
+            image_contrast.is_some(),
+            "--image",
+            mode == Mode::Image,
+        ),
+        (
+            "--image-gamma",
+            image_gamma.is_some(),
             "--image",
             mode == Mode::Image,
         ),
@@ -1633,6 +1729,11 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         image_flip_horizontal,
         image_flip_vertical,
         image_grayscale,
+        image_max_width,
+        image_max_height,
+        image_brightness,
+        image_contrast,
+        image_gamma,
         log_presentation,
         theme_styles,
         height,
@@ -3983,6 +4084,7 @@ fn to_art_image_mode(mode: ImageMode) -> rich_art::ImageMode {
         ImageMode::Sixel => rich_art::ImageMode::Sixel,
         ImageMode::Blocks => rich_art::ImageMode::Blocks,
         ImageMode::Braille => rich_art::ImageMode::Braille,
+        ImageMode::Quadrants => rich_art::ImageMode::Quadrants,
         ImageMode::Ascii => rich_art::ImageMode::Ascii,
         ImageMode::None => unreachable!("--image-mode none is rejected during argument parsing"),
     }
@@ -4040,6 +4142,9 @@ fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
             flip_horizontal: cli.image_flip_horizontal,
             flip_vertical: cli.image_flip_vertical,
             grayscale: cli.image_grayscale,
+            brightness: cli.image_brightness.unwrap_or(1.0),
+            contrast: cli.image_contrast.unwrap_or(1.0),
+            gamma: cli.image_gamma.unwrap_or(1.0),
         })
         .mode(to_art_image_mode(cli.image_mode))
         .width(width)
@@ -4047,10 +4152,17 @@ fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     if let Some(height) = cli.height {
         art = art.height(height);
     }
+    if let Some(columns) = cli.image_max_width {
+        art = art.max_width(columns);
+    }
+    if let Some(rows) = cli.image_max_height {
+        art = art.max_height(rows);
+    }
 
     if let Some(fit) = cli.image_fit.as_deref() {
         art = art.fit(match fit {
             "cover" => rich_art::ImageFit::Cover,
+            "stretch" => rich_art::ImageFit::Stretch,
             _ => rich_art::ImageFit::Contain,
         });
     }
@@ -4074,6 +4186,8 @@ fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     if let Some(color) = cli.image_color.as_deref() {
         art = art.color_mode(match color {
             "ansi256" => rich_art::ImageColorMode::Ansi256,
+            "ansi16" => rich_art::ImageColorMode::Ansi16,
+            "grayscale" => rich_art::ImageColorMode::Grayscale,
             _ => rich_art::ImageColorMode::TrueColor,
         });
     }
@@ -4194,7 +4308,7 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
         // An explicit choice still has to produce something. Downgrade rather
         // than emit a rectangle of identical blocks or nothing at all, and say
         // why on stderr so the change is visible rather than mysterious.
-        if mode == ImageMode::Blocks && !has_color {
+        if matches!(mode, ImageMode::Blocks | ImageMode::Quadrants) && !has_color {
             if !for_export && cli.report_format == ReportFormat::Human {
                 eprintln!("rich: no colour available, drawing the diff as ASCII art");
             }
@@ -4226,6 +4340,11 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
             ),
             ImageMode::Blocks => c.print(
                 &BlockArt::new(report.heatmap())
+                    .width(width)
+                    .height(rows_cap),
+            ),
+            ImageMode::Quadrants => c.print(
+                &rich_art::QuadrantArt::new(report.heatmap())
                     .width(width)
                     .height(rows_cap),
             ),
@@ -4569,19 +4688,27 @@ OPTIONS:
                      backend's default
         --image-anchor A Cover crop anchor: center (default), top, bottom, left,
                          right, top-left, top-right, bottom-left, bottom-right
-        --image-fit M With --image and --height: contain (letterbox) or cover
-                     (crop at --image-anchor); preserves aspect ratio in terminal cells
+        --image-fit M With --image and --height: contain (letterbox), cover
+                     (crop at --image-anchor), or stretch (fill, ignoring aspect)
+        --image-max-width N / --image-max-height N
+                     With --image, never exceed N columns / rows (aspect kept)
         --image-background #RRGGBB
                      With --image: flatten transparency onto this RGB colour
                      (also colours contain padding; quote the # in your shell)
-        --image-color M Truecolor (default) or ansi256, with ASCII/blocks images
-        --image-dither M none (default), floyd-steinberg, or bayer4x4 (ansi256)
+        --image-color M truecolor (default), ansi256, ansi16 or grayscale, with
+                     ASCII/blocks/quadrants images
+        --image-dither M none (default), floyd-steinberg, or bayer4x4 (needs a
+                     non-truecolor --image-color)
+        --image-brightness F / --image-contrast F / --image-gamma F
+                     Tone adjustments (1.0 = unchanged), applied in that order
+                     after rotation/flips and before grayscale and colour
         --image-rotate N Rotate still images clockwise: 0, 90, 180, 270
         --image-flip-horizontal / --image-flip-vertical Flip after rotation
         --image-grayscale Composite and convert still images to grayscale
         --image-mode M
                      With --diff/--image, how to draw the picture: auto
-                     (default), sixel (real pixels), blocks, braille, ascii, none
+                     (default), sixel (real pixels), blocks, quadrants, braille,
+                     ascii, none
                      (--image rejects none: there would be nothing to draw)
 {extension_help}
         --threshold PCT
