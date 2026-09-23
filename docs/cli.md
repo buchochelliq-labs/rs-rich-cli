@@ -6,8 +6,8 @@ by what you are trying to do. For the complete list of options, see the
 [CLI reference](cli-reference.md).
 
 **Assumes** you can run commands in a terminal. Examples use real CLI output;
-0.0.9 source-preparation workflows are documented below. See the
-[release notes](releases/0.0.9.md) for validation and publication status.
+0.0.10 workflows (prepared, not yet published) are documented below. See the
+[release notes](releases/0.0.10.md) for validation and publication status.
 
 ---
 
@@ -22,10 +22,13 @@ rich --demo --demo-delay 0    # skip section pauses
 rich --demo --no-color > tour.txt  # finite, colour-free transcript
 ```
 
-The tour walks through markup, tables, panels, layouts, Markdown, syntax,
-progress, notebooks, JSON Lines, logs, config profiles, batch planning and
-parallel HTML/SVG exports, watch updates, and rich-art's banners, Braille,
-half-blocks, ASCII, crop/background controls, image diffs and GIF playback.
+The tour walks through markup, a pushed theme, tables, panels, layouts,
+Markdown (including `~~~` strikethrough), syntax, progress with speed and time
+remaining, notebooks, JSON Lines, logs, config profiles, batch planning and
+parallel HTML/SVG exports, a two-file watch, and rich-art's banners, Braille,
+half-blocks, quadrants, ASCII, ANSI16 and tone adjustments, crop/background
+controls, image diffs and GIF playback. The watch example ends itself: its last
+edit writes invalid JSON, and `--watch-exit-on-error` stops the watch.
 It shows commands alongside the CLI examples. URL fetching, external paging
 and terminal-specific Sixel support are explained without opening a browser,
 fetching a URL or launching a pager.

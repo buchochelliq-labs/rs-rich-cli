@@ -59,8 +59,17 @@ Entries below record subsequent releases and development.
 
 ## Core 0.0.6 / ext 0.0.8 / art 0.0.8 / CLI 0.0.10 — prepared
 
-Every workstream in the [0.0.10 plan](docs/plans/0.0.10.md) is merged to `main`. The
-release test on the integrated tree is in progress. Nothing is tagged or published.
+Every workstream in the [0.0.10 plan](docs/plans/0.0.10.md) is merged to `main`, and the
+release test passed on the integrated tree; see the
+[0.0.10 release notes](docs/releases/0.0.10.md). Nothing is tagged or published.
+
+- Release tooling: `check_packages.py` drops Cargo's cached copies of staged-only
+  versions before verifying. Cargo reused a core 0.0.6 unpacked and built before
+  `fit_to_measurement` existed, which failed a good tree and could pass a bad one.
+- CLI: a multi-file `--watch` with `--watch-exit-on-error` no longer promises a retry
+  in the failing region.
+- Demo: the tour shows a pushed theme, `~~~` strikethrough and a two-file watch that
+  ends through `--watch-exit-on-error`; it is re-recorded from the 0.0.10 build.
 
 - Release: crates.io Trusted Publishing replaces the stored registry token; the
   OIDC exchange runs only after preflight and dry run (`docs/BRANCHING.md`).
