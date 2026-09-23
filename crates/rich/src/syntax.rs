@@ -472,7 +472,7 @@ mod tests {
     #[test]
     fn word_wrap_keeps_every_character() {
         let code = "A".repeat(300);
-        let console = Console::builder().width(80).no_color(true).build();
+        let console = Console::builder().width(80).color_system(None).build();
         let out = console.render_to_string(&Syntax::new(code.as_str(), "python").word_wrap(true));
         assert_eq!(
             out.matches('A').count(),
@@ -502,7 +502,7 @@ mod tests {
     /// blank line in the file, and the loss was baked into exports.
     #[test]
     fn word_wrap_keeps_blank_lines() {
-        let console = Console::builder().width(20).no_color(true).build();
+        let console = Console::builder().width(20).color_system(None).build();
         let out =
             console.render_to_string(&Syntax::new("a = 1\n\nb = 2\n", "python").word_wrap(true));
         let rows: Vec<&str> = out.trim_end_matches('\n').split('\n').collect();
@@ -530,7 +530,7 @@ mod tests {
     /// Both expectations captured verbatim from real rich 15.0.0.
     #[test]
     fn tabs_are_expanded_before_highlighting() {
-        let console = Console::builder().width(30).no_color(true).build();
+        let console = Console::builder().width(30).color_system(None).build();
         let out = console.render_to_string(&Syntax::new(
             "def f():\n\tif x:\n\t\treturn 1\n\treturn 0",
             "python",
@@ -551,7 +551,7 @@ mod tests {
     /// fixed run of spaces — the width of the text before it decides.
     #[test]
     fn a_tab_advances_to_the_next_tab_stop() {
-        let console = Console::builder().width(20).no_color(true).build();
+        let console = Console::builder().width(20).color_system(None).build();
         let out = console.render_to_string(&Syntax::new(
             "a\tb\tc\nab\tcd\tef\nabcd\tefgh\tijkl",
             "python",
@@ -589,7 +589,7 @@ mod tests {
         }
 
         for width in [10usize, 20, 30, 40] {
-            let console = Console::builder().width(width).no_color(true).build();
+            let console = Console::builder().width(width).color_system(None).build();
             let out = console.render_to_string(&Syntax::new("\tvalue = compute(a, b)", "python"));
             for row in out.split('\n') {
                 assert_eq!(screen_width(row), width, "row {row:?} at width {width}");
@@ -623,7 +623,7 @@ mod tests {
     /// row filled up, splitting identifiers mid-word.
     #[test]
     fn word_wrap_breaks_between_words() {
-        let console = Console::builder().width(30).no_color(true).build();
+        let console = Console::builder().width(30).color_system(None).build();
         // This exact line is the one character-folding splits as `z` / `eta`,
         // which is what makes the assertion discriminating.
         let code = "result = compute_total(alpha, beta, gamma, delta, epsilon, zeta, eta, theta)\n";

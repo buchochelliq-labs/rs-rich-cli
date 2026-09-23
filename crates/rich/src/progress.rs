@@ -35,16 +35,9 @@ use crate::text::Text;
 const MAX_SAMPLES: usize = 1000;
 
 /// A source of the current time in seconds. Upstream's `GetTimeCallable`.
-pub type GetTime = Arc<dyn Fn() -> f64 + Send + Sync>;
+pub use crate::console::GetTime;
 
-/// The default clock: seconds on a monotonic clock (upstream `time.monotonic`).
-fn monotonic() -> f64 {
-    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-    START
-        .get_or_init(std::time::Instant::now)
-        .elapsed()
-        .as_secs_f64()
-}
+use crate::console::monotonic;
 
 /// Identifies a task within one [`Progress`]. Upstream's `TaskID`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

@@ -16,6 +16,7 @@ theme conveniences) are NOT upstream and must not be captured here.
 
 from __future__ import annotations
 
+import io
 import json
 import importlib.metadata
 import os
@@ -1204,6 +1205,10 @@ LIVE_STATUS_HEADER = """\
 #   "steps": [["render", t] | ["update", {"status", "spinner", "spinner_style", "speed"}]]}
 # live: {"kind": "live", "markup", "style", "width", "height",
 #   "steps": [["render"] | ["position"] | ["restore"] | ["set", markup]]}
+# clock: {"kind": "clock", "target": "spinner" | "status" | "align_spinner", "name",
+#   "text", "style", "speed", "width", "steps": [["print", t]]} — the renderable
+#   itself is printed on a Console(get_time=...) whose clock reads t, so the
+#   frame comes from `Spinner.__rich_console__` → `render(console.get_time())`.
 """
 
 LIVE_STATUS_CASES: list[tuple[str, dict]] = [
@@ -1233,6 +1238,19 @@ LIVE_STATUS_CASES: list[tuple[str, dict]] = [
                ["set", "short"], ["position"], ["render"], ["position"]]}),
     ("live_render_style_wrap", {"kind": "live", "markup": "a line that wraps at twelve", "style": "on blue",
      "width": 12, "height": 25, "steps": [["render"], ["position"], ["restore"]]}),
+    # The first print fixes the start time, so a later clock reading advances
+    # the frame: a spinner animates just by being redrawn.
+    ("clock_spinner_advances", {"kind": "clock", "target": "spinner", "name": "dots", "text": "work",
+     "style": "green", "speed": 1.0, "width": 30,
+     "steps": [["print", 5.0], ["print", 5.0], ["print", 5.1], ["print", 5.35], ["print", 9.99]]}),
+    ("clock_status_advances", {"kind": "clock", "target": "status", "name": "line", "text": "Loading [i]data[/]",
+     "style": "status.spinner", "speed": 2.0, "width": 40,
+     "steps": [["print", 1.0], ["print", 1.07], ["print", 1.2], ["print", 3.3]]}),
+    # `Align` measures its child first, and `Spinner.__rich_measure__` renders
+    # frame 0 at time 0, fixing the start time there.
+    ("clock_measured_spinner", {"kind": "clock", "target": "align_spinner", "name": "dots", "text": "",
+     "style": None, "speed": 1.0, "width": 11,
+     "steps": [["print", 5.0], ["print", 5.1]]}),
 ]
 
 
@@ -1266,6 +1284,27 @@ def run_live_status_case(case) -> list[str]:
                 outputs.append(capture(status.renderable.render(step[1])))
             else:
                 status.update(**step[1])
+    elif case["kind"] == "clock":
+        now = [0.0]
+        clock_console = Console(force_terminal=True, color_system="truecolor", width=case["width"],
+                                height=25, highlight=False, legacy_windows=False,
+                                no_color=False, get_time=lambda: now[0])
+
+        def spinner():
+            return Spinner(case["name"], text=case["text"], style=case["style"], speed=case["speed"])
+
+        if case["target"] == "spinner":
+            renderable = spinner()
+        elif case["target"] == "status":
+            renderable = Status(case["text"], console=clock_console, spinner=case["name"],
+                                spinner_style=case["style"], speed=case["speed"])
+        else:
+            renderable = Align.center(spinner())
+        for _, time in case["steps"]:
+            now[0] = time
+            with clock_console.capture() as cap:
+                clock_console.print(renderable, end="")
+            outputs.append(cap.get())
     else:
         live = LiveRender(Text.from_markup(case["markup"]), style=case["style"] or "")
         for step in case["steps"]:
@@ -1784,6 +1823,98 @@ def verify_upstream_version() -> str:
     return expected
 
 
+NO_COLOR_HEADER = """\
+# Golden parity fixtures for no-colour mode — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py  (see AGENTS.md → Parity)
+#
+# Format: <name>\t<case JSON>\t<outputs JSON>
+# case: {"markup": str} or {"renderable": <renderables.tsv case name>}, plus
+#   "width" and "system" (the colour system).
+# outputs: {"color_system", "terminal", "text", "html"[, "svg"]}.
+#
+# Console(force_terminal=True, color_system=system, no_color=True, record=True,
+# highlight=False). `terminal` is what print wrote: `_render_buffer` removes the
+# colours but keeps bold/italic/underline/… (`Segment.remove_color`), and
+# `color_system` still reports the system. The exports read the record buffer,
+# which is kept BEFORE colour removal, so HTML/SVG keep their colours.
+"""
+
+NO_COLOR_MARKUP = (
+    "[bold red]Hello[/] [italic green on blue]world[/] [underline #ff8800]u[/] "
+    "[dim]d[/] [reverse magenta]r[/] [strike on yellow]s[/] [blink]b[/]"
+)
+
+NO_COLOR_CASES = [
+    ("markup_truecolor", {"markup": NO_COLOR_MARKUP, "width": 60, "system": "truecolor", "svg": True}),
+    ("markup_standard", {"markup": NO_COLOR_MARKUP, "width": 60, "system": "standard"}),
+    ("colour_only_markup", {"markup": "[red]r[/][on blue]b[/] plain", "width": 20, "system": "truecolor"}),
+    ("panel", {"renderable": "panel_title_markup", "width": 24, "system": "truecolor"}),
+    ("table_title_markup", {"renderable": "table_title_markup", "width": 30, "system": "truecolor"}),
+    ("table_col_style", {"renderable": "table_col_style", "width": 40, "system": "truecolor"}),
+]
+
+
+def run_no_color_case(case) -> dict:
+    renderables = {name: renderable for name, _, renderable in RENDERABLE_CASES}
+    file = io.StringIO()
+    console = Console(file=file, force_terminal=True, color_system=case["system"], width=case["width"],
+                      highlight=False, safe_box=False, legacy_windows=False, record=True, no_color=True)
+    if "markup" in case:
+        console.print(case["markup"])
+    else:
+        console.print(renderables[case["renderable"]])
+    outputs = {
+        "color_system": console.color_system,
+        "terminal": file.getvalue(),
+        "text": console.export_text(clear=False),
+        "html": console.export_html(clear=False, inline_styles=True),
+    }
+    if case.get("svg"):
+        outputs["svg"] = console.export_svg(title="X", unique_id="test", clear=False)
+    return outputs
+
+
+PROMPT_ASK_HEADER = """\
+# Golden parity fixtures for the prompt ask loop — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py  (see AGENTS.md → Parity)
+#
+# Format: <name>\t<case JSON>\t<outputs JSON>
+# case: {"kind": "prompt" | "confirm" | "int", "question", "choices"?, "default"?,
+#   "answers": [lines typed]}
+# outputs: {"terminal", "text", "result"}.
+#
+# `<Kind>.ask(question, console=..., stream=StringIO(answers))` on a
+# Console(file=StringIO(), record=True, force_terminal=True, truecolor, width 80,
+# highlight=False). The question reaches the console through `Console.input`
+# → `print(prompt, end="")`, so it is in the terminal output and the recording
+# alongside any re-ask messages. Answers are never empty: read from a stream
+# an empty line is "\\n", not "", so upstream would not take the default.
+"""
+
+PROMPT_ASK_CASES = [
+    ("prompt_answer", {"kind": "prompt", "question": "Enter [bold]name[/]", "answers": ["Ann"]}),
+    ("prompt_choices_reask", {"kind": "prompt", "question": "Pick", "choices": ["a", "b"],
+                              "default": "a", "answers": ["z", "b"]}),
+    ("confirm_reask", {"kind": "confirm", "question": "Sure", "answers": ["maybe", "y"]}),
+    ("int_reask", {"kind": "int", "question": "Age", "default": 3, "answers": ["x", "42"]}),
+]
+
+
+def run_prompt_ask_case(case) -> dict:
+    file = io.StringIO()
+    console = Console(file=file, force_terminal=True, color_system="truecolor", width=80,
+                      highlight=False, legacy_windows=False, record=True, no_color=False)
+    prompt_type = {"prompt": RichPrompt, "confirm": RichConfirm, "int": RichIntPrompt}[case["kind"]]
+    stream = io.StringIO("".join(f"{answer}\n" for answer in case["answers"]))
+    kwargs = {"console": console, "stream": stream}
+    if "choices" in case:
+        kwargs["choices"] = case["choices"]
+    if "default" in case:
+        kwargs["default"] = case["default"]
+    result = prompt_type.ask(case["question"], **kwargs)
+    return {"terminal": file.getvalue(), "text": console.export_text(clear=False), "result": result}
+
+
 MEASURE_HEADER = """\
 # Measurement.get of Syntax / JSON (#149), captured from Python rich.
 # Columns: name<TAB>max_width<TAB>input (JSON: kind, source, padding)<TAB>minimum<TAB>maximum
@@ -2073,6 +2204,24 @@ def main() -> None:
         llines.append(f"{name}\t{json.dumps(case, ensure_ascii=False)}\t{json.dumps(outputs, ensure_ascii=False)}")
     live_path.write_text("\n".join(llines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(LIVE_STATUS_CASES)} spinner/status/live cases to {live_path}")
+
+    # --- no-colour mode ---------------------------------------------------
+    no_color_path = golden_dir() / "no_color.tsv"
+    nlines = [NO_COLOR_HEADER.rstrip("\n")]
+    for name, case in NO_COLOR_CASES:
+        outputs = run_no_color_case(case)
+        nlines.append(f"{name}\t{json.dumps(case, ensure_ascii=False)}\t{json.dumps(outputs, ensure_ascii=False)}")
+    no_color_path.write_text("\n".join(nlines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(NO_COLOR_CASES)} no-colour cases to {no_color_path}")
+
+    # --- prompt ask loop -------------------------------------------------
+    ask_path = golden_dir() / "prompt_ask.tsv"
+    alines = [PROMPT_ASK_HEADER.rstrip("\n")]
+    for name, case in PROMPT_ASK_CASES:
+        outputs = run_prompt_ask_case(case)
+        alines.append(f"{name}\t{json.dumps(case, ensure_ascii=False)}\t{json.dumps(outputs, ensure_ascii=False)}")
+    ask_path.write_text("\n".join(alines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(PROMPT_ASK_CASES)} prompt ask cases to {ask_path}")
 
     # --- markdown strikethrough --------------------------------------------
     strike_path = golden_dir() / "markdown_strike.tsv"

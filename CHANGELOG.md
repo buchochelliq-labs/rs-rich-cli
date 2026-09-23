@@ -60,6 +60,43 @@ Entries below record subsequent releases and development.
 Cohort versions for 0.0.11 (not published): core 0.0.7, ext 0.0.9, art 0.0.9,
 CLI 0.0.11. Core changes below, so every dependent moves with it.
 
+### Core: no_color, spinner time and prompt output match rich
+
+Three gaps found while writing the user guide, each verified against rich
+15.0.0 and pinned by new golden fixtures (`no_color.tsv`, `prompt_ask.tsv`,
+three `clock_*` rows in `live_status.tsv`).
+
+- **No-colour mode keeps attributes.** `no_color` (or a non-empty `NO_COLOR`)
+  used to drop the colour system, so bold, italic and underline went too.
+  Upstream keeps the colour system and removes only colours when output is
+  written (`Segment.remove_color` in `Console._render_buffer`).
+  - **Behaviour change:** `Console::color_system()` now reports the colour
+    system whatever `no_color` says, as upstream's `Console.color_system` does.
+    Code asking "will colour reach the terminal?" must also check
+    `Console::no_color()`. The ext target observation, rich-art image and GIF
+    rendering and `rich doctor` now do.
+  - Capture and printing strip colours. HTML, SVG and plain-text exports read
+    the recording, so they keep their colours, as upstream's do.
+  - In a terminal, `NO_COLOR` now keeps bold and underline, as it does in
+    upstream rich-cli (which honours it through `Console`); our `--no-color`,
+    documented as equivalent, does the same. Piped output is still plain.
+  - A `TERM` of `dumb` or `unknown` now gets no colour system, as upstream's
+    `is_dumb_terminal` does. `NO_COLOR` had hidden this gap.
+  - New `Style::without_color` and `Segment::remove_color`.
+- **Spinners animate by themselves.** A `Spinner` or `Status` rendered as a
+  renderable now shows the frame for the console's clock
+  (`Spinner.__rich_console__` → `render(console.get_time())`), so one placed in
+  a `Live` display moves. Before, it always drew frame 0.
+  - New `Console::get_time` and `ConsoleBuilder::get_time`, ports of
+    `Console(get_time=…)`, default monotonic. This is the same clock as
+    `Progress`: `progress::GetTime` is now `console::GetTime`, re-exported.
+  - `Spinner` measures as `render(0)`, as upstream's `__rich_measure__` does,
+    which also fixes the start time at 0.
+- **Prompt questions go through the console.** `Prompt`, `Confirm`,
+  `IntPrompt` and `FloatPrompt` wrote the question with `print!`, so capture and
+  export missed it. New `Console::input` / `input_from` port `Console.input`:
+  the prompt is printed through the console with `end=""`, then a line is read.
+
 ### Ext: CLI authoring (0.0.11 workstream 6)
 
 - **One description, many outputs.** `rich_ext::cli_doc::CommandSpec` describes a
@@ -86,7 +123,8 @@ CLI 0.0.11. Core changes below, so every dependent moves with it.
   usage first, options under headings (Render mode, Input, Layout, Image,
   Inspect, Export, Paging, Watch, Batch, Config & theme, …) with their
   defaults, choices, environment variables and config keys, wrapped to the
-  terminal. Metavars read `<N>`. It is plain when piped or with `--no-color`.
+  terminal. Metavars read `<N>`. It is plain when piped and colour-free with
+  `--no-color`.
   - `rich completions bash|zsh|fish|powershell` prints a completion script.
   - `rich docs markdown`, `rich docs man [--output DIR]` and `rich docs config`
     print reference pages; `docs/cli-reference.md` is generated from them.

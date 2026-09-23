@@ -1429,6 +1429,43 @@ fn live_status_parity() {
                     }
                 }
             }
+            "clock" => {
+                // Upstream's `Console(get_time=…)`: the renderable itself is
+                // printed, and the spinner reads the frame time off the console.
+                let now = std::sync::Arc::new(std::sync::Mutex::new(0.0_f64));
+                let clock = now.clone();
+                let console = Console::builder()
+                    .force_terminal(true)
+                    .color_system(Some(ColorSystem::Truecolor))
+                    .width(case["width"].as_u64().unwrap() as usize)
+                    .highlight(false)
+                    .no_color(false)
+                    .get_time(move || *clock.lock().unwrap())
+                    .build();
+                let spinner = || {
+                    let mut spinner = Spinner::new(case["name"].as_str().unwrap())
+                        .text(case["text"].as_str().unwrap())
+                        .speed(case["speed"].as_f64().unwrap());
+                    if let Some(style) = str_of(&case, "style") {
+                        spinner = spinner.style(style);
+                    }
+                    spinner
+                };
+                let renderable: Box<dyn Renderable> = match case["target"].as_str().unwrap() {
+                    "spinner" => Box::new(spinner()),
+                    "status" => Box::new(
+                        Status::new(case["text"].as_str().unwrap())
+                            .spinner(case["name"].as_str().unwrap())
+                            .spinner_style(case["style"].as_str().unwrap())
+                            .speed(case["speed"].as_f64().unwrap()),
+                    ),
+                    _ => Box::new(Align::center(Box::new(spinner()))),
+                };
+                for step in steps {
+                    *now.lock().unwrap() = step[1].as_f64().unwrap();
+                    outputs.push(console.capture(|c| c.print(renderable.as_ref())));
+                }
+            }
             _ => {
                 let text = |markup: &str| Box::new(Text::from_markup(markup).unwrap());
                 let mut live = LiveRender::new(text(case["markup"].as_str().unwrap()));
@@ -1450,7 +1487,140 @@ fn live_status_parity() {
         assert_eq!(outputs, expected, "live_status case {name}");
         checked += 1;
     }
-    assert_eq!(checked, 8);
+    assert_eq!(checked, 11);
+}
+
+/// No-colour mode (`Console(no_color=True)`): printed output loses its colours
+/// but keeps every other attribute, `color_system` still reports the system,
+/// and the exports — which read the recording, not the terminal output — keep
+/// their colours.
+#[test]
+fn no_color_parity() {
+    use serde_json::Value;
+
+    let data = include_str!("golden/no_color.tsv");
+    let mut checked = 0;
+    for line in data.lines().filter(|l| !l.starts_with('#')) {
+        let cols: Vec<&str> = line.split('\t').collect();
+        let [name, case, expected] = cols[..] else {
+            panic!("malformed no_color row: {line:?}");
+        };
+        let case: Value = serde_json::from_str(case).unwrap();
+        let expected: Value = serde_json::from_str(expected).unwrap();
+        let (system, system_name) = match case["system"].as_str().unwrap() {
+            "truecolor" => (ColorSystem::Truecolor, "truecolor"),
+            "standard" => (ColorSystem::Standard, "standard"),
+            other => panic!("no colour system {other:?} wired up"),
+        };
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(system))
+            .width(case["width"].as_u64().unwrap() as usize)
+            .highlight(false)
+            .no_color(true)
+            .build();
+        let print = |c: &Console| match case["markup"].as_str() {
+            Some(markup) => c.print_str(markup),
+            None => c.print(build_renderable(case["renderable"].as_str().unwrap()).as_ref()),
+        };
+        assert!(console.no_color(), "{name}");
+        assert_eq!(
+            console.color_system().map(|_| system_name),
+            expected["color_system"].as_str(),
+            "no_color case {name}: color_system"
+        );
+        assert_eq!(
+            console.capture(print),
+            expected["terminal"].as_str().unwrap(),
+            "no_color case {name}: terminal output"
+        );
+        assert_eq!(
+            console.export_text(print),
+            expected["text"].as_str().unwrap(),
+            "no_color case {name}: export_text"
+        );
+        assert_eq!(
+            console.export_html(print),
+            expected["html"].as_str().unwrap(),
+            "no_color case {name}: export_html"
+        );
+        if let Some(svg) = expected.get("svg") {
+            assert_eq!(
+                console.export_svg("X", "test", print),
+                svg.as_str().unwrap(),
+                "no_color case {name}: export_svg"
+            );
+        }
+        checked += 1;
+    }
+    assert_eq!(checked, 6);
+}
+
+/// The whole ask loop through a recording console: the question is printed
+/// through the console (`Console.input`), so capture and export see it next
+/// to the re-ask messages.
+#[test]
+fn prompt_ask_parity() {
+    use rich::prompt::{Confirm, IntPrompt, Prompt, ScriptedInput};
+    use serde_json::Value;
+
+    let data = include_str!("golden/prompt_ask.tsv");
+    let console = truecolor_console(80);
+    let mut checked = 0;
+    for line in data.lines().filter(|l| !l.starts_with('#')) {
+        let cols: Vec<&str> = line.split('\t').collect();
+        let [name, case, expected] = cols[..] else {
+            panic!("malformed prompt_ask row: {line:?}");
+        };
+        let case: Value = serde_json::from_str(case).unwrap();
+        let expected: Value = serde_json::from_str(expected).unwrap();
+        let ask = |c: &Console| -> Value {
+            let answers: Vec<String> = case["answers"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|a| a.as_str().unwrap().to_string())
+                .collect();
+            let input = &mut ScriptedInput::new(answers);
+            let question = case["question"].as_str().unwrap();
+            match case["kind"].as_str().unwrap() {
+                "prompt" => {
+                    let mut prompt = Prompt::new(question);
+                    if let Some(choices) = case.get("choices").and_then(Value::as_array) {
+                        prompt = prompt.choices(choices.iter().map(|c| c.as_str().unwrap()));
+                    }
+                    let default = case.get("default").and_then(Value::as_str);
+                    Value::from(prompt.ask_from(c, input, default).unwrap())
+                }
+                "confirm" => Value::from(Confirm::new(question).ask_from(c, input, None).unwrap()),
+                _ => {
+                    let default = case.get("default").and_then(Value::as_i64);
+                    Value::from(
+                        IntPrompt::new(question)
+                            .ask_from(c, input, default)
+                            .unwrap(),
+                    )
+                }
+            }
+        };
+        let mut result = Value::Null;
+        let terminal = console.capture(|c| result = ask(c));
+        assert_eq!(
+            terminal,
+            expected["terminal"].as_str().unwrap(),
+            "prompt_ask case {name}: terminal"
+        );
+        assert_eq!(result, expected["result"], "prompt_ask case {name}: result");
+        assert_eq!(
+            console.export_text(|c| {
+                ask(c);
+            }),
+            expected["text"].as_str().unwrap(),
+            "prompt_ask case {name}: export_text"
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 4);
 }
 
 /// `Measurement.get` of `Syntax` and `JSON` (#149). The inputs travel in the

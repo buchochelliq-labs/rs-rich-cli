@@ -17,6 +17,21 @@ use crate::theme::Theme;
 const DEFAULT_WIDTH: usize = 80;
 const DEFAULT_HEIGHT: usize = 25;
 
+/// A source of the current time in seconds. Upstream's `GetTimeCallable`,
+/// shared by [`Console::get_time`] and [`Progress`](crate::progress::Progress).
+pub type GetTime = std::sync::Arc<dyn Fn() -> f64 + Send + Sync>;
+
+/// Seconds on a monotonic clock: upstream's default `time.monotonic`. Every
+/// default clock in the crate reads this one origin, so times taken from a
+/// console and from a progress display are comparable.
+pub(crate) fn monotonic() -> f64 {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    START
+        .get_or_init(std::time::Instant::now)
+        .elapsed()
+        .as_secs_f64()
+}
+
 /// Horizontal justification of a renderable within its width.
 /// Mirrors `rich.console.JustifyMethod`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -93,6 +108,8 @@ pub struct Console {
     height: usize,
     is_terminal: bool,
     no_color: bool,
+    /// Upstream's `Console.get_time`: the clock animations read.
+    get_time: GetTime,
     emoji: bool,
     highlight: bool,
     legacy_windows: bool,
@@ -154,18 +171,28 @@ impl Console {
         ConsoleBuilder::new()
     }
 
-    /// The active color system, or `None` when color is disabled.
+    /// The active color system, or `None` when styles are not rendered at
+    /// all. Port of `Console.color_system`.
+    ///
+    /// Like upstream, this is independent of [`no_color`](Self::no_color):
+    /// no-colour mode keeps the colour system and strips only the colours at
+    /// output time, so bold, italic, underline and the like still render.
+    /// Callers asking "will colour reach the terminal?" must check both.
     pub fn color_system(&self) -> Option<ColorSystem> {
-        if self.no_color {
-            None
-        } else {
-            self.color_system
-        }
+        self.color_system
     }
 
-    /// Whether colour output is disabled. Port of `Console.no_color`.
+    /// Whether colour output is disabled. Port of `Console.no_color`: set by
+    /// the builder, or by a non-empty `NO_COLOR` environment variable.
     pub fn no_color(&self) -> bool {
         self.no_color
+    }
+
+    /// The current time in seconds from this console's clock. Port of
+    /// `Console.get_time` (default `time.monotonic`); override it with
+    /// [`ConsoleBuilder::get_time`] for deterministic animation.
+    pub fn get_time(&self) -> f64 {
+        (self.get_time)()
     }
 
     /// The detected (or configured) width in cells.
@@ -345,20 +372,58 @@ impl Console {
     /// Write (or, while capturing, record) a rendered segment stream, adding a
     /// trailing newline. The single sink for every `print*` path.
     fn emit(&self, segments: Vec<Segment>) {
+        self.emit_end(segments, true);
+    }
+
+    /// [`emit`](Self::emit), with the trailing newline optional: upstream's
+    /// `print(…, end="")` when `newline` is false. Output written straight to
+    /// stdout is flushed in that case, so a prompt shows before input is read.
+    fn emit_end(&self, segments: Vec<Segment>, newline: bool) {
         if segments.is_empty() {
             return;
         }
         if self.capturing.get() {
             let mut buffer = self.record_buffer.borrow_mut();
             buffer.extend(segments);
-            buffer.push(Segment::line());
+            if newline {
+                buffer.push(Segment::line());
+            }
             return;
         }
         let mut output = self.segments_to_string(&segments);
-        output.push('\n');
+        if newline {
+            output.push('\n');
+        }
         let stdout = std::io::stdout();
         let mut lock = stdout.lock();
         let _ = write!(lock, "{output}");
+        if !newline {
+            let _ = lock.flush();
+        }
+    }
+
+    /// Display `prompt` and read a line of input from standard input. Port of
+    /// `Console.input`: the prompt is console markup, printed through the
+    /// console with `end=""` so it is captured and exported like any other
+    /// output. `None` means end of input.
+    pub fn input(&self, prompt: &str) -> std::io::Result<Option<String>> {
+        let prompt = self.build_text(prompt);
+        self.input_from(&prompt, &mut crate::prompt::StdinInput)
+    }
+
+    /// [`input`](Self::input) with a renderable prompt (upstream accepts a
+    /// `Text`) and an explicit input source — upstream's `stream=` argument.
+    pub fn input_from(
+        &self,
+        prompt: &dyn Renderable,
+        stream: &mut dyn crate::prompt::InputSource,
+    ) -> std::io::Result<Option<String>> {
+        // `if prompt: self.print(prompt, end="")`.
+        let segments = self.render_segments(prompt);
+        if segments.iter().any(|segment| !segment.text.is_empty()) {
+            self.emit_end(segments, false);
+        }
+        stream.read_line()
     }
 
     /// Render a value into a list of lines, each a list of [`Segment`]s.
@@ -769,9 +834,18 @@ impl Console {
     }
 
     /// Convert rendered segments into a terminal string, applying this console's
-    /// colour system (and honouring `no_color`).
+    /// colour system (and honouring `no_color`). Port of `Console._render_buffer`.
     pub fn segments_to_string(&self, segments: &[Segment]) -> String {
-        let system = self.color_system();
+        let system = self.color_system;
+        // `if self.no_color and color_system: buffer = Segment.remove_color(…)`:
+        // colours go, every other attribute stays.
+        let colorless;
+        let segments = if self.no_color && system.is_some() {
+            colorless = Segment::remove_color(segments);
+            &colorless[..]
+        } else {
+            segments
+        };
         let mut out = String::new();
         for segment in segments {
             // Control codes are meaningless off a terminal — upstream's
@@ -855,6 +929,7 @@ pub struct ConsoleBuilder {
     width: Option<usize>,
     height: Option<usize>,
     no_color: Option<bool>,
+    get_time: Option<GetTime>,
     emoji: Option<bool>,
     highlight: Option<bool>,
     legacy_windows: Option<bool>,
@@ -872,6 +947,7 @@ impl ConsoleBuilder {
             width: None,
             height: None,
             no_color: None,
+            get_time: None,
             emoji: None,
             highlight: None,
             legacy_windows: None,
@@ -922,8 +998,19 @@ impl ConsoleBuilder {
         self
     }
 
+    /// Enable no-colour mode: colours are stripped from output while other
+    /// attributes (bold, underline, …) still render. Unset, a non-empty
+    /// `NO_COLOR` environment variable enables it. Port of `no_color=`.
     pub fn no_color(mut self, value: bool) -> Self {
         self.no_color = Some(value);
+        self
+    }
+
+    /// Read the current time (seconds) from `clock` instead of the monotonic
+    /// clock. Port of `Console(get_time=…)`; animations such as
+    /// [`Spinner`](crate::spinner::Spinner) render the frame for this time.
+    pub fn get_time(mut self, clock: impl Fn() -> f64 + Send + Sync + 'static) -> Self {
+        self.get_time = Some(std::sync::Arc::new(clock));
         self
     }
 
@@ -958,7 +1045,7 @@ impl ConsoleBuilder {
             .unwrap_or_else(|| std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty()));
         let color_system = if self.color_system_set {
             self.color_system
-        } else if is_terminal {
+        } else if is_terminal && !is_dumb_terminal() {
             Some(detect_color_system())
         } else {
             None
@@ -972,6 +1059,9 @@ impl ConsoleBuilder {
             height,
             is_terminal,
             no_color,
+            get_time: self
+                .get_time
+                .unwrap_or_else(|| std::sync::Arc::new(monotonic)),
             emoji: self.emoji.unwrap_or(true),
             // Upstream's `Console(highlight=True)` default. Getting this wrong is
             // invisible in the fixtures (every one is captured with
@@ -988,6 +1078,16 @@ impl ConsoleBuilder {
             capturing: std::cell::Cell::new(false),
         }
     }
+}
+
+/// Whether `TERM` names a terminal that cannot render styles. Port of
+/// `Console.is_dumb_terminal` (the caller supplies the `is_terminal` half):
+/// `_detect_color_system` returns no colour system for one, so its output is
+/// plain even though it is a terminal.
+fn is_dumb_terminal() -> bool {
+    std::env::var("TERM")
+        .map(|term| matches!(term.to_lowercase().as_str(), "dumb" | "unknown"))
+        .unwrap_or(false)
 }
 
 /// Detect the terminal color system.

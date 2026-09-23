@@ -21,7 +21,10 @@ pub(super) fn observe(console: &Console, overrides: TargetOverrides) -> Detected
             width: Some(console.width()),
             height: Some(console.height()),
             is_terminal: console.is_terminal(),
-            color_system: console.color_system(),
+            // `no_color` strips colour on output without clearing the colour
+            // system (upstream's model), so colour reaches the target only
+            // when both allow it.
+            color_system: console.color_system().filter(|_| !console.no_color()),
             unicode: !console.ascii_only(),
             hyperlinks: console.is_terminal(),
             sixel_hint,

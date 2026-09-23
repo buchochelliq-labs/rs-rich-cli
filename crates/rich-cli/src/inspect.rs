@@ -305,7 +305,7 @@ mod tests {
         let view = build(options, content, resource, |_| Err("no".into())).unwrap();
         Console::builder()
             .width(60)
-            .no_color(true)
+            .color_system(None)
             .build()
             .render_export(view.as_ref())
     }
@@ -395,7 +395,7 @@ mod tests {
         .unwrap();
         let out = Console::builder()
             .width(60)
-            .no_color(true)
+            .color_system(None)
             .build()
             .render_export(view.as_ref());
         assert!(

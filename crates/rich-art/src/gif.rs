@@ -310,6 +310,7 @@ impl GifFrame {
             && console.is_terminal()
             && !console.ascii_only()
             && console.color_system().is_some()
+            && !console.no_color()
     }
 
     pub(crate) fn columns(&self, console: &Console, available: usize) -> usize {
