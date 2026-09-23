@@ -64,6 +64,10 @@ checked against unpublished versions; nothing is published yet.
   `upload-pages-artifact` v5, `deploy-pages` v5).
 - Art: `icy_sixel` 0.7 for the optional Sixel backend.
 - CLI: `toml` 1.1 for configuration parsing; strict-config behaviour unchanged.
+- Core: Markdown strikethrough pairs tilde runs as upstream's markdown-it does, so
+  runs of three or more (`a ~~~x~~~ b` → `a ~` + struck `x` + `~ b`) and uneven
+  runs match rich 15.0.0. Golden `markdown_strike.tsv` (24 cases); DIVERGENCES §21
+  narrowed to tilde pairs crossing a later emphasis span (#9).
 
 ## CLI 0.0.9 / art 0.0.7 — prepared
 

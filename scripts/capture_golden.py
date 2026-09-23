@@ -1003,6 +1003,45 @@ TEXT_OPS_HEADER = """\
 """
 
 
+MARKDOWN_STRIKE_HEADER = """\
+# Golden parity fixtures for MARKDOWN STRIKETHROUGH delimiter pairing (markdown-it)
+# — captured from real Python `rich`. Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<markdown source as json>\t<escaped output of\n#   Markdown(source, hyperlinks=False) at width 40> (hyperlinks off: upstream's OSC 8\n#   links carry a random id= that is not reproducible)
+"""
+
+#: Keep the Rust side data-driven: `markdown_strike_parity` reads the source from
+#: the fixture, so cases are added here only.
+MARKDOWN_STRIKE_CASES: list[tuple[str, str]] = [
+    ("double", "a ~~x~~ b"),
+    ("single_is_literal", "a ~x~ b ~~y~~"),
+    ("triple", "a ~~~x~~~ b"),
+    ("quadruple", "a ~~~~x~~~~ b"),
+    ("quintuple", "a ~~~~~x~~~~~ b"),
+    ("two_then_three", "a ~~x~~~ b"),
+    ("three_then_two", "a ~~~x~~ b"),
+    ("one_then_two", "a ~x~~ b"),
+    ("spaced_delimiters_do_not_flank", "a ~~ x ~~ b"),
+    ("intraword", "x~~y~~z"),
+    ("adjacent_spans", "~~a~~~~b~~ c"),
+    ("chained", "~~a~~b~~c~~"),
+    ("around_emphasis", "~~a *b* c~~"),
+    ("inside_emphasis", "*a ~~b~~ c*"),
+    ("crossing_emphasis", "*a ~~b* c~~"),
+    ("code_is_opaque", "~~a `c~~` d~~"),
+    ("escaped_tilde", "a \\~~~x~~ b"),
+    ("soft_break", "a ~~b\nc~~ d"),
+    ("unclosed", "a ~~~x b"),
+    ("heading", "# H ~~~x~~~"),
+    ("tight_list", "- a ~~~i~~~\n- ~~j~~"),
+    # Table cells are left out: the port renders cell text unstyled (#9), so
+    # their pairing is unit-tested on plain text in markdown.rs instead.
+    ("link_label_scope", "~~a [b~~](http://x) c~~"),
+    ("inside_link", "[~~~l~~~](http://x)"),
+    ("punctuation_neighbours", "(~~~x~~~).~~y~~!"),
+]
+
+
 def escape(text: str) -> str:
     """Render ESC and newline as the literal markers the Rust test unescapes."""
     return (
@@ -1310,6 +1349,23 @@ def main() -> None:
         )
     functions_path.write_text("\n".join(flines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(FUNCTION_CASES)} function cases to {functions_path}")
+
+    # --- markdown strikethrough --------------------------------------------
+    strike_path = golden_dir() / "markdown_strike.tsv"
+    klines = [MARKDOWN_STRIKE_HEADER.rstrip("\n")]
+    for name, source in MARKDOWN_STRIKE_CASES:
+        kconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=40,
+            highlight=False,
+            no_color=False,
+        )
+        with kconsole.capture() as capture:
+            kconsole.print(Markdown(source, hyperlinks=False))
+        klines.append(f"{name}\t{json.dumps(source)}\t{escape(capture.get())}")
+    strike_path.write_text("\n".join(klines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(MARKDOWN_STRIKE_CASES)} markdown strike cases to {strike_path}")
 
     # --- terminal themes -------------------------------------------------
     import rich.terminal_theme as _tt
