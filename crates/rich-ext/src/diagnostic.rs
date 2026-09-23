@@ -738,9 +738,18 @@ impl Renderable for Diagnostic {
                 ),
                 None => (None, None),
             };
-            for snippet in &self.snippets {
+            for (index, snippet) in self.snippets.iter().enumerate() {
+                // The `  --> path:line:column` row already names the first
+                // snippet's file, so its own `--> path` header is dropped
+                // rather than repeating the location (as rustc shows it once).
+                let repeated = index == 0
+                    && self
+                        .location
+                        .as_ref()
+                        .is_some_and(|location| location.path == snippet.name);
                 // Crop paired source/underline rows together; wrapping them independently mislabels columns.
-                for line in snippet.rows(primary.clone(), secondary.clone(), self.linker.as_ref()) {
+                let lines = snippet.rows(primary.clone(), secondary.clone(), self.linker.as_ref());
+                for line in lines.into_iter().skip(usize::from(repeated)) {
                     rows.extend(fit_segments(&line, o.max_width, OverflowPolicy::Crop));
                 }
             }
