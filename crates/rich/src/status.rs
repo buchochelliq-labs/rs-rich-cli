@@ -1,66 +1,113 @@
 //! A status indicator with a spinner.
 //!
 //! Port of `rich/status.py` (the renderable surface). A [`Status`] shows a
-//! spinner animation followed by a status message. Upstream drives it with a
-//! `Live` loop; here the renderable shows the first frame (`t = 0`), and the
-//! live animation lands with the Live-loop work (see the Live/progress issue).
+//! spinner animation followed by a status message, parsed as console markup.
+//! Upstream drives it with a `Live` loop; here the spinner is the testable
+//! surface ([`Status::renderable`] rendered at a point in time), and
+//! [`Status::update`] follows upstream: a new spinner name replaces the
+//! spinner (restarting its animation), anything else updates it in place.
 
 use crate::console::{Console, ConsoleOptions};
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::spinner::Spinner;
-use crate::style::Style;
+use crate::style::StyleType;
 
 /// A spinner + message status indicator. Mirrors `rich.status.Status`.
 pub struct Status {
-    message: String,
-    spinner: String,
-    spinner_style: Style,
+    status: String,
+    spinner_style: StyleType,
     speed: f64,
+    spinner: Spinner,
 }
 
 impl Status {
-    /// A status showing `message` with the default `dots` spinner (green).
+    /// A status showing `message` with the default `dots` spinner, styled
+    /// `status.spinner` (green in the default theme).
     pub fn new(message: impl Into<String>) -> Self {
+        let status = message.into();
+        let spinner_style = StyleType::Name("status.spinner".to_string());
         Status {
-            message: message.into(),
-            spinner: "dots".to_string(),
-            spinner_style: Style::parse("green").expect("valid built-in style"),
+            spinner: Spinner::new("dots")
+                .text(status.clone())
+                .style(spinner_style.clone()),
+            status,
+            spinner_style,
             speed: 1.0,
         }
     }
 
-    /// Choose the spinner animation by name (default `dots`).
-    pub fn spinner(mut self, name: impl Into<String>) -> Self {
-        self.spinner = name.into();
+    fn rebuild(mut self, name: &str) -> Self {
+        self.spinner = Spinner::new(name)
+            .text(self.status.clone())
+            .style(self.spinner_style.clone())
+            .speed(self.speed);
         self
     }
 
-    /// Style applied to the spinner frame (default `status.spinner` = green).
-    pub fn spinner_style(mut self, style: Style) -> Self {
-        self.spinner_style = style;
+    /// Choose the spinner animation by name (default `dots`).
+    pub fn spinner(self, name: &str) -> Self {
+        self.rebuild(name)
+    }
+
+    /// Style applied to the spinner frame (default `status.spinner`).
+    pub fn spinner_style(mut self, style: impl Into<StyleType>) -> Self {
+        self.spinner_style = style.into();
+        self.spinner = self.spinner.style(self.spinner_style.clone());
         self
     }
 
     /// Set the spinner animation speed multiplier (default 1.0).
     pub fn speed(mut self, speed: f64) -> Self {
         self.speed = speed;
+        self.spinner = self.spinner.speed(speed);
         self
     }
 
+    /// Port of `Status.update`. `None` (and, as upstream, a zero speed) leaves
+    /// a field unchanged. A new spinner name builds a fresh spinner; otherwise
+    /// the current one is updated in place, a speed change continuing from its
+    /// current frame.
+    pub fn update(
+        &mut self,
+        status: Option<&str>,
+        spinner: Option<&str>,
+        spinner_style: Option<StyleType>,
+        speed: Option<f64>,
+    ) {
+        if let Some(status) = status {
+            self.status = status.to_string();
+        }
+        if let Some(style) = spinner_style {
+            self.spinner_style = style;
+        }
+        if let Some(speed) = speed.filter(|s| *s != 0.0) {
+            self.speed = speed;
+        }
+        if let Some(name) = spinner {
+            self.spinner = Spinner::new(name)
+                .text(self.status.clone())
+                .style(self.spinner_style.clone())
+                .speed(self.speed);
+        } else {
+            self.spinner.update(
+                Some(&self.status),
+                Some(self.spinner_style.clone()),
+                Some(self.speed),
+            );
+        }
+    }
+
     /// The underlying spinner. Mirrors upstream's `Status.renderable`.
-    pub fn renderable(&self) -> Spinner {
-        Spinner::new(&self.spinner)
-            .text(&self.message)
-            .style(self.spinner_style.clone())
-            .speed(self.speed)
+    pub fn renderable(&self) -> &Spinner {
+        &self.spinner
     }
 }
 
 impl Renderable for Status {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        // Static first frame; the live animation needs the Live loop.
-        self.renderable().render(0.0).rich_render(console, options)
+        // Static frame; the live animation needs the Live loop.
+        self.spinner.rich_render(console, options)
     }
 }
 

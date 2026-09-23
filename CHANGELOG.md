@@ -64,6 +64,27 @@ checked against unpublished versions; nothing is published yet.
   `upload-pages-artifact` v5, `deploy-pages` v5).
 - Art: `icy_sixel` 0.7 for the optional Sixel backend.
 - CLI: `toml` 1.1 for configuration parsing; strict-config behaviour unchanged.
+- Core parity (#15): `Spinner` follows upstream's animation state. The first
+  `render` fixes the start time, `Spinner::update` changes text, style or speed
+  (a new speed continues from the current frame), the text is console markup,
+  and the frame style may be a theme name. `Status` keeps one stateful spinner,
+  parses its message as markup, defaults to the `status.spinner` theme style and
+  gains `update`; `Status::renderable` now returns `&Spinner`.
+  `ProgressColumn::Spinner` delegates its start time to the spinner, as
+  upstream's `SpinnerColumn` does. The new golden `live_status.tsv` has 8 step
+  programs covering spinner and status frames and LiveRender control sequences;
+  PORTING gains parity cells for Live and progress.
+- Core: Progress time, rate and spinner columns and upstream's task model (#6):
+  an injectable clock, `add_task` returning a `TaskId`, `update`/`advance`/
+  `reset`/`start_task`/`stop_task`/`remove_task`, the 30 s speed window, and
+  `TimeElapsed`, `TimeRemaining`, `TransferSpeed`, `FileSize`, `TotalFileSize`,
+  `Spinner`, `TaskProgress` and binary `Download` columns. Golden
+  `progress_time.tsv` replays identical step programs against rich 15.0.0.
+  `Progress::new()` now uses upstream's default columns (adds time remaining);
+  `add_task` takes `impl Into<Option<f64>>` totals and returns a `TaskId`.
+  Progress cell styles now resolve against the console theme.
+- CLI: the capability demo's progress section shows speed, ETA, elapsed and a
+  spinner from a simulated clock.
 - CLI: `--watch` accepts several local files; a change re-renders only that
   file, in its own `rich-ext` Live region, with errors shown per file until it
   recovers. File events come from `notify` (parent-directory watches, so atomic
