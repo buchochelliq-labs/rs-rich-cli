@@ -13,8 +13,11 @@ touching anything under `crates/`.
 
 ## The one rule everything follows
 
-> **The core (`crates/rich`, `crates/rich-cli`) is a faithful mirror. Our own
-> features go in `crates/rich-ext`. Never mix the two.**
+> **The core library (`crates/rich`) is a faithful mirror. New renderers and
+> library-facing features go in `crates/rich-ext`. `crates/rich-cli` mirrors
+> upstream commands, but may own documented binary-boundary conveniences when
+> they only compose public `rich` / `rich-ext` APIs and do not change core
+> behavior.**
 
 The dependency graph is one-directional and must stay that way:
 
@@ -25,6 +28,9 @@ rich-cli ──▶ rich-ext ──▶ rich
 
 If a change would make `crates/rich` diverge from upstream `rich`, it is almost
 certainly in the wrong place — see [Adding our own features](#adding-our-own-features).
+If a CLI-only feature changes the `rich` binary rather than the library, record
+it in the release plan and `docs/PORTING.md`, keep renderers in `rich-ext` where
+possible, and keep the boundary free of core back-dependencies.
 
 ---
 
@@ -56,17 +62,20 @@ only**, and is restated in the README. That file is still the source of truth fo
 a sync, and it is still updated as part of one — it just no longer drives a crate
 version.
 
-- **Never** bump a mirror crate to ship one of *our* features. Features still go
-  in `rich-ext`. The mirror/ext boundary is unchanged; only the numbering is.
+- **Never** bump `rs-rich` to ship one of *our* features. Features still go in
+  `rich-ext` unless they are documented `rich-cli` binary-boundary conveniences.
+  The mirror/ext boundary is unchanged; only the numbering is.
 
 ---
 
 ## Adding our own features
 
-1. **Default location: `crates/rich-ext`.** New renderables, highlighters, boxes,
-   themes, CLI conveniences — all go here. Register them onto a `Console` through
-   the extension registry (see [docs/PLUGINS.md](docs/PLUGINS.md)); do not reach
-   into core internals.
+1. **Default location: `crates/rich-ext`.** New renderables, highlighters, boxes
+   and themes go here. Register them onto a `Console` through the extension
+   registry (see [docs/PLUGINS.md](docs/PLUGINS.md)); do not reach into core
+   internals. CLI conveniences that are only command routing, exit/report
+   contracts, streaming orchestration, or release automation may live in
+   `crates/rich-cli` when their accepted release plan says so.
 2. **If a feature genuinely needs a core hook**, add it as a new *extension-point
    trait* in `crates/rich/src/protocol.rs` (the sanctioned seam), keeping core's
    own behavior unchanged. Extensions implement the trait from `rich-ext`.
@@ -75,8 +84,8 @@ version.
    in [docs/DIVERGENCES.md](docs/DIVERGENCES.md). A default build of `crates/rich`
    must always behave like upstream.
 
-If you find yourself editing a faithful-port module to add non-upstream behavior,
-stop and move it to `rich-ext`.
+If you find yourself editing a faithful-port library module to add non-upstream
+behavior, stop and move it to `rich-ext`.
 
 ---
 
@@ -105,6 +114,37 @@ Use the [`port-module`](.claude/skills/port-module/SKILL.md) skill. In short:
 - The Rust test (`crates/rich/tests/golden.rs`) asserts our output matches those
   bytes. A parity break must fail CI, never be silently accepted.
 
+#### Never install `rich-cli` into the same environment as `rich`
+
+`UPSTREAM.toml` pins **both** `rich` 15.0.0 and `rich-cli` 1.8.1, and those two
+**cannot coexist**: `rich-cli` 1.8.1 requires `rich<13`, so installing it
+silently *downgrades* `rich` to 12.6.0 — the exact library this port measures
+itself against.
+
+Nothing about that failure looks wrong. `pip` prints no error, the goldens still
+run, and every subsequent parity check quietly compares against the wrong
+upstream. It is the most dangerous state this repo can be in, because a
+comparison that is measuring the wrong thing is indistinguishable from one that
+passes.
+
+Keep the CLI oracle in its own virtualenv, and check the library version before
+trusting any parity result:
+
+```bash
+python -m venv .venv-richcli
+.venv-richcli/Scripts/python -m pip install "rich-cli==1.8.1"   # rich 12.6.0 lives here
+python -c "from importlib.metadata import version; print(version('rich'))"  # must be 15.0.0
+```
+
+Use the venv **only** for questions about *CLI semantics* (what a flag does,
+whether it errors, what the default is). Do not use it as a rendering oracle:
+its `rich` is 12.6.0, not the version `crates/rich` mirrors.
+
+Two more environment traps that silently produce wrong comparisons on Windows:
+`NO_COLOR` is set on some machines and strips colour from the captured side
+only, and Python's text stdout translates `\n` to `\r\n`, which makes every
+measured line one cell wider than it is. Clear the first; strip the second.
+
 ---
 
 ## Syncing a new upstream release
@@ -113,7 +153,8 @@ Use the [`sync-upstream`](.claude/skills/sync-upstream/SKILL.md) skill:
 
 1. Diff upstream between the ref in `UPSTREAM.toml` and the new tag.
 2. Map each changed `.py` to its Rust file via `docs/PORTING.md` and port the diff.
-3. Bump the mirror crate's `version` to match, update `UPSTREAM.toml`.
+3. Bump the mirror crate's independent SemVer as appropriate, and update
+   `UPSTREAM.toml`; never copy the Python version into the crate manifest.
 4. Re-capture golden fixtures against the new version; make CI green.
 5. Add a `CHANGELOG.md` entry noting the upstream version absorbed.
 

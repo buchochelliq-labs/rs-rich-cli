@@ -1,12 +1,12 @@
 # crates/rich-cli — binary that mirrors the Python `rich-cli` command-line tool.
 #
-# ⚠️  VERSION POLICY: this crate's version mirrors the upstream `rich-cli`
-# release (a DIFFERENT project from the `rich` library — it versions separately).
-# See UPSTREAM.toml and AGENTS.md.
+# VERSION POLICY: the crates.io package `rs-rich-cli` follows independent SemVer;
+# its version does not mirror the upstream Python `rich-cli` release. The tracked
+# upstream release is recorded in UPSTREAM.toml. This package installs `rich`.
 [package]
 name = "rs-rich-cli"
-version = "0.0.1"
-description = "A Rust port of the `rich-cli` terminal toolbox, built on the `rich` crate"
+version = "0.0.10"
+description = "The `rich` executable: a Rust port of Python `rich-cli` 1.8.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -26,17 +26,34 @@ path = "src/main.rs"
 workspace = true
 
 [features]
+# Optional parser reuse; disabled in the default mirror (DIVERGENCES #23).
+syntax-cache = ["rich/syntax-cache"]
 default = ["fetch", "art"]
+# Optional JSON display divergence; never enabled by default.
+json-escape-safe = ["rich/json-escape-safe"]
 # `fetch` enables the CLI's URL support (`rich <url>`); disable it
 # (`--no-default-features`) for a lean, network-free build.
 fetch = ["dep:ureq"]
-# `art` enables `--gif` (animated GIF playback). Pulls in image decoders, so it
-# can be dropped for a smaller binary.
+# `art` enables `--gif` (animated GIF playback), `--diff` (perceptual image
+# diffing) and the image renderers behind `--image-mode`, including Sixel.
+# Pulls in image decoders, so it can be dropped for a smaller binary.
 art = ["dep:rich-art"]
 
 [dependencies]
 rich.workspace = true
 rich-ext.workspace = true
+terminal_size.workspace = true
 serde_json.workspace = true
 ureq = { workspace = true, optional = true }
-rich-art = { workspace = true, optional = true, features = ["gif"] }
+rich-art = { workspace = true, optional = true, features = ["gif", "sixel"] }
+
+toml = "1.1"
+tempfile = "3"
+same-file = "1"
+ctrlc = "3.4"
+cap-std = "4"
+cap-fs-ext = "4"
+fastrand = "2"
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization"] }

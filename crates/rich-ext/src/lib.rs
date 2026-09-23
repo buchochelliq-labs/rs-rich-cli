@@ -20,12 +20,17 @@
 //! assert!(out.contains("\x1b[1;36m7\x1b[0m"));
 //! ```
 
+pub mod cli;
+pub mod encoding;
 pub mod highlighter;
 pub mod registry;
+pub mod sanitize;
+pub mod target;
 pub mod theme;
 
 pub use highlighter::NumberHighlighter;
 pub use registry::{install_defaults, ExtensionRegistry};
+pub use sanitize::sanitize_terminal_controls;
 pub use theme::{extended_theme, EXTRA_STYLES};
 
 use rich::Console;
@@ -44,3 +49,17 @@ impl ConsoleExt for Console {
         self
     }
 }
+
+#[cfg(feature = "testing")]
+pub mod testing;
+
+pub mod layout;
+
+pub mod event;
+
+pub mod diagnostic;
+
+#[cfg(any(feature = "log", feature = "tracing"))]
+pub mod adapters;
+
+pub mod live;

@@ -16,9 +16,33 @@ color, and beautiful formatting in the terminal.
 Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
 (see [`UPSTREAM.toml`](UPSTREAM.toml)).
 
-![Console markup](docs/assets/markup.svg)
+![Rich-art cover cropping with nine anchors](docs/assets/demos/v8-crop-anchors.gif)
 
-> **`0.0.1` — early, and the version says so.** The crates version independently
+**[Watch the rich-art videos](https://buchochelliq-labs.github.io/rs-rich-cli/demos/)** ·
+[Output gallery](docs/gallery.md) · [CLI guide](docs/cli.md)
+
+This preview shows crop anchors from the optimized CLI 0.0.8 build.
+[New workflows and reproduction](docs/demos.md#cli-008-workflows) ·
+[0.0.8 release notes](docs/releases/0.0.8.md).
+
+## Install and try
+
+```bash
+cargo install rs-rich-cli
+rich --print '[bold magenta]Hello[/] [green]World[/]'
+rich --help
+rich --demo  # guided suite tour; Ctrl+C stops
+```
+
+For Rust applications, use `cargo add rs-rich` and import `rich::Console`.
+See [Getting started](docs/getting-started.md) for library examples.
+
+![Progress output exported by rs-rich](docs/assets/demos/progress.gif)
+
+Progress and spinner GIFs replay exported library frames; the gallery includes
+[tables, panels, trees, Markdown and JSON](docs/gallery.md).
+
+> **Early releases, and the versions say so.** The crates version independently
 > by ordinary SemVer; the number is *not* tied to the upstream release. Expect
 > breaking API changes. Which upstream version is tracked lives in
 > [`UPSTREAM.toml`](UPSTREAM.toml) and the line above. See [AGENTS.md](AGENTS.md)
@@ -26,14 +50,30 @@ Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
 
 ## Workspace
 
-**All four are published on crates.io at `0.0.1`.**
+Each package follows independent SemVer. The Python releases being tracked are
+recorded separately in [`UPSTREAM.toml`](UPSTREAM.toml).
 
-| crate | crates.io | docs | `use` as | what it is |
-|-------|-----------|------|----------|------------|
-| [`crates/rich`](crates/rich) | [![rs-rich](https://img.shields.io/crates/v/rs-rich.svg)](https://crates.io/crates/rs-rich) | [docs.rs](https://docs.rs/rs-rich) | `rich` | faithful port of the `rich` library |
-| [`crates/rich-ext`](crates/rich-ext) | [![rs-rich-ext](https://img.shields.io/crates/v/rs-rich-ext.svg)](https://crates.io/crates/rs-rich-ext) | [docs.rs](https://docs.rs/rs-rich-ext) | `rich_ext` | our additions + the plugin registry |
-| [`crates/rich-cli`](crates/rich-cli) | [![rs-rich-cli](https://img.shields.io/crates/v/rs-rich-cli.svg)](https://crates.io/crates/rs-rich-cli) | — *(binary)* | *(binary `rich`)* | the `rich` command-line tool |
-| [`crates/rich-art`](crates/rich-art) | [![rs-rich-art](https://img.shields.io/crates/v/rs-rich-art.svg)](https://crates.io/crates/rs-rich-art) | [docs.rs](https://docs.rs/rs-rich-art) | `rich_art` | FIGlet text, image→ASCII, animated GIFs |
+A `vX.Y.Z` tag selects a coordinated workspace release; a `<crate>-vX.Y.Z`
+tag selects only that crate. See [the release documentation](docs/BRANCHING.md#releases).
+
+These are the manifest versions in this checkout. Publication status is recorded
+in the release notes; the crates.io links show available packages.
+
+<!-- BEGIN MANIFEST VERSIONS -->
+| Package | Manifest version |
+|---|---|
+| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.6` |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.8` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.10` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.8` |
+<!-- END MANIFEST VERSIONS -->
+
+| Package | Role | Import / installed name |
+|---|---|---|
+| `rs-rich` | faithful port of Python rich 15.0.0 | `use rich` |
+| `rs-rich-ext` | additions and plugin registry | `use rich_ext` |
+| `rs-rich-cli` | CLI tracking Python rich-cli 1.8.1 | executable `rich` |
+| `rs-rich-art` | FIGlet, image→ASCII, animated GIFs | `use rich_art` |
 
 The published package names carry an `rs-` prefix because `rich` is already taken
 on crates.io by an unrelated crate. The library targets keep the short names, so
@@ -71,6 +111,25 @@ Per-module detail is in [docs/PORTING.md](docs/PORTING.md). What comes next, and
 why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 [#16](https://github.com/buchochelliq-labs/rs-rich-cli/issues/16).
 
+## Release history and development
+
+The [release notes](docs/releases/0.0.4.md) document the coordinated 0.0.4
+release. Later source changes are tracked in the [roadmap](docs/ROADMAP.md)
+and development plans. The manifest table above describes this checkout;
+crates.io is the source for available published versions.
+
+CLI 0.0.8 and art 0.0.6 are [published and registry-verified](docs/releases/0.0.8.md).
+The [0.0.9 source preparation](docs/releases/0.0.9.md) adds named themes, batch
+progress/cancellation, selected demo sections, `rich doctor` and opt-in ANSI256
+image dithering. Combined validation is pending; source versions do not imply
+publication. See [copyable workflows](docs/recipes.md).
+
+## 0.0.3 release notes
+
+The [0.0.3 notes](docs/releases/0.0.3.md) cover graphical diff exports, notebook
+layout, styled titles, JSON correctness, Windows paging and safer GIF/CSV output.
+See [UAT closeout](docs/remaining-uat-0.0.3.md) for completed and deferred work.
+
 ## Install
 
 ```bash
@@ -87,9 +146,11 @@ cargo run -p rs-rich-cli -- FILE    # print a file (type auto-detected)
 ```
 
 The CLI covers `--markdown` · `--syntax` · `--json` · `--csv` · `--ipynb` ·
-`--print` · `--rule` · `--panel` · `--padding` · `--pager` · `--export-html` ·
-`--export-svg` · alignment and width flags, plus fetching an `http(s)` URL
-directly.
+`--jsonl` · `--log` · `--print` · `--rule` · `--panel` · `--padding` ·
+`--pager` · `--export-html` · `--export-svg` · `--sanitize` · `--report json` ·
+alignment and width flags, plus fetching an `http(s)` URL directly. Preferred
+subcommands such as `rich json`, `rich markdown`, `rich csv`, `rich jsonl` and
+`rich log` coexist with the legacy flat flags.
 
 Library usage:
 

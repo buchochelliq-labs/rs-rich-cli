@@ -1,0 +1,1 @@
+rich: GIF animation needs a terminal; rendering the first frame only

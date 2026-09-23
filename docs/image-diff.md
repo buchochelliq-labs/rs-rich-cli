@@ -1,122 +1,147 @@
 # Comparing images
 
-A rendering library needs a way to answer *"what changed?"* about its own output.
-`scripts/image_diff.py` does that, and this page is both its documentation and its
-test case.
+```bash
+rich --diff before.png after.png
+```
 
-The pair below is the same subject rendered twice. One has a halo. Everything
-else is meant to be identical — but it isn't quite, and that turns out to be the
-whole problem.
+`--diff` answers a question a pixel comparison cannot: **would a person notice,
+and where?**
 
-<div class="imgdiff"
-     data-before="assets/diff/halo-before.webp"
-     data-after="assets/diff/halo-after.webp"
-     data-difference="assets/diff/halo-difference.webp"
-     data-heatmap="assets/diff/halo-heatmap.webp"
-     data-highlight="assets/diff/halo-highlight.webp"
-     data-before-label="Before"
-     data-after-label="After">
-  <img src="assets/diff/halo-before.webp" alt="Before: neon elephant, no halo">
-  <img src="assets/diff/halo-after.webp" alt="After: the same elephant with a golden halo">
-</div>
+Compare two images byte for byte and anything regenerated — artwork,
+anti-aliased text, a re-encoded screenshot — reports as almost entirely
+changed. On the pair used throughout this page a plain comparison calls **42%**
+of the canvas different, with a bounding box covering three quarters of the
+frame. True, and useless.
 
-## Why a pixel diff is not enough
+The perceptual pipeline reports **5.4%**, and points at the one region that
+matters.
 
-The obvious implementation is `abs(before - after)`. On this pair it reports:
+## How it decides
 
-<div class="imgdiff-stats" markdown>
+1. **Blur** both images, so sub-pixel noise and re-encoding artefacts stop
+   registering as change.
+2. **Convert to CIELAB**, where Euclidean distance approximates perceived
+   difference. In RGB a shift in dark blue and the same numeric shift in
+   mid-green look identical to the arithmetic and nothing alike to the eye.
+3. **ΔE per pixel** (CIE76), then threshold.
+4. **Morphological open** — erode, then dilate — dropping speckle while leaving
+   surviving areas their original size.
+5. **Label connected components** and rank them by area × severity, so the
+   report leads with what a person would point at first.
 
-| | naive pixel diff | this tool |
-|---|---|---|
-| canvas reported changed | **42.2%** | **12.5%** |
-| bounding box of change | 77% of the image | 14% of the image |
-| top region | — | the halo, **47%** of all change |
+## The output
 
-</div>
+Two parts. The picture shows *where*; the table is the part that survives a
+pipe, a log, and a CI transcript.
 
-Forty-two percent, with a box around three-quarters of the picture. Technically
-true and completely useless — because these are two separate *generations*, not
-one image with a halo pasted on. The elephant is redrawn with fractionally
-different glow, line weight and position everywhere, and a pixel comparison
-faithfully reports all of it.
+![rich --diff rendering with Sixel graphics](assets/cli-diff/sixel.webp)
 
-Switch to the **Difference** tab above and you can see the problem directly: the
-whole animal lights up. The halo is in there, but so is everything else.
+`Share` is the region's portion of all changed pixels — including components
+too small to be listed, so the shares do not sum to 100%. `Mean ΔE` is how
+*strong* the change is, independent of how large.
 
-## What the tool does instead
+## Choosing how the picture is drawn
 
-1. **Blur lightly** — high-frequency redraw noise cancels out; structural change
-   survives.
-2. **Compare in CIELAB**, not sRGB. A ΔE of 30 means roughly the same *perceived*
-   difference wherever it falls, so a single threshold works across the whole
-   image. In sRGB the same numeric delta is dramatic in shadow and invisible in
-   highlight.
-3. **Threshold, then morphologically open** — erode-then-dilate deletes isolated
-   speckle while leaving coherent regions intact.
-4. **Label connected components and rank them** by area × severity.
+```bash
+rich --diff before.png after.png --image-mode sixel
+```
 
-Step 4 is what makes the result readable. The answer stops being a cloud of
-pixels and becomes *"three things changed, and here they are in order"*:
-
-| rank | share of all change | mean ΔE | region |
-|---|---|---|---|
-| 1 | **47%** | 98.0 | `(277, 70)` 712×262 — **the halo** |
-| 2 | 6% | 78.3 | `(605, 861)` 277×275 — the calf's trunk |
-| 3 | 4% | 71.8 | `(172, 595)` 145×331 — the mother's trunk |
-
-The halo is ranked first by roughly eight times. Try the **Highlight** tab: the
-image dims to 35% and only the ranked regions stay lit.
-
-## The modes, and what each is for
-
-Different questions want different views, which is why the viewer has seven
-rather than one.
-
-| mode | answers |
+| mode | what it does |
 |---|---|
-| **Slider** | Did anything *move*? A wipe makes displacement obvious — edges jump as the handle crosses them. |
-| **Onion** | How big is a *small* change? Cross-fading is better than wiping for sub-pixel shifts in weight or position. |
-| **Blink** | Where should I even look? The eye is extremely good at catching flicker; this finds changes you would never spot side by side. |
-| **Side by side** | What does each actually look like? Useful once you know where to look, useless for finding anything. |
-| **Difference** | What changed at the pixel level, including noise? Familiar, and honest about texture the perceptual view suppresses. |
-| **Heatmap** | How *perceptually* big is each change? Warmer is bigger. |
-| **Highlight** | Just tell me what changed. The ranked answer. |
+| `auto` | Sixel where it looks supported, else `blocks`, else `ascii` (default) |
+| `sixel` | Real pixels via the Sixel graphics protocol |
+| `blocks` | Half-block characters — any truecolour terminal |
+| `ascii` | A character ramp; the only mode that needs no colour |
+| `none` | Numbers only |
 
-Blink respects `prefers-reduced-motion` and holds still if you have that set —
-an automatic flicker is exactly what that setting asks to stop. The interval is
-also deliberately slow, since fast blinking is both unreadable and a
-photosensitivity hazard.
+**`blocks`** packs two pixel rows into each character cell as `▀`, foreground
+over background. Every cell is painted, so there are no gaps, but a cell can
+only carry two colours — hence the visible stair-stepping.
 
-## Using it
+![the same diff rendered with half-block characters](assets/cli-diff/blocks.webp)
+
+**`ascii`** maps each pixel to a character from a ramp. Dark pixels become
+spaces, so a heat map arrives full of holes. It is the right answer for line art
+and for terminals with no colour at all, and the wrong one for anything
+photographic — included here because that trade-off is worth seeing rather than
+being told about.
+
+![the same diff rendered as ASCII art](assets/cli-diff/ascii.webp)
+
+### Why this is a picker and not just detection
+
+There is no reliable way to ask a terminal whether it renders Sixel. The correct
+probe is a DA1 query needing a round trip on a tty, which is unavailable when
+output is piped, and terminals that ignore the query leave you waiting. `auto`
+is therefore a **heuristic over environment variables** and will be wrong
+somewhere.
+
+So the guess is overridable at every level: `--image-mode` beats everything, and
+`RICH_SIXEL=0`/`1` beats the heuristic.
+
+**Every mode degrades rather than failing.** Sixel is a control sequence, so it
+only works on a terminal. Redirected output falls back to ASCII; exports use blocks (or
+ASCII without colour). Blocks need colour, so without it they fall back to
+ASCII, since a half-block render with no colour is a rectangle of identical
+characters carrying no information. Each downgrade prints a line to **stderr**
+saying what it did, so the change is visible rather than mysterious, and stderr
+keeps it out of a redirected report.
+
+## As a CI gate
 
 ```bash
-python scripts/image_diff.py before.png after.png --out docs/assets/diff/name
+rich --diff baseline.png current.png --threshold 2 --image-mode none
 ```
 
-It writes `name-before/-after/-difference/-heatmap/-highlight.webp` plus
-`name.json` with the statistics and region list. The defaults are tuned for
-*regenerated artwork*, which is the noisy end of the spectrum. Screenshot pairs
-are far cleaner and want a lower threshold:
+Exits non-zero when more than 2% of the canvas has changed perceptibly, so
+visual regressions fail a build. The threshold is compared against the
+*perceptual* figure, never the naive one — gating on a byte comparison is what
+makes visual regression testing unusable, because every re-render trips it.
 
-```bash
-python scripts/image_diff.py a.png b.png --out out/x --blur 2 --threshold 20
-```
+The comparison uses **both percentages as printed**, with the same one-decimal
+rounding, so equal displayed values pass. For example, a threshold of `5.39`
+prints as `5.4%` and passes a displayed change of `5.4%`; `5.34` prints as `5.3%`
+and fails that change. A threshold outside 0–100, or one that is not a real number,
+is rejected: `NaN` parses successfully as a float and compares false against
+everything, so accepting it would silently switch the gate off and report a pass.
 
-Sizes must match. Comparing differently-sized images is meaningless, so the tool
-refuses rather than silently rescaling and reporting nonsense.
+Everything the gate prints goes to **stdout**; only the downgrade notices above
+use stderr.
 
-!!! note "Why WebP"
+`--threshold` and `--image-mode` are refused without `--diff` rather than
+ignored. Silently accepting them meant a job that lost its `--diff` — a typo, a
+refactor, an argument reordered — became a permanently green gate, which is the
+same failure an unvalidated threshold caused.
 
-    The outputs are WebP, not PNG. This content is glow over black — effectively
-    photographic — so PNG's lossless compression has almost nothing to exploit
-    and lands around 1 MB per image. At q=82 the difference is invisible here and
-    the files are roughly ten times smaller, which matters on a page showing six
-    of them at once.
+## Tuning
 
-## Where this is heading
+**These are not exposed on the command line yet** — they are listed so the
+output can be interpreted, not adjusted. `--threshold` gates the *result*; it
+does not change the ΔE threshold below. Callers of the `rich-art` crate can set
+all four through `DiffSettings`.
 
-Right now it is a manual tool. The obvious next step is wiring it into CI against
-the generated [gallery](gallery.md) images, so a change that alters rendering
-shows up as an annotated diff on the pull request rather than as a reviewer
-noticing something looks off. That is tracked with the visual-regression work in
-the [roadmap](ROADMAP.md).
+Defaults are tuned for regenerated artwork, where noise is heavy. Screenshot
+pairs are far cleaner and would tolerate a much lower ΔE threshold.
+
+| setting | default | effect |
+|---|---|---|
+| blur radius | 6.0 | higher ignores more fine detail |
+| ΔE threshold | 60.0 | higher reports only stronger changes |
+| open kernel | 11 | larger discards bigger speckles |
+| minimum region | 400 px | smaller regions are not listed |
+
+Images of differing sizes are refused rather than compared: every pixel past the
+smaller extent would read as changed, which is not a meaningful answer.
+
+## Accuracy
+
+The pipeline is verified against a Python reference implementation using
+`scipy.ndimage`, in the same arrangement `capture_golden.py` provides for render
+parity. On the full-size reference pair the two agree on region count and rank
+order, positions to within 1–3 px, areas to within 0.1–2.1%, and mean ΔE to one
+decimal place.
+
+The residual is one known difference: PIL's `GaussianBlur` approximates a
+Gaussian with three box passes, where this uses a true separable Gaussian. That
+moves the ΔE threshold boundary by a pixel or so, which nudges region edges. The
+parity test pins the agreement rather than claiming it is exact.

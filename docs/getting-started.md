@@ -1,5 +1,20 @@
 # Getting started
 
+**Assumes** you have Rust installed and can run commands in a terminal. If you
+do not, [rustup.rs](https://rustup.rs) is the one-line installer.
+
+## Requirements
+
+| | |
+|---|---|
+| **Rust** | 1.90 or later (the MSRV, checked in CI) |
+| **Terminal** | any VT-capable terminal. On Windows use Windows Terminal — the legacy `cmd.exe` console is [not supported](known-issues.md#windows-legacy-console-is-not-supported) |
+| **Tested on** | Linux (`ubuntu-latest`) in CI; developed and exercised on Windows 11 |
+| **Cost** | none — MIT licensed, no account, no network calls except the optional URL-fetch feature |
+
+macOS is expected to work and is not covered by CI, so it is untested rather
+than unsupported.
+
 ## Install
 
 === "Library"
@@ -14,11 +29,11 @@
     cargo install rs-rich-cli
     ```
 
-=== "Both, in a Cargo.toml"
+=== "Cargo.toml (published 0.0.2 example)"
 
     ```toml
     [dependencies]
-    rs-rich = "0.0.1"
+    rs-rich = "0.0.2"
     ```
 
 !!! tip "Published on crates.io"
@@ -26,8 +41,39 @@
     [`rs-rich`](https://crates.io/crates/rs-rich) ·
     [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) ·
     [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) ·
-    [`rs-rich-art`](https://crates.io/crates/rs-rich-art) — all at 0.0.1.
+    [`rs-rich-art`](https://crates.io/crates/rs-rich-art) — follow the links for current published versions.
     API documentation is on [docs.rs](https://docs.rs/rs-rich).
+
+## Check the install worked
+
+```bash
+rich --version
+```
+
+The output reports the installed `rs-rich-cli` package version. For a build
+from this checkout, compare it with the [manifest-version table](index.md#versions-in-this-checkout).
+It does not report the Python upstream version or the core library version.
+
+If the shell reports "command not found", Cargo's binary directory is not on
+your `PATH`. It is `~/.cargo/bin` (`%USERPROFILE%\.cargo\bin` on Windows) — add
+it and open a new shell, since `PATH` changes do not apply to shells that are
+already running.
+
+Then render something:
+
+```bash
+rich --print "[bold magenta]Hello[/] [green]World[/]"
+```
+
+## Uninstall
+
+```bash
+cargo uninstall rs-rich-cli
+```
+
+`rich` writes no configuration files and no cache, so removing the binary
+removes it completely. For the library, delete the dependency from your
+`Cargo.toml`.
 
 ## The package is `rs-rich`, the crate is `rich`
 
@@ -36,7 +82,7 @@ package carries an `rs-` prefix. The library target keeps the short name, so the
 dependency and the `use` line differ:
 
 ```toml
-rs-rich = "0.0.1"      # what you depend on
+rs-rich = "0.0.2"      # example using the published 0.0.2 release
 ```
 
 ```rust

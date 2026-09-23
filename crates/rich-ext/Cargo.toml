@@ -1,11 +1,13 @@
 # crates/rich-ext — OUR additions on top of the faithful core.
 #
-# This crate carries an INDEPENDENT SemVer (starts at 0.1.0) and never mirrors
-# any upstream version. All local features + the internal plugin registry live
-# here so the core stays a clean mirror. See AGENTS.md.
+# Like every crate in this repository, this crate carries an independent SemVer
+# that started at 0.0.1 and is bumped only when this crate is selected for a
+# release; it never mirrors an upstream version. All local features + the
+# internal plugin registry live here so the core stays a clean mirror. See
+# AGENTS.md → Versioning.
 [package]
 name = "rs-rich-ext"
-version = "0.0.1"
+version = "0.0.8"
 description = "Extensions and the internal plugin registry for the `rich` Rust port"
 edition.workspace = true
 license.workspace = true
@@ -19,7 +21,7 @@ readme = "README.md"
 documentation = "https://docs.rs/rs-rich-ext"
 keywords = ["terminal", "console", "plugin", "extension", "highlighter"]
 categories = ["command-line-interface", "text-processing"]
-include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
+include = ["src/**/*", "examples/**/*", "README.md", "LICENSE", "Cargo.toml"]
 
 [lib]
 # The package is `rs-rich-ext` on crates.io (plain `rich` is taken), but the
@@ -31,3 +33,27 @@ workspace = true
 
 [dependencies]
 rich.workspace = true
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { workspace = true, optional = true }
+
+log = { version = "0.4", optional = true }
+tracing = { version = "0.1", default-features = false, features = ["std"], optional = true }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["registry", "std"], optional = true }
+
+[features]
+default = []
+log = ["dep:log"]
+tracing = ["dep:tracing", "dep:tracing-subscriber"]
+testing = ["dep:serde", "dep:serde_json"]
+
+[[example]]
+name = "snapshot"
+required-features = ["testing"]
+
+[[example]]
+name = "log_adapter"
+required-features = ["log"]
+
+[[example]]
+name = "tracing_adapter"
+required-features = ["tracing"]

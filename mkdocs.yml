@@ -79,11 +79,33 @@ nav:
       - 5. Progress and live output: tutorial/05-live.md
       - 6. The CLI: tutorial/06-cli.md
   - Gallery: gallery.md
+  - Rich-art videos: demos.md
+  - Using the CLI: cli.md
+  - CLI reference: cli-reference.md
+  - Workflow recipes: recipes.md
   - Comparing images: image-diff.md
-  - CLI reference: cli.md
+  - Troubleshooting: troubleshooting.md
+  - Known issues: known-issues.md
+  - Development plans:
+      - Themes, diagnostics and image quality: plans/0.0.9.md
+      - CLI workflows and crop controls: plans/0.0.8.md
+      - CLI usability: plans/0.0.7.md
+      - Performance and confidence: plans/0.0.6.md
+  - Releases:
+      - 0.0.9 preparation notes: releases/0.0.9.md
+      - 0.0.9 expanded release evidence: releases/0.0.9-expanded.md
+      - 0.0.8: releases/0.0.8.md
+      - 0.0.7: releases/0.0.7.md
+      - 0.0.5 preparation plan: plans/0.0.5.md
+      - 0.0.4: releases/0.0.4.md
+      - 0.0.4 development plan: plans/0.0.4.md
+      - 0.0.3: releases/0.0.3.md
+      - 0.0.3 UAT closeout: remaining-uat-0.0.3.md
+      - Runtime verification: runtime-audit-0.0.3.md
   - Parity with Python rich:
       - Overview: parity.md
       - Divergences: DIVERGENCES.md
+      - Benchmarks: benchmarks.md
       - Roadmap: ROADMAP.md
       - Module status: PORTING.md
   - Contributing:

@@ -1,0 +1,669 @@
+<svg class="rich-terminal" viewBox="0 0 506 391.59999999999997" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .rich-cli-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .rich-cli-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .rich-cli-r1 { fill: #000115 }
+.rich-cli-r2 { fill: #010118 }
+.rich-cli-r3 { fill: #02011b }
+.rich-cli-r4 { fill: #03011d }
+.rich-cli-r5 { fill: #04011f }
+.rich-cli-r6 { fill: #050121 }
+.rich-cli-r7 { fill: #060123 }
+.rich-cli-r8 { fill: #070124 }
+.rich-cli-r9 { fill: #080124 }
+.rich-cli-r10 { fill: #090124 }
+.rich-cli-r11 { fill: #0a0124 }
+.rich-cli-r12 { fill: #0a0123 }
+.rich-cli-r13 { fill: #0b0122 }
+.rich-cli-r14 { fill: #0c0120 }
+.rich-cli-r15 { fill: #0d011e }
+.rich-cli-r16 { fill: #0e011c }
+.rich-cli-r17 { fill: #0f011a }
+.rich-cli-r18 { fill: #100117 }
+.rich-cli-r19 { fill: #110114 }
+.rich-cli-r20 { fill: #120111 }
+.rich-cli-r21 { fill: #13010e }
+.rich-cli-r22 { fill: #14010c }
+.rich-cli-r23 { fill: #150109 }
+.rich-cli-r24 { fill: #150107 }
+.rich-cli-r25 { fill: #160105 }
+.rich-cli-r26 { fill: #170103 }
+.rich-cli-r27 { fill: #180101 }
+.rich-cli-r28 { fill: #190101 }
+.rich-cli-r29 { fill: #1a0100 }
+.rich-cli-r30 { fill: #1b0100 }
+.rich-cli-r31 { fill: #1c0101 }
+.rich-cli-r32 { fill: #1d0102 }
+.rich-cli-r33 { fill: #1e0103 }
+.rich-cli-r34 { fill: #1f0105 }
+.rich-cli-r35 { fill: #200107 }
+.rich-cli-r36 { fill: #200109 }
+.rich-cli-r37 { fill: #21010c }
+.rich-cli-r38 { fill: #22010f }
+.rich-cli-r39 { fill: #230111 }
+.rich-cli-r40 { fill: #240114 }
+.rich-cli-r41 { fill: #c5c8c6 }
+.rich-cli-r42 { fill: #030b92 }
+.rich-cli-r43 { fill: #080ba0 }
+.rich-cli-r44 { fill: #0d0baf }
+.rich-cli-r45 { fill: #130bbd }
+.rich-cli-r46 { fill: #190bc8 }
+.rich-cli-r47 { fill: #1e0bd2 }
+.rich-cli-r48 { fill: #240bd8 }
+.rich-cli-r49 { fill: #290bdc }
+.rich-cli-r50 { fill: #2f0bdd }
+.rich-cli-r51 { fill: #350bdc }
+.rich-cli-r52 { fill: #3b0bd8 }
+.rich-cli-r53 { fill: #400bd1 }
+.rich-cli-r54 { fill: #450bc7 }
+.rich-cli-r55 { fill: #4b0bbb }
+.rich-cli-r56 { fill: #510bae }
+.rich-cli-r57 { fill: #570b9f }
+.rich-cli-r58 { fill: #5c0b8e }
+.rich-cli-r59 { fill: #610b7d }
+.rich-cli-r60 { fill: #670b6b }
+.rich-cli-r61 { fill: #6d0b5a }
+.rich-cli-r62 { fill: #730b49 }
+.rich-cli-r63 { fill: #780b39 }
+.rich-cli-r64 { fill: #7e0b2b }
+.rich-cli-r65 { fill: #830b1e }
+.rich-cli-r66 { fill: #890b14 }
+.rich-cli-r67 { fill: #8f0b0b }
+.rich-cli-r68 { fill: #940b05 }
+.rich-cli-r69 { fill: #9a0b02 }
+.rich-cli-r70 { fill: #9f0b02 }
+.rich-cli-r71 { fill: #a50b05 }
+.rich-cli-r72 { fill: #ab0b0a }
+.rich-cli-r73 { fill: #b00b12 }
+.rich-cli-r74 { fill: #b60b1c }
+.rich-cli-r75 { fill: #bb0b28 }
+.rich-cli-r76 { fill: #c10b36 }
+.rich-cli-r77 { fill: #c70b46 }
+.rich-cli-r78 { fill: #cc0b57 }
+.rich-cli-r79 { fill: #d20b69 }
+.rich-cli-r80 { fill: #d70b7a }
+.rich-cli-r81 { fill: #dd0b8a }
+.rich-cli-r82 { fill: #031fce }
+.rich-cli-r83 { fill: #091fdb }
+.rich-cli-r84 { fill: #0f1fe7 }
+.rich-cli-r85 { fill: #161ff1 }
+.rich-cli-r86 { fill: #1c1ff8 }
+.rich-cli-r87 { fill: #221ffb }
+.rich-cli-r88 { fill: #291ffc }
+.rich-cli-r89 { fill: #2f1ff9 }
+.rich-cli-r90 { fill: #361ff4 }
+.rich-cli-r91 { fill: #3c1feb }
+.rich-cli-r92 { fill: #431fdf }
+.rich-cli-r93 { fill: #491fd1 }
+.rich-cli-r94 { fill: #4f1fc1 }
+.rich-cli-r95 { fill: #561fb0 }
+.rich-cli-r96 { fill: #5c1f9d }
+.rich-cli-r97 { fill: #631f89 }
+.rich-cli-r98 { fill: #691f75 }
+.rich-cli-r99 { fill: #6f1f61 }
+.rich-cli-r100 { fill: #761f4f }
+.rich-cli-r101 { fill: #7c1f3d }
+.rich-cli-r102 { fill: #831f2d }
+.rich-cli-r103 { fill: #891f1f }
+.rich-cli-r104 { fill: #901f14 }
+.rich-cli-r105 { fill: #961f0b }
+.rich-cli-r106 { fill: #9c1f06 }
+.rich-cli-r107 { fill: #a31f03 }
+.rich-cli-r108 { fill: #a91f04 }
+.rich-cli-r109 { fill: #b01f08 }
+.rich-cli-r110 { fill: #b61f0f }
+.rich-cli-r111 { fill: #bc1f18 }
+.rich-cli-r112 { fill: #c31f25 }
+.rich-cli-r113 { fill: #c91f33 }
+.rich-cli-r114 { fill: #d01f44 }
+.rich-cli-r115 { fill: #d61f56 }
+.rich-cli-r116 { fill: #dd1f69 }
+.rich-cli-r117 { fill: #e31f7e }
+.rich-cli-r118 { fill: #e91f91 }
+.rich-cli-r119 { fill: #f01fa5 }
+.rich-cli-r120 { fill: #f61fb7 }
+.rich-cli-r121 { fill: #fc1fc6 }
+.rich-cli-r122 { fill: #0334ef }
+.rich-cli-r123 { fill: #0934f6 }
+.rich-cli-r124 { fill: #0f34fb }
+.rich-cli-r125 { fill: #1634fc }
+.rich-cli-r126 { fill: #1c34fb }
+.rich-cli-r127 { fill: #2234f6 }
+.rich-cli-r128 { fill: #2934ef }
+.rich-cli-r129 { fill: #2f34e4 }
+.rich-cli-r130 { fill: #3634d7 }
+.rich-cli-r131 { fill: #3c34c7 }
+.rich-cli-r132 { fill: #4334b6 }
+.rich-cli-r133 { fill: #4934a4 }
+.rich-cli-r134 { fill: #4f3490 }
+.rich-cli-r135 { fill: #56347d }
+.rich-cli-r136 { fill: #5c3468 }
+.rich-cli-r137 { fill: #633455 }
+.rich-cli-r138 { fill: #693443 }
+.rich-cli-r139 { fill: #6f3432 }
+.rich-cli-r140 { fill: #763424 }
+.rich-cli-r141 { fill: #7c3418 }
+.rich-cli-r142 { fill: #83340e }
+.rich-cli-r143 { fill: #893407 }
+.rich-cli-r144 { fill: #903404 }
+.rich-cli-r145 { fill: #963403 }
+.rich-cli-r146 { fill: #9c3406 }
+.rich-cli-r147 { fill: #a3340b }
+.rich-cli-r148 { fill: #a93414 }
+.rich-cli-r149 { fill: #b03420 }
+.rich-cli-r150 { fill: #b6342e }
+.rich-cli-r151 { fill: #bc343e }
+.rich-cli-r152 { fill: #c3344f }
+.rich-cli-r153 { fill: #c93462 }
+.rich-cli-r154 { fill: #d03476 }
+.rich-cli-r155 { fill: #d6348a }
+.rich-cli-r156 { fill: #dd349e }
+.rich-cli-r157 { fill: #e334b1 }
+.rich-cli-r158 { fill: #e934c2 }
+.rich-cli-r159 { fill: #f034d2 }
+.rich-cli-r160 { fill: #f634e0 }
+.rich-cli-r161 { fill: #fc34ea }
+.rich-cli-r162 { fill: #034afc }
+.rich-cli-r163 { fill: #094afc }
+.rich-cli-r164 { fill: #0f4af8 }
+.rich-cli-r165 { fill: #164af1 }
+.rich-cli-r166 { fill: #1c4ae8 }
+.rich-cli-r167 { fill: #224adc }
+.rich-cli-r168 { fill: #294ace }
+.rich-cli-r169 { fill: #2f4abd }
+.rich-cli-r170 { fill: #364aab }
+.rich-cli-r171 { fill: #3c4a98 }
+.rich-cli-r172 { fill: #434a84 }
+.rich-cli-r173 { fill: #494a70 }
+.rich-cli-r174 { fill: #4f4a5c }
+.rich-cli-r175 { fill: #564a4a }
+.rich-cli-r176 { fill: #5c4a39 }
+.rich-cli-r177 { fill: #634a29 }
+.rich-cli-r178 { fill: #694a1c }
+.rich-cli-r179 { fill: #6f4a11 }
+.rich-cli-r180 { fill: #764a09 }
+.rich-cli-r181 { fill: #7c4a04 }
+.rich-cli-r182 { fill: #834a03 }
+.rich-cli-r183 { fill: #894a04 }
+.rich-cli-r184 { fill: #904a09 }
+.rich-cli-r185 { fill: #964a10 }
+.rich-cli-r186 { fill: #9c4a1b }
+.rich-cli-r187 { fill: #a34a28 }
+.rich-cli-r188 { fill: #a94a38 }
+.rich-cli-r189 { fill: #b04a49 }
+.rich-cli-r190 { fill: #b64a5b }
+.rich-cli-r191 { fill: #bc4a6f }
+.rich-cli-r192 { fill: #c34a83 }
+.rich-cli-r193 { fill: #c94a96 }
+.rich-cli-r194 { fill: #d04aaa }
+.rich-cli-r195 { fill: #d64abc }
+.rich-cli-r196 { fill: #dd4acd }
+.rich-cli-r197 { fill: #e34adb }
+.rich-cli-r198 { fill: #e94ae7 }
+.rich-cli-r199 { fill: #f04af1 }
+.rich-cli-r200 { fill: #f64af8 }
+.rich-cli-r201 { fill: #fc4afb }
+.rich-cli-r202 { fill: #035ff4 }
+.rich-cli-r203 { fill: #095fec }
+.rich-cli-r204 { fill: #0f5fe1 }
+.rich-cli-r205 { fill: #165fd3 }
+.rich-cli-r206 { fill: #1c5fc3 }
+.rich-cli-r207 { fill: #225fb2 }
+.rich-cli-r208 { fill: #295f9f }
+.rich-cli-r209 { fill: #2f5f8b }
+.rich-cli-r210 { fill: #365f77 }
+.rich-cli-r211 { fill: #3c5f63 }
+.rich-cli-r212 { fill: #435f51 }
+.rich-cli-r213 { fill: #495f3f }
+.rich-cli-r214 { fill: #4f5f2f }
+.rich-cli-r215 { fill: #565f21 }
+.rich-cli-r216 { fill: #5c5f15 }
+.rich-cli-r217 { fill: #635f0c }
+.rich-cli-r218 { fill: #695f06 }
+.rich-cli-r219 { fill: #6f5f03 }
+.rich-cli-r220 { fill: #765f03 }
+.rich-cli-r221 { fill: #7c5f07 }
+.rich-cli-r222 { fill: #835f0e }
+.rich-cli-r223 { fill: #895f17 }
+.rich-cli-r224 { fill: #905f23 }
+.rich-cli-r225 { fill: #965f31 }
+.rich-cli-r226 { fill: #9c5f42 }
+.rich-cli-r227 { fill: #a35f54 }
+.rich-cli-r228 { fill: #a95f67 }
+.rich-cli-r229 { fill: #b05f7b }
+.rich-cli-r230 { fill: #b65f8f }
+.rich-cli-r231 { fill: #bc5fa3 }
+.rich-cli-r232 { fill: #c35fb5 }
+.rich-cli-r233 { fill: #c95fc6 }
+.rich-cli-r234 { fill: #d05fd6 }
+.rich-cli-r235 { fill: #d65fe3 }
+.rich-cli-r236 { fill: #dd5fee }
+.rich-cli-r237 { fill: #e35ff6 }
+.rich-cli-r238 { fill: #e95ffb }
+.rich-cli-r239 { fill: #f05ffc }
+.rich-cli-r240 { fill: #f65ffb }
+.rich-cli-r241 { fill: #fc5ff7 }
+.rich-cli-r242 { fill: #0375d7 }
+.rich-cli-r243 { fill: #0975c9 }
+.rich-cli-r244 { fill: #0f75b8 }
+.rich-cli-r245 { fill: #1675a6 }
+.rich-cli-r246 { fill: #1c7592 }
+.rich-cli-r247 { fill: #22757f }
+.rich-cli-r248 { fill: #29756b }
+.rich-cli-r249 { fill: #2f7557 }
+.rich-cli-r250 { fill: #367545 }
+.rich-cli-r251 { fill: #3c7534 }
+.rich-cli-r252 { fill: #437526 }
+.rich-cli-r253 { fill: #497519 }
+.rich-cli-r254 { fill: #4f750f }
+.rich-cli-r255 { fill: #567508 }
+.rich-cli-r256 { fill: #5c7504 }
+.rich-cli-r257 { fill: #637503 }
+.rich-cli-r258 { fill: #697505 }
+.rich-cli-r259 { fill: #6f750b }
+.rich-cli-r260 { fill: #767513 }
+.rich-cli-r261 { fill: #7c751f }
+.rich-cli-r262 { fill: #83752c }
+.rich-cli-r263 { fill: #89753c }
+.rich-cli-r264 { fill: #90754e }
+.rich-cli-r265 { fill: #967560 }
+.rich-cli-r266 { fill: #9c7574 }
+.rich-cli-r267 { fill: #a37588 }
+.rich-cli-r268 { fill: #a9759c }
+.rich-cli-r269 { fill: #b075ae }
+.rich-cli-r270 { fill: #b675c0 }
+.rich-cli-r271 { fill: #bc75d0 }
+.rich-cli-r272 { fill: #c375df }
+.rich-cli-r273 { fill: #c975ea }
+.rich-cli-r274 { fill: #d075f3 }
+.rich-cli-r275 { fill: #d675f9 }
+.rich-cli-r276 { fill: #dd75fc }
+.rich-cli-r277 { fill: #e375fc }
+.rich-cli-r278 { fill: #e975f8 }
+.rich-cli-r279 { fill: #f075f1 }
+.rich-cli-r280 { fill: #f675e8 }
+.rich-cli-r281 { fill: #fc75dd }
+.rich-cli-r282 { fill: #038aab }
+.rich-cli-r283 { fill: #098a9a }
+.rich-cli-r284 { fill: #0f8a86 }
+.rich-cli-r285 { fill: #168a72 }
+.rich-cli-r286 { fill: #1c8a5e }
+.rich-cli-r287 { fill: #228a4c }
+.rich-cli-r288 { fill: #298a3a }
+.rich-cli-r289 { fill: #2f8a2b }
+.rich-cli-r290 { fill: #368a1d }
+.rich-cli-r291 { fill: #3c8a12 }
+.rich-cli-r292 { fill: #438a0a }
+.rich-cli-r293 { fill: #498a05 }
+.rich-cli-r294 { fill: #4f8a03 }
+.rich-cli-r295 { fill: #568a04 }
+.rich-cli-r296 { fill: #5c8a08 }
+.rich-cli-r297 { fill: #638a10 }
+.rich-cli-r298 { fill: #698a1a }
+.rich-cli-r299 { fill: #6f8a27 }
+.rich-cli-r300 { fill: #768a36 }
+.rich-cli-r301 { fill: #7c8a47 }
+.rich-cli-r302 { fill: #838a59 }
+.rich-cli-r303 { fill: #898a6c }
+.rich-cli-r304 { fill: #908a81 }
+.rich-cli-r305 { fill: #968a94 }
+.rich-cli-r306 { fill: #9c8aa8 }
+.rich-cli-r307 { fill: #a38aba }
+.rich-cli-r308 { fill: #a98acb }
+.rich-cli-r309 { fill: #b08ada }
+.rich-cli-r310 { fill: #b68ae6 }
+.rich-cli-r311 { fill: #bc8af0 }
+.rich-cli-r312 { fill: #c38af7 }
+.rich-cli-r313 { fill: #c98afb }
+.rich-cli-r314 { fill: #d08afc }
+.rich-cli-r315 { fill: #d68afa }
+.rich-cli-r316 { fill: #dd8af4 }
+.rich-cli-r317 { fill: #e38aec }
+.rich-cli-r318 { fill: #e98ae1 }
+.rich-cli-r319 { fill: #f08ad3 }
+.rich-cli-r320 { fill: #f68ac3 }
+.rich-cli-r321 { fill: #fc8ab4 }
+.rich-cli-r322 { fill: #03a078 }
+.rich-cli-r323 { fill: #09a065 }
+.rich-cli-r324 { fill: #0fa052 }
+.rich-cli-r325 { fill: #16a040 }
+.rich-cli-r326 { fill: #1ca030 }
+.rich-cli-r327 { fill: #22a022 }
+.rich-cli-r328 { fill: #29a016 }
+.rich-cli-r329 { fill: #2fa00d }
+.rich-cli-r330 { fill: #36a006 }
+.rich-cli-r331 { fill: #3ca003 }
+.rich-cli-r332 { fill: #43a003 }
+.rich-cli-r333 { fill: #49a006 }
+.rich-cli-r334 { fill: #4fa00d }
+.rich-cli-r335 { fill: #56a016 }
+.rich-cli-r336 { fill: #5ca022 }
+.rich-cli-r337 { fill: #63a030 }
+.rich-cli-r338 { fill: #69a040 }
+.rich-cli-r339 { fill: #6fa052 }
+.rich-cli-r340 { fill: #76a065 }
+.rich-cli-r341 { fill: #7ca079 }
+.rich-cli-r342 { fill: #83a08d }
+.rich-cli-r343 { fill: #89a0a1 }
+.rich-cli-r344 { fill: #90a0b3 }
+.rich-cli-r345 { fill: #96a0c4 }
+.rich-cli-r346 { fill: #9ca0d4 }
+.rich-cli-r347 { fill: #a3a0e2 }
+.rich-cli-r348 { fill: #a9a0ed }
+.rich-cli-r349 { fill: #b0a0f5 }
+.rich-cli-r350 { fill: #b6a0fa }
+.rich-cli-r351 { fill: #bca0fc }
+.rich-cli-r352 { fill: #c3a0fb }
+.rich-cli-r353 { fill: #c9a0f7 }
+.rich-cli-r354 { fill: #d0a0ef }
+.rich-cli-r355 { fill: #d6a0e5 }
+.rich-cli-r356 { fill: #dda0d9 }
+.rich-cli-r357 { fill: #e3a0c9 }
+.rich-cli-r358 { fill: #e9a0b8 }
+.rich-cli-r359 { fill: #f0a0a6 }
+.rich-cli-r360 { fill: #f6a093 }
+.rich-cli-r361 { fill: #fca081 }
+.rich-cli-r362 { fill: #03b545 }
+.rich-cli-r363 { fill: #09b536 }
+.rich-cli-r364 { fill: #0fb527 }
+.rich-cli-r365 { fill: #16b51a }
+.rich-cli-r366 { fill: #1cb510 }
+.rich-cli-r367 { fill: #22b508 }
+.rich-cli-r368 { fill: #29b504 }
+.rich-cli-r369 { fill: #2fb503 }
+.rich-cli-r370 { fill: #36b505 }
+.rich-cli-r371 { fill: #3cb50a }
+.rich-cli-r372 { fill: #43b512 }
+.rich-cli-r373 { fill: #49b51d }
+.rich-cli-r374 { fill: #4fb52b }
+.rich-cli-r375 { fill: #56b53a }
+.rich-cli-r376 { fill: #5cb54c }
+.rich-cli-r377 { fill: #63b55e }
+.rich-cli-r378 { fill: #69b572 }
+.rich-cli-r379 { fill: #6fb586 }
+.rich-cli-r380 { fill: #76b59a }
+.rich-cli-r381 { fill: #7cb5ad }
+.rich-cli-r382 { fill: #83b5bf }
+.rich-cli-r383 { fill: #89b5cf }
+.rich-cli-r384 { fill: #90b5dd }
+.rich-cli-r385 { fill: #96b5e9 }
+.rich-cli-r386 { fill: #9cb5f2 }
+.rich-cli-r387 { fill: #a3b5f9 }
+.rich-cli-r388 { fill: #a9b5fc }
+.rich-cli-r389 { fill: #b0b5fc }
+.rich-cli-r390 { fill: #b6b5f9 }
+.rich-cli-r391 { fill: #bcb5f3 }
+.rich-cli-r392 { fill: #c3b5e9 }
+.rich-cli-r393 { fill: #c9b5dd }
+.rich-cli-r394 { fill: #d0b5cf }
+.rich-cli-r395 { fill: #d6b5bf }
+.rich-cli-r396 { fill: #ddb5ad }
+.rich-cli-r397 { fill: #e3b59a }
+.rich-cli-r398 { fill: #e9b586 }
+.rich-cli-r399 { fill: #f0b572 }
+.rich-cli-r400 { fill: #f6b55f }
+.rich-cli-r401 { fill: #fcb54e }
+.rich-cli-r402 { fill: #03cb1d }
+.rich-cli-r403 { fill: #09cb13 }
+.rich-cli-r404 { fill: #0fcb0b }
+.rich-cli-r405 { fill: #16cb05 }
+.rich-cli-r406 { fill: #1ccb03 }
+.rich-cli-r407 { fill: #22cb04 }
+.rich-cli-r408 { fill: #29cb08 }
+.rich-cli-r409 { fill: #2fcb0f }
+.rich-cli-r410 { fill: #36cb19 }
+.rich-cli-r411 { fill: #3ccb25 }
+.rich-cli-r412 { fill: #43cb34 }
+.rich-cli-r413 { fill: #49cb45 }
+.rich-cli-r414 { fill: #4fcb57 }
+.rich-cli-r415 { fill: #56cb6a }
+.rich-cli-r416 { fill: #5ccb7f }
+.rich-cli-r417 { fill: #63cb92 }
+.rich-cli-r418 { fill: #69cba6 }
+.rich-cli-r419 { fill: #6fcbb8 }
+.rich-cli-r420 { fill: #76cbc9 }
+.rich-cli-r421 { fill: #7ccbd8 }
+.rich-cli-r422 { fill: #83cbe5 }
+.rich-cli-r423 { fill: #89cbef }
+.rich-cli-r424 { fill: #90cbf7 }
+.rich-cli-r425 { fill: #96cbfb }
+.rich-cli-r426 { fill: #9ccbfc }
+.rich-cli-r427 { fill: #a3cbfa }
+.rich-cli-r428 { fill: #a9cbf5 }
+.rich-cli-r429 { fill: #b0cbed }
+.rich-cli-r430 { fill: #b6cbe2 }
+.rich-cli-r431 { fill: #bccbd5 }
+.rich-cli-r432 { fill: #c3cbc5 }
+.rich-cli-r433 { fill: #c9cbb4 }
+.rich-cli-r434 { fill: #d0cba1 }
+.rich-cli-r435 { fill: #d6cb8d }
+.rich-cli-r436 { fill: #ddcb7a }
+.rich-cli-r437 { fill: #e3cb65 }
+.rich-cli-r438 { fill: #e9cb53 }
+.rich-cli-r439 { fill: #f0cb40 }
+.rich-cli-r440 { fill: #f6cb30 }
+.rich-cli-r441 { fill: #fccb23 }
+.rich-cli-r442 { fill: #03e006 }
+.rich-cli-r443 { fill: #09e003 }
+.rich-cli-r444 { fill: #0fe003 }
+.rich-cli-r445 { fill: #16e006 }
+.rich-cli-r446 { fill: #1ce00c }
+.rich-cli-r447 { fill: #22e015 }
+.rich-cli-r448 { fill: #29e021 }
+.rich-cli-r449 { fill: #2fe02e }
+.rich-cli-r450 { fill: #36e03e }
+.rich-cli-r451 { fill: #3ce050 }
+.rich-cli-r452 { fill: #43e063 }
+.rich-cli-r453 { fill: #49e077 }
+.rich-cli-r454 { fill: #4fe08b }
+.rich-cli-r455 { fill: #56e09f }
+.rich-cli-r456 { fill: #5ce0b2 }
+.rich-cli-r457 { fill: #63e0c3 }
+.rich-cli-r458 { fill: #69e0d3 }
+.rich-cli-r459 { fill: #6fe0e0 }
+.rich-cli-r460 { fill: #76e0ec }
+.rich-cli-r461 { fill: #7ce0f4 }
+.rich-cli-r462 { fill: #83e0fa }
+.rich-cli-r463 { fill: #89e0fc }
+.rich-cli-r464 { fill: #90e0fb }
+.rich-cli-r465 { fill: #96e0f7 }
+.rich-cli-r466 { fill: #9ce0f0 }
+.rich-cli-r467 { fill: #a3e0e6 }
+.rich-cli-r468 { fill: #a9e0da }
+.rich-cli-r469 { fill: #b0e0cb }
+.rich-cli-r470 { fill: #b6e0ba }
+.rich-cli-r471 { fill: #bce0a8 }
+.rich-cli-r472 { fill: #c3e095 }
+.rich-cli-r473 { fill: #c9e081 }
+.rich-cli-r474 { fill: #d0e06d }
+.rich-cli-r475 { fill: #d6e059 }
+.rich-cli-r476 { fill: #dde047 }
+.rich-cli-r477 { fill: #e3e036 }
+.rich-cli-r478 { fill: #e9e027 }
+.rich-cli-r479 { fill: #f0e01a }
+.rich-cli-r480 { fill: #f6e010 }
+.rich-cli-r481 { fill: #fce009 }
+.rich-cli-r482 { fill: #03d503 }
+.rich-cli-r483 { fill: #08d506 }
+.rich-cli-r484 { fill: #0dd50c }
+.rich-cli-r485 { fill: #13d515 }
+.rich-cli-r486 { fill: #19d51f }
+.rich-cli-r487 { fill: #1ed52c }
+.rich-cli-r488 { fill: #24d53b }
+.rich-cli-r489 { fill: #29d54b }
+.rich-cli-r490 { fill: #2fd55c }
+.rich-cli-r491 { fill: #35d56d }
+.rich-cli-r492 { fill: #3bd57f }
+.rich-cli-r493 { fill: #40d590 }
+.rich-cli-r494 { fill: #45d5a0 }
+.rich-cli-r495 { fill: #4bd5b0 }
+.rich-cli-r496 { fill: #51d5bd }
+.rich-cli-r497 { fill: #57d5c8 }
+.rich-cli-r498 { fill: #5cd5d1 }
+.rich-cli-r499 { fill: #61d5d8 }
+.rich-cli-r500 { fill: #67d5dc }
+.rich-cli-r501 { fill: #6dd5dd }
+.rich-cli-r502 { fill: #73d5dc }
+.rich-cli-r503 { fill: #78d5d8 }
+.rich-cli-r504 { fill: #7ed5d0 }
+.rich-cli-r505 { fill: #83d5c7 }
+.rich-cli-r506 { fill: #89d5bc }
+.rich-cli-r507 { fill: #8fd5ae }
+.rich-cli-r508 { fill: #94d59f }
+.rich-cli-r509 { fill: #9ad58e }
+.rich-cli-r510 { fill: #9fd57d }
+.rich-cli-r511 { fill: #a5d56b }
+.rich-cli-r512 { fill: #abd55a }
+.rich-cli-r513 { fill: #b0d549 }
+.rich-cli-r514 { fill: #b6d539 }
+.rich-cli-r515 { fill: #bbd52b }
+.rich-cli-r516 { fill: #c1d51e }
+.rich-cli-r517 { fill: #c7d513 }
+.rich-cli-r518 { fill: #ccd50b }
+.rich-cli-r519 { fill: #d2d505 }
+.rich-cli-r520 { fill: #d7d502 }
+.rich-cli-r521 { fill: #ddd502 }
+.rich-cli-r522 { fill: #002401 }
+.rich-cli-r523 { fill: #012402 }
+.rich-cli-r524 { fill: #022403 }
+.rich-cli-r525 { fill: #032405 }
+.rich-cli-r526 { fill: #042407 }
+.rich-cli-r527 { fill: #052409 }
+.rich-cli-r528 { fill: #06240c }
+.rich-cli-r529 { fill: #07240f }
+.rich-cli-r530 { fill: #082411 }
+.rich-cli-r531 { fill: #092414 }
+.rich-cli-r532 { fill: #0a2417 }
+.rich-cli-r533 { fill: #0a241a }
+.rich-cli-r534 { fill: #0b241c }
+.rich-cli-r535 { fill: #0c241f }
+.rich-cli-r536 { fill: #0d2421 }
+.rich-cli-r537 { fill: #0e2422 }
+.rich-cli-r538 { fill: #0f2423 }
+.rich-cli-r539 { fill: #102424 }
+.rich-cli-r540 { fill: #112424 }
+.rich-cli-r541 { fill: #122424 }
+.rich-cli-r542 { fill: #132423 }
+.rich-cli-r543 { fill: #142422 }
+.rich-cli-r544 { fill: #152421 }
+.rich-cli-r545 { fill: #15241f }
+.rich-cli-r546 { fill: #16241d }
+.rich-cli-r547 { fill: #17241a }
+.rich-cli-r548 { fill: #182418 }
+.rich-cli-r549 { fill: #192415 }
+.rich-cli-r550 { fill: #1a2412 }
+.rich-cli-r551 { fill: #1b240f }
+.rich-cli-r552 { fill: #1c240c }
+.rich-cli-r553 { fill: #1d240a }
+.rich-cli-r554 { fill: #1e2407 }
+.rich-cli-r555 { fill: #1f2405 }
+.rich-cli-r556 { fill: #202403 }
+.rich-cli-r557 { fill: #202402 }
+.rich-cli-r558 { fill: #212401 }
+.rich-cli-r559 { fill: #222400 }
+.rich-cli-r560 { fill: #232400 }
+.rich-cli-r561 { fill: #242400 }
+    </style>
+
+    <defs>
+    <clipPath id="rich-cli-clip-terminal">
+      <rect x="0" y="0" width="487.0" height="340.59999999999997" />
+    </clipPath>
+    <clipPath id="rich-cli-line-0">
+    <rect x="0" y="1.5" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-1">
+    <rect x="0" y="25.9" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-2">
+    <rect x="0" y="50.3" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-3">
+    <rect x="0" y="74.7" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-4">
+    <rect x="0" y="99.1" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-5">
+    <rect x="0" y="123.5" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-6">
+    <rect x="0" y="147.9" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-7">
+    <rect x="0" y="172.3" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-8">
+    <rect x="0" y="196.7" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-9">
+    <rect x="0" y="221.1" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-10">
+    <rect x="0" y="245.5" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-11">
+    <rect x="0" y="269.9" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-cli-line-12">
+    <rect x="0" y="294.3" width="488" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="504" height="389.6" rx="8"/><text class="rich-cli-title" fill="#c5c8c6" text-anchor="middle" x="252" y="27">gradient.png</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#rich-cli-clip-terminal)">
+    
+    <g class="rich-cli-matrix">
+    <text class="rich-cli-r41" x="488" y="20" textLength="12.2" clip-path="url(#rich-cli-line-0)">
+</text><text class="rich-cli-r43" x="12.2" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r44" x="24.4" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r45" x="36.6" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r46" x="48.8" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r47" x="61" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r48" x="73.2" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r49" x="85.4" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r50" x="97.6" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r51" x="109.8" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r52" x="122" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r53" x="134.2" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r54" x="146.4" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r55" x="158.6" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r56" x="170.8" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r57" x="183" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r58" x="195.2" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r59" x="207.4" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r60" x="219.6" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r61" x="231.8" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r62" x="244" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r63" x="256.2" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r64" x="268.4" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r65" x="280.6" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r66" x="292.8" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r67" x="305" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r68" x="317.2" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r69" x="329.4" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">.</text><text class="rich-cli-r70" x="341.6" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">&#x27;</text><text class="rich-cli-r71" x="353.8" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">&#x27;</text><text class="rich-cli-r72" x="366" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">&#x27;</text><text class="rich-cli-r73" x="378.2" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">&#x27;</text><text class="rich-cli-r74" x="390.4" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">,</text><text class="rich-cli-r75" x="402.6" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">,</text><text class="rich-cli-r76" x="414.8" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">,</text><text class="rich-cli-r77" x="427" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">;</text><text class="rich-cli-r78" x="439.2" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">;</text><text class="rich-cli-r79" x="451.4" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">;</text><text class="rich-cli-r80" x="463.6" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">:</text><text class="rich-cli-r81" x="475.8" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">:</text><text class="rich-cli-r41" x="488" y="44.4" textLength="12.2" clip-path="url(#rich-cli-line-1)">
+</text><text class="rich-cli-r82" x="0" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">.</text><text class="rich-cli-r83" x="12.2" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">.</text><text class="rich-cli-r84" x="24.4" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">.</text><text class="rich-cli-r85" x="36.6" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">.</text><text class="rich-cli-r86" x="48.8" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">&#x27;</text><text class="rich-cli-r87" x="61" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">&#x27;</text><text class="rich-cli-r88" x="73.2" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">&#x27;</text><text class="rich-cli-r89" x="85.4" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">&#x27;</text><text class="rich-cli-r90" x="97.6" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">&#x27;</text><text class="rich-cli-r91" x="109.8" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">&#x27;</text><text class="rich-cli-r92" x="122" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">,</text><text class="rich-cli-r93" x="134.2" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">,</text><text class="rich-cli-r94" x="146.4" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">,</text><text class="rich-cli-r95" x="158.6" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">,</text><text class="rich-cli-r96" x="170.8" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">,</text><text class="rich-cli-r97" x="183" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">&#x27;</text><text class="rich-cli-r98" x="195.2" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">&#x27;</text><text class="rich-cli-r99" x="207.4" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">&#x27;</text><text class="rich-cli-r100" x="219.6" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">&#x27;</text><text class="rich-cli-r101" x="231.8" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">&#x27;</text><text class="rich-cli-r102" x="244" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">&#x27;</text><text class="rich-cli-r103" x="256.2" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">&#x27;</text><text class="rich-cli-r104" x="268.4" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">,</text><text class="rich-cli-r105" x="280.6" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">,</text><text class="rich-cli-r106" x="292.8" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">,</text><text class="rich-cli-r107" x="305" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">,</text><text class="rich-cli-r108" x="317.2" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">,</text><text class="rich-cli-r109" x="329.4" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">,</text><text class="rich-cli-r110" x="341.6" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">;</text><text class="rich-cli-r111" x="353.8" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">;</text><text class="rich-cli-r112" x="366" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">;</text><text class="rich-cli-r113" x="378.2" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">:</text><text class="rich-cli-r114" x="390.4" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">:</text><text class="rich-cli-r115" x="402.6" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">c</text><text class="rich-cli-r116" x="414.8" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">c</text><text class="rich-cli-r117" x="427" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">c</text><text class="rich-cli-r118" x="439.2" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">l</text><text class="rich-cli-r119" x="451.4" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">l</text><text class="rich-cli-r120" x="463.6" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">o</text><text class="rich-cli-r121" x="475.8" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">o</text><text class="rich-cli-r41" x="488" y="68.8" textLength="12.2" clip-path="url(#rich-cli-line-2)">
+</text><text class="rich-cli-r122" x="0" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">&#x27;</text><text class="rich-cli-r123" x="12.2" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">&#x27;</text><text class="rich-cli-r124" x="24.4" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r125" x="36.6" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r126" x="48.8" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r127" x="61" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r128" x="73.2" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r129" x="85.4" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r130" x="97.6" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r131" x="109.8" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r132" x="122" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r133" x="134.2" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r134" x="146.4" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r135" x="158.6" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r136" x="170.8" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r137" x="183" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r138" x="195.2" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r139" x="207.4" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r140" x="219.6" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r141" x="231.8" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r142" x="244" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r143" x="256.2" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">,</text><text class="rich-cli-r144" x="268.4" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">;</text><text class="rich-cli-r145" x="280.6" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">;</text><text class="rich-cli-r146" x="292.8" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">;</text><text class="rich-cli-r147" x="305" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">;</text><text class="rich-cli-r148" x="317.2" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">:</text><text class="rich-cli-r149" x="329.4" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">:</text><text class="rich-cli-r150" x="341.6" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">:</text><text class="rich-cli-r151" x="353.8" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">c</text><text class="rich-cli-r152" x="366" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">c</text><text class="rich-cli-r153" x="378.2" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">l</text><text class="rich-cli-r154" x="390.4" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">l</text><text class="rich-cli-r155" x="402.6" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">o</text><text class="rich-cli-r156" x="414.8" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">o</text><text class="rich-cli-r157" x="427" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">o</text><text class="rich-cli-r158" x="439.2" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">d</text><text class="rich-cli-r159" x="451.4" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">d</text><text class="rich-cli-r160" x="463.6" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">x</text><text class="rich-cli-r161" x="475.8" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">x</text><text class="rich-cli-r41" x="488" y="93.2" textLength="12.2" clip-path="url(#rich-cli-line-3)">
+</text><text class="rich-cli-r162" x="0" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r163" x="12.2" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r164" x="24.4" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r165" x="36.6" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r166" x="48.8" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r167" x="61" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r168" x="73.2" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r169" x="85.4" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r170" x="97.6" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r171" x="109.8" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r172" x="122" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r173" x="134.2" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r174" x="146.4" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r175" x="158.6" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r176" x="170.8" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r177" x="183" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r178" x="195.2" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r179" x="207.4" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r180" x="219.6" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r181" x="231.8" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">;</text><text class="rich-cli-r182" x="244" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">:</text><text class="rich-cli-r183" x="256.2" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">:</text><text class="rich-cli-r184" x="268.4" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">:</text><text class="rich-cli-r185" x="280.6" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">:</text><text class="rich-cli-r186" x="292.8" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">c</text><text class="rich-cli-r187" x="305" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">c</text><text class="rich-cli-r188" x="317.2" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">c</text><text class="rich-cli-r189" x="329.4" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">l</text><text class="rich-cli-r190" x="341.6" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">l</text><text class="rich-cli-r191" x="353.8" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">o</text><text class="rich-cli-r192" x="366" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">o</text><text class="rich-cli-r193" x="378.2" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">d</text><text class="rich-cli-r194" x="390.4" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">d</text><text class="rich-cli-r195" x="402.6" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">x</text><text class="rich-cli-r196" x="414.8" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">x</text><text class="rich-cli-r197" x="427" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">x</text><text class="rich-cli-r198" x="439.2" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">k</text><text class="rich-cli-r199" x="451.4" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">k</text><text class="rich-cli-r200" x="463.6" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">k</text><text class="rich-cli-r201" x="475.8" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">O</text><text class="rich-cli-r41" x="488" y="117.6" textLength="12.2" clip-path="url(#rich-cli-line-4)">
+</text><text class="rich-cli-r202" x="0" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">:</text><text class="rich-cli-r203" x="12.2" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">:</text><text class="rich-cli-r204" x="24.4" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">:</text><text class="rich-cli-r205" x="36.6" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">:</text><text class="rich-cli-r206" x="48.8" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">:</text><text class="rich-cli-r207" x="61" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">:</text><text class="rich-cli-r208" x="73.2" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">:</text><text class="rich-cli-r209" x="85.4" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">:</text><text class="rich-cli-r210" x="97.6" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">:</text><text class="rich-cli-r211" x="109.8" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">:</text><text class="rich-cli-r212" x="122" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">:</text><text class="rich-cli-r213" x="134.2" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">:</text><text class="rich-cli-r214" x="146.4" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">:</text><text class="rich-cli-r215" x="158.6" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">:</text><text class="rich-cli-r216" x="170.8" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">:</text><text class="rich-cli-r217" x="183" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">:</text><text class="rich-cli-r218" x="195.2" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">:</text><text class="rich-cli-r219" x="207.4" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">:</text><text class="rich-cli-r220" x="219.6" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">:</text><text class="rich-cli-r221" x="231.8" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">c</text><text class="rich-cli-r222" x="244" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">c</text><text class="rich-cli-r223" x="256.2" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">c</text><text class="rich-cli-r224" x="268.4" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">l</text><text class="rich-cli-r225" x="280.6" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">l</text><text class="rich-cli-r226" x="292.8" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">l</text><text class="rich-cli-r227" x="305" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">o</text><text class="rich-cli-r228" x="317.2" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">o</text><text class="rich-cli-r229" x="329.4" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">d</text><text class="rich-cli-r230" x="341.6" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">d</text><text class="rich-cli-r231" x="353.8" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">x</text><text class="rich-cli-r232" x="366" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">x</text><text class="rich-cli-r233" x="378.2" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">k</text><text class="rich-cli-r234" x="390.4" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">k</text><text class="rich-cli-r235" x="402.6" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">k</text><text class="rich-cli-r236" x="414.8" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">O</text><text class="rich-cli-r237" x="427" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">O</text><text class="rich-cli-r238" x="439.2" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">O</text><text class="rich-cli-r239" x="451.4" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">O</text><text class="rich-cli-r240" x="463.6" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">0</text><text class="rich-cli-r241" x="475.8" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">0</text><text class="rich-cli-r41" x="488" y="142" textLength="12.2" clip-path="url(#rich-cli-line-5)">
+</text><text class="rich-cli-r242" x="0" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">c</text><text class="rich-cli-r243" x="12.2" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">c</text><text class="rich-cli-r244" x="24.4" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">c</text><text class="rich-cli-r245" x="36.6" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">c</text><text class="rich-cli-r246" x="48.8" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">c</text><text class="rich-cli-r247" x="61" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">c</text><text class="rich-cli-r248" x="73.2" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">c</text><text class="rich-cli-r249" x="85.4" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">c</text><text class="rich-cli-r250" x="97.6" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">c</text><text class="rich-cli-r251" x="109.8" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">c</text><text class="rich-cli-r252" x="122" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">c</text><text class="rich-cli-r253" x="134.2" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">c</text><text class="rich-cli-r254" x="146.4" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">c</text><text class="rich-cli-r255" x="158.6" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">c</text><text class="rich-cli-r256" x="170.8" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">c</text><text class="rich-cli-r257" x="183" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">c</text><text class="rich-cli-r258" x="195.2" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">c</text><text class="rich-cli-r259" x="207.4" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">l</text><text class="rich-cli-r260" x="219.6" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">l</text><text class="rich-cli-r261" x="231.8" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">l</text><text class="rich-cli-r262" x="244" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">o</text><text class="rich-cli-r263" x="256.2" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">o</text><text class="rich-cli-r264" x="268.4" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">d</text><text class="rich-cli-r265" x="280.6" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">d</text><text class="rich-cli-r266" x="292.8" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">d</text><text class="rich-cli-r267" x="305" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">x</text><text class="rich-cli-r268" x="317.2" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">x</text><text class="rich-cli-r269" x="329.4" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">k</text><text class="rich-cli-r270" x="341.6" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">k</text><text class="rich-cli-r271" x="353.8" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">O</text><text class="rich-cli-r272" x="366" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">O</text><text class="rich-cli-r273" x="378.2" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">O</text><text class="rich-cli-r274" x="390.4" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">0</text><text class="rich-cli-r275" x="402.6" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">0</text><text class="rich-cli-r276" x="414.8" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">0</text><text class="rich-cli-r277" x="427" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">0</text><text class="rich-cli-r278" x="439.2" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">K</text><text class="rich-cli-r279" x="451.4" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">K</text><text class="rich-cli-r280" x="463.6" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">K</text><text class="rich-cli-r281" x="475.8" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">K</text><text class="rich-cli-r41" x="488" y="166.4" textLength="12.2" clip-path="url(#rich-cli-line-6)">
+</text><text class="rich-cli-r282" x="0" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">l</text><text class="rich-cli-r283" x="12.2" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">l</text><text class="rich-cli-r284" x="24.4" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">l</text><text class="rich-cli-r285" x="36.6" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">c</text><text class="rich-cli-r286" x="48.8" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">c</text><text class="rich-cli-r287" x="61" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">c</text><text class="rich-cli-r288" x="73.2" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">c</text><text class="rich-cli-r289" x="85.4" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">c</text><text class="rich-cli-r290" x="97.6" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">c</text><text class="rich-cli-r291" x="109.8" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">l</text><text class="rich-cli-r292" x="122" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">l</text><text class="rich-cli-r293" x="134.2" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">l</text><text class="rich-cli-r294" x="146.4" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">l</text><text class="rich-cli-r295" x="158.6" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">l</text><text class="rich-cli-r296" x="170.8" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">l</text><text class="rich-cli-r297" x="183" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">o</text><text class="rich-cli-r298" x="195.2" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">o</text><text class="rich-cli-r299" x="207.4" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">o</text><text class="rich-cli-r300" x="219.6" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">d</text><text class="rich-cli-r301" x="231.8" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">d</text><text class="rich-cli-r302" x="244" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">x</text><text class="rich-cli-r303" x="256.2" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">x</text><text class="rich-cli-r304" x="268.4" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">k</text><text class="rich-cli-r305" x="280.6" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">k</text><text class="rich-cli-r306" x="292.8" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">k</text><text class="rich-cli-r307" x="305" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">O</text><text class="rich-cli-r308" x="317.2" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">O</text><text class="rich-cli-r309" x="329.4" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">0</text><text class="rich-cli-r310" x="341.6" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">0</text><text class="rich-cli-r311" x="353.8" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">0</text><text class="rich-cli-r312" x="366" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">K</text><text class="rich-cli-r313" x="378.2" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">K</text><text class="rich-cli-r314" x="390.4" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">K</text><text class="rich-cli-r315" x="402.6" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">K</text><text class="rich-cli-r316" x="414.8" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">K</text><text class="rich-cli-r317" x="427" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">X</text><text class="rich-cli-r318" x="439.2" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">X</text><text class="rich-cli-r319" x="451.4" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">X</text><text class="rich-cli-r320" x="463.6" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">X</text><text class="rich-cli-r321" x="475.8" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">X</text><text class="rich-cli-r41" x="488" y="190.8" textLength="12.2" clip-path="url(#rich-cli-line-7)">
+</text><text class="rich-cli-r322" x="0" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">l</text><text class="rich-cli-r323" x="12.2" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">l</text><text class="rich-cli-r324" x="24.4" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">l</text><text class="rich-cli-r325" x="36.6" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">l</text><text class="rich-cli-r326" x="48.8" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">l</text><text class="rich-cli-r327" x="61" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">l</text><text class="rich-cli-r328" x="73.2" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">l</text><text class="rich-cli-r329" x="85.4" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">l</text><text class="rich-cli-r330" x="97.6" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">o</text><text class="rich-cli-r331" x="109.8" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">o</text><text class="rich-cli-r332" x="122" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">o</text><text class="rich-cli-r333" x="134.2" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">o</text><text class="rich-cli-r334" x="146.4" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">o</text><text class="rich-cli-r335" x="158.6" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">d</text><text class="rich-cli-r336" x="170.8" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">d</text><text class="rich-cli-r337" x="183" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">x</text><text class="rich-cli-r338" x="195.2" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">x</text><text class="rich-cli-r339" x="207.4" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">x</text><text class="rich-cli-r340" x="219.6" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">k</text><text class="rich-cli-r341" x="231.8" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">k</text><text class="rich-cli-r342" x="244" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">O</text><text class="rich-cli-r343" x="256.2" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">O</text><text class="rich-cli-r344" x="268.4" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">0</text><text class="rich-cli-r345" x="280.6" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">0</text><text class="rich-cli-r346" x="292.8" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">0</text><text class="rich-cli-r347" x="305" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">K</text><text class="rich-cli-r348" x="317.2" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">K</text><text class="rich-cli-r349" x="329.4" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">K</text><text class="rich-cli-r350" x="341.6" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">X</text><text class="rich-cli-r351" x="353.8" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">X</text><text class="rich-cli-r352" x="366" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">X</text><text class="rich-cli-r353" x="378.2" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">X</text><text class="rich-cli-r354" x="390.4" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">X</text><text class="rich-cli-r355" x="402.6" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">X</text><text class="rich-cli-r356" x="414.8" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">N</text><text class="rich-cli-r357" x="427" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">N</text><text class="rich-cli-r358" x="439.2" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">X</text><text class="rich-cli-r359" x="451.4" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">N</text><text class="rich-cli-r360" x="463.6" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">X</text><text class="rich-cli-r361" x="475.8" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">X</text><text class="rich-cli-r41" x="488" y="215.2" textLength="12.2" clip-path="url(#rich-cli-line-8)">
+</text><text class="rich-cli-r362" x="0" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">o</text><text class="rich-cli-r363" x="12.2" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">o</text><text class="rich-cli-r364" x="24.4" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">o</text><text class="rich-cli-r365" x="36.6" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">o</text><text class="rich-cli-r366" x="48.8" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">o</text><text class="rich-cli-r367" x="61" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">o</text><text class="rich-cli-r368" x="73.2" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">o</text><text class="rich-cli-r369" x="85.4" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">d</text><text class="rich-cli-r370" x="97.6" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">d</text><text class="rich-cli-r371" x="109.8" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">d</text><text class="rich-cli-r372" x="122" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">d</text><text class="rich-cli-r373" x="134.2" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">x</text><text class="rich-cli-r374" x="146.4" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">x</text><text class="rich-cli-r375" x="158.6" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">k</text><text class="rich-cli-r376" x="170.8" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">k</text><text class="rich-cli-r377" x="183" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">k</text><text class="rich-cli-r378" x="195.2" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">O</text><text class="rich-cli-r379" x="207.4" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">O</text><text class="rich-cli-r380" x="219.6" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">0</text><text class="rich-cli-r381" x="231.8" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">0</text><text class="rich-cli-r382" x="244" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">K</text><text class="rich-cli-r383" x="256.2" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">K</text><text class="rich-cli-r384" x="268.4" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">K</text><text class="rich-cli-r385" x="280.6" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">X</text><text class="rich-cli-r386" x="292.8" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">X</text><text class="rich-cli-r387" x="305" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">X</text><text class="rich-cli-r388" x="317.2" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">N</text><text class="rich-cli-r389" x="329.4" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">N</text><text class="rich-cli-r390" x="341.6" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">N</text><text class="rich-cli-r391" x="353.8" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">N</text><text class="rich-cli-r392" x="366" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">N</text><text class="rich-cli-r393" x="378.2" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">N</text><text class="rich-cli-r394" x="390.4" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">N</text><text class="rich-cli-r395" x="402.6" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">N</text><text class="rich-cli-r396" x="414.8" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">N</text><text class="rich-cli-r397" x="427" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">N</text><text class="rich-cli-r398" x="439.2" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">N</text><text class="rich-cli-r399" x="451.4" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">N</text><text class="rich-cli-r400" x="463.6" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">N</text><text class="rich-cli-r401" x="475.8" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">N</text><text class="rich-cli-r41" x="488" y="239.6" textLength="12.2" clip-path="url(#rich-cli-line-9)">
+</text><text class="rich-cli-r402" x="0" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">d</text><text class="rich-cli-r403" x="12.2" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">d</text><text class="rich-cli-r404" x="24.4" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">d</text><text class="rich-cli-r405" x="36.6" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">d</text><text class="rich-cli-r406" x="48.8" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">d</text><text class="rich-cli-r407" x="61" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">x</text><text class="rich-cli-r408" x="73.2" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">x</text><text class="rich-cli-r409" x="85.4" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">x</text><text class="rich-cli-r410" x="97.6" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">k</text><text class="rich-cli-r411" x="109.8" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">k</text><text class="rich-cli-r412" x="122" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">k</text><text class="rich-cli-r413" x="134.2" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">O</text><text class="rich-cli-r414" x="146.4" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">O</text><text class="rich-cli-r415" x="158.6" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">0</text><text class="rich-cli-r416" x="170.8" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">0</text><text class="rich-cli-r417" x="183" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">0</text><text class="rich-cli-r418" x="195.2" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">K</text><text class="rich-cli-r419" x="207.4" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">K</text><text class="rich-cli-r420" x="219.6" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">X</text><text class="rich-cli-r421" x="231.8" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">X</text><text class="rich-cli-r422" x="244" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">X</text><text class="rich-cli-r423" x="256.2" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">N</text><text class="rich-cli-r424" x="268.4" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">N</text><text class="rich-cli-r425" x="280.6" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">N</text><text class="rich-cli-r426" x="292.8" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">W</text><text class="rich-cli-r427" x="305" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">W</text><text class="rich-cli-r428" x="317.2" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">W</text><text class="rich-cli-r429" x="329.4" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">W</text><text class="rich-cli-r430" x="341.6" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">W</text><text class="rich-cli-r431" x="353.8" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">W</text><text class="rich-cli-r432" x="366" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">W</text><text class="rich-cli-r433" x="378.2" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">W</text><text class="rich-cli-r434" x="390.4" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">W</text><text class="rich-cli-r435" x="402.6" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">W</text><text class="rich-cli-r436" x="414.8" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">W</text><text class="rich-cli-r437" x="427" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">W</text><text class="rich-cli-r438" x="439.2" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">W</text><text class="rich-cli-r439" x="451.4" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">W</text><text class="rich-cli-r440" x="463.6" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">W</text><text class="rich-cli-r441" x="475.8" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">W</text><text class="rich-cli-r41" x="488" y="264" textLength="12.2" clip-path="url(#rich-cli-line-10)">
+</text><text class="rich-cli-r442" x="0" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">x</text><text class="rich-cli-r443" x="12.2" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">x</text><text class="rich-cli-r444" x="24.4" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">x</text><text class="rich-cli-r445" x="36.6" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">k</text><text class="rich-cli-r446" x="48.8" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">k</text><text class="rich-cli-r447" x="61" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">k</text><text class="rich-cli-r448" x="73.2" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">O</text><text class="rich-cli-r449" x="85.4" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">O</text><text class="rich-cli-r450" x="97.6" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">O</text><text class="rich-cli-r451" x="109.8" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">0</text><text class="rich-cli-r452" x="122" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">0</text><text class="rich-cli-r453" x="134.2" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">K</text><text class="rich-cli-r454" x="146.4" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">K</text><text class="rich-cli-r455" x="158.6" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">X</text><text class="rich-cli-r456" x="170.8" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">X</text><text class="rich-cli-r457" x="183" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">X</text><text class="rich-cli-r458" x="195.2" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">N</text><text class="rich-cli-r459" x="207.4" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">N</text><text class="rich-cli-r460" x="219.6" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">N</text><text class="rich-cli-r461" x="231.8" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">W</text><text class="rich-cli-r462" x="244" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">W</text><text class="rich-cli-r463" x="256.2" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">W</text><text class="rich-cli-r464" x="268.4" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">W</text><text class="rich-cli-r465" x="280.6" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">M</text><text class="rich-cli-r466" x="292.8" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">M</text><text class="rich-cli-r467" x="305" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">M</text><text class="rich-cli-r468" x="317.2" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">M</text><text class="rich-cli-r469" x="329.4" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">M</text><text class="rich-cli-r470" x="341.6" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">M</text><text class="rich-cli-r471" x="353.8" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">M</text><text class="rich-cli-r472" x="366" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">M</text><text class="rich-cli-r473" x="378.2" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">M</text><text class="rich-cli-r474" x="390.4" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">M</text><text class="rich-cli-r475" x="402.6" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">M</text><text class="rich-cli-r476" x="414.8" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">M</text><text class="rich-cli-r477" x="427" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">M</text><text class="rich-cli-r478" x="439.2" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">M</text><text class="rich-cli-r479" x="451.4" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">M</text><text class="rich-cli-r480" x="463.6" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">M</text><text class="rich-cli-r481" x="475.8" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">M</text><text class="rich-cli-r41" x="488" y="288.4" textLength="12.2" clip-path="url(#rich-cli-line-11)">
+</text><text class="rich-cli-r482" x="0" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">d</text><text class="rich-cli-r483" x="12.2" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">d</text><text class="rich-cli-r484" x="24.4" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">x</text><text class="rich-cli-r485" x="36.6" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">x</text><text class="rich-cli-r486" x="48.8" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">x</text><text class="rich-cli-r487" x="61" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">k</text><text class="rich-cli-r488" x="73.2" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">k</text><text class="rich-cli-r489" x="85.4" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">k</text><text class="rich-cli-r490" x="97.6" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">O</text><text class="rich-cli-r491" x="109.8" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">O</text><text class="rich-cli-r492" x="122" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">0</text><text class="rich-cli-r493" x="134.2" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">0</text><text class="rich-cli-r494" x="146.4" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">0</text><text class="rich-cli-r495" x="158.6" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">K</text><text class="rich-cli-r496" x="170.8" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">K</text><text class="rich-cli-r497" x="183" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">K</text><text class="rich-cli-r498" x="195.2" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">X</text><text class="rich-cli-r499" x="207.4" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">X</text><text class="rich-cli-r500" x="219.6" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">X</text><text class="rich-cli-r501" x="231.8" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">X</text><text class="rich-cli-r502" x="244" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">X</text><text class="rich-cli-r503" x="256.2" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">N</text><text class="rich-cli-r504" x="268.4" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">N</text><text class="rich-cli-r505" x="280.6" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">N</text><text class="rich-cli-r506" x="292.8" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">N</text><text class="rich-cli-r507" x="305" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">N</text><text class="rich-cli-r508" x="317.2" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">N</text><text class="rich-cli-r509" x="329.4" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">N</text><text class="rich-cli-r510" x="341.6" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">N</text><text class="rich-cli-r511" x="353.8" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">N</text><text class="rich-cli-r512" x="366" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">N</text><text class="rich-cli-r513" x="378.2" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">N</text><text class="rich-cli-r514" x="390.4" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">N</text><text class="rich-cli-r515" x="402.6" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">N</text><text class="rich-cli-r516" x="414.8" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">N</text><text class="rich-cli-r517" x="427" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">N</text><text class="rich-cli-r518" x="439.2" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">N</text><text class="rich-cli-r519" x="451.4" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">N</text><text class="rich-cli-r520" x="463.6" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">N</text><text class="rich-cli-r521" x="475.8" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">N</text><text class="rich-cli-r41" x="488" y="312.8" textLength="12.2" clip-path="url(#rich-cli-line-12)">
+</text><text class="rich-cli-r532" x="122" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r533" x="134.2" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r534" x="146.4" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r535" x="158.6" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r536" x="170.8" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r537" x="183" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r538" x="195.2" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r539" x="207.4" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r540" x="219.6" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r541" x="231.8" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r542" x="244" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r543" x="256.2" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r544" x="268.4" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r545" x="280.6" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r546" x="292.8" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r547" x="305" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r548" x="317.2" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r549" x="329.4" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r550" x="341.6" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r551" x="353.8" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r552" x="366" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r553" x="378.2" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r554" x="390.4" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r555" x="402.6" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r556" x="414.8" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r557" x="427" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r558" x="439.2" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r559" x="451.4" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r560" x="463.6" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text><text class="rich-cli-r561" x="475.8" y="337.2" textLength="12.2" clip-path="url(#rich-cli-line-13)">.</text>
+    </g>
+    </g>
+</svg>

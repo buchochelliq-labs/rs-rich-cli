@@ -87,6 +87,7 @@ impl ConsoleOptions {
 /// The high-level interface for rendering to a terminal. Mirrors
 /// `rich.console.Console`.
 pub struct Console {
+    render_environment: Option<std::sync::Arc<dyn crate::protocol::RenderEnvironment>>,
     color_system: Option<ColorSystem>,
     width: usize,
     height: usize,
@@ -228,6 +229,9 @@ impl Console {
     /// Write (or, while capturing, record) a rendered segment stream, adding a
     /// trailing newline. The single sink for every `print*` path.
     fn emit(&self, segments: Vec<Segment>) {
+        if segments.is_empty() {
+            return;
+        }
         if self.capturing.get() {
             let mut buffer = self.record_buffer.borrow_mut();
             buffer.extend(segments);
@@ -282,8 +286,11 @@ impl Console {
     /// returning the string (including the single trailing newline). For tests
     /// and export.
     pub fn render_export(&self, renderable: &dyn Renderable) -> String {
-        let mut out = self.render_to_string(renderable);
-        out.push('\n');
+        let segments = self.render_segments(renderable);
+        let mut out = self.segments_to_string(&segments);
+        if !segments.is_empty() {
+            out.push('\n');
+        }
         out
     }
 
@@ -543,7 +550,7 @@ impl Console {
 
     /// Expand `:emoji:` shortcodes. Runs before markup parsing (matching
     /// upstream's default `emoji=True`); `:name:` and `[tag]` don't overlap.
-    fn expand_emoji(&self, content: &str) -> String {
+    pub(crate) fn expand_emoji(&self, content: &str) -> String {
         if self.emoji {
             crate::emoji::replace(content)
         } else {
@@ -617,6 +624,11 @@ fn segments_to_plain(segments: &[Segment]) -> String {
 
 impl Renderable for Text {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        // Empty Text still represents a printable blank line; an empty
+        // generator such as Markdown does not. Preserve that distinction.
+        if self.is_empty() {
+            return vec![Segment::new("", None)];
+        }
         // Wrap to the available width; the effective justify is this text's own
         // justify, falling back to the console options' justify.
         let justify = if self.get_justify() != Justify::Default {
@@ -753,9 +765,13 @@ impl ConsoleBuilder {
         let is_terminal = self
             .force_terminal
             .unwrap_or_else(|| std::io::stdout().is_terminal());
+        // Upstream's rule is `environ.get("NO_COLOR", "") != ""`, so an EMPTY
+        // NO_COLOR does not disable colour — only a non-empty value does. That
+        // matters because a shell that exports `NO_COLOR=` (a common way to
+        // clear it) would otherwise still be treated as opting out.
         let no_color = self
             .no_color
-            .unwrap_or_else(|| std::env::var_os("NO_COLOR").is_some());
+            .unwrap_or_else(|| std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty()));
         let color_system = if self.color_system_set {
             self.color_system
         } else if is_terminal {
@@ -766,6 +782,7 @@ impl ConsoleBuilder {
         let width = self.width.unwrap_or_else(detect_width);
         let height = self.height.unwrap_or_else(detect_height);
         Console {
+            render_environment: None,
             color_system,
             width,
             height,
@@ -789,7 +806,17 @@ impl ConsoleBuilder {
     }
 }
 
-/// Detect the terminal color system from environment variables.
+/// Detect the terminal color system.
+///
+/// `COLORTERM`/`TERM` are the portable signals, but **Windows sets neither**.
+/// Detecting from them alone meant every Windows console fell back to
+/// [`ColorSystem::Standard`] — 16 colors — for all output. Measured on a real
+/// Windows Terminal session: 28 distinct colors in a rendered heat map against
+/// 140 once truecolor was detected.
+///
+/// Upstream `rich` special-cases Windows for the same reason. It reaches the
+/// platform APIs directly; we ask `anstyle-query`, which avoids hand-written
+/// `unsafe` FFI for a console handle (see `docs/DIVERGENCES.md`).
 fn detect_color_system() -> ColorSystem {
     if let Some(colorterm) = std::env::var_os("COLORTERM") {
         let colorterm = colorterm.to_string_lossy().to_ascii_lowercase();
@@ -797,12 +824,35 @@ fn detect_color_system() -> ColorSystem {
             return ColorSystem::Truecolor;
         }
     }
-    if let Some(term) = std::env::var_os("TERM") {
-        if term.to_string_lossy().contains("256") {
-            return ColorSystem::EightBit;
-        }
+
+    // Windows. This function is only reached when stdout is a terminal (see
+    // ConsoleBuilder::build), and every modern Windows console that can be a
+    // terminal speaks 24-bit color, so report truecolor.
+    //
+    // The call below is for its SIDE EFFECT — it turns on
+    // ENABLE_VIRTUAL_TERMINAL_PROCESSING, which legacy `conhost` needs before
+    // it honours any escape sequence. Its RETURN VALUE is deliberately ignored:
+    // it enables VT on stdout *and stderr* and propagates failure with `?`, so
+    // merely redirecting stderr (`rich ... 2>log`, the most natural CI
+    // invocation) made it report failure and dropped the whole console to 16
+    // colors — even though stdout was still a fully capable terminal.
+    #[cfg(windows)]
+    {
+        let _ = anstyle_query::windows::enable_ansi_colors();
+        ColorSystem::Truecolor
     }
-    ColorSystem::Standard
+
+    // `TERM` is meaningless on Windows and the branch above always returns, so
+    // gating this keeps either platform free of unreachable code.
+    #[cfg(not(windows))]
+    {
+        if let Some(term) = std::env::var_os("TERM") {
+            if term.to_string_lossy().contains("256") {
+                return ColorSystem::EightBit;
+            }
+        }
+        ColorSystem::Standard
+    }
 }
 
 /// Detect the terminal width: `COLUMNS`, then the real terminal, then a default.
@@ -839,6 +889,18 @@ fn detect_height() -> usize {
     DEFAULT_HEIGHT
 }
 
+impl crate::protocol::ConsoleEnvironment for Console {
+    fn set_render_environment(
+        &mut self,
+        value: Option<std::sync::Arc<dyn crate::protocol::RenderEnvironment>>,
+    ) {
+        self.render_environment = value;
+    }
+    fn render_environment(&self) -> Option<&dyn crate::protocol::RenderEnvironment> {
+        self.render_environment.as_deref()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -854,6 +916,17 @@ mod tests {
 
     /// The strict path reports malformed markup where the lenient one prints it
     /// literally. Both must still agree on markup that is actually valid.
+    #[test]
+    fn empty_text_and_empty_renderables_have_distinct_endings() {
+        let console = Console::builder().force_terminal(false).build();
+        assert_eq!(console.render_export(&Text::new("")), "\n");
+        assert_eq!(
+            console.render_export(&crate::markdown::Markdown::new("")),
+            ""
+        );
+        assert_eq!(console.render_export(&crate::table::Table::new()), "\n");
+    }
+
     #[test]
     fn try_build_text_reports_bad_markup() {
         let console = test_console();

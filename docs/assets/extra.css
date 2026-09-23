@@ -2,7 +2,7 @@
    their own dark background, so they must not be inverted or tinted by the
    theme — and they should sit at a comfortable width rather than filling the
    column edge to edge. */
-.md-typeset img[src$=".svg"] {
+.md-typeset img[src$=".svg"]:not([src^="http"]) {
   display: block;
   margin: 1.2rem auto;
   max-width: 100%;
@@ -19,4 +19,36 @@
 /* Slightly tighter tables — the parity and status tables are wide. */
 .md-typeset table:not([class]) {
   font-size: 0.72rem;
+}
+
+/* Status badges are inline metadata, not terminal screenshots. */
+.md-typeset .project-badges > p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: .4rem .5rem;
+  margin: 0 0 1rem;
+}
+.md-typeset .project-badges a {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: 24px;
+  line-height: 1;
+}
+.md-typeset .project-badges img,
+.md-typeset table img[src^="https://img.shields.io/"] {
+  display: inline-block;
+  width: auto;
+  height: 20px;
+  max-width: 100%;
+  margin: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.md-typeset video {
+  display: block;
+  max-width: 100%;
+  height: auto;
 }

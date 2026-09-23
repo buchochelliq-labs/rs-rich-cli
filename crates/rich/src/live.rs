@@ -50,7 +50,9 @@ impl<W: Write> Live<W> {
             return;
         }
         self.started = true;
-        let _ = write!(self.writer, "{}", Control::show_cursor(false).as_str());
+        if self.console.is_terminal() {
+            let _ = write!(self.writer, "{}", Control::show_cursor(false).as_str());
+        }
         self.refresh();
     }
 
@@ -63,6 +65,9 @@ impl<W: Write> Live<W> {
     /// Redraw the current renderable in place (reposition over the last frame,
     /// then render).
     pub fn refresh(&mut self) {
+        if !self.console.is_terminal() {
+            return;
+        }
         // `position_cursor` uses the *previous* frame's shape; rendering then
         // updates the shape for next time.
         let position = self.live_render.position_cursor();
@@ -73,6 +78,12 @@ impl<W: Write> Live<W> {
     /// Commit the final frame (with a trailing newline) and show the cursor.
     pub fn stop(&mut self) {
         if !self.started {
+            return;
+        }
+        if !self.console.is_terminal() {
+            let content = self.console.render_to_string(&self.live_render);
+            let _ = writeln!(self.writer, "{content}");
+            self.started = false;
             return;
         }
         let position = self.live_render.position_cursor();
@@ -199,6 +210,18 @@ mod tests {
             .width(20)
             .no_color(false)
             .build()
+    }
+
+    #[test]
+    fn redirected_live_emits_only_the_final_frame() {
+        let console = Console::builder().force_terminal(false).width(20).build();
+        let mut live = Live::new(Box::new(Text::new("first")), console, Vec::<u8>::new());
+        live.start();
+        live.update(Box::new(Text::new("last")));
+        live.refresh();
+        assert!(live.writer().is_empty());
+        live.stop();
+        assert_eq!(live.writer(), b"last\n");
     }
 
     #[test]

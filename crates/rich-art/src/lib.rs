@@ -24,6 +24,32 @@ pub mod figlet;
 #[cfg(feature = "image")]
 pub mod ascii;
 
+#[cfg(feature = "image")]
+pub mod block;
+
+#[cfg(feature = "image")]
+pub mod braille;
+
+#[cfg(feature = "image")]
+pub mod image_art;
+
+#[cfg(feature = "image")]
+mod image_color;
+
+#[cfg(feature = "image")]
+pub use image_color::{Dither, ImageColorMode};
+
+#[cfg(feature = "image")]
+pub mod imagediff;
+
+#[cfg(feature = "sixel")]
+pub mod sixel;
+
+/// The `image` crate, re-exported so callers can decode files without taking
+/// their own dependency on it (and without a version skew against ours).
+#[cfg(feature = "image")]
+pub use image;
+
 #[cfg(feature = "gif")]
 pub mod gif;
 
@@ -34,6 +60,23 @@ pub use crate::figlet::{FigletFont, FontError, Justify};
 
 #[cfg(feature = "image")]
 pub use crate::ascii::{AsciiArt, DEFAULT_RAMP};
+
+#[cfg(feature = "image")]
+pub use crate::block::BlockArt;
+
+#[cfg(feature = "image")]
+pub use crate::braille::BrailleArt;
+
+#[cfg(feature = "sixel")]
+pub use crate::sixel::SixelArt;
+
+#[cfg(feature = "image")]
+pub use crate::image_art::{
+    ImageAnchor, ImageArt, ImageArtError, ImageFit, ImageMode, ImageOptions, RenderCapabilities,
+};
+
+#[cfg(feature = "image")]
+pub use crate::imagediff::{diff, DiffError, DiffReport, DiffSettings, Region};
 
 #[cfg(feature = "gif")]
 pub use crate::gif::{AnimatedArt, Repeat};
@@ -165,3 +208,9 @@ mod tests {
         assert!(banner.to_text(80).starts_with(" _   _ _ \n"));
     }
 }
+
+#[cfg(feature = "image")]
+mod transform;
+
+#[cfg(feature = "image")]
+pub use transform::{ImageTransforms, Rotation};

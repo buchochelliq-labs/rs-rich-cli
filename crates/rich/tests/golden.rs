@@ -257,6 +257,7 @@ fn unescape(s: &str) -> String {
     s.replace("\\x1b", "\x1b")
         .replace("\\n", "\n")
         .replace("\\x1f", "\x1f")
+        .replace("\\x5c", "\\")
 }
 
 /// Build the renderable matching a fixture `name`. Must stay in sync with
@@ -270,6 +271,31 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "rule_title" | "rule_title_odd" => Box::new(Rule::new("Hi")),
         "rule_left" => Box::new(Rule::new("Hi").align(HorizontalAlign::Left)),
         "rule_right" => Box::new(Rule::new("Hi").align(HorizontalAlign::Right)),
+        "rule_title_markup" => Box::new(Rule::new("[bold red]Ready[/] :rocket:")),
+        "rule_title_literal" => Box::new(Rule::new(r"\[red]literal\[/red]")),
+        "rule_title_spaces" => Box::new(Rule::new("[bold]a\tb\nc[/]")),
+        "rule_title_truncate" => Box::new(Rule::new("[red]long[/][bold blue]title[/]")),
+        "rule_left_markup" => Box::new(Rule::new("[red]Title[/]").align(HorizontalAlign::Left)),
+        "rule_right_markup" => Box::new(Rule::new("[red]Title[/]").align(HorizontalAlign::Right)),
+        "rule_title_wide_truncate" => Box::new(Rule::new("[red]界[/][blue]abc[/]")),
+        "rule_empty_title" => Box::new(Rule::new("")),
+        "panel_title_markup" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title("[bold red]Ready[/] :rocket:").border_style(Style::parse("blue").unwrap())),
+        "panel_title_literal" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title(r"\[red]literal\[/red]")),
+        "panel_title_spaces" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title("[bold]a\tb\nc[/]")),
+        "panel_title_truncate" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title("[red]long[/][bold blue]title[/]").border_style(Style::parse("green").unwrap())),
+        "panel_subtitle_markup" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .subtitle("[italic yellow]Done[/] :rocket:").subtitle_align(HorizontalAlign::Right)
+            .border_style(Style::parse("blue").unwrap())),
+        "panel_subtitle_truncate" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .subtitle("[red]long[/][bold blue]title[/]").border_style(Style::parse("green").unwrap())),
+        "panel_title_wide_truncate" => Box::new(Panel::new(Box::new(Text::new("x"))).title("[red]界[/][blue]abc[/]")),
+        "panel_empty_title" => Box::new(Panel::new(Box::new(Text::new("x"))).title("").subtitle("")),
+        "panel_tiny_title" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title("[bold red]T[/]").subtitle("[green]S[/]")),
         "panel_plain" => Box::new(Panel::new(Box::new(Text::new("hello")))),
         "panel_title" => Box::new(Panel::new(Box::new(Text::new("hello"))).title("T")),
         "panel_title_left" => Box::new(
@@ -306,6 +332,10 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "padding_0_1" => Box::new(Padding::new(Box::new(Text::new("hi")), (0, 1, 0, 1))),
         "wrap_words" => Box::new(Text::new("The quick brown fox")),
         "wrap_fold" => Box::new(Text::new("abcdefghij")),
+        "wrap_many_unicode" => Box::new(Text::from_markup(&format!(
+            "{}\n{}", "[red]界é🙂[/]".repeat(32), "[blue]❤️xyz[/]".repeat(16)
+        )).unwrap()),
+        "wrap_many_words" => Box::new(Text::from_markup(&"[green]éclair 界 hello [/]".repeat(24)).unwrap()),
         "wrap_combining" => {
             let s: String = "abcdef".chars().flat_map(|c| [c, '\u{301}']).collect();
             Box::new(Text::new(s))
@@ -325,6 +355,10 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "table_expand" => Box::new(expand_table()),
         "table_justify" => Box::new(justify_table()),
         "table_title" => Box::new(title_table()),
+        "table_title_markup" => Box::new(sample_table(SQUARE)
+            .title("[bold red]Users[/] :rocket:").caption("[green]2 rows[/] :white_check_mark:")),
+        "table_title_wrap" => Box::new(sample_table(SQUARE)
+            .title("[red]Long title wraps onto lines[/]").caption("[green]a\tb\nc[/]")),
         "table_lines" => Box::new(lines_table()),
         "table_col_width" => Box::new(width_table()),
         "table_col_style" => Box::new(style_table()),
@@ -350,16 +384,41 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "bar_half" => Box::new(ProgressBar::new(100.0, 50.0).width(20)),
         "bar_third" => Box::new(ProgressBar::new(100.0, 33.0).width(20)),
         "bar_full" => Box::new(ProgressBar::new(100.0, 100.0).width(20)),
+        "json_python_numbers" => Box::new(Json::new("[1234567890123456789012345678901234567890,-1234567890123456789012345678901234567890,1e400,-1e400,-0]").unwrap()),
         "json_object" => Box::new(Json::new(JSON_SAMPLE).expect("valid JSON")),
         "json_unicode" => Box::new(
             Json::new("{\"name\": \"caf\u{e9}\", \"emoji\": \"\u{2764}\"}").expect("valid JSON"),
         ),
+        "json_escapes_w8" | "json_escapes_w10" | "json_escapes_w12" => {
+            Box::new(Json::new(r#"{"v":"a\"b\\c\nd\u0001e"}"#).expect("valid JSON"))
+        }
         "markdown_doc" => Box::new(Markdown::new(
             "# Title\n\nHello **bold** and *italic* and `code`.",
         )),
         "markdown_list" => Box::new(Markdown::new("Items:\n\n- one\n- two\n\n1. a\n2. b")),
         "markdown_quote_hr" => Box::new(Markdown::new("Note:\n\n> important\n\n---\n\ndone")),
+        "markdown_empty" => Box::new(Markdown::new("").hyperlinks(false)),
+        "markdown_rule_only_quote" => Box::new(Markdown::new("> ---").hyperlinks(false)),
+        "markdown_rule_then_quote_text" => Box::new(Markdown::new("> ---\n>\n> text").hyperlinks(false)),
+        "markdown_html_then_paragraph" => Box::new(Markdown::new("<div>hidden</div>\n\nParagraph").hyperlinks(false)),
+        "markdown_html_only" => Box::new(Markdown::new("<div>hidden</div>").hyperlinks(false)),
+        "markdown_html_between_paragraphs" => Box::new(Markdown::new("A\n\n<div>x</div>\n\nB").hyperlinks(false)),
+        "markdown_images_same_table_cell" => Box::new(Markdown::new("| h |\n|---|\n| ![a](x) ![b](y) |\n| ![c](z) |").hyperlinks(false)),
         "markdown_hr_end" => Box::new(Markdown::new("a\n\n---")),
+        "markdown_image_table_cell" => Box::new(
+            Markdown::new("| Icon | Name |\n| --- | --- |\n| ![crate](crate.svg) | rich |\n")
+                .hyperlinks(false),
+        ),
+        "markdown_images_one_container" => Box::new(
+            Markdown::new("Before ![one](one.svg) + ![two](two.svg) after.").hyperlinks(false),
+        ),
+        "markdown_badge_table" => Box::new(
+            Markdown::new(
+                "| Badge |\n| --- |\n| ![build](build.svg) |\n\
+                 | ![docs](docs.svg) |\n| ![crate](crate.svg) |\n",
+            )
+            .hyperlinks(false),
+        ),
         "markdown_table" => Box::new(Markdown::new(
             "| Name | Age |\n| :--- | ---: |\n| Alice | 30 |\n| Bob | 7 |\n",
         )),
@@ -385,7 +444,13 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
             Style::parse("green").unwrap(),
         )),
         "progress_three" => {
-            let mut progress = rich::Progress::new();
+            // Explicit columns, as `_progress_table` in capture_golden.py:
+            // upstream's default set also has a time-remaining column.
+            let mut progress = rich::Progress::new().columns(vec![
+                rich::ProgressColumn::Description,
+                rich::ProgressColumn::Bar,
+                rich::ProgressColumn::Percentage,
+            ]);
             progress.add_task("Downloading", 100.0, 50.0);
             progress.add_task("Processing", 100.0, 100.0);
             progress.add_task("Waiting", 100.0, 0.0);
@@ -576,6 +641,27 @@ fn build_text_op(name: &str) -> Vec<Text> {
         "pad" => mutated(styled("hi", &[("bold", 0, 2)]), &|t| t.pad(3, ' ')),
         "pad_left" => mutated(styled("hi", &[("bold", 0, 2)]), &|t| t.pad_left(3, '.')),
         "pad_right" => mutated(styled("hi", &[("bold", 0, 2)]), &|t| t.pad_right(3, '.')),
+        "truncate_styled_ellipsis" => [1, 2, 5, 8]
+            .into_iter()
+            .map(|width| {
+                let mut text = Text::from_markup("[red]long[/][bold blue]title[/]").unwrap();
+                text.truncate(width, Some(Overflow::Ellipsis), false);
+                text
+            })
+            .collect(),
+        "truncate_wide_styled" => [
+            (1, Overflow::Crop),
+            (1, Overflow::Ellipsis),
+            (2, Overflow::Ellipsis),
+            (3, Overflow::Ellipsis),
+        ]
+        .into_iter()
+        .map(|(width, overflow)| {
+            let mut text = Text::from_markup("[red]界[/][blue]abc[/]").unwrap();
+            text.truncate(width, Some(overflow), false);
+            text
+        })
+        .collect(),
         "right_crop" => mutated(styled("hello world", &[("bold", 3, 9)]), &|t| {
             t.right_crop(4)
         }),
@@ -721,6 +807,60 @@ fn overflow_parity() {
         checked += 1;
     }
     assert!(checked > 0, "no overflow cases were checked");
+}
+
+/// Markup edge cases, checked against upstream — including which side errors.
+///
+/// These pin the three places a hand-rolled tag scanner drifts from upstream's
+/// `RE_TAGS`: backslash-run parity, a `[` inside a tag body, and zero-length
+/// spans. Every one of them passed the old ad-hoc scanner's own unit tests while
+/// diverging from real `rich`.
+#[test]
+fn markup_edge_parity() {
+    let data = include_str!("golden/markup_edge.tsv");
+    let console = truecolor_console(80);
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let markup = unescape(
+            parts
+                .next()
+                .unwrap_or_else(|| panic!("line {}: missing markup", index + 1)),
+        );
+        let expected = parts
+            .next()
+            .unwrap_or_else(|| panic!("line {}: missing expected", index + 1));
+
+        match console.try_build_text(&markup) {
+            Ok(text) => {
+                assert_ne!(
+                    expected,
+                    "<ERROR>",
+                    "edge case {name:?} (line {}): upstream raises MarkupError, we accepted it",
+                    index + 1
+                );
+                assert_eq!(
+                    console.render_to_string(&text),
+                    unescape(expected),
+                    "edge case {name:?} (line {}) diverged from upstream rich",
+                    index + 1
+                );
+            }
+            Err(error) => assert_eq!(
+                expected,
+                "<ERROR>",
+                "edge case {name:?} (line {}): upstream renders this, we raised {error}",
+                index + 1
+            ),
+        }
+        checked += 1;
+    }
+    assert!(checked > 0, "no markup edge cases were checked");
 }
 
 /// The bundled terminal-theme palettes, checked against upstream. Each theme is
@@ -1012,4 +1152,213 @@ fn layout_parity() {
         checked += 1;
     }
     assert!(checked > 0, "no layout cases were checked");
+}
+
+/// Build a progress column from a `progress_time.tsv` spec. Keep in sync with
+/// `progress_columns` in scripts/capture_golden.py.
+fn progress_column(spec: &serde_json::Value) -> rich::ProgressColumn {
+    use rich::{ProgressColumn, SpinnerColumn, TimeRemainingColumn};
+    let spec = spec.as_array().expect("column spec");
+    let flag = |i: usize| spec[i].as_bool().expect("bool");
+    match spec[0].as_str().expect("column name") {
+        "description" => ProgressColumn::Description,
+        "bar" => ProgressColumn::Bar,
+        "percentage" => ProgressColumn::Percentage,
+        "task_progress" => ProgressColumn::TaskProgress {
+            show_speed: flag(1),
+        },
+        "mofn" => ProgressColumn::MofN,
+        "download" if flag(1) => ProgressColumn::BinaryDownload,
+        "download" => ProgressColumn::Download,
+        "elapsed" => ProgressColumn::TimeElapsed,
+        "remaining" => ProgressColumn::TimeRemaining(TimeRemainingColumn::new(flag(1), flag(2))),
+        "speed" => ProgressColumn::TransferSpeed,
+        "filesize" => ProgressColumn::FileSize,
+        "total_filesize" => ProgressColumn::TotalFileSize,
+        "spinner" => ProgressColumn::Spinner(SpinnerColumn::new(
+            spec[1].as_str().unwrap(),
+            spec[2].as_str().unwrap(),
+        )),
+        other => panic!("unknown progress column {other:?}"),
+    }
+}
+
+/// Progress time/rate/spinner columns and the task API, driven by the same step
+/// programs as upstream with a shared fake clock.
+#[test]
+fn progress_time_parity() {
+    use rich::{Progress, TaskId, TaskUpdate};
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
+
+    let data = include_str!("golden/progress_time.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let case: serde_json::Value =
+            serde_json::from_str(parts.next().expect("case")).expect("case json");
+        let expected = unescape(parts.next().expect("expected"));
+
+        let now = Arc::new(AtomicU64::new(0f64.to_bits()));
+        let clock = now.clone();
+        let mut progress =
+            Progress::new().clock(move || f64::from_bits(clock.load(Ordering::SeqCst)));
+        if let Some(columns) = case["columns"].as_array() {
+            progress = progress.columns(columns.iter().map(progress_column).collect());
+        }
+        let id = |v: &serde_json::Value| TaskId(v.as_u64().expect("task id") as usize);
+        let mut got = String::new();
+        for step in case["steps"].as_array().expect("steps") {
+            let step = step.as_array().expect("step");
+            match step[0].as_str().expect("op") {
+                "time" => now.store(step[1].as_f64().unwrap().to_bits(), Ordering::SeqCst),
+                "add" => {
+                    let (description, total, completed) = (
+                        step[1].as_str().unwrap(),
+                        step[2].as_f64(),
+                        step[3].as_f64().unwrap(),
+                    );
+                    if step[4].as_bool().unwrap() {
+                        progress.add_task(description, total, completed);
+                    } else {
+                        progress.add_unstarted_task(description, total, completed);
+                    }
+                }
+                "update" => {
+                    let fields = &step[2];
+                    let update = TaskUpdate {
+                        total: fields["total"].as_f64(),
+                        completed: fields["completed"].as_f64(),
+                        advance: fields["advance"].as_f64(),
+                        description: fields["description"].as_str().map(String::from),
+                        visible: fields["visible"].as_bool(),
+                    };
+                    progress.update(id(&step[1]), update);
+                }
+                "advance" => progress.advance(id(&step[1]), step[2].as_f64().unwrap()),
+                "start" => progress.start_task(id(&step[1])),
+                "stop" => progress.stop_task(id(&step[1])),
+                "reset" => {
+                    let fields = &step[2];
+                    progress.reset(
+                        id(&step[1]),
+                        fields["start"].as_bool().unwrap_or(true),
+                        fields["total"].as_f64(),
+                        fields["completed"].as_f64().unwrap_or(0.0),
+                    );
+                }
+                "remove" => progress.remove_task(id(&step[1])),
+                "render" => {
+                    let console = truecolor_console(step[1].as_u64().unwrap() as usize);
+                    got.push_str(&console.capture(|c| c.print(&progress)));
+                }
+                op => panic!("unknown progress step {op:?}"),
+            }
+        }
+        assert_eq!(
+            got,
+            expected,
+            "progress case {name:?} (line {}) diverged",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 11, "expected every progress time case to run");
+}
+
+/// Spinner and Status frames and LiveRender control sequences (#15): the same
+/// step programs as upstream, one expected output per `render`/`position`/
+/// `restore` step.
+#[test]
+fn live_status_parity() {
+    use rich::style::StyleType;
+    use rich::{LiveRender, Spinner, Status};
+    use serde_json::Value;
+
+    let data = include_str!("golden/live_status.tsv");
+    let mut checked = 0;
+    for line in data.lines().filter(|l| !l.starts_with('#')) {
+        let cols: Vec<&str> = line.split('\t').collect();
+        let [name, case, expected] = cols[..] else {
+            panic!("malformed live_status row: {line:?}");
+        };
+        let case: Value = serde_json::from_str(case).unwrap();
+        let expected: Vec<String> = serde_json::from_str(expected).unwrap();
+        let str_of = |v: &Value, key: &str| v.get(key).and_then(Value::as_str).map(str::to_owned);
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(case["width"].as_u64().unwrap() as usize)
+            .height(case["height"].as_u64().unwrap_or(25) as usize)
+            .no_color(false)
+            .build();
+        let steps = case["steps"].as_array().unwrap();
+        let mut outputs = Vec::new();
+        match case["kind"].as_str().unwrap() {
+            "spinner" => {
+                let mut spinner = Spinner::new(case["name"].as_str().unwrap())
+                    .text(case["text"].as_str().unwrap())
+                    .speed(case["speed"].as_f64().unwrap());
+                if let Some(style) = str_of(&case, "style") {
+                    spinner = spinner.style(style);
+                }
+                for step in steps {
+                    match step[0].as_str().unwrap() {
+                        "render" => outputs.push(
+                            console.render_to_string(&spinner.render(step[1].as_f64().unwrap())),
+                        ),
+                        _ => spinner.update(
+                            str_of(&step[1], "text").as_deref(),
+                            str_of(&step[1], "style").map(StyleType::from),
+                            step[1].get("speed").and_then(Value::as_f64),
+                        ),
+                    }
+                }
+            }
+            "status" => {
+                let mut status = Status::new(case["message"].as_str().unwrap())
+                    .spinner(case["spinner"].as_str().unwrap())
+                    .spinner_style(case["style"].as_str().unwrap())
+                    .speed(case["speed"].as_f64().unwrap());
+                for step in steps {
+                    match step[0].as_str().unwrap() {
+                        "render" => outputs.push(console.render_to_string(
+                            &status.renderable().render(step[1].as_f64().unwrap()),
+                        )),
+                        _ => status.update(
+                            str_of(&step[1], "status").as_deref(),
+                            str_of(&step[1], "spinner").as_deref(),
+                            str_of(&step[1], "spinner_style").map(StyleType::from),
+                            step[1].get("speed").and_then(Value::as_f64),
+                        ),
+                    }
+                }
+            }
+            _ => {
+                let text = |markup: &str| Box::new(Text::from_markup(markup).unwrap());
+                let mut live = LiveRender::new(text(case["markup"].as_str().unwrap()));
+                if let Some(style) = str_of(&case, "style") {
+                    live = live.style(Style::parse(&style).unwrap());
+                }
+                for step in steps {
+                    match step[0].as_str().unwrap() {
+                        "render" => outputs.push(console.render_to_string(&live)),
+                        "position" => {
+                            outputs.push(console.render_to_string(&live.position_cursor()))
+                        }
+                        "restore" => outputs.push(console.render_to_string(&live.restore_cursor())),
+                        _ => live.set_renderable(text(step[1].as_str().unwrap())),
+                    }
+                }
+            }
+        }
+        assert_eq!(outputs, expected, "live_status case {name}");
+        checked += 1;
+    }
+    assert_eq!(checked, 8);
 }

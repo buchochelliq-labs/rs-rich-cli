@@ -1,14 +1,16 @@
 # crates/rich-art — ASCII-art renderables (FIGlet banners, and later image art).
 #
 # ⚠️  NOT a port. This crate is OUR OWN feature, not a mirror of anything
-# upstream, so it carries its own SemVer (like rich-ext) and must never be
-# version-locked to `rich`/`rich-cli`. See AGENTS.md → Versioning.
+# upstream. Like every crate in this repository, it has independent SemVer that
+# started at 0.0.1 and is bumped only when this crate is selected for release.
+# See AGENTS.md → Versioning.
 #
-# It is deliberately self-contained: it depends only on `rich` (for the
-# `Renderable` trait) so it can be lifted into its own repository unchanged.
+# It is deliberately self-contained: its one direct dependency is `rs-rich`
+# (imported as `rich`, for the `Renderable` trait), so it can be lifted into its
+# own repository unchanged.
 [package]
 name = "rs-rich-art"
-version = "0.0.1"
+version = "0.0.8"
 description = "ASCII-art renderables for `rich` — FIGlet-style text banners"
 edition.workspace = true
 license.workspace = true
@@ -37,10 +39,12 @@ include = [
 [features]
 default = []
 # `image` enables image -> ASCII/ANSI art (jp2a-style). Off by default so the
-# crate stays dependency-free for the FIGlet banners alone.
+# crate adds no optional image dependencies for the FIGlet banners alone.
 image = ["dep:image"]
 # `gif` adds animated-GIF playback, driven by `rich`'s Live display.
 gif = ["image"]
+# `sixel` renders real pixels via the Sixel graphics protocol.
+sixel = ["image", "dep:icy_sixel"]
 
 # The image/GIF examples only build when their feature is on.
 [[example]]
@@ -62,6 +66,11 @@ required-features = ["gif"]
 name = "shrink_asset"
 required-features = ["gif"]
 
+# Prints an image-diff report as JSON, for diffing against the Python oracle.
+[[example]]
+name = "diff_report"
+required-features = ["image"]
+
 [lib]
 # The package is `rs-rich-art` on crates.io (plain `rich` is taken), but the
 # library target keeps the short name so users write `use rich_art::…`.
@@ -73,3 +82,4 @@ workspace = true
 [dependencies]
 rich.workspace = true
 image = { workspace = true, optional = true }
+icy_sixel = { version = "0.7.0", optional = true }

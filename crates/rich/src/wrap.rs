@@ -46,8 +46,14 @@ pub fn divide_line(text: &str, width: usize, fold: bool) -> Vec<usize> {
 
     for (start, _end, word) in words(text) {
         let word_length = cell_len(word.trim_end());
-        let remaining_space = width.saturating_sub(cell_offset);
-        let word_fits_remaining_space = remaining_space >= word_length;
+        // Signed, because upstream's `width - cell_offset` goes NEGATIVE once a
+        // line has overshot (an unfoldable word wider than the whole width bumps
+        // `cell_offset` past `width`). Clamping that to zero made a following
+        // zero-cell word — a word joiner, a lone variation selector — "fit" in
+        // the nothing that was left, so its break was never emitted and the rest
+        // of the line vanished from the output.
+        let remaining_space = width as isize - cell_offset as isize;
+        let word_fits_remaining_space = remaining_space >= word_length as isize;
 
         if word_fits_remaining_space {
             cell_offset += cell_len(&word);
@@ -102,5 +108,29 @@ mod tests {
     fn folds_overlong_word() {
         // A 10-char word folded at width 4 → breaks every 4 chars.
         assert_eq!(divide_line("abcdefghij", 4, true), vec![4, 8]);
+    }
+
+    /// An unfoldable word wider than the line pushes `cell_offset` **past** the
+    /// width, so upstream's `width - cell_offset` is negative and nothing fits
+    /// on that line any more. Computing it with `saturating_sub` clamped it to
+    /// zero, and a following word measuring zero cells — a word joiner, a lone
+    /// variation selector — then "fit" in the nothing that was left, so its
+    /// break was never emitted and the rest of the text disappeared.
+    ///
+    /// Real rich 15.0.0: `divide_line("aaaaaaaa ⁠", 2, fold=False) == [9]`.
+    #[test]
+    fn a_zero_cell_word_after_an_overflowing_line_still_breaks() {
+        assert_eq!(divide_line("aaaaaaaa \u{2060}", 2, false), vec![9]);
+    }
+
+    /// The grapheme-aware fold, seen from `divide_line`: at width 4 a run of
+    /// 2-cell VS16 hearts breaks every two hearts (four code points), not every
+    /// four. Real rich 15.0.0: `divide_line("❤️" * 6, 4) == [4, 8]`.
+    #[test]
+    fn folds_an_emoji_run_by_cell_width() {
+        assert_eq!(
+            divide_line(&"\u{2764}\u{fe0f}".repeat(6), 4, true),
+            vec![4, 8]
+        );
     }
 }
