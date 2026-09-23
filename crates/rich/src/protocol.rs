@@ -28,6 +28,15 @@ pub trait Renderable {
     fn measure(&self, _console: &Console, options: &ConsoleOptions) -> Measurement {
         Measurement::new(options.max_width, options.max_width)
     }
+
+    /// Whether a top-level `Console::print` shrinks this renderable to its
+    /// measured width. The shrink stands in for upstream's
+    /// `_collect_renderables`, which joins printed `str`/`Text` values; other
+    /// upstream renderables render at the full width, so one whose output pads
+    /// to the width it is given (`Syntax`'s background) returns `false`.
+    fn fit_to_measurement(&self) -> bool {
+        true
+    }
 }
 
 /// Optional line-streaming extension point for renderables.

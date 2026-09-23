@@ -1,7 +1,7 @@
 //! Opt-in colour processing for the final sampled image raster.
 use image::RgbaImage;
 
-/// Colour precision for ASCII and half-block image rendering.
+/// Colour precision for image rendering.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ImageColorMode {
     /// Preserve existing RGB samples and rendering behavior.
@@ -12,6 +12,16 @@ pub enum ImageColorMode {
     /// Nearest color uses squared Euclidean distance in encoded RGB; exact
     /// ties select the lowest palette index.
     Ansi256,
+    /// Quantize to the 16 system colours, matched against rich's fixed
+    /// `STANDARD_PALETTE` (the 170/85 VGA table). The terminal theme decides
+    /// how those entries finally look, so this trades fidelity for output that
+    /// follows the user's theme. Same distance and tie rule as `Ansi256`.
+    Ansi16,
+    /// Quantize to the 26 neutral ANSI256 entries: 16 (black), the 232–255
+    /// ramp and 231 (white). Each pixel's luma (`(77R + 150G + 29B) / 256`,
+    /// the weights `--image-grayscale` uses) picks the nearest level; exact
+    /// ties select the lowest palette index.
+    Grayscale,
 }
 
 /// Dithering applied after sizing and compositing, before glyph selection.
@@ -28,29 +38,55 @@ pub enum Dither {
     Bayer4x4,
 }
 
-/// Squared Euclidean distance in encoded RGB (not linear-light RGB).
-/// Exact ties choose the lowest palette index for reproducible output.
-fn nearest(rgb: [f64; 3]) -> (u8, [u8; 3]) {
+/// Encoded RGB of an ANSI256 cube or ramp entry (16–255).
+fn eight_bit(index: u8) -> [u8; 3] {
     const LEVELS: [u8; 6] = [0, 95, 135, 175, 215, 255];
-    let mut best = (16, [0; 3]);
+    let value = index - 16;
+    if index < 232 {
+        [
+            LEVELS[(value / 36) as usize],
+            LEVELS[(value / 6 % 6) as usize],
+            LEVELS[(value % 6) as usize],
+        ]
+    } else {
+        [8 + (index - 232) * 10; 3]
+    }
+}
+
+/// Nearest palette entry for `mode` (never `TrueColor`). Squared Euclidean
+/// distance in encoded RGB (luma for `Grayscale`), not linear-light RGB.
+/// Candidates are scanned in ascending index order and only a strictly closer
+/// one replaces the best, so exact ties choose the lowest palette index.
+pub(crate) fn nearest(rgb: [f64; 3], mode: ImageColorMode) -> (u8, [u8; 3]) {
+    let mut best = (0, [0; 3]);
     let mut distance = f64::INFINITY;
-    for index in 16u16..=255 {
-        let value = index - 16;
-        let candidate = if index < 232 {
-            [
-                LEVELS[(value / 36) as usize],
-                LEVELS[(value / 6 % 6) as usize],
-                LEVELS[(value % 6) as usize],
-            ]
-        } else {
-            [8 + (index as u8 - 232) * 10; 3]
-        };
-        let d: f64 = (0..3)
-            .map(|c| (rgb[c] - f64::from(candidate[c])).powi(2))
-            .sum();
+    let mut consider = |index: u8, candidate: [u8; 3], d: f64| {
         if d < distance {
             distance = d;
-            best = (index as u8, candidate);
+            best = (index, candidate);
+        }
+    };
+    let rgb_distance =
+        |c: [u8; 3]| -> f64 { (0..3).map(|i| (rgb[i] - f64::from(c[i])).powi(2)).sum() };
+    match mode {
+        ImageColorMode::TrueColor | ImageColorMode::Ansi256 => {
+            for index in 16u8..=255 {
+                let c = eight_bit(index);
+                consider(index, c, rgb_distance(c));
+            }
+        }
+        ImageColorMode::Ansi16 => {
+            for (index, t) in rich::color::STANDARD_PALETTE.iter().enumerate() {
+                let c = [t.red, t.green, t.blue];
+                consider(index as u8, c, rgb_distance(c));
+            }
+        }
+        ImageColorMode::Grayscale => {
+            let luma = (77.0 * rgb[0] + 150.0 * rgb[1] + 29.0 * rgb[2]) / 256.0;
+            for index in std::iter::once(16).chain(231..=255) {
+                let c = eight_bit(index);
+                consider(index, c, (luma - f64::from(c[0])).powi(2));
+            }
         }
     }
     best
@@ -86,7 +122,7 @@ pub(crate) fn preprocess(
             let rgb = std::array::from_fn(|c| {
                 (f64::from(pixel.0[c]) * alpha + current[x][c] + offset).clamp(0.0, 255.0)
             });
-            let (index, color) = nearest(rgb);
+            let (index, color) = nearest(rgb, mode);
             indices.push(index);
             pixel.0 = [color[0], color[1], color[2], 255];
             if dither == Dither::FloydSteinberg {
@@ -179,5 +215,61 @@ mod tests {
             preprocess(&mut empty, ImageColorMode::Ansi256, Dither::FloydSteinberg),
             Some(vec![])
         );
+    }
+
+    #[test]
+    fn ansi16_matches_the_standard_palette_with_lowest_index_ties() {
+        let hit = |rgb: [f64; 3]| nearest(rgb, ImageColorMode::Ansi16).0;
+        for (index, t) in rich::color::STANDARD_PALETTE.iter().enumerate() {
+            let rgb = [t.red, t.green, t.blue].map(f64::from);
+            assert_eq!(hit(rgb), index as u8);
+        }
+        assert_eq!(hit([200.0, 10.0, 10.0]), 1);
+        assert_eq!(hit([250.0, 90.0, 80.0]), 9);
+        // #ff8800 is exactly equidistant from 3 (170,85,0) and 9 (255,85,85).
+        assert_eq!(hit([255.0, 136.0, 0.0]), 3);
+    }
+
+    #[test]
+    fn grayscale_uses_luma_and_the_neutral_entries_only() {
+        let hit = |rgb: [f64; 3]| nearest(rgb, ImageColorMode::Grayscale);
+        assert_eq!(hit([0.0; 3]), (16, [0; 3]));
+        assert_eq!(hit([255.0; 3]), (231, [255; 3]));
+        assert_eq!(hit([128.0; 3]), (244, [128; 3]));
+        // Pure red has luma 76.7, nearest to the 78 entry (239).
+        assert_eq!(hit([255.0, 0.0, 0.0]), (239, [78; 3]));
+        // 3 sits between 0 (16) and 8 (232): 16 is nearer.
+        assert_eq!(hit([3.0; 3]).0, 16);
+        // 4 is equidistant from 0 and 8: the lower index (16) wins.
+        assert_eq!(hit([4.0; 3]).0, 16);
+    }
+
+    #[test]
+    fn every_quantized_mode_accepts_every_dither() {
+        for mode in [
+            ImageColorMode::Ansi256,
+            ImageColorMode::Ansi16,
+            ImageColorMode::Grayscale,
+        ] {
+            for dither in [Dither::None, Dither::FloydSteinberg, Dither::Bayer4x4] {
+                let mut pixels = RgbaImage::from_fn(5, 3, |x, y| {
+                    Rgba([(x * 50) as u8, (y * 90) as u8, 120, 255])
+                });
+                let indices = preprocess(&mut pixels, mode, dither).unwrap();
+                assert_eq!(indices.len(), 15);
+                for (index, pixel) in indices.iter().zip(pixels.pixels()) {
+                    let expected = nearest(pixel.0.map(f64::from)[..3].try_into().unwrap(), mode);
+                    assert_eq!(expected.0, *index, "{mode:?} {dither:?}");
+                    match mode {
+                        ImageColorMode::Ansi16 => assert!(*index < 16),
+                        ImageColorMode::Grayscale => {
+                            assert!(*index == 16 || *index >= 231);
+                            assert!(pixel.0[0] == pixel.0[1] && pixel.0[1] == pixel.0[2]);
+                        }
+                        _ => assert!(*index >= 16),
+                    }
+                }
+            }
+        }
     }
 }

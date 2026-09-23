@@ -3,5 +3,7 @@ mod constraints;
 pub use constraints::{allocate, Allocation, Constraint, ConstraintError};
 mod node;
 mod overflow;
+mod overflowing;
 pub use node::{Alignment, Axis, LayoutNode};
 pub use overflow::{fit_segments, OverflowPolicy};
+pub use overflowing::Overflowing;

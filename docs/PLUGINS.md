@@ -88,6 +88,12 @@ Detection provenance is separate from the rendering snapshot. `Support::Inferred
 is a conservative hint; protocol rendering can require `Confirmed`. Unicode and
 hyperlink policy are declared by the caller. Legacy renderers may still have their
 own sizing choices; wrap them in bounded `LayoutNode` containers for strict cells.
+`layout::Overflowing` gives any renderable one explicit `OverflowPolicy`: Syntax,
+JSON and Text are rendered at their measured natural width and every line is then
+wrapped, folded, cropped or ellipsised to the cell width (wide glyphs never split);
+output that already fits is returned byte-identical to core.
+`LayoutNode` leaves receive their region's height, like upstream `Layout`, so a
+`Panel` leaf fills its region; opt into `.content_height()` for natural height.
 
 Enable `rs-rich-ext` features `testing`, `log` and `tracing` independently. The
 snapshot helper has no process environment dependency or assertion-framework

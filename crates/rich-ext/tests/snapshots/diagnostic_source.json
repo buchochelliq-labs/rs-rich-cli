@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "width": 20,
+  "height": 8,
+  "plain": "expected an integer\n--> app.toml\n1 | [server]\n2 | port = \"eighty\"\n  |        ^^^^^^^^\n3 | host = \"localhos\nhelp: use a port \nnumber such as 8080",
+  "ansi": "\u001b[1;31mexpected an integer\u001b[0m\n--> app.toml\n1 | [server]\n2 | port = \"eighty\"\n  |        ^^^^^^^^\n3 | host = \"localhos\nhelp: use a port \nnumber such as 8080",
+  "segments": [
+    {
+      "text": "expected an integer",
+      "control": false,
+      "foreground": "800000",
+      "background": null,
+      "attributes": [
+        "bold"
+      ],
+      "link": null
+    },
+    {
+      "text": "\n",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "--> app.toml",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "\n",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "1 | [server]",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "\n",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "2 | port = \"eighty\"",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "\n",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "  |        ^^^^^^^^",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "\n",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "3 | host = \"localhos",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "\n",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "help: use a port ",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "\n",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "number such as 8080",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    }
+  ]
+}

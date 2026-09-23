@@ -35,6 +35,7 @@ use rich::segment::Segment;
 use crate::ascii::AsciiArt;
 use crate::block::BlockArt;
 use crate::braille::BrailleArt;
+use crate::quadrant::QuadrantArt;
 use crate::{Dither, ImageColorMode};
 
 /// Which backend renders the image.
@@ -51,6 +52,8 @@ pub enum ImageMode {
     Blocks,
     /// Unicode Braille cells, two pixels wide by four pixels high.
     Braille,
+    /// Unicode quadrant blocks, two by two pixels in two colours per cell.
+    Quadrants,
     /// Real pixels via the Sixel graphics protocol. Requires this crate's
     /// `sixel` feature.
     Sixel,
@@ -63,6 +66,8 @@ pub enum ImageFit {
     Contain,
     /// Fill the rectangle, cropping around the selected [`ImageAnchor`].
     Cover,
+    /// Fill the rectangle exactly, ignoring the aspect ratio.
+    Stretch,
 }
 
 /// Which part of the image to retain when using [`ImageFit::Cover`].
@@ -171,14 +176,19 @@ pub enum ImageArtError {
     /// Fitting requires positive width and height, a nonempty image and
     /// destination, and raster canvases no larger than 16 megapixels.
     InvalidFitDimensions,
-    /// Quantization supports ASCII/blocks only; dithering requires ANSI256.
+    /// Quantization supports ASCII, blocks and quadrants only; dithering
+    /// requires a quantized colour mode.
     UnsupportedColorOptions,
+    /// Brightness or contrast is negative or not finite, or gamma is not a
+    /// finite positive number. See [`ImageTransforms`](crate::ImageTransforms).
+    InvalidAdjustment,
 }
 
 impl std::fmt::Display for ImageArtError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UnsupportedColorOptions => write!(f, "image color processing requires ASCII or blocks; Floyd–Steinberg dithering requires ANSI256"),
+            Self::UnsupportedColorOptions => write!(f, "image color processing requires ASCII, blocks or quadrants; dithering requires ansi256, ansi16 or grayscale"),
+            Self::InvalidAdjustment => write!(f, "image brightness and contrast must be finite and non-negative, and gamma finite and positive"),
             Self::FeatureNotEnabled { mode, feature } => write!(
                 f,
                 "image mode {mode:?} is not available in this build; \
@@ -222,6 +232,8 @@ pub struct ImageArt {
     color_mode: ImageColorMode,
     dither: Dither,
     transforms: crate::ImageTransforms,
+    max_width: Option<usize>,
+    max_height: Option<usize>,
 }
 
 impl ImageArt {
@@ -241,6 +253,8 @@ impl ImageArt {
             color_mode: ImageColorMode::default(),
             dither: Dither::default(),
             transforms: crate::ImageTransforms::default(),
+            max_width: None,
+            max_height: None,
         }
     }
 
@@ -331,6 +345,28 @@ impl ImageArt {
     pub fn transforms(mut self, transforms: crate::ImageTransforms) -> Self {
         self.transforms = transforms;
         self
+    }
+
+    /// Never render wider than this many columns, whatever the requested or
+    /// available width. Fitting clamps its rectangle to the cap too.
+    pub fn max_width(mut self, columns: usize) -> Self {
+        self.max_width = Some(columns);
+        self
+    }
+
+    /// Never render taller than this many rows. Without fitting the image
+    /// keeps its aspect ratio and narrows to fit; fitting clamps its rectangle.
+    pub fn max_height(mut self, rows: usize) -> Self {
+        self.max_height = Some(rows);
+        self
+    }
+
+    /// The requested row count after the `max_height` cap.
+    fn rows(&self) -> Option<usize> {
+        match (self.options.height, self.max_height) {
+            (Some(h), Some(cap)) => Some(h.min(cap)),
+            (h, cap) => h.or(cap),
+        }
     }
 
     /// Resolve [`ImageMode::Auto`] into a concrete backend given what the
@@ -429,13 +465,16 @@ impl ImageArt {
                 .options
                 .width
                 .ok_or(ImageArtError::InvalidFitDimensions)?
-                .min(available);
+                .min(available)
+                .min(self.max_width.unwrap_or(usize::MAX));
             let rows = self
                 .options
                 .height
-                .ok_or(ImageArtError::InvalidFitDimensions)?;
+                .ok_or(ImageArtError::InvalidFitDimensions)?
+                .min(self.max_height.unwrap_or(usize::MAX));
             let (sx, sy) = match mode {
-                ImageMode::Braille => (2, 4),
+                // Square fitting pixels; quadrants resample 2×4 down to 2×2.
+                ImageMode::Braille | ImageMode::Quadrants => (2, 4),
                 ImageMode::Sixel => (8, 16),
                 _ => (1, 2),
             };
@@ -472,6 +511,7 @@ impl ImageArt {
             return Ok(Arc::new(source));
         };
         let result = match self.fit.expect("target is present only with fit") {
+            ImageFit::Stretch => source.resize_exact(width, height, FilterType::Triangle),
             ImageFit::Contain => {
                 let fitted = source.resize(width, height, FilterType::Triangle).to_rgb8();
                 let mut canvas = RgbImage::from_pixel(width, height, Rgb(background));
@@ -536,11 +576,17 @@ impl ImageArt {
         console: &Console,
         options: &ConsoleOptions,
     ) -> Result<Vec<Segment>, ImageArtError> {
-        if (self.dither != Dither::None && self.color_mode != ImageColorMode::Ansi256)
+        if (self.dither != Dither::None && self.color_mode == ImageColorMode::TrueColor)
             || ((self.color_mode != ImageColorMode::TrueColor || self.dither != Dither::None)
-                && !matches!(mode, ImageMode::Ascii | ImageMode::Blocks))
+                && !matches!(
+                    mode,
+                    ImageMode::Ascii | ImageMode::Blocks | ImageMode::Quadrants
+                ))
         {
             return Err(ImageArtError::UnsupportedColorOptions);
+        }
+        if !self.transforms.adjustments_valid() {
+            return Err(ImageArtError::InvalidAdjustment);
         }
         let image = self.prepare_image(mode, options.max_width)?;
         let width = self.options.width.unwrap_or(options.max_width);
@@ -549,6 +595,7 @@ impl ImageArt {
         } else {
             width
         };
+        let width = width.min(self.max_width.unwrap_or(usize::MAX));
         match mode {
             ImageMode::Auto => {
                 // `render` always resolves Auto before dispatching here, but
@@ -564,8 +611,19 @@ impl ImageArt {
                     .width(width)
                     .color(self.options.color)
                     .color_processing(self.color_mode, self.dither);
-                if let Some(height) = self.options.height {
-                    art = art.height(height);
+                match (self.options.height, self.max_height) {
+                    (Some(_), _) => art = art.height(self.rows().expect("height is set")),
+                    // ASCII's height is an exact row count, not a cap, so an
+                    // unfitted max height narrows the width to keep the aspect.
+                    (None, Some(cap)) => {
+                        let (columns, rows) = art.grid(options.max_width);
+                        if rows > cap.max(1) {
+                            let cap = cap.max(1);
+                            let columns = ((columns * cap) as f64 / rows as f64).round() as usize;
+                            art = art.width(columns.max(1)).height(cap);
+                        }
+                    }
+                    (None, None) => {}
                 }
                 Ok(art.rich_render(console, options))
             }
@@ -573,14 +631,23 @@ impl ImageArt {
                 let mut art = BlockArt::from_shared(Arc::clone(&image))
                     .width(width)
                     .color_processing(self.color_mode, self.dither);
-                if let Some(height) = self.options.height {
+                if let Some(height) = self.rows() {
+                    art = art.height(height);
+                }
+                Ok(art.rich_render(console, options))
+            }
+            ImageMode::Quadrants => {
+                let mut art = QuadrantArt::from_shared(Arc::clone(&image))
+                    .width(width)
+                    .color_processing(self.color_mode, self.dither);
+                if let Some(height) = self.rows() {
                     art = art.height(height);
                 }
                 Ok(art.rich_render(console, options))
             }
             ImageMode::Braille => {
                 let mut art = BrailleArt::from_shared(Arc::clone(&image)).width(width);
-                if let Some(height) = self.options.height {
+                if let Some(height) = self.rows() {
                     art = art.height(height);
                 }
                 Ok(art.rich_render(console, options))
@@ -603,7 +670,7 @@ impl ImageArt {
             return Err(ImageArtError::NonTerminalDestination);
         }
         let mut art = SixelArt::new((*image).clone()).width(width);
-        if let Some(height) = self.options.height {
+        if let Some(height) = self.rows() {
             art = art.height(height);
         }
         if art.encode(width).is_none() {
