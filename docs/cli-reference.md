@@ -75,19 +75,27 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
                  backend's default
     --image-anchor A Cover crop anchor: center (default), top, bottom, left,
                      right, top-left, top-right, bottom-left, bottom-right
-    --image-fit M With --image and --height: contain (letterbox) or cover
-                 (crop at --image-anchor); preserves aspect ratio in terminal cells
+    --image-fit M With --image and --height: contain (letterbox), cover
+                 (crop at --image-anchor), or stretch (fill, ignoring aspect)
+    --image-max-width N / --image-max-height N
+                 With --image, never exceed N columns / rows (aspect kept)
     --image-background #RRGGBB
                  With --image: flatten transparency onto this RGB colour
                  (also colours contain padding; quote the # in your shell)
-    --image-color M Truecolor (default) or ansi256, with ASCII/blocks images
-    --image-dither M none (default), floyd-steinberg, or bayer4x4 (ansi256)
+    --image-color M truecolor (default), ansi256, ansi16 or grayscale, with
+                 ASCII/blocks/quadrants images
+    --image-dither M none (default), floyd-steinberg, or bayer4x4 (needs a
+                 non-truecolor --image-color)
+    --image-brightness F / --image-contrast F / --image-gamma F
+                 Tone adjustments (1.0 = unchanged), applied in that order
+                 after rotation/flips and before grayscale and colour
     --image-rotate N Rotate still images clockwise: 0, 90, 180, 270
     --image-flip-horizontal / --image-flip-vertical Flip after rotation
     --image-grayscale Composite and convert still images to grayscale
     --image-mode M
                  With --diff/--image, how to draw the picture: auto
-                 (default), sixel (real pixels), blocks, braille, ascii, none
+                 (default), sixel (real pixels), blocks, quadrants, braille,
+                 ascii, none
                  (--image rejects none: there would be nothing to draw)
     --gif-mode M With --gif: ascii (default) or blocks (half-block pixels).
                  Blocks fall back to ASCII without color or when piped.
