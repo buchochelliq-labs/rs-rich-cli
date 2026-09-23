@@ -1395,6 +1395,35 @@ fn measure_parity() {
     assert_eq!(checked, 15);
 }
 
+/// Markdown strikethrough delimiter pairing (markdown-it's rules), checked
+/// against upstream. Data-driven: each fixture line carries its own source.
+#[test]
+fn markdown_strike_parity() {
+    let data = include_str!("golden/markdown_strike.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let source: String =
+            serde_json::from_str(parts.next().expect("source")).expect("source json");
+        let expected = unescape(parts.next().expect("expected"));
+        let console = truecolor_console(40);
+        let got = console.capture(|c| c.print(&Markdown::new(&source).hyperlinks(false)));
+        assert_eq!(
+            got,
+            expected,
+            "markdown strike case {name:?} (line {}) diverged: {source:?}",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 24, "expected every markdown strike case to run");
+}
+
 /// Run one `theme_stack.tsv` step list. Keep in sync with `run_theme_steps` in
 /// scripts/capture_golden.py.
 fn run_theme_steps(console: &mut Console, steps: &[serde_json::Value], out: &mut String) {
