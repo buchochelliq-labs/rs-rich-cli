@@ -628,7 +628,8 @@ fn profile_returns_sane_shapes() {
     let allocs = p.allocations.expect("CountingAllocator is installed");
     assert!(allocs.allocations > 0 && allocs.bytes > 0);
 
-    let out = render(&ProfileReport::new(&p), 100);
+    // Wide enough that the summary never wraps: its counts vary by build.
+    let out = render(&ProfileReport::new(&p), 200);
     assert!(
         out.contains("render") && out.contains("frame 30x4"),
         "{out}"
