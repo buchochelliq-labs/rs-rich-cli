@@ -240,18 +240,25 @@ impl std::error::Error for CliError {}
 /// above 0.7, compared without leading dashes (clap's measure and cutoff).
 /// At most three are returned; an exact match is never suggested.
 ///
+/// Like is compared with like: a `--long` input only against `--long`
+/// candidates, a `-s` input only against `-s` short flags, and a bare word (a
+/// subcommand, key or value) only against bare words. A long-flag typo so
+/// never draws a one-letter short flag, which clap never offers either.
+///
 /// ```
 /// use rich_ext::cli_doc::suggest;
 ///
 /// assert_eq!(suggest("--colr", ["--color", "--width", "--colour"]), ["--color", "--colour"]);
 /// assert!(suggest("--zzz", ["--color"]).is_empty());
+/// assert_eq!(suggest("--paralel", ["--parallel", "-r"]), ["--parallel"]);
 /// ```
 pub fn suggest<S: AsRef<str>>(input: &str, candidates: impl IntoIterator<Item = S>) -> Vec<String> {
     let needle = input.trim_start_matches('-');
+    let kind = dashes(input);
     let mut scored: Vec<(f64, String)> = candidates
         .into_iter()
         .map(|c| c.as_ref().to_string())
-        .filter(|c| c != input)
+        .filter(|c| c != input && dashes(c) == kind)
         .map(|c| (jaro_winkler(needle, c.trim_start_matches('-')), c))
         .filter(|(score, _)| *score > 0.7)
         .collect();
@@ -259,6 +266,12 @@ pub fn suggest<S: AsRef<str>>(input: &str, candidates: impl IntoIterator<Item = 
     scored.sort_by(|a, b| b.0.total_cmp(&a.0));
     scored.dedup_by(|a, b| a.1 == b.1);
     scored.into_iter().take(3).map(|(_, c)| c).collect()
+}
+
+/// Leading dashes, capped at two: a bare word, a `-s` short flag or a
+/// `--long` flag.
+fn dashes(word: &str) -> usize {
+    word.bytes().take(2).take_while(|&b| b == b'-').count()
 }
 
 /// Jaro-Winkler similarity in `0.0..=1.0`, over chars.
@@ -326,5 +339,23 @@ mod tests {
             suggest("confg", ["config", "print", "markdown"]),
             ["config"]
         );
+    }
+
+    #[test]
+    fn suggestions_compare_like_with_like() {
+        let names = ["--parallel", "-r", "--dry-run", "-n", "report", "-p"];
+        assert_eq!(suggest("--paralel", names), ["--parallel"]);
+        assert_eq!(suggest("--dry-rn", names), ["--dry-run"]);
+        assert!(!suggest("--r", names).contains(&"-r".to_string()));
+        assert!(suggest("-x", ["--x-ray", "--xx"]).is_empty());
+        assert_eq!(suggest("reprt", names), ["report"]);
+        assert!(suggest("paralel", names).is_empty());
+    }
+
+    #[test]
+    fn suggestions_keep_the_top_three_and_the_cutoff() {
+        let names = ["--color", "--colour", "--colors", "--colored", "--width"];
+        assert_eq!(suggest("--colr", names).len(), 3);
+        assert!(suggest("--zzz", names).is_empty());
     }
 }
