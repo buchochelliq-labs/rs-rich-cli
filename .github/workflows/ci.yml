@@ -27,7 +27,7 @@ jobs:
     name: release workflow regressions
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
@@ -47,7 +47,7 @@ jobs:
     name: registry source identity and staged packages
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
@@ -68,7 +68,7 @@ jobs:
     name: fmt · clippy · test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
@@ -138,7 +138,7 @@ jobs:
           - crate: rs-rich-cli
             args: "--all-features"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
@@ -161,7 +161,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
@@ -184,7 +184,7 @@ jobs:
     name: minimum supported Rust version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
@@ -212,7 +212,7 @@ jobs:
     name: golden parity vs upstream rich
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 

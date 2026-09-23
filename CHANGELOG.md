@@ -54,7 +54,16 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
-No additional changes pending.
+Planned cohort (see [0.0.10 plan](docs/plans/0.0.10.md)): core 0.0.6, ext 0.0.8,
+art 0.0.8, CLI 0.0.10. Manifests are bumped up front so every 0.0.10 change is
+checked against unpublished versions; nothing is published yet.
+
+- Release: crates.io Trusted Publishing replaces the stored registry token; the
+  OIDC exchange runs only after preflight and dry run (`docs/BRANCHING.md`).
+- CI: GitHub Actions moved to Node 24 majors (`checkout` v7, `github-script` v9,
+  `upload-pages-artifact` v5, `deploy-pages` v5).
+- Art: `icy_sixel` 0.7 for the optional Sixel backend.
+- CLI: `toml` 1.1 for configuration parsing; strict-config behaviour unchanged.
 
 ## CLI 0.0.9 / art 0.0.7 — prepared
 

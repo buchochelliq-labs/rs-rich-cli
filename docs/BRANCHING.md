@@ -329,9 +329,29 @@ all release tags and manual dispatches.
 The gate requires an annotated tag pointing at the checked-out commit on `main`;
 lightweight tags are rejected before CI or publication.
 
+### Registry authentication (Trusted Publishing)
+
+Since 0.0.10 the workflow holds no long-lived crates.io secret. After the
+preflight and dry run pass, `rust-lang/crates-io-auth-action` exchanges the job's
+GitHub OIDC token (`id-token: write` on the `publish` job only) for a short-lived
+crates.io token, which only the upload step receives. A failed exchange stops
+the job before any crate is uploaded; `verify_only` runs never request a token.
+
+Each of the four crates needs a Trusted Publishing entry on crates.io
+(crate → Settings → Trusted Publishing) with repository
+`buchochelliq-labs/rs-rich-cli`, workflow `release.yml` and environment
+`crates-io`. A crate set to "trusted publishing only" rejects token uploads
+with `403 Forbidden`, which is how the first 0.0.9 core upload failed. Once the
+first trusted publish succeeds, delete the old `CARGO_REGISTRY_TOKEN`
+repository secret.
+
+A tag push runs the workflow file from the tagged commit. To publish an existing
+tag with a newer workflow on `main`, dispatch the workflow manually from `main`
+with that tag; the gate still checks out and publishes the tag's exact commit.
+
 After publishing, verification reuses the protected `crates-io` job's validated
-checkout: fresh registry consumers can execute build scripts too. The registry
-token is scoped only to the upload step.
+checkout: fresh registry consumers can execute build scripts too. The short-lived
+registry token is scoped only to the upload step.
 Verification waits for **each selected version** on crates.io
 and fails if it does not appear. In fresh temporary directories outside the
 checkout, it installs the CLI with an exact version and `--locked`, or compiles

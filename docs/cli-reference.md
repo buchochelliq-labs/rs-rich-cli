@@ -10,7 +10,7 @@ Looking for how to *do* something rather than what a flag is called? Start at
 [Using the CLI](cli.md).
 
 
-*rich 0.0.9 — Rust port of the rich-cli terminal toolbox*
+*rich 0.0.10 — Rust port of the rich-cli terminal toolbox*
 
 ## Usage
 
