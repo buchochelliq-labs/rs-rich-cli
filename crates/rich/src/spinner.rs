@@ -1,20 +1,24 @@
 //! Spinners.
 //!
 //! Port of upstream `rich/spinner.py` and the full `rich/_spinners.py` table. A
-//! [`Spinner`] picks an animation frame for a given elapsed time;
-//! [`Spinner::render`] gives the frame at a point in time and is the testable
-//! surface. Animation comes from redrawing with a `Live` display, and
-//! `ProgressColumn::Spinner` animates one per progress row from the progress
-//! clock.
+//! [`Spinner`] picks an animation frame for a point in time;
+//! [`Spinner::render`] is the testable surface. Like upstream, the first render
+//! fixes the start of the animation, and [`Spinner::update`] can change the
+//! text, style or speed mid-animation (a new speed takes effect from the next
+//! render, continuing from the current frame). Animation comes from redrawing
+//! with a `Live` display, and `ProgressColumn::Spinner` animates one from the
+//! progress clock.
 //!
-//! Scope: all built-in spinners (vendored in `spinner_data.rs`), an optional
-//! trailing text and a frame [`Style`]. Mid-animation speed changes
-//! (`Spinner.update(speed=…)`) are not ported.
+//! Scope: all built-in spinners (vendored in `spinner_data.rs`), trailing text
+//! as console markup and a frame style. Upstream's non-text trailing
+//! renderables (a `Table.grid` of frame and renderable) are not ported.
+
+use std::cell::Cell;
 
 use crate::console::{Console, ConsoleOptions};
 use crate::protocol::Renderable;
 use crate::segment::Segment;
-use crate::style::Style;
+use crate::style::StyleType;
 use crate::text::Text;
 
 /// A named terminal spinner. Mirrors `rich.spinner.Spinner`.
@@ -22,9 +26,22 @@ pub struct Spinner {
     frames: &'static [&'static str],
     /// Frame interval in milliseconds.
     interval: f64,
-    text: String,
-    speed: f64,
-    style: Option<Style>,
+    // Boxed so a spinner stays small inside `ProgressColumn`.
+    text: Option<Box<Text>>,
+    style: Option<StyleType>,
+    speed: Cell<f64>,
+    /// Upstream's `start_time`: set by the first render.
+    start_time: Cell<Option<f64>>,
+    /// Upstream's `frame_no_offset`, carried across a speed change.
+    frame_no_offset: Cell<f64>,
+    /// Upstream's `_update_speed`: a pending speed (0.0 = none).
+    update_speed: Cell<f64>,
+}
+
+/// Console markup as upstream's `Text.from_markup(text)`; malformed markup is
+/// kept literally rather than failing a spinner.
+fn markup(text: &str) -> Text {
+    Text::from_markup(text).unwrap_or_else(|_| Text::new(text))
 }
 
 impl Spinner {
@@ -36,57 +53,94 @@ impl Spinner {
         Spinner {
             frames,
             interval,
-            text: String::new(),
-            speed: 1.0,
+            text: None,
             style: None,
+            speed: Cell::new(1.0),
+            start_time: Cell::new(None),
+            frame_no_offset: Cell::new(0.0),
+            update_speed: Cell::new(0.0),
         }
     }
 
-    /// Add trailing text after the spinner frame.
+    /// Trailing text after the frame, parsed as console markup (upstream
+    /// passes a `str` through `Text.from_markup`).
     pub fn text(mut self, text: impl Into<String>) -> Self {
-        self.text = text.into();
+        self.text = Some(Box::new(markup(&text.into())));
         self
     }
 
     /// Set the animation speed multiplier (default 1.0).
-    pub fn speed(mut self, speed: f64) -> Self {
-        self.speed = speed;
+    pub fn speed(self, speed: f64) -> Self {
+        self.speed.set(speed);
         self
     }
 
-    /// Style applied to the spinner *frame* (not the trailing text).
-    pub fn style(mut self, style: Style) -> Self {
-        self.style = Some(style);
+    /// Style applied to the spinner *frame* (not the trailing text): a style
+    /// or a theme name such as `"status.spinner"`.
+    pub fn style(mut self, style: impl Into<StyleType>) -> Self {
+        self.style = Some(style.into());
         self
     }
 
-    /// The frame index at `time` seconds (from an implicit start of 0).
-    fn frame_index(&self, time: f64) -> usize {
-        let interval_secs = self.interval / 1000.0;
-        ((time * self.speed / interval_secs) as usize) % self.frames.len()
+    /// Port of `Spinner.update`: replace the text or style when given, and
+    /// schedule a speed change for the next render. Like upstream, empty text
+    /// and a zero speed mean "unchanged".
+    pub fn update(&mut self, text: Option<&str>, style: Option<StyleType>, speed: Option<f64>) {
+        if let Some(text) = text.filter(|t| !t.is_empty()) {
+            self.text = Some(Box::new(markup(text)));
+        }
+        if let Some(style) = style {
+            self.style = Some(style);
+        }
+        if let Some(speed) = speed.filter(|s| *s != 0.0) {
+            self.update_speed.set(speed);
+        }
     }
 
     /// Render the spinner as it appears at `time` seconds. Port of
-    /// `Spinner.render` (`Text.assemble(frame, " ", text)`): the frame carries
-    /// the spinner style, the trailing `" text"` stays plain.
+    /// `Spinner.render`: the first call fixes the start time, the frame carries
+    /// the spinner style and `Text.assemble(frame, " ", text)` adds the text.
     pub fn render(&self, time: f64) -> Text {
-        let frame = self.frames[self.frame_index(time)];
-        let mut text = if self.text.is_empty() {
-            Text::new(frame)
-        } else {
-            Text::new(format!("{frame} {}", self.text))
-        };
-        if let Some(style) = &self.style {
-            text.stylize(style.clone(), 0, frame.len());
+        let start = self.start_time.get().unwrap_or(time);
+        self.start_time.set(Some(start));
+        let frame_no = (time - start) * self.speed.get() / (self.interval / 1000.0)
+            + self.frame_no_offset.get();
+        // Python's `int()` truncates toward zero and `%` is non-negative.
+        let index = (frame_no.trunc() as i64).rem_euclid(self.frames.len() as i64) as usize;
+        let frame_str = self.frames[index];
+        let pending = self.update_speed.get();
+        if pending != 0.0 {
+            self.frame_no_offset.set(frame_no);
+            self.start_time.set(Some(time));
+            self.speed.set(pending);
+            self.update_speed.set(0.0);
         }
-        text
+        match &self.text {
+            // `Text.assemble` turns the frame's style into a span over the
+            // frame alone, so the trailing text keeps its own styling.
+            Some(text) if !text.plain().is_empty() => {
+                let mut assembled = Text::new("");
+                assembled.append(frame_str, self.style.clone());
+                assembled.append(" ", None);
+                assembled.append_text(text)
+            }
+            _ => {
+                let mut frame = Text::new(frame_str);
+                if let Some(style) = &self.style {
+                    frame.set_base_style(style.clone());
+                }
+                frame
+            }
+        }
     }
 }
 
 impl Renderable for Spinner {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        // A bare print shows the first frame (t = 0); animation needs a Live loop.
-        self.render(0.0).rich_render(console, options)
+        // A bare print shows the frame at the animation's start; animation
+        // needs a Live loop driving `render` with a clock.
+        self.render(self.start_time.get().unwrap_or(0.0))
+            .rich_render(console, options)
     }
 }
 
@@ -95,13 +149,16 @@ mod tests {
     use super::*;
     use crate::color::ColorSystem;
 
+    /// The frame at `time` of a spinner whose first render was at 0.
     fn frame_at(name: &str, time: f64) -> String {
         let console = Console::builder()
             .force_terminal(true)
             .color_system(Some(ColorSystem::Truecolor))
             .width(20)
             .build();
-        console.render_to_string(&Spinner::new(name).render(time))
+        let spinner = Spinner::new(name);
+        spinner.render(0.0);
+        console.render_to_string(&spinner.render(time))
     }
 
     #[test]

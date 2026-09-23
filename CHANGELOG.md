@@ -64,6 +64,16 @@ checked against unpublished versions; nothing is published yet.
   `upload-pages-artifact` v5, `deploy-pages` v5).
 - Art: `icy_sixel` 0.7 for the optional Sixel backend.
 - CLI: `toml` 1.1 for configuration parsing; strict-config behaviour unchanged.
+- Core parity (#15): `Spinner` follows upstream's animation state. The first
+  `render` fixes the start time, `Spinner::update` changes text, style or speed
+  (a new speed continues from the current frame), the text is console markup,
+  and the frame style may be a theme name. `Status` keeps one stateful spinner,
+  parses its message as markup, defaults to the `status.spinner` theme style and
+  gains `update`; `Status::renderable` now returns `&Spinner`.
+  `ProgressColumn::Spinner` delegates its start time to the spinner, as
+  upstream's `SpinnerColumn` does. The new golden `live_status.tsv` has 8 step
+  programs covering spinner and status frames and LiveRender control sequences;
+  PORTING gains parity cells for Live and progress.
 - Core: Progress time, rate and spinner columns and upstream's task model (#6):
   an injectable clock, `add_task` returning a `TaskId`, `update`/`advance`/
   `reset`/`start_task`/`stop_task`/`remove_task`, the 30 s speed window, and

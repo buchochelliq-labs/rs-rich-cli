@@ -1113,6 +1113,94 @@ def progress_columns(specs):
     return [build[spec[0]](*spec[1:]) for spec in specs]
 
 
+LIVE_STATUS_HEADER = """\
+# Golden parity fixtures for Spinner / Status frames and LiveRender control
+# sequences (#15), captured from real Python `rich` by running step programs.
+# Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<case JSON>\t<JSON list of outputs, one per output step>
+# spinner: {"kind": "spinner", "name", "text", "style", "speed", "width",
+#   "steps": [["render", t] | ["update", {"text", "style", "speed"}]]}
+# status: {"kind": "status", "message", "spinner", "style", "speed", "width",
+#   "steps": [["render", t] | ["update", {"status", "spinner", "spinner_style", "speed"}]]}
+# live: {"kind": "live", "markup", "style", "width", "height",
+#   "steps": [["render"] | ["position"] | ["restore"] | ["set", markup]]}
+"""
+
+LIVE_STATUS_CASES: list[tuple[str, dict]] = [
+    ("spinner_from_zero", {"kind": "spinner", "name": "dots", "text": "", "style": None,
+     "speed": 1.0, "width": 30, "steps": [["render", 0], ["render", 0.08], ["render", 0.25], ["render", 1.0]]}),
+    ("spinner_starts_at_first_render", {"kind": "spinner", "name": "dots", "text": "work",
+     "style": "green", "speed": 1.0, "width": 30,
+     "steps": [["render", 5.0], ["render", 5.05], ["render", 5.3], ["render", 12.34]]}),
+    ("spinner_speed_and_markup", {"kind": "spinner", "name": "line", "text": "[bold]busy[/] now",
+     "style": "red", "speed": 2.5, "width": 30,
+     "steps": [["render", 1.0], ["render", 1.1], ["render", 1.37]]}),
+    ("spinner_update_speed", {"kind": "spinner", "name": "dots", "text": "a", "style": None,
+     "speed": 1.0, "width": 30,
+     "steps": [["render", 0], ["render", 0.25], ["update", {"speed": 3.0}], ["render", 0.3],
+               ["render", 0.5], ["update", {"text": "b", "style": "blue"}], ["render", 0.6]]}),
+    ("status_default", {"kind": "status", "message": "Loading [i]data[/]", "spinner": "dots",
+     "style": "status.spinner", "speed": 1.0, "width": 40,
+     "steps": [["render", 2.0], ["render", 2.4]]}),
+    ("status_updates", {"kind": "status", "message": "Step 1", "spinner": "dots", "style": "status.spinner",
+     "speed": 1.0, "width": 40,
+     "steps": [["render", 0], ["update", {"status": "Step 2"}], ["render", 0.2],
+               ["update", {"spinner": "line", "spinner_style": "magenta"}], ["render", 0.4], ["render", 0.9],
+               ["update", {"speed": 2.0}], ["render", 1.0], ["render", 1.3]]}),
+    ("live_render_cursor", {"kind": "live", "markup": "one\n[red]two[/]\nthree", "style": None,
+     "width": 20, "height": 25,
+     "steps": [["position"], ["restore"], ["render"], ["position"], ["restore"],
+               ["set", "short"], ["position"], ["render"], ["position"]]}),
+    ("live_render_style_wrap", {"kind": "live", "markup": "a line that wraps at twelve", "style": "on blue",
+     "width": 12, "height": 25, "steps": [["render"], ["position"], ["restore"]]}),
+]
+
+
+def run_live_status_case(case) -> list[str]:
+    from rich.live_render import LiveRender
+    from rich.spinner import Spinner
+    from rich.status import Status
+
+    console = Console(force_terminal=True, color_system="truecolor", width=case["width"],
+                      height=case.get("height", 25), highlight=False, legacy_windows=False,
+                      no_color=False)
+
+    def capture(renderable) -> str:
+        with console.capture() as cap:
+            console.print(renderable, end="")
+        return cap.get()
+
+    outputs = []
+    if case["kind"] == "spinner":
+        spinner = Spinner(case["name"], text=case["text"], style=case["style"], speed=case["speed"])
+        for step in case["steps"]:
+            if step[0] == "render":
+                outputs.append(capture(spinner.render(step[1])))
+            else:
+                spinner.update(**step[1])
+    elif case["kind"] == "status":
+        status = Status(case["message"], console=console, spinner=case["spinner"],
+                        spinner_style=case["style"], speed=case["speed"])
+        for step in case["steps"]:
+            if step[0] == "render":
+                outputs.append(capture(status.renderable.render(step[1])))
+            else:
+                status.update(**step[1])
+    else:
+        live = LiveRender(Text.from_markup(case["markup"]), style=case["style"] or "")
+        for step in case["steps"]:
+            if step[0] == "render":
+                outputs.append(capture(live))
+            elif step[0] == "position":
+                outputs.append(capture(live.position_cursor()))
+            elif step[0] == "restore":
+                outputs.append(capture(live.restore_cursor()))
+            else:
+                live.set_renderable(Text.from_markup(step[1]))
+    return outputs
+
+
 def run_progress_case(case) -> str:
     from rich.progress import Progress
 
@@ -1466,6 +1554,15 @@ def main() -> None:
         plines.append(f"{name}\t{json.dumps(case)}\t{escape(run_progress_case(case))}")
     ptime_path.write_text("\n".join(plines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(PROGRESS_TIME_CASES)} progress time cases to {ptime_path}")
+
+    # --- spinner / status frames and live render -------------------------
+    live_path = golden_dir() / "live_status.tsv"
+    llines = [LIVE_STATUS_HEADER.rstrip("\n")]
+    for name, case in LIVE_STATUS_CASES:
+        outputs = run_live_status_case(case)
+        llines.append(f"{name}\t{json.dumps(case, ensure_ascii=False)}\t{json.dumps(outputs, ensure_ascii=False)}")
+    live_path.write_text("\n".join(llines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(LIVE_STATUS_CASES)} spinner/status/live cases to {live_path}")
 
     # --- terminal themes -------------------------------------------------
     import rich.terminal_theme as _tt

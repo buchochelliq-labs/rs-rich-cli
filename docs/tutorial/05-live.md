@@ -78,9 +78,12 @@ console.print(&frame);
 
 ![Spinner](../assets/spinner-animated.svg)
 
-`render` takes a time in seconds and returns the frame for that moment, so the
-animation is a pure function of elapsed time — no internal clock, and easy to
-test.
+`render` takes a time in seconds and returns the frame for that moment. As in
+upstream rich, the first `render` marks the start of the animation, so keep one
+spinner for the whole animation rather than building a new one per frame (a new
+spinner always starts on its first frame). `spinner.update(text, style, speed)`
+changes the text, style or speed mid-animation; a new speed continues from the
+current frame. `Spinner::text` is console markup.
 
 ## Live displays
 
@@ -94,9 +97,10 @@ use std::time::{Duration, Instant};
 let console = Console::new();
 let started = Instant::now();
 let mut live = Live::new(&console);
+let spinner = Spinner::new("dots");
 
 for _ in 0..50 {
-    let frame = Spinner::new("dots").render(started.elapsed().as_secs_f64());
+    let frame = spinner.render(started.elapsed().as_secs_f64());
     live.update(&Text::new("  ").append_text(&frame));
     std::thread::sleep(Duration::from_millis(80));
 }
@@ -117,7 +121,13 @@ live.finish();
 ```rust
 use rich::Status;
 
-let status = Status::new("Fetching…");
+let mut status = Status::new("Fetching [b]index[/]…");
+let frame = status.renderable().render(elapsed_seconds);
+status.update(Some("Unpacking…"), None, None, None);
 ```
+
+`Status::update` follows upstream: a new spinner name replaces the spinner and
+restarts its animation, while a new message, style or speed updates it in
+place.
 
 Next: [The CLI →](06-cli.md)
