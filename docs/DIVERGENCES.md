@@ -303,17 +303,27 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** add a stable per-link id (e.g. a hash of the URL) if hover grouping
   is ever needed — but it still wouldn't match upstream's random value.
 
-### 21. Strikethrough delimiter runs of three or more tildes
-- **Differs:** `~x~` (single tilde) and `~~x~~` (double) match upstream exactly —
-  the first is literal text, the second is struck through. A run of **three or
-  more** tildes does not: `~~~x~~~` renders as literal `~~~x~~~` here, while
-  upstream renders `~x~` (it consumes the outer pair and strikes the rest).
-- **Why:** the two parsers resolve delimiter runs differently. `pulldown-cmark`
-  emits no strikethrough event at all for a triple run, so there is nothing to
-  re-interpret after the fact; matching upstream would mean reimplementing
-  markdown-it's delimiter-run algorithm rather than reading its output.
-- **Remove:** port markdown-it's `tokenize`/`postProcess` delimiter pairing for
-  strikethrough, under the Markdown issue (#9).
+### 21. Strikethrough across emphasis (narrowed in 0.0.10)
+- **Resolved (0.0.10, core 0.0.6):** tilde runs of any length now pair as
+  upstream's markdown-it pairs them. pulldown-cmark's own strikethrough is off;
+  `pair_strikethrough` ports markdown-it's tokenize (odd runs split into `~` plus
+  `~~` delimiters), `balance_pairs` and postProcess (a lone `~` before a closer
+  moves after it), scoped per inline run with link labels nested. `a ~~~x~~~ b`
+  renders `a ~` + struck `x` + `~ b`, as upstream does. Golden
+  `markdown_strike.tsv` covers 24 cases byte for byte, including odd and uneven
+  runs, intraword and punctuation neighbours, escapes, soft breaks, headings,
+  tight lists, links and emphasis nesting.
+- **Still differs:** markdown-it pairs `*`/`_` and `~` in one pass, so a tilde
+  closer that falls inside an emphasis span opened *after* the tilde opener wins
+  and dissolves that emphasis: `~~a *b~~ c*` strikes `a *b` upstream. Here
+  pulldown-cmark has already paired the emphasis, and a tilde pair is never
+  allowed to cross an emphasis span, so the tildes stay literal. Crossings the
+  other way (`*a ~~b* c~~`, no strikethrough) already match.
+- **Why:** matching that last case means reimplementing CommonMark emphasis
+  pairing alongside strikethrough instead of using pulldown-cmark's.
+- **Remove:** port markdown-it's emphasis delimiter handling into the same
+  `balance_pairs` pass, under the Markdown issue (#9). Pinned by
+  `tildes_crossing_a_later_emphasis_stay_literal`.
 
 ## Feature-flagged divergences
 

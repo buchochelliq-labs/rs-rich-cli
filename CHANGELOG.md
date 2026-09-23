@@ -142,6 +142,10 @@ checked against unpublished versions; nothing is published yet.
   rows, cells, columns and options. A nightly workflow runs 20,000 generated
   cases on `main`. First findings are filed as #442–#449, with repros in
   `scripts/fixtures/diff_rich_known.jsonl`; triage steps are in `docs/parity.md`.
+- Core: Markdown strikethrough pairs tilde runs as upstream's markdown-it does, so
+  runs of three or more (`a ~~~x~~~ b` → `a ~` + struck `x` + `~ b`) and uneven
+  runs match rich 15.0.0. Golden `markdown_strike.tsv` (24 cases); DIVERGENCES §21
+  narrowed to tilde pairs crossing a later emphasis span (#9).
 
 ## CLI 0.0.9 / art 0.0.7 — prepared
 
