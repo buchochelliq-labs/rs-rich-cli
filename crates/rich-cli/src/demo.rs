@@ -304,7 +304,12 @@ fn tour(no_color: bool, delay: Duration, group: Option<&str>) -> std::io::Result
         ));
 
         section(&console, delay, "Watch updates");
-        watch(&console, no_color, &file("first.json"), &watch_child)?;
+        watch(
+            &console,
+            no_color,
+            [&file("first.json"), &file("second.json")],
+            &watch_child,
+        )?;
         section(&console, delay, "Pager, input and confidence controls");
         console.print(&Text::new("--auto-pager opens a pager for tall TTY output; --no-pager opts out.\nURL fetch, encoding, sanitization and JSON reports support scripts and CI.\nThe tour stays offline and does not open an external pager."));
         command(
@@ -331,31 +336,51 @@ fn tour(no_color: bool, delay: Duration, group: Option<&str>) -> std::io::Result
     Ok(())
 }
 
-fn watch(console: &Console, no_color: bool, path: &str, slot: &WatchChild) -> std::io::Result<()> {
+/// Watch two files, each in its own Live region. The tour cannot deliver a
+/// portable Ctrl+C to the child, so the last edit writes invalid JSON and
+/// `--watch-exit-on-error` ends the watch, restoring the terminal itself.
+fn watch(
+    console: &Console,
+    no_color: bool,
+    [first, second]: [&str; 2],
+    slot: &WatchChild,
+) -> std::io::Result<()> {
     if !std::io::stdout().is_terminal() {
         for value in [1, 2] {
-            std::fs::write(path, format!("{{\"live_update\":{value}}}"))?;
+            std::fs::write(first, format!("{{\"live_update\":{value}}}"))?;
             command(
                 console,
                 no_color,
-                "--watch first.json (snapshot when redirected)",
-                vec!["--watch".into(), path.into()],
+                "--watch first.json second.json (one snapshot each when redirected)",
+                vec!["--watch".into(), first.into(), second.into()],
             )?;
         }
         return Ok(());
     }
     console.print(&Text::new(
-        "$ rich --watch --watch-interval 0.1 first.json (two edits, then stop)",
+        "$ rich --watch --watch-exit-on-error first.json second.json\n  \
+         (two edits to first.json repaint only its region; invalid JSON then ends the watch)",
     ));
+    // Run beside the files and pass bare names, so the region headers read
+    // `first.json` rather than a temporary path.
+    let (first_path, second_path) = (Path::new(first), Path::new(second));
     let mut cmd = std::process::Command::new(std::env::current_exe()?);
+    if let Some(directory) = first_path.parent() {
+        cmd.current_dir(directory);
+    }
     cmd.args([
         "--no-config",
         "--no-pager",
         "--watch",
-        "--watch-interval",
+        "--watch-debounce",
         "0.1",
-        path,
     ]);
+    cmd.arg("--watch-exit-on-error");
+    cmd.args(
+        [first_path.file_name(), second_path.file_name()]
+            .into_iter()
+            .flatten(),
+    );
     if no_color {
         cmd.arg("--no-color");
     }
@@ -363,7 +388,7 @@ fn watch(console: &Console, no_color: bool, path: &str, slot: &WatchChild) -> st
     let result = (|| {
         for value in [1, 2] {
             std::thread::sleep(Duration::from_millis(700));
-            std::fs::write(path, format!("{{\"live_update\":{value}}}"))?;
+            std::fs::write(first, format!("{{\"live_update\":{value}}}"))?;
         }
         std::thread::sleep(Duration::from_millis(700));
         if let Some(status) = slot.lock().unwrap().as_mut().unwrap().try_wait()? {
@@ -371,7 +396,23 @@ fn watch(console: &Console, no_color: bool, path: &str, slot: &WatchChild) -> st
                 "watch stopped early: {status}"
             )));
         }
-        Ok(())
+        std::fs::write(first, "{\"live_update\": ")?;
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            if let Some(status) = slot.lock().unwrap().as_mut().unwrap().try_wait()? {
+                return if status.success() {
+                    Err(std::io::Error::other("watch ignored the invalid edit"))
+                } else {
+                    Ok(())
+                };
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err(std::io::Error::other(
+                    "watch did not stop on the invalid edit",
+                ));
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
     })();
     if let Some(mut child) = slot.lock().unwrap().take() {
         let _ = child.kill();

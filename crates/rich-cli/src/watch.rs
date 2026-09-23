@@ -364,6 +364,9 @@ struct Regions {
     content: Vec<Vec<Segment>>,
     observed: Option<(usize, usize)>,
     last_tick: Instant,
+    /// Whether a failed render is followed by another attempt; false under
+    /// `--watch-exit-on-error`, where the first failure ends the watch.
+    retries: bool,
 }
 
 impl Regions {
@@ -385,6 +388,7 @@ impl Regions {
             content: Vec::new(),
             observed: terminal_dimensions(),
             last_tick: Instant::now(),
+            retries: !cli.watch_exit_on_error,
         }
     }
 
@@ -415,18 +419,23 @@ impl Regions {
 
     fn compose(&self, resource: &str, frame: Frame, count: usize) -> Vec<Segment> {
         let body: Vec<Segment> = match &frame.error {
-            Some(message) => vec![
-                Segment::new(
-                    format!("rich: {}", sanitize_terminal_controls(message)),
-                    Style::parse("bold red").ok(),
-                ),
-                Segment::line(),
-                Segment::new(
-                    "watch will retry after the next change",
-                    Style::parse("dim").ok(),
-                ),
-                Segment::line(),
-            ],
+            Some(message) => {
+                let mut body = vec![
+                    Segment::new(
+                        format!("rich: {}", sanitize_terminal_controls(message)),
+                        Style::parse("bold red").ok(),
+                    ),
+                    Segment::line(),
+                ];
+                if self.retries {
+                    body.push(Segment::new(
+                        "watch will retry after the next change",
+                        Style::parse("dim").ok(),
+                    ));
+                    body.push(Segment::line());
+                }
+                body
+            }
             None => frame
                 .segments
                 .into_iter()

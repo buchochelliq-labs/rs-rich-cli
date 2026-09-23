@@ -93,17 +93,22 @@ def cases_009(c, work):
 def cases_010(c, work):
     img = "rich --no-config image gradient.png --width 48 --height 14 --image-fit contain"
     watch = "rich --no-config --watch --watch-debounce 0.1 status.json notes.md"
+
+    def image(*groups):
+        # Shown as typed shell continuations so the prompt line never wraps mid-word.
+        shown = img + "".join(f" \\\n    {group}" for group in groups)
+        return (shown, " ".join((img, *groups)))
+
     return [
         c("01-version-doctor", "Installed from the packaged crates: version and read-only diagnostics",
           ["rich --version", "rich doctor --no-config"], rows=11),
         c("02-image-quadrants", "Image: quadrant blocks, 2×2 pixels per cell",
-          [f"{img} --image-mode quadrants"], cols=72, rows=18),
+          [image("--image-mode quadrants")], rows=19),
         c("03-image-ansi16-bayer", "Image: quadrants in the 16 theme colours with Bayer 4×4",
-          [f"{img} --image-mode quadrants --image-color ansi16 --image-dither bayer4x4"],
-          cols=72, rows=18),
+          [image("--image-mode quadrants --image-color ansi16 --image-dither bayer4x4")], rows=19),
         c("04-image-gray-tone", "Image: grayscale palette with brightness, contrast and gamma",
-          [f"{img} --image-mode blocks --image-color grayscale --image-brightness 1.1 "
-           "--image-contrast 1.4 --image-gamma 0.8"], cols=100, rows=18),
+          [image("--image-mode blocks --image-color grayscale",
+                 "--image-brightness 1.1 --image-contrast 1.4 --image-gamma 0.8")], rows=20),
         c("05-markdown-strike", "Markdown: tilde runs paired as markdown-it pairs them",
           ["rich --no-config strike.md --width 60"], cols=72, rows=10),
         c("06-watch-two-files", "Multi-file --watch: one live region per file; only the edited one repaints",

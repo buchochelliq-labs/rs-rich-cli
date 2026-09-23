@@ -4955,6 +4955,13 @@ fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
         "Color:    [red]red[/] [green]green[/] [blue]blue[/] [#ff8800]#ff8800[/] [white on blue]on blue[/]",
     );
     console.print_str("Theme:    [error]error[/], [warning]warning[/], [info]info[/]");
+    // Upstream's theme stack: a pushed theme applies until its guard drops.
+    let mut themed = build_demo_console(no_color);
+    let release =
+        rich::Theme::from_styles([("release", "bold magenta")], true).expect("valid demo theme");
+    themed.use_theme(release).print_str(
+        "Stack:    [release]release[/] from a pushed theme, popped when its guard drops",
+    );
     console.print_str("Extension: numbers like 3.14 and 2026 are auto-highlighted");
     // Built-in ReprHighlighter (highlight=true): auto-colors numbers, bools,
     // strings, paths, calls, etc.
@@ -5214,7 +5221,7 @@ fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
     // Markdown — headings, inline styles, lists, block quotes, tables, and rules.
     demo::section(&console, delay, "markdown");
     console.print(&Markdown::new(
-        "# Heading\n\nA paragraph with **bold**, *italic*, `code`, and a [link](https://example.com).\n\n- bullet item\n- another\n\n1. first\n2. second\n\n> a block quote\n\n| Name | Age |\n| :--- | ---: |\n| Alice | 30 |\n| Bob | 7 |\n\n```rust\nfn main() {\n    println!(\"hi\");\n}\n```\n\n---",
+        "# Heading\n\nA paragraph with **bold**, *italic*, `code`, ~~struck~~ text, and a [link](https://example.com).\nTilde runs pair as upstream pairs them: a ~~~x~~~ b.\n\n- bullet item\n- another\n\n1. first\n2. second\n\n> a block quote\n\n| Name | Age |\n| :--- | ---: |\n| Alice | 30 |\n| Bob | 7 |\n\n```rust\nfn main() {\n    println!(\"hi\");\n}\n```\n\n---",
     ));
 
     // Syntax highlighting (via syntect — functional, not byte-parity with rich).

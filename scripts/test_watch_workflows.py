@@ -308,6 +308,8 @@ class MultiFileWatchTests(unittest.TestCase):
         self.assertNotEqual(session.await_exit(), 0)
         self.assertIn(b"invalid JSON", session.transcript)
         self.assertIn(b"\x1b[?25h", session.transcript, "cursor must be restored")
+        # The failing region must not promise a retry that exit-on-error forgoes.
+        self.assertNotIn(b"watch will retry", session.transcript)
 
     def test_single_file_exit_on_error(self):
         root, first, _ = self.workspace()

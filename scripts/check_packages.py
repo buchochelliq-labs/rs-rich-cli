@@ -14,7 +14,9 @@ are excluded from comparison (library consumers resolve their own lockfiles).
 
 import argparse
 import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -58,6 +60,44 @@ def compare_packages(name, version, local, published):
         )
 
 
+# Registry caches that only ever hold published, immutable artifacts.
+PUBLIC_REGISTRY_PREFIXES = ("index.crates.io-", "github.com-")
+
+
+def purge_staged_copies(root, staged, home=None):
+    """Drop Cargo's cached copies of staged-only versions before verification.
+
+    Cargo's staging registry unpacks each sibling tarball into
+    $CARGO_HOME/registry/src/<staging>/NAME-VERSION and, as for any registry
+    package, treats it as immutable: an unpack left by an earlier run at the same
+    unpublished version is reused, and so are artifacts compiled from it. Packaging
+    again after a code change then verifies dependents against the old sibling,
+    failing a good tree or passing one that uses a removed API (the core 0.0.6
+    `fit_to_measurement` incident). Returns the removed cache paths.
+    """
+    registry = Path(home or os.environ.get("CARGO_HOME") or Path.home() / ".cargo") / "registry"
+    removed = []
+    for kind, suffix in (("src", ""), ("cache", ".crate")):
+        folder = registry / kind
+        if not folder.is_dir():
+            continue
+        for index in sorted(folder.iterdir()):
+            if index.name.startswith(PUBLIC_REGISTRY_PREFIXES):
+                continue
+            for name, version in staged:
+                path = index / f"{name}-{version}{suffix}"
+                if path.is_dir():
+                    shutil.rmtree(path)
+                elif path.exists():
+                    path.unlink()
+                else:
+                    continue
+                removed.append(path)
+    for name, _ in staged:
+        subprocess.run(["cargo", "clean", "--quiet", "-p", name], cwd=root, check=True)
+    return removed
+
+
 def is_published(name, version, status):
     if status not in (200, 404):
         raise RuntimeError(f"Cannot establish registry state for {name}@{version}: HTTP {status}")
@@ -97,6 +137,9 @@ def check(root, allow_dirty=False):
                 destination.write_bytes(response.read())
             compare_packages(name, version, artifacts / filename, destination)
             print(f"Registry contents match: {name}@{version}", flush=True)
+    staged = sorted((name, p["version"]) for name, p in packages.items() if not published[name])
+    for path in purge_staged_copies(root, staged):
+        print(f"Removed stale staged copy: {path}", flush=True)
     subprocess.run(command, cwd=root, check=True)
     print("Staged package verification passed. This does not establish registry publication readiness.",
           flush=True)
