@@ -120,6 +120,25 @@ def _tree() -> Tree:
     return tree
 
 
+def _tree_deep() -> Tree:
+    # Guides eat the width: at 4 cells and below a child label has no room left
+    # and upstream renders neither it nor its guides.
+    tree = Tree("root")
+    tree.add("child one").add("grand")
+    return tree
+
+
+def _tree_multiline() -> Tree:
+    tree = Tree("root\nlabel")
+    tree.add("child\nline two").add("grand kid")
+    tree.add("last\nx")
+    return tree
+
+
+COLUMNS_MIXED = ["a", "supercalifragilistic", "bc", "def"]
+COLUMNS_SIX = ["one", "two", "three", "four", "five", "six"]
+
+
 def _table(box_set) -> Table:
     table = Table(box=box_set)
     table.add_column("Name")
@@ -413,12 +432,32 @@ RENDERABLE_CASES = [
     ("table_min_width", 30, _table_min_width()),
     ("table_max_width", 40, _table_max_width()),
     ("tree_nested", 40, _tree()),
+    ("tree_deep_w3", 3, _tree_deep()),
+    ("tree_deep_w4", 4, _tree_deep()),
+    ("tree_deep_w6", 6, _tree_deep()),
+    ("tree_deep_w10", 10, _tree_deep()),
+    ("tree_deep_w20", 20, _tree_deep()),
+    ("tree_multiline_w6", 6, _tree_multiline()),
+    ("tree_multiline_w12", 12, _tree_multiline()),
     ("align_center", 20, Align.center("hi")),
     ("align_right", 20, Align.right("hi")),
     ("align_center_odd", 21, Align.center("hi")),
     ("constrain_panel", 20, Constrain(Panel("hi", box=box.SQUARE), width=10)),
     ("columns_two_rows", 20, Columns(["one", "two", "three", "four", "five", "six"])),
     ("columns_one_row", 30, Columns(["alpha", "beta", "gamma", "delta"])),
+    # Items wider than the width: each width is capped at `max_width` by
+    # `Measurement.get`, and the grid truncates (one word) or wraps the item.
+    ("columns_long_w8", 8, Columns(["supercalifragilistic"])),
+    ("columns_long_w5", 5, Columns(["supercalifragilistic"])),
+    ("columns_long_w3", 3, Columns(["supercalifragilistic"])),
+    ("columns_wrap_w13", 13, Columns(["name name name"])),
+    ("columns_mixed_w12", 12, Columns(COLUMNS_MIXED)),
+    ("columns_mixed_equal_w12", 12, Columns(COLUMNS_MIXED, equal=True)),
+    ("columns_mixed_expand_w12", 12, Columns(COLUMNS_MIXED, expand=True)),
+    ("columns_equal_w20", 20, Columns(COLUMNS_SIX, equal=True)),
+    ("columns_expand_w20", 20, Columns(COLUMNS_SIX, expand=True)),
+    ("columns_equal_expand_w20", 20, Columns(COLUMNS_SIX, equal=True, expand=True)),
+    ("columns_equal_expand_wrap_w13", 13, Columns(["name name name", "x"], equal=True, expand=True)),
     ("bar_empty", 20, ProgressBar(total=100, completed=0, width=20)),
     ("bar_half", 20, ProgressBar(total=100, completed=50, width=20)),
     ("bar_third", 20, ProgressBar(total=100, completed=33, width=20)),
