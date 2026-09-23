@@ -1,5 +1,8 @@
 //! Read-only CLI diagnostics. Capability heuristics never probe the terminal.
 use super::*;
+use rich_ext::capabilities::{
+    Capabilities, CapabilityReport, ColorDepth, Overrides, Report, SystemEnvironment,
+};
 
 pub(super) fn requested(args: &[String]) -> bool {
     let mut iter = args.iter();
@@ -34,7 +37,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
         }
     }
     match report(args) {
-        Ok(report) => {
+        Ok((report, capabilities, no_color)) => {
             if json {
                 println!(
                     "{}",
@@ -74,6 +77,9 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                     report["pager"]["program"].as_str().unwrap(),
                     report["pager"]["source"].as_str().unwrap()
                 );
+                println!();
+                let console = Console::builder().no_color(no_color).build();
+                console.print(&CapabilityReport::new(&capabilities));
             }
             ExitCode::SUCCESS
         }
@@ -81,7 +87,9 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
     }
 }
 
-fn report(args: &[String]) -> Result<serde_json::Value, String> {
+/// The doctor report, the shared capability detection behind it, and whether
+/// colour is off.
+fn report(args: &[String]) -> Result<(serde_json::Value, Report, bool), String> {
     let mut inspect_args = vec!["config".into(), "show".into()];
     let mut command_seen = false;
     let mut image_mode = "auto".to_owned();
@@ -149,10 +157,22 @@ fn report(args: &[String]) -> Result<serde_json::Value, String> {
             .map(|value| format!("{value:?}").to_lowercase())
             .unwrap_or_else(|| "none".into())
     };
-    #[cfg(feature = "art")]
-    let sixel = rich_art::sixel::is_probably_supported();
-    #[cfg(not(feature = "art"))]
-    let sixel = false;
+    // The shared detection (rich_ext::capabilities), the same API library
+    // users call; config width, height and no_color are its overrides.
+    let capabilities = Capabilities::detect_with(
+        &SystemEnvironment,
+        &Overrides {
+            width: settings["width"].as_u64().map(|v| v as usize),
+            height: settings["height"].as_u64().map(|v| v as usize),
+            color: no_color.then_some(ColorDepth::None),
+            ..Default::default()
+        },
+    );
+    let mut capabilities = capabilities;
+    if no_color {
+        capabilities.color.reason = "--no-color, a non-empty NO_COLOR or config no_color".into();
+    }
+    let sixel = cfg!(feature = "art") && capabilities.sixel.value;
     let requested_mode = image_mode.as_str();
     let selected_mode = if !cfg!(feature = "art") {
         "unavailable"
@@ -189,14 +209,17 @@ fn report(args: &[String]) -> Result<serde_json::Value, String> {
             std::env::var("TERM").unwrap_or_default().as_str(),
             "dumb" | "emacs"
         );
-    Ok(serde_json::json!({
+    let capabilities_json = serde_json::to_value(&capabilities).map_err(|e| e.to_string())?;
+    let json = serde_json::json!({
         "package": {"name": env!("CARGO_PKG_NAME"), "version": env!("CARGO_PKG_VERSION")},
         "features": {"art": cfg!(feature="art"), "fetch": cfg!(feature="fetch"), "syntax-cache": cfg!(feature="syntax-cache"), "json-escape-safe": cfg!(feature="json-escape-safe")},
         "terminal": {"stdout_tty": console.is_terminal(), "width": console.width(), "height": console.height(), "color": color, "no_color": no_color, "detection": "local terminal and environment; no probe", "provenance": provenance},
         "image": {"requested_mode": requested_mode, "selected_mode": selected_mode, "sixel_inferred": sixel, "detection": "inferred from environment; no probe"},
         "config": {"source": config["source"], "profile": config["profile"], "disabled": config["disabled"]},
-        "pager": {"source": pager_source, "program": pager_program, "availability": "not checked", "terminal_eligible": pager_eligible, "explicit": settings["pager"].as_bool().unwrap_or(false), "automatic": settings["auto_pager"].as_bool().unwrap_or(false)}
-    }))
+        "pager": {"source": pager_source, "program": pager_program, "availability": "not checked", "terminal_eligible": pager_eligible, "explicit": settings["pager"].as_bool().unwrap_or(false), "automatic": settings["auto_pager"].as_bool().unwrap_or(false)},
+        "capabilities": capabilities_json
+    });
+    Ok((json, capabilities, no_color))
 }
 
 #[cfg(test)]
