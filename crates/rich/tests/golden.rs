@@ -1159,6 +1159,21 @@ fn layout_parity() {
     assert!(checked > 0, "no layout cases were checked");
 }
 
+/// A JSON value as the Python object `**fields` would carry.
+fn format_value(value: &serde_json::Value) -> rich::pyformat::FormatValue {
+    use rich::pyformat::FormatValue;
+    match value {
+        serde_json::Value::Null => FormatValue::None,
+        serde_json::Value::Bool(flag) => FormatValue::Bool(*flag),
+        serde_json::Value::Number(number) => match number.as_i64() {
+            Some(integer) => FormatValue::Int(integer),
+            None => FormatValue::Float(number.as_f64().expect("number")),
+        },
+        serde_json::Value::String(text) => FormatValue::Str(text.clone()),
+        other => panic!("unsupported field value {other}"),
+    }
+}
+
 /// Build a progress column from a `progress_time.tsv` spec. Keep in sync with
 /// `progress_columns` in scripts/capture_golden.py.
 fn progress_column(spec: &serde_json::Value) -> rich::ProgressColumn {
@@ -1183,6 +1198,20 @@ fn progress_column(spec: &serde_json::Value) -> rich::ProgressColumn {
         "spinner" => ProgressColumn::Spinner(SpinnerColumn::new(
             spec[1].as_str().unwrap(),
             spec[2].as_str().unwrap(),
+        )),
+        "text" => ProgressColumn::TextFormat(
+            rich::progress::TextColumn::new(spec[1].as_str().unwrap())
+                .style(spec[2].as_str().unwrap().to_string())
+                .justify(match spec[3].as_str().unwrap() {
+                    "left" => Justify::Left,
+                    "center" => Justify::Center,
+                    "right" => Justify::Right,
+                    other => panic!("unknown justify {other:?}"),
+                })
+                .markup(flag(4)),
+        ),
+        "renderable" => ProgressColumn::Renderable(std::sync::Arc::new(
+            Text::from_markup(spec[1].as_str().unwrap()).expect("valid markup"),
         )),
         other => panic!("unknown progress column {other:?}"),
     }
@@ -1228,21 +1257,42 @@ fn progress_time_parity() {
                         step[2].as_f64(),
                         step[3].as_f64().unwrap(),
                     );
-                    if step[4].as_bool().unwrap() {
-                        progress.add_task(description, total, completed);
-                    } else {
-                        progress.add_unstarted_task(description, total, completed);
-                    }
+                    let fields: Vec<(String, rich::pyformat::FormatValue)> = step
+                        .get(5)
+                        .and_then(|fields| fields.as_object())
+                        .map(|fields| {
+                            fields
+                                .iter()
+                                .map(|(name, value)| (name.clone(), format_value(value)))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    progress.add_task_with(
+                        description,
+                        total,
+                        completed,
+                        step[4].as_bool().unwrap(),
+                        fields,
+                    );
                 }
                 "update" => {
                     let fields = &step[2];
-                    let update = TaskUpdate {
+                    let mut update = TaskUpdate {
                         total: fields["total"].as_f64(),
                         completed: fields["completed"].as_f64(),
                         advance: fields["advance"].as_f64(),
                         description: fields["description"].as_str().map(String::from),
                         visible: fields["visible"].as_bool(),
+                        ..TaskUpdate::default()
                     };
+                    // Any other keyword is a custom field (`update(**fields)`).
+                    for (name, value) in fields.as_object().expect("update fields") {
+                        if !["total", "completed", "advance", "description", "visible"]
+                            .contains(&name.as_str())
+                        {
+                            update = update.field(name.clone(), format_value(value));
+                        }
+                    }
                     progress.update(id(&step[1]), update);
                 }
                 "advance" => progress.advance(id(&step[1]), step[2].as_f64().unwrap()),
@@ -1273,7 +1323,7 @@ fn progress_time_parity() {
         );
         checked += 1;
     }
-    assert_eq!(checked, 11, "expected every progress time case to run");
+    assert_eq!(checked, 15, "expected every progress time case to run");
 }
 
 /// Spinner and Status frames and LiveRender control sequences (#15): the same
@@ -1499,6 +1549,141 @@ fn markdown_options_parity() {
         checked += 1;
     }
     assert_eq!(checked, 8, "expected every markdown options case to run");
+}
+
+/// `ProgressBar` against upstream: determinate, pulse, ASCII and no-colour.
+/// Data-driven: each fixture line carries its own case.
+#[test]
+fn progress_bar_parity() {
+    use rich::progress_bar::ProgressBar;
+    let data = include_str!("golden/progress_bar.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let case: serde_json::Value =
+            serde_json::from_str(parts.next().expect("case")).expect("case json");
+        let expected = unescape(parts.next().expect("expected"));
+        let color_system = match case.get("color_system").and_then(|v| v.as_str()) {
+            None | Some("truecolor") => ColorSystem::Truecolor,
+            Some("256") => ColorSystem::EightBit,
+            Some("standard") => ColorSystem::Standard,
+            Some(other) => panic!("unknown color system {other:?}"),
+        };
+        let flag = |key: &str| case.get(key).and_then(|v| v.as_bool()).unwrap_or(false);
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(color_system))
+            .width(80)
+            .highlight(false)
+            .no_color(flag("no_color"))
+            .legacy_windows(flag("legacy_windows"))
+            .build();
+        let completed = case["completed"].as_f64().expect("completed");
+        let mut bar = match case["total"].as_f64() {
+            Some(total) => ProgressBar::new(total, completed),
+            None => ProgressBar::indeterminate(),
+        }
+        .width(case["width"].as_u64().expect("width") as usize)
+        .pulse(flag("pulse"));
+        if let Some(time) = case.get("animation_time").and_then(|v| v.as_f64()) {
+            bar = bar.animation_time(time);
+        }
+        // A bar yields no newline of its own, so `print` adds none upstream.
+        let got = console.render_to_string(&bar);
+        assert_eq!(
+            got,
+            expected,
+            "progress bar case {name:?} (line {}) diverged",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 15, "expected every progress bar case to run");
+}
+
+/// A live `Progress` display's byte stream (start, task changes, explicit
+/// refreshes, stop) against upstream with `auto_refresh=False`. The port's
+/// auto-refresh thread is given an interval long enough never to fire.
+#[test]
+fn progress_live_parity() {
+    use rich::Progress;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
+
+    let data = include_str!("golden/progress_live.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let case: serde_json::Value =
+            serde_json::from_str(parts.next().expect("case")).expect("case json");
+        let expected = unescape(parts.next().expect("expected"));
+        let now = Arc::new(AtomicU64::new(0f64.to_bits()));
+        let clock = now.clone();
+        let columns = case["columns"]
+            .as_array()
+            .expect("columns")
+            .iter()
+            .map(progress_column)
+            .collect();
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(case["width"].as_u64().expect("width") as usize)
+            .highlight(false)
+            .no_color(false)
+            .build();
+        let live = Progress::new()
+            .columns(columns)
+            .clock(move || f64::from_bits(clock.load(Ordering::SeqCst)))
+            .start(console, Vec::<u8>::new(), 1e-9);
+        let id = |value: &serde_json::Value| rich::TaskId(value.as_u64().unwrap() as usize);
+        for step in case["steps"].as_array().expect("steps") {
+            match step[0].as_str().expect("op") {
+                "time" => now.store(step[1].as_f64().unwrap().to_bits(), Ordering::SeqCst),
+                "add" => {
+                    live.add_task(
+                        step[1].as_str().unwrap(),
+                        step[2].as_f64(),
+                        step[3].as_f64().unwrap(),
+                    );
+                }
+                "advance" => live.advance(id(&step[1]), step[2].as_f64().unwrap()),
+                "update" => {
+                    let fields = &step[2];
+                    let mut update = rich::TaskUpdate::default();
+                    if let Some(completed) = fields["completed"].as_f64() {
+                        update = update.completed(completed);
+                    }
+                    if let Some(description) = fields["description"].as_str() {
+                        update = update.description(description);
+                    }
+                    live.update(id(&step[1]), update);
+                }
+                "refresh" => live.refresh(),
+                other => panic!("unknown live progress step {other:?}"),
+            }
+        }
+        let (_, bytes) = live.stop();
+        let got = String::from_utf8(bytes).expect("utf-8");
+        assert_eq!(
+            got,
+            expected,
+            "live progress case {name:?} (line {}) diverged",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 3, "expected every live progress case to run");
 }
 
 /// Run one `theme_stack.tsv` step list. Keep in sync with `run_theme_steps` in

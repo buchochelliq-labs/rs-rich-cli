@@ -163,6 +163,11 @@ impl Console {
         }
     }
 
+    /// Whether colour output is disabled. Port of `Console.no_color`.
+    pub fn no_color(&self) -> bool {
+        self.no_color
+    }
+
     /// The detected (or configured) width in cells.
     pub fn width(&self) -> usize {
         self.width

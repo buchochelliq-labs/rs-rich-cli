@@ -88,9 +88,16 @@ impl<W: Write> Live<W> {
         }
         let position = self.live_render.position_cursor();
         let content = self.console.render_to_string(&self.live_render);
+        // Upstream ends the display with `console.line()` only when the last
+        // render drew something (`_live_render.last_render_height`).
+        let newline = if self.live_render.last_render_height() > 0 {
+            "\n"
+        } else {
+            ""
+        };
         let _ = write!(
             self.writer,
-            "{}{}\n{}",
+            "{}{}{newline}{}",
             position.as_str(),
             content,
             Control::show_cursor(true).as_str()
@@ -115,6 +122,8 @@ enum LiveMessage {
     Update(Box<dyn Renderable + Send>),
     /// Redraw the current renderable now.
     Refresh,
+    /// Redraw now, then acknowledge on the channel.
+    RefreshAck(mpsc::Sender<()>),
     /// Commit the final frame, restore the cursor, and stop the thread.
     Stop,
 }
@@ -132,16 +141,22 @@ impl<W: Write + Send + 'static> Live<W> {
         refresh_per_second: f64,
     ) -> AutoLive<W> {
         let (sender, receiver) = mpsc::channel::<LiveMessage>();
+        let (started, wait_started) = mpsc::channel::<()>();
         let interval = Duration::from_secs_f64(1.0 / refresh_per_second.max(f64::MIN_POSITIVE));
         let handle = thread::spawn(move || {
             // The `Live` (and its non-`Send` `LiveRender`) is built and owned
             // entirely within this thread — only the `Send` inputs cross over.
             let mut live = Live::new(renderable, console, writer);
             live.start();
+            let _ = started.send(());
             loop {
                 match receiver.recv_timeout(interval) {
                     Ok(LiveMessage::Update(renderable)) => live.update(renderable),
                     Ok(LiveMessage::Refresh) | Err(RecvTimeoutError::Timeout) => live.refresh(),
+                    Ok(LiveMessage::RefreshAck(done)) => {
+                        live.refresh();
+                        let _ = done.send(());
+                    }
                     // Stop, or the handle was dropped: finalize and exit.
                     Ok(LiveMessage::Stop) | Err(RecvTimeoutError::Disconnected) => {
                         live.stop();
@@ -151,6 +166,10 @@ impl<W: Write + Send + 'static> Live<W> {
             }
             live.into_writer()
         });
+        // Upstream's `Live.start()` draws the first frame before returning;
+        // without this wait, a change made right after spawning could land in
+        // the "first" frame, depending on thread scheduling.
+        let _ = wait_started.recv();
         AutoLive {
             sender,
             handle: Some(handle),
@@ -174,6 +193,16 @@ impl<W: Write + Send + 'static> AutoLive<W> {
     /// Ask the thread to redraw the current renderable now.
     pub fn refresh(&self) {
         let _ = self.sender.send(LiveMessage::Refresh);
+    }
+
+    /// Redraw now and wait until the frame is written, as upstream's
+    /// `Live.refresh()` renders in the caller's thread. A renderable that reads
+    /// shared state then shows the state as of this call.
+    pub fn refresh_wait(&self) {
+        let (done, wait) = mpsc::channel();
+        if self.sender.send(LiveMessage::RefreshAck(done)).is_ok() {
+            let _ = wait.recv();
+        }
     }
 
     /// Commit the final frame, join the thread, and return the output sink.

@@ -50,6 +50,7 @@ pub mod progress;
 pub mod progress_bar;
 pub mod prompt;
 pub mod protocol;
+pub mod pyformat;
 pub mod ratio;
 mod repr_patterns;
 pub mod rule;
@@ -91,7 +92,8 @@ pub use crate::pager::{Pager, SystemPager};
 pub use crate::panel::Panel;
 pub use crate::pretty::Pretty;
 pub use crate::progress::{
-    Progress, ProgressColumn, SpinnerColumn, Task, TaskId, TaskUpdate, TimeRemainingColumn,
+    track, LiveProgress, Progress, ProgressColumn, SpinnerColumn, Task, TaskId, TaskUpdate,
+    TextColumn, TimeRemainingColumn, Track, TrackStdout,
 };
 pub use crate::progress_bar::ProgressBar;
 pub use crate::protocol::{Highlighter, LineRenderable, Renderable};

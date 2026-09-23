@@ -1082,6 +1082,32 @@ PROGRESS_TIME_CASES: list[tuple[str, dict]] = [
         "steps": [["time", 0], ["add", "d", 10, 0, True], ["time", 90061], ["render", 40],
                   ["time", 180000], ["render", 40]],
     }),
+    ("pulse_unstarted", {
+        "columns": [["description"], ["bar"], ["percentage"]],
+        "steps": [["time", 0], ["add", "Queued", 10, 0, False], ["render", 60],
+                  ["time", 0.2], ["render", 60], ["time", 1.35], ["render", 60],
+                  ["start", 0], ["time", 2], ["advance", 0, 5], ["render", 60]],
+    }),
+    ("pulse_indeterminate", {
+        "columns": [["description"], ["bar"], ["task_progress", True]],
+        "steps": [["time", 3.7], ["add", "Stream", None, 0, True], ["render", 50],
+                  ["time", 9.05], ["advance", 0, 42], ["render", 50],
+                  ["update", 0, {"total": 100}], ["render", 50]],
+    }),
+    ("text_format_fields", {
+        "columns": [["text", "{task.fields[name]:<6}|{task.completed:>6.1f}|{task.percentage:>3.0f}%", "cyan", "left", True],
+                    ["text", "{task.description} ", "none", "right", False],
+                    ["text", "[bold]{task.fields[size]:,}[/] items", "none", "center", True],
+                    ["text", "{task.total} {task.finished} {task.id} {task.speed}", "magenta", "left", True]],
+        "steps": [["time", 0], ["add", "Short", 200, 0, True, {"name": "disk", "size": 1234567}],
+                  ["add", "A longer one", None, 5, True, {"name": "net", "size": 42}], ["render", 80],
+                  ["time", 2], ["advance", 0, 50], ["update", 1, {"name": "cache", "size": 7, "completed": 9}],
+                  ["render", 80], ["update", 0, {"completed": 200}], ["render", 80]],
+    }),
+    ("renderable_column", {
+        "columns": [["description"], ["renderable", "[red]one[/]\ntwo lines"], ["bar"], ["renderable", "[b]x"]],
+        "steps": [["time", 0], ["add", "job", 10, 4, True], ["add", "other", 10, 10, True], ["render", 50]],
+    }),
     ("defaults", {
         "columns": None,
         "steps": [["time", 0], ["add", "Downloading", 100, 0, True], ["add", "Done", 100, 0, True],
@@ -1093,7 +1119,7 @@ PROGRESS_TIME_CASES: list[tuple[str, dict]] = [
 
 def progress_columns(specs):
     from rich.progress import (
-        BarColumn, DownloadColumn, FileSizeColumn, MofNCompleteColumn, SpinnerColumn,
+        BarColumn, DownloadColumn, FileSizeColumn, MofNCompleteColumn, RenderableColumn, SpinnerColumn,
         TaskProgressColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn,
         TotalFileSizeColumn, TransferSpeedColumn,
     )
@@ -1111,6 +1137,10 @@ def progress_columns(specs):
         "filesize": lambda: FileSizeColumn(),
         "total_filesize": lambda: TotalFileSizeColumn(),
         "spinner": lambda name, finished: SpinnerColumn(name, finished_text=finished),
+        "text": lambda fmt, style, justify, markup: TextColumn(
+            fmt, style=style, justify=justify, markup=markup
+        ),
+        "renderable": lambda markup: RenderableColumn(Text.from_markup(markup)),
     }
     return [build[spec[0]](*spec[1:]) for spec in specs]
 
@@ -1215,7 +1245,8 @@ def run_progress_case(case) -> str:
         if op == "time":
             now[0] = float(step[1])
         elif op == "add":
-            progress.add_task(step[1], total=step[2], completed=step[3], start=step[4])
+            fields = step[5] if len(step) > 5 else {}
+            progress.add_task(step[1], total=step[2], completed=step[3], start=step[4], **fields)
         elif op == "update":
             progress.update(step[1], **step[2])
         elif op == "advance":
@@ -1297,6 +1328,119 @@ MARKDOWN_OPTIONS_CASES: list[tuple[str, str, dict]] = [
     ("wrapped_items_styled", "- one two three four five six seven eight nine ten eleven\n\n"
      "> - quoted item that wraps over more than one line here", {"style": "on blue"}),
 ]
+
+PROGRESS_BAR_HEADER = """\
+# Golden parity fixtures for ProgressBar (determinate, pulse, ASCII, no-colour)
+# — captured from real Python `rich`. Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<case as json>\t<escaped output of Console(...).print(ProgressBar(...))>
+"""
+
+#: Renders one PROGRESS_BAR_CASES entry (argv[1], JSON) and prints the output
+#: as JSON, in a fresh interpreter.
+PROGRESS_BAR_WORKER = """
+import json, sys
+from rich.console import Console
+from rich.progress_bar import ProgressBar
+case = json.loads(sys.argv[1])
+console = Console(
+    force_terminal=True,
+    color_system=case.get("color_system", "truecolor"),
+    width=80,
+    highlight=False,
+    no_color=case.get("no_color", False),
+    legacy_windows=case.get("legacy_windows", False),
+)
+bar = ProgressBar(
+    total=case["total"],
+    completed=case["completed"],
+    width=case["width"],
+    pulse=case.get("pulse", False),
+    animation_time=case.get("animation_time"),
+)
+with console.capture() as capture:
+    console.print(bar)
+print(json.dumps(capture.get()))
+"""
+
+#: Each case: total (None pulses), completed, width, pulse, animation_time,
+#: color_system, no_color, legacy_windows (the ASCII glyphs). Data-driven.
+PROGRESS_BAR_CASES: list[tuple[str, dict]] = [
+    ("half", {"total": 100, "completed": 50, "width": 20}),
+    ("zero_total", {"total": 0, "completed": 0, "width": 12}),
+    ("negative_completed", {"total": 10, "completed": -3, "width": 12}),
+    ("over_complete", {"total": 10, "completed": 30, "width": 12}),
+    ("standard_colors", {"total": 100, "completed": 37, "width": 16, "color_system": "standard"}),
+    ("no_color_determinate", {"total": 100, "completed": 37, "width": 16, "no_color": True}),
+    ("ascii_determinate", {"total": 100, "completed": 37, "width": 16, "legacy_windows": True}),
+    ("pulse_t0", {"total": 100, "completed": 0, "width": 30, "pulse": True, "animation_time": 0}),
+    ("pulse_t1", {"total": 100, "completed": 0, "width": 30, "pulse": True, "animation_time": 1.0}),
+    ("pulse_fraction", {"total": 100, "completed": 0, "width": 7, "pulse": True, "animation_time": 0.37}),
+    ("pulse_no_total", {"total": None, "completed": 0, "width": 45, "animation_time": 12.25}),
+    ("pulse_256", {"total": None, "completed": 0, "width": 25, "animation_time": 2, "color_system": "256"}),
+    ("pulse_standard", {"total": None, "completed": 0, "width": 25, "animation_time": 2, "color_system": "standard"}),
+    ("pulse_no_color", {"total": None, "completed": 0, "width": 25, "animation_time": 2, "no_color": True}),
+    ("pulse_ascii", {"total": None, "completed": 0, "width": 25, "animation_time": 2, "legacy_windows": True}),
+]
+
+PROGRESS_LIVE_HEADER = """\
+# Golden parity fixtures for a live Progress display's byte stream — captured from
+# real Python `rich` (auto_refresh=False, explicit refreshes). Regenerate with:
+# python scripts/capture_golden.py
+#
+# Format: <name>\t<case JSON>\t<escaped bytes written between start() and stop()>
+# Steps: ["time", t] | ["add", description, total, completed] | ["advance", id, n]
+#   | ["update", id, {fields}] | ["refresh"]
+"""
+
+PROGRESS_LIVE_CASES: list[tuple[str, dict]] = [
+    ("one_task", {
+        "columns": [["description"], ["bar"], ["percentage"]], "width": 40,
+        "steps": [["time", 0], ["add", "copy", 4, 0], ["refresh"], ["time", 1],
+                  ["advance", 0, 2], ["refresh"], ["advance", 0, 2]],
+    }),
+    ("two_tasks_grow", {
+        "columns": [["description"], ["mofn"]], "width": 30,
+        "steps": [["time", 0], ["add", "a", 3, 0], ["refresh"], ["add", "bb", 5, 1], ["refresh"],
+                  ["update", 0, {"completed": 3, "description": "a done"}], ["refresh"]],
+    }),
+    ("empty", {"columns": [["description"]], "width": 20, "steps": []}),
+]
+
+
+def run_progress_live_case(case) -> str:
+    import io
+
+    from rich.progress import Progress
+
+    now = [0.0]
+    buffer = io.StringIO()
+    console = Console(
+        file=buffer, force_terminal=True, color_system="truecolor", width=case["width"],
+        highlight=False, no_color=False,
+    )
+    progress = Progress(
+        *progress_columns(case["columns"]), console=console, auto_refresh=False,
+        get_time=lambda: now[0],
+    )
+    progress.start()
+    for step in case["steps"]:
+        op = step[0]
+        if op == "time":
+            now[0] = float(step[1])
+        elif op == "add":
+            progress.add_task(step[1], total=step[2], completed=step[3])
+        elif op == "advance":
+            progress.advance(step[1], step[2])
+        elif op == "update":
+            progress.update(step[1], **step[2])
+        elif op == "refresh":
+            progress.refresh()
+        else:
+            raise SystemExit(f"unknown live progress step {op!r}")
+    progress.stop()
+    return buffer.getvalue()
+
 
 #: Keep the Rust side data-driven: `markdown_strike_parity` reads the source from
 #: the fixture, so cases are added here only.
@@ -1856,6 +2000,33 @@ def main() -> None:
         )
     options_path.write_text("\n".join(olines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(MARKDOWN_OPTIONS_CASES)} markdown option cases to {options_path}")
+
+    # --- progress bar ----------------------------------------------------
+    bar_path = golden_dir() / "progress_bar.tsv"
+    blines = [PROGRESS_BAR_HEADER.rstrip("\n")]
+    for name, case in PROGRESS_BAR_CASES:
+        # One interpreter per case: rich memoises a Style's escape codes on the
+        # (shared, theme-owned) instance whatever the colour system, so a bar
+        # rendered in truecolor first would leak its codes into a later
+        # "standard" capture.
+        rendered = subprocess.run(
+            [sys.executable, "-c", PROGRESS_BAR_WORKER, json.dumps(case)],
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        ).stdout
+        blines.append(f"{name}\t{json.dumps(case)}\t{escape(json.loads(rendered))}")
+    bar_path.write_text("\n".join(blines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(PROGRESS_BAR_CASES)} progress bar cases to {bar_path}")
+
+    # --- live progress stream ---------------------------------------------
+    live_progress_path = golden_dir() / "progress_live.tsv"
+    llines = [PROGRESS_LIVE_HEADER.rstrip("\n")]
+    for name, case in PROGRESS_LIVE_CASES:
+        llines.append(f"{name}\t{json.dumps(case)}\t{escape(run_progress_live_case(case))}")
+    live_progress_path.write_text("\n".join(llines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(PROGRESS_LIVE_CASES)} live progress cases to {live_progress_path}")
 
     # --- theme stack -----------------------------------------------------
     stack_path = golden_dir() / "theme_stack.tsv"
