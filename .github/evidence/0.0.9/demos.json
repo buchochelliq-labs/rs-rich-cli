@@ -1,0 +1,205 @@
+{
+  "version": "rich (rs-rich-cli) 0.0.9",
+  "binary_path": "/workspace/scratch/02a46fd2d12a/rs-rich-cli/target/release/rich",
+  "binary_sha256": "ab1a7647db799eff36a609fea7c5101f006940d6956a82b26f12cfad03b5e476",
+  "source_sha256": "11a0870d5b6773f463b3d88cf4b8db0339b3e63aeae8c901f1b703b97e8b0a6d",
+  "source_digest_recipe": "Sorted crates/**/*.rs, crates/**/Cargo.toml, Cargo.toml, Cargo.lock; relative path + NUL + bytes",
+  "git_head": "7a9d0e1bd407db91ec84315f33e6171630ec4c2d",
+  "git_worktree_changes": [
+    " M CHANGELOG.md",
+    " M Cargo.lock",
+    " M Cargo.toml",
+    " M README.md",
+    " M crates/rich-art/Cargo.toml",
+    " M crates/rich-art/README.md",
+    " M crates/rich-art/src/ascii.rs",
+    " M crates/rich-art/src/block.rs",
+    " M crates/rich-art/src/image_art.rs",
+    " M crates/rich-art/src/lib.rs",
+    " M crates/rich-cli/Cargo.toml",
+    " M crates/rich-cli/README.md",
+    " M crates/rich-cli/src/batch.rs",
+    " M crates/rich-cli/src/config.rs",
+    " M crates/rich-cli/src/demo.rs",
+    " M crates/rich-cli/src/main.rs",
+    " M crates/rich-cli/tests/demo.rs",
+    " M docs/PORTING.md",
+    " M docs/ROADMAP.md",
+    " M docs/cli-reference.md",
+    " M docs/cli.md",
+    " M docs/index.md",
+    " M docs/recipes.md",
+    " M docs/releases/0.0.8.md",
+    " M mkdocs.yml",
+    " M scripts/gen_cli_reference.py",
+    " M scripts/release_evidence.py",
+    "?? crates/rich-art/src/image_color.rs",
+    "?? crates/rich-art/tests/image_color.rs",
+    "?? crates/rich-cli/src/doctor.rs",
+    "?? crates/rich-cli/tests/batch_v9.rs",
+    "?? crates/rich-cli/tests/doctor.rs",
+    "?? crates/rich-cli/tests/themes_v9.rs",
+    "?? crates/rich-cli/tests/v9_options.rs",
+    "?? docs/plans/0.0.9.md",
+    "?? docs/releases/0.0.9.md",
+    "?? docs/superpowers/",
+    "?? scripts/capture_v9_demos.py",
+    "?? scripts/test_batch_v9.py"
+  ],
+  "cases": [
+    {
+      "case": "truecolor",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.9/gradient.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "contain",
+        "--width",
+        "40",
+        "--height",
+        "20",
+        "--image-color",
+        "truecolor"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "c8dde92926ac390a6f605b8c6210464d9c1a64b1d886d64bc4f03581dde77765",
+      "bytes": 29245,
+      "recorded_duration_seconds": 0.0068
+    },
+    {
+      "case": "ansi256",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.9/gradient.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "contain",
+        "--width",
+        "40",
+        "--height",
+        "20",
+        "--image-color",
+        "ansi256",
+        "--image-dither",
+        "none"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "d6674aaffc201528631b6d71449f4d3bc34ad50fe3d0c8188ea54021794a4fd2",
+      "bytes": 20534,
+      "recorded_duration_seconds": 0.0083
+    },
+    {
+      "case": "dither",
+      "args": [
+        "--no-config",
+        "image",
+        ".github/evidence/0.0.9/gradient.png",
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "contain",
+        "--width",
+        "40",
+        "--height",
+        "20",
+        "--image-color",
+        "ansi256",
+        "--image-dither",
+        "floyd-steinberg"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "05813fa9265a2e2494f6ef1cbf7963ec8bad142249288422791872f447499734",
+      "bytes": 20533,
+      "recorded_duration_seconds": 0.0082
+    },
+    {
+      "case": "theme",
+      "args": [
+        "--config",
+        ".github/evidence/0.0.9/theme.toml",
+        "--theme",
+        "release",
+        "--print",
+        "[title]CLI 0.0.9 \u2014 named themes[/title]\n\n[success]Ready to render[/success]\n[detail]Styles come from \\[themes.release] in theme.toml[/detail]\n\n[success]The same named styles travel to batch workers.[/success]",
+        "--width",
+        "80"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "ed0925d463c28557fff424b0e530330849c142308be0ef4a2c8515576bfaeb1f",
+      "bytes": 488,
+      "recorded_duration_seconds": 0.043
+    },
+    {
+      "case": "doctor",
+      "args": [
+        "--no-config",
+        "doctor"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "e384e627245bde3f6baa1ff1cfe8f9ef40ef38607b32bbdd4866774201dbd592",
+      "bytes": 397,
+      "recorded_duration_seconds": 0.002
+    },
+    {
+      "case": "demo-list",
+      "args": [
+        "--no-config",
+        "--demo-list"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "2cec0f21f7801846791abcf3e16ec53880d1889c31f16e83d11730998bea4546",
+      "bytes": 144,
+      "recorded_duration_seconds": 0.0022
+    },
+    {
+      "case": "batch-progress",
+      "args": [
+        "--no-config",
+        "json",
+        "--batch",
+        "scripts/fixtures/workflows/a.json",
+        "scripts/fixtures/workflows/b.json",
+        "--jobs",
+        "2",
+        "--progress",
+        "--export-html",
+        "/tmp/rich-v9-demo-xlnfw108/document.html",
+        "--width",
+        "60"
+      ],
+      "exit_code": 0,
+      "stdout_stderr_sha256": "13c3af21aa7ffe4977293b31ee310f2cdc2516ef1f55fb580220c6f87760d3ff",
+      "bytes": 275,
+      "recorded_duration_seconds": 0.0086
+    }
+  ],
+  "fixtures": {
+    "gradient.png": "689f331a32d792d3386cef5523d1e3ebbaaf98dd81dc60252dafe2f44c2fb686",
+    "theme.toml": "30529cc0d23fc32195c55338d3598e8c1decce2762a3fef152565aefe91628c0"
+  },
+  "exports": {
+    "a.html": "6755f342231d1c054b107b5b478bd753925a92dbd3deb69bd2f84c9961b1f616",
+    "b.html": "4ae97c64b7a1b0c9e79d99acca417ed58ad80e5f63b8093a90e74d3ae9e08b92"
+  },
+  "capture_exit_codes_verified_zero": true,
+  "recordings_sha256": "77e22152279560d12bc6e7f0e5168a3d57257652bcc671c426cec247d4f5e76c",
+  "terminal": {
+    "width": 88,
+    "height": 28,
+    "TERM": "xterm-256color",
+    "COLORTERM": "truecolor",
+    "RICH_SIXEL": "0",
+    "NO_COLOR": "unset"
+  },
+  "presentation": "15 seconds: five completed PTY results held 3 seconds each; first scene compares two cropped captures side by side. Captions added; no audio; MP4 10 fps; GIF 5 frames.",
+  "media": {
+    "v9-workflows.gif": "875802365109357c154d84deed147524fffe9b39efe865ec8a34eddcf149b0e0",
+    "v9-workflows.mp4": "aa5a232d8031ff28f07c24730a3db02a8825fd122314e4de383a222c82171e2b",
+    "v9-workflows.png": "26de1875b6ef7e859e69338403106915e8d2adbf8ef63bd0f8d136c11741bd77"
+  }
+}

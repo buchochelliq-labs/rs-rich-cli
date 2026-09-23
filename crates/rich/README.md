@@ -60,3 +60,8 @@ turning into merge conflicts — see
 ## Licence
 
 MIT.
+
+The optional `protocol::ConsoleEnvironment` extension seam carries an immutable
+`RenderEnvironment` through nested renderables. Legacy consoles have no attached
+environment and preserve their default behavior. Destination policy implementations
+live in `rs-rich-ext`, keeping this crate independent of extensions and CLI code.

@@ -1,0 +1,6 @@
+{"name": "watch_redirected", "args": ["--no-config", "json", "scripts/fixtures/workflows/a.json", "--watch"]}
+{"name": "profile_json", "args": ["--config", "scripts/fixtures/workflows/profiles.toml", "--profile", "ci", "json", "scripts/fixtures/workflows/a.json"]}
+{"name": "batch_json", "args": ["--no-config", "json", "--batch", "scripts/fixtures/workflows/a.json", "scripts/fixtures/workflows/b.json", "--report", "json"]}
+{"name": "image_auto_plain", "args": ["--no-config", "image", "crates/rich-art/examples/assets/cat.gif", "--width", "24", "--height", "12"]}
+{"name": "image_contain_plain", "args": ["--no-config", "image", "crates/rich-art/examples/assets/cat.gif", "--image-mode", "ascii", "--width", "24", "--height", "8", "--image-fit", "contain", "--image-background", "#FFFFFF"]}
+{"name": "image_cover_plain", "args": ["--no-config", "image", "crates/rich-art/examples/assets/cat.gif", "--image-mode", "braille", "--width", "24", "--height", "8", "--image-fit", "cover"]}

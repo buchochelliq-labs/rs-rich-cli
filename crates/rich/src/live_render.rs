@@ -47,6 +47,12 @@ impl LiveRender {
         self.renderable = renderable;
     }
 
+    /// The height of the last render, `0` before any. Port of
+    /// `LiveRender.last_render_height`.
+    pub fn last_render_height(&self) -> usize {
+        self.shape.get().map_or(0, |(_, height)| height)
+    }
+
     /// Control codes to move the cursor to the start of the previous render,
     /// erasing each line. Port of `LiveRender.position_cursor`.
     pub fn position_cursor(&self) -> Control {

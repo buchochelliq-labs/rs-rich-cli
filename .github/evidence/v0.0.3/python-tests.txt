@@ -1,0 +1,46 @@
+test_cli_verification_retries_and_installs_exact_version (test_release.PublicationTests.test_cli_verification_retries_and_installs_exact_version) ... Waiting for rs-rich-cli@0.0.3, attempt 1
+Verified rs-rich-cli@0.0.3 from crates.io
+ok
+test_consumer_build_failure_is_fatal (test_release.PublicationTests.test_consumer_build_failure_is_fatal) ... ok
+test_coordinated_verification_checks_every_package (test_release.PublicationTests.test_coordinated_verification_checks_every_package) ... Verified rs-rich@0.0.2 from crates.io
+Verified rs-rich-ext@0.0.2 from crates.io
+Verified rs-rich-cli@0.0.2 from crates.io
+Verified rs-rich-art@0.0.2 from crates.io
+ok
+test_invalid_downstream_selection_never_publishes (test_release.PublicationTests.test_invalid_downstream_selection_never_publishes) ... ok
+test_library_verification_builds_exact_registry_dependency (test_release.PublicationTests.test_library_verification_builds_exact_registry_dependency) ... Verified rs-rich@0.0.3 from crates.io
+Verified rs-rich-ext@0.0.3 from crates.io
+Verified rs-rich-art@0.0.3 from crates.io
+ok
+test_plan_exports_selection_for_downstream_commands (test_release.PublicationTests.test_plan_exports_selection_for_downstream_commands) ... ok
+test_preflight_fails_closed (test_release.PublicationTests.test_preflight_fails_closed) ... ok
+test_preflight_queries_only_selected_versions (test_release.PublicationTests.test_preflight_queries_only_selected_versions) ... {"rs-rich-cli":"0.0.3"}
+rs-rich-art@0.0.3 is available
+ok
+test_publish_and_dry_run_use_same_selection (test_release.PublicationTests.test_publish_and_dry_run_use_same_selection) ... ok
+test_verification_exhaustion_never_builds (test_release.PublicationTests.test_verification_exhaustion_never_builds) ... Waiting for rs-rich-art@0.0.3, attempt 1
+Waiting for rs-rich-art@0.0.3, attempt 2
+Waiting for rs-rich-art@0.0.3, attempt 3
+Waiting for rs-rich-art@0.0.3, attempt 4
+Waiting for rs-rich-art@0.0.3, attempt 5
+ok
+test_verification_registry_errors_fail_immediately (test_release.PublicationTests.test_verification_registry_errors_fail_immediately) ... ok
+test_changed_publishable_workspace_is_rejected (test_release.SelectionTests.test_changed_publishable_workspace_is_rejected) ... ok
+test_cli_and_art_at_same_new_version_remain_separate (test_release.SelectionTests.test_cli_and_art_at_same_new_version_remain_separate) ... ok
+test_each_crate_can_advance_independently (test_release.SelectionTests.test_each_crate_can_advance_independently) ... ok
+test_legacy_tag_selects_all_four (test_release.SelectionTests.test_legacy_tag_selects_all_four) ... ok
+test_mismatch_and_invalid_tags_fail (test_release.SelectionTests.test_mismatch_and_invalid_tags_fail) ... ok
+test_prerelease_requires_exact_manifest_version (test_release.SelectionTests.test_prerelease_requires_exact_manifest_version) ... ok
+test_stale_internal_requirement_fails (test_release.SelectionTests.test_stale_internal_requirement_fails) ... ok
+test_independent_versions_and_drift (test_release_readiness.ReadinessTests.test_independent_versions_and_drift) ... ok
+test_oracle_pin_parses_toml_not_line_format (test_release_readiness.ReadinessTests.test_oracle_pin_parses_toml_not_line_format) ... ok
+test_release_aliases_require_main_ancestry (test_release_readiness.ReadinessTests.test_release_aliases_require_main_ancestry) ... ok
+
+----------------------------------------------------------------------
+Ran 21 tests in 0.123s
+
+OK
+Stale manifest versions: README.md, docs/index.md
+Run python3 scripts/gen_versions.py
+Manifest-version tables match Cargo.toml files
+Manifest-version tables match Cargo.toml files

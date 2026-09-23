@@ -28,6 +28,52 @@ pub trait Renderable {
     fn measure(&self, _console: &Console, options: &ConsoleOptions) -> Measurement {
         Measurement::new(options.max_width, options.max_width)
     }
+
+    /// Whether a top-level `Console::print` shrinks this renderable to its
+    /// measured width. Upstream renders every top-level renderable at the full
+    /// console width, so the default is `false`; an extension may opt in.
+    fn fit_to_measurement(&self) -> bool {
+        false
+    }
+
+    /// The `Text` a top-level print renders in place of this renderable.
+    ///
+    /// Upstream's `Console._collect_renderables` rebuilds printed `str`/`Text`
+    /// values through `Text(sep, end=end).join(...)`, whose `blank_copy` takes
+    /// `justify`, `overflow` and `no_wrap` from the separator. Only `Text`
+    /// overrides this.
+    #[doc(hidden)]
+    fn printed_text(&self) -> Option<Text> {
+        None
+    }
+}
+
+/// Optional line-streaming extension point for renderables.
+///
+/// Mirrors the incremental consumption of upstream's rendering generators.
+/// Consumers can write each visual line immediately instead of collecting the
+/// complete segment stream. Implementations may still retain source data for
+/// measurement. This trait keeps streaming hooks out of inherent core APIs.
+pub trait LineRenderable: Renderable {
+    /// Emit styled visual lines without trailing newlines, stopping immediately
+    /// on the callback's first error. An empty segment represents a blank line;
+    /// calling the callback zero times represents no output.
+    fn try_for_each_line<E>(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        emit: impl FnMut(Vec<Segment>) -> Result<(), E>,
+    ) -> Result<(), E>;
+}
+
+/// Transfer already-owned table rows without cloning every cell string.
+///
+/// This extension point changes ownership only. Column definitions, measurement
+/// and rendering follow the table's existing rules, including missing/extra cells.
+/// Producers that parse into owned strings can release their row collection as
+/// they populate a table instead of retaining a second complete copy.
+pub trait OwnedTableRows {
+    fn extend_owned_rows(&mut self, rows: Vec<Vec<String>>) -> &mut Self;
 }
 
 /// A transformer that adds style spans to [`Text`] (e.g. syntax/number/URL
@@ -38,4 +84,35 @@ pub trait Renderable {
 pub trait Highlighter {
     /// Inspect `text` and apply any style spans in place.
     fn highlight(&self, text: &mut Text);
+}
+
+/// Evidence for an optional output protocol; inference is not confirmation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Support {
+    Unsupported,
+    Inferred,
+    Confirmed,
+}
+
+/// Immutable destination capabilities supplied by an extension. No detection or I/O.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TargetCapabilities {
+    pub width: usize,
+    pub height: usize,
+    pub color_system: Option<crate::color::ColorSystem>,
+    pub interactive: bool,
+    pub unicode: bool,
+    pub hyperlinks: bool,
+    pub sixel: Support,
+}
+
+/// Optional context shared by nested renderables without changing their protocol.
+pub trait RenderEnvironment: Send + Sync {
+    fn capabilities(&self) -> TargetCapabilities;
+}
+
+/// Attach/query a per-console immutable extension environment.
+pub trait ConsoleEnvironment {
+    fn set_render_environment(&mut self, value: Option<std::sync::Arc<dyn RenderEnvironment>>);
+    fn render_environment(&self) -> Option<&dyn RenderEnvironment>;
 }

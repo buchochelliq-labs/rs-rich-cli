@@ -1,0 +1,10 @@
+version = 1
+
+[profiles.preview]
+width = 48
+pager = false
+
+[defaults]
+width = 80
+pager = true
+no_color = true

@@ -50,6 +50,7 @@ pub mod progress;
 pub mod progress_bar;
 pub mod prompt;
 pub mod protocol;
+pub mod pyformat;
 pub mod ratio;
 mod repr_patterns;
 pub mod rule;
@@ -76,7 +77,7 @@ pub use crate::ansi::AnsiDecoder;
 pub use crate::bar::Bar;
 pub use crate::color::{Color, ColorSystem, ColorTriplet};
 pub use crate::columns::Columns;
-pub use crate::console::{Console, ConsoleOptions, Justify, Overflow};
+pub use crate::console::{Console, ConsoleOptions, Justify, Overflow, ThemeContext};
 pub use crate::constrain::Constrain;
 pub use crate::control::{Control, ControlType};
 pub use crate::errors::{Result, RichError};
@@ -85,14 +86,17 @@ pub use crate::json::Json;
 pub use crate::layout::Layout;
 pub use crate::live::{AutoLive, Live};
 pub use crate::live_render::LiveRender;
-pub use crate::log_render::{LogLevel, LogRender};
+pub use crate::log_render::{level_text, LogLevel, LogRecord, LogRender};
 pub use crate::padding::Padding;
 pub use crate::pager::{Pager, SystemPager};
 pub use crate::panel::Panel;
 pub use crate::pretty::Pretty;
-pub use crate::progress::{Progress, ProgressColumn};
+pub use crate::progress::{
+    track, LiveProgress, Progress, ProgressColumn, SpinnerColumn, Task, TaskId, TaskUpdate,
+    TextColumn, TimeRemainingColumn, Track, TrackStdout,
+};
 pub use crate::progress_bar::ProgressBar;
-pub use crate::protocol::{Highlighter, Renderable};
+pub use crate::protocol::{Highlighter, LineRenderable, Renderable};
 pub use crate::rule::Rule;
 pub use crate::screen::Screen;
 pub use crate::segment::Segment;

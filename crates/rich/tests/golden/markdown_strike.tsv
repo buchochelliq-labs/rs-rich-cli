@@ -1,0 +1,30 @@
+# Golden parity fixtures for MARKDOWN STRIKETHROUGH delimiter pairing (markdown-it)
+# — captured from real Python `rich`. Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>	<markdown source as json>	<escaped output of
+#   Markdown(source, hyperlinks=False) at width 40> (hyperlinks off: upstream's OSC 8
+#   links carry a random id= that is not reproducible)
+double	"a ~~x~~ b"	a \x1b[9mx\x1b[0m b                                   \n
+single_is_literal	"a ~x~ b ~~y~~"	a ~x~ b \x1b[9my\x1b[0m                               \n
+triple	"a ~~~x~~~ b"	a ~\x1b[9mx\x1b[0m~ b                                 \n
+quadruple	"a ~~~~x~~~~ b"	a \x1b[9mx\x1b[0m b                                   \n
+quintuple	"a ~~~~~x~~~~~ b"	a ~\x1b[9mx\x1b[0m~ b                                 \n
+two_then_three	"a ~~x~~~ b"	a \x1b[9mx\x1b[0m~ b                                  \n
+three_then_two	"a ~~~x~~ b"	a ~\x1b[9mx\x1b[0m b                                  \n
+one_then_two	"a ~x~~ b"	a ~x~~ b                                \n
+spaced_delimiters_do_not_flank	"a ~~ x ~~ b"	a ~~ x ~~ b                             \n
+intraword	"x~~y~~z"	x\x1b[9my\x1b[0mz                                     \n
+adjacent_spans	"~~a~~~~b~~ c"	\x1b[9ma\x1b[0m\x1b[9mb\x1b[0m c                                    \n
+chained	"~~a~~b~~c~~"	\x1b[9ma\x1b[0mb\x1b[9mc\x1b[0m                                     \n
+around_emphasis	"~~a *b* c~~"	\x1b[9ma \x1b[0m\x1b[3;9mb\x1b[0m\x1b[9m c\x1b[0m                                   \n
+inside_emphasis	"*a ~~b~~ c*"	\x1b[3ma \x1b[0m\x1b[3;9mb\x1b[0m\x1b[3m c\x1b[0m                                   \n
+crossing_emphasis	"*a ~~b* c~~"	\x1b[3ma ~~b\x1b[0m c~~                               \n
+code_is_opaque	"~~a `c~~` d~~"	\x1b[9ma \x1b[0m\x1b[1;9;36;40mc~~\x1b[0m\x1b[9m d\x1b[0m                                 \n
+escaped_tilde	"a \\~~~x~~ b"	a ~\x1b[9mx\x1b[0m b                                  \n
+soft_break	"a ~~b\nc~~ d"	a \x1b[9mb\x1b[0m\x1b[9m \x1b[0m\x1b[9mc\x1b[0m d                                 \n
+unclosed	"a ~~~x b"	a ~~~x b                                \n
+heading	"# H ~~~x~~~"	                 \x1b[1;4mH ~\x1b[0m\x1b[1;4;9mx\x1b[0m\x1b[1;4m~\x1b[0m                  \n
+tight_list	"- a ~~~i~~~\n- ~~j~~"	\n\x1b[1m • \x1b[0ma ~\x1b[9mi\x1b[0m~                                \n\x1b[1m • \x1b[0m\x1b[9mj\x1b[0m                                    \n
+link_label_scope	"~~a [b~~](http://x) c~~"	\x1b[9ma \x1b[0m\x1b[9;94mb~~\x1b[0m\x1b[9m (\x1b[0m\x1b[4;9;34mhttp://x\x1b[0m\x1b[9m)\x1b[0m\x1b[9m c\x1b[0m                      \n
+inside_link	"[~~~l~~~](http://x)"	\x1b[94m~l~\x1b[0m (\x1b[4;34mhttp://x\x1b[0m)                          \n
+punctuation_neighbours	"(~~~x~~~).~~y~~!"	(~\x1b[9mx\x1b[0m~).\x1b[9my\x1b[0m!                                \n

@@ -1,0 +1,90 @@
+name: nightly differential parity
+
+# High-volume generated comparison against the pinned Python rich (#34).
+# Pull requests replay only the small checked-in corpus (see ci.yml); this runs
+# thousands of generated Markup/Text/Panel/Table/Rule/Padding/Align cases from
+# `main` and fails loudly, printing shrunk, replayable corpus cases to the log
+# and the job summary. Triage steps:
+# docs/parity.md#differential-fuzzing.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      count:
+        description: Generated cases to compare
+        required: false
+        default: "20000"
+      seed:
+        description: Generator seed (default is the run id, printed in the log)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-parity
+  cancel-in-progress: false
+
+jobs:
+  differential:
+    name: generated differential run
+    # Scheduled runs only exist on the default branch; a manual dispatch from
+    # another ref is refused so a red nightly always describes `main`.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned upstream rich
+        run: |
+          version="$(python scripts/read_upstream_version.py)"
+          echo "Pinned rich version: $version"
+          python -m pip install "rich==$version"
+
+      - name: Build the Rust renderer
+        run: cargo build --release -p rs-rich --example diff_render
+
+      - name: Compare generated cases
+        env:
+          PYTHONUTF8: "1"
+          COUNT: ${{ inputs.count || '20000' }}
+          SEED: ${{ inputs.seed || github.run_id }}
+        run: |
+          echo "Replay with: python scripts/diff_rich.py --generate $COUNT --seed $SEED"
+          env -u NO_COLOR TERM=xterm-256color python scripts/diff_rich.py \
+            --generate "$COUNT" --seed "$SEED" \
+            --write-failures nightly-failures.jsonl \
+            --rust-command target/release/examples/diff_render \
+            > nightly-report.jsonl
+
+      - name: Report failing cases
+        if: failure()
+        run: |
+          echo "::group::Shrunk failing cases (corpus JSONL)"
+          cat nightly-failures.jsonl 2>/dev/null || true
+          echo "::endgroup::"
+          {
+            echo "## Differential parity failures"
+            echo
+            echo "Seed \`${{ inputs.seed || github.run_id }}\`. Each line below is a shrunk"
+            echo "corpus case; save it to a file and replay it with"
+            echo "\`python scripts/diff_rich.py --corpus FILE\`."
+            echo
+            echo '```json'
+            head -n 50 nightly-failures.jsonl 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

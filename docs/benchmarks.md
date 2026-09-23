@@ -23,7 +23,7 @@ Ranges are across three separate passes on one Windows 11 machine.
 | `--rule` (no input file at all) | 12–15 ms | 316–356 ms | **~26×** |
 | syntax highlight, 46 KB `.rs` | 283–306 ms | 1050–1184 ms | **~3.8×** |
 
-Versions: this crate at 0.0.1 (release build) against `rich-cli` 1.8.1, which
+Versions: this crate at 0.0.2 (release build) against `rich-cli` 1.8.1, which
 pins **`rich` 12.6.0** — not the 15.0.0 that `UPSTREAM.toml` mirrors. That is
 what `pip install rich-cli` gives you today, so it is the honest real-world
 comparison, but it is not a controlled one.
@@ -86,3 +86,227 @@ before they were caught:
 - **Single passes are noisy.** One pass measured the JSON case at 135 ms
   against a 25–27 ms consensus across every other pass. Take the median of
   several passes before believing a number, and never quote a single run.
+
+## 0.0.4 development baseline
+
+Measured on 2026-09-10 against published 0.0.3 source
+`d9bfe617e835d7403744d54726e24f21784a7faa`, Linux 6.18.35 x86-64,
+Rust 1.98.1, optimized build. These are separate from the historical Windows
+comparisons above: no Python comparison or cross-platform speed claim is made.
+
+```bash
+cargo build --release -p rs-rich-cli --locked
+python3 scripts/bench_v004.py --binary target/release/rich \
+  --revision "$(git rev-parse HEAD)" --output baseline.json
+```
+
+The Linux harness requires `cc`. It generates deterministic fixtures, validates
+and hashes one captured warmup render, then records five end-to-end samples at
+width 100 with `--no-color` and stdout redirected. A native `wait4` sampler
+measures the CLI's peak RSS without inheriting the Python harness's memory
+footprint. Process/sampler startup is included. Each invocation has a 10-second
+timeout and process-group cleanup; timed-out cases have no fabricated median.
+
+[Raw samples, ranges and input/output/binary SHA-256 hashes](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/.github/evidence/v0.0.4-baseline/baseline.json)
+are retained alongside the harness.
+
+| Case | Median (ms) | Peak RSS (KiB) |
+|---|---:|---:|
+| startup | 4.1 | 5,012 |
+| syntax-46000 | 186.5 | 25,068 |
+| syntax-199000 | 633.3 | 59,036 |
+| csv-10000 | 96.8 | 8,900 |
+| csv-stdin-10000 | 100.3 | 8,964 |
+| csv-panel-10000 | 311.4 | 113,464 |
+| csv-50000 | 496.2 | 27,024 |
+| csv-100000 | 977.5 | 49,884 |
+| wrap-ascii-65536 | 10.5 | 8,200 |
+| wrap-ascii-262144 | 27.6 | 11,252 |
+| wrap-ascii-1048576 | 95.8 | 24,388 |
+| wrap-ascii-5242880 | 454.7 | 94,476 |
+| wrap-words-5m | 601.2 | 129,964 |
+| wrap-markdown-1m | 3969.1 | 24,232 |
+| wrap-unicode | 8.8 | 7,964 |
+| wrap-markdown-5m | >10,000 (warmup timeout) | — |
+
+The legacy `wrap-ascii-*`, `wrap-words-5m` and `wrap-unicode` fixtures have
+`.txt` extensions, which select the plain Syntax renderer. They do **not**
+measure the Text wrapping path. These 5 MiB Syntax cases complete under a second
+on this host, while the 5 MiB Markdown paragraph times out. The harness now also
+contains extensionless `text-*` fixtures that select Text directly. Legacy case
+names and raw measurements are retained for comparison. Do not apply the
+original issue's 120-second observation to every input.
+CSV retains source rows for global measurement; decorated output additionally
+buffers rendered lines. Memory is not constant.
+
+## 0.0.5 library probe
+
+0.0.5 adds a small library-focused probe for the surfaces that process-level CLI
+benchmarks hide: markup parsing, Text wrap/justify, Table layout and a full
+Console render path. It uses no extra benchmark dependency; run it from the
+current checkout and store the JSON artifact with the revision being measured:
+
+```bash
+cargo run --release -p rs-rich --example library_bench -- \
+  --revision "$(git rev-parse HEAD)" --runs 20 --warmups 3
+```
+
+Width and color are injectable, so CI and local comparisons can use the same
+terminal profile rather than ambient settings:
+
+```bash
+cargo run --release -p rs-rich --example library_bench -- \
+  --revision "$(git rev-parse HEAD)" --width 80 --color-system standard
+```
+
+The output records revision, run counts, width, color system, active
+`syntax-cache` cfg state, per-case samples, medians, setup time where meaningful,
+rendered byte counts and output hashes. Compare default and `syntax-cache` builds
+as separate artifacts. Treat shared-runner timing as advisory until enough
+variance data exists; output hashes and successful rendering remain the blocking
+correctness signal.
+
+## Deterministic CLI snapshots
+
+`python scripts/snapshot_cli.py --update` captures the bounded cases in
+`scripts/fixtures/cli_snapshots.jsonl`; without `--update` it checks them and
+prints a unified diff on failure. The runner pins `COLUMNS`, `LINES`, `TERM`,
+`NO_COLOR`, and UTF-8 mode and passes `--width` unless a case supplies it:
+
+```bash
+python scripts/snapshot_cli.py --width 80 --profile plain --update
+python scripts/snapshot_cli.py --width 80 --profile plain
+```
+
+The `plain`, `standard`, and `truecolor` profiles are intentionally small.
+Batch/profile/watch/image command snapshots are deferred until those CLI
+surfaces have stable contracts; the helper can cover them without changing its
+comparison or artifact format once they land.
+
+Before implementation, the targets are: reduce the 100k-row CSV peak RSS by at
+least 40%; halve the 1 MiB Markdown paragraph time and make the 5 MiB paragraph
+finish within 10 seconds; reduce the 199 KB syntax median by at least 20%.
+These are engineering targets, not shipped performance guarantees. Compare on
+this host with the same build settings and corpus, retain output hashes, and
+report short-input regressions and decorated-path limitations separately.
+
+## 0.0.4 CSV ownership improvement
+
+The 0.0.4 implementation transfers parsed rows and their collection into `Table`
+through an ownership extension point, and trims completed row capacity. Global
+header/numeric inference and column measurement are unchanged. This removes a
+second full cell copy and duplicate row-container allocation; it is not
+constant-memory streaming.
+
+| Case | 0.0.3 peak RSS (KiB) | Development peak RSS (KiB) |
+|---|---:|---:|
+| csv-10000 | 8,900 | 6,608 |
+| csv-stdin-10000 | 8,964 | 6,604 |
+| csv-panel-10000 | 113,464 | 113,268 |
+| csv-50000 | 27,024 | 15,584 |
+| csv-100000 | 49,884 | 27,088 |
+
+The 100k-row case uses about 46% less peak RSS, exceeding the predeclared 40%
+target. Decorated output remains dominated by rendered-line buffers. A two-pass
+file reader or stdin spooling was considered; ownership transfer avoids new I/O,
+disk-failure and cleanup paths while meeting this release's memory target.
+Source rows and decorated/paged/exported output still need further work for
+bounded-memory processing.
+
+Timings varied with host load. A consecutive five-sample check measured 100k rows
+at 1,245 ms before and 1,059 ms after (peak RSS 49,900 → 26,952 KiB); the earlier
+full pass ranged more widely. This is a memory improvement, not a general speed
+guarantee. [All samples and 120 output comparisons](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/v0.0.4-csv)
+are retained. The comparison matrix matched stdout, stderr, exit status and both
+HTML/SVG exports byte-for-byte across dialects, ragged/multiline/Unicode rows,
+widths 4/20/80, panels, padding, alignment, titles/captions and pager selection.
+
+Actual CLI rendering of the recorded CSV memory measurements:
+
+![CSV memory measurements rendered by the CLI](assets/releases/0.0.4-csv.jpg)
+
+## 0.0.4 Text wrapping results
+
+Text now converts successive character break positions to UTF-8 byte positions
+by scanning only the next slice. This removes repeated prefix scans without
+changing line breaks, graphemes, cropping or styles.
+
+Same host, build profile and measurement method as above; a fresh 0.0.3 baseline
+was taken for the true Text cases. Five samples follow one warmup.
+
+| Case | 0.0.3 median (ms) | Optimized median (ms) |
+|---|---:|---:|
+| wrap-markdown-1m | 4142.9 | 112.6 |
+| wrap-markdown-5m | >10,000 (timeout) | 531.2 |
+| text-ascii-65536 | 25.0 | 8.8 |
+| text-ascii-262144 | 260.3 | 24.5 |
+| text-ascii-1048576 | 3997.5 | 86.9 |
+| text-ascii-5242880 | >10,000 (timeout) | 411.2 |
+| text-words-5m | >10,000 (timeout) | 536.0 |
+| text-unicode | 11.7 | 6.2 |
+
+The 1 MiB Markdown paragraph improves from 4.14 s to 113 ms, exceeding the
+halving target; the 5 MiB paragraph now finishes in 531 ms, below the 10-second
+target. The previously timed-out cases have no baseline median, so no speedup
+ratio is assigned to them. These are measurements on one Linux host, not a
+cross-platform guarantee. Long input still allocates source and rendered lines;
+this optimization does not make memory constant.
+
+All five completed before/after benchmark cases retain identical output hashes.
+A separate 192-case comparison retains exact stdout, stderr, exit status, HTML
+and SVG bytes across narrow/wide output, Unicode, tabs, empty input, Markdown
+and decorators. Two additional styled Unicode wrapping goldens come from real
+Rich 15.0.0; all existing goldens remain unchanged.
+
+[Raw timings, hashes and reproducible comparisons](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/v0.0.4-wrapping)
+are committed with the implementation.
+
+Actual CLI output at width 64:
+
+![Styled Markdown wrapping in the CLI](assets/releases/0.0.4-wrapping.jpg)
+
+## 0.0.4 repeated-source syntax results
+
+Profiling showed parsing/highlighting dominated syntax rendering. The optional
+`syntax-cache` Cargo feature reuses parse operations for exact repeated lines
+whose full parser state matches one small initial reference before and after
+parsing. Default builds retain the uncached Syntect path. Every line advances
+the live highlighter; grammars, themes and the regex engine are unchanged.
+Build with `cargo build -p rs-rich-cli --release --features syntax-cache`.
+The cache stores operations for at most 64 eligible lines per render and never
+clones later states containing potentially large captured openers.
+
+| Case | 0.0.3 median (ms) | Opt-in development median (ms) |
+|---|---:|---:|
+| Repetitive Rust, 46 KB | 185.1 | 72.3 |
+| Repetitive Rust, 199 KB | 629.9 | 159.3 |
+| Real CLI source | 445.0 | 442.0 |
+| Real Text source | 253.8 | 256.9 |
+
+These are five-run Linux medians using the same inputs and optimized settings.
+The repeated 199 KB fixture improves by 75%, exceeding the predeclared 20%
+target. Real-source controls are essentially unchanged: this is a benefit for
+repeated boilerplate, not a general syntax speedup. Source and output remain
+buffered. The cache takes at most one reference snapshot from a first source
+line of at most 4096 bytes; oversized first lines disable caching. Entry lines
+are limited to 4096 bytes and 256 operations each.
+
+All five benchmark output hashes and 144 output/export combinations match the
+pre-change binary. State-sensitive tests compare every bundled theme with
+uncached Syntect. Cold-process samples and a separate repeated-library-render
+probe are included in the [raw evidence](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/v0.0.4-syntax).
+
+Actual CLI syntax output, including identical text inside and outside a comment:
+
+![Syntax colors and comment context in the CLI](assets/releases/0.0.4-syntax.jpg)
+
+## Downstream render snapshots
+
+Enable `rs-rich-ext`'s optional `testing` feature and use
+`testing::RenderSnapshot::capture(&target, &renderable)`. The versioned JSON
+includes fixed dimensions, plain/ANSI output and owned segment style metadata.
+`diff` reports the first changed line or style path, including style-only changes.
+Snapshots preserve renderer line endings; they do not append Console.print's
+newline. Run `cargo run -p rs-rich-ext --features testing --example snapshot`
+for a deterministic example. These extension snapshots are separate from the
+Python upstream parity goldens.

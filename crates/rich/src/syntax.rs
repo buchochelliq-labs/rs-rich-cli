@@ -12,14 +12,20 @@
 
 use std::sync::OnceLock;
 
-use syntect::easy::HighlightLines;
 use syntect::highlighting::{Color as SynColor, FontStyle, Style as SynStyle, Theme, ThemeSet};
 use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
 
+#[cfg(not(feature = "syntax-cache"))]
+use syntect::easy::HighlightLines;
+#[cfg(feature = "syntax-cache")]
+#[path = "syntax_cache.rs"]
+mod cache;
+
 use crate::cells::cell_len;
 use crate::color::Color;
 use crate::console::{Console, ConsoleOptions};
+use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::style::Style;
@@ -134,6 +140,45 @@ impl Syntax {
     }
 }
 
+impl Syntax {
+    /// Highlight the code into a [`Text`](crate::text::Text) rather than a padded block. Port of
+    /// `Syntax.highlight`: the theme background is the text's base style and
+    /// every token carries its own style. Tabs are expanded first, as
+    /// `_process_code` does. Used by `Markdown(inline_code_lexer=…)`.
+    pub fn highlight(&self) -> crate::text::Text {
+        let syntaxes = syntax_set();
+        let themes = theme_set();
+        let theme = self.theme_ref(themes);
+        let syntax = self
+            .language
+            .as_deref()
+            .and_then(|lang| {
+                syntaxes
+                    .find_syntax_by_token(lang)
+                    .or_else(|| syntaxes.find_syntax_by_extension(lang))
+            })
+            .unwrap_or_else(|| syntaxes.find_syntax_plain_text());
+        let mut text = crate::text::Text::new("");
+        if let Some(background) = theme.settings.background.map(to_color) {
+            text.set_base_style(Style::new().with_bgcolor(background));
+        }
+        #[cfg(not(feature = "syntax-cache"))]
+        let mut highlighter = HighlightLines::new(syntax, theme);
+        #[cfg(feature = "syntax-cache")]
+        let mut highlighter = cache::CachedHighlighter::new(syntax, theme);
+        let code = expand_tabs(&self.code, self.tab_size);
+        for line in LinesWithEndings::from(&code) {
+            for (syn_style, token) in highlighter
+                .highlight_line(line, syntaxes)
+                .unwrap_or_default()
+            {
+                text.append(token, Some(to_style(syn_style).into()));
+            }
+        }
+        text
+    }
+}
+
 fn syntax_set() -> &'static SyntaxSet {
     static SET: OnceLock<SyntaxSet> = OnceLock::new();
     SET.get_or_init(SyntaxSet::load_defaults_newlines)
@@ -176,7 +221,52 @@ impl Syntax {
     }
 }
 
+/// Port of Python's `str.splitlines()`: every Unicode line boundary ends a
+/// line, `\r\n` counts once, and a trailing boundary adds no empty line.
+fn python_splitlines(text: &str) -> Vec<&str> {
+    let mut lines = Vec::new();
+    let mut start = 0;
+    let mut chars = text.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        if matches!(
+            c,
+            '\n' | '\r'
+                | '\x0b'
+                | '\x0c'
+                | '\x1c'
+                | '\x1d'
+                | '\x1e'
+                | '\u{85}'
+                | '\u{2028}'
+                | '\u{2029}'
+        ) {
+            lines.push(&text[start..i]);
+            start = i + c.len_utf8();
+            if c == '\r' && chars.peek().map(|&(_, n)| n) == Some('\n') {
+                chars.next();
+                start += 1;
+            }
+        }
+    }
+    if start < text.len() {
+        lines.push(&text[start..]);
+    }
+    lines
+}
+
 impl Renderable for Syntax {
+    /// Port of `Syntax.__rich_measure__` (no line numbers or `code_width` in
+    /// this port, so the numbers column is zero wide). Like upstream it
+    /// measures the raw source, where a tab counts as zero cells.
+    fn measure(&self, _console: &Console, _options: &ConsoleOptions) -> Measurement {
+        let widest = python_splitlines(&self.code)
+            .into_iter()
+            .map(cell_len)
+            .max()
+            .unwrap_or(0);
+        Measurement::new(0, self.padding * 2 + widest)
+    }
+
     fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let syntaxes = syntax_set();
         let themes = theme_set();
@@ -194,7 +284,10 @@ impl Renderable for Syntax {
             })
             .unwrap_or_else(|| syntaxes.find_syntax_plain_text());
 
+        #[cfg(not(feature = "syntax-cache"))]
         let mut highlighter = HighlightLines::new(syntax, theme);
+        #[cfg(feature = "syntax-cache")]
+        let mut highlighter = cache::CachedHighlighter::new(syntax, theme);
         // The gutter eats into the space the code itself may occupy.
         let width = options.max_width;
         let code_width = width.saturating_sub(self.padding * 2);
@@ -319,6 +412,28 @@ mod tests {
             .no_color(false)
             .build()
             .render_to_string(&Syntax::new(code, lang))
+    }
+
+    #[test]
+    fn measured_syntax_still_prints_at_full_width() {
+        // Upstream renders a printed Syntax at the console width (its background
+        // pads every row); only str/Text shrink to their measurement.
+        let console = Console::builder().width(30).color_system(None).build();
+        let syntax = Syntax::new("x = 1", "python");
+        assert_eq!(syntax.measure(&console, &console.options()).maximum, 5);
+        let out = console.render_to_string(&syntax);
+        assert!(!out.contains('\x1b'), "{out:?}");
+        assert_eq!(cell_len(out.lines().next().unwrap()), 30, "{out:?}");
+    }
+
+    #[test]
+    fn splitlines_matches_python() {
+        assert_eq!(
+            python_splitlines("a\r\nb\rc\u{2028}d\n"),
+            ["a", "b", "c", "d"]
+        );
+        assert_eq!(python_splitlines("\n\n"), ["", ""]);
+        assert!(python_splitlines("").is_empty());
     }
 
     #[test]

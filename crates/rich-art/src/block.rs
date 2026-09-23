@@ -15,9 +15,11 @@
 //!   *and* doubles the vertical detail — a ramp renderer has to throw half the
 //!   rows away to avoid a stretched image.
 //!
-//! It needs a truecolour (or at least 256-colour) terminal; with colour off
+//! Truecolour preserves the most detail; 256/16-colour terminals quantize the
+//! colors with reduced fidelity. With colour off
 //! there is nothing to see, so callers should fall back to `AsciiArt` there.
 
+use crate::{image_color::preprocess, Dither, ImageColorMode};
 use image::{imageops::FilterType, DynamicImage, GenericImageView};
 use rich::color::Color;
 use rich::console::{Console, ConsoleOptions};
@@ -31,18 +33,32 @@ const UPPER_HALF: &str = "\u{2580}";
 
 /// An image drawn with half-block characters.
 pub struct BlockArt {
-    image: DynamicImage,
+    image: std::sync::Arc<DynamicImage>,
     width: Option<usize>,
     height: Option<usize>,
+    color_mode: ImageColorMode,
+    dither: Dither,
 }
 
 impl BlockArt {
     pub fn new(image: DynamicImage) -> Self {
+        Self::from_shared(std::sync::Arc::new(image))
+    }
+
+    pub(crate) fn from_shared(image: std::sync::Arc<DynamicImage>) -> Self {
         Self {
             image,
             width: None,
             height: None,
+            color_mode: ImageColorMode::default(),
+            dither: Dither::default(),
         }
+    }
+
+    pub(crate) fn color_processing(mut self, mode: ImageColorMode, dither: Dither) -> Self {
+        self.color_mode = mode;
+        self.dither = dither;
+        self
     }
 
     pub fn from_path(path: impl AsRef<std::path::Path>) -> Result<Self, image::ImageError> {
@@ -64,7 +80,7 @@ impl BlockArt {
     }
 
     /// Columns and character rows for the available width.
-    fn grid(&self, available: usize) -> (usize, usize) {
+    pub(crate) fn grid(&self, available: usize) -> (usize, usize) {
         let (iw, ih) = self.image.dimensions();
         if iw == 0 || ih == 0 {
             return (1, 1);
@@ -90,16 +106,20 @@ impl BlockArt {
     /// The rendered rows as `(upper, lower)` colour pairs.
     fn cells(&self, available: usize) -> Vec<Vec<(Color, Color)>> {
         let (columns, rows) = self.grid(available);
-        let scaled = self
+        let mut scaled = self
             .image
             .resize_exact(columns as u32, (rows * 2) as u32, FilterType::Triangle)
             .to_rgba8();
+        let indices = preprocess(&mut scaled, self.color_mode, self.dither);
 
         (0..rows)
             .map(|row| {
                 (0..columns)
                     .map(|col| {
                         let sample = |y: u32| {
+                            if let Some(indices) = &indices {
+                                return Color::from_ansi(indices[y as usize * columns + col]);
+                            }
                             let p = scaled.get_pixel(col as u32, y.min(scaled.height() - 1));
                             let [r, g, b, a] = p.0;
                             // Composite onto black so transparency reads as

@@ -104,27 +104,12 @@ Format: what differs · why · how to remove it (if temporary).
   no_wrap content plus one other column.
 - **Remove:** drop padding on zero-width columns under the Table issue (#5).
 
-### 8. `Json` — exotic number formatting differs from CPython
-- **Differs:** non-ASCII strings and key order are **byte-parity** with upstream
-  (golden `json_unicode`): `rich.json.JSON` defaults to `ensure_ascii=False`, so
-  our UTF-8 output matches, and `serde_json`'s `preserve_order` keeps input key
-  order — the earlier "we don't `\u`-escape" concern was a false alarm (upstream
-  doesn't escape either). What *can* still differ is **number formatting** for
-  exotic values: **shortest round-trip is now exact** (round 8: `serde_json`'s default float
-  parser took a fast path landing 1 ULP from the value in the file, so ~12% of
-  computed doubles rendered as a *different* double; the `float_roundtrip`
-  feature fixes it, pinned by a unit test). What can still differ is
-  exponent notation (CPython renders `1e+20` / `1e-07`; ryu via
-  `serde_json` renders `1e20` / `1e-7`, and the two use different thresholds for
-  *when* to switch to exponent form), and integers beyond i64/u64 lose precision
-  (parsed as f64) where CPython keeps them exact.
-- **Why:** matching CPython exactly means replicating its `float_repr`
-  (shortest-round-trip *and* its decimal/exponent threshold + `e[+-]NN` padding),
-  which ryu formats differently; and exact big-integers need `serde_json`'s
-  `arbitrary_precision`, which in turn stops normalizing numbers. Both are a
-  rabbit hole disproportionate to how rarely JSON documents carry such values.
-- **Remove:** port CPython's `float_repr` and enable `arbitrary_precision` (with
-  its own normalization pass) under the JSON issue (#10).
+### 8. ~~`Json` — exotic number formatting differs from CPython~~ (resolved in 0.0.11)
+- Floats are now written with a port of Python's `float.__repr__`
+  (`rich::pyformat::float_repr`), as `json.dumps` does: shortest round-trip
+  digits, exponent form below `1e-4` and from `1e16`, and `e+NN`/`e-NN`
+  padding (`1e+20`, `1e-07`). Golden `json_python_floats` pins it against
+  rich 15.0.0, alongside `json_python_numbers` for integers and Infinity.
 
 ### 9. `Markdown` covers most elements (code blocks are non-parity)
 - **Differs:** paragraphs, ATX headings (h1–h6), bullet + ordered lists, block
@@ -133,15 +118,14 @@ Format: what differs · why · how to remove it (if temporary).
   `Syntax` renderable — so they're highlighted but **not** byte-identical to
   upstream (syntect ≠ Pygments; see #18). **Links** render as an OSC 8 hyperlink +
   the `markdown.link_url` style — byte-identical to upstream except the random
-  `id=` field we omit (#20). The one remaining gap: **inline styling within a
-  table cell** (e.g. `**bold**` inside a cell) is collected as plain text, since
-  Table cells are strings, not `Text` renderables. (The trailing-blank-line quirk
-  for a document ending in a thematic break is now matched — golden
-  `markdown_hr_end`.)
-- **Why:** these are the common elements; cell-level inline styling needs Table
-  cells to become full renderables (a larger refactor).
-- **Remove:** give Table cells styled `Text` content, then route inline markdown
-  into table cells, under the Markdown issue (#9).
+  `id=` field we omit (#20). Inline styling inside **table cells** is byte-parity
+  since 0.0.11 (golden `markdown_table_inline`): cells hold styled `Text`, as
+  upstream's `TableDataElement` does. The constructor options `justify` and
+  `style` are byte-parity too (golden `markdown_options`); `code_theme`,
+  `inline_code_lexer` and `inline_code_theme` take `syntect` theme names. (The trailing-blank-line quirk for a
+  document ending in a thematic break is also matched — golden `markdown_hr_end`.)
+- **Why:** code blocks go through `syntect`, not Pygments (#18).
+- **Remove:** see the Syntax entry (#18).
 
 ### 10. ~~`AnsiDecoder` skips OSC hyperlinks~~ (resolved)
 - **Resolved:** the decoder now reads OSC 8 sequences (`\x1b]8;<params>;<url>\x1b\`)
@@ -183,21 +167,23 @@ Format: what differs · why · how to remove it (if temporary).
   same strings the conditional does. Byte-parity with real rich 15.0.0 across
   compact/basic/ordinal/week/split forms (unit-tested).
 
-### 14. No theme *stack* (`push_theme`/`pop_theme`)
-- **Differs:** style names on spans now resolve against the rendering console's
-  theme, as upstream does — that half is **done** (`StyleType`, `Theme::get_style`).
-  What is missing is upstream's per-console theme *stack*: `Console.push_theme`,
-  `pop_theme` and the `use_theme` context manager. Names resolve against the
-  console's single current theme instead.
-- **Why:** the stack forces a `&mut self`-vs-interior-mutability decision that
-  this port should not make casually. An RAII guard borrowing the `Console`
-  mutably makes `console.print(...)` *inside* the guard a borrow error — which is
-  the entire use case — and a `RefCell` stack breaks `Console::theme() -> &Theme`
-  and adds an `already borrowed` panic class on re-entrant renders. Upstream's
-  stack is also thread-local, which sits awkwardly with a `Console` that gets
-  *moved* between threads by `Live::spawn`.
-- **Remove:** design the stack against those constraints, under its own issue.
-  Late-bound span names are a strict prerequisite and are now in place.
+### 14. ~~No theme *stack* (`push_theme`/`pop_theme`)~~ (resolved)
+- **Resolved (0.0.10, core 0.0.6):** `Console::push_theme(theme, inherit)`,
+  `pop_theme()` (an error on the base theme, as upstream's `ThemeStackError`)
+  and `use_theme(theme)`, which returns a `ThemeContext` guard that derefs to the
+  console and pops on drop — including during a panic unwind. Printing *through
+  the guard* avoids the borrow problem that previously blocked the design, and
+  `Console::theme()` still returns `&Theme` (the top of the stack).
+  `Theme::from_styles`, `config`, `from_file` and `read` port upstream's theme
+  files, including `configparser`'s lower-cased keys, `[DEFAULT]`, continuation
+  lines, `%` interpolation and error classes.
+- **Behaviour kept from upstream:** `use_theme` always inherits; upstream's
+  `ThemeContext` never forwards its `inherit` argument (verified against rich
+  15.0.0), so this port omits the ignored parameter.
+- **Remaining difference:** upstream's stack is thread-local; here the stack
+  belongs to the `Console` value, which fits a console that `Live::spawn` moves
+  to another thread. Golden `theme_stack.tsv` covers push, pop, nested push,
+  `use_theme`, `Theme.config` and `from_file` byte for byte.
 
 ### 14a. `Style::parse` results are not cached
 - **Differs:** upstream LRU-caches style-definition parsing; we re-resolve names
@@ -221,20 +207,38 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** add an `adler32`-of-`repr` default id only if a caller needs the
   exact auto-generated ids (rare); the explicit-id form already round-trips.
 
-### 16. `Progress` — deterministic columns done; time/rate/spinner + Live deferred
-- **Differs:** `Progress` now renders a **configurable `ProgressColumn` list**
-  (default: description, flexing bar, percentage), with the deterministic columns
-  ported byte-parity — description, static text, the bar, percentage, **M-of-N**
-  (`{completed}/{total}`), and **download** (`0.5/1.0 kB`, shared SI byte unit via
-  `filesize::pick_unit_and_suffix`). The grid layout matches upstream's
-  `Table.grid(padding=(0, 1))`: fixed columns take their widest cell, the bar
-  flexes (capped at 40), single unstyled space between columns. Still deferred:
-  the non-deterministic columns (spinner, transfer-speed, time-remaining/elapsed)
-  and the in-place `Live` refresh loop.
-- **Why:** the ported columns are deterministic (testable); the time/rate/spinner
-  columns depend on wall-clock elapsed and the refresh loop needs `Live` (#17).
-- **Remove:** add the time/rate/spinner columns (with the `Live` loop) under the
-  Live/progress issue (#6).
+### 16. `Progress` — columns, task model, pulse and live display done
+- **Resolved (0.0.10, core 0.0.6):** the time, rate and spinner columns and the
+  task model are ported: an injectable clock (`Progress::clock`, upstream's
+  `get_time`), task start/stop/finish times, the 30-second speed sample window,
+  `update`/`advance`/`reset`/`start_task`/`stop_task`/`remove_task` with
+  upstream's exact sample and finish rules, and `TimeElapsed`, `TimeRemaining`
+  (compact, elapsed-when-finished and its 0.5 s render cache), `TransferSpeed`,
+  `FileSize`, `TotalFileSize`, `Spinner`, `TaskProgress { show_speed }` and
+  binary `Download` columns. `Progress::new()` now uses upstream's default
+  columns (description, bar, percentage, time remaining). Golden
+  `progress_time.tsv` replays the same step programs through Python and Rust.
+- **Resolved (0.0.11, core 0.0.7):**
+  - The pulse bar for unstarted or indeterminate tasks, with the ASCII and
+    no-colour fallbacks (golden `progress_bar.tsv`).
+  - `TextColumn` format strings over task attributes and per-task `fields`,
+    through a port of Python's format mini-language.
+  - `RenderableColumn`, whose cells may span several lines.
+  - A live display: `Progress::start` returns a `LiveProgress` redrawn by the
+    `Live` refresh thread (§17). Its byte stream matches upstream's
+    `auto_refresh=False` Live (golden `progress_live.tsv`).
+  - `track()`, both `LiveProgress::track` and the module-level `track`.
+- **Still differs:**
+  - Task totals and counts are `f64`, so `{task.total}` formats a whole number
+    as an int. Upstream keeps whatever type the caller passed.
+  - `track` advances inline rather than through upstream's `_TrackThread`
+    batching (`update_period`). The counts match; the refresh timing differs.
+  - Not ported: `transient`, `disable`, `expand`, `wrap_file`/`open`, and
+    table-column options.
+  - Cells truncate rather than wrap at very narrow widths.
+- **Why:** Rust has no dynamic int/float, and the remaining options need
+  §17's transient mode or file wrappers.
+- **Remove:** under the Live/progress issue (#6).
 
 ### 17. `Live` — auto-refresh thread done; alt-screen/redirect deferred
 - **Differs:** `Live` implements the deterministic `start`/`update`/`refresh`/`stop`
@@ -244,7 +248,10 @@ Format: what differs · why · how to remove it (if temporary).
   `update`), a port of upstream's `refresh_per_second`. The thread constructs and
   owns the `Live` internally, so only `Send` inputs (renderable/console/writer)
   cross over — which made `Console` `Send` (its highlighter boxes are now
-  `dyn Highlighter + Send`). Still deferred: `transient`/alt-screen modes,
+  `dyn Highlighter + Send`). `Live::spawn` returns only once the first frame
+  is drawn, and `AutoLive::refresh_wait` redraws synchronously, as upstream's
+  `start()` and `refresh()` do; the final newline is written only when the
+  last render had height (`last_render_height`). Still deferred: `transient`/alt-screen modes,
   stdout/stderr redirection, and the console render-hook integration; `Live` also
   renders to a generic `Write` sink rather than through `Console`'s own file.
 - **Why:** those remaining pieces are large plumbing; the refresh loop itself is
@@ -282,11 +289,13 @@ Format: what differs · why · how to remove it (if temporary).
     `Error::source()` chain (`Caused by:`) in a red-bordered panel. There are no
     stack frames or source snippets — Rust errors don't carry them (pair with
     `std::backtrace::Backtrace` at the call site if you want a frame list).
-  - `LogRender` (`log_render.rs`) formats one log record — optional time, a
-    severity-colored level, message, optional path — into a styled line, using the
-    same column styles (`log.time`, `logging.level.*`, `log.path`). It takes a
-    `LogLevel` enum + strings rather than depending on `log`/`tracing`; wiring a
-    `log::Log` handler on top is a `rich-ext` follow-up.
+  - `LogRender` (`log_render.rs`) is now a faithful port of `_log_render.py`
+    (golden `log_render.tsv`), except that it takes the time already formatted
+    rather than a `datetime` and a `strftime` format. `rich-ext`'s `RichHandler`
+    is the `logging.RichHandler` counterpart: it renders `log` and `tracing`
+    events through the `LogAdapter`/`EventLayer` sinks. Its default time is UTC
+    `[HH:MM:SS]` (local time would need a time-zone dependency), structured
+    fields follow the message as `key=value`, and there are no rich tracebacks.
 - **Why:** a 1:1 port isn't possible without reflection; the Rust-native analogs
   deliver the same *utility* (colorized value/error/log rendering).
 - **Remove:** inherent to the language difference; not removable.
@@ -302,19 +311,70 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** add a stable per-link id (e.g. a hash of the URL) if hover grouping
   is ever needed — but it still wouldn't match upstream's random value.
 
-### 21. Strikethrough delimiter runs of three or more tildes
-- **Differs:** `~x~` (single tilde) and `~~x~~` (double) match upstream exactly —
-  the first is literal text, the second is struck through. A run of **three or
-  more** tildes does not: `~~~x~~~` renders as literal `~~~x~~~` here, while
-  upstream renders `~x~` (it consumes the outer pair and strikes the rest).
-- **Why:** the two parsers resolve delimiter runs differently. `pulldown-cmark`
-  emits no strikethrough event at all for a triple run, so there is nothing to
-  re-interpret after the fact; matching upstream would mean reimplementing
-  markdown-it's delimiter-run algorithm rather than reading its output.
-- **Remove:** port markdown-it's `tokenize`/`postProcess` delimiter pairing for
-  strikethrough, under the Markdown issue (#9).
+### 21. Strikethrough across emphasis (narrowed in 0.0.10)
+- **Resolved (0.0.10, core 0.0.6):** tilde runs of any length now pair as
+  upstream's markdown-it pairs them. pulldown-cmark's own strikethrough is off;
+  `pair_strikethrough` ports markdown-it's tokenize (odd runs split into `~` plus
+  `~~` delimiters), `balance_pairs` and postProcess (a lone `~` before a closer
+  moves after it), scoped per inline run with link labels nested. `a ~~~x~~~ b`
+  renders `a ~` + struck `x` + `~ b`, as upstream does. Golden
+  `markdown_strike.tsv` covers 24 cases byte for byte, including odd and uneven
+  runs, intraword and punctuation neighbours, escapes, soft breaks, headings,
+  tight lists, links and emphasis nesting.
+- **Still differs:** markdown-it pairs `*`/`_` and `~` in one pass, so a tilde
+  closer that falls inside an emphasis span opened *after* the tilde opener wins
+  and dissolves that emphasis: `~~a *b~~ c*` strikes `a *b` upstream. Here
+  pulldown-cmark has already paired the emphasis, and a tilde pair is never
+  allowed to cross an emphasis span, so the tildes stay literal. Crossings the
+  other way (`*a ~~b* c~~`, no strikethrough) already match.
+- **Why:** matching that last case means reimplementing CommonMark emphasis
+  pairing alongside strikethrough instead of using pulldown-cmark's.
+- **Remove:** port markdown-it's emphasis delimiter handling into the same
+  `balance_pairs` pass, under the Markdown issue (#9). Pinned by
+  `tildes_crossing_a_later_emphasis_stay_literal`.
 
 ## Feature-flagged divergences
 
-*None yet.* If a future feature can only be built by changing core behavior, it
-must be behind a Cargo `feature` that is **off by default**, and listed here.
+### 22. Escape-safe JSON presentation (`json-escape-safe`)
+
+This Cargo feature is **off by default** in both `rs-rich` and `rs-rich-cli`.
+The default build keeps Python rich 15.0.0 folding and cropping, including
+boundaries inside escapes. Enable with `cargo build -p rs-rich-cli --features
+json-escape-safe`. Library callers additionally opt in with
+`Json::new(input)?.escape_safe(true)`; enabling the feature alone leaves existing
+library calls unchanged.
+
+Opted-in rendering groups short escapes and `\uXXXX` when they fit the available
+width. Cropping stops before an incomplete escape. Folding recalculates each
+boundary from the remaining content, preserving the suffix after an adjusted
+break (#98). At widths smaller than the escape itself, folding splits its ASCII
+spelling to preserve bytes within the width; atomicity is impossible there.
+Cropping remains intentionally lossy presentation output. This behavior requires
+JSON lexical context unavailable in generic Text rendering. Remove this special
+handling if upstream adopts the same escape-aware layout.
+
+## Explicit text encoding extension (0.0.4 development)
+
+`--encoding` is a CLI convenience implemented by `rich_ext::encoding::Encoding`.
+It provides strict UTF-8 and UTF-16 decoding only when requested. Default file
+replacement decoding and strict stdin/URL UTF-8 are retained. BOM diagnostics
+add stderr guidance without automatic encoding changes. This adds no core
+dependency on extensions. See [encoding policy](troubleshooting.md#text-encoding).
+
+### 23. Optional syntax parse reuse (`syntax-cache`)
+
+- **Default:** the faithful mirror uses Syntect's normal `HighlightLines` path.
+- **Opt-in:** the `syntax-cache` Cargo feature enables repository-specific repeated-line
+  parsing reuse. It is off by default in both `rs-rich` and `rs-rich-cli`; the CLI
+  feature forwards to core. The helper lives in a separately gated module.
+- **Scope:** exact repeated lines may reuse operations only when their before/after
+  parser state equals one reference captured after a first line of at most 4096
+  bytes. A longer first line disables caching. No later live state is cloned,
+  and cache entries contain operations rather than captured states. This prevents
+  a large heredoc opener from being copied once per body line.
+- **Limits:** at most 64 lines, each at most 4096 bytes and 256 operations. The
+  source and rendered output still allocate memory. Results are workload-specific;
+  varied source may see no gain. Grammars, themes and live highlight-state updates
+  remain unchanged. Differential tests and native export comparisons verify output.
+- **Enable:** `cargo build -p rs-rich-cli --release --features syntax-cache`.
+  See [benchmarks](benchmarks.md#004-repeated-source-syntax-results).

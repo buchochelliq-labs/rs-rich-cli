@@ -1,0 +1,134 @@
+test_cli_verification_retries_and_installs_exact_version (test_release.PublicationTests.test_cli_verification_retries_and_installs_exact_version) ... Waiting for rs-rich-cli@0.0.3, attempt 1
+Verified rs-rich-cli@0.0.3 from crates.io
+ok
+test_consumer_build_failure_is_fatal (test_release.PublicationTests.test_consumer_build_failure_is_fatal) ... ok
+test_coordinated_verification_checks_every_package (test_release.PublicationTests.test_coordinated_verification_checks_every_package) ... Verified rs-rich@0.0.2 from crates.io
+Verified rs-rich-ext@0.0.2 from crates.io
+Verified rs-rich-cli@0.0.2 from crates.io
+Verified rs-rich-art@0.0.2 from crates.io
+ok
+test_invalid_downstream_selection_never_publishes (test_release.PublicationTests.test_invalid_downstream_selection_never_publishes) ... ok
+test_library_verification_builds_exact_registry_dependency (test_release.PublicationTests.test_library_verification_builds_exact_registry_dependency) ... Verified rs-rich@0.0.3 from crates.io
+Verified rs-rich-ext@0.0.3 from crates.io
+Verified rs-rich-art@0.0.3 from crates.io
+ok
+test_plan_exports_selection_for_downstream_commands (test_release.PublicationTests.test_plan_exports_selection_for_downstream_commands) ... ok
+test_preflight_fails_closed (test_release.PublicationTests.test_preflight_fails_closed) ... ok
+test_preflight_queries_only_selected_versions (test_release.PublicationTests.test_preflight_queries_only_selected_versions) ... {"rs-rich-cli":"0.0.3"}
+rs-rich-art@0.0.3 is available
+ok
+test_publish_and_dry_run_use_same_selection (test_release.PublicationTests.test_publish_and_dry_run_use_same_selection) ... ok
+test_verification_exhaustion_never_builds (test_release.PublicationTests.test_verification_exhaustion_never_builds) ... Waiting for rs-rich-art@0.0.3, attempt 1
+Waiting for rs-rich-art@0.0.3, attempt 2
+Waiting for rs-rich-art@0.0.3, attempt 3
+Waiting for rs-rich-art@0.0.3, attempt 4
+Waiting for rs-rich-art@0.0.3, attempt 5
+ok
+test_verification_registry_errors_fail_immediately (test_release.PublicationTests.test_verification_registry_errors_fail_immediately) ... ok
+test_changed_publishable_workspace_is_rejected (test_release.SelectionTests.test_changed_publishable_workspace_is_rejected) ... ok
+test_cli_and_art_at_same_new_version_remain_separate (test_release.SelectionTests.test_cli_and_art_at_same_new_version_remain_separate) ... ok
+test_each_crate_can_advance_independently (test_release.SelectionTests.test_each_crate_can_advance_independently) ... ok
+test_legacy_tag_selects_all_four (test_release.SelectionTests.test_legacy_tag_selects_all_four) ... ok
+test_mismatch_and_invalid_tags_fail (test_release.SelectionTests.test_mismatch_and_invalid_tags_fail) ... ok
+test_prerelease_requires_exact_manifest_version (test_release.SelectionTests.test_prerelease_requires_exact_manifest_version) ... ok
+test_stale_internal_requirement_fails (test_release.SelectionTests.test_stale_internal_requirement_fails) ... ok
+test_added_and_deleted_packaged_sources_are_rejected (test_release_packages.PackageTests.test_added_and_deleted_packaged_sources_are_rejected) ... ok
+test_generated_provenance_and_lockfile_do_not_require_version_bump (test_release_packages.PackageTests.test_generated_provenance_and_lockfile_do_not_require_version_bump) ... ok
+test_manifest_dependency_change_is_rejected (test_release_packages.PackageTests.test_manifest_dependency_change_is_rejected) ... ok
+test_registry_errors_are_not_treated_as_unpublished (test_release_packages.PackageTests.test_registry_errors_are_not_treated_as_unpublished) ... ok
+test_unversioned_clone_api_change_is_rejected (test_release_packages.PackageTests.test_unversioned_clone_api_change_is_rejected) ... ok
+test_staged_new_dependency_builds_but_unchanged_clone_mismatch_fails (test_release_packages.StagedCargoTests.test_staged_new_dependency_builds_but_unchanged_clone_mismatch_fails)
+Real Cargo packages/compiles fixtures; only registry HTTP is replaced. ... warning: manifest has no documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+   Packaging rs-rich v0.0.5 (/tmp/package-regression-g3z0_or9/core)
+    Packaged 4 files, 1.0KiB (735B compressed)
+warning: manifest has no documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+   Packaging rs-rich-art v0.0.5 (/tmp/package-regression-g3z0_or9/art)
+    Packaged 4 files, 1.0KiB (747B compressed)
+warning: manifest has no documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+   Packaging rs-rich-ext v0.0.5 (/tmp/package-regression-g3z0_or9/ext)
+    Packaged 4 files, 1.0KiB (762B compressed)
+warning: manifest has no documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+   Packaging rs-rich-cli v0.0.5 (/tmp/package-regression-g3z0_or9/cli)
+    Packaged 4 files, 1.4KiB (930B compressed)
+STAGED ONLY: rs-rich@0.0.5 is unpublished
+warning: manifest has no documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+   Packaging rs-rich v0.0.5 (/tmp/package-regression-g3z0_or9/core)
+    Packaged 4 files, 1.0KiB (735B compressed)
+warning: manifest has no documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+   Packaging rs-rich-art v0.0.5 (/tmp/package-regression-g3z0_or9/art)
+    Packaged 4 files, 1.0KiB (747B compressed)
+warning: manifest has no documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+   Packaging rs-rich-ext v0.0.6 (/tmp/package-regression-g3z0_or9/ext)
+    Packaged 4 files, 1.0KiB (762B compressed)
+warning: manifest has no documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+   Packaging rs-rich-cli v0.0.6 (/tmp/package-regression-g3z0_or9/cli)
+    Packaged 4 files, 1.4KiB (929B compressed)
+warning: manifest has no documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+   Packaging rs-rich v0.0.5 (/tmp/package-regression-g3z0_or9/core)
+    Packaged 4 files, 1.0KiB (735B compressed)
+warning: manifest has no documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+   Packaging rs-rich-art v0.0.5 (/tmp/package-regression-g3z0_or9/art)
+    Packaged 4 files, 1.0KiB (747B compressed)
+warning: manifest has no documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+   Packaging rs-rich-ext v0.0.6 (/tmp/package-regression-g3z0_or9/ext)
+    Packaged 4 files, 1.0KiB (762B compressed)
+warning: manifest has no documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+   Packaging rs-rich-cli v0.0.6 (/tmp/package-regression-g3z0_or9/cli)
+    Packaged 4 files, 1.4KiB (929B compressed)
+   Verifying rs-rich v0.0.5 (/tmp/package-regression-g3z0_or9/core)
+   Compiling rs-rich v0.0.5 (/tmp/package-regression-g3z0_or9/target/package/rs-rich-0.0.5)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.05s
+   Verifying rs-rich-art v0.0.5 (/tmp/package-regression-g3z0_or9/art)
+   Compiling rs-rich-art v0.0.5 (/tmp/package-regression-g3z0_or9/target/package/rs-rich-art-0.0.5)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.06s
+   Verifying rs-rich-ext v0.0.6 (/tmp/package-regression-g3z0_or9/ext)
+   Compiling rs-rich-ext v0.0.6 (/tmp/package-regression-g3z0_or9/target/package/rs-rich-ext-0.0.6)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.09s
+   Verifying rs-rich-cli v0.0.6 (/tmp/package-regression-g3z0_or9/cli)
+   Unpacking rs-rich-ext v0.0.6 (registry `/tmp/package-regression-g3z0_or9/target/package/tmp-registry`)
+   Compiling rs-rich-ext v0.0.6
+   Compiling rs-rich-cli v0.0.6 (/tmp/package-regression-g3z0_or9/target/package/rs-rich-cli-0.0.6)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.13s
+ok
+test_independent_versions_and_drift (test_release_readiness.ReadinessTests.test_independent_versions_and_drift) ... ok
+test_oracle_pin_parses_toml_not_line_format (test_release_readiness.ReadinessTests.test_oracle_pin_parses_toml_not_line_format) ... ok
+test_release_aliases_require_main_ancestry (test_release_readiness.ReadinessTests.test_release_aliases_require_main_ancestry) ... ok
+test_release_handoff_gate_catches_release_file_only_prs (test_release_readiness.ReadinessTests.test_release_handoff_gate_catches_release_file_only_prs) ... ok
+test_release_handoff_gate_enforces_final_snapshot_fields (test_release_readiness.ReadinessTests.test_release_handoff_gate_enforces_final_snapshot_fields) ... ok
+test_release_readiness_policy_schema_is_explicit (test_release_readiness.ReadinessTests.test_release_readiness_policy_schema_is_explicit) ... ok
+test_release_tag_must_be_annotated_checked_out_and_on_main (test_release_readiness.ReadinessTests.test_release_tag_must_be_annotated_checked_out_and_on_main) ... ok
+test_release_validation_wrapper_serializes_shared_target_cargo (test_release_readiness.ReadinessTests.test_release_validation_wrapper_serializes_shared_target_cargo) ... ok
+test_workflows_use_published_checkout_major (test_release_readiness.ReadinessTests.test_workflows_use_published_checkout_major) ... ok
+
+----------------------------------------------------------------------
+Ran 33 tests in 0.757s
+
+OK
+Stale manifest versions: README.md, docs/index.md
+Run python3 scripts/gen_versions.py
+Manifest-version tables match Cargo.toml files
+Manifest-version tables match Cargo.toml files

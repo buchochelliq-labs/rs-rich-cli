@@ -1,0 +1,4 @@
+# Known divergences found by the generated differential run (#34). Each case
+# still differs from Python rich and names its issue. When fixing an issue, move
+# its case(s) into diff_rich_cases.jsonl (the pull-request corpus) in the same PR.
+# Replay: python scripts/diff_rich.py --corpus scripts/fixtures/diff_rich_known.jsonl

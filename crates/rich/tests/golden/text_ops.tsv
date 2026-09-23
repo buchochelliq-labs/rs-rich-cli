@@ -17,6 +17,8 @@ split_word	a\x1f\x1b[1mb\x1b[0m\x1fc
 pad	   \x1b[1mhi\x1b[0m   
 pad_left	...\x1b[1mhi\x1b[0m
 pad_right	\x1b[1mhi\x1b[0m...
+truncate_styled_ellipsis	\x1b[31m…\x1b[0m\x1f\x1b[31ml…\x1b[0m\x1f\x1b[31mlong\x1b[0m\x1b[1;34m…\x1b[0m\x1f\x1b[31mlong\x1b[0m\x1b[1;34mtit…\x1b[0m
+truncate_wide_styled	\x1b[31m \x1b[0m\x1f\x1b[31m…\x1b[0m\x1f\x1b[31m \x1b[0m\x1b[34m…\x1b[0m\x1f\x1b[31m界\x1b[0m\x1b[34m…\x1b[0m
 right_crop	hel\x1b[1mlo w\x1b[0m
 rstrip	\x1b[1mhi\x1b[0m there
 rstrip_end_partial	hello   
