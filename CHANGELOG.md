@@ -57,9 +57,10 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
-Planned cohort (see [0.0.10 plan](docs/plans/0.0.10.md)): core 0.0.6, ext 0.0.8,
-art 0.0.8, CLI 0.0.10. Manifests are bumped up front so every 0.0.10 change is
-checked against unpublished versions; nothing is published yet.
+## Core 0.0.6 / ext 0.0.8 / art 0.0.8 / CLI 0.0.10 — prepared
+
+Every workstream in the [0.0.10 plan](docs/plans/0.0.10.md) is merged to `main`. The
+release test on the integrated tree is in progress. Nothing is tagged or published.
 
 - Release: crates.io Trusted Publishing replaces the stored registry token; the
   OIDC exchange runs only after preflight and dry run (`docs/BRANCHING.md`).
