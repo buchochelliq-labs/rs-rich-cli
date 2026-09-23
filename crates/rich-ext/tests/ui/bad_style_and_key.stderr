@@ -1,0 +1,11 @@
+error: invalid style: color parse error: "purplish" is not a valid color
+ --> tests/ui/bad_style_and_key.rs:2:30
+  |
+2 |     let _ = rich_ext::style!("bold purplish");
+  |                              ^^^^^^^^^^^^^^^
+
+error: `repr.numbr` is not a default theme key; keys in that group include repr.ellipsis, repr.indent, repr.error, repr.str, repr.brace
+ --> tests/ui/bad_style_and_key.rs:3:34
+  |
+3 |     let _ = rich_ext::theme_key!("repr.numbr");
+  |                                  ^^^^^^^^^^^^

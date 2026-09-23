@@ -33,6 +33,7 @@ workspace = true
 
 [dependencies]
 rich.workspace = true
+rich-macros = { workspace = true, optional = true }
 fancy-regex.workspace = true
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { workspace = true, optional = true }
@@ -44,10 +45,13 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["r
 
 [dev-dependencies]
 thiserror = "2"
+trybuild = "1"
 
 [features]
 default = []
 anyhow = ["dep:anyhow"]
+# richf!, style!, theme_key!, markup!, #[derive(Rich)] and the print macros.
+macros = ["dep:rich-macros"]
 log = ["dep:log"]
 tracing = ["dep:tracing", "dep:tracing-subscriber"]
 testing = ["dep:serde", "dep:serde_json"]

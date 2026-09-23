@@ -23,7 +23,8 @@ The dependency graph is one-directional and must stay that way:
 
 ```
 rich-cli ──▶ rich-ext ──▶ rich
-                          (core: no deps on ext/cli, no knowledge of them)
+                 │          ▲   (core: no deps on ext/cli/macros, no knowledge of them)
+                 └──▶ rich-macros   (proc-macros; optional, behind ext's `macros` feature)
 ```
 
 If a change would make `crates/rich` diverge from upstream `rich`, it is almost
@@ -43,6 +44,7 @@ possible, and keep the boundary free of core back-dependencies.
 | `rs-rich`      | independent SemVer | whenever we ship anything              |
 | `rs-rich-cli`  | independent SemVer | whenever we ship anything              |
 | `rs-rich-ext`  | independent SemVer | whenever we ship anything              |
+| `rs-rich-macros` | independent SemVer | whenever we ship anything            |
 | `rs-rich-art`  | independent SemVer | whenever we ship anything              |
 
 ### Why not mirror the upstream version?

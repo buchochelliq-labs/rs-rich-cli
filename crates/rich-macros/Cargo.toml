@@ -1,0 +1,36 @@
+# crates/rich-macros — compile-time checked markup and derive macros.
+#
+# A proc-macro must be its own crate, so these live here and are re-exported
+# from rs-rich-ext behind its `macros` feature. Generated code names only public
+# rich / rich-ext APIs (through `rich_ext::__private`). Independent SemVer from
+# 0.0.1, like every crate here; see AGENTS.md → Versioning.
+[package]
+name = "rs-rich-macros"
+version = "0.0.1"
+description = "Compile-time checked markup and derive macros for the `rich` Rust port"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rs-rich-macros"
+keywords = ["terminal", "console", "markup", "macro", "derive"]
+categories = ["command-line-interface", "development-tools::procedural-macro-helpers"]
+include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
+
+[lib]
+name = "rich_macros"
+proc-macro = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Markup and styles are checked with the core's own parsers, so a macro never
+# accepts what the runtime would reject (or the reverse).
+rich.workspace = true
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full"] }

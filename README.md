@@ -63,6 +63,7 @@ in the release notes; the crates.io links show available packages.
 | Package | Manifest version |
 |---|---|
 | [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.7` |
+| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.1` |
 | [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.9` |
 | [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.11` |
 | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.9` |
@@ -72,6 +73,7 @@ in the release notes; the crates.io links show available packages.
 |---|---|---|
 | `rs-rich` | faithful port of Python rich 15.0.0 | `use rich` |
 | `rs-rich-ext` | additions and plugin registry | `use rich_ext` |
+| `rs-rich-macros` | checked markup and derive macros (via `rs-rich-ext`'s `macros` feature) | `use rich_ext::richf` |
 | `rs-rich-cli` | CLI tracking Python rich-cli 1.8.1 | executable `rich` |
 | `rs-rich-art` | FIGlet, image→ASCII, animated GIFs | `use rich_art` |
 

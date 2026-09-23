@@ -108,6 +108,28 @@ retain signed/unsigned 64/128-bit numbers; Debug-only fields become strings.
 See examples `log_adapter` and `tracing_adapter`. Layer integration follows
 [tracing-subscriber Layer](https://docs.rs/tracing-subscriber/0.3.23/tracing_subscriber/layer/trait.Layer.html).
 
+### Macros
+
+The `macros` feature re-exports `rs-rich-macros`:
+
+- `richf!("[bold]{name}[/] has {count:>3} items")` builds a `Text` from
+  `format!`-style markup. Unbalanced, mismatched or unclosed tags, unknown style
+  names and unknown theme keys are compile errors. Declare custom keys with
+  `richf!(keys["app.title"], …)`. Values are escaped, so user data is never read
+  as markup. A placeholder inside a tag (`[{color}]`) is inserted as markup and
+  checked at run time.
+- `style!("bold red")`, `theme_key!("repr.number")` and `markup!("[green]ok[/]")`
+  check literals.
+- `#[derive(Rich)]` renders a struct or enum as labelled fields, a titled panel
+  (`#[rich(panel)]`) or a table row (`#[rich(table)]`). Field options are
+  `skip`, `label`, `style`, `display`, `format`, `justify` and `order`.
+  `derive::table(&records)` lays many records out as rows.
+- `rich_println!`, `rich_eprintln!` and `rich_trace!` print checked markup.
+
+Without the feature you still get `rich_table!`, `rich_panel!`, `rich_tree!`,
+`rich_progress!` and `rich_dbg!` (`dbg!` rendered through `Pretty`). They build
+the ordinary core types, so the result can still be configured.
+
 ### Coordinated Live regions
 
 `live::LiveCoordinator` owns one writer and opaque region IDs. Call `refresh`

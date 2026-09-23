@@ -8,11 +8,11 @@ name: release
 
 on:
   push:
-    tags: ["v*", "rs-rich-v*", "rs-rich-ext-v*", "rs-rich-cli-v*", "rs-rich-art-v*"]
+    tags: ["v*", "rs-rich-v*", "rs-rich-macros-v*", "rs-rich-ext-v*", "rs-rich-cli-v*", "rs-rich-art-v*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing tag (vX.Y.Z for all crates or rs-rich[-ext/-cli/-art]-vX.Y.Z for one)
+        description: Existing tag (vX.Y.Z for all crates or rs-rich[-macros/-ext/-cli/-art]-vX.Y.Z for one)
         required: true
       verify_only:
         description: Verify already-published exact versions without uploading

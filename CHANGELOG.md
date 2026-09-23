@@ -116,6 +116,30 @@ CLI 0.0.11. Core changes below, so every dependent moves with it.
 - **Goldens.** 6 new `progress_time.tsv` cases (expand, flexible bar, column
   options, crop and style, narrow wrapping) and 4 new `progress_live.tsv` cases
   (transient, disabled, non-terminal) match rich 15.0.0.
+
+### New crate `rs-rich-macros` 0.0.1 and ext macros (0.0.11 workstream 5)
+
+- **`rs-rich-macros`** is a proc-macro crate, used through `rs-rich-ext`'s new
+  `macros` feature. It checks markup and styles with the core's own parsers.
+  - **Checked markup (#36, #282, #283).** `richf!` builds a `Text` from
+    `format!`-style markup and escapes the values. Unbalanced, mismatched or
+    unclosed tags, unknown style names and unknown theme keys are compile
+    errors, as are malformed or unused placeholders. `style!`, `theme_key!` and
+    `markup!` check literals.
+  - **Derive (#280, #281).** `#[derive(Rich)]` implements `RichRecord` and
+    `Renderable`: labelled fields, a panel, or a table row, with field options
+    `skip`, `label`, `style` (checked), `display`, `format`, `justify` and
+    `order`. `rich_ext::derive::table` renders many records as rows.
+- **Print and debug macros (#284, #285).** `rich_dbg!` is `dbg!` rendered through
+  `Pretty`. With `macros`, `rich_println!`, `rich_eprintln!` and `rich_trace!`
+  print checked markup.
+- **Convenience macros (#385).** `rich_table!`, `rich_panel!`, `rich_tree!` and
+  `rich_progress!` build the ordinary core types.
+- **Tests.** `trybuild` compile-fail cases pin the error messages.
+- **Release tooling.** The tooling knows the fifth crate: `release.py`, the
+  release tag triggers, the CI feature matrix and the release tests.
+  Publication order is core, macros, ext and art, then CLI.
+
 ### Ext: diagnostics, hyperlinks, stack traces and a dashboard (0.0.11 workstream 3)
 
 - **Diagnostics (#210).** `Diagnostic` gains a `Level` and code
