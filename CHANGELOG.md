@@ -64,6 +64,12 @@ checked against unpublished versions; nothing is published yet.
   `upload-pages-artifact` v5, `deploy-pages` v5).
 - Art: `icy_sixel` 0.7 for the optional Sixel backend.
 - CLI: `toml` 1.1 for configuration parsing; strict-config behaviour unchanged.
+- Ext: `Diagnostic::from_error` no longer reports an ordinary error chain as a
+  `[cycle]` when a wrapper stores its source as its first field (same address);
+  cause identity now compares address *and* type (#146, #151). New regressions
+  cover a three-level chain, and checked-in `RenderSnapshot` fixtures cover
+  multiline, chained and source-context diagnostics. A nested-panel layout
+  regression evidences #134.
 
 ## CLI 0.0.9 / art 0.0.7 — prepared
 

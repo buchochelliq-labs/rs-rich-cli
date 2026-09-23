@@ -186,3 +186,81 @@ fn intrinsic_height_uses_descendant_allocated_widths() {
         ["ABCXY ", "DEF   ", "tail  "]
     );
 }
+
+/// #134's nested-panel criterion: panels as layout leaves, a split nested inside
+/// a split, and a layout inside a panel, all bounded and cell-exact.
+#[test]
+fn nested_panels_compose_inside_and_around_layouts() {
+    use rich::Panel;
+    let console = Console::builder()
+        .width(30)
+        .height(8)
+        .no_color(true)
+        .build();
+    let node = LayoutNode::split(
+        Axis::Horizontal,
+        vec![
+            LayoutNode::leaf(Box::new(
+                Panel::new(Box::new(Text::new("nav"))).title("Side"),
+            ))
+            .width(Constraint::fixed(12)),
+            LayoutNode::split(
+                Axis::Vertical,
+                vec![
+                    LayoutNode::leaf(Box::new(Panel::new(Box::new(Text::new("top")))))
+                        .height(Constraint::fixed(3)),
+                    LayoutNode::leaf(Box::new(Panel::new(Box::new(Text::new("bottom"))))),
+                ],
+            ),
+        ],
+    );
+    let rows = strings(Segment::split_lines(
+        &node.rich_render(&console, &console.options().update_dimensions(30, 8)),
+    ));
+    assert_eq!(rows.len(), 8, "{rows:#?}");
+    for row in &rows {
+        assert_eq!(rich::cells::cell_len(row), 30, "{rows:#?}");
+    }
+    // Leaves render at their natural height (the region is padded with blank
+    // rows); widths are exact. Left: a 12-cell panel. Right: a 3-row panel above
+    // the rest of the column, each 18 cells wide.
+    assert_eq!(
+        rows,
+        [
+            "╭── Side ──╮╭────────────────╮",
+            "│ nav      ││ top            │",
+            "╰──────────╯╰────────────────╯",
+            "            ╭────────────────╮",
+            "            │ bottom         │",
+            "            ╰────────────────╯",
+            "                              ",
+            "                              ",
+        ]
+    );
+
+    // A layout inside a panel takes the panel's inner width.
+    let inner = LayoutNode::split(
+        Axis::Horizontal,
+        vec![
+            LayoutNode::leaf(Box::new(Text::new("a"))).width(Constraint::fixed(4)),
+            LayoutNode::leaf(Box::new(Text::new("b"))).align(Alignment::End, Alignment::Start),
+        ],
+    );
+    let panel = Panel::new(Box::new(inner));
+    let rows = strings(Segment::split_lines(
+        &panel.rich_render(&console, &console.options().update_dimensions(14, 3)),
+    ));
+    assert_eq!(rows[1], "│ a        b │", "{rows:#?}");
+    for width in [0, 1, 2, 5, 12, 29] {
+        for height in [0, 1, 3, 8] {
+            let rows = Segment::split_lines(&node.rich_render(
+                &console,
+                &console.options().update_dimensions(width, height),
+            ));
+            assert!(rows.len() <= height);
+            assert!(rows
+                .iter()
+                .all(|r| r.iter().map(Segment::cell_length).sum::<usize>() <= width));
+        }
+    }
+}
