@@ -5004,13 +5004,46 @@ fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
         console.print(&ProgressBar::new(100.0, pct).width(48));
     }
 
-    // Progress display — description + flexing bar + percentage (static frame).
+    // Progress display with upstream's default columns (description, bar,
+    // percentage, time remaining), driven by a simulated clock so the frame is
+    // deterministic: speeds and ETAs come from real task samples.
     demo::section(&console, delay, "progress");
-    let mut progress = Progress::new();
-    progress.add_task("Downloading", 100.0, 50.0);
-    progress.add_task("Processing", 100.0, 100.0);
+    let clock = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0f64.to_bits()));
+    let set_time =
+        |seconds: f64| clock.store(seconds.to_bits(), std::sync::atomic::Ordering::SeqCst);
+    let reader = clock.clone();
+    let now = move || f64::from_bits(reader.load(std::sync::atomic::Ordering::SeqCst));
+    let mut progress = Progress::new().clock(now.clone());
+    let downloading = progress.add_task("Downloading", 100.0, 0.0);
+    let processing = progress.add_task("Processing", 100.0, 0.0);
     progress.add_task("Waiting", 100.0, 0.0);
+    set_time(4.0);
+    progress.advance(downloading, 20.0);
+    progress.advance(processing, 60.0);
+    set_time(8.0);
+    progress.advance(downloading, 30.0);
+    progress.advance(processing, 40.0);
     console.print(&progress);
+
+    // Time, rate and spinner columns on a simulated transfer.
+    let mut transfer = Progress::new().clock(now).columns(vec![
+        ProgressColumn::spinner(),
+        ProgressColumn::Description,
+        ProgressColumn::Bar,
+        ProgressColumn::Download,
+        ProgressColumn::TransferSpeed,
+        ProgressColumn::TimeElapsed,
+        ProgressColumn::time_remaining(),
+    ]);
+    let iso = transfer.add_task("ubuntu.iso", 4_700_000_000.0, 0.0);
+    let notes = transfer.add_task("notes.txt", 42_000.0, 0.0);
+    set_time(12.0);
+    transfer.advance(iso, 1_200_000_000.0);
+    transfer.advance(notes, 20_000.0);
+    set_time(20.0);
+    transfer.advance(iso, 900_000_000.0);
+    transfer.advance(notes, 22_000.0);
+    console.print(&transfer);
 
     // Progress with custom columns — description + bar + M-of-N counter.
     let mut mofn = Progress::new().columns(vec![
