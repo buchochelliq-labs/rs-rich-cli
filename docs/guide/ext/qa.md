@@ -199,21 +199,19 @@ shrink budget, and which node kinds to generate (`kinds`, `without`).
 --8<-- "crates/rich-ext/examples/guide_qa.rs:fuzz"
 ```
 
-![Seven failures, with their widths and invariants](../../media/guide/guide_qa-fuzz.svg)
+![No failures across 60 generated cases](../../media/guide/guide_qa-fuzz.svg)
 
-These failures are real. They are the two known core bugs the fuzzer found:
-`Columns` overflows with an item wider than the width, and `Tree` guides
-overflow below about 8 columns. The shrunk reproductions look like this:
+A failure lists the case, the width, the broken invariant and a shrunk
+reproduction you can paste into a test, like this one:
 
 ```text
 // seed 7, case 12, width 1
 let renderable = Columns::new(vec!["su".to_string()]);
-// seed 7, case 4, width 1
-let renderable = { let mut t = Tree::new(""); { let n0 = t.add(""); } t };
 ```
 
-Until those are fixed in core, leave out `NodeKind::Columns` and keep widths
-at 16 or more when fuzzing your own code, or expect these failures.
+That reproduction is from a real bug the fuzzer found: `Columns` used to
+overflow with an item wider than the width, and `Tree` guides overflowed
+below about 8 columns. Both are fixed in core, matching rich 15.0.0.
 
 ## Capability matrix
 
