@@ -27,7 +27,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `_wrap.py`                            | `wrap.rs`                | 🟢 | ✅ 0 / 30,680 wrap cases |
 | `theme.py`, `themes.py`, `default_styles.py` | `theme.rs` | ✅ | ✅ |
 | `terminal_theme.py` | `terminal_theme.rs` | 🟡 | ✅ |
-| `console.py` (+ `ConsoleOptions`, `render_lines`) | `console.rs`  | 🟡 | ✅ |
+| `console.py` (+ `ConsoleOptions`, `render_lines`) | `console.rs`  | 🟡 | ✅ (+ `no_color.tsv`: colour removal, exports) |
 | `protocol.py`, `abc.py`, `_extension.py` | `protocol.rs`         | 🟡 | — |
 | `measure.py` (+ `Renderable::measure`, fit, `Measurement.get`) | `measure.rs`       | 🟡 | ✅ `Syntax`/`JSON` measurement golden (`measure.tsv`); container `__rich_measure__` (`measure_renderables.tsv`) |
 | `errors.py`                           | `errors.rs`              | 🟡 | — |
@@ -60,8 +60,8 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | upstream `rich/…` | rust file | status | parity |
 |-------------------|-----------|:------:|--------|
 | `progress.py` | `progress.rs` + `pyformat.rs` | 🟡 | ✅ `progress_time.tsv` step programs (columns incl. `TextColumn`/`RenderableColumn`, fields, pulse, task API, clock, expand, table-column options, `bar_width=None`), `progress_live.tsv` (live stream, transient, disable, non-terminal) |
-| `spinner.py`, `_spinners.py` (full table) | `spinner.rs` | 🟡 | ✅ `live_status.tsv` (start at first render, `update`, markup text) |
-| `status.py` | `status.rs` | 🟡 | ✅ `live_status.tsv` (frames and `update`) |
+| `spinner.py`, `_spinners.py` (full table) | `spinner.rs` | 🟡 | ✅ `live_status.tsv` (start at first render, `update`, markup text, console clock, measure) |
+| `status.py` | `status.rs` | 🟡 | ✅ `live_status.tsv` (frames, `update`, console clock) |
 | `live_render.py` | `live_render.rs` | 🟡 | ✅ `live_status.tsv` (`position_cursor`/`restore_cursor`, style, wrap) |
 | `live.py` | `live.rs` | 🟡 | ✅ `progress_live.tsv` (start/refresh/stop stream); auto-refresh timing by unit tests |
 

@@ -176,8 +176,9 @@ pub fn explain(renderable: &dyn Renderable, target: &RenderTarget) -> Explanatio
     explain_with_report(renderable, target, None)
 }
 
-/// [`explain`] for a console at `width`: its colour system, `ascii_only`
-/// and terminal flag (hyperlinks are assumed on a terminal).
+/// [`explain`] for a console at `width`: its colour system (none under
+/// `no_color`), `ascii_only` and terminal flag (hyperlinks are assumed on a
+/// terminal).
 pub fn explain_console(
     renderable: &dyn Renderable,
     console: &Console,
@@ -186,7 +187,8 @@ pub fn explain_console(
     let caps = TargetCapabilities {
         width,
         height: console.height(),
-        color_system: console.color_system(),
+        // `no_color` keeps the colour system and strips colour on output.
+        color_system: console.color_system().filter(|_| !console.no_color()),
         interactive: console.is_terminal(),
         unicode: !console.ascii_only(),
         hyperlinks: console.is_terminal(),

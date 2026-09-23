@@ -5,9 +5,10 @@
 //! [`Spinner::render`] is the testable surface. Like upstream, the first render
 //! fixes the start of the animation, and [`Spinner::update`] can change the
 //! text, style or speed mid-animation (a new speed takes effect from the next
-//! render, continuing from the current frame). Animation comes from redrawing
-//! with a `Live` display, and `ProgressColumn::Spinner` animates one from the
-//! progress clock.
+//! render, continuing from the current frame). Rendered as a renderable, a
+//! spinner shows the frame for the console's clock ([`Console::get_time`]), so
+//! redrawing it in a `Live` display animates it; `ProgressColumn::Spinner`
+//! animates one from the progress clock.
 //!
 //! Scope: all built-in spinners (vendored in `spinner_data.rs`), trailing text
 //! as console markup and a frame style. Upstream's non-text trailing
@@ -16,6 +17,7 @@
 use std::cell::Cell;
 
 use crate::console::{Console, ConsoleOptions};
+use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::style::StyleType;
@@ -136,11 +138,17 @@ impl Spinner {
 }
 
 impl Renderable for Spinner {
+    /// Port of `Spinner.__rich_console__`: the frame for the console's clock
+    /// ([`Console::get_time`]), so each redraw inside a `Live` display moves
+    /// the animation on.
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        // A bare print shows the frame at the animation's start; animation
-        // needs a Live loop driving `render` with a clock.
-        self.render(self.start_time.get().unwrap_or(0.0))
+        self.render(console.get_time())
             .rich_render(console, options)
+    }
+
+    /// Port of `Spinner.__rich_measure__`, which measures `self.render(0)`.
+    fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+        self.render(0.0).measure(console, options)
     }
 }
 

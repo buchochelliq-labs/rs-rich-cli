@@ -2,12 +2,16 @@
 //!
 //! Port of `rich/status.py` (the renderable surface). A [`Status`] shows a
 //! spinner animation followed by a status message, parsed as console markup.
-//! Upstream drives it with a `Live` loop; here the spinner is the testable
-//! surface ([`Status::renderable`] rendered at a point in time), and
+//! Upstream drives it with its own `Live` loop; here a `Status` is a
+//! renderable whose spinner reads the console's clock
+//! ([`Console::get_time`]), so it animates when redrawn by a
+//! [`Live`](crate::live::Live) display. [`Status::renderable`] rendered at a
+//! point in time is the testable surface, and
 //! [`Status::update`] follows upstream: a new spinner name replaces the
 //! spinner (restarting its animation), anything else updates it in place.
 
 use crate::console::{Console, ConsoleOptions};
+use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::spinner::Spinner;
@@ -104,10 +108,15 @@ impl Status {
     }
 }
 
+/// Upstream's `Status.__rich__` returns the spinner, so a status renders (and
+/// measures) exactly as its spinner: the frame for the console's clock.
 impl Renderable for Status {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        // Static frame; the live animation needs the Live loop.
         self.spinner.rich_render(console, options)
+    }
+
+    fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+        self.spinner.measure(console, options)
     }
 }
 

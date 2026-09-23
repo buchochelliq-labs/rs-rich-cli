@@ -1462,7 +1462,7 @@ mod tests {
             }
             let row: Vec<String> = (0..ncols).map(|i| i.to_string()).collect();
             table.add_row(&row.iter().map(String::as_str).collect::<Vec<_>>());
-            let console = Console::builder().width(80).no_color(true).build();
+            let console = Console::builder().width(80).color_system(None).build();
             let out = console.render_to_string(&table);
             let rows: Vec<&str> = out.lines().filter(|l| !l.trim().is_empty()).collect();
             let widths: Vec<usize> = rows.iter().map(|r| r.chars().count()).collect();
@@ -1491,7 +1491,7 @@ mod tests {
         table.add_column("bio");
         table.add_row(&["Alice", "line one\nline two is much longer"]);
         table.add_row(&["Bob", "short"]);
-        let console = Console::builder().width(60).no_color(true).build();
+        let console = Console::builder().width(60).color_system(None).build();
         let out = console.render_to_string(&table);
         let top = out.lines().next().expect("a top border");
         let width = top.chars().count();

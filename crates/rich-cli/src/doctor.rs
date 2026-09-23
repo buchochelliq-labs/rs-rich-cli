@@ -135,7 +135,7 @@ fn report(args: &[String]) -> Result<(serde_json::Value, Report, bool), String> 
             height: settings["height"].as_u64().map(|v| v as usize),
             color_system: (settings["no_color"].is_boolean()
                 || std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()))
-            .then_some(console.color_system()),
+            .then_some(console.color_system().filter(|_| !console.no_color())),
             ..Default::default()
         },
     );

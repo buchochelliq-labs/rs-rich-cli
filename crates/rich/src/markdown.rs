@@ -1679,7 +1679,7 @@ mod tests {
         let highlighted = render_with(&Markdown::new(source).inline_code_lexer("rust"));
         assert!(!highlighted.contains("\x1b[1;36;40m"), "{highlighted:?}");
         assert_ne!(plain, highlighted);
-        let text = Console::builder().width(30).no_color(true).build();
+        let text = Console::builder().width(30).color_system(None).build();
         assert_eq!(
             text.render_to_string(&Markdown::new(source).inline_code_lexer("rust")),
             text.render_to_string(&Markdown::new(source)),
@@ -1702,14 +1702,14 @@ mod tests {
 
     #[test]
     fn a_code_only_list_item_keeps_the_bullet_on_its_padding_row() {
-        let console = Console::builder().width(30).no_color(true).build();
+        let console = Console::builder().width(30).color_system(None).build();
         assert_eq!(console.render_export(&Markdown::new("- ```\n  code\n  ```")),
             "\n •                            \n    code                      \n                              \n");
     }
 
     #[test]
     fn table_cell_images_share_a_row_until_the_cell_closes() {
-        let console = Console::builder().width(30).no_color(true).build();
+        let console = Console::builder().width(30).color_system(None).build();
         let output = console.render_to_string(&Markdown::new(
             "| h |\n|---|\n| ![a](x) ![b](y) |\n| ![c](z) |",
         ));
@@ -1718,7 +1718,7 @@ mod tests {
 
     #[test]
     fn quoted_rule_spacing_uses_the_last_closed_child() {
-        let console = Console::builder().width(30).no_color(true).build();
+        let console = Console::builder().width(30).color_system(None).build();
         assert_eq!(
             console.render_to_string(&Markdown::new("> ---")),
             "▌ --------------------------\n▌                           "
@@ -1732,7 +1732,7 @@ mod tests {
 
     #[test]
     fn ignored_html_blocks_keep_upstream_paragraph_spacing() {
-        let console = Console::builder().width(30).no_color(true).build();
+        let console = Console::builder().width(30).color_system(None).build();
         for (source, expected) in [
             (
                 "<div>hidden</div>\n\nParagraph",
@@ -1870,7 +1870,7 @@ mod container_tests {
     use super::*;
 
     fn plain(source: &str, width: usize) -> String {
-        let console = Console::builder().width(width).no_color(true).build();
+        let console = Console::builder().width(width).color_system(None).build();
         console.render_to_string(&Markdown::new(source))
     }
 
@@ -2317,7 +2317,7 @@ mod hyperlink_tests {
     fn plain(source: &str, width: usize, hyperlinks: bool) -> String {
         Console::builder()
             .width(width)
-            .no_color(true)
+            .color_system(None)
             .build()
             .render_to_string(&Markdown::new(source).hyperlinks(hyperlinks))
     }

@@ -170,6 +170,17 @@ impl Style {
         self.bgcolor.as_ref()
     }
 
+    /// A copy with the foreground and background colours removed; attributes
+    /// and link survive. Port of `Style.without_color`.
+    pub fn without_color(&self) -> Style {
+        Style {
+            color: None,
+            bgcolor: None,
+            attrs: self.attrs,
+            link: self.link.clone(),
+        }
+    }
+
     /// The tri-state value of attribute `index` (see the internal `attrs` order:
     /// 0=bold, 1=dim, 2=italic, 3=underline, 6=reverse, 8=strike, …).
     pub fn attr(&self, index: usize) -> Option<bool> {

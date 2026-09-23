@@ -1,0 +1,18 @@
+# Golden parity fixtures for the prompt ask loop — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py  (see AGENTS.md → Parity)
+#
+# Format: <name>	<case JSON>	<outputs JSON>
+# case: {"kind": "prompt" | "confirm" | "int", "question", "choices"?, "default"?,
+#   "answers": [lines typed]}
+# outputs: {"terminal", "text", "result"}.
+#
+# `<Kind>.ask(question, console=..., stream=StringIO(answers))` on a
+# Console(file=StringIO(), record=True, force_terminal=True, truecolor, width 80,
+# highlight=False). The question reaches the console through `Console.input`
+# → `print(prompt, end="")`, so it is in the terminal output and the recording
+# alongside any re-ask messages. Answers are never empty: read from a stream
+# an empty line is "\n", not "", so upstream would not take the default.
+prompt_answer	{"kind": "prompt", "question": "Enter [bold]name[/]", "answers": ["Ann"]}	{"terminal": "Enter \u001b[1mname\u001b[0m: ", "text": "Enter name: ", "result": "Ann"}
+prompt_choices_reask	{"kind": "prompt", "question": "Pick", "choices": ["a", "b"], "default": "a", "answers": ["z", "b"]}	{"terminal": "Pick \u001b[1;35m[a/b]\u001b[0m \u001b[1;36m(a)\u001b[0m: \u001b[31mPlease select one of the available options\u001b[0m\nPick \u001b[1;35m[a/b]\u001b[0m \u001b[1;36m(a)\u001b[0m: ", "text": "Pick [a/b] (a): Please select one of the available options\nPick [a/b] (a): ", "result": "b"}
+confirm_reask	{"kind": "confirm", "question": "Sure", "answers": ["maybe", "y"]}	{"terminal": "Sure \u001b[1;35m[y/n]\u001b[0m: \u001b[31mPlease enter Y or N\u001b[0m\nSure \u001b[1;35m[y/n]\u001b[0m: ", "text": "Sure [y/n]: Please enter Y or N\nSure [y/n]: ", "result": true}
+int_reask	{"kind": "int", "question": "Age", "default": 3, "answers": ["x", "42"]}	{"terminal": "Age \u001b[1;36m(3)\u001b[0m: \u001b[31mPlease enter a valid integer number\u001b[0m\nAge \u001b[1;36m(3)\u001b[0m: ", "text": "Age (3): Please enter a valid integer number\nAge (3): ", "result": 42}
