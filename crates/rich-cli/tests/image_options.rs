@@ -22,8 +22,8 @@ fn image_fit_requires_a_target_height() {
 fn image_options_reject_invalid_values_and_other_modes() {
     for (args, message) in [
         (
-            vec!["image", "missing.png", "--image-fit", "stretch"],
-            "contain or cover",
+            vec!["image", "missing.png", "--image-fit", "squash"],
+            "contain, cover or stretch",
         ),
         (
             vec!["image", "missing.png", "--image-background", "purple"],
@@ -276,4 +276,302 @@ fn transform_config_and_cli_override_match_explicit_options() {
     );
     assert!(explicit.status.success());
     assert_eq!(configured.stdout, explicit.stdout);
+}
+
+#[test]
+fn new_image_options_reject_bad_values_combinations_and_other_modes() {
+    for (args, message) in [
+        (
+            vec!["image", "missing.png", "--image-color", "ansi8"],
+            "truecolor, ansi256, ansi16 or grayscale",
+        ),
+        (
+            vec!["image", "missing.png", "--image-brightness", "-1"],
+            "--image-brightness requires a finite number of at least 0",
+        ),
+        (
+            vec!["image", "missing.png", "--image-contrast", "NaN"],
+            "--image-contrast requires a finite number",
+        ),
+        (
+            vec!["image", "missing.png", "--image-gamma", "0"],
+            "--image-gamma requires a finite number greater than 0",
+        ),
+        (
+            vec!["image", "missing.png", "--image-gamma", "bright"],
+            "--image-gamma requires",
+        ),
+        (
+            vec!["image", "missing.png", "--image-max-width", "0"],
+            "--image-max-width requires a positive integer",
+        ),
+        (
+            vec!["image", "missing.png", "--image-max-height", "-3"],
+            "--image-max-height requires a positive integer",
+        ),
+        (
+            vec!["image", "missing.png", "--image-mode", "tiles"],
+            "quadrants",
+        ),
+        (
+            vec![
+                "image",
+                "missing.png",
+                "--image-mode",
+                "braille",
+                "--image-color",
+                "ansi16",
+            ],
+            "ascii, blocks or quadrants",
+        ),
+        (
+            vec![
+                "image",
+                "missing.png",
+                "--image-color",
+                "truecolor",
+                "--image-dither",
+                "bayer4x4",
+            ],
+            "requires --image-color ansi256, ansi16 or grayscale",
+        ),
+        (
+            vec!["--print", "hi", "--image-gamma", "2"],
+            "--image-gamma only has an effect with --image",
+        ),
+        (
+            vec!["--print", "hi", "--image-max-width", "4"],
+            "--image-max-width only has an effect with --image",
+        ),
+    ] {
+        let out = run(&args);
+        assert_eq!(out.status.code(), Some(2), "{args:?}");
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains(message),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn new_image_options_route_to_the_library_exactly() {
+    use rich_art::{image, Dither, ImageArt, ImageColorMode, ImageFit, ImageMode, ImageTransforms};
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("source.png");
+    let source = image::DynamicImage::ImageRgba8(image::RgbaImage::from_fn(9, 7, |x, y| {
+        image::Rgba([
+            (x * 29) as u8,
+            (y * 37) as u8,
+            90,
+            if x == 4 { 0 } else { 255 },
+        ])
+    }));
+    source.save(&path).unwrap();
+    let console = rich::Console::builder()
+        .width(80)
+        .force_terminal(false)
+        .color_system(None)
+        .build();
+    let base = [
+        "image",
+        path.to_str().unwrap(),
+        "--width",
+        "8",
+        "--image-brightness",
+        "1.3",
+        "--image-contrast",
+        "0.8",
+        "--image-gamma",
+        "1.5",
+    ];
+    let transforms = ImageTransforms {
+        brightness: 1.3,
+        contrast: 0.8,
+        gamma: 1.5,
+        ..Default::default()
+    };
+    let cases: Vec<(Vec<&str>, ImageArt)> = vec![
+        (
+            vec![
+                "--image-mode",
+                "quadrants",
+                "--image-color",
+                "ansi16",
+                "--image-dither",
+                "floyd-steinberg",
+            ],
+            ImageArt::new(source.clone())
+                .mode(ImageMode::Quadrants)
+                .color_mode(ImageColorMode::Ansi16)
+                .dither(Dither::FloydSteinberg),
+        ),
+        (
+            vec![
+                "--image-mode",
+                "ascii",
+                "--image-color",
+                "grayscale",
+                "--image-max-height",
+                "2",
+            ],
+            ImageArt::new(source.clone())
+                .mode(ImageMode::Ascii)
+                .color_mode(ImageColorMode::Grayscale)
+                .max_height(2),
+        ),
+        (
+            vec![
+                "--image-mode",
+                "ascii",
+                "--height",
+                "3",
+                "--image-fit",
+                "stretch",
+                "--image-max-width",
+                "5",
+            ],
+            ImageArt::new(source.clone())
+                .mode(ImageMode::Ascii)
+                .height(3)
+                .fit(ImageFit::Stretch)
+                .max_width(5),
+        ),
+    ];
+    for (extra, art) in cases {
+        let mut args = base.to_vec();
+        args.extend(&extra);
+        args.push("--no-color");
+        let out = run(&args);
+        assert!(
+            out.status.success(),
+            "{extra:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let expected = console.render_to_string(&art.width(8).color(false).transforms(transforms));
+        assert_eq!(
+            String::from_utf8(out.stdout)
+                .unwrap()
+                .trim_end_matches('\n'),
+            expected.trim_end_matches('\n'),
+            "{extra:?}"
+        );
+    }
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn new_image_options_load_from_config_and_validate_there() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("source.png");
+    rich_art::image::RgbImage::from_fn(8, 6, |x, y| {
+        rich_art::image::Rgb([x as u8 * 30, y as u8 * 40, 60])
+    })
+    .save(&source)
+    .unwrap();
+    let config = temp.path().join("config.toml");
+    std::fs::write(
+        &config,
+        "[defaults]\nimage_color = 'grayscale'\nimage_dither = 'bayer4x4'\nimage_brightness = 2\nimage_gamma = 0.8\nimage_max_width = 5\n",
+    )
+    .unwrap();
+    let configured = Command::new(env!("CARGO_BIN_EXE_rich"))
+        .args([
+            "--config",
+            config.to_str().unwrap(),
+            "image",
+            source.to_str().unwrap(),
+        ])
+        .args(["--image-mode", "quadrants", "--width", "8"])
+        .env_remove("NO_COLOR")
+        .output()
+        .unwrap();
+    let explicit = run(&[
+        "image",
+        source.to_str().unwrap(),
+        "--image-mode",
+        "quadrants",
+        "--width",
+        "8",
+        "--image-color",
+        "grayscale",
+        "--image-dither",
+        "bayer4x4",
+        "--image-brightness",
+        "2",
+        "--image-gamma",
+        "0.8",
+        "--image-max-width",
+        "5",
+    ]);
+    assert!(
+        configured.status.success(),
+        "{}",
+        String::from_utf8_lossy(&configured.stderr)
+    );
+    assert!(explicit.status.success());
+    assert_eq!(configured.stdout, explicit.stdout);
+    let first = String::from_utf8(explicit.stdout).unwrap();
+    assert_eq!(
+        first.lines().next().unwrap().chars().count(),
+        5,
+        "{first:?}"
+    );
+
+    for bad in [
+        "image_gamma = 0",
+        "image_contrast = -1",
+        "image_max_height = 0",
+        "image_color = 'sepia'",
+        "image_fit = 'squash'",
+    ] {
+        std::fs::write(&config, format!("[defaults]\n{bad}\n")).unwrap();
+        let out = Command::new(env!("CARGO_BIN_EXE_rich"))
+            .args([
+                "--config",
+                config.to_str().unwrap(),
+                "image",
+                source.to_str().unwrap(),
+            ])
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(2), "{bad}");
+    }
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn quadrant_diff_heatmaps_render_in_exports() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("rich-art/tests/fixtures");
+    let temp = tempfile::tempdir().unwrap();
+    let html = temp.path().join("diff.html");
+    let out = run(&[
+        "--diff",
+        dir.join("halo-before.png").to_str().unwrap(),
+        dir.join("halo-after.png").to_str().unwrap(),
+        "--width",
+        "40",
+        "--image-mode",
+        "quadrants",
+        "--threshold",
+        "100",
+        "--export-html",
+        html.to_str().unwrap(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let document = std::fs::read_to_string(html).unwrap();
+    assert!(
+        document
+            .chars()
+            .any(|c| matches!(c, '▘' | '▀' | '▌' | '▛' | '▚' | '▜' | '▙' | '█')),
+        "no quadrant glyphs in the export"
+    );
 }

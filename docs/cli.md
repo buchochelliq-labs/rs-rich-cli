@@ -84,15 +84,50 @@ Repeated scalar options use the last value, including `--width` and export paths
 Watch a local file while editing it:
 
 ```bash
-rich --watch --watch-interval 0.5 report.md
+rich --watch report.md
 ```
 
-The watcher checks local file contents at the polling interval using a bounded
-buffer, so same-size edits with preserved timestamps are detected. Atomic saves, temporary
-disappearance, malformed intermediate content, and later recovery are handled
-as successive frames; a failed frame is reported and the watcher keeps
-running. `Ctrl-C` terminates the interactive watch. URLs can be watched when
-the default `fetch` feature is enabled:
+Local files are watched through operating-system file events (inotify,
+FSEvents, ReadDirectoryChangesW or kqueue, via the `notify` crate). Each file's
+*parent directory* is watched and events are filtered by path, so atomic
+rename-over saves and delete-and-recreate are caught. A render only happens
+when the file's contents changed: the file is hashed with a bounded buffer, so
+same-size edits with preserved timestamps are detected and metadata-only
+events are ignored. Atomic saves, temporary disappearance, malformed
+intermediate content, and later recovery are handled as successive frames; a
+failed frame is reported and the watcher keeps running. `Ctrl-C` terminates
+the interactive watch.
+
+Watch several files at once — each keeps its own render mode (auto-detected
+from its extension unless a mode flag is given) and gets its own live region
+with the file name as a header:
+
+```bash
+rich --watch README.md status.json data.csv
+```
+
+A change to one file re-renders only that file's region; the regions repaint in
+place through the `rich-ext` Live coordinator instead of clearing the screen,
+and each region is cropped to an equal share of the terminal height (a
+`… N more lines` marker shows what is hidden). Errors stay visible inside the
+failing file's region and clear when the file becomes valid again. On
+`Ctrl-C` the last frame is left on screen and the cursor is restored. A single
+watched file keeps the full-viewport clear-and-repaint of earlier releases.
+
+| option | default | effect |
+|---|---|---|
+| `--watch-debounce SEC` | `0.1` | Quiet period that collapses a burst of events (an editor's write, rename and chmod) into one re-render. A file that keeps changing still refreshes at least every 10 debounce windows. `0` renders on every event. |
+| `--watch-poll` | off | Skip file events and poll local files every `--watch-interval`. Use it on network filesystems (NFS, SMB, some container mounts) where events are not delivered. |
+| `--watch-interval SEC` | `1` | Polling interval for `--watch-poll`, for the automatic polling fallback, and for URLs. |
+| `--watch-exit-on-error` | off | End the watch when a render fails, restoring the terminal, printing the error and exiting with that render's non-zero exit code. |
+
+If file events cannot be set up (for example the watch limit is exhausted or a
+parent directory does not exist), the watcher prints one notice and falls back
+to polling at `--watch-interval`. Idle watching does not busy-loop in either
+mode. Recursive directory and glob watching are not supported; name each file.
+
+URLs can be watched when the default `fetch` feature is enabled. A URL is
+always polled, and must be the only watched resource:
 
 ```bash
 rich --watch --watch-cache --watch-interval 5 https://example.com/data.json
@@ -101,7 +136,8 @@ rich --watch --watch-cache --watch-interval 5 https://example.com/data.json
 `--watch-cache` hashes each fetched response and only renders changed bodies.
 Without it, URLs are fetched and rendered every interval. When stdout is
 redirected or piped, `--watch` renders exactly one snapshot and exits instead
-of entering an interactive loop. A binary built with `--no-default-features`
+of entering an interactive loop; with several files the snapshot is each file
+rendered once, in order, byte-identical to separate `rich FILE` runs. A binary built with `--no-default-features`
 does not support URL fetching, including URL watches. Watch cannot be combined
 with batch or explicit/automatic paging.
 
@@ -276,7 +312,7 @@ rich image photo.png --image-mode blocks --height 20
 
 Renders a single picture instead of a comparison: `--diff` needs exactly two
 images, `--image` needs exactly one. It shares the same `--image-mode`
-(auto/sixel/blocks/braille/ascii) and capability auto-detection as `--diff`, plus a new
+(auto/sixel/blocks/quadrants/braille/ascii) and capability auto-detection as `--diff`, plus a new
 `--height N` to bound the rendered rows independently of `--width`. `none` is
 rejected for `--image`, because it means "draw nothing" and there is no
 comparison report to fall back on. See
@@ -295,8 +331,13 @@ rectangle and crops excess edges around `--image-anchor` (default `center`).
 Anchors are `center`, `top`, `bottom`, `left`, `right`, `top-left`, `top-right`,
 `bottom-left` and `bottom-right`. An explicit anchor requires cover fitting;
 contain always keeps the whole image centered. Both preserve aspect ratio assuming
-terminal cells are twice as tall as they are wide. Fitting requires `--height`;
-width defaults to the terminal width and is capped by available columns.
+terminal cells are twice as tall as they are wide. `stretch` fills the rectangle
+exactly and ignores the aspect ratio. Fitting requires `--height`; width defaults
+to the terminal width and is capped by available columns.
+
+`--image-max-width N` and `--image-max-height N` are upper bounds that never
+enlarge anything. Without fitting, the image keeps its aspect ratio and narrows
+to respect a height cap; with fitting, they clamp the target rectangle.
 
 `--image-background '#RRGGBB'` composites transparent pixels before resizing and
 colours contain padding. Fit padding defaults to black. Without either option,
@@ -319,24 +360,51 @@ let art = ImageArt::from_path("logo.png")?
 
 [See the actual renderings](demos.md) and [workflow recipes](recipes.md).
 
-### ANSI256 colour and dithering
+### Quadrant blocks
+
+```bash
+rich image logo.png --image-mode quadrants --width 60
+```
+
+Quadrant characters (`▘ ▀ ▌ ▛ ▚ ▜ ▙ █` and their complements) split every cell
+into 2×2 pixels, doubling half-blocks' horizontal detail on edges and diagonals.
+A cell still has only a foreground and a background colour, so each cell tries
+the eight ways of splitting its four pixels into two groups. It paints each
+group in its mean colour and keeps the split with the smallest summed squared
+RGB error. Exact ties keep the earlier candidate, and a uniform cell is `█`.
+Transparency composites onto black as in half-block mode. Quadrants also draw
+`--diff` heatmaps, and fall back to ASCII without colour like blocks.
+
+### Colour modes and dithering
 
 ```bash
 rich image photo.png --image-mode blocks --width 60 --image-color ansi256
 rich image photo.png --image-mode ascii --width 60 --image-color ansi256 --image-dither floyd-steinberg
+rich image photo.png --image-mode quadrants --width 60 --image-color ansi16 --image-dither bayer4x4
+rich image photo.png --image-mode blocks --width 60 --image-color grayscale
 ```
 
 Truecolor and no dithering remain the defaults (`--image-color truecolor`,
-`--image-dither none`). Opt-in ANSI256 preprocessing supports ASCII and half-block
-still images; Floyd–Steinberg requires ANSI256. Unsupported combinations are
-rejected rather than ignored. Auto mode is allowed when it resolves to ASCII
-or blocks; select a supported mode explicitly for predictable behavior. These
-controls do not apply to Braille, Sixel, GIF playback or image comparisons.
+`--image-dither none`). The quantized modes are:
+
+- `ansi256`: the fixed entries 16–255.
+- `ansi16`: the 16 system colours, matched against rich's standard palette (the
+  170/85 VGA table). The terminal theme decides how they finally look, so output
+  follows the user's theme at the cost of fidelity.
+- `grayscale`: the 26 neutral entries 16, 232–255 and 231, chosen by luma.
+
+They support ASCII, half-block and quadrant still images. Floyd–Steinberg and
+Bayer 4×4 work with every quantized mode and require one. Unsupported
+combinations are rejected rather than ignored. Auto mode is allowed when it
+resolves to ASCII or blocks; select a supported mode explicitly for predictable
+behavior. These controls do not apply to Braille, Sixel, GIF playback or image
+comparisons.
 
 Preprocessing runs on the final sampled raster after fitting and background
-compositing, before glyph selection. It uses fixed ANSI256 entries 16–255,
+compositing, before glyph selection. ANSI256 uses fixed entries 16–255,
 excluding the first 16 terminal-theme-dependent colours. Nearest colour uses
-squared distance in encoded RGB, with ties choosing the lowest palette index.
+squared distance in encoded RGB (luma for grayscale), with ties choosing the
+lowest palette index.
 Floyd–Steinberg visits left-to-right, top-to-bottom and discards diffusion error
 at image boundaries. This is a deterministic bounded palette policy, not a
 perceptual colour-distance model.
@@ -352,19 +420,53 @@ let art = ImageArt::from_path("photo.png")?
 
 The reusable builders live in art; `ImageOptions` remains source-compatible.
 
+### Brightness, contrast and gamma
+
+```bash
+rich image photo.png --image-brightness 1.2 --image-contrast 1.4 --image-gamma 0.8
+```
+
+Each defaults to `1.0` (unchanged) and acts on every encoded channel value `v`
+in `0..1`, clamping after each step. Alpha is never touched:
+
+1. brightness `b`: `v × b`
+2. contrast `c`: `(v − 0.5) × c + 0.5`
+3. gamma `g`: `v^(1/g)`; values above 1 brighten mid-tones
+
+The order is fixed: rotation and flips, then brightness, contrast and gamma, then
+`--image-grayscale`, fitting and background, sampling, and colour quantization.
+Brightness and contrast must be finite and at least 0; gamma must be finite and
+greater than 0. The same keys work in configuration files (`image_brightness`,
+`image_contrast`, `image_gamma`, `image_max_width`, `image_max_height`).
+
+```rust
+use rich_art::{ImageArt, ImageColorMode, ImageMode, ImageTransforms};
+let art = ImageArt::from_path("photo.png")?
+    .mode(ImageMode::Quadrants)
+    .width(60)
+    .max_height(20)
+    .color_mode(ImageColorMode::Ansi16)
+    .transforms(ImageTransforms { brightness: 1.2, gamma: 0.8, ..Default::default() });
+```
+
+![Actual same-source 0.0.10 image modes](media/cli-010-image-modes.png)
+
+Every panel is the binary's own SVG export of one gradient fixture. Reproduce it
+with `python scripts/capture_image_modes_010.py --binary target/release/rich`.
+
 ## Watch a changing file
 
 ```bash
 rich json status.json --no-config --watch --watch-interval 0.5
 ```
 
-Interactive watch clears and repaints the terminal viewport for each changed
-frame. It leaves the cursor visible and uses the existing console controls.
-Invalid input or a missing file is recoverable. Local regular files are read
-with a fixed 64 KiB buffer on every poll so same-size edits and atomic saves
-are detected even when timestamps are preserved. For large files, choose a
-longer interval to reduce disk I/O. Redirected stdout renders once and exits
-without terminal clear codes. See [watch recipes](recipes.md#watch-json-while-editing).
+Interactive watch of one file clears and repaints the terminal viewport for
+each changed frame; several files share the terminal as one live region each.
+Invalid input or a missing file is recoverable. Local regular files are hashed
+with a fixed 64 KiB buffer after each (debounced) file event, or on every poll
+with `--watch-poll`, so same-size edits and atomic saves are detected even when
+timestamps are preserved. Redirected stdout renders once and exits without
+terminal clear codes. See [watch recipes](recipes.md#watch-json-while-editing).
 
 ## Use it in a script or CI
 
@@ -658,8 +760,9 @@ render; varied source files may see no speedup. See the
 [measurements](benchmarks.md#004-repeated-source-syntax-results).
 
 Disabling configured watch with `watch = false` or `--no-watch` also suppresses
-inherited `watch_interval` and `watch_cache`. Explicitly passing those watch
-options without enabling watch remains a usage error.
+inherited `watch_interval`, `watch_cache`, `watch_debounce`, `watch_poll` and
+`watch_exit_on_error`. Explicitly passing those watch options without enabling
+watch remains a usage error.
 
 ### Destination capabilities
 
@@ -786,5 +889,5 @@ These are real renderer outputs; reproduce them with
 Raw HTML/SVG exports, source fixture and provenance accompany the previews.
 Braille uses fixed luminance thresholding with 2×4 dot cells; half-block uses top
 foreground/bottom background pairs. Tests enumerate all eight Braille positions,
-partial transparent cells and odd block heights. Quadrants remain optional future
-work; GIF block playback continues to consume the existing block renderer.
+partial transparent cells and odd block heights. Quadrant blocks shipped in 0.0.10
+(see above); GIF block playback continues to consume the existing block renderer.

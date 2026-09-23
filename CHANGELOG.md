@@ -85,6 +85,63 @@ checked against unpublished versions; nothing is published yet.
   Progress cell styles now resolve against the console theme.
 - CLI: the capability demo's progress section shows speed, ETA, elapsed and a
   spinner from a simulated clock.
+- Ext: `Diagnostic::from_error` no longer reports an ordinary error chain as a
+  `[cycle]` when a wrapper stores its source as its first field (same address);
+  cause identity now compares address *and* type (#146, #151). New regressions
+  cover a three-level chain, and checked-in `RenderSnapshot` fixtures cover
+  multiline, chained and source-context diagnostics. A nested-panel layout
+  regression evidences #134.
+- Ext (behaviour change): `LayoutNode` leaves now receive their region's height,
+  as upstream `Layout` passes it, so height-aware renderables such as `Panel`
+  fill their region instead of rendering at natural height above blank rows.
+  The nested-panel regression is byte-identical to rich 15.0.0's `Layout`.
+  Wrap a leaf in `.content_height()` to keep a panel at its natural height.
+- Core: `Syntax` and `Json` port upstream `__rich_measure__` (Syntax measures its
+  raw source plus padding; JSON measures as its `Text`), with `Measurement::get`,
+  `normalize` and `with_maximum`, parity-tested by the new `measure.tsv` golden.
+  A printed `Syntax` still renders at the full console width, as upstream does:
+  the new `Renderable::fit_to_measurement` (default `true`) opts it out of the
+  top-level shrink that stands in for upstream's `str`/`Text` joining.
+- Ext: `layout::Overflowing` applies one explicit `OverflowPolicy` (wrap, fold,
+  crop, ellipsis, visible) to Syntax, JSON or Text lines; fitting output is
+  unchanged byte for byte, and padded Syntax rows keep their background (#149).
+- Art 0.0.8 image modes (#125, #126, #199) and CLI routing (#144):
+  - `ImageColorMode::Ansi16` (rich's standard palette) and `Grayscale` (neutral
+    ANSI256 entries by luma). Floyd–Steinberg and Bayer 4×4 now work with every
+    quantized mode.
+  - `ImageMode::Quadrants` / `QuadrantArt`: 2×2 pixels per cell, choosing the
+    cheapest two-colour split. Also available for `--diff` heatmaps.
+  - `ImageFit::Stretch`, `ImageArt::max_width`/`max_height`, and brightness,
+    contrast and gamma in `ImageTransforms`, applied in a documented fixed order.
+  - CLI flags `--image-color ansi16|grayscale`, `--image-mode quadrants`,
+    `--image-fit stretch`, `--image-max-width`, `--image-max-height`,
+    `--image-brightness`, `--image-contrast` and `--image-gamma`, plus matching
+    config keys. Invalid values and unsupported combinations are usage errors.
+  - Unset options leave output byte-identical: 149 pre-existing mode, colour,
+    dither, fit and transform invocations compared equal against the previous
+    binary, stdout plus HTML and SVG exports.
+  - Migration: exhaustive matches need `ImageMode::Quadrants`,
+    `ImageFit::Stretch`, `ImageColorMode::{Ansi16, Grayscale}` and
+    `ImageArtError::InvalidAdjustment`. `ImageTransforms` gained three `f32`
+    fields, so it is no longer `Eq`, and struct literals need `..Default::default()`.
+  - The guided demo's art section and a same-source comparison image
+    (`docs/media/cli-010-image-modes.png`) show the new modes from actual output.
+- CLI: `--watch` accepts several local files; a change re-renders only that
+  file, in its own `rich-ext` Live region, with errors shown per file until it
+  recovers. File events come from `notify` (parent-directory watches, so atomic
+  rename-over saves and delete-and-recreate are seen), debounced by
+  `--watch-debounce` (default 0.1 s); `--watch-poll` and watcher failures use
+  the polling loop. `--watch-exit-on-error` ends the watch non-zero on a failed
+  render. New config keys: `watch_debounce`, `watch_poll`,
+  `watch_exit_on_error`. Redirected output and URL watching are unchanged (#139).
+- Parity tooling (#34): `scripts/diff_rich.py` generates Table, Rule, Padding
+  and Align cases alongside markup, text and panels. The Python oracle renders
+  each colour system in its own interpreter, because rich memoises a Style's
+  escape codes and a shared process misreported colours. Markup compares the
+  strict parser on both sides. The shrinker keeps the failure kind and reduces
+  rows, cells, columns and options. A nightly workflow runs 20,000 generated
+  cases on `main`. First findings are filed as #442–#449, with repros in
+  `scripts/fixtures/diff_rich_known.jsonl`; triage steps are in `docs/parity.md`.
 
 ## CLI 0.0.9 / art 0.0.7 — prepared
 

@@ -29,7 +29,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `terminal_theme.py` | `terminal_theme.rs` | 🟡 | ✅ |
 | `console.py` (+ `ConsoleOptions`, `render_lines`) | `console.rs`  | 🟡 | ✅ |
 | `protocol.py`, `abc.py`, `_extension.py` | `protocol.rs`         | 🟡 | — |
-| `measure.py` (+ `Renderable::measure`, fit) | `measure.rs`       | 🟡 | ✅ |
+| `measure.py` (+ `Renderable::measure`, fit, `Measurement.get`) | `measure.rs`       | 🟡 | ✅ `Syntax`/`JSON` measurement golden (`measure.tsv`) |
 | `errors.py`                           | `errors.rs`              | 🟡 | — |
 | `control.py`                          | `control.rs`             | 🟢 | ✅ |
 | `ansi.py`                             | `ansi.rs`                | 🟡 | ✅ |
@@ -69,7 +69,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 
 | upstream `rich/…` | rust file | status | notes |
 |-------------------|-----------|:------:|-------|
-| `syntax.py` | `syntax.rs` | 🟡 | functional via `syntect` (non-parity, DIVERGENCES #18) |
+| `syntax.py` | `syntax.rs` | 🟡 | functional via `syntect` (non-parity, DIVERGENCES #18); `__rich_measure__` is parity-tested |
 | `markdown.py` | `markdown.rs` | 🟡 | paragraphs/headings/inline/lists/quotes/code/links (both `hyperlinks` modes) + images (including table-cell hoisting and adjacency) + **GFM tables** via `pulldown-cmark` (inline styling within a table cell deferred) |
 | `json.py` | `json.rs` | 🟡 | ✅ default layout, arbitrary integers and overflowing exponents; optional escape-safe layout is off by default (DIVERGENCES §22) |
 | `pretty.py` | `pretty.rs` | 🟡 | Rust-native (`Debug` + repr highlight, #19) |
@@ -124,6 +124,7 @@ core mirror is untouched and a sync does not have to reconcile them.
 | strict TOML profiles, inverse booleans, `config show` / `config validate` | `config.rs` + `main.rs` | validated defaults/profile/CLI precedence and JSON inspection compose existing options without changing core |
 | `--auto-pager` and `--no-pager` | `main.rs` | CLI destination/height policy composes public pager APIs; redirected stdout is never paged |
 | `--image-anchor` for still-image cover fitting | `main.rs` | routes to public `rich-art::ImageArt::anchor`; crop implementation and `ImageAnchor` remain in art |
+| multi-file `--watch` with `--watch-debounce`, `--watch-poll`, `--watch-exit-on-error` (0.0.10, #139) | `watch.rs` + `main.rs` + `config.rs` | `notify` file events on each parent directory, polling fallback; several files repaint as public `rich-ext` `LiveCoordinator` regions; no core change |
 
 The 0.0.8 additions are published; workflow and registry-consumer evidence is
 recorded in [release notes](releases/0.0.8.md). Dry-run does not write exports
@@ -141,7 +142,10 @@ and explicit overrides, not a materialized list of built-in defaults.
 | Batch progress and Ctrl+C | CLI batch + main | Human-report stderr TTY only; kill/wait workers and exit 130; no core Live/progress behavior changes |
 | `--demo-list`, `--demo-section` | CLI demo + main | Routes stable groups of existing renderers; preserves cleanup and finite pipes |
 | `rich doctor` | CLI doctor + main | Read-only selected diagnostics; JSON stdout; no terminal probes, network fetch or pager execution |
-| `--image-color`, `--image-dither` | CLI routing; art implementation | Public `ImageColorMode`, `Dither`, `ImageArt::color_mode`/`dither`; ASCII/blocks preprocessing only |
+| `--image-color`, `--image-dither` | CLI routing; art implementation | Public `ImageColorMode`, `Dither`, `ImageArt::color_mode`/`dither`; ASCII/blocks/quadrants preprocessing only |
+| `--image-color ansi16\|grayscale` (#125) | CLI routing; art `image_color.rs` | `ImageColorMode::Ansi16` (rich `STANDARD_PALETTE`) and `Grayscale` (luma over 16/232–255/231); every dither |
+| `--image-mode quadrants` (#199) | CLI routing; art `quadrant.rs` | `ImageMode::Quadrants`, `QuadrantArt`; cheapest of eight two-colour 2×2 partitions; also draws `--diff` heatmaps |
+| `--image-fit stretch`, `--image-max-width/height`, `--image-brightness/contrast/gamma` (#126) | CLI routing; art `image_art.rs`, `transform.rs` | `ImageFit::Stretch`, `ImageArt::max_width`/`max_height`, `ImageTransforms` brightness/contrast/gamma in a fixed order |
 
 Art 0.0.7 owns fixed ANSI256 quantisation and optional Floyd–Steinberg diffusion
 on the final sampled image. Truecolor/no-dither defaults remain unchanged and
