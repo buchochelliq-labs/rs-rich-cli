@@ -365,6 +365,85 @@ Reports the regions that changed, and exits `5` when more than `2%` of the image
 differs — which makes it usable as a CI gate. See
 [Comparing images](image-diff.md) for the modes and how the comparison works.
 
+## Compare text, source and patches
+
+When the two files are not both images, `rich diff` compares them as text. It
+is not in upstream rich-cli.
+
+```bash
+rich diff old.rs new.rs
+```
+
+```text
+--- old.rs
++++ new.rs
+@@ -1,4 +1,4 @@
+1 1   fn main() {
+2   -     let x = 1;
+  2 +     let x = 2;
+3 3       println!("{}", x);
+4 4   }
+old.rs → new.rs: 1 added, 1 removed (25.0% of lines changed)
+```
+
+- Source is syntax-highlighted by file name (or `--language NAME`), with the
+  changed words emphasised inside each changed line.
+- Captured terminal output (text containing escape sequences) is compared by
+  its visible text, and a line whose text is the same but whose colours or
+  styles changed is shown with `~`, so a colour regression is not invisible.
+- `--side-by-side` puts old and new in two columns; `--context N` sets the
+  unchanged lines kept around each change (default 3).
+- `--threshold PCT` gates on the share of changed lines and exits `5` above
+  it, as it does for images.
+
+A single input is read as a patch, such as `git diff` output. It renders as a
+tree of the changed files with their counts, then each file's highlighted hunks:
+
+```bash
+git diff | rich diff -
+git show HEAD | rich diff - --side-by-side
+```
+
+## Compare benchmark runs
+
+```bash
+rich bench compare baseline.json candidate.json --threshold 10
+rich bench compare target/criterion-main target/criterion
+```
+
+Each file is a benchmark run saved by `rich_ext::qa::bench` (or a criterion
+output directory). The table shows each benchmark's change with a small
+min/median/p95/max sparkline and marks regressions and improvements; a change
+inside `--threshold` percent (default 5) or inside the noise counts as
+unchanged. Any regression exits `5`.
+
+## Decode escape sequences
+
+`rich ansi explain` lists every escape sequence in a capture with what it does:
+colours and styles, cursor and screen control, OSC 8 hyperlinks, window titles
+and raw escapes. Then it prints the text a terminal would show.
+
+```bash
+ls --color=always | rich ansi explain
+rich ansi explain capture.txt --escapes-only
+```
+
+```text
+┏━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Offset ┃ Raw                    ┃ Kind    ┃ Meaning                          ┃
+┡━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ 0      │ ESC[1;31m              │ SGR     │ bold on, fg red                  │
+│ 7      │ ERROR                  │ text    │ 5 characters                     │
+│ 12     │ ESC[0m                 │ SGR     │ reset                            │
+│ 17     │ ESC]8;;https://x.yESC\ │ OSC     │ open hyperlink to https://x.y    │
+│        │                        │         │ (ST-terminated)                  │
+…
+```
+
+`--ansi-inline` marks the escapes inside the text instead of listing them.
+`--sanitize` does not apply here: the escapes are what you asked to see, and
+they are only ever printed as visible text.
+
 ## Render a still image
 
 ```bash
@@ -756,7 +835,16 @@ rich doctor --report json > doctor.json
 rich doctor --config rich.toml --profile ci
 ```
 
-Doctor reports package/build features, stdout terminal status, dimensions and
+Doctor ends with a capability table: colour depth, Unicode, hyperlinks, graphics
+protocol, Sixel, size, interactivity and whether animation suits the output,
+each with where the value came from (`COLORTERM=truecolor`, `stdout is not a
+terminal`, an override). It is the same detection library code gets from
+`rich_ext::capabilities`, and `--report json` carries it as `capabilities`.
+Set `RICH_COLOR`, `RICH_UNICODE`, `RICH_HYPERLINKS`, `RICH_GRAPHICS`,
+`RICH_ANIMATION`, `RICH_WIDTH` or `RICH_HEIGHT` to override a value for tests or
+CI.
+
+Doctor also reports package/build features, stdout terminal status, dimensions and
 colour policy, inferred Sixel support and selected image mode, selected
 config/profile and pager choice. It distinguishes detection from inference;
 Sixel inference does not prove terminal support. It performs no terminal probes,

@@ -49,9 +49,10 @@ Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by exten
 | `--log` | Stream common structured-log JSONL records. |
 | `--gif` | Animate GIFs side by side; pipes receive the first frame. |
 | `--rule` | Draw a horizontal rule (RESOURCE is its title) |
-| `--diff` | Perceptually compare two images (needs exactly two) |
+| `--diff` | Compare two images perceptually, two text files as a diff (syntax-aware; ANSI captures by visible text and style), or render one patch such as `git diff` output. |
 | `--image` | Render RESOURCE as a still image (ASCII/Braille/blocks/Sixel) |
 | `--inspect` | Explore structured data (JSON, YAML, TOML, XML, INI, dotenv) as a tree. |
+| `--ansi-explain` | Decode every escape sequence in RESOURCE and show the visible text. |
 
 ### Input
 
@@ -105,7 +106,7 @@ Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by exten
 | `--image-flip-horizontal`, `--no-image-flip-horizontal` | Flip still images horizontally, after rotation. Config: `image_flip_horizontal`. |
 | `--image-flip-vertical`, `--no-image-flip-vertical` | Flip still images vertically, after rotation. Config: `image_flip_vertical`. |
 | `--image-grayscale`, `--no-image-grayscale` | Composite and convert still images to grayscale. Config: `image_grayscale`. |
-| `--threshold <PCT>` | With --diff, exit non-zero above PCT% changed. Also sets the exit code: 0 within, 5 over. |
+| `--threshold <PCT>` | With --diff, exit non-zero above PCT% changed (pixels for images, lines for text). Also sets the exit code: 0 within, 5 over. |
 
 ### Inspect
 
@@ -120,6 +121,16 @@ Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by exten
 | `--show-paths` | Append each value's path. |
 | `--redact` | Mask secret-looking keys such as password, token and api_key. |
 | `--compare <PATH>` | Show added, removed and changed values against another document. |
+
+### Diff & ANSI
+
+| Option | Description |
+| --- | --- |
+| `--side-by-side` | With a text --diff, show old and new in two columns. |
+| `--context <N>` | With a text --diff, unchanged lines around each change. Default: `3`. |
+| `--language <NAME>` | With a text --diff, highlight as this language instead of guessing from the file name. |
+| `--ansi-inline` | With --ansi-explain, mark escapes inline in the text instead of a table. |
+| `--escapes-only` | With --ansi-explain, list only escape sequences, not text runs. |
 
 ### Export
 
@@ -214,13 +225,15 @@ Self-contained examples; ignores config; accepts --no-color.
 | `jsonl`, `ndjson` | Stream JSON Lines / NDJSON records (`--jsonl`) |
 | `log`, `logs` | Stream common structured-log JSONL records (`--log`) |
 | `gif` | Animate GIFs (`--gif`) |
-| `diff` | Perceptually compare two images (`--diff`) |
+| `diff` | Compare two images, two text files, or render one patch (`--diff`) |
 | `image` | Render a still image as ASCII/Braille/blocks/Sixel (`--image`) |
 | `rule` | Draw a horizontal rule (`--rule`) |
 | `inspect` | Explore structured data (JSON, YAML, TOML, XML, INI, dotenv) as a tree (`--inspect`) |
+| `ansi`, `ansi-explain` | Decode escape sequences: `rich ansi explain FILE` (`--ansi-explain`) |
 | `config` | Show, validate, explain or document configuration |
 | `completions` | Print a shell completion script |
 | `docs` | Print reference documentation generated from this help |
+| `bench` | Compare benchmark runs |
 | `doctor` | Read-only build, terminal, config and pager diagnostics; --report json writes diagnostic data to stdout |
 
 ### Environment
@@ -387,7 +400,7 @@ rich gif [OPTIONS] [RESOURCE]
 
 ### rich diff
 
-Perceptually compare two images (`--diff`)
+Compare two images, two text files, or render one patch (`--diff`)
 
 #### Usage
 
@@ -441,6 +454,22 @@ Explore structured data (JSON, YAML, TOML, XML, INI, dotenv) as a tree (`--inspe
 
 ```text
 rich inspect [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich ansi
+
+Decode escape sequences: `rich ansi explain FILE` (`--ansi-explain`)
+
+#### Usage
+
+```text
+rich ansi [OPTIONS] [RESOURCE]
 ```
 
 #### Arguments
@@ -612,6 +641,53 @@ Print the configuration reference as Markdown
 rich docs config
 ```
 
+### rich bench
+
+Compare benchmark runs
+
+#### Usage
+
+```text
+rich bench <COMMAND>
+```
+
+#### Commands
+
+| Command | Description |
+| --- | --- |
+| `compare` | Compare a candidate benchmark run with a baseline; exits 5 when any benchmark regressed |
+
+#### rich bench compare
+
+Compare a candidate benchmark run with a baseline; exits 5 when any benchmark regressed
+
+##### Usage
+
+```text
+rich bench compare [OPTIONS] <BASELINE> <CANDIDATE>
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--threshold <PCT>` | Changes within ±PCT% (beyond noise) count as unchanged. Default: `5`. |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `<BASELINE>` | A rich_ext::qa::bench JSON run, or a criterion directory. |
+| `<CANDIDATE>` | The run to judge, in the same form. |
+
+##### Examples
+
+Gate CI on a 10% slowdown
+
+```sh
+rich bench compare baseline.json candidate.json --threshold 10
+```
+
 ### rich doctor
 
 Read-only build, terminal, config and pager diagnostics; --report json writes diagnostic data to stdout
@@ -640,7 +716,7 @@ Settings are read from these sources, lowest precedence first; a later source ov
 
 | Key | Type | Default | Environment | Flag | Description |
 | --- | --- | --- | --- | --- | --- |
-| `mode` | enum: `print`, `markdown`, `json`, `syntax`, `csv`, `ipynb`, `jsonl`, `log`, `rule`, `image`, `gif`, `diff` | `auto` | | `--print, --markdown, ... or a command word` | Render mode, as the flag or command of the same name |
+| `mode` | enum: `print`, `markdown`, `json`, `syntax`, `csv`, `ipynb`, `jsonl`, `log`, `rule`, `image`, `gif`, `diff`, `inspect`, `ansi` | `auto` | | `--print, --markdown, ... or a command word` | Render mode, as the flag or command of the same name |
 | `format` | enum: `auto`, `json`, `yaml`, `toml`, `xml`, `ini`, `env` | `auto` | | `--format` | Input format. With --inspect, the parser (default auto-detect); otherwise `auto` detects piped or extensionless input and routes it (JSON to --json, other formats to highlighting, anything else to plain text), and a named format overrides the extension |
 | `width` | positive integer | | | `--width` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) |
 | `panel` | enum: `ascii`, `ascii2`, `square`, `rounded`, `heavy`, `double`, `none` | | | `--panel` | Wrap output in a panel, shrunk to fit its content (none = no panel) |
