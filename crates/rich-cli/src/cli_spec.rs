@@ -854,6 +854,38 @@ fn authoring_commands() -> Vec<CommandSpec> {
             .subcommand(
                 CommandSpec::new("config").about("Print the configuration reference as Markdown"),
             ),
+        CommandSpec::new("bench")
+            .about("Compare benchmark runs")
+            .subcommand_required(true)
+            .subcommand(
+                CommandSpec::new("compare")
+                    .about(
+                        "Compare a candidate benchmark run with a baseline; exits 5 when any \
+                         benchmark regressed",
+                    )
+                    .arg(
+                        ArgSpec::positional("baseline")
+                            .required(true)
+                            .value(ValueHint::Path)
+                            .help("A rich_ext::qa::bench JSON run, or a criterion directory"),
+                    )
+                    .arg(
+                        ArgSpec::positional("candidate")
+                            .required(true)
+                            .value(ValueHint::Path)
+                            .help("The run to judge, in the same form"),
+                    )
+                    .arg(
+                        ArgSpec::option("threshold")
+                            .value_name("PCT")
+                            .default_value("5")
+                            .help("Changes within ±PCT% (beyond noise) count as unchanged"),
+                    )
+                    .example(
+                        "rich bench compare baseline.json candidate.json --threshold 10",
+                        "Gate CI on a 10% slowdown",
+                    ),
+            ),
     ]
 }
 

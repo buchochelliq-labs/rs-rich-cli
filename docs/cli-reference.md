@@ -233,6 +233,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `config` | Show, validate, explain or document configuration |
 | `completions` | Print a shell completion script |
 | `docs` | Print reference documentation generated from this help |
+| `bench` | Compare benchmark runs |
 | `doctor` | Read-only build, terminal, config and pager diagnostics; --report json writes diagnostic data to stdout |
 
 ### Environment
@@ -638,6 +639,53 @@ Print the configuration reference as Markdown
 
 ```text
 rich docs config
+```
+
+### rich bench
+
+Compare benchmark runs
+
+#### Usage
+
+```text
+rich bench <COMMAND>
+```
+
+#### Commands
+
+| Command | Description |
+| --- | --- |
+| `compare` | Compare a candidate benchmark run with a baseline; exits 5 when any benchmark regressed |
+
+#### rich bench compare
+
+Compare a candidate benchmark run with a baseline; exits 5 when any benchmark regressed
+
+##### Usage
+
+```text
+rich bench compare [OPTIONS] <BASELINE> <CANDIDATE>
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--threshold <PCT>` | Changes within ±PCT% (beyond noise) count as unchanged. Default: `5`. |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `<BASELINE>` | A rich_ext::qa::bench JSON run, or a criterion directory. |
+| `<CANDIDATE>` | The run to judge, in the same form. |
+
+##### Examples
+
+Gate CI on a 10% slowdown
+
+```sh
+rich bench compare baseline.json candidate.json --threshold 10
 ```
 
 ### rich doctor

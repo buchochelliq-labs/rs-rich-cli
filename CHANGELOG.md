@@ -111,6 +111,28 @@ CLI 0.0.11. Core changes below, so every dependent moves with it.
   `assert_rich_json_eq!`, `assert_render_eq!` and `assert_snapshot_eq!` panic
   with a rendered diff (side by side with `RICH_ASSERT_LAYOUT=side-by-side`).
   `RenderSnapshot::diff` now returns a unified diff.
+- **QA tooling (#306, #308–#313, #225, #230).** `rich_ext::qa`, with `testing`:
+  - `screenshot`: renders a fixture across widths, colour depths and Unicode
+    modes and checks it against approved files (`RICH_APPROVE=1` accepts
+    changes; `.new` files hold what changed).
+  - `stress`: many widths and heights, reporting overflow, clipped content,
+    unstable wrapping, panics and measure mismatches.
+  - `lint`: clipped text, unknown style names in markup, broken links, status
+    shown only by colour, and colours, glyphs or links the target cannot show.
+  - `explain`: why a render wrapped, truncated, lost colour (`#ff8700 → 208 →
+    …`), fell back to ASCII or dropped links.
+  - `profile`: measure, render and frame times, with an opt-in counting
+    allocator for allocation counts.
+  - `fuzz`: seeded, reproducible random renderables checked for panics, width,
+    determinism and measure bounds, with shrinking and a Rust reproduction.
+  - `matrix`: the same fixtures across 16 capability profiles (colour depths,
+    Unicode, links, dumb, CI, Windows Terminal, screen reader).
+  - `bench`: a benchmark harness, a JSON run format (also read from criterion
+    output) and `compare`, with sparklines. `rich bench compare BASE CAND`
+    prints it and exits 5 on a regression.
+  - The fuzzer found two core bugs, confirmed against rich 15.0.0 and left for
+    a core fix: `Columns` overflows with items wider than the width, and `Tree`
+    guides overflow below about 8 columns. Their tests are ignored until then.
 - **CLI.** `rich diff` compares anything that is not an image pair as text, or
   renders one patch (`git diff | rich diff -`), with `--side-by-side`,
   `--context` and `--language`. `--threshold` counts changed lines and exits 5

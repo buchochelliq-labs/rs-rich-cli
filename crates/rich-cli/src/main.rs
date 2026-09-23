@@ -1025,6 +1025,9 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     if authoring::dispatch(args)? {
         return Ok(None);
     }
+    if tools::bench_dispatch(args)? {
+        return Ok(None);
+    }
     if let Some(output) = config::inspect(args, &roots)? {
         println!("{output}");
         return Ok(None);

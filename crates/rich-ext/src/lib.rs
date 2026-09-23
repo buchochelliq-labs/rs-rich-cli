@@ -57,6 +57,10 @@ impl ConsoleExt for Console {
 #[cfg(feature = "testing")]
 pub mod testing;
 
+// QA tooling: screenshots, stress, lint, explain, profile, fuzz, matrix, bench.
+#[cfg(feature = "testing")]
+pub mod qa;
+
 pub mod layout;
 
 pub mod event;

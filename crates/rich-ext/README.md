@@ -190,6 +190,14 @@ errors through rich. See the `clap_help` example.
   failures first.
 - With `testing`, `assert_rich_eq!` and friends panic with a rendered diff.
 
+### Testing and QA
+
+With the `testing` feature, `rich_ext::qa` tests renderables the way users see
+them: approved screenshots across widths and capabilities
+(`qa::screenshot::assert_screenshots`), layout stress, render linting, render
+explanations, profiling, seeded fuzzing with shrinking, a capability matrix,
+and benchmark capture and comparison.
+
 ### Capabilities and accessibility
 
 - `capabilities::Capabilities::system()` (or `::detect` with a

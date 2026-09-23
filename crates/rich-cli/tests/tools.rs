@@ -208,3 +208,51 @@ fn doctor_reports_capabilities_with_their_sources() {
         assert!(report[key].is_object(), "{key}");
     }
 }
+
+#[test]
+fn bench_compare_shows_changes_and_gates_on_regressions() {
+    use rich_ext::qa::bench::{BenchRun, Measurement};
+    let temp = tempfile::tempdir().unwrap();
+    let dir = temp.path();
+    let run = |render: f64, parse: f64| {
+        BenchRun::new(vec![
+            Measurement::from_samples("render", &[render; 20]),
+            Measurement::from_samples("parse", &[parse; 20]),
+        ])
+    };
+    run(100.0, 50.0).save(dir.join("base.json")).unwrap();
+    run(101.0, 30.0).save(dir.join("fast.json")).unwrap();
+    run(150.0, 50.0).save(dir.join("slow.json")).unwrap();
+
+    let ok = run_in(dir, &["bench", "compare", "base.json", "fast.json"], "");
+    assert!(
+        ok.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ok.stderr)
+    );
+    let text = stdout(&ok);
+    assert!(text.contains("render") && text.contains("parse"), "{text}");
+
+    let slow = run_in(dir, &["bench", "compare", "base.json", "slow.json"], "");
+    assert_eq!(slow.status.code(), Some(5), "{}", stdout(&slow));
+    assert!(String::from_utf8_lossy(&slow.stderr).contains("benchmark regression"));
+    // A generous threshold lets the same change through.
+    let loose = run_in(
+        dir,
+        &[
+            "bench",
+            "compare",
+            "base.json",
+            "slow.json",
+            "--threshold",
+            "60",
+        ],
+        "",
+    );
+    assert!(loose.status.success(), "{}", stdout(&loose));
+
+    let missing = run_in(dir, &["bench", "compare", "base.json", "nope.json"], "");
+    assert_eq!(missing.status.code(), Some(3));
+    let usage = run_in(dir, &["bench", "compare", "base.json"], "");
+    assert_eq!(usage.status.code(), Some(2));
+}

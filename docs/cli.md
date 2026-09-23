@@ -404,6 +404,19 @@ git diff | rich diff -
 git show HEAD | rich diff - --side-by-side
 ```
 
+## Compare benchmark runs
+
+```bash
+rich bench compare baseline.json candidate.json --threshold 10
+rich bench compare target/criterion-main target/criterion
+```
+
+Each file is a benchmark run saved by `rich_ext::qa::bench` (or a criterion
+output directory). The table shows each benchmark's change with a small
+min/median/p95/max sparkline and marks regressions and improvements; a change
+inside `--threshold` percent (default 5) or inside the noise counts as
+unchanged. Any regression exits `5`.
+
 ## Decode escape sequences
 
 `rich ansi explain` lists every escape sequence in a capture with what it does:

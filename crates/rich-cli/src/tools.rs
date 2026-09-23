@@ -240,6 +240,108 @@ pub(crate) fn ansi_explain(options: &ToolOptions, content: &str) -> Box<dyn Rend
     })
 }
 
+/// Whether `bench` is the first positional, with no render mode selected (as
+/// for `rich docs`: `rich -p bench` still prints the word).
+fn is_bench(args: &[String]) -> bool {
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        if arg == "--" {
+            return false;
+        }
+        if super::VALUE_OPTIONS.contains(&arg.as_str()) {
+            iter.next();
+            continue;
+        }
+        if super::mode_flag_alias(arg).is_some() {
+            return false;
+        }
+        if !arg.starts_with('-') || arg == "-" {
+            return arg == "bench";
+        }
+    }
+    false
+}
+
+/// `rich bench compare BASELINE CANDIDATE [--threshold PCT]`: compare two
+/// benchmark runs (`rich_ext::qa::bench` JSON files, or criterion output
+/// directories) and exit 5 when any benchmark regressed. `Ok(false)` when the
+/// command line is not this command.
+pub(crate) fn bench_dispatch(args: &[String]) -> Result<bool, String> {
+    use rich_ext::qa::bench::{compare, BenchRun, CompareOptions, ComparisonView};
+    if !is_bench(args) {
+        return Ok(false);
+    }
+    let mut positionals = Vec::new();
+    let mut threshold = None;
+    let mut no_color = std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty());
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--threshold" => {
+                threshold = Some(
+                    iter.next()
+                        .and_then(|v| v.parse::<f64>().ok())
+                        .filter(|v| v.is_finite() && *v >= 0.0)
+                        .ok_or("--threshold requires a percentage")?,
+                );
+            }
+            "--no-color" => no_color = true,
+            "--color" => no_color = false,
+            "--no-config" | "--machine-json" => {}
+            "--report" => {
+                iter.next();
+            }
+            other if other.starts_with('-') && other != "-" => {
+                return Err(format!(
+                    "unknown option {other:?} for rich bench compare; it takes --threshold PCT"
+                ));
+            }
+            other => positionals.push(other.to_string()),
+        }
+    }
+    let [_, command, baseline, candidate] = positionals.as_slice() else {
+        return Err("usage: rich bench compare BASELINE CANDIDATE [--threshold PCT]".into());
+    };
+    if command != "compare" {
+        return Err(format!("unknown bench command {command:?}; use compare"));
+    }
+    let load = |path: &str| {
+        let result = if std::path::Path::new(path).is_dir() {
+            BenchRun::from_criterion_dir(path)
+        } else {
+            BenchRun::load(path)
+        };
+        result.map_err(|err| format!("cannot read benchmark run {path}: {err}"))
+    };
+    let (baseline, candidate) = match (load(baseline), load(candidate)) {
+        (Ok(a), Ok(b)) => (a, b),
+        (Err(err), _) | (_, Err(err)) => {
+            let _ = super::emit_error(
+                super::wants_json_report(args),
+                super::ExitClass::Input,
+                &err,
+            );
+            std::process::exit(i32::from(super::ExitClass::Input.code()));
+        }
+    };
+    let mut options = CompareOptions::default();
+    if let Some(threshold) = threshold {
+        options.threshold_pct = threshold;
+    }
+    let comparison = compare(&baseline, &candidate, &options);
+    let console = Console::builder().no_color(no_color).build();
+    console.print(&ComparisonView::new(&comparison));
+    if comparison.has_regressions() {
+        let _ = super::emit_error(
+            super::wants_json_report(args),
+            super::ExitClass::Gate,
+            "benchmark regression",
+        );
+        std::process::exit(i32::from(super::ExitClass::Gate.code()));
+    }
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -314,6 +416,16 @@ mod tests {
         .unwrap();
         let out = render(outcome.renderable.as_ref());
         assert!(out.contains('~'), "a style-only change must show:\n{out}");
+    }
+
+    #[test]
+    fn bench_is_a_command_word_only_in_first_position() {
+        let args = |items: &[&str]| names(items);
+        assert!(is_bench(&args(&["bench", "compare", "a", "b"])));
+        assert!(is_bench(&args(&["--no-color", "bench"])));
+        assert!(!is_bench(&args(&["--title", "bench", "file.txt"])));
+        assert!(!is_bench(&args(&["-p", "bench"])));
+        assert!(!is_bench(&args(&["notes.txt", "bench"])));
     }
 
     #[test]
