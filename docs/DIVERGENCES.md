@@ -220,20 +220,24 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** add an `adler32`-of-`repr` default id only if a caller needs the
   exact auto-generated ids (rare); the explicit-id form already round-trips.
 
-### 16. `Progress` — deterministic columns done; time/rate/spinner + Live deferred
-- **Differs:** `Progress` now renders a **configurable `ProgressColumn` list**
-  (default: description, flexing bar, percentage), with the deterministic columns
-  ported byte-parity — description, static text, the bar, percentage, **M-of-N**
-  (`{completed}/{total}`), and **download** (`0.5/1.0 kB`, shared SI byte unit via
-  `filesize::pick_unit_and_suffix`). The grid layout matches upstream's
-  `Table.grid(padding=(0, 1))`: fixed columns take their widest cell, the bar
-  flexes (capped at 40), single unstyled space between columns. Still deferred:
-  the non-deterministic columns (spinner, transfer-speed, time-remaining/elapsed)
-  and the in-place `Live` refresh loop.
-- **Why:** the ported columns are deterministic (testable); the time/rate/spinner
-  columns depend on wall-clock elapsed and the refresh loop needs `Live` (#17).
-- **Remove:** add the time/rate/spinner columns (with the `Live` loop) under the
-  Live/progress issue (#6).
+### 16. `Progress` — columns and task model done; Live loop + pulse deferred
+- **Resolved (0.0.10, core 0.0.6):** the time, rate and spinner columns and the
+  task model are ported: an injectable clock (`Progress::clock`, upstream's
+  `get_time`), task start/stop/finish times, the 30-second speed sample window,
+  `update`/`advance`/`reset`/`start_task`/`stop_task`/`remove_task` with
+  upstream's exact sample and finish rules, and `TimeElapsed`, `TimeRemaining`
+  (compact, elapsed-when-finished and its 0.5 s render cache), `TransferSpeed`,
+  `FileSize`, `TotalFileSize`, `Spinner`, `TaskProgress { show_speed }` and
+  binary `Download` columns. `Progress::new()` now uses upstream's default
+  columns (description, bar, percentage, time remaining). Golden
+  `progress_time.tsv` replays the same step programs through Python and Rust.
+- **Still differs:** the auto-refreshing `Live` integration and `track()`; the
+  pulsing bar for unstarted or indeterminate tasks (the bar renders empty);
+  `RenderableColumn`, table-column options and per-task custom `fields`
+  (`TextColumn` format strings). Cells truncate rather than wrap at very narrow
+  widths.
+- **Why:** these need the `Live` refresh loop (§17) or a renderable grid cell.
+- **Remove:** under the Live/progress issue (#6).
 
 ### 17. `Live` — auto-refresh thread done; alt-screen/redirect deferred
 - **Differs:** `Live` implements the deterministic `start`/`update`/`refresh`/`stop`

@@ -52,18 +52,18 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `layout.py` | `layout.rs` | 🟡 | ✅ |
 | `styled.py` | `styled.rs` | 🟢 | ✅ |
 | `screen.py` | `screen.rs` | 🟡 | — |
-| `progress_bar.py` | `progress_bar.rs` | 🟡 |
+| `progress_bar.py` | `progress_bar.rs` | 🟡 | ✅ `bar_*`, `progress_three` |
 | `bar.py` | `bar.rs` | 🟡 | ✅ |
 
 ## Live & progress
 
-| upstream `rich/…` | rust file | status |
-|-------------------|-----------|:------:|
-| `progress.py` | `progress.rs` | 🟡 |
-| `spinner.py`, `_spinners.py` (full table) | `spinner.rs` | 🟡 |
-| `status.py` | `status.rs` | 🟡 |
-| `live_render.py` | `live_render.rs` | 🟡 |
-| `live.py` (manual refresh) | `live.rs` | 🟡 |
+| upstream `rich/…` | rust file | status | parity |
+|-------------------|-----------|:------:|--------|
+| `progress.py` | `progress.rs` | 🟡 | ✅ `progress_time.tsv` step programs (columns, task API, clock) |
+| `spinner.py`, `_spinners.py` (full table) | `spinner.rs` | 🟡 | ✅ `live_status.tsv` (start at first render, `update`, markup text) |
+| `status.py` | `status.rs` | 🟡 | ✅ `live_status.tsv` (frames and `update`) |
+| `live_render.py` | `live_render.rs` | 🟡 | ✅ `live_status.tsv` (`position_cursor`/`restore_cursor`, style, wrap) |
+| `live.py` (manual refresh) | `live.rs` | 🟡 | — (unit tests; the Live loop is timing-driven) |
 
 ## Content renderers
 
