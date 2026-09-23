@@ -68,6 +68,55 @@ so the parity claim is checked continuously rather than asserted once.
     python -c "from importlib.metadata import version; print(version('rich'))"
     ```
 
+## Differential fuzzing
+
+Golden fixtures pin cases someone thought of. `scripts/diff_rich.py` generates
+cases nobody thought of: markup, styled text with every overflow and justify
+mode, panels, tables (column justify, `no_wrap`, min/max widths, ratios, edges,
+lines, titles), rules, padding and alignment, at random widths and colour
+systems. It renders each case through the pinned Python `rich` and through the
+Rust `diff_render` example, then compares the bytes.
+
+- **Pull requests** replay the small checked-in corpus
+  (`scripts/fixtures/diff_rich_cases.jsonl`), so CI stays fast and every case
+  there must match.
+- **Nightly** (`.github/workflows/nightly-parity.yml`, `main` only) compares
+  20,000 generated cases with a fresh seed. It fails loudly, printing shrunk,
+  replayable corpus lines to the log and the job summary.
+- **Known divergences** it has found live in
+  `scripts/fixtures/diff_rich_known.jsonl`, one line per case, each naming its
+  issue.
+
+The Python side renders each colour system in its own interpreter. rich memoises
+a `Style`'s escape codes on the instance whatever the colour system, so a shared
+interpreter reports mismatches that are the oracle's own. Markup uses the strict
+parser on both sides, because upstream raises `MarkupError`.
+
+### Triage a red nightly
+
+1. Take the seed from the log (`Replay with: … --seed N`), or a shrunk line from
+   the summary, and reproduce it locally in a virtualenv holding only the pinned
+   `rich`:
+
+    ```bash
+    echo '<shrunk line>' > case.jsonl
+    env -u NO_COLOR TERM=xterm-256color PYTHONUTF8=1 \
+      python scripts/diff_rich.py --corpus case.jsonl
+    ```
+
+2. Check [Divergences](DIVERGENCES.md) and the known list. If the case belongs
+   to a known family, there is nothing new; the issue it names tracks it.
+3. Otherwise file a `type:bug` issue with the shrunk line, both outputs and the
+   upstream code path, and add the case to `diff_rich_known.jsonl` with its
+   issue number.
+4. When fixing an issue, move its known cases into `diff_rich_cases.jsonl` in the
+   same PR, so the pull-request corpus keeps the fix.
+
+Useful flags: `--generate N --seed S` for a generated run, `--no-shrink`, and
+`--max-shrink N` to limit how many failures are shrunk (one per case kind
+first), `--write-failures PATH` to append shrunk cases as corpus JSONL, and
+`--self-test-mutation` to prove the harness detects a mismatch.
+
 ## What this buys you
 
 If you know Python `rich`, you already know this library — the same markup, the
