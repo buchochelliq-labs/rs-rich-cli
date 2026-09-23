@@ -146,9 +146,10 @@ Both were found by the ext fuzzer and checked against rich 15.0.0.
   - `bench`: a benchmark harness, a JSON run format (also read from criterion
     output) and `compare`, with sparklines. `rich bench compare BASE CAND`
     prints it and exits 5 on a regression.
-  - The fuzzer found two core bugs, confirmed against rich 15.0.0 and left for
-    a core fix: `Columns` overflows with items wider than the width, and `Tree`
-    guides overflow below about 8 columns. Their tests are ignored until then.
+  - The fuzzer found two core bugs, confirmed against rich 15.0.0: `Columns`
+    overflowed with items wider than the width, and `Tree` guides overflowed
+    below about 8 columns. Both are fixed below, and the fuzz test now covers
+    every core renderable at every width.
 - **CLI.** `rich diff` compares anything that is not an image pair as text, or
   renders one patch (`git diff | rich diff -`), with `--side-by-side`,
   `--context` and `--language`. `--threshold` counts changed lines and exits 5
