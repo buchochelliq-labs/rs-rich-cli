@@ -22,6 +22,7 @@ mod batch_races;
 mod config;
 mod demo;
 mod doctor;
+mod inspect;
 mod render_target;
 mod structured_log;
 mod watch;
@@ -82,6 +83,8 @@ enum Mode {
     JsonLines,
     /// `--log`: stream common structured-log JSONL records.
     Log,
+    /// `--inspect`: explore structured data (not upstream; see `inspect.rs`).
+    Inspect,
 }
 
 impl Mode {
@@ -175,10 +178,15 @@ const MODE_SPECS: &[ModeSpec] = &[
         primary: "log",
         aliases: &["log", "logs"],
     },
+    ModeSpec {
+        mode: Mode::Inspect,
+        primary: "inspect",
+        aliases: &["inspect"],
+    },
 ];
 
 const RENDER_MODE_FLAGS: &str =
-    "--print/--markdown/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--image/--jsonl/--log";
+    "--print/--markdown/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--image/--jsonl/--log/--inspect";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReportFormat {
@@ -398,6 +406,7 @@ struct Cli {
     worker_args: Vec<String>,
     overwrite: bool,
     collision: CollisionPolicy,
+    data: inspect::DataOptions,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -498,6 +507,12 @@ const VALUE_OPTIONS: &[&str] = &[
     "--loop",
     "--jobs",
     "--collision",
+    "--format",
+    "--select",
+    "--find",
+    "--max-depth",
+    "--max-length",
+    "--compare",
     "--config",
     "--profile",
 ];
@@ -506,6 +521,11 @@ const VALUE_OPTIONS: &[&str] = &[
 /// positional subcommand form. Config must not inject a `mode` default over
 /// `rich json file.json`, which selects JSON without ever naming `--json`.
 fn selects_mode_explicitly(args: &[String]) -> bool {
+    explicit_mode(args).is_some()
+}
+
+/// The render mode the command line picks by flag or subcommand, if any.
+fn explicit_mode(args: &[String]) -> Option<Mode> {
     let mut iter = args.iter();
     let mut seen_positional = false;
     while let Some(arg) = iter.next() {
@@ -517,19 +537,19 @@ fn selects_mode_explicitly(args: &[String]) -> bool {
             continue;
         }
         if arg.starts_with('-') && arg.len() > 1 {
-            if mode_flag_alias(arg).is_some() {
-                return true;
+            if let Some(flag) = mode_flag_alias(arg) {
+                return command_mode(&flag[2..]);
             }
             continue;
         }
         if !seen_positional {
             seen_positional = true;
-            if command_mode(arg).is_some() {
-                return true;
+            if let Some(mode) = command_mode(arg) {
+                return Some(mode);
             }
         }
     }
-    false
+    None
 }
 
 /// The canonical long flag for a render-mode option, or `None` for anything else.
@@ -547,6 +567,7 @@ fn mode_flag_alias(arg: &str) -> Option<&'static str> {
         "--image" => "--image",
         "--gif" => "--gif",
         "--diff" => "--diff",
+        "--inspect" => "--inspect",
         _ => return None,
     })
 }
@@ -1019,6 +1040,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut theme_styles = std::collections::BTreeMap::new();
     let mut height = None;
     let mut extensions = CliExtensions::default();
+    let mut data = inspect::DataOptions::default();
     let mut width = None;
     let mut justify = None;
     let mut no_color = std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty());
@@ -1065,6 +1087,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         if extensions.parse_option(arg, &mut iter)? {
             continue;
         }
+        if data.parse_option(arg, &mut iter)? {
+            continue;
+        }
         match arg.as_str() {
             "--" => end_of_options = true,
             "-h" | "--help" => {
@@ -1086,6 +1111,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--image" => set_mode(&mut mode, Mode::Image)?,
             "--jsonl" | "--ndjson" => set_mode(&mut mode, Mode::JsonLines)?,
             "--log" => set_mode(&mut mode, Mode::Log)?,
+            "--inspect" => set_mode(&mut mode, Mode::Inspect)?,
             "--log-presentation" => {
                 let value = iter
                     .next()
@@ -1444,6 +1470,24 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             other => resources.push(other.to_string()),
         }
     }
+
+    // `--format` makes automatic mode an input mode: with no RESOURCE it reads
+    // stdin, as `--json` does, instead of showing the demo.
+    if data.format.is_some() {
+        if !matches!(mode, Mode::Auto | Mode::Inspect) {
+            return Err(format!(
+                "--format cannot be combined with --{}",
+                mode_name(mode)
+            ));
+        }
+        if mode == Mode::Auto && resources.is_empty() && !batch {
+            resources.push("-".into());
+        }
+    }
+    if let Some(flag) = data.inspect_only_option().filter(|_| mode != Mode::Inspect) {
+        return Err(format!("{flag} only has an effect with --inspect"));
+    }
+    data.validate()?;
 
     if watch && (batch || pager || auto_pager) {
         return Err("--watch cannot be combined with --batch or paging".into());
@@ -1819,6 +1863,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         worker_args: worker_args(args),
         overwrite,
         collision,
+        data,
     }))
 }
 
@@ -2701,10 +2746,28 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         content = sanitize_terminal_controls(&content);
     }
 
+    // `--format` routes input automatic mode would print as text (stdin, no
+    // extension) — or, with a named format, any input — to a renderer.
+    let mut routed_language = None;
+    let mut routed = false;
+    if let Some(format) = cli.data.format.filter(|_| cli.mode == Mode::Auto) {
+        if mode == Mode::Auto || matches!(format, inspect::InputFormat::Named(_)) {
+            routed = true;
+            mode = match inspect::route(format, &content, cli.resource.as_deref()) {
+                inspect::Route::Json => Mode::Json,
+                inspect::Route::Syntax(lexer) => {
+                    routed_language = Some(lexer);
+                    Mode::Syntax
+                }
+                inspect::Route::Text => Mode::Auto,
+            };
+        }
+    }
+
     // For a URL that neither a flag nor a telltale extension resolved: upstream
     // renders fetched content as syntax-highlighted source by default, unless the
     // Content-Type marks it markdown / json / csv.
-    if resource_is_url && mode == Mode::Auto {
+    if resource_is_url && mode == Mode::Auto && !routed {
         mode = content_type
             .as_deref()
             .and_then(content_type_mode)
@@ -2778,7 +2841,9 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     // language, so `snippet.txt` served as `text/x-python` still highlights.
     let extension = resource_ext(cli.resource.as_deref().unwrap_or_default())
         .filter(|ext| !is_uninformative_ext(ext));
-    let language = extension
+    let language = routed_language
+        .map(str::to_string)
+        .or(extension)
         .or_else(|| {
             content_type
                 .as_deref()
@@ -2896,6 +2961,19 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 Box::new(Syntax::new(content.as_str(), language.as_str()).word_wrap(true)),
                 Some(fit),
             )
+        }
+        Mode::Inspect => {
+            let encoding = cli.extensions.encoding;
+            let read = |path: &str| {
+                read_resource(Some(path), encoding)
+                    .map_err(|err| format!("cannot read {path}: {err}"))
+            };
+            let view = match inspect::build(&cli.data, &content, cli.resource.as_deref(), read) {
+                Ok(view) => view,
+                Err(err) => return fail(&cli, ExitClass::Data, err),
+            };
+            let fit = view.measure(&console, &console.options()).maximum;
+            (view, Some(fit))
         }
         // Print + auto: parse markup (Print) or take plain text (auto).
         _ => {

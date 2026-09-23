@@ -171,6 +171,7 @@ const VALUE_KEYS: &[&str] = &[
     "image_contrast",
     "image_gamma",
     "log_presentation",
+    "format",
 ];
 
 fn validate_value(key: &str, value: &Value) -> Result<(), String> {
@@ -207,6 +208,7 @@ fn validate_value(key: &str, value: &Value) -> Result<(), String> {
                         | "image"
                         | "gif"
                         | "diff"
+                        | "inspect"
                 )
             }),
             "collision" => value
@@ -218,6 +220,9 @@ fn validate_value(key: &str, value: &Value) -> Result<(), String> {
             "log_presentation" => value
                 .as_str()
                 .is_some_and(|v| matches!(v, "plain" | "rich")),
+            "format" => value
+                .as_str()
+                .is_some_and(|v| crate::inspect::InputFormat::parse(v).is_ok()),
             "image_color" => value
                 .as_str()
                 .is_some_and(|v| matches!(v, "truecolor" | "ansi256" | "ansi16" | "grayscale")),
@@ -615,8 +620,12 @@ pub(crate) fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<St
         _ => 1,
     });
     for (key, value) in settings {
+        // A configured `format` is for automatic and inspect modes; it must not
+        // turn `rich --json file` into a usage error.
+        let explicit_mode = super::explicit_mode(&args.cleaned);
         if explicit.contains(&key)
-            || (key == "mode" && super::selects_mode_explicitly(&args.cleaned))
+            || (key == "mode" && explicit_mode.is_some())
+            || (key == "format" && explicit_mode.is_some_and(|mode| mode != super::Mode::Inspect))
         {
             continue;
         }

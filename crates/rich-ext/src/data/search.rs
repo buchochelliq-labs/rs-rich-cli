@@ -41,6 +41,7 @@ pub struct SearchQuery {
     key: Option<String>,
     path: Option<String>,
     value: Option<String>,
+    text: Option<String>,
     case_insensitive: bool,
 }
 
@@ -56,6 +57,15 @@ impl SearchQuery {
     /// Scalars whose text contains `pattern`.
     pub fn value(pattern: impl Into<String>) -> Self {
         Self::default().and_value(pattern)
+    }
+    /// Nodes whose own key, or scalars whose text, contains `pattern`: the
+    /// one criterion that combines with OR, for a "find anywhere" search.
+    pub fn text(pattern: impl Into<String>) -> Self {
+        Self::default().and_text(pattern)
+    }
+    pub fn and_text(mut self, pattern: impl Into<String>) -> Self {
+        self.text = Some(pattern.into());
+        self
     }
     pub fn and_key(mut self, pattern: impl Into<String>) -> Self {
         self.key = Some(pattern.into());
@@ -75,7 +85,7 @@ impl SearchQuery {
         self
     }
     fn is_empty(&self) -> bool {
-        self.key.is_none() && self.path.is_none() && self.value.is_none()
+        self.key.is_none() && self.path.is_none() && self.value.is_none() && self.text.is_none()
     }
 }
 
@@ -254,8 +264,21 @@ pub fn search<'a>(node: &'a Node, query: &SearchQuery) -> Vec<SearchMatch<'a>> {
                 return;
             }
         }
+        let mut text_on = None;
+        if let Some(pattern) = &query.text {
+            if value_text(node).is_some_and(|text| find(&text, pattern, ci).is_some()) {
+                text_on = Some(MatchKind::Value);
+            } else if matches!(path.last(), Some(PathSegment::Key(key)) if find(key, pattern, ci).is_some())
+            {
+                text_on = Some(MatchKind::Key);
+            } else {
+                return;
+            }
+        }
         let matched_on = if query.value.is_some() {
             MatchKind::Value
+        } else if let Some(kind) = text_on {
+            kind
         } else if query.key.is_some() {
             MatchKind::Key
         } else {
@@ -364,7 +387,8 @@ impl<'a> SearchResults<'a> {
             let start = text.plain().len();
             text.append(&shown, Some(key_style.clone().into()));
             if i + 1 == segments.len() && hit.matched_on == MatchKind::Key {
-                self.highlighted(&mut text, start, self.query.key.as_deref(), &highlight);
+                let pattern = self.query.key.as_deref().or(self.query.text.as_deref());
+                self.highlighted(&mut text, start, pattern, &highlight);
             }
         }
         if hit.matched_on == MatchKind::Path {
@@ -376,7 +400,8 @@ impl<'a> SearchResults<'a> {
         let text = text.append_text(&self.value_display(console, hit.node));
         let mut text = text;
         if hit.matched_on == MatchKind::Value {
-            self.highlighted(&mut text, start, self.query.value.as_deref(), &highlight);
+            let pattern = self.query.value.as_deref().or(self.query.text.as_deref());
+            self.highlighted(&mut text, start, pattern, &highlight);
         }
         text
     }

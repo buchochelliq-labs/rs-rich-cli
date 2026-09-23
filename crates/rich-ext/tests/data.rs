@@ -425,6 +425,20 @@ fn search_by_key_path_and_value() {
         MatchKind::Value
     );
     assert!(search(&node, &SearchQuery::default()).is_empty());
+    // `text` is the one OR criterion: a key or a value.
+    let hits = search(&node, &SearchQuery::text("db").case_insensitive(true));
+    let found: Vec<_> = hits
+        .iter()
+        .map(|hit| (hit.path.to_string(), hit.matched_on))
+        .collect();
+    assert_eq!(
+        found,
+        [
+            ("servers[1].name".to_string(), MatchKind::Value),
+            ("db_main".to_string(), MatchKind::Key),
+            ("db_main.host".to_string(), MatchKind::Value),
+        ]
+    );
 }
 
 #[test]
