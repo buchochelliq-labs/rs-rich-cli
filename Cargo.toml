@@ -55,6 +55,10 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 # workspace MSRV of 1.90.)
 ureq = "3"
 
+# Event-driven file watching for the CLI's `--watch` (inotify, FSEvents,
+# ReadDirectoryChangesW, kqueue). The polling loop remains the fallback.
+notify = "8"
+
 # Core stays safe by default; the future Windows-console port may opt back in
 # per-item with an explicit `#[allow(unsafe_code)]` + justification.
 [workspace.lints.rust]

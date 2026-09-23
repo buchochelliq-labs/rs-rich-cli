@@ -159,8 +159,10 @@ batch/profile/watch/image work:
   currently stable Markdown and JSON stdin paths.
 - **#34:** the differential corpus and generator now include box renderables
   (`Panel` box variations) and vary the safe-box capability profile in addition
-  to width, color, markup, styles and overflow. Broader CLI differential
-  fuzzing remains follow-up work beyond this bounded corpus.
+  to width, color, markup, styles and overflow. 0.0.10 adds Table, Rule,
+  Padding and Align generators, per-colour-system oracle isolation, a
+  failure-kind-preserving shrinker and a nightly 20,000-case run on `main`.
+  Its first runs filed #442–#449 (see [parity](parity.md#differential-fuzzing)).
 - **#35:** `library_bench` accepts explicit width and color-system arguments and
   records them in its JSON artifact. CI publication and threshold enforcement
   remain deferred; output hashes stay the blocking correctness signal.
