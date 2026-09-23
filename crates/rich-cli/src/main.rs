@@ -5748,6 +5748,7 @@ mod tests {
             &ConfigRoots {
                 home: None,
                 cwd: root.clone(),
+                no_color_env: false,
             },
         )
         .unwrap();
@@ -5763,6 +5764,7 @@ mod tests {
             &ConfigRoots {
                 home: None,
                 cwd: root.clone(),
+                no_color_env: false,
             },
         )
         .unwrap_err();
@@ -5848,6 +5850,7 @@ mod tests {
             &ConfigRoots {
                 home: None,
                 cwd: root.clone(),
+                no_color_env: false,
             },
         )
         .unwrap();

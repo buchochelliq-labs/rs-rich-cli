@@ -793,8 +793,15 @@ rich config reference
 
 `explain` tables every key across the layers the binary applies, lowest first:
 built-in defaults, `NO_COLOR`, the config file's `[defaults]`, the selected
-profile, then the command line. A config `no_color = false` therefore overrides
-`NO_COLOR`, exactly as rendering does. With a KEY it prints that key's chain.
+profile, then the command line. With a KEY it prints that key's chain.
+
+A config `no_color = false` overrides `NO_COLOR`, as the
+[NO_COLOR convention](https://no-color.org/) allows for user configuration, but
+only from your own config: `~/.config/rich/config.toml` or a file named with
+`--config`. A `rich.toml` found in the working directory belongs to the project
+you are in, so it can turn colour off but not back on against `NO_COLOR`;
+`config explain` notes when it was ignored. `--color` always overrides
+`NO_COLOR`.
 `reference` lists every source and key with its type, default and flag.
 
 ---

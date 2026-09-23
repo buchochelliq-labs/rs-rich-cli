@@ -15,6 +15,9 @@ struct Configuration {
     base: Settings,
     /// The applied profile's name and table, for `config explain`.
     profile: Option<(String, Settings)>,
+    /// Set when a working-directory `rich.toml` asked for `no_color = false`
+    /// while `NO_COLOR` is set, and was ignored (see `load`).
+    ignored_color: bool,
 }
 
 pub(crate) fn validate_theme_name(name: &str) -> Result<(), String> {
@@ -43,6 +46,8 @@ pub(crate) fn validate_theme_binding(name: &str, style: &str) -> Result<(), Stri
 pub(crate) struct ConfigRoots {
     pub home: Option<PathBuf>,
     pub cwd: PathBuf,
+    /// Whether `NO_COLOR` is set and non-empty.
+    pub no_color_env: bool,
 }
 
 impl Default for ConfigRoots {
@@ -52,6 +57,7 @@ impl Default for ConfigRoots {
                 .or_else(|| std::env::var_os("USERPROFILE"))
                 .map(PathBuf::from),
             cwd: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            no_color_env: std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty()),
         }
     }
 }
@@ -382,6 +388,7 @@ fn decode_configuration(text: &str, selected: Option<&str>) -> Result<Configurat
         themes,
         base,
         profile: applied,
+        ignored_color: false,
     })
 }
 
@@ -422,8 +429,28 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
     };
     let text =
         std::fs::read_to_string(&path).map_err(|e| format!("config {}: {e}", path.display()))?;
-    let settings = decode_configuration(&text, args.profile.as_deref())
+    let mut settings = decode_configuration(&text, args.profile.as_deref())
         .map_err(|e| format!("config {}: {e}", path.display()))?;
+    // A `rich.toml` found in the working directory belongs to whatever project
+    // the user is in, not to the user, so it may turn colour off but not back
+    // on against `NO_COLOR`. The user's own config (`~/.config/rich`, or a file
+    // named with `--config`) still can, as the NO_COLOR convention allows, and
+    // so can `--color`.
+    if roots.no_color_env && args.path.is_none() && path == roots.cwd.join("rich.toml") {
+        let enables =
+            |settings: &Settings| settings.get("no_color") == Some(&Value::Boolean(false));
+        let mut ignored = false;
+        for table in std::iter::once(&mut settings.settings)
+            .chain(std::iter::once(&mut settings.base))
+            .chain(settings.profile.as_mut().map(|(_, table)| table))
+        {
+            if enables(table) {
+                table.remove("no_color");
+                ignored = true;
+            }
+        }
+        settings.ignored_color = ignored;
+    }
     Ok((settings, Some(path)))
 }
 
@@ -755,6 +782,8 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
             source: source.as_deref().map(|path| shown_path(path, roots)),
             theme: args.theme.as_deref(),
             overrides: &overrides,
+            no_color_env: roots.no_color_env,
+            ignored_color: configuration.ignored_color,
         };
         return Ok(Some(explain(&layers, key)));
     }
@@ -781,6 +810,9 @@ struct Layers<'a> {
     source: Option<String>,
     theme: Option<&'a str>,
     overrides: &'a Settings,
+    no_color_env: bool,
+    /// The working-directory config's `no_color = false` was ignored.
+    ignored_color: bool,
 }
 
 /// A config path relative to the working directory, or under `~`, when it is.
@@ -803,7 +835,8 @@ fn shown(value: &Value) -> String {
 
 /// The layers in the order the binary applies them: `NO_COLOR` seeds the
 /// parser's state before any flag, and config values arrive as flags ahead
-/// of the command line's, so a config `no_color = false` beats `NO_COLOR`.
+/// of the command line's, so a config `no_color = false` beats `NO_COLOR`
+/// (except from a working-directory `rich.toml`, which `load` has dropped).
 fn precedence(layers: &Layers) -> rich_ext::cli_doc::Precedence {
     use rich_ext::cli_doc::{Layer, Precedence};
     let table = |mut layer: Layer, settings: &Settings| {
@@ -813,7 +846,7 @@ fn precedence(layers: &Layers) -> rich_ext::cli_doc::Precedence {
         layer
     };
     let mut precedence = Precedence::new().layer(super::cli_spec::default_layer());
-    if std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty()) {
+    if layers.no_color_env {
         precedence = precedence.layer(
             Layer::new("environment")
                 .origin("NO_COLOR")
@@ -843,13 +876,23 @@ fn explain(layers: &Layers, key: Option<&str>) -> String {
         .iter()
         .any(|r| r.key == "no_color" && r.value == "true");
     let render = |renderable: &dyn rich::Renderable| super::cli_spec::render(renderable, no_color);
-    match key {
+    let mut output = match key {
         None => render(&precedence.view()),
         Some(key) => match precedence.explain(key) {
             Some(explanation) => render(&explanation),
             None => format!("{key} is not set by any layer"),
         },
+    };
+    if layers.ignored_color && key.is_none_or(|key| key == "no_color") {
+        if !output.ends_with('\n') {
+            output.push('\n');
+        }
+        output.push_str(
+            "note: no_color = false in ./rich.toml is ignored while NO_COLOR is set; \
+             pass --color, or set it in ~/.config/rich/config.toml, to override NO_COLOR\n",
+        );
     }
+    output
 }
 
 /// Every key `validate_value` accepts.
@@ -879,6 +922,7 @@ mod tests {
         let roots = ConfigRoots {
             home: None,
             cwd: root.path().into(),
+            no_color_env: false,
         };
         let expanded = config_args(
             &strings(&[
@@ -967,6 +1011,7 @@ mod tests {
         let roots = ConfigRoots {
             home: None,
             cwd: root.clone(),
+            no_color_env: false,
         };
         let merged = config_args(
             &strings(&["--profile", "ci", "--width", "60", "input"]),
@@ -1002,6 +1047,7 @@ mod tests {
         let roots = ConfigRoots {
             home: None,
             cwd: root.path().into(),
+            no_color_env: false,
         };
         for flag in ["--bogus", "--title"] {
             let mut args = strings(&["config", "validate", flag]);
@@ -1038,6 +1084,7 @@ mod tests {
         let roots = ConfigRoots {
             home: None,
             cwd: root.path().into(),
+            no_color_env: false,
         };
         for flags in [
             vec![],
@@ -1074,6 +1121,7 @@ mod tests {
         let roots = ConfigRoots {
             home: None,
             cwd: root.path().into(),
+            no_color_env: false,
         };
         for flags in [vec!["--profile", "once"], vec!["--no-watch"]] {
             let mut args = strings(&flags);
@@ -1110,6 +1158,7 @@ mod tests {
         let roots = ConfigRoots {
             home: None,
             cwd: root.path().into(),
+            no_color_env: false,
         };
         let merged = config_args(&strings(&["a.md", "b.md"]), &roots).unwrap();
         let cli = super::super::parse_inner(&merged).unwrap().unwrap();
@@ -1169,6 +1218,7 @@ mod tests {
         let roots = ConfigRoots {
             home: None,
             cwd: root.path().into(),
+            no_color_env: false,
         };
         for flags in [
             vec!["--no-watch", "--watch-cache"],
@@ -1216,6 +1266,7 @@ mod tests {
         let roots = ConfigRoots {
             home: None,
             cwd: root.path().into(),
+            no_color_env: false,
         };
         (root, roots)
     }
@@ -1304,6 +1355,63 @@ mod tests {
                 .contains("unknown config inspection option")
         );
         assert!(inspect(&strings(&["config", "explain", "a", "b"]), &roots).is_err());
+    }
+
+    #[test]
+    fn a_working_directory_config_cannot_undo_no_color() {
+        let root = tempfile::tempdir().unwrap();
+        let cwd = root.path().join("project");
+        let home = root.path().join("home");
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::create_dir_all(home.join(".config/rich")).unwrap();
+        let color = "[defaults]\nno_color = false\n[profile.p]\nno_color = false\n";
+        let roots = |no_color_env| ConfigRoots {
+            home: Some(home.clone()),
+            cwd: cwd.clone(),
+            no_color_env,
+        };
+        let merged = |args: &[&str], no_color_env| {
+            config_args(&strings(args), &roots(no_color_env)).unwrap()
+        };
+
+        // The user's own config may override NO_COLOR, as the convention allows.
+        std::fs::write(home.join(".config/rich/config.toml"), color).unwrap();
+        assert!(merged(&["x.md"], true).contains(&"--color".to_string()));
+
+        // A project's ./rich.toml may not, from [defaults] or a profile.
+        std::fs::write(cwd.join("rich.toml"), color).unwrap();
+        for args in [&["x.md"][..], &["--profile", "p", "x.md"]] {
+            let args = merged(args, true);
+            assert!(!args.contains(&"--color".to_string()), "{args:?}");
+        }
+        // Without NO_COLOR it still applies, and --color still wins.
+        assert!(merged(&["x.md"], false).contains(&"--color".to_string()));
+        assert!(merged(&["--color", "x.md"], true).contains(&"--color".to_string()));
+        // A file named with --config is the user's choice, so it keeps its say.
+        assert!(merged(&["--config", "rich.toml", "x.md"], true).contains(&"--color".to_string()));
+        // Turning colour off is always allowed.
+        std::fs::write(cwd.join("rich.toml"), "[defaults]\nno_color = true\n").unwrap();
+        assert!(merged(&["x.md"], true).contains(&"--no-color".to_string()));
+
+        // `config show` and `config explain` report the effective setting.
+        std::fs::write(cwd.join("rich.toml"), color).unwrap();
+        let show = inspect(&strings(&["config", "show"]), &roots(true))
+            .unwrap()
+            .unwrap();
+        let show: serde_json::Value = serde_json::from_str(&show).unwrap();
+        assert!(show["settings"].get("no_color").is_none(), "{show}");
+        let explained = inspect(&strings(&["config", "explain", "no_color"]), &roots(true))
+            .unwrap()
+            .unwrap();
+        assert!(explained.contains("NO_COLOR"), "{explained}");
+        assert!(
+            explained.contains("is ignored while NO_COLOR is set"),
+            "{explained}"
+        );
+        let explained = inspect(&strings(&["config", "explain", "no_color"]), &roots(false))
+            .unwrap()
+            .unwrap();
+        assert!(!explained.contains("ignored"), "{explained}");
     }
 
     #[test]
