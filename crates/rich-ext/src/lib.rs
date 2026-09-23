@@ -59,6 +59,12 @@ pub mod event;
 
 pub mod diagnostic;
 
+pub mod dashboard;
+
+pub mod hyperlink;
+
+pub mod stacktrace;
+
 pub mod log_handler;
 pub use log_handler::RichHandler;
 

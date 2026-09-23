@@ -116,6 +116,32 @@ CLI 0.0.11. Core changes below, so every dependent moves with it.
 - **Goldens.** 6 new `progress_time.tsv` cases (expand, flexible bar, column
   options, crop and style, narrow wrapping) and 4 new `progress_live.tsv` cases
   (transient, disabled, non-terminal) match rich 15.0.0.
+### Ext: diagnostics, hyperlinks, stack traces and a dashboard (0.0.11 workstream 3)
+
+- **Diagnostics (#210).** `Diagnostic` gains a `Level` and code
+  (`error[E0308]: …`, the code optionally linked), a `Location` row, labelled
+  primary and secondary spans on `SourceSnippet`, `Suggestion`s that show the
+  edited line, and an attached `StackTrace`. Without them it renders exactly as
+  before.
+- **Error adapters (#386, #387).** `DiagnosticInfo` lets any error type, such as a
+  `thiserror` enum, supply its level, code, help, notes and location through
+  `Diagnostic::from_info` / `to_diagnostic`. The new `anyhow` feature adds
+  `Diagnostic::from_anyhow`, which maps the context chain and a captured
+  backtrace.
+- **Hyperlinks (#212).** `hyperlink::Hyperlinker` links URLs, paths,
+  `path:line:column` and `#123` / `owner/repo#123` references, as `file://` URLs
+  or through an editor template. It is a `Highlighter`, so `RichHandler` can use
+  it. Non-terminals keep the plain text.
+- **Stack traces (#239).** `stacktrace::parse` normalises Rust, Python, Java and
+  JavaScript traces, with chained causes, into one shape. Parsers are pluggable.
+  Rendering dims and collapses library frames and links locations.
+  `stacktrace::capture` and `panic_hook` cover Rust panics. The tests parse traces
+  captured from real Python 3.11, Node 22, OpenJDK and Rust runs.
+- **Dashboard (#329).** `dashboard::DiagnosticsDashboard` summarises counts by
+  level, lists the most frequent codes, and groups diagnostics by file in
+  location order.
+- `rs-rich-ext` now depends on `fancy-regex` directly. It was already in the tree
+  through core.
 
 ### Logging: `LogRender` port and `RichHandler` (#10)
 
