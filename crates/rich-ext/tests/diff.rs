@@ -1096,6 +1096,21 @@ Received: 5
     }
 
     #[test]
+    fn report_prints_bracketed_names_literally() {
+        // pytest parametrised ids look like markup; they must stay data.
+        let xml = r#"<testsuite name="test_colours[red]" tests="1"><testcase classname="c" name="test_x[bold]"/></testsuite>"#;
+        let run = junit::parse(xml).unwrap();
+        let all = plain(&TestReport::new(run).show_passed(true), 72);
+        assert!(all.contains("test_x[bold]"), "{all}");
+        // The suite table's row, not only the PASSED line, keeps the brackets.
+        assert!(
+            all.lines()
+                .any(|l| l.contains("test_colours[red]") && l.contains(" 1 ")),
+            "{all}"
+        );
+    }
+
+    #[test]
     fn junit_export_round_trips() {
         for source in [SUREFIRE, PYTEST, JEST] {
             let run = junit::parse(source).unwrap();

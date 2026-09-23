@@ -1,0 +1,22 @@
+# Measurement.get of containers with a `__rich_measure__`, captured from Python rich.
+# Columns: name<TAB>max_width<TAB>minimum<TAB>maximum
+# Console: width=<max_width>, highlight=False. The Rust test builds the
+# renderable matching each <name> with the same builder as renderables.tsv.
+measure_table	40	15	15
+measure_table_narrow	10	10	10
+measure_table_nested	40	22	34
+measure_table_markup	40	31	31
+measure_table_renderables	60	47	47
+measure_grid_empty	40	0	0
+measure_tree	40	14	17
+measure_panel	40	15	15
+measure_panel_title	40	16	16
+measure_panel_width	40	9	9
+measure_padding	40	10	16
+measure_padding_tight	4	4	4
+measure_constrain	40	5	8
+measure_align	40	3	6
+measure_rule	40	1	1
+measure_styled_panel	40	5	5
+measure_hbar	40	4	40
+measure_hbar_width	40	7	7

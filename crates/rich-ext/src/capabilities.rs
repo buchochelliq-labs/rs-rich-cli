@@ -55,7 +55,7 @@
 
 use crate::target::{CapabilityOrigin, DetectedCapabilities, TargetObservations};
 use rich::protocol::{Support, TargetCapabilities};
-use rich::{ColorSystem, Console, ConsoleOptions, Renderable, Segment, Table};
+use rich::{ColorSystem, Console, ConsoleOptions, Renderable, Segment, Table, Text};
 use std::collections::BTreeMap;
 use std::io::IsTerminal;
 
@@ -960,16 +960,25 @@ impl Renderable for CapabilityReport<'_> {
             } else {
                 format!("{origin}: {reason}")
             };
-            table.add_row(&[name, &value, &source]);
+            // Values come from the environment, so they are data, not markup.
+            table.add_row_text(vec![Text::new(name), Text::new(value), Text::new(source)]);
         }
         let facts = [("terminal", &self.report.terminal), ("ci", &self.report.ci)];
         for (name, value) in facts {
             if let Some(value) = value {
-                table.add_row(&[name, value, "inferred"]);
+                table.add_row_text(vec![
+                    Text::new(name),
+                    Text::new(value.as_str()),
+                    Text::new("inferred"),
+                ]);
             }
         }
         for warning in &self.report.warnings {
-            table.add_row(&["warning", "", warning]);
+            table.add_row_text(vec![
+                Text::new("warning"),
+                Text::new(""),
+                Text::new(warning.as_str()),
+            ]);
         }
         table.rich_render(console, options)
     }

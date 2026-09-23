@@ -32,6 +32,7 @@ pub fn print(renderable: &dyn Renderable) {
 }
 
 /// A table from a header row and cell rows; each cell is anything `Display`.
+/// Headers and cells are displayed literally, never parsed as markup.
 ///
 /// ```
 /// let table = rich_ext::rich_table!(["Name", "Age"], ["Alice", 30], ["Bob", 4]);
@@ -41,8 +42,13 @@ pub fn print(renderable: &dyn Renderable) {
 macro_rules! rich_table {
     ([$($header:expr),* $(,)?] $(, [$($cell:expr),* $(,)?])* $(,)?) => {{
         let mut table = $crate::__private::rich::Table::new();
-        $( table.add_column(::std::string::ToString::to_string(&$header)); )*
-        $( table.add_row(&[$( ::std::string::ToString::to_string(&$cell).as_str() ),*]); )*
+        $( table.add_column_text(
+            $crate::__private::rich::Text::new(::std::string::ToString::to_string(&$header)),
+            $crate::__private::rich::Justify::Left,
+        ); )*
+        $( table.add_row_text(::std::vec![$( $crate::__private::rich::Text::new(
+            ::std::string::ToString::to_string(&$cell),
+        ) ),*]); )*
         table
     }};
 }
@@ -73,6 +79,7 @@ macro_rules! rich_panel {
 }
 
 /// A tree from nested labels: `rich_tree!("root" => ["a", "b" => ["c"]])`.
+/// Labels are displayed literally, never parsed as markup.
 ///
 /// ```
 /// let tree = rich_ext::rich_tree!("src" => ["main.rs", "lib" => ["mod.rs"]]);
@@ -82,18 +89,18 @@ macro_rules! rich_panel {
 macro_rules! rich_tree {
     ($label:expr $(=> [$($children:tt)*])?) => {{
         #[allow(unused_mut)]
-        let mut tree = $crate::__private::rich::Tree::new($label);
+        let mut tree = $crate::__private::rich::Tree::new($crate::__private::rich::Text::new($label));
         $( $crate::rich_tree!(@children tree; $($children)*); )?
         tree
     }};
     (@children $parent:ident; ) => {};
     (@children $parent:ident; $label:expr => [$($children:tt)*] $(, $($rest:tt)*)?) => {{
-        let node = $parent.add($label);
+        let node = $parent.add($crate::__private::rich::Text::new($label));
         $crate::rich_tree!(@children node; $($children)*);
         $( $crate::rich_tree!(@children $parent; $($rest)*); )?
     }};
     (@children $parent:ident; $label:expr $(, $($rest:tt)*)?) => {{
-        $parent.add($label);
+        $parent.add($crate::__private::rich::Text::new($label));
         $( $crate::rich_tree!(@children $parent; $($rest)*); )?
     }};
 }

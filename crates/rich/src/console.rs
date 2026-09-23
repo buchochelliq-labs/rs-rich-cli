@@ -704,6 +704,38 @@ impl Console {
         Ok(text)
     }
 
+    /// Convert a plain string to [`Text`] the way a `str` renderable is
+    /// converted upstream: emoji codes expand (per the console), console
+    /// markup is parsed, and highlighting runs when `highlight` (or, when
+    /// `None`, the console default) enables it. Port of `Console.render_str`,
+    /// which `Table` cells, `Tree` labels and `Columns` items go through.
+    ///
+    /// Malformed markup falls back to the literal text, as
+    /// [`build_text`](Console::build_text) does (docs/DIVERGENCES.md §2).
+    pub fn render_str(&self, content: &str, highlight: Option<bool>) -> Text {
+        let highlight = highlight.unwrap_or(self.highlight);
+        // `markup.render` returns the (emoji-replaced) string untouched when it
+        // holds no `[`; skip the parser for the common plain cell.
+        let markup = if content.contains('[') {
+            let expanded = self.expand_emoji(content);
+            Text::from_markup(&expanded).unwrap_or_else(|_| Text::new(expanded))
+        } else if content.contains(':') {
+            Text::new(self.expand_emoji(content))
+        } else {
+            Text::new(content)
+        };
+        if !highlight {
+            return markup;
+        }
+        // Highlight the plain text, then append the markup spans, as
+        // `highlight_text.copy_styles(rich_text)` does (see `try_build_text`).
+        let mut text = self.decorate_with_repr(Text::new(markup.plain()));
+        for span in markup.spans() {
+            text.push_span(span.clone());
+        }
+        text
+    }
+
     /// As [`print_str`](Console::print_str), but reports malformed markup.
     pub fn try_print_str(&self, content: &str) -> crate::errors::Result<()> {
         self.print(&self.try_build_text(content)?);
@@ -743,6 +775,16 @@ impl Console {
         if self.highlight {
             crate::highlighter::ReprHighlighter::new().highlight(&mut text);
         }
+        text
+    }
+
+    /// [`decorate`](Self::decorate) for a caller that has already decided to
+    /// highlight (upstream's `highlight=True` override of the console default).
+    fn decorate_with_repr(&self, mut text: Text) -> Text {
+        for highlighter in &self.highlighters {
+            highlighter.highlight(&mut text);
+        }
+        crate::highlighter::ReprHighlighter::new().highlight(&mut text);
         text
     }
 

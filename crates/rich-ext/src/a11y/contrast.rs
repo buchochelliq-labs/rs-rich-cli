@@ -21,8 +21,8 @@
 use crate::fidelity::style_without_color;
 use rich::terminal_theme::blend_rgb;
 use rich::{
-    ColorTriplet, Console, ConsoleOptions, Renderable, Segment, Style, Table, TerminalTheme, Theme,
-    DEFAULT_TERMINAL_THEME, MONOKAI,
+    ColorTriplet, Console, ConsoleOptions, Renderable, Segment, Style, Table, TerminalTheme, Text,
+    Theme, DEFAULT_TERMINAL_THEME, MONOKAI,
 };
 
 /// sRGB channel (0–255) to linear light.
@@ -564,7 +564,13 @@ impl Renderable for ContrastReport<'_> {
                     Severity::Warning => "warning",
                     Severity::Info => "info",
                 };
-                table.add_row(&[&f.style_name, severity, &f.describe(), &f.suggestion]);
+                // Data, not markup: a style name or suggestion can contain brackets.
+                table.add_row_text(vec![
+                    Text::new(f.style_name.as_str()),
+                    Text::new(severity),
+                    Text::new(f.describe()),
+                    Text::new(f.suggestion.as_str()),
+                ]);
             }
             out = table.rich_render(console, options);
             if out.last().is_some_and(|s| !s.text.ends_with('\n')) {

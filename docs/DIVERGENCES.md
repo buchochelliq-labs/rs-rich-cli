@@ -43,7 +43,10 @@ Format: what differs · why · how to remove it (if temporary).
   back to printing the raw text where upstream would raise `MarkupError`. The
   strict behaviour is available as `try_print_str` / `try_print_justified` /
   `try_build_text`, and `rich --print` uses it, so user-supplied markup is
-  reported rather than rendered literally.
+  reported rather than rendered literally. `Console::render_str`, which renders
+  plain-string table headers and cells, tree labels and `Columns` items (and so
+  `rich --csv` cells), is lenient too: rendering has no error path, so malformed
+  markup there prints literally where upstream raises.
 
   Also unmodelled: `@`-tag *meta payloads*. The tag applies no style and its
   parameters are discarded rather than being `literal_eval`'d into a meta map.
