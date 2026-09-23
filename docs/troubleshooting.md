@@ -4,7 +4,7 @@ Error messages exactly as `rich` prints them, with what causes each and what to
 do. All diagnostics go to **stderr** and every failure exits **1**, so a failed
 render never looks like a successful one to a script.
 
-**Applies to** `rich 0.0.1`. If your version differs, check
+**Applies to** `rich 0.0.2`. If your version differs, check
 [the changelog](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/CHANGELOG.md).
 
 ---
@@ -105,12 +105,49 @@ overflows, please
 the exact input — width handling is measured against Python `rich` and that
 class of defect is treated as a bug.
 
-### `rich` prints its help and exits 0 when I give it nothing
+### `rich` shows a demo when I give it nothing
 
-That is intended, and matches upstream `rich-cli`: with no resource and no mode
-flag there is nothing to render.
+With no resource and no mode flag, `rich` shows its capability demo. Use
+`rich --help` for options. Demo layout/style/paging/export flags are rejected
+with a diagnostic; add a resource or render mode to use those options.
+
+### A mode is waiting for input
+
+Input modes without a resource, or with `-`, read stdin until EOF. In a terminal,
+`rich` prints an input hint; finish with Ctrl-D on Unix or Ctrl-Z then Enter on
+Windows. Piped input keeps working without a hint.
 
 ---
+
+
+## Text encoding
+
+In 0.0.4, select a known encoding explicitly:
+
+```bash
+rich notes.txt --encoding utf-16
+rich notes.txt --encoding utf-16le
+cat notes.txt | rich - --encoding utf-16be
+rich https://example.com/notes.txt --encoding utf-16
+```
+
+`utf-16` requires a byte-order mark (BOM). `utf-16le` and `utf-16be` also accept
+headerless input; use the byte order specified by the file's producer. Decoding
+is strict: odd byte counts, unpaired surrogates and contradictory BOMs fail with
+nonzero status before rendering. Generic `utf-16` rejects UTF-32 BOM signatures;
+the little-endian signature is also possible for UTF-16 BOM followed by NUL, so
+select `utf-16le` explicitly for that known case. UTF-32 is not auto-detected.
+Only one BOM is consumed. File/stdin newlines are normalized as before.
+
+Without this option, files keep upstream-compatible UTF-8 replacement decoding.
+A recognized UTF-16 BOM prints a hint, without silently changing decoding or the
+exit status. Headerless encodings are not guessed. Stdin and fetched bodies
+remain strict UTF-8; `--encoding utf-8` additionally makes file decoding strict.
+URL download limits and TLS checks are unchanged. Encoding does not apply to
+literal `--print` text, rules, GIF playback, image diffs or the capability demo.
+
+An unreadable image passed as text now produces one actionable `rich --diff`
+hint. A valid text file with an image suffix still renders as text.
 
 ## Reporting a bug
 

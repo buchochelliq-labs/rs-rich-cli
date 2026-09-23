@@ -1,0 +1,4 @@
+Input: 1300080 bytes, 10 columns, 10000 data rows
+Same host, debug builds, COLUMNS=100, stdout=/dev/null
+before: peak RSS 236008 KiB; elapsed 5.31 seconds
+after: peak RSS 24656 KiB; elapsed 2.27 seconds

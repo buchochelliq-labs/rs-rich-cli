@@ -1,0 +1,28 @@
+{
+  "versionPattern": "\\b(?:rs-rich(?:-ext|-cli|-art)?-)?v?\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?\\b",
+  "releaseFiles": [
+    "CHANGELOG.md",
+    "Cargo.lock",
+    "docs/BRANCHING.md",
+    ".claude/skills/release/SKILL.md"
+  ],
+  "releaseFileSuffixes": [
+    "/Cargo.toml"
+  ],
+  "handoffTriggers": [
+    "versionSignal",
+    "releaseFiles"
+  ],
+  "handoffCommentWaitSeconds": 120,
+  "handoffRequiredText": [
+    "Head SHA:",
+    "Mergeable:",
+    "Merge state:",
+    "Review decision:",
+    "Selected publish tag",
+    "Publish target:",
+    "Unresolved review threads:",
+    "Validation summary:",
+    "Remaining visible blocker:"
+  ]
+}

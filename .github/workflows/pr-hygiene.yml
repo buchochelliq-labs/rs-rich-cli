@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  issues: read
   pull-requests: read
 
 jobs:
@@ -23,7 +24,7 @@ jobs:
     if: github.event.pull_request.user.type != 'Bot'
     steps:
       - name: Check required sections are present and filled
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const REQUIRED = [
@@ -91,43 +92,196 @@ jobs:
               core.info('All required sections present and filled.');
             }
 
+  readiness:
+    name: release readiness
+    runs-on: ubuntu-latest
+    # Bots do not run release prep and often cannot satisfy human handoff rules.
+    if: github.event.pull_request.user.type != 'Bot'
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check review threads and release handoff
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const pr = context.payload.pull_request;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const policy = JSON.parse(
+              fs.readFileSync('.github/release-readiness.json', 'utf8')
+            );
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const reviewThreads = [];
+            let snapshot = null;
+            let cursor = null;
+            let hasNextPage = true;
+            while (hasNextPage) {
+              const { repository } = await github.graphql(`
+              query($owner:String!,$repo:String!,$number:Int!,$cursor:String) {
+                repository(owner:$owner,name:$repo) {
+                  pullRequest(number:$number) {
+                    headRefOid
+                    mergeable
+                    mergeStateStatus
+                    reviewDecision
+                    reviewThreads(first:100, after:$cursor) {
+                      nodes {
+                        isResolved
+                        path
+                        line
+                        comments(first:1) {
+                          nodes { body }
+                        }
+                      }
+                      pageInfo {
+                        hasNextPage
+                        endCursor
+                      }
+                    }
+                  }
+                }
+              }`,
+                { owner, repo, number: pr.number, cursor }
+              );
+              const page = repository.pullRequest.reviewThreads;
+              snapshot ??= {
+                headRefOid: repository.pullRequest.headRefOid,
+                mergeable: repository.pullRequest.mergeable,
+                mergeStateStatus: repository.pullRequest.mergeStateStatus,
+                reviewDecision: repository.pullRequest.reviewDecision || '',
+              };
+              reviewThreads.push(...page.nodes);
+              hasNextPage = page.pageInfo.hasNextPage;
+              cursor = page.pageInfo.endCursor;
+            }
+
+            const unresolved = reviewThreads.filter((thread) => !thread.isResolved);
+            const remainingBlocker =
+              snapshot.mergeable === 'MERGEABLE' && snapshot.mergeStateStatus === 'BLOCKED'
+                ? 'branch protection / maintainer review or merge action'
+                : 'none visible in PR readiness job';
+            const problems = [];
+            await core.summary
+              .addHeading('Release readiness snapshot')
+              .addList([
+                `Head SHA: ${snapshot.headRefOid}`,
+                `Mergeable: ${snapshot.mergeable}`,
+                `Merge state: ${snapshot.mergeStateStatus}`,
+                `Review decision: ${snapshot.reviewDecision || 'none'}`,
+                `Unresolved review threads: ${unresolved.length}`,
+                `Remaining visible blocker: ${remainingBlocker}`,
+              ])
+              .write();
+            if (unresolved.length) {
+              problems.push(
+                `${unresolved.length} unresolved review thread(s):\n` +
+                unresolved.map((thread) => {
+                  const first = thread.comments.nodes[0]?.body || '';
+                  const title = first.split(/\r?\n/).find(Boolean) || 'review comment';
+                  return `  • ${thread.path || 'unknown path'}:${thread.line || '?'} — ${title}`;
+                }).join('\n')
+              );
+            }
+
+            const changed = await github.paginate(
+              github.rest.pulls.listFiles,
+              { owner, repo, pull_number: pr.number, per_page: 100 }
+            );
+            const text = [pr.title, pr.body || '', pr.head.ref].join('\n');
+            const versionSignal = new RegExp(policy.versionPattern).test(text);
+            const releaseFiles = changed.some(({ filename }) =>
+              policy.releaseFiles.includes(filename) ||
+              policy.releaseFileSuffixes.some((suffix) => filename.endsWith(suffix))
+            );
+            const triggerChecks = { versionSignal, releaseFiles };
+            const needsHandoff = policy.handoffTriggers.some((trigger) => {
+              if (!(trigger in triggerChecks)) {
+                throw new Error(`Unknown release handoff trigger in policy: ${trigger}`);
+              }
+              return triggerChecks[trigger];
+            });
+            if (needsHandoff) {
+              async function latestHandoff() {
+                const comments = await github.paginate(
+                  github.rest.issues.listComments,
+                  { owner, repo, issue_number: pr.number, per_page: 100 }
+                );
+                const handoffs = comments.filter((comment) => {
+                  const body = (comment.body || '').replace(/^\uFEFF/, '');
+                  return /^\s*## Release handoff:/m.test(body);
+                });
+                return handoffs.at(-1);
+              }
+
+              const deadline = Date.now() + (policy.handoffCommentWaitSeconds * 1000);
+              let latest = null;
+              let body = '';
+              do {
+                latest = await latestHandoff();
+                body = (latest?.body || '').replace(/^\uFEFF/, '');
+                if (!latest || !body.includes(pr.head.sha)) {
+                  const remaining = Math.max(0, deadline - Date.now());
+                  if (remaining > 0) {
+                    core.info(
+                      `Waiting up to ${Math.ceil(remaining / 1000)}s for a current release handoff.`
+                    );
+                    await sleep(Math.min(10000, remaining));
+                  }
+                }
+              } while ((!latest || !body.includes(pr.head.sha)) && Date.now() < deadline);
+
+              if (!latest) {
+                problems.push('Release PR is missing a `## Release handoff:` PR comment.');
+              } else {
+                if (!body.includes(pr.head.sha)) {
+                  problems.push(
+                    `Latest release handoff is stale: it does not mention current head ${pr.head.sha}.`
+                  );
+                }
+                const missingFields = policy.handoffRequiredText
+                  .filter((required) => !body.includes(required));
+                if (missingFields.length) {
+                  problems.push(
+                    'Latest release handoff is missing required snapshot field(s): ' +
+                    missingFields.join(', ')
+                  );
+                }
+                if (!problems.length) {
+                  core.info(`Release handoff is current for ${pr.head.sha}.`);
+                }
+              }
+            } else {
+              core.info('No release handoff required for this PR.');
+            }
+
+            if (problems.length) {
+              core.setFailed(problems.join('\n\n'));
+            } else {
+              core.info('No unresolved review threads; release handoff state is valid.');
+            }
+
   base:
     name: base branch
     runs-on: ubuntu-latest
     steps:
-      # This repo has twice lost work to a PR based on another PR's branch: the
-      # base was squash-merged and deleted, so the child merged into a dead
-      # branch and reported success while its commits never reached main.
-      # Stacking is still allowed — it just cannot be merged while stacked.
+      - uses: actions/checkout@v7
       - name: Reject a base that is not main or a release branch
         env:
           BASE: ${{ github.event.pull_request.base.ref }}
-        run: |
-          case "$BASE" in
-            main|release/*|rc/*)
-              echo "Base '$BASE' is fine."
-              ;;
-            *)
-              echo "::error::This PR targets '$BASE', which is not 'main', 'rc/*' or 'release/*'."
-              echo "::error::Stacked PRs are fine to open, but must be retargeted to main before merging —"
-              echo "::error::a base branch that gets squash-merged and deleted takes this PR's commits with it."
-              echo "::error::Retarget with: gh pr edit <number> --base main"
-              exit 1
-              ;;
-          esac
+        run: bash scripts/check_pr_base.sh base "$BASE"
 
   # An rc branch is a second long-lived head, which is the shape behind every
   # instance of work being lost in this repo. It is safe only while it stays a
   # fast-forward of main — the moment main moves ahead, an rc merge either
   # conflicts or silently reverts, and a tag cut from it is no longer on main.
   #
-  # So: fail loudly the moment rc falls behind, rather than at release time.
+  # Apply the same check to rc/*, release/* and releases/*. Keep the existing
+  # job name stable for branch protection; main passes without an ancestry check.
   rc-current:
     name: rc not behind main
-    if: startsWith(github.event.pull_request.base.ref, 'rc/')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -142,12 +296,4 @@ jobs:
           BASE: ${{ github.event.pull_request.base.ref }}
         run: |
           git fetch origin main --quiet
-          behind=$(git rev-list --count "HEAD..origin/main")
-          if [ "$behind" -gt 0 ]; then
-            echo "::error::Merging this would leave '$BASE' $behind commit(s) behind main."
-            echo "::error::A release cut from it would not contain what is on main."
-            echo "::error::Open a PR merging main into '$BASE' first — note that rc/*"
-            echo "::error::is protected, so a direct push needs admin rights."
-            exit 1
-          fi
-          echo "Merging this keeps '$BASE' level with main."
+          bash scripts/check_pr_base.sh current "$BASE"

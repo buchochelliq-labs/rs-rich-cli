@@ -1,7 +1,7 @@
 # Build the documentation site and publish it to GitHub Pages.
 #
 # The screenshots are NOT regenerated here — they are committed, and CI checks
-# they are current. Regenerating during deploy would let the published images
+# their referenced paths exist. Regenerating during deploy would let the published images
 # silently disagree with the reviewed ones.
 name: docs
 
@@ -63,7 +63,7 @@ jobs:
           print("all image references resolve")
           PY
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         if: github.ref == 'refs/heads/main'
         with:
           path: site

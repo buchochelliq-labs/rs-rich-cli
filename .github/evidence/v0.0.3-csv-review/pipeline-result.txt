@@ -1,0 +1,4 @@
+Input: header + 10000 CSV rows
+Consumer: read eight lines then close pipe
+Producer exit: 0
+Producer stderr bytes: 0

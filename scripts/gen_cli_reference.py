@@ -10,6 +10,7 @@ what `--panel-style` now does. Re-run after any CLI change:
 The prose that cannot be derived from `--help` — defaults, interactions, exit
 codes — lives in `docs/cli.md` and is maintained by hand.
 """
+import argparse
 import pathlib
 import re
 import subprocess
@@ -33,15 +34,18 @@ Looking for how to *do* something rather than what a flag is called? Start at
 """
 
 FOOTER = """
-## Exit codes
-
-| Code | Meaning |
-|------|---------|
-| `0` | The resource rendered. With `--diff --threshold`, also: change was within the threshold. |
-| `1` | The run failed: the resource could not be read or parsed, a flag was invalid or orphaned, or `--diff --threshold` found more change than allowed. |
-
 `rich` writes diagnostics to stderr and rendered output to stdout, so
 `rich --csv data.csv > table.txt` keeps the two apart.
+
+`--report json` writes the result/error envelope to stderr for the same reason:
+stdout remains the rendered payload. `rich doctor --report json` is an
+informational command: its diagnostic document is written to stdout instead.
+
+Successful reports include `ok`, `code`, `exit_code` and a `result` object.
+Failures include the same status fields plus `message` and an `error` object.
+The top-level `message` is retained for simple shell consumers; structured
+consumers can read `error.message`. Informational exits such as `--help` and
+`--version` print their normal text and do not emit a report envelope.
 
 !!! note "A failure always exits non-zero"
 
@@ -52,20 +56,25 @@ FOOTER = """
 
 
 def main():
-    if not EXE.exists():
-        print(f"binary not found at {EXE}; run: cargo build --release -p rs-rich-cli",
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--binary", type=pathlib.Path, default=EXE)
+    parser.add_argument("--check", action="store_true")
+    args = parser.parse_args()
+    if not args.binary.exists():
+        print(f"binary not found at {args.binary}; run: cargo build --release -p rs-rich-cli",
               file=sys.stderr)
         return 1
 
     help_text = subprocess.run(
-        [str(EXE), "--help"], capture_output=True, text=True, encoding="utf-8"
+        [str(args.binary.resolve()), "--help"], capture_output=True, text=True,
+        encoding="utf-8", check=True
     ).stdout.replace("\r\n", "\n")
 
     # The help is our own artefact with a fixed set of sections. Splitting on
     # those names beats inferring headings: a heading may wrap onto a second
     # line and carry a parenthetical, while the RESOURCE paragraph is prose that
     # merely starts in capitals — an inferring parser read it as a section.
-    KNOWN = ["USAGE", "RENDER MODE", "OPTIONS", "ENVIRONMENT"]
+    KNOWN = ["USAGE", "COMMANDS", "RENDER MODE", "OPTIONS", "ENVIRONMENT", "EXIT CODES"]
     lines = help_text.split("\n")
     sections, order = {}, []
     current, preamble = None, []
@@ -107,8 +116,10 @@ def main():
         "USAGE": "Usage",
         "RESOURCE": "The resource argument",
         "RENDER MODE": "Render modes",
+        "COMMANDS": "Commands",
         "OPTIONS": "Options",
         "ENVIRONMENT": "Environment variables",
+        "EXIT CODES": "Exit codes",
     }
 
     for name in order:
@@ -126,7 +137,14 @@ def main():
         parts.append("```text\n" + dedented.rstrip() + "\n```\n")
 
     parts.append(FOOTER)
-    OUT.write_text("\n".join(parts), encoding="utf-8")
+    rendered = "\n".join(parts)
+    if args.check:
+        if OUT.read_text(encoding="utf-8") != rendered:
+            print("docs/cli-reference.md is stale; regenerate with this binary", file=sys.stderr)
+            return 1
+        print("docs/cli-reference.md matches the CLI --help")
+        return 0
+    OUT.write_text(rendered, encoding="utf-8")
 
     flags = sorted(set(re.findall(r"--[a-z][a-z-]+", help_text)))
     print(f"wrote {OUT.relative_to(ROOT)}  ({len(flags)} long options)")

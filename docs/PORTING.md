@@ -25,11 +25,11 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `markup.py`                           | `markup.rs`              | 🟡 | ✅ |
 | `text.py` (+ justify, overflow)       | `text.rs`                | 🟡 | ✅ |
 | `_wrap.py`                            | `wrap.rs`                | 🟢 | ✅ 0 / 30,680 wrap cases |
-| `theme.py`, `themes.py`, `default_styles.py` | `theme.rs` | 🟡 | — |
+| `theme.py`, `themes.py`, `default_styles.py` | `theme.rs` | ✅ | ✅ |
 | `terminal_theme.py` | `terminal_theme.rs` | 🟡 | ✅ |
 | `console.py` (+ `ConsoleOptions`, `render_lines`) | `console.rs`  | 🟡 | ✅ |
 | `protocol.py`, `abc.py`, `_extension.py` | `protocol.rs`         | 🟡 | — |
-| `measure.py` (+ `Renderable::measure`, fit) | `measure.rs`       | 🟡 | ✅ |
+| `measure.py` (+ `Renderable::measure`, fit, `Measurement.get`) | `measure.rs`       | 🟡 | ✅ `Syntax`/`JSON` measurement golden (`measure.tsv`) |
 | `errors.py`                           | `errors.rs`              | 🟡 | — |
 | `control.py`                          | `control.rs`             | 🟢 | ✅ |
 | `ansi.py`                             | `ansi.rs`                | 🟡 | ✅ |
@@ -52,31 +52,31 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `layout.py` | `layout.rs` | 🟡 | ✅ |
 | `styled.py` | `styled.rs` | 🟢 | ✅ |
 | `screen.py` | `screen.rs` | 🟡 | — |
-| `progress_bar.py` | `progress_bar.rs` | 🟡 |
+| `progress_bar.py` | `progress_bar.rs` | 🟢 | ✅ `bar_*`, `progress_three`, `progress_bar.tsv` (pulse, ASCII, no-colour) |
 | `bar.py` | `bar.rs` | 🟡 | ✅ |
 
 ## Live & progress
 
-| upstream `rich/…` | rust file | status |
-|-------------------|-----------|:------:|
-| `progress.py` | `progress.rs` | 🟡 |
-| `spinner.py`, `_spinners.py` (full table) | `spinner.rs` | 🟡 |
-| `status.py` | `status.rs` | 🟡 |
-| `live_render.py` | `live_render.rs` | 🟡 |
-| `live.py` (manual refresh) | `live.rs` | 🟡 |
+| upstream `rich/…` | rust file | status | parity |
+|-------------------|-----------|:------:|--------|
+| `progress.py` | `progress.rs` + `pyformat.rs` | 🟡 | ✅ `progress_time.tsv` step programs (columns incl. `TextColumn`/`RenderableColumn`, fields, pulse, task API, clock), `progress_live.tsv` (live stream) |
+| `spinner.py`, `_spinners.py` (full table) | `spinner.rs` | 🟡 | ✅ `live_status.tsv` (start at first render, `update`, markup text) |
+| `status.py` | `status.rs` | 🟡 | ✅ `live_status.tsv` (frames and `update`) |
+| `live_render.py` | `live_render.rs` | 🟡 | ✅ `live_status.tsv` (`position_cursor`/`restore_cursor`, style, wrap) |
+| `live.py` | `live.rs` | 🟡 | ✅ `progress_live.tsv` (start/refresh/stop stream); auto-refresh timing by unit tests |
 
 ## Content renderers
 
 | upstream `rich/…` | rust file | status | notes |
 |-------------------|-----------|:------:|-------|
-| `syntax.py` | `syntax.rs` | 🟡 | functional via `syntect` (non-parity, DIVERGENCES #18) |
-| `markdown.py` | `markdown.rs` | 🟡 | paragraphs/headings/inline/lists/quotes/code/links (both `hyperlinks` modes) + images + **GFM tables** via `pulldown-cmark` (inline styling within a table cell deferred) |
-| `json.py` | `json.rs` | 🟡 | ✅ |
+| `syntax.py` | `syntax.rs` | 🟡 | functional via `syntect` (non-parity, DIVERGENCES #18); `__rich_measure__` is parity-tested |
+| `markdown.py` | `markdown.rs` | 🟡 | paragraphs/headings/inline/lists/quotes/code/links (both `hyperlinks` modes) + images (including table-cell hoisting and adjacency) + **GFM tables** via `pulldown-cmark`, with inline styling inside cells (golden `markdown_table_inline`); constructor options `justify`/`style` (golden `markdown_options`), `code_theme`/`inline_code_lexer`/`inline_code_theme` (syntect) |
+| `json.py` | `json.rs` | 🟡 | ✅ default layout, arbitrary integers, Python float `repr` and overflowing exponents; optional escape-safe layout is off by default (DIVERGENCES §22) |
 | `pretty.py` | `pretty.rs` | 🟡 | Rust-native (`Debug` + repr highlight, #19) |
 | `repr.py`, `_inspect.py` | resp. | ⬜ | need Rust reflection — see #19 |
 | `traceback.py` | `traceback.rs` | 🟡 | Rust-native (error `source()` chain, #19) |
-| `_log_render.py` | `log_render.rs` | 🟡 | Rust-native formatter (#19) |
-| `logging.py` (log::Log handler) | `rich-ext` | ⬜ | needs the `log`/`tracing` crate |
+| `_log_render.py` | `log_render.rs` | ✅ | ✅ `log_render.tsv`; takes a pre-formatted time (DIVERGENCES §19) |
+| `logging.py` (log::Log handler) | `rich-ext` `log_handler.rs` | 🟡 | `RichHandler` over the `log`/`tracing` adapters; UTC default time, no rich tracebacks (DIVERGENCES §19) |
 
 ## Utilities & platform
 
@@ -104,8 +104,86 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | HTML export (`--export-html`) + SVG export (`--export-svg`) | `main.rs` | 🟡 both done |
 | `--panel`/`--padding` decorators (+ title/caption/style), `--ipynb`, URL fetch (`fetch` feature) | `main.rs` | 🟡 done |
 | paging (`--pager`) | `pager.rs` + `main.rs` | 🟡 done |
+| preferred subcommands (`print`, `markdown`, `syntax`, `json`, `csv`/`tsv`, `ipynb`, `jsonl`, `log`, `gif`, `diff`, `image`, `rule`) while preserving flat flags | `main.rs` | 🟡 done; `image` is a local rich-art convenience |
+| stable exit-code classes and `--report json` / `--machine-json` result/error envelopes | `main.rs` | 🟡 done |
+| JSONL / NDJSON and structured-log streaming from files/stdin | `main.rs` | 🟡 done |
+| 0.0.7 binary-boundary `--watch` polling for files and fetch-enabled URLs | `main.rs` | 🟡 done; deliberate CLI convenience |
+
+### Binary-boundary conveniences (not upstream `rich-cli`)
+
+Per [AGENTS.md](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/AGENTS.md)
+these are recorded because they live in the `rich`
+binary rather than in `rich-ext`. Each is command routing, planning or defaulting
+only: they compose public `rich` / `rich-ext` APIs and add no renderer, so the
+core mirror is untouched and a sync does not have to reconcile them.
+
+| convenience | rust `crates/rich-cli/src/…` | rationale |
+|-------------|------------------------------|-----------|
+| `--demo` and `--demo-delay` | `demo.rs` + `main.rs` | bounded, offline tour composes existing public renderers and CLI workflows; uses temporary examples and restores terminal state on interruption |
+| batch planning and `--dry-run`, with `--jobs` concurrency for file exports | `batch.rs` + `main.rs` | subprocess workers reuse the single-resource renderer; disk-spooled output is replayed in input order; terminal-only batches remain serial |
+| strict TOML profiles, inverse booleans, `config show` / `config validate` | `config.rs` + `main.rs` | validated defaults/profile/CLI precedence and JSON inspection compose existing options without changing core |
+| `--auto-pager` and `--no-pager` | `main.rs` | CLI destination/height policy composes public pager APIs; redirected stdout is never paged |
+| `--image-anchor` for still-image cover fitting | `main.rs` | routes to public `rich-art::ImageArt::anchor`; crop implementation and `ImageAnchor` remain in art |
+| multi-file `--watch` with `--watch-debounce`, `--watch-poll`, `--watch-exit-on-error` (0.0.10, #139) | `watch.rs` + `main.rs` + `config.rs` | `notify` file events on each parent directory, polling fallback; several files repaint as public `rich-ext` `LiveCoordinator` regions; no core change |
+
+The 0.0.8 additions are published; workflow and registry-consumer evidence is
+recorded in [release notes](releases/0.0.8.md). Dry-run does not write exports
+or parent directories. Parallel fail-fast stops scheduling after observed failures
+but lets in-flight workers finish. Config inspection includes configured settings
+and explicit overrides, not a materialized list of built-in defaults.
+
+
+### CLI 0.0.9 preparation boundaries
+
+| Convenience | Owner | Boundary |
+|---|---|---|
+| Named TOML themes, `--theme`, `--theme-style` | CLI config + main | Validated data builds public `rich::Theme`; resolved bindings pass to workers; no core theme-stack change |
+| Batch export filesystem hardening (#196) | CLI `batch_output.rs` + `batch.rs` | Parent retains directory handles; workers render to private staging; no-follow descendant traversal, exclusive creation and entry replacement; see CLI contract for directory-object authority and metadata semantics |
+| Batch progress and Ctrl+C | CLI batch + main | Human-report stderr TTY only; kill/wait workers and exit 130; no core Live/progress behavior changes |
+| `--demo-list`, `--demo-section` | CLI demo + main | Routes stable groups of existing renderers; preserves cleanup and finite pipes |
+| `rich doctor` | CLI doctor + main | Read-only selected diagnostics; JSON stdout; no terminal probes, network fetch or pager execution |
+| `--image-color`, `--image-dither` | CLI routing; art implementation | Public `ImageColorMode`, `Dither`, `ImageArt::color_mode`/`dither`; ASCII/blocks/quadrants preprocessing only |
+| `--image-color ansi16\|grayscale` (#125) | CLI routing; art `image_color.rs` | `ImageColorMode::Ansi16` (rich `STANDARD_PALETTE`) and `Grayscale` (luma over 16/232–255/231); every dither |
+| `--image-mode quadrants` (#199) | CLI routing; art `quadrant.rs` | `ImageMode::Quadrants`, `QuadrantArt`; cheapest of eight two-colour 2×2 partitions; also draws `--diff` heatmaps |
+| `--image-fit stretch`, `--image-max-width/height`, `--image-brightness/contrast/gamma` (#126) | CLI routing; art `image_art.rs`, `transform.rs` | `ImageFit::Stretch`, `ImageArt::max_width`/`max_height`, `ImageTransforms` brightness/contrast/gamma in a fixed order |
+
+Art 0.0.7 owns fixed ANSI256 quantisation and optional Floyd–Steinberg diffusion
+on the final sampled image. Truecolor/no-dither defaults remain unchanged and
+`ImageOptions` remains source-compatible. CLI 0.0.9 composes these APIs; core
+0.0.4 and ext 0.0.6 remain unchanged. Combined validation is pending in the
+[0.0.9 preparation notes](releases/0.0.9.md).
 
 ---
 
 *When you change a module's status, keep this table and the relevant roadmap
 issue in sync.*
+
+### 0.0.3 title and notebook follow-up
+
+Panel string labels parse markup/emoji, flatten newlines, expand tabs and measure
+visible cells. Rule labels use console markup/emoji handling; Table title/caption
+markup retains wrapped lines. Rich 15 goldens cover styled, wide, tiny, multiline
+and truncated labels. Text span offsets remain valid when Unicode truncation
+replaces a character with padding or an ellipsis. CLI notebooks compose the
+upstream cell/output group before applying the shared decorators and alignment.
+Windows paging selects `more.com` and has a required native CI launch test.
+
+Expanded CLI 0.0.9 adds opt-in `--log-presentation rich` at the binary boundary.
+JSONL conversion composes rich-ext StructuredEvent; the default log formatter and
+core LogRender remain unchanged. Optional rich-ext `log`/`tracing` adapters never
+install global state. Their external facade dependencies are disabled by default.
+
+`rich-ext::live` owns extension region coordination; faithful core Live remains
+unchanged. The coordinator uses core Control encoders, reserves an insertion row
+and guard column, rejects supplied control content, and closes a failed session.
+The virtual-screen regressions and `scripts/test_live_regions_pty.py` exercise
+actual terminal writes, log retention, resize suspension and cursor restoration.
+
+Batch directory preservation and leaf templates are CLI planning conveniences.
+They reuse collision checks, worker bounds, ordered replay and cancellation.
+Legacy flat export naming and dry-run parent requirements remain unchanged.
+
+The expanded 0.0.9 still-image flags compose public `rich-art` transform and dither
+builders at the CLI boundary. Transform order is rotation, H/V flips, optional
+composite/grayscale, fit/anchor, sampling, palette processing and glyph selection.
+They are not upstream behavior and do not change core renderers or goldens.

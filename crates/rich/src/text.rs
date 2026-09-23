@@ -185,6 +185,33 @@ impl Text {
     /// span can dangle past the end. Upstream's `Text.plain` setter does the
     /// same via `_trim_spans`.
     fn set_plain(&mut self, plain: String) {
+        // Upstream spans use character offsets. A truncation may replace a
+        // wide glyph with padding or ASCII with a multibyte ellipsis, so byte
+        // offsets alone cannot be clamped into the replacement string.
+        if !self.spans.is_empty()
+            && !self.plain.starts_with(&plain)
+            && !plain.starts_with(&self.plain)
+        {
+            let old_offsets: Vec<usize> = self
+                .plain
+                .char_indices()
+                .map(|(i, _)| i)
+                .chain(std::iter::once(self.plain.len()))
+                .collect();
+            let new_offsets: Vec<usize> = plain
+                .char_indices()
+                .map(|(i, _)| i)
+                .chain(std::iter::once(plain.len()))
+                .collect();
+            let map_offset = |offset: usize| {
+                let character = old_offsets.partition_point(|old| *old < offset);
+                new_offsets[character.min(new_offsets.len() - 1)]
+            };
+            for span in &mut self.spans {
+                span.start = map_offset(span.start);
+                span.end = map_offset(span.end);
+            }
+        }
         let length = plain.len();
         self.plain = plain;
         self.spans.retain(|span| span.start < length);
@@ -620,6 +647,14 @@ impl Text {
         self.spans.push(span);
     }
 
+    /// Drop this text's own `justify`, `overflow` and `no_wrap`, so they defer to
+    /// the console options as upstream's `Text.join` result does.
+    pub(crate) fn clear_layout_options(&mut self) {
+        self.justify = Justify::Default;
+        self.overflow = None;
+        self.no_wrap = None;
+    }
+
     /// Set the whole-text base style, resolved or named.
     pub fn set_base_style(&mut self, style: impl Into<StyleType>) {
         self.style = style.into();
@@ -637,34 +672,11 @@ impl Text {
     /// The `(minimum, maximum)` cell width of this text: `maximum` is the widest
     /// hard line, `minimum` the widest word. Port of `Text.__rich_measure__`.
     pub fn measurement(&self) -> (usize, usize) {
-        // Measured against the tab-EXPANDED text. Upstream measures the raw
-        // string, where `cell_len` counts a tab as zero cells, and gets away
-        // with it because nothing upstream feeds a `Text`'s own measurement back
-        // in as its render width.
-        //
-        // This port does: `Console::render_segments` shrinks `max_width` to the
-        // measurement before rendering, standing in for upstream's
-        // `_collect_renderables`, which rebuilds a printed `Text` through
-        // `Text.join` and drops its `justify` on the way (which is why
-        // `print(Text("hi", justify="center"))` is *not* centred upstream).
-        // Measuring raw here therefore hands the renderer three cells for
-        // `"a\tb\tc"` and it comes back as `a`/`b`/`c` on three lines, where
-        // upstream prints `a       b       c`.
-        //
-        // So this is knowingly non-upstream, and it is the wrong half of the
-        // pair to fix: the measurement should be raw and the shrink-to-fit in
-        // `console.rs` should be replaced by the `Text.join` semantics. Both
-        // ends have to move together, and `console.rs` is not this file. See
-        // DIVERGENCES for the tabbed-`Panel` width this leaves too wide.
-        let expanded;
-        let plain = if self.plain.contains('\t') {
-            let mut text = self.clone();
-            text.expand_tabs(DEFAULT_TAB_SIZE);
-            expanded = text.plain;
-            &expanded
-        } else {
-            &self.plain
-        };
+        // Measured against the raw string, as upstream does: `cell_len` counts
+        // a tab as zero cells, and tabs expand only at render time. A printed
+        // `Text` renders at the full width (see `Renderable::printed_text`), so
+        // this measurement never becomes its own render width (#447).
+        let plain = &self.plain;
         let max_line = plain.split('\n').map(cell_len).max().unwrap_or(0);
         let min_word = plain
             .split_whitespace()
@@ -892,8 +904,14 @@ impl Text {
             // cropping methods leave it long and let truncation cut it.
             let breaks = crate::wrap::divide_line(sub, width, overflow == Overflow::Fold);
             let mut cuts = vec![a];
+            let mut previous_char = 0;
+            let mut previous_byte = 0;
             for char_offset in breaks {
-                cuts.push(a + char_to_byte(sub, char_offset));
+                // Breaks are ordered char offsets. Scan only the next slice;
+                // rescanning the prefix for every line is quadratic.
+                previous_byte += char_to_byte(&sub[previous_byte..], char_offset - previous_char);
+                previous_char = char_offset;
+                cuts.push(a + previous_byte);
             }
             cuts.push(b);
             groups.push(cuts.windows(2).map(|w| (w[0], w[1])).collect());

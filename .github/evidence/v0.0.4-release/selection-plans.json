@@ -1,0 +1,14 @@
+{
+  "v0.0.4": {
+    "rs-rich": "0.0.4",
+    "rs-rich-ext": "0.0.4",
+    "rs-rich-cli": "0.0.4",
+    "rs-rich-art": "0.0.4"
+  },
+  "rs-rich-cli-v0.0.4": {
+    "rs-rich-cli": "0.0.4"
+  },
+  "rs-rich-art-v0.0.4": {
+    "rs-rich-art": "0.0.4"
+  }
+}

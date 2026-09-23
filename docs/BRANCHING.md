@@ -41,7 +41,7 @@ If that ever fails, something was published that isn't on `main`.
 | `port/<module>` | fresh `origin/main` | `main` via PR | one PR — the `port-module` skill |
 | `sync/rich-<version>` | fresh `origin/main` | `main` via PR | one PR — the `sync-upstream` skill |
 | `rc/<X.Y.Z>` | fresh `origin/main` | `main` via PR, then tag on `main` | a release cycle |
-| `release/<X.Y.Z>` | fresh `origin/main` | `main` via PR, then tag `vX.Y.Z` on `main` | minutes |
+| `release/<X.Y.Z>` or `releases/<X.Y.Z>` | fresh `origin/main` | `main` via PR, then tag `vX.Y.Z` on `main` | minutes |
 | `hotfix/<X.Y.Z>` | the tag `vX.Y.(Z-1)` | nothing — tagged in place, forward-ported to `main` by PR | until forward-ported |
 
 A merged branch is **dead**. It is auto-deleted, and pushing to it is a bug, not
@@ -57,7 +57,7 @@ git config core.hooksPath .githooks
 It refuses any push to a branch whose PR has already merged. This is not
 hypothetical: it was written immediately after two commits were pushed onto
 PR #31's branch minutes after that PR merged, stranding them exactly as #23 and
-#30 were stranded.
+PR #30 were stranded.
 
 ### Release-candidate branches
 
@@ -71,14 +71,22 @@ head. It is safe **only** while the rc stays a fast-forward of `main`. The momen
 `main` moves ahead, merging the rc either conflicts or silently reverts, and a
 release cut from it no longer contains what is on `main`.
 
-CI enforces that: the `rc not behind main` check fails any PR into an `rc/*`
-branch that has fallen behind. Keep it current with:
+CI enforces that: the `rc not behind main` check applies to `rc/*`, `release/*`,
+and `releases/*` (including `releases/v0.0.3-rc`). It tests the proposed merge
+result, so a PR bringing in current `main` can pass. Keep it current with:
 
 ```bash
-git switch rc/0.0.2 && git merge origin/main && git push
+git fetch origin
+git switch -c fix/refresh-release origin/releases/v0.0.3-rc
+git merge origin/main
+# Open a PR into releases/v0.0.3-rc.
 ```
 
 #### Protection
+
+The ruleset described below covers `rc/*`. Accepting `release/*` and `releases/*`
+in workflow checks does not extend that ruleset; verify server-side protections
+before creating another integration branch.
 
 `rc/*` is covered by its own ruleset (**"rc branches"**), matching `main`'s
 protection rather than being the soft underbelly of the release process:
@@ -119,17 +127,105 @@ gh pr edit <number> --base main
 ```
 
 CI enforces this: the `base branch` check fails any PR not targeting `main` or
-`release/*`.
+`rc/*`, `release/*`, or `releases/*`.
 
 ## Releases
 
-Versions move in **lockstep** — all four crates share one number and one tag.
-This is not a stylistic choice. In Cargo, `^0.0.1` is an *exact* requirement, so
-`rs-rich-ext` pinned to `rs-rich 0.0.1` can never resolve against `0.0.2`; Cargo
-already forces lockstep below `0.1.0`. Independent per-crate versions become
-meaningful at `0.1.0` and can be revisited then.
+There are two separate decisions here:
 
-Tags are annotated: `vX.Y.Z` for releases, `vX.Y.Z-rc.N` for candidates.
+1. **Each crate owns its SemVer.** A number describes that crate's Rust API and
+   contents; it is never copied from either Python upstream. A change in one
+   crate does not, by policy alone, require an unrelated crate's version to
+   change.
+2. **The tag explicitly selects what ships.** A `vX.Y.Z` tag retains the
+   coordinated workspace meaning: all four manifests and their internal
+   requirements must agree at `X.Y.Z`. A `<crate>-vX.Y.Z` tag selects only that
+   crate, whose manifest must match the tag. Unselected crates keep their own
+   versions and are neither published nor verified as if they had changed.
+
+| Tag | Packages published and verified |
+|---|---|
+| `v0.0.3` | All four crates at `0.0.3` |
+| `rs-rich-v0.0.3` | Only `rs-rich` at `0.0.3` |
+| `rs-rich-ext-v0.0.3` | Only `rs-rich-ext` at `0.0.3` |
+| `rs-rich-cli-v0.0.3` | Only `rs-rich-cli` at `0.0.3` |
+| `rs-rich-art-v0.0.3` | Only `rs-rich-art` at `0.0.3` |
+
+The same forms accept SemVer prereleases, for example
+`rs-rich-cli-v0.0.3-rc.1`. Manual dispatch accepts an **existing tag** in one of
+these forms, never a branch name. Every job checks out the validated tag's
+commit SHA, including the reusable CI gate. Tags still belong on `main` after
+merging the release changes; this does not relax the ancestry rule.
+
+For a CLI-only `0.0.3` release with core still at `0.0.2`, use
+`rs-rich-cli-v0.0.3`, not `v0.0.3`. For an art-only release, use
+`rs-rich-art-v0.0.3` and update the root `rich-art` dependency requirement to
+match. All three workspace requirements are checked against their respective
+crate versions, not against the selected crate's tag version. Refresh
+`Cargo.lock` whenever manifests or dependency requirements change.
+
+Dependencies outside the selected set must already be available on crates.io;
+`cargo publish -p <crate> --locked --dry-run` verifies the packaged crate against
+those registry dependencies before any upload. If both art and CLI advance and
+CLI requires the new art version, publish and verify art first, then CLI.
+
+### What Cargo means by `0.0.x`
+
+The workspace dependency spelling `version = "0.0.2"` is Cargo shorthand for
+the caret requirement `^0.0.2`. Cargo permits versions `>=0.0.2,<0.0.3`: for a
+`0.0.x` requirement, changing the patch component is incompatible. A path
+dependency can use the local package while developing, but its version must
+still satisfy that requirement, and the requirement is what consumers see in
+the published package. Thus bumping `rs-rich` from `0.0.2` to `0.0.3` requires
+updating the requirements used by its direct dependents (`rs-rich-ext`,
+`rs-rich-art`, and `rs-rich-cli`); bumping `rs-rich-ext` or `rs-rich-art`
+requires updating `rs-rich-cli`. Cargo does **not** force unrelated crates to
+share a version. Our coordinated-tag policy does.
+
+### Released 0.0.4 snapshot
+
+All four packages published at 0.0.4 because each changed or consumed the new
+core version. Core adds an ownership extension point, wrapping improvements and
+an optional syntax cache; ext adds explicit text decoding; art adds GIF
+half-block rendering; the CLI wires these options and reduces CSV copies.
+
+The annotated `v0.0.4` tag selects all four and points to main commit
+`355a333b853606fcff830f498db1c35b9f94061d`. The
+[release workflow](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/34451499873) passed source, package and exact-version
+registry-consumer verification. See [release notes](releases/0.0.4.md).
+
+The [0.0.5 preparation plan](plans/0.0.5.md) does not preselect package versions.
+Assess each changed crate and its dependency closure before choosing coordinated
+or per-crate tags. Never repeat the upload path for an already published version.
+
+### Prepared 0.0.3 snapshot
+
+This preparation includes the Markdown fix from `main`, requiring core 0.0.3.
+The ext package also changes its core dependency and must publish a new version.
+Together with the prepared CLI and art versions, all four manifests in that
+snapshot said 0.0.3. This is the dependency closure for this release, not a lockstep policy.
+The selected coordinated tag `v0.0.3` selects all four:
+
+| package | decision | manifest change | internal requirement change |
+|---|---|---|---|
+| `rs-rich` | publish `0.0.3` | `crates/rich/Cargo.toml`: `0.0.2` → `0.0.3` | root `rich` requirement: `0.0.2` → `0.0.3` |
+| `rs-rich-ext` | publish `0.0.3` | `crates/rich-ext/Cargo.toml`: `0.0.2` → `0.0.3` | root `rich-ext` requirement: `0.0.2` → `0.0.3`; it consumes the updated root `rich` requirement |
+| `rs-rich-art` | publish `0.0.3` | `crates/rich-art/Cargo.toml`: `0.0.2` → `0.0.3` | root `rich-art` requirement: `0.0.2` → `0.0.3`; it consumes the updated root `rich` requirement |
+| `rs-rich-cli` | publish `0.0.3` | `crates/rich-cli/Cargo.toml`: `0.0.2` → `0.0.3` | it consumes all three updated root requirements |
+
+The manifest and lockfile updates are finalized, and selected changes are under
+the 0.0.3 changelog heading. `Unreleased` is reserved for subsequent work. Regenerate
+version tables with `python3 scripts/gen_versions.py` and CLI help with
+`python3 scripts/gen_cli_reference.py` after building the release binary. CI
+checks both generated documents. No tag or registry upload is created by preparation.
+
+This coordinated option is separate from the independent CLI/art tags above.
+Do not publish a crate at `0.0.3` independently and then expect a coordinated
+`v0.0.3` to skip it: the already-published-version guard deliberately rejects
+that mixed attempt. Choose the release scope before tagging.
+
+Tags are annotated: `vX.Y.Z` or `<crate>-vX.Y.Z` for releases, with `-rc.N`
+appended for candidates.
 
 The full procedure lives in the **`release` skill** (`.claude/skills/release/`).
 In outline:
@@ -141,11 +237,138 @@ In outline:
 4. Soak. Fixes land on `main` as ordinary PRs, then cut another rc.
 5. Cut `release/X.Y.Z`, same shape, merge, tag `vX.Y.Z`.
 
+### Final PR readiness gate
+
+Green CI is necessary, but it is not enough. Before saying a release PR is ready,
+record a final readiness snapshot that proves review feedback and branch
+protection are accounted for:
+
+```bash
+gh pr checks <number> --watch --interval 15
+gh pr view <number> --json headRefOid,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup
+gh api graphql -f owner=<owner> -f name=<repo> -F number=<number> \
+  -f query='query($owner:String!,$name:String!,$number:Int!,$cursor:String){ repository(owner:$owner,name:$name){ pullRequest(number:$number){ reviewThreads(first:100, after:$cursor){ nodes{ isResolved } pageInfo{ hasNextPage endCursor } } } } }' \
+  --jq '.data.repository.pullRequest.reviewThreads.nodes | map(select(.isResolved == false)) | length'
+git status --short --branch
+```
+
+The ready state is: every required/expected check is green, unresolved review
+thread count is `0`, latest review comments have been inspected, the worktree is
+clean, and the PR's `headRefOid`, `mergeable`, `mergeStateStatus`, and
+`reviewDecision` are written into the handoff. If `mergeable` is `MERGEABLE` but
+`mergeStateStatus` is `BLOCKED`, say exactly which external branch-protection
+requirement remains, or state that maintainer review/merge is the only visible
+blocker.
+
+Post a release handoff note on the PR before stopping. It must include these
+field labels exactly so CI can enforce the final snapshot:
+`Head SHA:`, `Mergeable:`, `Merge state:`, `Review decision:`,
+`Selected publish tag`, `Publish target:`,
+`Validation summary:`, `Unresolved review threads:`, and
+`Remaining visible blocker:`. For an independent crate release, spell out the
+crate tag (for example `rs-rich-cli-v0.0.6`) and explicitly say not to use the
+coordinated `vX.Y.Z` tag unless all selected manifests match it.
+
+The release-readiness policy is centralized in
+`.github/release-readiness.json`; keep the workflow, tests, and this document
+using those fields rather than adding another release-file, trigger, or
+handoff-field list. The policy owns:
+
+- `versionPattern`: text that marks a PR as release-related.
+- `releaseFiles` / `releaseFileSuffixes`: changed files that require a release
+  handoff even if no version appears in the title, body, or branch.
+- `handoffTriggers`: the allowed trigger checks the workflow may combine.
+- `handoffCommentWaitSeconds`: the bounded wait that lets CI observe a
+  just-posted current-SHA handoff comment before failing as stale.
+- `handoffRequiredText`: the exact handoff labels CI requires.
+
+Update `scripts/test_release_readiness.py` with any policy-shape change so the
+schema fails locally before the workflow fails remotely.
+
+### Windows validation ordering
+
+Do not run Cargo commands that build the same binary in parallel on Windows when
+they share the default `target` directory. Windows can hold `target\debug\*.exe`
+open long enough for a concurrent Cargo invocation to fail with
+`Access is denied`. For release prep, prefer the serialized wrapper:
+
+```bash
+python scripts/validate_release.py --tag rs-rich-cli-v0.0.6
+```
+
+`--tag` is required. The wrapper always ends by running
+`scripts/release.py plan <tag>`, so the local validation list proves the selected
+release tag as well as build/test health. Its Python release checks are listed
+explicitly (`test_release.py` and `test_release_readiness.py`) instead of through
+a glob, so adding another release test module requires updating the wrapper on
+purpose.
+
+For ad-hoc parallel validation, isolate jobs with separate `CARGO_TARGET_DIR`
+values:
+
+```powershell
+$env:CARGO_TARGET_DIR = "target\check-cli"
+cargo test -p rs-rich-cli --test cli
+```
+
+Use isolation only for validation scratch builds; release packaging and locked
+workspace checks should continue to use the normal workspace target unless there
+is a specific reason to do otherwise.
+
 ### Publish order
 
-Don't script it. `cargo publish --workspace --locked` derives the topological
-order itself and cross-verifies dependents against sibling tarballs. Publishing
-is **irreversible** — versions are immutable and can only be yanked.
+`cargo publish --workspace --locked` retains the coordinated path's topological
+order and sibling-tarball verification. Independent tags use
+`cargo publish -p <crate> --locked`. Both paths run a dry run with the identical
+selection first. The workflow resolves that selection once, checks the
+manifests and internal requirements, and queries crates.io for each selected
+package/version. A hit or an unexpected registry response aborts the job;
+unchanged, unselected versions are not queried. Uploads are serialized across
+all release tags and manual dispatches.
+
+The gate requires an annotated tag pointing at the checked-out commit on `main`;
+lightweight tags are rejected before CI or publication.
+
+### Registry authentication (Trusted Publishing)
+
+Since 0.0.10 the workflow holds no long-lived crates.io secret. After the
+preflight and dry run pass, `rust-lang/crates-io-auth-action` exchanges the job's
+GitHub OIDC token (`id-token: write` on the `publish` job only) for a short-lived
+crates.io token, which only the upload step receives. A failed exchange stops
+the job before any crate is uploaded; `verify_only` runs never request a token.
+
+Each of the four crates needs a Trusted Publishing entry on crates.io
+(crate → Settings → Trusted Publishing) with repository
+`buchochelliq-labs/rs-rich-cli`, workflow `release.yml` and environment
+`crates-io`. A crate set to "trusted publishing only" rejects token uploads
+with `403 Forbidden`, which is how the first 0.0.9 core upload failed. Once the
+first trusted publish succeeds, delete the old `CARGO_REGISTRY_TOKEN`
+repository secret.
+
+A tag push runs the workflow file from the tagged commit. To publish an existing
+tag with a newer workflow on `main`, dispatch the workflow manually from `main`
+with that tag; the gate still checks out and publishes the tag's exact commit.
+
+After publishing, verification reuses the protected `crates-io` job's validated
+checkout: fresh registry consumers can execute build scripts too. The short-lived
+registry token is scoped only to the upload step.
+Verification waits for **each selected version** on crates.io
+and fails if it does not appear. In fresh temporary directories outside the
+checkout, it installs the CLI with an exact version and `--locked`, or compiles
+a consumer with an exact registry dependency for each selected library. An
+art-only release never installs the CLI or waits for a new core version.
+
+To retry verification after all selected packages have been uploaded, manually
+dispatch the release workflow with the same existing tag and `verify_only: true`.
+This keeps the annotated-tag, ancestry and full-CI gates, skips preflight and both
+upload commands, and runs exact-version verification. Normal tag pushes and
+manual dispatches default to publication and still reject any existing version.
+Verification-only mode cannot complete a partial upload.
+
+Publishing is **irreversible** — versions are immutable and can only be yanked.
+A partial upload still requires manual recovery, not a blind rerun. Planning and documentation updates
+do not create tags or publish packages. Create the annotated tag on `main`;
+the protected release workflow publishes the selected packages.
 
 ## What is enforced, and what is merely written down
 

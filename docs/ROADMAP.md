@@ -1,6 +1,6 @@
 # Roadmap
 
-Where this goes after `0.0.1`. Ordered by what unblocks people, not by what is
+Where this goes after `0.0.4`. Ordered by what unblocks people, not by what is
 most interesting to build.
 
 Two rules constrain everything here:
@@ -14,12 +14,197 @@ Two rules constrain everything here:
 
 ---
 
-## 0.0.2 — pay the known correctness debt
+## 0.0.2 — released 2026-08-11
 
-Not speculative. These are **confirmed and reproduced** findings from adversarial
-review, left unfixed only so they could land as one coherent change.
+The correctness milestone shipped. It paid down the confirmed rendering,
+markup, colour, and CLI correctness debt; see the
+[0.0.2 changelog](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/CHANGELOG.md#002--2026-08-11)
+for the released work.
 
-### Rewrite the markup tag scanner against `RE_TAGS`
+---
+
+## 0.0.3 — released 2026-09-10
+
+The patch release accepted:
+
+- correctness fixes confirmed against current `main` and, where applicable, the
+  pinned upstream oracle;
+- documentation and package-metadata consistency fixes; and
+- release hardening that makes the documented CI, parity, packaging, or
+  clean-room verification gates more reliable.
+
+New features were deferred from `0.0.3`. Subsequent fixes go
+under `Unreleased`, naming every affected crate.
+
+### Completed source scope (2026-09-10)
+
+The 0.0.3 fixes are merged into main through PR #111: Markdown image and container parity,
+independent release selection, tested TOML pin parsing, JSON precision/depth,
+optional escape-safe JSON presentation, safe GIF redirection, CSV streaming,
+title markup, notebook layout, graphical diff exports and native Windows paging.
+
+See [release notes](releases/0.0.3.md) and [UAT closeout](remaining-uat-0.0.3.md).
+The selected changes are under the 0.0.3 changelog heading; `Unreleased` now tracks
+subsequent work. Registry publication and verification are tracked by the
+protected release workflow, separately from the completed source merge.
+
+### Deferred from 0.0.3 into 0.0.4
+
+- [#65](https://github.com/buchochelliq-labs/rs-rich-cli/issues/65): GIF half-block rendering.
+- [#74](https://github.com/buchochelliq-labs/rs-rich-cli/issues/74): further CSV memory reductions and long-line wrapping performance.
+- [#62](https://github.com/buchochelliq-labs/rs-rich-cli/issues/62): image/encoding diagnostics and additional encoding support.
+- [#45](https://github.com/buchochelliq-labs/rs-rich-cli/issues/45): syntax-highlighting performance.
+
+---
+
+## 0.0.4 — released 2026-09-10
+
+The [0.0.4 development plan](plans/0.0.4.md) scopes these four issues
+above into small PRs: reproduce current baselines, improve diagnostics, add
+explicit GIF blocks, reduce CSV memory and wrapping costs, then optimize the
+measured syntax bottlenecks. It defines acceptance cases, per-crate version
+decisions, real CLI evidence, independent review and docs-site updates.
+
+Diagnostics (#62), GIF rendering (#65), CSV/wrapping (#74) and opt-in syntax
+parsing reuse (#45) are merged into main and published in all four 0.0.4
+packages. The [release notes](releases/0.0.4.md) record measurements,
+limitations and successful exact-version consumer verification.
+
+---
+
+## 0.0.5 — proposed confidence and input-control work
+
+The [0.0.5 preparation plan](plans/0.0.5.md) proposes four bounded workstreams:
+issue #15 golden-test gaps, #34 reproducible differential fuzzing, #35 library
+benchmarks with CI artifacts, and #64 explicit input sanitization. Start with
+the oracle/case contract; benchmark work can proceed independently. Keep default
+rendering unchanged and sanitizer policy in extensions.
+
+The plan audits existing evidence and dependency PRs, defines acceptance gates,
+and preserves independent package selection. It is planning only: 0.0.5 code,
+manifest bumps and publication are not included in this documentation update.
+
+---
+
+## 0.0.6 — CLI foundations and streaming automation
+
+The [0.0.6 plan](plans/0.0.6.md) scopes the next release to `rich-cli`
+automation: task-oriented subcommands that preserve existing flat flags,
+stable exit-code classes, a shared JSON report envelope, and bounded JSONL/log
+streaming from files and stdin.
+
+This deliberately defers the larger intuiTUIve/TUI, watch, batch, config and
+dependency-upgrade work so the command/output contract can land first.
+
+## 0.0.7 — rich-art image commands
+
+The image workstream adds the reusable `rich-art::ImageArt` capability facade,
+ASCII, Braille, half-block and Sixel backends, and `rich image` / `--image`
+CLI routing with width, height and explicit mode selection. Existing GIF and
+diff report envelopes remain unchanged; unsupported graphics modes downgrade
+only where documented or return an actionable error.
+
+## 0.0.7 — watch and workflow foundations
+
+The 0.0.7 CLI workstream adds the first binary-boundary watch convenience:
+`rich --watch RESOURCE` polls local files without busy-looping, keeps running
+through atomic-save gaps and parse failures, and recovers on a later valid
+frame. Fetch-enabled builds may poll URLs with configurable intervals and
+response caching. Redirected output remains a deterministic one-shot snapshot.
+Rendering stays in the existing CLI/core paths; no new core refresh behavior is
+introduced.
+
+### Batch and configuration
+
+The CLI now plans explicit files, directories, and globs deterministically,
+reuses the existing render/export pipeline per item, refuses silent overwrites,
+and reports aggregate machine-readable status. TOML profiles are discovered
+from platform roots (or selected explicitly), with command-line values taking
+precedence. Since CLI 0.0.8, full TOML and every inactive profile are strictly
+validated; scalar-only parsing is historical. `--jobs N` runs bounded subprocess
+workers for file exports, spooling output to disk and replaying in input order.
+Terminal-only batches remain serial. `--dry-run` inspects plans without writing
+exports; `config show` / `config validate` expose effective configured settings.
+
+## 0.0.8 — published workflow and crop controls
+
+[CLI 0.0.8 / art 0.0.6](releases/0.0.8.md) completed independent publication and
+exact-version registry verification. It shipped strict TOML profiles, parallel
+file-export batches, dry-run/config inspection, automatic paging, crop anchors
+and the guided suite tour. Core 0.0.4 and ext 0.0.6 stayed unchanged.
+
+## 0.0.9 — published 2026-09-22
+
+The [accepted plan](plans/0.0.9.md) delivered CLI 0.0.9 and art 0.0.7: named themes
+and explicit style overrides, terminal-only human batch progress, Ctrl+C worker
+cleanup, listable/selectable demo sections and read-only doctor diagnostics.
+Art adds opt-in ANSI256 and Floyd–Steinberg preprocessing for ASCII/half-block
+still images. Truecolor/no-dither remains the default; GIF, diff, Braille and
+Sixel preprocessing remain outside this slice of #125.
+
+The expanded scope (#192) added core 0.0.5 and ext 0.0.7: render targets and
+capabilities, layout constraints, typed events and diagnostics, coordinated Live
+regions, render snapshots, batch naming and hardened publication (#196), and image
+transforms with Bayer dithering. All four packages were published on 2026-09-22;
+see the [expanded release notes](releases/0.0.9-expanded.md).
+
+## 0.0.11 — developer ergonomics and core usability (in progress)
+
+The [0.0.11 plan](plans/0.0.11.md) covers
+[milestone 2](https://github.com/buchochelliq-labs/rs-rich-cli/milestone/2) plus
+everything unfinished from 0.0.10. Unfinished 0.0.10 issues: #6, #9, #34, #126
+and #144. New issues for the 0.0.10 deferrals: #498 (the #125 remainder) and #499
+(`--theme-file`). Work starts with the core parity divergences the fuzzer found
+(#442–#449). Then come Rust-native ergonomics on public APIs: diagnostics with
+`anyhow`/`thiserror` adapters, serde-driven rendering and structured-data viewers,
+derive and checked-markup macros (a new `rs-rich-macros` crate), `clap` help and
+errors, `tracing` polish, a shared diff engine with test helpers, and
+terminal-capability and accessibility policies.
+
+## 0.0.10 — progress you can ship with (published)
+
+Every workstream is merged to `main`, and the cohort was published on 2026-09-23. The
+release test and release runs are recorded in the [0.0.10 release notes](releases/0.0.10.md).
+
+The [0.0.10 plan](plans/0.0.10.md) targets core parity over new surface area:
+Progress time, rate and spinner columns with a task-driving API (#6), upstream's
+theme stack (#3), wider golden and differential coverage around both (#15, #34),
+the four 0.0.9 leftovers (#134, #146, #149, #151) and release hardening (Trusted
+Publishing, Node 24 actions, pending dependency bumps). Also in scope: multi-file
+debounced watch (#139), ANSI16/grayscale image modes, image adjustments and quadrant
+blocks (#125, #126, #124 follow-up), and `~~~` strikethrough parity (#9). Core moves to 0.0.6, so
+ext, art and CLI move with it (0.0.8, 0.0.8, 0.0.10). The Python wrapper (#197)
+proceeds as a separate spike.
+
+### Confidence tooling for expanded CLI surfaces
+
+The confidence slice adds bounded, deterministic support around the selected
+batch/profile/watch/image work:
+
+- **#150/#135:** `scripts/snapshot_cli.py` provides injectable width and
+  terminal capability profiles with PTY terminal forcing for color modes,
+  option-terminator (`--`) positioning, stable environment variables, newline
+  normalization, and readable failure diffs. The initial corpus covers the
+  currently stable Markdown and JSON stdin paths.
+- **#34:** the differential corpus and generator now include box renderables
+  (`Panel` box variations) and vary the safe-box capability profile in addition
+  to width, color, markup, styles and overflow. 0.0.10 adds Table, Rule,
+  Padding and Align generators, per-colour-system oracle isolation, a
+  failure-kind-preserving shrinker and a nightly 20,000-case run on `main`.
+  Its first runs filed #442–#449 (see [parity](parity.md#differential-fuzzing)).
+- **#35:** `library_bench` accepts explicit width and color-system arguments and
+  records them in its JSON artifact. CI publication and threshold enforcement
+  remain deferred; output hashes stay the blocking correctness signal.
+
+Image behavior remains covered by the existing focused `rich-cli` integration
+tests. Snapshot cases for the merged batch/profile/watch/image workflows remain
+follow-up work; capability/RenderTarget decisions (#147/#148) remain separate.
+
+---
+
+## 0.0.2 planning record
+
+The milestone centered on rewriting the markup tag scanner against `RE_TAGS`.
 
 The scanner is hand-rolled and diverges from upstream's
 `((\\*)\[([a-z#/@][^[]*?)])` in three ways:
@@ -37,11 +222,8 @@ One rewrite closes all three, and closes
 
 ## 0.1.0 — the gaps that block real adoption
 
-**Theme stack** (`push_theme` / `pop_theme`) — [§14](DIVERGENCES.md).
-Any application with themed output needs it. The work is a design pass, not
-typing: an RAII guard borrowing the `Console` mutably makes `console.print(…)`
-*inside* the guard a borrow error, which is the entire use case, and a `RefCell`
-stack breaks `Console::theme() -> &Theme`.
+~~**Theme stack**~~ — done in 0.0.10 (core 0.0.6): `push_theme`, `pop_theme`
+and a `use_theme` guard that derefs to the console; see [§14](DIVERGENCES.md).
 
 **Windows legacy console** — [#12](https://github.com/buchochelliq-labs/rs-rich-cli/issues/12).
 Needs an explicit `unsafe` opt-in, since the workspace denies `unsafe_code`.
@@ -51,9 +233,9 @@ Without it, pre-Windows-10 terminals silently fall back to plain output.
 [§17](DIVERGENCES.md). A progress bar with no ETA is half a feature, and it is
 the most visible gap for anyone writing a CLI.
 
-`0.1.0` is also where **independent per-crate versioning** becomes meaningful.
-Below it, Cargo treats `^0.0.x` as an exact requirement, so lockstep is forced
-whether or not we choose it. See [BRANCHING.md](BRANCHING.md).
+Independent per-crate versioning already applies below `0.1.0`. A `0.0.x`
+dependency bump requires updating its dependents and publishing changed
+manifests; unrelated crates need not bump. See [BRANCHING.md](BRANCHING.md).
 
 ---
 
@@ -77,9 +259,10 @@ syncs.
 
 ### Benchmarks
 
-There are none. A rendering library with no performance data is a latent
-surprise for whoever first puts it in a hot loop. A baseline is worth more than
-any optimisation made without one.
+CLI timing and CSV memory measurements now exist in the
+[benchmarks](benchmarks.md) and [runtime audit](runtime-audit-0.0.3.md). A repeatable
+library microbenchmark suite and tracked regression thresholds remain useful
+follow-up work.
 
 ---
 

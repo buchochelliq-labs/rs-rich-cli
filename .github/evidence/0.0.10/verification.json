@@ -1,0 +1,74 @@
+{
+  "date": "2026-09-23",
+  "status": "release test passed on the integrated tree; unpublished; tags not created",
+  "source_commit": "48f62c9fd4a442c391eb4dcf21b37be02f1dd1fc",
+  "toolchain": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+  "cohort": {
+    "rs-rich": "0.0.6",
+    "rs-rich-ext": "0.0.8",
+    "rs-rich-art": "0.0.8",
+    "rs-rich-cli": "0.0.10"
+  },
+  "checks": {
+    "validate_release": "15/15 steps passed (python scripts/validate_release.py --tag rs-rich-cli-v0.0.10)",
+    "rust_tests": {
+      "passed": 908,
+      "failed": 0
+    },
+    "python_release_tests": 36,
+    "golden_parity": "rich 15.0.0 (dedicated venv, no rich-cli): 16 fixture files regenerate byte-identically",
+    "differential_corpus": "21/21 cases match rich 15.0.0; harness unit tests OK",
+    "ci_scripts_final_binary": [
+      "test_cli_terminal.py: 3 OK",
+      "test_demo_pty.py: 5 process checks",
+      "test_batch_v9.py: passed",
+      "snapshot_cli.py: 6 workflow snapshots",
+      "test_watch_workflows.py: 12 OK",
+      "test_live_regions_pty.py: passed"
+    ],
+    "docs": "mkdocs build --strict passed; gen_versions/gen_cli_reference --check match",
+    "packages": "staged package verification passed after purging stale staged copies; all four versions unpublished",
+    "packaged_crates_sha256": {
+      "rs-rich-0.0.6.crate": "2bcd63359a2817375a74cba1dd15f0ccc64eb2c49007263de78ee93e2c2e71d6",
+      "rs-rich-art-0.0.8.crate": "2dd758159646f5fb5b65c088b9c20f1887fb48ddf99b1f1bbea21d52afa09a66",
+      "rs-rich-cli-0.0.10.crate": "bc6a8ee686a2fe467715e673d7659c4608012663d0a13bc74250eb84c29cdf24",
+      "rs-rich-ext-0.0.8.crate": "046fd6df97153ad088f207bba13f64b9ae1bcb87001a7538fb03f2a50a23dd8a"
+    },
+    "consumer_install": "cargo install from packaged rs-rich-cli-0.0.10 with siblings patched to packaged crates: rich (rs-rich-cli) 0.0.10",
+    "library_consumer": "=0.0.6/=0.0.8 packaged core/ext: theme stack, ~~~ strikethrough, Progress clock estimate (matches rich 15.0.0), Spinner start, Overflowing crop",
+    "tag_plans": {
+      "rs-rich-v0.0.6": "rs-rich 0.0.6",
+      "rs-rich-ext-v0.0.8": "rs-rich-ext 0.0.8",
+      "rs-rich-art-v0.0.8": "rs-rich-art 0.0.8",
+      "rs-rich-cli-v0.0.10": "rs-rich-cli 0.0.10",
+      "v0.0.10": "rejected: manifest version mismatch"
+    },
+    "registry": {
+      "new_versions": "404 x4",
+      "published_0.0.9_cohort": "200 x4"
+    },
+    "existing_tags": "none of the four new tags exist; 0.0.9-cohort tags are annotated on the remote"
+  },
+  "found_and_fixed": [
+    "stale staged package copies in check_packages.py",
+    "multi-file watch retry hint under --watch-exit-on-error",
+    "guided tour updated for 0.0.10 features"
+  ],
+  "media": {
+    "screenshots": "docs/media/release-0.0.10 (provenance.json)",
+    "tour": ".github/evidence/0.0.10/demo-tour/capture.json"
+  },
+  "publication": {
+    "date": "2026-09-23",
+    "source_commit": "e604cc5",
+    "method": "crates.io Trusted Publishing (release.yml, environment crates-io)",
+    "runs": {
+      "rs-rich-v0.0.6": "35818053978",
+      "rs-rich-ext-v0.0.8": "35818015980",
+      "rs-rich-art-v0.0.8": "35818038760",
+      "rs-rich-cli-v0.0.10": "35818067984"
+    },
+    "registry": "rs-rich 0.0.6, rs-rich-ext 0.0.8, rs-rich-art 0.0.8, rs-rich-cli 0.0.10 return HTTP 200",
+    "incident": "tags pushed out of order; ext first attempt failed its dry run before upload and queued runs were cancelled by the concurrency group; recovered by sequential re-runs; no version uploaded twice"
+  }
+}

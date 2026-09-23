@@ -7,11 +7,12 @@
 //! guarantee described in AGENTS.md.
 
 use rich::markdown::Markdown;
+use rich::measure::Measurement;
 use rich::r#box::{Box as BoxSet, DOUBLE_EDGE, HEAVY_HEAD, SIMPLE, SQUARE};
 use rich::{
     Align, AnsiDecoder, Bar, ColorSystem, Columns, Console, Constrain, Control, HorizontalAlign,
     Json, Justify, Layout, Overflow, Padding, Panel, ProgressBar, Renderable, Rule, Style, Styled,
-    Table, Text, Tree,
+    Syntax, Table, Text, Tree,
 };
 
 /// Build the layout matching a `layout_*` fixture name. Must stay in sync with
@@ -257,6 +258,7 @@ fn unescape(s: &str) -> String {
     s.replace("\\x1b", "\x1b")
         .replace("\\n", "\n")
         .replace("\\x1f", "\x1f")
+        .replace("\\x5c", "\\")
 }
 
 /// Build the renderable matching a fixture `name`. Must stay in sync with
@@ -270,6 +272,31 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "rule_title" | "rule_title_odd" => Box::new(Rule::new("Hi")),
         "rule_left" => Box::new(Rule::new("Hi").align(HorizontalAlign::Left)),
         "rule_right" => Box::new(Rule::new("Hi").align(HorizontalAlign::Right)),
+        "rule_title_markup" => Box::new(Rule::new("[bold red]Ready[/] :rocket:")),
+        "rule_title_literal" => Box::new(Rule::new(r"\[red]literal\[/red]")),
+        "rule_title_spaces" => Box::new(Rule::new("[bold]a\tb\nc[/]")),
+        "rule_title_truncate" => Box::new(Rule::new("[red]long[/][bold blue]title[/]")),
+        "rule_left_markup" => Box::new(Rule::new("[red]Title[/]").align(HorizontalAlign::Left)),
+        "rule_right_markup" => Box::new(Rule::new("[red]Title[/]").align(HorizontalAlign::Right)),
+        "rule_title_wide_truncate" => Box::new(Rule::new("[red]界[/][blue]abc[/]")),
+        "rule_empty_title" => Box::new(Rule::new("")),
+        "panel_title_markup" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title("[bold red]Ready[/] :rocket:").border_style(Style::parse("blue").unwrap())),
+        "panel_title_literal" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title(r"\[red]literal\[/red]")),
+        "panel_title_spaces" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title("[bold]a\tb\nc[/]")),
+        "panel_title_truncate" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title("[red]long[/][bold blue]title[/]").border_style(Style::parse("green").unwrap())),
+        "panel_subtitle_markup" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .subtitle("[italic yellow]Done[/] :rocket:").subtitle_align(HorizontalAlign::Right)
+            .border_style(Style::parse("blue").unwrap())),
+        "panel_subtitle_truncate" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .subtitle("[red]long[/][bold blue]title[/]").border_style(Style::parse("green").unwrap())),
+        "panel_title_wide_truncate" => Box::new(Panel::new(Box::new(Text::new("x"))).title("[red]界[/][blue]abc[/]")),
+        "panel_empty_title" => Box::new(Panel::new(Box::new(Text::new("x"))).title("").subtitle("")),
+        "panel_tiny_title" => Box::new(Panel::new(Box::new(Text::new("x")))
+            .title("[bold red]T[/]").subtitle("[green]S[/]")),
         "panel_plain" => Box::new(Panel::new(Box::new(Text::new("hello")))),
         "panel_title" => Box::new(Panel::new(Box::new(Text::new("hello"))).title("T")),
         "panel_title_left" => Box::new(
@@ -306,6 +333,10 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "padding_0_1" => Box::new(Padding::new(Box::new(Text::new("hi")), (0, 1, 0, 1))),
         "wrap_words" => Box::new(Text::new("The quick brown fox")),
         "wrap_fold" => Box::new(Text::new("abcdefghij")),
+        "wrap_many_unicode" => Box::new(Text::from_markup(&format!(
+            "{}\n{}", "[red]界é🙂[/]".repeat(32), "[blue]❤️xyz[/]".repeat(16)
+        )).unwrap()),
+        "wrap_many_words" => Box::new(Text::from_markup(&"[green]éclair 界 hello [/]".repeat(24)).unwrap()),
         "wrap_combining" => {
             let s: String = "abcdef".chars().flat_map(|c| [c, '\u{301}']).collect();
             Box::new(Text::new(s))
@@ -325,6 +356,10 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "table_expand" => Box::new(expand_table()),
         "table_justify" => Box::new(justify_table()),
         "table_title" => Box::new(title_table()),
+        "table_title_markup" => Box::new(sample_table(SQUARE)
+            .title("[bold red]Users[/] :rocket:").caption("[green]2 rows[/] :white_check_mark:")),
+        "table_title_wrap" => Box::new(sample_table(SQUARE)
+            .title("[red]Long title wraps onto lines[/]").caption("[green]a\tb\nc[/]")),
         "table_lines" => Box::new(lines_table()),
         "table_col_width" => Box::new(width_table()),
         "table_col_style" => Box::new(style_table()),
@@ -350,16 +385,42 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "bar_half" => Box::new(ProgressBar::new(100.0, 50.0).width(20)),
         "bar_third" => Box::new(ProgressBar::new(100.0, 33.0).width(20)),
         "bar_full" => Box::new(ProgressBar::new(100.0, 100.0).width(20)),
+        "json_python_floats" => Box::new(Json::new("[1e20,1e-7,1e16,1e15,0.0001,0.00001,-0.0,1.5,2.5e-300,123456789012345680000.0,0.1,1E+2,3.14159265358979,5e-324]").unwrap()),
+        "json_python_numbers" => Box::new(Json::new("[1234567890123456789012345678901234567890,-1234567890123456789012345678901234567890,1e400,-1e400,-0]").unwrap()),
         "json_object" => Box::new(Json::new(JSON_SAMPLE).expect("valid JSON")),
         "json_unicode" => Box::new(
             Json::new("{\"name\": \"caf\u{e9}\", \"emoji\": \"\u{2764}\"}").expect("valid JSON"),
         ),
+        "json_escapes_w8" | "json_escapes_w10" | "json_escapes_w12" => {
+            Box::new(Json::new(r#"{"v":"a\"b\\c\nd\u0001e"}"#).expect("valid JSON"))
+        }
         "markdown_doc" => Box::new(Markdown::new(
             "# Title\n\nHello **bold** and *italic* and `code`.",
         )),
         "markdown_list" => Box::new(Markdown::new("Items:\n\n- one\n- two\n\n1. a\n2. b")),
         "markdown_quote_hr" => Box::new(Markdown::new("Note:\n\n> important\n\n---\n\ndone")),
+        "markdown_empty" => Box::new(Markdown::new("").hyperlinks(false)),
+        "markdown_rule_only_quote" => Box::new(Markdown::new("> ---").hyperlinks(false)),
+        "markdown_rule_then_quote_text" => Box::new(Markdown::new("> ---\n>\n> text").hyperlinks(false)),
+        "markdown_html_then_paragraph" => Box::new(Markdown::new("<div>hidden</div>\n\nParagraph").hyperlinks(false)),
+        "markdown_html_only" => Box::new(Markdown::new("<div>hidden</div>").hyperlinks(false)),
+        "markdown_html_between_paragraphs" => Box::new(Markdown::new("A\n\n<div>x</div>\n\nB").hyperlinks(false)),
+        "markdown_images_same_table_cell" => Box::new(Markdown::new("| h |\n|---|\n| ![a](x) ![b](y) |\n| ![c](z) |").hyperlinks(false)),
         "markdown_hr_end" => Box::new(Markdown::new("a\n\n---")),
+        "markdown_image_table_cell" => Box::new(
+            Markdown::new("| Icon | Name |\n| --- | --- |\n| ![crate](crate.svg) | rich |\n")
+                .hyperlinks(false),
+        ),
+        "markdown_images_one_container" => Box::new(
+            Markdown::new("Before ![one](one.svg) + ![two](two.svg) after.").hyperlinks(false),
+        ),
+        "markdown_badge_table" => Box::new(
+            Markdown::new(
+                "| Badge |\n| --- |\n| ![build](build.svg) |\n\
+                 | ![docs](docs.svg) |\n| ![crate](crate.svg) |\n",
+            )
+            .hyperlinks(false),
+        ),
         "markdown_table" => Box::new(Markdown::new(
             "| Name | Age |\n| :--- | ---: |\n| Alice | 30 |\n| Bob | 7 |\n",
         )),
@@ -385,7 +446,13 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
             Style::parse("green").unwrap(),
         )),
         "progress_three" => {
-            let mut progress = rich::Progress::new();
+            // Explicit columns, as `_progress_table` in capture_golden.py:
+            // upstream's default set also has a time-remaining column.
+            let mut progress = rich::Progress::new().columns(vec![
+                rich::ProgressColumn::Description,
+                rich::ProgressColumn::Bar,
+                rich::ProgressColumn::Percentage,
+            ]);
             progress.add_task("Downloading", 100.0, 50.0);
             progress.add_task("Processing", 100.0, 100.0);
             progress.add_task("Waiting", 100.0, 0.0);
@@ -576,6 +643,27 @@ fn build_text_op(name: &str) -> Vec<Text> {
         "pad" => mutated(styled("hi", &[("bold", 0, 2)]), &|t| t.pad(3, ' ')),
         "pad_left" => mutated(styled("hi", &[("bold", 0, 2)]), &|t| t.pad_left(3, '.')),
         "pad_right" => mutated(styled("hi", &[("bold", 0, 2)]), &|t| t.pad_right(3, '.')),
+        "truncate_styled_ellipsis" => [1, 2, 5, 8]
+            .into_iter()
+            .map(|width| {
+                let mut text = Text::from_markup("[red]long[/][bold blue]title[/]").unwrap();
+                text.truncate(width, Some(Overflow::Ellipsis), false);
+                text
+            })
+            .collect(),
+        "truncate_wide_styled" => [
+            (1, Overflow::Crop),
+            (1, Overflow::Ellipsis),
+            (2, Overflow::Ellipsis),
+            (3, Overflow::Ellipsis),
+        ]
+        .into_iter()
+        .map(|(width, overflow)| {
+            let mut text = Text::from_markup("[red]界[/][blue]abc[/]").unwrap();
+            text.truncate(width, Some(overflow), false);
+            text
+        })
+        .collect(),
         "right_crop" => mutated(styled("hello world", &[("bold", 3, 9)]), &|t| {
             t.right_crop(4)
         }),
@@ -708,10 +796,14 @@ fn overflow_parity() {
         let no_wrap = field("no_wrap") == "true";
         let expected = unescape(&field("expected"));
 
-        let text = build_overflow_text(name)
-            .overflow(overflow)
-            .no_wrap(no_wrap);
-        let got = truecolor_console(width).render_export(&text);
+        // Captured with `Console.print(text, overflow=…, no_wrap=…)`: print-level
+        // options, which a printed `Text` defers to after `Text.join`.
+        let text = build_overflow_text(name);
+        let console = truecolor_console(width);
+        let mut options = console.options();
+        options.overflow = Some(overflow);
+        options.no_wrap = Some(no_wrap);
+        let got = console.render_export_with(&text, &options);
         assert_eq!(
             got,
             expected,
@@ -1066,4 +1158,692 @@ fn layout_parity() {
         checked += 1;
     }
     assert!(checked > 0, "no layout cases were checked");
+}
+
+/// A JSON value as the Python object `**fields` would carry.
+fn format_value(value: &serde_json::Value) -> rich::pyformat::FormatValue {
+    use rich::pyformat::FormatValue;
+    match value {
+        serde_json::Value::Null => FormatValue::None,
+        serde_json::Value::Bool(flag) => FormatValue::Bool(*flag),
+        serde_json::Value::Number(number) => match number.as_i64() {
+            Some(integer) => FormatValue::Int(integer),
+            None => FormatValue::Float(number.as_f64().expect("number")),
+        },
+        serde_json::Value::String(text) => FormatValue::Str(text.clone()),
+        other => panic!("unsupported field value {other}"),
+    }
+}
+
+/// Build a progress column from a `progress_time.tsv` spec. Keep in sync with
+/// `progress_columns` in scripts/capture_golden.py.
+fn progress_column(spec: &serde_json::Value) -> rich::ProgressColumn {
+    use rich::{ProgressColumn, SpinnerColumn, TimeRemainingColumn};
+    let spec = spec.as_array().expect("column spec");
+    let flag = |i: usize| spec[i].as_bool().expect("bool");
+    match spec[0].as_str().expect("column name") {
+        "description" => ProgressColumn::Description,
+        "bar" => ProgressColumn::Bar,
+        "percentage" => ProgressColumn::Percentage,
+        "task_progress" => ProgressColumn::TaskProgress {
+            show_speed: flag(1),
+        },
+        "mofn" => ProgressColumn::MofN,
+        "download" if flag(1) => ProgressColumn::BinaryDownload,
+        "download" => ProgressColumn::Download,
+        "elapsed" => ProgressColumn::TimeElapsed,
+        "remaining" => ProgressColumn::TimeRemaining(TimeRemainingColumn::new(flag(1), flag(2))),
+        "speed" => ProgressColumn::TransferSpeed,
+        "filesize" => ProgressColumn::FileSize,
+        "total_filesize" => ProgressColumn::TotalFileSize,
+        "spinner" => ProgressColumn::Spinner(SpinnerColumn::new(
+            spec[1].as_str().unwrap(),
+            spec[2].as_str().unwrap(),
+        )),
+        "text" => ProgressColumn::TextFormat(
+            rich::progress::TextColumn::new(spec[1].as_str().unwrap())
+                .style(spec[2].as_str().unwrap().to_string())
+                .justify(match spec[3].as_str().unwrap() {
+                    "left" => Justify::Left,
+                    "center" => Justify::Center,
+                    "right" => Justify::Right,
+                    other => panic!("unknown justify {other:?}"),
+                })
+                .markup(flag(4)),
+        ),
+        "renderable" => ProgressColumn::Renderable(std::sync::Arc::new(
+            Text::from_markup(spec[1].as_str().unwrap()).expect("valid markup"),
+        )),
+        other => panic!("unknown progress column {other:?}"),
+    }
+}
+
+/// Progress time/rate/spinner columns and the task API, driven by the same step
+/// programs as upstream with a shared fake clock.
+#[test]
+fn progress_time_parity() {
+    use rich::{Progress, TaskId, TaskUpdate};
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
+
+    let data = include_str!("golden/progress_time.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let case: serde_json::Value =
+            serde_json::from_str(parts.next().expect("case")).expect("case json");
+        let expected = unescape(parts.next().expect("expected"));
+
+        let now = Arc::new(AtomicU64::new(0f64.to_bits()));
+        let clock = now.clone();
+        let mut progress =
+            Progress::new().clock(move || f64::from_bits(clock.load(Ordering::SeqCst)));
+        if let Some(columns) = case["columns"].as_array() {
+            progress = progress.columns(columns.iter().map(progress_column).collect());
+        }
+        let id = |v: &serde_json::Value| TaskId(v.as_u64().expect("task id") as usize);
+        let mut got = String::new();
+        for step in case["steps"].as_array().expect("steps") {
+            let step = step.as_array().expect("step");
+            match step[0].as_str().expect("op") {
+                "time" => now.store(step[1].as_f64().unwrap().to_bits(), Ordering::SeqCst),
+                "add" => {
+                    let (description, total, completed) = (
+                        step[1].as_str().unwrap(),
+                        step[2].as_f64(),
+                        step[3].as_f64().unwrap(),
+                    );
+                    let fields: Vec<(String, rich::pyformat::FormatValue)> = step
+                        .get(5)
+                        .and_then(|fields| fields.as_object())
+                        .map(|fields| {
+                            fields
+                                .iter()
+                                .map(|(name, value)| (name.clone(), format_value(value)))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    progress.add_task_with(
+                        description,
+                        total,
+                        completed,
+                        step[4].as_bool().unwrap(),
+                        fields,
+                    );
+                }
+                "update" => {
+                    let fields = &step[2];
+                    let mut update = TaskUpdate {
+                        total: fields["total"].as_f64(),
+                        completed: fields["completed"].as_f64(),
+                        advance: fields["advance"].as_f64(),
+                        description: fields["description"].as_str().map(String::from),
+                        visible: fields["visible"].as_bool(),
+                        ..TaskUpdate::default()
+                    };
+                    // Any other keyword is a custom field (`update(**fields)`).
+                    for (name, value) in fields.as_object().expect("update fields") {
+                        if !["total", "completed", "advance", "description", "visible"]
+                            .contains(&name.as_str())
+                        {
+                            update = update.field(name.clone(), format_value(value));
+                        }
+                    }
+                    progress.update(id(&step[1]), update);
+                }
+                "advance" => progress.advance(id(&step[1]), step[2].as_f64().unwrap()),
+                "start" => progress.start_task(id(&step[1])),
+                "stop" => progress.stop_task(id(&step[1])),
+                "reset" => {
+                    let fields = &step[2];
+                    progress.reset(
+                        id(&step[1]),
+                        fields["start"].as_bool().unwrap_or(true),
+                        fields["total"].as_f64(),
+                        fields["completed"].as_f64().unwrap_or(0.0),
+                    );
+                }
+                "remove" => progress.remove_task(id(&step[1])),
+                "render" => {
+                    let console = truecolor_console(step[1].as_u64().unwrap() as usize);
+                    got.push_str(&console.capture(|c| c.print(&progress)));
+                }
+                op => panic!("unknown progress step {op:?}"),
+            }
+        }
+        assert_eq!(
+            got,
+            expected,
+            "progress case {name:?} (line {}) diverged",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 15, "expected every progress time case to run");
+}
+
+/// Spinner and Status frames and LiveRender control sequences (#15): the same
+/// step programs as upstream, one expected output per `render`/`position`/
+/// `restore` step.
+#[test]
+fn live_status_parity() {
+    use rich::style::StyleType;
+    use rich::{LiveRender, Spinner, Status};
+    use serde_json::Value;
+
+    let data = include_str!("golden/live_status.tsv");
+    let mut checked = 0;
+    for line in data.lines().filter(|l| !l.starts_with('#')) {
+        let cols: Vec<&str> = line.split('\t').collect();
+        let [name, case, expected] = cols[..] else {
+            panic!("malformed live_status row: {line:?}");
+        };
+        let case: Value = serde_json::from_str(case).unwrap();
+        let expected: Vec<String> = serde_json::from_str(expected).unwrap();
+        let str_of = |v: &Value, key: &str| v.get(key).and_then(Value::as_str).map(str::to_owned);
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(case["width"].as_u64().unwrap() as usize)
+            .height(case["height"].as_u64().unwrap_or(25) as usize)
+            .no_color(false)
+            .build();
+        let steps = case["steps"].as_array().unwrap();
+        let mut outputs = Vec::new();
+        match case["kind"].as_str().unwrap() {
+            "spinner" => {
+                let mut spinner = Spinner::new(case["name"].as_str().unwrap())
+                    .text(case["text"].as_str().unwrap())
+                    .speed(case["speed"].as_f64().unwrap());
+                if let Some(style) = str_of(&case, "style") {
+                    spinner = spinner.style(style);
+                }
+                for step in steps {
+                    match step[0].as_str().unwrap() {
+                        "render" => outputs.push(
+                            console.render_to_string(&spinner.render(step[1].as_f64().unwrap())),
+                        ),
+                        _ => spinner.update(
+                            str_of(&step[1], "text").as_deref(),
+                            str_of(&step[1], "style").map(StyleType::from),
+                            step[1].get("speed").and_then(Value::as_f64),
+                        ),
+                    }
+                }
+            }
+            "status" => {
+                let mut status = Status::new(case["message"].as_str().unwrap())
+                    .spinner(case["spinner"].as_str().unwrap())
+                    .spinner_style(case["style"].as_str().unwrap())
+                    .speed(case["speed"].as_f64().unwrap());
+                for step in steps {
+                    match step[0].as_str().unwrap() {
+                        "render" => outputs.push(console.render_to_string(
+                            &status.renderable().render(step[1].as_f64().unwrap()),
+                        )),
+                        _ => status.update(
+                            str_of(&step[1], "status").as_deref(),
+                            str_of(&step[1], "spinner").as_deref(),
+                            str_of(&step[1], "spinner_style").map(StyleType::from),
+                            step[1].get("speed").and_then(Value::as_f64),
+                        ),
+                    }
+                }
+            }
+            _ => {
+                let text = |markup: &str| Box::new(Text::from_markup(markup).unwrap());
+                let mut live = LiveRender::new(text(case["markup"].as_str().unwrap()));
+                if let Some(style) = str_of(&case, "style") {
+                    live = live.style(Style::parse(&style).unwrap());
+                }
+                for step in steps {
+                    match step[0].as_str().unwrap() {
+                        "render" => outputs.push(console.render_to_string(&live)),
+                        "position" => {
+                            outputs.push(console.render_to_string(&live.position_cursor()))
+                        }
+                        "restore" => outputs.push(console.render_to_string(&live.restore_cursor())),
+                        _ => live.set_renderable(text(step[1].as_str().unwrap())),
+                    }
+                }
+            }
+        }
+        assert_eq!(outputs, expected, "live_status case {name}");
+        checked += 1;
+    }
+    assert_eq!(checked, 8);
+}
+
+/// `Measurement.get` of `Syntax` and `JSON` (#149). The inputs travel in the
+/// fixture as JSON, so no case list needs to stay in sync by name.
+#[test]
+fn measure_parity() {
+    let data = include_str!("golden/measure.tsv");
+    let console = Console::builder().width(80).build();
+    let mut checked = 0;
+    for line in data.lines().filter(|l| !l.starts_with('#')) {
+        let cols: Vec<&str> = line.split('\t').collect();
+        let [name, width, spec, minimum, maximum] = cols[..] else {
+            panic!("malformed measure row: {line:?}");
+        };
+        let spec: serde_json::Value = serde_json::from_str(spec).unwrap();
+        let source = spec["source"].as_str().unwrap();
+        let padding = spec["padding"].as_u64().unwrap() as usize;
+        let renderable: Box<dyn Renderable> = match spec["kind"].as_str().unwrap() {
+            "syntax" => Box::new(Syntax::new(source, "python").padding(padding)),
+            _ => Box::new(Json::new(source).unwrap()),
+        };
+        let options = console.options().update_width(width.parse().unwrap());
+        let got = Measurement::get(&console, &options, renderable.as_ref());
+        assert_eq!(
+            (got.minimum, got.maximum),
+            (minimum.parse().unwrap(), maximum.parse().unwrap()),
+            "measure case {name}"
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 15);
+}
+
+/// Markdown strikethrough delimiter pairing (markdown-it's rules), checked
+/// against upstream. Data-driven: each fixture line carries its own source.
+#[test]
+fn markdown_strike_parity() {
+    let data = include_str!("golden/markdown_strike.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let source: String =
+            serde_json::from_str(parts.next().expect("source")).expect("source json");
+        let expected = unescape(parts.next().expect("expected"));
+        let console = truecolor_console(40);
+        let got = console.capture(|c| c.print(&Markdown::new(&source).hyperlinks(false)));
+        assert_eq!(
+            got,
+            expected,
+            "markdown strike case {name:?} (line {}) diverged: {source:?}",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 24, "expected every markdown strike case to run");
+}
+
+/// Inline styling inside Markdown table cells (#9), checked against upstream.
+/// Data-driven: each fixture line carries its own source.
+#[test]
+fn markdown_table_inline_parity() {
+    let data = include_str!("golden/markdown_table_inline.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let source: String =
+            serde_json::from_str(parts.next().expect("source")).expect("source json");
+        let expected = unescape(parts.next().expect("expected"));
+        let console = truecolor_console(40);
+        let got = console.capture(|c| c.print(&Markdown::new(&source).hyperlinks(false)));
+        assert_eq!(
+            got,
+            expected,
+            "markdown table case {name:?} (line {}) diverged: {source:?}",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 8, "expected every markdown table case to run");
+}
+
+/// `Markdown(justify=…, style=…)` against upstream. Data-driven: each fixture
+/// line carries its source and the options to apply.
+#[test]
+fn markdown_options_parity() {
+    let data = include_str!("golden/markdown_options.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(4, '\t');
+        let name = parts.next().unwrap_or("");
+        let source: String =
+            serde_json::from_str(parts.next().expect("source")).expect("source json");
+        let options: serde_json::Value =
+            serde_json::from_str(parts.next().expect("options")).expect("options json");
+        let expected = unescape(parts.next().expect("expected"));
+        let mut markdown = Markdown::new(&source).hyperlinks(false);
+        if let Some(justify) = options.get("justify").and_then(|v| v.as_str()) {
+            markdown = markdown.justify(match justify {
+                "left" => Justify::Left,
+                "center" => Justify::Center,
+                "right" => Justify::Right,
+                "full" => Justify::Full,
+                other => panic!("unknown justify {other:?}"),
+            });
+        }
+        if let Some(style) = options.get("style").and_then(|v| v.as_str()) {
+            markdown = markdown.style(Style::parse(style).expect("valid style"));
+        }
+        let console = truecolor_console(40);
+        let got = console.capture(|c| c.print(&markdown));
+        assert_eq!(
+            got,
+            expected,
+            "markdown options case {name:?} (line {}) diverged: {options}",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 8, "expected every markdown options case to run");
+}
+
+/// `ProgressBar` against upstream: determinate, pulse, ASCII and no-colour.
+/// Data-driven: each fixture line carries its own case.
+#[test]
+fn progress_bar_parity() {
+    use rich::progress_bar::ProgressBar;
+    let data = include_str!("golden/progress_bar.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let case: serde_json::Value =
+            serde_json::from_str(parts.next().expect("case")).expect("case json");
+        let expected = unescape(parts.next().expect("expected"));
+        let color_system = match case.get("color_system").and_then(|v| v.as_str()) {
+            None | Some("truecolor") => ColorSystem::Truecolor,
+            Some("256") => ColorSystem::EightBit,
+            Some("standard") => ColorSystem::Standard,
+            Some(other) => panic!("unknown color system {other:?}"),
+        };
+        let flag = |key: &str| case.get(key).and_then(|v| v.as_bool()).unwrap_or(false);
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(color_system))
+            .width(80)
+            .highlight(false)
+            .no_color(flag("no_color"))
+            .legacy_windows(flag("legacy_windows"))
+            .build();
+        let completed = case["completed"].as_f64().expect("completed");
+        let mut bar = match case["total"].as_f64() {
+            Some(total) => ProgressBar::new(total, completed),
+            None => ProgressBar::indeterminate(),
+        }
+        .width(case["width"].as_u64().expect("width") as usize)
+        .pulse(flag("pulse"));
+        if let Some(time) = case.get("animation_time").and_then(|v| v.as_f64()) {
+            bar = bar.animation_time(time);
+        }
+        // A bar yields no newline of its own, so `print` adds none upstream.
+        let got = console.render_to_string(&bar);
+        assert_eq!(
+            got,
+            expected,
+            "progress bar case {name:?} (line {}) diverged",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 15, "expected every progress bar case to run");
+}
+
+/// A live `Progress` display's byte stream (start, task changes, explicit
+/// refreshes, stop) against upstream with `auto_refresh=False`. The port's
+/// auto-refresh thread is given an interval long enough never to fire.
+#[test]
+fn progress_live_parity() {
+    use rich::Progress;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
+
+    let data = include_str!("golden/progress_live.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let case: serde_json::Value =
+            serde_json::from_str(parts.next().expect("case")).expect("case json");
+        let expected = unescape(parts.next().expect("expected"));
+        let now = Arc::new(AtomicU64::new(0f64.to_bits()));
+        let clock = now.clone();
+        let columns = case["columns"]
+            .as_array()
+            .expect("columns")
+            .iter()
+            .map(progress_column)
+            .collect();
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(case["width"].as_u64().expect("width") as usize)
+            .highlight(false)
+            .no_color(false)
+            .build();
+        let live = Progress::new()
+            .columns(columns)
+            .clock(move || f64::from_bits(clock.load(Ordering::SeqCst)))
+            .start(console, Vec::<u8>::new(), 1e-9);
+        let id = |value: &serde_json::Value| rich::TaskId(value.as_u64().unwrap() as usize);
+        for step in case["steps"].as_array().expect("steps") {
+            match step[0].as_str().expect("op") {
+                "time" => now.store(step[1].as_f64().unwrap().to_bits(), Ordering::SeqCst),
+                "add" => {
+                    live.add_task(
+                        step[1].as_str().unwrap(),
+                        step[2].as_f64(),
+                        step[3].as_f64().unwrap(),
+                    );
+                }
+                "advance" => live.advance(id(&step[1]), step[2].as_f64().unwrap()),
+                "update" => {
+                    let fields = &step[2];
+                    let mut update = rich::TaskUpdate::default();
+                    if let Some(completed) = fields["completed"].as_f64() {
+                        update = update.completed(completed);
+                    }
+                    if let Some(description) = fields["description"].as_str() {
+                        update = update.description(description);
+                    }
+                    live.update(id(&step[1]), update);
+                }
+                "refresh" => live.refresh(),
+                other => panic!("unknown live progress step {other:?}"),
+            }
+        }
+        let (_, bytes) = live.stop();
+        let got = String::from_utf8(bytes).expect("utf-8");
+        assert_eq!(
+            got,
+            expected,
+            "live progress case {name:?} (line {}) diverged",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 3, "expected every live progress case to run");
+}
+
+/// `LogRender` against upstream's `_log_render.LogRender`: each case prints
+/// its records through one render, so repeated times are blanked.
+#[test]
+fn log_render_parity() {
+    use rich::{level_text, LogRender};
+    let data = include_str!("golden/log_render.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let case: serde_json::Value =
+            serde_json::from_str(parts.next().expect("case")).expect("case json");
+        let expected = unescape(parts.next().expect("expected"));
+        let options = &case["options"];
+        let flag = |key: &str, default: bool| options[key].as_bool().unwrap_or(default);
+        let mut render = LogRender::new()
+            .show_time(flag("show_time", true))
+            .show_level(flag("show_level", false))
+            .show_path(flag("show_path", true))
+            .omit_repeated_times(flag("omit_repeated_times", true));
+        if let Some(width) = options.get("level_width") {
+            render = render.level_width(width.as_u64().map(|w| w as usize));
+        }
+        let console = truecolor_console(case["width"].as_u64().expect("width") as usize);
+        let mut got = String::new();
+        for record in case["records"].as_array().expect("records") {
+            let level = record[1].as_str().unwrap();
+            let table = render.render(
+                &console,
+                Text::from_markup(record[2].as_str().unwrap()).expect("markup"),
+                record[0].as_str().map(Text::new),
+                if level.is_empty() {
+                    Text::new("")
+                } else {
+                    level_text(level)
+                },
+                record[3].as_str(),
+                record[4].as_u64().map(|line| line as u32),
+                None,
+            );
+            got.push_str(&console.capture(|c| c.print(&table)));
+        }
+        assert_eq!(
+            got,
+            expected,
+            "log render case {name:?} (line {}) diverged",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 4, "expected every log render case to run");
+}
+
+/// Run one `theme_stack.tsv` step list. Keep in sync with `run_theme_steps` in
+/// scripts/capture_golden.py.
+fn run_theme_steps(console: &mut Console, steps: &[serde_json::Value], out: &mut String) {
+    use rich::errors::RichError;
+    use rich::Theme;
+
+    fn theme_of(styles: &serde_json::Value, inherit: bool) -> Theme {
+        let pairs = styles
+            .as_object()
+            .expect("styles object")
+            .iter()
+            .map(|(name, style)| (name.clone(), style.as_str().expect("style").to_string()));
+        Theme::from_styles(pairs, inherit).expect("fixture styles parse")
+    }
+    fn plain(console: &Console, text: &str, out: &mut String) {
+        out.push_str(&console.capture(|c| c.print(&Text::new(text))));
+    }
+
+    for step in steps {
+        let step = step.as_array().expect("step array");
+        match step[0].as_str().expect("op") {
+            "push" => console.push_theme(theme_of(&step[1], false), step[2].as_bool().unwrap()),
+            "pop" => {
+                if let Err(RichError::ThemeStack(message)) = console.pop_theme() {
+                    plain(console, &format!("ERR:ThemeStackError:{message}"), out);
+                }
+            }
+            "use" => {
+                let mut themed = console.use_theme(theme_of(&step[1], false));
+                run_theme_steps(&mut themed, step[2].as_array().expect("nested steps"), out);
+            }
+            "print" => {
+                let markup = step[1].as_str().expect("markup");
+                out.push_str(&console.capture(|c| c.print_str(markup)));
+            }
+            "config" => {
+                let inherit = step[2].as_bool().unwrap();
+                let theme = theme_of(&step[1], inherit);
+                let text = if inherit {
+                    theme.len().to_string()
+                } else {
+                    theme.config()
+                };
+                plain(console, &text, out);
+            }
+            "from_file" => {
+                let text = step[1].as_str().expect("config text");
+                let line = match Theme::from_file(text, step[2].as_bool().unwrap()) {
+                    Ok(theme) => {
+                        let mut lines: Vec<String> = theme
+                            .names()
+                            .map(|name| format!("{name}={}", theme.get(name).unwrap().definition()))
+                            .collect();
+                        lines.sort();
+                        lines.join("\n")
+                    }
+                    Err(RichError::ThemeConfig(message)) => {
+                        format!("ERR:{}", message.split(':').next().unwrap())
+                    }
+                    // Upstream's `Style.parse` wraps a bad colour in
+                    // `StyleSyntaxError`; `Style::parse` reports it as
+                    // `ColorParse`. Both are the style-parse failure here.
+                    Err(RichError::StyleSyntax(_) | RichError::ColorParse(_)) => {
+                        "ERR:StyleSyntaxError".to_string()
+                    }
+                    Err(other) => panic!("unexpected error {other:?}"),
+                };
+                plain(console, &line, out);
+            }
+            op => panic!("unknown theme step {op:?}"),
+        }
+    }
+}
+
+/// The theme stack (`push_theme`/`pop_theme`/`use_theme`) and theme config
+/// files (`Theme.config`/`Theme.from_file`), checked against upstream.
+#[test]
+fn theme_stack_parity() {
+    let data = include_str!("golden/theme_stack.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let steps: serde_json::Value =
+            serde_json::from_str(parts.next().expect("steps")).expect("steps json");
+        let expected = unescape(parts.next().expect("expected"));
+        let mut console = truecolor_console(40);
+        let mut got = String::new();
+        run_theme_steps(&mut console, steps.as_array().unwrap(), &mut got);
+        assert_eq!(
+            got,
+            expected,
+            "theme stack case {name:?} (line {}) diverged",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 9, "expected every theme stack case to run");
 }
