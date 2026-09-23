@@ -239,9 +239,8 @@ markup, such as an unmatched `[/tag]`, is an error with exit code `4`.
 
 !!! info "About the screenshot titles"
 
-    An exported SVG is titled after its RESOURCE. For literal markup the title
-    is cut at the last `/` (a closing tag), so the screenshots of `print` on this
-    page pipe the same markup through `rich print -` and are titled `rich`.
+    An exported SVG is titled after its RESOURCE when that is a file path or
+    URL. Literal text, from `print` or `rule`, and stdin give the title `rich`.
 
 `rule` draws a horizontal rule with the RESOURCE as its title:
 

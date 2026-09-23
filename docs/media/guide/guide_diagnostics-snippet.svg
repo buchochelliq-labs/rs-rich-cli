@@ -1,4 +1,4 @@
-<svg class="rich-terminal" viewBox="0 0 872 391.59999999999997" xmlns="http://www.w3.org/2000/svg">
+<svg class="rich-terminal" viewBox="0 0 872 367.2" xmlns="http://www.w3.org/2000/svg">
     <!-- Generated with Rich https://www.textualize.io -->
     <style>
 
@@ -41,7 +41,7 @@
 
     <defs>
     <clipPath id="guide_diagnostics-snippet-clip-terminal">
-      <rect x="0" y="0" width="853.0" height="340.59999999999997" />
+      <rect x="0" y="0" width="853.0" height="316.2" />
     </clipPath>
     <clipPath id="guide_diagnostics-snippet-line-0">
     <rect x="0" y="1.5" width="854" height="24.65"/>
@@ -79,12 +79,9 @@
 <clipPath id="guide_diagnostics-snippet-line-11">
     <rect x="0" y="269.9" width="854" height="24.65"/>
             </clipPath>
-<clipPath id="guide_diagnostics-snippet-line-12">
-    <rect x="0" y="294.3" width="854" height="24.65"/>
-            </clipPath>
     </defs>
 
-    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="870" height="389.6" rx="8"/><text class="guide_diagnostics-snippet-title" fill="#c5c8c6" text-anchor="middle" x="435" y="27">rich-ext</text>
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="870" height="365.2" rx="8"/><text class="guide_diagnostics-snippet-title" fill="#c5c8c6" text-anchor="middle" x="435" y="27">rich-ext</text>
             <g transform="translate(26,22)">
             <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
             <circle cx="22" cy="0" r="7" fill="#febc2e"/>
@@ -97,17 +94,16 @@
     <text class="guide_diagnostics-snippet-r1" x="0" y="20" textLength="61" clip-path="url(#guide_diagnostics-snippet-line-0)">error</text><text class="guide_diagnostics-snippet-r1" x="61" y="20" textLength="97.6" clip-path="url(#guide_diagnostics-snippet-line-0)">[CFG001]</text><text class="guide_diagnostics-snippet-r2" x="158.6" y="20" textLength="24.4" clip-path="url(#guide_diagnostics-snippet-line-0)">:&#160;</text><text class="guide_diagnostics-snippet-r2" x="183" y="20" textLength="195.2" clip-path="url(#guide_diagnostics-snippet-line-0)">invalid&#160;endpoint</text><text class="guide_diagnostics-snippet-r3" x="854" y="20" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-0)">
 </text><text class="guide_diagnostics-snippet-r4" x="0" y="44.4" textLength="73.2" clip-path="url(#guide_diagnostics-snippet-line-1)">&#160;&#160;--&gt;&#160;</text><text class="guide_diagnostics-snippet-r3" x="73.2" y="44.4" textLength="183" clip-path="url(#guide_diagnostics-snippet-line-1)">config.toml:2:8</text><text class="guide_diagnostics-snippet-r3" x="854" y="44.4" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-1)">
 </text><text class="guide_diagnostics-snippet-r3" x="0" y="68.8" textLength="378.2" clip-path="url(#guide_diagnostics-snippet-line-2)">caused&#160;by:&#160;port&#160;must&#160;be&#160;numeric</text><text class="guide_diagnostics-snippet-r3" x="854" y="68.8" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-2)">
-</text><text class="guide_diagnostics-snippet-r3" x="0" y="93.2" textLength="48.8" clip-path="url(#guide_diagnostics-snippet-line-3)">--&gt;&#160;</text><text class="guide_diagnostics-snippet-r3" x="48.8" y="93.2" textLength="134.2" clip-path="url(#guide_diagnostics-snippet-line-3)">config.toml</text><text class="guide_diagnostics-snippet-r3" x="854" y="93.2" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-3)">
-</text><text class="guide_diagnostics-snippet-r3" x="0" y="117.6" textLength="146.4" clip-path="url(#guide_diagnostics-snippet-line-4)">1&#160;|&#160;[server]</text><text class="guide_diagnostics-snippet-r3" x="854" y="117.6" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-4)">
-</text><text class="guide_diagnostics-snippet-r3" x="0" y="142" textLength="219.6" clip-path="url(#guide_diagnostics-snippet-line-5)">2&#160;|&#160;port&#160;=&#160;invalid</text><text class="guide_diagnostics-snippet-r3" x="854" y="142" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-5)">
-</text><text class="guide_diagnostics-snippet-r3" x="0" y="166.4" textLength="48.8" clip-path="url(#guide_diagnostics-snippet-line-6)">&#160;&#160;|&#160;</text><text class="guide_diagnostics-snippet-r4" x="48.8" y="166.4" textLength="48.8" clip-path="url(#guide_diagnostics-snippet-line-6)">----</text><text class="guide_diagnostics-snippet-r1" x="134.2" y="166.4" textLength="85.4" clip-path="url(#guide_diagnostics-snippet-line-6)">^^^^^^^</text><text class="guide_diagnostics-snippet-r1" x="231.8" y="166.4" textLength="146.4" clip-path="url(#guide_diagnostics-snippet-line-6)">not&#160;a&#160;number</text><text class="guide_diagnostics-snippet-r3" x="854" y="166.4" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-6)">
-</text><text class="guide_diagnostics-snippet-r3" x="0" y="190.8" textLength="48.8" clip-path="url(#guide_diagnostics-snippet-line-7)">&#160;&#160;|&#160;</text><text class="guide_diagnostics-snippet-r4" x="48.8" y="190.8" textLength="146.4" clip-path="url(#guide_diagnostics-snippet-line-7)">for&#160;this&#160;key</text><text class="guide_diagnostics-snippet-r3" x="854" y="190.8" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-7)">
-</text><text class="guide_diagnostics-snippet-r3" x="0" y="215.2" textLength="268.4" clip-path="url(#guide_diagnostics-snippet-line-8)">3&#160;|&#160;host&#160;=&#160;&quot;localhost&quot;</text><text class="guide_diagnostics-snippet-r3" x="854" y="215.2" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-8)">
-</text><text class="guide_diagnostics-snippet-r3" x="0" y="239.6" textLength="463.6" clip-path="url(#guide_diagnostics-snippet-line-9)">note:&#160;ports&#160;below&#160;1024&#160;need&#160;privileges</text><text class="guide_diagnostics-snippet-r3" x="854" y="239.6" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-9)">
-</text><text class="guide_diagnostics-snippet-r3" x="0" y="264" textLength="390.4" clip-path="url(#guide_diagnostics-snippet-line-10)">help:&#160;use&#160;a&#160;port&#160;from&#160;1&#160;to&#160;65535</text><text class="guide_diagnostics-snippet-r3" x="854" y="264" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-10)">
-</text><text class="guide_diagnostics-snippet-r3" x="0" y="288.4" textLength="207.4" clip-path="url(#guide_diagnostics-snippet-line-11)">help:&#160;for&#160;example</text><text class="guide_diagnostics-snippet-r3" x="854" y="288.4" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-11)">
-</text><text class="guide_diagnostics-snippet-r3" x="0" y="312.8" textLength="183" clip-path="url(#guide_diagnostics-snippet-line-12)">2&#160;|&#160;port&#160;=&#160;8080</text><text class="guide_diagnostics-snippet-r3" x="854" y="312.8" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-12)">
-</text><text class="guide_diagnostics-snippet-r3" x="0" y="337.2" textLength="134.2" clip-path="url(#guide_diagnostics-snippet-line-13)">&#160;&#160;|&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_diagnostics-snippet-r5" x="134.2" y="337.2" textLength="48.8" clip-path="url(#guide_diagnostics-snippet-line-13)">++++</text><text class="guide_diagnostics-snippet-r3" x="854" y="337.2" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-13)">
+</text><text class="guide_diagnostics-snippet-r3" x="0" y="93.2" textLength="146.4" clip-path="url(#guide_diagnostics-snippet-line-3)">1&#160;|&#160;[server]</text><text class="guide_diagnostics-snippet-r3" x="854" y="93.2" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-3)">
+</text><text class="guide_diagnostics-snippet-r3" x="0" y="117.6" textLength="219.6" clip-path="url(#guide_diagnostics-snippet-line-4)">2&#160;|&#160;port&#160;=&#160;invalid</text><text class="guide_diagnostics-snippet-r3" x="854" y="117.6" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-4)">
+</text><text class="guide_diagnostics-snippet-r3" x="0" y="142" textLength="48.8" clip-path="url(#guide_diagnostics-snippet-line-5)">&#160;&#160;|&#160;</text><text class="guide_diagnostics-snippet-r4" x="48.8" y="142" textLength="48.8" clip-path="url(#guide_diagnostics-snippet-line-5)">----</text><text class="guide_diagnostics-snippet-r1" x="134.2" y="142" textLength="85.4" clip-path="url(#guide_diagnostics-snippet-line-5)">^^^^^^^</text><text class="guide_diagnostics-snippet-r1" x="231.8" y="142" textLength="146.4" clip-path="url(#guide_diagnostics-snippet-line-5)">not&#160;a&#160;number</text><text class="guide_diagnostics-snippet-r3" x="854" y="142" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-5)">
+</text><text class="guide_diagnostics-snippet-r3" x="0" y="166.4" textLength="48.8" clip-path="url(#guide_diagnostics-snippet-line-6)">&#160;&#160;|&#160;</text><text class="guide_diagnostics-snippet-r4" x="48.8" y="166.4" textLength="146.4" clip-path="url(#guide_diagnostics-snippet-line-6)">for&#160;this&#160;key</text><text class="guide_diagnostics-snippet-r3" x="854" y="166.4" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-6)">
+</text><text class="guide_diagnostics-snippet-r3" x="0" y="190.8" textLength="268.4" clip-path="url(#guide_diagnostics-snippet-line-7)">3&#160;|&#160;host&#160;=&#160;&quot;localhost&quot;</text><text class="guide_diagnostics-snippet-r3" x="854" y="190.8" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-7)">
+</text><text class="guide_diagnostics-snippet-r3" x="0" y="215.2" textLength="463.6" clip-path="url(#guide_diagnostics-snippet-line-8)">note:&#160;ports&#160;below&#160;1024&#160;need&#160;privileges</text><text class="guide_diagnostics-snippet-r3" x="854" y="215.2" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-8)">
+</text><text class="guide_diagnostics-snippet-r3" x="0" y="239.6" textLength="390.4" clip-path="url(#guide_diagnostics-snippet-line-9)">help:&#160;use&#160;a&#160;port&#160;from&#160;1&#160;to&#160;65535</text><text class="guide_diagnostics-snippet-r3" x="854" y="239.6" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-9)">
+</text><text class="guide_diagnostics-snippet-r3" x="0" y="264" textLength="207.4" clip-path="url(#guide_diagnostics-snippet-line-10)">help:&#160;for&#160;example</text><text class="guide_diagnostics-snippet-r3" x="854" y="264" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-10)">
+</text><text class="guide_diagnostics-snippet-r3" x="0" y="288.4" textLength="183" clip-path="url(#guide_diagnostics-snippet-line-11)">2&#160;|&#160;port&#160;=&#160;8080</text><text class="guide_diagnostics-snippet-r3" x="854" y="288.4" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-11)">
+</text><text class="guide_diagnostics-snippet-r3" x="0" y="312.8" textLength="134.2" clip-path="url(#guide_diagnostics-snippet-line-12)">&#160;&#160;|&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_diagnostics-snippet-r5" x="134.2" y="312.8" textLength="48.8" clip-path="url(#guide_diagnostics-snippet-line-12)">++++</text><text class="guide_diagnostics-snippet-r3" x="854" y="312.8" textLength="12.2" clip-path="url(#guide_diagnostics-snippet-line-12)">
 </text>
     </g>
     </g>

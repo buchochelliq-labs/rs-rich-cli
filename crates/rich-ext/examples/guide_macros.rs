@@ -213,9 +213,7 @@ fn main() {
         use rich_ext::{rich_dbg, rich_eprintln, rich_println, rich_progress, rich_trace};
 
         let retries = rich_dbg!(3 * 2); // like dbg!: prints to stderr, returns the value
-                                        // Pass values as arguments: inside these print macros, `{retries}`
-                                        // cannot capture a local variable (it can in `richf!`).
-        rich_println!("[bold green]done[/] after {} retries", retries);
+        rich_println!("[bold green]done[/] after {retries} retries");
         rich_eprintln!("[yellow]warning:[/] {} files skipped", 2);
         rich_trace!("[dim]cache[/] warmed"); // dim `file:line` prefix, to stderr
 

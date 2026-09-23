@@ -205,14 +205,9 @@ location when called with none. Its line looks like this:
 
 The stderr macros colour their output only when stderr is a terminal.
 
-!!! warning "Captured identifiers in the print macros"
-
-    `rich_println!("{name}")`, `rich_eprintln!` and `rich_trace!` currently
-    fail to compile with ``cannot find value `name` in this scope`` when a
-    placeholder captures a local variable implicitly. Pass the value as an
-    argument instead, `rich_println!("{}", name)` or
-    `rich_println!("{name}", name = name)`, or print `richf!` yourself.
-    Implicit captures work in `richf!` directly.
+Placeholders capture local variables as they do in `format!`:
+`rich_println!("{name}")`, `{name:>5}` and `{name:>width$}` all work, as do
+positional and named arguments.
 
 `rich_trace!` is for quick, temporary trace lines. For real logging, route
 `log` or `tracing` through [`RichHandler`](logging.md).
