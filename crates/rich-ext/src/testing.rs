@@ -44,31 +44,36 @@ impl RenderSnapshot {
     pub fn to_json(&self) -> Result<String, SnapshotError> {
         serde_json::to_string_pretty(self)
     }
-    /// First changed line or metadata path, without hiding style-only changes.
+    /// How `other` differs, or `None` when equal, without hiding style-only
+    /// changes: a `diff -u` of the plain text when it differs, else the
+    /// style-changed lines and the first differing segment field, else the
+    /// first differing metadata path.
     pub fn diff(&self, other: &Self) -> Option<String> {
         if self == other {
             return None;
         }
         if self.plain != other.plain {
-            let a: Vec<_> = self.plain.split('\n').collect();
-            let b: Vec<_> = other.plain.split('\n').collect();
-            for i in 0..a.len().max(b.len()) {
-                if a.get(i) != b.get(i) {
-                    return Some(format!(
-                        "line {}\n-{}\n+{}",
-                        i + 1,
-                        a.get(i).unwrap_or(&""),
-                        b.get(i).unwrap_or(&"")
-                    ));
-                }
-            }
+            return Some(
+                crate::diff::TextDiff::new(&self.plain, &other.plain).unified("self", "other"),
+            );
         }
         if self.segments != other.segments {
-            return first_difference(
+            let view = crate::diff::DiffView::ansi(&self.ansi, &other.ansi);
+            let lines = view.style_changed_lines();
+            let field = first_difference(
                 "segments",
                 &serde_json::to_value(&self.segments).ok()?,
                 &serde_json::to_value(&other.segments).ok()?,
             );
+            let mut out = String::new();
+            if !lines.is_empty() {
+                let lines: Vec<String> = lines.iter().map(usize::to_string).collect();
+                out.push_str(&format!("style changed on line {}\n", lines.join(", ")));
+            }
+            if let Some(field) = field {
+                out.push_str(&field);
+            }
+            return (!out.is_empty()).then_some(out);
         }
         let a = serde_json::to_value(self).ok()?;
         let b = serde_json::to_value(other).ok()?;

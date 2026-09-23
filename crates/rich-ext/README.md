@@ -176,6 +176,40 @@ With the `clap` feature, `CommandSpec::from_clap` builds the description from a
 `clap::Command`, and `cli_doc::clap::parse_or_exit` renders help, version and
 errors through rich. See the `clap_help` example.
 
+### Diffs and test output
+
+`rich_ext::diff` renders differences for people and for CI logs:
+
+- `DiffView::new(old, new)` for text, `DiffView::ansi` for captured terminal
+  output, and `DiffView::snapshots` for render snapshots; unified or
+  `Layout::SideBySide`.
+- `SourceDiff` highlights both sides of a source change.
+- `git::parse_unified` and `PatchView` render `git diff` output as a file tree
+  and hunks.
+- With `test-report`, `TestReport` renders JUnit XML or libtest JSON results
+  failures first.
+- With `testing`, `assert_rich_eq!` and friends panic with a rendered diff.
+
+### Testing and QA
+
+With the `testing` feature, `rich_ext::qa` tests renderables the way users see
+them: approved screenshots across widths and capabilities
+(`qa::screenshot::assert_screenshots`), layout stress, render linting, render
+explanations, profiling, seeded fuzzing with shrinking, a capability matrix,
+and benchmark capture and comparison.
+
+### Capabilities and accessibility
+
+- `capabilities::Capabilities::system()` (or `::detect` with a
+  `MapEnvironment` in tests) says what the terminal supports and why.
+- `fidelity::Degrade::new(renderable)` renders anything at a lower fidelity:
+  without colour, without styles, or ASCII only.
+- `a11y::semantic::AccessibleText` gives plain, ordered text for screen readers
+  and logs; `a11y::policy::AccessibilityPolicy` applies reduced motion, high
+  contrast or monochrome; `a11y::contrast::check_theme` checks a theme's
+  contrast and colour-blind safety.
+- `ansi_explain::explain` decodes escape sequences.
+
 ### Coordinated Live regions
 
 `live::LiveCoordinator` owns one writer and opaque region IDs. Call `refresh`

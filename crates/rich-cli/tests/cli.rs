@@ -1772,11 +1772,10 @@ fn image_read_error_is_one_actionable_line_and_suffix_alone_is_not_an_error() {
 #[cfg(feature = "art")]
 #[test]
 fn unknown_image_extension_has_clean_punctuation() {
+    // `--image` opens by extension. (`--diff` on non-image names now compares
+    // them as text, so it no longer reaches this error.)
     let path = fixture("v004-image.unsupported", b"not an image");
-    let (_, err, ok) = run_full(
-        &["--diff", path.to_str().unwrap(), path.to_str().unwrap()],
-        "",
-    );
+    let (_, err, ok) = run_full(&["--image", path.to_str().unwrap()], "");
     assert!(
         !ok && err.contains("unsupported image extension unsupported;"),
         "{err}"

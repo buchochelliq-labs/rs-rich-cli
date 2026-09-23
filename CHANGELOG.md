@@ -60,6 +60,84 @@ Entries below record subsequent releases and development.
 Cohort versions for 0.0.11 (not published): core 0.0.7, ext 0.0.9, art 0.0.9,
 CLI 0.0.11. Core changes below, so every dependent moves with it.
 
+### Capabilities and accessibility (0.0.11 workstream 9)
+
+- **Capabilities (#209).** `rich_ext::capabilities` detects colour depth,
+  Unicode, OSC 8 hyperlinks, graphics protocol (kitty, iTerm, Sixel), size,
+  interactivity and whether animation suits the output. It reads an
+  `Environment` (the real one, or a deterministic map for tests), records where
+  every value came from, and honours `RICH_COLOR`, `RICH_UNICODE`,
+  `RICH_HYPERLINKS`, `RICH_GRAPHICS`, `RICH_SIXEL`, `RICH_ANIMATION`,
+  `RICH_WIDTH` and `RICH_HEIGHT` overrides. It converts to the
+  `TargetCapabilities` that `RenderTarget` uses. `rich doctor` now reports
+  through it: a capability table with sources, and `capabilities` in
+  `--report json`.
+- **Graceful degradation (#218).** `Fidelity` runs Animated, Rich, Styled,
+  Plain, Ascii and is selected from capabilities and a policy. `Degradable` and
+  `Adaptive` let a renderable offer levels, and `Degrade` strips colour, styles
+  or non-ASCII glyphs from any renderable while keeping cell widths.
+- **Semantic text (#229).** `AccessibleText` gives screen readers and logs the
+  content of a `Table`, `Tree`, `Panel`, `Rule`, `Text` or `Diagnostic` in
+  reading order, without decoration.
+- **Policies (#422).** `AccessibilityPolicy` (compact, screen reader, no
+  animation, reduced motion, high contrast, monochrome) from `RICH_A11Y` and
+  `NO_COLOR`, with themes, fidelity ceilings and status symbols that do not
+  rely on colour (`✔ ok`, `[OK]`, `ok:`).
+- **Theme checks (#307).** `check_theme` reports WCAG contrast failures
+  against light and dark backgrounds, styles that become identical without
+  colour, and pairs confusable under protanopia, deuteranopia or tritanopia
+  (Viénot/Brettel simulation, CIEDE2000), with suggested colours and a JSON
+  form behind the `serde` feature.
+- **ANSI explain (#219).** `rich_ext::ansi_explain` decodes SGR, CSI, OSC
+  (including OSC 8 links), DCS, ESC and control characters with their meanings
+  and the visible text. `rich ansi explain [FILE|-]` prints it.
+
+### Diff engine and `rich diff` for text (0.0.11 workstream 8)
+
+- **Engine (#208).** `rich_ext::diff`: a linear-space Myers diff whose unified
+  output matches GNU `diff -u` hunk for hunk, with word-level emphasis.
+  `DiffView` renders text, ANSI captures (style-only changes shown with `~`) and
+  render snapshots, unified or side by side, readable with colour off.
+- **Source diffs (#223).** `SourceDiff` highlights both sides with `Syntax`,
+  emphasises changed tokens, numbers lines and can link them to an editor.
+- **Patches (#236).** `git::parse_unified` reads `git diff` output, including
+  renames, copies, binary files and mode changes. `PatchView` shows a file tree
+  with counts, highlighted hunks, inline annotations and links from a pluggable
+  `LinkProvider`.
+- **Test results (#237).** Behind `test-report`: JUnit XML (Surefire, pytest,
+  jest-junit) and libtest JSON into one model, and `TestReport` renders failures
+  first with a diff of expected against actual.
+- **Assertions (#217).** With `testing`: `assert_rich_eq!`,
+  `assert_rich_json_eq!`, `assert_render_eq!` and `assert_snapshot_eq!` panic
+  with a rendered diff (side by side with `RICH_ASSERT_LAYOUT=side-by-side`).
+  `RenderSnapshot::diff` now returns a unified diff.
+- **QA tooling (#306, #308–#313, #225, #230).** `rich_ext::qa`, with `testing`:
+  - `screenshot`: renders a fixture across widths, colour depths and Unicode
+    modes and checks it against approved files (`RICH_APPROVE=1` accepts
+    changes; `.new` files hold what changed).
+  - `stress`: many widths and heights, reporting overflow, clipped content,
+    unstable wrapping, panics and measure mismatches.
+  - `lint`: clipped text, unknown style names in markup, broken links, status
+    shown only by colour, and colours, glyphs or links the target cannot show.
+  - `explain`: why a render wrapped, truncated, lost colour (`#ff8700 → 208 →
+    …`), fell back to ASCII or dropped links.
+  - `profile`: measure, render and frame times, with an opt-in counting
+    allocator for allocation counts.
+  - `fuzz`: seeded, reproducible random renderables checked for panics, width,
+    determinism and measure bounds, with shrinking and a Rust reproduction.
+  - `matrix`: the same fixtures across 16 capability profiles (colour depths,
+    Unicode, links, dumb, CI, Windows Terminal, screen reader).
+  - `bench`: a benchmark harness, a JSON run format (also read from criterion
+    output) and `compare`, with sparklines. `rich bench compare BASE CAND`
+    prints it and exits 5 on a regression.
+  - The fuzzer found two core bugs, confirmed against rich 15.0.0 and left for
+    a core fix: `Columns` overflows with items wider than the width, and `Tree`
+    guides overflow below about 8 columns. Their tests are ignored until then.
+- **CLI.** `rich diff` compares anything that is not an image pair as text, or
+  renders one patch (`git diff | rich diff -`), with `--side-by-side`,
+  `--context` and `--language`. `--threshold` counts changed lines and exits 5
+  above it. Image pairs are compared perceptually as before.
+
 ### Ext: CLI authoring (0.0.11 workstream 6)
 
 - **One description, many outputs.** `rich_ext::cli_doc::CommandSpec` describes a
