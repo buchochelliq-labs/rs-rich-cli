@@ -7,11 +7,12 @@
 //! guarantee described in AGENTS.md.
 
 use rich::markdown::Markdown;
+use rich::measure::Measurement;
 use rich::r#box::{Box as BoxSet, DOUBLE_EDGE, HEAVY_HEAD, SIMPLE, SQUARE};
 use rich::{
     Align, AnsiDecoder, Bar, ColorSystem, Columns, Console, Constrain, Control, HorizontalAlign,
     Json, Justify, Layout, Overflow, Padding, Panel, ProgressBar, Renderable, Rule, Style, Styled,
-    Table, Text, Tree,
+    Syntax, Table, Text, Tree,
 };
 
 /// Build the layout matching a `layout_*` fixture name. Must stay in sync with
@@ -1361,4 +1362,168 @@ fn live_status_parity() {
         checked += 1;
     }
     assert_eq!(checked, 8);
+}
+
+/// `Measurement.get` of `Syntax` and `JSON` (#149). The inputs travel in the
+/// fixture as JSON, so no case list needs to stay in sync by name.
+#[test]
+fn measure_parity() {
+    let data = include_str!("golden/measure.tsv");
+    let console = Console::builder().width(80).build();
+    let mut checked = 0;
+    for line in data.lines().filter(|l| !l.starts_with('#')) {
+        let cols: Vec<&str> = line.split('\t').collect();
+        let [name, width, spec, minimum, maximum] = cols[..] else {
+            panic!("malformed measure row: {line:?}");
+        };
+        let spec: serde_json::Value = serde_json::from_str(spec).unwrap();
+        let source = spec["source"].as_str().unwrap();
+        let padding = spec["padding"].as_u64().unwrap() as usize;
+        let renderable: Box<dyn Renderable> = match spec["kind"].as_str().unwrap() {
+            "syntax" => Box::new(Syntax::new(source, "python").padding(padding)),
+            _ => Box::new(Json::new(source).unwrap()),
+        };
+        let options = console.options().update_width(width.parse().unwrap());
+        let got = Measurement::get(&console, &options, renderable.as_ref());
+        assert_eq!(
+            (got.minimum, got.maximum),
+            (minimum.parse().unwrap(), maximum.parse().unwrap()),
+            "measure case {name}"
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 15);
+}
+
+/// Markdown strikethrough delimiter pairing (markdown-it's rules), checked
+/// against upstream. Data-driven: each fixture line carries its own source.
+#[test]
+fn markdown_strike_parity() {
+    let data = include_str!("golden/markdown_strike.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let source: String =
+            serde_json::from_str(parts.next().expect("source")).expect("source json");
+        let expected = unescape(parts.next().expect("expected"));
+        let console = truecolor_console(40);
+        let got = console.capture(|c| c.print(&Markdown::new(&source).hyperlinks(false)));
+        assert_eq!(
+            got,
+            expected,
+            "markdown strike case {name:?} (line {}) diverged: {source:?}",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 24, "expected every markdown strike case to run");
+}
+
+/// Run one `theme_stack.tsv` step list. Keep in sync with `run_theme_steps` in
+/// scripts/capture_golden.py.
+fn run_theme_steps(console: &mut Console, steps: &[serde_json::Value], out: &mut String) {
+    use rich::errors::RichError;
+    use rich::Theme;
+
+    fn theme_of(styles: &serde_json::Value, inherit: bool) -> Theme {
+        let pairs = styles
+            .as_object()
+            .expect("styles object")
+            .iter()
+            .map(|(name, style)| (name.clone(), style.as_str().expect("style").to_string()));
+        Theme::from_styles(pairs, inherit).expect("fixture styles parse")
+    }
+    fn plain(console: &Console, text: &str, out: &mut String) {
+        out.push_str(&console.capture(|c| c.print(&Text::new(text))));
+    }
+
+    for step in steps {
+        let step = step.as_array().expect("step array");
+        match step[0].as_str().expect("op") {
+            "push" => console.push_theme(theme_of(&step[1], false), step[2].as_bool().unwrap()),
+            "pop" => {
+                if let Err(RichError::ThemeStack(message)) = console.pop_theme() {
+                    plain(console, &format!("ERR:ThemeStackError:{message}"), out);
+                }
+            }
+            "use" => {
+                let mut themed = console.use_theme(theme_of(&step[1], false));
+                run_theme_steps(&mut themed, step[2].as_array().expect("nested steps"), out);
+            }
+            "print" => {
+                let markup = step[1].as_str().expect("markup");
+                out.push_str(&console.capture(|c| c.print_str(markup)));
+            }
+            "config" => {
+                let inherit = step[2].as_bool().unwrap();
+                let theme = theme_of(&step[1], inherit);
+                let text = if inherit {
+                    theme.len().to_string()
+                } else {
+                    theme.config()
+                };
+                plain(console, &text, out);
+            }
+            "from_file" => {
+                let text = step[1].as_str().expect("config text");
+                let line = match Theme::from_file(text, step[2].as_bool().unwrap()) {
+                    Ok(theme) => {
+                        let mut lines: Vec<String> = theme
+                            .names()
+                            .map(|name| format!("{name}={}", theme.get(name).unwrap().definition()))
+                            .collect();
+                        lines.sort();
+                        lines.join("\n")
+                    }
+                    Err(RichError::ThemeConfig(message)) => {
+                        format!("ERR:{}", message.split(':').next().unwrap())
+                    }
+                    // Upstream's `Style.parse` wraps a bad colour in
+                    // `StyleSyntaxError`; `Style::parse` reports it as
+                    // `ColorParse`. Both are the style-parse failure here.
+                    Err(RichError::StyleSyntax(_) | RichError::ColorParse(_)) => {
+                        "ERR:StyleSyntaxError".to_string()
+                    }
+                    Err(other) => panic!("unexpected error {other:?}"),
+                };
+                plain(console, &line, out);
+            }
+            op => panic!("unknown theme step {op:?}"),
+        }
+    }
+}
+
+/// The theme stack (`push_theme`/`pop_theme`/`use_theme`) and theme config
+/// files (`Theme.config`/`Theme.from_file`), checked against upstream.
+#[test]
+fn theme_stack_parity() {
+    let data = include_str!("golden/theme_stack.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let steps: serde_json::Value =
+            serde_json::from_str(parts.next().expect("steps")).expect("steps json");
+        let expected = unescape(parts.next().expect("expected"));
+        let mut console = truecolor_console(40);
+        let mut got = String::new();
+        run_theme_steps(&mut console, steps.as_array().unwrap(), &mut got);
+        assert_eq!(
+            got,
+            expected,
+            "theme stack case {name:?} (line {}) diverged",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 9, "expected every theme stack case to run");
 }

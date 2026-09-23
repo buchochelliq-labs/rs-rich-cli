@@ -118,11 +118,13 @@ release. Later source changes are tracked in the [roadmap](docs/ROADMAP.md)
 and development plans. The manifest table above describes this checkout;
 crates.io is the source for available published versions.
 
-CLI 0.0.8 and art 0.0.6 are [published and registry-verified](docs/releases/0.0.8.md).
-The [0.0.9 source preparation](docs/releases/0.0.9.md) adds named themes, batch
-progress/cancellation, selected demo sections, `rich doctor` and opt-in ANSI256
-image dithering. Combined validation is pending; source versions do not imply
-publication. See [copyable workflows](docs/recipes.md).
+The 0.0.9 cohort (core 0.0.5, ext 0.0.7, art 0.0.7, CLI 0.0.9) is
+[published](docs/releases/0.0.9-expanded.md). The [0.0.10 cohort](docs/releases/0.0.10.md)
+(core 0.0.6, ext 0.0.8, art 0.0.8, CLI 0.0.10) is prepared on `main` but not yet
+published: Progress time, rate and spinner columns, upstream's theme stack, `~~~`
+strikethrough parity, multi-file watch, and quadrant, ANSI16 and grayscale image
+modes with tone adjustments. Source versions do not imply publication. See
+[copyable workflows](docs/recipes.md).
 
 ## 0.0.3 release notes
 

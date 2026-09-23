@@ -1,0 +1,94 @@
+{
+  "binary": "rich (rs-rich-cli) 0.0.10 installed with cargo install from target/package/rs-rich-cli-0.0.10.crate, siblings patched to their packaged .crate sources",
+  "binary_sha256": "08c4912475bc2036103f34e58eaab5789f322304e4ba1776c9296d12cc0c4c38",
+  "packaged_crates_sha256": {
+    "rs-rich-0.0.6.crate": "2bcd63359a2817375a74cba1dd15f0ccc64eb2c49007263de78ee93e2c2e71d6",
+    "rs-rich-art-0.0.8.crate": "2dd758159646f5fb5b65c088b9c20f1887fb48ddf99b1f1bbea21d52afa09a66",
+    "rs-rich-cli-0.0.10.crate": "bc6a8ee686a2fe467715e673d7659c4608012663d0a13bc74250eb84c29cdf24",
+    "rs-rich-ext-0.0.8.crate": "046fd6df97153ad088f207bba13f64b9ae1bcb87001a7538fb03f2a50a23dd8a"
+  },
+  "source_commit": "48f62c9fd4a442c391eb4dcf21b37be02f1dd1fc",
+  "renderer": "xterm.js 5 in headless Chromium replaying the captured PTY bytes verbatim",
+  "reproduce": "scripts/terminal_shots/make_cases.py --release 0.0.10 + shoot.js",
+  "cases": [
+    {
+      "name": "01-version-doctor",
+      "title": "Installed from the packaged crates: version and read-only diagnostics",
+      "exit_code": 0,
+      "pty": {
+        "cols": 100,
+        "rows": 11,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "a668f3d889b5c325f4a7ef6cd2e887a4dba04886612f258f3524d61a3a6d987d",
+      "png_sha256": "9c2fcddfc545647dd3aa670dedbc06d63df803f1874044badcb7489a39851cc9"
+    },
+    {
+      "name": "02-image-quadrants",
+      "title": "Image: quadrant blocks, 2×2 pixels per cell",
+      "exit_code": 0,
+      "pty": {
+        "cols": 100,
+        "rows": 19,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "bd3efce5bdb93b9975bea855391835c4e4687cd4373013de3e8c4893447c34d6",
+      "png_sha256": "ca4363b88f16ff33f165f61895e0376a8ba3cbec45dff794e49414696c222944"
+    },
+    {
+      "name": "03-image-ansi16-bayer",
+      "title": "Image: quadrants in the 16 theme colours with Bayer 4×4",
+      "exit_code": 0,
+      "pty": {
+        "cols": 100,
+        "rows": 19,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "1f3d16f11640818596fa8949ee7b4998de01cef7fbcb99cb8273910579861294",
+      "png_sha256": "dc6ac2943a81bc488d781b0fc46023ba6b4c8cda86991906a5a74f1945dda84c"
+    },
+    {
+      "name": "04-image-gray-tone",
+      "title": "Image: grayscale palette with brightness, contrast and gamma",
+      "exit_code": 0,
+      "pty": {
+        "cols": 100,
+        "rows": 20,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "1b7ad52bfb963238aebdd8a4d46a1c882b395f570f3a9d667ed5d528ac6d8943",
+      "png_sha256": "1ed5d7dad948ed9b5ea0dc19cfe61d50a44499a311a4d54b79f18f573d83879d"
+    },
+    {
+      "name": "05-markdown-strike",
+      "title": "Markdown: tilde runs paired as markdown-it pairs them",
+      "exit_code": 0,
+      "pty": {
+        "cols": 72,
+        "rows": 10,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "0386db729eb252d6842c72abc9c96c4a4f910e629a4cefa47e10622620f7ae76",
+      "png_sha256": "8538c77affa23354b7189f92f1f62e537de9155f1da2845ef98577346282ea38"
+    },
+    {
+      "name": "06-watch-two-files",
+      "title": "Multi-file --watch: one live region per file; only the edited one repaints",
+      "exit_code": 130,
+      "pty": {
+        "cols": 80,
+        "rows": 16,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "b5f14686c12607c4e59580114c4f222f04e19edd0889899317800eb9c23c3034",
+      "png_sha256": "c139fec752e41a4a3bf6d09a455c702d6ae58d2e118731a8c571f7bfe933f6d3",
+      "note": "Ends with SIGINT by design (exit 130). Draw order in the raw bytes: running -> watching two files -> passed -> passed -> watching two files (first frame, the edit repainting only status.json, the final frame kept on exit)."
+    }
+  ]
+}

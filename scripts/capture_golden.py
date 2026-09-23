@@ -36,6 +36,7 @@ from rich.control import Control
 from rich.json import JSON
 from rich.layout import Layout
 from rich.markdown import Markdown
+from rich.measure import Measurement
 from rich.padding import Padding
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
@@ -47,6 +48,7 @@ JSON_SAMPLE = (
 )
 from rich.rule import Rule
 from rich.styled import Styled
+from rich.syntax import Syntax
 from rich.table import Table
 from rich.prompt import Confirm as RichConfirm
 from rich.prompt import FloatPrompt as RichFloatPrompt
@@ -1239,6 +1241,151 @@ def run_progress_case(case) -> str:
     return "".join(out)
 
 
+MARKDOWN_STRIKE_HEADER = """\
+# Golden parity fixtures for MARKDOWN STRIKETHROUGH delimiter pairing (markdown-it)
+# — captured from real Python `rich`. Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<markdown source as json>\t<escaped output of\n#   Markdown(source, hyperlinks=False) at width 40> (hyperlinks off: upstream's OSC 8\n#   links carry a random id= that is not reproducible)
+"""
+
+#: Keep the Rust side data-driven: `markdown_strike_parity` reads the source from
+#: the fixture, so cases are added here only.
+MARKDOWN_STRIKE_CASES: list[tuple[str, str]] = [
+    ("double", "a ~~x~~ b"),
+    ("single_is_literal", "a ~x~ b ~~y~~"),
+    ("triple", "a ~~~x~~~ b"),
+    ("quadruple", "a ~~~~x~~~~ b"),
+    ("quintuple", "a ~~~~~x~~~~~ b"),
+    ("two_then_three", "a ~~x~~~ b"),
+    ("three_then_two", "a ~~~x~~ b"),
+    ("one_then_two", "a ~x~~ b"),
+    ("spaced_delimiters_do_not_flank", "a ~~ x ~~ b"),
+    ("intraword", "x~~y~~z"),
+    ("adjacent_spans", "~~a~~~~b~~ c"),
+    ("chained", "~~a~~b~~c~~"),
+    ("around_emphasis", "~~a *b* c~~"),
+    ("inside_emphasis", "*a ~~b~~ c*"),
+    ("crossing_emphasis", "*a ~~b* c~~"),
+    ("code_is_opaque", "~~a `c~~` d~~"),
+    ("escaped_tilde", "a \\~~~x~~ b"),
+    ("soft_break", "a ~~b\nc~~ d"),
+    ("unclosed", "a ~~~x b"),
+    ("heading", "# H ~~~x~~~"),
+    ("tight_list", "- a ~~~i~~~\n- ~~j~~"),
+    # Table cells are left out: the port renders cell text unstyled (#9), so
+    # their pairing is unit-tested on plain text in markdown.rs instead.
+    ("link_label_scope", "~~a [b~~](http://x) c~~"),
+    ("inside_link", "[~~~l~~~](http://x)"),
+    ("punctuation_neighbours", "(~~~x~~~).~~y~~!"),
+]
+
+
+THEME_STACK_HEADER = """\
+# Golden parity fixtures for the THEME STACK — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<steps json>\t<escaped output>
+# Steps run on one Console(width=40, truecolor, highlight=False):
+#   ["push", {name: style}, inherit]  Console.push_theme(Theme(styles, inherit=False), inherit=inherit)
+#   ["pop"]                           Console.pop_theme(); a ThemeStackError prints "ERR:ThemeStackError:<msg>"
+#   ["use", {name: style}, [steps]]   with Console.use_theme(Theme(styles, inherit=False)): <steps>
+#   ["print", markup]                 Console.print(markup)
+#   ["config", {name: style}, inherit] print Theme(styles, inherit).config when inherit is False,
+#                                      else the number of styles
+#   ["from_file", text, inherit]      print sorted "name=str(style)" of Theme.from_file(text), or
+#                                      "ERR:<ExceptionType>" when it raises
+"""
+
+#: Keep in sync with `theme_stack_parity` in crates/rich/tests/golden.rs.
+THEME_STACK_CASES: list[tuple[str, list]] = [
+    ("push_inherits", [
+        ["print", "[warning]w[/] [repr.number]1[/]"],
+        ["push", {"warning": "bold red"}, True],
+        ["print", "[warning]w[/] [repr.number]1[/]"],
+    ]),
+    ("push_without_inherit_drops_defaults", [
+        ["push", {"warning": "bold red"}, False],
+        ["print", "[warning]w[/] [repr.number]1[/] [bold]b[/]"],
+    ]),
+    ("nested_push_and_pop_restore", [
+        ["push", {"warning": "red"}, True],
+        ["push", {"warning": "green"}, True],
+        ["print", "[warning]two[/]"],
+        ["pop"],
+        ["print", "[warning]one[/]"],
+        ["pop"],
+        ["print", "[warning]base[/]"],
+    ]),
+    ("pop_base_is_an_error", [
+        ["pop"],
+        ["push", {"x": "blue"}, True],
+        ["pop"],
+        ["pop"],
+    ]),
+    ("use_theme_scopes_and_ignores_inherit", [
+        ["use", {"warning": "underline magenta"}, [
+            ["print", "[warning]in[/] [repr.number]2[/]"],
+        ]],
+        ["print", "[warning]out[/]"],
+    ]),
+    ("theme_names_shadow_style_words", [
+        ["push", {"red": "blue"}, True],
+        ["print", "[red]r[/]"],
+    ]),
+    ("config_is_sorted_definitions", [
+        ["config", {"b": "bold", "a": "red on blue", "c": "not italic link https://e.x", "d": "none"}, False],
+        ["config", {"b": "bold"}, True],
+    ]),
+    ("from_file_parses_like_configparser", [
+        ["from_file", "[DEFAULT]\nq = blue\n[styles]\nFoo = bold  red\nbar: green on black\n# c\n; c2\nurl = link https://x.y/%%20\nlong = bold\n  italic\nref = %(q)s\n", False],
+    ]),
+    ("from_file_errors", [
+        ["from_file", "[other]\na = red\n", False],
+        ["from_file", "[styles]\na = red\na = blue\n", False],
+        ["from_file", "[styles]\nnovalue\n", False],
+        ["from_file", "[styles]\nu = x%y\n", False],
+        ["from_file", "[styles]\na = notacolor\n", False],
+    ]),
+]
+
+
+def run_theme_steps(console, steps) -> None:
+    import io
+
+    from rich.theme import Theme, ThemeStackError
+
+    for step in steps:
+        op = step[0]
+        if op == "push":
+            console.push_theme(Theme(step[1], inherit=False), inherit=step[2])
+        elif op == "pop":
+            try:
+                console.pop_theme()
+            except ThemeStackError as error:
+                console.print(f"ERR:ThemeStackError:{error}", markup=False)
+        elif op == "use":
+            with console.use_theme(Theme(step[1], inherit=False)):
+                run_theme_steps(console, step[2])
+        elif op == "print":
+            console.print(step[1])
+        elif op == "config":
+            theme = Theme(step[1], inherit=step[2])
+            if step[2]:
+                console.print(str(len(theme.styles)), markup=False)
+            else:
+                console.print(theme.config, markup=False)
+        elif op == "from_file":
+            try:
+                theme = Theme.from_file(io.StringIO(step[1]), inherit=step[2])
+            except Exception as error:  # noqa: BLE001 - the type is the fixture
+                console.print(f"ERR:{type(error).__name__}", markup=False)
+            else:
+                lines = sorted(f"{k}={v}" for k, v in theme.styles.items())
+                console.print("\n".join(lines), markup=False)
+        else:
+            raise SystemExit(f"unknown theme step {op!r}")
+
+
 def escape(text: str) -> str:
     """Render ESC and newline as the literal markers the Rust test unescapes."""
     return (
@@ -1317,9 +1464,52 @@ def verify_upstream_version() -> str:
     return expected
 
 
+MEASURE_HEADER = """\
+# Measurement.get of Syntax / JSON (#149), captured from Python rich.
+# Columns: name<TAB>max_width<TAB>input (JSON: kind, source, padding)<TAB>minimum<TAB>maximum
+"""
+
+# Syntax measures its raw source (a tab counts zero cells) plus horizontal
+# padding; JSON measures as its formatted Text (min = widest word).
+MEASURE_CASES = [
+    ("syntax_simple", 80, "syntax", "def f():\n    return 1\n", 0),
+    ("syntax_padding", 80, "syntax", "x = 1\nlonger_line = 2", 2),
+    ("syntax_tabs", 80, "syntax", "a\tb\n\tindented", 0),
+    ("syntax_wide", 80, "syntax", "print('日本語テキスト')", 1),
+    ("syntax_emoji_zwj", 80, "syntax", "👨\u200d👩\u200d👧 = 1", 0),
+    ("syntax_empty", 80, "syntax", "", 0),
+    ("syntax_blank_lines", 80, "syntax", "\n\n", 3),
+    ("syntax_cr_lines", 80, "syntax", "ab\rabcdef\r\nabc", 0),
+    ("syntax_clamped", 10, "syntax", "a_very_long_identifier = 1", 1),
+    ("syntax_zero_width", 0, "syntax", "abc", 0),
+    ("json_object", 80, "json", '{"name": "value text", "items": [1, 2, 3]}', 0),
+    ("json_long_word", 80, "json", '{"k": "supercalifragilistic"}', 0),
+    ("json_wide", 80, "json", '{"名前": "日本語 テキスト"}', 0),
+    ("json_scalar", 80, "json", "42", 0),
+    ("json_clamped", 12, "json", '{"alpha": "beta gamma delta"}', 0),
+]
+
+
+def _measure_input(kind: str, source: str, padding: int):
+    if kind == "syntax":
+        return Syntax(source, "python", padding=padding)
+    return JSON(source)
+
+
 def main() -> None:
     version = verify_upstream_version()
     print(f"verified Python rich {version} against UPSTREAM.toml")
+
+    measure_path = golden_dir() / "measure.tsv"
+    mlines = [MEASURE_HEADER.rstrip("\n")]
+    for name, width, kind, source, padding in MEASURE_CASES:
+        mconsole = Console(width=max(width, 1), highlight=False, no_color=False)
+        options = mconsole.options.update_width(width)
+        m = Measurement.get(mconsole, options, _measure_input(kind, source, padding))
+        spec = json.dumps({"kind": kind, "source": source, "padding": padding}, ensure_ascii=False)
+        mlines.append(f"{name}\t{width}\t{spec}\t{m.minimum}\t{m.maximum}")
+    measure_path.write_text("\n".join(mlines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(MEASURE_CASES)} measure cases to {measure_path}")
     # highlight=False so no ReprHighlighter styling leaks in — the Rust core
     # ships no default highlighter.
     console = Console(
@@ -1563,6 +1753,40 @@ def main() -> None:
         llines.append(f"{name}\t{json.dumps(case, ensure_ascii=False)}\t{json.dumps(outputs, ensure_ascii=False)}")
     live_path.write_text("\n".join(llines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(LIVE_STATUS_CASES)} spinner/status/live cases to {live_path}")
+
+    # --- markdown strikethrough --------------------------------------------
+    strike_path = golden_dir() / "markdown_strike.tsv"
+    klines = [MARKDOWN_STRIKE_HEADER.rstrip("\n")]
+    for name, source in MARKDOWN_STRIKE_CASES:
+        kconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=40,
+            highlight=False,
+            no_color=False,
+        )
+        with kconsole.capture() as capture:
+            kconsole.print(Markdown(source, hyperlinks=False))
+        klines.append(f"{name}\t{json.dumps(source)}\t{escape(capture.get())}")
+    strike_path.write_text("\n".join(klines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(MARKDOWN_STRIKE_CASES)} markdown strike cases to {strike_path}")
+
+    # --- theme stack -----------------------------------------------------
+    stack_path = golden_dir() / "theme_stack.tsv"
+    slines = [THEME_STACK_HEADER.rstrip("\n")]
+    for name, steps in THEME_STACK_CASES:
+        sconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=40,
+            highlight=False,
+            no_color=False,
+        )
+        with sconsole.capture() as capture:
+            run_theme_steps(sconsole, steps)
+        slines.append(f"{name}\t{json.dumps(steps)}\t{escape(capture.get())}")
+    stack_path.write_text("\n".join(slines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(THEME_STACK_CASES)} theme stack cases to {stack_path}")
 
     # --- terminal themes -------------------------------------------------
     import rich.terminal_theme as _tt

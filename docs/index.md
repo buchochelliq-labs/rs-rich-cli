@@ -41,9 +41,10 @@ Progress and spinner animations replay exported library frames. The
 
 ## Release history and development
 
-[CLI 0.0.8/art 0.0.6](releases/0.0.8.md) are published and registry-verified.
-[CLI 0.0.9/art 0.0.7 preparation](releases/0.0.9.md) adds themes, batch cancellation,
-selectable demos, doctor and optional image dithering.
+The [0.0.9 cohort](releases/0.0.9-expanded.md) is published. The
+[0.0.10 cohort](releases/0.0.10.md) is prepared but not yet published. It adds
+Progress time, rate and spinner columns, upstream's theme stack, `~~~` strikethrough
+parity, multi-file watch, and quadrant, ANSI16 and grayscale image modes.
 The [roadmap](ROADMAP.md) tracks subsequent work. Manifest versions below
 identify this checkout; the crates.io badges identify published packages.
 

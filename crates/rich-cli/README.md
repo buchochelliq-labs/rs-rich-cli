@@ -62,8 +62,11 @@ Export
   writing to the terminal — any render mode can be captured this way.
 
 Watch
-: `--watch` polls a local file or URL and re-renders changes. Use
-  `--watch-interval SEC` to change the polling interval. `--watch-cache`
+: `--watch` re-renders changed local files (several may be given, each in its
+  own live region) or one URL. Files use OS file events debounced by
+  `--watch-debounce SEC` (default 0.1); `--watch-poll` polls every
+  `--watch-interval SEC` instead, and URLs are always polled.
+  `--watch-exit-on-error` stops on the first failed render. `--watch-cache`
   avoids re-rendering unchanged URL responses. Watch mode is intentionally
   finite when stdout is redirected: it renders one snapshot and exits, making
   pipelines deterministic. Builds without the `fetch` feature reject URL
@@ -99,10 +102,17 @@ Still-image crop
   such as `top-left`. Contain stays centered.
 
 Image palette
-: `--image-color ansi256` opts ASCII/half-block still images into fixed ANSI256
-  palette reduction. Add `--image-dither floyd-steinberg` for diffusion.
-  Truecolor/no-dither remains the default. Unsupported combinations are rejected;
-  GIF, diff, Braille and Sixel preprocessing are outside this feature.
+: `--image-color ansi256|ansi16|grayscale` opts ASCII, half-block and quadrant
+  still images into a fixed palette. Add `--image-dither floyd-steinberg` or
+  `bayer4x4` for dithering. Truecolor/no-dither remains the default. Unsupported
+  combinations are rejected; GIF, diff, Braille and Sixel preprocessing are
+  outside this feature.
+
+Quadrants and adjustments
+: `--image-mode quadrants` draws 2×2 pixels per cell. `--image-fit stretch`
+  ignores the aspect ratio; `--image-max-width`/`--image-max-height` cap the size;
+  `--image-brightness`, `--image-contrast` and `--image-gamma` (1.0 = unchanged)
+  adjust tone before quantization.
 
 Discovery and diagnostics
 : `--demo-list` lists `core`, `workflows`, `art`;

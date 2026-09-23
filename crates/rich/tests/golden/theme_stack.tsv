@@ -1,0 +1,22 @@
+# Golden parity fixtures for the THEME STACK — captured from real Python `rich`.
+# Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>	<steps json>	<escaped output>
+# Steps run on one Console(width=40, truecolor, highlight=False):
+#   ["push", {name: style}, inherit]  Console.push_theme(Theme(styles, inherit=False), inherit=inherit)
+#   ["pop"]                           Console.pop_theme(); a ThemeStackError prints "ERR:ThemeStackError:<msg>"
+#   ["use", {name: style}, [steps]]   with Console.use_theme(Theme(styles, inherit=False)): <steps>
+#   ["print", markup]                 Console.print(markup)
+#   ["config", {name: style}, inherit] print Theme(styles, inherit).config when inherit is False,
+#                                      else the number of styles
+#   ["from_file", text, inherit]      print sorted "name=str(style)" of Theme.from_file(text), or
+#                                      "ERR:<ExceptionType>" when it raises
+push_inherits	[["print", "[warning]w[/] [repr.number]1[/]"], ["push", {"warning": "bold red"}, true], ["print", "[warning]w[/] [repr.number]1[/]"]]	w \x1b[1;36m1\x1b[0m\n\x1b[1;31mw\x1b[0m \x1b[1;36m1\x1b[0m\n
+push_without_inherit_drops_defaults	[["push", {"warning": "bold red"}, false], ["print", "[warning]w[/] [repr.number]1[/] [bold]b[/]"]]	\x1b[1;31mw\x1b[0m 1 \x1b[1mb\x1b[0m\n
+nested_push_and_pop_restore	[["push", {"warning": "red"}, true], ["push", {"warning": "green"}, true], ["print", "[warning]two[/]"], ["pop"], ["print", "[warning]one[/]"], ["pop"], ["print", "[warning]base[/]"]]	\x1b[32mtwo\x1b[0m\n\x1b[31mone\x1b[0m\nbase\n
+pop_base_is_an_error	[["pop"], ["push", {"x": "blue"}, true], ["pop"], ["pop"]]	ERR:ThemeStackError:Unable to pop base \ntheme\nERR:ThemeStackError:Unable to pop base \ntheme\n
+use_theme_scopes_and_ignores_inherit	[["use", {"warning": "underline magenta"}, [["print", "[warning]in[/] [repr.number]2[/]"]]], ["print", "[warning]out[/]"]]	\x1b[4;35min\x1b[0m \x1b[1;36m2\x1b[0m\nout\n
+theme_names_shadow_style_words	[["push", {"red": "blue"}, true], ["print", "[red]r[/]"]]	\x1b[34mr\x1b[0m\n
+config_is_sorted_definitions	[["config", {"b": "bold", "a": "red on blue", "c": "not italic link https://e.x", "d": "none"}, false], ["config", {"b": "bold"}, true]]	[styles]\na = red on blue\nb = bold\nc = not italic link https://e.x\nd = none\n155\n
+from_file_parses_like_configparser	[["from_file", "[DEFAULT]\nq = blue\n[styles]\nFoo = bold  red\nbar: green on black\n# c\n; c2\nurl = link https://x.y/%%20\nlong = bold\n  italic\nref = %(q)s\n", false]]	bar=green on black\nfoo=bold red\nlong=bold italic\nq=blue\nref=blue\nurl=link https://x.y/%20\n
+from_file_errors	[["from_file", "[other]\na = red\n", false], ["from_file", "[styles]\na = red\na = blue\n", false], ["from_file", "[styles]\nnovalue\n", false], ["from_file", "[styles]\nu = x%y\n", false], ["from_file", "[styles]\na = notacolor\n", false]]	ERR:NoSectionError\nERR:DuplicateOptionError\nERR:ParsingError\nERR:InterpolationSyntaxError\nERR:StyleSyntaxError\n

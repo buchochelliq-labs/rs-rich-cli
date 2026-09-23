@@ -6,18 +6,23 @@ CLI 0.0.8 introduced `rich --demo`: a single guided pass through the
 suite with three-second section pauses. Use `--demo-delay 5` to slow it down;
 Ctrl+C stops cleanly. See [the tour instructions](cli.md#take-the-guided-tour).
 
-<video controls playsinline preload="none" poster="../assets/demos/v8-demo-tour.png" style="width:100%;max-width:1100px" aria-label="Guided tour of the rich CLI suite">
-  <source src="../assets/demos/v8-demo-tour.mp4" type="video/mp4">
+<video controls playsinline preload="none" poster="../assets/demos/v10-demo-tour.png" style="width:100%;max-width:1100px" aria-label="Guided tour of the rich CLI suite">
+  <source src="../assets/demos/v10-demo-tour.mp4" type="video/mp4">
   Your browser cannot play this video. Use the download below.
 </video>
 
-[Tour MP4](assets/demos/v8-demo-tour.mp4) · [Tour GIF](assets/demos/v8-demo-tour.gif)
+[Tour MP4](assets/demos/v10-demo-tour.mp4) · [Tour GIF](assets/demos/v10-demo-tour.gif)
 
-This recording runs `rich --demo --demo-delay 0.5` in a real terminal, faster
-than the default three-second pace. Playback and command output are captured
-from the optimized build, with a caption added and no audio. Reproduce with
-`python scripts/capture_demo_tour.py --binary target/release/rich` after installing
-the docs-media dependencies listed below.
+This recording runs the 0.0.10 `rich --demo --demo-delay 0.5` in a real terminal,
+faster than the default three-second pace. New in 0.0.10: a line printed through a
+pushed theme, `~~~` strikethrough in the Markdown section, Progress with speed and
+time remaining, two files watched in Live regions (the last edit writes invalid
+JSON, so `--watch-exit-on-error` ends the watch), and quadrant, ANSI16 and tone
+adjustments in the art section. Playback and command output are captured from the
+optimized build, with a caption added and no audio. Reproduce with
+`python scripts/capture_demo_tour.py --binary target/release/rich --release 0.0.10`
+after installing the docs-media dependencies listed below; provenance is in
+`.github/evidence/0.0.10/demo-tour/capture.json`.
 
 ## CLI 0.0.9 workflows
 

@@ -144,7 +144,10 @@ impl Diagnostic {
                 break;
             }
             let ptr = error as *const dyn std::error::Error;
-            if seen.iter().any(|&p| std::ptr::addr_eq(p, ptr)) {
+            // Identity is address *and* type (the whole wide pointer): an error
+            // stored as its wrapper's first field shares the wrapper's address,
+            // so comparing addresses alone reported ordinary chains as cycles.
+            if seen.iter().any(|&p| std::ptr::eq(p, ptr)) {
                 result.causes.push("[cycle]".into());
                 break;
             }

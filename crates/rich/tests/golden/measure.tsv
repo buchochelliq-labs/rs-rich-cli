@@ -1,0 +1,17 @@
+# Measurement.get of Syntax / JSON (#149), captured from Python rich.
+# Columns: name<TAB>max_width<TAB>input (JSON: kind, source, padding)<TAB>minimum<TAB>maximum
+syntax_simple	80	{"kind": "syntax", "source": "def f():\n    return 1\n", "padding": 0}	0	12
+syntax_padding	80	{"kind": "syntax", "source": "x = 1\nlonger_line = 2", "padding": 2}	0	19
+syntax_tabs	80	{"kind": "syntax", "source": "a\tb\n\tindented", "padding": 0}	0	8
+syntax_wide	80	{"kind": "syntax", "source": "print('日本語テキスト')", "padding": 1}	0	25
+syntax_emoji_zwj	80	{"kind": "syntax", "source": "👨‍👩‍👧 = 1", "padding": 0}	0	6
+syntax_empty	80	{"kind": "syntax", "source": "", "padding": 0}	0	0
+syntax_blank_lines	80	{"kind": "syntax", "source": "\n\n", "padding": 3}	0	6
+syntax_cr_lines	80	{"kind": "syntax", "source": "ab\rabcdef\r\nabc", "padding": 0}	0	6
+syntax_clamped	10	{"kind": "syntax", "source": "a_very_long_identifier = 1", "padding": 1}	0	10
+syntax_zero_width	0	{"kind": "syntax", "source": "abc", "padding": 0}	0	0
+json_object	80	{"kind": "json", "source": "{\"name\": \"value text\", \"items\": [1, 2, 3]}", "padding": 0}	8	23
+json_long_word	80	{"kind": "json", "source": "{\"k\": \"supercalifragilistic\"}", "padding": 0}	22	29
+json_wide	80	{"kind": "json", "source": "{\"名前\": \"日本語 テキスト\"}", "padding": 0}	9	27
+json_scalar	80	{"kind": "json", "source": "42", "padding": 0}	2	2
+json_clamped	12	{"kind": "json", "source": "{\"alpha\": \"beta gamma delta\"}", "padding": 0}	8	12

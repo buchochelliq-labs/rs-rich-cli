@@ -11,7 +11,7 @@
 //! is a documented follow-up (see the Markdown issue).
 
 use pulldown_cmark::{
-    Alignment, CodeBlockKind, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd,
+    Alignment, CodeBlockKind, CowStr, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd,
 };
 
 use crate::cells::cell_len;
@@ -395,6 +395,303 @@ fn append_break(
     }
 }
 
+/// One inline token while pairing tildes: an untouched event, literal source
+/// text, a `~~` delimiter, or a delimiter that has been paired.
+enum Piece<'a> {
+    Event(Event<'a>, std::ops::Range<usize>),
+    Literal(std::ops::Range<usize>),
+    Tilde(std::ops::Range<usize>),
+    Open(std::ops::Range<usize>),
+    Close(std::ops::Range<usize>),
+}
+
+/// A `~~` delimiter in markdown-it's `Delimiter` sense. `length` is always 0
+/// for strikethrough (upstream disables the "rule of 3"), so it is omitted.
+struct Delimiter {
+    piece: usize,
+    open: bool,
+    close: bool,
+    end: Option<usize>,
+    /// Innermost emphasis/strong span containing the delimiter. markdown-it
+    /// pairs `*`/`_` and `~` in one pass, and a matched pair's jump hides every
+    /// delimiter inside it from later closers; tildes are never paired across
+    /// an emphasis span here for the same reason (see DIVERGENCES §21).
+    emphasis: usize,
+}
+
+fn is_md_ascii_punct(c: char) -> bool {
+    c.is_ascii_punctuation()
+}
+
+/// markdown-it's `isPunctChar`: ASCII punctuation or a Unicode punctuation
+/// category. `char::is_ascii_punctuation` plus general punctuation/symbols is
+/// the closest std-only equivalent.
+fn is_punct_char(c: char) -> bool {
+    c.is_ascii_punctuation() || (!c.is_alphanumeric() && !c.is_whitespace() && !c.is_control())
+}
+
+/// Port of markdown-it's `StateInline.scanDelims` for a tilde run
+/// (`canSplitWord = True`), returning `(can_open, can_close)`.
+fn scan_delims(last: char, next: char) -> (bool, bool) {
+    let last_punct = is_md_ascii_punct(last) || is_punct_char(last);
+    let next_punct = is_md_ascii_punct(next) || is_punct_char(next);
+    let last_space = last.is_whitespace();
+    let next_space = next.is_whitespace();
+    let left_flanking = !(next_space || (next_punct && !(last_space || last_punct)));
+    let right_flanking = !(last_space || (last_punct && !(next_space || next_punct)));
+    (left_flanking, right_flanking)
+}
+
+/// Port of markdown-it's `balance_pairs.processDelimiters` for one delimiter
+/// list (a single marker, lengths 0).
+fn process_delimiters(delimiters: &mut [Delimiter]) {
+    if delimiters.is_empty() {
+        return;
+    }
+    // `openersBottom[marker]`, indexed by `closer.open ? 3 : 0` (length % 3 = 0).
+    let mut openers_bottom = [-1isize; 6];
+    let mut header = 0usize;
+    let mut last_piece: isize = -2;
+    let mut jumps: Vec<usize> = Vec::with_capacity(delimiters.len());
+    for closer_index in 0..delimiters.len() {
+        jumps.push(0);
+        if last_piece != delimiters[closer_index].piece as isize - 1 {
+            header = closer_index;
+        }
+        last_piece = delimiters[closer_index].piece as isize;
+        if !delimiters[closer_index].close {
+            continue;
+        }
+        let slot = if delimiters[closer_index].open { 3 } else { 0 };
+        let min_opener = openers_bottom[slot];
+        let mut opener_index = header as isize - jumps[header] as isize - 1;
+        let mut new_min = opener_index;
+        while opener_index > min_opener {
+            let i = opener_index as usize;
+            let usable = delimiters[i].open
+                && delimiters[i].end.is_none()
+                && delimiters[i].emphasis == delimiters[closer_index].emphasis;
+            if usable {
+                let last_jump = if i > 0 && !delimiters[i - 1].open {
+                    jumps[i - 1] + 1
+                } else {
+                    0
+                };
+                jumps[closer_index] = closer_index - i + last_jump;
+                jumps[i] = last_jump;
+                delimiters[closer_index].open = false;
+                delimiters[i].end = Some(closer_index);
+                delimiters[i].close = false;
+                new_min = -1;
+                last_piece = -2;
+                break;
+            }
+            opener_index -= jumps[i] as isize + 1;
+        }
+        if new_min != -1 {
+            openers_bottom[slot] = new_min;
+        }
+    }
+}
+
+/// Pair tilde runs the way upstream's markdown-it does (its `strikethrough`
+/// tokenize + `balance_pairs` + postProcess), over pulldown-cmark events parsed
+/// *without* strikethrough.
+///
+/// Per inline run (a paragraph, heading, table cell or tight list item, with a
+/// link label as its own nested scope, as markdown-it scopes delimiters per
+/// opening token): each run of two or more tildes in literal text becomes an
+/// optional leading `~` (odd runs) plus `~~` delimiters; paired delimiters turn
+/// into `Strikethrough` events, and a lone `~` left before a closer moves after
+/// it. `a ~~~x~~~ b` renders `a ~` + struck `x` + `~ b`, as upstream does.
+fn pair_strikethrough<'a>(
+    source: &'a str,
+    events: impl Iterator<Item = (Event<'a>, std::ops::Range<usize>)>,
+) -> Vec<(Event<'a>, std::ops::Range<usize>)> {
+    let mut pieces: Vec<Piece<'a>> = Vec::new();
+    // Delimiter lists: one per open scope; a link pushes a nested one.
+    let mut scopes: Vec<Vec<Delimiter>> = vec![Vec::new()];
+    let mut finished: Vec<Vec<Delimiter>> = Vec::new();
+    let mut emphasis_stack: Vec<usize> = Vec::new();
+    let mut next_emphasis = 1usize;
+    let mut in_code = false;
+    let mut in_cell = false;
+    let mut image_depth = 0usize;
+
+    let neighbour = |c: Option<char>, in_cell: bool| match c {
+        None => ' ',
+        // markdown-it parses a trimmed cell, so a pipe reads as the edge.
+        Some('|') if in_cell => ' ',
+        Some(c) => c,
+    };
+
+    for (event, range) in events {
+        if image_depth > 0 {
+            match &event {
+                Event::Start(Tag::Image { .. }) => image_depth += 1,
+                Event::End(TagEnd::Image) => image_depth -= 1,
+                _ => {}
+            }
+            pieces.push(Piece::Event(event, range));
+            continue;
+        }
+        match &event {
+            Event::Text(text) if !in_code && **text == source[range.clone()] => {
+                // Merge with a directly preceding literal so a run split across
+                // two text events is scanned as one.
+                let mut start = range.start;
+                if let Some(Piece::Literal(previous)) = pieces.last() {
+                    if previous.end == range.start {
+                        start = previous.start;
+                        pieces.pop();
+                    }
+                }
+                let end = range.end;
+                let bytes = source.as_bytes();
+                let mut at = start;
+                let mut literal_from = start;
+                while at < end {
+                    if bytes[at] != b'~' {
+                        at += 1;
+                        continue;
+                    }
+                    let run_start = at;
+                    while at < end && bytes[at] == b'~' {
+                        at += 1;
+                    }
+                    let length = at - run_start;
+                    if length < 2 {
+                        continue;
+                    }
+                    if literal_from < run_start {
+                        pieces.push(Piece::Literal(literal_from..run_start));
+                    }
+                    let last = neighbour(source[..run_start].chars().next_back(), in_cell);
+                    let next = neighbour(source[at..].chars().next(), in_cell);
+                    let (open, close) = scan_delims(last, next);
+                    let mut from = run_start;
+                    if length % 2 == 1 {
+                        pieces.push(Piece::Literal(from..from + 1));
+                        from += 1;
+                    }
+                    let emphasis = emphasis_stack.last().copied().unwrap_or(0);
+                    while from < at {
+                        pieces.push(Piece::Tilde(from..from + 2));
+                        scopes.last_mut().expect("scope").push(Delimiter {
+                            piece: pieces.len() - 1,
+                            open,
+                            close,
+                            end: None,
+                            emphasis,
+                        });
+                        from += 2;
+                    }
+                    literal_from = at;
+                }
+                if literal_from < end {
+                    pieces.push(Piece::Literal(literal_from..end));
+                }
+                continue;
+            }
+            Event::Start(Tag::Emphasis | Tag::Strong) => {
+                emphasis_stack.push(next_emphasis);
+                next_emphasis += 1;
+            }
+            Event::End(TagEnd::Emphasis | TagEnd::Strong) => {
+                emphasis_stack.pop();
+            }
+            Event::Start(Tag::Link { .. }) => scopes.push(Vec::new()),
+            Event::End(TagEnd::Link) => {
+                if scopes.len() > 1 {
+                    finished.push(scopes.pop().expect("link scope"));
+                }
+            }
+            Event::Start(Tag::Image { .. }) => image_depth = 1,
+            Event::Text(_)
+            | Event::Code(_)
+            | Event::InlineHtml(_)
+            | Event::SoftBreak
+            | Event::HardBreak
+            | Event::FootnoteReference(_)
+            | Event::InlineMath(_) => {}
+            // Anything else is block structure: the inline run ends here.
+            _ => {
+                match &event {
+                    Event::Start(Tag::CodeBlock(_)) => in_code = true,
+                    Event::End(TagEnd::CodeBlock) => in_code = false,
+                    Event::Start(Tag::TableCell) => in_cell = true,
+                    Event::End(TagEnd::TableCell) => in_cell = false,
+                    _ => {}
+                }
+                finished.append(&mut scopes);
+                scopes.push(Vec::new());
+                emphasis_stack.clear();
+            }
+        }
+        pieces.push(Piece::Event(event, range));
+    }
+    finished.append(&mut scopes);
+
+    // Pair, then mark: markdown-it's strikethrough `_postProcess`.
+    let mut lone_markers: Vec<usize> = Vec::new();
+    for mut delimiters in finished {
+        process_delimiters(&mut delimiters);
+        for delimiter in &delimiters {
+            let Some(end) = delimiter.end else { continue };
+            let closer = delimiters[end].piece;
+            if let Piece::Tilde(range) = &pieces[delimiter.piece] {
+                pieces[delimiter.piece] = Piece::Open(range.clone());
+            }
+            if let Piece::Tilde(range) = &pieces[closer] {
+                pieces[closer] = Piece::Close(range.clone());
+            }
+            if let Some(Piece::Literal(range)) = closer.checked_sub(1).map(|i| &pieces[i]) {
+                if &source[range.clone()] == "~" {
+                    lone_markers.push(closer - 1);
+                }
+            }
+        }
+    }
+    // An odd run is split as `~` + `~~`…, so a closer can leave its lone `~`
+    // in front of it: move it after the closing tags.
+    while let Some(i) = lone_markers.pop() {
+        let mut j = i + 1;
+        while j < pieces.len() && matches!(pieces[j], Piece::Close(_)) {
+            j += 1;
+        }
+        j -= 1;
+        if i != j {
+            pieces.swap(i, j);
+        }
+    }
+
+    // markdown-it's `fragments_join`: adjacent text tokens become one, so a
+    // run like `a ~` renders as a single span rather than one per piece.
+    let mut out: Vec<(Event<'a>, std::ops::Range<usize>)> = Vec::with_capacity(pieces.len());
+    for piece in pieces {
+        let (event, range) = match piece {
+            Piece::Event(event, range) => (event, range),
+            Piece::Literal(range) | Piece::Tilde(range) => {
+                (Event::Text(CowStr::Borrowed(&source[range.clone()])), range)
+            }
+            Piece::Open(range) => (Event::Start(Tag::Strikethrough), range),
+            Piece::Close(range) => (Event::End(TagEnd::Strikethrough), range),
+        };
+        if let (Event::Text(text), Some((Event::Text(previous), previous_range))) =
+            (&event, out.last_mut())
+        {
+            let mut joined = previous.to_string();
+            joined.push_str(text);
+            *previous = CowStr::Boxed(joined.into_boxed_str());
+            *previous_range =
+                previous_range.start.min(range.start)..previous_range.end.max(range.end);
+            continue;
+        }
+        out.push((event, range));
+    }
+    out
+}
+
 fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
     let mut blocks: Vec<Block> = Vec::new();
     let mut current: Option<Text> = None;
@@ -437,12 +734,15 @@ fn parse(source: &str, hyperlinks: bool) -> Vec<Block> {
     // The table being assembled while inside a GFM table.
     let mut table: Option<TableAccum> = None;
 
-    let options = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH;
-    // Offsets, not just events: pulldown-cmark accepts a *single* tilde as a
-    // strikethrough delimiter, while upstream's markdown-it requires two. Prose
-    // like `costs ~5~10` was silently restyled and its tildes deleted. The
-    // source range is the only way to tell `~x~` from `~~x~~` after parsing.
-    for (event, range) in Parser::new_ext(source, options).into_offset_iter() {
+    // Strikethrough is *not* enabled in pulldown-cmark: it pairs tilde runs by
+    // GFM rules (equal-length runs, single tildes allowed), while upstream's
+    // markdown-it splits runs into `~~` delimiters and pairs those. The
+    // tildes arrive as literal text and `pair_strikethrough` reproduces
+    // markdown-it's pairing, emitting ordinary `Strikethrough` events whose
+    // range is the `~~` delimiter.
+    let options = Options::ENABLE_TABLES;
+    let events = Parser::new_ext(source, options).into_offset_iter();
+    for (event, range) in pair_strikethrough(source, events) {
         // Everything between an image's brackets is its alt text, and upstream
         // takes that from the *raw* markdown (`token.content`) rather than from
         // parsed inline events: `![alt *em*](u)` shows `alt *em*`, asterisks and
@@ -1952,5 +2252,31 @@ mod hyperlink_tests {
         let out = plain("~5~10 and ~x~\n", 40, false);
         assert!(out.contains("~5~10"), "tilde dropped: {out:?}");
         assert!(out.contains("~x~"), "tilde dropped: {out:?}");
+    }
+
+    /// Table cells render unstyled (#9), but their tildes still pair by
+    /// markdown-it's rules: upstream shows `~c~` with the `c` struck.
+    #[test]
+    fn table_cell_tildes_pair_like_markdown_it() {
+        let out = plain("| h |\n|---|\n| ~~~c~~~ |\n", 20, false);
+        assert!(out.contains("~c~"), "{out:?}");
+        assert!(!out.contains("~~"), "{out:?}");
+    }
+
+    /// Tildes in a fenced block are code, not delimiters.
+    #[test]
+    fn code_block_tildes_are_untouched() {
+        let out = plain("```\na ~~~x~~~ b\n```\n", 30, false);
+        assert!(out.contains("a ~~~x~~~ b"), "{out:?}");
+    }
+
+    /// DIVERGENCES §21: when a tilde pair would cross an emphasis span whose
+    /// opener comes after the tilde opener, upstream dissolves the emphasis
+    /// (`~~a *b~~ c*` strikes `a *b`); this port keeps pulldown-cmark's emphasis
+    /// and leaves the tildes literal. Pinned so a fix shows up here.
+    #[test]
+    fn tildes_crossing_a_later_emphasis_stay_literal() {
+        let out = plain("~~a *b~~ c*", 30, false);
+        assert!(out.contains("~~a b~~ c"), "{out:?}");
     }
 }

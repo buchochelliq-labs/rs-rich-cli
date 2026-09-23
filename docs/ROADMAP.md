@@ -133,19 +133,35 @@ exact-version registry verification. It shipped strict TOML profiles, parallel
 file-export batches, dry-run/config inspection, automatic paging, crop anchors
 and the guided suite tour. Core 0.0.4 and ext 0.0.6 stayed unchanged.
 
-## 0.0.9 — themes, diagnostics and bounded image quality
+## 0.0.9 — published 2026-09-22
 
-The [accepted plan](plans/0.0.9.md) prepares CLI 0.0.9 and art 0.0.7: named themes
+The [accepted plan](plans/0.0.9.md) delivered CLI 0.0.9 and art 0.0.7: named themes
 and explicit style overrides, terminal-only human batch progress, Ctrl+C worker
 cleanup, listable/selectable demo sections and read-only doctor diagnostics.
 Art adds opt-in ANSI256 and Floyd–Steinberg preprocessing for ASCII/half-block
 still images. Truecolor/no-dither remains the default; GIF, diff, Braille and
 Sixel preprocessing remain outside this slice of #125.
 
-[Release notes](releases/0.0.9.md) track pending combined validation, recordings,
-review and package handoff. The expanded scope (#192) adds core 0.0.5 and ext 0.0.7
-to the cohort; its [release test](releases/0.0.9-expanded.md#release-test-2026-09-22)
-passed. This preparation does not publish or tag packages.
+The expanded scope (#192) added core 0.0.5 and ext 0.0.7: render targets and
+capabilities, layout constraints, typed events and diagnostics, coordinated Live
+regions, render snapshots, batch naming and hardened publication (#196), and image
+transforms with Bayer dithering. All four packages were published on 2026-09-22;
+see the [expanded release notes](releases/0.0.9-expanded.md).
+
+## 0.0.10 — progress you can ship with (prepared)
+
+Every workstream is merged to `main`, and the release test is recorded in the
+[0.0.10 release notes](releases/0.0.10.md). Nothing is published yet.
+
+The [0.0.10 plan](plans/0.0.10.md) targets core parity over new surface area:
+Progress time, rate and spinner columns with a task-driving API (#6), upstream's
+theme stack (#3), wider golden and differential coverage around both (#15, #34),
+the four 0.0.9 leftovers (#134, #146, #149, #151) and release hardening (Trusted
+Publishing, Node 24 actions, pending dependency bumps). Also in scope: multi-file
+debounced watch (#139), ANSI16/grayscale image modes, image adjustments and quadrant
+blocks (#125, #126, #124 follow-up), and `~~~` strikethrough parity (#9). Core moves to 0.0.6, so
+ext, art and CLI move with it (0.0.8, 0.0.8, 0.0.10). The Python wrapper (#197)
+proceeds as a separate spike.
 
 ### Confidence tooling for expanded CLI surfaces
 
@@ -159,8 +175,10 @@ batch/profile/watch/image work:
   currently stable Markdown and JSON stdin paths.
 - **#34:** the differential corpus and generator now include box renderables
   (`Panel` box variations) and vary the safe-box capability profile in addition
-  to width, color, markup, styles and overflow. Broader CLI differential
-  fuzzing remains follow-up work beyond this bounded corpus.
+  to width, color, markup, styles and overflow. 0.0.10 adds Table, Rule,
+  Padding and Align generators, per-colour-system oracle isolation, a
+  failure-kind-preserving shrinker and a nightly 20,000-case run on `main`.
+  Its first runs filed #442–#449 (see [parity](parity.md#differential-fuzzing)).
 - **#35:** `library_bench` accepts explicit width and color-system arguments and
   records them in its JSON artifact. CI publication and threshold enforcement
   remain deferred; output hashes stay the blocking correctness signal.
@@ -191,11 +209,8 @@ One rewrite closes all three, and closes
 
 ## 0.1.0 — the gaps that block real adoption
 
-**Theme stack** (`push_theme` / `pop_theme`) — [§14](DIVERGENCES.md).
-Any application with themed output needs it. The work is a design pass, not
-typing: an RAII guard borrowing the `Console` mutably makes `console.print(…)`
-*inside* the guard a borrow error, which is the entire use case, and a `RefCell`
-stack breaks `Console::theme() -> &Theme`.
+~~**Theme stack**~~ — done in 0.0.10 (core 0.0.6): `push_theme`, `pop_theme`
+and a `use_theme` guard that derefs to the console; see [§14](DIVERGENCES.md).
 
 **Windows legacy console** — [#12](https://github.com/buchochelliq-labs/rs-rich-cli/issues/12).
 Needs an explicit `unsafe` opt-in, since the workspace denies `unsafe_code`.

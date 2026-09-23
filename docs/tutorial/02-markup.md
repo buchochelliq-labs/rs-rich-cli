@@ -70,16 +70,51 @@ use rich::{Console, Style, Theme};
 
 let mut theme = Theme::default_theme();
 theme.insert("repr.number", Style::parse("bold red").unwrap());
+// The same applies to your own names.
+theme.insert("danger", Style::parse("bold white on red").unwrap());
 
 let console = Console::builder().theme(theme).build();
 console.print_str("answer = 42");     // 42 is bold red, not the default cyan
+console.print_str("[danger] DANGER [/]");
 ```
 
-The same applies to your own names:
+`Theme::from_styles` builds a theme from `(name, style)` pairs, like upstream's
+`Theme({...})`: with `inherit` set, the default styles come first.
+
+### Temporary themes
+
+A console keeps a **stack** of themes, as upstream's does. `use_theme` pushes one
+until the returned guard is dropped; print through the guard while it lives:
 
 ```rust
-theme.insert("danger", Style::parse("bold white on red").unwrap());
-console.print_str("[danger] DANGER [/]");
+use rich::{Console, Theme};
+
+let mut console = Console::new();
+let alert = Theme::from_styles([("danger", "bold yellow on red")], false).unwrap();
+{
+    let themed = console.use_theme(alert);   // inherits the current styles
+    themed.print_str("[danger] ALERT [/] answer = 42");
+}                                            // popped here, even on panic
+console.print_str("[danger]back to normal[/]");
+```
+
+`push_theme(theme, inherit)` and `pop_theme()` are the manual form; popping the
+base theme is an error, as upstream's `ThemeStackError` is.
+
+### Theme files
+
+Upstream's theme files (`[styles]` sections read by Python's `configparser`) load
+unchanged, so a theme shared with Python rich users works here too:
+
+```ini
+[styles]
+danger = bold white on red
+repr.number = bold magenta
+```
+
+```rust
+let theme = rich::Theme::read("my-theme.ini", true)?; // inherit the defaults
+println!("{}", theme.config());                       // write one back out
 ```
 
 !!! note "Unknown tags are not an error"

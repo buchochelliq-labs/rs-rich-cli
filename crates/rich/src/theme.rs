@@ -204,6 +204,14 @@ impl Theme {
         self.styles.insert(name.into(), style);
     }
 
+    /// Insert every style of `other`, replacing same-named ones: upstream's
+    /// `{**base, **other.styles}` merge.
+    pub fn extend_from(&mut self, other: &Theme) {
+        for (name, style) in &other.styles {
+            self.styles.insert(name.clone(), style.clone());
+        }
+    }
+
     /// Resolve a [`StyleType`] against this theme. Port of `Console.get_style`.
     ///
     /// An already-resolved style passes straight through. A name is looked up in
@@ -234,6 +242,11 @@ impl Theme {
         self.get_style(style).unwrap_or_default()
     }
 
+    /// The names of every style in this theme, in no particular order.
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.styles.keys().map(String::as_str)
+    }
+
     /// How many named styles this theme holds.
     pub fn len(&self) -> usize {
         self.styles.len()
@@ -259,11 +272,239 @@ impl Theme {
         theme
     }
 
+    /// Build a theme from `(name, style)` pairs. Port of
+    /// `Theme(styles, inherit=True)`: with `inherit` the upstream default styles
+    /// are included first and the given styles override them; without it the
+    /// theme holds only the given styles.
+    ///
+    /// Each style may be a definition to parse or an already-built [`Style`],
+    /// as upstream accepts `Union[str, Style]`. A definition that does not parse
+    /// is an error, as upstream's `Style.parse` raises.
+    pub fn from_styles<I, K, S>(styles: I, inherit: bool) -> Result<Self>
+    where
+        I: IntoIterator<Item = (K, S)>,
+        K: Into<String>,
+        S: Into<StyleType>,
+    {
+        let mut theme = if inherit {
+            Theme::default_theme()
+        } else {
+            Theme::new()
+        };
+        for (name, style) in styles {
+            let style = match style.into() {
+                StyleType::Style(style) => style,
+                StyleType::Name(definition) => Style::parse(&definition)?,
+            };
+            theme.insert(name, style);
+        }
+        Ok(theme)
+    }
+
+    /// The contents of a config file for this theme. Port of `Theme.config`:
+    /// a `[styles]` section with one `name = style` line per style, sorted by
+    /// name, each style written as its definition (`str(Style)`).
+    pub fn config(&self) -> String {
+        let mut names: Vec<&String> = self.styles.keys().collect();
+        names.sort();
+        let mut config = String::from("[styles]\n");
+        let lines: Vec<String> = names
+            .into_iter()
+            .map(|name| format!("{name} = {}", self.styles[name].definition()))
+            .collect();
+        config.push_str(&lines.join("\n"));
+        config
+    }
+
+    /// Load a theme from config-file text. Port of `Theme.from_file`, which
+    /// reads the `[styles]` section with Python's `configparser`.
+    ///
+    /// The `configparser` behaviour a theme file can observe is reproduced:
+    /// option names are lower-cased; `=` and `:` both separate name from value;
+    /// full-line `#` and `;` comments are skipped; indented lines continue the
+    /// previous value; `[DEFAULT]` options apply to `[styles]`; `%%` is a
+    /// literal `%` and `%(name)s` interpolates. A missing `[styles]` section, a
+    /// duplicate option, a line with no value and a lone `%` are errors, as they
+    /// are upstream.
+    pub fn from_file(config: &str, inherit: bool) -> Result<Self> {
+        let sections = config_file::parse(config)?;
+        let styles = config_file::styles(&sections)?;
+        Theme::from_styles(styles, inherit)
+    }
+
+    /// Read a theme from a config file on disk. Port of `Theme.read`.
+    pub fn read(path: impl AsRef<std::path::Path>, inherit: bool) -> Result<Self> {
+        let path = path.as_ref();
+        let text = std::fs::read_to_string(path).map_err(|error| {
+            crate::errors::RichError::ThemeConfig(format!("OSError: {}: {error}", path.display()))
+        })?;
+        Theme::from_file(&text, inherit)
+    }
+
     /// The shared default theme, for callers that only need to resolve a name
     /// (e.g. the built-in highlighters) and have no `Console` to hand.
     pub fn default_shared() -> &'static Theme {
         static DEFAULT: std::sync::OnceLock<Theme> = std::sync::OnceLock::new();
         DEFAULT.get_or_init(Theme::default_theme)
+    }
+}
+
+/// The subset of Python's `configparser` (default `ConfigParser()` settings)
+/// that `Theme.from_file` depends on.
+mod config_file {
+    use crate::errors::{Result, RichError};
+
+    /// Sections in file order, each with its options in file order.
+    pub(super) type Sections = Vec<(String, Vec<(String, String)>)>;
+
+    /// Errors carry the `configparser` exception name upstream would raise,
+    /// e.g. `NoSectionError: No section: 'styles'`.
+    fn error(kind: &str, message: impl std::fmt::Display) -> RichError {
+        RichError::ThemeConfig(format!("{kind}: {message}"))
+    }
+
+    pub(super) fn parse(text: &str) -> Result<Sections> {
+        let mut sections: Sections = Vec::new();
+        // The option most recently started, as (section index, option index,
+        // indentation of its first line); indented lines continue it.
+        let mut open: Option<(usize, usize, usize)> = None;
+        for (number, raw) in text.lines().enumerate() {
+            let line = raw.trim_end_matches('\r');
+            let stripped = line.trim();
+            let indent = line.len() - line.trim_start().len();
+            if stripped.starts_with('#') || stripped.starts_with(';') {
+                continue;
+            }
+            if stripped.is_empty() {
+                // configparser keeps blank lines inside a value but strips
+                // trailing ones; a style definition is whitespace-split, so
+                // dropping them is equivalent.
+                continue;
+            }
+            if let Some((section, option, first_indent)) = open {
+                if indent > first_indent {
+                    let value = &mut sections[section].1[option].1;
+                    value.push('\n');
+                    value.push_str(stripped);
+                    continue;
+                }
+            }
+            if stripped.starts_with('[') && stripped.ends_with(']') {
+                let name = stripped[1..stripped.len() - 1].to_string();
+                if sections.iter().any(|(existing, _)| *existing == name) {
+                    return Err(error(
+                        "DuplicateSectionError",
+                        format_args!("line {}: section '{name}' already exists", number + 1),
+                    ));
+                }
+                sections.push((name, Vec::new()));
+                open = None;
+                continue;
+            }
+            let Some(section) = sections.len().checked_sub(1) else {
+                return Err(error(
+                    "MissingSectionHeaderError",
+                    format_args!("line {}: file contains no section headers", number + 1),
+                ));
+            };
+            let Some(split) = stripped.find(['=', ':']) else {
+                return Err(error(
+                    "ParsingError",
+                    format_args!(
+                        "line {}: source contains parsing errors: {stripped:?}",
+                        number + 1
+                    ),
+                ));
+            };
+            // `optionxform` lower-cases option names.
+            let name = stripped[..split].trim().to_lowercase();
+            let value = stripped[split + 1..].trim().to_string();
+            let options = &mut sections[section].1;
+            if options.iter().any(|(existing, _)| *existing == name) {
+                return Err(error(
+                    "DuplicateOptionError",
+                    format_args!(
+                        "line {}: option '{name}' in section '{}' already exists",
+                        number + 1,
+                        sections[section].0
+                    ),
+                ));
+            }
+            options.push((name, value));
+            open = Some((section, options.len() - 1, indent));
+        }
+        Ok(sections)
+    }
+
+    /// `config.items("styles")`: `[DEFAULT]` options, overridden by the
+    /// section's own, with `BasicInterpolation` applied to every value.
+    pub(super) fn styles(sections: &Sections) -> Result<Vec<(String, String)>> {
+        let find = |wanted: &str| {
+            sections
+                .iter()
+                .find(|(name, _)| name == wanted)
+                .map(|(_, options)| options.clone())
+        };
+        let own = find("styles").ok_or_else(|| error("NoSectionError", "No section: 'styles'"))?;
+        let mut merged = find("DEFAULT").unwrap_or_default();
+        for (name, value) in own {
+            match merged.iter_mut().find(|(existing, _)| *existing == name) {
+                Some(slot) => slot.1 = value,
+                None => merged.push((name, value)),
+            }
+        }
+        let lookup = merged.clone();
+        merged
+            .into_iter()
+            .map(|(name, value)| Ok((name, interpolate(&value, &lookup, 0)?)))
+            .collect()
+    }
+
+    /// `BasicInterpolation`: `%%` is `%`, `%(name)s` is another option's value.
+    fn interpolate(value: &str, options: &[(String, String)], depth: usize) -> Result<String> {
+        // configparser's MAX_INTERPOLATION_DEPTH.
+        if depth > 10 {
+            return Err(error(
+                "InterpolationDepthError",
+                format_args!("interpolation too deeply recursive: {value:?}"),
+            ));
+        }
+        let mut out = String::new();
+        let mut rest = value;
+        while let Some(at) = rest.find('%') {
+            out.push_str(&rest[..at]);
+            rest = &rest[at..];
+            if let Some(after) = rest.strip_prefix("%%") {
+                out.push('%');
+                rest = after;
+            } else if let Some(after) = rest.strip_prefix("%(") {
+                let Some(close) = after.find(")s") else {
+                    return Err(error(
+                        "InterpolationSyntaxError",
+                        format_args!("bad interpolation variable reference {rest:?}"),
+                    ));
+                };
+                let key = after[..close].to_lowercase();
+                let Some((_, referenced)) = options.iter().find(|(name, _)| *name == key) else {
+                    return Err(error(
+                        "InterpolationMissingOptionError",
+                        format_args!("bad value substitution: key '{key}' not found"),
+                    ));
+                };
+                out.push_str(&interpolate(referenced, options, depth + 1)?);
+                rest = &after[close + 2..];
+            } else {
+                return Err(error(
+                    "InterpolationSyntaxError",
+                    format_args!(
+                        "'%' must be followed by '%' or '(', found: {:?}",
+                        rest.chars().take(2).collect::<String>()
+                    ),
+                ));
+            }
+        }
+        out.push_str(rest);
+        Ok(out)
     }
 }
 
@@ -386,5 +627,55 @@ mod tests {
             Style::parse("not bold cyan").ok().as_ref()
         );
         assert!(theme.get("no.such.style").is_none());
+    }
+
+    #[test]
+    fn from_file_handles_configparser_details() {
+        let theme = Theme::from_file(
+            "[styles]\n  Mixed = bold\n    red\npct = link https://x/%%41\n",
+            false,
+        )
+        .unwrap();
+        // Keys lower-case; indented lines continue the value; `%%` is `%`.
+        assert_eq!(theme.get("mixed").unwrap().definition(), "bold red");
+        assert_eq!(theme.get("pct").unwrap().definition(), "link https://x/%41");
+        assert_eq!(theme.len(), 2);
+        let inherited = Theme::from_file("[styles]\nx = red\n", true).unwrap();
+        assert_eq!(inherited.len(), Theme::default_theme().len() + 1);
+    }
+
+    #[test]
+    fn from_file_errors_name_the_configparser_exception() {
+        let kind = |text: &str| match Theme::from_file(text, false) {
+            Err(crate::errors::RichError::ThemeConfig(message)) => {
+                message.split(':').next().unwrap().to_string()
+            }
+            other => panic!("expected a config error, got {other:?}"),
+        };
+        assert_eq!(kind("a = red\n"), "MissingSectionHeaderError");
+        assert_eq!(kind("[styles]\n[styles]\n"), "DuplicateSectionError");
+        assert_eq!(
+            kind("[styles]\na = %(nope)s\n"),
+            "InterpolationMissingOptionError"
+        );
+        assert_eq!(
+            kind("[styles]\na = %(b)s\nb = %(a)s\n"),
+            "InterpolationDepthError"
+        );
+        assert_eq!(kind("[styles]\na = %(b\n"), "InterpolationSyntaxError");
+    }
+
+    #[test]
+    fn read_reports_missing_files_as_config_errors() {
+        let missing = std::env::temp_dir().join("rich-theme-that-does-not-exist.ini");
+        let error = Theme::read(&missing, true).unwrap_err();
+        assert!(error.to_string().contains("OSError"), "{error}");
+    }
+
+    #[test]
+    fn config_round_trips_through_from_file() {
+        let theme = Theme::from_styles([("b", "bold"), ("a", "red on blue")], false).unwrap();
+        let reread = Theme::from_file(&theme.config(), false).unwrap();
+        assert_eq!(reread.config(), theme.config());
     }
 }
