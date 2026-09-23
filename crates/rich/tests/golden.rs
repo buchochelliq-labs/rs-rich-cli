@@ -1270,3 +1270,95 @@ fn progress_time_parity() {
     }
     assert_eq!(checked, 11, "expected every progress time case to run");
 }
+
+/// Spinner and Status frames and LiveRender control sequences (#15): the same
+/// step programs as upstream, one expected output per `render`/`position`/
+/// `restore` step.
+#[test]
+fn live_status_parity() {
+    use rich::style::StyleType;
+    use rich::{LiveRender, Spinner, Status};
+    use serde_json::Value;
+
+    let data = include_str!("golden/live_status.tsv");
+    let mut checked = 0;
+    for line in data.lines().filter(|l| !l.starts_with('#')) {
+        let cols: Vec<&str> = line.split('\t').collect();
+        let [name, case, expected] = cols[..] else {
+            panic!("malformed live_status row: {line:?}");
+        };
+        let case: Value = serde_json::from_str(case).unwrap();
+        let expected: Vec<String> = serde_json::from_str(expected).unwrap();
+        let str_of = |v: &Value, key: &str| v.get(key).and_then(Value::as_str).map(str::to_owned);
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(case["width"].as_u64().unwrap() as usize)
+            .height(case["height"].as_u64().unwrap_or(25) as usize)
+            .no_color(false)
+            .build();
+        let steps = case["steps"].as_array().unwrap();
+        let mut outputs = Vec::new();
+        match case["kind"].as_str().unwrap() {
+            "spinner" => {
+                let mut spinner = Spinner::new(case["name"].as_str().unwrap())
+                    .text(case["text"].as_str().unwrap())
+                    .speed(case["speed"].as_f64().unwrap());
+                if let Some(style) = str_of(&case, "style") {
+                    spinner = spinner.style(style);
+                }
+                for step in steps {
+                    match step[0].as_str().unwrap() {
+                        "render" => outputs.push(
+                            console.render_to_string(&spinner.render(step[1].as_f64().unwrap())),
+                        ),
+                        _ => spinner.update(
+                            str_of(&step[1], "text").as_deref(),
+                            str_of(&step[1], "style").map(StyleType::from),
+                            step[1].get("speed").and_then(Value::as_f64),
+                        ),
+                    }
+                }
+            }
+            "status" => {
+                let mut status = Status::new(case["message"].as_str().unwrap())
+                    .spinner(case["spinner"].as_str().unwrap())
+                    .spinner_style(case["style"].as_str().unwrap())
+                    .speed(case["speed"].as_f64().unwrap());
+                for step in steps {
+                    match step[0].as_str().unwrap() {
+                        "render" => outputs.push(console.render_to_string(
+                            &status.renderable().render(step[1].as_f64().unwrap()),
+                        )),
+                        _ => status.update(
+                            str_of(&step[1], "status").as_deref(),
+                            str_of(&step[1], "spinner").as_deref(),
+                            str_of(&step[1], "spinner_style").map(StyleType::from),
+                            step[1].get("speed").and_then(Value::as_f64),
+                        ),
+                    }
+                }
+            }
+            _ => {
+                let text = |markup: &str| Box::new(Text::from_markup(markup).unwrap());
+                let mut live = LiveRender::new(text(case["markup"].as_str().unwrap()));
+                if let Some(style) = str_of(&case, "style") {
+                    live = live.style(Style::parse(&style).unwrap());
+                }
+                for step in steps {
+                    match step[0].as_str().unwrap() {
+                        "render" => outputs.push(console.render_to_string(&live)),
+                        "position" => {
+                            outputs.push(console.render_to_string(&live.position_cursor()))
+                        }
+                        "restore" => outputs.push(console.render_to_string(&live.restore_cursor())),
+                        _ => live.set_renderable(text(step[1].as_str().unwrap())),
+                    }
+                }
+            }
+        }
+        assert_eq!(outputs, expected, "live_status case {name}");
+        checked += 1;
+    }
+    assert_eq!(checked, 8);
+}

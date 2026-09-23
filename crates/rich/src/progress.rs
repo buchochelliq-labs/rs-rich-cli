@@ -14,7 +14,7 @@
 //! integration and `track()`, the pulsing bar for unstarted or indeterminate
 //! tasks, `RenderableColumn`, per-task custom `fields` and table-column options.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
@@ -77,7 +77,6 @@ pub struct SpinnerColumn {
     spinner: Spinner,
     style: StyleType,
     finished_text: String,
-    start: Cell<Option<f64>>,
 }
 
 impl SpinnerColumn {
@@ -88,7 +87,6 @@ impl SpinnerColumn {
             spinner: Spinner::new(name),
             style: StyleType::Name("progress.spinner".to_string()),
             finished_text: finished_text.into(),
-            start: Cell::new(None),
         }
     }
 
@@ -218,12 +216,9 @@ impl ProgressColumn {
                     Text::from_markup(&column.finished_text)
                         .unwrap_or_else(|_| Text::new(column.finished_text.clone()))
                 } else {
-                    let now = task.now();
-                    let start = column.start.get().unwrap_or_else(|| {
-                        column.start.set(Some(now));
-                        now
-                    });
-                    let mut frame = column.spinner.render(now - start);
+                    // Upstream's `self.spinner.render(task.get_time())`: the
+                    // spinner itself starts its animation at the first render.
+                    let mut frame = column.spinner.render(task.now());
                     frame.set_base_style(column.style.clone());
                     frame
                 }
