@@ -60,6 +60,22 @@ Entries below record subsequent releases and development.
 Cohort versions for 0.0.11 (not published): core 0.0.7, ext 0.0.9, art 0.0.9,
 CLI 0.0.11. Core changes below, so every dependent moves with it.
 
+### Core: Columns and Tree fit narrow widths
+
+Both were found by the ext fuzzer and checked against rich 15.0.0.
+
+- **Columns:** an item wider than the width sized its column to the whole item
+  and showed only its first line, so `Columns(["supercalifragilistic"])` at 8
+  cells printed 20. Item widths are now capped by `Measurement.get`, and the
+  items are laid out in upstream's `Table.grid`, which wraps them or ends them
+  with `…` (`superca…`). `Columns::equal` and `Columns::expand` are ported too.
+- **Tree:** guides overflowed a narrow width, so a nested tree printed 8-cell
+  lines at 3 cells. A label with no width left after its guides is now not
+  rendered, guides included, as upstream renders nothing there.
+- Goldens: `columns_long_*`, `columns_wrap_w13`, `columns_mixed_*`,
+  `columns_equal*`, `columns_expand_w20`, `tree_deep_w{3,4,6,10,20}` and
+  `tree_multiline_w{6,12}`.
+
 ### Ext: CLI authoring (0.0.11 workstream 6)
 
 - **One description, many outputs.** `rich_ext::cli_doc::CommandSpec` describes a
