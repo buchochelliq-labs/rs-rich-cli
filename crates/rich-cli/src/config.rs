@@ -8,8 +8,13 @@ type ThemeStyles = BTreeMap<String, String>;
 
 #[derive(Default)]
 struct Configuration {
+    /// The `[defaults]` table with the selected profile applied.
     settings: Settings,
     themes: BTreeMap<String, ThemeStyles>,
+    /// The `[defaults]` table alone, for `config explain`.
+    base: Settings,
+    /// The applied profile's name and table, for `config explain`.
+    profile: Option<(String, Settings)>,
 }
 
 pub(crate) fn validate_theme_name(name: &str) -> Result<(), String> {
@@ -171,9 +176,10 @@ const VALUE_KEYS: &[&str] = &[
     "image_contrast",
     "image_gamma",
     "log_presentation",
+    "format",
 ];
 
-fn validate_value(key: &str, value: &Value) -> Result<(), String> {
+pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
     let valid = if boolean_flags(key).is_some() {
         value.is_bool()
     } else {
@@ -207,6 +213,7 @@ fn validate_value(key: &str, value: &Value) -> Result<(), String> {
                         | "image"
                         | "gif"
                         | "diff"
+                        | "inspect"
                 )
             }),
             "collision" => value
@@ -218,6 +225,9 @@ fn validate_value(key: &str, value: &Value) -> Result<(), String> {
             "log_presentation" => value
                 .as_str()
                 .is_some_and(|v| matches!(v, "plain" | "rich")),
+            "format" => value
+                .as_str()
+                .is_some_and(|v| crate::inspect::InputFormat::parse(v).is_ok()),
             "image_color" => value
                 .as_str()
                 .is_some_and(|v| matches!(v, "truecolor" | "ansi256" | "ansi16" | "grayscale")),
@@ -357,15 +367,20 @@ fn decode_configuration(text: &str, selected: Option<&str>) -> Result<Configurat
             }
         }
     }
+    let base = defaults.clone();
     let name = selected.unwrap_or("default");
+    let mut applied = None;
     if let Some(profile) = profiles.remove(name) {
-        defaults.extend(profile);
+        defaults.extend(profile.clone());
+        applied = Some((name.to_string(), profile));
     } else if selected.is_some() {
         return Err(format!("unknown profile {name:?}"));
     }
     Ok(Configuration {
         settings: defaults,
         themes,
+        base,
+        profile: applied,
     })
 }
 
@@ -615,8 +630,12 @@ pub(crate) fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<St
         _ => 1,
     });
     for (key, value) in settings {
+        // A configured `format` is for automatic and inspect modes; it must not
+        // turn `rich --json file` into a usage error.
+        let explicit_mode = super::explicit_mode(&args.cleaned);
         if explicit.contains(&key)
-            || (key == "mode" && super::selects_mode_explicitly(&args.cleaned))
+            || (key == "mode" && explicit_mode.is_some())
+            || (key == "format" && explicit_mode.is_some_and(|mode| mode != super::Mode::Inspect))
         {
             continue;
         }
@@ -655,9 +674,25 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
     if positions.first().map(|i| args.cleaned[*i].as_str()) != Some("config") {
         return Ok(None);
     }
-    if positions.len() != 2 || !matches!(args.cleaned[positions[1]].as_str(), "show" | "validate") {
-        return Err("config requires show or validate".into());
+    let command = positions.get(1).map(|i| args.cleaned[*i].as_str());
+    let no_color = super::cli_spec::no_color_requested(&args.cleaned);
+    if args
+        .cleaned
+        .iter()
+        .take_while(|arg| *arg != "--")
+        .any(|arg| arg == "--help" || arg == "-h")
+    {
+        let mut path = vec!["config"];
+        path.extend(
+            command.filter(|c| matches!(*c, "show" | "validate" | "explain" | "reference")),
+        );
+        return Ok(super::cli_spec::subcommand_help(&path, no_color));
     }
+    let key = match (command, positions.len()) {
+        (Some("show" | "validate" | "explain" | "reference"), 2) => None,
+        (Some("explain"), 3) => Some(args.cleaned[positions[2]].as_str()),
+        _ => return Err("config requires show, validate, explain [KEY] or reference".into()),
+    };
     let mut iter = args.cleaned.iter();
     while let Some(arg) = iter.next() {
         if arg == "--" {
@@ -687,6 +722,22 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
             return Err(format!("unknown config inspection option {arg:?}"));
         }
     }
+    if command == Some("reference") {
+        let reference = super::cli_spec::config_reference();
+        return Ok(Some(super::cli_spec::render(&reference, no_color)));
+    }
+    if let Some(key) = key {
+        let known = super::cli_spec::known_config_keys();
+        if !known.iter().any(|k| k == key) {
+            let close = rich_ext::cli_doc::suggest(key, &known);
+            let hint = if close.is_empty() {
+                format!("; keys are {}", known.join(", "))
+            } else {
+                format!("; did you mean {}?", close.join(" or "))
+            };
+            return Err(format!("unknown config key {key:?}{hint}"));
+        }
+    }
     let (mut configuration, source) = load(&args, roots)?;
     let mut theme_styles = selected_theme(&mut configuration, &args)?;
     theme_styles.extend(explicit_theme_styles(&args.cleaned)?);
@@ -696,6 +747,16 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
         validate_value(key, value)?;
     }
     normalize_watch(&mut settings, &overrides)?;
+    if command == Some("explain") {
+        let layers = Layers {
+            base: &configuration.base,
+            profile: configuration.profile.as_ref(),
+            source: source.as_deref().map(|path| shown_path(path, roots)),
+            theme: args.theme.as_deref(),
+            overrides: &overrides,
+        };
+        return Ok(Some(explain(&layers, key)));
+    }
     settings.extend(overrides);
     let output = serde_json::json!({
         "valid": true,
@@ -709,6 +770,94 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
     serde_json::to_string_pretty(&output)
         .map(Some)
         .map_err(|e| e.to_string())
+}
+
+/// What `config explain` layers, lowest precedence first after the defaults.
+struct Layers<'a> {
+    base: &'a Settings,
+    profile: Option<&'a (String, Settings)>,
+    /// The config file, as `shown_path` displays it.
+    source: Option<String>,
+    theme: Option<&'a str>,
+    overrides: &'a Settings,
+}
+
+/// A config path relative to the working directory, or under `~`, when it is.
+fn shown_path(path: &std::path::Path, roots: &ConfigRoots) -> String {
+    if let Ok(relative) = path.strip_prefix(&roots.cwd) {
+        return relative.display().to_string();
+    }
+    if let Some(relative) = roots.home.as_ref().and_then(|h| path.strip_prefix(h).ok()) {
+        return format!("~/{}", relative.display());
+    }
+    path.display().to_string()
+}
+
+fn shown(value: &Value) -> String {
+    value
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| value.to_string())
+}
+
+/// The layers in the order the binary applies them: `NO_COLOR` seeds the
+/// parser's state before any flag, and config values arrive as flags ahead
+/// of the command line's, so a config `no_color = false` beats `NO_COLOR`.
+fn precedence(layers: &Layers) -> rich_ext::cli_doc::Precedence {
+    use rich_ext::cli_doc::{Layer, Precedence};
+    let table = |mut layer: Layer, settings: &Settings| {
+        for (key, value) in settings {
+            layer = layer.value(key.clone(), shown(value));
+        }
+        layer
+    };
+    let mut precedence = Precedence::new().layer(super::cli_spec::default_layer());
+    if std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty()) {
+        precedence = precedence.layer(
+            Layer::new("environment")
+                .origin("NO_COLOR")
+                .value("no_color", "true"),
+        );
+    }
+    if let Some(path) = &layers.source {
+        let file = Layer::new("config file").origin(path.clone());
+        precedence = precedence.layer(table(file, layers.base));
+    }
+    if let Some((name, settings)) = layers.profile {
+        let profile = Layer::new("profile").origin(format!("profile {name}"));
+        precedence = precedence.layer(table(profile, settings));
+    }
+    let mut command_line = table(Layer::new("command line"), layers.overrides);
+    if let Some(theme) = layers.theme {
+        command_line = command_line.value("theme", theme);
+    }
+    precedence.layer(command_line)
+}
+
+/// `config explain [KEY]`, rendered. Colour follows the effective `no_color`.
+fn explain(layers: &Layers, key: Option<&str>) -> String {
+    let precedence = precedence(layers);
+    let no_color = precedence
+        .resolve()
+        .iter()
+        .any(|r| r.key == "no_color" && r.value == "true");
+    let render = |renderable: &dyn rich::Renderable| super::cli_spec::render(renderable, no_color);
+    match key {
+        None => render(&precedence.view()),
+        Some(key) => match precedence.explain(key) {
+            Some(explanation) => render(&explanation),
+            None => format!("{key} is not set by any layer"),
+        },
+    }
+}
+
+/// Every key `validate_value` accepts.
+#[cfg(test)]
+pub(crate) fn all_keys() -> Vec<&'static str> {
+    let mut keys = vec!["mode", "theme"];
+    keys.extend(BOOLEAN_KEYS);
+    keys.extend(VALUE_KEYS);
+    keys
 }
 
 #[cfg(test)]
@@ -1054,5 +1203,136 @@ mod tests {
         assert_eq!(values["width"].as_integer(), Some(80));
         assert!(!values.contains_key("batch"));
         assert!(!values.contains_key("overwrite"));
+    }
+
+    fn explain_fixture() -> (tempfile::TempDir, ConfigRoots) {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(
+            root.path().join("rich.toml"),
+            "version = 1\n[defaults]\nwidth = 100\npager = true\n[profile.ci]\nwidth = 60\n",
+        )
+        .unwrap();
+        let roots = ConfigRoots {
+            home: None,
+            cwd: root.path().into(),
+        };
+        (root, roots)
+    }
+
+    #[test]
+    fn decoding_keeps_the_base_table_and_the_profile_apart() {
+        let text = "[defaults]\nwidth = 100\npager = true\n[profile.ci]\nwidth = 60\n";
+        let configuration = decode_configuration(text, Some("ci")).unwrap();
+        assert_eq!(configuration.base["width"].as_integer(), Some(100));
+        let (name, profile) = configuration.profile.as_ref().unwrap();
+        assert_eq!(name, "ci");
+        assert_eq!(profile["width"].as_integer(), Some(60));
+        assert!(!profile.contains_key("pager"));
+        // The merged settings `config show` reads are unchanged.
+        assert_eq!(configuration.settings["width"].as_integer(), Some(60));
+        assert_eq!(configuration.settings["pager"].as_bool(), Some(true));
+        assert!(decode_configuration(text, None).unwrap().profile.is_none());
+    }
+
+    #[test]
+    fn explain_traces_one_key_through_every_layer() {
+        let (_root, roots) = explain_fixture();
+        let output = inspect(
+            &strings(&[
+                "config",
+                "explain",
+                "width",
+                "--profile",
+                "ci",
+                "--width",
+                "40",
+            ]),
+            &roots,
+        )
+        .unwrap()
+        .unwrap();
+        let lines: Vec<&str> = output.lines().collect();
+        assert_eq!(lines[0], "width = 40", "{output}");
+        assert!(lines[1].contains("command line") && lines[1].contains("effective"));
+        assert!(lines[2].contains("profile (profile ci)") && lines[2].contains("60"));
+        assert!(lines[2].contains("overridden by command line"));
+        assert!(lines[3].contains("config file (rich.toml)") && lines[3].contains("100"));
+        assert!(lines[3].contains("overridden by profile"));
+
+        // Built-in defaults sit below the file.
+        let output = inspect(&strings(&["config", "explain", "pager"]), &roots)
+            .unwrap()
+            .unwrap();
+        assert!(output.starts_with("pager = true"), "{output}");
+        assert!(output.contains("defaults") && output.contains("overridden by config file"));
+    }
+
+    #[test]
+    fn explain_without_a_key_tables_every_layer() {
+        let (_root, roots) = explain_fixture();
+        let output = inspect(
+            &strings(&["config", "explain", "--no-config", "--jobs", "4"]),
+            &roots,
+        )
+        .unwrap()
+        .unwrap();
+        for column in ["Key", "defaults", "command line", "Effective"] {
+            assert!(output.contains(column), "{column}:\n{output}");
+        }
+        assert!(!output.contains("config file"), "{output}");
+        let jobs = output.lines().find(|l| l.contains("jobs")).unwrap();
+        assert!(jobs.contains('1') && jobs.contains('4'), "{jobs}");
+    }
+
+    #[test]
+    fn explain_rejects_unknown_keys_and_reports_unset_ones() {
+        let (_root, roots) = explain_fixture();
+        let error = inspect(&strings(&["config", "explain", "widht"]), &roots).unwrap_err();
+        assert!(
+            error.contains("unknown config key") && error.contains("width"),
+            "{error}"
+        );
+        let output = inspect(&strings(&["config", "explain", "export_html"]), &roots)
+            .unwrap()
+            .unwrap();
+        assert_eq!(output, "export_html is not set by any layer");
+        // The same flags `config show` accepts, and the same rejections.
+        assert!(
+            inspect(&strings(&["config", "explain", "--title", "x"]), &roots)
+                .unwrap_err()
+                .contains("unknown config inspection option")
+        );
+        assert!(inspect(&strings(&["config", "explain", "a", "b"]), &roots).is_err());
+    }
+
+    #[test]
+    fn reference_and_help_render_from_the_spec() {
+        let (_root, roots) = explain_fixture();
+        let output = inspect(&strings(&["config", "reference"]), &roots)
+            .unwrap()
+            .unwrap();
+        for text in [
+            "rich configuration",
+            "config file",
+            "./rich.toml",
+            "NO_COLOR",
+            "mode",
+        ] {
+            assert!(output.contains(text), "{text}:\n{output}");
+        }
+        let help = inspect(&strings(&["config", "explain", "--help"]), &roots)
+            .unwrap()
+            .unwrap();
+        assert!(
+            help.starts_with("Usage: rich config explain [OPTIONS] [KEY]"),
+            "{help}"
+        );
+        let help = inspect(&strings(&["config", "--help"]), &roots)
+            .unwrap()
+            .unwrap();
+        assert!(help.contains("reference"), "{help}");
+        assert!(inspect(&strings(&["config"]), &roots)
+            .unwrap_err()
+            .contains("explain"));
     }
 }

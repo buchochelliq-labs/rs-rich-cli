@@ -238,6 +238,65 @@ rich --csv notes.txt
 rich: Could not determine delimiter
 ```
 
+## Explore structured data
+
+`rich inspect` (or `--inspect`) reads JSON, YAML, TOML, XML, INI or dotenv from a
+file, a URL or stdin and draws it as a tree. It is not in upstream rich-cli.
+
+```bash
+rich inspect deploy.yaml
+```
+
+```text
+deploy.yaml
+├── defaults &defaults
+│   ├── retries: 3
+│   └── timeout: 30
+└── servers
+    ├── [0]
+    │   ├── name: "alpha"
+    │   ├── port: 8080
+    │   └── << *defaults
+    │       ├── retries: 3
+    │       └── timeout: 30
+    └── [1]
+        ├── name: "beta"
+        └── port: 8081
+```
+
+The format comes from the file name, else from the content; pass
+`--format json|yaml|toml|xml|ini|env` when detection cannot tell. INI and dotenv
+files show as a key table with their comments. These options change the view:
+
+| Option | Effect |
+|---|---|
+| `--select EXPR` | Keep what a JSONPath expression selects, e.g. `$.servers[*].name` |
+| `--find TEXT` | List keys and values containing TEXT (any case), with context |
+| `--flatten` | One `path` / `value` row per value |
+| `--table` | Records as a table, or a path/value table |
+| `--max-depth N`, `--max-length N` | Fold deeper containers; show at most N items each |
+| `--show-paths` | Print each value's path next to it |
+| `--redact` | Mask values under keys such as `password`, `token` or `api_key` |
+| `--compare PATH` | List what was added, removed or changed in PATH |
+
+A document that does not parse is reported as `file:line:column` and exits 4.
+
+### Detect the format of piped input
+
+Without a flag, piped text prints as plain text, as upstream does. Add
+`--format auto` to detect what it is: JSON goes to the JSON renderer, YAML,
+TOML, XML, INI and dotenv are highlighted, and anything else still prints as
+plain text. With `--format`, no RESOURCE means stdin.
+
+```bash
+kubectl get pod web -o json | rich --format auto
+curl -s https://example.com/config | rich --format yaml
+```
+
+A named format also overrides the file extension. To make detection the default,
+set `format = "auto"` in your [config](#config-profiles); a mode you pick
+explicitly, such as `--markdown`, ignores it.
+
 ## Render Markdown, and keep the links readable
 
 ```bash
@@ -645,6 +704,20 @@ background, watch, sanitization, paging and batch options; see the
 a CLI option (`--report json`), not a config key. Release and validation status
 are recorded in the [0.0.9 preparation notes](releases/0.0.9.md).
 
+To see where each value comes from, and what it overrides:
+
+```bash
+rich config explain --config rich.toml --profile ci --width 64
+rich config explain width --profile ci
+rich config reference
+```
+
+`explain` tables every key across the layers the binary applies, lowest first:
+built-in defaults, `NO_COLOR`, the config file's `[defaults]`, the selected
+profile, then the command line. A config `no_color = false` therefore overrides
+`NO_COLOR`, exactly as rendering does. With a KEY it prints that key's chain.
+`reference` lists every source and key with its type, default and flag.
+
 ---
 
 ## Reuse named themes
@@ -695,9 +768,23 @@ not the rendered-content/report split used by rendering commands. Errors retain
 the existing usage/error reporting contract. `--no-config` helps diagnose an
 invalid local configuration independently.
 
+## Shell completions and generated docs
+
+```bash
+rich completions bash > ~/.local/share/bash-completion/completions/rich
+rich completions zsh > "${fpath[1]}/_rich"
+rich docs man --output man/     # rich.1 plus one page per subcommand
+rich docs markdown > rich.md
+```
+
+`--help`, the completion scripts (bash, zsh, fish, PowerShell), the Markdown and
+man pages and `rich config reference` all come from one description of the
+command line, so they cannot disagree. `rich <command> --help` shows one
+command, such as `rich config explain --help`.
+
 ## Where to go next
 
-- [CLI reference](cli-reference.md) — every option, generated from `--help`
+- [CLI reference](cli-reference.md) — every option, generated from the description behind `--help`
 - [Comparing images](image-diff.md) — the `--diff` workflow in depth
 - [Troubleshooting](troubleshooting.md) — error messages and what to do about them
 - [Parity with Python rich](parity.md) — how close the output is, and where it differs

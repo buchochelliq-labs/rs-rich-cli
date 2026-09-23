@@ -41,7 +41,7 @@ art = ["dep:rich-art"]
 
 [dependencies]
 rich.workspace = true
-rich-ext.workspace = true
+rich-ext = { workspace = true, features = ["data", "yaml", "toml", "xml", "jsonpath"] }
 terminal_size.workspace = true
 serde_json.workspace = true
 ureq = { workspace = true, optional = true }

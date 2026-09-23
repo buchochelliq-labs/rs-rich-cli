@@ -14,14 +14,17 @@ use std::io::{BufRead, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+mod authoring;
 mod batch;
 mod batch_output;
 mod batch_paths;
 #[cfg(test)]
 mod batch_races;
+mod cli_spec;
 mod config;
 mod demo;
 mod doctor;
+mod inspect;
 mod render_target;
 mod structured_log;
 mod watch;
@@ -82,6 +85,8 @@ enum Mode {
     JsonLines,
     /// `--log`: stream common structured-log JSONL records.
     Log,
+    /// `--inspect`: explore structured data (not upstream; see `inspect.rs`).
+    Inspect,
 }
 
 impl Mode {
@@ -175,10 +180,15 @@ const MODE_SPECS: &[ModeSpec] = &[
         primary: "log",
         aliases: &["log", "logs"],
     },
+    ModeSpec {
+        mode: Mode::Inspect,
+        primary: "inspect",
+        aliases: &["inspect"],
+    },
 ];
 
 const RENDER_MODE_FLAGS: &str =
-    "--print/--markdown/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--image/--jsonl/--log";
+    "--print/--markdown/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--image/--jsonl/--log/--inspect";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReportFormat {
@@ -398,6 +408,7 @@ struct Cli {
     worker_args: Vec<String>,
     overwrite: bool,
     collision: CollisionPolicy,
+    data: inspect::DataOptions,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -498,6 +509,12 @@ const VALUE_OPTIONS: &[&str] = &[
     "--loop",
     "--jobs",
     "--collision",
+    "--format",
+    "--select",
+    "--find",
+    "--max-depth",
+    "--max-length",
+    "--compare",
     "--config",
     "--profile",
 ];
@@ -506,6 +523,11 @@ const VALUE_OPTIONS: &[&str] = &[
 /// positional subcommand form. Config must not inject a `mode` default over
 /// `rich json file.json`, which selects JSON without ever naming `--json`.
 fn selects_mode_explicitly(args: &[String]) -> bool {
+    explicit_mode(args).is_some()
+}
+
+/// The render mode the command line picks by flag or subcommand, if any.
+fn explicit_mode(args: &[String]) -> Option<Mode> {
     let mut iter = args.iter();
     let mut seen_positional = false;
     while let Some(arg) = iter.next() {
@@ -517,19 +539,19 @@ fn selects_mode_explicitly(args: &[String]) -> bool {
             continue;
         }
         if arg.starts_with('-') && arg.len() > 1 {
-            if mode_flag_alias(arg).is_some() {
-                return true;
+            if let Some(flag) = mode_flag_alias(arg) {
+                return command_mode(&flag[2..]);
             }
             continue;
         }
         if !seen_positional {
             seen_positional = true;
-            if command_mode(arg).is_some() {
-                return true;
+            if let Some(mode) = command_mode(arg) {
+                return Some(mode);
             }
         }
     }
-    false
+    None
 }
 
 /// The canonical long flag for a render-mode option, or `None` for anything else.
@@ -547,6 +569,7 @@ fn mode_flag_alias(arg: &str) -> Option<&'static str> {
         "--image" => "--image",
         "--gif" => "--gif",
         "--diff" => "--diff",
+        "--inspect" => "--inspect",
         _ => return None,
     })
 }
@@ -987,6 +1010,9 @@ fn set_mode(current: &mut Mode, mode: Mode) -> Result<(), String> {
 /// Parse args into a [`Cli`], or `Ok(None)` when `--help`/`--version` handled it.
 fn parse(args: &[String]) -> Result<Option<Cli>, String> {
     let roots = ConfigRoots::default();
+    if authoring::dispatch(args)? {
+        return Ok(None);
+    }
     if let Some(output) = config::inspect(args, &roots)? {
         println!("{output}");
         return Ok(None);
@@ -1019,6 +1045,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut theme_styles = std::collections::BTreeMap::new();
     let mut height = None;
     let mut extensions = CliExtensions::default();
+    let mut data = inspect::DataOptions::default();
     let mut width = None;
     let mut justify = None;
     let mut no_color = std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty());
@@ -1065,10 +1092,13 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         if extensions.parse_option(arg, &mut iter)? {
             continue;
         }
+        if data.parse_option(arg, &mut iter)? {
+            continue;
+        }
         match arg.as_str() {
             "--" => end_of_options = true,
             "-h" | "--help" => {
-                print_help();
+                print_help(no_color || cli_spec::no_color_requested(args));
                 return Ok(None);
             }
             "-V" | "--version" => {
@@ -1086,6 +1116,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--image" => set_mode(&mut mode, Mode::Image)?,
             "--jsonl" | "--ndjson" => set_mode(&mut mode, Mode::JsonLines)?,
             "--log" => set_mode(&mut mode, Mode::Log)?,
+            "--inspect" => set_mode(&mut mode, Mode::Inspect)?,
             "--log-presentation" => {
                 let value = iter
                     .next()
@@ -1444,6 +1475,24 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             other => resources.push(other.to_string()),
         }
     }
+
+    // `--format` makes automatic mode an input mode: with no RESOURCE it reads
+    // stdin, as `--json` does, instead of showing the demo.
+    if data.format.is_some() {
+        if !matches!(mode, Mode::Auto | Mode::Inspect) {
+            return Err(format!(
+                "--format cannot be combined with --{}",
+                mode_name(mode)
+            ));
+        }
+        if mode == Mode::Auto && resources.is_empty() && !batch {
+            resources.push("-".into());
+        }
+    }
+    if let Some(flag) = data.inspect_only_option().filter(|_| mode != Mode::Inspect) {
+        return Err(format!("{flag} only has an effect with --inspect"));
+    }
+    data.validate()?;
 
     if watch && (batch || pager || auto_pager) {
         return Err("--watch cannot be combined with --batch or paging".into());
@@ -1819,6 +1868,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         worker_args: worker_args(args),
         overwrite,
         collision,
+        data,
     }))
 }
 
@@ -2701,10 +2751,28 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         content = sanitize_terminal_controls(&content);
     }
 
+    // `--format` routes input automatic mode would print as text (stdin, no
+    // extension) — or, with a named format, any input — to a renderer.
+    let mut routed_language = None;
+    let mut routed = false;
+    if let Some(format) = cli.data.format.filter(|_| cli.mode == Mode::Auto) {
+        if mode == Mode::Auto || matches!(format, inspect::InputFormat::Named(_)) {
+            routed = true;
+            mode = match inspect::route(format, &content, cli.resource.as_deref()) {
+                inspect::Route::Json => Mode::Json,
+                inspect::Route::Syntax(lexer) => {
+                    routed_language = Some(lexer);
+                    Mode::Syntax
+                }
+                inspect::Route::Text => Mode::Auto,
+            };
+        }
+    }
+
     // For a URL that neither a flag nor a telltale extension resolved: upstream
     // renders fetched content as syntax-highlighted source by default, unless the
     // Content-Type marks it markdown / json / csv.
-    if resource_is_url && mode == Mode::Auto {
+    if resource_is_url && mode == Mode::Auto && !routed {
         mode = content_type
             .as_deref()
             .and_then(content_type_mode)
@@ -2778,7 +2846,9 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     // language, so `snippet.txt` served as `text/x-python` still highlights.
     let extension = resource_ext(cli.resource.as_deref().unwrap_or_default())
         .filter(|ext| !is_uninformative_ext(ext));
-    let language = extension
+    let language = routed_language
+        .map(str::to_string)
+        .or(extension)
         .or_else(|| {
             content_type
                 .as_deref()
@@ -2896,6 +2966,19 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 Box::new(Syntax::new(content.as_str(), language.as_str()).word_wrap(true)),
                 Some(fit),
             )
+        }
+        Mode::Inspect => {
+            let encoding = cli.extensions.encoding;
+            let read = |path: &str| {
+                read_resource(Some(path), encoding)
+                    .map_err(|err| format!("cannot read {path}: {err}"))
+            };
+            let view = match inspect::build(&cli.data, &content, cli.resource.as_deref(), read) {
+                Ok(view) => view,
+                Err(err) => return fail(&cli, ExitClass::Data, err),
+            };
+            let fit = view.measure(&console, &console.options()).maximum;
+            (view, Some(fit))
         }
         // Print + auto: parse markup (Print) or take plain text (auto).
         _ => {
@@ -4728,188 +4811,9 @@ fn save_exports(console: &Console, export: &Export, segments: &[Segment]) -> Res
     first_error.map_or(Ok(()), Err)
 }
 
-fn print_help() {
-    let extension_help = rich_ext::cli::HELP;
-    // A RAW string: `\`-continuations would eat the leading spaces of every
-    // line and print the whole thing flush-left.
-    println!(
-        r#"rich {VERSION} — Rust port of the rich-cli terminal toolbox
-
-USAGE:
-    rich [OPTIONS] [RESOURCE]
-    rich [OPTIONS] <COMMAND> [RESOURCE]
-    rich --batch [OPTIONS] RESOURCE...
-    rich --watch [OPTIONS] FILE...
-
-RESOURCE is a file path, an http(s) URL, or `-` for stdin. Everything after a
-bare `--` is a RESOURCE, however much it looks like an option. Input modes with
-no RESOURCE read stdin until EOF; `-p -` reads markup from stdin too. Terminal
-stdin shows an input hint. Repeated scalar options use their last value.
-
-COMMANDS:
-    config show     Show configured settings with CLI overrides as JSON
-    config validate Validate TOML, all profiles and explicit setting values
-    print       Treat RESOURCE as literal markup TEXT (`--print`)
-    markdown    Render Markdown (`--markdown`)
-    syntax      Syntax-highlight source (`--syntax`)
-    json        Pretty-print JSON (`--json`)
-    csv         Render CSV/TSV as a table (`--csv`)
-    ipynb       Render a Jupyter notebook (`--ipynb`)
-    jsonl       Stream JSON Lines / NDJSON records
-    log         Stream common structured-log JSONL records
-    gif         Animate GIFs (`--gif`)
-    diff        Perceptually compare two images (`--diff`)
-    image       Render a still image as ASCII/Braille/blocks/Sixel (`--image`)
-    rule        Draw a horizontal rule (`--rule`)
-
-RENDER MODE (choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb
-by extension — anything else with a file extension is syntax-highlighted):
-    -p, --print      Treat RESOURCE as literal markup TEXT, not a file path
-    -m, --markdown   Render RESOURCE as Markdown
-    -j, --json       Pretty-print RESOURCE as JSON
-    -x, --syntax     Syntax-highlight RESOURCE (language from its extension)
-        --csv        Render RESOURCE as a CSV/TSV table
-        --ipynb      Render RESOURCE as a Jupyter notebook
-        --jsonl      Stream JSON Lines / NDJSON records
-        --log        Stream common structured-log JSONL records
-        --log-presentation plain|rich  Select log presentation (default: plain)
-        --gif        Animate GIFs side by side; pipes receive the first frame
-        --loop N     With --gif, repeat N times (default 1; 0 = forever)
-        --rule       Draw a horizontal rule (RESOURCE is its title)
-        --diff       Perceptually compare two images (needs exactly two)
-        --image      Render RESOURCE as a still image (ASCII/Braille/blocks/Sixel)
-
-OPTIONS:
-    -w, --width N    Render the output N columns wide (the console keeps its
-                     own width, so --left/--center/--right still use it)
-        --height N   With --image, render this many rows instead of the
-                     backend's default
-        --image-anchor A Cover crop anchor: center (default), top, bottom, left,
-                         right, top-left, top-right, bottom-left, bottom-right
-        --image-fit M With --image and --height: contain (letterbox), cover
-                     (crop at --image-anchor), or stretch (fill, ignoring aspect)
-        --image-max-width N / --image-max-height N
-                     With --image, never exceed N columns / rows (aspect kept)
-        --image-background #RRGGBB
-                     With --image: flatten transparency onto this RGB colour
-                     (also colours contain padding; quote the # in your shell)
-        --image-color M truecolor (default), ansi256, ansi16 or grayscale, with
-                     ASCII/blocks/quadrants images
-        --image-dither M none (default), floyd-steinberg, or bayer4x4 (needs a
-                     non-truecolor --image-color)
-        --image-brightness F / --image-contrast F / --image-gamma F
-                     Tone adjustments (1.0 = unchanged), applied in that order
-                     after rotation/flips and before grayscale and colour
-        --image-rotate N Rotate still images clockwise: 0, 90, 180, 270
-        --image-flip-horizontal / --image-flip-vertical Flip after rotation
-        --image-grayscale Composite and convert still images to grayscale
-        --image-mode M
-                     With --diff/--image, how to draw the picture: auto
-                     (default), sixel (real pixels), blocks, quadrants, braille,
-                     ascii, none
-                     (--image rejects none: there would be nothing to draw)
-{extension_help}
-        --threshold PCT
-                     With --diff, exit non-zero above PCT% changed.
-                     Also sets the exit code: 0 within, 5 over.
-        --left       Left-justify output
-        --center     Center output
-        --right      Right-justify output
-    -o, --export-html PATH
-                     Also write a self-contained HTML document to PATH
-        --export-svg PATH
-                     Also write an SVG document to PATH. Unlike the HTML,
-                     it references its font from a CDN, so it is not
-                     self-contained offline.
-        --panel BOX  Wrap output in a panel, shrunk to fit its content
-                     (ascii/ascii2/square/rounded/heavy/double; none = no panel)
-        --padding P  Wrap output in padding (1, 2, or 4 comma-separated ints)
-    -e, --expand     Make --panel/--padding fill the width instead of fitting
-                     (implied by --width)
-        --title T    Panel title; also the CSV table's title
-        --caption T  Panel subtitle; also the CSV table's caption
-    -y, --hyperlinks Render a Markdown link as a clickable OSC 8 hyperlink.
-                     Off by default, which shows the URL as `text (url)`
-    -s, --style S    Style laid under the whole output, e.g. "bold red"
-    -S, --panel-style S
-                     Panel border style, e.g. "dim" (with --panel)
-        --pager      Page terminal output via MANPAGER, PAGER, then less/more.com
-        --no-pager   Disable explicit and automatic paging
-        --auto-pager Page only terminal output taller than the viewport
-        --no-auto-pager Disable automatic paging
-        --watch      Re-render changing files (several allowed) or one URL while
-                     stdout is a terminal; each file gets its own live region
-        --watch-interval SEC
-                     Poll interval in seconds (default 1)
-        --watch-debounce SEC
-                     Quiet period collapsing a burst of file events (default 0.1)
-        --watch-poll Poll local files at --watch-interval instead of file events
-        --watch-exit-on-error
-                     End the watch with a non-zero exit when a render fails
-        --watch-cache With URLs, render only when the response body changes
-        --batch      Convert explicit files, directories, or globs deterministically
-        --batch-preserve-dirs  Preserve paths under --batch-input-root PATH
-        --batch-name-template TEMPLATE  Name export leaves; export paths become directories
-        --jobs N     Parallel file-export workers (default 1); requires --batch
-                     Terminal output stays in input order; active jobs finish on error.
-        --progress, --no-progress
-                     Enable/disable batch counts on terminal stderr (default on);
-                     hidden for redirected stderr, JSON reports and dry runs
-        --dry-run    Validate and show the batch plan without writing files
-        --continue-on-error
-                     Process all planned inputs and aggregate failures
-        --overwrite  Allow existing batch export destinations
-        --collision P
-                     Batch policy: error (default), overwrite, or suffix
-        --config PATH
-                     Read versioned TOML defaults from PATH
-        --profile NAME
-                     Select a config profile (default: default)
-        --theme NAME Select a named theme from config
-        --theme-style NAME=STYLE
-                     Override a theme binding; repeatable and worker-safe
-        --no-config  Disable config discovery
-        --sanitize   Replace input terminal controls, JSON/notebook strings,
-                     titles and captions with visible inert text
-        --report F   Emit a result/error envelope on stderr: human (default) or json.
-        --machine-json
-                     Alias for --report json
-        --no-color   Disable colored output (as does a non-empty NO_COLOR)
-        --color      Override a config no_color setting (pipes remain plain)
-        --no-batch, --no-continue-on-error, --no-overwrite
-        --no-watch, --no-watch-cache, --no-watch-poll, --no-watch-exit-on-error,
-        --no-sanitize
-                     Disable the corresponding config/default boolean
-    --demo          Guided suite tour; pauses 3 seconds between sections on a TTY
-    --demo-list     List stable tour sections: core, workflows, art
-    --demo-section NAME
-                    With --demo, play one section only
-    --demo-delay SECONDS
-                    Tour pause (0–60); no pauses when redirected; Ctrl+C stops
-                    Self-contained examples; ignores config; accepts --no-color
-    doctor          Read-only build, terminal, config and pager diagnostics;
-                    --report json writes diagnostic data to stdout
-    -h, --help       Show this help
-    -V, --version    Show the rs-rich-cli package version
-
-ENVIRONMENT:
-    NO_COLOR         Any non-empty value disables colour
-    COLUMNS          Console width (default 80 when unavailable)
-    MANPAGER, PAGER   Pager command; fallback is less (Unix), more.com (Windows)
-    FORCE_COLOR      Not supported; redirected stdout stays plain
-    RICH_SIXEL       0/1 overrides Sixel detection for --image-mode auto
-
-With no RESOURCE and no mode flag, a capability demo is shown. Layout, style,
-paging, hyperlinks and export options require a resource or render mode.
-
-EXIT CODES:
-    0 success
-    2 usage/config error
-    3 input/read/write error
-    4 parse/render data error
-    5 threshold/gate failure
-"#
-    );
+/// `--help`: the [`cli_spec`] help, through a stdout console.
+fn print_help(no_color: bool) {
+    cli_spec::print_help(no_color);
 }
 
 fn build_demo_console(no_color: bool) -> Console {
