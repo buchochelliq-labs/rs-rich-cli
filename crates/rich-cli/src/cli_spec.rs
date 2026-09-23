@@ -20,6 +20,7 @@ const LAYOUT: &str = "Layout";
 const MODE_OPTIONS: &str = "Mode options";
 const IMAGE: &str = "Image";
 const INSPECT: &str = "Inspect";
+const DIFF: &str = "Diff & ANSI";
 const EXPORT: &str = "Export";
 const PAGING: &str = "Paging";
 const WATCH: &str = "Watch";
@@ -32,7 +33,7 @@ const GENERAL: &str = "General";
 /// The render modes a `mode` config value (and the command word) may name.
 pub(crate) const MODES: &[&str] = &[
     "print", "markdown", "json", "syntax", "csv", "ipynb", "jsonl", "log", "rule", "image", "gif",
-    "diff",
+    "diff", "inspect", "ansi",
 ];
 
 fn flag(long: &str, heading: &str, help: &str) -> ArgSpec {
@@ -105,7 +106,8 @@ fn render_modes() -> Vec<ArgSpec> {
         mode(
             "diff",
             None,
-            "Perceptually compare two images (needs exactly two)",
+            "Compare two images perceptually, two text files as a diff (syntax-aware; ANSI \
+             captures by visible text and style), or render one patch such as `git diff` output",
         ),
         mode(
             "image",
@@ -116,6 +118,45 @@ fn render_modes() -> Vec<ArgSpec> {
             "inspect",
             None,
             "Explore structured data (JSON, YAML, TOML, XML, INI, dotenv) as a tree",
+        ),
+        mode(
+            "ansi-explain",
+            None,
+            "Decode every escape sequence in RESOURCE and show the visible text",
+        ),
+    ]
+}
+
+fn diff_options() -> Vec<ArgSpec> {
+    vec![
+        flag(
+            "side-by-side",
+            DIFF,
+            "With a text --diff, show old and new in two columns",
+        ),
+        option(
+            "context",
+            "N",
+            DIFF,
+            "With a text --diff, unchanged lines around each change",
+        )
+        .default_value("3"),
+        option(
+            "language",
+            "NAME",
+            DIFF,
+            "With a text --diff, highlight as this language instead of guessing from the \
+             file name",
+        ),
+        flag(
+            "ansi-inline",
+            DIFF,
+            "With --ansi-explain, mark escapes inline in the text instead of a table",
+        ),
+        flag(
+            "escapes-only",
+            DIFF,
+            "With --ansi-explain, list only escape sequences, not text runs",
         ),
     ]
 }
@@ -374,8 +415,8 @@ fn image_options() -> Vec<ArgSpec> {
             "threshold",
             "PCT",
             IMAGE,
-            "With --diff, exit non-zero above PCT% changed. Also sets the exit code: 0 \
-             within, 5 over.",
+            "With --diff, exit non-zero above PCT% changed (pixels for images, lines for \
+             text). Also sets the exit code: 0 within, 5 over.",
         ),
     ]
 }
@@ -710,6 +751,7 @@ fn root_args() -> Vec<ArgSpec> {
         mode_options(),
         image_options(),
         inspect_options(),
+        diff_options(),
         export_options(),
         paging_options(),
         watch_options(),
@@ -876,7 +918,7 @@ pub(crate) fn spec() -> CommandSpec {
         (
             "diff",
             &[][..],
-            "Perceptually compare two images (`--diff`)",
+            "Compare two images, two text files, or render one patch (`--diff`)",
         ),
         (
             "image",
@@ -889,6 +931,11 @@ pub(crate) fn spec() -> CommandSpec {
             &[][..],
             "Explore structured data (JSON, YAML, TOML, XML, INI, dotenv) as a tree \
              (`--inspect`)",
+        ),
+        (
+            "ansi",
+            &["ansi-explain"][..],
+            "Decode escape sequences: `rich ansi explain FILE` (`--ansi-explain`)",
         ),
     ] {
         spec = spec.subcommand(mode_command(name, aliases, about));
@@ -1063,6 +1110,7 @@ mod tests {
     const CONFIG: &str = include_str!("config.rs");
     const DEMO: &str = include_str!("demo.rs");
     const INSPECT: &str = include_str!("inspect.rs");
+    const TOOLS: &str = include_str!("tools.rs");
 
     /// The source of the item that starts with `start`, up to the next
     /// top-level item.
@@ -1112,6 +1160,7 @@ mod tests {
             item(CONFIG, "fn boolean_flags("),
             item(DEMO, "fn options("),
             item(INSPECT, "impl DataOptions {"),
+            item(TOOLS, "impl ToolOptions {"),
         ] {
             out.extend(option_literals(source));
         }

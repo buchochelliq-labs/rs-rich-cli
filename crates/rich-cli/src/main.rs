@@ -27,6 +27,7 @@ mod doctor;
 mod inspect;
 mod render_target;
 mod structured_log;
+mod tools;
 mod watch;
 use batch::run_batch;
 use config::{config_args, ConfigRoots};
@@ -87,6 +88,8 @@ enum Mode {
     Log,
     /// `--inspect`: explore structured data (not upstream; see `inspect.rs`).
     Inspect,
+    /// `ansi explain` / `--ansi-explain`: decode escape sequences (`tools.rs`).
+    AnsiExplain,
 }
 
 impl Mode {
@@ -185,10 +188,15 @@ const MODE_SPECS: &[ModeSpec] = &[
         primary: "inspect",
         aliases: &["inspect"],
     },
+    ModeSpec {
+        mode: Mode::AnsiExplain,
+        primary: "ansi",
+        aliases: &["ansi", "ansi-explain"],
+    },
 ];
 
 const RENDER_MODE_FLAGS: &str =
-    "--print/--markdown/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--image/--jsonl/--log/--inspect";
+    "--print/--markdown/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--image/--jsonl/--log/--inspect/--ansi-explain";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReportFormat {
@@ -409,6 +417,7 @@ struct Cli {
     overwrite: bool,
     collision: CollisionPolicy,
     data: inspect::DataOptions,
+    tools: tools::ToolOptions,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -515,6 +524,8 @@ const VALUE_OPTIONS: &[&str] = &[
     "--max-depth",
     "--max-length",
     "--compare",
+    "--context",
+    "--language",
     "--config",
     "--profile",
 ];
@@ -570,6 +581,7 @@ fn mode_flag_alias(arg: &str) -> Option<&'static str> {
         "--gif" => "--gif",
         "--diff" => "--diff",
         "--inspect" => "--inspect",
+        "--ansi-explain" => "--ansi-explain",
         _ => return None,
     })
 }
@@ -1046,6 +1058,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut height = None;
     let mut extensions = CliExtensions::default();
     let mut data = inspect::DataOptions::default();
+    let mut tool_options = tools::ToolOptions::default();
+    // `rich ansi explain FILE`: the second word belongs to the command.
+    let mut ansi_word = false;
     let mut width = None;
     let mut justify = None;
     let mut no_color = std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty());
@@ -1095,6 +1110,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         if data.parse_option(arg, &mut iter)? {
             continue;
         }
+        if tool_options.parse_option(arg, &mut iter)? {
+            continue;
+        }
         match arg.as_str() {
             "--" => end_of_options = true,
             "-h" | "--help" => {
@@ -1117,6 +1135,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--jsonl" | "--ndjson" => set_mode(&mut mode, Mode::JsonLines)?,
             "--log" => set_mode(&mut mode, Mode::Log)?,
             "--inspect" => set_mode(&mut mode, Mode::Inspect)?,
+            "--ansi-explain" => set_mode(&mut mode, Mode::AnsiExplain)?,
             "--log-presentation" => {
                 let value = iter
                     .next()
@@ -1470,8 +1489,10 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             other
                 if mode == Mode::Auto && resources.is_empty() && command_mode(other).is_some() =>
             {
+                ansi_word = other == "ansi";
                 set_mode(&mut mode, command_mode(other).expect("checked above"))?;
             }
+            "explain" if ansi_word && resources.is_empty() => ansi_word = false,
             other => resources.push(other.to_string()),
         }
     }
@@ -1491,6 +1512,15 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     }
     if let Some(flag) = data.inspect_only_option().filter(|_| mode != Mode::Inspect) {
         return Err(format!("{flag} only has an effect with --inspect"));
+    }
+    if let Some(flag) = tool_options.diff_option().filter(|_| mode != Mode::Diff) {
+        return Err(format!("{flag} only has an effect with --diff"));
+    }
+    if let Some(flag) = tool_options
+        .ansi_option()
+        .filter(|_| mode != Mode::AnsiExplain)
+    {
+        return Err(format!("{flag} only has an effect with --ansi-explain"));
     }
     data.validate()?;
 
@@ -1523,8 +1553,10 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
 
     // Only `--gif` animates several resources at once; every other mode renders
     // exactly one.
-    if mode == Mode::Diff && resources.len() != 2 {
-        return Err("--diff needs exactly two images: --diff before.png after.png".into());
+    if mode == Mode::Diff && !(1..=2).contains(&resources.len()) {
+        return Err(
+            "--diff needs two images or files to compare, or one patch: --diff before after".into(),
+        );
     }
     if mode == Mode::Image {
         if resources.is_empty() {
@@ -1869,6 +1901,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         overwrite,
         collision,
         data,
+        tools: tool_options,
     }))
 }
 
@@ -2682,10 +2715,28 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         return play_gifs(&cli, &console);
     }
 
-    // `--diff` consumes both resources and reports rather than rendering one.
-    #[cfg(feature = "art")]
+    // `--diff` consumes both resources and reports rather than rendering one:
+    // perceptually for two images, as a text, source or patch diff otherwise.
     if mode == Mode::Diff {
+        let images = cli.resources.len() == 2 && cli.resources.iter().all(|r| looks_like_image(r));
+        if !images {
+            return run_text_diff(&cli, &console, &export);
+        }
+        if let Some(flag) = cli.tools.diff_option() {
+            return fail(
+                &cli,
+                ExitClass::Usage,
+                format!("{flag} applies to text diffs, not images"),
+            );
+        }
+        #[cfg(feature = "art")]
         return run_diff(&cli, &console, &export);
+        #[cfg(not(feature = "art"))]
+        return fail(
+            &cli,
+            ExitClass::Usage,
+            "this build has no image support (rebuild with the `art` feature)",
+        );
     }
 
     // `--image` renders a single still image directly through rich-art's
@@ -2747,7 +2798,9 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             }
         }
     };
-    if cli.sanitize {
+    // `ansi explain` shows escapes visibly; neutralising them first would
+    // leave nothing to explain.
+    if cli.sanitize && mode != Mode::AnsiExplain {
         content = sanitize_terminal_controls(&content);
     }
 
@@ -2966,6 +3019,11 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 Box::new(Syntax::new(content.as_str(), language.as_str()).word_wrap(true)),
                 Some(fit),
             )
+        }
+        Mode::AnsiExplain => {
+            let view = tools::ansi_explain(&cli.tools, &content);
+            let fit = view.measure(&console, &console.options()).maximum;
+            (view, Some(fit))
         }
         Mode::Inspect => {
             let encoding = cli.extensions.encoding;
@@ -4195,7 +4253,6 @@ fn build_ipynb(
     Notebook { items, justify }
 }
 
-#[cfg(feature = "art")]
 fn diff_threshold_exceeded(changed: f32, limit: f32) -> bool {
     // Use the formatter's rounding for BOTH displayed operands, including
     // ties. f32::round uses a different tie rule from the report's formatting.
@@ -4205,6 +4262,48 @@ fn diff_threshold_exceeded(changed: f32, limit: f32) -> bool {
             .expect("formatted percentage is a number")
     };
     displayed(changed) > displayed(limit)
+}
+
+/// `rich diff` for anything but an image pair: text, ANSI captures and
+/// source side by side or unified, or one patch (`git diff | rich diff -`).
+fn run_text_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
+    let mut contents = Vec::with_capacity(cli.resources.len());
+    for resource in &cli.resources {
+        let content = if is_url(resource) {
+            fetch_url(resource, cli.extensions.encoding).map(|(content, _)| content)
+        } else {
+            read_resource(Some(resource), cli.extensions.encoding)
+                .map_err(|err| format!("cannot read {resource}: {err}"))
+        };
+        match content {
+            Ok(content) => contents.push(content),
+            Err(err) => return fail(cli, ExitClass::Input, err),
+        }
+    }
+    let names: Vec<String> = cli
+        .resources
+        .iter()
+        .map(|r| {
+            if r == "-" {
+                "<stdin>".to_string()
+            } else {
+                r.clone()
+            }
+        })
+        .collect();
+    let outcome = match tools::text_diff(&cli.tools, &names, &contents, cli.diff_threshold) {
+        Ok(outcome) => outcome,
+        Err(err) => return fail(cli, ExitClass::Data, err),
+    };
+    let fit = outcome
+        .renderable
+        .measure(console, &console.options())
+        .maximum;
+    let code = decorate_and_emit(cli, console, export, outcome.renderable, Some(fit));
+    if code != ExitCode::SUCCESS || !outcome.failed {
+        return code;
+    }
+    fail(cli, ExitClass::Gate, "diff threshold exceeded")
 }
 
 /// Compare two images perceptually and report where they differ.
