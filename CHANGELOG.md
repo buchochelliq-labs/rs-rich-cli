@@ -60,6 +60,62 @@ Entries below record subsequent releases and development.
 Cohort versions for 0.0.11 (not published): core 0.0.7, ext 0.0.9, art 0.0.9,
 CLI 0.0.11. Core changes below, so every dependent moves with it.
 
+### Ext: CLI authoring (0.0.11 workstream 6)
+
+- **One description, many outputs.** `rich_ext::cli_doc::CommandSpec` describes a
+  command line without depending on any parser: options with value hints,
+  choices, defaults, environment variables and config keys, headings, examples
+  and extra sections.
+- **Help and errors (#38, #407).** `HelpView` renders grouped options with their
+  hints, examples and sections, in two columns from 60 columns wide and stacked
+  below that. `CliError` renders a diagnostic with "a similar argument exists"
+  suggestions (Jaro-Winkler, as clap does).
+- **Completions (#403).** `completion::generate` writes Bash, Zsh, Fish and
+  PowerShell scripts with descriptions and groups. `CompletionCatalog` exposes
+  the same metadata to other tools.
+- **Markdown and man pages (#408).** `docs::to_markdown` and `docs::to_man` /
+  `to_man_pages`; the man pages pass `mandoc -T lint` and `groff -ww`.
+- **Configuration (#409, #413).** `ConfigReference` renders keys, types,
+  defaults, environment variables and flags, with its sources in precedence
+  order. `Precedence` shows every layer's value for each key, marks the winner
+  and explains a single key's chain.
+- **clap (#38).** The optional `clap` feature maps a `clap::Command` onto the
+  model (`CommandSpec::from_clap`), maps `clap::Error` onto `CliError`, and
+  offers parse helpers that render help, version and errors through rich.
+
+### Structured data and `rich inspect` (0.0.11 workstream 4)
+
+- **Ext: `rich_ext::data` (#37, #211, #384).** One insertion-ordered document
+  tree for JSON, YAML, TOML, XML, INI and dotenv, built from text or from any
+  `Serialize` value. Features: `data` (JSON, INI, dotenv and every view),
+  `yaml` (saphyr-parser; anchors and aliases are kept), `toml`, `xml` and
+  `jsonpath`. Parse errors carry a line and column and convert to a
+  `Diagnostic`.
+  - `Explorer` draws a tree or table with depth, length and string limits,
+    folding and optional paths. `print_json`, `print_table` and `print_tree`
+    render serde values with no setup, and `TableOptions` overrides columns,
+    headers, justification and row limits.
+  - YAML (#394), TOML (#395) and XML (#396) keep their structure: anchors,
+    datetimes, and attributes as `@name` keys. INI and dotenv (#397) render as a
+    key table with comments; `Redaction::secrets()` and the `Redactor` trait
+    mask secret-looking values.
+  - Selection (#398): the `Selector` / `SelectorBackend` traits and a
+    `Selectors` registry, with an optional JSONPath backend (`$`, keys, indices,
+    slices, wildcards, recursive descent and filters).
+  - Flatten and unflatten (#399), with errors for ambiguous input; key, path
+    and value search with highlighted matches and context (#400); and `diff`.
+  - `Format::detect` is conservative: prose, Markdown, CSV and single lines are
+    not mistaken for YAML, TOML, INI or dotenv.
+- **CLI: `rich inspect` (#211).** Explores a file, URL or stdin as a tree; INI and
+  dotenv as a key table. `--select`, `--find`, `--flatten`, `--table`,
+  `--max-depth`, `--max-length`, `--show-paths`, `--redact` and `--compare`
+  change the view. A parse error reports `file:line:column` and exits 4.
+- **CLI: `--format` (#402).** `--format auto` detects piped or extensionless
+  input and routes it: JSON to the JSON renderer, other formats to highlighting,
+  anything else to plain text as before. A named format overrides the
+  extension. Detection is opt-in, so upstream's default is unchanged. `format`
+  is also a config key, and is ignored when another mode is chosen explicitly.
+
 ### Progress: pulse, format columns and live display (#6)
 
 - **Pulse bar.** `ProgressBar` pulses when `pulse` is set or the total is

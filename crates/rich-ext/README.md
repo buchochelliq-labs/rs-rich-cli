@@ -130,6 +130,52 @@ Without the feature you still get `rich_table!`, `rich_panel!`, `rich_tree!`,
 `rich_progress!` and `rich_dbg!` (`dbg!` rendered through `Pretty`). They build
 the ordinary core types, so the result can still be configured.
 
+### Structured data
+
+The `data` feature adds `rich_ext::data`: one document tree for JSON, INI and
+dotenv, plus YAML, TOML and XML behind the `yaml`, `toml` and `xml` features.
+
+```rust
+use rich::Console;
+use rich_ext::data::{parse, print_table, Explorer, Format};
+
+let console = Console::builder().build();
+let doc = parse(Format::Json, r#"{"servers": [{"name": "a", "port": 80}]}"#).unwrap();
+console.print(&Explorer::new(&doc).max_depth(3));
+
+#[derive(serde::Serialize)]
+struct Release { name: &'static str, downloads: u64 }
+print_table(&[Release { name: "rs-rich", downloads: 1200 }]);
+```
+
+- `Explorer` draws a tree or a table, with depth, length and string limits.
+- `print_json`, `print_table` and `print_tree` render any `Serialize` value.
+- `flatten`/`unflatten`, `search` (by key, path glob or value), `diff` and
+  `Redaction::secrets()` work on any document.
+- `Selectors` compiles selection expressions through pluggable backends; the
+  `jsonpath` feature adds a JSONPath one.
+- `Format::detect` guesses a format conservatively, and a `DataError` converts
+  to a `Diagnostic` pointing at the line and column.
+
+### CLI authoring
+
+`rich_ext::cli_doc` renders a command line from one description,
+`CommandSpec`, with no parser dependency:
+
+- `HelpView`: grouped help with defaults, environment variables, config keys,
+  choices, examples and sections; two columns from 60 columns wide, stacked
+  below that.
+- `CliError`: errors as diagnostics, with "a similar argument exists"
+  suggestions.
+- `completion::generate`: Bash, Zsh, Fish and PowerShell completion scripts.
+- `docs::to_markdown` and `docs::to_man`: reference pages.
+- `ConfigReference` and `Precedence`: a config reference, and which source
+  won for every key.
+
+With the `clap` feature, `CommandSpec::from_clap` builds the description from a
+`clap::Command`, and `cli_doc::clap::parse_or_exit` renders help, version and
+errors through rich. See the `clap_help` example.
+
 ### Coordinated Live regions
 
 `live::LiveCoordinator` owns one writer and opaque region IDs. Call `refresh`
