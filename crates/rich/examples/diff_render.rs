@@ -1,8 +1,11 @@
 use std::io::{self, BufRead};
 
 use rich::panel::Panel;
-use rich::r#box::{ASCII, DOUBLE, HEAVY, MINIMAL, ROUNDED, SQUARE};
-use rich::{ColorSystem, Console, Justify, Overflow, Style, Text};
+use rich::r#box::{ASCII, DOUBLE, HEAVY, HEAVY_HEAD, MINIMAL, ROUNDED, SQUARE};
+use rich::{
+    Align, ColorSystem, Console, HorizontalAlign, Justify, Overflow, Padding, Rule, Style, Table,
+    Text,
+};
 use serde_json::{json, Value};
 
 fn box_set(name: &str) -> Result<rich::r#box::Box, String> {
@@ -13,6 +16,7 @@ fn box_set(name: &str) -> Result<rich::r#box::Box, String> {
         "double" => Ok(DOUBLE),
         "ascii" => Ok(ASCII),
         "minimal" => Ok(MINIMAL),
+        "heavy_head" => Ok(HEAVY_HEAD),
         other => Err(format!("unknown box {other:?}")),
     }
 }
@@ -47,6 +51,75 @@ fn justify(name: &str) -> Result<Justify, String> {
     }
 }
 
+fn horizontal(name: &str) -> Result<HorizontalAlign, String> {
+    match name {
+        "left" => Ok(HorizontalAlign::Left),
+        "center" => Ok(HorizontalAlign::Center),
+        "right" => Ok(HorizontalAlign::Right),
+        other => Err(format!("unknown align {other:?}")),
+    }
+}
+
+fn flag(case: &Value, name: &str, default: bool) -> bool {
+    case.get(name).and_then(Value::as_bool).unwrap_or(default)
+}
+
+fn table(case: &Value) -> Result<Table, String> {
+    let box_type = case
+        .get("box")
+        .and_then(Value::as_str)
+        .unwrap_or("heavy_head");
+    let mut table = Table::new()
+        .box_set(box_set(box_type)?)
+        .show_header(flag(case, "show_header", true))
+        .show_lines(flag(case, "show_lines", false))
+        .show_edge(flag(case, "show_edge", true))
+        .pad_edge(flag(case, "pad_edge", true))
+        .expand(flag(case, "expand", false));
+    if let Some(title) = case.get("title").and_then(Value::as_str) {
+        table = table.title(title);
+    }
+    let columns = case
+        .get("columns")
+        .and_then(Value::as_array)
+        .ok_or("missing array field \"columns\"")?;
+    for column in columns {
+        let header = column.get("header").and_then(Value::as_str).unwrap_or("");
+        let justify = match column.get("justify").and_then(Value::as_str) {
+            Some(name) => justify(name)?,
+            None => Justify::Left,
+        };
+        table.add_column_justify(header, justify);
+        if flag(column, "no_wrap", false) {
+            table.column_no_wrap();
+        }
+        let number = |name: &str| column.get(name).and_then(Value::as_u64).map(|v| v as usize);
+        if let Some(value) = number("min_width") {
+            table.column_min_width(value);
+        }
+        if let Some(value) = number("max_width") {
+            table.column_max_width(value);
+        }
+        if let Some(value) = number("ratio") {
+            table.column_ratio(value);
+        }
+    }
+    for row in case
+        .get("rows")
+        .and_then(Value::as_array)
+        .ok_or("missing array field \"rows\"")?
+    {
+        let cells: Vec<&str> = row
+            .as_array()
+            .ok_or("row must be an array")?
+            .iter()
+            .map(|cell| cell.as_str().unwrap_or(""))
+            .collect();
+        table.add_row(&cells);
+    }
+    Ok(table)
+}
+
 fn field<'a>(case: &'a Value, name: &str) -> Result<&'a str, String> {
     case.get(name)
         .and_then(Value::as_str)
@@ -77,7 +150,12 @@ fn render(case: &Value) -> Result<String, String> {
         .build();
 
     match field(case, "kind")? {
-        "markup" => Ok(console.render_str_to_string(field(case, "source")?)),
+        // The strict parser: upstream's `console.print` raises `MarkupError`,
+        // and the lenient fallback is a documented divergence (DIVERGENCES §2).
+        "markup" => console
+            .try_build_text(field(case, "source")?)
+            .map(|text| console.render_to_string(&text))
+            .map_err(|error| format!("MarkupError: {error}")),
         "text" => {
             let mut text = if let Some(style) = case.get("style").and_then(Value::as_str) {
                 Text::styled(
@@ -106,6 +184,51 @@ fn render(case: &Value) -> Result<String, String> {
                 panel = panel.title(title);
             }
             Ok(console.render_to_string(&panel))
+        }
+        "table" => Ok(console.render_to_string(&table(case)?)),
+        "rule" => {
+            let title = field(case, "source")?;
+            let mut rule = if title.is_empty() {
+                Rule::line()
+            } else {
+                Rule::new(title)
+            };
+            if let Some(characters) = case.get("characters").and_then(Value::as_str) {
+                rule = rule.characters(characters);
+            }
+            if let Some(align) = case.get("align").and_then(Value::as_str) {
+                rule = rule.align(horizontal(align)?);
+            }
+            Ok(console.render_to_string(&rule))
+        }
+        "padding" => {
+            let pad: Vec<usize> = case
+                .get("pad")
+                .and_then(Value::as_array)
+                .ok_or("missing array field \"pad\"")?
+                .iter()
+                .map(|v| v.as_u64().unwrap_or(0) as usize)
+                .collect();
+            let [top, right, bottom, left] = pad[..] else {
+                return Err("pad must have four entries".into());
+            };
+            let mut padding = Padding::new(
+                Box::new(Text::new(field(case, "source")?)),
+                (top, right, bottom, left),
+            );
+            if let Some(style) = case.get("style").and_then(Value::as_str) {
+                padding = padding.style(Style::parse(style).map_err(|e| e.to_string())?);
+            }
+            Ok(console.render_to_string(&padding))
+        }
+        "align" => {
+            let child = Box::new(Text::new(field(case, "source")?));
+            let align = match horizontal(field(case, "align")?)? {
+                HorizontalAlign::Left => Align::left(child),
+                HorizontalAlign::Center => Align::center(child),
+                HorizontalAlign::Right => Align::right(child),
+            };
+            Ok(console.render_to_string(&align))
         }
         other => Err(format!("unknown kind {other:?}")),
     }

@@ -85,6 +85,22 @@ checked against unpublished versions; nothing is published yet.
   Progress cell styles now resolve against the console theme.
 - CLI: the capability demo's progress section shows speed, ETA, elapsed and a
   spinner from a simulated clock.
+- CLI: `--watch` accepts several local files; a change re-renders only that
+  file, in its own `rich-ext` Live region, with errors shown per file until it
+  recovers. File events come from `notify` (parent-directory watches, so atomic
+  rename-over saves and delete-and-recreate are seen), debounced by
+  `--watch-debounce` (default 0.1 s); `--watch-poll` and watcher failures use
+  the polling loop. `--watch-exit-on-error` ends the watch non-zero on a failed
+  render. New config keys: `watch_debounce`, `watch_poll`,
+  `watch_exit_on_error`. Redirected output and URL watching are unchanged (#139).
+- Parity tooling (#34): `scripts/diff_rich.py` generates Table, Rule, Padding
+  and Align cases alongside markup, text and panels. The Python oracle renders
+  each colour system in its own interpreter, because rich memoises a Style's
+  escape codes and a shared process misreported colours. Markup compares the
+  strict parser on both sides. The shrinker keeps the failure kind and reduces
+  rows, cells, columns and options. A nightly workflow runs 20,000 generated
+  cases on `main`. First findings are filed as #442–#449, with repros in
+  `scripts/fixtures/diff_rich_known.jsonl`; triage steps are in `docs/parity.md`.
 - Core: Markdown strikethrough pairs tilde runs as upstream's markdown-it does, so
   runs of three or more (`a ~~~x~~~ b` → `a ~` + struck `x` + `~ b`) and uneven
   runs match rich 15.0.0. Golden `markdown_strike.tsv` (24 cases); DIVERGENCES §21
