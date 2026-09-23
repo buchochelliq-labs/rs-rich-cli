@@ -18,6 +18,7 @@ Looking for how to *do* something rather than what a flag is called? Start at
 rich [OPTIONS] [RESOURCE]
 rich [OPTIONS] <COMMAND> [RESOURCE]
 rich --batch [OPTIONS] RESOURCE...
+rich --watch [OPTIONS] FILE...
 
 RESOURCE is a file path, an http(s) URL, or `-` for stdin. Everything after a
 bare `--` is a RESOURCE, however much it looks like an option. Input modes with
@@ -128,9 +129,15 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
     --no-pager   Disable explicit and automatic paging
     --auto-pager Page only terminal output taller than the viewport
     --no-auto-pager Disable automatic paging
-    --watch      Re-render a changing file or URL while stdout is a terminal
+    --watch      Re-render changing files (several allowed) or one URL while
+                 stdout is a terminal; each file gets its own live region
     --watch-interval SEC
                  Poll interval in seconds (default 1)
+    --watch-debounce SEC
+                 Quiet period collapsing a burst of file events (default 0.1)
+    --watch-poll Poll local files at --watch-interval instead of file events
+    --watch-exit-on-error
+                 End the watch with a non-zero exit when a render fails
     --watch-cache With URLs, render only when the response body changes
     --batch      Convert explicit files, directories, or globs deterministically
     --batch-preserve-dirs  Preserve paths under --batch-input-root PATH
@@ -162,7 +169,8 @@ Choose at most one; default auto-detects .md/.json/.csv/.tsv/.ipynb by extension
     --no-color   Disable colored output (as does a non-empty NO_COLOR)
     --color      Override a config no_color setting (pipes remain plain)
     --no-batch, --no-continue-on-error, --no-overwrite
-    --no-watch, --no-watch-cache, --no-sanitize
+    --no-watch, --no-watch-cache, --no-watch-poll, --no-watch-exit-on-error,
+    --no-sanitize
                  Disable the corresponding config/default boolean
 --demo          Guided suite tour; pauses 3 seconds between sections on a TTY
 --demo-list     List stable tour sections: core, workflows, art
