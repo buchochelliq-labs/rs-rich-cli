@@ -24,6 +24,7 @@ mod demo;
 mod doctor;
 mod render_target;
 mod structured_log;
+mod watch;
 use batch::run_batch;
 use config::{config_args, ConfigRoots};
 
@@ -367,6 +368,13 @@ struct Cli {
     watch_interval: f64,
     /// Avoid emitting unchanged URL responses.
     watch_cache: bool,
+    /// Quiet period, in seconds, that collapses a burst of file events into
+    /// one re-render (`--watch-debounce`).
+    watch_debounce: f64,
+    /// `--watch-poll`: skip file events and poll local files at the interval.
+    watch_poll: bool,
+    /// `--watch-exit-on-error`: end the watch non-zero when a render fails.
+    watch_exit_on_error: bool,
     batch: bool,
     progress: bool,
     continue_on_error: bool,
@@ -464,6 +472,7 @@ const VALUE_OPTIONS: &[&str] = &[
     "--demo-delay",
     "--watch-interval",
     "--interval",
+    "--watch-debounce",
     "--gif-mode",
     "--encoding",
     "--threshold",
@@ -558,6 +567,10 @@ fn emit_success_report(format: ReportFormat) {
 }
 
 fn fail(cli: &Cli, class: ExitClass, message: impl AsRef<str>) -> ExitCode {
+    // A watched resource's live region shows its own error.
+    if watch::capture_error(message.as_ref()) {
+        return class.exit_code();
+    }
     emit_error(
         cli.report_format == ReportFormat::Json,
         class,
@@ -566,7 +579,9 @@ fn fail(cli: &Cli, class: ExitClass, message: impl AsRef<str>) -> ExitCode {
 }
 
 fn success(cli: &Cli) -> ExitCode {
-    emit_success_report(cli.report_format);
+    if !watch::capturing() {
+        emit_success_report(cli.report_format);
+    }
     ExitClass::Success.exit_code()
 }
 
@@ -1000,6 +1015,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut watch = false;
     let mut watch_interval = 1.0;
     let mut watch_cache = false;
+    let mut watch_debounce: Option<f64> = None;
+    let mut watch_poll = false;
+    let mut watch_exit_on_error = false;
     let mut batch = false;
     let mut progress = true;
     let mut continue_on_error = false;
@@ -1214,6 +1232,8 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--color" => no_color = false,
             "--no-watch" => watch = false,
             "--no-watch-cache" => watch_cache = false,
+            "--no-watch-poll" => watch_poll = false,
+            "--no-watch-exit-on-error" => watch_exit_on_error = false,
             "--no-batch" => batch = false,
             "--no-continue-on-error" => continue_on_error = false,
             "--no-overwrite" => {
@@ -1240,6 +1260,20 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             }
             "--watch" => watch = true,
             "--watch-cache" => watch_cache = true,
+            "--watch-poll" => watch_poll = true,
+            "--watch-exit-on-error" => watch_exit_on_error = true,
+            "--watch-debounce" => {
+                let value = iter
+                    .next()
+                    .ok_or("--watch-debounce requires seconds (0 or more)")?;
+                let seconds = value
+                    .parse::<f64>()
+                    .map_err(|_| format!("invalid watch debounce {value:?}"))?;
+                if !seconds.is_finite() || !(0.0..=3600.0).contains(&seconds) {
+                    return Err("--watch-debounce must be between 0 and 3600 seconds".into());
+                }
+                watch_debounce = Some(seconds);
+            }
             "--watch-interval" | "--interval" => {
                 let value = iter
                     .next()
@@ -1560,6 +1594,19 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         ),
         ("--watch-interval", watch_interval != 1.0, "--watch", watch),
         ("--watch-cache", watch_cache, "--watch", watch),
+        (
+            "--watch-debounce",
+            watch_debounce.is_some(),
+            "--watch",
+            watch,
+        ),
+        ("--watch-poll", watch_poll, "--watch", watch),
+        (
+            "--watch-exit-on-error",
+            watch_exit_on_error,
+            "--watch",
+            watch,
+        ),
     ];
     if let Some((flag, _, needs, _)) = orphans
         .iter()
@@ -1612,8 +1659,10 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             return Err(format!("{flag} cannot be combined with {mode_name}"));
         }
     }
-    if !mode.accepts_multiple_resources() && resources.len() > 1 && !batch {
-        return Err("only one resource may be given (except with --gif)".into());
+    // `--watch` may follow several local files, one live region each; the
+    // watcher itself checks that every one of them is a watchable file.
+    if !mode.accepts_multiple_resources() && resources.len() > 1 && !batch && !watch {
+        return Err("only one resource may be given (except with --gif or --watch)".into());
     }
     let resource = resources.first().cloned();
 
@@ -1657,6 +1706,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         watch,
         watch_interval,
         watch_cache,
+        watch_debounce: watch_debounce.unwrap_or(watch::DEFAULT_DEBOUNCE_SECONDS),
+        watch_poll,
+        watch_exit_on_error,
         batch,
         progress,
         continue_on_error,
@@ -2219,38 +2271,74 @@ fn run(cli: Cli) -> ExitCode {
 }
 
 fn run_watch(mut cli: Cli) -> ExitCode {
-    let Some(resource) = cli.resource.as_deref() else {
+    let Some(resource) = cli.resource.clone() else {
         return fail(
             &cli,
             ExitClass::Usage,
             "--watch requires a file path or URL",
         );
     };
-    if resource == "-" || (cli.mode == Mode::Print && !is_url(resource)) {
-        return fail(
-            &cli,
-            ExitClass::Usage,
-            "--watch requires a local file or URL, not stdin or literal markup",
-        );
+    let several = cli.resources.len() > 1;
+    for resource in &cli.resources {
+        if resource == "-" || (cli.mode == Mode::Print && !is_url(resource)) {
+            return fail(
+                &cli,
+                ExitClass::Usage,
+                "--watch requires a local file or URL, not stdin or literal markup",
+            );
+        }
+        if several && is_url(resource) {
+            return fail(
+                &cli,
+                ExitClass::Usage,
+                "--watch with several resources requires local files; watch a URL on its own",
+            );
+        }
+        let effective_mode = if cli.mode == Mode::Auto {
+            detect_mode(Some(resource))
+        } else {
+            cli.mode
+        };
+        if effective_mode.draws_directly() || effective_mode == Mode::Rule {
+            return fail(
+                &cli,
+                ExitClass::Usage,
+                "--watch requires a resource-backed render mode",
+            );
+        }
     }
-    let effective_mode = if cli.mode == Mode::Auto {
-        detect_mode(Some(resource))
-    } else {
-        cli.mode
-    };
-    if effective_mode.draws_directly() || effective_mode == Mode::Rule {
+    if several && (cli.export_html.is_some() || cli.export_svg.is_some()) {
         return fail(
             &cli,
             ExitClass::Usage,
-            "--watch requires a resource-backed render mode",
+            "--export-html/--export-svg cannot be combined with watching several files",
         );
     }
     // Redirected output must be a finite, deterministic command. This also
     // keeps `rich --watch file > snapshot.txt` from hanging in a pipeline.
+    // Several files render once each, in order, exactly as separate runs.
     if !std::io::stdout().is_terminal() {
         cli.watch = false;
-        return run_once(cli);
+        if !several {
+            return run_once(cli);
+        }
+        let mut first_failure = None;
+        for resource in cli.resources.clone() {
+            let mut single = cli.clone();
+            single.resource = Some(resource.clone());
+            single.resources = vec![resource];
+            let status = run_once(single);
+            if status != ExitClass::Success.exit_code() && first_failure.is_none() {
+                first_failure = Some(status);
+            }
+        }
+        return first_failure.unwrap_or_else(|| ExitClass::Success.exit_code());
     }
+    let resource = resource.as_str();
+    if !is_url(resource) {
+        return watch::watch_files(cli);
+    }
+    // Only URLs remain: they keep the polling-only loop below.
     if is_url(resource) {
         #[cfg(not(feature = "fetch"))]
         {
@@ -2400,6 +2488,11 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         builder = builder.force_terminal(terminal == "1");
     }
     if let Some(width) = cli.width.filter(|_| mode.draws_directly()) {
+        builder = builder.width(width);
+    }
+    // A watched resource renders into a live region, one column narrower than
+    // the terminal (the Live display keeps the last column free).
+    if let Some(width) = watch::capture_width() {
         builder = builder.width(width);
     }
     let mut console = builder.build();
@@ -2661,6 +2754,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 && !cli.auto_pager
                 && cli.export_html.is_none()
                 && cli.export_svg.is_none()
+                && !watch::capturing()
             {
                 let mut options = console.options();
                 options.max_width = cli.width.unwrap_or_else(|| {
@@ -4447,6 +4541,11 @@ fn should_page(
 }
 
 fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) -> Result<(), String> {
+    if watch::capturing() {
+        // A live watch region repaints these segments itself.
+        watch::capture_segments(console.record_output(render));
+        return Ok(());
+    }
     if export.html_path.is_none()
         && export.svg_path.is_none()
         && !export.pager
@@ -4523,6 +4622,7 @@ USAGE:
     rich [OPTIONS] [RESOURCE]
     rich [OPTIONS] <COMMAND> [RESOURCE]
     rich --batch [OPTIONS] RESOURCE...
+    rich --watch [OPTIONS] FILE...
 
 RESOURCE is a file path, an http(s) URL, or `-` for stdin. Everything after a
 bare `--` is a RESOURCE, however much it looks like an option. Input modes with
@@ -4612,9 +4712,15 @@ OPTIONS:
         --no-pager   Disable explicit and automatic paging
         --auto-pager Page only terminal output taller than the viewport
         --no-auto-pager Disable automatic paging
-        --watch      Re-render a changing file or URL while stdout is a terminal
+        --watch      Re-render changing files (several allowed) or one URL while
+                     stdout is a terminal; each file gets its own live region
         --watch-interval SEC
                      Poll interval in seconds (default 1)
+        --watch-debounce SEC
+                     Quiet period collapsing a burst of file events (default 0.1)
+        --watch-poll Poll local files at --watch-interval instead of file events
+        --watch-exit-on-error
+                     End the watch with a non-zero exit when a render fails
         --watch-cache With URLs, render only when the response body changes
         --batch      Convert explicit files, directories, or globs deterministically
         --batch-preserve-dirs  Preserve paths under --batch-input-root PATH
@@ -4646,7 +4752,8 @@ OPTIONS:
         --no-color   Disable colored output (as does a non-empty NO_COLOR)
         --color      Override a config no_color setting (pipes remain plain)
         --no-batch, --no-continue-on-error, --no-overwrite
-        --no-watch, --no-watch-cache, --no-sanitize
+        --no-watch, --no-watch-cache, --no-watch-poll, --no-watch-exit-on-error,
+        --no-sanitize
                      Disable the corresponding config/default boolean
     --demo          Guided suite tour; pauses 3 seconds between sections on a TTY
     --demo-list     List stable tour sections: core, workflows, art
@@ -5362,6 +5469,44 @@ mod tests {
         assert!(cli.watch_cache);
         assert!(parse(&[s("--watch-cache"), s("file.md")]).is_err());
         assert!(parse(&[s("--watch-interval"), s("2"), s("file.md")]).is_err());
+    }
+
+    #[test]
+    fn parses_multi_file_watch_options() {
+        let s = |v: &str| v.to_string();
+        let parse = parse_inner;
+        let cli = parse(&[
+            s("--watch"),
+            s("--watch-debounce"),
+            s("0.3"),
+            s("--watch-poll"),
+            s("--watch-exit-on-error"),
+            s("a.md"),
+            s("b.json"),
+        ])
+        .unwrap()
+        .unwrap();
+        assert_eq!(cli.resources, ["a.md", "b.json"]);
+        assert_eq!(cli.watch_debounce, 0.3);
+        assert!(cli.watch_poll && cli.watch_exit_on_error);
+        let default = parse(&[s("--watch"), s("a.md")]).unwrap().unwrap();
+        assert_eq!(default.watch_debounce, watch::DEFAULT_DEBOUNCE_SECONDS);
+        assert!(!default.watch_poll && !default.watch_exit_on_error);
+        for orphan in [
+            vec![s("--watch-debounce"), s("0.2"), s("a.md")],
+            vec![s("--watch-poll"), s("a.md")],
+            vec![s("--watch-exit-on-error"), s("a.md")],
+        ] {
+            assert!(parse(&orphan)
+                .err()
+                .unwrap()
+                .contains("only has an effect with --watch"));
+        }
+        for bad in ["-0.1", "nan", "inf", "soon", "3601"] {
+            assert!(parse(&[s("--watch"), s("--watch-debounce"), s(bad), s("a.md")]).is_err());
+        }
+        // Several resources remain an error without --watch (or --gif/--batch).
+        assert!(parse(&[s("a.md"), s("b.md")]).is_err());
     }
 
     #[test]
