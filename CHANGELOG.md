@@ -76,6 +76,48 @@ Both were found by the ext fuzzer and checked against rich 15.0.0.
   `columns_equal*`, `columns_expand_w20`, `tree_deep_w{3,4,6,10,20}` and
   `tree_multiline_w{6,12}`.
 
+### Core: markup in cells, labels and columns; measurement parity
+
+Both were found while writing the user guide and checked against rich 15.0.0.
+
+- **Markup in plain strings.** Upstream renders a `str` through
+  `Console.render_str`, so `add_row("[b]x")`, `add_column("[b]Name")`,
+  `Tree("[b]root")`, `tree.add(...)` and `Columns([...])` items parse console
+  markup and emoji codes. The port printed `[b]x[/b]` literally. Strings are now
+  a new `Cell::Markup` (also what `From<&str>`/`From<String>` produce), rendered
+  through the new `Console::render_str`. A `Text` is never re-parsed, so
+  `add_row_text`, `add_column_text` and `Cell::Text` stay literal.
+- **Highlighting follows upstream:** off in table cells unless
+  `Table::highlight(true)` or `column_highlight(true)`, off in tree labels
+  unless `Tree::highlight(true)`, and the console default for `Columns` items.
+- **Measurement.** `Table`, `Tree`, `Panel`, `Padding`, `Constrain`, `Align`,
+  `Rule` (`1, 1`) and `Bar` now port their `__rich_measure__`. Before, they
+  measured as the full width, so a nested table stretched its column and
+  `Align` could not move a table. `Styled` and `Align` measure through
+  `Measurement::get`. `Table` measures every cell, header included, with
+  `Measurement.get` inside its padding, and uses upstream's `_get_padding_width`
+  for fixed, clamped and ratio columns.
+- **Panel:** `expand(false)`, `Panel::fit` and `width` are ported, so a fitted
+  panel shrinks to its measured content and title.
+- **Columns** take any cell: `Columns::from_cells` accepts markup strings,
+  literal `Text` and renderables, with `equal` constraining renderables.
+- **Table text cells** render their `Text` unstyled and apply the cell style
+  afterwards, as `render_lines(style=...)` does. A span that matches the cell
+  style now keeps its own segment (`[b]Name` in a bold header).
+- **Migration:** a plain-string header, cell or tree label that must stay
+  literal should be passed as `Text` or escaped with `markup::escape`.
+  `Tree::new`/`add` take `impl Into<Cell>`. Ext's `derive` headers, precedence
+  layer names, `rich_table!` and `rich_tree!` now pass `Text` and stay literal.
+  CLI CSV headers and cells now parse markup and emoji codes, as rich-cli 1.8.1
+  does (`table.add_row(*row)` with `str` cells). Malformed markup prints
+  literally rather than raising (DIVERGENCES §2).
+- Goldens: `table_markup_*`, `tree_markup`, `tree_highlight`, `columns_markup`,
+  `table_nested`, `table_renderable_cells*`, `table_tree_cell`,
+  `columns_panels*`, `columns_tables`, `panel_fit_*`, `panel_width`,
+  `align_table`, `align_panel_fit`, plus the new `highlight_renderables.tsv`
+  (5 cases, highlighting console) and `measure_renderables.tsv` (18
+  container measurements).
+
 ### Ext: CLI authoring (0.0.11 workstream 6)
 
 - **One description, many outputs.** `rich_ext::cli_doc::CommandSpec` describes a

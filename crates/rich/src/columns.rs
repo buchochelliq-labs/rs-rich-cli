@@ -3,22 +3,23 @@
 //! Port of upstream `rich/columns.py`. [`Columns`] packs items into as many
 //! equal-gap columns as fit the available width, filling row by row.
 //!
-//! Slice scope: string items with the default padding `(0, 1)`, laid out in
-//! upstream's box-less `Table.grid` (collapsed single-space gaps, no edge
-//! padding), plus `equal` and `expand`. `width`/`column_first`/
-//! `right_to_left`/`align`/`title` and non-string renderables are deferred
-//! with the rest of `columns.py`.
+//! Slice scope: string (markup), `Text` and renderable items with the default
+//! padding `(0, 1)`, laid out in upstream's box-less `Table.grid` (collapsed
+//! single-space gaps, no edge padding), plus `equal` and `expand`.
+//! `width`/`column_first`/`right_to_left`/`align`/`title` are deferred with
+//! the rest of `columns.py`.
+
+use std::sync::Arc;
 
 use crate::console::{Console, ConsoleOptions};
 use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
-use crate::table::Table;
-use crate::text::Text;
+use crate::table::{Cell, Table};
 
 /// Arranges items into a grid of columns. Mirrors `rich.columns.Columns`.
 pub struct Columns {
-    items: Vec<String>,
+    items: Vec<Cell>,
     /// `(top, right, bottom, left)`; only left/right are used for gap sizing.
     padding: (usize, usize, usize, usize),
     expand: bool,
@@ -26,8 +27,16 @@ pub struct Columns {
 }
 
 impl Columns {
-    /// Columns of string items with the default padding `(0, 1)`.
+    /// Columns of string items with the default padding `(0, 1)`. Each string
+    /// is console markup, converted with the console's defaults (markup, emoji
+    /// and highlighting), as upstream's `console.render_str(renderable)` does.
     pub fn new(items: Vec<String>) -> Self {
+        Columns::from_cells(items.into_iter().map(Cell::Markup).collect())
+    }
+
+    /// Columns of any items: markup strings, literal [`Text`](crate::text::Text)
+    /// or renderables, as upstream's `Columns(renderables)` accepts.
+    pub fn from_cells(items: Vec<Cell>) -> Self {
         Columns {
             items,
             padding: (0, 1, 0, 1),
@@ -99,13 +108,23 @@ impl Renderable for Columns {
         }
         let (top, right, bottom, left) = self.padding;
         let width_padding = left.max(right);
-        let renderables: Vec<Text> = self.items.iter().map(Text::new).collect();
+        // `render_str(renderable) if isinstance(renderable, str)`: strings take
+        // the console's markup, emoji and highlight defaults; a `Text` or
+        // renderable is used as it is.
+        let renderables: Vec<Cell> = self
+            .items
+            .iter()
+            .map(|item| match item {
+                Cell::Markup(markup) => Cell::Text(console.render_str(markup, None)),
+                other => other.clone(),
+            })
+            .collect();
 
         // `Measurement.get(...).maximum` caps each width at `options.max_width`,
         // so an item wider than the console still fits in a single column.
         let mut widths: Vec<usize> = renderables
             .iter()
-            .map(|text| Measurement::get(console, options, text).maximum)
+            .map(|cell| cell.measure_cell(console, options).maximum)
             .collect();
         if self.equal {
             let widest = widths.iter().copied().max().unwrap_or(0);
@@ -119,7 +138,7 @@ impl Renderable for Columns {
         // which wraps (or ellipsis-truncates) each item to its column width.
         // With `equal`, upstream wraps each item in `Constrain(renderable,
         // renderable_widths[0])`; for text items that is a no-op, since no item
-        // measures wider than the constraint.
+        // measures wider than the constraint, so only renderables are wrapped.
         let mut table = Table::grid()
             .padding(top, right, bottom, left)
             .collapse_padding(true)
@@ -129,16 +148,55 @@ impl Renderable for Columns {
             table.add_column("");
         }
         let mut cells = renderables;
+        if self.equal {
+            let width = widths.first().copied().unwrap_or(0);
+            for cell in &mut cells {
+                if let Cell::Renderable(renderable) = cell {
+                    *cell = Cell::Renderable(Arc::new(ConstrainCell {
+                        renderable: renderable.clone(),
+                        width,
+                    }));
+                }
+            }
+        }
         let remainder = cells.len() % column_count;
         if remainder != 0 {
             // `iter_renderables` pads the last row with `None`, which
             // `Table.add_row` renders as an empty cell.
-            cells.resize(cells.len() + (column_count - remainder), Text::new(""));
+            cells.resize(
+                cells.len() + (column_count - remainder),
+                Cell::Markup(String::new()),
+            );
         }
         for row in cells.chunks(column_count) {
-            table.add_row_text(row.to_vec());
+            table.add_row_cells(row.to_vec());
         }
         table.rich_render(console, options)
+    }
+}
+
+/// `Constrain(renderable, width)` around a shared cell renderable (the
+/// `equal` path). Same rules as [`Constrain`](crate::constrain::Constrain).
+struct ConstrainCell {
+    renderable: Arc<dyn Renderable + Send + Sync>,
+    width: usize,
+}
+
+impl Renderable for ConstrainCell {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        let options = options.update_width(self.width.min(options.max_width));
+        if options.max_width < 1 {
+            return Vec::new();
+        }
+        self.renderable.rich_render(console, &options)
+    }
+
+    fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+        Measurement::get(
+            console,
+            &options.update_width(self.width),
+            self.renderable.as_ref(),
+        )
     }
 }
 

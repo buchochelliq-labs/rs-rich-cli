@@ -7,6 +7,7 @@
 //! explicit `width`/`pad` options are deferred with the rest of `align.py`.
 
 use crate::console::{Console, ConsoleOptions};
+use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::style::Style;
@@ -58,11 +59,7 @@ impl Renderable for Align {
         // Upstream measures the child, renders it through `Constrain` at that
         // width, and squares the lines off with `Segment.set_shape`, so the
         // rendered *block* is aligned as a whole (#443).
-        let block_width = self
-            .child
-            .measure(console, options)
-            .maximum
-            .min(options.max_width);
+        let block_width = Measurement::get(console, options, self.child.as_ref()).maximum;
         let mut child_options = options.update_width(block_width);
         child_options.height = None;
         let lines = console.render_lines(self.child.as_ref(), &child_options, false);
@@ -106,6 +103,11 @@ impl Renderable for Align {
             }
         }
         segments
+    }
+
+    /// Port of `Align.__rich_measure__`: the child's measurement.
+    fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+        Measurement::get(console, options, self.child.as_ref())
     }
 }
 

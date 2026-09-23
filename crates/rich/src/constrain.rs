@@ -4,6 +4,7 @@
 //! reduced maximum width.
 
 use crate::console::{Console, ConsoleOptions};
+use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 
@@ -28,6 +29,16 @@ impl Renderable for Constrain {
         };
         let child_options = options.update_width(width);
         self.child.rich_render(console, &child_options)
+    }
+
+    /// Port of `Constrain.__rich_measure__`: the child measured within the
+    /// constraint (`Measurement.get` then caps it at the outer width).
+    fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+        let options = match self.width {
+            Some(width) => options.update_width(width),
+            None => options.clone(),
+        };
+        Measurement::get(console, &options, self.child.as_ref())
     }
 }
 

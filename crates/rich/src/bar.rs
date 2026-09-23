@@ -6,6 +6,7 @@
 
 use crate::color::Color;
 use crate::console::{Console, ConsoleOptions};
+use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::style::Style;
@@ -52,6 +53,15 @@ impl Bar {
 }
 
 impl Renderable for Bar {
+    /// Port of `Bar.__rich_measure__`: its fixed width, else at least four
+    /// cells and up to the whole width.
+    fn measure(&self, _console: &Console, options: &ConsoleOptions) -> Measurement {
+        match self.width {
+            Some(width) => Measurement::new(width, width),
+            None => Measurement::new(4, options.max_width),
+        }
+    }
+
     fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let width = self
             .width
