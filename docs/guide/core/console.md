@@ -85,7 +85,7 @@ Start from `console.options()` and change the fields you need: `max_width`,
 | `height(usize)` | `LINES`, else the terminal height, else 25 | Used by height-filling renderables such as `Layout` |
 | `color_system(Option<ColorSystem>)` | detected from `COLORTERM`/`TERM`; `None` when not a terminal | `Standard` (16), `EightBit` (256), `Truecolor`, or `None` for no colour at all |
 | `force_terminal(bool)` | detected | Treat stdout as a terminal: keep styles and control codes when piped |
-| `no_color(bool)` | on when `NO_COLOR` is set and non-empty | Disable styled output (see the note below) |
+| `no_color(bool)` | on when `NO_COLOR` is set and non-empty | Remove colours from output, keeping bold, italic and underline (see the note below) |
 | `highlight(bool)` | `true` | Automatic highlighting of numbers, strings, paths, URLs… |
 | `emoji(bool)` | `true` | Expand `:rocket:`-style shortcodes in markup |
 | `theme(Theme)` | `Theme::default_theme()` | The style names markup and renderables look up ([themes](text-and-style.md#themes)) |
@@ -95,12 +95,13 @@ Start from `console.options()` and change the fields you need: `max_width`,
 Read the result back with `console.width()`, `height()`, `color_system()`,
 `is_terminal()` and `no_color()`.
 
-!!! note "`no_color` drops all styling"
+!!! note "`no_color` removes only colour"
 
-    In this port `no_color` makes `color_system()` return `None`, so bold,
-    italic and underline disappear along with the colours. Upstream's
-    `no_color` removes only the colours. If you need attributes without colour,
-    leave `no_color` off and use styles that set no colour.
+    As upstream's does, `no_color` strips colours when output is written and
+    keeps bold, italic and underline. `color_system()` still reports the
+    detected colour system, so to ask "will colour reach the terminal?", also
+    check `no_color()`. Exports read the recording, so they keep their
+    colours. For no styling at all, use `color_system(None)`.
 
 !!! tip "Pin the console in tests"
 

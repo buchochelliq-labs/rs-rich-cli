@@ -200,17 +200,16 @@ a spinner plus a message, styled `status.spinner`:
 
 ![A status line, then the same status updated with a new message and spinner](../../media/guide/guide_progress-status.svg)
 
-To animate a status, render `status.renderable().render(elapsed)` on each tick
-of a `Live` display, as the auto-refresh example above does.
+A status in a `Live` animates on its own. The auto-refresh example above
+renders `status.renderable().render(elapsed)` instead, to choose each frame.
 
-!!! note "Printing a spinner shows its first frame"
+!!! note "Spinners read the console clock"
 
-    `console.print(&spinner)` or `print(&status)` always draws the frame at the
-    animation's start — the renderable has no clock. Drive the animation by
-    calling `render(elapsed_seconds)` yourself. Upstream's spinner reads the
-    console clock and animates when placed directly in a `Live`; this port's
-    does not yet. (Spinners *inside* a `Progress` animate, because they use the
-    progress clock.)
+    As upstream's does, a `Spinner` or `Status` renders the frame for
+    `console.get_time()`, so one placed directly in a `Live` animates on
+    every refresh. For reproducible output, such as tests or screenshots, pin
+    the clock with `ConsoleBuilder::get_time`, or render a given moment with
+    `render(elapsed_seconds)` as the examples on this page do.
 
 ## ProgressBar
 

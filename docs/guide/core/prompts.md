@@ -80,10 +80,6 @@ To test only the validation, call `process_response`, which does no I/O at all:
 
 ## Gotchas
 
-- **The question bypasses capture.** `ask` and `ask_from` write the question
-  straight to stdout, so `console.capture(...)` and the exports do not record
-  it (the rejection messages do go through the console). Use `make_prompt` to
-  render a question into a capture or export.
 - **No hidden input.** Upstream's `password=True` (no echo) is not ported;
   read secrets with a crate such as `rpassword`.
 - **`IntPrompt` is `i64`, `FloatPrompt` is `f64`.** Convert and range-check
