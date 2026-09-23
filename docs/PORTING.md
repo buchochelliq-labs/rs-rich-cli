@@ -121,7 +121,7 @@ core mirror is untouched and a sync does not have to reconcile them.
 |-------------|------------------------------|-----------|
 | `--demo` and `--demo-delay` | `demo.rs` + `main.rs` | bounded, offline tour composes existing public renderers and CLI workflows; uses temporary examples and restores terminal state on interruption |
 | batch planning and `--dry-run`, with `--jobs` concurrency for file exports | `batch.rs` + `main.rs` | subprocess workers reuse the single-resource renderer; disk-spooled output is replayed in input order; terminal-only batches remain serial |
-| strict TOML profiles, inverse booleans, `config show` / `config validate` | `config.rs` + `main.rs` | validated defaults/profile/CLI precedence and JSON inspection compose existing options without changing core |
+| strict TOML profiles, inverse booleans, `config show` / `config validate` | `config.rs` + `main.rs` | validated defaults/profile/CLI precedence and JSON inspection compose existing options without changing core; a working-directory `rich.toml` cannot turn colour back on against `NO_COLOR` (the user's config, `--config` and `--color` can) |
 | `--auto-pager` and `--no-pager` | `main.rs` | CLI destination/height policy composes public pager APIs; redirected stdout is never paged |
 | `--image-anchor` for still-image cover fitting | `main.rs` | routes to public `rich-art::ImageArt::anchor`; crop implementation and `ImageAnchor` remain in art |
 | multi-file `--watch` with `--watch-debounce`, `--watch-poll`, `--watch-exit-on-error` (0.0.10, #139) | `watch.rs` + `main.rs` + `config.rs` | `notify` file events on each parent directory, polling fallback; several files repaint as public `rich-ext` `LiveCoordinator` regions; no core change |

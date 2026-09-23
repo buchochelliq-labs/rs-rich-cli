@@ -694,6 +694,11 @@ Without a key, `config explain` tables every key across the layers — built-in
 defaults, `NO_COLOR`, the config file, the profile and the command line — and
 `config reference` lists every key with its type, default and flag.
 
+`no_color = false` in your own config (`~/.config/rich/config.toml`, or a file
+named with `--config`) overrides `NO_COLOR`. A `rich.toml` found in the working
+directory belongs to the project, so it can turn colour off but not back on
+while `NO_COLOR` is set; pass `--color` to override it for one run.
+
 Themes give names to styles. The `night` theme defines `notice` and `warning`:
 
 ```bash

@@ -707,7 +707,7 @@ Settings are TOML: `version = 1`, a `[defaults]` table, optional `[profile.NAME]
 Settings are read from these sources, lowest precedence first; a later source overrides an earlier one:
 
 1. **defaults** — Built-in defaults
-2. **environment** (`NO_COLOR`) — A non-empty value sets no_color = true
+2. **environment** (`NO_COLOR`) — A non-empty value sets no_color = true. A no_color = false in ./rich.toml cannot undo it; ~/.config/rich/config.toml, --config PATH and --color can
 3. **config file** (`./rich.toml, else ~/.config/rich/config.toml`) — The [defaults] table. Only the first file found is read; --config PATH reads that file instead and --no-config reads none
 4. **profile** (`[profile.NAME]`) — The profile selected with --profile (default: default) overrides the [defaults] table
 5. **command line** — Explicit flags override every other source

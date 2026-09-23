@@ -1023,7 +1023,8 @@ pub(crate) fn config_reference() -> ConfigReference {
         .source(
             "environment",
             "NO_COLOR",
-            "A non-empty value sets no_color = true",
+            "A non-empty value sets no_color = true. A no_color = false in ./rich.toml \
+             cannot undo it; ~/.config/rich/config.toml, --config PATH and --color can",
         )
         .source(
             "config file",
@@ -1277,6 +1278,7 @@ mod tests {
         let roots = ConfigRoots {
             home: None,
             cwd: root.path().into(),
+            no_color_env: false,
         };
         let demo = demo_options();
         for arg in root_args().iter().filter(|arg| !arg.positional) {

@@ -142,4 +142,20 @@ fn doctor_color_overrides_match_rendering_precedence() {
         // Color preference never forces terminal controls into redirected output.
         assert_eq!(report["terminal"]["color"], "none");
     }
+    // A rich.toml found in the working directory cannot undo NO_COLOR.
+    std::fs::write(
+        root.path().join("rich.toml"),
+        "[defaults]\nno_color = false\n",
+    )
+    .unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_rich"))
+        .args(["doctor", "--report", "json"])
+        .current_dir(root.path())
+        .env("NO_COLOR", "1")
+        .env("HOME", root.path())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["terminal"]["no_color"], true);
 }

@@ -60,6 +60,36 @@ Entries below record subsequent releases and development.
 Cohort versions for 0.0.11 (not published): core 0.0.7, ext 0.0.9, art 0.0.9,
 CLI 0.0.11. Core changes below, so every dependent moves with it.
 
+### CLI: a project's `rich.toml` cannot undo `NO_COLOR`
+
+- A `no_color = false` in a `rich.toml` found in the working directory used to
+  turn colour back on even with `NO_COLOR` set, so running `rich` inside a
+  repository could colour the output of someone who had asked for none. That
+  file now can turn colour off but not on while `NO_COLOR` is set, in
+  `[defaults]` or a profile. Your own `~/.config/rich/config.toml`, a file named
+  with `--config`, and `--color` still override `NO_COLOR`, as the NO_COLOR
+  convention allows for user configuration.
+- `config show` reports the effective setting, and `config explain` notes when
+  the file's value was ignored. The config reference and `docs/cli.md` describe
+  the rule.
+
+### Core: table vertical padding follows the row's position
+
+- A table applied its top and bottom padding to every row alike. Upstream
+  (`_get_cells`' `get_padding`) picks them per row. With `collapse_padding`,
+  every row but the last keeps only `max(0, top - bottom)` below it. With
+  `pad_edge` off, the first row (the header, when shown) loses its top padding
+  and the last row its bottom. So `Table::grid().padding(0, 2, 1, 0)` no longer
+  leaves a blank line after each row, and a grid of tables stacks as it does
+  upstream.
+- Checked against rich 15.0.0: 240 combinations of padding, `collapse_padding`,
+  `pad_edge`, header, row count, boxed and grid match byte for byte (98
+  differed before). Goldens: `table_vpad_{grid,boxed,collapse,no_edge,
+  header_only,no_header}`.
+- The guide's box gallery is regenerated. `box::NONE`'s doc comment no longer
+  calls it a port: upstream has no `box.NONE` and uses `box=None`, which draws
+  no border lines at all.
+
 ### Documentation: the user guide
 
 - **`docs/guide/`** walks through every component: an overview of the crates,
