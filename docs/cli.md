@@ -6,8 +6,8 @@ by what you are trying to do. For the complete list of options, see the
 [CLI reference](cli-reference.md).
 
 **Assumes** you can run commands in a terminal. Examples use real CLI output;
-0.0.10 workflows (prepared, not yet published) are documented below. See the
-[release notes](releases/0.0.10.md) for validation and publication status.
+0.0.10 workflows are documented below. See the
+[release notes](releases/0.0.10.md) for validation and publication evidence.
 
 ---
 

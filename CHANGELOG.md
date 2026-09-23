@@ -57,11 +57,15 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
-## Core 0.0.6 / ext 0.0.8 / art 0.0.8 / CLI 0.0.10 — prepared
+## Core 0.0.6 / ext 0.0.8 / art 0.0.8 / CLI 0.0.10 — published 2026-09-23
 
 Every workstream in the [0.0.10 plan](docs/plans/0.0.10.md) is merged to `main`, and the
 release test passed on the integrated tree; see the
-[0.0.10 release notes](docs/releases/0.0.10.md). Nothing is tagged or published.
+[0.0.10 release notes](docs/releases/0.0.10.md). All four crates were published through
+Trusted Publishing, each with a passing exact-version registry consumer:
+[core](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35818053978), [ext](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35818015980), [art](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35818038760) and
+[CLI](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35818067984). The tags were first pushed out of order; the release notes
+record the recovery. Each version was uploaded once.
 
 - Release tooling: `check_packages.py` drops Cargo's cached copies of staged-only
   versions before verifying. Cargo reused a core 0.0.6 unpacked and built before

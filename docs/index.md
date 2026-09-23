@@ -42,7 +42,7 @@ Progress and spinner animations replay exported library frames. The
 ## Release history and development
 
 The [0.0.9 cohort](releases/0.0.9-expanded.md) is published. The
-[0.0.10 cohort](releases/0.0.10.md) is prepared but not yet published. It adds
+[0.0.10 cohort](releases/0.0.10.md) is published too. It adds
 Progress time, rate and spinner columns, upstream's theme stack, `~~~` strikethrough
 parity, multi-file watch, and quadrant, ANSI16 and grayscale image modes.
 The [roadmap](ROADMAP.md) tracks subsequent work. Manifest versions below
