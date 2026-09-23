@@ -58,20 +58,17 @@ layout region.
 
 ![A tree inside a titled panel](../../media/guide/guide_tree-panel.svg)
 
-A tree reports the full available width when measured (see
-[measuring](console.md#measuring)), so in a table cell pin the column with
-`column_width`. `Align::center` works as expected: it aligns the block of
-lines the tree actually draws.
+A tree measures its widest label plus its guides (see
+[measuring](console.md#measuring)), so in a table cell or under
+`Align::center` it takes only the room it needs.
 
 ## Not yet ported
 
-This port covers upstream's default tree: thin guides and plain-text labels.
-Not yet available:
+This port covers upstream's default tree: thin guides, with labels given as
+markup strings, `Text` or renderables. Not yet available:
 
 - `guide_style` and the bold, double and ASCII guide sets.
-- Labels as renderables or markup (`Tree("[bold]root")`, `tree.add(Panel(…))`)
-  — labels are plain text; `[b]` shows literally.
-- `style`, `highlight`, `hide_root` and `expanded=False`.
+- `style`, `hide_root` and `expanded=False`.
 
 ## See also
 

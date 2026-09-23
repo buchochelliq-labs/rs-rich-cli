@@ -150,12 +150,14 @@ lot of layout behaviour.
 
 - **`Text`** measures from its content: the minimum is its longest word, the
   maximum its longest line.
-- **Everything else** — `Panel`, `Table`, `Tree`, `Padding`, `Rule`, and any
-  `Renderable` that does not override `measure` — reports the full available
-  width. Wrap it in [`Constrain`](layout.md#constrain-and-styled) to make it
-  narrower. (Upstream measures `Table`, `Tree` and `Padding` by their content;
-  this port does not yet, which matters when you nest them in a
-  [table cell](tables.md#renderables-in-cells).)
+- **`Table`, `Tree`, `Padding`, `Align` and `Constrain`** measure their
+  content, as upstream's do, so they size to it in a
+  [table cell](tables.md#renderables-in-cells) or under `Align`.
+- **`Panel`** fills the width unless built with `Panel::fit` (or given a
+  `width`); a fitted panel measures its content plus its border and padding.
+- **Everything else** — `Columns`, `Layout`, and any `Renderable` that does
+  not override `measure` — reports the full available width. Wrap it in
+  [`Constrain`](layout.md#constrain-and-styled) to make it narrower.
 - `Syntax`, `Json`, `Pretty`, `ProgressBar` and `Styled` measure their content.
 - `Measurement::get` normalizes and caps a renderable's answer at
   `options.max_width`; `clamp` and `with_maximum` adjust one.

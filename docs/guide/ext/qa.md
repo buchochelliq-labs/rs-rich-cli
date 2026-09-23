@@ -101,7 +101,7 @@ widths with the height unset.
 --8<-- "crates/rich-ext/examples/guide_qa.rs:stress"
 ```
 
-![A table that overflows at 3 columns and loses content at 8](../../media/guide/guide_qa-stress.svg)
+![A table that overflows at 3 columns](../../media/guide/guide_qa-stress.svg)
 
 `report.is_clean()` is the usual assertion. `report.of(IssueKind::Overflow)`
 filters the issues by kind.

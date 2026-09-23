@@ -88,7 +88,8 @@ fn measure(console: &Console) {
     // minimum = the longest word, maximum = the whole line.
     console.print_str(&format!("Text:  min={} max={}", m.minimum, m.maximum));
 
-    // Containers such as Panel fill the width by default.
+    // A panel measures its content plus border and padding, as upstream's
+    // does, though it still expands to fill the width when rendered.
     let panel = Panel::new(Box::new(Text::new("hi")));
     let m = Measurement::get(console, &options, &panel);
     console.print_str(&format!("Panel: min={} max={}", m.minimum, m.maximum));

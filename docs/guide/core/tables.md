@@ -28,12 +28,14 @@ Add columns, then rows. A row is a slice of strings, one per column.
 - The default box is `HEAVY_HEAD`, the header is bold, and cells have one
   space of padding left and right — upstream's defaults.
 
-!!! note "Plain `&str` cells are not markup"
+!!! note "Plain `&str` cells are markup"
 
-    `add_row(&["[b]x[/b]"])` shows the brackets. Upstream parses markup in
-    string cells; this port does not yet. For styled cells, build `Text`
-    values and use `add_row_text` — see [styling](#styling). The same applies
-    to headers passed to `add_column`.
+    As upstream does, `add_row(&["[b]x[/b]"])` renders `x` in bold, and so do
+    headers passed to `add_column`. Cells are parsed when the table renders,
+    with emoji codes and highlighting where the table or column enables it.
+    For data that must stay literal, such as file names or user input, pass
+    `Text` values with `add_row_text` or `add_column_text`; a `Text` is never
+    re-parsed.
 
 ## Columns
 
@@ -132,13 +134,9 @@ A cell can hold any renderable that is `Send + Sync`: another table, a
 
 ![A table nested in a table cell](../../media/guide/guide_tables-nested.svg)
 
-!!! warning "Nested containers ask for the full width"
-
-    A cell's width comes from measuring its content. This port's `Table`,
-    `Tree`, `Panel` and `Padding` do not measure their content yet — they ask
-    for all the width there is — so a column holding one grows to fill the
-    table. Pin such columns with `column_width` or `column_max_width`.
-    Upstream measures nested tables by their columns.
+A cell's width comes from measuring its content, and a nested `Table`,
+`Tree` or `Padding` measures by its own content, as upstream's do. A `Panel`
+fills the width it is given unless it is built with `Panel::fit`.
 
 !!! note "Not every renderable can be a cell"
 
@@ -180,8 +178,7 @@ On a legacy Windows console the fancy boxes fall back to `SQUARE`, and with
 - Alternating row styles (`row_styles`), per-row `style`/`end_section`, and
   `add_section`.
 - `title_style`, `caption_style`, `title_justify`, `caption_justify`,
-  `header_style` on the table, `highlight`, `min_width`/`width` on the table.
-- Markup and highlighting in plain string cells (see above).
+  `header_style` on the table, `min_width`/`width` on the table.
 
 ## See also
 

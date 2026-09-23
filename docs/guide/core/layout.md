@@ -38,8 +38,8 @@ The examples use these imports:
 | `padding((top, right, bottom, left))` | `(0, 1, 0, 1)` | space between border and content |
 | `border_style(Style)` | none | style of the border and title line |
 
-A panel always fills the width it is given. For a narrower one, wrap it in
-[`Constrain`](#constrain-and-styled).
+A panel fills the width it is given. `Panel::fit(child)` sizes it to its
+content instead, as upstream's `Panel.fit` does, and `.width(n)` fixes it.
 
 ## Padding
 
@@ -151,12 +151,10 @@ tables.
 
 ## Not yet ported
 
-- `Panel`: `expand=False` / `Panel.fit`, `width`, `height`, `style`,
-  `highlight` — use `Constrain` for width.
-- `Align`: vertical alignment, `width`, `style`; `Align.center` on a `Panel`
-  needs a `Constrain` first.
-- `Columns`: renderable items, `equal`, `expand`, `column_first`,
-  `right_to_left`, `align`, `title`, custom padding.
+- `Panel`: `height`, `style`, `highlight`.
+- `Align`: vertical alignment, `width`, `style`.
+- `Columns`: `column_first`, `right_to_left`, `align`, `title`, custom
+  padding.
 - `Layout`: named regions (`layout["body"]`), `visible`, `update`, and the
   placeholder drawn for an empty region (it renders blank —
   [divergence #11](../../DIVERGENCES.md)).
