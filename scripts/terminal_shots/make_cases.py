@@ -4,7 +4,7 @@
 Every screenshot is a real PTY run of the given `rich` binary; shoot.js only
 replays the captured bytes into xterm.js. Run from this directory:
 
-    python3 make_cases.py --bin-dir DIR --work WORKDIR --image PNG > cases.json
+    python3 make_cases.py --bin-dir DIR --work WORKDIR --image PNG [--release 0.0.10] > cases.json
     npm install && CHROMIUM=/path/to/chrome node shoot.js cases.json OUTDIR
 """
 import argparse
@@ -37,30 +37,39 @@ def fixtures(work: Path, image: Path) -> None:
 
 
 def case(name, title, commands, work, bin_dir, cols=100, rows=24, **extra):
-    # Echo each command as a prompt line, then run it in the same PTY.
+    # Echo each command as a prompt line, then run it in the same PTY. A command
+    # may be a (shown, run) pair when the real invocation needs shell plumbing
+    # (backgrounding, a scripted edit) that would only clutter the prompt line.
+    pairs = [c if isinstance(c, tuple) else (c, c) for c in commands]
     script = "; ".join(
-        f"printf '\\033[1;32m$\\033[0m %s\\n' {shlex.quote(c)}; {c}" for c in commands
+        f"printf '\\033[1;32m$\\033[0m %s\\n' {shlex.quote(shown)}; {run}" for shown, run in pairs
     )
     return {"name": name, "title": title, "cmd": "sh", "args": ["-c", script],
             "cwd": str(work), "cols": cols, "rows": rows,
             "env": {"PATH": f"{bin_dir}:/usr/bin:/bin"}, **extra}
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--bin-dir", type=Path, required=True)
-    parser.add_argument("--work", type=Path, required=True)
-    parser.add_argument("--image", type=Path, required=True)
-    args = parser.parse_args()
-    work, bin_dir = args.work.resolve(), args.bin_dir.resolve()
-    fixtures(work, args.image)
+def fixtures_010(work: Path) -> None:
+    (work / "strike.md").write_text(
+        "# Strikethrough like markdown-it\n\n"
+        "- `~~done~~` → ~~done~~\n"
+        "- `a ~~~x~~~ b` → a ~~~x~~~ b\n"
+        "- `~~one~~ and ~~two~~` → ~~one~~ and ~~two~~\n"
+    )
+    (work / "status.json").write_text('{"build": "running", "step": 1}\n')
+    (work / "notes.md").write_text("# Notes\n\n- watching two files\n")
+    (work / "edit-status.sh").write_text(
+        "sleep 1.5\nprintf '{\"build\": \"passed\", \"step\": 2}\\n' > status.json\nsleep 1.5\n"
+    )
+
+
+def cases_009(c, work):
     notice = "'[notice]notice: Ready[/]  [warning]warning: Check config[/]'"
     batch = ("rich --no-config --batch --batch-preserve-dirs --batch-input-root input "
              "--batch-name-template '{index}-{stem}.{output_ext}'")
     img = ("rich --no-config image gradient.png --image-mode blocks --width 48 "
            "--height 14 --image-fit contain")
-    c = lambda *a, **k: case(*a, work=work, bin_dir=bin_dir, **k)
-    cases = [
+    return [
         c("01-version-doctor", "Installed from the packaged crates: version and read-only diagnostics",
           ["rich --version", "rich doctor --no-config"], rows=11),
         c("02-themes", "Named theme from config, then an explicit --theme-style override",
@@ -79,7 +88,51 @@ def main() -> None:
           [f"{img} --image-rotate 90 --image-flip-horizontal --image-grayscale"], cols=72, rows=18),
         c("08-demo-list", "Guided tour sections", ["rich --demo-list"], rows=6),
     ]
-    print(json.dumps(cases, indent=1))
+
+
+def cases_010(c, work):
+    img = "rich --no-config image gradient.png --width 48 --height 14 --image-fit contain"
+    watch = "rich --no-config --watch --watch-debounce 0.1 status.json notes.md"
+
+    def image(*groups):
+        # Shown as typed shell continuations so the prompt line never wraps mid-word.
+        shown = img + "".join(f" \\\n    {group}" for group in groups)
+        return (shown, " ".join((img, *groups)))
+
+    return [
+        c("01-version-doctor", "Installed from the packaged crates: version and read-only diagnostics",
+          ["rich --version", "rich doctor --no-config"], rows=11),
+        c("02-image-quadrants", "Image: quadrant blocks, 2×2 pixels per cell",
+          [image("--image-mode quadrants")], rows=19),
+        c("03-image-ansi16-bayer", "Image: quadrants in the 16 theme colours with Bayer 4×4",
+          [image("--image-mode quadrants --image-color ansi16 --image-dither bayer4x4")], rows=19),
+        c("04-image-gray-tone", "Image: grayscale palette with brightness, contrast and gamma",
+          [image("--image-mode blocks --image-color grayscale",
+                 "--image-brightness 1.1 --image-contrast 1.4 --image-gamma 0.8")], rows=20),
+        c("05-markdown-strike", "Markdown: tilde runs paired as markdown-it pairs them",
+          ["rich --no-config strike.md --width 60"], cols=72, rows=10),
+        c("06-watch-two-files", "Multi-file --watch: one live region per file; only the edited one repaints",
+          [(watch, f"({watch} & p=$!; sh edit-status.sh; kill -INT $p; wait $p)")],
+          cols=80, rows=16, timeoutMs=20000),
+    ]
+
+
+CASE_SETS = {"0.0.9": cases_009, "0.0.10": cases_010}
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--bin-dir", type=Path, required=True)
+    parser.add_argument("--work", type=Path, required=True)
+    parser.add_argument("--image", type=Path, required=True)
+    parser.add_argument("--release", choices=sorted(CASE_SETS), default="0.0.9",
+                        help="which release's screenshot set to build (default 0.0.9)")
+    args = parser.parse_args()
+    work, bin_dir = args.work.resolve(), args.bin_dir.resolve()
+    fixtures(work, args.image)
+    fixtures_010(work)
+    c = lambda *a, **k: case(*a, work=work, bin_dir=bin_dir, **k)
+    print(json.dumps(CASE_SETS[args.release](c, work), indent=1))
 
 
 if __name__ == "__main__":

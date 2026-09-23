@@ -7,7 +7,7 @@ absorbed and what our own crates did.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
-## Expanded CLI 0.0.9 preparation (unpublished)
+## Core 0.0.5 / ext 0.0.7 / art 0.0.7 / CLI 0.0.9 — published 2026-09-22
 
 - Core 0.0.5: optional immutable rendering-environment extension seam; unchanged
   default parity and public ConsoleOptions/Renderable requirements.
@@ -25,8 +25,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - Release test passed on 2026-09-22 (full validation, golden parity, per-tag plans,
   packaged consumer install, installed-binary screenshots); see
   [expanded notes](docs/releases/0.0.9-expanded.md#release-test-2026-09-22).
-- Proposed cohort verified absent from crates.io on 2026-09-22; no tags or registry
-  publication performed. Publish core → ext/art → CLI after merge and CI.
+- Published from `main` at `c645220` in dependency order by the protected release
+  workflow: [`rs-rich-v0.0.5`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35789282880), [`rs-rich-ext-v0.0.7`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35792283558), [`rs-rich-art-v0.0.7`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35792299240), [`rs-rich-cli-v0.0.9`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35792320939). The core
+  upload first failed because crates.io required Trusted Publishing; it succeeded
+  after the crate setting was adjusted. The workflow still uses a stored token
+  (tracked for 0.0.10).
 
 ## [0.0.1] — first release
 
@@ -54,9 +57,19 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
-Planned cohort (see [0.0.10 plan](docs/plans/0.0.10.md)): core 0.0.6, ext 0.0.8,
-art 0.0.8, CLI 0.0.10. Manifests are bumped up front so every 0.0.10 change is
-checked against unpublished versions; nothing is published yet.
+## Core 0.0.6 / ext 0.0.8 / art 0.0.8 / CLI 0.0.10 — prepared
+
+Every workstream in the [0.0.10 plan](docs/plans/0.0.10.md) is merged to `main`, and the
+release test passed on the integrated tree; see the
+[0.0.10 release notes](docs/releases/0.0.10.md). Nothing is tagged or published.
+
+- Release tooling: `check_packages.py` drops Cargo's cached copies of staged-only
+  versions before verifying. Cargo reused a core 0.0.6 unpacked and built before
+  `fit_to_measurement` existed, which failed a good tree and could pass a bad one.
+- CLI: a multi-file `--watch` with `--watch-exit-on-error` no longer promises a retry
+  in the failing region.
+- Demo: the tour shows a pushed theme, `~~~` strikethrough and a two-file watch that
+  ends through `--watch-exit-on-error`; it is re-recorded from the 0.0.10 build.
 
 - Release: crates.io Trusted Publishing replaces the stored registry token; the
   OIDC exchange runs only after preflight and dry run (`docs/BRANCHING.md`).
@@ -152,7 +165,7 @@ checked against unpublished versions; nothing is published yet.
   `theme_stack.tsv` checks them against rich 15.0.0; DIVERGENCES §14 resolved (#3).
   `RichError` gains `ThemeStack` and `ThemeConfig`; exhaustive matches need them.
 
-## CLI 0.0.9 / art 0.0.7 — prepared
+## CLI 0.0.9 / art 0.0.7 — published with the cohort above
 
 - Named TOML themes, default/profile/CLI selection, explicit style overrides and
   resolved theme bindings for batch workers and exports.
@@ -166,7 +179,7 @@ checked against unpublished versions; nothing is published yet.
   and the `ImageOptions` struct shape remain unchanged.
 
 Local validation and review passed; see [0.0.9 preparation notes](docs/releases/0.0.9.md).
-The expanded scope above also moves core to 0.0.5 and ext to 0.0.7. No publication is claimed.
+The expanded scope above also moves core to 0.0.5 and ext to 0.0.7; all four published on 2026-09-22.
 
 ## CLI 0.0.8 / art 0.0.6 — published
 

@@ -52,7 +52,9 @@ def color(value, default):
                'blue':'0000ee','magenta':'cd00cd','cyan':'00cdcd','white':'e5e5e5',
                'brightblack':'7f7f7f','brightred':'ff0000','brightgreen':'00ff00',
                'brightbrown':'ffff00','brightyellow':'ffff00','brightblue':'5c5cff',
-               'brightmagenta':'ff00ff','brightcyan':'00ffff','brightwhite':'ffffff'}
+               'brightmagenta':'ff00ff','brightcyan':'00ffff','brightwhite':'ffffff',
+               # pyte 0.8.2 spells SGR 105 (bright magenta background) this way.
+               'bfightmagenta':'ff00ff'}
     if value == 'default': return default
     return '#' + palette.get(value, value)
 
