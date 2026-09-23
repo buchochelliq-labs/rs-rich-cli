@@ -78,6 +78,22 @@ CLI 0.0.11. Core changes below, so every dependent moves with it.
   rule titles now get the default title `rich`. Path, URL and stdin titles are
   unchanged.
 
+### Core: Columns and Tree fit narrow widths
+
+Both were found by the ext fuzzer and checked against rich 15.0.0.
+
+- **Columns:** an item wider than the width sized its column to the whole item
+  and showed only its first line, so `Columns(["supercalifragilistic"])` at 8
+  cells printed 20. Item widths are now capped by `Measurement.get`, and the
+  items are laid out in upstream's `Table.grid`, which wraps them or ends them
+  with `…` (`superca…`). `Columns::equal` and `Columns::expand` are ported too.
+- **Tree:** guides overflowed a narrow width, so a nested tree printed 8-cell
+  lines at 3 cells. A label with no width left after its guides is now not
+  rendered, guides included, as upstream renders nothing there.
+- Goldens: `columns_long_*`, `columns_wrap_w13`, `columns_mixed_*`,
+  `columns_equal*`, `columns_expand_w20`, `tree_deep_w{3,4,6,10,20}` and
+  `tree_multiline_w{6,12}`.
+
 ### Capabilities and accessibility (0.0.11 workstream 9)
 
 - **Capabilities (#209).** `rich_ext::capabilities` detects colour depth,
@@ -148,9 +164,10 @@ CLI 0.0.11. Core changes below, so every dependent moves with it.
   - `bench`: a benchmark harness, a JSON run format (also read from criterion
     output) and `compare`, with sparklines. `rich bench compare BASE CAND`
     prints it and exits 5 on a regression.
-  - The fuzzer found two core bugs, confirmed against rich 15.0.0 and left for
-    a core fix: `Columns` overflows with items wider than the width, and `Tree`
-    guides overflow below about 8 columns. Their tests are ignored until then.
+  - The fuzzer found two core bugs, confirmed against rich 15.0.0: `Columns`
+    overflowed with items wider than the width, and `Tree` guides overflowed
+    below about 8 columns. Both are fixed below, and the fuzz test now covers
+    every core renderable at every width.
 - **CLI.** `rich diff` compares anything that is not an image pair as text, or
   renders one patch (`git diff | rich diff -`), with `--side-by-side`,
   `--context` and `--language`. `--threshold` counts changed lines and exits 5
