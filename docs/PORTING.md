@@ -71,12 +71,12 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 |-------------------|-----------|:------:|-------|
 | `syntax.py` | `syntax.rs` | 🟡 | functional via `syntect` (non-parity, DIVERGENCES #18); `__rich_measure__` is parity-tested |
 | `markdown.py` | `markdown.rs` | 🟡 | paragraphs/headings/inline/lists/quotes/code/links (both `hyperlinks` modes) + images (including table-cell hoisting and adjacency) + **GFM tables** via `pulldown-cmark`, with inline styling inside cells (golden `markdown_table_inline`); constructor options `justify`/`style` (golden `markdown_options`), `code_theme`/`inline_code_lexer`/`inline_code_theme` (syntect) |
-| `json.py` | `json.rs` | 🟡 | ✅ default layout, arbitrary integers and overflowing exponents; optional escape-safe layout is off by default (DIVERGENCES §22) |
+| `json.py` | `json.rs` | 🟡 | ✅ default layout, arbitrary integers, Python float `repr` and overflowing exponents; optional escape-safe layout is off by default (DIVERGENCES §22) |
 | `pretty.py` | `pretty.rs` | 🟡 | Rust-native (`Debug` + repr highlight, #19) |
 | `repr.py`, `_inspect.py` | resp. | ⬜ | need Rust reflection — see #19 |
 | `traceback.py` | `traceback.rs` | 🟡 | Rust-native (error `source()` chain, #19) |
-| `_log_render.py` | `log_render.rs` | 🟡 | Rust-native formatter (#19) |
-| `logging.py` (log::Log handler) | `rich-ext` | ⬜ | needs the `log`/`tracing` crate |
+| `_log_render.py` | `log_render.rs` | ✅ | ✅ `log_render.tsv`; takes a pre-formatted time (DIVERGENCES §19) |
+| `logging.py` (log::Log handler) | `rich-ext` `log_handler.rs` | 🟡 | `RichHandler` over the `log`/`tracing` adapters; UTC default time, no rich tracebacks (DIVERGENCES §19) |
 
 ## Utilities & platform
 

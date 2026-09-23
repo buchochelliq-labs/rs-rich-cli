@@ -59,6 +59,9 @@ pub mod event;
 
 pub mod diagnostic;
 
+pub mod log_handler;
+pub use log_handler::RichHandler;
+
 #[cfg(any(feature = "log", feature = "tracing"))]
 pub mod adapters;
 

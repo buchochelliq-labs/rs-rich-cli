@@ -385,6 +385,7 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "bar_half" => Box::new(ProgressBar::new(100.0, 50.0).width(20)),
         "bar_third" => Box::new(ProgressBar::new(100.0, 33.0).width(20)),
         "bar_full" => Box::new(ProgressBar::new(100.0, 100.0).width(20)),
+        "json_python_floats" => Box::new(Json::new("[1e20,1e-7,1e16,1e15,0.0001,0.00001,-0.0,1.5,2.5e-300,123456789012345680000.0,0.1,1E+2,3.14159265358979,5e-324]").unwrap()),
         "json_python_numbers" => Box::new(Json::new("[1234567890123456789012345678901234567890,-1234567890123456789012345678901234567890,1e400,-1e400,-0]").unwrap()),
         "json_object" => Box::new(Json::new(JSON_SAMPLE).expect("valid JSON")),
         "json_unicode" => Box::new(
@@ -1684,6 +1685,63 @@ fn progress_live_parity() {
         checked += 1;
     }
     assert_eq!(checked, 3, "expected every live progress case to run");
+}
+
+/// `LogRender` against upstream's `_log_render.LogRender`: each case prints
+/// its records through one render, so repeated times are blanked.
+#[test]
+fn log_render_parity() {
+    use rich::{level_text, LogRender};
+    let data = include_str!("golden/log_render.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let case: serde_json::Value =
+            serde_json::from_str(parts.next().expect("case")).expect("case json");
+        let expected = unescape(parts.next().expect("expected"));
+        let options = &case["options"];
+        let flag = |key: &str, default: bool| options[key].as_bool().unwrap_or(default);
+        let mut render = LogRender::new()
+            .show_time(flag("show_time", true))
+            .show_level(flag("show_level", false))
+            .show_path(flag("show_path", true))
+            .omit_repeated_times(flag("omit_repeated_times", true));
+        if let Some(width) = options.get("level_width") {
+            render = render.level_width(width.as_u64().map(|w| w as usize));
+        }
+        let console = truecolor_console(case["width"].as_u64().expect("width") as usize);
+        let mut got = String::new();
+        for record in case["records"].as_array().expect("records") {
+            let level = record[1].as_str().unwrap();
+            let table = render.render(
+                &console,
+                Text::from_markup(record[2].as_str().unwrap()).expect("markup"),
+                record[0].as_str().map(Text::new),
+                if level.is_empty() {
+                    Text::new("")
+                } else {
+                    level_text(level)
+                },
+                record[3].as_str(),
+                record[4].as_u64().map(|line| line as u32),
+                None,
+            );
+            got.push_str(&console.capture(|c| c.print(&table)));
+        }
+        assert_eq!(
+            got,
+            expected,
+            "log render case {name:?} (line {}) diverged",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 4, "expected every log render case to run");
 }
 
 /// Run one `theme_stack.tsv` step list. Keep in sync with `run_theme_steps` in

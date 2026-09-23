@@ -92,6 +92,33 @@ CLI 0.0.11. Core changes below, so every dependent moves with it.
   (3 cases), plus 4 more `progress_time.tsv` cases: pulse, format fields and
   renderable columns. All match rich 15.0.0.
 
+### Logging: `LogRender` port and `RichHandler` (#10)
+
+- **`LogRender` is now a port of `_log_render.py`.** It lays a record out as a
+  `Table::grid` row: time (blanked when it repeats the previous record's),
+  level, message (ratio 1, folding) and `path:line` linked to the file. It
+  remembers the last time across calls, as upstream's instance does.
+  `rich::level_text` builds upstream's padded `logging.level.<name>` column, and
+  `LogLevel` spells `WARN` as Python's `WARNING`.
+- **Migration.** The old one-line `LogRender::new(level, message).time(..).path(..)`
+  is now `LogRecord`, with the same builders plus `.line(n)`. `LogRender::new()`
+  takes no arguments; call `.render(console, message, time, level, path, line,
+  link_path)` for each record.
+- **Table.** `Table::grid()` now has upstream's defaults: no padding and
+  `collapse_padding`. New `Table::without_box()` (upstream `box=None`),
+  `Table::padding(top, right, bottom, left)` and `column_overflow`; a
+  column's overflow applies to cells that set none.
+- **JSON floats** are written with Python's `float.__repr__` (`1e+20`, `1e-07`,
+  `10000000000.0`), as `json.dumps` does. This resolves DIVERGENCES §8.
+- **Ext: `RichHandler`** (`rich_ext::RichHandler`) is the counterpart of
+  upstream's `logging.RichHandler`. It prints events with the level column,
+  `ReprHighlighter`, HTTP-method keywords in `logging.keyword`, optional
+  markup, the file name linked to its full path, and structured fields as
+  `key=value`. With the `log` or `tracing` feature it is an `EventSink`, so
+  `LogAdapter` and `EventLayer` print through it. See the `rich_handler` example.
+- **Goldens.** New `log_render.tsv` (4 cases) and `json_python_floats` match
+  rich 15.0.0. The differential fuzzer now generates `box=None` tables.
+
 ### Markdown: styled table cells and constructor options (#9)
 
 - `Table` headers and cells can be styled `Text`, via the new

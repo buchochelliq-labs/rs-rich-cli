@@ -424,6 +424,8 @@ RENDERABLE_CASES = [
     ("bar_third", 20, ProgressBar(total=100, completed=33, width=20)),
     ("bar_full", 20, ProgressBar(total=100, completed=100, width=20)),
     ("json_python_numbers", 80, JSON("[1234567890123456789012345678901234567890,-1234567890123456789012345678901234567890,1e400,-1e400,-0]")),
+    # Floats go through float.__repr__: exponent form below 1e-4 and from 1e16.
+    ("json_python_floats", 80, JSON("[1e20,1e-7,1e16,1e15,0.0001,0.00001,-0.0,1.5,2.5e-300,123456789012345680000.0,0.1,1E+2,3.14159265358979,5e-324]")),
     ("json_object", 40, JSON(JSON_SAMPLE)),
     # Non-ASCII strings: rich's JSON defaults to ensure_ascii=False, so accented
     # characters and symbols render as UTF-8 (not \uXXXX). Keys keep input order.
@@ -1442,6 +1444,64 @@ def run_progress_live_case(case) -> str:
     return buffer.getvalue()
 
 
+LOG_RENDER_HEADER = """\
+# Golden parity fixtures for rich._log_render.LogRender — captured from real Python
+# `rich`. Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<case JSON>\t<escaped output of every record, printed in order
+#   through ONE LogRender (so repeated times are blanked)>
+# Records: [time or null, level name or "", message markup, path or null, line or null]
+"""
+
+LOG_RENDER_CASES: list[tuple[str, dict]] = [
+    ("defaults_repeated_time", {"width": 60, "options": {}, "records": [
+        ["[09/23/26 09:00:00]", "", "server started", "app.py", 42],
+        ["[09/23/26 09:00:00]", "", "same second, so the time is blanked", "app.py", 43],
+        ["[09/23/26 09:00:01]", "", "next second", None, None],
+    ]}),
+    ("levels_and_wrapping", {"width": 50, "options": {"show_level": True}, "records": [
+        ["[12:00:00]", "INFO", "listening on 0.0.0.0:8080", "server.rs", 12],
+        ["[12:00:00]", "WARNING", "a long message that has to wrap inside the message column", "server.rs", 88],
+        ["[12:00:05]", "ERROR", "[bold]connection[/] reset", "net.rs", 7],
+        ["[12:00:05]", "DEBUG", "cache warm", None, None],
+        ["[12:00:06]", "CRITICAL", "out of memory", "alloc.rs", 1],
+    ]}),
+    ("no_time_no_path_fit_level", {"width": 40, "options": {"show_time": False, "show_path": False, "show_level": True, "level_width": None}, "records": [
+        [None, "INFO", "hello", "ignored.rs", 1],
+        [None, "WARNING", "careful", None, None],
+    ]}),
+    ("keep_repeated_times", {"width": 40, "options": {"omit_repeated_times": False}, "records": [
+        ["[t]", "", "first", "a.py", None],
+        ["[t]", "", "second", "a.py", 0],
+    ]}),
+]
+
+
+def run_log_render_case(case) -> str:
+    from rich._log_render import LogRender
+
+    console = Console(
+        force_terminal=True, color_system="truecolor", width=case["width"],
+        highlight=False, no_color=False,
+    )
+    render = LogRender(**case["options"])
+    out = []
+    for time, level, message, path, line in case["records"]:
+        level_text = Text.styled(level.ljust(8), f"logging.level.{level.lower()}") if level else ""
+        table = render(
+            console,
+            [Text.from_markup(message)],
+            time_format=(lambda _, t=time: Text(t)) if time is not None else None,
+            level=level_text,
+            path=path,
+            line_no=line,
+        )
+        with console.capture() as capture:
+            console.print(table)
+        out.append(capture.get())
+    return "".join(out)
+
+
 #: Keep the Rust side data-driven: `markdown_strike_parity` reads the source from
 #: the fixture, so cases are added here only.
 MARKDOWN_STRIKE_CASES: list[tuple[str, str]] = [
@@ -2027,6 +2087,14 @@ def main() -> None:
         llines.append(f"{name}\t{json.dumps(case)}\t{escape(run_progress_live_case(case))}")
     live_progress_path.write_text("\n".join(llines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(PROGRESS_LIVE_CASES)} live progress cases to {live_progress_path}")
+
+    # --- log render ------------------------------------------------------
+    log_path = golden_dir() / "log_render.tsv"
+    lglines = [LOG_RENDER_HEADER.rstrip("\n")]
+    for name, case in LOG_RENDER_CASES:
+        lglines.append(f"{name}\t{json.dumps(case)}\t{escape(run_log_render_case(case))}")
+    log_path.write_text("\n".join(lglines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(LOG_RENDER_CASES)} log render cases to {log_path}")
 
     # --- theme stack -----------------------------------------------------
     stack_path = golden_dir() / "theme_stack.tsv"

@@ -7,9 +7,9 @@
 //! Non-ASCII strings render as UTF-8, matching upstream (`rich.json.JSON`
 //! defaults to `ensure_ascii=False`); object keys keep input order, and a
 //! repeated key keeps its first position but its last value — what both
-//! `dict` and serde_json's `preserve_order` do. The one remaining caveat is
-//! **number formatting** for exotic values — exponent notation (`1e+20`,
-//! `1e-07`) can differ from CPython's `repr`.
+//! `dict` and serde_json's `preserve_order` do. Number formatting follows
+//! `json.dumps` too: floats are written
+//! with Python's `float.__repr__` ([`crate::pyformat::float_repr`]).
 //! Custom indent/sort options are deferred — see docs/DIVERGENCES.md.
 //!
 //! ## Why the parser is hand-written
@@ -25,8 +25,8 @@
 //!
 //! Raising a recursion limit only moves the failure to a stack overflow, so
 //! parsing, rendering and *dropping* the tree here are all iterative: nesting
-//! depth costs heap, never stack. String decoding and finite floating-point
-//! formatting use `serde_json`; integer tokens retain their exact digits and
+//! depth costs heap, never stack. String decoding uses `serde_json`; integer
+//! tokens retain their exact digits, finite floats use Python's `repr`, and
 //! overflowing exponents become signed Infinity as in Python.
 //!
 //! That leaves nesting *unbounded* where CPython eventually raises
@@ -714,9 +714,8 @@ impl<'a> Parser<'a> {
                 "Infinity"
             }));
         }
-        let number: serde_json::Number =
-            serde_json::from_str(token).map_err(|error| self.error_at(start, &describe(&error)))?;
-        Ok(Node::Number(number.to_string()))
+        // `json.dumps` writes a float with `float.__repr__`.
+        Ok(Node::Number(crate::pyformat::float_repr(value)))
     }
 
     fn expect_literal(&mut self, literal: &str) -> Result<()> {
@@ -1178,7 +1177,7 @@ mod tests {
             r#"{"a": 1, "b": 2, "a": 3}"#,
             r#"{"a": {"b": {"c": [1, [], {}, [[2]]]}}}"#,
             r#"{"k": "A\t\"x\"A\\\/é"}"#,
-            r#"[0, -0.5, 1e10, 1E+10, 1e-7, 12345678901234567890, 1.7976931348623157e308]"#,
+            r#"[0, 12345678901234567890, -7]"#,
             r#"{"café": "❤", "": ""}"#,
             "[]",
             "{}",
@@ -1194,6 +1193,32 @@ mod tests {
                 "diverged on {sample}"
             );
         }
+    }
+
+    /// Floats are written with Python's `float.__repr__`, as `json.dumps` does,
+    /// not serde_json's spelling (`1e-7`, `10000000000.0`).
+    #[test]
+    fn floats_render_as_python_repr() {
+        let out = render_plain(
+            "[-0.5, 1e10, 1E+10, 1e-7, 1.7976931348623157e308, 1e16]",
+            10_000,
+        );
+        let values: Vec<&str> = out
+            .lines()
+            .filter_map(|line| line.trim().strip_suffix(',').or(Some(line.trim())))
+            .filter(|value| !matches!(*value, "[" | "]"))
+            .collect();
+        assert_eq!(
+            values,
+            [
+                "-0.5",
+                "10000000000.0",
+                "10000000000.0",
+                "1e-07",
+                "1.7976931348623157e+308",
+                "1e+16"
+            ]
+        );
     }
 
     /// A repeated key collapses to one entry — first position, last value —

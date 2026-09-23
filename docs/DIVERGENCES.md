@@ -104,24 +104,12 @@ Format: what differs · why · how to remove it (if temporary).
   no_wrap content plus one other column.
 - **Remove:** drop padding on zero-width columns under the Table issue (#5).
 
-### 8. `Json` — exotic number formatting differs from CPython
-- **Differs:** non-ASCII strings and key order are **byte-parity** with upstream
-  (golden `json_unicode`): `rich.json.JSON` defaults to `ensure_ascii=False`, so
-  our UTF-8 output matches, and `serde_json`'s `preserve_order` keeps input key
-  order — the earlier "we don't `\u`-escape" concern was a false alarm (upstream
-  doesn't escape either). What *can* still differ is **number formatting** for
-  exotic values: **shortest round-trip is now exact** (round 8: `serde_json`'s default float
-  parser took a fast path landing 1 ULP from the value in the file, so ~12% of
-  computed doubles rendered as a *different* double; the `float_roundtrip`
-  feature fixes it, pinned by a unit test). What can still differ is
-  exponent notation (CPython renders `1e+20` / `1e-07`; ryu via
-  `serde_json` renders `1e20` / `1e-7`, and the two use different thresholds for
-  *when* to switch to exponent form). Integers now retain all input digits, and
-  overflowing exponents render as signed Infinity, matching Python.
-- **Why:** matching CPython exactly means replicating its `float_repr`
-  (shortest-round-trip *and* its decimal/exponent threshold + `e[+-]NN` padding),
-  which ryu formats differently.
-- **Remove:** port CPython's `float_repr` under the JSON issue (#10).
+### 8. ~~`Json` — exotic number formatting differs from CPython~~ (resolved in 0.0.11)
+- Floats are now written with a port of Python's `float.__repr__`
+  (`rich::pyformat::float_repr`), as `json.dumps` does: shortest round-trip
+  digits, exponent form below `1e-4` and from `1e16`, and `e+NN`/`e-NN`
+  padding (`1e+20`, `1e-07`). Golden `json_python_floats` pins it against
+  rich 15.0.0, alongside `json_python_numbers` for integers and Infinity.
 
 ### 9. `Markdown` covers most elements (code blocks are non-parity)
 - **Differs:** paragraphs, ATX headings (h1–h6), bullet + ordered lists, block
@@ -301,11 +289,13 @@ Format: what differs · why · how to remove it (if temporary).
     `Error::source()` chain (`Caused by:`) in a red-bordered panel. There are no
     stack frames or source snippets — Rust errors don't carry them (pair with
     `std::backtrace::Backtrace` at the call site if you want a frame list).
-  - `LogRender` (`log_render.rs`) formats one log record — optional time, a
-    severity-colored level, message, optional path — into a styled line, using the
-    same column styles (`log.time`, `logging.level.*`, `log.path`). It takes a
-    `LogLevel` enum + strings rather than depending on `log`/`tracing`; wiring a
-    `log::Log` handler on top is a `rich-ext` follow-up.
+  - `LogRender` (`log_render.rs`) is now a faithful port of `_log_render.py`
+    (golden `log_render.tsv`), except that it takes the time already formatted
+    rather than a `datetime` and a `strftime` format. `rich-ext`'s `RichHandler`
+    is the `logging.RichHandler` counterpart: it renders `log` and `tracing`
+    events through the `LogAdapter`/`EventLayer` sinks. Its default time is UTC
+    `[HH:MM:SS]` (local time would need a time-zone dependency), structured
+    fields follow the message as `key=value`, and there are no rich tracebacks.
 - **Why:** a 1:1 port isn't possible without reflection; the Rust-native analogs
   deliver the same *utility* (colorized value/error/log rendering).
 - **Remove:** inherent to the language difference; not removable.

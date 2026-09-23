@@ -57,3 +57,7 @@ required-features = ["log"]
 [[example]]
 name = "tracing_adapter"
 required-features = ["tracing"]
+
+[[example]]
+name = "rich_handler"
+required-features = ["log", "tracing"]
