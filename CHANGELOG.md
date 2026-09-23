@@ -60,6 +60,30 @@ Entries below record subsequent releases and development.
 Cohort versions for 0.0.11 (not published): core 0.0.7, ext 0.0.9, art 0.0.9,
 CLI 0.0.11. Core changes below, so every dependent moves with it.
 
+### Markdown: styled table cells and constructor options (#9)
+
+- `Table` headers and cells can be styled `Text`, via the new
+  `Table::add_column_text` and `Table::add_row_text`. A cell's own `justify`,
+  `overflow` and `no_wrap` override the column's, as `Text.__rich_console__`
+  prefers them.
+- Markdown table cells now carry their strong, emphasis, code, strike and link
+  runs, as upstream's `TableDataElement` appends them under the current style.
+  Headers keep `markdown.table.header` over their inline spans.
+- A single `~` inside a table cell is appended to the cell, like other literal text.
+- `Markdown` gains upstream's constructor options: `justify`, `style`,
+  `code_theme`, `inline_code_lexer` and `inline_code_theme`. `style` is the root
+  of the style stack, as upstream's context uses it: under every text run,
+  under list-item content and padding, and under the block-quote colour. Code
+  themes are `syntect` names (DIVERGENCES #18).
+- New `Syntax::highlight` returns the highlighted code as `Text` (upstream
+  `Syntax.highlight`); inline code uses it when a lexer is set.
+- Fix: a wrapped list item's continuation rows are padded in the marker's own
+  style (bold bullet, cyan number), as upstream's `render_bullet` and
+  `render_number` do.
+- New goldens: `markdown_table_inline.tsv` (8 cases) and
+  `markdown_options.tsv` (8 cases: justify, style, and wrapped items) match
+  rich 15.0.0.
+
 ### Core parity fixes (0.0.11 workstream 1)
 
 This fixes every divergence family the 0.0.10 differential fuzzer found, each

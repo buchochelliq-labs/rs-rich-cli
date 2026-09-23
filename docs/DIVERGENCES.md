@@ -130,15 +130,14 @@ Format: what differs · why · how to remove it (if temporary).
   `Syntax` renderable — so they're highlighted but **not** byte-identical to
   upstream (syntect ≠ Pygments; see #18). **Links** render as an OSC 8 hyperlink +
   the `markdown.link_url` style — byte-identical to upstream except the random
-  `id=` field we omit (#20). The one remaining gap: **inline styling within a
-  table cell** (e.g. `**bold**` inside a cell) is collected as plain text, since
-  Table cells are strings, not `Text` renderables. (The trailing-blank-line quirk
-  for a document ending in a thematic break is now matched — golden
-  `markdown_hr_end`.)
-- **Why:** these are the common elements; cell-level inline styling needs Table
-  cells to become full renderables (a larger refactor).
-- **Remove:** give Table cells styled `Text` content, then route inline markdown
-  into table cells, under the Markdown issue (#9).
+  `id=` field we omit (#20). Inline styling inside **table cells** is byte-parity
+  since 0.0.11 (golden `markdown_table_inline`): cells hold styled `Text`, as
+  upstream's `TableDataElement` does. The constructor options `justify` and
+  `style` are byte-parity too (golden `markdown_options`); `code_theme`,
+  `inline_code_lexer` and `inline_code_theme` take `syntect` theme names. (The trailing-blank-line quirk for a
+  document ending in a thematic break is also matched — golden `markdown_hr_end`.)
+- **Why:** code blocks go through `syntect`, not Pygments (#18).
+- **Remove:** see the Syntax entry (#18).
 
 ### 10. ~~`AnsiDecoder` skips OSC hyperlinks~~ (resolved)
 - **Resolved:** the decoder now reads OSC 8 sequences (`\x1b]8;<params>;<url>\x1b\`)
