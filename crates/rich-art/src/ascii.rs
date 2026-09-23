@@ -131,7 +131,7 @@ impl AsciiArt {
     }
 
     /// The output grid for a given available width.
-    fn grid(&self, available: usize) -> (usize, usize) {
+    pub(crate) fn grid(&self, available: usize) -> (usize, usize) {
         let (image_width, image_height) = self.image.dimensions();
         let columns = self.width.unwrap_or(available).max(1);
         let rows = self.height.unwrap_or_else(|| {
