@@ -214,6 +214,7 @@ pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
                         | "gif"
                         | "diff"
                         | "inspect"
+                        | "ansi"
                 )
             }),
             "collision" => value

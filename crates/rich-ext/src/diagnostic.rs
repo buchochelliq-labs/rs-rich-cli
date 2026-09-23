@@ -611,6 +611,26 @@ impl Diagnostic {
     pub fn get_trace(&self) -> Option<&StackTrace> {
         self.trace.as_ref()
     }
+    /// The documentation link for the code, if set.
+    pub fn get_code_url(&self) -> Option<&str> {
+        self.code_url.as_deref()
+    }
+    /// The notes, in order.
+    pub fn notes(&self) -> &[String] {
+        &self.notes
+    }
+    /// The help messages, in order.
+    pub fn help_messages(&self) -> &[String] {
+        &self.help
+    }
+    /// The suggested fixes, in order.
+    pub fn suggestions(&self) -> &[Suggestion] {
+        &self.suggestions
+    }
+    /// The labels, in order.
+    pub fn labels(&self) -> &[String] {
+        &self.labels
+    }
 
     fn header(&self, c: &Console) -> Vec<Segment> {
         let Some(level) = self.level else {
