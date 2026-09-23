@@ -19,7 +19,8 @@ pub const EXTRA_STYLES: &[(&str, &str)] = &[
     ("success", "bold green"),
 ];
 
-/// Upstream's default theme plus [`EXTRA_STYLES`].
+/// Upstream's default theme plus [`EXTRA_STYLES`] and the CLI help, config
+/// and precedence styles in [`cli_doc::STYLES`](crate::cli_doc::STYLES).
 ///
 /// Pass to `Console::builder().theme(..)` to get `[error]`-style markup:
 ///
@@ -35,7 +36,7 @@ pub const EXTRA_STYLES: &[(&str, &str)] = &[
 /// ```
 pub fn extended_theme() -> Theme {
     let mut theme = Theme::default_theme();
-    for (name, spec) in EXTRA_STYLES {
+    for (name, spec) in EXTRA_STYLES.iter().chain(crate::cli_doc::STYLES) {
         if let Ok(style) = Style::parse(spec) {
             theme.insert(*name, style);
         }
@@ -51,7 +52,10 @@ mod tests {
     fn extends_without_dropping_upstream_styles() {
         let base = Theme::default_theme();
         let extended = extended_theme();
-        assert_eq!(extended.len(), base.len() + EXTRA_STYLES.len());
+        assert_eq!(
+            extended.len(),
+            base.len() + EXTRA_STYLES.len() + crate::cli_doc::STYLES.len()
+        );
         // Upstream entries survive...
         assert!(extended.get("repr.number").is_some());
         // ...and ours are added.
@@ -66,7 +70,7 @@ mod tests {
         // Guards the governance rule: our conveniences must not leak into the
         // faithful core's theme.
         let base = Theme::default_theme();
-        for (name, _) in EXTRA_STYLES {
+        for (name, _) in EXTRA_STYLES.iter().chain(crate::cli_doc::STYLES) {
             assert!(
                 base.get(name).is_none(),
                 "{name:?} leaked into the core default theme"

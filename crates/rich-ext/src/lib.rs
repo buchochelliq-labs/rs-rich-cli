@@ -88,3 +88,7 @@ pub mod live;
 
 #[cfg(feature = "data")]
 pub mod data;
+
+// CLI authoring: help, errors, completions, docs, config reference and
+// precedence from one command description.
+pub mod cli_doc;

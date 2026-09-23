@@ -45,6 +45,11 @@ anyhow = { version = "1", optional = true }
 log = { version = "0.4", optional = true }
 tracing = { version = "0.1", default-features = false, features = ["std"], optional = true }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["registry", "std"], optional = true }
+# `cli_doc::clap` adapter: reads `Command` metadata and maps `Error`s. `help` is
+# only there because without it clap drops its `-h/--help` flag; no `usage` or
+# `color` — rich renders those. `error-context` and `suggestions` populate
+# `Error::context()` (invalid arg/value, "did you mean").
+clap = { version = "4.5", default-features = false, features = ["std", "help", "env", "error-context", "suggestions"], optional = true }
 
 [dev-dependencies]
 thiserror = "2"
@@ -70,6 +75,9 @@ toml = ["data", "dep:toml"]
 xml = ["data", "dep:quick-xml"]
 # The built-in JSONPath selection backend for `data::select`.
 jsonpath = ["data"]
+# CLI authoring through clap: `cli_doc::clap` maps a `clap::Command` onto
+# the help, error, completion and docs renderers.
+clap = ["dep:clap"]
 
 [[example]]
 name = "snapshot"
@@ -90,3 +98,7 @@ required-features = ["log", "tracing"]
 [[example]]
 name = "structured_data"
 required-features = ["data"]
+
+[[example]]
+name = "clap_help"
+required-features = ["clap"]
