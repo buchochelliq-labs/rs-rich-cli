@@ -15,7 +15,9 @@ use rich_ext::qa::bench::{
     bench_renderable_with, compare, Bench, BenchRun, CompareOptions, ComparisonView, Measurement,
     Verdict,
 };
-use rich_ext::qa::explain::{explain, explain_with_report, EventKind, ExplanationView};
+use rich_ext::qa::explain::{
+    explain, explain_console, explain_with_report, EventKind, ExplanationView,
+};
 use rich_ext::qa::fuzz::{fuzz, fuzz_with, Case, GenOptions, Invariants, Node, NodeKind, Rendered};
 use rich_ext::qa::lint::{lint, lint_markup, LintOptions, LintReport, Rule, Severity};
 use rich_ext::qa::matrix::{self, CapabilityProfile, CellStatus, Fixture};
@@ -524,6 +526,15 @@ fn explain_reports_colour_unicode_links_and_capabilities() {
     let e = explain(&orange, &target(40, ColorDepth::None, true, true));
     assert!(e.has(EventKind::ColorRemoved));
     assert_eq!(e.events[0].summary, "fidelity plain");
+
+    // A no_color console keeps its colour system but prints no colour.
+    let console = Console::builder()
+        .color_system(Some(ColorSystem::EightBit))
+        .no_color(true)
+        .build();
+    let e = explain_console(&Text::styled("hi", "#ff8800"), &console, 40);
+    assert!(e.has(EventKind::ColorRemoved), "{:?}", e.events);
+    assert!(!e.has(EventKind::ColorDowngraded), "{:?}", e.events);
 
     let panel = Panel::new(Box::new(Text::new("✔ done")));
     let e = explain(&panel, &target(20, ColorDepth::TrueColor, false, false));

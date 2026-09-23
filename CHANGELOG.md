@@ -73,8 +73,9 @@ three `clock_*` rows in `live_status.tsv`).
   - **Behaviour change:** `Console::color_system()` now reports the colour
     system whatever `no_color` says, as upstream's `Console.color_system` does.
     Code asking "will colour reach the terminal?" must also check
-    `Console::no_color()`. The ext target observation, rich-art image and GIF
-    rendering and `rich doctor` now do.
+    `Console::no_color()`. The CLI's render target, `rich doctor`,
+    `rich_ext::qa::explain_console` and rich-art image and GIF rendering now
+    do.
   - Capture and printing strip colours. HTML, SVG and plain-text exports read
     the recording, so they keep their colours, as upstream's do.
   - In a terminal, `NO_COLOR` now keeps bold and underline, as it does in
