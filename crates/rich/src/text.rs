@@ -676,14 +676,7 @@ impl Text {
         // a tab as zero cells, and tabs expand only at render time. A printed
         // `Text` renders at the full width (see `Renderable::printed_text`), so
         // this measurement never becomes its own render width (#447).
-        let plain = &self.plain;
-        let max_line = plain.split('\n').map(cell_len).max().unwrap_or(0);
-        let min_word = plain
-            .split_whitespace()
-            .map(cell_len)
-            .max()
-            .unwrap_or(max_line);
-        (min_word, max_line)
+        measure_plain(&self.plain)
     }
 
     /// Render into visual lines, wrapping each hard line to `width` cells when
@@ -1261,6 +1254,17 @@ fn rstrip_end_line(line: &mut Vec<Segment>, size: usize) {
     if whitespace > 0 {
         right_crop_line(line, whitespace.min(excess));
     }
+}
+
+/// `Text.__rich_measure__` on a plain string: `(widest word, widest line)`.
+pub(crate) fn measure_plain(plain: &str) -> (usize, usize) {
+    let max_line = plain.split('\n').map(cell_len).max().unwrap_or(0);
+    let min_word = plain
+        .split_whitespace()
+        .map(cell_len)
+        .max()
+        .unwrap_or(max_line);
+    (min_word, max_line)
 }
 
 #[cfg(test)]

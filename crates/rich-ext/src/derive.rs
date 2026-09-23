@@ -144,7 +144,8 @@ fn rows(records: impl IntoIterator<Item = (Option<String>, Vec<Field>)>) -> Tabl
     }
     let mut table = Table::new();
     for (label, justify) in &columns {
-        table.add_column_justify(label.clone(), *justify);
+        // Field labels are literal, like the cell text beneath them.
+        table.add_column_text(Text::new(label.clone()), *justify);
     }
     for (_, fields) in records {
         let row = columns

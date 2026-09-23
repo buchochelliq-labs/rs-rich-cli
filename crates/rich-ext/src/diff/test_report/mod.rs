@@ -395,12 +395,13 @@ impl TestReport {
                 .time()
                 .map(|d| format!("{}s", seconds(d)))
                 .unwrap_or_default();
-            table.add_row(&[
-                &suite.name,
-                &t.passed.to_string(),
-                &(t.failed + t.errored).to_string(),
-                &t.skipped.to_string(),
-                &time,
+            // Suite names are data: pytest ids such as `test_x[a]` stay literal.
+            table.add_row_text(vec![
+                Text::new(suite.name.as_str()),
+                Text::new(t.passed.to_string()),
+                Text::new((t.failed + t.errored).to_string()),
+                Text::new(t.skipped.to_string()),
+                Text::new(time),
             ]);
         }
         table

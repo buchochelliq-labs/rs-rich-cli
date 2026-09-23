@@ -29,7 +29,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `terminal_theme.py` | `terminal_theme.rs` | 🟡 | ✅ |
 | `console.py` (+ `ConsoleOptions`, `render_lines`) | `console.rs`  | 🟡 | ✅ |
 | `protocol.py`, `abc.py`, `_extension.py` | `protocol.rs`         | 🟡 | — |
-| `measure.py` (+ `Renderable::measure`, fit, `Measurement.get`) | `measure.rs`       | 🟡 | ✅ `Syntax`/`JSON` measurement golden (`measure.tsv`) |
+| `measure.py` (+ `Renderable::measure`, fit, `Measurement.get`) | `measure.rs`       | 🟡 | ✅ `Syntax`/`JSON` measurement golden (`measure.tsv`); container `__rich_measure__` (`measure_renderables.tsv`) |
 | `errors.py`                           | `errors.rs`              | 🟡 | — |
 | `control.py`                          | `control.rs`             | 🟢 | ✅ |
 | `ansi.py`                             | `ansi.rs`                | 🟡 | ✅ |
@@ -46,9 +46,9 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `panel.py` | `panel.rs` | 🟡 | ✅ |
 | `align.py` | `align.rs` | 🟡 | ✅ |
 | `constrain.py` | `constrain.rs` | 🟡 | ✅ |
-| `table.py` | `table.rs` | 🟡 | ✅ (renderable cells via `Cell`, `ColumnOptions`) |
-| `columns.py` | `columns.rs` | 🟡 | ✅ |
-| `tree.py` | `tree.rs` | 🟡 | ✅ |
+| `table.py` | `table.rs` | 🟡 | ✅ (renderable cells via `Cell`, `ColumnOptions`, markup `str` cells, `__rich_measure__`) |
+| `columns.py` | `columns.rs` | 🟡 | ✅ (markup/`Text`/renderable items) |
+| `tree.py` | `tree.rs` | 🟡 | ✅ (markup labels, `__rich_measure__`) |
 | `layout.py` | `layout.rs` | 🟡 | ✅ |
 | `styled.py` | `styled.rs` | 🟢 | ✅ |
 | `screen.py` | `screen.rs` | 🟡 | — |

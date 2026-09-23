@@ -4,6 +4,7 @@
 //! with blank space on any of its four sides.
 
 use crate::console::{Console, ConsoleOptions};
+use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::style::Style;
@@ -89,6 +90,20 @@ impl Renderable for Padding {
         }
 
         join_rows(rows)
+    }
+
+    /// Port of `Padding.__rich_measure__`: the child's measurement plus the
+    /// horizontal padding, or the whole width when the padding leaves no room.
+    fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+        let (_, right, _, left) = self.pad;
+        let max_width = options.max_width;
+        let extra_width = left + right;
+        if max_width < extra_width + 1 {
+            return Measurement::new(max_width, max_width);
+        }
+        let child = Measurement::get(console, options, self.child.as_ref());
+        Measurement::new(child.minimum + extra_width, child.maximum + extra_width)
+            .with_maximum(max_width)
     }
 }
 

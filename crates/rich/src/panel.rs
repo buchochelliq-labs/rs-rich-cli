@@ -4,10 +4,11 @@
 //! a box border, inner padding, and an optional centered title.
 //!
 //! Slice scope: title + subtitle (with alignment), box + border style +
-//! padding, expand-to-width. `fit` (shrink-to-content) sizing is deferred.
+//! padding, `expand` (and [`Panel::fit`]) and a fixed `width`.
 
 use crate::align::HorizontalAlign;
 use crate::console::{Console, ConsoleOptions};
+use crate::measure::Measurement;
 use crate::padding::join_rows;
 use crate::protocol::Renderable;
 use crate::r#box::{Box as BoxSet, ROUNDED};
@@ -26,6 +27,8 @@ pub struct Panel {
     padding: (usize, usize, usize, usize),
     border_style: Style,
     style: Style,
+    expand: bool,
+    width: Option<usize>,
 }
 
 impl Panel {
@@ -41,7 +44,29 @@ impl Panel {
             padding: (0, 1, 0, 1),
             border_style: Style::new(),
             style: Style::new(),
+            expand: true,
+            width: None,
         }
+    }
+
+    /// A panel that fits its content rather than expanding to the available
+    /// width. Port of `Panel.fit` (`expand=False`).
+    pub fn fit(child: Box<dyn Renderable>) -> Self {
+        Panel::new(child).expand(false)
+    }
+
+    /// Expand to the full available width (upstream `expand`, default on), or
+    /// fit the measured width of the content and title.
+    pub fn expand(mut self, expand: bool) -> Self {
+        self.expand = expand;
+        self
+    }
+
+    /// A fixed width for the whole panel, borders included (upstream `width`),
+    /// capped at the available width.
+    pub fn width(mut self, width: usize) -> Self {
+        self.width = Some(width);
+        self
     }
 
     /// Set a title (drawn into the top border, centered by default).
@@ -108,17 +133,7 @@ impl Panel {
             )];
         };
 
-        // Text.from_markup expands emoji independently of the console's emoji
-        // flag. Preserve markup offsets while flattening newlines to spaces.
-        let expanded = crate::emoji::replace(label);
-        let parsed = Text::from_markup(&expanded).unwrap_or_else(|_| Text::new(expanded));
-        let mut label = parsed.blank_copy();
-        label.append(&parsed.plain().replace('\n', " "), None);
-        for span in parsed.spans() {
-            label.push_span(span.clone());
-        }
-        label.expand_tabs(DEFAULT_TAB_SIZE);
-        label.pad(1, ' ');
+        let mut label = label_text(label);
         label.set_base_style(self.border_style.clone());
         let label_width = inner_width - 2;
         label.truncate(label_width, None, false);
@@ -151,16 +166,86 @@ impl Panel {
     }
 }
 
+/// The title/subtitle `Text`: port of `Panel._title` / `_subtitle`.
+/// Text.from_markup expands emoji independently of the console's emoji flag.
+/// Preserve markup offsets while flattening newlines to spaces.
+fn label_text(label: &str) -> Text {
+    let expanded = crate::emoji::replace(label);
+    let parsed = Text::from_markup(&expanded).unwrap_or_else(|_| Text::new(expanded));
+    let mut text = parsed.blank_copy();
+    text.append(&parsed.plain().replace('\n', " "), None);
+    for span in parsed.spans() {
+        text.push_span(span.clone());
+    }
+    text.expand_tabs(DEFAULT_TAB_SIZE);
+    text.pad(1, ' ');
+    text
+}
+
+impl Panel {
+    /// The title as `Panel._title` builds it, when there is one.
+    fn title_text(&self) -> Option<Text> {
+        self.title
+            .as_deref()
+            .filter(|title| !title.is_empty())
+            .map(label_text)
+    }
+
+    /// `Measurement.get` of the child wrapped in upstream's
+    /// `Padding(renderable, padding)` (only when there is any padding).
+    fn measure_padded_child(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+        let (top, right, bottom, left) = self.padding;
+        let max_width = options.max_width;
+        if max_width < 1 {
+            return Measurement::new(0, 0);
+        }
+        if top == 0 && right == 0 && bottom == 0 && left == 0 {
+            return Measurement::get(console, options, self.child.as_ref());
+        }
+        // `Padding.__rich_measure__`, then `Measurement.get`'s normalization.
+        let extra_width = left + right;
+        let width = if max_width < extra_width + 1 {
+            Measurement::new(max_width, max_width)
+        } else {
+            let child = Measurement::get(console, options, self.child.as_ref());
+            Measurement::new(child.minimum + extra_width, child.maximum + extra_width)
+                .with_maximum(max_width)
+        };
+        let width = width.normalize().with_maximum(max_width);
+        if width.maximum < 1 {
+            Measurement::new(0, 0)
+        } else {
+            width.normalize()
+        }
+    }
+}
+
 impl Renderable for Panel {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        let width = options.max_width;
+        let width = match self.width {
+            Some(width) => width.min(options.max_width),
+            None => options.max_width,
+        };
         // Fall back to a terminal-safe box on legacy Windows / non-UTF-8.
         let box_set = self.box_set.substitute(
             console.legacy_windows(),
             console.safe_box(),
             console.ascii_only(),
         );
-        let inner_width = width.saturating_sub(2);
+        // The padded child fills `width - 2`, or, when not expanding, its
+        // measured width; a title may widen it up to the available width.
+        let mut inner_width = if self.expand {
+            width.saturating_sub(2)
+        } else {
+            self.measure_padded_child(console, &options.update_width(width.saturating_sub(2)))
+                .maximum
+        };
+        if let Some(title) = self.title_text() {
+            inner_width = options
+                .max_width
+                .saturating_sub(2)
+                .min(inner_width.max(title.cell_len() + 2));
+        }
         let (pt, pr, pb, pl) = self.padding;
         let child_width = inner_width.saturating_sub(pl).saturating_sub(pr);
 
@@ -229,6 +314,28 @@ impl Renderable for Panel {
         ));
 
         join_rows(rows)
+    }
+
+    /// Port of `Panel.__rich_measure__`: the widest of the content and the
+    /// title, measured inside the borders and padding, plus both; or the
+    /// fixed `width`. Either way the panel asks for exactly one width.
+    fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+        let (_, right, _, left) = self.padding;
+        let padding = left + right;
+        let width = match self.width {
+            Some(width) => width,
+            None => {
+                // `measure_renderables(console, options.update_width(...),
+                // [renderable, _title])`, whose maximum is the widest maximum.
+                let inner = options.update_width(options.max_width.saturating_sub(padding + 2));
+                let child = Measurement::get(console, &inner, self.child.as_ref()).maximum;
+                let title = self
+                    .title_text()
+                    .map_or(0, |title| Measurement::get(console, &inner, &title).maximum);
+                child.max(title) + padding + 2
+            }
+        };
+        Measurement::new(width, width)
     }
 }
 

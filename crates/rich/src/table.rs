@@ -11,13 +11,15 @@
 //! **expand** column widths, per-column justify, **explicit width**, per-column
 //! **`ratio`/`min_width`/`max_width`**, **per-column style**, **`no_wrap`**,
 //! title, caption, and `show_lines`. Headers and cells may be styled [`Text`]
-//! (`add_column_text`, `add_row_text`), as upstream accepts renderables.
+//! (`add_column_text`, `add_row_text`), as upstream accepts renderables; plain
+//! strings (`add_column`, `add_row`) are console markup, as upstream's `str`
+//! cells are (see [`Cell::Markup`]).
 //! Deferred (tracked in the Table issue): the rare width-0 column padding edge.
 
 use std::sync::Arc;
 
-use crate::cells::cell_len;
 use crate::console::{Console, ConsoleOptions, Justify, Overflow};
+use crate::measure::Measurement;
 use crate::protocol::{LineRenderable, Renderable};
 use crate::r#box::{Box as BoxSet, RowLevel, HEAVY_HEAD};
 use crate::segment::Segment;
@@ -26,7 +28,10 @@ use crate::text::{Text, DEFAULT_TAB_SIZE};
 
 /// A single column definition. Mirrors the used subset of `rich.table.Column`.
 struct Column {
-    header: Text,
+    header: Cell,
+    /// Highlight `str` cells (port of `Column.highlight`); `None` takes the
+    /// table's `highlight`, as `add_column(highlight=None)` does.
+    highlight: Option<bool>,
     justify: Justify,
     /// An explicit content width; when set, the column doesn't shrink to fit.
     width: Option<usize>,
@@ -55,12 +60,18 @@ struct Column {
     overflow: Overflow,
 }
 
-/// A table cell: styled text, or any renderable (upstream accepts both).
+/// A table cell: a markup string, styled text, or any renderable (upstream
+/// accepts all three).
 #[derive(Clone)]
 pub enum Cell {
-    /// A text cell; its own `justify`, `overflow` and `no_wrap` override the
-    /// column's.
+    /// A text cell, rendered literally (a `Text` is never re-parsed); its own
+    /// `justify`, `overflow` and `no_wrap` override the column's.
     Text(Text),
+    /// A plain string, which upstream renders through `Console.render_str`:
+    /// console markup and emoji codes are applied, and the column's
+    /// `highlight` decides whether it is highlighted. Pass [`Cell::Text`] for
+    /// data that must stay literal.
+    Markup(String),
     /// A renderable cell, measured with `__rich_measure__` and rendered at the
     /// column width, as upstream's `Padding(renderable)` cell is.
     Renderable(Arc<dyn Renderable + Send + Sync>),
@@ -72,9 +83,63 @@ impl From<Text> for Cell {
     }
 }
 
+/// A string cell is console markup, as upstream's `str` renderables are.
 impl From<&str> for Cell {
     fn from(text: &str) -> Self {
-        Cell::Text(Text::new(text))
+        Cell::Markup(text.to_string())
+    }
+}
+
+impl From<String> for Cell {
+    fn from(text: String) -> Self {
+        Cell::Markup(text)
+    }
+}
+
+impl From<&String> for Cell {
+    fn from(text: &String) -> Self {
+        Cell::Markup(text.clone())
+    }
+}
+
+impl Cell {
+    /// The cell as `Text`, or `None` for a renderable. A markup string goes
+    /// through [`Console::render_str`] with `highlight`.
+    pub(crate) fn to_text(&self, console: &Console, highlight: Option<bool>) -> Option<Text> {
+        match self {
+            Cell::Text(text) => Some(text.clone()),
+            Cell::Markup(markup) => Some(console.render_str(markup, highlight)),
+            Cell::Renderable(_) => None,
+        }
+    }
+
+    /// `Measurement.get(console, options, cell)`. A string is measured as
+    /// upstream measures a `str`: `render_str(..., highlight=False)`, then the
+    /// resulting `Text`'s `__rich_measure__`.
+    pub(crate) fn measure_cell(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+        match self {
+            Cell::Text(text) => Measurement::get(console, options, text),
+            // A string with no `[` or `:` is its own plain text (markup and
+            // emoji leave it alone); measure it without building a `Text`.
+            Cell::Markup(markup) if !markup.contains(['[', ':']) => {
+                if options.max_width < 1 {
+                    return Measurement::new(0, 0);
+                }
+                let (minimum, maximum) = crate::text::measure_plain(markup);
+                let width = Measurement::new(minimum, maximum)
+                    .normalize()
+                    .with_maximum(options.max_width);
+                if width.maximum < 1 {
+                    Measurement::new(0, 0)
+                } else {
+                    width.normalize()
+                }
+            }
+            Cell::Markup(markup) => {
+                Measurement::get(console, options, &console.render_str(markup, Some(false)))
+            }
+            Cell::Renderable(renderable) => Measurement::get(console, options, renderable.as_ref()),
+        }
     }
 }
 
@@ -140,6 +205,8 @@ pub struct Table {
     header_style: Style,
     border_style: Style,
     style: Style,
+    /// Highlight `str` cells (port of `Table.highlight`, default `False`).
+    highlight: bool,
 }
 
 impl Default for Table {
@@ -161,6 +228,7 @@ impl Default for Table {
             header_style: Style::parse("bold").expect("valid built-in style"),
             border_style: Style::new(),
             style: Style::new(),
+            highlight: false,
         }
     }
 }
@@ -257,6 +325,14 @@ impl Table {
         self
     }
 
+    /// Highlight string cells with the console's highlighter (upstream
+    /// `Table(highlight=…)`, default off). Columns added without their own
+    /// setting use it.
+    pub fn highlight(mut self, highlight: bool) -> Self {
+        self.highlight = highlight;
+        self
+    }
+
     /// The `(left, right)` padding for column `index` of `ncols`. Port of
     /// `_get_padding_width` (collapse) combined with the `pad_edge` edge drops.
     fn cell_padding(&self, index: usize, ncols: usize) -> (usize, usize) {
@@ -291,14 +367,20 @@ impl Table {
         self
     }
 
-    /// Add a left-justified column with the given header.
+    /// Add a left-justified column with the given header, which is console
+    /// markup as upstream's `add_column("[b]Name")` is.
     pub fn add_column(&mut self, header: impl Into<String>) -> &mut Self {
         self.add_column_justify(header, Justify::Left)
     }
 
-    /// Add a column with an explicit justification.
+    /// Add a column with an explicit justification. The header is console
+    /// markup; use [`add_column_text`](Self::add_column_text) for a literal one.
     pub fn add_column_justify(&mut self, header: impl Into<String>, justify: Justify) -> &mut Self {
-        self.add_column_text(Text::new(header.into()), justify)
+        self.add_column_text(Text::default(), justify);
+        if let Some(column) = self.columns.last_mut() {
+            column.header = Cell::Markup(header.into());
+        }
+        self
     }
 
     /// Add a column whose header is a styled [`Text`], as upstream's
@@ -307,7 +389,8 @@ impl Table {
     /// column's, as `Text.__rich_console__` prefers them over the options.
     pub fn add_column_text(&mut self, header: Text, justify: Justify) -> &mut Self {
         self.columns.push(Column {
-            header,
+            header: Cell::Text(header),
+            highlight: None,
             justify,
             width: None,
             style: Style::new(),
@@ -326,7 +409,8 @@ impl Table {
     /// `add_column(header, justify=…, width=…, ratio=…, …)` does.
     pub fn add_column_with(&mut self, header: Text, options: ColumnOptions) -> &mut Self {
         self.columns.push(Column {
-            header,
+            header: Cell::Text(header),
+            highlight: None,
             justify: options.justify,
             width: options.width,
             style: options.style,
@@ -417,6 +501,15 @@ impl Table {
         self
     }
 
+    /// Set whether the most-recently-added column highlights its string cells
+    /// (upstream `Column.highlight`). Chain after `add_column`.
+    pub fn column_highlight(&mut self, highlight: bool) -> &mut Self {
+        if let Some(column) = self.columns.last_mut() {
+            column.highlight = Some(highlight);
+        }
+        self
+    }
+
     /// Mark the most-recently-added column `no_wrap`: its cells crop to a single
     /// line (with ellipsis) instead of wrapping. Chain after `add_column`.
     pub fn column_no_wrap(&mut self) -> &mut Self {
@@ -426,10 +519,16 @@ impl Table {
         self
     }
 
-    /// Add a row of cells (extra cells are ignored; missing cells render empty).
+    /// Add a row of string cells (extra cells are ignored; missing cells render
+    /// empty). Each string is console markup, as upstream's `add_row("[b]x")`
+    /// is; use [`add_row_text`](Self::add_row_text) for literal data.
     pub fn add_row(&mut self, cells: &[&str]) -> &mut Self {
-        self.rows
-            .push(cells.iter().map(|s| Cell::Text(Text::new(*s))).collect());
+        self.rows.push(
+            cells
+                .iter()
+                .map(|s| Cell::Markup((*s).to_string()))
+                .collect(),
+        );
         self
     }
 
@@ -447,84 +546,115 @@ impl Table {
         self
     }
 
-    /// The measured content width of each column (widest cell, header included).
-    /// Widest *line* of a cell, not the width of the whole string.
-    ///
-    /// A cell spanning several lines occupies its widest line, exactly as
-    /// `Measurement.get` on a `Text` does. Measuring the raw string instead made
-    /// a multi-line cell as wide as all its lines **summed** — `\n` measures
-    /// zero, so nothing capped it — and a quoted CSV cell holding two sentences
-    /// blew its column out to 31 cells where upstream gives 23.
-    fn block_width(text: &str) -> usize {
-        text.split('\n').map(cell_len).max().unwrap_or(0)
+    /// The width of the borders: `ncols - 1` dividers, plus the two outer
+    /// edges when shown; no box, no border. Port of `_extra_width`.
+    fn extra_width(&self) -> usize {
+        if self.no_box {
+            0
+        } else {
+            (if self.show_edge { 2 } else { 0 }) + self.columns.len().saturating_sub(1)
+        }
     }
 
-    fn max_content_widths(&self) -> Vec<usize> {
-        let mut widths = vec![0usize; self.columns.len()];
-        for (index, column) in self.columns.iter().enumerate() {
-            if self.show_header {
-                widths[index] = Self::block_width(column.header.plain());
+    /// The column's padding width. Port of `_get_padding_width`, which (unlike
+    /// the per-cell padding of `_get_cells`) drops the left pad entirely under
+    /// `collapse_padding`.
+    fn padding_width(&self, index: usize) -> usize {
+        let (_, mut pad_right, _, mut pad_left) = self.padding;
+        if self.collapse_padding {
+            pad_left = 0;
+        }
+        if !self.pad_edge {
+            if index == 0 {
+                pad_left = 0;
+            }
+            if index + 1 == self.columns.len() {
+                pad_right = 0;
             }
         }
-        for row in &self.rows {
-            for (index, cell) in row.iter().enumerate() {
-                if let (true, Cell::Text(cell)) = (index < widths.len(), cell) {
-                    widths[index] = widths[index].max(Self::block_width(cell.plain()));
-                }
-            }
-        }
-        widths
+        pad_left + pad_right
     }
 
-    /// The maximum of upstream `Table._measure_column` for column `index` at
-    /// `max_width`: the rendered width (content + padding) it wants, given its
-    /// widest content line `content`.
+    /// `Measurement.get` of one of `_get_cells`' cells: the cell wrapped in
+    /// `Padding(renderable, (0, right, 0, left))` when the table has any
+    /// padding. Port of `Padding.__rich_measure__` over the cell.
+    fn measure_padded_cell(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        cell: &Cell,
+        (left, right): (usize, usize),
+    ) -> Measurement {
+        let max_width = options.max_width;
+        if max_width < 1 {
+            return Measurement::new(0, 0);
+        }
+        let (top, pr, bottom, pl) = self.padding;
+        if top == 0 && pr == 0 && bottom == 0 && pl == 0 {
+            return cell.measure_cell(console, options);
+        }
+        let extra_width = left + right;
+        let width = if max_width < extra_width + 1 {
+            Measurement::new(max_width, max_width)
+        } else {
+            let inner = cell.measure_cell(console, options);
+            Measurement::new(inner.minimum + extra_width, inner.maximum + extra_width)
+                .with_maximum(max_width)
+        };
+        // `Measurement.get` around the `Padding`.
+        let width = width.normalize().with_maximum(max_width);
+        if width.maximum < 1 {
+            Measurement::new(0, 0)
+        } else {
+            width.normalize()
+        }
+    }
+
+    /// The minimum and maximum width of column `index` (content + padding).
+    /// Port of `Table._measure_column`: every cell, header included, is
+    /// measured with `Measurement.get`, so a nested renderable (a `Table`,
+    /// `Panel`, …) sizes its column by its own `__rich_measure__`.
     fn measure_column(
         &self,
         console: &Console,
         options: &ConsoleOptions,
         index: usize,
-        content: usize,
-        max_width: usize,
-    ) -> usize {
+    ) -> Measurement {
+        let max_width = options.max_width;
         if max_width < 1 {
-            return 0;
+            return Measurement::new(0, 0);
         }
         let column = &self.columns[index];
-        let (pl, pr) = self.cell_padding(index, self.columns.len());
-        let padding = pl + pr;
+        let padding_width = self.padding_width(index);
         if let Some(width) = column.width {
-            return (width + padding).min(max_width);
+            // Fixed width column.
+            return Measurement::new(width + padding_width, width + padding_width)
+                .with_maximum(max_width);
         }
-        // Renderable cells measure at the width left inside their padding
-        // (`Padding.__rich_measure__`).
-        let inner = options.update_width(max_width.saturating_sub(padding));
-        let content = self
-            .rows
-            .iter()
-            .filter_map(|row| match row.get(index) {
-                Some(Cell::Renderable(renderable)) if max_width > padding => {
-                    Some(renderable.measure(console, &inner).maximum)
-                }
-                _ => None,
-            })
-            .fold(content, usize::max);
-        let has_cells = self.show_header || !self.rows.is_empty();
-        // A column with no cells measures `(1, max_width)`. A cell whose padding
-        // leaves no room measures the whole width (`Padding.__rich_measure__`).
-        let mut maximum = if !has_cells || max_width < padding + 1 {
-            max_width
+        // Every cell of a column shares its left/right padding; only the
+        // vertical padding depends on the row.
+        let padding = self.cell_padding(index, self.columns.len());
+        let empty = Cell::Markup(String::new());
+        let header = self.show_header.then_some(&column.header);
+        let body = self.rows.iter().map(|row| row.get(index).unwrap_or(&empty));
+        let mut measured = false;
+        let (mut minimum, mut maximum) = (0, 0);
+        for cell in header.into_iter().chain(body) {
+            let width = self.measure_padded_cell(console, options, cell, padding);
+            minimum = minimum.max(width.minimum);
+            maximum = maximum.max(width.maximum);
+            measured = true;
+        }
+        let measurement = if measured {
+            Measurement::new(minimum, maximum)
         } else {
-            (content + padding).min(max_width)
-        };
-        // `Measurement.clamp(min_width + padding, max_width + padding)`.
-        if let Some(min) = column.min_width {
-            maximum = maximum.max(min + padding);
+            Measurement::new(1, max_width)
         }
-        if let Some(max) = column.max_width {
-            maximum = maximum.min(max + padding);
-        }
-        maximum
+        .with_maximum(max_width);
+        measurement.clamp(
+            column.min_width.map(|width| width + padding_width),
+            column.max_width.map(|width| width + padding_width),
+        )
     }
 
     /// The rendered width (content + padding) of each column, shrinking the
@@ -536,16 +666,13 @@ impl Table {
         options: &ConsoleOptions,
         available: usize,
     ) -> Vec<usize> {
-        let ncols = self.columns.len();
+        let options = &options.update_width(available);
         // A fixed-width column uses its declared width; others measure content,
         // clamped to the column's [min_width, max_width]. Port of `_measure_column`.
-        let content = self.max_content_widths();
-        let mut widths: Vec<i64> = (0..ncols)
-            .map(|index| {
-                self.measure_column(console, options, index, content[index], available)
-                    .max(1) as i64
-            })
+        let maximums: Vec<i64> = (0..self.columns.len())
+            .map(|index| self.measure_column(console, options, index).maximum as i64)
             .collect();
+        let mut widths: Vec<i64> = maximums.iter().map(|&width| width.max(1)).collect();
 
         // Expand with explicit ratios: flexible (ratio) columns share the free
         // width in proportion, fixed columns keep their measured width. Port of
@@ -558,7 +685,7 @@ impl Table {
                 .map(|c| c.ratio.unwrap() as i64)
                 .collect();
             if ratios.iter().any(|&r| r > 0) {
-                let fixed_widths: Vec<i64> = widths
+                let fixed_widths: Vec<i64> = maximums
                     .iter()
                     .zip(&self.columns)
                     .map(|(&w, c)| if c.ratio.is_some() { 0 } else { w })
@@ -568,10 +695,7 @@ impl Table {
                     .iter()
                     .enumerate()
                     .filter(|(_, c)| c.ratio.is_some())
-                    .map(|(index, c)| {
-                        let (pl, pr) = self.cell_padding(index, ncols);
-                        (c.width.unwrap_or(1) + pl + pr) as i64
-                    })
+                    .map(|(index, c)| (c.width.unwrap_or(1) + self.padding_width(index)) as i64)
                     .collect();
                 let flexible_width = available as i64 - fixed_widths.iter().sum::<i64>();
                 let flex_widths = ratio_distribute(flexible_width, &ratios, Some(&flex_minimum));
@@ -612,11 +736,10 @@ impl Table {
                 .map(|(index, &width)| {
                     self.measure_column(
                         console,
-                        options,
+                        &options.update_width(width.max(0) as usize),
                         index,
-                        content[index],
-                        width.max(0) as usize,
-                    ) as i64
+                    )
+                    .maximum as i64
                 })
                 .collect();
         }
@@ -683,7 +806,6 @@ impl Table {
         width: usize,
         (cpl, cpr): (usize, usize),
         style: &Style,
-        simplify: bool,
     ) -> Vec<Vec<Segment>> {
         let (pt, _, pb, _) = self.padding;
         let cell_fill = Some(style.clone());
@@ -698,14 +820,8 @@ impl Table {
             if cpl > 0 {
                 row.push(Segment::new(" ".repeat(cpl), cell_fill.clone()));
             }
-            let padded = Segment::adjust_line_length(line, width, cell_fill.clone());
-            // Text cells are simplified to match upstream's segment runs; a
-            // renderable's own segments pass through, as `Padding` yields them.
-            if simplify {
-                row.extend(Segment::simplify(&padded));
-            } else {
-                row.extend(padded);
-            }
+            // The cell's segments pass through, as `Padding` yields them.
+            row.extend(Segment::adjust_line_length(line, width, cell_fill.clone()));
             if cpr > 0 {
                 row.push(Segment::new(" ".repeat(cpr), cell_fill.clone()));
             }
@@ -754,6 +870,12 @@ impl Table {
             let column = self.columns.get(index);
             let mut text = match cells.get(index) {
                 Some(Cell::Text(text)) => text.clone(),
+                // `render_options.update(highlight=column.highlight)`, then
+                // `Console.render` of a `str` calls `render_str`.
+                Some(Cell::Markup(markup)) => console.render_str(
+                    markup,
+                    Some(column.and_then(|c| c.highlight).unwrap_or(self.highlight)),
+                ),
                 None => Text::default(),
                 Some(Cell::Renderable(renderable)) => {
                     // `console.render_lines(renderable, render_options, style)`
@@ -773,13 +895,7 @@ impl Table {
                             true,
                         )
                     };
-                    cell_lines.push(self.pad_cell_lines(
-                        lines,
-                        *width,
-                        paddings[index],
-                        &style,
-                        false,
-                    ));
+                    cell_lines.push(self.pad_cell_lines(lines, *width, paddings[index], &style));
                     height = height.max(cell_lines.last().map_or(0, Vec::len));
                     continue;
                 }
@@ -810,22 +926,32 @@ impl Table {
             // `render_lines`: a zero-width content area renders no lines
             // (`Console.render` returns nothing below width 1), while empty
             // text still renders one blank line.
-            let mut lines = if *width == 0 {
+            //
+            // The text renders on its own and the cell style is applied to the
+            // result (`render_lines(..., style=...)`), so a span keeps its own
+            // segment even where it matches the cell style: `[b]Name` under a
+            // bold header is `Name` + padding, as upstream prints it. Only
+            // equal *unstyled-cell* runs merge, which rejoins the justify
+            // padding that `Text.pad_right` would have appended to the plain.
+            let mut lines: Vec<Vec<Segment>> = if *width == 0 {
                 Vec::new()
             } else {
                 text.render_lines_wrapped(
                     console.theme(),
-                    &style,
+                    &Style::new(),
                     Some(*width),
                     justify,
                     overflow,
                     no_wrap,
                 )
+                .iter()
+                .map(|line| Segment::apply_style(&Segment::simplify(line), &style))
+                .collect()
             };
             if lines.is_empty() && *width > 0 {
                 lines.push(Vec::new());
             }
-            let padded_lines = self.pad_cell_lines(lines, *width, paddings[index], &style, true);
+            let padded_lines = self.pad_cell_lines(lines, *width, paddings[index], &style);
             height = height.max(padded_lines.len());
             cell_lines.push(padded_lines);
         }
@@ -904,14 +1030,7 @@ impl LineRenderable for Table {
             console.safe_box(),
             console.ascii_only(),
         );
-        let ncols = self.columns.len();
-        // Borders occupy: (ncols-1) dividers, plus 2 outer edges when shown;
-        // no box, no border. Port of `_extra_width`.
-        let extra_width = if self.no_box {
-            0
-        } else {
-            (if self.show_edge { 2 } else { 0 }) + ncols.saturating_sub(1)
-        };
+        let extra_width = self.extra_width();
         let available = options.max_width.saturating_sub(extra_width);
 
         let rendered_widths = self.column_widths(console, options, available);
@@ -942,11 +1061,7 @@ impl LineRenderable for Table {
             boxed.then_some((box_set.mid_left, box_set.mid_vertical, box_set.mid_right));
 
         if self.show_header {
-            let headers: Vec<Cell> = self
-                .columns
-                .iter()
-                .map(|c| Cell::Text(c.header.clone()))
-                .collect();
+            let headers: Vec<Cell> = self.columns.iter().map(|c| c.header.clone()).collect();
             for line in self.render_row(
                 console,
                 options,
@@ -999,16 +1114,43 @@ impl LineRenderable for Table {
 
 impl crate::protocol::OwnedTableRows for Table {
     fn extend_owned_rows(&mut self, rows: Vec<Vec<String>>) -> &mut Self {
-        self.rows.extend(rows.into_iter().map(|row| {
-            row.into_iter()
-                .map(|cell| Cell::Text(Text::new(cell)))
-                .collect::<Vec<_>>()
-        }));
+        self.rows.extend(
+            rows.into_iter()
+                .map(|row| row.into_iter().map(Cell::Markup).collect::<Vec<_>>()),
+        );
         self
     }
 }
 
 impl Renderable for Table {
+    /// Port of `Table.__rich_measure__`: the column widths the table would
+    /// render at, then each column measured within their total.
+    fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+        if self.columns.is_empty() {
+            // `_extra_width` counts `len(columns) - 1` dividers, so an empty
+            // boxed table measures `2 - 1` with edges and `-1` (normalized to
+            // 0) without.
+            let width = usize::from(!self.no_box && self.show_edge);
+            return Measurement::new(width, width);
+        }
+        let extra_width = self.extra_width();
+        let max_width: usize = self
+            .column_widths(
+                console,
+                options,
+                options.max_width.saturating_sub(extra_width),
+            )
+            .iter()
+            .sum();
+        let options = options.update_width(max_width);
+        let (minimum, maximum) = (0..self.columns.len())
+            .map(|index| self.measure_column(console, &options, index))
+            .fold((0, 0), |(minimum, maximum), width| {
+                (minimum + width.minimum, maximum + width.maximum)
+            });
+        Measurement::new(minimum + extra_width, maximum + extra_width)
+    }
+
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let mut segments = Vec::new();
         let mut first = true;

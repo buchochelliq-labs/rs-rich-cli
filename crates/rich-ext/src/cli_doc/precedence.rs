@@ -142,7 +142,9 @@ impl Renderable for PrecedenceView {
         let mut table = Table::new();
         table.add_column("Key");
         for layer in &self.precedence.layers {
-            table.add_column(layer.name.clone());
+            // A layer name is data (a file path, an env prefix): keep it
+            // literal rather than letting `add_column` parse it as markup.
+            table.add_column_text(Text::new(layer.name.clone()), rich::Justify::Left);
         }
         table.add_column("Effective");
         let origins: Vec<String> = self
