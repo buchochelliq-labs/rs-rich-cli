@@ -85,3 +85,6 @@ pub use log_handler::RichHandler;
 pub mod adapters;
 
 pub mod live;
+
+#[cfg(feature = "data")]
+pub mod data;

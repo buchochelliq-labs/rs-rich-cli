@@ -37,6 +37,9 @@ rich-macros = { workspace = true, optional = true }
 fancy-regex.workspace = true
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { workspace = true, optional = true }
+saphyr-parser = { version = "0.1", optional = true }
+toml = { version = "1.1", optional = true }
+quick-xml = { version = "0.42", optional = true }
 
 anyhow = { version = "1", optional = true }
 log = { version = "0.4", optional = true }
@@ -55,6 +58,18 @@ macros = ["dep:rich-macros"]
 log = ["dep:log"]
 tracing = ["dep:tracing", "dep:tracing-subscriber"]
 testing = ["dep:serde", "dep:serde_json"]
+# Structured data (`rich_ext::data`): the format-neutral document model, the
+# explorer, table/flatten/search/diff/redaction views and the serde helpers,
+# with JSON, INI and dotenv parsers (hand-written; no extra deps).
+data = ["dep:serde", "dep:serde_json"]
+# YAML parsing through an event parser, so anchors, aliases and positions survive.
+yaml = ["data", "dep:saphyr-parser"]
+# TOML parsing with spans (dates render as written).
+toml = ["data", "dep:toml"]
+# XML parsing (streaming; attributes become `@name` keys).
+xml = ["data", "dep:quick-xml"]
+# The built-in JSONPath selection backend for `data::select`.
+jsonpath = ["data"]
 
 [[example]]
 name = "snapshot"
@@ -71,3 +86,7 @@ required-features = ["tracing"]
 [[example]]
 name = "rich_handler"
 required-features = ["log", "tracing"]
+
+[[example]]
+name = "structured_data"
+required-features = ["data"]
