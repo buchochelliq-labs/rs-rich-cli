@@ -800,14 +800,35 @@ impl Table {
     /// Pad a cell's rendered lines to its width, with the vertical padding
     /// above and below: upstream's `Padding` around the cell. Blank rows are
     /// one run across the whole cell, as `Padding`'s blank lines are.
+    /// The `(top, bottom)` padding of a cell in the first and/or last of the
+    /// rendered rows (header included). Port of `_get_cells`' `get_padding`:
+    /// with `collapse_padding` every row but the last keeps only
+    /// `max(0, top - bottom)` below it, and without `pad_edge` the first row
+    /// loses its top and the last row its bottom.
+    fn vertical_padding(&self, first_row: bool, last_row: bool) -> (usize, usize) {
+        let (mut top, _, mut bottom, _) = self.padding;
+        if self.collapse_padding && !last_row {
+            bottom = top.saturating_sub(bottom);
+        }
+        if !self.pad_edge {
+            if first_row {
+                top = 0;
+            }
+            if last_row {
+                bottom = 0;
+            }
+        }
+        (top, bottom)
+    }
+
     fn pad_cell_lines(
         &self,
         lines: Vec<Vec<Segment>>,
         width: usize,
         (cpl, cpr): (usize, usize),
+        (pt, pb): (usize, usize),
         style: &Style,
     ) -> Vec<Vec<Segment>> {
-        let (pt, _, pb, _) = self.padding;
         let cell_fill = Some(style.clone());
         let cell_width = cpl + width + cpr;
         let blank = || vec![Segment::new(" ".repeat(cell_width), cell_fill.clone())];
@@ -842,10 +863,12 @@ impl Table {
         cells: &[Cell],
         rendered_widths: &[usize],
         is_header: bool,
+        (first_row, last_row): (bool, bool),
         edges: Option<(char, char, char)>,
     ) -> Vec<Vec<Segment>> {
-        // Horizontal padding is per-column (see `cell_padding`); only the
-        // top/bottom vertical padding is uniform (see `pad_cell_lines`).
+        // Horizontal padding is per-column (see `cell_padding`); vertical
+        // padding depends on the row's place (see `vertical_padding`).
+        let vertical = self.vertical_padding(first_row, last_row);
         let border = Some(self.style.combine(&self.border_style));
         let ncols = self.columns.len();
         // Derived here rather than by the caller so the padding used to lay the
@@ -895,7 +918,13 @@ impl Table {
                             true,
                         )
                     };
-                    cell_lines.push(self.pad_cell_lines(lines, *width, paddings[index], &style));
+                    cell_lines.push(self.pad_cell_lines(
+                        lines,
+                        *width,
+                        paddings[index],
+                        vertical,
+                        &style,
+                    ));
                     height = height.max(cell_lines.last().map_or(0, Vec::len));
                     continue;
                 }
@@ -951,7 +980,8 @@ impl Table {
             if lines.is_empty() && *width > 0 {
                 lines.push(Vec::new());
             }
-            let padded_lines = self.pad_cell_lines(lines, *width, paddings[index], &style);
+            let padded_lines =
+                self.pad_cell_lines(lines, *width, paddings[index], vertical, &style);
             height = height.max(padded_lines.len());
             cell_lines.push(padded_lines);
         }
@@ -1068,6 +1098,7 @@ impl LineRenderable for Table {
                 &headers,
                 &rendered_widths,
                 true,
+                (true, self.rows.is_empty()),
                 head_edges,
             ) {
                 emit(line)?;
@@ -1082,8 +1113,16 @@ impl LineRenderable for Table {
 
         let row_last = self.rows.len().saturating_sub(1);
         for (index, row) in self.rows.iter().enumerate() {
-            for line in self.render_row(console, options, row, &rendered_widths, false, body_edges)
-            {
+            let place = (!self.show_header && index == 0, index == row_last);
+            for line in self.render_row(
+                console,
+                options,
+                row,
+                &rendered_widths,
+                false,
+                place,
+                body_edges,
+            ) {
                 emit(line)?;
             }
             if boxed && self.show_lines && index != row_last {
