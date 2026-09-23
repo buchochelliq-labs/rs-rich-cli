@@ -13,12 +13,20 @@ Create `status.json` with valid JSON, then run:
 rich json status.json --no-config --watch --watch-interval 0.5 --width 72
 ```
 
-Edit and save the file in another window. In a terminal, watch mode polls every
-half second and clears/repaints the terminal viewport for changed content.
-Each poll reads the local file using a fixed 64 KiB buffer; choose a longer
-interval for large files to reduce I/O. Invalid JSON and temporary missing
-files (including atomic-save gaps) produce recoverable frames; fixing the file
-allows the next poll to render it again. Press Ctrl+C to stop.
+Edit and save the file in another window. In a terminal, watch mode reacts to
+file events (debounced by `--watch-debounce`, default 0.1 s) and
+clears/repaints the terminal viewport for changed content. `--watch-interval`
+only matters with `--watch-poll` (use it on network filesystems) or for URLs.
+Invalid JSON and temporary missing files (including atomic-save gaps) produce
+recoverable frames; fixing the file renders it again. Add
+`--watch-exit-on-error` to stop with a non-zero exit instead. Press Ctrl+C to
+stop.
+
+Watch several files side by side, each in its own region:
+
+```bash
+rich --no-config --watch status.json notes.md
+```
 
 Redirecting stdout deliberately renders one snapshot and exits:
 
@@ -26,9 +34,10 @@ Redirecting stdout deliberately renders one snapshot and exits:
 rich json status.json --no-config --watch --width 72 > status.txt
 ```
 
-Watch takes a local file or URL, not stdin or literal markup. URL polling
+Watch takes local files or one URL, not stdin or literal markup. URL polling
 requires the `fetch` feature; add `--watch-cache` to suppress unchanged URL
-responses. Watch intervals must be positive finite seconds.
+responses. Watch intervals must be positive finite seconds; the debounce may
+be 0 to 3600 seconds.
 
 ## Export Markdown files to HTML in a batch
 
@@ -142,7 +151,8 @@ settings after profile and explicit CLI overrides; it does not expand every
 built-in CLI default. An empty object does not mean the renderer has no defaults.
 
 Supported settings include the earlier mode, width, export, batch and decoration
-options, plus `height`, `watch`, `watch_cache`, `watch_interval`, `sanitize`,
+options, plus `height`, `watch`, `watch_cache`, `watch_interval`, `watch_debounce`,
+`watch_poll`, `watch_exit_on_error`, `sanitize`,
 `auto_pager`, `image_fit`, `image_anchor` and `image_background`. Use a still-image
 command explicitly when configuring image geometry:
 

@@ -7,6 +7,17 @@ absorbed and what our own crates did.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+- CLI: `--watch` accepts several local files; a change re-renders only that
+  file, in its own `rich-ext` Live region, with errors shown per file until it
+  recovers. File events come from `notify` (parent-directory watches, so atomic
+  rename-over saves and delete-and-recreate are seen), debounced by
+  `--watch-debounce` (default 0.1 s); `--watch-poll` and watcher failures use
+  the polling loop. `--watch-exit-on-error` ends the watch non-zero on a failed
+  render. New config keys: `watch_debounce`, `watch_poll`,
+  `watch_exit_on_error`. Redirected output and URL watching are unchanged (#139).
+
 ## Expanded CLI 0.0.9 preparation (unpublished)
 
 - Core 0.0.5: optional immutable rendering-environment extension seam; unchanged
