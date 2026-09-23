@@ -51,6 +51,7 @@ toml = "1.1"
 tempfile = "3"
 same-file = "1"
 ctrlc = "3.4"
+notify.workspace = true
 cap-std = "4"
 cap-fs-ext = "4"
 fastrand = "2"

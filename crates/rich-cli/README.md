@@ -62,8 +62,11 @@ Export
   writing to the terminal — any render mode can be captured this way.
 
 Watch
-: `--watch` polls a local file or URL and re-renders changes. Use
-  `--watch-interval SEC` to change the polling interval. `--watch-cache`
+: `--watch` re-renders changed local files (several may be given, each in its
+  own live region) or one URL. Files use OS file events debounced by
+  `--watch-debounce SEC` (default 0.1); `--watch-poll` polls every
+  `--watch-interval SEC` instead, and URLs are always polled.
+  `--watch-exit-on-error` stops on the first failed render. `--watch-cache`
   avoids re-rendering unchanged URL responses. Watch mode is intentionally
   finite when stdout is redirected: it renders one snapshot and exits, making
   pipelines deterministic. Builds without the `fetch` feature reject URL
