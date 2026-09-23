@@ -19,8 +19,12 @@ import sys
 import tomllib
 
 from rich import box
+from rich.align import Align
 from rich.console import Console
+from rich.padding import Padding
 from rich.panel import Panel
+from rich.rule import Rule
+from rich.table import Table
 from rich.text import Text
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -33,6 +37,17 @@ CAPABILITY_PROFILES = [
 OVERFLOWS = ["fold", "crop", "ellipsis", "ignore"]
 JUSTIFY = ["default", "left", "center", "right", "full"]
 ALPHABET = "abc xyz[]/#:-_é界🙂\t"
+# Table cells, headers and titles are parsed as markup upstream; keep the
+# generated words markup-safe so a case exercises layout, not markup errors
+# (the `markup` kind already covers those).
+WORD_ALPHABET = "abc xyzé界🙂-_"
+KINDS = ["markup", "text", "panel", "table", "rule", "padding", "align"]
+BOXES = ["square", "rounded", "heavy", "double", "ascii", "minimal"]
+ALIGNS = ["left", "center", "right"]
+
+
+def word(rng: random.Random, low: int = 0, high: int = 12) -> str:
+    return "".join(rng.choice(WORD_ALPHABET) for _ in range(rng.randint(low, high)))
 
 
 def pinned_rich_version() -> str:
@@ -66,7 +81,7 @@ def generated_cases(seed: int, count: int) -> list[dict]:
     rng = random.Random(seed)
     cases = []
     for index in range(count):
-        kind = rng.choice(["markup", "text", "panel"])
+        kind = rng.choice(KINDS)
         source = "".join(rng.choice(ALPHABET) for _ in range(rng.randint(1, 32)))
         case = {
             "kind": kind,
@@ -85,9 +100,49 @@ def generated_cases(seed: int, count: int) -> list[dict]:
             if rng.random() < 0.4:
                 case["style"] = rng.choice(["red", "bold blue", "on green"])
         if kind == "panel":
-            case["box"] = rng.choice(["square", "rounded", "heavy", "double", "ascii", "minimal"])
+            case["box"] = rng.choice(BOXES)
             if rng.random() < 0.3:
                 case["title"] = rng.choice(["title", "Box Title", ""])
+        if kind == "table":
+            columns = rng.randint(1, 3)
+            case["source"] = ""
+            case["columns"] = [
+                {
+                    "header": word(rng, 0, 8),
+                    "justify": rng.choice(ALIGNS),
+                    **({"no_wrap": True} if rng.random() < 0.2 else {}),
+                    **({"min_width": rng.randint(1, 6)} if rng.random() < 0.15 else {}),
+                    **({"max_width": rng.randint(2, 10)} if rng.random() < 0.15 else {}),
+                    **({"ratio": rng.randint(1, 3)} if rng.random() < 0.15 else {}),
+                }
+                for _ in range(columns)
+            ]
+            case["rows"] = [
+                [word(rng) for _ in range(columns)] for _ in range(rng.randint(0, 3))
+            ]
+            case["box"] = rng.choice(BOXES)
+            for flag, chance in [
+                ("show_header", 0.8),
+                ("show_lines", 0.3),
+                ("show_edge", 0.8),
+                ("pad_edge", 0.8),
+                ("expand", 0.3),
+            ]:
+                case[flag] = rng.random() < chance
+            if rng.random() < 0.3:
+                case["title"] = word(rng, 1, 10)
+        if kind == "rule":
+            case["source"] = word(rng, 0, 16)
+            case["characters"] = rng.choice(["─", "=", "-~", "━", "*"])
+            case["align"] = rng.choice(ALIGNS)
+        if kind in ("padding", "align"):
+            case["source"] = word(rng, 1, 30)
+        if kind == "padding":
+            case["pad"] = [rng.randint(0, 2) for _ in range(4)]
+            if rng.random() < 0.3:
+                case["style"] = rng.choice(["on blue", "red", "on #102030"])
+        if kind == "align":
+            case["align"] = rng.choice(ALIGNS)
         cases.append(case)
     return cases
 
@@ -117,12 +172,52 @@ def python_render(case: dict) -> str:
         elif case["kind"] == "panel":
             box_name = case.get("box", "rounded")
             box_set = getattr(box, box_name.upper(), box.ROUNDED)
-            panel = Panel(case["source"], box=box_set, title=case.get("title"))
+            # Text, not str: the Rust side does not parse markup in panel bodies,
+            # and markup parsing has its own `markup` kind.
+            panel = Panel(Text(case["source"]), box=box_set, title=case.get("title"))
             console.print(panel, end="")
+        elif case["kind"] == "table":
+            table = Table(
+                box=getattr(box, case.get("box", "heavy_head").upper()),
+                show_header=case.get("show_header", True),
+                show_lines=case.get("show_lines", False),
+                show_edge=case.get("show_edge", True),
+                pad_edge=case.get("pad_edge", True),
+                expand=case.get("expand", False),
+                title=case.get("title"),
+            )
+            for column in case["columns"]:
+                table.add_column(
+                    column["header"],
+                    justify=column.get("justify", "left"),
+                    no_wrap=column.get("no_wrap", False),
+                    min_width=column.get("min_width"),
+                    max_width=column.get("max_width"),
+                    ratio=column.get("ratio"),
+                )
+            for row in case["rows"]:
+                table.add_row(*row)
+            console.print(table, end="")
+        elif case["kind"] == "rule":
+            rule = Rule(
+                case["source"],
+                characters=case.get("characters", "─"),
+                align=case.get("align", "center"),
+            )
+            console.print(rule, end="")
+        elif case["kind"] == "padding":
+            padding = Padding(
+                Text(case["source"]), tuple(case["pad"]), style=case.get("style", "none")
+            )
+            console.print(padding, end="")
+        elif case["kind"] == "align":
+            console.print(Align(Text(case["source"]), case["align"]), end="")
         else:
             raise ValueError(f"unknown kind {case['kind']!r}")
     out = capture.get()
-    if case["kind"] == "panel" and out.endswith("\n"):
+    # Block renderables end every line, including the last, with a newline;
+    # the Rust side renders to a string without the final one.
+    if case["kind"] != "markup" and case["kind"] != "text" and out.endswith("\n"):
         out = out[:-1]
     return out
 
@@ -144,38 +239,126 @@ def rust_render(cases: list[dict], command: list[str]) -> list[dict]:
     return [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
 
 
-def mismatches(cases: list[dict], rust_command: list[str], mutate_oracle: bool) -> list[dict]:
-    py_outputs = []
-    for case in cases:
+def python_render_all(cases: list[dict]) -> list[dict]:
+    """Render every case, one interpreter per colour system.
+
+    rich memoises a `Style`'s rendered SGR codes on the instance, whatever the
+    colour system, and `Style.parse` caches instances. Rendering `#ff8800`
+    under `standard` and then `truecolor` in one process prints `91` twice, so
+    a shared interpreter reports mismatches that are the oracle's own.
+    """
+    outputs: list[dict | None] = [None] * len(cases)
+    groups: dict[str, list[int]] = {}
+    for index, case in enumerate(cases):
+        groups.setdefault(case.get("color_system", "truecolor"), []).append(index)
+    for indices in groups.values():
+        payload = "\n".join(json.dumps(cases[i], ensure_ascii=False) for i in indices) + "\n"
+        proc = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), "--python-worker"],
+            input=payload,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            env={**os.environ, "PYTHONUTF8": "1"},
+        )
+        if proc.returncode != 0:
+            raise SystemExit(proc.stderr)
+        results = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
+        for index, result in zip(indices, results, strict=True):
+            outputs[index] = result
+    return outputs  # type: ignore[return-value]
+
+
+def python_worker() -> int:
+    for line in sys.stdin:
+        if not line.strip():
+            continue
+        case = json.loads(line)
         try:
-            py_outputs.append({"ok": True, "output": python_render(case)})
+            result = {"ok": True, "output": python_render(case)}
         except Exception as error:
-            py_outputs.append({"ok": False, "error": str(error)})
+            result = {"ok": False, "error": f"{type(error).__name__}: {error}"}
+        print(json.dumps(result, ensure_ascii=False), flush=True)
+    return 0
+
+
+def outcome(py: dict, rust: dict) -> str | None:
+    """Classify one comparison; None means the outputs agree."""
+    if not py.get("ok") and not rust.get("ok"):
+        return None
+    if not py.get("ok"):
+        return "python_error"
+    if not rust.get("ok"):
+        return "rust_error"
+    return None if py["output"] == rust["output"] else "output"
+
+
+def mismatches(cases: list[dict], rust_command: list[str], mutate_oracle: bool) -> list[dict]:
+    py_outputs = python_render_all(cases)
     if mutate_oracle and py_outputs and py_outputs[0].get("ok"):
         py_outputs[0]["output"] += "<mutation>"
     rust_outputs = rust_render(cases, rust_command)
     found = []
     for case, py, rust in zip(cases, py_outputs, rust_outputs, strict=True):
-        if not py.get("ok"):
-            found.append({"case": case, "python_error": py.get("error"), "rust": rust})
-        elif not rust.get("ok"):
-            found.append({"case": case, "python": py["output"], "rust_error": rust.get("error")})
-        elif py["output"] != rust["output"]:
-            found.append({"case": case, "python": py["output"], "rust": rust["output"]})
+        kind = outcome(py, rust)
+        if kind == "python_error":
+            found.append({"case": case, "kind": kind, "python_error": py.get("error"), "rust": rust})
+        elif kind == "rust_error":
+            found.append({"case": case, "kind": kind, "python": py["output"], "rust_error": rust.get("error")})
+        elif kind == "output":
+            found.append({"case": case, "kind": kind, "python": py["output"], "rust": rust["output"]})
     return found
 
 
-def shrink(case: dict, rust_command: list[str], mutate_oracle: bool) -> dict:
+def candidates(case: dict):
+    """Smaller variants of `case`: one character, cell, row or column fewer."""
+    source = case.get("source", "")
+    for index in range(len(source)):
+        yield {**case, "source": source[:index] + source[index + 1 :]}
+    rows = case.get("rows") or []
+    for r in range(len(rows)):
+        yield {**case, "rows": rows[:r] + rows[r + 1 :]}
+    for r, row in enumerate(rows):
+        for c, cell in enumerate(row):
+            for index in range(len(cell)):
+                smaller = [list(x) for x in rows]
+                smaller[r][c] = cell[:index] + cell[index + 1 :]
+                yield {**case, "rows": smaller}
+    columns = case.get("columns") or []
+    if len(columns) > 1:
+        for c in range(len(columns)):
+            yield {
+                **case,
+                "columns": columns[:c] + columns[c + 1 :],
+                "rows": [row[:c] + row[c + 1 :] for row in rows],
+            }
+    for c, column in enumerate(columns):
+        header = column.get("header", "")
+        for index in range(len(header)):
+            smaller = [dict(x) for x in columns]
+            smaller[c]["header"] = header[:index] + header[index + 1 :]
+            yield {**case, "columns": smaller}
+        for option in ("no_wrap", "min_width", "max_width", "ratio"):
+            if option in column:
+                smaller = [dict(x) for x in columns]
+                del smaller[c][option]
+                yield {**case, "columns": smaller}
+    for option in ("title", "style"):
+        if option in case:
+            yield {k: v for k, v in case.items() if k != option}
+
+
+def shrink(case: dict, kind: str, rust_command: list[str], mutate_oracle: bool) -> dict:
+    """Greedy delta reduction that keeps the *same* failure kind, so a layout
+    mismatch cannot wander off into an unrelated markup error."""
     current = copy.deepcopy(case)
-    source = current.get("source", "")
     changed = True
-    while changed and len(source) > 1:
+    while changed:
         changed = False
-        for index in range(len(source)):
-            candidate = source[:index] + source[index + 1 :]
-            trial = {**current, "source": candidate}
-            if mismatches([trial], rust_command, mutate_oracle):
-                current, source, changed = trial, candidate, True
+        for trial in candidates(current):
+            found = mismatches([trial], rust_command, mutate_oracle)
+            if found and found[0]["kind"] == kind:
+                current, changed = trial, True
                 break
     return current
 
@@ -187,6 +370,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--self-test-mutation", action="store_true")
     parser.add_argument(
+        "--write-failures",
+        type=Path,
+        metavar="PATH",
+        help="append each shrunk failing case to PATH as corpus JSONL",
+    )
+    parser.add_argument("--no-shrink", action="store_true", help="report failures unshrunk")
+    parser.add_argument(
+        "--max-shrink",
+        type=int,
+        default=25,
+        metavar="N",
+        help="shrink at most N failures (one per case kind first); the rest are reported unshrunk",
+    )
+    parser.add_argument("--python-worker", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument(
         "--rust-command",
         nargs=argparse.REMAINDER,
         default=["cargo", "run", "-q", "-p", "rs-rich", "--example", "diff_render"],
@@ -196,6 +394,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.python_worker:
+        return python_worker()
     version = verify_rich_version()
     cases = load_cases(args.corpus)
     if args.generate:
@@ -204,9 +404,28 @@ def main() -> int:
     if not found:
         print(f"ok: {len(cases)} cases matched Python rich {version}")
         return 0
-    for item in found:
-        shrunk = shrink(item["case"], args.rust_command, args.self_test_mutation)
+    # Shrinking re-renders every candidate, so bound it: first one failure per
+    # case kind (so every family gets a minimal reproducer), then the rest in
+    # order up to --max-shrink.
+    seen_kinds: set[str] = set()
+    first, rest = [], []
+    for index, item in enumerate(found):
+        kind = item["case"]["kind"]
+        (rest if kind in seen_kinds else first).append(index)
+        seen_kinds.add(kind)
+    order = first + rest
+    to_shrink = set() if args.no_shrink else set(order[: max(args.max_shrink, 0)])
+    for index, item in enumerate(found):
+        shrunk = (
+            shrink(item["case"], item["kind"], args.rust_command, args.self_test_mutation)
+            if index in to_shrink
+            else item["case"]
+        )
         print(json.dumps({"mismatch": item, "shrunk": shrunk}, ensure_ascii=False))
+        if args.write_failures:
+            with args.write_failures.open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps(shrunk, ensure_ascii=False) + "\n")
+    print(f"FAIL: {len(found)} of {len(cases)} cases differ from Python rich {version}", file=sys.stderr)
     return 1
 
 

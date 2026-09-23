@@ -84,15 +84,50 @@ Repeated scalar options use the last value, including `--width` and export paths
 Watch a local file while editing it:
 
 ```bash
-rich --watch --watch-interval 0.5 report.md
+rich --watch report.md
 ```
 
-The watcher checks local file contents at the polling interval using a bounded
-buffer, so same-size edits with preserved timestamps are detected. Atomic saves, temporary
-disappearance, malformed intermediate content, and later recovery are handled
-as successive frames; a failed frame is reported and the watcher keeps
-running. `Ctrl-C` terminates the interactive watch. URLs can be watched when
-the default `fetch` feature is enabled:
+Local files are watched through operating-system file events (inotify,
+FSEvents, ReadDirectoryChangesW or kqueue, via the `notify` crate). Each file's
+*parent directory* is watched and events are filtered by path, so atomic
+rename-over saves and delete-and-recreate are caught. A render only happens
+when the file's contents changed: the file is hashed with a bounded buffer, so
+same-size edits with preserved timestamps are detected and metadata-only
+events are ignored. Atomic saves, temporary disappearance, malformed
+intermediate content, and later recovery are handled as successive frames; a
+failed frame is reported and the watcher keeps running. `Ctrl-C` terminates
+the interactive watch.
+
+Watch several files at once — each keeps its own render mode (auto-detected
+from its extension unless a mode flag is given) and gets its own live region
+with the file name as a header:
+
+```bash
+rich --watch README.md status.json data.csv
+```
+
+A change to one file re-renders only that file's region; the regions repaint in
+place through the `rich-ext` Live coordinator instead of clearing the screen,
+and each region is cropped to an equal share of the terminal height (a
+`… N more lines` marker shows what is hidden). Errors stay visible inside the
+failing file's region and clear when the file becomes valid again. On
+`Ctrl-C` the last frame is left on screen and the cursor is restored. A single
+watched file keeps the full-viewport clear-and-repaint of earlier releases.
+
+| option | default | effect |
+|---|---|---|
+| `--watch-debounce SEC` | `0.1` | Quiet period that collapses a burst of events (an editor's write, rename and chmod) into one re-render. A file that keeps changing still refreshes at least every 10 debounce windows. `0` renders on every event. |
+| `--watch-poll` | off | Skip file events and poll local files every `--watch-interval`. Use it on network filesystems (NFS, SMB, some container mounts) where events are not delivered. |
+| `--watch-interval SEC` | `1` | Polling interval for `--watch-poll`, for the automatic polling fallback, and for URLs. |
+| `--watch-exit-on-error` | off | End the watch when a render fails, restoring the terminal, printing the error and exiting with that render's non-zero exit code. |
+
+If file events cannot be set up (for example the watch limit is exhausted or a
+parent directory does not exist), the watcher prints one notice and falls back
+to polling at `--watch-interval`. Idle watching does not busy-loop in either
+mode. Recursive directory and glob watching are not supported; name each file.
+
+URLs can be watched when the default `fetch` feature is enabled. A URL is
+always polled, and must be the only watched resource:
 
 ```bash
 rich --watch --watch-cache --watch-interval 5 https://example.com/data.json
@@ -101,7 +136,8 @@ rich --watch --watch-cache --watch-interval 5 https://example.com/data.json
 `--watch-cache` hashes each fetched response and only renders changed bodies.
 Without it, URLs are fetched and rendered every interval. When stdout is
 redirected or piped, `--watch` renders exactly one snapshot and exits instead
-of entering an interactive loop. A binary built with `--no-default-features`
+of entering an interactive loop; with several files the snapshot is each file
+rendered once, in order, byte-identical to separate `rich FILE` runs. A binary built with `--no-default-features`
 does not support URL fetching, including URL watches. Watch cannot be combined
 with batch or explicit/automatic paging.
 
@@ -424,13 +460,13 @@ with `python scripts/capture_image_modes_010.py --binary target/release/rich`.
 rich json status.json --no-config --watch --watch-interval 0.5
 ```
 
-Interactive watch clears and repaints the terminal viewport for each changed
-frame. It leaves the cursor visible and uses the existing console controls.
-Invalid input or a missing file is recoverable. Local regular files are read
-with a fixed 64 KiB buffer on every poll so same-size edits and atomic saves
-are detected even when timestamps are preserved. For large files, choose a
-longer interval to reduce disk I/O. Redirected stdout renders once and exits
-without terminal clear codes. See [watch recipes](recipes.md#watch-json-while-editing).
+Interactive watch of one file clears and repaints the terminal viewport for
+each changed frame; several files share the terminal as one live region each.
+Invalid input or a missing file is recoverable. Local regular files are hashed
+with a fixed 64 KiB buffer after each (debounced) file event, or on every poll
+with `--watch-poll`, so same-size edits and atomic saves are detected even when
+timestamps are preserved. Redirected stdout renders once and exits without
+terminal clear codes. See [watch recipes](recipes.md#watch-json-while-editing).
 
 ## Use it in a script or CI
 
@@ -724,8 +760,9 @@ render; varied source files may see no speedup. See the
 [measurements](benchmarks.md#004-repeated-source-syntax-results).
 
 Disabling configured watch with `watch = false` or `--no-watch` also suppresses
-inherited `watch_interval` and `watch_cache`. Explicitly passing those watch
-options without enabling watch remains a usage error.
+inherited `watch_interval`, `watch_cache`, `watch_debounce`, `watch_poll` and
+`watch_exit_on_error`. Explicitly passing those watch options without enabling
+watch remains a usage error.
 
 ### Destination capabilities
 
