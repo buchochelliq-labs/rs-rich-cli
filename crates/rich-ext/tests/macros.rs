@@ -204,3 +204,41 @@ fn compile_errors_name_the_problem() {
     let cases = trybuild::TestCases::new();
     cases.compile_fail("tests/ui/*.rs");
 }
+
+/// The print macros wrap `richf!` in `macro_rules!`; inline captures must
+/// still resolve at the caller, as they do for `format!` (and `richf!`).
+#[test]
+fn print_macros_capture_locals_like_format() {
+    use rich_ext::{rich_eprintln, rich_println, rich_trace};
+    let x = 7;
+    let name = "[x]";
+    let width = 5;
+    rich_println!("[bold]{x}[/]");
+    rich_println!("{x:>5}|{name}|{x:>width$}");
+    rich_println!("{} and {0}", x);
+    rich_println!("{label}={x}", label = "k");
+    rich_eprintln!("[bold]{x}[/]");
+    rich_eprintln!("{x:>5}|{name}|{x:>width$}");
+    rich_eprintln!("{} and {0}", x);
+    rich_eprintln!("{label}={x}", label = "k");
+    rich_trace!("[bold]{x}[/]");
+    rich_trace!("{x:>5}|{name}|{x:>width$}");
+    rich_trace!("{} and {0}", x);
+    rich_trace!("{label}={x}", label = "k");
+}
+
+/// A user's own `macro_rules!` wrapper around `richf!` sees the caller's
+/// locals, which is what the print macros rely on.
+#[test]
+fn richf_through_a_macro_rules_wrapper_captures_locals() {
+    macro_rules! wrap {
+        ($($arg:tt)*) => { richf!($($arg)*) };
+    }
+    let x = 7;
+    let width = 4;
+    assert_eq!(wrap!("[bold]{x}[/]").plain(), "7");
+    assert_eq!(wrap!("{x:>5}").plain(), "    7");
+    assert_eq!(wrap!("{x:>width$}|{}|{0}", "p").plain(), "   7|p|p");
+    assert_eq!(wrap!("{n}{x}", n = 1).plain(), "17");
+    assert_eq!(wrap!("{} {x:>w$}", "[a]", w = width).plain(), "[a]    7");
+}

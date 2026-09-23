@@ -747,8 +747,8 @@ fn json_errors_render_as_diagnostics() {
         out,
         concat!(
             "error: invalid JSON: expected `:`\n",
+            // One location line: the snippet does not repeat the file.
             "  --> input:2:7\n",
-            "--> input\n",
             "1 | {\n",
             "2 |   \"a\" 1\n",
             "  |       ^ expected `:`\n",

@@ -60,6 +60,24 @@ Entries below record subsequent releases and development.
 Cohort versions for 0.0.11 (not published): core 0.0.7, ext 0.0.9, art 0.0.9,
 CLI 0.0.11. Core changes below, so every dependent moves with it.
 
+### Fixes: print macro captures, flag suggestions, diagnostic locations, SVG titles
+
+- **Print macros capture locals.** `rich_println!("[bold]{x}[/]")`,
+  `rich_eprintln!` and `rich_trace!` failed with "cannot find value `x`":
+  `richf!` gave implicit captures the call-site span, which inside the print
+  macros' `macro_rules!` wrapper is the wrapper's hygiene. Captures now take
+  the template literal's span, as `format!` does.
+- **Like-for-like flag suggestions.** `cli_doc::suggest` compares a `--long`
+  typo only with long flags, a `-s` typo only with short flags and a bare word
+  only with bare words, so `--paralel` no longer also suggests `-r`.
+- **One location line.** A diagnostic with a location and a snippet of the same
+  file no longer repeats `--> file` above the snippet; `DataError` parse errors
+  show only `  --> file:line:col`. Snippet-only diagnostics are unchanged.
+- **SVG titles.** `rich print '[b]Hi[/] there' --export-svg …` and `--rule` with
+  markup titled the SVG with a fragment split on `/`; literal print text and
+  rule titles now get the default title `rich`. Path, URL and stdin titles are
+  unchanged.
+
 ### Ext: CLI authoring (0.0.11 workstream 6)
 
 - **One description, many outputs.** `rich_ext::cli_doc::CommandSpec` describes a

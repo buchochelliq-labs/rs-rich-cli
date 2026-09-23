@@ -267,6 +267,35 @@ fn unknown_argument_suggests_a_similar_one() {
 }
 
 #[test]
+fn flag_typos_are_compared_with_flags_of_the_same_kind() {
+    let spec = CommandSpec::new("tool")
+        .arg(ArgSpec::flag("parallel").short('r').help("Run in parallel"))
+        .arg(ArgSpec::flag("dry-run").short('n').help("Change nothing"))
+        .arg(ArgSpec::flag("quiet").short('q').help("Less output"))
+        .subcommand(CommandSpec::new("report").about("Summarise"));
+    // A long-flag typo never draws an unrelated one-letter short flag.
+    assert_eq!(
+        CliError::unknown_in(&spec, "--paralel").suggestions,
+        ["--parallel"]
+    );
+    assert_eq!(
+        CliError::unknown_in(&spec, "--dry-rn").suggestions,
+        ["--dry-run"]
+    );
+    assert!(CliError::unknown_in(&spec, "--r")
+        .suggestions
+        .iter()
+        .all(|s| s.starts_with("--")));
+    // A short-flag typo is compared with short flags only.
+    assert!(CliError::unknown_in(&spec, "-x")
+        .suggestions
+        .iter()
+        .all(|s| s.len() == 2 && !s.starts_with("--")));
+    // Subcommands with subcommands.
+    assert_eq!(CliError::unknown_in(&spec, "reprt").suggestions, ["report"]);
+}
+
+#[test]
 fn unknown_subcommand_and_invalid_value() {
     let error = CliError::unknown_in(&sample(), "confg");
     assert_eq!(

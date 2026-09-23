@@ -2382,3 +2382,37 @@ fn image_reads_raw_bytes_from_stdin() {
     let out = String::from_utf8_lossy(&result.stdout);
     assert!(!out.trim().is_empty());
 }
+
+/// The SVG title came from the RESOURCE's basename even when the resource was
+/// literal text, so `rich print '[b]Hi[/] there'` was titled `] there` and a
+/// marked-up rule `]`. Literal resources (print mode, rule titles) now get the
+/// default title; paths, URLs and stdin keep theirs.
+#[test]
+fn svg_titles_come_from_paths_not_literal_text() {
+    let dir = std::env::temp_dir().join(format!("rich-svg-title-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let svg = dir.join("t.svg");
+    let title = |args: &[&str], stdin: &str| -> String {
+        let _ = std::fs::remove_file(&svg);
+        let mut full = args.to_vec();
+        full.extend(["--export-svg", svg.to_str().unwrap()]);
+        let (_out, err, ok) = run_full(&full, stdin);
+        assert!(ok, "{args:?}: {err}");
+        let written = std::fs::read_to_string(&svg).unwrap();
+        let at = written.find("-title\" fill=").expect("an SVG title");
+        let rest = &written[at..];
+        let start = rest.find('>').unwrap() + 1;
+        let end = rest.find("</text>").unwrap();
+        rest[start..end].to_string()
+    };
+    assert_eq!(title(&["print", "[b]Hi[/] there"], ""), "rich");
+    assert_eq!(title(&["-p", "a/b\\c [i]d[/i]"], ""), "rich");
+    assert_eq!(title(&["--rule", "[bold red]Section[/]"], ""), "rich");
+    assert_eq!(title(&["--rule"], ""), "rich");
+    // Paths and stdin are unchanged.
+    let file = dir.join("notes.txt");
+    std::fs::write(&file, "hello\n").unwrap();
+    assert_eq!(title(&[file.to_str().unwrap()], ""), "notes.txt");
+    assert_eq!(title(&["-", "-p"], "hi"), "rich");
+    assert_eq!(title(&["-"], "hi"), "rich");
+}

@@ -1,6 +1,6 @@
 //! `richf!`, `markup!`, `style!` and `theme_key!`.
 
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::TokenStream;
 use quote::{format_ident, quote, quote_spanned};
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
@@ -235,9 +235,13 @@ pub fn richf(input: TokenStream) -> syn::Result<TokenStream> {
                     let binding = &named[at].1;
                     Ok(quote!(#binding))
                 }
-                // Captured from scope, as `format!` does.
+                // Captured from scope, as `format!` does: the name takes the
+                // template literal's span, so it resolves where the user wrote
+                // the literal even when a `macro_rules!` wrapper (the print
+                // macros) forwards it. `Span::call_site()` would resolve at
+                // the wrapper's hygiene and miss the caller's locals.
                 None => {
-                    let ident = Ident::new(name, Span::call_site());
+                    let ident = Ident::new(name, span);
                     Ok(quote_spanned!(span=> &#ident))
                 }
             },
@@ -256,7 +260,7 @@ pub fn richf(input: TokenStream) -> syn::Result<TokenStream> {
                 for reference in spec_references(spec) {
                     let name = match &reference {
                         ArgRef::Index(index) => format_ident!("__rich_ref{}", index),
-                        ArgRef::Name(name) => Ident::new(name, Span::call_site()),
+                        ArgRef::Name(name) => Ident::new(name, span),
                     };
                     let bound = resolve(&reference)?;
                     extra.push(quote!(#name = *#bound));
