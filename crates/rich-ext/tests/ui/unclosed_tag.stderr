@@ -1,0 +1,5 @@
+error: unclosed tag `[bold]`: close it with `[/bold]` or `[/]`
+ --> tests/ui/unclosed_tag.rs:3:30
+  |
+3 |     let _ = rich_ext::richf!("[bold]{name}");
+  |                              ^^^^^^^^^^^^^^

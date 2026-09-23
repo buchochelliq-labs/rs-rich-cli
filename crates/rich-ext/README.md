@@ -79,12 +79,56 @@ are cropped together at narrow widths to preserve column meaning; other content
 uses the selected overflow policy. No source files are opened implicitly.
 Attach multiple diagnostic blocks with `StructuredEvent::diagnostic`.
 
+For compiler-style output, give a diagnostic a `Level` and code
+(`Diagnostic::error(…).code("E0308")` renders `error[E0308]: …`) and a
+`Location`. Snippets take labelled primary (`^^^`) and secondary (`---`) spans
+(`primary_label`, `primary`, `secondary`), and `Suggestion::replace` shows the
+edited line. Implement `DiagnosticInfo` on an error type, such as a `thiserror`
+enum, to supply its level, code, help and location to `Diagnostic::from_info`.
+The `anyhow` feature adds `Diagnostic::from_anyhow`, which maps the context chain
+and any captured backtrace. `dashboard::DiagnosticsDashboard` groups many
+diagnostics by file, level and code. See the `diagnostic` and `dashboard`
+examples.
+
+`hyperlink::Hyperlinker` turns URLs, paths, `path:line:column` and (given a
+repository) `#123` references into OSC 8 links, or into editor URLs through a
+template. Non-terminals get the plain text. It is a `Highlighter`, so
+`RichHandler::highlighter` accepts it. Diagnostics, the dashboard and stack
+traces link their locations through it.
+
+`stacktrace::parse` normalises Rust, Python, Java and JavaScript traces, including
+chained causes, into one `StackTrace` with most recent call last. Add formats
+with `Parsers::with_parser`. `stacktrace::capture` and `stacktrace::panic_hook`
+build a trace for the current thread; installing the hook is left to you.
+
 Enable optional `log` or `tracing` features for `adapters::LogAdapter` or
 `adapters::EventLayer`. Supply an `Arc<dyn EventSink>` and install/filter the
 facade yourself. Sink errors are not recursively logged. Typed tracing visitors
 retain signed/unsigned 64/128-bit numbers; Debug-only fields become strings.
 See examples `log_adapter` and `tracing_adapter`. Layer integration follows
 [tracing-subscriber Layer](https://docs.rs/tracing-subscriber/0.3.23/tracing_subscriber/layer/trait.Layer.html).
+
+### Macros
+
+The `macros` feature re-exports `rs-rich-macros`:
+
+- `richf!("[bold]{name}[/] has {count:>3} items")` builds a `Text` from
+  `format!`-style markup. Unbalanced, mismatched or unclosed tags, unknown style
+  names and unknown theme keys are compile errors. Declare custom keys with
+  `richf!(keys["app.title"], …)`. Values are escaped, so user data is never read
+  as markup. A placeholder inside a tag (`[{color}]`) is inserted as markup and
+  checked at run time.
+- `style!("bold red")`, `theme_key!("repr.number")` and `markup!("[green]ok[/]")`
+  check literals.
+- `#[derive(Rich)]` renders a struct or enum as labelled fields, a titled panel
+  (`#[rich(panel)]`) or a table row (`#[rich(table)]`). Field options are
+  `skip`, `label`, `style`, `display`, `format`, `justify` and `order`.
+  `derive::table(&records)` lays many records out as rows.
+- `rich_println!`, `rich_eprintln!` and `rich_trace!` print checked markup.
+
+Without the feature you still get `rich_table!`, `rich_panel!`, `rich_tree!`,
+`rich_progress!` and `rich_dbg!` (`dbg!` rendered through `Pretty`). They build
+the ordinary core types, so the result can still be configured.
 
 ### Coordinated Live regions
 

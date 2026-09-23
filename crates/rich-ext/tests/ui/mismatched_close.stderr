@@ -1,0 +1,5 @@
+error: invalid markup: markup error: closing tag '[/italic]' at position 7 doesn't match any open tag
+ --> tests/ui/mismatched_close.rs:2:30
+  |
+2 |     let _ = rich_ext::richf!("[bold]x[/italic]");
+  |                              ^^^^^^^^^^^^^^^^^^

@@ -1,0 +1,5 @@
+error: argument 0 is never used
+ --> tests/ui/unused_argument.rs:2:30
+  |
+2 |     let _ = rich_ext::richf!("[bold]x[/]", 1);
+  |                              ^^^^^^^^^^^^

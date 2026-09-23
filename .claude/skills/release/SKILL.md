@@ -18,7 +18,8 @@ Every crate owns its independent SemVer. Choose a tag form explicitly:
 | `vX.Y.Z` | All four crates; all manifests must match X.Y.Z |
 | `<crate>-vX.Y.Z` | Only that package; its manifest must match X.Y.Z |
 
-Supported packages: `rs-rich`, `rs-rich-ext`, `rs-rich-cli`, `rs-rich-art`.
+Supported packages: `rs-rich`, `rs-rich-macros`, `rs-rich-ext`, `rs-rich-cli`, `rs-rich-art`.
+Publish `rs-rich-macros` after `rs-rich` and before `rs-rich-ext`, which depends on it.
 Both forms accept prereleases such as `-rc.1`. Manual workflow dispatch takes
 an existing tag, never a branch name.
 

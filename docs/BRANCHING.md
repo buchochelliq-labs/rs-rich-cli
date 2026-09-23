@@ -145,8 +145,9 @@ There are two separate decisions here:
 
 | Tag | Packages published and verified |
 |---|---|
-| `v0.0.3` | All four crates at `0.0.3` |
+| `v0.0.3` | Every crate at `0.0.3` (all four at the time; `rs-rich-macros` joined at 0.0.11) |
 | `rs-rich-v0.0.3` | Only `rs-rich` at `0.0.3` |
+| `rs-rich-macros-v0.0.1` | Only `rs-rich-macros` at `0.0.1` |
 | `rs-rich-ext-v0.0.3` | Only `rs-rich-ext` at `0.0.3` |
 | `rs-rich-cli-v0.0.3` | Only `rs-rich-cli` at `0.0.3` |
 | `rs-rich-art-v0.0.3` | Only `rs-rich-art` at `0.0.3` |

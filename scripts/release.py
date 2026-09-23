@@ -17,7 +17,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 
-CRATES = ("rs-rich", "rs-rich-ext", "rs-rich-cli", "rs-rich-art")
+CRATES = ("rs-rich", "rs-rich-macros", "rs-rich-ext", "rs-rich-cli", "rs-rich-art")
 NUMBER = r"(?:0|[1-9][0-9]*)"
 PRERELEASE = rf"(?:{NUMBER}|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
 VERSION = rf"{NUMBER}\.{NUMBER}\.{NUMBER}(?:-{PRERELEASE}(?:\.{PRERELEASE})*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
@@ -63,7 +63,7 @@ def select(tag, metadata, root):
     # Keep the repository's exact internal-requirement policy, but compare each
     # requirement with its OWN crate, not the version of the release tag.
     requirements = root["workspace"]["dependencies"]
-    for name in ("rs-rich", "rs-rich-ext", "rs-rich-art"):
+    for name in ("rs-rich", "rs-rich-macros", "rs-rich-ext", "rs-rich-art"):
         key = name.removeprefix("rs-")
         dependency = requirements.get(key, {})
         expected = packages[name]["version"]

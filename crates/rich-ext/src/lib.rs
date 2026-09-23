@@ -59,6 +59,25 @@ pub mod event;
 
 pub mod diagnostic;
 
+pub mod dashboard;
+
+pub mod derive;
+
+pub mod macros;
+
+#[cfg(feature = "macros")]
+pub use rich_macros::{markup, richf, style, theme_key, Rich};
+
+/// Paths the macros expand to. Not a public API.
+#[doc(hidden)]
+pub mod __private {
+    pub use rich;
+}
+
+pub mod hyperlink;
+
+pub mod stacktrace;
+
 pub mod log_handler;
 pub use log_handler::RichHandler;
 

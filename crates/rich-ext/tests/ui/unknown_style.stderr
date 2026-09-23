@@ -1,0 +1,5 @@
+error: unknown style or theme key `[bodl]`: it would render unstyled. Use a style such as `bold red`, a default theme key such as `repr.number`, or declare custom keys with `keys["bodl"]`
+ --> tests/ui/unknown_style.rs:2:30
+  |
+2 |     let _ = rich_ext::richf!("[bodl]typo[/]");
+  |                              ^^^^^^^^^^^^^^^

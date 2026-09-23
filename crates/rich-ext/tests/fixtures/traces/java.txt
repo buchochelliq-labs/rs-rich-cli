@@ -1,0 +1,6 @@
+Exception in thread "main" java.lang.IllegalStateException: cannot save
+	at Main.save(Main.java:3)
+	at Main.main(Main.java:4)
+Caused by: java.io.IOException: disk full
+	at Main.load(Main.java:2)
+	... 2 more

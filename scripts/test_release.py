@@ -11,7 +11,7 @@ from unittest.mock import patch
 import release
 
 
-NAMES = ("rs-rich", "rs-rich-ext", "rs-rich-cli", "rs-rich-art")
+NAMES = ("rs-rich", "rs-rich-macros", "rs-rich-ext", "rs-rich-cli", "rs-rich-art")
 
 
 def workspace():
@@ -25,6 +25,10 @@ def workspace():
         for name in NAMES if name != "rs-rich-cli"
     }}}
     return metadata, root
+
+
+def package(metadata, name):
+    return next(p for p in metadata["packages"] if p["name"] == name)
 
 
 class SelectionTests(unittest.TestCase):
@@ -59,7 +63,7 @@ class SelectionTests(unittest.TestCase):
 
     def test_prerelease_requires_exact_manifest_version(self):
         metadata, root = workspace()
-        metadata["packages"][2]["version"] = "0.0.3-rc.1"
+        package(metadata, "rs-rich-cli")["version"] = "0.0.3-rc.1"
         self.assertEqual(release.select("rs-rich-cli-v0.0.3-rc.1", metadata, root),
                          {"rs-rich-cli": "0.0.3-rc.1"})
         with self.assertRaises(ValueError):
@@ -67,7 +71,7 @@ class SelectionTests(unittest.TestCase):
 
     def test_stale_internal_requirement_fails(self):
         metadata, root = workspace()
-        metadata["packages"][3]["version"] = "0.0.3"
+        package(metadata, "rs-rich-art")["version"] = "0.0.3"
         with self.assertRaisesRegex(ValueError, "rich-art"):
             release.select("rs-rich-art-v0.0.3", metadata, root)
 
@@ -88,7 +92,7 @@ class SelectionTests(unittest.TestCase):
 class PublicationTests(unittest.TestCase):
     def test_plan_exports_selection_for_downstream_commands(self):
         metadata, root = workspace()
-        metadata["packages"][2]["version"] = "0.0.3"
+        package(metadata, "rs-rich-cli")["version"] = "0.0.3"
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "output"
             with patch("sys.argv", ["release.py", "plan", "rs-rich-cli-v0.0.3"]), \
@@ -171,7 +175,7 @@ class PublicationTests(unittest.TestCase):
 
     @patch("release.registry_status", return_value=200)
     def test_library_verification_builds_exact_registry_dependency(self, status):
-        for name in ("rs-rich", "rs-rich-ext", "rs-rich-art"):
+        for name in ("rs-rich", "rs-rich-macros", "rs-rich-ext", "rs-rich-art"):
             def check_consumer(command, **kwargs):
                 self.assertEqual(command, ["cargo", "check"])
                 consumer = Path(kwargs["cwd"])
@@ -189,7 +193,7 @@ class PublicationTests(unittest.TestCase):
     def test_coordinated_verification_checks_every_package(self, status, run):
         release.verify(dict.fromkeys(NAMES, "0.0.2"))
         self.assertEqual({call.args for call in status.call_args_list}, {(name, "0.0.2") for name in NAMES})
-        self.assertEqual(run.call_count, 4)
+        self.assertEqual(run.call_count, len(NAMES))
 
     @patch("release.subprocess.run", side_effect=subprocess.CalledProcessError(1, "cargo"))
     @patch("release.registry_status", return_value=200)

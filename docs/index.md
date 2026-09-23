@@ -97,6 +97,7 @@ The badges below show the versions currently available on crates.io.
 | [`rs-rich`](https://crates.io/crates/rs-rich) | [![rs-rich](https://img.shields.io/crates/v/rs-rich.svg)](https://crates.io/crates/rs-rich) | [docs.rs](https://docs.rs/rs-rich) | the library — `use rich::…` |
 | [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | [![rs-rich-cli](https://img.shields.io/crates/v/rs-rich-cli.svg)](https://crates.io/crates/rs-rich-cli) | — | the `rich` command |
 | [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | [![rs-rich-ext](https://img.shields.io/crates/v/rs-rich-ext.svg)](https://crates.io/crates/rs-rich-ext) | [docs.rs](https://docs.rs/rs-rich-ext) | extensions + plugin registry |
+| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | [![rs-rich-macros](https://img.shields.io/crates/v/rs-rich-macros.svg)](https://crates.io/crates/rs-rich-macros) | [docs.rs](https://docs.rs/rs-rich-macros) | checked markup and derive macros, used through `rs-rich-ext` |
 | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | [![rs-rich-art](https://img.shields.io/crates/v/rs-rich-art.svg)](https://crates.io/crates/rs-rich-art) | [docs.rs](https://docs.rs/rs-rich-art) | FIGlet text, image→ASCII, GIFs |
 
 <a id="versions-prepared-in-this-checkout"></a>
@@ -110,6 +111,7 @@ Each crate versions independently; see [Branching and releases](BRANCHING.md).
 | Package | Manifest version |
 |---|---|
 | [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.7` |
+| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.1` |
 | [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.9` |
 | [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.11` |
 | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.9` |

@@ -1,0 +1,24 @@
+/srv/app/save.js:2
+function save() { try { load() } catch (e) { throw new TypeError("cannot save", { cause: e }) } }
+                                             ^
+
+TypeError: cannot save
+    at save (/srv/app/save.js:2:52)
+    at Object.<anonymous> (/srv/app/save.js:3:1)
+    ... 6 lines matching cause stack trace ...
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:36:49 {
+  [cause]: Error: disk full
+      at load (/srv/app/save.js:1:25)
+      at save (/srv/app/save.js:2:25)
+      at Object.<anonymous> (/srv/app/save.js:3:1)
+      at Module._compile (node:internal/modules/cjs/loader:1705:14)
+      at Object..js (node:internal/modules/cjs/loader:1838:10)
+      at Module.load (node:internal/modules/cjs/loader:1441:32)
+      at Function._load (node:internal/modules/cjs/loader:1263:12)
+      at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+      at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+}
+
+Node.js v22.22.2
