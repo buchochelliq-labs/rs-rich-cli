@@ -140,6 +140,45 @@ impl Syntax {
     }
 }
 
+impl Syntax {
+    /// Highlight the code into a [`Text`] rather than a padded block. Port of
+    /// `Syntax.highlight`: the theme background is the text's base style and
+    /// every token carries its own style. Tabs are expanded first, as
+    /// `_process_code` does. Used by `Markdown(inline_code_lexer=…)`.
+    pub fn highlight(&self) -> crate::text::Text {
+        let syntaxes = syntax_set();
+        let themes = theme_set();
+        let theme = self.theme_ref(themes);
+        let syntax = self
+            .language
+            .as_deref()
+            .and_then(|lang| {
+                syntaxes
+                    .find_syntax_by_token(lang)
+                    .or_else(|| syntaxes.find_syntax_by_extension(lang))
+            })
+            .unwrap_or_else(|| syntaxes.find_syntax_plain_text());
+        let mut text = crate::text::Text::new("");
+        if let Some(background) = theme.settings.background.map(to_color) {
+            text.set_base_style(Style::new().with_bgcolor(background));
+        }
+        #[cfg(not(feature = "syntax-cache"))]
+        let mut highlighter = HighlightLines::new(syntax, theme);
+        #[cfg(feature = "syntax-cache")]
+        let mut highlighter = cache::CachedHighlighter::new(syntax, theme);
+        let code = expand_tabs(&self.code, self.tab_size);
+        for line in LinesWithEndings::from(&code) {
+            for (syn_style, token) in highlighter
+                .highlight_line(line, syntaxes)
+                .unwrap_or_default()
+            {
+                text.append(token, Some(to_style(syn_style).into()));
+            }
+        }
+        text
+    }
+}
+
 fn syntax_set() -> &'static SyntaxSet {
     static SET: OnceLock<SyntaxSet> = OnceLock::new();
     SET.get_or_init(SyntaxSet::load_defaults_newlines)

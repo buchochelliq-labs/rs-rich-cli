@@ -1248,6 +1248,56 @@ MARKDOWN_STRIKE_HEADER = """\
 # Format: <name>\t<markdown source as json>\t<escaped output of\n#   Markdown(source, hyperlinks=False) at width 40> (hyperlinks off: upstream's OSC 8\n#   links carry a random id= that is not reproducible)
 """
 
+MARKDOWN_TABLE_INLINE_HEADER = """\
+# Golden parity fixtures for inline styling inside MARKDOWN TABLE cells (#9)
+# — captured from real Python `rich`. Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<markdown source as json>\t<escaped output of\n#   Markdown(source, hyperlinks=False) at width 40>
+"""
+
+#: Data-driven like the strike cases: `markdown_table_inline_parity` reads the
+#: source from the fixture, so cases are added here only.
+MARKDOWN_TABLE_INLINE_CASES: list[tuple[str, str]] = [
+    ("strong_em_code", "| a | b |\n|---|---|\n| **bold** x | *em* `code` |"),
+    ("styled_header", "| **H1** | *h2* |\n|---|---|\n| x | y |"),
+    ("strike_cells", "| a |\n|---|\n| ~~gone~~ kept |\n| a ~b~ c |"),
+    ("link_label_and_url", "| site |\n|---|\n| [**rich**](https://x.io) docs |"),
+    ("aligned_styled", "| l | c | r |\n|:--|:-:|--:|\n| **1** | *22* | `333` |"),
+    ("wrapping_styled", "| text |\n|---|\n| some **very long bold words that wrap** across the width of the table |"),
+    ("empty_and_nested", "| a | b |\n|---|---|\n|  | ***both*** |"),
+    ("escaped_pipe", "| a |\n|---|\n| x \\| **y** |"),
+]
+
+MARKDOWN_OPTIONS_HEADER = """\
+# Golden parity fixtures for Markdown(justify=…, style=…) — captured from real
+# Python `rich`. Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<markdown source as json>\t<options as json>\t<escaped output of\n#   Markdown(source, hyperlinks=False, **options) at width 40>
+"""
+
+MARKDOWN_OPTIONS_DOC = (
+    "# Title\n\nA paragraph with **bold**, *em* and `code` that wraps across lines.\n\n"
+    "## Sub\n\n- tight one\n- tight two\n\n1. loose\n\n2. items\n\n"
+    "> quoted text\n\n| h | i |\n|---|--:|\n| **x** | 1 |\n\n"
+    "A [link](https://x.io) here.\n\n---\n\nEnd."
+)
+
+#: (name, source, options). The Rust test maps each option onto a builder.
+MARKDOWN_OPTIONS_CASES: list[tuple[str, str, dict]] = [
+    ("justify_center", MARKDOWN_OPTIONS_DOC, {"justify": "center"}),
+    ("justify_right", MARKDOWN_OPTIONS_DOC, {"justify": "right"}),
+    ("justify_full", MARKDOWN_OPTIONS_DOC, {"justify": "full"}),
+    ("style_on_blue", MARKDOWN_OPTIONS_DOC, {"style": "on blue"}),
+    ("style_red", MARKDOWN_OPTIONS_DOC, {"style": "red"}),
+    ("style_italic_centered", MARKDOWN_OPTIONS_DOC, {"style": "italic", "justify": "center"}),
+    # Continuation rows of a wrapped item are padded in the marker's style.
+    ("wrapped_items", "- one two three four five six seven eight nine ten eleven\n\n"
+     "1. alpha beta gamma delta epsilon zeta eta theta iota kappa\n\n"
+     "> - quoted item that wraps over more than one line here", {}),
+    ("wrapped_items_styled", "- one two three four five six seven eight nine ten eleven\n\n"
+     "> - quoted item that wraps over more than one line here", {"style": "on blue"}),
+]
+
 #: Keep the Rust side data-driven: `markdown_strike_parity` reads the source from
 #: the fixture, so cases are added here only.
 MARKDOWN_STRIKE_CASES: list[tuple[str, str]] = [
@@ -1770,6 +1820,42 @@ def main() -> None:
         klines.append(f"{name}\t{json.dumps(source)}\t{escape(capture.get())}")
     strike_path.write_text("\n".join(klines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(MARKDOWN_STRIKE_CASES)} markdown strike cases to {strike_path}")
+
+    # --- markdown table cells with inline styles --------------------------
+    table_inline_path = golden_dir() / "markdown_table_inline.tsv"
+    tlines = [MARKDOWN_TABLE_INLINE_HEADER.rstrip("\n")]
+    for name, source in MARKDOWN_TABLE_INLINE_CASES:
+        tconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=40,
+            highlight=False,
+            no_color=False,
+        )
+        with tconsole.capture() as capture:
+            tconsole.print(Markdown(source, hyperlinks=False))
+        tlines.append(f"{name}\t{json.dumps(source)}\t{escape(capture.get())}")
+    table_inline_path.write_text("\n".join(tlines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(MARKDOWN_TABLE_INLINE_CASES)} markdown table inline cases to {table_inline_path}")
+
+    # --- markdown constructor options -------------------------------------
+    options_path = golden_dir() / "markdown_options.tsv"
+    olines = [MARKDOWN_OPTIONS_HEADER.rstrip("\n")]
+    for name, source, md_options in MARKDOWN_OPTIONS_CASES:
+        mconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=40,
+            highlight=False,
+            no_color=False,
+        )
+        with mconsole.capture() as capture:
+            mconsole.print(Markdown(source, hyperlinks=False, **md_options))
+        olines.append(
+            f"{name}\t{json.dumps(source)}\t{json.dumps(md_options)}\t{escape(capture.get())}"
+        )
+    options_path.write_text("\n".join(olines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(MARKDOWN_OPTIONS_CASES)} markdown option cases to {options_path}")
 
     # --- theme stack -----------------------------------------------------
     stack_path = golden_dir() / "theme_stack.tsv"

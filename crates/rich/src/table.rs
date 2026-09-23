@@ -10,8 +10,9 @@
 //! multi-line/wrapped cells (with **ellipsis overflow**), **shrink-to-fit** +
 //! **expand** column widths, per-column justify, **explicit width**, per-column
 //! **`ratio`/`min_width`/`max_width`**, **per-column style**, **`no_wrap`**,
-//! title, caption, and `show_lines`. Deferred (tracked in the Table issue): the
-//! rare width-0 column padding edge.
+//! title, caption, and `show_lines`. Headers and cells may be styled [`Text`]
+//! (`add_column_text`, `add_row_text`), as upstream accepts renderables.
+//! Deferred (tracked in the Table issue): the rare width-0 column padding edge.
 
 use crate::cells::cell_len;
 use crate::console::{Console, ConsoleOptions, Justify, Overflow};
@@ -24,7 +25,7 @@ use crate::theme::Theme;
 
 /// A single column definition. Mirrors the used subset of `rich.table.Column`.
 struct Column {
-    header: String,
+    header: Text,
     justify: Justify,
     /// An explicit content width; when set, the column doesn't shrink to fit.
     width: Option<usize>,
@@ -53,7 +54,7 @@ struct Column {
 /// A grid of cells rendered inside a box. Mirrors `rich.table.Table`.
 pub struct Table {
     columns: Vec<Column>,
-    rows: Vec<Vec<String>>,
+    rows: Vec<Vec<Text>>,
     box_set: BoxSet,
     show_header: bool,
     show_lines: bool,
@@ -197,8 +198,16 @@ impl Table {
 
     /// Add a column with an explicit justification.
     pub fn add_column_justify(&mut self, header: impl Into<String>, justify: Justify) -> &mut Self {
+        self.add_column_text(Text::new(header.into()), justify)
+    }
+
+    /// Add a column whose header is a styled [`Text`], as upstream's
+    /// `add_column(header=Text(...))` does. The text's spans survive into the
+    /// header cell; its own `justify`, `overflow` and `no_wrap` override the
+    /// column's, as `Text.__rich_console__` prefers them over the options.
+    pub fn add_column_text(&mut self, header: Text, justify: Justify) -> &mut Self {
         self.columns.push(Column {
-            header: header.into(),
+            header,
             justify,
             width: None,
             style: Style::new(),
@@ -291,7 +300,15 @@ impl Table {
     /// Add a row of cells (extra cells are ignored; missing cells render empty).
     pub fn add_row(&mut self, cells: &[&str]) -> &mut Self {
         self.rows
-            .push(cells.iter().map(|s| s.to_string()).collect());
+            .push(cells.iter().map(|s| Text::new(*s)).collect());
+        self
+    }
+
+    /// Add a row of styled [`Text`] cells, as upstream's `add_row(Text(...))`.
+    /// Each cell keeps its spans, and its own `justify`, `overflow` and
+    /// `no_wrap` override the column's.
+    pub fn add_row_text(&mut self, cells: Vec<Text>) -> &mut Self {
+        self.rows.push(cells);
         self
     }
 
@@ -311,13 +328,13 @@ impl Table {
         let mut widths = vec![0usize; self.columns.len()];
         for (index, column) in self.columns.iter().enumerate() {
             if self.show_header {
-                widths[index] = Self::block_width(&column.header);
+                widths[index] = Self::block_width(column.header.plain());
             }
         }
         for row in &self.rows {
             for (index, cell) in row.iter().enumerate() {
                 if index < widths.len() {
-                    widths[index] = widths[index].max(Self::block_width(cell));
+                    widths[index] = widths[index].max(Self::block_width(cell.plain()));
                 }
             }
         }
@@ -492,7 +509,7 @@ impl Table {
     fn render_row(
         &self,
         theme: &Theme,
-        cells: &[String],
+        cells: &[Text],
         rendered_widths: &[usize],
         is_header: bool,
         edges: (char, char, char),
@@ -523,14 +540,20 @@ impl Table {
         for (index, width) in content_widths.iter().enumerate() {
             let style = self.cell_style(index, is_header);
             let cell_fill = Some(style.clone());
-            let content = cells.get(index).map(String::as_str).unwrap_or("");
+            let mut text = cells.get(index).cloned().unwrap_or_default();
             let column = self.columns.get(index);
-            let justify = column.map(|c| c.justify).unwrap_or(Justify::Left);
-            let no_wrap = column.map(|c| c.no_wrap).unwrap_or(false);
-            // Upstream renders the cell `Text` with the column's `no_wrap` and
-            // `overflow="ellipsis"`: wrap, then justify (which strips a right- or
+            // Upstream renders the cell `Text` with the column's `justify`,
+            // `no_wrap` and `overflow="ellipsis"` as options, which the text's own
+            // settings override: wrap, then justify (which strips a right- or
             // center-justified line before measuring it), then truncate.
-            let mut text = Text::new(content);
+            let justify = match text.get_justify() {
+                Justify::Default => column.map(|c| c.justify).unwrap_or(Justify::Left),
+                own => own,
+            };
+            let overflow = text.get_overflow().unwrap_or(Overflow::Ellipsis);
+            let no_wrap = text
+                .get_no_wrap()
+                .unwrap_or_else(|| column.map(|c| c.no_wrap).unwrap_or(false));
             // Header content carries its own style span over `header_style`; the
             // justify/edge padding stays `header_style` (matches upstream).
             if is_header {
@@ -546,14 +569,7 @@ impl Table {
             let mut lines = if *width == 0 {
                 Vec::new()
             } else {
-                text.render_lines_wrapped(
-                    theme,
-                    &style,
-                    Some(*width),
-                    justify,
-                    Overflow::Ellipsis,
-                    no_wrap,
-                )
+                text.render_lines_wrapped(theme, &style, Some(*width), justify, overflow, no_wrap)
             };
             if lines.is_empty() && *width > 0 {
                 lines.push(Vec::new());
@@ -689,7 +705,7 @@ impl LineRenderable for Table {
         let body_edges = (box_set.mid_left, box_set.mid_vertical, box_set.mid_right);
 
         if self.show_header {
-            let headers: Vec<String> = self.columns.iter().map(|c| c.header.clone()).collect();
+            let headers: Vec<Text> = self.columns.iter().map(|c| c.header.clone()).collect();
             for line in self.render_row(
                 console.theme(),
                 &headers,
@@ -737,12 +753,11 @@ impl LineRenderable for Table {
 }
 
 impl crate::protocol::OwnedTableRows for Table {
-    fn extend_owned_rows(&mut self, mut rows: Vec<Vec<String>>) -> &mut Self {
-        if self.rows.is_empty() {
-            self.rows = rows;
-        } else {
-            self.rows.append(&mut rows);
-        }
+    fn extend_owned_rows(&mut self, rows: Vec<Vec<String>>) -> &mut Self {
+        self.rows.extend(
+            rows.into_iter()
+                .map(|row| row.into_iter().map(Text::new).collect::<Vec<_>>()),
+        );
         self
     }
 }

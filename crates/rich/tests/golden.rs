@@ -1428,6 +1428,79 @@ fn markdown_strike_parity() {
     assert_eq!(checked, 24, "expected every markdown strike case to run");
 }
 
+/// Inline styling inside Markdown table cells (#9), checked against upstream.
+/// Data-driven: each fixture line carries its own source.
+#[test]
+fn markdown_table_inline_parity() {
+    let data = include_str!("golden/markdown_table_inline.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let source: String =
+            serde_json::from_str(parts.next().expect("source")).expect("source json");
+        let expected = unescape(parts.next().expect("expected"));
+        let console = truecolor_console(40);
+        let got = console.capture(|c| c.print(&Markdown::new(&source).hyperlinks(false)));
+        assert_eq!(
+            got,
+            expected,
+            "markdown table case {name:?} (line {}) diverged: {source:?}",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 8, "expected every markdown table case to run");
+}
+
+/// `Markdown(justify=…, style=…)` against upstream. Data-driven: each fixture
+/// line carries its source and the options to apply.
+#[test]
+fn markdown_options_parity() {
+    let data = include_str!("golden/markdown_options.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(4, '\t');
+        let name = parts.next().unwrap_or("");
+        let source: String =
+            serde_json::from_str(parts.next().expect("source")).expect("source json");
+        let options: serde_json::Value =
+            serde_json::from_str(parts.next().expect("options")).expect("options json");
+        let expected = unescape(parts.next().expect("expected"));
+        let mut markdown = Markdown::new(&source).hyperlinks(false);
+        if let Some(justify) = options.get("justify").and_then(|v| v.as_str()) {
+            markdown = markdown.justify(match justify {
+                "left" => Justify::Left,
+                "center" => Justify::Center,
+                "right" => Justify::Right,
+                "full" => Justify::Full,
+                other => panic!("unknown justify {other:?}"),
+            });
+        }
+        if let Some(style) = options.get("style").and_then(|v| v.as_str()) {
+            markdown = markdown.style(Style::parse(style).expect("valid style"));
+        }
+        let console = truecolor_console(40);
+        let got = console.capture(|c| c.print(&markdown));
+        assert_eq!(
+            got,
+            expected,
+            "markdown options case {name:?} (line {}) diverged: {options}",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 8, "expected every markdown options case to run");
+}
+
 /// Run one `theme_stack.tsv` step list. Keep in sync with `run_theme_steps` in
 /// scripts/capture_golden.py.
 fn run_theme_steps(console: &mut Console, steps: &[serde_json::Value], out: &mut String) {
