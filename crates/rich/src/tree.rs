@@ -55,10 +55,16 @@ impl Tree {
         width: usize,
     ) {
         let guide_style = Some(Style::new());
+        // Upstream renders the label at `options.max_width - sum(guide widths)`;
+        // with no room left, `Console.render` yields nothing, so neither the
+        // label nor its guides are emitted (its children still recurse).
         let available = width.saturating_sub(cell_len(prefix_first));
-        let mut label_lines =
-            Text::new(&self.label).render_lines(theme, &Style::new(), Some(available));
-        if label_lines.is_empty() {
+        let mut label_lines = if available < 1 {
+            Vec::new()
+        } else {
+            Text::new(&self.label).render_lines(theme, &Style::new(), Some(available))
+        };
+        if available >= 1 && label_lines.is_empty() {
             label_lines.push(Vec::new());
         }
 

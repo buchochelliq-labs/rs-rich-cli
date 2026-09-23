@@ -16,7 +16,7 @@ use rich_ext::qa::bench::{
     Verdict,
 };
 use rich_ext::qa::explain::{explain, explain_with_report, EventKind, ExplanationView};
-use rich_ext::qa::fuzz::{fuzz, fuzz_with, Case, GenOptions, Invariants, Node, NodeKind, Rendered};
+use rich_ext::qa::fuzz::{fuzz, fuzz_with, Case, GenOptions, Invariants, Node, Rendered};
 use rich_ext::qa::lint::{lint, lint_markup, LintOptions, LintReport, Rule, Severity};
 use rich_ext::qa::matrix::{self, CapabilityProfile, CellStatus, Fixture};
 use rich_ext::qa::profile::{profile, CountingAllocator, ProfileOptions, ProfileReport};
@@ -618,15 +618,6 @@ fn profile_returns_sane_shapes() {
 
 // ----------------------------------------------------------------------- fuzz
 
-/// Core renderables without the two kinds that expose known core bugs (see
-/// the ignored tests below), at widths where borders can fit.
-fn core_options() -> GenOptions {
-    GenOptions {
-        min_width: 16,
-        ..GenOptions::default().without(NodeKind::Columns)
-    }
-}
-
 #[test]
 fn fuzz_is_deterministic_for_a_seed() {
     let a = fuzz(42, 40, &Invariants::default());
@@ -641,7 +632,7 @@ fn fuzz_is_deterministic_for_a_seed() {
 #[test]
 fn fuzz_core_renderables_hold_invariants() {
     let start = std::time::Instant::now();
-    let report = fuzz_with(2024, 300, &core_options(), &Invariants::default());
+    let report = fuzz_with(2024, 300, &GenOptions::default(), &Invariants::default());
     let elapsed = start.elapsed();
     let failures: Vec<String> = report
         .failures
@@ -712,25 +703,23 @@ fn widest(renderable: &dyn Renderable, width: usize) -> usize {
         .unwrap_or(0)
 }
 
-/// Found by `fuzz` with the default generation options: `Columns` sizes a column to its
-/// widest item without capping it at the width, and shows only an item's
+/// Found by `fuzz` with the default generation options: `Columns` sized a column to its
+/// widest item without capping it at the width, and showed only an item's
 /// first line. Upstream lays items out in a `Table.grid`, which wraps or
 /// ellipsises them: `superca…` here.
 #[test]
-#[ignore = "core bug: Columns does not fit items wider than the width"]
-fn core_bug_columns_overflow() {
+fn fuzz_found_columns_fit_the_width() {
     let columns = rich::Columns::new(vec!["supercalifragilistic".to_string()]);
     assert_eq!(widest(&columns, 8), 8);
     let columns = rich::Columns::new(vec!["name name name".to_string()]);
     assert_eq!(widest(&columns, 13), 13);
 }
 
-/// Found by `fuzz` with the default generation options: `Tree` draws guides past the width when the
-/// width is below the guide depth. Upstream renders nothing for a child
+/// Found by `fuzz` with the default generation options: `Tree` drew guides past the width when the
+/// width was below the guide depth. Upstream renders nothing for a child
 /// label with no room, so it never exceeds the width (`roo`/`t` at width 3).
 #[test]
-#[ignore = "core bug: Tree guides overflow narrow widths"]
-fn core_bug_tree_guides_overflow() {
+fn fuzz_found_tree_guides_fit_the_width() {
     let mut tree = rich::Tree::new("root");
     tree.add("child one").add("grand");
     assert!(widest(&tree, 3) <= 3, "{}", widest(&tree, 3));

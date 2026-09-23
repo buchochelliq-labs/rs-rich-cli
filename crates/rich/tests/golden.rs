@@ -77,6 +77,25 @@ fn sample_tree() -> Tree {
     tree
 }
 
+/// Must match `_tree_deep` in scripts/capture_golden.py.
+fn deep_tree() -> Tree {
+    let mut tree = Tree::new("root");
+    tree.add("child one").add("grand");
+    tree
+}
+
+/// Must match `_tree_multiline` in scripts/capture_golden.py.
+fn multiline_tree() -> Tree {
+    let mut tree = Tree::new("root\nlabel");
+    tree.add("child\nline two").add("grand kid");
+    tree.add("last\nx");
+    tree
+}
+
+/// Must match `COLUMNS_MIXED` / `COLUMNS_SIX` in scripts/capture_golden.py.
+const COLUMNS_MIXED: &[&str] = &["a", "supercalifragilistic", "bc", "def"];
+const COLUMNS_SIX: &[&str] = &["one", "two", "three", "four", "five", "six"];
+
 /// The shared sample table used by the `table_*` fixtures.
 fn sample_table(box_set: BoxSet) -> Table {
     let mut table = Table::new().box_set(box_set);
@@ -373,6 +392,10 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "table_min_width" => Box::new(table_min_width_table()),
         "table_max_width" => Box::new(table_max_width_table()),
         "tree_nested" => Box::new(sample_tree()),
+        "tree_deep_w3" | "tree_deep_w4" | "tree_deep_w6" | "tree_deep_w10" | "tree_deep_w20" => {
+            Box::new(deep_tree())
+        }
+        "tree_multiline_w6" | "tree_multiline_w12" => Box::new(multiline_tree()),
         "align_center" | "align_center_odd" => Box::new(Align::center(Box::new(Text::new("hi")))),
         "align_right" => Box::new(Align::right(Box::new(Text::new("hi")))),
         "constrain_panel" => Box::new(Constrain::new(
@@ -381,6 +404,19 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         )),
         "columns_two_rows" => Box::new(columns(&["one", "two", "three", "four", "five", "six"])),
         "columns_one_row" => Box::new(columns(&["alpha", "beta", "gamma", "delta"])),
+        "columns_long_w8" | "columns_long_w5" | "columns_long_w3" => {
+            Box::new(columns(&["supercalifragilistic"]))
+        }
+        "columns_wrap_w13" => Box::new(columns(&["name name name"])),
+        "columns_mixed_w12" => Box::new(columns(COLUMNS_MIXED)),
+        "columns_mixed_equal_w12" => Box::new(columns(COLUMNS_MIXED).equal(true)),
+        "columns_mixed_expand_w12" => Box::new(columns(COLUMNS_MIXED).expand(true)),
+        "columns_equal_w20" => Box::new(columns(COLUMNS_SIX).equal(true)),
+        "columns_expand_w20" => Box::new(columns(COLUMNS_SIX).expand(true)),
+        "columns_equal_expand_w20" => Box::new(columns(COLUMNS_SIX).equal(true).expand(true)),
+        "columns_equal_expand_wrap_w13" => {
+            Box::new(columns(&["name name name", "x"]).equal(true).expand(true))
+        }
         "bar_empty" => Box::new(ProgressBar::new(100.0, 0.0).width(20)),
         "bar_half" => Box::new(ProgressBar::new(100.0, 50.0).width(20)),
         "bar_third" => Box::new(ProgressBar::new(100.0, 33.0).width(20)),
