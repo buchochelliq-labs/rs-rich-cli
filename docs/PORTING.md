@@ -46,7 +46,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `panel.py` | `panel.rs` | 🟡 | ✅ |
 | `align.py` | `align.rs` | 🟡 | ✅ |
 | `constrain.py` | `constrain.rs` | 🟡 | ✅ |
-| `table.py` | `table.rs` | 🟡 | ✅ |
+| `table.py` | `table.rs` | 🟡 | ✅ (renderable cells via `Cell`, `ColumnOptions`) |
 | `columns.py` | `columns.rs` | 🟡 | ✅ |
 | `tree.py` | `tree.rs` | 🟡 | ✅ |
 | `layout.py` | `layout.rs` | 🟡 | ✅ |
@@ -59,7 +59,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 
 | upstream `rich/…` | rust file | status | parity |
 |-------------------|-----------|:------:|--------|
-| `progress.py` | `progress.rs` + `pyformat.rs` | 🟡 | ✅ `progress_time.tsv` step programs (columns incl. `TextColumn`/`RenderableColumn`, fields, pulse, task API, clock), `progress_live.tsv` (live stream) |
+| `progress.py` | `progress.rs` + `pyformat.rs` | 🟡 | ✅ `progress_time.tsv` step programs (columns incl. `TextColumn`/`RenderableColumn`, fields, pulse, task API, clock, expand, table-column options, `bar_width=None`), `progress_live.tsv` (live stream, transient, disable, non-terminal) |
 | `spinner.py`, `_spinners.py` (full table) | `spinner.rs` | 🟡 | ✅ `live_status.tsv` (start at first render, `update`, markup text) |
 | `status.py` | `status.rs` | 🟡 | ✅ `live_status.tsv` (frames and `update`) |
 | `live_render.py` | `live_render.rs` | 🟡 | ✅ `live_status.tsv` (`position_cursor`/`restore_cursor`, style, wrap) |

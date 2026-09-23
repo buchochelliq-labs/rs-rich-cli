@@ -8,9 +8,9 @@
 //! Scope: the deterministic manual-refresh path (the byte stream is byte-parity
 //! with upstream's `auto_refresh=False`, `transient=False` Live), plus a
 //! background **auto-refresh thread** ([`Live::spawn`] → [`AutoLive`]) that
-//! redraws on an interval like upstream's `refresh_per_second`. The
-//! alt-screen/transient modes and IO redirection remain deferred (see the
-//! Live/progress issue).
+//! redraws on an interval like upstream's `refresh_per_second`, and
+//! `transient` displays that erase themselves on stop. The alt-screen mode and
+//! IO redirection remain deferred (see the Live/progress issue).
 
 use std::io::Write;
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -30,6 +30,7 @@ pub struct Live<W: Write> {
     console: Console,
     writer: W,
     started: bool,
+    transient: bool,
 }
 
 impl<W: Write> Live<W> {
@@ -41,7 +42,15 @@ impl<W: Write> Live<W> {
             console,
             writer,
             started: false,
+            transient: false,
         }
+    }
+
+    /// Clear the display when it stops (upstream `transient`): the final
+    /// frame is drawn, then erased and the cursor put back where it started.
+    pub fn transient(mut self, transient: bool) -> Self {
+        self.transient = transient;
+        self
     }
 
     /// Begin the live display: hide the cursor and draw the first frame.
@@ -81,8 +90,12 @@ impl<W: Write> Live<W> {
             return;
         }
         if !self.console.is_terminal() {
-            let content = self.console.render_to_string(&self.live_render);
-            let _ = writeln!(self.writer, "{content}");
+            // Upstream prints the final result for files, with no newline,
+            // only when it is not transient.
+            if !self.transient {
+                let content = self.console.render_to_string(&self.live_render);
+                let _ = write!(self.writer, "{content}");
+            }
             self.started = false;
             return;
         }
@@ -102,6 +115,13 @@ impl<W: Write> Live<W> {
             content,
             Control::show_cursor(true).as_str()
         );
+        if self.transient {
+            let _ = write!(
+                self.writer,
+                "{}",
+                self.live_render.restore_cursor().as_str()
+            );
+        }
         self.started = false;
     }
 
@@ -140,13 +160,25 @@ impl<W: Write + Send + 'static> Live<W> {
         writer: W,
         refresh_per_second: f64,
     ) -> AutoLive<W> {
+        Live::spawn_with(renderable, console, writer, refresh_per_second, false)
+    }
+
+    /// [`spawn`](Self::spawn), clearing the display when it stops when
+    /// `transient` is set (upstream `Live(transient=True)`).
+    pub fn spawn_with(
+        renderable: Box<dyn Renderable + Send>,
+        console: Console,
+        writer: W,
+        refresh_per_second: f64,
+        transient: bool,
+    ) -> AutoLive<W> {
         let (sender, receiver) = mpsc::channel::<LiveMessage>();
         let (started, wait_started) = mpsc::channel::<()>();
         let interval = Duration::from_secs_f64(1.0 / refresh_per_second.max(f64::MIN_POSITIVE));
         let handle = thread::spawn(move || {
             // The `Live` (and its non-`Send` `LiveRender`) is built and owned
             // entirely within this thread — only the `Send` inputs cross over.
-            let mut live = Live::new(renderable, console, writer);
+            let mut live = Live::new(renderable, console, writer).transient(transient);
             live.start();
             let _ = started.send(());
             loop {
@@ -250,7 +282,7 @@ mod tests {
         live.refresh();
         assert!(live.writer().is_empty());
         live.stop();
-        assert_eq!(live.writer(), b"last\n");
+        assert_eq!(live.writer(), b"last");
     }
 
     #[test]

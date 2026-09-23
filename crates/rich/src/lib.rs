@@ -92,8 +92,8 @@ pub use crate::pager::{Pager, SystemPager};
 pub use crate::panel::Panel;
 pub use crate::pretty::Pretty;
 pub use crate::progress::{
-    track, LiveProgress, Progress, ProgressColumn, SpinnerColumn, Task, TaskId, TaskUpdate,
-    TextColumn, TimeRemainingColumn, Track, TrackStdout,
+    track, BarColumn, LiveProgress, Progress, ProgressColumn, ProgressReader, SpinnerColumn, Task,
+    TaskId, TaskUpdate, TextColumn, TimeRemainingColumn, Track, TrackStdout,
 };
 pub use crate::progress_bar::ProgressBar;
 pub use crate::protocol::{Highlighter, LineRenderable, Renderable};
@@ -105,7 +105,7 @@ pub use crate::status::Status;
 pub use crate::style::{Style, StyleType};
 pub use crate::styled::Styled;
 pub use crate::syntax::Syntax;
-pub use crate::table::Table;
+pub use crate::table::{Cell, ColumnOptions, Table};
 pub use crate::terminal_theme::{
     TerminalTheme, DEFAULT_TERMINAL_THEME, DIMMED_MONOKAI, MONOKAI, NIGHT_OWLISH, SVG_EXPORT_THEME,
 };

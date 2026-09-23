@@ -92,6 +92,31 @@ CLI 0.0.11. Core changes below, so every dependent moves with it.
   (3 cases), plus 4 more `progress_time.tsv` cases: pulse, format fields and
   renderable columns. All match rich 15.0.0.
 
+### Progress: the grid, expand, column options, transient and file reading (#6)
+
+- **Rendered as upstream's grid.** `Progress::make_tasks_table` builds the
+  `Table::grid` that upstream's `make_tasks_table` does, and the display renders
+  it. Columns wrap at narrow widths instead of cropping.
+- **`expand`**, **`transient`** and **`disable`** on `Progress`.
+- **Column options.** `ProgressColumn::with_table_column(ColumnOptions)` is
+  upstream's `table_column=Column(...)`: width, min/max width, ratio, justify,
+  `no_wrap`, overflow and style. `ProgressColumn::BarWith(BarColumn)` sets the
+  bar width (`None` fills the column) and its styles.
+- **Reading files.** `LiveProgress::wrap_read` and `LiveProgress::open` port
+  `wrap_file` and `open`: the returned `ProgressReader` advances its task by
+  the bytes read.
+- **Table.** Cells may be any renderable (`Cell`, `Table::add_row_cells`), and
+  `Table::add_column_with(header, ColumnOptions)` sets every column option.
+  `ProgressBar` measures as upstream's does and gains style setters.
+- **Live.** `Live::transient` and `Live::spawn_with(…, transient)`. A
+  non-terminal stop no longer adds a newline; `LiveProgress::stop` writes it,
+  as `Progress.stop` does.
+- **Migration.** Exhaustive matches on `ProgressColumn` need the `BarWith` and
+  `WithTableColumn` variants.
+- **Goldens.** 6 new `progress_time.tsv` cases (expand, flexible bar, column
+  options, crop and style, narrow wrapping) and 4 new `progress_live.tsv` cases
+  (transient, disabled, non-terminal) match rich 15.0.0.
+
 ### Logging: `LogRender` port and `RichHandler` (#10)
 
 - **`LogRender` is now a port of `_log_render.py`.** It lays a record out as a

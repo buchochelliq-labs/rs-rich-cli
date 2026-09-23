@@ -1214,7 +1214,40 @@ fn progress_column(spec: &serde_json::Value) -> rich::ProgressColumn {
         "renderable" => ProgressColumn::Renderable(std::sync::Arc::new(
             Text::from_markup(spec[1].as_str().unwrap()).expect("valid markup"),
         )),
+        "bar_width" => ProgressColumn::BarWith(
+            rich::BarColumn::new().bar_width(spec[1].as_u64().map(|width| width as usize)),
+        ),
+        "column" => progress_column(&spec[2]).with_table_column(column_options(&spec[1])),
         other => panic!("unknown progress column {other:?}"),
+    }
+}
+
+/// `rich.table.Column(**options)` as [`rich::ColumnOptions`].
+fn column_options(options: &serde_json::Value) -> rich::ColumnOptions {
+    use rich::console::Overflow;
+    let size = |key: &str| options[key].as_u64().map(|value| value as usize);
+    rich::ColumnOptions {
+        justify: match options["justify"].as_str() {
+            None | Some("left") => Justify::Left,
+            Some("center") => Justify::Center,
+            Some("right") => Justify::Right,
+            Some(other) => panic!("unknown justify {other:?}"),
+        },
+        width: size("width"),
+        min_width: size("min_width"),
+        max_width: size("max_width"),
+        ratio: size("ratio"),
+        no_wrap: options["no_wrap"].as_bool().unwrap_or(false),
+        overflow: match options["overflow"].as_str() {
+            None | Some("ellipsis") => Overflow::Ellipsis,
+            Some("fold") => Overflow::Fold,
+            Some("crop") => Overflow::Crop,
+            Some(other) => panic!("unknown overflow {other:?}"),
+        },
+        style: options["style"]
+            .as_str()
+            .map(|style| rich::Style::parse(style).expect("valid style"))
+            .unwrap_or_default(),
     }
 }
 
@@ -1246,6 +1279,7 @@ fn progress_time_parity() {
         if let Some(columns) = case["columns"].as_array() {
             progress = progress.columns(columns.iter().map(progress_column).collect());
         }
+        progress = progress.expand(case["expand"].as_bool().unwrap_or(false));
         let id = |v: &serde_json::Value| TaskId(v.as_u64().expect("task id") as usize);
         let mut got = String::new();
         for step in case["steps"].as_array().expect("steps") {
@@ -1324,7 +1358,7 @@ fn progress_time_parity() {
         );
         checked += 1;
     }
-    assert_eq!(checked, 15, "expected every progress time case to run");
+    assert_eq!(checked, 21, "expected every progress time case to run");
 }
 
 /// Spinner and Status frames and LiveRender control sequences (#15): the same
@@ -1636,15 +1670,18 @@ fn progress_live_parity() {
             .iter()
             .map(progress_column)
             .collect();
+        let terminal = case["terminal"].as_bool().unwrap_or(true);
         let console = Console::builder()
-            .force_terminal(true)
-            .color_system(Some(ColorSystem::Truecolor))
+            .force_terminal(terminal)
+            .color_system(terminal.then_some(ColorSystem::Truecolor))
             .width(case["width"].as_u64().expect("width") as usize)
             .highlight(false)
             .no_color(false)
             .build();
         let live = Progress::new()
             .columns(columns)
+            .transient(case["transient"].as_bool().unwrap_or(false))
+            .disable(case["disable"].as_bool().unwrap_or(false))
             .clock(move || f64::from_bits(clock.load(Ordering::SeqCst)))
             .start(console, Vec::<u8>::new(), 1e-9);
         let id = |value: &serde_json::Value| rich::TaskId(value.as_u64().unwrap() as usize);
@@ -1684,7 +1721,7 @@ fn progress_live_parity() {
         );
         checked += 1;
     }
-    assert_eq!(checked, 3, "expected every live progress case to run");
+    assert_eq!(checked, 7, "expected every live progress case to run");
 }
 
 /// `LogRender` against upstream's `_log_render.LogRender`: each case prints

@@ -8,6 +8,7 @@
 
 use crate::color::{Color, ColorSystem, ColorTriplet};
 use crate::console::{Console, ConsoleOptions};
+use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::style::{Style, StyleType};
@@ -56,6 +57,30 @@ impl ProgressBar {
     /// Fix the bar width (otherwise it fills the available width).
     pub fn width(mut self, width: usize) -> Self {
         self.width = Some(width);
+        self
+    }
+
+    /// The background style (upstream `style`, default `bar.back`).
+    pub fn style(mut self, style: impl Into<StyleType>) -> Self {
+        self.style = style.into();
+        self
+    }
+
+    /// The completed-part style (upstream `complete_style`, default `bar.complete`).
+    pub fn complete_style(mut self, style: impl Into<StyleType>) -> Self {
+        self.complete_style = style.into();
+        self
+    }
+
+    /// The style once finished (upstream `finished_style`, default `bar.finished`).
+    pub fn finished_style(mut self, style: impl Into<StyleType>) -> Self {
+        self.finished_style = style.into();
+        self
+    }
+
+    /// The pulse style (upstream `pulse_style`, default `bar.pulse`).
+    pub fn pulse_style(mut self, style: impl Into<StyleType>) -> Self {
+        self.pulse_style = style.into();
         self
     }
 
@@ -175,6 +200,15 @@ fn monotonic() -> f64 {
 }
 
 impl Renderable for ProgressBar {
+    /// Port of `ProgressBar.__rich_measure__`: a fixed width measures exactly,
+    /// otherwise the bar takes 4 cells up to the whole width.
+    fn measure(&self, _console: &Console, options: &ConsoleOptions) -> Measurement {
+        match self.width {
+            Some(width) => Measurement::new(width, width),
+            None => Measurement::new(4, options.max_width),
+        }
+    }
+
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let width = self
             .width
