@@ -2694,11 +2694,15 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
 
     // SVG export needs a title (the resource's basename, else "rich") and a
     // stable id. Upstream's auto id hashes Python reprs, so we use a fixed one
-    // (see the rich crate's svg module / DIVERGENCES #15).
+    // (see the rich crate's svg module / DIVERGENCES #15). A literal resource
+    // (print-mode markup, a rule's title) is not a path, so splitting it on
+    // `/` or `\` would title `[b]Hi[/] there` as `] there`: it gets "rich".
+    let literal = mode == Mode::Rule
+        || (mode == Mode::Print && cli.resource.as_deref().is_some_and(|r| !is_url(r)));
     let mut svg_title = cli
         .resource
         .as_deref()
-        .filter(|r| *r != "-")
+        .filter(|r| *r != "-" && !literal)
         .map(|r| r.rsplit(['/', '\\']).next().unwrap_or(r).to_string())
         .unwrap_or_else(|| "rich".to_string());
     if cli.sanitize {
