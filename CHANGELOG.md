@@ -128,6 +128,7 @@ Both were found while writing the user guide and checked against rich 15.0.0.
   (5 cases, highlighting console) and `measure_renderables.tsv` (18
   container measurements).
 
+
 ### Capabilities and accessibility (0.0.11 workstream 9)
 
 - **Capabilities (#209).** `rich_ext::capabilities` detects colour depth,
