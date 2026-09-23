@@ -2161,13 +2161,11 @@ impl Renderable for ForceWidth {
 /// axis of `rich.align.Align`, which is what `console.print(justify=…)` wraps
 /// every renderable in.
 ///
-/// The core crate's [`Align`] is not that: it renders its child at the *full*
-/// width and pads each line by that line's own width, so it neither shrinks the
-/// child (nothing that fills the width — `Syntax`, `Rule`, a `Panel` — moves at
-/// all) nor squares the block off (multi-line output comes out ragged).
-/// Upstream constrains the child to its measured width, `set_shape`s every line
-/// to that one width, then pads the block. Doing that here leaves `align.rs`,
-/// which other renderables depend on, untouched.
+/// The core crate's [`Align`] follows upstream: it constrains the child to its
+/// measured width, `set_shape`s the block, then pads it. But in this port
+/// `Table`, `Json` and friends measure as the whole console (see
+/// `measure_rendered`), so core `Align` would not move them. This wrapper takes
+/// the width to constrain to from the caller instead.
 struct Aligned {
     child: Box<dyn Renderable>,
     /// The width to render the child *within* — what upstream's `Align` reads

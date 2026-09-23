@@ -62,10 +62,10 @@ in the release notes; the crates.io links show available packages.
 <!-- BEGIN MANIFEST VERSIONS -->
 | Package | Manifest version |
 |---|---|
-| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.6` |
-| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.8` |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.10` |
-| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.8` |
+| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.7` |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.9` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.11` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.9` |
 <!-- END MANIFEST VERSIONS -->
 
 | Package | Role | Import / installed name |
@@ -118,10 +118,9 @@ release. Later source changes are tracked in the [roadmap](docs/ROADMAP.md)
 and development plans. The manifest table above describes this checkout;
 crates.io is the source for available published versions.
 
-The 0.0.9 cohort (core 0.0.5, ext 0.0.7, art 0.0.7, CLI 0.0.9) is
+The 0.0.9 cohort (core 0.0.5, ext 0.0.7, art 0.0.7, CLI 0.0.9) is also
 [published](docs/releases/0.0.9-expanded.md). The [0.0.10 cohort](docs/releases/0.0.10.md)
-(core 0.0.6, ext 0.0.8, art 0.0.8, CLI 0.0.10) is prepared on `main` but not yet
-published: Progress time, rate and spinner columns, upstream's theme stack, `~~~`
+(core 0.0.6, ext 0.0.8, art 0.0.8, CLI 0.0.10) is published: Progress time, rate and spinner columns, upstream's theme stack, `~~~`
 strikethrough parity, multi-file watch, and quadrant, ANSI16 and grayscale image
 modes with tone adjustments. Source versions do not imply publication. See
 [copyable workflows](docs/recipes.md).

@@ -13,7 +13,7 @@
 //! title, caption, and `show_lines`. Deferred (tracked in the Table issue): the
 //! rare width-0 column padding edge.
 
-use crate::cells::{cell_len, set_cell_size};
+use crate::cells::cell_len;
 use crate::console::{Console, ConsoleOptions, Justify, Overflow};
 use crate::protocol::{LineRenderable, Renderable};
 use crate::r#box::{Box as BoxSet, RowLevel, HEAVY_HEAD};
@@ -324,6 +324,37 @@ impl Table {
         widths
     }
 
+    /// The maximum of upstream `Table._measure_column` for column `index` at
+    /// `max_width`: the rendered width (content + padding) it wants, given its
+    /// widest content line `content`.
+    fn measure_column(&self, index: usize, content: usize, max_width: usize) -> usize {
+        if max_width < 1 {
+            return 0;
+        }
+        let column = &self.columns[index];
+        let (pl, pr) = self.cell_padding(index, self.columns.len());
+        let padding = pl + pr;
+        if let Some(width) = column.width {
+            return (width + padding).min(max_width);
+        }
+        let has_cells = self.show_header || !self.rows.is_empty();
+        // A column with no cells measures `(1, max_width)`. A cell whose padding
+        // leaves no room measures the whole width (`Padding.__rich_measure__`).
+        let mut maximum = if !has_cells || max_width < padding + 1 {
+            max_width
+        } else {
+            (content + padding).min(max_width)
+        };
+        // `Measurement.clamp(min_width + padding, max_width + padding)`.
+        if let Some(min) = column.min_width {
+            maximum = maximum.max(min + padding);
+        }
+        if let Some(max) = column.max_width {
+            maximum = maximum.min(max + padding);
+        }
+        maximum
+    }
+
     /// The rendered width (content + padding) of each column, shrinking the
     /// widest columns to fit `available` when necessary. Port of the non-flexible
     /// path of `Table._calculate_column_widths` + `_collapse_widths`.
@@ -332,28 +363,8 @@ impl Table {
         // A fixed-width column uses its declared width; others measure content,
         // clamped to the column's [min_width, max_width]. Port of `_measure_column`.
         let content = self.max_content_widths();
-        let mut widths: Vec<i64> = self
-            .columns
-            .iter()
-            .zip(&content)
-            .enumerate()
-            .map(|(index, (column, &measured))| {
-                let (pl, pr) = self.cell_padding(index, ncols);
-                let content_width = match column.width {
-                    Some(w) => w,
-                    None => {
-                        let mut w = measured;
-                        if let Some(min) = column.min_width {
-                            w = w.max(min);
-                        }
-                        if let Some(max) = column.max_width {
-                            w = w.min(max);
-                        }
-                        w
-                    }
-                };
-                (content_width + pl + pr) as i64
-            })
+        let mut widths: Vec<i64> = (0..ncols)
+            .map(|index| self.measure_column(index, content[index], available).max(1) as i64)
             .collect();
 
         // Expand with explicit ratios: flexible (ratio) columns share the free
@@ -394,7 +405,8 @@ impl Table {
         }
 
         let table_width: i64 = widths.iter().sum();
-        if table_width > available as i64 {
+        let collapsed = table_width > available as i64;
+        if collapsed {
             // Only auto-width, wrapping columns may shrink; fixed and no_wrap
             // columns hold their width (no_wrap only yields via the last resort).
             let wrapable: Vec<bool> = self
@@ -411,12 +423,23 @@ impl Table {
                 let ratios = vec![1i64; widths.len()];
                 widths = ratio_reduce(excess, &ratios, &widths, &widths);
             }
+            // Upstream measures every column again at its reduced width, so a
+            // `min_width` re-inflates its column and the table overflows (the
+            // console crop then cuts it).
+            widths = widths
+                .iter()
+                .enumerate()
+                .map(|(index, &width)| {
+                    self.measure_column(index, content[index], width.max(0) as usize) as i64
+                })
+                .collect();
         }
 
         // Expand: distribute the leftover width proportionally. Port of the
-        // `expand` tail of `_calculate_column_widths` (via `ratio_distribute`).
+        // `elif … and self.expand` tail of `_calculate_column_widths` (via
+        // `ratio_distribute`), which a table that had to collapse never reaches.
         let table_width: i64 = widths.iter().sum();
-        if self.expand && table_width < available as i64 && table_width > 0 {
+        if !collapsed && self.expand && table_width < available as i64 && table_width > 0 {
             let pad = ratio_distribute(available as i64 - table_width, &widths, None);
             for (width, extra) in widths.iter_mut().zip(pad) {
                 *width += extra;
@@ -504,14 +527,10 @@ impl Table {
             let column = self.columns.get(index);
             let justify = column.map(|c| c.justify).unwrap_or(Justify::Left);
             let no_wrap = column.map(|c| c.no_wrap).unwrap_or(false);
-            // A no_wrap cell is one ellipsis-cropped line; otherwise wrap with
-            // ellipsis overflow (the table default). Then justify + pad.
-            let wrapped = if no_wrap {
-                ellipsis_crop(content, *width)
-            } else {
-                wrap_cell(content, *width).join("\n")
-            };
-            let mut text = Text::new(wrapped).justify(justify);
+            // Upstream renders the cell `Text` with the column's `no_wrap` and
+            // `overflow="ellipsis"`: wrap, then justify (which strips a right- or
+            // center-justified line before measuring it), then truncate.
+            let mut text = Text::new(content);
             // Header content carries its own style span over `header_style`; the
             // justify/edge padding stays `header_style` (matches upstream).
             if is_header {
@@ -520,35 +539,75 @@ impl Table {
                     text.stylize(span, 0, len);
                 }
             }
-            let mut lines = text.render_lines(theme, &style, Some(*width));
-            if lines.is_empty() {
+            // Upstream renders the cell as `Padding(renderable, …)` through
+            // `render_lines`: a zero-width content area renders no lines
+            // (`Console.render` returns nothing below width 1), while empty
+            // text still renders one blank line.
+            let mut lines = if *width == 0 {
+                Vec::new()
+            } else {
+                text.render_lines_wrapped(
+                    theme,
+                    &style,
+                    Some(*width),
+                    justify,
+                    Overflow::Ellipsis,
+                    no_wrap,
+                )
+            };
+            if lines.is_empty() && *width > 0 {
                 lines.push(Vec::new());
             }
-            // Vertical padding (blank content lines top/bottom).
-            let blank = || Segment::new(" ".repeat(*width), cell_fill.clone());
+            let (cpl, cpr) = paddings[index];
+            let cell_width = cpl + *width + cpr;
+            // Blank rows (vertical padding and row-height filler) are one run
+            // across the whole cell, as `Padding`'s blank lines and
+            // `Segment.set_shape` produce them.
+            let blank = || vec![Segment::new(" ".repeat(cell_width), cell_fill.clone())];
             let mut padded_lines: Vec<Vec<Segment>> = Vec::new();
             for _ in 0..pt {
-                padded_lines.push(vec![blank()]);
+                padded_lines.push(blank());
             }
             for line in &lines {
+                let mut row = Vec::new();
+                if cpl > 0 {
+                    row.push(Segment::new(" ".repeat(cpl), cell_fill.clone()));
+                }
                 let padded = Segment::adjust_line_length(line, *width, cell_fill.clone());
-                padded_lines.push(Segment::simplify(&padded));
+                row.extend(Segment::simplify(&padded));
+                if cpr > 0 {
+                    row.push(Segment::new(" ".repeat(cpr), cell_fill.clone()));
+                }
+                padded_lines.push(row);
             }
             for _ in 0..pb {
-                padded_lines.push(vec![blank()]);
+                padded_lines.push(blank());
             }
             height = height.max(padded_lines.len());
             cell_lines.push(padded_lines);
         }
 
-        // Pad every column to the row height with blank lines.
+        // Shape every cell to the row height (#445). Upstream aligns each cell
+        // to `row_height` (the tallest cell, possibly 0) with the cell style:
+        // header cells to the bottom, body cells (vertical "top") to the top.
+        // `Segment.set_shape` then pads to `max_height` (at least 1) with an
+        // unstyled blank.
+        let row_height = cell_lines.iter().map(Vec::len).max().unwrap_or(0);
         for (index, lines) in cell_lines.iter_mut().enumerate() {
-            let fill = Some(self.cell_style(index, is_header));
+            let (cpl, cpr) = paddings[index];
+            let blank = " ".repeat(cpl + content_widths[index] + cpr);
+            let filler = vec![Segment::new(
+                blank.clone(),
+                Some(self.cell_style(index, is_header)),
+            )];
+            let missing = row_height.saturating_sub(lines.len());
+            if is_header {
+                lines.splice(0..0, std::iter::repeat_n(filler, missing));
+            } else {
+                lines.extend(std::iter::repeat_n(filler, missing));
+            }
             while lines.len() < height {
-                lines.push(vec![Segment::new(
-                    " ".repeat(content_widths[index]),
-                    fill.clone(),
-                )]);
+                lines.push(vec![Segment::new(blank.clone(), None)]);
             }
         }
 
@@ -563,15 +622,7 @@ impl Table {
                 row.push(Segment::new(edge_left.to_string(), border.clone()));
             }
             for (c, column_lines) in cell_lines.iter().enumerate() {
-                let fill = Some(self.cell_style(c, is_header));
-                let (cpl, cpr) = paddings[c];
-                if cpl > 0 {
-                    row.push(Segment::new(" ".repeat(cpl), fill.clone()));
-                }
                 row.extend(column_lines[r].clone());
-                if cpr > 0 {
-                    row.push(Segment::new(" ".repeat(cpr), fill.clone()));
-                }
                 if c != last {
                     row.push(Segment::new(edge_vertical.to_string(), border.clone()));
                 } else if self.show_edge {
@@ -714,55 +765,6 @@ impl Renderable for Table {
             Err(never) => match never {},
         }
     }
-}
-
-/// Wrap `content` to `width` cells with **ellipsis overflow** (the table
-/// default): words are broken between, and a single word wider than `width` is
-/// cropped with a trailing `…`. Returns one string per visual line.
-fn wrap_cell(content: &str, width: usize) -> Vec<String> {
-    if width == 0 {
-        return vec![String::new()];
-    }
-    // Wrap each line of the cell on its own, as upstream's `Text.wrap` does —
-    // it splits on newlines before dividing. Handing the whole cell to
-    // `divide_line` treated the newline as ordinary whitespace worth zero cells,
-    // so it packed text from two source lines into one "line" that then printed
-    // as two rows: a 23-cell line inside a 23-cell column came out split.
-    if content.contains('\n') {
-        return content
-            .split('\n')
-            .flat_map(|line| wrap_cell(line, width))
-            .collect();
-    }
-    // `fold = false`: over-long words stay on their own (overflowing) line,
-    // which `ellipsis_crop` then trims — matching `Text(overflow="ellipsis")`.
-    let breaks = crate::wrap::divide_line(content, width, false);
-    let chars: Vec<char> = content.chars().collect();
-    let mut lines: Vec<String> = Vec::new();
-    let mut start = 0;
-    for stop in breaks {
-        lines.push(chars[start..stop].iter().collect());
-        start = stop;
-    }
-    lines.push(chars[start..].iter().collect());
-    // Trailing whitespace is dropped before the overflow check, so a word that
-    // fills the width exactly isn't spuriously ellipsized by its trailing space.
-    lines
-        .iter()
-        .map(|line| ellipsis_crop(line.trim_end(), width))
-        .collect()
-}
-
-/// Crop `text` to `width` cells, replacing the trailing cell with `…` when it
-/// doesn't fit. Port of the `overflow="ellipsis"` path of `Text.truncate`.
-fn ellipsis_crop(text: &str, width: usize) -> String {
-    if cell_len(text) <= width {
-        return text.to_string();
-    }
-    if width == 0 {
-        return String::new();
-    }
-    format!("{}\u{2026}", set_cell_size(text, width - 1))
 }
 
 /// Port of `Table.__rich_console__.render_annotation`: markup and emoji are

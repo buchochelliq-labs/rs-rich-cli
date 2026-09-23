@@ -148,10 +148,23 @@ regions, render snapshots, batch naming and hardened publication (#196), and ima
 transforms with Bayer dithering. All four packages were published on 2026-09-22;
 see the [expanded release notes](releases/0.0.9-expanded.md).
 
-## 0.0.10 — progress you can ship with (prepared)
+## 0.0.11 — developer ergonomics and core usability (in progress)
 
-Every workstream is merged to `main`, and the release test is recorded in the
-[0.0.10 release notes](releases/0.0.10.md). Nothing is published yet.
+The [0.0.11 plan](plans/0.0.11.md) covers
+[milestone 2](https://github.com/buchochelliq-labs/rs-rich-cli/milestone/2) plus
+everything unfinished from 0.0.10. Unfinished 0.0.10 issues: #6, #9, #34, #126
+and #144. New issues for the 0.0.10 deferrals: #498 (the #125 remainder) and #499
+(`--theme-file`). Work starts with the core parity divergences the fuzzer found
+(#442–#449). Then come Rust-native ergonomics on public APIs: diagnostics with
+`anyhow`/`thiserror` adapters, serde-driven rendering and structured-data viewers,
+derive and checked-markup macros (a new `rs-rich-macros` crate), `clap` help and
+errors, `tracing` polish, a shared diff engine with test helpers, and
+terminal-capability and accessibility policies.
+
+## 0.0.10 — progress you can ship with (published)
+
+Every workstream is merged to `main`, and the cohort was published on 2026-09-23. The
+release test and release runs are recorded in the [0.0.10 release notes](releases/0.0.10.md).
 
 The [0.0.10 plan](plans/0.0.10.md) targets core parity over new surface area:
 Progress time, rate and spinner columns with a task-driving API (#6), upstream's

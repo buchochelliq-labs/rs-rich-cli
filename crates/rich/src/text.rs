@@ -647,6 +647,14 @@ impl Text {
         self.spans.push(span);
     }
 
+    /// Drop this text's own `justify`, `overflow` and `no_wrap`, so they defer to
+    /// the console options as upstream's `Text.join` result does.
+    pub(crate) fn clear_layout_options(&mut self) {
+        self.justify = Justify::Default;
+        self.overflow = None;
+        self.no_wrap = None;
+    }
+
     /// Set the whole-text base style, resolved or named.
     pub fn set_base_style(&mut self, style: impl Into<StyleType>) {
         self.style = style.into();
@@ -664,34 +672,11 @@ impl Text {
     /// The `(minimum, maximum)` cell width of this text: `maximum` is the widest
     /// hard line, `minimum` the widest word. Port of `Text.__rich_measure__`.
     pub fn measurement(&self) -> (usize, usize) {
-        // Measured against the tab-EXPANDED text. Upstream measures the raw
-        // string, where `cell_len` counts a tab as zero cells, and gets away
-        // with it because nothing upstream feeds a `Text`'s own measurement back
-        // in as its render width.
-        //
-        // This port does: `Console::render_segments` shrinks `max_width` to the
-        // measurement before rendering, standing in for upstream's
-        // `_collect_renderables`, which rebuilds a printed `Text` through
-        // `Text.join` and drops its `justify` on the way (which is why
-        // `print(Text("hi", justify="center"))` is *not* centred upstream).
-        // Measuring raw here therefore hands the renderer three cells for
-        // `"a\tb\tc"` and it comes back as `a`/`b`/`c` on three lines, where
-        // upstream prints `a       b       c`.
-        //
-        // So this is knowingly non-upstream, and it is the wrong half of the
-        // pair to fix: the measurement should be raw and the shrink-to-fit in
-        // `console.rs` should be replaced by the `Text.join` semantics. Both
-        // ends have to move together, and `console.rs` is not this file. See
-        // DIVERGENCES for the tabbed-`Panel` width this leaves too wide.
-        let expanded;
-        let plain = if self.plain.contains('\t') {
-            let mut text = self.clone();
-            text.expand_tabs(DEFAULT_TAB_SIZE);
-            expanded = text.plain;
-            &expanded
-        } else {
-            &self.plain
-        };
+        // Measured against the raw string, as upstream does: `cell_len` counts
+        // a tab as zero cells, and tabs expand only at render time. A printed
+        // `Text` renders at the full width (see `Renderable::printed_text`), so
+        // this measurement never becomes its own render width (#447).
+        let plain = &self.plain;
         let max_line = plain.split('\n').map(cell_len).max().unwrap_or(0);
         let min_word = plain
             .split_whitespace()

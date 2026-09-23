@@ -30,12 +30,21 @@ pub trait Renderable {
     }
 
     /// Whether a top-level `Console::print` shrinks this renderable to its
-    /// measured width. The shrink stands in for upstream's
-    /// `_collect_renderables`, which joins printed `str`/`Text` values; other
-    /// upstream renderables render at the full width, so one whose output pads
-    /// to the width it is given (`Syntax`'s background) returns `false`.
+    /// measured width. Upstream renders every top-level renderable at the full
+    /// console width, so the default is `false`; an extension may opt in.
     fn fit_to_measurement(&self) -> bool {
-        true
+        false
+    }
+
+    /// The `Text` a top-level print renders in place of this renderable.
+    ///
+    /// Upstream's `Console._collect_renderables` rebuilds printed `str`/`Text`
+    /// values through `Text(sep, end=end).join(...)`, whose `blank_copy` takes
+    /// `justify`, `overflow` and `no_wrap` from the separator. Only `Text`
+    /// overrides this.
+    #[doc(hidden)]
+    fn printed_text(&self) -> Option<Text> {
+        None
     }
 }
 

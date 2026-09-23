@@ -42,7 +42,7 @@ Progress and spinner animations replay exported library frames. The
 ## Release history and development
 
 The [0.0.9 cohort](releases/0.0.9-expanded.md) is published. The
-[0.0.10 cohort](releases/0.0.10.md) is prepared but not yet published. It adds
+[0.0.10 cohort](releases/0.0.10.md) is published too. It adds
 Progress time, rate and spinner columns, upstream's theme stack, `~~~` strikethrough
 parity, multi-file watch, and quadrant, ANSI16 and grayscale image modes.
 The [roadmap](ROADMAP.md) tracks subsequent work. Manifest versions below
@@ -109,10 +109,10 @@ Each crate versions independently; see [Branching and releases](BRANCHING.md).
 <!-- BEGIN MANIFEST VERSIONS -->
 | Package | Manifest version |
 |---|---|
-| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.6` |
-| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.8` |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.10` |
-| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.8` |
+| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.7` |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.9` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.11` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.9` |
 <!-- END MANIFEST VERSIONS -->
 
 ## Install

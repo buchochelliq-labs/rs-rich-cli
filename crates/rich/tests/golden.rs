@@ -795,10 +795,14 @@ fn overflow_parity() {
         let no_wrap = field("no_wrap") == "true";
         let expected = unescape(&field("expected"));
 
-        let text = build_overflow_text(name)
-            .overflow(overflow)
-            .no_wrap(no_wrap);
-        let got = truecolor_console(width).render_export(&text);
+        // Captured with `Console.print(text, overflow=…, no_wrap=…)`: print-level
+        // options, which a printed `Text` defers to after `Text.join`.
+        let text = build_overflow_text(name);
+        let console = truecolor_console(width);
+        let mut options = console.options();
+        options.overflow = Some(overflow);
+        options.no_wrap = Some(no_wrap);
+        let got = console.render_export_with(&text, &options);
         assert_eq!(
             got,
             expected,

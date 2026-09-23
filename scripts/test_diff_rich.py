@@ -94,8 +94,9 @@ class DiffRichTests(unittest.TestCase):
         self.assertTrue(any("title" not in trial for trial in trials))
 
     def test_known_divergences_name_their_issue(self):
+        # The file is a queue: it is empty whenever every found divergence has
+        # been fixed and moved into the pull-request corpus.
         known = diff_rich.load_cases(diff_rich.ROOT / "scripts/fixtures/diff_rich_known.jsonl")
-        self.assertTrue(known)
         corpus = diff_rich.load_cases(diff_rich.DEFAULT_CORPUS)
         names = [case["name"] for case in corpus + known]
         self.assertEqual(len(names), len(set(names)))

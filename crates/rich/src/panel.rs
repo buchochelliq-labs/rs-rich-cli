@@ -170,7 +170,13 @@ impl Renderable for Panel {
         // panel expands to exactly `height` rows. Port of `Panel`'s
         // `child_height = height - 2` (padding here lives outside the child).
         child_options.height = options.height.map(|h| h.saturating_sub(2 + pt + pb));
-        let child_lines = console.render_lines(self.child.as_ref(), &child_options, true);
+        // Upstream: `console.render_lines(renderable, child_options, style=style)`.
+        let child_lines = console.render_lines_styled(
+            self.child.as_ref(),
+            &child_options,
+            Some(&self.style),
+            true,
+        );
 
         let border = Some(self.border_style.clone());
         let inner_style = Some(self.style.clone());
@@ -280,5 +286,29 @@ mod tests {
             .build();
         let out = legacy.render_export(&Panel::new(Box::new(Text::new("hi"))));
         assert_eq!(out, "┌──────────┐\n│ hi       │\n└──────────┘\n");
+    }
+
+    #[test]
+    fn zero_inner_width_renders_no_body_and_empty_text_one_row() {
+        // Captured from real rich 15.0.0 (#449, #442).
+        let narrow = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(crate::color::ColorSystem::Truecolor))
+            .width(4)
+            .highlight(false)
+            .build();
+        let panel = Panel::new(Box::new(Text::new("ab cd"))).box_set(crate::r#box::HEAVY);
+        assert_eq!(narrow.render_export(&panel), "┏━━┓\n┗━━┛\n");
+        let empty = Panel::new(Box::new(Text::new(""))).box_set(SQUARE);
+        assert_eq!(
+            Console::builder()
+                .force_terminal(true)
+                .color_system(Some(crate::color::ColorSystem::Truecolor))
+                .width(10)
+                .highlight(false)
+                .build()
+                .render_export(&empty),
+            "┌────────┐\n│        │\n└────────┘\n"
+        );
     }
 }

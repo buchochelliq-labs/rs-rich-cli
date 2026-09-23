@@ -57,11 +57,56 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
-## Core 0.0.6 / ext 0.0.8 / art 0.0.8 / CLI 0.0.10 — prepared
+Cohort versions for 0.0.11 (not published): core 0.0.7, ext 0.0.9, art 0.0.9,
+CLI 0.0.11. Core changes below, so every dependent moves with it.
+
+### Core parity fixes (0.0.11 workstream 1)
+
+This fixes every divergence family the 0.0.10 differential fuzzer found, each
+verified against rich 15.0.0. The known-divergence queue is now empty, and every
+repro is in the pull-request corpus.
+
+- **Padding (#442):** empty content keeps its line, and the padding style sits
+  under the content, as upstream's `render_lines(style=…)` does. The same fix
+  gives `Panel("")` its blank body row.
+- **Align (#443):** the rendered block is aligned as a whole
+  (`Constrain` + `Segment.set_shape`), not line by line.
+- **Rule (#444):** a right-aligned title with a multi-cell fill is dropped, as
+  upstream drops it.
+- **Table (#445):**
+  - header cells are bottom-aligned, and row shaping follows upstream's
+    `align_cell` + `set_shape`
+  - cells render through `Text` wrap, justify and truncate
+  - `_measure_column` is ported, including columns with no cells, the
+    `maximum or 1` floor, the re-measure after collapsing, and no expand once a
+    table has collapsed
+- **Printed `Text` (#446):** `Console::print` renders at the full width and
+  applies upstream's `Text.join` semantics, so a printed `Text`'s own `justify`,
+  `overflow` and `no_wrap` defer to the print options. The top-level
+  shrink-to-measurement that stood in for this is gone.
+  - `Renderable::fit_to_measurement` now defaults to `false`.
+  - New `Console::print_with` and `render_export_with` take explicit options, the
+    equivalent of `console.print(…, overflow=…, no_wrap=…)`.
+- **Tabs (#447):** `Text` measures the raw string, as upstream does. A tab
+  measures zero cells until render.
+- **Emoji (#448):** scanning resumes after every `:…:` match, including unknown
+  codes and `::`, as upstream's single `re.sub` does.
+- **Zero-width content (#449):** a renderable given less than one cell renders
+  nothing (upstream `Console.render`), so a squeezed `Panel` has no body rows.
+- **API:** `Console::render_lines_styled` ports `render_lines(style=…)`.
+
+Before the fix, three seeds of 2,000 generated cases had 1,193 mismatches.
+After it, 40,000 generated cases across 20 seeds match.
+
+## Core 0.0.6 / ext 0.0.8 / art 0.0.8 / CLI 0.0.10 — published 2026-09-23
 
 Every workstream in the [0.0.10 plan](docs/plans/0.0.10.md) is merged to `main`, and the
 release test passed on the integrated tree; see the
-[0.0.10 release notes](docs/releases/0.0.10.md). Nothing is tagged or published.
+[0.0.10 release notes](docs/releases/0.0.10.md). All four crates were published through
+Trusted Publishing, each with a passing exact-version registry consumer:
+[core](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35818053978), [ext](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35818015980), [art](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35818038760) and
+[CLI](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/35818067984). The tags were first pushed out of order; the release notes
+record the recovery. Each version was uploaded once.
 
 - Release tooling: `check_packages.py` drops Cargo's cached copies of staged-only
   versions before verifying. Cargo reused a core 0.0.6 unpacked and built before
