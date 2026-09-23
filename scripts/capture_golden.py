@@ -36,6 +36,7 @@ from rich.control import Control
 from rich.json import JSON
 from rich.layout import Layout
 from rich.markdown import Markdown
+from rich.measure import Measurement
 from rich.padding import Padding
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
@@ -47,6 +48,7 @@ JSON_SAMPLE = (
 )
 from rich.rule import Rule
 from rich.styled import Styled
+from rich.syntax import Syntax
 from rich.table import Table
 from rich.prompt import Confirm as RichConfirm
 from rich.prompt import FloatPrompt as RichFloatPrompt
@@ -1423,9 +1425,52 @@ def verify_upstream_version() -> str:
     return expected
 
 
+MEASURE_HEADER = """\
+# Measurement.get of Syntax / JSON (#149), captured from Python rich.
+# Columns: name<TAB>max_width<TAB>input (JSON: kind, source, padding)<TAB>minimum<TAB>maximum
+"""
+
+# Syntax measures its raw source (a tab counts zero cells) plus horizontal
+# padding; JSON measures as its formatted Text (min = widest word).
+MEASURE_CASES = [
+    ("syntax_simple", 80, "syntax", "def f():\n    return 1\n", 0),
+    ("syntax_padding", 80, "syntax", "x = 1\nlonger_line = 2", 2),
+    ("syntax_tabs", 80, "syntax", "a\tb\n\tindented", 0),
+    ("syntax_wide", 80, "syntax", "print('日本語テキスト')", 1),
+    ("syntax_emoji_zwj", 80, "syntax", "👨\u200d👩\u200d👧 = 1", 0),
+    ("syntax_empty", 80, "syntax", "", 0),
+    ("syntax_blank_lines", 80, "syntax", "\n\n", 3),
+    ("syntax_cr_lines", 80, "syntax", "ab\rabcdef\r\nabc", 0),
+    ("syntax_clamped", 10, "syntax", "a_very_long_identifier = 1", 1),
+    ("syntax_zero_width", 0, "syntax", "abc", 0),
+    ("json_object", 80, "json", '{"name": "value text", "items": [1, 2, 3]}', 0),
+    ("json_long_word", 80, "json", '{"k": "supercalifragilistic"}', 0),
+    ("json_wide", 80, "json", '{"名前": "日本語 テキスト"}', 0),
+    ("json_scalar", 80, "json", "42", 0),
+    ("json_clamped", 12, "json", '{"alpha": "beta gamma delta"}', 0),
+]
+
+
+def _measure_input(kind: str, source: str, padding: int):
+    if kind == "syntax":
+        return Syntax(source, "python", padding=padding)
+    return JSON(source)
+
+
 def main() -> None:
     version = verify_upstream_version()
     print(f"verified Python rich {version} against UPSTREAM.toml")
+
+    measure_path = golden_dir() / "measure.tsv"
+    mlines = [MEASURE_HEADER.rstrip("\n")]
+    for name, width, kind, source, padding in MEASURE_CASES:
+        mconsole = Console(width=max(width, 1), highlight=False, no_color=False)
+        options = mconsole.options.update_width(width)
+        m = Measurement.get(mconsole, options, _measure_input(kind, source, padding))
+        spec = json.dumps({"kind": kind, "source": source, "padding": padding}, ensure_ascii=False)
+        mlines.append(f"{name}\t{width}\t{spec}\t{m.minimum}\t{m.maximum}")
+    measure_path.write_text("\n".join(mlines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(MEASURE_CASES)} measure cases to {measure_path}")
     # highlight=False so no ReprHighlighter styling leaks in — the Rust core
     # ships no default highlighter.
     console = Console(

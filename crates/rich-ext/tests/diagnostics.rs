@@ -107,3 +107,66 @@ fn crlf_sources_render_without_carriage_returns() {
     assert!(!text.contains('\r'), "{text:?}");
     assert!(text.contains("1 | let a = 1;\n  |           ^"), "{text}");
 }
+
+/// A real three-level `std::error::Error` chain: each cause is its own row, in
+/// source order, after the headline (#146/#151).
+#[test]
+fn multi_level_error_chains_render_one_ordered_cause_per_row() {
+    #[derive(Debug)]
+    struct Leaf;
+    impl std::fmt::Display for Leaf {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "disk full")
+        }
+    }
+    impl std::error::Error for Leaf {}
+    #[derive(Debug)]
+    struct Middle(Leaf);
+    impl std::fmt::Display for Middle {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "cannot write cache")
+        }
+    }
+    impl std::error::Error for Middle {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            Some(&self.0)
+        }
+    }
+    #[derive(Debug)]
+    struct Top(Middle);
+    impl std::fmt::Display for Top {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "build failed")
+        }
+    }
+    impl std::error::Error for Top {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            Some(&self.0)
+        }
+    }
+
+    let error = Top(Middle(Leaf));
+    let text = output(&Diagnostic::from_error(&error, 8), 80);
+    assert_eq!(
+        text,
+        "build failed\ncaused by: cannot write cache\ncaused by: disk full"
+    );
+    // The depth limit cuts the chain after the given number of causes.
+    let text = output(&Diagnostic::from_error(&error, 1), 80);
+    assert_eq!(
+        text,
+        "build failed\ncaused by: cannot write cache\ncaused by: [truncated]"
+    );
+    // Narrow widths wrap each cause within the width, keeping source order.
+    let text = output(&Diagnostic::from_error(&error, 8), 12);
+    assert!(
+        text.lines().all(|l| rich::cells::cell_len(l) <= 12),
+        "{text}"
+    );
+    let middle = text.find("cannot write").expect("middle cause");
+    let leaf = text.find("disk full").expect("leaf cause");
+    assert!(
+        text.starts_with("build failed\n") && middle < leaf,
+        "{text}"
+    );
+}

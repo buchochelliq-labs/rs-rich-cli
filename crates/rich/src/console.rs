@@ -304,7 +304,7 @@ impl Console {
     /// no explicit justify is set (shared by the string and print paths).
     fn render_segments(&self, renderable: &dyn Renderable) -> Vec<Segment> {
         let mut options = self.options();
-        if options.justify == Justify::Default {
+        if options.justify == Justify::Default && renderable.fit_to_measurement() {
             let measurement = renderable.measure(self, &options);
             options.max_width = measurement.maximum.min(options.max_width).max(1);
         }

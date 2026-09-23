@@ -165,6 +165,11 @@ const VALUE_KEYS: &[&str] = &[
     "image_background",
     "image_color",
     "image_dither",
+    "image_max_width",
+    "image_max_height",
+    "image_brightness",
+    "image_contrast",
+    "image_gamma",
     "log_presentation",
 ];
 
@@ -176,7 +181,7 @@ fn validate_value(key: &str, value: &Value) -> Result<(), String> {
             "image_rotate" => value
                 .as_integer()
                 .is_some_and(|v| matches!(v, 0 | 90 | 180 | 270)),
-            "width" | "height" | "jobs" => value
+            "width" | "height" | "jobs" | "image_max_width" | "image_max_height" => value
                 .as_integer()
                 .is_some_and(|v| v > 0 && usize::try_from(v).is_ok()),
             "watch_interval" => value
@@ -215,13 +220,21 @@ fn validate_value(key: &str, value: &Value) -> Result<(), String> {
                 .is_some_and(|v| matches!(v, "plain" | "rich")),
             "image_color" => value
                 .as_str()
-                .is_some_and(|v| matches!(v, "truecolor" | "ansi256")),
+                .is_some_and(|v| matches!(v, "truecolor" | "ansi256" | "ansi16" | "grayscale")),
+            "image_brightness" | "image_contrast" => value
+                .as_float()
+                .or_else(|| value.as_integer().map(|v| v as f64))
+                .is_some_and(|v| v.is_finite() && v >= 0.0),
+            "image_gamma" => value
+                .as_float()
+                .or_else(|| value.as_integer().map(|v| v as f64))
+                .is_some_and(|v| v.is_finite() && v > 0.0),
             "image_dither" => value
                 .as_str()
                 .is_some_and(|v| matches!(v, "none" | "floyd-steinberg" | "bayer4x4")),
             "image_fit" => value
                 .as_str()
-                .is_some_and(|v| matches!(v, "contain" | "cover")),
+                .is_some_and(|v| matches!(v, "contain" | "cover" | "stretch")),
             "image_anchor" => value.as_str().is_some_and(|v| {
                 matches!(
                     v,
@@ -757,7 +770,7 @@ mod tests {
         for text in [
             "[profiles.unused]\nwat = true",
             "[profiles.unused]\npager = 'false'",
-            "[profiles.unused]\nimage_fit = 'stretch'",
+            "[profiles.unused]\nimage_fit = 'squash'",
             "version = 2",
             "[defaults]\nwidth = -1",
             "[defaults]\nwatch_interval = nan",

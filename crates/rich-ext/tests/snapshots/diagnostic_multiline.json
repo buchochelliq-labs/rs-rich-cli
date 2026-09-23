@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "width": 20,
+  "height": 8,
+  "plain": "migration failed\nrolled back 3 steps\nnote: the database \nis unchanged\nhelp: rerun with \n--verbose",
+  "ansi": "\u001b[1;31mmigration failed\u001b[0m\n\u001b[1;31mrolled back 3 steps\u001b[0m\nnote: the database \nis unchanged\nhelp: rerun with \n--verbose",
+  "segments": [
+    {
+      "text": "migration failed",
+      "control": false,
+      "foreground": "800000",
+      "background": null,
+      "attributes": [
+        "bold"
+      ],
+      "link": null
+    },
+    {
+      "text": "\n",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "rolled back 3 steps",
+      "control": false,
+      "foreground": "800000",
+      "background": null,
+      "attributes": [
+        "bold"
+      ],
+      "link": null
+    },
+    {
+      "text": "\n",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "note: the database ",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "\n",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "is unchanged",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "\n",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "help: rerun with ",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "\n",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    },
+    {
+      "text": "--verbose",
+      "control": false,
+      "foreground": null,
+      "background": null,
+      "attributes": [],
+      "link": null
+    }
+  ]
+}
