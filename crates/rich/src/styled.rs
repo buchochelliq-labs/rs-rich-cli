@@ -32,7 +32,7 @@ impl Renderable for Styled {
     fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
         // Styling doesn't change size — defer to the child. Port of
         // `Styled.__rich_measure__`.
-        self.renderable.measure(console, options)
+        Measurement::get(console, options, self.renderable.as_ref())
     }
 }
 

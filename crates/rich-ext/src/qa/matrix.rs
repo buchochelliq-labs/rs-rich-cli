@@ -21,7 +21,7 @@
 //! [`AccessibilityPolicy::screen_reader`] (no colour, linear text).
 
 use rich::cells::cell_len;
-use rich::{Console, ConsoleOptions, Renderable, Segment, Table, Text};
+use rich::{Console, ConsoleOptions, Justify, Renderable, Segment, Table, Text};
 
 use super::screenshot::{Approvals, Outcome, Shot};
 use super::{panic_message, plain_lines, plural, table_then_line, NoHeight, Probe};
@@ -395,7 +395,8 @@ impl Renderable for MatrixReport {
         let mut table = Table::new();
         table.add_column("Profile");
         for fixture in &self.fixtures {
-            table.add_column(fixture.clone());
+            // A fixture name is data, not markup: `table[wide]` stays literal.
+            table.add_column_text(Text::new(fixture.as_str()), Justify::Left);
         }
         for profile in &self.profiles {
             let mut row = vec![Text::new(profile.clone())];

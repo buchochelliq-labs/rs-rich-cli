@@ -500,3 +500,11 @@ fn explanation_serializes() {
         })
     );
 }
+
+#[test]
+fn captured_text_that_looks_like_markup_stays_literal() {
+    let e = explain("\x1b[32m[info]\x1b[0m [bold]done[/bold] :smile:\n");
+    let table = plain(&ExplanationView::new(&e).show_visible(false), 100);
+    assert!(table.contains("[info]"), "{table}");
+    assert!(table.contains("[bold]done[/bold] :smile:"), "{table}");
+}

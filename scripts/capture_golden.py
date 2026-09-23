@@ -136,6 +136,94 @@ def _tree_multiline() -> Tree:
     return tree
 
 
+def _markup_table() -> Table:
+    # `str` headers and cells are console markup (with emoji); a `Text` cell
+    # is never re-parsed, and an escaped tag prints literally.
+    table = Table(box=box.SQUARE)
+    table.add_column("[b]Name")
+    table.add_column("[i]Age[/i] :rocket:", justify="right")
+    table.add_row("[red]Alice[/]", "[green]30")
+    table.add_row("plain [bold]x[/] y", "7")
+    table.add_row(Text("[b]literal[/b]"), "\\[b]escaped")
+    return table
+
+
+def _highlight_table() -> Table:
+    # `Table(highlight=True)` highlights `str` headers and cells even when the
+    # console's own highlighting is off.
+    table = Table(box=box.SQUARE, highlight=True)
+    table.add_column("value 1")
+    table.add_column("[b]n[/] = 2")
+    table.add_row("n = 42 True", "'s' None")
+    return table
+
+
+def _markup_tree() -> Tree:
+    tree = Tree("[b]root[/] :rocket:")
+    child = tree.add("[i]child[/i] 1")
+    child.add("[red]leaf[/] True")
+    tree.add(Text("[b]literal"))
+    return tree
+
+
+def _highlight_tree() -> Tree:
+    tree = Tree("n = 1", highlight=True)
+    tree.add("x = None")
+    return tree
+
+
+def _inner_table() -> Table:
+    inner = Table(box=box.SQUARE)
+    inner.add_column("k")
+    inner.add_column("v")
+    inner.add_row("a", "1")
+    return inner
+
+
+def _nested_table() -> Table:
+    # The nested table sizes its column by `Table.__rich_measure__`.
+    outer = Table(box=box.SQUARE)
+    outer.add_column("Nested")
+    outer.add_column("Note")
+    outer.add_row(_inner_table(), "short")
+    outer.add_row("x", "a longer note here")
+    return outer
+
+
+def _renderable_cells_table() -> Table:
+    table = Table(box=box.SQUARE)
+    table.add_column("Panel")
+    table.add_column("Fit")
+    table.add_column("Pad")
+    table.add_column("Align")
+    table.add_column("Constrain")
+    table.add_row(
+        Panel("hi"),
+        Panel.fit("ok"),
+        Padding("p", (0, 2)),
+        Align.center("mid"),
+        Constrain(Panel("c"), 7),
+    )
+    return table
+
+
+def _tree_cell_table() -> Table:
+    table = Table(box=box.SQUARE)
+    table.add_column("Tree")
+    table.add_column("B")
+    table.add_row(_markup_tree(), "b")
+    return table
+
+
+def _name_age_table() -> Table:
+    table = Table(box=box.SQUARE)
+    table.add_column("Name")
+    table.add_column("Age")
+    table.add_row("Alice", "30")
+    table.add_row("Bob", "7")
+    return table
+
+
 COLUMNS_MIXED = ["a", "supercalifragilistic", "bc", "def"]
 COLUMNS_SIX = ["one", "two", "three", "four", "five", "six"]
 
@@ -533,6 +621,77 @@ RENDERABLE_CASES = [
     ("styled_on_red", 20, Styled(Text("hi"), "on red")),
     ("styled_panel", 8, Styled(Panel("x", box=box.SQUARE), "green")),
     ("progress_three", 50, _progress_table()),
+    # Markup in `str` table cells/headers, tree labels and columns items.
+    ("table_markup_cells", 40, _markup_table()),
+    ("table_markup_highlight", 40, _highlight_table()),
+    ("tree_markup", 30, _markup_tree()),
+    ("tree_highlight", 30, _highlight_tree()),
+    ("columns_markup", 30, Columns(["[b]one[/]", "[red]two", ":rocket: three", Text("[i]four")])),
+    # `__rich_measure__` of renderables nested in tables, columns and panels.
+    ("table_nested", 40, _nested_table()),
+    ("table_renderable_cells", 60, _renderable_cells_table()),
+    ("table_renderable_cells_w30", 30, _renderable_cells_table()),
+    ("table_tree_cell", 40, _tree_cell_table()),
+    ("columns_panels", 30, Columns([Panel("a"), Panel("bb"), Panel.fit("ccc"), "d"])),
+    ("columns_panels_equal", 30, Columns([Panel.fit("a"), Panel.fit("bbbb"), "cc"], equal=True)),
+    ("columns_tables", 40, Columns([_inner_table(), _inner_table(), _inner_table()])),
+    ("panel_fit_table", 40, Panel(_name_age_table(), expand=False)),
+    ("panel_fit_title", 40, Panel.fit("hi", title="A longer title")),
+    ("panel_fit_rule", 30, Panel.fit(Rule())),
+    ("panel_fit_rule_title", 30, Panel.fit(Rule("x"), title="T")),
+    ("panel_width", 30, Panel("x", width=12)),
+    ("panel_fit_tree", 30, Panel.fit(_markup_tree())),
+    ("align_table", 40, Align.center(_name_age_table())),
+    ("align_panel_fit", 30, Align.right(Panel.fit("x"))),
+]
+
+HIGHLIGHT_RENDERABLE_HEADER = """\
+# Renderables printed on a console with highlight=True (upstream's default),
+# captured from real Python `rich`. Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\\t<width>\\t<expected-ansi>
+# Console: force_terminal=True, color_system="truecolor", highlight=True,
+#          safe_box=False, legacy_windows=False.
+# `Columns` converts `str` items with the console's defaults, so they are
+# highlighted; `Table` and `Tree` pass their own `highlight` (default False).
+# The Rust test builds the renderable matching each <name> with the same
+# builder as renderables.tsv.
+"""
+
+HIGHLIGHT_RENDERABLE_CASES = [
+    ("columns_highlight", 40, Columns(["n = 1", "True", "[b]x[/] 'y'", Text("2")])),
+    ("table_highlight_default_off", 40, _name_age_table()),
+    ("table_markup_highlight", 40, _highlight_table()),
+    ("tree_markup", 30, _markup_tree()),
+    ("tree_highlight", 30, _highlight_tree()),
+]
+
+MEASURE_RENDERABLE_HEADER = """\
+# Measurement.get of containers with a `__rich_measure__`, captured from Python rich.
+# Columns: name<TAB>max_width<TAB>minimum<TAB>maximum
+# Console: width=<max_width>, highlight=False. The Rust test builds the
+# renderable matching each <name> with the same builder as renderables.tsv.
+"""
+
+MEASURE_RENDERABLE_CASES = [
+    ("measure_table", 40, _name_age_table()),
+    ("measure_table_narrow", 10, _name_age_table()),
+    ("measure_table_nested", 40, _nested_table()),
+    ("measure_table_markup", 40, _markup_table()),
+    ("measure_table_renderables", 60, _renderable_cells_table()),
+    ("measure_grid_empty", 40, Table.grid()),
+    ("measure_tree", 40, _markup_tree()),
+    ("measure_panel", 40, Panel("hello world")),
+    ("measure_panel_title", 40, Panel("x", title="Title here")),
+    ("measure_panel_width", 40, Panel("x", width=9)),
+    ("measure_padding", 40, Padding("hello world", (0, 2, 0, 3))),
+    ("measure_padding_tight", 4, Padding("hello", (0, 2))),
+    ("measure_constrain", 40, Constrain(Text("hello world wide"), 8)),
+    ("measure_align", 40, Align.left(Text("abc de"))),
+    ("measure_rule", 40, Rule("title")),
+    ("measure_styled_panel", 40, Styled(Panel("x"), "red")),
+    ("measure_hbar", 40, HBar(10, 2, 5)),
+    ("measure_hbar_width", 40, HBar(10, 2, 5, width=7)),
 ]
 
 # (name, width, height, layout) — layouts need an explicit console height.
@@ -2048,6 +2207,33 @@ def main() -> None:
         rlines.append(f"{name}\t{width}\t{escape(output)}")
     renderable_path.write_text("\n".join(rlines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(RENDERABLE_CASES)} renderable cases to {renderable_path}")
+
+    hr_path = golden_dir() / "highlight_renderables.tsv"
+    hrlines = [HIGHLIGHT_RENDERABLE_HEADER.rstrip("\n")]
+    for name, width, renderable in HIGHLIGHT_RENDERABLE_CASES:
+        hrconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=width,
+            highlight=True,
+            safe_box=False,
+            legacy_windows=False,
+            no_color=False,
+        )
+        with hrconsole.capture() as capture:
+            hrconsole.print(renderable)
+        hrlines.append(f"{name}\t{width}\t{escape(capture.get())}")
+    hr_path.write_text("\n".join(hrlines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(HIGHLIGHT_RENDERABLE_CASES)} highlight renderable cases to {hr_path}")
+
+    mr_path = golden_dir() / "measure_renderables.tsv"
+    mrlines = [MEASURE_RENDERABLE_HEADER.rstrip("\n")]
+    for name, width, renderable in MEASURE_RENDERABLE_CASES:
+        mrconsole = Console(width=width, highlight=False, no_color=False)
+        m = Measurement.get(mrconsole, mrconsole.options.update_width(width), renderable)
+        mrlines.append(f"{name}\t{width}\t{m.minimum}\t{m.maximum}")
+    mr_path.write_text("\n".join(mrlines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(MEASURE_RENDERABLE_CASES)} container measure cases to {mr_path}")
 
     highlight_path = golden_dir() / "highlight.tsv"
     hlines = [HIGHLIGHT_HEADER.rstrip("\n")]

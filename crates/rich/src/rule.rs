@@ -8,6 +8,7 @@
 use crate::align::HorizontalAlign;
 use crate::cells::{cell_len, set_cell_size};
 use crate::console::{Console, ConsoleOptions, Overflow};
+use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::style::Style;
@@ -160,6 +161,12 @@ impl Renderable for Rule {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let text = self.build_text(console, options.max_width);
         text.render(console.theme(), console.base_style())
+    }
+
+    /// Port of `Rule.__rich_measure__`: a rule fits any width, so it asks for
+    /// a single cell and never widens a fitted container.
+    fn measure(&self, _console: &Console, _options: &ConsoleOptions) -> Measurement {
+        Measurement::new(1, 1)
     }
 }
 

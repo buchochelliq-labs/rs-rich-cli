@@ -9,10 +9,13 @@
 use rich::markdown::Markdown;
 use rich::measure::Measurement;
 use rich::r#box::{Box as BoxSet, DOUBLE_EDGE, HEAVY_HEAD, SIMPLE, SQUARE};
+use std::sync::Arc;
+
+use rich::segment::Segment;
 use rich::{
-    Align, AnsiDecoder, Bar, ColorSystem, Columns, Console, Constrain, Control, HorizontalAlign,
-    Json, Justify, Layout, Overflow, Padding, Panel, ProgressBar, Renderable, Rule, Style, Styled,
-    Syntax, Table, Text, Tree,
+    Align, AnsiDecoder, Bar, Cell, ColorSystem, Columns, Console, ConsoleOptions, Constrain,
+    Control, HorizontalAlign, Json, Justify, Layout, Overflow, Padding, Panel, ProgressBar,
+    Renderable, Rule, Style, Styled, Syntax, Table, Text, Tree,
 };
 
 /// Build the layout matching a `layout_*` fixture name. Must stay in sync with
@@ -95,6 +98,116 @@ fn multiline_tree() -> Tree {
 /// Must match `COLUMNS_MIXED` / `COLUMNS_SIX` in scripts/capture_golden.py.
 const COLUMNS_MIXED: &[&str] = &["a", "supercalifragilistic", "bc", "def"];
 const COLUMNS_SIX: &[&str] = &["one", "two", "three", "four", "five", "six"];
+
+/// A `Send + Sync` table cell holding a container renderable (`Panel`,
+/// `Padding`, …), which owns a plain `Box<dyn Renderable>` and so cannot be a
+/// [`Cell::Renderable`] itself. The container is rebuilt for every call, and
+/// both rendering and measurement are delegated to it unchanged.
+struct Built(fn() -> Box<dyn Renderable>);
+
+impl Renderable for Built {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        (self.0)().rich_render(console, options)
+    }
+
+    fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+        (self.0)().measure(console, options)
+    }
+}
+
+fn built(build: fn() -> Box<dyn Renderable>) -> Cell {
+    Cell::Renderable(Arc::new(Built(build)))
+}
+
+fn text_box(s: &str) -> Box<dyn Renderable> {
+    Box::new(Text::new(s))
+}
+
+/// Must match `_markup_table` in scripts/capture_golden.py.
+fn markup_table() -> Table {
+    let mut table = Table::new().box_set(SQUARE);
+    table.add_column("[b]Name");
+    table.add_column_justify("[i]Age[/i] :rocket:", Justify::Right);
+    table.add_row(&["[red]Alice[/]", "[green]30"]);
+    table.add_row(&["plain [bold]x[/] y", "7"]);
+    table.add_row_cells(vec![
+        Cell::Text(Text::new("[b]literal[/b]")),
+        Cell::from(r"\[b]escaped"),
+    ]);
+    table
+}
+
+/// Must match `_highlight_table` in scripts/capture_golden.py.
+fn highlight_table() -> Table {
+    let mut table = Table::new().box_set(SQUARE).highlight(true);
+    table.add_column("value 1");
+    table.add_column("[b]n[/] = 2");
+    table.add_row(&["n = 42 True", "'s' None"]);
+    table
+}
+
+/// Must match `_markup_tree` in scripts/capture_golden.py.
+fn markup_tree() -> Tree {
+    let mut tree = Tree::new("[b]root[/] :rocket:");
+    let child = tree.add("[i]child[/i] 1");
+    child.add("[red]leaf[/] True");
+    tree.add(Text::new("[b]literal"));
+    tree
+}
+
+/// Must match `_highlight_tree` in scripts/capture_golden.py.
+fn highlight_tree() -> Tree {
+    let mut tree = Tree::new("n = 1").highlight(true);
+    tree.add("x = None");
+    tree
+}
+
+/// Must match `_inner_table` in scripts/capture_golden.py.
+fn inner_table() -> Table {
+    let mut inner = Table::new().box_set(SQUARE);
+    inner.add_column("k");
+    inner.add_column("v");
+    inner.add_row(&["a", "1"]);
+    inner
+}
+
+/// Must match `_nested_table` in scripts/capture_golden.py.
+fn nested_table() -> Table {
+    let mut outer = Table::new().box_set(SQUARE);
+    outer.add_column("Nested");
+    outer.add_column("Note");
+    outer.add_row_cells(vec![
+        Cell::Renderable(Arc::new(inner_table())),
+        "short".into(),
+    ]);
+    outer.add_row(&["x", "a longer note here"]);
+    outer
+}
+
+/// Must match `_renderable_cells_table` in scripts/capture_golden.py.
+fn renderable_cells_table() -> Table {
+    let mut table = Table::new().box_set(SQUARE);
+    for header in ["Panel", "Fit", "Pad", "Align", "Constrain"] {
+        table.add_column(header);
+    }
+    table.add_row_cells(vec![
+        built(|| Box::new(Panel::new(text_box("hi")))),
+        built(|| Box::new(Panel::fit(text_box("ok")))),
+        built(|| Box::new(Padding::new(text_box("p"), (0, 2, 0, 2)))),
+        built(|| Box::new(Align::center(text_box("mid")))),
+        built(|| Box::new(Constrain::new(Box::new(Panel::new(text_box("c"))), Some(7)))),
+    ]);
+    table
+}
+
+/// Must match `_tree_cell_table` in scripts/capture_golden.py.
+fn tree_cell_table() -> Table {
+    let mut table = Table::new().box_set(SQUARE);
+    table.add_column("Tree");
+    table.add_column("B");
+    table.add_row_cells(vec![Cell::Renderable(Arc::new(markup_tree())), "b".into()]);
+    table
+}
 
 /// The shared sample table used by the `table_*` fixtures.
 fn sample_table(box_set: BoxSet) -> Table {
@@ -494,8 +607,135 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
             progress.add_task("Waiting", 100.0, 0.0);
             Box::new(progress)
         }
+        "table_markup_cells" | "measure_table_markup" => Box::new(markup_table()),
+        "table_markup_highlight" => Box::new(highlight_table()),
+        "tree_markup" | "measure_tree" => Box::new(markup_tree()),
+        "tree_highlight" => Box::new(highlight_tree()),
+        "columns_markup" => Box::new(Columns::from_cells(vec![
+            "[b]one[/]".into(),
+            "[red]two".into(),
+            ":rocket: three".into(),
+            Cell::Text(Text::new("[i]four")),
+        ])),
+        "table_nested" | "measure_table_nested" => Box::new(nested_table()),
+        "table_renderable_cells" | "table_renderable_cells_w30" | "measure_table_renderables" => {
+            Box::new(renderable_cells_table())
+        }
+        "table_tree_cell" => Box::new(tree_cell_table()),
+        "columns_panels" => Box::new(Columns::from_cells(vec![
+            built(|| Box::new(Panel::new(text_box("a")))),
+            built(|| Box::new(Panel::new(text_box("bb")))),
+            built(|| Box::new(Panel::fit(text_box("ccc")))),
+            "d".into(),
+        ])),
+        "columns_panels_equal" => Box::new(
+            Columns::from_cells(vec![
+                built(|| Box::new(Panel::fit(text_box("a")))),
+                built(|| Box::new(Panel::fit(text_box("bbbb")))),
+                "cc".into(),
+            ])
+            .equal(true),
+        ),
+        "columns_tables" => Box::new(Columns::from_cells(
+            (0..3)
+                .map(|_| Cell::Renderable(Arc::new(inner_table())))
+                .collect(),
+        )),
+        "panel_fit_table" => Box::new(Panel::new(Box::new(sample_table(SQUARE))).expand(false)),
+        "panel_fit_title" => Box::new(Panel::fit(text_box("hi")).title("A longer title")),
+        "panel_fit_rule" => Box::new(Panel::fit(Box::new(Rule::line()))),
+        "panel_fit_rule_title" => Box::new(Panel::fit(Box::new(Rule::new("x"))).title("T")),
+        "panel_width" => Box::new(Panel::new(text_box("x")).width(12)),
+        "panel_fit_tree" => Box::new(Panel::fit(Box::new(markup_tree()))),
+        "align_table" => Box::new(Align::center(Box::new(sample_table(SQUARE)))),
+        "align_panel_fit" => Box::new(Align::right(Box::new(Panel::fit(text_box("x"))))),
+        // Highlighting console (highlight_renderables.tsv).
+        "columns_highlight" => Box::new(Columns::from_cells(vec![
+            "n = 1".into(),
+            "True".into(),
+            "[b]x[/] 'y'".into(),
+            Cell::Text(Text::new("2")),
+        ])),
+        "table_highlight_default_off" => Box::new(sample_table(SQUARE)),
+        // Container measurement (measure_renderables.tsv).
+        "measure_table" | "measure_table_narrow" => Box::new(sample_table(SQUARE)),
+        "measure_grid_empty" => Box::new(Table::grid()),
+        "measure_panel" => Box::new(Panel::new(text_box("hello world"))),
+        "measure_panel_title" => Box::new(Panel::new(text_box("x")).title("Title here")),
+        "measure_panel_width" => Box::new(Panel::new(text_box("x")).width(9)),
+        "measure_padding" => Box::new(Padding::new(text_box("hello world"), (0, 2, 0, 3))),
+        "measure_padding_tight" => Box::new(Padding::new(text_box("hello"), (0, 2, 0, 2))),
+        "measure_constrain" => Box::new(Constrain::new(text_box("hello world wide"), Some(8))),
+        "measure_align" => Box::new(Align::left(text_box("abc de"))),
+        "measure_rule" => Box::new(Rule::new("title")),
+        "measure_styled_panel" => Box::new(Styled::new(
+            Box::new(Panel::new(text_box("x"))),
+            Style::parse("red").unwrap(),
+        )),
+        "measure_hbar" => Box::new(Bar::new(10.0, 2.0, 5.0)),
+        "measure_hbar_width" => Box::new(Bar::new(10.0, 2.0, 5.0).width(7)),
         other => panic!("no builder for renderable fixture {other:?}"),
     }
+}
+
+/// Renderables printed on a console with highlighting ON, checked against
+/// upstream: `Columns` highlights `str` items with the console default, while
+/// `Table` and `Tree` use their own `highlight` (default off).
+#[test]
+fn highlight_renderables_parity() {
+    let data = include_str!("golden/highlight_renderables.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let width: usize = parts.next().unwrap().parse().unwrap();
+        let expected = unescape(parts.next().unwrap());
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(width)
+            .highlight(true)
+            .no_color(false)
+            .build();
+        let got = console.render_to_string(build_renderable(name).as_ref());
+        assert!(
+            expected == got || expected == format!("{got}\n"),
+            "highlight renderable case {name:?} (line {}) diverged from upstream rich\n got: {got:?}\n exp: {expected:?}",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 5);
+}
+
+/// `Measurement.get` of containers that define `__rich_measure__` (`Table`,
+/// `Tree`, `Panel`, `Padding`, `Constrain`, `Align`, `Rule`, `Styled`, `Bar`),
+/// checked against upstream.
+#[test]
+fn measure_renderables_parity() {
+    let data = include_str!("golden/measure_renderables.tsv");
+    let mut checked = 0;
+    for line in data.lines().filter(|l| !l.starts_with('#')) {
+        let cols: Vec<&str> = line.split('\t').collect();
+        let [name, width, minimum, maximum] = cols[..] else {
+            panic!("malformed measure row: {line:?}");
+        };
+        let width: usize = width.parse().unwrap();
+        let console = Console::builder().width(width).highlight(false).build();
+        let options = console.options().update_width(width);
+        let got = Measurement::get(&console, &options, build_renderable(name).as_ref());
+        assert_eq!(
+            (got.minimum, got.maximum),
+            (minimum.parse().unwrap(), maximum.parse().unwrap()),
+            "measure case {name}"
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 18);
 }
 
 #[test]
