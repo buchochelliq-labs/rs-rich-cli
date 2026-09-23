@@ -209,7 +209,10 @@ fn render(c: &Console, demo: &str, frame: usize) {
             c.print(&p);
         }
         "spinner" => {
+            // The first render starts the animation (as upstream), so anchor
+            // it at 0 before asking for this frame's time.
             let s = Spinner::new("dots");
+            s.render(0.0);
             let t = s.render(frame as f64 * 0.08);
             c.print(
                 &Text::new("  ")

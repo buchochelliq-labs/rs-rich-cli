@@ -90,7 +90,9 @@ pub use crate::padding::Padding;
 pub use crate::pager::{Pager, SystemPager};
 pub use crate::panel::Panel;
 pub use crate::pretty::Pretty;
-pub use crate::progress::{Progress, ProgressColumn};
+pub use crate::progress::{
+    Progress, ProgressColumn, SpinnerColumn, Task, TaskId, TaskUpdate, TimeRemainingColumn,
+};
 pub use crate::progress_bar::ProgressBar;
 pub use crate::protocol::{Highlighter, LineRenderable, Renderable};
 pub use crate::rule::Rule;
