@@ -52,6 +52,7 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["r
 clap = { version = "4.5", default-features = false, features = ["std", "help", "env", "error-context", "suggestions"], optional = true }
 
 [dev-dependencies]
+serde_json.workspace = true
 thiserror = "2"
 trybuild = "1"
 
@@ -63,6 +64,10 @@ macros = ["dep:rich-macros"]
 log = ["dep:log"]
 tracing = ["dep:tracing", "dep:tracing-subscriber"]
 testing = ["dep:serde", "dep:serde_json"]
+# `Serialize` for capability reports, contrast findings and ANSI explanations.
+serde = ["dep:serde"]
+# JUnit XML / libtest JSON test results and the `TestReport` renderable.
+test-report = ["dep:serde", "dep:serde_json", "dep:quick-xml"]
 # Structured data (`rich_ext::data`): the format-neutral document model, the
 # explorer, table/flatten/search/diff/redaction views and the serde helpers,
 # with JSON, INI and dotenv parsers (hand-written; no extra deps).
