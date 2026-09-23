@@ -1,10 +1,9 @@
 //! Progress displays.
 //!
 //! Port of `rich/progress.py`'s display and task model: a grid of tasks, one
-//! row each, whose cells come from a list of [`ProgressColumn`]s. Upstream builds
-//! a `Table.grid` (`padding=(0, 1)`); we render the equivalent inline — fixed
-//! columns take their widest cell, the bar column flexes to fill (capped at 40),
-//! and columns are separated by a single unstyled space.
+//! row each, whose cells come from a list of [`ProgressColumn`]s, laid out as
+//! upstream's `make_tasks_table` does: a [`Table::grid`] with `padding=(0, 1)`,
+//! each column's table-column options, and `expand`.
 //!
 //! Time is read from an injectable clock ([`Progress::clock`], upstream's
 //! `get_time`), so elapsed time, speed, ETA and spinner frames are
@@ -14,14 +13,13 @@
 //! refresh thread ([`LiveProgress`]); [`LiveProgress::track`] and [`track`]
 //! port `track()`. `TextColumn` format strings use [`pyformat`].
 //!
-//! Not ported yet (see docs/DIVERGENCES.md §16): `transient`, `disable`,
-//! `expand`, `wrap_file`/`open`, and table-column options.
+//! `transient` and `disable` apply to the live display; [`LiveProgress::wrap_read`]
+//! and [`LiveProgress::open`] port `wrap_file` and `open`.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::Arc;
 
-use crate::cells::cell_len;
 use crate::console::{Console, ConsoleOptions, Justify};
 use crate::filesize;
 use crate::progress_bar::ProgressBar;
@@ -30,11 +28,8 @@ use crate::pyformat::{self, FormatValue};
 use crate::segment::Segment;
 use crate::spinner::Spinner;
 use crate::style::{Style, StyleType};
+use crate::table::{Cell, ColumnOptions, Table};
 use crate::text::Text;
-
-/// The default `BarColumn` width (upstream `bar_width=40`); the bar shrinks below
-/// this to fit, and never grows past it.
-const BAR_MAX_WIDTH: usize = 40;
 
 /// Upstream keeps at most this many speed samples per task (`deque(maxlen=1000)`).
 const MAX_SAMPLES: usize = 1000;
@@ -199,6 +194,89 @@ pub enum ProgressColumn {
     TotalFileSize,
     /// An animated spinner (`SpinnerColumn`).
     Spinner(SpinnerColumn),
+    /// A bar with its width and styles set (`BarColumn(bar_width=…, style=…)`).
+    /// A `bar_width` of `None` lets the bar fill its column.
+    BarWith(BarColumn),
+    /// A column with explicit table-column options (upstream's `table_column=`
+    /// argument). See [`ProgressColumn::with_table_column`].
+    WithTableColumn(Box<ProgressColumn>, ColumnOptions),
+}
+
+/// A progress bar column's width and styles. Port of `BarColumn`'s arguments.
+#[derive(Clone, Debug)]
+pub struct BarColumn {
+    bar_width: Option<usize>,
+    style: StyleType,
+    complete_style: StyleType,
+    finished_style: StyleType,
+    pulse_style: StyleType,
+}
+
+impl Default for BarColumn {
+    fn default() -> Self {
+        BarColumn {
+            bar_width: Some(40),
+            style: "bar.back".into(),
+            complete_style: "bar.complete".into(),
+            finished_style: "bar.finished".into(),
+            pulse_style: "bar.pulse".into(),
+        }
+    }
+}
+
+impl BarColumn {
+    /// Upstream's defaults: 40 cells wide, `bar.*` styles.
+    pub fn new() -> Self {
+        BarColumn::default()
+    }
+
+    /// The bar width, or `None` to fill the column (upstream `bar_width`).
+    pub fn bar_width(mut self, width: Option<usize>) -> Self {
+        self.bar_width = width;
+        self
+    }
+
+    /// The background style (upstream `style`).
+    pub fn style(mut self, style: impl Into<StyleType>) -> Self {
+        self.style = style.into();
+        self
+    }
+
+    /// The completed-part style (upstream `complete_style`).
+    pub fn complete_style(mut self, style: impl Into<StyleType>) -> Self {
+        self.complete_style = style.into();
+        self
+    }
+
+    /// The finished style (upstream `finished_style`).
+    pub fn finished_style(mut self, style: impl Into<StyleType>) -> Self {
+        self.finished_style = style.into();
+        self
+    }
+
+    /// The pulse style (upstream `pulse_style`).
+    pub fn pulse_style(mut self, style: impl Into<StyleType>) -> Self {
+        self.pulse_style = style.into();
+        self
+    }
+
+    /// Port of `BarColumn.render`.
+    fn render(&self, task: &Task) -> ProgressBar {
+        let bar = match task.total {
+            Some(total) => ProgressBar::new(total.max(0.0), task.completed.max(0.0)),
+            None => ProgressBar::indeterminate(),
+        };
+        let bar = match self.bar_width {
+            Some(width) => bar.width(width.max(1)),
+            None => bar,
+        };
+        bar.pulse(!task.started())
+            .animation_time(task.now())
+            .style(self.style.clone())
+            .complete_style(self.complete_style.clone())
+            .finished_style(self.finished_style.clone())
+            .pulse_style(self.pulse_style.clone())
+    }
 }
 
 impl ProgressColumn {
@@ -212,29 +290,68 @@ impl ProgressColumn {
         ProgressColumn::Spinner(SpinnerColumn::new("dots", " "))
     }
 
-    fn is_bar(&self) -> bool {
-        matches!(self, ProgressColumn::Bar)
+    /// This column with explicit table-column options, as upstream's
+    /// `table_column=Column(...)` argument sets them: width, ratio, justify,
+    /// wrapping and style of the grid column.
+    pub fn with_table_column(self, options: ColumnOptions) -> Self {
+        let inner = match self {
+            ProgressColumn::WithTableColumn(inner, _) => *inner,
+            column => column,
+        };
+        ProgressColumn::WithTableColumn(Box::new(inner), options)
     }
 
-    /// Columns rendered as a renderable rather than a single-line text cell.
-    fn is_text(&self) -> bool {
-        !matches!(self, ProgressColumn::Bar | ProgressColumn::Renderable(_))
+    /// Port of `get_table_column()`: text columns default to
+    /// `Column(no_wrap=True)`, the rest to `Column()`.
+    fn table_column(&self) -> ColumnOptions {
+        match self {
+            ProgressColumn::WithTableColumn(_, options) => options.clone(),
+            ProgressColumn::Description
+            | ProgressColumn::Text(..)
+            | ProgressColumn::TextFormat(_)
+            | ProgressColumn::Percentage
+            | ProgressColumn::TaskProgress { .. } => ColumnOptions {
+                no_wrap: true,
+                ..ColumnOptions::default()
+            },
+            _ => ColumnOptions::default(),
+        }
+    }
+
+    /// The grid cell for `task`: the column's `__call__(task)`.
+    fn table_cell(&self, task: &Task) -> Cell {
+        match self {
+            ProgressColumn::WithTableColumn(inner, _) => inner.table_cell(task),
+            ProgressColumn::Bar => Cell::Renderable(Arc::new(BarColumn::default().render(task))),
+            ProgressColumn::BarWith(column) => Cell::Renderable(Arc::new(column.render(task))),
+            ProgressColumn::Renderable(renderable) => Cell::Renderable(renderable.clone()),
+            column => Cell::Text(column.cell(task)),
+        }
     }
 
     /// The cell for `task` (never called on [`ProgressColumn::Bar`]).
     fn cell(&self, task: &Task) -> Text {
         let named = |plain: String, style: &str| Text::styled(plain, style);
         match self {
+            // `TextColumn`s hand their `justify` (default left) to the text, so
+            // it overrides the table column's.
             ProgressColumn::Description => {
                 let markup = format!("[progress.description]{}", task.description);
-                Text::from_markup(&markup).unwrap_or_else(|_| Text::new(task.description.clone()))
+                Text::from_markup(&markup)
+                    .unwrap_or_else(|_| Text::new(task.description.clone()))
+                    .justify(Justify::Left)
             }
-            ProgressColumn::Text(text, style) => Text::styled(text.clone(), style.clone()),
+            ProgressColumn::Text(text, style) => {
+                Text::styled(text.clone(), style.clone()).justify(Justify::Left)
+            }
             ProgressColumn::TextFormat(column) => column.render(task),
-            ProgressColumn::Bar | ProgressColumn::Renderable(_) => {
-                unreachable!("bar and renderable columns have no text cell")
+            ProgressColumn::Bar
+            | ProgressColumn::BarWith(_)
+            | ProgressColumn::Renderable(_)
+            | ProgressColumn::WithTableColumn(..) => {
+                unreachable!("bar, renderable and wrapped columns have no text cell")
             }
-            ProgressColumn::Percentage => task.percentage_cell(),
+            ProgressColumn::Percentage => task.percentage_cell().justify(Justify::Left),
             ProgressColumn::TaskProgress { show_speed } => {
                 if task.total.is_none() && *show_speed {
                     render_speed(
@@ -243,7 +360,7 @@ impl ProgressColumn {
                             .or_else(|| task.speed()),
                     )
                 } else {
-                    task.percentage_cell()
+                    task.percentage_cell().justify(Justify::Left)
                 }
             }
             ProgressColumn::MofN => named(task.mofn_text(), "progress.download"),
@@ -650,6 +767,9 @@ pub struct Progress {
     columns: Vec<ProgressColumn>,
     get_time: GetTime,
     speed_estimate_period: f64,
+    expand: bool,
+    transient: bool,
+    disable: bool,
 }
 
 impl Default for Progress {
@@ -660,6 +780,9 @@ impl Default for Progress {
             columns: Progress::default_columns(),
             get_time: Arc::new(monotonic),
             speed_estimate_period: 30.0,
+            expand: false,
+            transient: false,
+            disable: false,
         }
     }
 }
@@ -693,6 +816,25 @@ impl Progress {
         for task in &mut self.tasks {
             task.get_time = self.get_time.clone();
         }
+        self
+    }
+
+    /// Stretch the task grid to the full width (upstream `expand`).
+    pub fn expand(mut self, expand: bool) -> Self {
+        self.expand = expand;
+        self
+    }
+
+    /// Erase the display when it stops (upstream `transient`).
+    pub fn transient(mut self, transient: bool) -> Self {
+        self.transient = transient;
+        self
+    }
+
+    /// Show nothing: [`start`](Self::start) draws no display, while tasks
+    /// still update (upstream `disable`).
+    pub fn disable(mut self, disable: bool) -> Self {
+        self.disable = disable;
         self
     }
 
@@ -913,132 +1055,33 @@ impl Progress {
     }
 }
 
+impl Progress {
+    /// The grid the display renders. Port of `Progress.make_tasks_table`: a
+    /// `Table.grid` with one column per [`ProgressColumn`] (its table column
+    /// options), `padding=(0, 1)` and the progress's `expand`, and one row per
+    /// visible task.
+    pub fn make_tasks_table(&self) -> Table {
+        let mut table = Table::grid().padding(0, 1, 0, 1).expand(self.expand);
+        for column in &self.columns {
+            table.add_column_with(Text::new(""), column.table_column());
+        }
+        for task in self.tasks.iter().filter(|task| task.visible) {
+            // Each column is called once per row, in order: spinners and the
+            // remaining-time cache are stateful, as upstream's columns are.
+            let cells = self
+                .columns
+                .iter()
+                .map(|column| column.table_cell(task))
+                .collect();
+            table.add_row_cells(cells);
+        }
+        table
+    }
+}
+
 impl Renderable for Progress {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        let width = options.max_width;
-        let ncols = self.columns.len();
-        let tasks: Vec<&Task> = self.tasks.iter().filter(|task| task.visible).collect();
-
-        // Render every text cell once: spinners and the remaining-time cache are
-        // stateful, as upstream's columns are (each is called once per row).
-        let cells: Vec<Vec<Option<Text>>> = tasks
-            .iter()
-            .map(|task| {
-                self.columns
-                    .iter()
-                    .map(|column| column.is_text().then(|| column.cell(task)))
-                    .collect()
-            })
-            .collect();
-
-        // Text columns take their widest cell and renderable columns their
-        // measured width; bar columns flex. The grid's `widths = [_range.maximum
-        // or 1 …]` floor only bites on the last column: the others carry a cell
-        // of right padding (`pad_edge=False`, collapsed), which this port
-        // renders as the inter-column gap.
-        let mut col_widths = vec![0usize; ncols];
-        for row in &cells {
-            for (index, cell) in row.iter().enumerate() {
-                if let Some(cell) = cell {
-                    col_widths[index] = col_widths[index].max(cell_len(cell.plain()));
-                }
-            }
-        }
-        for (index, column) in self.columns.iter().enumerate() {
-            if let ProgressColumn::Renderable(renderable) = column {
-                if !tasks.is_empty() {
-                    col_widths[index] = renderable.measure(console, options).maximum.min(width);
-                }
-            }
-        }
-        if let (false, Some(last)) = (tasks.is_empty(), self.columns.last()) {
-            if !last.is_bar() {
-                col_widths[ncols - 1] = col_widths[ncols - 1].max(1);
-            }
-        }
-
-        // The bar column(s) share whatever the fixed columns and the single-space
-        // gaps leave, each capped at the default bar width. Port of the grid's
-        // shrink-to-fit over `no_wrap` fixed columns + a flexing `BarColumn`.
-        let gaps = ncols.saturating_sub(1);
-        let fixed_sum: usize = col_widths.iter().sum();
-        let bar_count = self.columns.iter().filter(|c| c.is_bar()).count();
-        let bar_width = width
-            .saturating_sub(fixed_sum + gaps)
-            .checked_div(bar_count)
-            .map_or(0, |per_bar| BAR_MAX_WIDTH.min(per_bar));
-        for (index, column) in self.columns.iter().enumerate() {
-            if column.is_bar() {
-                col_widths[index] = bar_width;
-            }
-        }
-
-        let theme = console.theme();
-        let mut lines: Vec<Vec<Segment>> = Vec::new();
-        for (task, row_cells) in tasks.iter().zip(cells) {
-            // Each cell as lines at its column width; the row is as tall as its
-            // tallest cell, and shorter cells are padded with blank lines.
-            let mut cell_lines: Vec<Vec<Vec<Segment>>> = Vec::with_capacity(ncols);
-            for (index, (column, cell)) in self.columns.iter().zip(row_cells).enumerate() {
-                let column_width = col_widths[index];
-                let rendered = match column {
-                    ProgressColumn::Bar => {
-                        // `BarColumn.render`: a task with no total, or not yet
-                        // started, pulses at the task clock's time.
-                        let bar = match task.total {
-                            Some(total) => {
-                                ProgressBar::new(total.max(0.0), task.completed.max(0.0))
-                            }
-                            None => ProgressBar::indeterminate(),
-                        }
-                        .width(bar_width)
-                        .pulse(!task.started())
-                        .animation_time(task.now());
-                        vec![bar.rich_render(console, &options.update_width(bar_width))]
-                    }
-                    ProgressColumn::Renderable(renderable) => console.render_lines(
-                        renderable.as_ref(),
-                        &options.update_width(column_width),
-                        true,
-                    ),
-                    _ => {
-                        let mut cell = cell.unwrap_or_default();
-                        justify_cell(&mut cell, column_width);
-                        vec![cell.render(theme, &Style::new())]
-                    }
-                };
-                cell_lines.push(rendered);
-            }
-            let height = cell_lines.iter().map(Vec::len).max().unwrap_or(0).max(1);
-            for line in 0..height {
-                let mut row: Vec<Segment> = Vec::new();
-                for (index, cell) in cell_lines.iter().enumerate() {
-                    if index > 0 {
-                        // Inter-column gap: one unstyled space (the grid's
-                        // collapsed padding, whose column style is null).
-                        row.push(Segment::new(" ", None));
-                    }
-                    match cell.get(line) {
-                        Some(segments) => row.extend(segments.iter().cloned()),
-                        None if col_widths[index] > 0 => {
-                            row.push(Segment::new(" ".repeat(col_widths[index]), None));
-                        }
-                        None => {}
-                    }
-                }
-                lines.push(row);
-            }
-        }
-
-        let mut segments = Vec::new();
-        let last = lines.len().saturating_sub(1);
-        for (index, line) in lines.into_iter().enumerate() {
-            segments.extend(line);
-            if index != last {
-                segments.push(Segment::line());
-            }
-        }
-        segments
+        self.make_tasks_table().rich_render(console, options)
     }
 }
 
@@ -1065,16 +1108,30 @@ impl Progress {
         writer: W,
         refresh_per_second: f64,
     ) -> LiveProgress<W> {
+        // `disable` draws nothing: upstream skips `live.start()` and `stop()`.
+        if self.disable {
+            return LiveProgress {
+                progress: Arc::new(std::sync::Mutex::new(self)),
+                live: None,
+                writer: Some(writer),
+                interactive: true,
+            };
+        }
+        let transient = self.transient;
+        let interactive = console.is_terminal();
         let shared = Arc::new(std::sync::Mutex::new(self));
-        let live = crate::live::Live::spawn(
+        let live = crate::live::Live::spawn_with(
             Box::new(ProgressView(shared.clone())),
             console,
             writer,
             refresh_per_second,
+            transient,
         );
         LiveProgress {
             progress: shared,
             live: Some(live),
+            writer: None,
+            interactive,
         }
     }
 }
@@ -1084,6 +1141,10 @@ impl Progress {
 pub struct LiveProgress<W: std::io::Write + Send + 'static> {
     progress: Arc<std::sync::Mutex<Progress>>,
     live: Option<crate::live::AutoLive<W>>,
+    /// The sink of a disabled display, which never reaches a live thread.
+    writer: Option<W>,
+    /// Whether the console is a terminal; `stop` ends a file with a newline.
+    interactive: bool,
 }
 
 impl<W: std::io::Write + Send + 'static> LiveProgress<W> {
@@ -1160,14 +1221,84 @@ impl<W: std::io::Write + Send + 'static> LiveProgress<W> {
         }
     }
 
+    /// Track reading from `reader`: each read advances the task by the bytes
+    /// read. Port of `Progress.wrap_file`: `total` is the byte count, or else
+    /// the total of `task`; a new task named `description` is added when
+    /// `task` is `None`, otherwise `task`'s total is set.
+    pub fn wrap_read<R: std::io::Read>(
+        &self,
+        reader: R,
+        total: Option<u64>,
+        task: Option<TaskId>,
+        description: impl Into<String>,
+    ) -> std::io::Result<ProgressReader<'_, R, W>> {
+        let total = total.map(|total| total as f64).or_else(|| {
+            task.and_then(|task| self.with(|progress| progress.task(task).and_then(Task::total)))
+        });
+        let Some(total) = total else {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "unable to get the total number of bytes, please specify 'total'",
+            ));
+        };
+        let task = self.task_for(task, total, description);
+        Ok(ProgressReader {
+            reader,
+            progress: self,
+            task,
+        })
+    }
+
+    /// Open `path` for reading and track it. Port of `Progress.open` in
+    /// binary mode: `total` defaults to the file's size.
+    pub fn open(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        total: Option<u64>,
+        task: Option<TaskId>,
+        description: impl Into<String>,
+    ) -> std::io::Result<ProgressReader<'_, std::fs::File, W>> {
+        let file = std::fs::File::open(path)?;
+        let total = match total {
+            Some(total) => total,
+            None => file.metadata()?.len(),
+        };
+        let task = self.task_for(task, total as f64, description);
+        Ok(ProgressReader {
+            reader: file,
+            progress: self,
+            task,
+        })
+    }
+
+    /// A new task with `total`, or `task` with its total set to it.
+    fn task_for(&self, task: Option<TaskId>, total: f64, description: impl Into<String>) -> TaskId {
+        match task {
+            Some(task) => {
+                self.update(task, TaskUpdate::default().total(total));
+                task
+            }
+            None => self.add_task(description, total, 0.0),
+        }
+    }
+
     /// Commit the final frame, stop the refresh thread, and return the
     /// progress and the output sink. Port of `Progress.stop`.
     pub fn stop(mut self) -> (Progress, W) {
-        let writer = self
-            .live
-            .take()
-            .expect("live display present until stop")
-            .stop();
+        let writer = match self.live.take() {
+            Some(live) => {
+                let mut writer = live.stop();
+                // `Progress.stop`: `console.print()` when not interactive.
+                if !self.interactive {
+                    let _ = writer.write_all(b"\n");
+                }
+                writer
+            }
+            None => self
+                .writer
+                .take()
+                .expect("a disabled display keeps its writer"),
+        };
         let progress = match Arc::try_unwrap(std::mem::replace(
             &mut self.progress,
             Arc::new(std::sync::Mutex::new(Progress::new())),
@@ -1179,6 +1310,49 @@ impl<W: std::io::Write + Send + 'static> LiveProgress<W> {
             Err(_) => unreachable!("progress still shared after the live display stopped"),
         };
         (progress, writer)
+    }
+}
+
+/// A reader that advances a task by the bytes read through it. Returned by
+/// [`LiveProgress::wrap_read`] and [`LiveProgress::open`] (upstream `_Reader`).
+pub struct ProgressReader<'a, R, W: std::io::Write + Send + 'static> {
+    reader: R,
+    progress: &'a LiveProgress<W>,
+    task: TaskId,
+}
+
+impl<R, W: std::io::Write + Send + 'static> ProgressReader<'_, R, W> {
+    /// The task this reader advances.
+    pub fn task(&self) -> TaskId {
+        self.task
+    }
+
+    /// The wrapped reader.
+    pub fn into_inner(self) -> R {
+        self.reader
+    }
+}
+
+impl<R: std::io::Read, W: std::io::Write + Send + 'static> std::io::Read
+    for ProgressReader<'_, R, W>
+{
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let count = self.reader.read(buf)?;
+        self.progress.advance(self.task, count as f64);
+        Ok(count)
+    }
+}
+
+impl<R: std::io::BufRead, W: std::io::Write + Send + 'static> std::io::BufRead
+    for ProgressReader<'_, R, W>
+{
+    fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+        self.reader.fill_buf()
+    }
+
+    fn consume(&mut self, amount: usize) {
+        self.reader.consume(amount);
+        self.progress.advance(self.task, amount as f64);
     }
 }
 
@@ -1296,26 +1470,6 @@ fn whole_number(value: f64) -> FormatValue {
         FormatValue::Int(value as i64)
     } else {
         FormatValue::Float(value)
-    }
-}
-
-/// Fit a `no_wrap` text cell to its column: crop it, then justify it as
-/// `Lines.justify` does (right and center strip trailing space first). Padding
-/// takes the cell's base style, not its spans, as a grid pads a `Text` cell.
-fn justify_cell(cell: &mut Text, width: usize) {
-    cell.truncate(width, None, false);
-    match cell.get_justify() {
-        Justify::Right | Justify::Center => {
-            cell.rstrip();
-            let gap = width.saturating_sub(cell.cell_len());
-            if cell.get_justify() == Justify::Right {
-                cell.pad_left(gap, ' ');
-            } else {
-                cell.pad_left(gap / 2, ' ');
-                cell.pad_right(gap - gap / 2, ' ');
-            }
-        }
-        _ => cell.truncate(width, None, true),
     }
 }
 
@@ -1467,5 +1621,61 @@ mod tests {
         assert_eq!(progress.task(task).unwrap().total(), None);
         assert_eq!(progress.task(task).unwrap().completed(), 4.0);
         assert_eq!(progress.task(with_total).unwrap().total(), Some(5.0));
+    }
+
+    fn quiet_console() -> Console {
+        Console::builder().force_terminal(false).width(40).build()
+    }
+
+    #[test]
+    fn wrap_read_advances_by_the_bytes_read() {
+        use std::io::Read;
+        let live = Progress::new()
+            .disable(true)
+            .start(quiet_console(), Vec::new(), 1.0);
+        let mut reader = live
+            .wrap_read(&b"hello world"[..], Some(11), None, "Reading...")
+            .expect("total given");
+        let task = reader.task();
+        let mut buf = [0u8; 4];
+        reader.read_exact(&mut buf).unwrap();
+        assert_eq!(live.with(|p| p.task(task).unwrap().completed()), 4.0);
+        let mut rest = Vec::new();
+        reader.read_to_end(&mut rest).unwrap();
+        assert!(live.with(|p| p.task(task).unwrap().finished()));
+        let (_, out) = live.stop();
+        assert!(out.is_empty(), "a disabled display writes nothing");
+    }
+
+    #[test]
+    fn wrap_read_needs_a_total() {
+        let live = Progress::new()
+            .disable(true)
+            .start(quiet_console(), Vec::new(), 1.0);
+        let err = live
+            .wrap_read(&b""[..], None, None, "x")
+            .err()
+            .expect("no total");
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        let task = live.add_task("sized", 5.0, 0.0);
+        assert!(live.wrap_read(&b""[..], None, Some(task), "x").is_ok());
+    }
+
+    #[test]
+    fn open_takes_the_file_size_as_total() {
+        use std::io::Read;
+        let path = std::env::temp_dir().join(format!("rs-rich-open-{}", std::process::id()));
+        std::fs::write(&path, b"0123456789").unwrap();
+        let live = Progress::new()
+            .disable(true)
+            .start(quiet_console(), Vec::new(), 1.0);
+        let mut reader = live.open(&path, None, None, "Reading...").unwrap();
+        let task = reader.task();
+        assert_eq!(live.with(|p| p.task(task).unwrap().total()), Some(10.0));
+        std::io::copy(&mut reader, &mut std::io::sink()).unwrap();
+        assert_eq!(live.with(|p| p.task(task).unwrap().completed()), 10.0);
+        let _ = reader.read(&mut [0u8; 1]);
+        drop(reader);
+        std::fs::remove_file(path).unwrap();
     }
 }

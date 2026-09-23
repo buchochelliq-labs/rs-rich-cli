@@ -14,6 +14,8 @@
 //! (`add_column_text`, `add_row_text`), as upstream accepts renderables.
 //! Deferred (tracked in the Table issue): the rare width-0 column padding edge.
 
+use std::sync::Arc;
+
 use crate::cells::cell_len;
 use crate::console::{Console, ConsoleOptions, Justify, Overflow};
 use crate::protocol::{LineRenderable, Renderable};
@@ -21,7 +23,6 @@ use crate::r#box::{Box as BoxSet, RowLevel, HEAVY_HEAD};
 use crate::segment::Segment;
 use crate::style::Style;
 use crate::text::{Text, DEFAULT_TAB_SIZE};
-use crate::theme::Theme;
 
 /// A single column definition. Mirrors the used subset of `rich.table.Column`.
 struct Column {
@@ -54,10 +55,76 @@ struct Column {
     overflow: Overflow,
 }
 
+/// A table cell: styled text, or any renderable (upstream accepts both).
+#[derive(Clone)]
+pub enum Cell {
+    /// A text cell; its own `justify`, `overflow` and `no_wrap` override the
+    /// column's.
+    Text(Text),
+    /// A renderable cell, measured with `__rich_measure__` and rendered at the
+    /// column width, as upstream's `Padding(renderable)` cell is.
+    Renderable(Arc<dyn Renderable + Send + Sync>),
+}
+
+impl From<Text> for Cell {
+    fn from(text: Text) -> Self {
+        Cell::Text(text)
+    }
+}
+
+impl From<&str> for Cell {
+    fn from(text: &str) -> Self {
+        Cell::Text(Text::new(text))
+    }
+}
+
+impl Default for Cell {
+    fn default() -> Self {
+        Cell::Text(Text::default())
+    }
+}
+
+/// Options for a column, as upstream's `Column(...)` takes them. Pass to
+/// [`Table::add_column_with`].
+#[derive(Clone, Debug)]
+pub struct ColumnOptions {
+    /// Content justification (`justify`, default left).
+    pub justify: Justify,
+    /// A fixed content width (`width`).
+    pub width: Option<usize>,
+    /// A floor on the content width (`min_width`).
+    pub min_width: Option<usize>,
+    /// A cap on the content width (`max_width`).
+    pub max_width: Option<usize>,
+    /// A share of the free width when the table expands (`ratio`).
+    pub ratio: Option<usize>,
+    /// Never wrap cells (`no_wrap`).
+    pub no_wrap: bool,
+    /// How over-long text is handled (`overflow`, default ellipsis).
+    pub overflow: Overflow,
+    /// The style of the column's body cells (`style`).
+    pub style: Style,
+}
+
+impl Default for ColumnOptions {
+    fn default() -> Self {
+        ColumnOptions {
+            justify: Justify::Left,
+            width: None,
+            min_width: None,
+            max_width: None,
+            ratio: None,
+            no_wrap: false,
+            overflow: Overflow::Ellipsis,
+            style: Style::new(),
+        }
+    }
+}
+
 /// A grid of cells rendered inside a box. Mirrors `rich.table.Table`.
 pub struct Table {
     columns: Vec<Column>,
-    rows: Vec<Vec<Text>>,
+    rows: Vec<Vec<Cell>>,
     box_set: BoxSet,
     /// `box=None`: no borders and no column dividers (see [`Table::grid`]).
     no_box: bool,
@@ -255,6 +322,25 @@ impl Table {
         self
     }
 
+    /// Add a column with every [`ColumnOptions`] set, as upstream's
+    /// `add_column(header, justify=…, width=…, ratio=…, …)` does.
+    pub fn add_column_with(&mut self, header: Text, options: ColumnOptions) -> &mut Self {
+        self.columns.push(Column {
+            header,
+            justify: options.justify,
+            width: options.width,
+            style: options.style,
+            header_content_style: None,
+            header_fill: None,
+            ratio: options.ratio,
+            min_width: options.min_width,
+            max_width: options.max_width,
+            no_wrap: options.no_wrap,
+            overflow: options.overflow,
+        });
+        self
+    }
+
     /// Pin the most-recently-added column to an explicit content width. Content
     /// wider than this wraps (with ellipsis overflow) instead of shrinking the
     /// column. Chain after `add_column`.
@@ -343,7 +429,7 @@ impl Table {
     /// Add a row of cells (extra cells are ignored; missing cells render empty).
     pub fn add_row(&mut self, cells: &[&str]) -> &mut Self {
         self.rows
-            .push(cells.iter().map(|s| Text::new(*s)).collect());
+            .push(cells.iter().map(|s| Cell::Text(Text::new(*s))).collect());
         self
     }
 
@@ -351,6 +437,12 @@ impl Table {
     /// Each cell keeps its spans, and its own `justify`, `overflow` and
     /// `no_wrap` override the column's.
     pub fn add_row_text(&mut self, cells: Vec<Text>) -> &mut Self {
+        self.rows.push(cells.into_iter().map(Cell::Text).collect());
+        self
+    }
+
+    /// Add a row of [`Cell`]s, which may be any renderable.
+    pub fn add_row_cells(&mut self, cells: Vec<Cell>) -> &mut Self {
         self.rows.push(cells);
         self
     }
@@ -376,7 +468,7 @@ impl Table {
         }
         for row in &self.rows {
             for (index, cell) in row.iter().enumerate() {
-                if index < widths.len() {
+                if let (true, Cell::Text(cell)) = (index < widths.len(), cell) {
                     widths[index] = widths[index].max(Self::block_width(cell.plain()));
                 }
             }
@@ -387,7 +479,14 @@ impl Table {
     /// The maximum of upstream `Table._measure_column` for column `index` at
     /// `max_width`: the rendered width (content + padding) it wants, given its
     /// widest content line `content`.
-    fn measure_column(&self, index: usize, content: usize, max_width: usize) -> usize {
+    fn measure_column(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        index: usize,
+        content: usize,
+        max_width: usize,
+    ) -> usize {
         if max_width < 1 {
             return 0;
         }
@@ -397,6 +496,19 @@ impl Table {
         if let Some(width) = column.width {
             return (width + padding).min(max_width);
         }
+        // Renderable cells measure at the width left inside their padding
+        // (`Padding.__rich_measure__`).
+        let inner = options.update_width(max_width.saturating_sub(padding));
+        let content = self
+            .rows
+            .iter()
+            .filter_map(|row| match row.get(index) {
+                Some(Cell::Renderable(renderable)) if max_width > padding => {
+                    Some(renderable.measure(console, &inner).maximum)
+                }
+                _ => None,
+            })
+            .fold(content, usize::max);
         let has_cells = self.show_header || !self.rows.is_empty();
         // A column with no cells measures `(1, max_width)`. A cell whose padding
         // leaves no room measures the whole width (`Padding.__rich_measure__`).
@@ -418,13 +530,21 @@ impl Table {
     /// The rendered width (content + padding) of each column, shrinking the
     /// widest columns to fit `available` when necessary. Port of the non-flexible
     /// path of `Table._calculate_column_widths` + `_collapse_widths`.
-    fn column_widths(&self, available: usize) -> Vec<usize> {
+    fn column_widths(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        available: usize,
+    ) -> Vec<usize> {
         let ncols = self.columns.len();
         // A fixed-width column uses its declared width; others measure content,
         // clamped to the column's [min_width, max_width]. Port of `_measure_column`.
         let content = self.max_content_widths();
         let mut widths: Vec<i64> = (0..ncols)
-            .map(|index| self.measure_column(index, content[index], available).max(1) as i64)
+            .map(|index| {
+                self.measure_column(console, options, index, content[index], available)
+                    .max(1) as i64
+            })
             .collect();
 
         // Expand with explicit ratios: flexible (ratio) columns share the free
@@ -490,7 +610,13 @@ impl Table {
                 .iter()
                 .enumerate()
                 .map(|(index, &width)| {
-                    self.measure_column(index, content[index], width.max(0) as usize) as i64
+                    self.measure_column(
+                        console,
+                        options,
+                        index,
+                        content[index],
+                        width.max(0) as usize,
+                    ) as i64
                 })
                 .collect();
         }
@@ -548,18 +674,62 @@ impl Table {
         }
     }
 
+    /// Pad a cell's rendered lines to its width, with the vertical padding
+    /// above and below: upstream's `Padding` around the cell. Blank rows are
+    /// one run across the whole cell, as `Padding`'s blank lines are.
+    fn pad_cell_lines(
+        &self,
+        lines: Vec<Vec<Segment>>,
+        width: usize,
+        (cpl, cpr): (usize, usize),
+        style: &Style,
+        simplify: bool,
+    ) -> Vec<Vec<Segment>> {
+        let (pt, _, pb, _) = self.padding;
+        let cell_fill = Some(style.clone());
+        let cell_width = cpl + width + cpr;
+        let blank = || vec![Segment::new(" ".repeat(cell_width), cell_fill.clone())];
+        let mut padded_lines: Vec<Vec<Segment>> = Vec::new();
+        for _ in 0..pt {
+            padded_lines.push(blank());
+        }
+        for line in &lines {
+            let mut row = Vec::new();
+            if cpl > 0 {
+                row.push(Segment::new(" ".repeat(cpl), cell_fill.clone()));
+            }
+            let padded = Segment::adjust_line_length(line, width, cell_fill.clone());
+            // Text cells are simplified to match upstream's segment runs; a
+            // renderable's own segments pass through, as `Padding` yields them.
+            if simplify {
+                row.extend(Segment::simplify(&padded));
+            } else {
+                row.extend(padded);
+            }
+            if cpr > 0 {
+                row.push(Segment::new(" ".repeat(cpr), cell_fill.clone()));
+            }
+            padded_lines.push(row);
+        }
+        for _ in 0..pb {
+            padded_lines.push(blank());
+        }
+        padded_lines
+    }
+
     /// Render one table row (a list of cell strings) into visual lines.
+    #[allow(clippy::too_many_arguments)]
     fn render_row(
         &self,
-        theme: &Theme,
-        cells: &[Text],
+        console: &Console,
+        options: &ConsoleOptions,
+        cells: &[Cell],
         rendered_widths: &[usize],
         is_header: bool,
         edges: Option<(char, char, char)>,
     ) -> Vec<Vec<Segment>> {
         // Horizontal padding is per-column (see `cell_padding`); only the
-        // top/bottom vertical padding is uniform.
-        let (pt, _, pb, _) = self.padding;
+        // top/bottom vertical padding is uniform (see `pad_cell_lines`).
         let border = Some(self.style.combine(&self.border_style));
         let ncols = self.columns.len();
         // Derived here rather than by the caller so the padding used to lay the
@@ -581,9 +751,39 @@ impl Table {
         let mut height = 1;
         for (index, width) in content_widths.iter().enumerate() {
             let style = self.cell_style(index, is_header);
-            let cell_fill = Some(style.clone());
-            let mut text = cells.get(index).cloned().unwrap_or_default();
             let column = self.columns.get(index);
+            let mut text = match cells.get(index) {
+                Some(Cell::Text(text)) => text.clone(),
+                None => Text::default(),
+                Some(Cell::Renderable(renderable)) => {
+                    // `console.render_lines(renderable, render_options, style)`
+                    // at the content width, with the column's justify,
+                    // no_wrap and overflow as options.
+                    let mut cell_options = options.update_width(*width);
+                    cell_options.justify = column.map_or(Justify::Left, |c| c.justify);
+                    cell_options.no_wrap = Some(column.is_some_and(|c| c.no_wrap));
+                    cell_options.overflow = Some(column.map_or(Overflow::Ellipsis, |c| c.overflow));
+                    let lines = if *width == 0 {
+                        Vec::new()
+                    } else {
+                        console.render_lines_styled(
+                            renderable.as_ref(),
+                            &cell_options,
+                            Some(&style),
+                            true,
+                        )
+                    };
+                    cell_lines.push(self.pad_cell_lines(
+                        lines,
+                        *width,
+                        paddings[index],
+                        &style,
+                        false,
+                    ));
+                    height = height.max(cell_lines.last().map_or(0, Vec::len));
+                    continue;
+                }
+            };
             // Upstream renders the cell `Text` with the column's `justify`,
             // `no_wrap` and `overflow="ellipsis"` as options, which the text's own
             // settings override: wrap, then justify (which strips a right- or
@@ -613,36 +813,19 @@ impl Table {
             let mut lines = if *width == 0 {
                 Vec::new()
             } else {
-                text.render_lines_wrapped(theme, &style, Some(*width), justify, overflow, no_wrap)
+                text.render_lines_wrapped(
+                    console.theme(),
+                    &style,
+                    Some(*width),
+                    justify,
+                    overflow,
+                    no_wrap,
+                )
             };
             if lines.is_empty() && *width > 0 {
                 lines.push(Vec::new());
             }
-            let (cpl, cpr) = paddings[index];
-            let cell_width = cpl + *width + cpr;
-            // Blank rows (vertical padding and row-height filler) are one run
-            // across the whole cell, as `Padding`'s blank lines and
-            // `Segment.set_shape` produce them.
-            let blank = || vec![Segment::new(" ".repeat(cell_width), cell_fill.clone())];
-            let mut padded_lines: Vec<Vec<Segment>> = Vec::new();
-            for _ in 0..pt {
-                padded_lines.push(blank());
-            }
-            for line in &lines {
-                let mut row = Vec::new();
-                if cpl > 0 {
-                    row.push(Segment::new(" ".repeat(cpl), cell_fill.clone()));
-                }
-                let padded = Segment::adjust_line_length(line, *width, cell_fill.clone());
-                row.extend(Segment::simplify(&padded));
-                if cpr > 0 {
-                    row.push(Segment::new(" ".repeat(cpr), cell_fill.clone()));
-                }
-                padded_lines.push(row);
-            }
-            for _ in 0..pb {
-                padded_lines.push(blank());
-            }
+            let padded_lines = self.pad_cell_lines(lines, *width, paddings[index], &style, true);
             height = height.max(padded_lines.len());
             cell_lines.push(padded_lines);
         }
@@ -731,7 +914,7 @@ impl LineRenderable for Table {
         };
         let available = options.max_width.saturating_sub(extra_width);
 
-        let rendered_widths = self.column_widths(available);
+        let rendered_widths = self.column_widths(console, options, available);
         let border = Some(self.style.combine(&self.border_style));
 
         // Full table width (for centering title/caption): columns + borders.
@@ -759,9 +942,14 @@ impl LineRenderable for Table {
             boxed.then_some((box_set.mid_left, box_set.mid_vertical, box_set.mid_right));
 
         if self.show_header {
-            let headers: Vec<Text> = self.columns.iter().map(|c| c.header.clone()).collect();
+            let headers: Vec<Cell> = self
+                .columns
+                .iter()
+                .map(|c| Cell::Text(c.header.clone()))
+                .collect();
             for line in self.render_row(
-                console.theme(),
+                console,
+                options,
                 &headers,
                 &rendered_widths,
                 true,
@@ -779,7 +967,8 @@ impl LineRenderable for Table {
 
         let row_last = self.rows.len().saturating_sub(1);
         for (index, row) in self.rows.iter().enumerate() {
-            for line in self.render_row(console.theme(), row, &rendered_widths, false, body_edges) {
+            for line in self.render_row(console, options, row, &rendered_widths, false, body_edges)
+            {
                 emit(line)?;
             }
             if boxed && self.show_lines && index != row_last {
@@ -810,10 +999,11 @@ impl LineRenderable for Table {
 
 impl crate::protocol::OwnedTableRows for Table {
     fn extend_owned_rows(&mut self, rows: Vec<Vec<String>>) -> &mut Self {
-        self.rows.extend(
-            rows.into_iter()
-                .map(|row| row.into_iter().map(Text::new).collect::<Vec<_>>()),
-        );
+        self.rows.extend(rows.into_iter().map(|row| {
+            row.into_iter()
+                .map(|cell| Cell::Text(Text::new(cell)))
+                .collect::<Vec<_>>()
+        }));
         self
     }
 }

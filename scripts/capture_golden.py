@@ -1017,7 +1017,9 @@ PROGRESS_TIME_HEADER = """\
 # Specs: ["description"] ["bar"] ["percentage"] ["task_progress", show_speed]
 #   ["mofn"] ["download", binary_units] ["elapsed"] ["remaining", compact,
 #   elapsed_when_finished] ["speed"] ["filesize"] ["total_filesize"]
-#   ["spinner", name, finished_text]
+#   ["spinner", name, finished_text] ["bar_width", width|null]
+#   ["column", {Column options}, spec] (the column's `table_column=`)
+# Case keys: "expand" (bool, default false)
 # Steps: ["time", t] ["add", description, total|null, completed, start]
 #   ["update", id, {"total", "completed", "advance", "description", "visible"}]
 #   ["advance", id, amount] ["start", id] ["stop", id]
@@ -1056,6 +1058,37 @@ PROGRESS_TIME_CASES: list[tuple[str, dict]] = [
         "columns": [["description"], ["filesize"], ["total_filesize"], ["download", False], ["download", True], ["speed"]],
         "steps": [["time", 0], ["add", "iso", 3500000000, 0, True], ["time", 1], ["advance", 0, 1250000],
                   ["time", 3], ["advance", 0, 2500000], ["render", 80]],
+    }),
+    ("expand_default_bar", {
+        "expand": True, "columns": [["description"], ["bar"], ["percentage"]],
+        "steps": [["time", 0], ["add", "copy", 10, 4, True], ["add", "move", 10, 10, True],
+                  ["render", 70], ["render", 40]],
+    }),
+    ("flexible_bar", {
+        "columns": [["description"], ["bar_width", None], ["percentage"]],
+        "steps": [["time", 0], ["add", "copy", 10, 4, True], ["render", 50], ["render", 20]],
+    }),
+    ("flexible_bar_expand", {
+        "expand": True, "columns": [["description"], ["bar_width", None], ["mofn"]],
+        "steps": [["time", 0], ["add", "a", 8, 2, True], ["add", "longer", 8, 8, True], ["render", 44]],
+    }),
+    ("table_column_options", {
+        "expand": True,
+        "columns": [["column", {"justify": "right", "width": 12}, ["description"]], ["bar_width", 10],
+                    ["column", {"ratio": 1, "justify": "center"}, ["mofn"]],
+                    ["column", {"style": "red", "min_width": 6}, ["elapsed"]]],
+        "steps": [["time", 0], ["add", "fetch", 5, 2, True], ["time", 3], ["render", 60]],
+    }),
+    ("column_crop_and_style", {
+        "columns": [["column", {"max_width": 6, "no_wrap": True, "overflow": "ellipsis", "style": "bold"},
+                     ["description"]], ["bar_width", 5],
+                    ["column", {"max_width": 4, "overflow": "fold"}, ["text", "{task.fields[tag]}", "cyan", "left", False]]],
+        "steps": [["time", 0], ["add", "a long description", 4, 1, True, {"tag": "abcdefghij"}], ["render", 40]],
+    }),
+    ("narrow_wraps_columns", {
+        "columns": None,
+        "steps": [["time", 0], ["add", "Downloading files", 100, 30, True], ["time", 5], ["advance", 0, 10],
+                  ["render", 24], ["render", 12]],
     }),
     ("spinner_frames", {
         "columns": [["spinner", "dots", " "], ["description"], ["spinner", "line", "[green]done"]],
@@ -1143,8 +1176,20 @@ def progress_columns(specs):
             fmt, style=style, justify=justify, markup=markup
         ),
         "renderable": lambda markup: RenderableColumn(Text.from_markup(markup)),
+        "bar_width": lambda width: BarColumn(bar_width=width),
     }
-    return [build[spec[0]](*spec[1:]) for spec in specs]
+
+    def one(spec):
+        if spec[0] == "column":
+            # ["column", {Column options}, inner spec]: the `table_column=` argument.
+            from rich.table import Column
+
+            column = one(spec[2])
+            column._table_column = Column(**spec[1])
+            return column
+        return build[spec[0]](*spec[1:])
+
+    return [one(spec) for spec in specs]
 
 
 LIVE_STATUS_HEADER = """\
@@ -1240,7 +1285,8 @@ def run_progress_case(case) -> str:
 
     now = [0.0]
     columns = [] if case["columns"] is None else progress_columns(case["columns"])
-    progress = Progress(*columns, get_time=lambda: now[0], auto_refresh=False)
+    progress = Progress(*columns, get_time=lambda: now[0], auto_refresh=False,
+                        expand=case.get("expand", False))
     out = []
     for step in case["steps"]:
         op = step[0]
@@ -1391,6 +1437,7 @@ PROGRESS_LIVE_HEADER = """\
 # python scripts/capture_golden.py
 #
 # Format: <name>\t<case JSON>\t<escaped bytes written between start() and stop()>
+# Case keys: "transient", "disable" (bool, default false), "terminal" (default true)
 # Steps: ["time", t] | ["add", description, total, completed] | ["advance", id, n]
 #   | ["update", id, {fields}] | ["refresh"]
 """
@@ -1407,6 +1454,23 @@ PROGRESS_LIVE_CASES: list[tuple[str, dict]] = [
                   ["update", 0, {"completed": 3, "description": "a done"}], ["refresh"]],
     }),
     ("empty", {"columns": [["description"]], "width": 20, "steps": []}),
+    ("transient", {
+        "columns": [["description"], ["bar"], ["percentage"]], "width": 40, "transient": True,
+        "steps": [["time", 0], ["add", "copy", 4, 0], ["refresh"], ["add", "move", 2, 1], ["refresh"],
+                  ["advance", 0, 4]],
+    }),
+    ("disabled", {
+        "columns": [["description"], ["bar"]], "width": 40, "disable": True,
+        "steps": [["add", "copy", 4, 0], ["refresh"], ["advance", 0, 4], ["refresh"]],
+    }),
+    ("not_a_terminal", {
+        "columns": [["description"], ["mofn"]], "width": 30, "terminal": False,
+        "steps": [["add", "copy", 4, 0], ["refresh"], ["advance", 0, 4], ["refresh"]],
+    }),
+    ("not_a_terminal_transient", {
+        "columns": [["description"], ["mofn"]], "width": 30, "terminal": False, "transient": True,
+        "steps": [["add", "copy", 4, 0], ["refresh"], ["advance", 0, 4]],
+    }),
 ]
 
 
@@ -1417,13 +1481,15 @@ def run_progress_live_case(case) -> str:
 
     now = [0.0]
     buffer = io.StringIO()
+    terminal = case.get("terminal", True)
     console = Console(
-        file=buffer, force_terminal=True, color_system="truecolor", width=case["width"],
-        highlight=False, no_color=False,
+        file=buffer, force_terminal=terminal, color_system="truecolor" if terminal else None,
+        width=case["width"], highlight=False, no_color=False,
     )
     progress = Progress(
         *progress_columns(case["columns"]), console=console, auto_refresh=False,
-        get_time=lambda: now[0],
+        get_time=lambda: now[0], transient=case.get("transient", False),
+        disable=case.get("disable", False),
     )
     progress.start()
     for step in case["steps"]:

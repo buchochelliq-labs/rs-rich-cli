@@ -228,16 +228,22 @@ Format: what differs · why · how to remove it (if temporary).
     `Live` refresh thread (§17). Its byte stream matches upstream's
     `auto_refresh=False` Live (golden `progress_live.tsv`).
   - `track()`, both `LiveProgress::track` and the module-level `track`.
+  - The display is now upstream's `make_tasks_table`: a `Table::grid` with
+    each column's table-column options (`ProgressColumn::with_table_column`),
+    so `expand`, `BarColumn(bar_width=None)` (`ProgressColumn::BarWith`) and
+    narrow-width wrapping match. `transient`, `disable`, and
+    `wrap_file`/`open` (`LiveProgress::wrap_read`/`open`) are ported
+    (goldens in `progress_time.tsv` and `progress_live.tsv`).
 - **Still differs:**
   - Task totals and counts are `f64`, so `{task.total}` formats a whole number
     as an int. Upstream keeps whatever type the caller passed.
   - `track` advances inline rather than through upstream's `_TrackThread`
     batching (`update_period`). The counts match; the refresh timing differs.
-  - Not ported: `transient`, `disable`, `expand`, `wrap_file`/`open`, and
-    table-column options.
-  - Cells truncate rather than wrap at very narrow widths.
-- **Why:** Rust has no dynamic int/float, and the remaining options need
-  §17's transient mode or file wrappers.
+  - `open` reads bytes; upstream's text mode (`TextIOWrapper`) is left to the
+    caller, for example `BufReader::lines` over the returned reader.
+  - `redirect_stdout`/`redirect_stderr` follow `Live` (§17).
+- **Why:** Rust has no dynamic int/float, and text decoding belongs to the
+  caller's reader.
 - **Remove:** under the Live/progress issue (#6).
 
 ### 17. `Live` — auto-refresh thread done; alt-screen/redirect deferred
@@ -251,7 +257,10 @@ Format: what differs · why · how to remove it (if temporary).
   `dyn Highlighter + Send`). `Live::spawn` returns only once the first frame
   is drawn, and `AutoLive::refresh_wait` redraws synchronously, as upstream's
   `start()` and `refresh()` do; the final newline is written only when the
-  last render had height (`last_render_height`). Still deferred: `transient`/alt-screen modes,
+  last render had height (`last_render_height`). `transient` erases the
+  display on stop (`Live::transient`, `Live::spawn_with`), and a non-terminal
+  stop writes the final frame without a newline, as upstream does. Still
+  deferred: the alt-screen mode,
   stdout/stderr redirection, and the console render-hook integration; `Live` also
   renders to a generic `Write` sink rather than through `Console`'s own file.
 - **Why:** those remaining pieces are large plumbing; the refresh loop itself is
