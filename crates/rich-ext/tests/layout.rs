@@ -221,22 +221,29 @@ fn nested_panels_compose_inside_and_around_layouts() {
     for row in &rows {
         assert_eq!(rich::cells::cell_len(row), 30, "{rows:#?}");
     }
-    // Leaves render at their natural height (the region is padded with blank
-    // rows); widths are exact. Left: a 12-cell panel. Right: a 3-row panel above
-    // the rest of the column, each 18 cells wide.
+    // Like upstream `Layout`, leaves receive their region's height, so panels
+    // fill it (byte-identical to rich 15.0.0's `Layout` for the same tree).
+    // Left: a 12-cell panel. Right: a 3-row panel above the rest of the column.
     assert_eq!(
         rows,
         [
             "╭── Side ──╮╭────────────────╮",
             "│ nav      ││ top            │",
+            "│          │╰────────────────╯",
+            "│          │╭────────────────╮",
+            "│          ││ bottom         │",
+            "│          ││                │",
+            "│          ││                │",
             "╰──────────╯╰────────────────╯",
-            "            ╭────────────────╮",
-            "            │ bottom         │",
-            "            ╰────────────────╯",
-            "                              ",
-            "                              ",
         ]
     );
+
+    // `.content_height()` opts a leaf back into its natural height.
+    let natural = LayoutNode::leaf(Box::new(Panel::new(Box::new(Text::new("x"))))).content_height();
+    let rows = strings(Segment::split_lines(
+        &natural.rich_render(&console, &console.options().update_dimensions(6, 5)),
+    ));
+    assert_eq!(rows, ["╭────╮", "│ x  │", "╰────╯", "      ", "      "]);
 
     // A layout inside a panel takes the panel's inner width.
     let inner = LayoutNode::split(

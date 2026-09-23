@@ -70,6 +70,11 @@ checked against unpublished versions; nothing is published yet.
   cover a three-level chain, and checked-in `RenderSnapshot` fixtures cover
   multiline, chained and source-context diagnostics. A nested-panel layout
   regression evidences #134.
+- Ext (behaviour change): `LayoutNode` leaves now receive their region's height,
+  as upstream `Layout` passes it, so height-aware renderables such as `Panel`
+  fill their region instead of rendering at natural height above blank rows.
+  The nested-panel regression is byte-identical to rich 15.0.0's `Layout`.
+  Wrap a leaf in `.content_height()` to keep a panel at its natural height.
 
 ## CLI 0.0.9 / art 0.0.7 — prepared
 

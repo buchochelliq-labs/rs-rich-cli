@@ -88,6 +88,8 @@ Detection provenance is separate from the rendering snapshot. `Support::Inferred
 is a conservative hint; protocol rendering can require `Confirmed`. Unicode and
 hyperlink policy are declared by the caller. Legacy renderers may still have their
 own sizing choices; wrap them in bounded `LayoutNode` containers for strict cells.
+`LayoutNode` leaves receive their region's height, like upstream `Layout`, so a
+`Panel` leaf fills its region; opt into `.content_height()` for natural height.
 
 Enable `rs-rich-ext` features `testing`, `log` and `tracing` independently. The
 snapshot helper has no process environment dependency or assertion-framework
