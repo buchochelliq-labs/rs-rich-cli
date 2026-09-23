@@ -444,7 +444,13 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
             Style::parse("green").unwrap(),
         )),
         "progress_three" => {
-            let mut progress = rich::Progress::new();
+            // Explicit columns, as `_progress_table` in capture_golden.py:
+            // upstream's default set also has a time-remaining column.
+            let mut progress = rich::Progress::new().columns(vec![
+                rich::ProgressColumn::Description,
+                rich::ProgressColumn::Bar,
+                rich::ProgressColumn::Percentage,
+            ]);
             progress.add_task("Downloading", 100.0, 50.0);
             progress.add_task("Processing", 100.0, 100.0);
             progress.add_task("Waiting", 100.0, 0.0);
@@ -1146,4 +1152,121 @@ fn layout_parity() {
         checked += 1;
     }
     assert!(checked > 0, "no layout cases were checked");
+}
+
+/// Build a progress column from a `progress_time.tsv` spec. Keep in sync with
+/// `progress_columns` in scripts/capture_golden.py.
+fn progress_column(spec: &serde_json::Value) -> rich::ProgressColumn {
+    use rich::{ProgressColumn, SpinnerColumn, TimeRemainingColumn};
+    let spec = spec.as_array().expect("column spec");
+    let flag = |i: usize| spec[i].as_bool().expect("bool");
+    match spec[0].as_str().expect("column name") {
+        "description" => ProgressColumn::Description,
+        "bar" => ProgressColumn::Bar,
+        "percentage" => ProgressColumn::Percentage,
+        "task_progress" => ProgressColumn::TaskProgress {
+            show_speed: flag(1),
+        },
+        "mofn" => ProgressColumn::MofN,
+        "download" if flag(1) => ProgressColumn::BinaryDownload,
+        "download" => ProgressColumn::Download,
+        "elapsed" => ProgressColumn::TimeElapsed,
+        "remaining" => ProgressColumn::TimeRemaining(TimeRemainingColumn::new(flag(1), flag(2))),
+        "speed" => ProgressColumn::TransferSpeed,
+        "filesize" => ProgressColumn::FileSize,
+        "total_filesize" => ProgressColumn::TotalFileSize,
+        "spinner" => ProgressColumn::Spinner(SpinnerColumn::new(
+            spec[1].as_str().unwrap(),
+            spec[2].as_str().unwrap(),
+        )),
+        other => panic!("unknown progress column {other:?}"),
+    }
+}
+
+/// Progress time/rate/spinner columns and the task API, driven by the same step
+/// programs as upstream with a shared fake clock.
+#[test]
+fn progress_time_parity() {
+    use rich::{Progress, TaskId, TaskUpdate};
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
+
+    let data = include_str!("golden/progress_time.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let name = parts.next().unwrap_or("");
+        let case: serde_json::Value =
+            serde_json::from_str(parts.next().expect("case")).expect("case json");
+        let expected = unescape(parts.next().expect("expected"));
+
+        let now = Arc::new(AtomicU64::new(0f64.to_bits()));
+        let clock = now.clone();
+        let mut progress =
+            Progress::new().clock(move || f64::from_bits(clock.load(Ordering::SeqCst)));
+        if let Some(columns) = case["columns"].as_array() {
+            progress = progress.columns(columns.iter().map(progress_column).collect());
+        }
+        let id = |v: &serde_json::Value| TaskId(v.as_u64().expect("task id") as usize);
+        let mut got = String::new();
+        for step in case["steps"].as_array().expect("steps") {
+            let step = step.as_array().expect("step");
+            match step[0].as_str().expect("op") {
+                "time" => now.store(step[1].as_f64().unwrap().to_bits(), Ordering::SeqCst),
+                "add" => {
+                    let (description, total, completed) = (
+                        step[1].as_str().unwrap(),
+                        step[2].as_f64(),
+                        step[3].as_f64().unwrap(),
+                    );
+                    if step[4].as_bool().unwrap() {
+                        progress.add_task(description, total, completed);
+                    } else {
+                        progress.add_unstarted_task(description, total, completed);
+                    }
+                }
+                "update" => {
+                    let fields = &step[2];
+                    let update = TaskUpdate {
+                        total: fields["total"].as_f64(),
+                        completed: fields["completed"].as_f64(),
+                        advance: fields["advance"].as_f64(),
+                        description: fields["description"].as_str().map(String::from),
+                        visible: fields["visible"].as_bool(),
+                    };
+                    progress.update(id(&step[1]), update);
+                }
+                "advance" => progress.advance(id(&step[1]), step[2].as_f64().unwrap()),
+                "start" => progress.start_task(id(&step[1])),
+                "stop" => progress.stop_task(id(&step[1])),
+                "reset" => {
+                    let fields = &step[2];
+                    progress.reset(
+                        id(&step[1]),
+                        fields["start"].as_bool().unwrap_or(true),
+                        fields["total"].as_f64(),
+                        fields["completed"].as_f64().unwrap_or(0.0),
+                    );
+                }
+                "remove" => progress.remove_task(id(&step[1])),
+                "render" => {
+                    let console = truecolor_console(step[1].as_u64().unwrap() as usize);
+                    got.push_str(&console.capture(|c| c.print(&progress)));
+                }
+                op => panic!("unknown progress step {op:?}"),
+            }
+        }
+        assert_eq!(
+            got,
+            expected,
+            "progress case {name:?} (line {}) diverged",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 11, "expected every progress time case to run");
 }

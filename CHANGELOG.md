@@ -64,6 +64,17 @@ checked against unpublished versions; nothing is published yet.
   `upload-pages-artifact` v5, `deploy-pages` v5).
 - Art: `icy_sixel` 0.7 for the optional Sixel backend.
 - CLI: `toml` 1.1 for configuration parsing; strict-config behaviour unchanged.
+- Core: Progress time, rate and spinner columns and upstream's task model (#6):
+  an injectable clock, `add_task` returning a `TaskId`, `update`/`advance`/
+  `reset`/`start_task`/`stop_task`/`remove_task`, the 30 s speed window, and
+  `TimeElapsed`, `TimeRemaining`, `TransferSpeed`, `FileSize`, `TotalFileSize`,
+  `Spinner`, `TaskProgress` and binary `Download` columns. Golden
+  `progress_time.tsv` replays identical step programs against rich 15.0.0.
+  `Progress::new()` now uses upstream's default columns (adds time remaining);
+  `add_task` takes `impl Into<Option<f64>>` totals and returns a `TaskId`.
+  Progress cell styles now resolve against the console theme.
+- CLI: the capability demo's progress section shows speed, ETA, elapsed and a
+  spinner from a simulated clock.
 
 ## CLI 0.0.9 / art 0.0.7 — prepared
 

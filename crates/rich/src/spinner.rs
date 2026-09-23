@@ -1,12 +1,15 @@
 //! Spinners.
 //!
-//! Port of upstream `rich/spinner.py` + a subset of `rich/_spinners.py`. A
-//! [`Spinner`] picks an animation frame for a given elapsed time. The animation
-//! itself is driven by a `Live` loop (not yet ported); [`Spinner::render`] gives
-//! the frame at a point in time and is the testable surface.
+//! Port of upstream `rich/spinner.py` and the full `rich/_spinners.py` table. A
+//! [`Spinner`] picks an animation frame for a given elapsed time;
+//! [`Spinner::render`] gives the frame at a point in time and is the testable
+//! surface. Animation comes from redrawing with a `Live` display, and
+//! `ProgressColumn::Spinner` animates one per progress row from the progress
+//! clock.
 //!
 //! Scope: all built-in spinners (vendored in `spinner_data.rs`), an optional
-//! trailing text and a frame [`Style`]. Live-loop animation is still deferred.
+//! trailing text and a frame [`Style`]. Mid-animation speed changes
+//! (`Spinner.update(speed=…)`) are not ported.
 
 use crate::console::{Console, ConsoleOptions};
 use crate::protocol::Renderable;

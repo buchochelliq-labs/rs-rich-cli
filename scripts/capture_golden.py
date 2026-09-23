@@ -1003,6 +1003,154 @@ TEXT_OPS_HEADER = """\
 """
 
 
+PROGRESS_TIME_HEADER = """\
+# Golden parity fixtures for PROGRESS time/rate/spinner columns and the task API
+# — captured from real Python `rich` with an injected clock.
+# Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<case json>\t<escaped output>
+# Case: {"columns": [spec, ...] | null (upstream defaults), "steps": [step, ...]}
+# Specs: ["description"] ["bar"] ["percentage"] ["task_progress", show_speed]
+#   ["mofn"] ["download", binary_units] ["elapsed"] ["remaining", compact,
+#   elapsed_when_finished] ["speed"] ["filesize"] ["total_filesize"]
+#   ["spinner", name, finished_text]
+# Steps: ["time", t] ["add", description, total|null, completed, start]
+#   ["update", id, {"total", "completed", "advance", "description", "visible"}]
+#   ["advance", id, amount] ["start", id] ["stop", id]
+#   ["reset", id, {"start", "total", "completed"}] ["remove", id] ["render", width]
+"""
+
+#: Keep in sync with `progress_time_parity` in crates/rich/tests/golden.rs.
+PROGRESS_TIME_CASES: list[tuple[str, dict]] = [
+    ("speed_and_eta", {
+        "columns": [["description"], ["bar"], ["percentage"], ["remaining", False, False], ["elapsed"], ["speed"]],
+        "steps": [["time", 0], ["add", "Download", 100, 0, True], ["render", 80],
+                  ["time", 2], ["advance", 0, 10], ["time", 4], ["advance", 0, 20], ["render", 80]],
+    }),
+    ("finishing", {
+        "columns": [["description"], ["remaining", False, False], ["remaining", True, True], ["elapsed"], ["speed"]],
+        "steps": [["time", 0], ["add", "Job", 50, 0, True], ["time", 1], ["advance", 0, 20],
+                  ["time", 3], ["advance", 0, 30], ["time", 9], ["render", 60]],
+    }),
+    ("compact_and_hours", {
+        "columns": [["description"], ["remaining", True, False], ["remaining", False, False]],
+        "steps": [["time", 0], ["add", "Slow", 50000, 0, True], ["add", "Fast", 100, 0, True],
+                  ["time", 10], ["advance", 0, 1], ["advance", 1, 50], ["time", 20], ["advance", 0, 1],
+                  ["advance", 1, 10], ["render", 60]],
+    }),
+    ("unstarted", {
+        "columns": [["description"], ["elapsed"], ["remaining", False, False], ["remaining", True, False], ["speed"], ["mofn"]],
+        "steps": [["time", 5], ["add", "Queued", 10, 0, False], ["render", 60],
+                  ["time", 8], ["start", 0], ["time", 11], ["render", 60]],
+    }),
+    ("indeterminate", {
+        "columns": [["description"], ["task_progress", True], ["task_progress", False], ["remaining", False, False], ["mofn"], ["download", False]],
+        "steps": [["time", 0], ["add", "Stream", None, 0, True], ["render", 70],
+                  ["time", 2], ["advance", 0, 3000], ["time", 4], ["advance", 0, 5000], ["render", 70]],
+    }),
+    ("file_sizes", {
+        "columns": [["description"], ["filesize"], ["total_filesize"], ["download", False], ["download", True], ["speed"]],
+        "steps": [["time", 0], ["add", "iso", 3500000000, 0, True], ["time", 1], ["advance", 0, 1250000],
+                  ["time", 3], ["advance", 0, 2500000], ["render", 80]],
+    }),
+    ("spinner_frames", {
+        "columns": [["spinner", "dots", " "], ["description"], ["spinner", "line", "[green]done"]],
+        "steps": [["time", 100], ["add", "a", 10, 0, True], ["add", "b", 10, 0, True], ["render", 40],
+                  ["time", 100.25], ["render", 40], ["time", 101], ["update", 1, {"completed": 10}], ["render", 40]],
+    }),
+    ("update_reset_stop_remove", {
+        "columns": [["description"], ["percentage"], ["elapsed"], ["remaining", False, False], ["speed"]],
+        "steps": [["time", 0], ["add", "one", 100, 0, True], ["add", "two", 100, 0, True],
+                  ["time", 2], ["update", 0, {"completed": 40}], ["update", 1, {"advance": 5, "description": "TWO"}],
+                  ["time", 4], ["update", 0, {"completed": 60}], ["render", 70],
+                  ["update", 0, {"total": 200}], ["render", 70],
+                  ["time", 6], ["stop", 1], ["time", 9], ["render", 70],
+                  ["reset", 1, {"start": True, "total": 50, "completed": 5}], ["time", 12], ["render", 70],
+                  ["update", 1, {"visible": False}], ["render", 70],
+                  ["remove", 0], ["update", 1, {"visible": True}], ["render", 70]],
+    }),
+    ("sample_window", {
+        "columns": [["description"], ["speed"], ["remaining", False, False]],
+        "steps": [["time", 0], ["add", "w", 1000, 0, True], ["time", 1], ["advance", 0, 100],
+                  ["time", 20], ["advance", 0, 10], ["time", 40], ["advance", 0, 10], ["render", 50],
+                  ["time", 55], ["advance", 0, 10], ["render", 50]],
+    }),
+    ("long_elapsed", {
+        "columns": [["description"], ["elapsed"]],
+        "steps": [["time", 0], ["add", "d", 10, 0, True], ["time", 90061], ["render", 40],
+                  ["time", 180000], ["render", 40]],
+    }),
+    ("defaults", {
+        "columns": None,
+        "steps": [["time", 0], ["add", "Downloading", 100, 0, True], ["add", "Done", 100, 0, True],
+                  ["time", 1], ["advance", 0, 25], ["time", 2], ["advance", 0, 25], ["advance", 1, 100],
+                  ["render", 70]],
+    }),
+]
+
+
+def progress_columns(specs):
+    from rich.progress import (
+        BarColumn, DownloadColumn, FileSizeColumn, MofNCompleteColumn, SpinnerColumn,
+        TaskProgressColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn,
+        TotalFileSizeColumn, TransferSpeedColumn,
+    )
+
+    build = {
+        "description": lambda: TextColumn("[progress.description]{task.description}"),
+        "bar": lambda: BarColumn(),
+        "percentage": lambda: TaskProgressColumn(),
+        "task_progress": lambda show_speed: TaskProgressColumn(show_speed=show_speed),
+        "mofn": lambda: MofNCompleteColumn(),
+        "download": lambda binary: DownloadColumn(binary_units=binary),
+        "elapsed": lambda: TimeElapsedColumn(),
+        "remaining": lambda compact, when: TimeRemainingColumn(compact=compact, elapsed_when_finished=when),
+        "speed": lambda: TransferSpeedColumn(),
+        "filesize": lambda: FileSizeColumn(),
+        "total_filesize": lambda: TotalFileSizeColumn(),
+        "spinner": lambda name, finished: SpinnerColumn(name, finished_text=finished),
+    }
+    return [build[spec[0]](*spec[1:]) for spec in specs]
+
+
+def run_progress_case(case) -> str:
+    from rich.progress import Progress
+
+    now = [0.0]
+    columns = [] if case["columns"] is None else progress_columns(case["columns"])
+    progress = Progress(*columns, get_time=lambda: now[0], auto_refresh=False)
+    out = []
+    for step in case["steps"]:
+        op = step[0]
+        if op == "time":
+            now[0] = float(step[1])
+        elif op == "add":
+            progress.add_task(step[1], total=step[2], completed=step[3], start=step[4])
+        elif op == "update":
+            progress.update(step[1], **step[2])
+        elif op == "advance":
+            progress.advance(step[1], step[2])
+        elif op == "start":
+            progress.start_task(step[1])
+        elif op == "stop":
+            progress.stop_task(step[1])
+        elif op == "reset":
+            progress.reset(step[1], **step[2])
+        elif op == "remove":
+            progress.remove_task(step[1])
+        elif op == "render":
+            rconsole = Console(
+                force_terminal=True, color_system="truecolor", width=step[1],
+                highlight=False, no_color=False,
+            )
+            with rconsole.capture() as capture:
+                rconsole.print(progress.make_tasks_table(progress.tasks))
+            out.append(capture.get())
+        else:
+            raise SystemExit(f"unknown progress step {op!r}")
+    return "".join(out)
+
+
 def escape(text: str) -> str:
     """Render ESC and newline as the literal markers the Rust test unescapes."""
     return (
@@ -1310,6 +1458,14 @@ def main() -> None:
         )
     functions_path.write_text("\n".join(flines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(FUNCTION_CASES)} function cases to {functions_path}")
+
+    # --- progress time columns -------------------------------------------
+    ptime_path = golden_dir() / "progress_time.tsv"
+    plines = [PROGRESS_TIME_HEADER.rstrip("\n")]
+    for name, case in PROGRESS_TIME_CASES:
+        plines.append(f"{name}\t{json.dumps(case)}\t{escape(run_progress_case(case))}")
+    ptime_path.write_text("\n".join(plines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(PROGRESS_TIME_CASES)} progress time cases to {ptime_path}")
 
     # --- terminal themes -------------------------------------------------
     import rich.terminal_theme as _tt
