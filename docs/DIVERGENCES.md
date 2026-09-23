@@ -219,7 +219,7 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** add an `adler32`-of-`repr` default id only if a caller needs the
   exact auto-generated ids (rare); the explicit-id form already round-trips.
 
-### 16. `Progress` — columns and task model done; Live loop + pulse deferred
+### 16. `Progress` — columns, task model, pulse and live display done
 - **Resolved (0.0.10, core 0.0.6):** the time, rate and spinner columns and the
   task model are ported: an injectable clock (`Progress::clock`, upstream's
   `get_time`), task start/stop/finish times, the 30-second speed sample window,
@@ -230,12 +230,26 @@ Format: what differs · why · how to remove it (if temporary).
   binary `Download` columns. `Progress::new()` now uses upstream's default
   columns (description, bar, percentage, time remaining). Golden
   `progress_time.tsv` replays the same step programs through Python and Rust.
-- **Still differs:** the auto-refreshing `Live` integration and `track()`; the
-  pulsing bar for unstarted or indeterminate tasks (the bar renders empty);
-  `RenderableColumn`, table-column options and per-task custom `fields`
-  (`TextColumn` format strings). Cells truncate rather than wrap at very narrow
-  widths.
-- **Why:** these need the `Live` refresh loop (§17) or a renderable grid cell.
+- **Resolved (0.0.11, core 0.0.7):**
+  - The pulse bar for unstarted or indeterminate tasks, with the ASCII and
+    no-colour fallbacks (golden `progress_bar.tsv`).
+  - `TextColumn` format strings over task attributes and per-task `fields`,
+    through a port of Python's format mini-language.
+  - `RenderableColumn`, whose cells may span several lines.
+  - A live display: `Progress::start` returns a `LiveProgress` redrawn by the
+    `Live` refresh thread (§17). Its byte stream matches upstream's
+    `auto_refresh=False` Live (golden `progress_live.tsv`).
+  - `track()`, both `LiveProgress::track` and the module-level `track`.
+- **Still differs:**
+  - Task totals and counts are `f64`, so `{task.total}` formats a whole number
+    as an int. Upstream keeps whatever type the caller passed.
+  - `track` advances inline rather than through upstream's `_TrackThread`
+    batching (`update_period`). The counts match; the refresh timing differs.
+  - Not ported: `transient`, `disable`, `expand`, `wrap_file`/`open`, and
+    table-column options.
+  - Cells truncate rather than wrap at very narrow widths.
+- **Why:** Rust has no dynamic int/float, and the remaining options need
+  §17's transient mode or file wrappers.
 - **Remove:** under the Live/progress issue (#6).
 
 ### 17. `Live` — auto-refresh thread done; alt-screen/redirect deferred
@@ -246,7 +260,10 @@ Format: what differs · why · how to remove it (if temporary).
   `update`), a port of upstream's `refresh_per_second`. The thread constructs and
   owns the `Live` internally, so only `Send` inputs (renderable/console/writer)
   cross over — which made `Console` `Send` (its highlighter boxes are now
-  `dyn Highlighter + Send`). Still deferred: `transient`/alt-screen modes,
+  `dyn Highlighter + Send`). `Live::spawn` returns only once the first frame
+  is drawn, and `AutoLive::refresh_wait` redraws synchronously, as upstream's
+  `start()` and `refresh()` do; the final newline is written only when the
+  last render had height (`last_render_height`). Still deferred: `transient`/alt-screen modes,
   stdout/stderr redirection, and the console render-hook integration; `Live` also
   renders to a generic `Write` sink rather than through `Console`'s own file.
 - **Why:** those remaining pieces are large plumbing; the refresh loop itself is

@@ -1,43 +1,55 @@
-//! Progress bars (static rendering).
+//! Progress bars.
 //!
-//! Port of the `__rich_console__` core of upstream `rich/progress_bar.py`. A
-//! [`ProgressBar`] renders a determinate bar at a given completion using
-//! half-cell resolution for a smooth edge.
-//!
-//! Slice scope: determinate bars in a color-capable terminal. The indeterminate
-//! "pulse" animation and ASCII/legacy fallbacks are deferred.
+//! Port of upstream `rich/progress_bar.py`. A [`ProgressBar`] renders a
+//! determinate bar at half-cell resolution, or, when pulsing (`pulse=True` or
+//! no total), upstream's animated pulse: a cosine fade between `bar.pulse` and
+//! `bar.back` that scrolls with the animation time. ASCII-only and legacy
+//! Windows consoles get upstream's `-` glyphs.
 
-use crate::color::Color;
+use crate::color::{Color, ColorSystem, ColorTriplet};
 use crate::console::{Console, ConsoleOptions};
 use crate::protocol::Renderable;
 use crate::segment::Segment;
-use crate::style::Style;
+use crate::style::{Style, StyleType};
 
-const BAR: &str = "━"; // U+2501
-const HALF_BAR_RIGHT: &str = "╸"; // U+2578 — trailing edge of the completed run
-const HALF_BAR_LEFT: &str = "╺"; // U+257A — leading edge of the background run
+/// Segments in one pulse period. Upstream `PULSE_SIZE`.
+const PULSE_SIZE: usize = 20;
 
-/// A determinate progress bar. Mirrors `rich.progress_bar.ProgressBar`.
+/// A progress bar. Mirrors `rich.progress_bar.ProgressBar`.
 pub struct ProgressBar {
-    total: f64,
+    /// `None` renders the pulse, as upstream's `total=None` does.
+    total: Option<f64>,
     completed: f64,
     width: Option<usize>,
-    complete_style: Style,
-    finished_style: Style,
-    back_style: Style,
+    pulse: bool,
+    animation_time: Option<f64>,
+    style: StyleType,
+    complete_style: StyleType,
+    finished_style: StyleType,
+    pulse_style: StyleType,
 }
 
 impl ProgressBar {
-    /// A bar of `completed` out of `total`, using upstream's default `bar.*` styles.
+    /// A bar of `completed` out of `total`, with upstream's default `bar.*` styles.
     pub fn new(total: f64, completed: f64) -> Self {
-        let color = |spec: &str| Style::new().with_color(Color::parse(spec).expect("valid color"));
         ProgressBar {
-            total,
+            total: Some(total),
             completed,
             width: None,
-            complete_style: color("rgb(249,38,114)"), // bar.complete
-            finished_style: color("rgb(114,156,31)"), // bar.finished
-            back_style: color("color(237)"),          // bar.back (grey23)
+            pulse: false,
+            animation_time: None,
+            style: "bar.back".into(),
+            complete_style: "bar.complete".into(),
+            finished_style: "bar.finished".into(),
+            pulse_style: "bar.pulse".into(),
+        }
+    }
+
+    /// A bar with no total, which always pulses (upstream `total=None`).
+    pub fn indeterminate() -> Self {
+        ProgressBar {
+            total: None,
+            ..ProgressBar::new(100.0, 0.0)
         }
     }
 
@@ -46,64 +58,183 @@ impl ProgressBar {
         self.width = Some(width);
         self
     }
+
+    /// Render the pulse animation instead of the completion (upstream `pulse`).
+    pub fn pulse(mut self, pulse: bool) -> Self {
+        self.pulse = pulse;
+        self
+    }
+
+    /// The time, in seconds, the pulse is drawn at (upstream `animation_time`).
+    /// Without it the pulse follows a monotonic clock.
+    pub fn animation_time(mut self, time: f64) -> Self {
+        self.animation_time = Some(time);
+        self
+    }
+
+    /// Port of `_get_pulse_segments`: one period of the pulse.
+    fn pulse_segments(
+        fore: &Style,
+        back: &Style,
+        color_system: Option<ColorSystem>,
+        no_color: bool,
+        ascii: bool,
+    ) -> Vec<Segment> {
+        let bar = if ascii { "-" } else { "\u{2501}" };
+        // Upstream tests `color_system not in ("standard", "eight_bit",
+        // "truecolor")`, but a 256-colour console reports `"256"`, so only
+        // standard and truecolor consoles get the blended pulse.
+        let colourful = matches!(
+            color_system,
+            Some(ColorSystem::Standard | ColorSystem::Truecolor)
+        );
+        if !colourful || no_color {
+            let fore_count = PULSE_SIZE / 2;
+            let mut segments = vec![Segment::new(bar, Some(fore.clone())); fore_count];
+            let back_bar = if no_color { " " } else { bar };
+            segments.extend(vec![
+                Segment::new(back_bar, Some(back.clone()));
+                PULSE_SIZE - fore_count
+            ]);
+            return segments;
+        }
+        let triplet = |style: &Style, fallback: ColorTriplet| {
+            style
+                .color()
+                .and_then(Color::get_truecolor)
+                .unwrap_or(fallback)
+        };
+        let fore_color = triplet(fore, ColorTriplet::new(255, 0, 255));
+        let back_color = triplet(back, ColorTriplet::new(0, 0, 0));
+        (0..PULSE_SIZE)
+            .map(|index| {
+                let position = index as f64 / PULSE_SIZE as f64;
+                let fade = 0.5 + (position * std::f64::consts::PI * 2.0).cos() / 2.0;
+                let color = blend_rgb(fore_color, back_color, fade);
+                Segment::new(
+                    bar,
+                    Some(Style::new().with_color(Color::from_rgb(
+                        color.red,
+                        color.green,
+                        color.blue,
+                    ))),
+                )
+            })
+            .collect()
+    }
+
+    /// Port of `_render_pulse`.
+    fn render_pulse(&self, console: &Console, width: usize, ascii: bool) -> Vec<Segment> {
+        let fore = style_or(console, &self.pulse_style, "white");
+        let back = style_or(console, &self.style, "black");
+        let pulse = Self::pulse_segments(
+            &fore,
+            &back,
+            console.color_system(),
+            console.no_color(),
+            ascii,
+        );
+        let count = pulse.len();
+        let time = self.animation_time.unwrap_or_else(monotonic);
+        // `int(-current_time * 15) % segment_count`, with Python's floor modulo.
+        let offset = ((-time * 15.0) as i64).rem_euclid(count as i64) as usize;
+        pulse
+            .iter()
+            .cycle()
+            .skip(offset)
+            .take(width)
+            .cloned()
+            .collect()
+    }
+}
+
+/// `console.get_style(name, default=…)`.
+fn style_or(console: &Console, style: &StyleType, default: &str) -> Style {
+    console
+        .get_style(style)
+        .unwrap_or_else(|_| Style::parse(default).expect("valid default style"))
+}
+
+/// Port of `rich.color.blend_rgb`.
+fn blend_rgb(first: ColorTriplet, second: ColorTriplet, cross_fade: f64) -> ColorTriplet {
+    let mix = |a: u8, b: u8| (f64::from(a) + (f64::from(b) - f64::from(a)) * cross_fade) as u8;
+    ColorTriplet::new(
+        mix(first.red, second.red),
+        mix(first.green, second.green),
+        mix(first.blue, second.blue),
+    )
+}
+
+/// Seconds on a monotonic clock (upstream `time.monotonic`).
+fn monotonic() -> f64 {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    START
+        .get_or_init(std::time::Instant::now)
+        .elapsed()
+        .as_secs_f64()
 }
 
 impl Renderable for ProgressBar {
-    fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let width = self
             .width
+            .filter(|width| *width > 0)
             .unwrap_or(options.max_width)
             .min(options.max_width);
-        if width == 0 || self.total <= 0.0 {
-            return vec![Segment::new(
-                BAR.repeat(width),
-                Some(self.back_style.clone()),
-            )];
+        let ascii = console.legacy_windows() || console.ascii_only();
+        if self.pulse || self.total.is_none() {
+            return self.render_pulse(console, width, ascii);
         }
+        let total = self.total.unwrap_or(0.0);
+        let completed = total.min(self.completed.max(0.0));
 
-        let completed = self.completed.clamp(0.0, self.total);
-        // Completion measured in half-cells (double resolution). Port of
-        // `int(width * 2 * completed / total)`.
-        let complete_halves = (width as f64 * 2.0 * completed / self.total) as usize;
+        let (bar, half_bar_right, half_bar_left) = if ascii {
+            ("-", " ", " ")
+        } else {
+            ("\u{2501}", "\u{2578}", "\u{257a}")
+        };
+        // `int(width * 2 * completed / total) if total else width * 2`.
+        let complete_halves = if total != 0.0 {
+            (width as f64 * 2.0 * completed / total) as usize
+        } else {
+            width * 2
+        };
         let bar_count = complete_halves / 2;
         let half_bar_count = complete_halves % 2;
-
-        let is_finished = completed >= self.total;
-        let complete_style = if is_finished {
-            &self.finished_style
-        } else {
-            &self.complete_style
-        };
+        let back = style_or(console, &self.style, "none");
+        let is_finished = self.completed >= total;
+        let complete = style_or(
+            console,
+            if is_finished {
+                &self.finished_style
+            } else {
+                &self.complete_style
+            },
+            "none",
+        );
 
         let mut segments: Vec<Segment> = Vec::new();
         if bar_count > 0 {
-            segments.push(Segment::new(
-                BAR.repeat(bar_count),
-                Some(complete_style.clone()),
-            ));
+            segments.push(Segment::new(bar.repeat(bar_count), Some(complete.clone())));
         }
         if half_bar_count > 0 {
             segments.push(Segment::new(
-                HALF_BAR_RIGHT.repeat(half_bar_count),
-                Some(complete_style.clone()),
+                half_bar_right.repeat(half_bar_count),
+                Some(complete),
             ));
         }
-
-        // Background.
-        let mut remaining = width - bar_count - half_bar_count;
-        if remaining > 0 {
-            if half_bar_count == 0 && bar_count > 0 {
-                segments.push(Segment::new(
-                    HALF_BAR_LEFT.to_string(),
-                    Some(self.back_style.clone()),
-                ));
-                remaining -= 1;
-            }
+        // The background only renders with colour: without it the empty part
+        // of the bar is simply left out.
+        if !console.no_color() && console.color_system().is_some() {
+            let mut remaining = width.saturating_sub(bar_count + half_bar_count);
             if remaining > 0 {
-                segments.push(Segment::new(
-                    BAR.repeat(remaining),
-                    Some(self.back_style.clone()),
-                ));
+                if half_bar_count == 0 && bar_count > 0 {
+                    segments.push(Segment::new(half_bar_left, Some(back.clone())));
+                    remaining -= 1;
+                }
+                if remaining > 0 {
+                    segments.push(Segment::new(bar.repeat(remaining), Some(back)));
+                }
             }
         }
         segments
@@ -128,7 +259,7 @@ mod tests {
     fn empty_bar_is_all_background() {
         assert_eq!(
             render(0.0),
-            format!("\x1b[38;5;237m{}\x1b[0m", BAR.repeat(20))
+            format!("\x1b[38;5;237m{}\x1b[0m", "\u{2501}".repeat(20))
         );
     }
 
@@ -136,7 +267,7 @@ mod tests {
     fn full_bar_uses_finished_style() {
         assert_eq!(
             render(100.0),
-            format!("\x1b[38;2;114;156;31m{}\x1b[0m", BAR.repeat(20))
+            format!("\x1b[38;2;114;156;31m{}\x1b[0m", "\u{2501}".repeat(20))
         );
     }
 

@@ -60,6 +60,38 @@ Entries below record subsequent releases and development.
 Cohort versions for 0.0.11 (not published): core 0.0.7, ext 0.0.9, art 0.0.9,
 CLI 0.0.11. Core changes below, so every dependent moves with it.
 
+### Progress: pulse, format columns and live display (#6)
+
+- **Pulse bar.** `ProgressBar` pulses when `pulse` is set or the total is
+  unknown: `ProgressBar::indeterminate`, `.pulse`, `.animation_time`. It uses
+  upstream's cosine fade, including the quirk that 256-colour consoles get the
+  two-tone fallback. It also has the ASCII (legacy/`ascii_only`) glyphs and
+  no-colour fallbacks. The bar column pulses for unstarted and indeterminate
+  tasks.
+- **Determinate bar fixes.** A zero total draws a full finished bar, and the
+  background is left out without colour, as upstream does.
+- **Text and renderable columns.** `TextColumn` formats strings against the
+  task (`{task.completed:>6.1f}`, `{task.fields[name]}`) through the new
+  `rich::pyformat`, a port of Python's format mini-language. It also takes
+  style, justify and markup. Per-task fields come through
+  `Progress::add_task_with` and `TaskUpdate::field`. `ProgressColumn::Renderable`
+  shows any renderable, and rows grow to fit multi-line cells.
+- **Live display.** `Progress::start(console, writer, refresh_per_second)`
+  returns a `LiveProgress`. It redraws on the `Live` thread and refreshes
+  where upstream does: `add_task`, `reset`, and `update(refresh=True)`.
+  `stop()` commits the final frame.
+- **`track()`.** `LiveProgress::track` and the module-level `rich::track`
+  advance a task per item, after the loop body, as upstream does.
+- **Live changes.** `Live::spawn` waits for the first frame. The new
+  `AutoLive::refresh_wait` redraws synchronously. The final newline is written
+  only after a non-empty render.
+- **API changes.** `TaskUpdate` gains `fields` and `refresh` (struct literals
+  need `..TaskUpdate::default()`). `ProgressColumn` gains `TextFormat` and
+  `Renderable`. New `Console::no_color()`.
+- **Goldens.** New `progress_bar.tsv` (15 cases) and `progress_live.tsv`
+  (3 cases), plus 4 more `progress_time.tsv` cases: pulse, format fields and
+  renderable columns. All match rich 15.0.0.
+
 ### Markdown: styled table cells and constructor options (#9)
 
 - `Table` headers and cells can be styled `Text`, via the new
