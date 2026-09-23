@@ -82,6 +82,21 @@ CLI 0.0.11. Core changes below, so every dependent moves with it.
 - **clap (#38).** The optional `clap` feature maps a `clap::Command` onto the
   model (`CommandSpec::from_clap`), maps `clap::Error` onto `CliError`, and
   offers parse helpers that render help, version and errors through rich.
+- **CLI.** `rich --help` is now rendered from a `CommandSpec` of the whole CLI:
+  usage first, options under headings (Render mode, Input, Layout, Image,
+  Inspect, Export, Paging, Watch, Batch, Config & theme, …) with their
+  defaults, choices, environment variables and config keys, wrapped to the
+  terminal. Metavars read `<N>`. It is plain when piped or with `--no-color`.
+  - `rich completions bash|zsh|fish|powershell` prints a completion script.
+  - `rich docs markdown`, `rich docs man [--output DIR]` and `rich docs config`
+    print reference pages; `docs/cli-reference.md` is generated from them.
+  - `rich config reference` lists every config key. `rich config explain [KEY]`
+    shows each key's value in every layer, in the order the binary applies
+    them (defaults, `NO_COLOR`, config file, profile, command line), and marks
+    the one that wins.
+  - Drift tests keep the help and the parser in step, in both directions.
+  - `completions` and `docs` are command words when they come first, like
+    `config` and `doctor`; `rich -p docs` still prints the word.
 
 ### Structured data and `rich inspect` (0.0.11 workstream 4)
 
