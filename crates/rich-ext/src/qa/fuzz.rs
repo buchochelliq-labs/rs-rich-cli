@@ -364,7 +364,7 @@ fn words(rng: &mut Rng, pool: &[&str], max: usize) -> String {
         if i > 0 && !rng.chance(10) {
             out.push(' ');
         }
-        out.push_str(rng.pick(pool));
+        out.push_str(*rng.pick(pool));
     }
     out
 }
@@ -405,7 +405,7 @@ fn gen_table(rng: &mut Rng, o: &GenOptions) -> TableNode {
     TableNode {
         columns,
         rows,
-        box_name: rng.pick(BOXES),
+        box_name: *rng.pick(BOXES),
         show_header: !rng.chance(20),
         show_lines: rng.chance(25),
         expand: rng.chance(25),
@@ -462,7 +462,7 @@ fn gen_node(rng: &mut Rng, o: &GenOptions, depth: usize) -> Node {
             child: Box::new(gen_node(rng, o, depth + 1)),
         },
         NodeKind::Align => Node::Align {
-            align: rng.pick(&["left", "center", "right"]),
+            align: *rng.pick(&["left", "center", "right"]),
             child: Box::new(gen_node(rng, o, depth + 1)),
         },
     }
