@@ -20,8 +20,12 @@
 //! assert!(out.contains("\x1b[1;36m7\x1b[0m"));
 //! ```
 
+pub mod a11y;
+pub mod ansi_explain;
+pub mod capabilities;
 pub mod cli;
 pub mod encoding;
+pub mod fidelity;
 pub mod highlighter;
 pub mod registry;
 pub mod sanitize;
@@ -92,3 +96,6 @@ pub mod data;
 // CLI authoring: help, errors, completions, docs, config reference and
 // precedence from one command description.
 pub mod cli_doc;
+
+// Diffs: engine, views, source/patch renderers, test reports and assertions.
+pub mod diff;
