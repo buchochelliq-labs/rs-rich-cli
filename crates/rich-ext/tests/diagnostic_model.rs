@@ -37,7 +37,6 @@ fn a_compiler_style_diagnostic_renders_every_part() {
     let expected = [
         "error[E0308]: mismatched types",
         "  --> src/main.rs:2:21",
-        "--> src/main.rs",
         "2 |     let port: u16 = \"eighty\";",
         "  |               ---   ^^^^^^^^ expected `u16`, found `&str`",
         "  |               expected due to this",
@@ -87,6 +86,36 @@ fn a_label_on_a_multi_line_span_sits_on_its_last_line() {
     assert!(text.contains("3 |   b)\n  | ^^^^ this call"), "{text}");
     assert!(!text.contains("^^^^^ this call\n2"), "{text}");
     assert_eq!(text.matches("this call").count(), 1);
+}
+
+#[test]
+fn a_location_and_its_snippet_show_the_file_once() {
+    let snippet = || SourceSnippet::new("a.toml".into(), "k = v\n".into(), 4..5, 0).unwrap();
+    let located = Diagnostic::error("bad")
+        .location(Location::new("a.toml", Some(1), Some(5)))
+        .view(EventView::Expanded)
+        .snippet(snippet());
+    assert_eq!(
+        plain(&located, 80),
+        "error: bad\n  --> a.toml:1:5\n1 | k = v\n  |     ^"
+    );
+    // A snippet from another file keeps its own header.
+    let elsewhere = Diagnostic::error("bad")
+        .location(Location::new("b.toml", Some(1), Some(1)))
+        .view(EventView::Expanded)
+        .snippet(snippet());
+    assert_eq!(
+        plain(&elsewhere, 80),
+        "error: bad\n  --> b.toml:1:1\n--> a.toml\n1 | k = v\n  |     ^"
+    );
+    // Without a location the snippet's header is the only one, as before.
+    let bare = Diagnostic::error("bad")
+        .view(EventView::Expanded)
+        .snippet(snippet());
+    assert_eq!(
+        plain(&bare, 80),
+        "error: bad\n--> a.toml\n1 | k = v\n  |     ^"
+    );
 }
 
 #[test]
