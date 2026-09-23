@@ -74,12 +74,30 @@ table_ratio	30	┌─────────┬──────────�
 table_min_width	30	┌────────────┐\n│\x1b[1m \x1b[0m\x1b[1mA         \x1b[0m\x1b[1m \x1b[0m│\n├────────────┤\n│ hi         │\n└────────────┘\n
 table_max_width	40	┌───────┐\n│\x1b[1m \x1b[0m\x1b[1mA    \x1b[0m\x1b[1m \x1b[0m│\n├───────┤\n│ a     │\n│ very  │\n│ long  │\n│ cell  │\n│ value │\n│ here  │\n└───────┘\n
 tree_nested	40	root\n├── child A\n│   ├── leaf A1\n│   └── leaf A2\n└── child B\n
+tree_deep_w3	3	roo\nt\n
+tree_deep_w4	4	root\n
+tree_deep_w6	6	root\n└── ch\n    il\n    d \n    on\n    e\n
+tree_deep_w10	10	root\n└── child \n    one\n    └── gr\n        an\n        d\n
+tree_deep_w20	20	root\n└── child one\n    └── grand\n
+tree_multiline_w6	6	root\nlabel\n├── ch\n│   il\n│   d\n│   li\n│   ne\n│    \n│   tw\n│   o\n└── la\n    st\n    x\n
+tree_multiline_w12	12	root\nlabel\n├── child\n│   line two\n│   └── gran\n│       d \n│       kid\n└── last\n    x\n
 align_center	20	         hi         \n
 align_right	20	                  hi\n
 align_center_odd	21	         hi          \n
 constrain_panel	20	┌────────┐\n│ hi     │\n└────────┘\n
 columns_two_rows	20	one  two three four\nfive six           \n
 columns_one_row	30	alpha beta gamma delta\n
+columns_long_w8	8	superca…\n
+columns_long_w5	5	supe…\n
+columns_long_w3	3	su…\n
+columns_wrap_w13	13	name name    \nname         \n
+columns_mixed_w12	12	a           \nsupercalifr…\nbc          \ndef         \n
+columns_mixed_equal_w12	12	a           \nsupercalifr…\nbc          \ndef         \n
+columns_mixed_expand_w12	12	a           \nsupercalifr…\nbc          \ndef         \n
+columns_equal_w20	20	one  two  three\nfour five six  \n
+columns_expand_w20	20	one   two three four\nfive  six           \n
+columns_equal_expand_w20	20	one    two    three \nfour   five   six   \n
+columns_equal_expand_wrap_w13	13	name name    \nname         \nx            \n
 bar_empty	20	\x1b[38;5;237m━━━━━━━━━━━━━━━━━━━━\x1b[0m
 bar_half	20	\x1b[38;2;249;38;114m━━━━━━━━━━\x1b[0m\x1b[38;5;237m╺\x1b[0m\x1b[38;5;237m━━━━━━━━━\x1b[0m
 bar_third	20	\x1b[38;2;249;38;114m━━━━━━\x1b[0m\x1b[38;2;249;38;114m╸\x1b[0m\x1b[38;5;237m━━━━━━━━━━━━━\x1b[0m
