@@ -1,7 +1,7 @@
 //! Several GIFs, embedded in the binary as assets, animating at once.
 //!
 //! ```text
-//! cargo run -p rich-art --features gif --example stage
+//! cargo run -p rs-rich-art --features gif --example stage
 //! ```
 //!
 //! The GIFs are compiled in with `include_bytes!`, so the binary is

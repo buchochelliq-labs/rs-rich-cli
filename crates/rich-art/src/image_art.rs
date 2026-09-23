@@ -326,7 +326,8 @@ impl ImageArt {
         self
     }
 
-    /// Select truecolor (default) or the fixed ANSI256 palette for ASCII/blocks.
+    /// Select truecolor (default) or a reduced palette (ANSI256, ANSI16 or
+    /// grayscale) for the ASCII, half-block and quadrant backends.
     /// Processing occurs after fit/background handling and final sampling,
     /// before ASCII luminance normalization and glyph selection.
     pub fn color_mode(mut self, mode: ImageColorMode) -> Self {
@@ -334,8 +335,9 @@ impl ImageArt {
         self
     }
 
-    /// Select optional error diffusion. Floyd–Steinberg requires ANSI256 and
-    /// ASCII/blocks; unsupported combinations are errors from [`Self::render`].
+    /// Select optional dithering (Floyd–Steinberg or Bayer 4×4). It needs a
+    /// reduced palette and the ASCII, half-block or quadrant backend;
+    /// unsupported combinations are errors from [`Self::render`].
     pub fn dither(mut self, dither: Dither) -> Self {
         self.dither = dither;
         self

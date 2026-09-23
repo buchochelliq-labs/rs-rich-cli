@@ -1,0 +1,95 @@
+<svg class="rich-terminal" viewBox="0 0 897 294.0" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .guide_qa-profile-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .guide_qa-profile-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .guide_qa-profile-r1 { fill: #c5c8c6 }
+.guide_qa-profile-r2 { fill: #c5c8c6;font-weight: bold }
+    </style>
+
+    <defs>
+    <clipPath id="guide_qa-profile-clip-terminal">
+      <rect x="0" y="0" width="877.4" height="243.0" />
+    </clipPath>
+    <clipPath id="guide_qa-profile-line-0">
+    <rect x="0" y="1.5" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-profile-line-1">
+    <rect x="0" y="25.9" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-profile-line-2">
+    <rect x="0" y="50.3" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-profile-line-3">
+    <rect x="0" y="74.7" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-profile-line-4">
+    <rect x="0" y="99.1" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-profile-line-5">
+    <rect x="0" y="123.5" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-profile-line-6">
+    <rect x="0" y="147.9" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-profile-line-7">
+    <rect x="0" y="172.3" width="878.4" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_qa-profile-line-8">
+    <rect x="0" y="196.7" width="878.4" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="895" height="292" rx="8"/><text class="guide_qa-profile-title" fill="#c5c8c6" text-anchor="middle" x="447" y="27">profile</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#guide_qa-profile-clip-terminal)">
+    
+    <g class="guide_qa-profile-matrix">
+    <text class="guide_qa-profile-r1" x="0" y="20" textLength="878.4" clip-path="url(#guide_qa-profile-line-0)">┏━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━┓</text><text class="guide_qa-profile-r1" x="878.4" y="20" textLength="12.2" clip-path="url(#guide_qa-profile-line-0)">
+</text><text class="guide_qa-profile-r1" x="0" y="44.4" textLength="12.2" clip-path="url(#guide_qa-profile-line-1)">┃</text><text class="guide_qa-profile-r2" x="24.4" y="44.4" textLength="134.2" clip-path="url(#guide_qa-profile-line-1)">Phase&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_qa-profile-r1" x="170.8" y="44.4" textLength="12.2" clip-path="url(#guide_qa-profile-line-1)">┃</text><text class="guide_qa-profile-r2" x="195.2" y="44.4" textLength="97.6" clip-path="url(#guide_qa-profile-line-1)">Mean&#160;&#160;&#160;&#160;</text><text class="guide_qa-profile-r1" x="305" y="44.4" textLength="12.2" clip-path="url(#guide_qa-profile-line-1)">┃</text><text class="guide_qa-profile-r2" x="329.4" y="44.4" textLength="97.6" clip-path="url(#guide_qa-profile-line-1)">Median&#160;&#160;</text><text class="guide_qa-profile-r1" x="439.2" y="44.4" textLength="12.2" clip-path="url(#guide_qa-profile-line-1)">┃</text><text class="guide_qa-profile-r2" x="463.6" y="44.4" textLength="109.8" clip-path="url(#guide_qa-profile-line-1)">p95&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_qa-profile-r1" x="585.6" y="44.4" textLength="12.2" clip-path="url(#guide_qa-profile-line-1)">┃</text><text class="guide_qa-profile-r2" x="610" y="44.4" textLength="97.6" clip-path="url(#guide_qa-profile-line-1)">Min&#160;&#160;&#160;&#160;&#160;</text><text class="guide_qa-profile-r1" x="719.8" y="44.4" textLength="12.2" clip-path="url(#guide_qa-profile-line-1)">┃</text><text class="guide_qa-profile-r2" x="744.2" y="44.4" textLength="109.8" clip-path="url(#guide_qa-profile-line-1)">Max&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_qa-profile-r1" x="866.2" y="44.4" textLength="12.2" clip-path="url(#guide_qa-profile-line-1)">┃</text><text class="guide_qa-profile-r1" x="878.4" y="44.4" textLength="12.2" clip-path="url(#guide_qa-profile-line-1)">
+</text><text class="guide_qa-profile-r1" x="0" y="68.8" textLength="878.4" clip-path="url(#guide_qa-profile-line-2)">┡━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━┩</text><text class="guide_qa-profile-r1" x="878.4" y="68.8" textLength="12.2" clip-path="url(#guide_qa-profile-line-2)">
+</text><text class="guide_qa-profile-r1" x="0" y="93.2" textLength="12.2" clip-path="url(#guide_qa-profile-line-3)">│</text><text class="guide_qa-profile-r1" x="24.4" y="93.2" textLength="134.2" clip-path="url(#guide_qa-profile-line-3)">measure&#160;&#160;&#160;&#160;</text><text class="guide_qa-profile-r1" x="170.8" y="93.2" textLength="12.2" clip-path="url(#guide_qa-profile-line-3)">│</text><text class="guide_qa-profile-r1" x="195.2" y="93.2" textLength="97.6" clip-path="url(#guide_qa-profile-line-3)">13.40&#160;µs</text><text class="guide_qa-profile-r1" x="305" y="93.2" textLength="12.2" clip-path="url(#guide_qa-profile-line-3)">│</text><text class="guide_qa-profile-r1" x="329.4" y="93.2" textLength="97.6" clip-path="url(#guide_qa-profile-line-3)">12.00&#160;µs</text><text class="guide_qa-profile-r1" x="439.2" y="93.2" textLength="12.2" clip-path="url(#guide_qa-profile-line-3)">│</text><text class="guide_qa-profile-r1" x="463.6" y="93.2" textLength="109.8" clip-path="url(#guide_qa-profile-line-3)">19.00&#160;µs&#160;</text><text class="guide_qa-profile-r1" x="585.6" y="93.2" textLength="12.2" clip-path="url(#guide_qa-profile-line-3)">│</text><text class="guide_qa-profile-r1" x="610" y="93.2" textLength="97.6" clip-path="url(#guide_qa-profile-line-3)">11.00&#160;µs</text><text class="guide_qa-profile-r1" x="719.8" y="93.2" textLength="12.2" clip-path="url(#guide_qa-profile-line-3)">│</text><text class="guide_qa-profile-r1" x="744.2" y="93.2" textLength="109.8" clip-path="url(#guide_qa-profile-line-3)">19.00&#160;µs&#160;</text><text class="guide_qa-profile-r1" x="866.2" y="93.2" textLength="12.2" clip-path="url(#guide_qa-profile-line-3)">│</text><text class="guide_qa-profile-r1" x="878.4" y="93.2" textLength="12.2" clip-path="url(#guide_qa-profile-line-3)">
+</text><text class="guide_qa-profile-r1" x="0" y="117.6" textLength="12.2" clip-path="url(#guide_qa-profile-line-4)">│</text><text class="guide_qa-profile-r1" x="24.4" y="117.6" textLength="134.2" clip-path="url(#guide_qa-profile-line-4)">render&#160;&#160;&#160;&#160;&#160;</text><text class="guide_qa-profile-r1" x="170.8" y="117.6" textLength="12.2" clip-path="url(#guide_qa-profile-line-4)">│</text><text class="guide_qa-profile-r1" x="195.2" y="117.6" textLength="97.6" clip-path="url(#guide_qa-profile-line-4)">67.00&#160;µs</text><text class="guide_qa-profile-r1" x="305" y="117.6" textLength="12.2" clip-path="url(#guide_qa-profile-line-4)">│</text><text class="guide_qa-profile-r1" x="329.4" y="117.6" textLength="97.6" clip-path="url(#guide_qa-profile-line-4)">62.00&#160;µs</text><text class="guide_qa-profile-r1" x="439.2" y="117.6" textLength="12.2" clip-path="url(#guide_qa-profile-line-4)">│</text><text class="guide_qa-profile-r1" x="463.6" y="117.6" textLength="109.8" clip-path="url(#guide_qa-profile-line-4)">90.00&#160;µs&#160;</text><text class="guide_qa-profile-r1" x="585.6" y="117.6" textLength="12.2" clip-path="url(#guide_qa-profile-line-4)">│</text><text class="guide_qa-profile-r1" x="610" y="117.6" textLength="97.6" clip-path="url(#guide_qa-profile-line-4)">58.00&#160;µs</text><text class="guide_qa-profile-r1" x="719.8" y="117.6" textLength="12.2" clip-path="url(#guide_qa-profile-line-4)">│</text><text class="guide_qa-profile-r1" x="744.2" y="117.6" textLength="109.8" clip-path="url(#guide_qa-profile-line-4)">90.00&#160;µs&#160;</text><text class="guide_qa-profile-r1" x="866.2" y="117.6" textLength="12.2" clip-path="url(#guide_qa-profile-line-4)">│</text><text class="guide_qa-profile-r1" x="878.4" y="117.6" textLength="12.2" clip-path="url(#guide_qa-profile-line-4)">
+</text><text class="guide_qa-profile-r1" x="0" y="142" textLength="12.2" clip-path="url(#guide_qa-profile-line-5)">│</text><text class="guide_qa-profile-r1" x="24.4" y="142" textLength="134.2" clip-path="url(#guide_qa-profile-line-5)">frame&#160;60x10</text><text class="guide_qa-profile-r1" x="170.8" y="142" textLength="12.2" clip-path="url(#guide_qa-profile-line-5)">│</text><text class="guide_qa-profile-r1" x="195.2" y="142" textLength="97.6" clip-path="url(#guide_qa-profile-line-5)">79.00&#160;µs</text><text class="guide_qa-profile-r1" x="305" y="142" textLength="12.2" clip-path="url(#guide_qa-profile-line-5)">│</text><text class="guide_qa-profile-r1" x="329.4" y="142" textLength="97.6" clip-path="url(#guide_qa-profile-line-5)">75.00&#160;µs</text><text class="guide_qa-profile-r1" x="439.2" y="142" textLength="12.2" clip-path="url(#guide_qa-profile-line-5)">│</text><text class="guide_qa-profile-r1" x="463.6" y="142" textLength="109.8" clip-path="url(#guide_qa-profile-line-5)">101.00&#160;µs</text><text class="guide_qa-profile-r1" x="585.6" y="142" textLength="12.2" clip-path="url(#guide_qa-profile-line-5)">│</text><text class="guide_qa-profile-r1" x="610" y="142" textLength="97.6" clip-path="url(#guide_qa-profile-line-5)">70.00&#160;µs</text><text class="guide_qa-profile-r1" x="719.8" y="142" textLength="12.2" clip-path="url(#guide_qa-profile-line-5)">│</text><text class="guide_qa-profile-r1" x="744.2" y="142" textLength="109.8" clip-path="url(#guide_qa-profile-line-5)">101.00&#160;µs</text><text class="guide_qa-profile-r1" x="866.2" y="142" textLength="12.2" clip-path="url(#guide_qa-profile-line-5)">│</text><text class="guide_qa-profile-r1" x="878.4" y="142" textLength="12.2" clip-path="url(#guide_qa-profile-line-5)">
+</text><text class="guide_qa-profile-r1" x="0" y="166.4" textLength="878.4" clip-path="url(#guide_qa-profile-line-6)">└─────────────┴──────────┴──────────┴───────────┴──────────┴───────────┘</text><text class="guide_qa-profile-r1" x="878.4" y="166.4" textLength="12.2" clip-path="url(#guide_qa-profile-line-6)">
+</text><text class="guide_qa-profile-r1" x="0" y="190.8" textLength="866.2" clip-path="url(#guide_qa-profile-line-7)">width&#160;60,&#160;50&#160;iterations:&#160;118&#160;segments,&#160;9&#160;lines,&#160;540&#160;cells,&#160;1392&#160;bytes;&#160;</text><text class="guide_qa-profile-r1" x="878.4" y="190.8" textLength="12.2" clip-path="url(#guide_qa-profile-line-7)">
+</text><text class="guide_qa-profile-r1" x="0" y="215.2" textLength="756.4" clip-path="url(#guide_qa-profile-line-8)">1486&#160;bytes&#160;per&#160;frame;&#160;412&#160;allocations&#160;(38016&#160;bytes)&#160;per&#160;render</text><text class="guide_qa-profile-r1" x="878.4" y="215.2" textLength="12.2" clip-path="url(#guide_qa-profile-line-8)">
+</text><text class="guide_qa-profile-r1" x="878.4" y="239.6" textLength="12.2" clip-path="url(#guide_qa-profile-line-9)">
+</text>
+    </g>
+    </g>
+</svg>

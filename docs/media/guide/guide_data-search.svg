@@ -1,0 +1,86 @@
+<svg class="rich-terminal" viewBox="0 0 750 220.79999999999998" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .guide_data-search-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .guide_data-search-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .guide_data-search-r1 { fill: #608ab1;font-weight: bold }
+.guide_data-search-r2 { fill: #c5c8c6 }
+.guide_data-search-r3 { fill: #292929;font-weight: bold }
+.guide_data-search-r4 { fill: #868887 }
+.guide_data-search-r5 { fill: #98a84b }
+    </style>
+
+    <defs>
+    <clipPath id="guide_data-search-clip-terminal">
+      <rect x="0" y="0" width="731.0" height="169.79999999999998" />
+    </clipPath>
+    <clipPath id="guide_data-search-line-0">
+    <rect x="0" y="1.5" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_data-search-line-1">
+    <rect x="0" y="25.9" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_data-search-line-2">
+    <rect x="0" y="50.3" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_data-search-line-3">
+    <rect x="0" y="74.7" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_data-search-line-4">
+    <rect x="0" y="99.1" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_data-search-line-5">
+    <rect x="0" y="123.5" width="732" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="748" height="218.8" rx="8"/><text class="guide_data-search-title" fill="#c5c8c6" text-anchor="middle" x="374" y="27">Search</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#guide_data-search-clip-terminal)">
+    <rect fill="#d0b344" x="231.8" y="1.5" width="48.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#d0b344" x="109.8" y="74.7" width="61" height="24.65" shape-rendering="crispEdges"/><rect fill="#d0b344" x="268.4" y="99.1" width="61" height="24.65" shape-rendering="crispEdges"/><rect fill="#d0b344" x="195.2" y="123.5" width="61" height="24.65" shape-rendering="crispEdges"/>
+    <g class="guide_data-search-matrix">
+    <text class="guide_data-search-r1" x="0" y="20" textLength="97.6" clip-path="url(#guide_data-search-line-0)">services</text><text class="guide_data-search-r1" x="97.6" y="20" textLength="48.8" clip-path="url(#guide_data-search-line-0)">.web</text><text class="guide_data-search-r1" x="146.4" y="20" textLength="61" clip-path="url(#guide_data-search-line-0)">.port</text><text class="guide_data-search-r2" x="207.4" y="20" textLength="24.4" clip-path="url(#guide_data-search-line-0)">:&#160;</text><text class="guide_data-search-r3" x="231.8" y="20" textLength="48.8" clip-path="url(#guide_data-search-line-0)">8080</text><text class="guide_data-search-r2" x="732" y="20" textLength="12.2" clip-path="url(#guide_data-search-line-0)">
+</text><text class="guide_data-search-r2" x="0" y="44.4" textLength="170.8" clip-path="url(#guide_data-search-line-1)">&#160;&#160;&#160;&#160;settings:&#160;</text><text class="guide_data-search-r4" x="170.8" y="44.4" textLength="122" clip-path="url(#guide_data-search-line-1)">{…}&#160;2&#160;keys</text><text class="guide_data-search-r2" x="732" y="44.4" textLength="12.2" clip-path="url(#guide_data-search-line-1)">
+</text><text class="guide_data-search-r4" x="0" y="68.8" textLength="85.4" clip-path="url(#guide_data-search-line-2)">1&#160;match</text><text class="guide_data-search-r2" x="732" y="68.8" textLength="12.2" clip-path="url(#guide_data-search-line-2)">
+</text><text class="guide_data-search-r1" x="0" y="93.2" textLength="97.6" clip-path="url(#guide_data-search-line-3)">defaults</text><text class="guide_data-search-r1" x="97.6" y="93.2" textLength="12.2" clip-path="url(#guide_data-search-line-3)">.</text><text class="guide_data-search-r3" x="109.8" y="93.2" textLength="61" clip-path="url(#guide_data-search-line-3)">image</text><text class="guide_data-search-r2" x="170.8" y="93.2" textLength="24.4" clip-path="url(#guide_data-search-line-3)">:&#160;</text><text class="guide_data-search-r5" x="195.2" y="93.2" textLength="317.2" clip-path="url(#guide_data-search-line-3)">&quot;registry.example/app:1.4&quot;</text><text class="guide_data-search-r2" x="732" y="93.2" textLength="12.2" clip-path="url(#guide_data-search-line-3)">
+</text><text class="guide_data-search-r1" x="0" y="117.6" textLength="97.6" clip-path="url(#guide_data-search-line-4)">services</text><text class="guide_data-search-r1" x="97.6" y="117.6" textLength="48.8" clip-path="url(#guide_data-search-line-4)">.web</text><text class="guide_data-search-r1" x="146.4" y="117.6" textLength="109.8" clip-path="url(#guide_data-search-line-4)">.settings</text><text class="guide_data-search-r1" x="256.2" y="117.6" textLength="12.2" clip-path="url(#guide_data-search-line-4)">.</text><text class="guide_data-search-r3" x="268.4" y="117.6" textLength="61" clip-path="url(#guide_data-search-line-4)">image</text><text class="guide_data-search-r2" x="329.4" y="117.6" textLength="24.4" clip-path="url(#guide_data-search-line-4)">:&#160;</text><text class="guide_data-search-r5" x="353.8" y="117.6" textLength="317.2" clip-path="url(#guide_data-search-line-4)">&quot;registry.example/app:1.4&quot;</text><text class="guide_data-search-r2" x="732" y="117.6" textLength="12.2" clip-path="url(#guide_data-search-line-4)">
+</text><text class="guide_data-search-r1" x="0" y="142" textLength="97.6" clip-path="url(#guide_data-search-line-5)">services</text><text class="guide_data-search-r1" x="97.6" y="142" textLength="85.4" clip-path="url(#guide_data-search-line-5)">.worker</text><text class="guide_data-search-r1" x="183" y="142" textLength="12.2" clip-path="url(#guide_data-search-line-5)">.</text><text class="guide_data-search-r3" x="195.2" y="142" textLength="61" clip-path="url(#guide_data-search-line-5)">image</text><text class="guide_data-search-r2" x="256.2" y="142" textLength="24.4" clip-path="url(#guide_data-search-line-5)">:&#160;</text><text class="guide_data-search-r5" x="280.6" y="142" textLength="317.2" clip-path="url(#guide_data-search-line-5)">&quot;registry.example/app:1.4&quot;</text><text class="guide_data-search-r2" x="732" y="142" textLength="12.2" clip-path="url(#guide_data-search-line-5)">
+</text><text class="guide_data-search-r4" x="0" y="166.4" textLength="109.8" clip-path="url(#guide_data-search-line-6)">3&#160;matches</text><text class="guide_data-search-r2" x="732" y="166.4" textLength="12.2" clip-path="url(#guide_data-search-line-6)">
+</text>
+    </g>
+    </g>
+</svg>

@@ -1,7 +1,9 @@
 //! # rich-art
 //!
-//! ASCII-art renderables for the [`rich`] terminal library — currently
-//! **FIGlet-style text banners** (in the spirit of `figlet(6)` / `pyfiglet`).
+//! Art renderables for the [`rich`] terminal library: **FIGlet-style text
+//! banners** (in the spirit of `figlet(6)` / `pyfiglet`), and with the `image`,
+//! `gif` and `sixel` features, images as ASCII, Braille, half-blocks,
+//! quadrants or Sixel, animated GIFs, and perceptual image diffs.
 //!
 //! This crate is **not** a port of anything upstream. `rich` itself has no
 //! banner support, so this is a local feature and lives outside the faithful

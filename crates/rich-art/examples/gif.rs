@@ -1,7 +1,7 @@
 //! Play an animated GIF in the terminal as ANSI art.
 //!
 //! ```text
-//! cargo run -p rich-art --features gif --example gif -- spin.gif
+//! cargo run -p rs-rich-art --features gif --example gif -- spin.gif
 //! ```
 //!
 //! Requires the `gif` feature.

@@ -1,7 +1,7 @@
 //! Print a FIGlet banner through a `rich` console.
 //!
 //! ```text
-//! cargo run -p rich-art --example banner -- "Hello"
+//! cargo run -p rs-rich-art --example banner -- "Hello"
 //! ```
 
 use rich::color::ColorSystem;

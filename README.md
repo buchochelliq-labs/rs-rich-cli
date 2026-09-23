@@ -19,7 +19,7 @@ Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
 ![Rich-art cover cropping with nine anchors](docs/assets/demos/v8-crop-anchors.gif)
 
 **[Watch the rich-art videos](https://buchochelliq-labs.github.io/rs-rich-cli/demos/)** ·
-[Output gallery](docs/gallery.md) · [CLI guide](docs/cli.md)
+[User guide](docs/guide/index.md) · [Output gallery](docs/gallery.md) · [CLI guide](docs/cli.md)
 
 This preview shows crop anchors from the optimized CLI 0.0.8 build.
 [New workflows and reproduction](docs/demos.md#cli-008-workflows) ·

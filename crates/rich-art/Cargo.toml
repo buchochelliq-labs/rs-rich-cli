@@ -11,7 +11,7 @@
 [package]
 name = "rs-rich-art"
 version = "0.0.9"
-description = "ASCII-art renderables for `rich` — FIGlet-style text banners"
+description = "Art renderables for `rich`: FIGlet banners, images as ASCII/Braille/blocks/Sixel, GIFs and image diffs"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -71,6 +71,11 @@ required-features = ["gif"]
 name = "diff_report"
 required-features = ["image"]
 
+
+[package.metadata.docs.rs]
+# Show the image, GIF and Sixel APIs on docs.rs.
+all-features = true
+
 [lib]
 # The package is `rs-rich-art` on crates.io (plain `rich` is taken), but the
 # library target keeps the short name so users write `use rich_art::…`.
@@ -83,3 +88,20 @@ workspace = true
 rich.workspace = true
 image = { workspace = true, optional = true }
 icy_sixel = { version = "0.7.0", optional = true }
+
+# The user-guide examples: each snippet on docs/guide/art/*.md is compiled
+# from these, and `-- --svg docs/media/guide` regenerates the screenshots.
+[[example]]
+name = "guide_banners"
+
+[[example]]
+name = "guide_images"
+required-features = ["image"]
+
+[[example]]
+name = "guide_gifs"
+required-features = ["gif"]
+
+[[example]]
+name = "guide_image_diff"
+required-features = ["image"]

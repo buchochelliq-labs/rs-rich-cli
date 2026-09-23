@@ -37,8 +37,11 @@ Bad markup is reported rather than printed literally:
 $ rich -p "[/nope]"
 rich: markup error: closing tag '[/nope]' at position 0 doesn't match any open tag
 $ echo $?
-1
+4
 ```
+
+Exit code 4 means a parse or render error in the input; the
+[CLI guide](../guide/cli/index.md) lists every exit code.
 
 ## Fetching a URL
 

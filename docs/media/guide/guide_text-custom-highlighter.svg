@@ -1,0 +1,60 @@
+<svg class="rich-terminal" viewBox="0 0 799 74.4" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .guide_text-custom-highlighter-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .guide_text-custom-highlighter-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .guide_text-custom-highlighter-r1 { fill: #c5c8c6 }
+.guide_text-custom-highlighter-r2 { fill: #4b4e55;font-weight: bold }
+    </style>
+
+    <defs>
+    <clipPath id="guide_text-custom-highlighter-clip-terminal">
+      <rect x="0" y="0" width="779.8" height="23.4" />
+    </clipPath>
+    
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="797" height="72.4" rx="8"/><text class="guide_text-custom-highlighter-title" fill="#c5c8c6" text-anchor="middle" x="398" y="27">guide_text-custom-highlighter</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#guide_text-custom-highlighter-clip-terminal)">
+    <rect fill="#d08442" x="109.8" y="1.5" width="97.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#d08442" x="341.6" y="1.5" width="73.2" height="24.65" shape-rendering="crispEdges"/>
+    <g class="guide_text-custom-highlighter-matrix">
+    <text class="guide_text-custom-highlighter-r1" x="0" y="20" textLength="109.8" clip-path="url(#guide_text-custom-highlighter-line-0)">Fixed&#160;in&#160;</text><text class="guide_text-custom-highlighter-r2" x="109.8" y="20" textLength="97.6" clip-path="url(#guide_text-custom-highlighter-line-0)">ENG-1234</text><text class="guide_text-custom-highlighter-r1" x="207.4" y="20" textLength="134.2" clip-path="url(#guide_text-custom-highlighter-line-0)">;&#160;see&#160;also&#160;</text><text class="guide_text-custom-highlighter-r2" x="341.6" y="20" textLength="73.2" clip-path="url(#guide_text-custom-highlighter-line-0)">OPS-77</text><text class="guide_text-custom-highlighter-r1" x="414.8" y="20" textLength="122" clip-path="url(#guide_text-custom-highlighter-line-0)">&#160;and&#160;1234.</text><text class="guide_text-custom-highlighter-r1" x="780.8" y="20" textLength="12.2" clip-path="url(#guide_text-custom-highlighter-line-0)">
+</text>
+    </g>
+    </g>
+</svg>

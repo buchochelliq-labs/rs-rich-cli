@@ -18,7 +18,7 @@ colour, tables, markdown and progress bars in the terminal — plus a port of th
 ![Rich-art cover cropping with nine anchors](assets/demos/v8-crop-anchors.gif)
 
 **[Watch the rich-art videos](demos.md)** · [Browse the gallery](gallery.md) ·
-[Start with the CLI](cli.md) · [Learn the library](tutorial/index.md)
+[Start with the CLI](cli.md) · [Learn the library](tutorial/index.md) · [Read the full guide](guide/index.md)
 
 The preview shows crop anchors from the optimized CLI 0.0.8 build.
 See the [new workflow videos](demos.md#cli-008-workflows) for batch dry-run,
