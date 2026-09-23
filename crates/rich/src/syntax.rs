@@ -228,10 +228,6 @@ impl Renderable for Syntax {
         Measurement::new(0, self.padding * 2 + widest)
     }
 
-    fn fit_to_measurement(&self) -> bool {
-        false
-    }
-
     fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let syntaxes = syntax_set();
         let themes = theme_set();

@@ -108,7 +108,7 @@ impl Rule {
         title.expand_tabs(DEFAULT_TAB_SIZE);
         title.truncate(truncate_width, Some(Overflow::Ellipsis), false);
 
-        match self.align {
+        let mut text = match self.align {
             HorizontalAlign::Center => {
                 // Title truncated (never padded) to leave room for the flanking spaces.
                 let title_len = title.cell_len();
@@ -136,14 +136,23 @@ impl Rule {
                 text
             }
             HorizontalAlign::Right => {
-                let fill_len = width.saturating_sub(title.cell_len()).saturating_sub(1);
+                // Upstream repeats the characters string once per remaining
+                // *cell*, so a multi-cell fill overshoots the width and the
+                // final crop below removes the title (#444).
+                let repeat = width.saturating_sub(title.cell_len()).saturating_sub(1);
                 let mut text = Text::new("");
-                text.append(&self.fill(fill_len), Some(self.style.clone().into()));
+                text.append(
+                    &self.characters.repeat(repeat),
+                    Some(self.style.clone().into()),
+                );
                 text.append(" ", None);
                 text = text.append_text(&title);
                 text
             }
-        }
+        };
+        // Upstream: `rule_text.plain = set_cell_size(rule_text.plain, width)`.
+        text.truncate(width, Some(Overflow::Crop), true);
+        text
     }
 }
 
@@ -200,5 +209,20 @@ mod tests {
         let console = Console::builder().width(5).no_color(true).build();
         let out = console.render_to_string(&Rule::new("TITLE"));
         assert_eq!(out.trim_end_matches('\n'), "\u{2500} \u{2026} \u{2500}");
+    }
+
+    #[test]
+    fn right_aligned_title_is_dropped_by_a_multi_cell_fill() {
+        // Captured from real rich 15.0.0 (#444).
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(crate::color::ColorSystem::Truecolor))
+            .width(10)
+            .highlight(false)
+            .build();
+        let rule = Rule::new("x")
+            .characters("-~")
+            .align(HorizontalAlign::Right);
+        assert_eq!(console.render_export(&rule), "\x1b[92m-~-~-~-~-~\x1b[0m\n");
     }
 }

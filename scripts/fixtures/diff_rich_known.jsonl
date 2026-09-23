@@ -2,13 +2,3 @@
 # still differs from Python rich and names its issue. When fixing an issue, move
 # its case(s) into diff_rich_cases.jsonl (the pull-request corpus) in the same PR.
 # Replay: python scripts/diff_rich.py --corpus scripts/fixtures/diff_rich_known.jsonl
-{"kind":"padding","name":"padding_empty","issue":442,"source":"","width":5,"color_system":"truecolor","pad":[1,0,0,0]}
-{"kind":"padding","name":"padding_style","issue":442,"source":"ab","width":5,"color_system":"truecolor","pad":[0,0,0,1],"style":"on blue"}
-{"kind":"align","name":"align_block","issue":443,"source":"abcd ef","width":4,"color_system":"truecolor","align":"right"}
-{"kind":"rule","name":"rule_right_multichar","issue":444,"source":"x","width":10,"color_system":"truecolor","characters":"-~","align":"right"}
-{"kind":"table","name":"table_header_bottom","issue":445,"source":"","width":14,"color_system":"256","columns":[{"header":"x _🙂z","justify":"left"},{"header":"éc","justify":"left"}],"rows":[],"box":"rounded","show_header":true,"show_lines":true,"show_edge":true,"pad_edge":true,"expand":true}
-{"kind":"table","name":"table_empty_header_sgr","issue":445,"source":"","width":20,"color_system":"standard","columns":[{"header":"é_éb_🙂界","justify":"right"},{"header":"","justify":"left"}],"rows":[],"box":"square","show_header":true,"show_lines":true,"show_edge":false,"pad_edge":true,"expand":true}
-{"kind":"text","name":"printed_text_overflow","issue":446,"source":"abcdefghij","width":6,"color_system":"truecolor","overflow":"ellipsis"}
-{"kind":"text","name":"tab_full_justify","issue":447,"source":"x::y_aa-🙂b- #\tz","width":5,"color_system":"truecolor","safe_box":true,"overflow":"fold","no_wrap":false,"justify":"full"}
-{"kind":"markup","name":"emoji_overlap","issue":448,"source":" -:界[ba:b: x","width":31,"color_system":"256"}
-{"kind":"panel","name":"panel_zero_inner","issue":449,"source":"_ \ty:é\t界c#_","width":4,"color_system":"standard","box":"heavy"}

@@ -85,7 +85,8 @@ Rust `diff_render` example, then compares the bytes.
   replayable corpus lines to the log and the job summary.
 - **Known divergences** it has found live in
   `scripts/fixtures/diff_rich_known.jsonl`, one line per case, each naming its
-  issue.
+  issue. 0.0.11 fixed the first eight families (#442–#449), so the file is
+  empty until the nightly run finds something new.
 
 The Python side renders each colour system in its own interpreter. rich memoises
 a `Style`'s escape codes on the instance whatever the colour system, so a shared

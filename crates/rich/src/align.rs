@@ -55,19 +55,37 @@ impl Align {
 
 impl Renderable for Align {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        let width = options.max_width;
-        let lines = console.render_lines(self.child.as_ref(), options, false);
+        // Upstream measures the child, renders it through `Constrain` at that
+        // width, and squares the lines off with `Segment.set_shape`, so the
+        // rendered *block* is aligned as a whole (#443).
+        let block_width = self
+            .child
+            .measure(console, options)
+            .maximum
+            .min(options.max_width);
+        let mut child_options = options.update_width(block_width);
+        child_options.height = None;
+        let lines = console.render_lines(self.child.as_ref(), &child_options, false);
+        let width = lines
+            .iter()
+            .map(|line| line.iter().map(Segment::cell_length).sum::<usize>())
+            .max()
+            .unwrap_or(0);
+        let lines: Vec<Vec<Segment>> = lines
+            .iter()
+            .map(|line| Segment::adjust_line_length(line, width, None))
+            .collect();
+
+        let excess = options.max_width.saturating_sub(width);
         let style = Some(Style::new());
+        let (left_pad, right_pad) = match self.align {
+            HorizontalAlign::Left => (0, excess),
+            HorizontalAlign::Right => (excess, 0),
+            HorizontalAlign::Center => (excess / 2, excess - excess / 2),
+        };
 
         let mut rows: Vec<Vec<Segment>> = Vec::with_capacity(lines.len());
         for line in lines {
-            let line_width: usize = line.iter().map(Segment::cell_length).sum();
-            let excess = width.saturating_sub(line_width);
-            let (left_pad, right_pad) = match self.align {
-                HorizontalAlign::Left => (0, excess),
-                HorizontalAlign::Right => (excess, 0),
-                HorizontalAlign::Center => (excess / 2, excess - excess / 2),
-            };
             let mut row = Vec::new();
             if left_pad > 0 {
                 row.push(Segment::new(" ".repeat(left_pad), style.clone()));
@@ -121,5 +139,15 @@ mod tests {
     fn center_odd_remainder_floors_left() {
         let out = console(21).render_export(&Align::center(Box::new(Text::new("hi"))));
         assert_eq!(out, "         hi          \n");
+    }
+
+    #[test]
+    fn aligns_the_wrapped_block_not_each_line() {
+        // Captured from real rich 15.0.0 (#443): the block is 4 cells wide, so
+        // the shorter wrapped line keeps its place inside it.
+        let out = console(4).render_export(&Align::right(Box::new(Text::new("abcd ef"))));
+        assert_eq!(out, "abcd\nef  \n");
+        let out = console(8).render_export(&Align::right(Box::new(Text::new("abc de"))));
+        assert_eq!(out, "  abc de\n");
     }
 }

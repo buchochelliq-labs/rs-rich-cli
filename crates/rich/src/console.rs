@@ -300,10 +300,31 @@ impl Console {
         self.segments_to_string(&segments)
     }
 
-    /// Render a renderable to segments, applying top-level measurement-fit when
-    /// no explicit justify is set (shared by the string and print paths).
+    /// Render a renderable to segments as `Console.print` does (shared by the
+    /// string and print paths): a printed `Text` goes through upstream's
+    /// `Text.join`, and an extension that opts into measurement-fit is shrunk
+    /// to its measured width when no explicit justify is set.
     fn render_segments(&self, renderable: &dyn Renderable) -> Vec<Segment> {
-        let mut options = self.options();
+        self.render_segments_with(renderable, &self.options())
+    }
+
+    /// [`render_segments`](Self::render_segments) with explicit render options,
+    /// as upstream's `Console.print(…, justify=, overflow=, no_wrap=)` builds
+    /// them.
+    fn render_segments_with(
+        &self,
+        renderable: &dyn Renderable,
+        options: &ConsoleOptions,
+    ) -> Vec<Segment> {
+        let mut options = options.clone();
+        let joined;
+        let renderable = match renderable.printed_text() {
+            Some(text) => {
+                joined = text;
+                &joined as &dyn Renderable
+            }
+            None => renderable,
+        };
         if options.justify == Justify::Default && renderable.fit_to_measurement() {
             let measurement = renderable.measure(self, &options);
             options.max_width = measurement.maximum.min(options.max_width).max(1);
@@ -346,11 +367,46 @@ impl Console {
         options: &ConsoleOptions,
         pad: bool,
     ) -> Vec<Vec<Segment>> {
-        let segments = renderable.rich_render(self, options);
+        self.render_lines_styled(renderable, options, None, pad)
+    }
+
+    /// [`render_lines`](Self::render_lines) with upstream's `style=` argument:
+    /// the style is applied under every rendered segment and to the padding
+    /// that fills each line, as `Panel` and `Padding` use it.
+    pub fn render_lines_styled(
+        &self,
+        renderable: &dyn Renderable,
+        options: &ConsoleOptions,
+        style: Option<&Style>,
+        pad: bool,
+    ) -> Vec<Vec<Segment>> {
+        let style = style.filter(|style| !style.is_null());
+        // Upstream `Console.render` yields nothing when `max_width < 1`, so a
+        // renderable squeezed to zero width contributes no lines (#449).
+        let mut segments = if options.max_width < 1 {
+            Vec::new()
+        } else {
+            renderable.rich_render(self, options)
+        };
+        if let Some(style) = style {
+            segments = Segment::apply_style(&segments, style);
+        }
         let mut lines = Segment::split_lines(&segments);
+        // An empty `Text` renders as a lone empty segment: upstream renders it
+        // as its `end` newline, which `split_and_crop_lines` turns into one
+        // blank line (#442).
+        if lines.is_empty()
+            && !segments.is_empty()
+            && segments
+                .iter()
+                .all(|segment| !segment.control && segment.text.is_empty())
+        {
+            lines.push(Vec::new());
+        }
+        let pad_style = Some(style.cloned().unwrap_or_default());
         if pad {
             for line in &mut lines {
-                *line = Segment::adjust_line_length(line, options.max_width, Some(Style::new()));
+                *line = Segment::adjust_line_length(line, options.max_width, pad_style.clone());
             }
         }
         // Honor an explicit height by cropping/padding to exactly that many rows
@@ -362,7 +418,7 @@ impl Console {
                 lines.push(if pad {
                     vec![Segment::new(
                         " ".repeat(options.max_width),
-                        Some(Style::new()),
+                        pad_style.clone(),
                     )]
                 } else {
                     Vec::new()
@@ -388,6 +444,31 @@ impl Console {
     pub fn print(&self, renderable: &dyn Renderable) {
         let segments = self.render_segments(renderable);
         self.emit(segments);
+    }
+
+    /// Print with explicit render options, the equivalent of upstream's
+    /// `Console.print(renderable, justify=…, overflow=…, no_wrap=…)`. Start
+    /// from [`options`](Self::options) and set the fields to override. A
+    /// printed `Text` defers to these options, because upstream's `Text.join`
+    /// drops the text's own `justify`, `overflow` and `no_wrap`.
+    pub fn print_with(&self, renderable: &dyn Renderable, options: &ConsoleOptions) {
+        let segments = self.render_segments_with(renderable, options);
+        self.emit(segments);
+    }
+
+    /// Like [`render_export`](Self::render_export), with explicit render
+    /// options as for [`print_with`](Self::print_with).
+    pub fn render_export_with(
+        &self,
+        renderable: &dyn Renderable,
+        options: &ConsoleOptions,
+    ) -> String {
+        let segments = self.render_segments_with(renderable, options);
+        let mut out = self.segments_to_string(&segments);
+        if !segments.is_empty() {
+            out.push('\n');
+        }
+        out
     }
 
     /// Write a terminal control sequence to stdout.
@@ -713,6 +794,14 @@ fn segments_to_plain(segments: &[Segment]) -> String {
 }
 
 impl Renderable for Text {
+    fn printed_text(&self) -> Option<Text> {
+        // `Text("").join([self])`: the text and its spans survive; justify,
+        // overflow and no_wrap come from the blank separator (#446).
+        let mut text = self.clone();
+        text.clear_layout_options();
+        Some(text)
+    }
+
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         // Empty Text still represents a printable blank line; an empty
         // generator such as Markdown does not. Preserve that distinction.
@@ -1311,5 +1400,33 @@ mod tests {
         }));
         assert!(unwound.is_err());
         assert!(console.theme().get("accent").is_none());
+    }
+
+    #[test]
+    fn a_printed_text_defers_layout_to_the_print_options() {
+        // Captured from real rich 15.0.0 (#446, #447): `Text.join` drops the
+        // text's own overflow and justify; print-level options still apply.
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(crate::color::ColorSystem::Truecolor))
+            .width(6)
+            .highlight(false)
+            .build();
+        let text = Text::new("abcdefghij").overflow(Overflow::Ellipsis);
+        assert_eq!(console.render_export(&text), "abcdef\nghij\n");
+        let mut options = console.options();
+        options.overflow = Some(Overflow::Ellipsis);
+        assert_eq!(
+            console.render_export_with(&Text::new("abcdefghij"), &options),
+            "abcde…\n"
+        );
+        let wide = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(crate::color::ColorSystem::Truecolor))
+            .width(20)
+            .highlight(false)
+            .build();
+        let tabbed = Text::new("a\tb").justify(Justify::Right);
+        assert_eq!(wide.render_export(&tabbed), "a       b\n");
     }
 }
