@@ -29,6 +29,7 @@ pub(crate) struct ViewerOptions {
     limit: Option<usize>,
     show_secrets: bool,
     cast: Option<String>,
+    redact_patterns: Vec<String>,
 }
 
 fn number<'a, T: std::str::FromStr>(
@@ -74,6 +75,11 @@ impl ViewerOptions {
             "--limit" => self.limit = Some(number(arg, rest)?),
             "--show-secrets" => self.show_secrets = true,
             "--cast" => self.cast = Some(rest.next().ok_or("--cast requires a file")?.clone()),
+            "--redact-pattern" => self.redact_patterns.push(
+                rest.next()
+                    .ok_or("--redact-pattern requires a regular expression")?
+                    .clone(),
+            ),
             _ => return Ok(false),
         }
         Ok(true)
@@ -92,6 +98,11 @@ impl ViewerOptions {
             ("--limit", self.limit.is_some(), &["unicode"]),
             ("--show-secrets", self.show_secrets, &["env"]),
             ("--cast", self.cast.is_some(), &["capture"]),
+            (
+                "--redact-pattern",
+                !self.redact_patterns.is_empty(),
+                &["capture"],
+            ),
         ]
         .into_iter()
         .filter(|(_, given, _)| *given)
@@ -227,6 +238,21 @@ impl Captured {
             (None, Some(signal)) => u8::try_from(128 + signal).unwrap_or(1),
             (None, None) => 1,
         }
+    }
+
+    /// Mask secrets in the output and the command line, before anything is
+    /// shown, exported or recorded. The output is decoded once, so a
+    /// character split between pipe reads stays whole; chunks keep their
+    /// timing and, when nothing matched, their bytes. A secret split across
+    /// chunks is masked where it starts. On the command line, the word after
+    /// a secret-named flag (`--token X`) is masked too.
+    pub fn redact(&mut self, redactor: &rich_ext::redact::Redactor) {
+        let chunks: Vec<&[u8]> = self.chunks.iter().map(|(_, b)| b.as_slice()).collect();
+        let redacted = redactor.redact_byte_chunks(&chunks);
+        for ((_, bytes), new) in self.chunks.iter_mut().zip(redacted) {
+            *bytes = new;
+        }
+        self.command = redactor.redact_args(&self.command);
     }
 
     fn output(&self) -> Vec<u8> {
@@ -399,16 +425,46 @@ pub(crate) fn asciicast(captured: &Captured, width: usize, height: usize) -> Str
     });
     let mut out = header.to_string();
     out.push('\n');
-    for (at, bytes) in &captured.chunks {
+    let mut event = |at: Duration, bytes: &[u8]| {
         // Terminals expect CRLF; piped output has bare LF.
         let data = String::from_utf8_lossy(bytes)
             .replace("\r\n", "\n")
             .replace('\n', "\r\n");
-        let event = serde_json::json!([at.as_secs_f64(), "o", data]);
-        out.push_str(&event.to_string());
+        out.push_str(&serde_json::json!([at.as_secs_f64(), "o", data]).to_string());
         out.push('\n');
+    };
+    // A character split between pipe reads goes out whole, in the event
+    // where it ends, instead of as two replacement characters.
+    let mut pending: Vec<u8> = Vec::new();
+    let mut last = Duration::ZERO;
+    for (at, bytes) in &captured.chunks {
+        pending.extend_from_slice(bytes);
+        let tail = pending.split_off(pending.len() - incomplete_utf8_tail(&pending));
+        if !pending.is_empty() {
+            event(*at, &pending);
+        }
+        pending = tail;
+        last = *at;
+    }
+    if !pending.is_empty() {
+        event(last, &pending);
     }
     out
+}
+
+/// How many bytes at the end of `bytes` are the start of a UTF-8
+/// character that the next read will finish.
+fn incomplete_utf8_tail(bytes: &[u8]) -> usize {
+    let from = bytes.len().saturating_sub(3);
+    for start in (from..bytes.len()).rev() {
+        if bytes[start] & 0xc0 != 0x80 {
+            return match std::str::from_utf8(&bytes[start..]) {
+                Err(e) if e.error_len().is_none() => bytes.len() - start,
+                _ => 0,
+            };
+        }
+    }
+    0
 }
 
 /// `rich hex`: the bytes from `--offset`, at most `--length` of them.
@@ -471,6 +527,31 @@ pub(crate) fn env(options: &ViewerOptions, patterns: &[String]) -> Box<dyn Rende
 
 pub(crate) fn cast_path(options: &ViewerOptions) -> Option<&str> {
     options.cast.as_deref()
+}
+
+/// The redactor `--redact` (parsed with the `--inspect` options, which share
+/// it) and `--redact-pattern` ask for, if any: the built-in detectors, then
+/// each pattern. Masks keep their width, so the captured screen keeps its
+/// layout.
+pub(crate) fn capture_redactor(
+    options: &ViewerOptions,
+    redact: bool,
+) -> Result<Option<rich_ext::redact::Redactor>, String> {
+    use rich_ext::redact::Redactor;
+    if !redact && options.redact_patterns.is_empty() {
+        return Ok(None);
+    }
+    let mut redactor = if redact {
+        Redactor::secrets()
+    } else {
+        Redactor::new()
+    };
+    for pattern in &options.redact_patterns {
+        redactor = redactor
+            .pattern(pattern)
+            .map_err(|e| format!("--redact-pattern: {e}"))?;
+    }
+    Ok(Some(redactor.preserve_width(true)))
 }
 
 #[cfg(test)]
@@ -549,6 +630,95 @@ mod tests {
             .map(|s| s.to_string())
             .collect();
         assert_eq!(shell_words(&words), r"ls -la 'my file' 'it'\''s'");
+    }
+
+    fn captured(command: &[&str], chunks: &[&[u8]]) -> Captured {
+        Captured {
+            command: command.iter().map(|s| s.to_string()).collect(),
+            chunks: chunks
+                .iter()
+                .enumerate()
+                .map(|(i, bytes)| (Duration::from_millis(i as u64), bytes.to_vec()))
+                .collect(),
+            status: Some(1),
+            signal: None,
+            elapsed: Duration::from_millis(chunks.len() as u64),
+        }
+    }
+
+    fn redactor() -> rich_ext::redact::Redactor {
+        capture_redactor(&ViewerOptions::default(), true)
+            .unwrap()
+            .unwrap()
+    }
+
+    #[test]
+    fn redaction_keeps_characters_split_between_reads() {
+        let text = format!("x{}\n", "é".repeat(10_000));
+        let chunks: Vec<&[u8]> = text.as_bytes().chunks(8192).collect();
+        let mut capture = captured(&["cat", "big.txt"], &chunks);
+        capture.redact(&redactor());
+        // Nothing to mask: the bytes are untouched, so nothing is lost.
+        let after: Vec<&[u8]> = capture.chunks.iter().map(|(_, b)| b.as_slice()).collect();
+        assert_eq!(after, chunks);
+        assert_eq!(capture.output(), text.as_bytes());
+        // Invalid bytes are not multiplied, and a secret is still masked.
+        let mut capture = captured(&["x"], &[b"\xc3", b"\xa9\xff token=ab", b"c\n"]);
+        capture.redact(&redactor());
+        assert_eq!(capture.output(), b"\xc3\xa9\xff token=***\n");
+    }
+
+    #[test]
+    fn casts_keep_characters_split_between_reads() {
+        let text = format!("x{}\n", "é".repeat(10_000));
+        let chunks: Vec<&[u8]> = text.as_bytes().chunks(8192).collect();
+        let cast = asciicast(&captured(&["cat"], &chunks), 80, 24);
+        assert!(!cast.contains('\u{fffd}'), "a split character was mangled");
+        let data: String = cast
+            .lines()
+            .skip(1)
+            .map(|line| {
+                let event: serde_json::Value = serde_json::from_str(line).unwrap();
+                event[2].as_str().unwrap().to_string()
+            })
+            .collect();
+        assert_eq!(data, text.replace('\n', "\r\n"));
+    }
+
+    #[test]
+    fn redaction_masks_secret_flag_values_on_the_command_line() {
+        let mut capture = captured(
+            &[
+                "deploy",
+                "--token",
+                "hunter2",
+                "--api-key=abc123",
+                "-p",
+                "80",
+            ],
+            &[b"ok\n"],
+        );
+        capture.redact(&redactor());
+        let masked = [
+            "deploy",
+            "--token",
+            "*******",
+            "--api-key=******",
+            "-p",
+            "80",
+        ];
+        assert_eq!(capture.command, masked);
+        let report = capture_report(&capture).to_string();
+        assert!(
+            !report.contains("hunter2") && !report.contains("abc123"),
+            "{report}"
+        );
+        let cast = asciicast(&capture, 80, 24);
+        let header = cast.lines().next().unwrap();
+        assert!(
+            !header.contains("hunter2") && !header.contains("abc123"),
+            "{header}"
+        );
     }
 
     #[cfg(unix)]

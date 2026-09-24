@@ -89,8 +89,14 @@ impl DataOptions {
         Ok(true)
     }
 
+    /// Whether `--redact` was given (it also applies to `rich capture`).
+    pub(crate) fn redact(&self) -> bool {
+        self.redact
+    }
+
     /// The first inspect-only option given, for the "only has an effect" check.
-    pub(crate) fn inspect_only_option(&self) -> Option<&'static str> {
+    /// `--redact` is left out when `redact_elsewhere`: `rich capture` takes it too.
+    pub(crate) fn inspect_only_option(&self, redact_elsewhere: bool) -> Option<&'static str> {
         [
             ("--select", self.select.is_some()),
             ("--find", self.find.is_some()),
@@ -99,7 +105,7 @@ impl DataOptions {
             ("--max-depth", self.max_depth.is_some()),
             ("--max-length", self.max_length.is_some()),
             ("--show-paths", self.show_paths),
-            ("--redact", self.redact),
+            ("--redact", self.redact && !redact_elsewhere),
             ("--compare", self.compare.is_some()),
         ]
         .into_iter()

@@ -22,19 +22,26 @@
 
 pub mod a11y;
 pub mod ansi_explain;
+pub mod badge;
+pub mod cancel;
 pub mod capabilities;
 pub mod cli;
 pub mod encoding;
 pub mod env_inspect;
 pub mod fidelity;
+pub mod format;
 pub mod hex;
 pub mod highlighter;
+pub mod redact;
 pub mod registry;
 pub mod sanitize;
+pub mod size_bar;
 pub mod source_view;
+pub mod table;
 pub mod target;
 pub mod theme;
 pub mod unicode_inspect;
+pub mod workflow;
 
 pub use highlighter::NumberHighlighter;
 pub use registry::{install_defaults, ExtensionRegistry};
@@ -107,3 +114,8 @@ pub mod cli_doc;
 
 // Diffs: engine, views, source/patch renderers, test reports and assertions.
 pub mod diff;
+
+// Transfers, retry/rate-limit countdowns and transient notifications.
+pub mod countdown;
+pub mod notify;
+pub mod transfer;

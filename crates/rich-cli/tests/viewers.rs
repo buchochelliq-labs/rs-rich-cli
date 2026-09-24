@@ -33,6 +33,23 @@ fn text(bytes: &[u8]) -> String {
     String::from_utf8(bytes.to_vec()).unwrap()
 }
 
+/// Fail if any of `secrets` appears in `body`, saying which output leaked,
+/// which secret (by position) and where, but never the value itself or the
+/// output around it: a failing redaction test must not print the secret it
+/// guards into the CI log.
+// Only the Unix capture tests (they run shell scripts) call this.
+#[cfg_attr(not(unix), allow(dead_code))]
+fn assert_no_leaks(name: &str, body: &str, secrets: &[&str]) {
+    for (index, secret) in secrets.iter().enumerate() {
+        if let Some(at) = body.find(secret) {
+            panic!(
+                "{name} leaks secret #{index} at byte {at} of {}",
+                body.len()
+            );
+        }
+    }
+}
+
 fn ok(output: &Output) -> String {
     assert!(output.status.success(), "{output:?}");
     text(&output.stdout)
@@ -277,4 +294,216 @@ fn viewer_options_are_rejected_elsewhere_and_capture_needs_a_command() {
         &[],
     );
     assert_eq!(missing.status.code(), Some(3), "{missing:?}");
+}
+
+#[cfg(unix)]
+#[test]
+fn capture_redacts_before_showing_exporting_or_recording() {
+    let dir = temp();
+    let token = "ghp_0123456789abcdefghijklmnopqrstuvwxyzAB";
+    let script = format!(
+        "echo 'GITHUB_TOKEN={token}'; printf 'pass\\033[31mword=hun\\033[0mter2\\n'; \
+         echo 'order 1234-5678'; echo 'plain line'"
+    );
+    // From a file, so the secrets are not on the (also redacted) command line.
+    std::fs::write(dir.path().join("script.sh"), script).unwrap();
+    let out = ok(&run(
+        dir.path(),
+        &[
+            "capture",
+            "--redact",
+            "--redact-pattern",
+            r"order (?P<secret>\d{4})",
+            "--cast",
+            "run.cast",
+            "--export-svg",
+            "run.svg",
+            "--export-html",
+            "run.html",
+            "--",
+            "sh",
+            "script.sh",
+        ],
+        b"",
+        &[],
+    ));
+    let cast = std::fs::read_to_string(dir.path().join("run.cast")).unwrap();
+    let svg = std::fs::read_to_string(dir.path().join("run.svg")).unwrap();
+    let html = std::fs::read_to_string(dir.path().join("run.html")).unwrap();
+    for (name, body) in [
+        ("stdout", &out),
+        ("cast", &cast),
+        ("svg", &svg),
+        ("html", &html),
+    ] {
+        assert_no_leaks(name, body, &[token, "hunter2", "ter2", "1234"]);
+    }
+    // Masks keep the width of what they replace, so the panel stays aligned.
+    let stars = "*".repeat(token.len());
+    assert!(out.contains(&format!("GITHUB_TOKEN={stars}")), "{out}");
+    assert!(out.contains("password=*******"), "{out}");
+    assert!(out.contains("order ****-5678"), "{out}");
+    assert!(out.contains("plain line"), "{out}");
+    // The recording keeps its escapes around the masked cells.
+    assert!(
+        cast.contains(r"pass\u001b[31mword=***\u001b[0m****"),
+        "{cast}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn capture_redacts_the_command_line_too() {
+    let dir = temp();
+    let out = ok(&run(
+        dir.path(),
+        &[
+            "capture",
+            "--redact",
+            "--",
+            "sh",
+            "-c",
+            "true",
+            "password=hunter2",
+        ],
+        b"",
+        &[],
+    ));
+    assert!(!out.contains("hunter2"), "{out}");
+    assert!(out.contains("password=*******"), "{out}");
+    // Without the flag nothing is masked.
+    let out = ok(&run(
+        dir.path(),
+        &["capture", "--", "echo", "token=abc"],
+        b"",
+        &[],
+    ));
+    assert!(out.contains("token=abc"), "{out}");
+}
+
+#[cfg(unix)]
+#[test]
+fn capture_redacts_link_targets_and_skips_whole_escapes() {
+    let dir = temp();
+    let token = "ghp_0123456789abcdefghijklmnopqrstuvwxyzAB";
+    // A hyperlink whose URL holds a password and a token, then what
+    // `tput sgr0` emits (`ESC ( B ESC [ m`) before a token and a value.
+    let script = format!(
+        "printf '\\033]8;;https://u:hunter2pw@h/?token={token}\\033\\\\link\\033]8;;\\033\\\\\\n'; \
+         printf '\\033(B\\033[m{token}\\n'; printf 'API_KEY=\\033(B\\033[mabc123\\n'"
+    );
+    std::fs::write(dir.path().join("script.sh"), script).unwrap();
+    let out = ok(&run(
+        dir.path(),
+        &[
+            "capture",
+            "--redact",
+            "--cast",
+            "run.cast",
+            "--",
+            "sh",
+            "script.sh",
+        ],
+        b"",
+        &[],
+    ));
+    let cast = std::fs::read_to_string(dir.path().join("run.cast")).unwrap();
+    for (name, body) in [("stdout", &out), ("cast", &cast)] {
+        assert_no_leaks(name, body, &["hunter2pw", token, "abc123"]);
+    }
+    // The escapes stay well formed around the masks.
+    assert!(
+        cast.contains(r"\u001b]8;;https://u:********@h/?token=********\u001b\\link"),
+        "{cast}"
+    );
+    assert!(cast.contains(r"API_KEY=\u001b(B\u001b[m******"), "{cast}");
+}
+
+#[cfg(unix)]
+#[test]
+fn capture_redact_keeps_multibyte_output_intact() {
+    let dir = temp();
+    let text = format!("x{}\n", "é".repeat(10_000));
+    std::fs::write(dir.path().join("big.txt"), &text).unwrap();
+    let out = ok(&run(
+        dir.path(),
+        &[
+            "capture", "--redact", "--cast", "run.cast", "--", "cat", "big.txt",
+        ],
+        b"",
+        &[],
+    ));
+    assert!(!out.contains('\u{fffd}'), "{out}");
+    assert_eq!(out.matches('é').count(), 10_000);
+    let cast = std::fs::read_to_string(dir.path().join("run.cast")).unwrap();
+    assert!(!cast.contains('\u{fffd}'), "the cast mangled a character");
+}
+
+#[cfg(unix)]
+#[test]
+fn capture_redacts_secret_flag_values_in_the_command_line() {
+    let dir = temp();
+    let command = [
+        "sh",
+        "-c",
+        "exit 3",
+        "sh",
+        "--token",
+        "hunter2",
+        "--api-key=abc123",
+    ];
+    let output = run(
+        dir.path(),
+        &[
+            &[
+                "--report", "json", "capture", "--redact", "--cast", "run.cast", "--",
+            ][..],
+            &command[..],
+        ]
+        .concat(),
+        b"",
+        &[],
+    );
+    assert_eq!(output.status.code(), Some(3), "{output:?}");
+    let out = text(&output.stdout);
+    let report = text(&output.stderr);
+    let cast = std::fs::read_to_string(dir.path().join("run.cast")).unwrap();
+    for (name, body) in [("panel", &out), ("report", &report), ("cast", &cast)] {
+        assert_no_leaks(name, body, &["hunter2", "abc123"]);
+    }
+    // The title quotes the masks as a shell would.
+    assert!(
+        out.contains("--token '*******' '--api-key=******'"),
+        "{out}"
+    );
+}
+
+#[test]
+fn redact_options_are_checked() {
+    let dir = temp();
+    let error = usage(&run(
+        dir.path(),
+        &["capture", "--redact-pattern", "(", "--", "true"],
+        b"",
+        &[],
+    ));
+    assert!(
+        error.contains("--redact-pattern: invalid pattern \"(\""),
+        "{error}"
+    );
+    let error = usage(&run(
+        dir.path(),
+        &["view", "--redact-pattern", "x", "main.rs"],
+        b"",
+        &[],
+    ));
+    assert!(
+        error.contains("--redact-pattern only has an effect with `rich capture`"),
+        "{error}"
+    );
+    let error = usage(&run(dir.path(), &["--redact", "main.rs"], b"", &[]));
+    assert!(
+        error.contains("--redact only has an effect with --inspect or `rich capture`"),
+        "{error}"
+    );
 }
