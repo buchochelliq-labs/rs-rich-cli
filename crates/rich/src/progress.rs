@@ -1108,6 +1108,7 @@ impl Progress {
                 live: None,
                 writer: Some(writer),
                 interactive: true,
+                holder: std::sync::Mutex::new(None),
             };
         }
         let transient = self.transient;
@@ -1125,6 +1126,7 @@ impl Progress {
             live: Some(live),
             writer: None,
             interactive,
+            holder: std::sync::Mutex::new(None),
         }
     }
 }
@@ -1138,16 +1140,55 @@ pub struct LiveProgress<W: std::io::Write + Send + 'static> {
     writer: Option<W>,
     /// Whether the console is a terminal; `stop` ends a file with a newline.
     interactive: bool,
+    /// The thread inside [`with`](LiveProgress::with), if any. Upstream's lock
+    /// is an `RLock`; ours is not, so re-entry is detected rather than left to
+    /// deadlock on the mutex or on the refresh thread.
+    holder: std::sync::Mutex<Option<std::thread::ThreadId>>,
+}
+
+/// Clears [`LiveProgress`]'s `holder` when a `with` block ends, unwinding
+/// included.
+struct HolderGuard<'a>(&'a std::sync::Mutex<Option<std::thread::ThreadId>>);
+
+impl Drop for HolderGuard<'_> {
+    fn drop(&mut self) {
+        *self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+    }
 }
 
 impl<W: std::io::Write + Send + 'static> LiveProgress<W> {
     /// Run `f` with the progress locked, for any change not wrapped below.
+    ///
+    /// `f` may call [`refresh`](Self::refresh) (the frame is drawn as soon as
+    /// the lock is released), but not `with` or a method built on it: upstream
+    /// re-enters its `RLock`, which a `&mut Progress` cannot express, so a
+    /// nested call panics instead of deadlocking.
     pub fn with<R>(&self, f: impl FnOnce(&mut Progress) -> R) -> R {
+        let current = std::thread::current().id();
+        assert!(
+            !self.held_by(current),
+            "LiveProgress::with re-entered from inside a `with` closure; \
+             use the `&mut Progress` it was given instead"
+        );
         let mut progress = match self.progress.lock() {
             Ok(progress) => progress,
             Err(poisoned) => poisoned.into_inner(),
         };
+        *self
+            .holder
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(current);
+        let _holder = HolderGuard(&self.holder);
         f(&mut progress)
+    }
+
+    /// Whether `thread` is inside [`with`](Self::with) right now.
+    fn held_by(&self, thread: std::thread::ThreadId) -> bool {
+        *self
+            .holder
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            == Some(thread)
     }
 
     /// [`Progress::add_task`], then redraw (upstream's `add_task` refreshes).
@@ -1185,9 +1226,17 @@ impl<W: std::io::Write + Send + 'static> LiveProgress<W> {
 
     /// Redraw now rather than at the next tick, returning once the frame is
     /// written. Port of `Progress.refresh`.
+    ///
+    /// Called from inside [`with`](Self::with), the redraw is queued instead:
+    /// the refresh thread needs the lock this thread holds to render, so
+    /// waiting for it would deadlock. The frame is drawn when `with` returns.
     pub fn refresh(&self) {
         if let Some(live) = &self.live {
-            live.refresh_wait();
+            if self.held_by(std::thread::current().id()) {
+                live.refresh();
+            } else {
+                live.refresh_wait();
+            }
         }
     }
 
@@ -1571,6 +1620,55 @@ mod tests {
             .columns(columns)
             .clock(|| 0.0)
             .start(console, Vec::new(), 1e-9)
+    }
+
+    /// Run `f` on its own thread and fail (rather than hang the suite) if it
+    /// has not finished within a few seconds.
+    fn within_deadline<R: Send + 'static>(f: impl FnOnce() -> R + Send + 'static) -> R {
+        let (done, wait) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = done.send(std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)));
+        });
+        match wait.recv_timeout(std::time::Duration::from_secs(10)) {
+            Ok(Ok(value)) => value,
+            Ok(Err(payload)) => std::panic::resume_unwind(payload),
+            Err(_) => panic!("deadlocked: did not finish within 10s"),
+        }
+    }
+
+    #[test]
+    fn refresh_inside_with_does_not_deadlock() {
+        // Upstream's `Progress` lock is an `RLock` and `refresh()` renders in
+        // the caller's thread, so refreshing while holding the lock is fine.
+        let output = within_deadline(|| {
+            let live = live(vec![ProgressColumn::Description, ProgressColumn::MofN]);
+            live.with(|progress| {
+                let task = progress.add_task("inside", Some(2.0), 1.0);
+                live.refresh();
+                task
+            });
+            live.refresh();
+            String::from_utf8(live.stop().1).unwrap()
+        });
+        assert!(
+            output.ends_with("inside \x1b[32m1/2\x1b[0m\n\x1b[?25h"),
+            "{output:?}"
+        );
+    }
+
+    #[test]
+    fn nested_with_panics_instead_of_deadlocking() {
+        let result = within_deadline(|| {
+            let live = live(vec![ProgressColumn::Description]);
+            let nested = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                live.with(|_| live.add_task("nested", None, 0.0))
+            }));
+            // The display is still usable after the refused re-entry.
+            let task = live.add_task("after", None, 0.0);
+            live.stop();
+            (nested.is_err(), task)
+        });
+        assert!(result.0, "a nested `with` must be refused, not deadlock");
     }
 
     #[test]
