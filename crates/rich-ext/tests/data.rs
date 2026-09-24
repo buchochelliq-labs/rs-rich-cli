@@ -1099,15 +1099,27 @@ mod xml {
 
     #[test]
     fn large_documents_stay_linear() {
-        let mut doc = String::from("<items>");
-        for i in 0..50_000 {
-            doc.push_str(&format!("<item n=\"{i}\">{i}</item>"));
+        // Compare two sizes under the same machine load instead of against a
+        // wall-clock limit, which a busy CI runner can miss: four times the
+        // items costs about 4x when linear and about 16x when quadratic.
+        fn time(items: usize) -> std::time::Duration {
+            let mut doc = String::from("<items>");
+            for i in 0..items {
+                doc.push_str(&format!("<item n=\"{i}\">{i}</item>"));
+            }
+            doc.push_str("</items>");
+            let started = std::time::Instant::now();
+            let node = parse_xml(&doc).unwrap();
+            let elapsed = started.elapsed();
+            assert_eq!(node.at(&path("items.item")).unwrap().len(), items);
+            elapsed
         }
-        doc.push_str("</items>");
-        let started = std::time::Instant::now();
-        let node = parse_xml(&doc).unwrap();
-        assert_eq!(node.at(&path("items.item")).unwrap().len(), 50_000);
-        assert!(started.elapsed().as_secs() < 10);
+        let small = time(12_500);
+        let large = time(50_000);
+        assert!(
+            large < small * 10 + std::time::Duration::from_millis(250),
+            "12,500 items took {small:?}, 50,000 took {large:?}"
+        );
     }
 
     #[test]

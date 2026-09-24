@@ -983,10 +983,17 @@ impl fmt::Display for DataError {
 impl std::error::Error for DataError {}
 
 /// Line starts of a source, for byte offset → [`Position`].
+///
+/// Parsers ask for positions in increasing order, so the last answer is kept
+/// and a later offset on the same line counts characters from there. Counting
+/// from the line start instead made every lookup cost the whole line, which is
+/// quadratic on minified (single-line) XML or TOML.
 #[cfg(any(feature = "toml", feature = "xml"))]
 pub(crate) struct LineIndex<'a> {
     source: &'a str,
     starts: Vec<usize>,
+    /// The last (byte offset, line, column) answered.
+    last: std::cell::Cell<(usize, usize, usize)>,
 }
 
 #[cfg(any(feature = "toml", feature = "xml"))]
@@ -994,7 +1001,11 @@ impl<'a> LineIndex<'a> {
     pub(crate) fn new(source: &'a str) -> Self {
         let mut starts = vec![0];
         starts.extend(source.match_indices('\n').map(|(i, _)| i + 1));
-        LineIndex { source, starts }
+        LineIndex {
+            source,
+            starts,
+            last: std::cell::Cell::new((0, 1, 1)),
+        }
     }
 
     pub(crate) fn position(&self, offset: usize) -> Position {
@@ -1004,7 +1015,13 @@ impl<'a> LineIndex<'a> {
         }
         let line = self.starts.partition_point(|s| *s <= offset);
         let start = self.starts[line - 1];
-        let column = self.source[start..offset].chars().count() + 1;
+        let (last_offset, last_line, last_column) = self.last.get();
+        let column = if last_line == line && last_offset >= start && last_offset <= offset {
+            last_column + self.source[last_offset..offset].chars().count()
+        } else {
+            self.source[start..offset].chars().count() + 1
+        };
+        self.last.set((offset, line, column));
         Position::new(line, column)
     }
 }
@@ -1123,4 +1140,43 @@ pub fn parse_toml(content: &str) -> Result<Node, DataError> {
 #[cfg(feature = "xml")]
 pub fn parse_xml(content: &str) -> Result<Node, DataError> {
     xml::parse(content)
+}
+
+#[cfg(all(test, any(feature = "toml", feature = "xml")))]
+mod line_index_tests {
+    use super::{LineIndex, Position};
+
+    /// The uncached answer: count characters from the line's start.
+    fn naive(source: &str, offset: usize) -> Position {
+        let mut offset = offset.min(source.len());
+        while !source.is_char_boundary(offset) {
+            offset -= 1;
+        }
+        let start = source[..offset].rfind('\n').map_or(0, |i| i + 1);
+        let line = source[..offset].matches('\n').count() + 1;
+        Position::new(line, source[start..offset].chars().count() + 1)
+    }
+
+    #[test]
+    fn cached_positions_match_counting_from_the_line_start() {
+        let source = "ab\ncafé 👩‍👩‍👧 x\n\n<a b=\"é\">tëxt</a>\nlast";
+        let index = LineIndex::new(source);
+        // Increasing, repeated, backwards, past the end and mid-character
+        // offsets, in a fixed pseudo-random order after a forward sweep.
+        let mut offsets: Vec<usize> = (0..=source.len() + 2).collect();
+        let mut state = 7u64;
+        for _ in 0..400 {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            offsets.push((state >> 33) as usize % (source.len() + 3));
+        }
+        for offset in offsets {
+            assert_eq!(
+                index.position(offset),
+                naive(source, offset),
+                "offset {offset}"
+            );
+        }
+    }
 }
