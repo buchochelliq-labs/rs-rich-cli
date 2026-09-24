@@ -75,7 +75,12 @@ fn takes_value(arg: &str) -> bool {
     super::VALUE_OPTIONS.contains(&arg)
         || matches!(
             arg,
-            "--image-anchor" | "--interval" | "--theme-style" | "--image-color" | "--image-dither"
+            "--image-anchor"
+                | "--interval"
+                | "--theme-style"
+                | "--image-color"
+                | "--image-dither"
+                | "--image-color-distance"
         )
 }
 
@@ -176,6 +181,7 @@ const VALUE_KEYS: &[&str] = &[
     "image_background",
     "image_color",
     "image_dither",
+    "image_color_distance",
     "image_max_width",
     "image_max_height",
     "image_brightness",
@@ -248,7 +254,8 @@ pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
                 .is_some_and(|v| v.is_finite() && v > 0.0),
             "image_dither" => value
                 .as_str()
-                .is_some_and(|v| matches!(v, "none" | "floyd-steinberg" | "bayer4x4")),
+                .is_some_and(|v| matches!(v, "none" | "floyd-steinberg" | "bayer4x4" | "atkinson")),
+            "image_color_distance" => value.as_str().is_some_and(|v| matches!(v, "rgb" | "oklab")),
             "image_fit" => value
                 .as_str()
                 .is_some_and(|v| matches!(v, "contain" | "cover" | "stretch")),

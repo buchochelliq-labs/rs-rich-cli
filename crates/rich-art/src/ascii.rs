@@ -6,7 +6,7 @@
 //!
 //! Requires the non-default `image` feature.
 
-use crate::{image_color::preprocess, Dither, ImageColorMode};
+use crate::{image_color::preprocess, ColorDistance, Dither, ImageColorMode};
 use image::imageops::FilterType;
 use image::{DynamicImage, GenericImageView, ImageError, Rgba};
 
@@ -35,6 +35,7 @@ pub struct AsciiArt {
     height: Option<usize>,
     color_mode: ImageColorMode,
     dither: Dither,
+    distance: ColorDistance,
     ramp: Vec<char>,
     invert: bool,
     color: bool,
@@ -54,6 +55,7 @@ impl AsciiArt {
             height: None,
             color_mode: ImageColorMode::default(),
             dither: Dither::default(),
+            distance: ColorDistance::default(),
             ramp: DEFAULT_RAMP.chars().collect(),
             invert: false,
             color: false,
@@ -66,9 +68,15 @@ impl AsciiArt {
         Ok(AsciiArt::new(image::load_from_memory(bytes)?))
     }
 
-    pub(crate) fn color_processing(mut self, mode: ImageColorMode, dither: Dither) -> Self {
+    pub(crate) fn color_processing(
+        mut self,
+        mode: ImageColorMode,
+        dither: Dither,
+        distance: ColorDistance,
+    ) -> Self {
         self.color_mode = mode;
         self.dither = dither;
+        self.distance = distance;
         self
     }
 
@@ -174,7 +182,7 @@ impl AsciiArt {
             .image
             .resize_exact(columns as u32, rows as u32, FilterType::Triangle)
             .to_rgba8();
-        let indices = preprocess(&mut scaled, self.color_mode, self.dither);
+        let indices = preprocess(&mut scaled, self.color_mode, self.dither, self.distance);
 
         // Auto-levels: find the luminance range actually present so it can be
         // stretched across the ramp. A flat image (min == max) is left alone.

@@ -19,7 +19,7 @@
 //! colors with reduced fidelity. With colour off
 //! there is nothing to see, so callers should fall back to `AsciiArt` there.
 
-use crate::{image_color::preprocess, Dither, ImageColorMode};
+use crate::{image_color::preprocess, ColorDistance, Dither, ImageColorMode};
 use image::{imageops::FilterType, DynamicImage, GenericImageView};
 use rich::color::Color;
 use rich::console::{Console, ConsoleOptions};
@@ -38,6 +38,7 @@ pub struct BlockArt {
     height: Option<usize>,
     color_mode: ImageColorMode,
     dither: Dither,
+    distance: ColorDistance,
 }
 
 impl BlockArt {
@@ -52,12 +53,19 @@ impl BlockArt {
             height: None,
             color_mode: ImageColorMode::default(),
             dither: Dither::default(),
+            distance: ColorDistance::default(),
         }
     }
 
-    pub(crate) fn color_processing(mut self, mode: ImageColorMode, dither: Dither) -> Self {
+    pub(crate) fn color_processing(
+        mut self,
+        mode: ImageColorMode,
+        dither: Dither,
+        distance: ColorDistance,
+    ) -> Self {
         self.color_mode = mode;
         self.dither = dither;
+        self.distance = distance;
         self
     }
 
@@ -110,7 +118,7 @@ impl BlockArt {
             .image
             .resize_exact(columns as u32, (rows * 2) as u32, FilterType::Triangle)
             .to_rgba8();
-        let indices = preprocess(&mut scaled, self.color_mode, self.dither);
+        let indices = preprocess(&mut scaled, self.color_mode, self.dither, self.distance);
 
         (0..rows)
             .map(|row| {

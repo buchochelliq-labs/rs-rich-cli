@@ -42,7 +42,7 @@ pub mod image_art;
 mod image_color;
 
 #[cfg(feature = "image")]
-pub use image_color::{Dither, ImageColorMode};
+pub use image_color::{ColorDistance, Dither, ImageColorMode};
 
 #[cfg(feature = "image")]
 pub mod imagediff;

@@ -325,7 +325,30 @@ fn new_image_options_reject_bad_values_combinations_and_other_modes() {
                 "--image-color",
                 "ansi16",
             ],
-            "ascii, blocks or quadrants",
+            "which is monochrome",
+        ),
+        (
+            vec!["image", "missing.png", "--image-dither", "sierra"],
+            "--image-dither requires none, floyd-steinberg, bayer4x4 or atkinson",
+        ),
+        (
+            vec!["image", "missing.png", "--image-color-distance", "lab"],
+            "--image-color-distance requires rgb or oklab",
+        ),
+        (
+            vec!["image", "missing.png", "--image-color-distance", "oklab"],
+            "--image-color-distance oklab requires --image-color ansi256, ansi16 or grayscale",
+        ),
+        (
+            vec![
+                "--print",
+                "hi",
+                "--image-color",
+                "ansi16",
+                "--image-color-distance",
+                "oklab",
+            ],
+            "--image-color only has an effect with --image or --gif",
         ),
         (
             vec![
@@ -357,10 +380,54 @@ fn new_image_options_reject_bad_values_combinations_and_other_modes() {
     }
 }
 
+/// Sixel and GIF frames now take a reduced palette; only a usage error
+/// (exit 2) would mean the combination was still rejected.
+#[test]
+fn reduced_palettes_are_accepted_for_sixel_and_gif() {
+    for args in [
+        vec![
+            "image",
+            "missing.png",
+            "--image-mode",
+            "sixel",
+            "--image-color",
+            "ansi16",
+            "--image-dither",
+            "atkinson",
+            "--image-color-distance",
+            "oklab",
+        ],
+        vec![
+            "gif",
+            "missing.gif",
+            "--image-color",
+            "grayscale",
+            "--image-dither",
+            "bayer4x4",
+        ],
+    ] {
+        let out = run(&args);
+        assert_ne!(
+            out.status.code(),
+            Some(2),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains("missing."),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
 #[cfg(feature = "art")]
 #[test]
 fn new_image_options_route_to_the_library_exactly() {
-    use rich_art::{image, Dither, ImageArt, ImageColorMode, ImageFit, ImageMode, ImageTransforms};
+    use rich_art::{
+        image, ColorDistance, Dither, ImageArt, ImageColorMode, ImageFit, ImageMode,
+        ImageTransforms,
+    };
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("source.png");
     let source = image::DynamicImage::ImageRgba8(image::RgbaImage::from_fn(9, 7, |x, y| {
@@ -423,6 +490,23 @@ fn new_image_options_route_to_the_library_exactly() {
                 .mode(ImageMode::Ascii)
                 .color_mode(ImageColorMode::Grayscale)
                 .max_height(2),
+        ),
+        (
+            vec![
+                "--image-mode",
+                "blocks",
+                "--image-color",
+                "ansi16",
+                "--image-dither",
+                "atkinson",
+                "--image-color-distance",
+                "oklab",
+            ],
+            ImageArt::new(source.clone())
+                .mode(ImageMode::Blocks)
+                .color_mode(ImageColorMode::Ansi16)
+                .dither(Dither::Atkinson)
+                .color_distance(ColorDistance::Oklab),
         ),
         (
             vec![

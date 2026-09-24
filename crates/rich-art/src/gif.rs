@@ -27,7 +27,7 @@ use rich::protocol::Renderable;
 use rich::{Console, Control, Live};
 
 use crate::ascii::AsciiArt;
-use crate::BlockArt;
+use crate::{BlockArt, ColorDistance, Dither, ImageColorMode};
 
 /// A GIF's `0` delay means "as fast as possible"; browsers substitute 100ms and
 /// so do we, otherwise such GIFs spin at whatever speed the terminal allows.
@@ -62,6 +62,9 @@ pub struct AnimatedArt {
     invert: bool,
     color: bool,
     blocks: bool,
+    color_mode: ImageColorMode,
+    dither: Dither,
+    distance: ColorDistance,
     repeat: Repeat,
     /// Lower bound on a frame's on-screen time, i.e. an upper bound on frame
     /// rate. Colour art is byte-heavy, so an uncapped fast GIF can outrun a
@@ -102,6 +105,9 @@ impl AnimatedArt {
             invert: false,
             color: false,
             blocks: false,
+            color_mode: ImageColorMode::TrueColor,
+            dither: Dither::None,
+            distance: ColorDistance::Rgb,
             repeat: Repeat::Once,
             min_delay: None,
         })
@@ -151,6 +157,28 @@ impl AnimatedArt {
     }
 
     /// How many times to play through.
+    /// Quantize every frame to a reduced palette (ANSI256, ANSI16 or
+    /// grayscale), as [`ImageArt::color_mode`](crate::ImageArt::color_mode)
+    /// does for a still image. It applies to coloured ASCII and to half-block
+    /// frames; truecolor (the default) leaves frames unchanged.
+    pub fn color_mode(mut self, mode: ImageColorMode) -> Self {
+        self.color_mode = mode;
+        self
+    }
+
+    /// Dither each frame while quantizing. Ignored with truecolor. Every frame
+    /// is dithered on its own, so ordered dithering (Bayer) flickers least.
+    pub fn dither(mut self, dither: Dither) -> Self {
+        self.dither = dither;
+        self
+    }
+
+    /// How the nearest palette colour is measured. Ignored with truecolor.
+    pub fn color_distance(mut self, distance: ColorDistance) -> Self {
+        self.distance = distance;
+        self
+    }
+
     pub fn repeat(mut self, repeat: Repeat) -> Self {
         self.repeat = repeat;
         self
@@ -194,7 +222,8 @@ impl AnimatedArt {
         let frame = self.frames.get(index)?;
         let mut art = AsciiArt::from_shared(frame.image.clone())
             .invert(self.invert)
-            .color(self.color);
+            .color(self.color)
+            .color_processing(self.color_mode, self.dither, self.distance);
         if let Some(width) = self.width {
             art = art.width(width);
         }
@@ -212,18 +241,20 @@ impl AnimatedArt {
     /// Ramp and inversion apply to the ASCII fallback, not colored blocks.
     pub fn render_frame(&self, index: usize) -> Option<GifFrame> {
         let ascii = self.frame(index)?;
-        let blocks = if self.blocks {
-            let mut art = BlockArt::from_shared(self.frames[index].image.clone());
-            if let Some(width) = self.width {
-                art = art.width(width);
-            }
-            if let Some(height) = self.height {
-                art = art.height(height);
-            }
-            Some(art)
-        } else {
-            None
-        };
+        let blocks =
+            if self.blocks {
+                let mut art = BlockArt::from_shared(self.frames[index].image.clone())
+                    .color_processing(self.color_mode, self.dither, self.distance);
+                if let Some(width) = self.width {
+                    art = art.width(width);
+                }
+                if let Some(height) = self.height {
+                    art = art.height(height);
+                }
+                Some(art)
+            } else {
+                None
+            };
         Some(GifFrame {
             ascii,
             blocks,
@@ -571,6 +602,49 @@ mod tests {
     }
 
     #[test]
+    fn frames_follow_the_reduced_palette() {
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(rich::ColorSystem::Truecolor))
+            .width(8)
+            .build();
+        let bytes = make_gif(&[[230, 20, 60], [0, 120, 255]], 10);
+        for blocks in [false, true] {
+            let art = AnimatedArt::from_bytes(&bytes)
+                .unwrap()
+                .width(4)
+                .height(2)
+                .color(true)
+                .blocks(blocks)
+                .color_mode(ImageColorMode::Ansi16)
+                .dither(Dither::Atkinson)
+                .color_distance(ColorDistance::Oklab);
+            for index in 0..2 {
+                let out = console.render_to_string(&art.render_frame(index).unwrap());
+                assert!(!out.contains("38;2;") && !out.contains("48;2;"), "{out:?}");
+                assert!(!out.contains("38;5;") && !out.contains("48;5;"), "{out:?}");
+            }
+            // The crimson frame reads as bright red, the azure one as blue.
+            let first = console.render_to_string(&art.render_frame(0).unwrap());
+            assert!(first.contains("91"), "{first:?}");
+        }
+        // Truecolor, the default, leaves frames as they were.
+        let plain = AnimatedArt::from_bytes(&bytes)
+            .unwrap()
+            .width(4)
+            .color(true);
+        let explicit = AnimatedArt::from_bytes(&bytes)
+            .unwrap()
+            .width(4)
+            .color(true)
+            .color_mode(ImageColorMode::TrueColor);
+        assert_eq!(
+            console.render_to_string(&plain.render_frame(1).unwrap()),
+            console.render_to_string(&explicit.render_frame(1).unwrap())
+        );
+    }
+
+    #[test]
     fn repeat_multiplies_the_duration() {
         let bytes = make_gif(&[[0, 0, 0], [255, 255, 255]], 50);
         let art = AnimatedArt::from_bytes(&bytes).expect("decodes");
@@ -591,6 +665,9 @@ mod tests {
                 invert: self.invert,
                 color: self.color,
                 blocks: self.blocks,
+                color_mode: self.color_mode,
+                dither: self.dither,
+                distance: self.distance,
                 repeat,
                 min_delay: self.min_delay,
             }

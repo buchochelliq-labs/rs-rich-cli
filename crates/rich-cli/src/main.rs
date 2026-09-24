@@ -368,6 +368,8 @@ struct Cli {
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_dither: Option<String>,
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    image_color_distance: Option<String>,
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_rotate: Option<u16>,
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_flip_horizontal: bool,
@@ -539,6 +541,7 @@ const VALUE_OPTIONS: &[&str] = &[
     "--theme-style",
     "--image-color",
     "--image-dither",
+    "--image-color-distance",
     "--image-rotate",
     "--image-max-width",
     "--image-max-height",
@@ -1092,6 +1095,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut image_background = None;
     let mut image_color = None;
     let mut image_dither = None;
+    let mut image_color_distance = None;
     let mut image_rotate = None;
     let mut image_flip_horizontal = false;
     let mut image_flip_vertical = false;
@@ -1286,13 +1290,24 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                 });
             }
             "--image-dither" => {
-                let value = iter
-                    .next()
-                    .ok_or("--image-dither requires none, floyd-steinberg or bayer4x4")?;
-                if !matches!(value.as_str(), "none" | "floyd-steinberg" | "bayer4x4") {
-                    return Err("--image-dither requires none, floyd-steinberg or bayer4x4".into());
+                const USAGE: &str =
+                    "--image-dither requires none, floyd-steinberg, bayer4x4 or atkinson";
+                let value = iter.next().ok_or(USAGE)?;
+                if !matches!(
+                    value.as_str(),
+                    "none" | "floyd-steinberg" | "bayer4x4" | "atkinson"
+                ) {
+                    return Err(USAGE.into());
                 }
                 image_dither = Some(value.clone());
+            }
+            "--image-color-distance" => {
+                const USAGE: &str = "--image-color-distance requires rgb or oklab";
+                let value = iter.next().ok_or(USAGE)?;
+                if !matches!(value.as_str(), "rgb" | "oklab") {
+                    return Err(USAGE.into());
+                }
+                image_color_distance = Some(value.clone());
             }
             "--image-mode" => {
                 let value = iter.next().ok_or(
@@ -1649,29 +1664,25 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         image_color.as_deref(),
         Some("ansi256" | "ansi16" | "grayscale")
     );
-    if (quantized
-        || matches!(
-            image_dither.as_deref(),
-            Some("floyd-steinberg" | "bayer4x4")
-        ))
-        && !matches!(
-            image_mode,
-            ImageMode::Auto | ImageMode::Ascii | ImageMode::Blocks | ImageMode::Quadrants
-        )
-    {
-        return Err(
-            "image color processing supports only --image-mode ascii, blocks or quadrants".into(),
-        );
-    }
-    if matches!(
-        image_dither.as_deref(),
-        Some("floyd-steinberg" | "bayer4x4")
-    ) && !quantized
-    {
+    if quantized && image_mode == ImageMode::Braille {
         return Err(format!(
-            "--image-dither {} requires --image-color ansi256, ansi16 or grayscale",
-            image_dither.as_deref().unwrap()
+            "--image-color {} has no effect with --image-mode braille, which is monochrome",
+            image_color.as_deref().unwrap()
         ));
+    }
+    for (flag, value, neutral) in [
+        ("--image-dither", image_dither.as_deref(), "none"),
+        (
+            "--image-color-distance",
+            image_color_distance.as_deref(),
+            "rgb",
+        ),
+    ] {
+        if let Some(value) = value.filter(|v| *v != neutral && !quantized) {
+            return Err(format!(
+                "{flag} {value} requires --image-color ansi256, ansi16 or grayscale"
+            ));
+        }
     }
     if image_anchor.is_some() && image_fit.as_deref() != Some("cover") {
         return Err("--image-anchor requires --image-fit cover".into());
@@ -1770,8 +1781,8 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         (
             "--image-color",
             image_color.is_some(),
-            "--image",
-            mode == Mode::Image,
+            "--image or --gif",
+            mode == Mode::Image || effective_mode == Mode::Gif,
         ),
         (
             "--image-max-width",
@@ -1806,8 +1817,14 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         (
             "--image-dither",
             image_dither.is_some(),
-            "--image",
-            mode == Mode::Image,
+            "--image or --gif",
+            mode == Mode::Image || effective_mode == Mode::Gif,
+        ),
+        (
+            "--image-color-distance",
+            image_color_distance.is_some(),
+            "--image or --gif",
+            mode == Mode::Image || effective_mode == Mode::Gif,
         ),
         (
             "--image-fit",
@@ -1929,6 +1946,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         image_background,
         image_color,
         image_dither,
+        image_color_distance,
         image_rotate,
         image_flip_horizontal,
         image_flip_vertical,
@@ -4689,21 +4707,11 @@ fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     if let Some(background) = cli.image_background {
         art = art.background(background);
     }
-    if let Some(color) = cli.image_color.as_deref() {
-        art = art.color_mode(match color {
-            "ansi256" => rich_art::ImageColorMode::Ansi256,
-            "ansi16" => rich_art::ImageColorMode::Ansi16,
-            "grayscale" => rich_art::ImageColorMode::Grayscale,
-            _ => rich_art::ImageColorMode::TrueColor,
-        });
-    }
-    if let Some(dither) = cli.image_dither.as_deref() {
-        art = art.dither(match dither {
-            "floyd-steinberg" => rich_art::Dither::FloydSteinberg,
-            "bayer4x4" => rich_art::Dither::Bayer4x4,
-            _ => rich_art::Dither::None,
-        });
-    }
+    let (color_mode, dither, distance) = image_color_processing(cli);
+    art = art
+        .color_mode(color_mode)
+        .dither(dither)
+        .color_distance(distance);
 
     // Validate up front: `Renderable::rich_render` cannot fail and would
     // silently fall back to ASCII, which is the wrong answer for a CLI that
@@ -4961,6 +4969,36 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
 }
 
 /// Animate every `--gif` resource at once, sharing the console width.
+/// `--image-color`, `--image-dither` and `--image-color-distance`, shared by
+/// still images and GIF frames. Unset options are the library defaults.
+#[cfg(feature = "art")]
+fn image_color_processing(
+    cli: &Cli,
+) -> (
+    rich_art::ImageColorMode,
+    rich_art::Dither,
+    rich_art::ColorDistance,
+) {
+    use rich_art::{ColorDistance, Dither, ImageColorMode};
+    let mode = match cli.image_color.as_deref() {
+        Some("ansi256") => ImageColorMode::Ansi256,
+        Some("ansi16") => ImageColorMode::Ansi16,
+        Some("grayscale") => ImageColorMode::Grayscale,
+        _ => ImageColorMode::TrueColor,
+    };
+    let dither = match cli.image_dither.as_deref() {
+        Some("floyd-steinberg") => Dither::FloydSteinberg,
+        Some("bayer4x4") => Dither::Bayer4x4,
+        Some("atkinson") => Dither::Atkinson,
+        _ => Dither::None,
+    };
+    let distance = match cli.image_color_distance.as_deref() {
+        Some("oklab") => ColorDistance::Oklab,
+        _ => ColorDistance::Rgb,
+    };
+    (mode, dither, distance)
+}
+
 #[cfg(feature = "art")]
 fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
     use rich_art::{AnimatedArt, Repeat, Stage};
@@ -4989,10 +5027,14 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
     for path in &cli.resources {
         match AnimatedArt::from_path(path) {
             Ok(art) => {
+                let (color_mode, dither, distance) = image_color_processing(cli);
                 stage = stage.with(
                     art.width(per_gif)
                         .blocks(cli.extensions.gif_blocks())
                         .color(!cli.no_color)
+                        .color_mode(color_mode)
+                        .dither(dither)
+                        .color_distance(distance)
                         .repeat(repeat)
                         // Colour art is byte-heavy; keep it comfortable.
                         .max_fps(30.0),

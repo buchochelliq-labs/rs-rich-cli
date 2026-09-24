@@ -19,7 +19,7 @@
 //! colours is usually not one.
 
 use crate::image_color::{nearest, preprocess};
-use crate::{Dither, ImageColorMode};
+use crate::{ColorDistance, Dither, ImageColorMode};
 use image::{imageops::FilterType, DynamicImage, GenericImageView};
 use rich::color::Color;
 use rich::console::{Console, ConsoleOptions};
@@ -98,6 +98,7 @@ pub struct QuadrantArt {
     height: Option<usize>,
     color_mode: ImageColorMode,
     dither: Dither,
+    distance: ColorDistance,
 }
 
 impl QuadrantArt {
@@ -112,12 +113,19 @@ impl QuadrantArt {
             height: None,
             color_mode: ImageColorMode::default(),
             dither: Dither::default(),
+            distance: ColorDistance::default(),
         }
     }
 
-    pub(crate) fn color_processing(mut self, mode: ImageColorMode, dither: Dither) -> Self {
+    pub(crate) fn color_processing(
+        mut self,
+        mode: ImageColorMode,
+        dither: Dither,
+        distance: ColorDistance,
+    ) -> Self {
         self.color_mode = mode;
         self.dither = dither;
+        self.distance = distance;
         self
     }
 
@@ -168,7 +176,7 @@ impl QuadrantArt {
             )
             .to_rgba8();
         // Quantization composites alpha onto black itself; truecolor does it here.
-        preprocess(&mut scaled, self.color_mode, self.dither);
+        preprocess(&mut scaled, self.color_mode, self.dither, self.distance);
         let sample = |x: usize, y: usize| -> [f64; 3] {
             let [r, g, b, a] = scaled.get_pixel(x as u32, y as u32).0;
             let f = f64::from(a) / 255.0;
@@ -196,7 +204,7 @@ impl QuadrantArt {
             let [r, g, b] = rgb.map(|v| v.round().clamp(0.0, 255.0) as u8);
             Color::from_rgb(r, g, b)
         } else {
-            Color::from_ansi(nearest(rgb, self.color_mode).0)
+            Color::from_ansi(nearest(rgb, self.color_mode, self.distance).0)
         }
     }
 }

@@ -36,7 +36,7 @@ use crate::ascii::AsciiArt;
 use crate::block::BlockArt;
 use crate::braille::BrailleArt;
 use crate::quadrant::QuadrantArt;
-use crate::{Dither, ImageColorMode};
+use crate::{ColorDistance, Dither, ImageColorMode};
 
 /// Which backend renders the image.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -178,8 +178,9 @@ pub enum ImageArtError {
     /// Fitting requires positive width and height, a nonempty image and
     /// destination, and raster canvases no larger than 16 megapixels.
     InvalidFitDimensions,
-    /// Quantization supports ASCII, blocks and quadrants only; dithering
-    /// requires a quantized colour mode.
+    /// A reduced colour mode was asked of Braille, which draws monochrome
+    /// dots and has no colours to quantize; or dithering or a colour distance
+    /// was set without a reduced colour mode.
     UnsupportedColorOptions,
     /// Brightness or contrast is negative or not finite, or gamma is not a
     /// finite positive number. See [`ImageTransforms`](crate::ImageTransforms).
@@ -189,7 +190,7 @@ pub enum ImageArtError {
 impl std::fmt::Display for ImageArtError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UnsupportedColorOptions => write!(f, "image color processing requires ASCII, blocks or quadrants; dithering requires ansi256, ansi16 or grayscale"),
+            Self::UnsupportedColorOptions => write!(f, "Braille images are monochrome, so they take no color mode; dithering and color distance require ansi256, ansi16 or grayscale"),
             Self::InvalidAdjustment => write!(f, "image brightness and contrast must be finite and non-negative, and gamma finite and positive"),
             Self::FeatureNotEnabled { mode, feature } => write!(
                 f,
@@ -233,6 +234,7 @@ pub struct ImageArt {
     background: Option<[u8; 3]>,
     color_mode: ImageColorMode,
     dither: Dither,
+    color_distance: ColorDistance,
     transforms: crate::ImageTransforms,
     max_width: Option<usize>,
     max_height: Option<usize>,
@@ -254,6 +256,7 @@ impl ImageArt {
             background: None,
             color_mode: ImageColorMode::default(),
             dither: Dither::default(),
+            color_distance: ColorDistance::default(),
             transforms: crate::ImageTransforms::default(),
             max_width: None,
             max_height: None,
@@ -329,19 +332,28 @@ impl ImageArt {
     }
 
     /// Select truecolor (default) or a reduced palette (ANSI256, ANSI16 or
-    /// grayscale) for the ASCII, half-block and quadrant backends.
+    /// grayscale) for the ASCII, half-block, quadrant and Sixel backends.
     /// Processing occurs after fit/background handling and final sampling,
-    /// before ASCII luminance normalization and glyph selection.
+    /// before ASCII luminance normalization and glyph selection. Sixel then
+    /// encodes exactly the palette colours instead of adaptive ones. Braille
+    /// is monochrome and rejects a reduced palette.
     pub fn color_mode(mut self, mode: ImageColorMode) -> Self {
         self.color_mode = mode;
         self
     }
 
-    /// Select optional dithering (Floyd–Steinberg or Bayer 4×4). It needs a
-    /// reduced palette and the ASCII, half-block or quadrant backend;
-    /// unsupported combinations are errors from [`Self::render`].
+    /// Select optional dithering (Floyd–Steinberg, Bayer 4×4 or Atkinson).
+    /// It needs a reduced palette; unsupported combinations are errors from
+    /// [`Self::render`].
     pub fn dither(mut self, dither: Dither) -> Self {
         self.dither = dither;
+        self
+    }
+
+    /// Measure the nearest palette colour in encoded RGB (the default) or in
+    /// perceptual OKLab. It needs a reduced palette, like dithering.
+    pub fn color_distance(mut self, distance: ColorDistance) -> Self {
+        self.color_distance = distance;
         self
     }
 
@@ -580,13 +592,9 @@ impl ImageArt {
         console: &Console,
         options: &ConsoleOptions,
     ) -> Result<Vec<Segment>, ImageArtError> {
-        if (self.dither != Dither::None && self.color_mode == ImageColorMode::TrueColor)
-            || ((self.color_mode != ImageColorMode::TrueColor || self.dither != Dither::None)
-                && !matches!(
-                    mode,
-                    ImageMode::Ascii | ImageMode::Blocks | ImageMode::Quadrants
-                ))
-        {
+        let reduced = self.color_mode != ImageColorMode::TrueColor;
+        let tuned = self.dither != Dither::None || self.color_distance != ColorDistance::Rgb;
+        if (tuned && !reduced) || (reduced && mode == ImageMode::Braille) {
             return Err(ImageArtError::UnsupportedColorOptions);
         }
         if !self.transforms.adjustments_valid() {
@@ -614,7 +622,7 @@ impl ImageArt {
                 let mut art = AsciiArt::from_shared(Arc::clone(&image))
                     .width(width)
                     .color(self.options.color)
-                    .color_processing(self.color_mode, self.dither);
+                    .color_processing(self.color_mode, self.dither, self.color_distance);
                 match (self.options.height, self.max_height) {
                     (Some(_), _) => art = art.height(self.rows().expect("height is set")),
                     // ASCII's height is an exact row count, not a cap, so an
@@ -634,7 +642,7 @@ impl ImageArt {
             ImageMode::Blocks => {
                 let mut art = BlockArt::from_shared(Arc::clone(&image))
                     .width(width)
-                    .color_processing(self.color_mode, self.dither);
+                    .color_processing(self.color_mode, self.dither, self.color_distance);
                 if let Some(height) = self.rows() {
                     art = art.height(height);
                 }
@@ -643,7 +651,7 @@ impl ImageArt {
             ImageMode::Quadrants => {
                 let mut art = QuadrantArt::from_shared(Arc::clone(&image))
                     .width(width)
-                    .color_processing(self.color_mode, self.dither);
+                    .color_processing(self.color_mode, self.dither, self.color_distance);
                 if let Some(height) = self.rows() {
                     art = art.height(height);
                 }
@@ -673,7 +681,9 @@ impl ImageArt {
         if !console.is_terminal() {
             return Err(ImageArtError::NonTerminalDestination);
         }
-        let mut art = SixelArt::new((*image).clone()).width(width);
+        let mut art = SixelArt::new((*image).clone())
+            .width(width)
+            .color_processing(self.color_mode, self.dither, self.color_distance);
         if let Some(height) = self.rows() {
             art = art.height(height);
         }
