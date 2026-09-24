@@ -137,8 +137,24 @@ fn checkerboard(image: &RgbaImage, square: (u32, u32)) -> RgbImage {
 
 /// Which pixels of a sampled raster count as transparent (under half
 /// opacity), or `None` when transparency is not being kept.
-pub(crate) fn clear_mask(raster: &RgbaImage, keep: bool) -> Option<Vec<bool>> {
-    keep.then(|| raster.pixels().map(|p| p.0[3] < 128).collect())
+///
+/// When it is kept, every other pixel is made fully opaque in place: a pixel
+/// at or over half opacity shows its own colour, so nothing downstream
+/// (palette quantization, luminance, thresholds) may darken it by its alpha.
+/// Without it the raster is left untouched.
+pub(crate) fn clear_mask(raster: &mut RgbaImage, keep: bool) -> Option<Vec<bool>> {
+    keep.then(|| {
+        raster
+            .pixels_mut()
+            .map(|p| {
+                let clear = p.0[3] < 128;
+                if !clear {
+                    p.0[3] = 255;
+                }
+                clear
+            })
+            .collect()
+    })
 }
 
 /// What the destination can actually do, used only to resolve
@@ -219,6 +235,15 @@ pub enum ImageArtError {
     SixelEncodeFailed,
     /// Sixel output requires a real terminal destination.
     NonTerminalDestination,
+    /// The destination is a terminal, but not one known to understand Sixel.
+    /// Setting `RICH_SIXEL=1` or `RICH_GRAPHICS=sixel` overrides the guess
+    /// (see [`sixel::is_probably_supported`](crate::sixel::is_probably_supported)).
+    SixelNotSupported,
+    /// The Sixel raster for this width and height would exceed
+    /// [`sixel::MAX_PIXELS`](crate::sixel::MAX_PIXELS) (16 megapixels, at
+    /// 8×16 pixels per cell) or its size overflows. A narrower width or a
+    /// height cap brings it back in range.
+    SixelTooLarge,
     /// Fitting requires positive width and height, a nonempty image and
     /// destination, and raster canvases no larger than 16 megapixels.
     InvalidFitDimensions,
@@ -249,6 +274,12 @@ impl std::fmt::Display for ImageArtError {
             }
             Self::NonTerminalDestination => {
                 write!(f, "Sixel graphics require a terminal destination; use ASCII, Braille, or blocks when redirecting output")
+            }
+            Self::SixelTooLarge => {
+                write!(f, "the Sixel image would exceed 16 megapixels at this size; set a smaller width or a height")
+            }
+            Self::SixelNotSupported => {
+                write!(f, "this terminal is not known to support Sixel graphics; set RICH_SIXEL=1 or RICH_GRAPHICS=sixel to force it, or use ASCII, Braille, blocks or quadrants")
             }
         }
     }
@@ -496,10 +527,13 @@ impl ImageArt {
         {
             return Ok(Vec::new());
         }
-        if self.options.mode == ImageMode::Sixel
-            && (!caps.interactive || caps.sixel == Support::Unsupported)
-        {
-            return Err(ImageArtError::NonTerminalDestination);
+        if self.options.mode == ImageMode::Sixel {
+            if !caps.interactive {
+                return Err(ImageArtError::NonTerminalDestination);
+            }
+            if caps.sixel == Support::Unsupported {
+                return Err(ImageArtError::SixelNotSupported);
+            }
         }
         let mode = if self.options.mode == ImageMode::Auto && !caps.unicode {
             ImageMode::Ascii
@@ -749,7 +783,9 @@ impl ImageArt {
                 Ok(art.rich_render(console, options))
             }
             ImageMode::Braille => {
-                let mut art = BrailleArt::from_shared(Arc::clone(&image)).width(width);
+                let mut art = BrailleArt::from_shared(Arc::clone(&image))
+                    .width(width)
+                    .keep_transparency(self.keeps_transparency());
                 if let Some(height) = self.rows() {
                     art = art.height(height);
                 }
@@ -765,7 +801,7 @@ impl ImageArt {
         image: Arc<DynamicImage>,
         width: usize,
         console: &Console,
-        options: &ConsoleOptions,
+        _options: &ConsoleOptions,
     ) -> Result<Vec<Segment>, ImageArtError> {
         use crate::sixel::SixelArt;
 
@@ -774,14 +810,20 @@ impl ImageArt {
         }
         let mut art = SixelArt::new((*image).clone())
             .width(width)
+            .keep_transparency(self.keeps_transparency())
             .color_processing(self.color_mode, self.dither, self.color_distance);
         if let Some(height) = self.rows() {
             art = art.height(height);
         }
-        if art.encode(width).is_none() {
-            return Err(ImageArtError::SixelEncodeFailed);
+        if art.checked_pixel_size(width).is_none() {
+            return Err(ImageArtError::SixelTooLarge);
         }
-        Ok(art.rich_render(console, options))
+        // Encode once and emit it exactly as `SixelArt`'s renderable does
+        // (with the width pinned, the console options cannot change it).
+        match art.encode(width) {
+            Some(sixel) => Ok(vec![Segment::control(sixel), Segment::line()]),
+            None => Err(ImageArtError::SixelEncodeFailed),
+        }
     }
 
     #[cfg(not(feature = "sixel"))]
@@ -1317,5 +1359,62 @@ mod tests {
             art.render(&console, &options),
             Err(ImageArtError::NonTerminalDestination)
         );
+    }
+
+    #[cfg(feature = "sixel")]
+    #[test]
+    fn explicit_sixel_refuses_rasters_over_the_cap() {
+        // 1x400 at 80 columns: 640 x 256 000 Sixel pixels.
+        let console = Console::builder().force_terminal(true).width(80).build();
+        let options = console.options();
+        let art = ImageArt::new(solid(1, 400, [10, 20, 30]))
+            .mode(ImageMode::Sixel)
+            .width(80);
+        assert_eq!(
+            art.render(&console, &options),
+            Err(ImageArtError::SixelTooLarge)
+        );
+        // A height cap brings it back in range.
+        let capped = ImageArt::new(solid(1, 400, [10, 20, 30]))
+            .mode(ImageMode::Sixel)
+            .width(80)
+            .height(4);
+        assert!(capped.render(&console, &options).is_ok());
+    }
+
+    #[test]
+    fn explicit_sixel_tells_redirection_from_an_unrecognised_terminal() {
+        use rich::protocol::{RenderEnvironment, Support, TargetCapabilities};
+        struct Target(bool, Support);
+        impl RenderEnvironment for Target {
+            fn capabilities(&self) -> TargetCapabilities {
+                TargetCapabilities {
+                    width: 8,
+                    height: 8,
+                    color_system: Some(ColorSystem::Truecolor),
+                    interactive: self.0,
+                    unicode: true,
+                    hyperlinks: false,
+                    sixel: self.1,
+                }
+            }
+        }
+        let console = console(true);
+        let options = console.options();
+        let art = ImageArt::new(solid(8, 8, [10, 20, 30])).mode(ImageMode::Sixel);
+        let render = |interactive, sixel| {
+            art.render_with_environment(&console, &options, &Target(interactive, sixel))
+        };
+        assert_eq!(
+            render(false, Support::Inferred),
+            Err(ImageArtError::NonTerminalDestination)
+        );
+        // A real terminal that just is not recognised is not "redirected".
+        let error = render(true, Support::Unsupported).unwrap_err();
+        assert_eq!(error, ImageArtError::SixelNotSupported);
+        let message = error.to_string();
+        assert!(!message.contains("redirect"), "{message}");
+        assert!(message.contains("RICH_SIXEL=1"), "{message}");
+        assert!(message.contains("RICH_GRAPHICS=sixel"), "{message}");
     }
 }

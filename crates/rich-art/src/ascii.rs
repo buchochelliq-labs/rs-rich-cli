@@ -191,8 +191,14 @@ impl AsciiArt {
             .image
             .resize_exact(columns as u32, rows as u32, FilterType::Triangle)
             .to_rgba8();
-        let clear = crate::image_art::clear_mask(&scaled, self.transparent);
-        let indices = preprocess(&mut scaled, self.color_mode, self.dither, self.distance);
+        let clear = crate::image_art::clear_mask(&mut scaled, self.transparent);
+        let indices = preprocess(
+            &mut scaled,
+            self.color_mode,
+            self.dither,
+            self.distance,
+            clear.as_deref(),
+        );
         let is_clear = |x: usize, y: usize| clear.as_ref().is_some_and(|c| c[y * columns + x]);
 
         // Auto-levels: find the luminance range actually present so it can be
