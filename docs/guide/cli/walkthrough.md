@@ -536,6 +536,8 @@ text rows from the table.
 
 Related: `--sanitize` replaces control characters in *any* input with visible,
 inert symbols (`ESC[2J` becomes `␛[2J`). Use it for files you do not trust.
+`rich view` and the text `rich diff` do this by default; `--no-sanitize` turns
+it off there.
 
 ## Viewing and inspecting anything
 
@@ -560,11 +562,16 @@ cat config.yaml | rich view -           # the format is detected from the conten
 
 Paging is on by default; any paging flag, on the command line or in the
 config, overrides it. Folding and interactive search are left to your pager.
+Like `less`, `view` shows escape sequences in the file as inert text (`␛]0;…`)
+instead of letting them retitle the window or write the clipboard; pass
+`--no-sanitize` to let them through. It shows at most 8 MiB and 20,000 lines of
+source or text (64 KiB of binary), and says so on stderr when it stops early.
 
 `hex` is a hex dump in the style of `hexdump -C`: offsets, bytes in groups,
 an ASCII panel, and `*` for runs of repeated lines. `--offset` and `--length`
-slice the input, `--bytes-per-line` and `--group` shape it, and `--search`
-highlights a byte string:
+slice the input, reading only that window, `--bytes-per-line` (1–4096) and
+`--group` shape it, and `--search` highlights a byte string. Without
+`--length` it shows at most 64 KiB:
 
 ```bash
 rich hex logo.png --length 48 --search "49 48 44 52"
@@ -613,6 +620,12 @@ signal killed it) after drawing the panel and writing any exports, so
 `rich capture -- cargo test` fails a CI step when the tests fail. Append
 `|| true` to ignore it. With `--report json` a failed command's envelope has
 `"code": "command"` and its status. There is no PNG export.
+
+The command sees `COLUMNS` as the panel's inner width. `capture` keeps at most
+1 MiB or 20,000 lines of output, stopping the command beyond that, and stops
+reading one second after the command exits, even if something it started in
+the background still holds the output open; either leaves a notice on stderr.
+`--sanitize` makes controls in the output inert, keeping its colours.
 
 ## Panels, padding, alignment and style
 

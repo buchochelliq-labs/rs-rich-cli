@@ -66,11 +66,13 @@ impl DataOptions {
                 self.format = Some(InputFormat::parse(rest.next().ok_or(FORMAT_USAGE)?)?);
             }
             "--select" => {
-                self.select = Some(
-                    rest.next()
-                        .ok_or("--select requires an expression")?
-                        .clone(),
-                );
+                let expression = rest.next().ok_or("--select requires an expression")?;
+                // A malformed expression is a usage error, found before any
+                // input is read.
+                Selectors::default()
+                    .compile("jsonpath", expression)
+                    .map_err(|err| format!("invalid --select expression: {err}"))?;
+                self.select = Some(expression.clone());
             }
             "--find" => {
                 self.find = Some(rest.next().ok_or("--find requires a search text")?.clone());
@@ -178,15 +180,17 @@ fn parse_document(
             "cannot detect the format of {name}; pass --format json, yaml, toml, xml, ini or env"
         )
     })?;
-    let node = data::parse(format, content).map_err(|err| match err.position {
-        Some(at) => format!(
-            "{name}:{}:{}: invalid {}: {}",
-            at.line,
-            at.column,
-            format.name(),
-            err.message
-        ),
-        None => format!("{name}: invalid {}: {}", format.name(), err.message),
+    let node = data::parse(format, content).map_err(|err| {
+        // A parser's depth limit is not a syntax error in the document.
+        let problem = if err.message.contains("recursion limit") {
+            format!("{} too deeply nested to read", format.name())
+        } else {
+            format!("invalid {}: {}", format.name(), err.message)
+        };
+        match err.position {
+            Some(at) => format!("{name}:{}:{}: {problem}", at.line, at.column),
+            None => format!("{name}: {problem}"),
+        }
     })?;
     Ok((format, node))
 }

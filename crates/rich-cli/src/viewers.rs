@@ -8,7 +8,6 @@
 //! `inspect.rs` and `tools.rs`.
 use std::io::Read;
 use std::process::{Command, Stdio};
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use rich::ansi::AnsiDecoder;
@@ -16,6 +15,9 @@ use rich::text::Text;
 use rich::{Panel, Renderable, Style};
 use rich_ext::data::Format;
 use rich_ext::source_view::SourceView;
+
+/// The widest `--bytes-per-line` `rich_ext::hex::HexView` draws.
+const MAX_BYTES_PER_LINE: usize = 4096;
 
 /// Options for the viewer commands.
 #[derive(Clone, Debug, Default)]
@@ -64,7 +66,15 @@ impl ViewerOptions {
             "--no-line-numbers" => self.no_line_numbers = true,
             "--offset" => self.offset = Some(number(arg, rest)?),
             "--length" => self.length = Some(number(arg, rest)?),
-            "--bytes-per-line" => self.bytes_per_line = Some(number(arg, rest)?),
+            "--bytes-per-line" => {
+                let per_line: usize = number(arg, rest)?;
+                if !(1..=MAX_BYTES_PER_LINE).contains(&per_line) {
+                    return Err(format!(
+                        "--bytes-per-line must be between 1 and {MAX_BYTES_PER_LINE}"
+                    ));
+                }
+                self.bytes_per_line = Some(per_line);
+            }
             "--group" => {
                 let group: usize = number(arg, rest)?;
                 if group == 0 {
@@ -83,6 +93,16 @@ impl ViewerOptions {
             _ => return Ok(false),
         }
         Ok(true)
+    }
+
+    /// `--offset`, where `rich hex` starts.
+    pub(crate) fn offset(&self) -> Option<u64> {
+        self.offset
+    }
+
+    /// `--length`, the most bytes `rich hex` shows.
+    pub(crate) fn length(&self) -> Option<usize> {
+        self.length
     }
 
     /// Each option given with the commands it applies to, for the "only has
@@ -140,6 +160,29 @@ pub(crate) fn looks_binary(bytes: &[u8]) -> bool {
         // A multi-byte character cut off at the 8 KiB boundary is still text.
         Err(error) => error.error_len().is_some(),
     }
+}
+
+/// Where `bytes` would be cut to keep `limit` lines: just after the newline
+/// ending line `limit`, when anything follows it.
+pub(crate) fn line_end(bytes: &[u8], limit: usize) -> Option<usize> {
+    match limit {
+        0 => Some(0),
+        _ => bytes
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| **b == b'\n')
+            .nth(limit - 1)
+            .map(|(at, _)| at + 1),
+    }
+    .filter(|&end| end < bytes.len())
+}
+
+/// Tell the reader on stderr that only part of `name` is shown.
+pub(crate) fn notice(name: &str, shown: &str, hint: &str) {
+    eprintln!(
+        "rich: showing the first {shown} of {}; {hint}",
+        rich_ext::sanitize_terminal_controls(name)
+    );
 }
 
 /// Decide how to view a resource from its extension, then its content.
@@ -225,6 +268,9 @@ pub(crate) struct Captured {
     /// The signal that killed the command, where the platform reports one.
     pub signal: Option<i32>,
     pub elapsed: Duration,
+    /// Why reading stopped early, if it did: output past the limit, or a
+    /// background process holding the output open after the command exited.
+    pub notice: Option<String>,
 }
 
 impl Captured {
@@ -255,6 +301,39 @@ impl Captured {
         self.command = redactor.redact_args(&self.command);
     }
 
+    /// `--sanitize`: neutralise terminal controls in the output, keeping the
+    /// colours the panel shows, and in the command line, before anything is
+    /// shown, exported or recorded. The output is processed a line at a time,
+    /// as the ANSI decoder reads it, so a sequence split between pipe reads
+    /// is still seen whole; a chunk that ends mid-line goes out with the
+    /// chunk that finishes the line.
+    pub fn sanitize(&mut self) {
+        let neutralize = |bytes: &[u8]| {
+            crate::controls::neutralize_for_decoder(&String::from_utf8_lossy(bytes)).into_bytes()
+        };
+        let mut pending: Vec<u8> = Vec::new();
+        let mut chunks: Chunks = Vec::new();
+        let mut last = Duration::ZERO;
+        for (at, bytes) in std::mem::take(&mut self.chunks) {
+            pending.extend_from_slice(&bytes);
+            last = at;
+            if let Some(end) = pending.iter().rposition(|&b| b == b'\n') {
+                let rest = pending.split_off(end + 1);
+                chunks.push((at, neutralize(&pending)));
+                pending = rest;
+            }
+        }
+        if !pending.is_empty() {
+            chunks.push((last, neutralize(&pending)));
+        }
+        self.chunks = chunks;
+        self.command = self
+            .command
+            .iter()
+            .map(|word| rich_ext::sanitize_terminal_controls(word))
+            .collect();
+    }
+
     fn output(&self) -> Vec<u8> {
         self.chunks
             .iter()
@@ -263,10 +342,35 @@ impl Captured {
     }
 }
 
+/// How long `capture` keeps reading after the command exits while its output
+/// stays open (a background process it started can hold it forever).
+/// Measured from the exit.
+const GRACE: Duration = Duration::from_secs(1);
+
+/// How often `capture` checks on the command while no output arrives.
+const TICK: Duration = Duration::from_millis(10);
+
 /// Run `command` with its output piped, as a colour-capable terminal `width`
 /// columns wide would see it (`FORCE_COLOR`, `CLICOLOR_FORCE`, `COLUMNS`).
 /// The command's own exit status is recorded, not returned as an error.
+///
+/// Reading stops [`GRACE`] after the command exits, even if a process it left
+/// in the background still holds the output open, and output past
+/// [`CAPTURE_LIMIT`](crate::controls::CAPTURE_LIMIT) or
+/// [`LINE_LIMIT`](crate::controls::LINE_LIMIT) lines stops the command; either
+/// is recorded in [`Captured::notice`].
 pub(crate) fn capture(command: &[String], width: usize) -> Result<Captured, String> {
+    use crate::controls::{CAPTURE_LIMIT, LINE_LIMIT};
+    capture_with_limits(command, width, CAPTURE_LIMIT, LINE_LIMIT)
+}
+
+fn capture_with_limits(
+    command: &[String],
+    width: usize,
+    limit: usize,
+    line_limit: usize,
+) -> Result<Captured, String> {
+    use std::sync::mpsc::{channel, RecvTimeoutError};
     let (program, args) = command
         .split_first()
         .ok_or("capture needs a command after --")?;
@@ -291,35 +395,92 @@ pub(crate) fn capture(command: &[String], width: usize) -> Result<Captured, Stri
     // Our copies of the write end must close, or the read never ends.
     drop(process);
     let mut child = spawned.map_err(|e| format!("cannot run {program}: {e}"))?;
-    let chunks: Arc<Mutex<Chunks>> = Arc::default();
-    let pump = {
-        let chunks = chunks.clone();
-        std::thread::spawn(move || {
-            let mut buffer = [0u8; 8192];
-            while let Ok(read) = reader.read(&mut buffer) {
-                if read == 0 {
-                    break;
-                }
-                let at = started.elapsed();
-                chunks
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .push((at, buffer[..read].to_vec()));
+    let (sender, receiver) = channel::<(Duration, Vec<u8>)>();
+    // Not joined: a background process may keep the pipe open long after
+    // we stop listening. Once the receiver is gone its next send fails.
+    std::thread::spawn(move || {
+        let mut buffer = [0u8; 8192];
+        while let Ok(read) = reader.read(&mut buffer) {
+            if read == 0
+                || sender
+                    .send((started.elapsed(), buffer[..read].to_vec()))
+                    .is_err()
+            {
+                break;
             }
-        })
-    };
-    let status = child
-        .wait()
-        .map_err(|e| format!("waiting for {program}: {e}"))?;
-    let _ = pump.join();
-    let elapsed = started.elapsed();
-    let chunks = std::mem::take(&mut *chunks.lock().unwrap_or_else(|e| e.into_inner()));
+        }
+    });
+    let mut chunks: Chunks = Vec::new();
+    let (mut kept, mut lines) = (0usize, 0usize);
+    let mut notice = None;
+    let mut exited: Option<(std::process::ExitStatus, Instant)> = None;
+    let wait_error = |e: std::io::Error| format!("waiting for {program}: {e}");
+    loop {
+        match receiver.recv_timeout(TICK) {
+            Ok((at, mut bytes)) if notice.is_none() => {
+                let past = if kept + bytes.len() > limit {
+                    bytes.truncate(limit - kept);
+                    Some(crate::controls::size(limit as u64))
+                } else {
+                    None
+                };
+                let past = match line_end(&bytes, line_limit - lines) {
+                    Some(end) => {
+                        bytes.truncate(end);
+                        Some(format!("{line_limit} lines"))
+                    }
+                    None => past,
+                };
+                lines += bytes.iter().filter(|b| **b == b'\n').count();
+                if let Some(past) = past {
+                    notice = Some(format!(
+                        "the output passed {past}, the most rich capture keeps; stopped the command"
+                    ));
+                    if exited.is_none() {
+                        let _ = child.kill();
+                    }
+                }
+                kept += bytes.len();
+                if !bytes.is_empty() {
+                    chunks.push((at, bytes));
+                }
+            }
+            Ok(_) | Err(RecvTimeoutError::Timeout) => {}
+            // End of output: all that is left is the exit.
+            Err(RecvTimeoutError::Disconnected) => {
+                if exited.is_none() {
+                    exited = Some((child.wait().map_err(wait_error)?, Instant::now()));
+                }
+                break;
+            }
+        }
+        if exited.is_none() {
+            if let Some(status) = child.try_wait().map_err(wait_error)? {
+                exited = Some((status, Instant::now()));
+            }
+        }
+        match exited {
+            Some(_) if notice.is_some() => break,
+            Some((_, at)) if at.elapsed() >= GRACE => {
+                notice = Some(format!(
+                    "{} exited but something it started still holds its output open; \
+                     stopped reading {}s later",
+                    rich_ext::sanitize_terminal_controls(program),
+                    GRACE.as_secs()
+                ));
+                break;
+            }
+            _ => {}
+        }
+    }
+    let (status, at) = exited.expect("the loop ends after the exit");
     Ok(Captured {
         command: command.to_vec(),
         chunks,
         status: status.code(),
         signal: exit_signal(&status),
-        elapsed,
+        elapsed: at.duration_since(started),
+        notice,
     })
 }
 
@@ -350,6 +511,12 @@ fn shell_words(words: &[String]) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// The command line as the panel title and the cast header show it: our own
+/// chrome, so any terminal controls in it are always made visible.
+fn shown_command(words: &[String]) -> String {
+    rich_ext::sanitize_terminal_controls(&shell_words(words))
 }
 
 fn format_elapsed(elapsed: Duration) -> String {
@@ -384,7 +551,7 @@ pub(crate) fn capture_view(captured: &Captured) -> Box<dyn Renderable> {
     let panel = Panel::new(Box::new(text))
         .title(format!(
             "$ {}",
-            rich::markup::escape(&shell_words(&captured.command))
+            rich::markup::escape(&shown_command(&captured.command))
         ))
         .subtitle(format!("{status} · {}", format_elapsed(captured.elapsed)))
         .border_style(Style::parse(if ok { "green" } else { "red" }).unwrap_or_default());
@@ -419,8 +586,8 @@ pub(crate) fn asciicast(captured: &Captured, width: usize, height: usize) -> Str
         "version": 2,
         "width": width,
         "height": height,
-        "command": shell_words(&captured.command),
-        "title": shell_words(&captured.command),
+        "command": shown_command(&captured.command),
+        "title": shown_command(&captured.command),
         "env": { "TERM": "xterm-256color" },
     });
     let mut out = header.to_string();
@@ -467,18 +634,14 @@ fn incomplete_utf8_tail(bytes: &[u8]) -> usize {
     0
 }
 
-/// `rich hex`: the bytes from `--offset`, at most `--length` of them.
-pub(crate) fn hex(options: &ViewerOptions, bytes: Vec<u8>) -> Result<Box<dyn Renderable>, String> {
+/// `rich hex`: `bytes`, already read from `start` (`--offset`) for at most
+/// `--length` bytes, labelled from `start`.
+pub(crate) fn hex(
+    options: &ViewerOptions,
+    bytes: Vec<u8>,
+    start: u64,
+) -> Result<Box<dyn Renderable>, String> {
     use rich_ext::hex::{parse_needle, HexView};
-    let start = options.offset.unwrap_or(0);
-    let skip = usize::try_from(start)
-        .unwrap_or(usize::MAX)
-        .min(bytes.len());
-    let mut bytes = bytes;
-    bytes.drain(..skip);
-    if let Some(length) = options.length {
-        bytes.truncate(length);
-    }
     let mut view = HexView::new(bytes).offset(start);
     if let Some(per_line) = options.bytes_per_line {
         view = view.bytes_per_line(Some(per_line));
@@ -643,6 +806,7 @@ mod tests {
             status: Some(1),
             signal: None,
             elapsed: Duration::from_millis(chunks.len() as u64),
+            notice: None,
         }
     }
 
@@ -719,6 +883,49 @@ mod tests {
             !header.contains("hunter2") && !header.contains("abc123"),
             "{header}"
         );
+    }
+
+    #[test]
+    fn line_ends_cut_after_the_last_line_kept() {
+        assert_eq!(line_end(b"a\nb\nc\n", 2), Some(4));
+        assert_eq!(line_end(b"a\nb\n", 2), None);
+        assert_eq!(line_end(b"a\nb", 2), None);
+        assert_eq!(line_end(b"a\nb\nc", 2), Some(4));
+        assert_eq!(line_end(b"x", 0), Some(0));
+        assert_eq!(line_end(b"", 0), None);
+    }
+
+    #[test]
+    fn sanitizing_a_capture_sees_sequences_split_between_reads() {
+        let mut capture = captured(
+            &["x\u{1b}]0;T\u{7}"],
+            &[b"a\x1b]0;ti", b"tle\x07b\xc2", b"\x9b2J\n\x1b[31mred\n"],
+        );
+        capture.sanitize();
+        let output = String::from_utf8(capture.output()).unwrap();
+        assert_eq!(output, "ab\\u{009B}2J\n\u{1b}[31mred\n");
+        assert_eq!(capture.command, ["x␛]0;T␇"]);
+        // The line ending in the middle of the first chunks goes out with
+        // the chunk that finishes it.
+        assert_eq!(capture.chunks.len(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn capture_limits_bytes_and_lines() {
+        let command = |script: &str| -> Vec<String> {
+            ["sh", "-c", script].iter().map(|s| s.to_string()).collect()
+        };
+        let lines = capture_with_limits(&command("yes | head -n 50"), 40, 1 << 20, 10).unwrap();
+        assert_eq!(String::from_utf8(lines.output()).unwrap(), "y\n".repeat(10));
+        assert!(lines.notice.unwrap().contains("10 lines"));
+        let bytes = capture_with_limits(&command("yes"), 40, 7, 1000).unwrap();
+        assert_eq!(bytes.output(), b"y\ny\ny\ny");
+        assert!(bytes.notice.as_deref().unwrap().contains("7 bytes"));
+        assert_ne!(bytes.exit_code(), 0);
+        let exact = capture_with_limits(&command("printf 'a\\nb\\n'"), 40, 4, 2).unwrap();
+        assert_eq!(exact.output(), b"a\nb\n");
+        assert!(exact.notice.is_none());
     }
 
     #[cfg(unix)]
