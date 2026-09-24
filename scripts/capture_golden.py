@@ -2178,6 +2178,38 @@ def _measure_input(kind: str, source: str, padding: int):
     return JSON(source)
 
 
+PRINT_JUSTIFY_HEADER = """\
+# Golden parity fixtures for print-level justify of a printed Text — captured
+# from real Python `rich`. Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<width>\t<justify>\t<expected output as JSON>
+# Captured via `Console.print(text, justify=...)`. `Console.print` passes the
+# text through `Text("").join([text])`, which turns the text's base style into
+# a leading span: the justify padding is therefore left unstyled.
+# Console: force_terminal=True, color_system="truecolor", highlight=False.
+# The Rust test builds the text matching each <name>; keep them in sync.
+"""
+
+
+def _print_justify_spans() -> Text:
+    text = Text("ab cd", style="bold")
+    text.stylize("red", 0, 2)
+    return text
+
+
+PRINT_JUSTIFY_CASES = [
+    ("base_style_center", 10, lambda: Text("hi", style="on red"), "center"),
+    ("base_style_right", 10, lambda: Text("hi", style="on red"), "right"),
+    ("base_style_left", 10, lambda: Text("hi", style="on red"), "left"),
+    ("base_style_default", 10, lambda: Text("hi", style="on red"), "default"),
+    ("base_style_and_spans_center", 11, _print_justify_spans, "center"),
+    ("base_style_wrapped_center", 8, lambda: Text("hello world", style="on blue"), "center"),
+    ("base_style_full", 8, lambda: Text("aa bb cc dd", style="on blue"), "full"),
+    ("base_style_multiline_right", 6, lambda: Text("a\nbcd", style="on green"), "right"),
+    ("markup_span_center", 10, lambda: Text.from_markup("[on red]hi[/]"), "center"),
+]
+
+
 def main() -> None:
     version = verify_upstream_version()
     print(f"verified Python rich {version} against UPSTREAM.toml")
@@ -2607,6 +2639,25 @@ def main() -> None:
         tlines.append(f"{theme_name}\t{json.dumps(payload)}")
     themes_path.write_text("\n".join(tlines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(tlines) - 1} terminal themes to {themes_path}")
+
+    # --- print-level justify of a printed Text -------------------------
+    pj_path = golden_dir() / "print_justify.tsv"
+    pjlines = [PRINT_JUSTIFY_HEADER.rstrip("\n")]
+    for name, width, build, justify in PRINT_JUSTIFY_CASES:
+        pjconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=width,
+            highlight=False,
+            no_color=False,
+        )
+        with pjconsole.capture() as capture:
+            pjconsole.print(build(), justify=None if justify == "default" else justify)
+        pjlines.append(
+            f"{name}\t{width}\t{justify}\t{json.dumps(capture.get(), ensure_ascii=False)}"
+        )
+    pj_path.write_text("\n".join(pjlines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(PRINT_JUSTIFY_CASES)} print justify cases to {pj_path}")
 
     # --- exports --------------------------------------------------------
     # These were previously pasted into Rust source as string literals, which

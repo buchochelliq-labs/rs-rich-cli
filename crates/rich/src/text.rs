@@ -655,6 +655,25 @@ impl Text {
         self.no_wrap = None;
     }
 
+    /// Move the base style into a span over the whole text, ahead of the
+    /// existing spans — what `Text.join` does to each joined text. A falsy
+    /// style (null, or an empty name) adds no span, as `if text.style:` skips
+    /// it upstream.
+    pub(crate) fn base_style_to_span(&mut self) {
+        let style = std::mem::take(&mut self.style);
+        let falsy = style.is_null_style() || matches!(&style, StyleType::Name(name) if name.is_empty());
+        if !falsy {
+            self.spans.insert(
+                0,
+                Span {
+                    start: 0,
+                    end: self.plain.len(),
+                    style,
+                },
+            );
+        }
+    }
+
     /// Set the whole-text base style, resolved or named.
     pub fn set_base_style(&mut self, style: impl Into<StyleType>) {
         self.style = style.into();

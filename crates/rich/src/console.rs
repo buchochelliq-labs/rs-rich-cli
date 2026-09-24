@@ -917,9 +917,13 @@ fn segments_to_plain(segments: &[Segment]) -> String {
 impl Renderable for Text {
     fn printed_text(&self) -> Option<Text> {
         // `Text("").join([self])`: the text and its spans survive; justify,
-        // overflow and no_wrap come from the blank separator (#446).
+        // overflow and no_wrap come from the blank separator (#446). The base
+        // style does not: `join` takes the separator's (none) and re-applies
+        // this text's as a leading span (`if text.style: append_span(...)`),
+        // so print-level justify padding is left unstyled.
         let mut text = self.clone();
         text.clear_layout_options();
+        text.base_style_to_span();
         Some(text)
     }
 

@@ -2367,3 +2367,65 @@ fn theme_stack_parity() {
     }
     assert_eq!(checked, 9, "expected every theme stack case to run");
 }
+
+/// A generic parser for the JSON-output fixtures: skips comments and blank
+/// lines, splits each line into `fields` tab-separated columns, and hands the
+/// (1-based line number, columns) pairs back.
+fn tsv_rows(data: &str, fields: usize) -> Vec<(usize, Vec<&str>)> {
+    data.lines()
+        .enumerate()
+        .map(|(index, raw)| (index + 1, raw.trim_end_matches('\r')))
+        .filter(|(_, line)| !line.trim().is_empty() && !line.starts_with('#'))
+        .map(|(number, line)| {
+            let columns: Vec<&str> = line.splitn(fields, '\t').collect();
+            assert_eq!(columns.len(), fields, "line {number}: expected {fields} columns");
+            (number, columns)
+        })
+        .collect()
+}
+
+/// The text matching a `print_justify.tsv` case. Must stay in sync with
+/// `PRINT_JUSTIFY_CASES` in `scripts/capture_golden.py`.
+fn build_print_justify_text(name: &str) -> Text {
+    match name {
+        "base_style_center" | "base_style_right" | "base_style_left" | "base_style_default" => {
+            Text::styled("hi", "on red")
+        }
+        "base_style_and_spans_center" => {
+            let mut text = Text::styled("ab cd", "bold");
+            text.stylize("red", 0, 2);
+            text
+        }
+        "base_style_wrapped_center" => Text::styled("hello world", "on blue"),
+        "base_style_full" => Text::styled("aa bb cc dd", "on blue"),
+        "base_style_multiline_right" => Text::styled("a\nbcd", "on green"),
+        "markup_span_center" => Text::from_markup("[on red]hi[/]").unwrap(),
+        other => panic!("no print_justify builder for {other:?}"),
+    }
+}
+
+/// `Console.print(text, justify=…)`: upstream's `Text("").join([text])` makes
+/// the base style a leading span, so the justify padding stays unstyled.
+#[test]
+fn print_justify_parity() {
+    let rows = tsv_rows(include_str!("golden/print_justify.tsv"), 4);
+    for (line, columns) in &rows {
+        let name = columns[0];
+        let width: usize = columns[1].parse().expect("width");
+        let justify = match columns[2] {
+            "default" => Justify::Default,
+            "left" => Justify::Left,
+            "center" => Justify::Center,
+            "right" => Justify::Right,
+            "full" => Justify::Full,
+            other => panic!("line {line}: unknown justify {other:?}"),
+        };
+        let expected: String = serde_json::from_str(columns[3]).expect("expected json");
+        let console = truecolor_console(width);
+        let mut options = console.options();
+        options.justify = justify;
+        let got = console.render_export_with(&build_print_justify_text(name), &options);
+        assert_eq!(got, expected, "print justify case {name:?} (line {line}) diverged");
+    }
+    assert_eq!(rows.len(), 9, "expected every print justify case to run");
+}
