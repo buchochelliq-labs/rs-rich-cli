@@ -205,9 +205,7 @@ impl<W: Write + Send + 'static> Live<W> {
                 loop {
                     match receiver.recv_timeout(interval) {
                         Ok(LiveMessage::Update(renderable)) => live.update(renderable),
-                        Ok(LiveMessage::Refresh) | Err(RecvTimeoutError::Timeout) => {
-                            live.refresh()
-                        }
+                        Ok(LiveMessage::Refresh) | Err(RecvTimeoutError::Timeout) => live.refresh(),
                         Ok(LiveMessage::RefreshAck(done)) => {
                             live.refresh();
                             let _ = done.send(());
@@ -437,7 +435,10 @@ mod tests {
         };
         let output = String::from_utf8(output).unwrap();
         assert!(output.starts_with("\x1b[?25lok"), "{output:?}");
-        assert!(output.ends_with("\x1b[?25h"), "cursor left hidden: {output:?}");
+        assert!(
+            output.ends_with("\x1b[?25h"),
+            "cursor left hidden: {output:?}"
+        );
         assert_eq!(error.as_deref(), Some("render failed"));
 
         // `stop()` swallows the failure after restoring the terminal.
@@ -452,7 +453,10 @@ mod tests {
         );
         auto.refresh();
         let output = String::from_utf8(auto.stop()).unwrap();
-        assert!(output.ends_with("\x1b[?25h"), "cursor left hidden: {output:?}");
+        assert!(
+            output.ends_with("\x1b[?25h"),
+            "cursor left hidden: {output:?}"
+        );
     }
 
     #[test]

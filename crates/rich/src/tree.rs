@@ -179,7 +179,13 @@ impl Drop for Tree {
 impl Renderable for Tree {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let mut lines: Vec<Vec<Segment>> = Vec::new();
-        self.render_into(console, options, self.highlight, &mut lines, options.max_width);
+        self.render_into(
+            console,
+            options,
+            self.highlight,
+            &mut lines,
+            options.max_width,
+        );
 
         let mut segments = Vec::new();
         let last = lines.len().saturating_sub(1);

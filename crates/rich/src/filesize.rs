@@ -44,7 +44,7 @@ fn group_thousands(n: i64) -> String {
         grouped.push('-');
     }
     for (index, digit) in digits.chars().enumerate() {
-        if index > 0 && (digits.len() - index) % 3 == 0 {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
             grouped.push(',');
         }
         grouped.push(digit);
@@ -126,8 +126,14 @@ mod tests {
         assert_eq!(decimal_signed(1), "1 byte");
         assert_eq!(decimal_signed(1500), "1.5 kB");
         let suffixes = &["bytes", "kB", "MB"];
-        assert_eq!(pick_unit_and_suffix_signed(-5000, suffixes, 1000), (1, "bytes"));
-        assert_eq!(pick_unit_and_suffix_signed(5000, suffixes, 1000), (1000, "kB"));
+        assert_eq!(
+            pick_unit_and_suffix_signed(-5000, suffixes, 1000),
+            (1, "bytes")
+        );
+        assert_eq!(
+            pick_unit_and_suffix_signed(5000, suffixes, 1000),
+            (1000, "kB")
+        );
     }
 
     #[test]

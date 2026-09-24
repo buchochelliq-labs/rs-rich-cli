@@ -1158,7 +1158,10 @@ struct HolderGuard<'a>(&'a std::sync::Mutex<Option<std::thread::ThreadId>>);
 
 impl Drop for HolderGuard<'_> {
     fn drop(&mut self) {
-        *self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+        *self
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
     }
 }
 

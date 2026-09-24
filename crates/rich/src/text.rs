@@ -661,7 +661,8 @@ impl Text {
     /// it upstream.
     pub(crate) fn base_style_to_span(&mut self) {
         let style = std::mem::take(&mut self.style);
-        let falsy = style.is_null_style() || matches!(&style, StyleType::Name(name) if name.is_empty());
+        let falsy =
+            style.is_null_style() || matches!(&style, StyleType::Name(name) if name.is_empty());
         if !falsy {
             self.spans.insert(
                 0,
