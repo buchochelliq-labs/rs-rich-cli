@@ -21,7 +21,7 @@ use std::io::Write;
 use std::time::Duration;
 
 use image::codecs::gif::GifDecoder;
-use image::{AnimationDecoder, DynamicImage, ImageError};
+use image::{AnimationDecoder, DynamicImage, ImageDecoder, ImageError};
 
 use rich::protocol::Renderable;
 use rich::{Console, Control, Live};
@@ -73,10 +73,64 @@ pub struct AnimatedArt {
 }
 
 impl AnimatedArt {
+    /// Upper bound, in bytes, on the decoded frames an [`AnimatedArt`] keeps.
+    ///
+    /// Every frame is held as a full-canvas RGBA buffer, so a tiny GIF with a
+    /// large logical screen or many frames would otherwise expand into
+    /// gigabytes. Decoding stops with an [`ImageError::Limits`] error as soon
+    /// as the frames so far exceed this, matching the 512 MiB `image` allows a
+    /// still image by default.
+    pub const MAX_DECODED_BYTES: usize = 512 * 1024 * 1024;
+
     /// Decode an animated GIF from bytes.
+    ///
+    /// Fails with [`ImageError::Limits`] when the canvas alone is beyond
+    /// `image`'s default limits, or when all frames together would take more
+    /// than [`MAX_DECODED_BYTES`](Self::MAX_DECODED_BYTES).
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, ImageError> {
-        let decoder = GifDecoder::new(std::io::Cursor::new(bytes))?;
-        let decoded = decoder.into_frames().collect_frames()?;
+        Self::from_bytes_within(bytes, Self::MAX_DECODED_BYTES)
+    }
+
+    /// [`from_bytes`](Self::from_bytes) with an explicit frame-memory budget.
+    fn from_bytes_within(bytes: &[u8], budget: usize) -> Result<Self, ImageError> {
+        let mut decoder = GifDecoder::new(std::io::Cursor::new(bytes))?;
+        // `GifDecoder::new` starts with no limits at all; use `image`'s
+        // defaults, as a still image gets, so the canvas is checked up front.
+        decoder.set_limits(image::Limits::default())?;
+        let over_budget = || {
+            ImageError::Limits(image::error::LimitError::from_kind(
+                image::error::LimitErrorKind::InsufficientMemory,
+            ))
+        };
+        // Refuse up front, before decoding anything, when the frame count
+        // already rules the file out; the running total below still guards
+        // whatever the pre-scan cannot see.
+        let (width, height) = decoder.dimensions();
+        let canvas = (width as usize)
+            .checked_mul(height as usize)
+            .and_then(|pixels| pixels.checked_mul(4))
+            .ok_or_else(over_budget)?;
+        if canvas
+            .checked_mul(count_image_blocks(bytes))
+            .is_none_or(|total| total > budget)
+        {
+            return Err(over_budget());
+        }
+        let mut used = 0usize;
+        let mut decoded = Vec::new();
+        for frame in decoder.into_frames() {
+            let frame = frame?;
+            let buffer = frame.buffer();
+            let size = (buffer.width() as usize)
+                .checked_mul(buffer.height() as usize)
+                .and_then(|pixels| pixels.checked_mul(4))
+                .ok_or_else(over_budget)?;
+            used = used.checked_add(size).ok_or_else(over_budget)?;
+            if used > budget {
+                return Err(over_budget());
+            }
+            decoded.push(frame);
+        }
         let frames = decoded
             .into_iter()
             .map(|frame| {
@@ -386,6 +440,53 @@ impl Renderable for AnimatedArt {
     }
 }
 
+/// Count the image blocks (frames) in a GIF by walking its block structure,
+/// without decompressing anything. A truncated or malformed stream yields the
+/// frames seen so far; the decoder reports the actual error.
+fn count_image_blocks(bytes: &[u8]) -> usize {
+    // Skip a chain of data sub-blocks starting at `at`; returns the index just
+    // past the zero-length terminator.
+    fn skip_sub_blocks(bytes: &[u8], mut at: usize) -> Option<usize> {
+        loop {
+            let len = *bytes.get(at)? as usize;
+            at += 1 + len;
+            if len == 0 {
+                return Some(at);
+            }
+        }
+    }
+    fn table_len(packed: u8) -> usize {
+        if packed & 0x80 == 0 {
+            0
+        } else {
+            3 << ((packed & 0x07) + 1)
+        }
+    }
+    let Some(&screen_packed) = bytes.get(10) else {
+        return 0;
+    };
+    let mut at = 13 + table_len(screen_packed);
+    let mut count = 0;
+    loop {
+        match bytes.get(at) {
+            Some(0x2C) => {
+                count += 1;
+                let Some(&packed) = bytes.get(at + 9) else {
+                    return count;
+                };
+                // Descriptor, local colour table, LZW minimum code size.
+                at += 10 + table_len(packed) + 1;
+            }
+            Some(0x21) => at += 2,
+            _ => return count,
+        }
+        match skip_sub_blocks(bytes, at) {
+            Some(next) => at = next,
+            None => return count,
+        }
+    }
+}
+
 /// Helpers shared by this module's tests and the [`stage`](crate::stage) ones.
 #[cfg(test)]
 pub(crate) mod tests_support {
@@ -407,12 +508,83 @@ pub(crate) mod tests_support {
         }
         buffer
     }
+
+    /// Hand-build a GIF89a whose logical screen is `screen_w` x `screen_h` but
+    /// which carries `frames` 1x1 image blocks: a few dozen bytes that decode
+    /// to `frames` full-screen canvases.
+    pub(crate) fn crafted_gif(screen_w: u16, screen_h: u16, frames: usize) -> Vec<u8> {
+        let mut bytes = b"GIF89a".to_vec();
+        bytes.extend_from_slice(&screen_w.to_le_bytes());
+        bytes.extend_from_slice(&screen_h.to_le_bytes());
+        // Global colour table of two entries, background 0, no aspect.
+        bytes.extend_from_slice(&[0x80, 0, 0, 0, 0, 0, 255, 255, 255]);
+        for _ in 0..frames {
+            // Image descriptor: at (0, 0), 1x1, no local table.
+            bytes.extend_from_slice(&[0x2C, 0, 0, 0, 0, 1, 0, 1, 0, 0]);
+            // LZW minimum code size 2; codes clear, 0, end; block terminator.
+            bytes.extend_from_slice(&[2, 2, 0x44, 0x01, 0]);
+        }
+        bytes.push(0x3B);
+        bytes
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::tests_support::make_gif;
+    use super::tests_support::{crafted_gif, make_gif};
     use super::*;
+
+    #[test]
+    fn crafted_gif_decodes_while_small() {
+        let art = AnimatedArt::from_bytes(&crafted_gif(4, 3, 2)).expect("decodes");
+        assert_eq!(art.frame_count(), 2);
+        assert_eq!(art.frames[0].image.width(), 4);
+        assert_eq!(art.frames[0].image.height(), 3);
+    }
+
+    #[test]
+    fn huge_logical_screen_is_a_clean_limit_error() {
+        // 62 bytes that claim a 65535x65535 canvas: 17 GB as one RGBA frame.
+        let bytes = crafted_gif(u16::MAX, u16::MAX, 1);
+        assert!(bytes.len() < 64);
+        let error = AnimatedArt::from_bytes(&bytes).err().expect("must refuse");
+        assert!(matches!(error, ImageError::Limits(_)), "{error}");
+    }
+
+    #[test]
+    fn many_full_canvas_frames_are_refused_before_decoding() {
+        // ~1 KB that would decode to 64 x 2000x2000 RGBA canvases (1 GB).
+        let bytes = crafted_gif(2000, 2000, 64);
+        assert!(bytes.len() < 1100);
+        let error = AnimatedArt::from_bytes(&bytes).err().expect("must refuse");
+        assert!(matches!(error, ImageError::Limits(_)), "{error}");
+    }
+
+    #[test]
+    fn image_blocks_are_counted_past_extensions() {
+        // The encoder writes loop and graphic-control extensions per frame.
+        let bytes = make_gif(&[[1, 2, 3], [4, 5, 6], [7, 8, 9]], 10);
+        assert_eq!(count_image_blocks(&bytes), 3);
+        assert_eq!(count_image_blocks(&crafted_gif(3, 3, 5)), 5);
+        assert!(count_image_blocks(&bytes[..bytes.len() / 2]) < 3);
+        assert_eq!(count_image_blocks(b"GIF89a"), 0);
+    }
+
+    #[test]
+    fn decoded_frames_are_capped_in_total() {
+        // Each 1x1 frame decodes to a full 100x100 canvas (40 000 bytes).
+        let bytes = crafted_gif(100, 100, 10);
+        assert_eq!(
+            AnimatedArt::from_bytes_within(&bytes, 100 * 100 * 4 * 10)
+                .expect("fits exactly")
+                .frame_count(),
+            10
+        );
+        let error = AnimatedArt::from_bytes_within(&bytes, 100 * 100 * 4 * 10 - 1)
+            .err()
+            .expect("one byte over the budget");
+        assert!(matches!(error, ImageError::Limits(_)), "{error}");
+    }
 
     #[test]
     fn block_frames_follow_color_and_terminal_capabilities() {
