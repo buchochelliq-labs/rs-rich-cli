@@ -174,7 +174,8 @@ first. See the [0.0.11 release notes](docs/releases/0.0.11.md#what-the-release-t
   - `hex --bytes-per-line` must be 1–4096.
   - A bad `--select` is a usage error.
 - **CLI: config trust.** A working-directory `rich.toml` can no longer set
-  `theme_file` or turn off the new `view`/`diff` sanitising, the same rule as
+  `theme_file`, choose export files (`export_html`, `export_svg`; ignored with a
+  warning) or turn off the new `view`/`diff` sanitising, the same rule as
   `NO_COLOR`. Theme files must be regular files of at most 1 MiB, so a FIFO no
   longer hangs `rich`.
 - **Tests.** Two intermittent failures were traced to the tests:

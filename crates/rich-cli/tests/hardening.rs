@@ -614,6 +614,70 @@ fn a_project_config_theme_file_is_ignored_with_a_warning() {
 }
 
 #[test]
+fn a_project_config_cannot_choose_export_files() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("rich.toml"),
+        "[defaults]\nexport_html = 'page.html'\n[profiles.default]\nexport_svg = 'page.svg'\n",
+    )
+    .unwrap();
+    let quick = Duration::from_secs(30);
+    let out = run_with(dir.path(), &["--print", "hi"], b"", &[], true, quick);
+    assert!(out.status.success(), "{out:?}");
+    assert_eq!(text(&out.stdout), "hi\n");
+    let stderr = text(&out.stderr);
+    for key in ["export_html", "export_svg"] {
+        assert!(
+            stderr.contains(&format!("{key} in ./rich.toml is ignored")),
+            "{stderr}"
+        );
+    }
+    assert!(!dir.path().join("page.html").exists());
+    assert!(!dir.path().join("page.svg").exists());
+    let explain = run_with(
+        dir.path(),
+        &["config", "explain", "export_svg"],
+        b"",
+        &[],
+        true,
+        quick,
+    );
+    assert!(
+        text(&explain.stdout).contains("export_svg in ./rich.toml is ignored"),
+        "{explain:?}"
+    );
+    // Named on the command line it still exports, without the warning.
+    let out = run_with(
+        dir.path(),
+        &["--export-html", "cli.html", "--print", "hi"],
+        b"",
+        &[],
+        true,
+        quick,
+    );
+    assert!(out.status.success(), "{out:?}");
+    assert!(dir.path().join("cli.html").exists());
+    assert!(!text(&out.stderr).contains("export_html in"), "{out:?}");
+    // The user's own config (named with --config) still may.
+    std::fs::write(
+        dir.path().join("user.toml"),
+        "[defaults]\nexport_html = 'user.html'\n",
+    )
+    .unwrap();
+    let out = run_with(
+        dir.path(),
+        &["--config", "user.toml", "--print", "hi"],
+        b"",
+        &[],
+        true,
+        quick,
+    );
+    assert!(out.status.success(), "{out:?}");
+    assert!(dir.path().join("user.html").exists(), "{out:?}");
+    assert!(!text(&out.stderr).contains("is ignored"), "{out:?}");
+}
+
+#[test]
 fn theme_files_are_size_limited_and_config_errors_name_the_setting() {
     let dir = tempfile::tempdir().unwrap();
     let mut big = String::from("[styles]\n");

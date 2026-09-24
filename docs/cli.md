@@ -876,9 +876,11 @@ you are in, so it can turn colour off but not back on against `NO_COLOR`;
 
 For the same reason a working-directory `rich.toml` cannot name a `theme_file`
 (a file every command in that directory would read; a FIFO there would hang
-them all) or set `sanitize = false`: both are ignored, `theme_file` with a
-warning on stderr, and `config explain` notes each. Set them in your own config
-or on the command line instead.
+them all), choose files for `rich` to write with `export_html` or `export_svg`,
+or set `sanitize = false`. All are ignored: `theme_file` and the `export_*` keys
+with a warning on stderr (unless the command line sets the same option), and
+`config explain` notes each. Set them in your own config or on the command line
+instead.
 `reference` lists every source and key with its type, default and flag.
 
 ---
