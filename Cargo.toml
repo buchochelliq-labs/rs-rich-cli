@@ -43,7 +43,9 @@ fancy-regex = "0.19"
 pulldown-cmark = { version = "0.13", default-features = false }
 # Syntax highlighting engine (Pygments-equivalent). `default-fancy` uses the
 # pure-Rust fancy-regex backend, avoiding the C `onig` dependency.
-syntect = { version = "5", default-features = false, features = ["default-fancy"] }
+# Only the bundled syntax and theme dumps are loaded (`load_defaults`), so the
+# YAML/plist loaders, HTML output and dump creation stay off.
+syntect = { version = "5", default-features = false, features = ["default-syntaxes", "default-themes", "regex-fancy"] }
 # Image decoding for rich-art's optional image->ASCII art (jp2a-style). Only the
 # PNG/JPEG decoders are enabled, keeping the tree small; behind rich-art's
 # NON-default `image` feature so the default adds no image dependencies.
