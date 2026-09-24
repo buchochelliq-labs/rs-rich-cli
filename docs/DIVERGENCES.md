@@ -284,8 +284,42 @@ Format: what differs · why · how to remove it (if temporary).
   (mirrors how `cells` delegates East-Asian-width to `unicode-width`). Byte-parity
   is impossible across highlighter engines.
 - **Remove:** not removable while using a different engine; the divergence is
-  inherent. Future work can add line numbers, themes matching rich's names, and
-  the path/loader conveniences.
+  inherent. Future work can add line numbers and the path/loader conveniences.
+- **Pluggable engine (0.0.12).** Highlighting goes through the
+  `protocol::CodeHighlighter` trait. `SyntectHighlighter` is the default, and
+  `Syntax::highlighter` / `Markdown::highlighter` accept any other engine. With
+  the default, output is byte-identical to 0.0.11. Core validates an engine's
+  spans against the source, so an engine can change colours but never the text.
+- **Upstream's ANSI themes.** `ansi_dark` and `ansi_light` use upstream's
+  `ANSI_DARK`/`ANSI_LIGHT` styles and the terminal's 16 colours, with no
+  background. Pygments token types become TextMate scopes:
+
+  | Pygments token | TextMate scopes |
+  |---|---|
+  | `Comment` | `comment` |
+  | `Comment.Preproc` | `meta.preprocessor`, `meta.annotation` (Rust attributes), `keyword.control.import.include` |
+  | `Keyword` | `keyword`, `storage.type`, `storage.modifier`, `constant.language` |
+  | `Keyword.Type` | `support.type`, `storage.type.primitive`/`numeric`/`builtin` |
+  | `Operator` (unstyled) | `keyword.operator` |
+  | `Operator.Word` | `keyword.operator.logical`, `keyword.operator.word` |
+  | `Name.Builtin` | `support.function.builtin`, `variable.language` |
+  | `Name.Function` | `entity.name.function` |
+  | `Name.Namespace` | `entity.name.namespace`, `entity.name.module` |
+  | `Name.Class` | `entity.name.class`/`struct`/`enum`/`union`/`trait`/`type` |
+  | `Name.Exception` | `support.type.exception` |
+  | `Name.Decorator` | `meta.decorator`, `meta.annotation.python`, `entity.name.function.decorator` |
+  | `Name.Variable` | instance, class, global and shell variables |
+  | `Name.Constant` | `variable.other.constant`, `constant.other`, `entity.name.constant`, `support.constant` |
+  | `Name.Attribute` | `entity.other.attribute-name` |
+  | `Name.Tag` | `entity.name.tag` |
+  | `String` | `string`, and string prefixes (`storage.type.string`) |
+  | `Number` | `constant.numeric` |
+  | `Generic.Deleted` / `Inserted` | `markup.deleted` / `markup.inserted` |
+  | `Generic.Heading` / `Subheading` | `markup.heading` / `markup.heading.2`–`6`, `meta.diff.range` |
+  | `Error` | `invalid` |
+
+  `Whitespace` and `Generic.Prompt` have no TextMate equivalent and stay
+  unstyled.
 
 ### 19. Python-object modules are reimagined for Rust
 - **Differs:** `pretty.py`/`repr.py`/`_inspect.py`, `traceback.py`, and the

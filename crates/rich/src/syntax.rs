@@ -1,38 +1,37 @@
 //! Syntax highlighting.
 //!
-//! Port of `rich/syntax.py`'s renderable surface, powered by the `syntect`
-//! crate. A [`Syntax`] highlights a block of source code for a given language
-//! and theme, producing colored [`Segment`]s (a solid block: each line is padded
-//! to the render width with the theme background).
+//! Port of `rich/syntax.py`'s renderable surface. A [`Syntax`] highlights a
+//! block of source code for a given language and theme, producing colored
+//! [`Segment`]s (a solid block: each line is padded to the render width with
+//! the theme background).
 //!
-//! **Divergence:** upstream uses Pygments; we use `syntect`, which ships
-//! different grammars and themes. So the *coloring is functional, not
-//! byte-identical* to Python rich — see docs/DIVERGENCES.md. Everything else
-//! (the renderable protocol, width handling) matches the port's conventions.
+//! Highlighting goes through a [`CodeHighlighter`]. The default,
+//! [`SyntectHighlighter`], uses the `syntect` crate.
+//!
+//! **Divergence:** upstream uses Pygments; `syntect` ships different grammars
+//! and themes. So the *coloring is functional, not byte-identical* to Python
+//! rich — see docs/DIVERGENCES.md. Everything else (the renderable protocol,
+//! width handling) matches the port's conventions.
 
-use std::sync::OnceLock;
+use std::sync::Arc;
 
-use syntect::highlighting::{Color as SynColor, FontStyle, Style as SynStyle, Theme, ThemeSet};
-use syntect::parsing::SyntaxSet;
-use syntect::util::LinesWithEndings;
-
-#[cfg(not(feature = "syntax-cache"))]
-use syntect::easy::HighlightLines;
 #[cfg(feature = "syntax-cache")]
 #[path = "syntax_cache.rs"]
 mod cache;
+#[path = "syntax_syntect.rs"]
+mod syntect_adapter;
+
+pub use syntect_adapter::SyntectHighlighter;
 
 use crate::cells::cell_len;
-use crate::color::Color;
 use crate::console::{Console, ConsoleOptions};
 use crate::measure::Measurement;
-use crate::protocol::Renderable;
+use crate::protocol::{
+    CodeHighlighter, HighlightError, HighlightedCode, HighlightedLine, Renderable,
+};
 use crate::segment::Segment;
 use crate::style::Style;
 use crate::text::is_control_code;
-
-/// The default theme (a dark base16 palette shipped with `syntect`).
-const DEFAULT_THEME: &str = "base16-ocean.dark";
 
 /// Upstream's `Syntax(tab_size=4)`.
 const DEFAULT_TAB_SIZE: usize = 4;
@@ -41,10 +40,13 @@ const DEFAULT_TAB_SIZE: usize = 4;
 pub struct Syntax {
     code: String,
     language: Option<String>,
-    theme: String,
+    /// `None` means the highlighter's default theme.
+    theme: Option<String>,
     word_wrap: bool,
     padding: usize,
     tab_size: usize,
+    /// `None` means [`SyntectHighlighter`].
+    highlighter: Option<Arc<dyn CodeHighlighter>>,
 }
 
 /// Port of Python's `str.expandtabs(tab_size)`, which `Syntax._process_code`
@@ -106,8 +108,16 @@ impl Syntax {
             tab_size: DEFAULT_TAB_SIZE,
             code: code.into(),
             language: Some(language.into()).filter(|l| !l.is_empty()),
-            theme: DEFAULT_THEME.to_string(),
+            theme: None,
+            highlighter: None,
         }
+    }
+
+    /// Highlight with `highlighter` instead of the default
+    /// [`SyntectHighlighter`]. Theme names are the highlighter's own.
+    pub fn highlighter(mut self, highlighter: Arc<dyn CodeHighlighter>) -> Self {
+        self.highlighter = Some(highlighter);
+        self
     }
 
     /// How far a tab advances the column, in characters. Upstream's
@@ -132,12 +142,86 @@ impl Syntax {
         self
     }
 
-    /// Choose the highlighting theme (a `syntect` theme name). Unknown names fall
-    /// back to the default.
+    /// Choose the highlighting theme, by the highlighter's name for it. The
+    /// default highlighter offers `syntect`'s themes plus upstream's
+    /// `ansi_dark` and `ansi_light`. Unknown names fall back to the
+    /// highlighter's default theme.
     pub fn theme(mut self, theme: impl Into<String>) -> Self {
-        self.theme = theme.into();
+        self.theme = Some(theme.into());
         self
     }
+
+    /// Highlight the (already tab-expanded) `code`, falling back to the default
+    /// theme for an unknown one and to plain text if the engine fails, then
+    /// validate the result against the source (see [`CodeHighlighter`]).
+    fn highlighted(&self, code: &str) -> HighlightedCode {
+        let engine = self
+            .highlighter
+            .clone()
+            .unwrap_or_else(SyntectHighlighter::shared);
+        let language = self.language.as_deref();
+        let theme = self.theme.as_deref().unwrap_or(engine.default_theme());
+        let result = match engine.highlight(code, language, theme) {
+            Err(HighlightError::UnknownTheme(_)) => {
+                engine.highlight(code, language, engine.default_theme())
+            }
+            other => other,
+        };
+        let highlighted = result.unwrap_or_default();
+        validate(code, highlighted)
+    }
+}
+
+/// Make a highlighter's output safe to render against `code`: one line per
+/// `code.split('\n')` element, spans sorted, in range, non-overlapping and on
+/// character boundaries, and no hyperlinks in adapter styles.
+fn validate(code: &str, mut highlighted: HighlightedCode) -> HighlightedCode {
+    let sources: Vec<&str> = code.split('\n').collect();
+    highlighted
+        .lines
+        .resize_with(sources.len(), HighlightedLine::default);
+    for (line, source) in highlighted.lines.iter_mut().zip(&sources) {
+        let mut end = 0usize;
+        line.spans.retain(|span| {
+            let keep = span.range.start < span.range.end
+                && span.range.start >= end
+                && span.range.end <= source.len()
+                && source.is_char_boundary(span.range.start)
+                && source.is_char_boundary(span.range.end);
+            if keep {
+                end = span.range.end;
+            }
+            keep
+        });
+        for span in &mut line.spans {
+            span.style = span.style.update_link(None);
+        }
+        line.newline_style = line.newline_style.as_ref().map(|s| s.update_link(None));
+    }
+    highlighted.default_style = highlighted.default_style.update_link(None);
+    highlighted
+}
+
+/// The pieces of one source line: every span, plus the gaps between them in
+/// the default style, in order.
+fn line_pieces<'a>(
+    source: &'a str,
+    line: &HighlightedLine,
+    default_style: &Style,
+) -> Vec<(&'a str, Style)> {
+    let mut pieces = Vec::with_capacity(line.spans.len() + 1);
+    let mut position = 0usize;
+    for span in &line.spans {
+        if span.range.start > position {
+            pieces.push((&source[position..span.range.start], default_style.clone()));
+        }
+        pieces.push((&source[span.range.clone()], span.style.clone()));
+        position = span.range.end;
+    }
+    if position < source.len() {
+        pieces.push((&source[position..], default_style.clone()));
+    }
+    pieces
 }
 
 impl Syntax {
@@ -146,78 +230,38 @@ impl Syntax {
     /// every token carries its own style. Tabs are expanded first, as
     /// `_process_code` does. Used by `Markdown(inline_code_lexer=…)`.
     pub fn highlight(&self) -> crate::text::Text {
-        let syntaxes = syntax_set();
-        let themes = theme_set();
-        let theme = self.theme_ref(themes);
-        let syntax = self
-            .language
-            .as_deref()
-            .and_then(|lang| {
-                syntaxes
-                    .find_syntax_by_token(lang)
-                    .or_else(|| syntaxes.find_syntax_by_extension(lang))
-            })
-            .unwrap_or_else(|| syntaxes.find_syntax_plain_text());
-        let mut text = crate::text::Text::new("");
-        if let Some(background) = theme.settings.background.map(to_color) {
-            text.set_base_style(Style::new().with_bgcolor(background));
-        }
-        #[cfg(not(feature = "syntax-cache"))]
-        let mut highlighter = HighlightLines::new(syntax, theme);
-        #[cfg(feature = "syntax-cache")]
-        let mut highlighter = cache::CachedHighlighter::new(syntax, theme);
         let code = expand_tabs(&self.code, self.tab_size);
-        for line in LinesWithEndings::from(&code) {
-            for (syn_style, token) in highlighter
-                .highlight_line(line, syntaxes)
-                .unwrap_or_default()
-            {
-                text.append(token, Some(to_style(syn_style).into()));
+        let highlighted = self.highlighted(&code);
+        let mut text = crate::text::Text::new("");
+        if let Some(background) = &highlighted.background {
+            text.set_base_style(Style::new().with_bgcolor(background.clone()));
+        }
+        let sources: Vec<&str> = code.split('\n').collect();
+        let last = sources.len().saturating_sub(1);
+        for (index, (source, line)) in sources.iter().zip(&highlighted.lines).enumerate() {
+            let mut pieces: Vec<(String, Style)> =
+                line_pieces(source, line, &highlighted.default_style)
+                    .into_iter()
+                    .map(|(piece, style)| (piece.to_string(), style))
+                    .collect();
+            if index != last {
+                // The engine's style for the line break. When it matches the
+                // last piece, the break joins that piece, as one token.
+                let style = line.newline_style.clone().unwrap_or_default();
+                match pieces.last_mut() {
+                    Some((piece, last_style))
+                        if line.newline_style.is_some() && *last_style == style =>
+                    {
+                        piece.push('\n');
+                    }
+                    _ => pieces.push(("\n".to_string(), style)),
+                }
+            }
+            for (piece, style) in pieces {
+                text.append(piece.as_str(), Some(style.into()));
             }
         }
         text
-    }
-}
-
-fn syntax_set() -> &'static SyntaxSet {
-    static SET: OnceLock<SyntaxSet> = OnceLock::new();
-    SET.get_or_init(SyntaxSet::load_defaults_newlines)
-}
-
-fn theme_set() -> &'static ThemeSet {
-    static SET: OnceLock<ThemeSet> = OnceLock::new();
-    SET.get_or_init(ThemeSet::load_defaults)
-}
-
-/// Convert a `syntect` RGBA color to a truecolor [`Color`] (alpha dropped).
-fn to_color(c: SynColor) -> Color {
-    Color::from_rgb(c.r, c.g, c.b)
-}
-
-/// Convert a `syntect` style (fg/bg + font flags) to a rich [`Style`].
-fn to_style(s: SynStyle) -> Style {
-    let mut style = Style::new()
-        .with_color(to_color(s.foreground))
-        .with_bgcolor(to_color(s.background));
-    if s.font_style.contains(FontStyle::BOLD) {
-        style = style.combine(&Style::parse("bold").expect("valid style"));
-    }
-    if s.font_style.contains(FontStyle::ITALIC) {
-        style = style.combine(&Style::parse("italic").expect("valid style"));
-    }
-    if s.font_style.contains(FontStyle::UNDERLINE) {
-        style = style.combine(&Style::parse("underline").expect("valid style"));
-    }
-    style
-}
-
-impl Syntax {
-    fn theme_ref<'a>(&self, themes: &'a ThemeSet) -> &'a Theme {
-        themes
-            .themes
-            .get(&self.theme)
-            .or_else(|| themes.themes.get(DEFAULT_THEME))
-            .expect("default theme present")
     }
 }
 
@@ -268,26 +312,6 @@ impl Renderable for Syntax {
     }
 
     fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        let syntaxes = syntax_set();
-        let themes = theme_set();
-        let theme = self.theme_ref(themes);
-        let background = theme.settings.background.map(to_color);
-
-        // Resolve the language by token (name) or extension; else plain text.
-        let syntax = self
-            .language
-            .as_deref()
-            .and_then(|lang| {
-                syntaxes
-                    .find_syntax_by_token(lang)
-                    .or_else(|| syntaxes.find_syntax_by_extension(lang))
-            })
-            .unwrap_or_else(|| syntaxes.find_syntax_plain_text());
-
-        #[cfg(not(feature = "syntax-cache"))]
-        let mut highlighter = HighlightLines::new(syntax, theme);
-        #[cfg(feature = "syntax-cache")]
-        let mut highlighter = cache::CachedHighlighter::new(syntax, theme);
         // The gutter eats into the space the code itself may occupy.
         let width = options.max_width;
         let code_width = width.saturating_sub(self.padding * 2);
@@ -295,19 +319,17 @@ impl Renderable for Syntax {
         // `Syntax._process_code`: the source is tab-expanded before it reaches
         // the highlighter, so no U+0009 ever survives into a segment.
         let code = expand_tabs(&self.code, self.tab_size);
+        let highlighted = self.highlighted(&code);
+        let background = highlighted.background.clone();
 
+        // Upstream splits the source with Python's `str.split("\n")`, which keeps
+        // the empty element after a trailing newline — so a file ending in `\n`
+        // gets one final padded blank row, and an empty source one row. The
+        // highlighter returns exactly one line per element of that split.
         let mut lines: Vec<Vec<Segment>> = Vec::new();
-        for line in LinesWithEndings::from(&code) {
-            let ranges = highlighter
-                .highlight_line(line, syntaxes)
-                .unwrap_or_default();
+        for (source, line) in code.split('\n').zip(&highlighted.lines) {
             let mut row: Vec<Segment> = Vec::new();
-            let mut used = 0usize;
-            for (syn_style, text) in ranges {
-                let text = text.strip_suffix('\n').unwrap_or(text);
-                if text.is_empty() {
-                    continue;
-                }
+            for (text, style) in line_pieces(source, line, &highlighted.default_style) {
                 // Upstream's Syntax builds a `Text`, so `strip_control_codes`
                 // runs on every token. We emit segments directly, which let BEL,
                 // backspace, vertical tab and form feed through to the terminal
@@ -316,20 +338,9 @@ impl Renderable for Syntax {
                 if text.is_empty() {
                     continue;
                 }
-                used += cell_len(&text);
-                row.push(Segment::new(text, Some(to_style(syn_style))));
+                row.push(Segment::new(text, Some(style)));
             }
-            let _ = used;
             lines.push(row);
-        }
-
-        // Upstream splits the source with Python's `str.split("\n")`, which keeps
-        // the empty element after a trailing newline — so a file ending in `\n`
-        // gets one final padded blank row. `LinesWithEndings` yields no such
-        // element, so every source (i.e. nearly every real file) rendered one row
-        // short of upstream. An empty source splits to `[""]`, one row, too.
-        if code.is_empty() || code.ends_with('\n') {
-            lines.push(Vec::new());
         }
 
         // Wrapping happens before padding, so every *visual* row gets the same
@@ -403,6 +414,7 @@ impl Renderable for Syntax {
 mod tests {
     use super::*;
     use crate::color::ColorSystem;
+    use std::sync::Arc;
 
     fn render(code: &str, lang: &str, width: usize) -> String {
         Console::builder()
@@ -643,5 +655,214 @@ mod tests {
                 "{word:?} was split across rows: {out:?}"
             );
         }
+    }
+
+    // ---- CodeHighlighter (#522, #523) ---------------------------------------
+
+    use crate::protocol::HighlightSpan;
+
+    /// A highlighter that returns exactly the lines it was built with.
+    struct Fixed(Vec<HighlightedLine>);
+
+    impl CodeHighlighter for Fixed {
+        fn highlight(
+            &self,
+            _code: &str,
+            _language: Option<&str>,
+            _theme: &str,
+        ) -> Result<HighlightedCode, HighlightError> {
+            Ok(HighlightedCode {
+                lines: self.0.clone(),
+                ..Default::default()
+            })
+        }
+        fn default_theme(&self) -> &str {
+            "fixed"
+        }
+        fn themes(&self) -> Vec<String> {
+            vec!["fixed".into()]
+        }
+        fn languages(&self) -> Vec<String> {
+            Vec::new()
+        }
+    }
+
+    /// Always fails with an engine error.
+    struct Broken;
+
+    impl CodeHighlighter for Broken {
+        fn highlight(
+            &self,
+            _code: &str,
+            _language: Option<&str>,
+            _theme: &str,
+        ) -> Result<HighlightedCode, HighlightError> {
+            Err(HighlightError::Engine("boom".into()))
+        }
+        fn default_theme(&self) -> &str {
+            "x"
+        }
+        fn themes(&self) -> Vec<String> {
+            vec!["x".into()]
+        }
+        fn languages(&self) -> Vec<String> {
+            Vec::new()
+        }
+    }
+
+    fn span(range: std::ops::Range<usize>, style: &str) -> HighlightSpan {
+        HighlightSpan {
+            range,
+            style: Style::parse(style).unwrap(),
+        }
+    }
+
+    fn line(spans: Vec<HighlightSpan>) -> HighlightedLine {
+        HighlightedLine {
+            spans,
+            newline_style: None,
+        }
+    }
+
+    fn render_with(code: &str, highlighter: Arc<dyn CodeHighlighter>, width: usize) -> String {
+        Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Standard))
+            .width(width)
+            .build()
+            .render_to_string(&Syntax::new(code, "python").highlighter(highlighter))
+    }
+
+    #[test]
+    fn a_custom_highlighter_drives_the_rendered_styles() {
+        let fixed = Fixed(vec![line(vec![span(0..1, "red"), span(4..5, "bold")])]);
+        let out = render_with("x = 1", Arc::new(fixed), 7);
+        // `x` red, ` = ` in the default (unstyled) gap, `1` bold, then padding.
+        assert_eq!(out, "\u{1b}[31mx\u{1b}[0m = \u{1b}[1m1\u{1b}[0m  ");
+    }
+
+    #[test]
+    fn invalid_spans_are_dropped_not_rendered() {
+        let fixed = Fixed(vec![line(vec![
+            span(0..3, "red"),
+            span(1..2, "green"), // overlaps the first
+            span(3..99, "blue"), // past the end of the line
+            span(std::ops::Range { start: 2, end: 1 }, "yellow"), // reversed
+        ])]);
+        let out = render_with("abcdef", Arc::new(fixed), 6);
+        assert_eq!(out, "\u{1b}[31mabc\u{1b}[0mdef");
+        // A span ending inside a multi-byte character is dropped too.
+        let fixed = Fixed(vec![line(vec![span(0..1, "red")])]);
+        let out = render_with("é", Arc::new(fixed), 1);
+        assert_eq!(out, "é");
+    }
+
+    #[test]
+    fn missing_and_extra_lines_are_reconciled_with_the_source() {
+        // One line returned for three source lines: the rest render unstyled.
+        let fixed = Fixed(vec![line(vec![span(0..1, "red")])]);
+        let out = render_with("a\nb\nc", Arc::new(fixed), 1);
+        assert_eq!(out, "\u{1b}[31ma\u{1b}[0m\nb\nc");
+        // Extra lines beyond the source are ignored.
+        let fixed = Fixed(vec![
+            line(vec![]),
+            line(vec![]),
+            line(vec![span(0..1, "red")]),
+        ]);
+        assert_eq!(render_with("a", Arc::new(fixed), 1), "a");
+    }
+
+    #[test]
+    fn highlighter_styles_cannot_add_links_or_text() {
+        let style = Style::parse("red")
+            .unwrap()
+            .with_link("https://evil.example/\u{1b}]0;x\u{7}");
+        let fixed = Fixed(vec![line(vec![HighlightSpan { range: 0..1, style }])]);
+        let out = render_with("a\u{8}", Arc::new(fixed), 1);
+        assert!(!out.contains("\u{1b}]8"), "hyperlink escaped: {out:?}");
+        assert!(!out.contains("evil"), "{out:?}");
+        assert!(!out.contains('\u{8}'), "control code survived: {out:?}");
+    }
+
+    #[test]
+    fn an_engine_failure_renders_the_source_unstyled() {
+        let out = render_with("print(1)", Arc::new(Broken), 8);
+        assert_eq!(out, "print(1)");
+    }
+
+    #[test]
+    fn an_unknown_theme_falls_back_to_the_default_theme() {
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(20)
+            .build();
+        let default = console.render_to_string(&Syntax::new("x = 1", "python"));
+        let unknown =
+            console.render_to_string(&Syntax::new("x = 1", "python").theme("no-such-theme"));
+        assert_eq!(default, unknown);
+    }
+
+    #[test]
+    fn highlight_text_uses_the_same_highlighter() {
+        let fixed = Fixed(vec![line(vec![span(0..1, "red")]), line(vec![])]);
+        let text = Syntax::new("ab\ncd", "python")
+            .highlighter(Arc::new(fixed))
+            .highlight();
+        assert_eq!(text.plain(), "ab\ncd");
+        assert_eq!(text.spans()[0].start, 0);
+        assert_eq!(text.spans()[0].end, 1);
+    }
+
+    /// Upstream's `ANSI_DARK`/`ANSI_LIGHT` colours, by Pygments token class,
+    /// applied through the TextMate scopes syntect reports.
+    #[test]
+    fn ansi_themes_use_upstream_palette_colours() {
+        let code = "# note\n@wraps\ndef greet(name):\n    return f\"hi {name}\" and 42\n";
+        let render = |theme: &str, system: ColorSystem| {
+            Console::builder()
+                .force_terminal(true)
+                .color_system(Some(system))
+                .width(40)
+                .build()
+                .render_to_string(&Syntax::new(code, "python").theme(theme))
+        };
+        let dark = render("ansi_dark", ColorSystem::Truecolor);
+        // No RGB colour and no background anywhere: only the 16 palette colours.
+        assert!(!dark.contains("38;2;") && !dark.contains("48;"), "{dark:?}");
+        assert!(dark.contains("\u{1b}[2m#"), "comment is dim: {dark:?}");
+        assert!(
+            dark.contains("\u{1b}[1;95m@"),
+            "decorator bold bright_magenta: {dark:?}"
+        );
+        assert!(
+            dark.contains("\u{1b}[33mf"),
+            "string prefix is part of the string: {dark:?}"
+        );
+        assert!(
+            dark.contains("\u{1b}[94mdef"),
+            "keyword bright_blue: {dark:?}"
+        );
+        assert!(
+            dark.contains("\u{1b}[92mgreet"),
+            "function bright_green: {dark:?}"
+        );
+        assert!(
+            dark.contains("\u{1b}[94m42"),
+            "number bright_blue: {dark:?}"
+        );
+        assert!(
+            dark.contains("\u{1b}[95mand"),
+            "operator word bright_magenta: {dark:?}"
+        );
+        assert!(dark.contains("\u{1b}[33m"), "string yellow: {dark:?}");
+        let light = render("ansi_light", ColorSystem::Truecolor);
+        assert!(light.contains("\u{1b}[34mdef"), "keyword blue: {light:?}");
+        assert!(
+            light.contains("\u{1b}[32mgreet"),
+            "function green: {light:?}"
+        );
+        // A 16-colour console gets exactly the same codes.
+        assert_eq!(render("ansi_dark", ColorSystem::Standard), dark);
     }
 }
