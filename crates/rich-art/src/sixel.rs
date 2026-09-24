@@ -299,7 +299,7 @@ mod tests {
 
     /// Decode a Sixel sequence back to RGBA pixels.
     fn decode(sixel: &str) -> icy_sixel::SixelImage {
-        icy_sixel::sixel_decode(sixel.as_bytes()).expect("decodes")
+        icy_sixel::SixelImage::decode(sixel.as_bytes()).expect("decodes")
     }
 
     #[test]

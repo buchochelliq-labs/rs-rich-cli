@@ -405,10 +405,11 @@ fn image_options() -> Vec<ArgSpec> {
         .config_key("image_max_height"),
         option(
             "image-background",
-            "#RRGGBB",
+            "BG",
             IMAGE,
-            "With --image: flatten transparency onto this RGB colour (also colours contain \
-             padding; quote the # in your shell)",
+            "With --image: flatten transparency onto #RRGGBB (also colours contain padding; \
+             quote the # in your shell), leave it to the terminal's background (default), or \
+             show it on a gray checkerboard (checkerboard)",
         )
         .config_key("image_background"),
         option(

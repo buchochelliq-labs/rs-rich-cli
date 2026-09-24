@@ -30,6 +30,7 @@ use rich::style::Style;
 /// The glyph: the top half is painted in the foreground colour, the bottom
 /// half is left as background.
 const UPPER_HALF: &str = "\u{2580}";
+const LOWER_HALF: &str = "\u{2584}";
 
 /// An image drawn with half-block characters.
 pub struct BlockArt {
@@ -39,6 +40,7 @@ pub struct BlockArt {
     color_mode: ImageColorMode,
     dither: Dither,
     distance: ColorDistance,
+    transparent: bool,
 }
 
 impl BlockArt {
@@ -54,6 +56,7 @@ impl BlockArt {
             color_mode: ImageColorMode::default(),
             dither: Dither::default(),
             distance: ColorDistance::default(),
+            transparent: false,
         }
     }
 
@@ -66,6 +69,14 @@ impl BlockArt {
         self.color_mode = mode;
         self.dither = dither;
         self.distance = distance;
+        self
+    }
+
+    /// Leave cells whose pixels are under half opacity unpainted, so the
+    /// terminal's own background shows through, instead of compositing them
+    /// onto black. Used by [`ImageBackground::TerminalDefault`](crate::ImageBackground).
+    pub(crate) fn keep_transparency(mut self, transparent: bool) -> Self {
+        self.transparent = transparent;
         self
     }
 
@@ -111,13 +122,15 @@ impl BlockArt {
         (columns, rows)
     }
 
-    /// The rendered rows as `(upper, lower)` colour pairs.
-    fn cells(&self, available: usize) -> Vec<Vec<(Color, Color)>> {
+    /// The rendered rows as `(upper, lower)` colour pairs. A half is `None`
+    /// only when transparency is kept and that pixel is under half opacity.
+    fn cells(&self, available: usize) -> Vec<Vec<(Option<Color>, Option<Color>)>> {
         let (columns, rows) = self.grid(available);
         let mut scaled = self
             .image
             .resize_exact(columns as u32, (rows * 2) as u32, FilterType::Triangle)
             .to_rgba8();
+        let clear = crate::image_art::clear_mask(&scaled, self.transparent);
         let indices = preprocess(&mut scaled, self.color_mode, self.dither, self.distance);
 
         (0..rows)
@@ -125,19 +138,28 @@ impl BlockArt {
                 (0..columns)
                     .map(|col| {
                         let sample = |y: u32| {
-                            if let Some(indices) = &indices {
-                                return Color::from_ansi(indices[y as usize * columns + col]);
+                            let y = y.min(scaled.height() - 1);
+                            let i = y as usize * columns + col;
+                            if clear.as_ref().is_some_and(|clear| clear[i]) {
+                                return None;
                             }
-                            let p = scaled.get_pixel(col as u32, y.min(scaled.height() - 1));
-                            let [r, g, b, a] = p.0;
+                            if let Some(indices) = &indices {
+                                return Some(Color::from_ansi(indices[i]));
+                            }
+                            let [r, g, b, a] = scaled.get_pixel(col as u32, y).0;
+                            if clear.is_some() {
+                                // Kept transparency: an opaque-enough pixel
+                                // shows its own colour, not a darkened one.
+                                return Some(Color::from_rgb(r, g, b));
+                            }
                             // Composite onto black so transparency reads as
                             // empty rather than as an opaque colour.
                             let f = f32::from(a) / 255.0;
-                            Color::from_rgb(
+                            Some(Color::from_rgb(
                                 (f32::from(r) * f) as u8,
                                 (f32::from(g) * f) as u8,
                                 (f32::from(b) * f) as u8,
-                            )
+                            ))
                         };
                         (sample((row * 2) as u32), sample((row * 2 + 1) as u32))
                     })
@@ -154,10 +176,25 @@ impl Renderable for BlockArt {
         let last = rows.len().saturating_sub(1);
         for (index, row) in rows.iter().enumerate() {
             for (upper, lower) in row {
-                let style = Style::new()
-                    .with_color(upper.clone())
-                    .with_bgcolor(lower.clone());
-                segments.push(Segment::new(UPPER_HALF.to_string(), Some(style)));
+                segments.push(match (upper, lower) {
+                    (Some(upper), Some(lower)) => Segment::new(
+                        UPPER_HALF.to_string(),
+                        Some(
+                            Style::new()
+                                .with_color(upper.clone())
+                                .with_bgcolor(lower.clone()),
+                        ),
+                    ),
+                    (Some(upper), None) => Segment::new(
+                        UPPER_HALF.to_string(),
+                        Some(Style::new().with_color(upper.clone())),
+                    ),
+                    (None, Some(lower)) => Segment::new(
+                        LOWER_HALF.to_string(),
+                        Some(Style::new().with_color(lower.clone())),
+                    ),
+                    (None, None) => Segment::new(" ", None),
+                });
             }
             if index != last {
                 segments.push(Segment::line());
@@ -204,12 +241,12 @@ mod tests {
         assert_eq!(rows.len(), 2);
         // The first character row covers the two red pixel rows.
         for (upper, lower) in &rows[0] {
-            assert_eq!(*upper, Color::from_rgb(255, 0, 0));
-            assert_eq!(*lower, Color::from_rgb(255, 0, 0));
+            assert_eq!(*upper, Some(Color::from_rgb(255, 0, 0)));
+            assert_eq!(*lower, Some(Color::from_rgb(255, 0, 0)));
         }
         for (upper, lower) in &rows[1] {
-            assert_eq!(*upper, Color::from_rgb(0, 0, 255));
-            assert_eq!(*lower, Color::from_rgb(0, 0, 255));
+            assert_eq!(*upper, Some(Color::from_rgb(0, 0, 255)));
+            assert_eq!(*lower, Some(Color::from_rgb(0, 0, 255)));
         }
     }
 

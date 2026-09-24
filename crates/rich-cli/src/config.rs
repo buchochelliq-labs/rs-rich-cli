@@ -273,11 +273,9 @@ pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
                         | "bottom-right"
                 )
             }),
-            "image_background" => value.as_str().is_some_and(|v| {
-                v.len() == 7
-                    && v.starts_with('#')
-                    && v.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit)
-            }),
+            "image_background" => value
+                .as_str()
+                .is_some_and(|v| super::ImageBackdrop::parse(v).is_some()),
             "panel" => value.as_str().is_some_and(|v| {
                 matches!(
                     v.to_ascii_lowercase().as_str(),

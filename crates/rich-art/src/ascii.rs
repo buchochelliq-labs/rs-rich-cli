@@ -36,6 +36,7 @@ pub struct AsciiArt {
     color_mode: ImageColorMode,
     dither: Dither,
     distance: ColorDistance,
+    transparent: bool,
     ramp: Vec<char>,
     invert: bool,
     color: bool,
@@ -56,6 +57,7 @@ impl AsciiArt {
             color_mode: ImageColorMode::default(),
             dither: Dither::default(),
             distance: ColorDistance::default(),
+            transparent: false,
             ramp: DEFAULT_RAMP.chars().collect(),
             invert: false,
             color: false,
@@ -66,6 +68,13 @@ impl AsciiArt {
     /// Decode an image from bytes (PNG or JPEG).
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, ImageError> {
         Ok(AsciiArt::new(image::load_from_memory(bytes)?))
+    }
+
+    /// Render pixels under half opacity as unstyled spaces, leaving the
+    /// terminal background, instead of reading them as dark.
+    pub(crate) fn keep_transparency(mut self, transparent: bool) -> Self {
+        self.transparent = transparent;
+        self
     }
 
     pub(crate) fn color_processing(
@@ -182,14 +191,20 @@ impl AsciiArt {
             .image
             .resize_exact(columns as u32, rows as u32, FilterType::Triangle)
             .to_rgba8();
+        let clear = crate::image_art::clear_mask(&scaled, self.transparent);
         let indices = preprocess(&mut scaled, self.color_mode, self.dither, self.distance);
+        let is_clear = |x: usize, y: usize| clear.as_ref().is_some_and(|c| c[y * columns + x]);
 
         // Auto-levels: find the luminance range actually present so it can be
         // stretched across the ramp. A flat image (min == max) is left alone.
         let (low, span) = if self.normalize {
             let mut min = f64::MAX;
             let mut max = f64::MIN;
-            for pixel in scaled.pixels() {
+            for (i, pixel) in scaled.pixels().enumerate() {
+                // Kept-transparent cells are blank, not part of the range.
+                if is_clear(i % columns, i / columns) {
+                    continue;
+                }
                 let luma = Self::luminance(*pixel);
                 min = min.min(luma);
                 max = max.max(luma);
@@ -208,6 +223,9 @@ impl AsciiArt {
             .map(|y| {
                 (0..columns)
                     .map(|x| {
+                        if is_clear(x, y) {
+                            return (' ', None);
+                        }
                         let pixel = *scaled.get_pixel(x as u32, y as u32);
                         let glyph = self.glyph(level(Self::luminance(pixel)));
                         let colour = if self.color {

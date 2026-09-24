@@ -362,7 +362,7 @@ struct Cli {
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_anchor: Option<String>,
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
-    image_background: Option<[u8; 3]>,
+    image_background: Option<ImageBackdrop>,
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_color: Option<String>,
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
@@ -1343,20 +1343,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                 image_anchor = Some(value.clone());
             }
             "--image-background" => {
-                let value = iter.next().ok_or("--image-background requires #RRGGBB")?;
-                let bytes = value.as_bytes();
-                if bytes.len() != 7
-                    || bytes[0] != b'#'
-                    || !bytes[1..].iter().all(u8::is_ascii_hexdigit)
-                {
-                    return Err("--image-background requires #RRGGBB".into());
-                }
-                let mut rgb = [0; 3];
-                for (index, channel) in rgb.iter_mut().enumerate() {
-                    *channel = u8::from_str_radix(&value[1 + index * 2..3 + index * 2], 16)
-                        .map_err(|_| "--image-background requires #RRGGBB")?;
-                }
-                image_background = Some(rgb);
+                const USAGE: &str = "--image-background requires #RRGGBB, default or checkerboard";
+                let value = iter.next().ok_or(USAGE)?;
+                image_background = Some(ImageBackdrop::parse(value).ok_or(USAGE)?);
             }
             "--height" => {
                 let value = iter.next().ok_or("--height requires a number")?;
@@ -4704,8 +4693,15 @@ fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
             _ => ImageAnchor::Center,
         });
     }
-    if let Some(background) = cli.image_background {
-        art = art.background(background);
+    match cli.image_background {
+        Some(ImageBackdrop::Color(rgb)) => art = art.background(rgb),
+        Some(ImageBackdrop::Terminal) => {
+            art = art.background_mode(rich_art::ImageBackground::TerminalDefault)
+        }
+        Some(ImageBackdrop::Checkerboard) => {
+            art = art.background_mode(rich_art::ImageBackground::Checkerboard)
+        }
+        None => {}
     }
     let (color_mode, dither, distance) = image_color_processing(cli);
     art = art
@@ -4969,6 +4965,38 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
 }
 
 /// Animate every `--gif` resource at once, sharing the console width.
+/// `--image-background`: what transparent pixels become.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(feature = "art"), allow(dead_code))]
+enum ImageBackdrop {
+    /// `#RRGGBB`: composite onto this colour.
+    Color([u8; 3]),
+    /// `default`: leave transparent cells to the terminal's background.
+    Terminal,
+    /// `checkerboard`: composite onto a gray checkerboard.
+    Checkerboard,
+}
+
+impl ImageBackdrop {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "default" => return Some(ImageBackdrop::Terminal),
+            "checkerboard" => return Some(ImageBackdrop::Checkerboard),
+            _ => {}
+        }
+        let hex = value.strip_prefix('#')?;
+        if hex.len() != 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return None;
+        }
+        let channel = |i: usize| u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).ok();
+        Some(ImageBackdrop::Color([
+            channel(0)?,
+            channel(1)?,
+            channel(2)?,
+        ]))
+    }
+}
+
 /// `--image-color`, `--image-dither` and `--image-color-distance`, shared by
 /// still images and GIF frames. Unset options are the library defaults.
 #[cfg(feature = "art")]

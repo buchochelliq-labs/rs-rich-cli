@@ -328,6 +328,10 @@ fn new_image_options_reject_bad_values_combinations_and_other_modes() {
             "which is monochrome",
         ),
         (
+            vec!["image", "missing.png", "--image-background", "sky"],
+            "--image-background requires #RRGGBB, default or checkerboard",
+        ),
+        (
             vec!["image", "missing.png", "--image-dither", "sierra"],
             "--image-dither requires none, floyd-steinberg, bayer4x4 or atkinson",
         ),
@@ -425,8 +429,8 @@ fn reduced_palettes_are_accepted_for_sixel_and_gif() {
 #[test]
 fn new_image_options_route_to_the_library_exactly() {
     use rich_art::{
-        image, ColorDistance, Dither, ImageArt, ImageColorMode, ImageFit, ImageMode,
-        ImageTransforms,
+        image, ColorDistance, Dither, ImageArt, ImageBackground, ImageColorMode, ImageFit,
+        ImageMode, ImageTransforms,
     };
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("source.png");
@@ -507,6 +511,29 @@ fn new_image_options_route_to_the_library_exactly() {
                 .color_mode(ImageColorMode::Ansi16)
                 .dither(Dither::Atkinson)
                 .color_distance(ColorDistance::Oklab),
+        ),
+        (
+            vec!["--image-mode", "blocks", "--image-background", "default"],
+            ImageArt::new(source.clone())
+                .mode(ImageMode::Blocks)
+                .background_mode(ImageBackground::TerminalDefault),
+        ),
+        (
+            vec![
+                "--image-mode",
+                "quadrants",
+                "--height",
+                "3",
+                "--image-fit",
+                "contain",
+                "--image-background",
+                "checkerboard",
+            ],
+            ImageArt::new(source.clone())
+                .mode(ImageMode::Quadrants)
+                .height(3)
+                .fit(ImageFit::Contain)
+                .background_mode(ImageBackground::Checkerboard),
         ),
         (
             vec![
