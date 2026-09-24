@@ -21,6 +21,7 @@ const MODE_OPTIONS: &str = "Mode options";
 const IMAGE: &str = "Image";
 const INSPECT: &str = "Inspect";
 const DIFF: &str = "Diff & ANSI";
+const VIEWERS: &str = "Viewers";
 const EXPORT: &str = "Export";
 const PAGING: &str = "Paging";
 const WATCH: &str = "Watch";
@@ -157,6 +158,60 @@ fn diff_options() -> Vec<ArgSpec> {
             "escapes-only",
             DIFF,
             "With --ansi-explain, list only escape sequences, not text runs",
+        ),
+    ]
+}
+
+fn viewer_options() -> Vec<ArgSpec> {
+    vec![
+        option(
+            "search",
+            "TEXT",
+            VIEWERS,
+            "With `rich view`, highlight every case-insensitive match and mark its line; with \
+             `rich hex`, highlight a byte string: hex such as `de ad` or `0xDEAD`, or quoted \
+             text such as '\"PNG\"'",
+        ),
+        flag(
+            "no-line-numbers",
+            VIEWERS,
+            "With `rich view`, leave out the line-number gutter",
+        ),
+        option(
+            "offset",
+            "N",
+            VIEWERS,
+            "With `rich hex`, start N bytes in (decimal or 0x hex)",
+        ),
+        option(
+            "length",
+            "N",
+            VIEWERS,
+            "With `rich hex`, show at most N bytes",
+        ),
+        option(
+            "bytes-per-line",
+            "N",
+            VIEWERS,
+            "With `rich hex`, bytes on each line (default: fit the width, up to 16)",
+        ),
+        option("group", "N", VIEWERS, "With `rich hex`, bytes per group").default_value("8"),
+        option(
+            "limit",
+            "N",
+            VIEWERS,
+            "With `rich unicode`, show at most N graphemes",
+        ),
+        flag(
+            "show-secrets",
+            VIEWERS,
+            "With `rich env`, show values whose names look secret instead of masking them",
+        ),
+        option(
+            "cast",
+            "FILE",
+            VIEWERS,
+            "With `rich capture`, also write an asciicast v2 recording (`asciinema play FILE`)",
         ),
     ]
 }
@@ -752,6 +807,7 @@ fn root_args() -> Vec<ArgSpec> {
         image_options(),
         inspect_options(),
         diff_options(),
+        viewer_options(),
         export_options(),
         paging_options(),
         watch_options(),
@@ -969,6 +1025,33 @@ pub(crate) fn spec() -> CommandSpec {
             &["ansi-explain"][..],
             "Decode escape sequences: `rich ansi explain FILE` (`--ansi-explain`)",
         ),
+        (
+            "view",
+            &[][..],
+            "Show any file: Markdown, CSV, notebooks, images and patches rendered, source and \
+             data numbered and highlighted, binary as hex; paged, searchable with --search",
+        ),
+        (
+            "hex",
+            &["hexdump"][..],
+            "Hex dump with offsets, byte groups and an ASCII panel (--search, --offset, --length)",
+        ),
+        (
+            "unicode",
+            &[][..],
+            "Show graphemes, code points, UTF-8 bytes, widths and invalid sequences",
+        ),
+        (
+            "env",
+            &[][..],
+            "List environment variables, secrets masked; `rich env PATH` checks each PATH entry",
+        ),
+        (
+            "capture",
+            &[][..],
+            "Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE \
+             records it), then exit with the command's status",
+        ),
     ] {
         spec = spec.subcommand(mode_command(name, aliases, about));
     }
@@ -1144,6 +1227,7 @@ mod tests {
     const DEMO: &str = include_str!("demo.rs");
     const INSPECT: &str = include_str!("inspect.rs");
     const TOOLS: &str = include_str!("tools.rs");
+    const VIEWERS: &str = include_str!("viewers.rs");
 
     /// The source of the item that starts with `start`, up to the next
     /// top-level item.
@@ -1194,6 +1278,7 @@ mod tests {
             item(DEMO, "fn options("),
             item(INSPECT, "impl DataOptions {"),
             item(TOOLS, "impl ToolOptions {"),
+            item(VIEWERS, "impl ViewerOptions {"),
         ] {
             out.extend(option_literals(source));
         }

@@ -209,6 +209,11 @@ and benchmark capture and comparison.
   contrast or monochrome; `a11y::contrast::check_theme` checks a theme's
   contrast and colour-blind safety.
 - `ansi_explain::explain` decodes escape sequences.
+- `source_view::SourceView` shows source with line numbers and search
+  highlights; `hex::HexView` is a `hexdump -C`-style dump;
+  `unicode_inspect::UnicodeView` breaks text into graphemes, code points and
+  widths; `env_inspect::{EnvView, PathView}` list variables with secrets masked
+  and check PATH entries.
 
 ### Coordinated Live regions
 

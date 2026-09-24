@@ -629,6 +629,11 @@ Exit codes are stable by failure class:
 | `5` | Threshold/gate failure, such as `--diff --threshold` exceeded. |
 | `130` | Batch interrupted with Ctrl+C. Started workers are stopped and reaped. |
 
+`rich capture -- CMD` is the exception: once its output is shown and exported
+it exits with the command's own status, or 128 + the signal number if a signal
+killed it, as `time` and `env` do. With `--report json` that failure's envelope
+has `"code": "command"` and the command's `status` and `signal` in `result`.
+
 Check them:
 
 ```bash
@@ -833,6 +838,28 @@ are validated, including inactive profiles and themes. `rich config show` expose
 the selected theme. Batch workers receive the resolved bindings so parallel
 exports use the same theme. These are CLI mappings onto the public `rich::Theme`
 API; they add no core theme-stack behavior. `--no-color` and `NO_COLOR` still apply.
+
+## Viewers
+
+These commands are ours; upstream has none of them.
+
+```bash
+rich view FILE [--search TEXT] [--no-line-numbers]   # detect, render, page
+rich hex FILE [--offset N] [--length N] [--bytes-per-line N] [--group N] [--search BYTES]
+rich unicode FILE [--limit N]                        # graphemes, code points, widths
+rich env [PATTERN...] [--show-secrets]               # variables; `rich env PATH` checks entries
+rich capture [--cast FILE] -- COMMAND [ARGS...]      # run, show, export or record
+```
+
+`view` routes Markdown, CSV, notebooks, JSON Lines, images, GIFs and patches to
+their renderers; shows source and structured data highlighted with line
+numbers; and shows binary input as a hex dump. It pages by default unless a
+paging flag is given. `--search` highlights case-insensitive matches and prints
+a summary to stderr; for `hex` it takes bytes (`de ad`, `0xDEAD`, or quoted
+text). `env` masks values of secret-looking names. `capture` sets `FORCE_COLOR`,
+`CLICOLOR_FORCE` and `COLUMNS` for the child, merges stdout and stderr in order,
+reports its exit status without failing on it, and `--cast` writes asciicast v2.
+The viewer options are rejected on other commands.
 
 ## Inspect your environment
 
