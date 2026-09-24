@@ -117,7 +117,87 @@ def cases_010(c, work):
     ]
 
 
-CASE_SETS = {"0.0.9": cases_009, "0.0.10": cases_010}
+def write_rgba_png(path: Path, width: int, height: int, pixel) -> None:
+    """A minimal RGBA PNG writer, so the alpha fixture needs no imaging library."""
+    import struct
+    import zlib
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return (struct.pack(">I", len(data)) + kind + data
+                + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF))
+
+    rows = b"".join(
+        b"\x00" + b"".join(bytes(pixel(x, y)) for x in range(width)) for y in range(height)
+    )
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(rows, 9))
+        + chunk(b"IEND", b"")
+    )
+
+
+def fixtures_011(work: Path) -> None:
+    (work / "deploy.yaml").write_text(
+        "service: api\nreplicas: 3\nimage:\n  name: rs-rich\n  tag: \"0.0.11\"\n"
+        "ports: [8080, 8443]\nlimits:\n  cpu: 500m\n  memory: 256Mi\n"
+    )
+    (work / "old.toml").write_text("retries = 2\ntimeout = 30\nmode = \"fast\"\n")
+    (work / "new.toml").write_text("retries = 3\ntimeout = 30\nmode = \"safe\"\nlog = true\n")
+    (work / "text.txt").write_text("café 👩‍👩‍👧 ok\n")
+    (work / "codes.txt").write_text(
+        "\x1b[1;31mError\x1b[0m \x1b]8;;https://example.com\x1b\\docs\x1b]8;;\x1b\\\n"
+    )
+    (work / "demo.theme").write_text("[styles]\nrelease = bold magenta\nrepr.number = bold cyan\n")
+
+    # A pink disc and a translucent cyan bar on a fully transparent canvas.
+    def pixel(x, y):
+        if (x - 38) ** 2 + (y - 30) ** 2 < 24 * 24:
+            return (255, 110, 190, 255)
+        if x > 78 and 12 < y < 48:
+            return (70, 220, 255, 210)
+        return (0, 0, 0, 0)
+
+    write_rgba_png(work / "alpha.png", 120, 60, pixel)
+
+
+def cases_011(c, work):
+    img = "rich --no-config image gradient.png --width 48 --height 14 --image-fit contain"
+    alpha = "rich --no-config image alpha.png --image-mode quadrants --width 48 --height 12"
+    secret = "echo deploy token=ghp_0123456789abcdefghijklmnopqrstuvwxyzAB"
+
+    def image(*groups):
+        shown = img + "".join(f" \\\n    {group}" for group in groups)
+        return (shown, " ".join((img, *groups)))
+
+    return [
+        c("01-version-doctor", "Installed from the packaged crates: version and read-only diagnostics",
+          ["rich --version", "rich doctor --no-config"], rows=11),
+        c("02-inspect", "rich inspect: structured data as a tree",
+          ["rich --no-config inspect deploy.yaml"], cols=80, rows=15),
+        c("03-diff", "rich diff: a text diff with line numbers and a summary",
+          ["rich --no-config diff old.toml new.toml"], cols=80, rows=13),
+        c("04-view-search", "rich view: detect, highlight and search any file",
+          ["rich --no-config view deploy.yaml --search rs-rich --no-pager"], cols=80, rows=13),
+        c("05-hex-unicode", "rich hex and rich unicode: bytes and graphemes",
+          ["rich --no-config hex text.txt", "rich --no-config unicode text.txt"], cols=90, rows=24),
+        c("06-ansi-explain", "rich ansi explain: escape sequences in words",
+          ["rich --no-config ansi explain codes.txt"], cols=90, rows=17),
+        c("07-capture-redact", "rich capture --redact (experimental): check captures before sharing",
+          [f"rich --no-config capture --redact -- sh -c '{secret}'"], cols=90, rows=7),
+        c("08-image-atkinson-oklab", "Image: ANSI16 with Atkinson dithering and OKLab colour matching",
+          [image("--image-mode quadrants --image-color ansi16",
+                 "--image-dither atkinson --image-color-distance oklab")], rows=20),
+        c("09-alpha-backgrounds", "Transparent pixels: checkerboard preview, then the terminal's own background",
+          [f"{alpha} --image-background checkerboard",
+           f"{alpha} --image-background default"], cols=72, rows=28),
+        c("10-theme-file", "An upstream [styles] theme file with --theme-file",
+          ["rich --no-config --theme-file demo.theme --print '[release]0.0.11[/] ships 12 workstreams'"],
+          cols=80, rows=4),
+    ]
+
+
+CASE_SETS = {"0.0.9": cases_009, "0.0.10": cases_010, "0.0.11": cases_011}
 
 
 def main() -> None:
@@ -131,6 +211,7 @@ def main() -> None:
     work, bin_dir = args.work.resolve(), args.bin_dir.resolve()
     fixtures(work, args.image)
     fixtures_010(work)
+    fixtures_011(work)
     c = lambda *a, **k: case(*a, work=work, bin_dir=bin_dir, **k)
     print(json.dumps(CASE_SETS[args.release](c, work), indent=1))
 
