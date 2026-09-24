@@ -1311,6 +1311,19 @@ PROGRESS_TIME_CASES: list[tuple[str, dict]] = [
         "steps": [["time", 0], ["add", "iso", 3500000000, 0, True], ["time", 1], ["advance", 0, 1250000],
                   ["time", 3], ["advance", 0, 2500000], ["render", 80]],
     }),
+    # Negative counts go through `int()` upstream, not a clamp to zero:
+    # `filesize.decimal(-8)` is "-8 bytes" and the download column "-8/100 bytes".
+    ("negative_completed", {
+        "columns": [["description"], ["filesize"], ["total_filesize"], ["download", False],
+                    ["download", True], ["mofn"]],
+        "steps": [["time", 0], ["add", "neg", 100, -8.7, True], ["add", "big", 5000, -1234, True],
+                  ["add", "none", None, -3, True], ["add", "total", -5, 0, True], ["render", 90]],
+    }),
+    ("negative_speed", {
+        "columns": [["description"], ["speed"], ["task_progress", True]],
+        "steps": [["time", 0], ["add", "back", None, 5000, True], ["time", 1], ["advance", 0, -1500],
+                  ["time", 2], ["advance", 0, -1500], ["render", 60]],
+    }),
     ("expand_default_bar", {
         "expand": True, "columns": [["description"], ["bar"], ["percentage"]],
         "steps": [["time", 0], ["add", "copy", 10, 4, True], ["add", "move", 10, 10, True],

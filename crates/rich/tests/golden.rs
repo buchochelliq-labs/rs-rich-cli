@@ -1694,7 +1694,7 @@ fn progress_time_parity() {
         );
         checked += 1;
     }
-    assert_eq!(checked, 21, "expected every progress time case to run");
+    assert_eq!(checked, 23, "expected every progress time case to run");
 }
 
 /// Spinner and Status frames and LiveRender control sequences (#15): the same

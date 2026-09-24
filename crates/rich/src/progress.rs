@@ -379,17 +379,19 @@ impl ProgressColumn {
                     .or_else(|| task.speed());
                 let text = match speed {
                     None => "?".to_string(),
-                    Some(speed) => format!("{}/s", filesize::decimal(speed as u64)),
+                    Some(speed) => format!("{}/s", filesize::decimal_signed(speed as i64)),
                 };
                 named(text, "progress.data.speed")
             }
+            // `filesize.decimal(int(task.completed))`: `int()` truncates
+            // toward zero and keeps the sign.
             ProgressColumn::FileSize => named(
-                filesize::decimal(task.completed as u64),
+                filesize::decimal_signed(task.completed as i64),
                 "progress.filesize",
             ),
             ProgressColumn::TotalFileSize => named(
                 task.total
-                    .map_or_else(String::new, |total| filesize::decimal(total as u64)),
+                    .map_or_else(String::new, |total| filesize::decimal_signed(total as i64)),
                 "progress.filesize.total",
             ),
             ProgressColumn::Spinner(column) => {
@@ -454,8 +456,11 @@ fn render_speed(speed: Option<f64>) -> Text {
     let Some(speed) = speed else {
         return Text::styled("", "progress.percentage");
     };
-    let (unit, suffix) =
-        filesize::pick_unit_and_suffix(speed as u64, &["", "×10³", "×10⁶", "×10⁹", "×10¹²"], 1000);
+    let (unit, suffix) = filesize::pick_unit_and_suffix_signed(
+        speed as i64,
+        &["", "×10³", "×10⁶", "×10⁹", "×10¹²"],
+        1000,
+    );
     let data_speed = speed / unit as f64;
     Text::styled(
         format!("{data_speed:.1}{suffix} it/s"),
@@ -681,18 +686,19 @@ impl Task {
         const BINARY: &[&str] = &[
             "bytes", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB",
         ];
-        let completed = self.completed as u64;
-        let base_size = self.total.map_or(completed, |total| total as u64);
+        // `int(task.completed)` / `int(task.total)`: truncated, sign kept.
+        let completed = self.completed as i64;
+        let base_size = self.total.map_or(completed, |total| total as i64);
         let (unit, suffix) = if binary {
-            filesize::pick_unit_and_suffix(base_size, BINARY, 1024)
+            filesize::pick_unit_and_suffix_signed(base_size, BINARY, 1024)
         } else {
-            filesize::pick_unit_and_suffix(base_size, DECIMAL, 1000)
+            filesize::pick_unit_and_suffix_signed(base_size, DECIMAL, 1000)
         };
         let precision = if unit == 1 { 0 } else { 1 };
         let completed_str = grouped(completed as f64 / unit as f64, precision);
         let total_str = self.total.map_or_else(
             || "?".to_string(),
-            |total| grouped((total as u64) as f64 / unit as f64, precision),
+            |total| grouped((total as i64) as f64 / unit as f64, precision),
         );
         format!("{completed_str}/{total_str} {suffix}")
     }
