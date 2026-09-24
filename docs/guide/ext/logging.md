@@ -72,7 +72,64 @@ own, globally or for a scope:
   `key=value`.
 - Integers keep their type, including unsigned and 128-bit values; floats and
   bools too. Fields recorded with `Debug` (`?value`) become strings.
-- Spans are not recorded, only events.
+
+## Spans
+
+Every event carries the spans it happened in, outermost first, with their
+fields as last recorded (a later `span.record(...)` updates them). The layer
+keeps them in the subscriber's registry, so the subscriber must implement
+`LookupSpan`, as `tracing_subscriber::registry()` and `fmt()` do.
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_logging.rs:span-lines"
+```
+
+By default `RichHandler` puts the span chain before the message:
+
+![Events prefixed with request{method=GET path=/items} and query{table=items}](../../media/guide/guide_logging-spans-inline.svg)
+
+With `span_open(true)` and `span_close(true)` the layer also reports each span
+opening, and closing with how long it was open. `SpanView::Tree` then draws the
+spans as branches, with each event indented under its span:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_logging.rs:spans"
+```
+
+![A tree of the request and query spans, with open and close lines and timings](../../media/guide/guide_logging-spans-tree.svg)
+
+| `span_view` | Shows |
+|---|---|
+| `SpanView::Inline` (default) | `outer{a=1}:inner: message`; open and close events as `name{…} opened` and `name{…} closed 1.20ms` |
+| `SpanView::Tree` | a `│ ` guide per span, `┌ name field=value` on open, `└ name 1.20ms` on close; ASCII consoles get `\| `, `+ ` and `` ` `` |
+| `SpanView::Hidden` | the message alone |
+
+Any `EventSink` receives the same span data, through
+`StructuredEvent::span_context()` and, for open and close events,
+`span_marker()`.
+
+## Links and live displays
+
+`hyperlinker(Hyperlinker)` links the path column through a
+[`Hyperlinker`](extensions.md#hyperlinks) instead of a bare `file://` URL.
+Its editor template, and a base directory for the relative paths `tracing`
+reports, then apply:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_logging.rs:editor-links"
+```
+
+`live(coordinator)` prints through a
+[`LiveCoordinator`](live-and-layout.md) instead of the console. Each log line
+goes above the live regions, which are repainted below it, so logging never
+tears a progress display:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_logging.rs:live"
+```
+
+Render with a console as wide as the coordinator's target, as
+`target.console()` is; longer lines fold.
 
 ## Handler options
 
@@ -94,6 +151,9 @@ own, globally or for a scope:
 | `keywords(words)` | HTTP methods | `keywords` |
 | `enable_link_path(bool)` | on | `enable_link_path` |
 | `time_format(closure)` | UTC `[HH:MM:SS]` | `log_time_format` |
+| `span_view(SpanView)` | `Inline` | none: upstream has no spans ([Spans](#spans)) |
+| `hyperlinker(Hyperlinker)` | none (bare `file://`) | none ([Links](#links-and-live-displays)) |
+| `live(coordinator)` | the console | none ([Live displays](#links-and-live-displays)) |
 
 Any highlighter works, including a [`Hyperlinker`](extensions.md#hyperlinks)
 that makes issue references, paths and URLs in messages clickable:

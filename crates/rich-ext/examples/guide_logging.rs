@@ -11,9 +11,9 @@ use std::sync::{Arc, Mutex};
 use rich::{ColorSystem, Console};
 use rich_ext::adapters::{EventLayer, EventSink, LogAdapter};
 use rich_ext::event::{
-    EventContext, EventView, Message, Severity, SourceLocation, StructuredEvent, Value,
+    EventContext, EventView, Message, Severity, SourceLocation, SpanEvent, StructuredEvent, Value,
 };
-use rich_ext::RichHandler;
+use rich_ext::{RichHandler, SpanView};
 
 const WIDTH: usize = 90;
 
@@ -115,6 +115,39 @@ fn tracing_lines() {
     // --8<-- [end:tracing-lines]
 }
 
+fn span_lines() {
+    // --8<-- [start:span-lines]
+    let request = tracing::info_span!("request", method = "GET", path = "/items");
+    let _request = request.enter();
+    tracing::info!("authorized");
+    {
+        let _query = tracing::debug_span!("query", table = "items").entered();
+        tracing::info!(rows = 42u64, "fetched");
+    }
+    tracing::info!(status = 200u16, "done");
+    // --8<-- [end:span-lines]
+}
+
+/// Span events recorded with their real durations, given fixed ones so the
+/// screenshot is reproducible.
+fn pin_elapsed(events: Vec<StructuredEvent>) -> Vec<StructuredEvent> {
+    let mut fixed = [
+        std::time::Duration::from_micros(3_400),
+        std::time::Duration::from_micros(8_250),
+    ]
+    .into_iter();
+    events
+        .into_iter()
+        .map(|event| match event.span_marker() {
+            Some(SpanEvent::Close { .. }) => {
+                let elapsed = fixed.next().unwrap_or_default();
+                event.span_event(SpanEvent::Close { elapsed })
+            }
+            _ => event,
+        })
+        .collect()
+}
+
 fn main() {
     let shots = Shots::from_args();
     let recorder = Arc::new(Recorder::default());
@@ -162,6 +195,78 @@ fn main() {
                 console.print(&handler.render(&event));
             }
         });
+    }
+
+    // --8<-- [start:spans]
+    use tracing_subscriber::prelude::*;
+
+    // Report spans opening and closing, and draw them as a tree.
+    let layer = EventLayer::new(recorder.clone())
+        .span_open(true)
+        .span_close(true);
+    let subscriber = tracing_subscriber::registry().with(layer);
+    tracing::subscriber::with_default(subscriber, span_lines);
+    let tree = RichHandler::new(Console::new())
+        .span_view(SpanView::Tree)
+        .show_time(false);
+    // --8<-- [end:spans]
+    let events = pin_elapsed(recorder.take());
+    let inline = RichHandler::new(Console::new()).show_time(false);
+    shots.shot("spans-inline", |console| {
+        let events = events.iter().filter(|event| event.span_marker().is_none());
+        for event in events {
+            console.print(&inline.render(event));
+        }
+    });
+    shots.shot("spans-tree", |console| {
+        for event in &events {
+            console.print(&tree.render(event));
+        }
+    });
+
+    // --8<-- [start:editor-links]
+    use rich_ext::hyperlink::Hyperlinker;
+
+    let _editor = RichHandler::new(Console::new()).hyperlinker(
+        Hyperlinker::new()
+            .base_dir(env!("CARGO_MANIFEST_DIR")) // tracing reports paths relative to the crate
+            .editor("vscode://file/{path}:{line}"),
+    );
+    // --8<-- [end:editor-links]
+
+    if !shots.svg() {
+        println!("── live ──");
+        // --8<-- [start:live]
+        use rich_ext::capabilities::Capabilities;
+        use rich_ext::live::LiveCoordinator;
+        use rich_ext::target::{RenderTarget, TargetKind};
+
+        let capabilities = Capabilities::system().to_target_capabilities();
+        let target = RenderTarget::new(
+            TargetKind::Terminal,
+            capabilities,
+            rich::Theme::default_theme(),
+        );
+        let live = Arc::new(Mutex::new(LiveCoordinator::new(
+            std::io::stdout(),
+            target.clone(),
+        )));
+        let progress = live
+            .lock()
+            .unwrap()
+            .add(vec![rich::Segment::new("uploading… 40%", None)])
+            .expect("add a region");
+        live.lock().unwrap().refresh().expect("paint");
+
+        // Log lines print above the region, which is repainted below them.
+        let handler = RichHandler::new(target.console()).live(live.clone());
+        let subscriber = tracing_subscriber::registry().with(EventLayer::new(Arc::new(handler)));
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::info!(chunk = 4u64, "uploaded");
+        });
+        live.lock().unwrap().remove(progress).expect("remove");
+        live.lock().unwrap().finish().expect("finish");
+        // --8<-- [end:live]
     }
 
     shots.shot("options", |console| {

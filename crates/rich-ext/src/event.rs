@@ -102,9 +102,39 @@ pub struct EventContext {
     pub task: Option<String>,
     pub correlation_id: Option<String>,
 }
+/// A span an event happened in: its name and its fields as last recorded.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SpanContext {
+    pub name: String,
+    pub fields: Vec<(String, Value)>,
+}
+impl SpanContext {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            fields: Vec::new(),
+        }
+    }
+    pub fn field(mut self, key: impl Into<String>, value: Value) -> Self {
+        self.fields.push((key.into(), value));
+        self
+    }
+}
+/// Marks an event that reports a span opening or closing rather than
+/// something that happened inside one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpanEvent {
+    Open,
+    /// The span closed after this long, from opening to closing.
+    Close {
+        elapsed: std::time::Duration,
+    },
+}
 #[derive(Clone, Debug)]
 pub struct StructuredEvent {
     diagnostics: Vec<crate::diagnostic::Diagnostic>,
+    spans: Vec<SpanContext>,
+    span_event: Option<SpanEvent>,
     pub message: Message,
     pub fields: Vec<(String, Value)>,
     pub context: EventContext,
@@ -117,6 +147,8 @@ impl StructuredEvent {
     pub fn new(message: Message) -> Self {
         Self {
             diagnostics: Vec::new(),
+            spans: Vec::new(),
+            span_event: None,
             message,
             fields: Vec::new(),
             context: EventContext::default(),
@@ -158,6 +190,25 @@ impl StructuredEvent {
     pub fn overflow(mut self, overflow: OverflowPolicy) -> Self {
         self.overflow = overflow;
         self
+    }
+    /// The spans the event happened in, outermost first.
+    pub fn spans(mut self, spans: Vec<SpanContext>) -> Self {
+        self.spans = spans;
+        self
+    }
+    /// Mark the event as a span opening or closing. Its message is the span's
+    /// name, its fields the span's, and `spans` its parents.
+    pub fn span_event(mut self, event: SpanEvent) -> Self {
+        self.span_event = Some(event);
+        self
+    }
+    /// The spans the event happened in, outermost first.
+    pub fn span_context(&self) -> &[SpanContext] {
+        &self.spans
+    }
+    /// Whether the event reports a span opening or closing.
+    pub fn span_marker(&self) -> Option<SpanEvent> {
+        self.span_event
     }
 }
 pub(crate) fn theme_style(console: &Console, key: &str, fallback: &str) -> Style {
