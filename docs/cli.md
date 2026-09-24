@@ -876,9 +876,11 @@ you are in, so it can turn colour off but not back on against `NO_COLOR`;
 
 For the same reason a working-directory `rich.toml` cannot name a `theme_file`
 (a file every command in that directory would read; a FIFO there would hang
-them all) or set `sanitize = false`: both are ignored, `theme_file` with a
-warning on stderr, and `config explain` notes each. Set them in your own config
-or on the command line instead.
+them all), choose files for `rich` to write with `export_html` or `export_svg`,
+or set `sanitize = false`. All are ignored: `theme_file` and the `export_*` keys
+with a warning on stderr (unless the command line sets the same option), and
+`config explain` notes each. Set them in your own config or on the command line
+instead.
 `reference` lists every source and key with its type, default and flag.
 
 ---
@@ -1150,6 +1152,11 @@ For repetitive source files, build the CLI with
 off by default and changes no CLI flags. It reuses parsing work within one
 render; varied source files may see no speedup. See the
 [measurements](benchmarks.md#004-repeated-source-syntax-results).
+
+For faster highlighting of any source file, build with `--features onig`. That
+uses the Oniguruma regex engine (C, compiled from bundled source, so a C compiler
+is needed) instead of pure-Rust `fancy-regex`: 2–4× faster, with the same
+output. It is off by default ([Divergences #26](DIVERGENCES.md)).
 
 Disabling configured watch with `watch = false` or `--no-watch` also suppresses
 inherited `watch_interval`, `watch_cache`, `watch_debounce`, `watch_poll` and

@@ -415,3 +415,21 @@ dependency on extensions. See [encoding policy](troubleshooting.md#text-encoding
   remain unchanged. Differential tests and native export comparisons verify output.
 - **Enable:** `cargo build -p rs-rich-cli --release --features syntax-cache`.
   See [benchmarks](benchmarks.md#004-repeated-source-syntax-results).
+
+### 26. Optional Oniguruma regex engine (`onig`)
+
+- **Default:** `Syntax` and Markdown code blocks run syntect with the pure-Rust
+  `fancy-regex` engine.
+- **Opt-in:** the `onig` Cargo feature switches syntect to Oniguruma, a C
+  library compiled from bundled source (a C compiler is needed at build time).
+  It is off by default in `rs-rich` and `rs-rich-cli`; the CLI feature forwards
+  to core. Grammars, themes and the highlighting API are unchanged.
+- **Why:** highlighting is 2–4× faster. At 0.0.11, a full `rich` run on a
+  1,784-line Rust file dropped from 0.43 s to 0.16 s, and on a 2,916-line Python
+  file from 0.76 s to 0.36 s. The binary grows by about 330 KB.
+- **Output:** the two engines agree on the grammars syntect ships. Rendering
+  all 558 source, docs and data files in this repository through both builds
+  gave byte-identical output. A grammar regex that only one engine accepts
+  could still differ.
+- **Enable:** `cargo build -p rs-rich-cli --release --features onig`, or
+  `rs-rich = { version = "…", features = ["onig"] }`.

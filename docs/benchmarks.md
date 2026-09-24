@@ -300,6 +300,22 @@ Actual CLI syntax output, including identical text inside and outside a comment:
 
 ![Syntax colors and comment context in the CLI](assets/releases/0.0.4-syntax.jpg)
 
+## 0.0.11 Oniguruma highlighting (`onig`)
+
+Best of three full `rich --no-config --no-pager FILE` runs in a 100-column PTY
+with truecolor. Both are release builds of the same 0.0.11 source; the only
+difference is `--features onig`. Runs are local (Linux, x86-64), not CI.
+
+| File | Lines | Default (`fancy-regex`) | `onig` |
+|---|---|---|---|
+| `crates/rich/src/text.rs` | 1,784 | 0.43 s | 0.16 s |
+| `scripts/capture_golden.py` | 2,916 | 0.76 s | 0.36 s |
+| `docs/cli.md` | 1,290 | 0.15 s | 0.06 s |
+
+Output was byte-identical for all 558 source, docs and data files in the
+repository. The binary grows from 15.3 MB to 15.6 MB. See
+[Divergences #26](DIVERGENCES.md).
+
 ## Downstream render snapshots
 
 Enable `rs-rich-ext`'s optional `testing` feature and use

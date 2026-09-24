@@ -24,6 +24,9 @@ struct Configuration {
     /// Set when a working-directory `rich.toml` asked for `sanitize = false`,
     /// which was ignored (see `load`).
     ignored_sanitize: bool,
+    /// The `export_*` keys a working-directory `rich.toml` set, which were
+    /// ignored (see `load`).
+    ignored_export: Vec<&'static str>,
 }
 
 pub(crate) fn validate_theme_name(name: &str) -> Result<(), String> {
@@ -404,6 +407,7 @@ fn decode_configuration(text: &str, selected: Option<&str>) -> Result<Configurat
         ignored_color: false,
         ignored_theme_file: false,
         ignored_sanitize: false,
+        ignored_export: Vec::new(),
     })
 }
 
@@ -468,10 +472,12 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
         settings.ignored_color = ignored;
     }
     // For the same reason it may not name a file for every command to read
-    // (`theme_file`: a FIFO hangs every run), nor turn off the sanitizing
+    // (`theme_file`: a FIFO hangs every run) or to write (`export_html`,
+    // `export_svg`: any path the user can write), nor turn off the sanitizing
     // `rich view` and `rich diff` do by default.
     if untrusted {
         let (mut theme_file, mut sanitize) = (false, false);
+        let mut export = Vec::new();
         for table in std::iter::once(&mut settings.settings)
             .chain(std::iter::once(&mut settings.base))
             .chain(settings.profile.as_mut().map(|(_, table)| table))
@@ -481,9 +487,16 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
                 table.remove("sanitize");
                 sanitize = true;
             }
+            for key in EXPORT_KEYS {
+                if table.remove(*key).is_some() && !export.contains(key) {
+                    export.push(*key);
+                }
+            }
         }
+        export.sort_unstable();
         settings.ignored_theme_file = theme_file;
         settings.ignored_sanitize = sanitize;
+        settings.ignored_export = export;
     }
     // A theme file named in a config file is relative to that file, so the
     // config works from any directory.
@@ -698,6 +711,11 @@ pub(crate) fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<St
     if configuration.ignored_theme_file && !json_report && !explicit.contains("theme_file") {
         eprintln!("rich: warning: {UNTRUSTED_THEME_FILE}");
     }
+    for key in &configuration.ignored_export {
+        if !json_report && !explicit.contains(*key) {
+            eprintln!("rich: warning: {}", untrusted_export(key));
+        }
+    }
     let mut result = Vec::new();
     for (name, style) in theme_styles {
         result.extend(["--theme-style".into(), format!("{name}={style}")]);
@@ -846,6 +864,7 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
             ignored_color: configuration.ignored_color,
             ignored_theme_file: configuration.ignored_theme_file,
             ignored_sanitize: configuration.ignored_sanitize,
+            ignored_export: &configuration.ignored_export,
         };
         return Ok(Some(explain(&layers, key)));
     }
@@ -879,6 +898,8 @@ struct Layers<'a> {
     ignored_theme_file: bool,
     /// The working-directory config's `sanitize = false` was ignored.
     ignored_sanitize: bool,
+    /// The working-directory config's `export_*` keys that were ignored.
+    ignored_export: &'a [&'static str],
 }
 
 /// A config path relative to the working directory, or under `~`, when it is.
@@ -973,6 +994,14 @@ fn explain(layers: &Layers, key: Option<&str>) -> String {
             output.push_str(&format!("note: {note}\n"));
         }
     }
+    for name in layers.ignored_export {
+        if key.is_none_or(|key| key == *name) {
+            if !output.ends_with('\n') {
+                output.push('\n');
+            }
+            output.push_str(&format!("note: {}\n", untrusted_export(name)));
+        }
+    }
     output
 }
 
@@ -981,6 +1010,19 @@ pub(crate) const UNTRUSTED_THEME_FILE: &str =
     "theme_file in ./rich.toml is ignored: a project's config may not name a file for every \
      command to read; pass --theme-file, or set it in ~/.config/rich/config.toml or a file \
      given with --config";
+
+/// Settings that name a file `rich` writes.
+const EXPORT_KEYS: &[&str] = &["export_html", "export_svg"];
+
+/// Why a working-directory `rich.toml`'s `export_html` or `export_svg` has no
+/// effect.
+fn untrusted_export(key: &str) -> String {
+    format!(
+        "{key} in ./rich.toml is ignored: a project's config may not choose files for rich to \
+         write; pass --{}, or set it in ~/.config/rich/config.toml or a file given with --config",
+        key.replace('_', "-")
+    )
+}
 
 /// Why a working-directory `rich.toml`'s `sanitize = false` has no effect.
 const UNTRUSTED_SANITIZE: &str =

@@ -128,7 +128,9 @@ is not guessed: select its byte order explicitly or convert to UTF-8. See
 ### Syntax parsing remains costly for varied source
 
 The off-by-default 0.0.4 `syntax-cache` Cargo feature helps repeated boilerplate
-whose parser state stays unchanged. Default builds use uncached Syntect. Measured real-source files showed essentially unchanged runtime;
+whose parser state stays unchanged. The off-by-default `onig` feature (0.0.11)
+makes all highlighting 2–4× faster by using Oniguruma, at the cost of a C build
+dependency. Default builds use uncached Syntect. Measured real-source files showed essentially unchanged runtime;
 loading and parsing new syntax still costs more than plain text. See the
 [workload-specific results](benchmarks.md#004-repeated-source-syntax-results).
 Historical 0.0.2 Windows/Python comparisons are retained separately in the
