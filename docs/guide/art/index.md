@@ -87,5 +87,5 @@ The examples draw their own test pictures in code, so they need no image files.
 ## See also
 
 - [`crates/rich-art/README.md`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-art/README.md) — the crate overview on crates.io
-- [Rich-art videos](../../demos.md) — recordings of the renderers in a real terminal
+- [CLI and art videos](../../demos.md) — recordings of the CLI tour and the renderers in a real terminal
 - [Using the CLI](../../cli.md#render-a-still-image) — the same features from the command line

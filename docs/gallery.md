@@ -1,12 +1,14 @@
 # Gallery
 
-These are committed snapshots of actual library output, exported with
+These are committed snapshots of actual core library output, exported with
 `Console::export_svg` by `scripts/capture_screenshots.sh`. Regenerate them when
 rendering changes. Progress and spinner GIFs replay the exported SVG frames.
+The [extensions, art and CLI](#beyond-the-core) are shown at the end, and every
+guide page has more.
 
 | What you want to do | Start here |
 |---|---|
-| Animate images in the terminal | [Rich-art videos and commands](demos.md) |
+| Animate images in the terminal | [CLI and art videos](demos.md) |
 | Style text | [Markup tutorial](tutorial/02-markup.md) |
 | Present structured data | [Table tutorial](tutorial/03-tables.md) |
 | Arrange output | [Layout tutorial](tutorial/04-layout.md) |
@@ -51,7 +53,8 @@ per-column justification. Borders, titles and captions are all styleable.
 
 ## Columns
 
-Items are packed into as many equal columns as the width allows.
+Items are packed into as many columns as the width allows, each as wide as its
+widest item (`Columns::equal` makes them all the same width).
 
 ![Columns](assets/columns.svg)
 
@@ -97,3 +100,47 @@ Items are packed into as many equal columns as the width allows.
 The same over-long word under each overflow method.
 
 ![Overflow](assets/overflow.svg)
+
+## Beyond the core
+
+These come from `rs-rich-ext`, `rs-rich-art` and the `rich` command. Each image
+is the real output of a guide example or CLI command; follow the link for the
+code.
+
+### Diagnostics and stack traces
+
+![A chained Python traceback, cause first](media/guide/guide_diagnostics-trace-python.svg)
+
+[Diagnostics guide](guide/ext/diagnostics.md)
+
+### Structured data
+
+![A document explored as a tree](media/guide/guide_data-explorer.svg)
+
+[Structured data guide](guide/ext/structured-data.md)
+
+### Workflows
+
+![A task tree of running steps](media/guide/guide_workflow-tree.svg)
+
+[Workflows guide](guide/ext/workflows.md)
+
+### Diffs
+
+![A unified diff with highlighted changes](media/guide/guide_diff-unified.svg)
+
+[Diffs and test reports guide](guide/ext/diffs-and-test-reports.md)
+
+### Images
+
+![One image in each colour mode](media/guide/guide_images-color-modes.svg)
+
+[Images guide](guide/art/images.md)
+
+### CLI viewers
+
+![rich inspect drawing a YAML file as a tree](media/guide/cli_inspect.svg)
+
+![rich view showing a Python file with line numbers](media/guide/cli_view.svg)
+
+[CLI walkthrough](guide/cli/walkthrough.md)

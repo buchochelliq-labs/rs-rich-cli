@@ -51,6 +51,8 @@ rich --diff before.png after.png --image-mode sixel
 | `auto` | Sixel where it looks supported, else `blocks`, else `ascii` (default) |
 | `sixel` | Real pixels via the Sixel graphics protocol |
 | `blocks` | Half-block characters — any truecolour terminal |
+| `quadrants` | Quadrant blocks: 2×2 pixels per cell in two colours — finer edges than `blocks`, needs colour |
+| `braille` | Braille dots, 2×4 per cell, monochrome |
 | `ascii` | A character ramp; the only mode that needs no colour |
 | `none` | Numbers only |
 
@@ -93,7 +95,8 @@ keeps it out of a redirected report.
 rich --diff baseline.png current.png --threshold 2 --image-mode none
 ```
 
-Exits non-zero when more than 2% of the canvas has changed perceptibly, so
+Exits `5` (and prints `rich: diff threshold exceeded` on stderr) when more than
+2% of the canvas has changed perceptibly, so
 visual regressions fail a build. The threshold is compared against the
 *perceptual* figure, never the naive one — gating on a byte comparison is what
 makes visual regression testing unusable, because every re-render trips it.
@@ -108,8 +111,10 @@ everything, so accepting it would silently switch the gate off and report a pass
 Everything the gate prints goes to **stdout**; only the downgrade notices above
 use stderr.
 
-`--threshold` and `--image-mode` are refused without `--diff` rather than
-ignored. Silently accepting them meant a job that lost its `--diff` — a typo, a
+`--threshold` is refused without `--diff`, and `--image-mode` without `--diff`
+or `--image`, rather than ignored (a usage error, exit 2). `--threshold` also
+gates text diffs, on the share of changed lines; see
+[Compare text, source and patches](cli.md#compare-text-source-and-patches). Silently accepting them meant a job that lost its `--diff` — a typo, a
 refactor, an argument reordered — became a permanently green gate, which is the
 same failure an unvalidated threshold caused.
 

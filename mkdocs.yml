@@ -120,7 +120,7 @@ nav:
           - Walkthrough: guide/cli/walkthrough.md
           - Smoke test: guide/cli/smoke.md
   - Gallery: gallery.md
-  - Rich-art videos: demos.md
+  - CLI and art videos: demos.md
   - Using the CLI: cli.md
   - CLI reference: cli-reference.md
   - Workflow recipes: recipes.md
