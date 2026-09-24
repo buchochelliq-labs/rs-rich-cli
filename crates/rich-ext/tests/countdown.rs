@@ -119,6 +119,15 @@ fn retry_status_from_backoff_and_with_a_bar() {
         plain(80, &first.at(Duration::from_millis(500))),
         "⚠ warning attempt 1/3 failed: 503 — retrying in 1s  [####..............]"
     );
+    // The bar shrinks to the room left, and goes when there is too little.
+    assert_eq!(
+        plain(60, &first.at(Duration::from_millis(500))),
+        "⚠ warning attempt 1/3 failed: 503 — retrying in 1s  [#.....]"
+    );
+    assert_eq!(
+        plain(56, &first.at(Duration::from_millis(500))),
+        "⚠ warning attempt 1/3 failed: 503 — retrying in 1s"
+    );
     assert_eq!(
         plain(80, &backoff.status(3, "503").unwrap()),
         "✖ error attempt 3/3 failed: 503 — giving up"

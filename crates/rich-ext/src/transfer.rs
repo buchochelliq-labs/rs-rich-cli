@@ -598,10 +598,11 @@ impl Transfer {
                 format!("{text}{fill}")
             }
         };
+        let arrow = pad(cells.arrow, widths.arrow, false);
         let name = pad(&self.name, widths.name, false);
         let sizes = pad(&cells.sizes, widths.sizes, true);
         let rate = pad(&cells.rate, widths.rate, true);
-        let fixed = cell_len(cells.arrow)
+        let fixed = cell_len(&arrow)
             + 1
             + cell_len(&name)
             + 2
@@ -614,7 +615,7 @@ impl Transfer {
         let bar_width = self.bar_width.min(room);
 
         let mut line = vec![
-            Segment::new(cells.arrow, Some(style(console, "transfer.direction"))),
+            Segment::new(arrow, Some(style(console, "transfer.direction"))),
             Segment::new(" ", None),
             Segment::new(name, Some(style(console, "transfer.name"))),
             Segment::new("  ", None),
@@ -683,6 +684,7 @@ struct Cells {
 
 #[derive(Clone, Copy, Default)]
 struct Widths {
+    arrow: usize,
     name: usize,
     sizes: usize,
     rate: usize,
@@ -694,6 +696,7 @@ impl Widths {
         let mut widths = Widths::default();
         for transfer in transfers {
             let cells = transfer.cells(set);
+            widths.arrow = widths.arrow.max(cell_len(cells.arrow));
             widths.name = widths.name.max(cell_len(&transfer.name));
             widths.sizes = widths.sizes.max(cell_len(&cells.sizes));
             widths.rate = widths.rate.max(cell_len(&cells.rate));

@@ -215,6 +215,30 @@ fn splitmix64(seed: u64) -> u64 {
     z ^ (z >> 31)
 }
 
+/// Append a countdown bar (without its time label, which the sentence
+/// already has) to `line`, shrunk to the room left, or not at all when fewer
+/// than 5 cells remain.
+fn append_bar(
+    line: &mut Vec<Segment>,
+    console: &Console,
+    options: &ConsoleOptions,
+    total: Duration,
+    left: Duration,
+    width: usize,
+) {
+    let used: usize = line.iter().map(Segment::cell_length).sum();
+    let width = width.min(options.max_width.saturating_sub(used + 2));
+    if width < 5 {
+        return;
+    }
+    line.push(Segment::new("  ", None));
+    let mut bar = CountdownBar::new(total, left)
+        .width(width)
+        .segments(console, options);
+    bar.truncate(bar.len().saturating_sub(2));
+    line.extend(bar);
+}
+
 /// A bar that shrinks as time runs out, followed by the time left.
 ///
 /// ```
@@ -403,12 +427,7 @@ impl Renderable for RetryStatus {
                     Some(style(console, "countdown.remaining")),
                 ));
                 if let Some(total) = self.total {
-                    line.push(Segment::new("  ", None));
-                    let bar = CountdownBar::new(total, left).width(self.bar_width);
-                    let mut bar = bar.segments(console, options);
-                    // The time is already in the sentence.
-                    bar.truncate(bar.len().saturating_sub(2));
-                    line.extend(bar);
+                    append_bar(&mut line, console, options, total, left, self.bar_width);
                 }
             }
             None => line.push(Segment::new("giving up", Some(style(console, key)))),
@@ -529,11 +548,14 @@ impl Renderable for RateLimit {
             ));
         }
         if let Some(window) = self.window {
-            line.push(Segment::new("  ", None));
-            let bar = CountdownBar::new(window, self.resets_in).width(self.bar_width);
-            let mut bar = bar.segments(console, options);
-            bar.truncate(bar.len().saturating_sub(2));
-            line.extend(bar);
+            append_bar(
+                &mut line,
+                console,
+                options,
+                window,
+                self.resets_in,
+                self.bar_width,
+            );
         }
         finish_line(line, options.max_width)
     }
