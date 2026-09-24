@@ -2282,6 +2282,100 @@ MARKDOWN_LINKS_CASES = [
 ]
 
 
+PYFORMAT_HEADER = """\
+# Parity fixtures for Python's format() mini-language, as `TextColumn`
+# templates reach it (`rich::pyformat::format_value`). Captured from the
+# CPython running this script (3.11+, for the `z` flag; 3.11-3.13 agree).
+# Regenerate with: python scripts/capture_golden.py
+#
+# Format: <value as JSON>\t<spec as JSON>\t<format(value, spec) as JSON, or null
+#   where Python raises>
+# Values: {"float": repr}, {"int": n}, {"str": s}, {"bool": b}, {"none": null}.
+"""
+
+
+def _pyformat_cases() -> list:
+    """A deterministic sweep of values x specs (several thousand cases)."""
+    floats = [
+        0.0, -0.0, 0.5, 1.0, 1.5, 2.5, 12.5, 9.99, 99.95, 0.125, 100.0, 123.456,
+        -123.456, 0.1, 0.0001, 1e-05, -0.0001, 1.23e-10, 1234567.891, 123456789.0,
+        1e15, 1e16, 1.5e16, 1e100, float("inf"), float("-inf"), float("nan"),
+    ]
+    ints = [0, 7, -42, 255, -1, 1234567, 10**15, 65]
+    strs = ["ab", "h\u00e9llo", "", "\u754cx"]
+    flag_sets = ["", "#", "0", "z", "+", " ", ",", "_", "-", "z#", "+,", "#0", " _", "z0"]
+    aligns = ["", "<", ">", "^", "=", "*^", "0>", "x="]
+    widths = ["", "1", "8", "12"]
+    precisions = ["", ".0", ".1", ".2", ".3", ".6", ".10"]
+    float_types = ["", "e", "E", "f", "F", "g", "G", "%", "n"]
+    int_types = ["", "d", "n", "x", "X", "o", "b", "c", "e", "f", "g", "%"]
+    str_types = ["", "s"]
+
+    cases = []
+    counter = 0
+
+    def pick(options):
+        nonlocal counter
+        counter += 1
+        return options[(counter * 7 + counter // len(options)) % len(options)]
+
+    def spec_for(kind, precision):
+        return pick(aligns) + pick(flag_sets) + pick(widths) + precision + kind
+
+    for value in floats:
+        for kind in float_types:
+            for precision in precisions:
+                cases.append(({"float": repr(value)}, spec_for(kind, precision)))
+                cases.append(({"float": repr(value)}, pick(flag_sets) + precision + kind))
+    for value in ints:
+        for kind in int_types:
+            for _ in range(4):
+                precision = pick(precisions) if kind in ("e", "f", "g", "%") else ""
+                cases.append(({"int": value}, spec_for(kind, precision)))
+    for value in strs:
+        for kind in str_types:
+            for precision in ["", ".0", ".2", ".4"]:
+                for _ in range(3):
+                    cases.append(({"str": value}, spec_for(kind, precision)))
+    for flag in [True, False]:
+        for spec in ["", "d", "5", ">5", "05", "x", ".1f", "s", ","]:
+            cases.append(({"bool": flag}, spec))
+    for spec in ["", "s", "5", ">5", "d"]:
+        cases.append(({"none": None}, spec))
+    # Named regressions from the audit.
+    named = [
+        (12.5, ".2"), (2.5, ".0"), (1e16, ","), (1e16, "_"), (float("inf"), "%"),
+        (float("nan"), ".1%"), (123.0, "#g"), (123.0, "#.3g"), (-0.0001, "z.2f"),
+        (-0.0, "z"), (1234.5, "n"), (1234.5, ".3n"), (0.0, ".2"), (-0.0, ".2"),
+        (1e-05, ","), (1234567.891, ",.2e"), (1e100, ",.2f"),
+    ]
+    for value, spec in named:
+        cases.append(({"float": repr(value)}, spec))
+    cases.append(({"str": "h\u00e9llo"}, "08"))
+    cases.append(({"str": "ab"}, "=5"))
+    cases.append(({"str": "ab"}, "05s"))
+    cases.append(({"int": 1234}, ",n"))
+    cases.append(({"int": 1234}, "n"))
+
+    seen = set()
+    unique = []
+    for value, spec in cases:
+        key = (json.dumps(value), spec)
+        if key not in seen:
+            seen.add(key)
+            unique.append((value, spec))
+    return unique
+
+
+def _pyformat_value(value: dict):
+    (kind, raw), = value.items()
+    if kind == "float":
+        return float(raw)
+    if kind == "none":
+        return None
+    return raw
+
+
 def main() -> None:
     version = verify_upstream_version()
     print(f"verified Python rich {version} against UPSTREAM.toml")
@@ -2711,6 +2805,20 @@ def main() -> None:
         tlines.append(f"{theme_name}\t{json.dumps(payload)}")
     themes_path.write_text("\n".join(tlines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(tlines) - 1} terminal themes to {themes_path}")
+
+    # --- Python format() mini-language ---------------------------------
+    pyformat_path = golden_dir() / "pyformat.tsv"
+    pflines = [PYFORMAT_HEADER.rstrip("\n")]
+    for value, spec in _pyformat_cases():
+        try:
+            result = json.dumps(format(_pyformat_value(value), spec), ensure_ascii=False)
+        except (ValueError, TypeError, OverflowError):
+            result = "null"
+        pflines.append(
+            f"{json.dumps(value, ensure_ascii=False)}\t{json.dumps(spec)}\t{result}"
+        )
+    pyformat_path.write_text("\n".join(pflines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(pflines) - 1} format() cases to {pyformat_path}")
 
     # --- markdown link destinations ------------------------------------
     import re as _re

@@ -2432,6 +2432,43 @@ fn markdown_links_parity() {
     assert_eq!(rows.len(), 38, "expected every markdown link case to run");
 }
 
+/// `format(value, spec)` for the values a `TextColumn` template reaches,
+/// against a few thousand cases swept through CPython.
+#[test]
+fn pyformat_parity() {
+    use rich::pyformat::{format_value, FormatValue};
+    let rows = tsv_rows(include_str!("golden/pyformat.tsv"), 3);
+    let mut failures = Vec::new();
+    for (line, columns) in &rows {
+        let value: serde_json::Value = serde_json::from_str(columns[0]).expect("value json");
+        let spec: String = serde_json::from_str(columns[1]).expect("spec json");
+        let expected: Option<String> = serde_json::from_str(columns[2]).expect("expected json");
+        let (kind, raw) = value.as_object().unwrap().iter().next().unwrap();
+        let value = match kind.as_str() {
+            "float" => FormatValue::Float(raw.as_str().unwrap().parse().expect("float repr")),
+            "int" => FormatValue::Int(raw.as_i64().unwrap()),
+            "str" => FormatValue::Str(raw.as_str().unwrap().to_string()),
+            "bool" => FormatValue::Bool(raw.as_bool().unwrap()),
+            "none" => FormatValue::None,
+            other => panic!("line {line}: unknown value kind {other:?}"),
+        };
+        let got = format_value(&value, &spec);
+        if got != expected {
+            failures.push(format!(
+                "line {line}: format({value:?}, {spec:?}) = {got:?}, Python {expected:?}"
+            ));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} of {} format() cases diverged:\n{}",
+        failures.len(),
+        rows.len(),
+        failures.join("\n")
+    );
+    assert!(rows.len() > 3000, "expected the full format() sweep");
+}
+
 /// The text matching a `print_justify.tsv` case. Must stay in sync with
 /// `PRINT_JUSTIFY_CASES` in `scripts/capture_golden.py`.
 fn build_print_justify_text(name: &str) -> Text {
