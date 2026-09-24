@@ -4,9 +4,10 @@ What does not work yet, what was never meant to, and what works differently on
 purpose. Three different things, kept apart — a deliberate trade-off listed as a
 bug makes a considered decision look like neglect.
 
-**Applies to** the released `rs-rich-cli 0.0.4` / `rs-rich 0.0.4` packages, reviewed
-2026-09-10 against Python
-`rich` 15.0.0. Each entry links to its issue so you can check the status without
+**Applies to** the 0.0.11 cohort (`rs-rich-cli` 0.0.11, `rs-rich` 0.0.7,
+`rs-rich-ext` 0.0.9, `rs-rich-art` 0.0.9, `rs-rich-macros` 0.0.1), prepared but
+not yet published, reviewed 2026-09-24 against Python `rich` 15.0.0. The latest
+published cohort is 0.0.10. Each entry links to its issue so you can check the status without
 waiting for this page to be updated.
 
 ---
@@ -56,11 +57,47 @@ export.
 
 ### GIF interruption and export limitations
 
-0.0.4 supports `--gif-mode blocks`; see the
-[capability matrix](cli.md#gif-half-block-rendering-004).
-ASCII remains the default and the redirected/colorless fallback. Normal playback
-restores the cursor; Ctrl-C can leave it hidden, as before. GIF export and Sixel
-playback are unsupported.
+`--gif-mode` is `ascii` (the default, and the redirected/colorless fallback) or
+`blocks`; see the [capability matrix](cli.md#gif-half-block-rendering-004).
+Since 0.0.11, `--image-color` and `--image-dither` also apply to GIF frames.
+Normal playback restores the cursor; Ctrl-C can leave it hidden. GIF export and
+Sixel playback are unsupported.
+
+### Redaction is experimental and best effort
+
+`rich_ext::redact`, `rich capture --redact` and `--redact-pattern`, and
+`rich inspect --redact` mask what their detectors recognise: secret-named keys,
+bearer tokens, common token prefixes, AWS key ids, JWTs and URL passwords. They
+can miss a secret in a format they do not know. Read the output, and any SVG,
+HTML or cast file written from it, before sharing it, and
+[report](https://github.com/buchochelliq-labs/rs-rich-cli/issues/new?template=bug_report.yml)
+anything that gets through. `rich env` masking is best effort in the same way.
+
+### Viewers read a bounded amount
+
+`view`, `hex`, `unicode`, `inspect`, `capture` and `--theme-file` stop at a
+fixed size (for example 8 MiB or 20,000 lines for source in `view`, 64 MiB per
+`inspect` document, 1 MiB of `capture` output), so an endless input ends instead
+of exhausting memory. Larger inputs are shown in part or refused; the caps are
+not configurable. See [Limits](cli.md#limits).
+
+### `capture` has no PNG export
+
+`rich capture` shows the output in a panel, exports SVG or HTML, and records an
+asciicast with `--cast`. There is no PNG export; convert the SVG yourself.
+
+### `rs-rich-macros` is not on crates.io yet
+
+`rs-rich-macros` 0.0.1 is new in the 0.0.11 cohort. Until the cohort is
+published, `rs-rich-ext`'s `macros` feature (`richf!`, `#[derive(Rich)]`) works
+only from a checkout of this repository.
+
+### SVG export can squeeze CJK glyphs
+
+SVG textLength uses character counts for some runs; wide CJK glyphs may overlap
+in the exported image. The same case reproduces in pinned Python Rich 15.0.0.
+Decoded text and plain terminal output retain the original characters. This is
+an export-layout limitation, separate from encoding support.
 
 ### CSV output still retains source rows
 
@@ -116,16 +153,20 @@ padding, wrapping, the background block — is parity-tested.
 Replacing `syntect` would mean shipping a Pygments-equivalent lexer set, which is
 out of scope. This is divergence **#18**.
 
-### Raw `ESC` in input reaches the terminal
+### Raw `ESC` in input reaches the terminal in the upstream modes
 
-An escape character in a rendered file is passed through, exactly as upstream
-passes it through. It is listed here because it surprises people, not because it
-is a defect: matching upstream is the project's whole purpose.
-
-If you render untrusted input and want it neutralised, that needs an opt-in
-sanitiser — [#64](https://github.com/buchochelliq-labs/rs-rich-cli/issues/64).
+In the modes ported from upstream (`rich FILE`, `--print`, `--markdown`,
+`--json`, …), an escape character in a rendered file is passed through, exactly
+as upstream passes it through. It is listed here because it surprises people,
+not because it is a defect: matching upstream is the project's whole purpose.
 `BEL`, backspace, vertical tab and form feed **are** stripped, as upstream
 strips them.
+
+For untrusted input, pass `--sanitize` (since 0.0.5,
+[#64](https://github.com/buchochelliq-labs/rs-rich-cli/issues/64)), which shows
+terminal controls as inert symbols. `rich view` and text `rich diff`, which have
+no upstream behaviour to keep, sanitise by default; `--no-sanitize` turns that
+off. See [Neutralize terminal controls](cli.md#neutralize-terminal-controls-in-input).
 
 ### Hyperlinks have no random `id=`
 
@@ -137,11 +178,21 @@ Terminals do not depend on it. Divergence **#20**.
 
 ## Fixed recently
 
-Kept here so anyone on an older build still finds the symptom. Full detail in
+Kept here so anyone on an older build still finds the symptom. Problems found
+and fixed in features that were never published (such as the 0.0.11 release-test
+fixes to `view`, stack traces and hyperlinks) are in the changelog instead. Full detail in
 [the changelog](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/CHANGELOG.md).
 
 | Symptom | Fixed in |
 |---------|----------|
+| `NO_COLOR` also dropped bold and underline in a terminal | core `0.0.7` (prepared) |
+| A project `rich.toml` with `no_color = false` undid `NO_COLOR` | CLI `0.0.11` (prepared) |
+| Markup in plain-string table cells and tree labels printed literally | core `0.0.7` (prepared) |
+| `Columns` and `Tree` overflowed narrow widths | core `0.0.7` (prepared) |
+| `--export-svg` titled literal print text and rules with a fragment of the markup | CLI `0.0.11` (prepared) |
+| A multi-file `--watch --watch-exit-on-error` promised a retry it never made | CLI `0.0.10` |
+| Live `print` dropped ordinary writes at widths 0 and 1; diagnostic snippets kept CRLF carriage returns | ext `0.0.7` |
+| `--watch` missed same-size edits and atomic saves | CLI `0.0.7` |
 | Diff exports lost graphical content when stdout was redirected | `0.0.3` |
 | Notebook layout flags were ignored; title markup printed literally | `0.0.3` |
 | Windows default pager failed to launch `more.com` | `0.0.3` |
@@ -163,10 +214,3 @@ Please [open an issue](https://github.com/buchochelliq-labs/rs-rich-cli/issues)
 with the exact command, the input if you can share it, and what you expected. If
 it is a *parity* difference from Python `rich`, [Reporting a parity
 bug](parity.md#reporting-a-parity-bug) explains what makes those reports useful.
-
-### SVG export can squeeze CJK glyphs
-
-SVG textLength uses character counts for some runs; wide CJK glyphs may overlap
-in the exported image. The same case reproduces in pinned Python Rich 15.0.0.
-Decoded text and plain terminal output retain the original characters. This is
-an export-layout limitation, separate from encoding support.
