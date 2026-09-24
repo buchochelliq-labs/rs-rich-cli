@@ -335,6 +335,19 @@ fn vpad_table(
     table
 }
 
+/// `_zero_width_table` in scripts/capture_golden.py: `padding=(vertical,
+/// horizontal)`, squeezed until its columns have no content width.
+fn zero_width_table(vertical: usize, horizontal: usize) -> Table {
+    let mut table = Table::new()
+        .box_set(SQUARE)
+        .padding(vertical, horizontal, vertical, horizontal);
+    table.add_column("h");
+    table.add_column("i");
+    table.add_row(&["a", "b"]);
+    table.add_row(&["c", "d"]);
+    table
+}
+
 fn table_style_table() -> Table {
     let mut table = Table::new()
         .box_set(SQUARE)
@@ -686,6 +699,16 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "panel_fit_tree" => Box::new(Panel::fit(Box::new(markup_tree()))),
         "align_table" => Box::new(Align::center(Box::new(sample_table(SQUARE)))),
         "align_panel_fit" => Box::new(Align::right(Box::new(Panel::fit(text_box("x"))))),
+        "table_zero_width_p10_w2" => Box::new(zero_width_table(1, 0)),
+        "table_zero_width_p21_w1"
+        | "table_zero_width_p21_w2"
+        | "table_zero_width_p21_w3"
+        | "table_zero_width_p21_w5"
+        | "table_zero_width_p21_w7" => Box::new(zero_width_table(2, 1)),
+        "panel_fit_zero_width_table_w6" => {
+            Box::new(Panel::fit(Box::new(zero_width_table(1, 0))).box_set(SQUARE))
+        }
+        "panel_fit_zero_width_table_p21_w6" => Box::new(Panel::fit(Box::new(zero_width_table(2, 1)))),
         // Highlighting console (highlight_renderables.tsv).
         "columns_highlight" => Box::new(Columns::from_cells(vec![
             "n = 1".into(),

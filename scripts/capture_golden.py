@@ -359,6 +359,17 @@ def _vpad_table(
     return table
 
 
+def _zero_width_table(padding: tuple) -> Table:
+    """Columns squeezed to no content width: `Console.render` yields nothing
+    for a cell narrower than 1, so its vertical padding never appears."""
+    table = Table(box=box.SQUARE, padding=padding)
+    table.add_column("h")
+    table.add_column("i")
+    table.add_row("a", "b")
+    table.add_row("c", "d")
+    return table
+
+
 def _table_style() -> Table:
     table = Table(box=box.SQUARE, style="blue")
     table.add_column("Name")
@@ -676,6 +687,15 @@ RENDERABLE_CASES = [
     ("panel_fit_tree", 30, Panel.fit(_markup_tree())),
     ("align_table", 40, Align.center(_name_age_table())),
     ("align_panel_fit", 30, Align.right(Panel.fit("x"))),
+    # Vertical padding of cells whose width collapsed to zero.
+    ("table_zero_width_p10_w2", 2, _zero_width_table((1, 0))),
+    ("table_zero_width_p21_w1", 1, _zero_width_table((2, 1))),
+    ("table_zero_width_p21_w2", 2, _zero_width_table((2, 1))),
+    ("table_zero_width_p21_w3", 3, _zero_width_table((2, 1))),
+    ("table_zero_width_p21_w5", 5, _zero_width_table((2, 1))),
+    ("table_zero_width_p21_w7", 7, _zero_width_table((2, 1))),
+    ("panel_fit_zero_width_table_w6", 6, Panel.fit(_zero_width_table((1, 0)), box=box.SQUARE)),
+    ("panel_fit_zero_width_table_p21_w6", 6, Panel.fit(_zero_width_table((2, 1)))),
 ]
 
 HIGHLIGHT_RENDERABLE_HEADER = """\
