@@ -243,3 +243,23 @@ fn deep_hand_built_chains_drop_and_render_without_recursing() {
         drop(trace);
     });
 }
+
+#[test]
+fn control_codes_in_trace_paths_cannot_escape_the_link() {
+    let input = "Traceback (most recent call last):\n  File \"/tmp/a\x07\x1b]0;PWNED\x07.py\", line 1, in f\nValueError: x\x1b[2J\n";
+    let trace = stacktrace::parse(input).unwrap();
+    let terminal = Console::builder().force_terminal(true).width(100).build();
+    for view in [
+        trace.render_options(),
+        trace
+            .render_options()
+            .hyperlinker(Hyperlinker::new().editor("vscode://file{path}:{line}:{column}")),
+    ] {
+        let out = terminal.render_to_string(&view);
+        assert!(!out.contains("\x1b]0;"), "{out:?}");
+        assert!(out.contains("/tmp/a%07%1B%5D0;PWNED%07.py"), "{out:?}");
+        // The visible label shows the codes instead of running them.
+        assert!(out.contains("/tmp/a␇␛]0;PWNED␇.py:1"), "{out:?}");
+        assert!(out.contains("x␛[2J") && !out.contains("\x1b[2J"), "{out:?}");
+    }
+}

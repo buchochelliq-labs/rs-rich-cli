@@ -628,6 +628,11 @@ pub fn panic_hook(
     }
 }
 
+/// Trace text is untrusted input: show its control codes, never run them.
+fn clean(text: &str) -> String {
+    crate::sanitize_terminal_controls(text)
+}
+
 /// Rendering options for a [`StackTrace`].
 pub struct StackTraceView<'a> {
     trace: &'a StackTrace,
@@ -722,9 +727,9 @@ impl StackTraceView<'_> {
             let elided = frame.metadata.iter().find(|(key, _)| key == "elided");
             text.append("  ", None);
             match elided {
-                Some((_, label)) => text.append(label, Some(dim.clone().into())),
+                Some((_, label)) => text.append(&clean(label), Some(dim.clone().into())),
                 None => text.append(
-                    name,
+                    &clean(name),
                     Some(base.clone().unwrap_or(function_style.clone()).into()),
                 ),
             }
@@ -741,16 +746,19 @@ impl StackTraceView<'_> {
                 text.append("\n", None);
             }
             if let Some(source) = &frame.source {
-                text.append(&format!("      {source}\n"), base.clone().map(Into::into));
+                text.append(
+                    &format!("      {}\n", clean(source)),
+                    base.clone().map(Into::into),
+                );
             }
         }
         flush_hidden(text, &mut hidden);
         let error_style = theme_style(console, "stacktrace.error", "bold red");
         let kind = trace.kind.as_deref().unwrap_or("error");
-        text.append(kind, Some(error_style.into()));
+        text.append(&clean(kind), Some(error_style.into()));
         if let Some(message) = &trace.message {
             text.append(": ", None);
-            text.append(message, None);
+            text.append(&clean(message), None);
         }
         if let Some(location) = &trace.location {
             if let Some(path) = &location.path {

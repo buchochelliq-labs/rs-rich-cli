@@ -295,7 +295,8 @@ impl Hyperlinker {
                 label.push_str(&format!(":{column}"));
             }
         }
-        let mut text = Text::styled(label, style);
+        // The label is shown as is, so a control code in it would run.
+        let mut text = Text::styled(crate::sanitize_terminal_controls(&label), style);
         if let Some(url) = self.file_url(path, line, column) {
             let end = text.plain().len();
             text.stylize(Style::new().with_link(url), 0, end);
@@ -310,17 +311,40 @@ impl Highlighter for Hyperlinker {
     }
 }
 
-/// Percent-encode the characters that would end or confuse a URL path.
+/// Percent-encode every byte outside RFC 3986's path characters (unreserved,
+/// sub-delims, `:`, `@` and `/`), non-ASCII as its UTF-8 bytes. Paths come
+/// from untrusted text such as stack traces, and the URL is written inside an
+/// OSC 8 sequence: a raw BEL or ESC would end it early and run what follows.
 fn encode_path(path: &str) -> String {
+    use std::fmt::Write;
     let path = path.replace('\\', "/");
     let mut out = String::with_capacity(path.len());
-    for ch in path.chars() {
-        match ch {
-            '%' => out.push_str("%25"),
-            ' ' => out.push_str("%20"),
-            '#' => out.push_str("%23"),
-            '?' => out.push_str("%3F"),
-            _ => out.push(ch),
+    for byte in path.bytes() {
+        let keep = byte.is_ascii_alphanumeric()
+            || matches!(
+                byte,
+                b'-' | b'.'
+                    | b'_'
+                    | b'~'
+                    | b'!'
+                    | b'$'
+                    | b'&'
+                    | b'\''
+                    | b'('
+                    | b')'
+                    | b'*'
+                    | b'+'
+                    | b','
+                    | b';'
+                    | b'='
+                    | b':'
+                    | b'@'
+                    | b'/'
+            );
+        if keep {
+            out.push(byte as char);
+        } else {
+            let _ = write!(out, "%{byte:02X}");
         }
     }
     // `C:/x` becomes `/C:/x`, so `file://` + path is a valid file URL.
@@ -372,6 +396,33 @@ mod tests {
         assert_eq!(
             linker.file_url("/a b/c.rs", Some(3), None).unwrap(),
             "vscode://file/a%20b/c.rs:3:1"
+        );
+    }
+
+    #[test]
+    fn paths_encode_everything_outside_the_uri_path_set() {
+        let linker = Hyperlinker::new();
+        assert_eq!(
+            linker
+                .file_url("/tmp/a\x07\x1b]0;P\u{9b}\x7f\"<>^`{|}[é].py", Some(2), None)
+                .unwrap(),
+            "file:///tmp/a%07%1B%5D0;P%C2%9B%7F%22%3C%3E%5E%60%7B%7C%7D%5B%C3%A9%5D.py#2"
+        );
+        // Ordinary paths, and the RFC 3986 path characters, stay as they were.
+        assert_eq!(
+            linker
+                .file_url("/a b/c-d_e.f~g/h!$&'()*+,;=:@%#?.rs", None, None)
+                .unwrap(),
+            "file:///a%20b/c-d_e.f~g/h!$&'()*+,;=:@%25%23%3F.rs"
+        );
+        assert_eq!(
+            linker.file_url("C:\\x\\y.rs", None, None).unwrap(),
+            "file:///C:/x/y.rs"
+        );
+        let editor = Hyperlinker::new().editor("vscode://file{path}:{line}:{column}");
+        assert_eq!(
+            editor.file_url("/a\x1b\\b", Some(1), Some(2)).unwrap(),
+            "vscode://file/a%1B/b:1:2"
         );
     }
 
