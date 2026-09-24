@@ -96,9 +96,10 @@ Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by exten
 | `--image-anchor <A>` | Cover crop anchor. Default: `center`. Config: `image_anchor`. Possible values: `center`, `top`, `bottom`, `left`, `right`, `top-left`, `top-right`, `bottom-left`, `bottom-right`. |
 | `--image-max-width <N>` | With --image, never exceed N columns (aspect kept) Config: `image_max_width`. |
 | `--image-max-height <N>` | With --image, never exceed N rows (aspect kept) Config: `image_max_height`. |
-| `--image-background <#RRGGBB>` | With --image: flatten transparency onto this RGB colour (also colours contain padding; quote the # in your shell) Config: `image_background`. |
-| `--image-color <M>` | Colour depth, with ASCII/blocks/quadrants images. Default: `truecolor`. Config: `image_color`. Possible values: `truecolor`, `ansi256`, `ansi16`, `grayscale`. |
-| `--image-dither <M>` | Dithering (needs a non-truecolor --image-color) Default: `none`. Config: `image_dither`. Possible values: `none`, `floyd-steinberg`, `bayer4x4`. |
+| `--image-background <BG>` | With --image: flatten transparency onto #RRGGBB (also colours contain padding; quote the # in your shell), leave it to the terminal's background (default), or show it on a gray checkerboard (checkerboard) Config: `image_background`. |
+| `--image-color <M>` | Colour depth for --image (not Braille, which is monochrome) and --gif frames. Default: `truecolor`. Config: `image_color`. Possible values: `truecolor`, `ansi256`, `ansi16`, `grayscale`. |
+| `--image-dither <M>` | Dithering (needs a non-truecolor --image-color) Default: `none`. Config: `image_dither`. Possible values: `none`, `floyd-steinberg`, `bayer4x4`, `atkinson`. |
+| `--image-color-distance <M>` | How the nearest palette colour is measured: encoded RGB, or perceptual OKLab (needs a non-truecolor --image-color) Default: `rgb`. Config: `image_color_distance`. Possible values: `rgb`, `oklab`. |
 | `--image-brightness <F>` | Tone adjustment (1.0 = unchanged). Brightness, contrast and gamma apply in that order, after rotation/flips and before grayscale and colour. Default: `1.0`. Config: `image_brightness`. |
 | `--image-contrast <F>` | Tone adjustment (1.0 = unchanged) Default: `1.0`. Config: `image_contrast`. |
 | `--image-gamma <F>` | Tone adjustment (1.0 = unchanged) Default: `1.0`. Config: `image_gamma`. |
@@ -197,6 +198,7 @@ Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by exten
 | `--no-config` | Disable config discovery. |
 | `--theme <NAME>` | Select a named theme from config. Config: `theme`. |
 | `--theme-style <NAME=STYLE>...` | Override a theme binding; repeatable and worker-safe. |
+| `--theme-file <PATH>` | Load styles from an upstream rich theme file ([styles] section); --theme and --theme-style override it. Config: `theme_file`. |
 
 ### Output & reports
 
@@ -632,7 +634,7 @@ rich config explain [OPTIONS] [KEY]
 
 | Argument | Description |
 | --- | --- |
-| `[KEY]` | Explain one setting instead of all of them. Possible values: `mode`, `format`, `width`, `panel`, `padding`, `log_presentation`, `height`, `image_fit`, `image_anchor`, `image_max_width`, `image_max_height`, `image_background`, `image_color`, `image_dither`, `image_brightness`, `image_contrast`, `image_gamma`, `image_rotate`, `image_flip_horizontal`, `image_flip_vertical`, `image_grayscale`, `export_html`, `export_svg`, `pager`, `auto_pager`, `watch`, `watch_interval`, `watch_debounce`, `watch_poll`, `watch_exit_on_error`, `watch_cache`, `batch`, `batch_input_root`, `batch_preserve_dirs`, `batch_name_template`, `jobs`, `progress`, `continue_on_error`, `overwrite`, `collision`, `theme`, `no_color`, `sanitize`. |
+| `[KEY]` | Explain one setting instead of all of them. Possible values: `mode`, `format`, `width`, `panel`, `padding`, `log_presentation`, `height`, `image_fit`, `image_anchor`, `image_max_width`, `image_max_height`, `image_background`, `image_color`, `image_dither`, `image_color_distance`, `image_brightness`, `image_contrast`, `image_gamma`, `image_rotate`, `image_flip_horizontal`, `image_flip_vertical`, `image_grayscale`, `export_html`, `export_svg`, `pager`, `auto_pager`, `watch`, `watch_interval`, `watch_debounce`, `watch_poll`, `watch_exit_on_error`, `watch_cache`, `batch`, `batch_input_root`, `batch_preserve_dirs`, `batch_name_template`, `jobs`, `progress`, `continue_on_error`, `overwrite`, `collision`, `theme`, `theme_file`, `no_color`, `sanitize`. |
 
 #### rich config reference
 
@@ -826,9 +828,10 @@ Settings are read from these sources, lowest precedence first; a later source ov
 | `image_anchor` | enum: `center`, `top`, `bottom`, `left`, `right`, `top-left`, `top-right`, `bottom-left`, `bottom-right` | `center` | | `--image-anchor` | Cover crop anchor |
 | `image_max_width` | positive integer | | | `--image-max-width` | With --image, never exceed N columns (aspect kept) |
 | `image_max_height` | positive integer | | | `--image-max-height` | With --image, never exceed N rows (aspect kept) |
-| `image_background` | string | | | `--image-background` | With --image: flatten transparency onto this RGB colour (also colours contain padding; quote the # in your shell) |
-| `image_color` | enum: `truecolor`, `ansi256`, `ansi16`, `grayscale` | `truecolor` | | `--image-color` | Colour depth, with ASCII/blocks/quadrants images |
-| `image_dither` | enum: `none`, `floyd-steinberg`, `bayer4x4` | `none` | | `--image-dither` | Dithering (needs a non-truecolor --image-color) |
+| `image_background` | string | | | `--image-background` | With --image: flatten transparency onto #RRGGBB (also colours contain padding; quote the # in your shell), leave it to the terminal's background (default), or show it on a gray checkerboard (checkerboard) |
+| `image_color` | enum: `truecolor`, `ansi256`, `ansi16`, `grayscale` | `truecolor` | | `--image-color` | Colour depth for --image (not Braille, which is monochrome) and --gif frames |
+| `image_dither` | enum: `none`, `floyd-steinberg`, `bayer4x4`, `atkinson` | `none` | | `--image-dither` | Dithering (needs a non-truecolor --image-color) |
+| `image_color_distance` | enum: `rgb`, `oklab` | `rgb` | | `--image-color-distance` | How the nearest palette colour is measured: encoded RGB, or perceptual OKLab (needs a non-truecolor --image-color) |
 | `image_brightness` | number | `1.0` | | `--image-brightness` | Tone adjustment (1.0 = unchanged). Brightness, contrast and gamma apply in that order, after rotation/flips and before grayscale and colour |
 | `image_contrast` | number | `1.0` | | `--image-contrast` | Tone adjustment (1.0 = unchanged) |
 | `image_gamma` | number | `1.0` | | `--image-gamma` | Tone adjustment (1.0 = unchanged) |
@@ -856,6 +859,7 @@ Settings are read from these sources, lowest precedence first; a later source ov
 | `overwrite` | bool | | | `--overwrite` | Allow existing batch export destinations |
 | `collision` | enum: `error`, `overwrite`, `suffix` | `error` | | `--collision` | Batch policy for existing destinations |
 | `theme` | string | | | `--theme` | Select a named theme from config |
+| `theme_file` | string | | | `--theme-file` | Load styles from an upstream rich theme file ([styles] section); --theme and --theme-style override it |
 | `no_color` | bool | | `NO_COLOR` | `--no-color` | Disable colored output (as does a non-empty NO_COLOR) |
 | `sanitize` | bool | | | `--sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text |
 

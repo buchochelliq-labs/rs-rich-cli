@@ -189,6 +189,7 @@ const VALUE_KEYS: &[&str] = &[
     "image_gamma",
     "log_presentation",
     "format",
+    "theme_file",
 ];
 
 pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
@@ -287,6 +288,7 @@ pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
                 matches!(parts.len(), 1 | 2 | 4)
                     && parts.iter().all(|p| p.trim().parse::<usize>().is_ok())
             }),
+            "theme_file" => value.as_str().is_some_and(|v| !v.is_empty()),
             "export_html" | "export_svg" | "batch_input_root" | "batch_name_template" => {
                 value.is_str()
             }
@@ -455,6 +457,20 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
             }
         }
         settings.ignored_color = ignored;
+    }
+    // A theme file named in a config file is relative to that file, so the
+    // config works from any directory.
+    if let Some(dir) = path.parent() {
+        for table in std::iter::once(&mut settings.settings)
+            .chain(std::iter::once(&mut settings.base))
+            .chain(settings.profile.as_mut().map(|(_, table)| table))
+        {
+            if let Some(Value::String(file)) = table.get_mut("theme_file") {
+                if PathBuf::from(&*file).is_relative() {
+                    *file = dir.join(&*file).to_string_lossy().into_owned();
+                }
+            }
+        }
     }
     Ok((settings, Some(path)))
 }

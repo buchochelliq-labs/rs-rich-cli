@@ -717,6 +717,14 @@ fn config_options() -> Vec<ArgSpec> {
             "Override a theme binding; repeatable and worker-safe",
         )
         .multiple(true),
+        option(
+            "theme-file",
+            "PATH",
+            CONFIG,
+            "Load styles from an upstream rich theme file ([styles] section); --theme and \
+             --theme-style override it",
+        )
+        .config_key("theme_file"),
     ]
 }
 

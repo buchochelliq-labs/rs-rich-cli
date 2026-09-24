@@ -465,6 +465,8 @@ comparison report to fall back on. See
 rich image photo.png --image-mode blocks --width 44 --height 12 --image-fit contain
 rich image photo.png --image-mode blocks --width 44 --height 12 --image-fit cover --image-anchor top
 rich image logo.png --image-fit contain --width 44 --height 12 --image-background '#542080'
+rich image logo.png --image-mode blocks --width 44 --image-background default
+rich image logo.png --image-mode blocks --width 44 --height 12 --image-fit contain --image-background checkerboard
 ```
 
 `contain` centres the whole image in a padded rectangle; `cover` fills the
@@ -480,9 +482,22 @@ to the terminal width and is capped by available columns.
 enlarge anything. Without fitting, the image keeps its aspect ratio and narrows
 to respect a height cap; with fitting, they clamp the target rectangle.
 
-`--image-background '#RRGGBB'` composites transparent pixels before resizing and
-colours contain padding. Fit padding defaults to black. Without either option,
-existing renderer behaviour is preserved. Fitting rejects empty/zero dimensions
+`--image-background` says what transparent pixels become:
+
+- `'#RRGGBB'` composites them onto that colour before resizing, and colours
+  contain padding. Fit padding otherwise defaults to black.
+- `default` leaves them to the terminal's own background. A pixel under half
+  opacity after sampling is left unpainted: a blank in ASCII, a half or quadrant
+  left out of the glyph in blocks and quadrants, no Braille dot, a transparent
+  Sixel pixel. Contain padding is transparent too. A fully opaque image renders
+  exactly as it does without the option.
+- `checkerboard` composites them onto #999999 and #666666 squares, the
+  image-editor convention for previewing transparency. With fitting, each square
+  is two cells wide by one tall, so it looks square; without fitting, squares are
+  a sixteenth of the image's longer side.
+
+Without either `--image-background` or fitting, existing renderer behaviour is
+preserved. Fitting rejects empty/zero dimensions
 and rasters above 16 megapixels, including cover's intermediate resize; extreme
 aspect ratios may therefore require a smaller size. These options apply to
 `image`, not GIF playback or image comparisons.
@@ -497,6 +512,7 @@ let art = ImageArt::from_path("logo.png")?
     .fit(ImageFit::Cover)
     .anchor(ImageAnchor::Top)
     .background([84, 32, 128]);
+// or .background_mode(ImageBackground::TerminalDefault / ::Checkerboard)
 ```
 
 [See the actual renderings](demos.md) and [workflow recipes](recipes.md).
@@ -513,7 +529,8 @@ A cell still has only a foreground and a background colour, so each cell tries
 the eight ways of splitting its four pixels into two groups. It paints each
 group in its mean colour and keeps the split with the smallest summed squared
 RGB error. Exact ties keep the earlier candidate, and a uniform cell is `█`.
-Transparency composites onto black as in half-block mode. Quadrants also draw
+Transparency composites onto black as in half-block mode, unless
+`--image-background default` leaves the transparent quadrants unpainted. Quadrants also draw
 `--diff` heatmaps, and fall back to ASCII without colour like blocks.
 
 ### Colour modes and dithering
@@ -523,6 +540,9 @@ rich image photo.png --image-mode blocks --width 60 --image-color ansi256
 rich image photo.png --image-mode ascii --width 60 --image-color ansi256 --image-dither floyd-steinberg
 rich image photo.png --image-mode quadrants --width 60 --image-color ansi16 --image-dither bayer4x4
 rich image photo.png --image-mode blocks --width 60 --image-color grayscale
+rich image photo.png --image-mode blocks --width 60 --image-color ansi16 --image-dither atkinson --image-color-distance oklab
+rich image photo.png --image-mode sixel --image-color ansi16 --image-dither atkinson
+rich --gif spin.gif --gif-mode blocks --image-color ansi256 --image-dither bayer4x4
 ```
 
 Truecolor and no dithering remain the defaults (`--image-color truecolor`,
@@ -534,29 +554,36 @@ Truecolor and no dithering remain the defaults (`--image-color truecolor`,
   follows the user's theme at the cost of fidelity.
 - `grayscale`: the 26 neutral entries 16, 232–255 and 231, chosen by luma.
 
-They support ASCII, half-block and quadrant still images. Floyd–Steinberg and
-Bayer 4×4 work with every quantized mode and require one. Unsupported
-combinations are rejected rather than ignored. Auto mode is allowed when it
-resolves to ASCII or blocks; select a supported mode explicitly for predictable
-behavior. These controls do not apply to Braille, Sixel, GIF playback or image
-comparisons.
+They apply to ASCII, half-block, quadrant and Sixel still images and to GIF
+frames (`--gif`). Sixel then encodes exactly the palette's colours instead of
+choosing up to 256 adaptive ones. Braille draws monochrome dots, so a reduced
+`--image-color` is rejected there. Floyd–Steinberg, Bayer 4×4 and Atkinson work
+with every quantized mode and require one, as does `--image-color-distance`.
+Unsupported combinations are rejected rather than ignored. These controls do not
+apply to image comparisons. GIF frames are dithered one at a time, so Bayer
+dithering flickers least.
 
 Preprocessing runs on the final sampled raster after fitting and background
 compositing, before glyph selection. ANSI256 uses fixed entries 16–255,
-excluding the first 16 terminal-theme-dependent colours. Nearest colour uses
-squared distance in encoded RGB (luma for grayscale), with ties choosing the
-lowest palette index.
-Floyd–Steinberg visits left-to-right, top-to-bottom and discards diffusion error
-at image boundaries. This is a deterministic bounded palette policy, not a
-perceptual colour-distance model.
+excluding the first 16 terminal-theme-dependent colours. By default the nearest
+colour is the one at the smallest squared distance in encoded RGB (luma for
+grayscale), with ties choosing the lowest palette index.
+`--image-color-distance oklab` measures in OKLab, a perceptual space, instead:
+hues stay truer on the small ANSI16 palette, where RGB distance often falls back
+to a gray. Error diffusion still accumulates in encoded RGB. Floyd–Steinberg
+visits left-to-right, top-to-bottom and discards diffusion error at image
+boundaries. Atkinson (`--image-dither atkinson`) spreads only six eighths of the
+error, an eighth each to two pixels on the right and three below plus one two
+rows down, which keeps highlights and shadows cleaner.
 
 ```rust
-use rich_art::{Dither, ImageArt, ImageColorMode, ImageMode};
+use rich_art::{ColorDistance, Dither, ImageArt, ImageColorMode, ImageMode};
 let art = ImageArt::from_path("photo.png")?
     .mode(ImageMode::Blocks)
     .width(60)
-    .color_mode(ImageColorMode::Ansi256)
-    .dither(Dither::FloydSteinberg);
+    .color_mode(ImageColorMode::Ansi16)
+    .dither(Dither::Atkinson)
+    .color_distance(ColorDistance::Oklab);
 ```
 
 The reusable builders live in art; `ImageOptions` remains source-compatible.
@@ -839,6 +866,37 @@ the selected theme. Batch workers receive the resolved bindings so parallel
 exports use the same theme. These are CLI mappings onto the public `rich::Theme`
 API; they add no core theme-stack behavior. `--no-color` and `NO_COLOR` still apply.
 
+### Load an upstream theme file
+
+`--theme-file PATH` reads a theme file in upstream rich's format, the one
+`Theme.read` loads and `Theme.config` writes: a `[styles]` section of
+`name = style` lines.
+
+```ini
+[styles]
+notice = bold cyan
+repr.number = underline magenta
+```
+
+```bash
+rich --theme-file night.ini --print '[notice]Ready[/] in 42 ms'
+```
+
+The styles layer onto the built-in theme, and later layers override earlier ones:
+
+1. The built-in default theme.
+2. `--theme-file`, or `theme_file` in the config.
+3. The selected config theme (`theme`, `--profile`, `--theme NAME`).
+4. `--theme-style NAME=STYLE` bindings.
+
+A `theme_file` in a config file is relative to that config file, so the config
+works from any directory; an explicit `--theme-file` replaces it. A file that
+cannot be read or parsed stops with a usage error (exit 2) that names the file
+and, where there is one, the line, for example
+`--theme-file night.ini: line 4: style syntax error: …`. The file is parsed with
+the same `configparser` rules as upstream: names are lower-cased, `;` and `#`
+lines are comments, and `[DEFAULT]` options apply to `[styles]`.
+
 ## Viewers
 
 These commands are ours; upstream has none of them.
@@ -1032,7 +1090,8 @@ conversion and includes contain padding. Transform flags require still-image
 mode. Bayer requires ANSI256 ASCII or blocks. Defaults remain unchanged.
 
 Config keys are `image_rotate` (integer), `image_flip_horizontal`,
-`image_flip_vertical`, `image_grayscale` (booleans), and `image_dither` (string).
+`image_flip_vertical`, `image_grayscale` (booleans), `image_dither` and
+`image_color_distance` (strings).
 CLI flags override config, including `--no-image-flip-horizontal`,
 `--no-image-flip-vertical` and `--no-image-grayscale`. Batch workers inherit the
 resolved options. HTML/SVG exports render against an explicit noninteractive

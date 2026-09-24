@@ -390,6 +390,9 @@ struct Cli {
     image_gamma: Option<f32>,
     log_presentation: String,
     theme_styles: std::collections::BTreeMap<String, Style>,
+    /// `--theme-file PATH`: styles from an upstream `[styles]` theme file,
+    /// layered under config themes and `--theme-style`.
+    theme_file_styles: std::collections::BTreeMap<String, Style>,
     /// `--height N`: with `--image`, render this many rows instead of the
     /// backend's default.
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
@@ -539,6 +542,7 @@ const VALUE_OPTIONS: &[&str] = &[
     "--height",
     "--theme",
     "--theme-style",
+    "--theme-file",
     "--image-color",
     "--image-dither",
     "--image-color-distance",
@@ -1107,6 +1111,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut image_gamma = None;
     let mut log_presentation = String::from("plain");
     let mut theme_styles = std::collections::BTreeMap::new();
+    let mut theme_file_styles = std::collections::BTreeMap::new();
     let mut height = None;
     let mut extensions = CliExtensions::default();
     let mut data = inspect::DataOptions::default();
@@ -1227,6 +1232,10 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                 let style = Style::parse(value)
                     .map_err(|error| format!("invalid theme style {name}: {error}"))?;
                 theme_styles.insert(name.to_owned(), style);
+            }
+            "--theme-file" => {
+                let path = iter.next().ok_or("--theme-file requires PATH")?;
+                theme_file_styles = read_theme_file(path)?;
             }
             "--image-color" => {
                 const USAGE: &str =
@@ -1899,6 +1908,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             ),
             ("--width", demo && width.is_some()),
             ("--theme-style", demo && !theme_styles.is_empty()),
+            ("--theme-file", demo && !theme_file_styles.is_empty()),
             (
                 "--hyperlinks",
                 hyperlinks && (effective_mode.streams_records() || demo),
@@ -1947,6 +1957,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         image_gamma,
         log_presentation,
         theme_styles,
+        theme_file_styles,
         height,
         extensions,
         width,
@@ -2746,12 +2757,64 @@ fn run_once(cli: Cli) -> ExitCode {
     run_once_with_fetch(cli, None)
 }
 
+/// The console theme: the default theme, then `--theme-file`, then config
+/// themes and `--theme-style` bindings, each overriding the one before.
 fn cli_theme(cli: &Cli) -> rich::Theme {
     let mut theme = rich::Theme::default_theme();
-    for (name, style) in &cli.theme_styles {
+    for (name, style) in cli.theme_file_styles.iter().chain(&cli.theme_styles) {
         theme.insert(name.clone(), style.clone());
     }
     theme
+}
+
+impl Cli {
+    /// Whether any option changes the console theme.
+    fn themed(&self) -> bool {
+        !self.theme_styles.is_empty() || !self.theme_file_styles.is_empty()
+    }
+}
+
+/// Read an upstream theme file (`Theme.read`: a `[styles]` section of
+/// `name = style` lines). Errors name the file and, where the file has one,
+/// the offending line.
+fn read_theme_file(path: &str) -> Result<std::collections::BTreeMap<String, Style>, String> {
+    let text =
+        std::fs::read_to_string(path).map_err(|err| format!("--theme-file {path}: {err}"))?;
+    let theme = rich::Theme::from_file(&text, false).map_err(|err| match &err {
+        // Structural errors already say which line.
+        rich::errors::RichError::ThemeConfig(_) => format!("--theme-file {path}: {err}"),
+        _ => match bad_style_line(&text) {
+            Some(line) => format!("--theme-file {path}: line {line}: {err}"),
+            None => format!("--theme-file {path}: {err}"),
+        },
+    })?;
+    Ok(theme
+        .names()
+        .filter_map(|name| Some((name.to_owned(), theme.get(name)?.clone())))
+        .collect())
+}
+
+/// The 1-based line of the first `name = style` in `[styles]` whose style
+/// does not parse, for pointing at a style error.
+fn bad_style_line(text: &str) -> Option<usize> {
+    let mut in_styles = false;
+    for (index, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_styles = trimmed.eq_ignore_ascii_case("[styles]");
+            continue;
+        }
+        if !in_styles || trimmed.starts_with(['#', ';']) || line.starts_with([' ', '\t']) {
+            continue;
+        }
+        let Some((_, value)) = trimmed.split_once(['=', ':']) else {
+            continue;
+        };
+        if Style::parse(value.trim()).is_err() {
+            return Some(index + 1);
+        }
+    }
+    None
 }
 
 fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)>) -> ExitCode {
@@ -2815,7 +2878,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     // Modes that render incrementally write directly to the console instead of
     // composing one renderable, so no `ForceWidth` wrapper can reach them.
     let mut builder = Console::builder().no_color(cli.no_color);
-    if !cli.theme_styles.is_empty() {
+    if cli.themed() {
         builder = builder.theme(cli_theme(&cli));
     }
     // Parallel workers spool output, but render for the parent's destination.
@@ -5080,7 +5143,7 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
 
     // `play` needs its own console (it moves into the Live display).
     let mut builder = Console::builder().no_color(cli.no_color);
-    if !cli.theme_styles.is_empty() {
+    if cli.themed() {
         builder = builder.theme(cli_theme(cli));
     }
     // Parallel workers spool output, but render for the parent's destination.

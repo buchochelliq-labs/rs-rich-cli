@@ -12,16 +12,17 @@ covered by the snapshot and golden tests.
 ## What it covers
 
 The tool writes its own sample files into a temporary directory (the same files
-the [walkthrough](walkthrough.md) uses) and runs 75 cases:
+the [walkthrough](walkthrough.md) uses) and runs 86 cases:
 
 | Area | Cases |
 |---|---|
 | Render modes | `print` (argument and stdin), Markdown (auto and `markdown --hyperlinks`), syntax (auto and `syntax --width`), JSON, CSV (file and stdin), notebook, `jsonl`, `log` (plain, `--log-presentation rich`, stdin), `rule`, `--format auto` on piped JSON, YAML and plain text |
 | Structured data | `inspect` with no option, `--select`, `--find`, `--flatten`, `--redact`, `--compare`, and JSON from stdin |
 | Text diffs | two files, `--side-by-side`, a patch on stdin, and a failing `--threshold` (exit 5) |
-| Art | `image` in blocks, ASCII, quadrants and Braille; `--image-fit cover` with an anchor; `--image-background`; `--image-color ansi16 --image-dither bayer4x4`; rotation, grayscale and contrast; `gif`; an image `diff` and a failing image gate (exit 5) |
+| Art | `image` in blocks, ASCII, quadrants and Braille; `--image-fit cover` with an anchor; `--image-background` with a colour, `default` and `checkerboard`; `--image-color ansi16 --image-dither bayer4x4`, and `atkinson` with `--image-color-distance oklab`; rotation, grayscale and contrast; `gif`; an image `diff` and a failing image gate (exit 5) |
 | Escapes | `ansi explain`, `--ansi-inline`, `--sanitize` |
-| Layout and export | panel with title, caption, padding and border style; centring with a fixed width and style; `--export-html` (checks the file); a named theme and `--theme-style` |
+| Viewers | `view` on source with `--search`, Markdown and JSON from stdin; `hex` with a search; `unicode`; `env` with masking; `capture` |
+| Layout and export | panel with title, caption, padding and border style; centring with a fixed width and style; `--export-html` (checks the file); a named theme, `--theme-style` and `--theme-file` |
 | Workflows | `--pager` (with `PAGER=cat`; redirected output is not paged), `--watch` on two files (renders once when redirected), `--batch --dry-run`, and a real `--batch --jobs 2` (checks both HTML files) |
 | Configuration | `config validate`, `config show`, `config explain KEY`, `config reference`, and an invalid config (exit 2) |
 | Generated docs | `--help`, `--version`, completions for bash, zsh, fish and PowerShell, `docs markdown`, `docs config`, `docs man` (checks `rich.1`) |
