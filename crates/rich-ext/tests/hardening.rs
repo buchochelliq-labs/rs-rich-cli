@@ -198,8 +198,15 @@ fn env_view_masks_secret_values_whatever_the_name() {
         .map(|(k, v)| (k.to_string(), v.to_string())),
     );
     let out = plain(&env, 120);
-    for secret in ["hunter2", ":pw@", "sk_live_0123", "eyJhbGci"] {
-        assert!(!out.contains(secret), "{secret} shown:\n{out}");
+    // Name the secret by index and offset: printing it (or the output) on
+    // failure would log the very value the view should have masked.
+    for (index, secret) in ["hunter2", ":pw@", "sk_live_0123", "eyJhbGci"]
+        .iter()
+        .enumerate()
+    {
+        if let Some(at) = out.find(secret) {
+            panic!("secret #{index} shown at byte {at}");
+        }
     }
     assert!(out.contains("postgres://admin:"), "{out}");
     assert!(out.contains("@db/x"), "{out}");
