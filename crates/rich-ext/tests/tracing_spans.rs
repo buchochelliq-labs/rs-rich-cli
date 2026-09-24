@@ -384,3 +384,27 @@ fn live_output_prints_above_the_regions() {
     let after = text[log..].matches("progress 50%").count();
     assert_eq!((before, after), (1, 1), "{text:?}");
 }
+
+/// `span.record` replaces a field in place, `message` included, as tracing's
+/// record semantics say; it used to append a second `message`.
+#[test]
+fn recording_a_span_field_replaces_it_in_place() {
+    let sink = Arc::new(Sink::default());
+    let subscriber = tracing_subscriber::registry().with(EventLayer::new(sink.clone()));
+    tracing::subscriber::with_default(subscriber, || {
+        let span = tracing::info_span!("s", message = "first", k = 2i64);
+        let _span = span.enter();
+        span.record("message", "second");
+        span.record("k", 3i64);
+        span.record("message", "third");
+        tracing::info!("inside");
+    });
+    let events = sink.0.lock().unwrap();
+    assert_eq!(
+        events[0].span_context()[0].fields,
+        [
+            ("message".to_string(), Value::String("third".into())),
+            ("k".to_string(), Value::Integer(3)),
+        ]
+    );
+}
