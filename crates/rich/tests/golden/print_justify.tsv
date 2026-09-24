@@ -1,0 +1,18 @@
+# Golden parity fixtures for print-level justify of a printed Text — captured
+# from real Python `rich`. Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>	<width>	<justify>	<expected output as JSON>
+# Captured via `Console.print(text, justify=...)`. `Console.print` passes the
+# text through `Text("").join([text])`, which turns the text's base style into
+# a leading span: the justify padding is therefore left unstyled.
+# Console: force_terminal=True, color_system="truecolor", highlight=False.
+# The Rust test builds the text matching each <name>; keep them in sync.
+base_style_center	10	center	"    \u001b[41mhi\u001b[0m    \n"
+base_style_right	10	right	"        \u001b[41mhi\u001b[0m\n"
+base_style_left	10	left	"\u001b[41mhi\u001b[0m        \n"
+base_style_default	10	default	"\u001b[41mhi\u001b[0m\n"
+base_style_and_spans_center	11	center	"   \u001b[1;31mab\u001b[0m\u001b[1m cd\u001b[0m   \n"
+base_style_wrapped_center	8	center	" \u001b[44mhello\u001b[0m  \n \u001b[44mworld\u001b[0m  \n"
+base_style_full	8	full	"\u001b[44maa\u001b[0m\u001b[44m \u001b[0m\u001b[44mbb\u001b[0m\u001b[44m \u001b[0m\u001b[44mcc\u001b[0m\n\u001b[44mdd\u001b[0m\n"
+base_style_multiline_right	6	right	"     \u001b[42ma\u001b[0m\n   \u001b[42mbcd\u001b[0m\n"
+markup_span_center	10	center	"    \u001b[41mhi\u001b[0m    \n"

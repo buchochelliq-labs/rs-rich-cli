@@ -335,6 +335,19 @@ fn vpad_table(
     table
 }
 
+/// `_zero_width_table` in scripts/capture_golden.py: `padding=(vertical,
+/// horizontal)`, squeezed until its columns have no content width.
+fn zero_width_table(vertical: usize, horizontal: usize) -> Table {
+    let mut table = Table::new()
+        .box_set(SQUARE)
+        .padding(vertical, horizontal, vertical, horizontal);
+    table.add_column("h");
+    table.add_column("i");
+    table.add_row(&["a", "b"]);
+    table.add_row(&["c", "d"]);
+    table
+}
+
 fn table_style_table() -> Table {
     let mut table = Table::new()
         .box_set(SQUARE)
@@ -686,6 +699,16 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "panel_fit_tree" => Box::new(Panel::fit(Box::new(markup_tree()))),
         "align_table" => Box::new(Align::center(Box::new(sample_table(SQUARE)))),
         "align_panel_fit" => Box::new(Align::right(Box::new(Panel::fit(text_box("x"))))),
+        "table_zero_width_p10_w2" => Box::new(zero_width_table(1, 0)),
+        "table_zero_width_p21_w1"
+        | "table_zero_width_p21_w2"
+        | "table_zero_width_p21_w3"
+        | "table_zero_width_p21_w5"
+        | "table_zero_width_p21_w7" => Box::new(zero_width_table(2, 1)),
+        "panel_fit_zero_width_table_w6" => {
+            Box::new(Panel::fit(Box::new(zero_width_table(1, 0))).box_set(SQUARE))
+        }
+        "panel_fit_zero_width_table_p21_w6" => Box::new(Panel::fit(Box::new(zero_width_table(2, 1)))),
         // Highlighting console (highlight_renderables.tsv).
         "columns_highlight" => Box::new(Columns::from_cells(vec![
             "n = 1".into(),
@@ -1671,7 +1694,7 @@ fn progress_time_parity() {
         );
         checked += 1;
     }
-    assert_eq!(checked, 21, "expected every progress time case to run");
+    assert_eq!(checked, 23, "expected every progress time case to run");
 }
 
 /// Spinner and Status frames and LiveRender control sequences (#15): the same
@@ -2366,4 +2389,131 @@ fn theme_stack_parity() {
         checked += 1;
     }
     assert_eq!(checked, 9, "expected every theme stack case to run");
+}
+
+/// A generic parser for the JSON-output fixtures: skips comments and blank
+/// lines, splits each line into `fields` tab-separated columns, and hands the
+/// (1-based line number, columns) pairs back.
+fn tsv_rows(data: &str, fields: usize) -> Vec<(usize, Vec<&str>)> {
+    data.lines()
+        .enumerate()
+        .map(|(index, raw)| (index + 1, raw.trim_end_matches('\r')))
+        .filter(|(_, line)| !line.trim().is_empty() && !line.starts_with('#'))
+        .map(|(number, line)| {
+            let columns: Vec<&str> = line.splitn(fields, '\t').collect();
+            assert_eq!(
+                columns.len(),
+                fields,
+                "line {number}: expected {fields} columns"
+            );
+            (number, columns)
+        })
+        .collect()
+}
+
+/// Link, image and autolink destinations go through markdown-it's
+/// `normalizeLink` (and autolink text through `normalizeLinkText`) upstream:
+/// percent-encoded, punycoded hosts, and no raw control bytes in an OSC 8.
+#[test]
+fn markdown_links_parity() {
+    let rows = tsv_rows(include_str!("golden/markdown_links.tsv"), 4);
+    for (line, columns) in &rows {
+        let name = columns[0];
+        let source: String = serde_json::from_str(columns[1]).expect("source json");
+        let hyperlinks = columns[2] == "true";
+        let expected: String = serde_json::from_str(columns[3]).expect("expected json");
+        let console = truecolor_console(60);
+        let got = console.capture(|c| c.print(&Markdown::new(&source).hyperlinks(hyperlinks)));
+        assert_eq!(
+            got, expected,
+            "markdown link case {name:?} hyperlinks={hyperlinks} (line {line}) diverged"
+        );
+    }
+    assert_eq!(rows.len(), 38, "expected every markdown link case to run");
+}
+
+/// `format(value, spec)` for the values a `TextColumn` template reaches,
+/// against a few thousand cases swept through CPython.
+#[test]
+fn pyformat_parity() {
+    use rich::pyformat::{format_value, FormatValue};
+    let rows = tsv_rows(include_str!("golden/pyformat.tsv"), 3);
+    let mut failures = Vec::new();
+    for (line, columns) in &rows {
+        let value: serde_json::Value = serde_json::from_str(columns[0]).expect("value json");
+        let spec: String = serde_json::from_str(columns[1]).expect("spec json");
+        let expected: Option<String> = serde_json::from_str(columns[2]).expect("expected json");
+        let (kind, raw) = value.as_object().unwrap().iter().next().unwrap();
+        let value = match kind.as_str() {
+            "float" => FormatValue::Float(raw.as_str().unwrap().parse().expect("float repr")),
+            "int" => FormatValue::Int(raw.as_i64().unwrap()),
+            "str" => FormatValue::Str(raw.as_str().unwrap().to_string()),
+            "bool" => FormatValue::Bool(raw.as_bool().unwrap()),
+            "none" => FormatValue::None,
+            other => panic!("line {line}: unknown value kind {other:?}"),
+        };
+        let got = format_value(&value, &spec);
+        if got != expected {
+            failures.push(format!(
+                "line {line}: format({value:?}, {spec:?}) = {got:?}, Python {expected:?}"
+            ));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} of {} format() cases diverged:\n{}",
+        failures.len(),
+        rows.len(),
+        failures.join("\n")
+    );
+    assert!(rows.len() > 3000, "expected the full format() sweep");
+}
+
+/// The text matching a `print_justify.tsv` case. Must stay in sync with
+/// `PRINT_JUSTIFY_CASES` in `scripts/capture_golden.py`.
+fn build_print_justify_text(name: &str) -> Text {
+    match name {
+        "base_style_center" | "base_style_right" | "base_style_left" | "base_style_default" => {
+            Text::styled("hi", "on red")
+        }
+        "base_style_and_spans_center" => {
+            let mut text = Text::styled("ab cd", "bold");
+            text.stylize("red", 0, 2);
+            text
+        }
+        "base_style_wrapped_center" => Text::styled("hello world", "on blue"),
+        "base_style_full" => Text::styled("aa bb cc dd", "on blue"),
+        "base_style_multiline_right" => Text::styled("a\nbcd", "on green"),
+        "markup_span_center" => Text::from_markup("[on red]hi[/]").unwrap(),
+        other => panic!("no print_justify builder for {other:?}"),
+    }
+}
+
+/// `Console.print(text, justify=…)`: upstream's `Text("").join([text])` makes
+/// the base style a leading span, so the justify padding stays unstyled.
+#[test]
+fn print_justify_parity() {
+    let rows = tsv_rows(include_str!("golden/print_justify.tsv"), 4);
+    for (line, columns) in &rows {
+        let name = columns[0];
+        let width: usize = columns[1].parse().expect("width");
+        let justify = match columns[2] {
+            "default" => Justify::Default,
+            "left" => Justify::Left,
+            "center" => Justify::Center,
+            "right" => Justify::Right,
+            "full" => Justify::Full,
+            other => panic!("line {line}: unknown justify {other:?}"),
+        };
+        let expected: String = serde_json::from_str(columns[3]).expect("expected json");
+        let console = truecolor_console(width);
+        let mut options = console.options();
+        options.justify = justify;
+        let got = console.render_export_with(&build_print_justify_text(name), &options);
+        assert_eq!(
+            got, expected,
+            "print justify case {name:?} (line {line}) diverged"
+        );
+    }
+    assert_eq!(rows.len(), 9, "expected every print justify case to run");
 }

@@ -365,6 +365,9 @@ mod config_file {
 
     pub(super) fn parse(text: &str) -> Result<Sections> {
         let mut sections: Sections = Vec::new();
+        // The option names of each section, so a duplicate is found without
+        // rescanning the section (which made large files quadratic).
+        let mut seen: Vec<std::collections::HashSet<String>> = Vec::new();
         // The option most recently started, as (section index, option index,
         // indentation of its first line); indented lines continue it.
         let mut open: Option<(usize, usize, usize)> = None;
@@ -398,6 +401,7 @@ mod config_file {
                     ));
                 }
                 sections.push((name, Vec::new()));
+                seen.push(std::collections::HashSet::new());
                 open = None;
                 continue;
             }
@@ -419,8 +423,7 @@ mod config_file {
             // `optionxform` lower-cases option names.
             let name = stripped[..split].trim().to_lowercase();
             let value = stripped[split + 1..].trim().to_string();
-            let options = &mut sections[section].1;
-            if options.iter().any(|(existing, _)| *existing == name) {
+            if !seen[section].insert(name.clone()) {
                 return Err(error(
                     "DuplicateOptionError",
                     format_args!(
@@ -430,6 +433,7 @@ mod config_file {
                     ),
                 ));
             }
+            let options = &mut sections[section].1;
             options.push((name, value));
             open = Some((section, options.len() - 1, indent));
         }
@@ -447,21 +451,38 @@ mod config_file {
         };
         let own = find("styles").ok_or_else(|| error("NoSectionError", "No section: 'styles'"))?;
         let mut merged = find("DEFAULT").unwrap_or_default();
+        // Name -> position in `merged`, keeping configparser's order: the
+        // `[DEFAULT]` options first, then the section's new ones.
+        let mut index: std::collections::HashMap<String, usize> = merged
+            .iter()
+            .enumerate()
+            .map(|(position, (name, _))| (name.clone(), position))
+            .collect();
         for (name, value) in own {
-            match merged.iter_mut().find(|(existing, _)| *existing == name) {
-                Some(slot) => slot.1 = value,
-                None => merged.push((name, value)),
+            match index.get(&name) {
+                Some(&position) => merged[position].1 = value,
+                None => {
+                    index.insert(name.clone(), merged.len());
+                    merged.push((name, value));
+                }
             }
         }
-        let lookup = merged.clone();
+        let lookup: std::collections::HashMap<&str, &str> = merged
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str()))
+            .collect();
         merged
-            .into_iter()
-            .map(|(name, value)| Ok((name, interpolate(&value, &lookup, 0)?)))
+            .iter()
+            .map(|(name, value)| Ok((name.clone(), interpolate(value, &lookup, 0)?)))
             .collect()
     }
 
     /// `BasicInterpolation`: `%%` is `%`, `%(name)s` is another option's value.
-    fn interpolate(value: &str, options: &[(String, String)], depth: usize) -> Result<String> {
+    fn interpolate(
+        value: &str,
+        options: &std::collections::HashMap<&str, &str>,
+        depth: usize,
+    ) -> Result<String> {
         // configparser's MAX_INTERPOLATION_DEPTH.
         if depth > 10 {
             return Err(error(
@@ -485,7 +506,7 @@ mod config_file {
                     ));
                 };
                 let key = after[..close].to_lowercase();
-                let Some((_, referenced)) = options.iter().find(|(name, _)| *name == key) else {
+                let Some(referenced) = options.get(key.as_str()) else {
                     return Err(error(
                         "InterpolationMissingOptionError",
                         format_args!("bad value substitution: key '{key}' not found"),
@@ -511,6 +532,38 @@ mod config_file {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Parsing a theme file is linear: 40 000 styles (with `[DEFAULT]`
+    /// overrides and interpolation) took ~32 s in a debug build when every
+    /// option was checked against every earlier one. The bound is generous so
+    /// only a quadratic regression trips it.
+    #[test]
+    fn large_theme_files_parse_in_linear_time() {
+        const COUNT: usize = 40_000;
+        let mut config = String::from("[DEFAULT]\n");
+        for index in (0..COUNT).step_by(2) {
+            config.push_str(&format!("style{index} = red\n"));
+        }
+        config.push_str("[styles]\nbase = bold\n");
+        for index in 0..COUNT {
+            config.push_str(&format!("style{index} = %(base)s color({})\n", index % 256));
+        }
+        let started = std::time::Instant::now();
+        let theme = Theme::from_file(&config, false).expect("valid theme");
+        let elapsed = started.elapsed();
+        assert!(
+            elapsed < std::time::Duration::from_secs(8),
+            "parsing {COUNT} styles took {elapsed:?}"
+        );
+        assert_eq!(theme.styles.len(), COUNT + 1);
+        assert_eq!(
+            theme.get("style39999"),
+            Some(&Style::parse("bold color(63)").unwrap())
+        );
+        // Duplicate detection still works at scale.
+        config.push_str("style7 = blue\n");
+        assert!(Theme::from_file(&config, false).is_err());
+    }
 
     /// The theme is consulted *before* the style parser. The default theme
     /// defines bare words like `red` itself, so parse-first would make a custom

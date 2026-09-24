@@ -14,6 +14,44 @@ pub fn decimal(size: u64) -> String {
     )
 }
 
+/// [`decimal`] for a signed count. Upstream takes any `int`: a negative size
+/// is below every unit, so it prints as grouped bytes, e.g. `-1,234 bytes`.
+pub fn decimal_signed(size: i64) -> String {
+    match u64::try_from(size) {
+        Ok(size) => decimal(size),
+        Err(_) => format!("{} bytes", group_thousands(size)),
+    }
+}
+
+/// [`pick_unit_and_suffix`] for a signed size: a negative size is below the
+/// first unit (`if size < unit * base: break` on the first pass).
+pub fn pick_unit_and_suffix_signed<'a>(
+    size: i64,
+    suffixes: &[&'a str],
+    base: u64,
+) -> (u64, &'a str) {
+    match u64::try_from(size) {
+        Ok(size) => pick_unit_and_suffix(size, suffixes, base),
+        Err(_) => (1, suffixes[0]),
+    }
+}
+
+/// `f"{n:,}"`: an integer with comma thousands separators.
+fn group_thousands(n: i64) -> String {
+    let digits = n.unsigned_abs().to_string();
+    let mut grouped = String::with_capacity(digits.len() + digits.len() / 3 + 1);
+    if n < 0 {
+        grouped.push('-');
+    }
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            grouped.push(',');
+        }
+        grouped.push(digit);
+    }
+    grouped
+}
+
 /// Pick the largest unit whose value doesn't exceed `size`, returning the unit
 /// (`base**i`) and its suffix. Port of `filesize.pick_unit_and_suffix`.
 ///
@@ -75,6 +113,27 @@ mod tests {
         assert_eq!(decimal(1_000_000), "1.0 MB");
         assert_eq!(decimal(1_500_000_000), "1.5 GB");
         assert_eq!(decimal(1_000_000_000_000_000_000), "1.0 EB");
+    }
+
+    #[test]
+    fn negative_sizes_match_upstream() {
+        // Captured from real rich 15.0.0 `filesize.decimal` /
+        // `pick_unit_and_suffix` on negative ints.
+        assert_eq!(decimal_signed(-1), "-1 bytes");
+        assert_eq!(decimal_signed(-8), "-8 bytes");
+        assert_eq!(decimal_signed(-1234), "-1,234 bytes");
+        assert_eq!(decimal_signed(-1_234_567), "-1,234,567 bytes");
+        assert_eq!(decimal_signed(1), "1 byte");
+        assert_eq!(decimal_signed(1500), "1.5 kB");
+        let suffixes = &["bytes", "kB", "MB"];
+        assert_eq!(
+            pick_unit_and_suffix_signed(-5000, suffixes, 1000),
+            (1, "bytes")
+        );
+        assert_eq!(
+            pick_unit_and_suffix_signed(5000, suffixes, 1000),
+            (1000, "kB")
+        );
     }
 
     #[test]

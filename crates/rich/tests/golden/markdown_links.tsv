@@ -1,0 +1,48 @@
+# Golden parity fixtures for MARKDOWN LINK DESTINATIONS — captured from real
+# Python `rich`. Regenerate with: python scripts/capture_golden.py
+#
+# markdown-it runs every link, image and autolink destination through
+# `normalizeLink` (percent-encoding + punycode host) and an autolink's text
+# through `normalizeLinkText` before rich sees them.
+# Format: <name>	<markdown source as JSON>	<hyperlinks: true|false>	<output as JSON>
+# Console: force_terminal=True, color_system="truecolor", width=60,
+#          highlight=False. OSC 8 `id=<n>` parameters (random upstream, absent
+#          in the port) are stripped from the captured output.
+osc_in_destination	"[x](<http://a\u001b]0;PWN\u0007>) end"	false	"\u001b[94mx\u001b[0m (\u001b[4;34mhttp://a%1B%5D0;PWN%07\u001b[0m) end                              \n"
+osc_in_destination	"[x](<http://a\u001b]0;PWN\u0007>) end"	true	"\u001b]8;;http://a%1B%5D0;PWN%07\u001b\\\u001b[4;34mx\u001b[0m\u001b]8;;\u001b\\ end                                                       \n"
+idn_host_and_path	"[y](http://\u00e9.com/\u00fc)"	false	"\u001b[94my\u001b[0m (\u001b[4;34mhttp://xn--9ca.com/%C3%BC\u001b[0m)                               \n"
+idn_host_and_path	"[y](http://\u00e9.com/\u00fc)"	true	"\u001b]8;;http://xn--9ca.com/%C3%BC\u001b\\\u001b[4;34my\u001b[0m\u001b]8;;\u001b\\                                                           \n"
+space_in_angle_destination	"[z](<http://a b>)"	false	"\u001b[94mz\u001b[0m (\u001b[4;34mhttp://a%20b\u001b[0m)                                            \n"
+space_in_angle_destination	"[z](<http://a b>)"	true	"\u001b]8;;http://a%20b\u001b\\\u001b[4;34mz\u001b[0m\u001b]8;;\u001b\\                                                           \n"
+existing_escapes_kept	"[p](http://a/%41%zz%2F)"	false	"\u001b[94mp\u001b[0m (\u001b[4;34mhttp://a/%41%25zz%2F\u001b[0m)                                    \n"
+existing_escapes_kept	"[p](http://a/%41%zz%2F)"	true	"\u001b]8;;http://a/%41%25zz%2F\u001b\\\u001b[4;34mp\u001b[0m\u001b]8;;\u001b\\                                                           \n"
+uppercase_scheme_not_punycoded	"[u](HTTP://\u00e9.com)"	false	"\u001b[94mu\u001b[0m (\u001b[4;34mHTTP://%C3%A9.com\u001b[0m)                                       \n"
+uppercase_scheme_not_punycoded	"[u](HTTP://\u00e9.com)"	true	"\u001b]8;;HTTP://%C3%A9.com\u001b\\\u001b[4;34mu\u001b[0m\u001b]8;;\u001b\\                                                           \n"
+mailto_link	"[m](mailto:\u00fc@\u00e9.de)"	false	"\u001b[94mm\u001b[0m (\u001b[4;34mmailto:%C3%BC@xn--9ca.de\u001b[0m)                                \n"
+mailto_link	"[m](mailto:\u00fc@\u00e9.de)"	true	"\u001b]8;;mailto:%C3%BC@xn--9ca.de\u001b\\\u001b[4;34mm\u001b[0m\u001b]8;;\u001b\\                                                           \n"
+reference_link	"[r][1]\n\n[1]: http://\u00e9.com/\u00fc"	false	"\u001b[94mr\u001b[0m (\u001b[4;34mhttp://xn--9ca.com/%C3%BC\u001b[0m)                               \n"
+reference_link	"[r][1]\n\n[1]: http://\u00e9.com/\u00fc"	true	"\u001b]8;;http://xn--9ca.com/%C3%BC\u001b\\\u001b[4;34mr\u001b[0m\u001b]8;;\u001b\\                                                           \n"
+autolink_decodes_text	"<http://xn--9ca.com/%C3%BC%2F%25>"	false	"\u001b[94mhttp://\u00e9.com/\u00fc%2F%25\u001b[0m (\u001b[4;34mhttp://xn--9ca.com/%C3%BC%2F%25\u001b[0m)      \n"
+autolink_decodes_text	"<http://xn--9ca.com/%C3%BC%2F%25>"	true	"\u001b]8;;http://xn--9ca.com/%C3%BC%2F%25\u001b\\\u001b[4;34mhttp://\u00e9.com/\u00fc%2F%25\u001b[0m\u001b]8;;\u001b\\                                        \n"
+email_autolink	"<a+b@x.de>"	false	"\u001b[94ma+b@x.de\u001b[0m (\u001b[4;34mmailto:a+b@x.de\u001b[0m)                                  \n"
+email_autolink	"<a+b@x.de>"	true	"\u001b]8;;mailto:a+b@x.de\u001b\\\u001b[4;34ma+b@x.de\u001b[0m\u001b]8;;\u001b\\                                                    \n"
+image_destination	"![alt](<http://\u00e9.com/a b.png>)"	false	"\ud83c\udf06 alt                                                      \n"
+image_destination	"![alt](<http://\u00e9.com/a b.png>)"	true	"\ud83c\udf06 \u001b]8;;http://xn--9ca.com/a%20b.png\u001b\\alt\u001b]8;;\u001b\\                                                      \n"
+image_without_alt	"![](<http://\u00e9.com/\u00fc.png>)"	false	"\ud83c\udf06 %C3%BC.png                                               \n"
+image_without_alt	"![](<http://\u00e9.com/\u00fc.png>)"	true	"\ud83c\udf06 \u001b]8;;http://xn--9ca.com/%C3%BC.png\u001b\\%C3%BC.png\u001b]8;;\u001b\\                                               \n"
+linked_image	"[![a](http://x/\u00fc.png)](http://\u00e9.com)"	false	"\ud83c\udf06 a  (\u001b[4;34mhttp://xn--9ca.com\u001b[0m)                                  \n"
+linked_image	"[![a](http://x/\u00fc.png)](http://\u00e9.com)"	true	"\ud83c\udf06 \u001b]8;;http://xn--9ca.com\u001b\\\u001b[4;34ma\u001b[0m\u001b]8;;\u001b\\                                                        \n"
+refused_javascript_link	"[j](javascript:alert(1)) t"	false	"[j](javascript:alert(1)) t                                  \n"
+refused_javascript_link	"[j](javascript:alert(1)) t"	true	"[j](javascript:alert(1)) t                                  \n"
+refused_link_keeps_label_markup	"[*j*](vbscript:x)"	false	"[\u001b[3mj\u001b[0m](vbscript:x)                                             \n"
+refused_link_keeps_label_markup	"[*j*](vbscript:x)"	true	"[\u001b[3mj\u001b[0m](vbscript:x)                                             \n"
+refused_uppercase_file_link	"[f](FILE:///etc/passwd)"	false	"[f](FILE:///etc/passwd)                                     \n"
+refused_uppercase_file_link	"[f](FILE:///etc/passwd)"	true	"[f](FILE:///etc/passwd)                                     \n"
+refused_autolink	"<javascript:alert(1)>"	false	"<javascript:alert(1)>                                       \n"
+refused_autolink	"<javascript:alert(1)>"	true	"<javascript:alert(1)>                                       \n"
+refused_data_image	"![i](data:text/html,x)"	false	"![i](data:text/html,x)                                      \n"
+refused_data_image	"![i](data:text/html,x)"	true	"![i](data:text/html,x)                                      \n"
+allowed_data_image_link	"[ok](data:image/png;base64,xx)"	false	"\u001b[94mok\u001b[0m (\u001b[4;34mdata:image/png;base64,xx\u001b[0m)                               \n"
+allowed_data_image_link	"[ok](data:image/png;base64,xx)"	true	"\u001b]8;;data:image/png;base64,xx\u001b\\\u001b[4;34mok\u001b[0m\u001b]8;;\u001b\\                                                          \n"
+autolink_tildes_literal	"<http://a~~b~~c>"	false	"\u001b[94mhttp://a~~b~~c\u001b[0m (\u001b[4;34mhttp://a~~b~~c\u001b[0m)                             \n"
+autolink_tildes_literal	"<http://a~~b~~c>"	true	"\u001b]8;;http://a~~b~~c\u001b\\\u001b[4;34mhttp://a~~b~~c\u001b[0m\u001b]8;;\u001b\\                                              \n"
