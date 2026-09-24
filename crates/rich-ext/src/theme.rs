@@ -20,10 +20,11 @@ pub const EXTRA_STYLES: &[(&str, &str)] = &[
 ];
 
 /// Upstream's default theme plus [`EXTRA_STYLES`] and the CLI help, config
-/// and precedence styles in [`cli_doc::STYLES`](crate::cli_doc::STYLES), and
-/// the diff and test-report styles in [`diff::STYLES`](crate::diff::STYLES),
-/// and the command, task and summary styles in
-/// [`workflow::STYLES`](crate::workflow::STYLES).
+/// and precedence styles in [`cli_doc::STYLES`](crate::cli_doc::STYLES), the
+/// diff and test-report styles in [`diff::STYLES`](crate::diff::STYLES), and
+/// the workflow renderables' styles: [`workflow`](crate::workflow::STYLES),
+/// [`transfer`](crate::transfer::STYLES), [`countdown`](crate::countdown::STYLES)
+/// and [`notify`](crate::notify::STYLES).
 ///
 /// Pass to `Console::builder().theme(..)` to get `[error]`-style markup:
 ///
@@ -44,6 +45,9 @@ pub fn extended_theme() -> Theme {
         .chain(crate::cli_doc::STYLES)
         .chain(crate::diff::STYLES)
         .chain(crate::workflow::STYLES)
+        .chain(crate::transfer::STYLES)
+        .chain(crate::countdown::STYLES)
+        .chain(crate::notify::STYLES)
     {
         if let Ok(style) = Style::parse(spec) {
             theme.insert(*name, style);
@@ -67,6 +71,9 @@ mod tests {
                 + crate::cli_doc::STYLES.len()
                 + crate::diff::STYLES.len()
                 + crate::workflow::STYLES.len()
+                + crate::transfer::STYLES.len()
+                + crate::countdown::STYLES.len()
+                + crate::notify::STYLES.len()
         );
         // Upstream entries survive...
         assert!(extended.get("repr.number").is_some());
@@ -87,6 +94,9 @@ mod tests {
             .chain(crate::cli_doc::STYLES)
             .chain(crate::diff::STYLES)
             .chain(crate::workflow::STYLES)
+            .chain(crate::transfer::STYLES)
+            .chain(crate::countdown::STYLES)
+            .chain(crate::notify::STYLES)
         {
             assert!(
                 base.get(name).is_none(),
