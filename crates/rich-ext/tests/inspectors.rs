@@ -461,7 +461,8 @@ fn vars(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
 
 #[test]
 fn secret_names_are_detected() {
-    for secret in [
+    // Variable *names* that look secret; no secret values appear here.
+    for name in [
         "GITHUB_TOKEN",
         "db_password",
         "MYSQL_PASSWD",
@@ -476,7 +477,7 @@ fn secret_names_are_detected() {
         "npm-auth-x",
         "HTTP_AUTHORIZATION",
     ] {
-        assert!(is_secret_name(secret), "{secret} not secret");
+        assert!(is_secret_name(name), "{name} should be masked");
     }
     for plain in [
         "AUTHOR",
