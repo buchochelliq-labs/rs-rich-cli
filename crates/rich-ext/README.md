@@ -1,10 +1,15 @@
 # rich-ext
 
-Extensions and the internal plugin registry for the [`rich`](../rich) Rust port.
+Everything the [`rich`](https://crates.io/crates/rs-rich) Rust port adds on top
+of upstream Python `rich`: diagnostics and stack traces, structured data and
+serde helpers, checked-markup macros, `clap` and `tracing` integration, diffs
+and test reports, capability detection and accessibility, workflow renderables,
+and the extension registry. The [user guide](https://buchochelliq-labs.github.io/rs-rich-cli/guide/ext/) covers each
+module with compiled examples.
 
 ## Why this crate exists
 
-[`rich`](../rich) is a **faithful mirror** of Python `rich`: it ships upstream's
+[`rich`](https://crates.io/crates/rs-rich) is a **faithful mirror** of Python `rich`: it ships upstream's
 behaviour and nothing else, so that absorbing a new upstream release is a
 diff-and-port rather than a merge conflict.
 
@@ -100,6 +105,18 @@ traces link their locations through it.
 chained causes, into one `StackTrace` with most recent call last. Add formats
 with `Parsers::with_parser`. `stacktrace::capture` and `stacktrace::panic_hook`
 build a trace for the current thread; installing the hook is left to you.
+
+### Logging and tracing spans
+
+`RichHandler` renders log records like upstream's `RichHandler`: time, level,
+message and a linked `path:line` column. `hyperlinker(Hyperlinker)` links that
+column through editor templates and a base directory, and
+`live(coordinator)` prints above a `LiveCoordinator`'s regions so logging never
+tears a progress display (control characters are shown as inert symbols).
+`span_view(SpanView::…)` chooses how `tracing` spans appear, including
+`SpanView::Tree`, where span open and close events draw `┌ name field=value`
+and `└ name 1.20ms`. With the `tracing` feature, `EventLayer::span_open` and
+`span_close` emit those events.
 
 Enable optional `log` or `tracing` features for `adapters::LogAdapter` or
 `adapters::EventLayer`. Supply an `Arc<dyn EventSink>` and install/filter the
@@ -214,6 +231,27 @@ and benchmark capture and comparison.
   `unicode_inspect::UnicodeView` breaks text into graphemes, code points and
   widths; `env_inspect::{EnvView, PathView}` list variables with secrets masked
   and check PATH entries.
+
+### Workflow renderables
+
+For build, deploy and release tools, all in the default build:
+
+- `workflow`: `CommandRunner` runs a command and `CommandView` shows its status
+  and output; `TaskTree` / `TaskTreeView` draw nested steps; `CompletionSummary`
+  ends a run with what passed and failed.
+- `transfer`: `Transfers` and `Transfer` track downloads and uploads with rates
+  (`RateMeter`), and `TransferReader` / `TransferWriter` wrap I/O.
+- `countdown`: `CountdownBar`, `RetryStatus`, `Backoff` and `RateLimit` for
+  retries and waits; `cancel::CancelToken` stops them.
+- `notify`: `Notifications` shows transient toasts.
+- `table`: `TableData` with sorting (`SortKey`) and grouping (`GroupBy`,
+  `Aggregate`), and a `StreamingTable` for rows that keep arriving.
+- `badge` (`Badge`, `Badges`), `size_bar` (`SizeBar`) and `format` (bytes,
+  rates, durations, relative times, percentages, compact numbers).
+- `redact`: `Redactor` masks secrets (secret-named keys, bearer tokens, common
+  token prefixes, AWS key ids, JWTs, URL passwords, your own patterns) before
+  they are shown or written. **Experimental and best effort**: read redacted
+  output before sharing it.
 
 ### Coordinated Live regions
 
