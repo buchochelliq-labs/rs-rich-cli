@@ -33,7 +33,7 @@ than unsupported.
 
     ```toml
     [dependencies]
-    rs-rich = "0.0.6"
+    rs-rich = "0.0.7"
     ```
 
 !!! tip "Published on crates.io"
@@ -41,10 +41,9 @@ than unsupported.
     [`rs-rich`](https://crates.io/crates/rs-rich) ·
     [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) ·
     [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) ·
-    [`rs-rich-art`](https://crates.io/crates/rs-rich-art) — follow the links for current published versions.
+    [`rs-rich-art`](https://crates.io/crates/rs-rich-art) ·
+    [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) — follow the links for current published versions.
     API documentation is on [docs.rs](https://docs.rs/rs-rich).
-    `rs-rich-macros` is new in the 0.0.11 cohort, which is prepared but not yet
-    published.
 
 ## Check the install worked
 
@@ -84,7 +83,7 @@ package carries an `rs-` prefix. The library target keeps the short name, so the
 dependency and the `use` line differ:
 
 ```toml
-rs-rich = "0.0.6"      # the latest published release
+rs-rich = "0.0.7"      # the latest published release
 ```
 
 ```rust

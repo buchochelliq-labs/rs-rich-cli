@@ -13,8 +13,7 @@ Ctrl+C stops cleanly. See [the tour instructions](cli.md#take-the-guided-tour).
 
 [Tour MP4](assets/demos/v11-demo-tour.mp4) · [Tour GIF](assets/demos/v11-demo-tour.gif)
 
-This recording runs the 0.0.11 `rich --demo --demo-delay 0.5` (prepared, not yet
-published) in a real terminal, faster than the default three-second pace. New in
+This recording runs the 0.0.11 `rich --demo --demo-delay 0.5` in a real terminal, faster than the default three-second pace. New in
 0.0.11:
 
 - `rich inspect` drawing a structured document as a tree;

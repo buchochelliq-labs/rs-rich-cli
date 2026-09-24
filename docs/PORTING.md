@@ -9,7 +9,7 @@ plus the porting status of each. It is the lookup table used by both the
 **Parity:** ✅ golden-tested against real `rich` · — none yet
 
 **Last verified:** 2026-09-24, against Python `rich` 15.0.0, at the 0.0.11
-release test (core 0.0.7, prepared). The status column is what the golden
+release test (core 0.0.7). The status column is what the golden
 fixtures and differential sweeps measured, not an estimate — see
 [Parity](parity.md) for the figures.
 

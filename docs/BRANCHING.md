@@ -353,11 +353,13 @@ version must be uploaded with a maintainer's API token, either by hand as below
 or through the workflow with a token secret added for that one run; the
 maintainer chooses. After that, add the Trusted Publishing entry and publish
 later versions from the workflow.
-`rs-rich-macros` is in this position for 0.0.11: its `rs-rich-macros-v0.0.1`
-tag run would fail the token exchange. Publish it by hand after `rs-rich` 0.0.7
-is on crates.io (it depends on the core) and before tagging `rs-rich-ext`
-0.0.9. `rs-rich-ext`'s optional `macros` dependency must resolve on crates.io
-for its own upload. From the tagged commit on `main`:
+`rs-rich-macros` was in this position for 0.0.11: a `rs-rich-macros-v0.0.1`
+tag run would have failed the token exchange, so 0.0.1 was published by hand on
+2026-09-24, after `rs-rich` 0.0.7 was on crates.io (it depends on the core) and
+before tagging `rs-rich-ext` 0.0.9, whose optional `macros` dependency must
+resolve on crates.io for its own upload. The next new crate (planned:
+`rs-rich-lumis`, #524) follows the same steps. From the tagged commit on
+`main`:
 
 ```bash
 cargo publish -p rs-rich-macros --locked   # with a maintainer's API token

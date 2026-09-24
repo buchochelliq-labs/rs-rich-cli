@@ -17,8 +17,7 @@ what kind of failure it was:
 `rich capture` is the exception: it exits with the captured command's own
 status (128 + the signal number when a signal ended it).
 
-**Applies to** `rich 0.0.11` (`rs-rich-cli` 0.0.11, prepared but not yet
-published). If your version differs, check
+**Applies to** `rich 0.0.11` (`rs-rich-cli` 0.0.11). If your version differs, check
 [the changelog](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/CHANGELOG.md).
 
 ---

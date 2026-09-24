@@ -57,8 +57,22 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
-Cohort versions for 0.0.11 (not published): core 0.0.7, macros 0.0.1 (new),
-ext 0.0.9, art 0.0.9, CLI 0.0.11. Core changes below, so every dependent moves with it.
+Nothing yet.
+
+## Core 0.0.7 / macros 0.0.1 / ext 0.0.9 / art 0.0.9 / CLI 0.0.11 — published 2026-09-24
+
+Cohort versions for 0.0.11: core 0.0.7, macros 0.0.1 (new), ext 0.0.9, art
+0.0.9, CLI 0.0.11. Core changes below, so every dependent moves with it.
+
+- Published from `main` at `433c1b1`, one tag at a time in dependency order:
+  [`rs-rich-v0.0.7`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/36063309820),
+  then `rs-rich-macros` 0.0.1 uploaded by hand with a maintainer token (a new
+  crate cannot start with Trusted Publishing), then
+  [`rs-rich-ext-v0.0.9`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/36065371117),
+  [`rs-rich-art-v0.0.9`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/36065405590)
+  and [`rs-rich-cli-v0.0.11`](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/36065429562)
+  through Trusted Publishing. See the
+  [release notes](docs/releases/0.0.11.md#publication).
 
 ### Optional Oniguruma highlighting (`onig`)
 

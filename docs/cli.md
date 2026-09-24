@@ -8,10 +8,9 @@ looks inside bytes, characters and escape sequences (`hex`, `unicode`,
 (`capture`). This page is organised by what you are trying to do. For the
 complete list of options, see the [CLI reference](cli-reference.md).
 
-**Assumes** you can run commands in a terminal. Examples use real CLI output;
-the 0.0.11 workflows, prepared but not yet published, are documented below. See
-the [0.0.11 release notes](releases/0.0.11.md) for status and the
-[0.0.10 notes](releases/0.0.10.md) for the latest published release.
+**Assumes** you can run commands in a terminal. Examples use real CLI output
+from 0.0.11, the latest published release; see the
+[0.0.11 release notes](releases/0.0.11.md).
 
 ---
 
