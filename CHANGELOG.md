@@ -57,8 +57,8 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
-Cohort versions for 0.0.11 (not published): core 0.0.7, ext 0.0.9, art 0.0.9,
-CLI 0.0.11. Core changes below, so every dependent moves with it.
+Cohort versions for 0.0.11 (not published): core 0.0.7, macros 0.0.1 (new),
+ext 0.0.9, art 0.0.9, CLI 0.0.11. Core changes below, so every dependent moves with it.
 
 ### Release test: security, robustness and parity fixes
 
@@ -69,6 +69,32 @@ first. See the [0.0.11 release notes](docs/releases/0.0.11.md#what-the-release-t
 - **Dependencies.** `rustls` 0.23.45 for RUSTSEC-2026-0285 (reaches only the
   CLI's `fetch` feature). Core loads only syntect's bundled dumps, which drops
   the unmaintained `yaml-rust` and `plist` from the tree.
+- **Core: Markdown links (security and parity).** Link and image destinations
+  now go through a port of markdown-it's `normalizeLink`: mdurl
+  percent-encoding, plus punycode written by hand, so no new dependency. They are
+  also checked with markdown-it's `validateLink`. An escape sequence in a link can
+  no longer reach the terminal, `é.com/ü` becomes `xn--9ca.com/%C3%BC`, and
+  `javascript:`, `vbscript:`, `file:` and non-image `data:` links print as
+  literal text, as upstream does. `~~` inside an autolink is no longer
+  strikethrough. A refused reference definition still prints nothing
+  (DIVERGENCES #24).
+- **Core: parity.**
+  - A printed `Text`'s base style no longer colours justify padding.
+  - Zero-width table cells get no vertical padding.
+  - Byte columns and speeds keep negative values (`-8/100 bytes`).
+  - `TextColumn` format specs follow CPython's `format()`: 3,836 golden cases,
+    up from 509 that diverged.
+- **Core: robustness.**
+  - A `LiveProgress::refresh()` inside `with()` no longer deadlocks; a nested
+    `with()` panics with a clear message.
+  - A render panic on the live thread restores the cursor. `AutoLive::try_stop`
+    reports the panic.
+  - `ProgressBar` no longer overflows on huge totals.
+  - `Tree` renders, measures and drops without recursion, tested at 20,000
+    levels.
+  - Theme files parse in linear time.
+  - JSON deeper than 10,000 levels is an error rather than an unbounded render
+    (DIVERGENCES #25).
 - **Ext: terminal-control injection.**
   - OSC 8 links could be broken out of in three places, each letting a crafted
     path or URL set the window title:
@@ -124,6 +150,8 @@ first. See the [0.0.11 release notes](docs/releases/0.0.11.md#what-the-release-t
   - New enum variants: `unicode_inspect::Kind::Bidi`,
     `ImageArtError::{SixelTooLarge, SixelNotSupported}`.
   - `richf!` prints a value's `\[` literally; it used to unescape it.
+  - Core additions: `LivePanic`, `AutoLive::try_stop`,
+    `filesize::{decimal_signed, pick_unit_and_suffix_signed}`, `json::MAX_DEPTH`.
 
 ### Workflow renderables (0.0.11 workstream 10)
 
