@@ -242,3 +242,52 @@ fn richf_through_a_macro_rules_wrapper_captures_locals() {
     assert_eq!(wrap!("{n}{x}", n = 1).plain(), "17");
     assert_eq!(wrap!("{} {x:>w$}", "[a]", w = width).plain(), "[a]    7");
 }
+
+/// A value ending in an odd run of three or more backslashes used to escape
+/// the template's own next tag, leaving `[/]` closing nothing: a panic.
+#[test]
+fn richf_values_cannot_escape_the_templates_tags() {
+    let v = "a\\\\\\";
+    let text = richf!("{}[bold]x[/]", v);
+    assert_eq!(text.plain(), "a\\\\\\x");
+    assert!(ansi(&text).contains("\x1b[1mx"), "{:?}", ansi(&text));
+    // A backslash in the template before a value cannot turn the value's
+    // bracket into a tag either, nor can a template `[` open one with it.
+    assert_eq!(richf!("\\{}", "[b]x").plain(), "\\[b]x");
+    assert_eq!(richf!("[{}", "b]x").plain(), "[b]x");
+    // A value's own `\[` is literal text, as written.
+    assert_eq!(richf!("{}", "\\[1] \\[b]").plain(), "\\[1] \\[b]");
+}
+
+/// Values drawn from the markup-significant alphabet, in every kind of slot,
+/// always parse and print exactly as given.
+#[test]
+fn richf_values_are_always_literal_property() {
+    const ALPHABET: &[char] = &['\\', '[', ']', '/', 'a', 'b', '#', '@', ' '];
+    let mut seed: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut next = move || {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        seed
+    };
+    for _ in 0..4000 {
+        let mut value = || -> String {
+            let len = next() % 9;
+            (0..len)
+                .map(|_| ALPHABET[(next() % ALPHABET.len() as u64) as usize])
+                .collect()
+        };
+        let (a, b) = (value(), value());
+        let cases = [
+            (richf!("{}[bold]x[/]{}", a, b), format!("{a}x{b}")),
+            (richf!("[bold]{}{}[/]", a, b), format!("{a}{b}")),
+            (richf!("\\\\{}\\[b]{}", a, b), format!("\\\\{a}[b]{b}")),
+            (richf!("[i]{}[/i]\\{}[b]y[/b]", a, b), format!("{a}\\{b}y")),
+            (richf!("\\[b {}]{}", a, b), format!("[b {a}]{b}")),
+        ];
+        for (text, want) in cases {
+            assert_eq!(text.plain(), want, "a={a:?} b={b:?}");
+        }
+    }
+}

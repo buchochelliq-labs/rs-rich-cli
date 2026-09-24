@@ -23,10 +23,14 @@ mod template;
 ///
 /// Compile errors: an unbalanced, mismatched or unclosed tag; a tag that is
 /// neither a style (`bold red on blue`) nor a default theme key
-/// (`repr.number`); a malformed placeholder; an unused argument. Declare custom
+/// (`repr.number`); a malformed placeholder (the name must be an
+/// identifier); an unused argument. Declare custom
 /// theme keys first: `richf!(keys["app.title"], "[app.title]{name}[/]")`.
 ///
-/// Values are escaped, so `[` in user data is never read as markup. A
+/// Values are escaped, so `[` in user data is never read as markup, and a
+/// value cannot reach the template's own tags (a trailing `\` does not escape
+/// the next one). A `[` before a placeholder that a `]` in the value could
+/// complete as a tag is a compile error. A
 /// placeholder inside a tag (`[{color}]`) is inserted as markup instead, and
 /// that tag is checked at run time only.
 #[proc_macro]

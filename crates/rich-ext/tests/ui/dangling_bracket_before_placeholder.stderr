@@ -1,0 +1,5 @@
+error: a `[` before a placeholder is neither closed nor escaped, so a `]` in the value would complete it as a tag; write `\[` for a literal bracket
+ --> tests/ui/dangling_bracket_before_placeholder.rs:3:30
+  |
+3 |     let _ = rich_ext::richf!("[b {}", v);
+  |                              ^^^^^^^
