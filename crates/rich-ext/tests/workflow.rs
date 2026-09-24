@@ -273,7 +273,68 @@ fn helper_process() {
             std::thread::sleep(Duration::from_secs(60));
             std::process::exit(0);
         }
+        "close" => {
+            // Close both pipes, then keep running: the runner sees its
+            // readers disconnect long before the child exits.
+            writeln!(out, "closing").unwrap();
+            out.flush().unwrap();
+            err.flush().unwrap();
+            close_stdout_and_stderr();
+            std::thread::sleep(Duration::from_secs(20));
+            std::process::exit(0);
+        }
+        "parent" => {
+            // A background grandchild inherits both pipes and outlives us.
+            let mut grandchild = helper("chatter");
+            grandchild.stdin(std::process::Stdio::null());
+            grandchild.spawn().expect("the grandchild");
+            writeln!(out, "parent done").unwrap();
+            out.flush().unwrap();
+            std::process::exit(0);
+        }
+        "chatter" => {
+            // Start after the parent has exited, then never go quiet for
+            // long; stop once the reader has gone away.
+            std::thread::sleep(Duration::from_millis(400));
+            for i in 1..=100 {
+                if writeln!(out, "bg {i}").and_then(|()| out.flush()).is_err() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            std::process::exit(0);
+        }
         _ => std::process::exit(2),
+    }
+}
+
+/// Close the process's own stdout and stderr handles. Std has no safe way to
+/// close them, and the test needs a child that outlives its pipes.
+#[cfg(unix)]
+#[allow(unsafe_code)]
+fn close_stdout_and_stderr() {
+    use std::os::fd::{FromRawFd, OwnedFd};
+    // SAFETY: the helper never touches fds 1 and 2 again before exiting.
+    unsafe {
+        drop(OwnedFd::from_raw_fd(1));
+        drop(OwnedFd::from_raw_fd(2));
+    }
+}
+
+/// Close the process's own stdout and stderr handles. Std has no safe way to
+/// close them, and the test needs a child that outlives its pipes.
+#[cfg(windows)]
+#[allow(unsafe_code)]
+fn close_stdout_and_stderr() {
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    // SAFETY: the helper never touches its std handles again before exiting.
+    unsafe {
+        drop(OwnedHandle::from_raw_handle(
+            std::io::stdout().as_raw_handle(),
+        ));
+        drop(OwnedHandle::from_raw_handle(
+            std::io::stderr().as_raw_handle(),
+        ));
     }
 }
 
@@ -343,6 +404,67 @@ fn runner_cancellation_kills_the_child() {
     assert!(has(&record, Stream::Stdout, "ready"), "{record:?}");
     // Killed long before the helper's 60 s sleep ends.
     assert!(record.duration < Duration::from_secs(30), "{record:?}");
+}
+
+#[test]
+fn runner_cancels_and_ticks_after_the_child_closes_its_pipes() {
+    let token = CancelToken::new();
+    let trigger = token.clone();
+    let canceller = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(800));
+        trigger.cancel();
+    });
+    let mut after_close = 0;
+    let record = CommandRunner::new()
+        .cancel(token)
+        .tick(Duration::from_millis(20))
+        .on_update(|record| {
+            if record.lines.iter().any(|line| line.text == "closing") {
+                after_close += 1;
+            }
+        })
+        .run(&mut helper("close"));
+    canceller.join().unwrap();
+    assert_eq!(record.status, CommandStatus::Cancelled, "{record:?}");
+    assert!(has(&record, Stream::Stdout, "closing"), "{record:?}");
+    // Killed long before the helper's 20 s sleep ends, and the view kept
+    // ticking while the pipes were closed.
+    assert!(record.duration < Duration::from_secs(10), "{record:?}");
+    assert!(
+        after_close > 5,
+        "{after_close} updates after the pipes closed"
+    );
+}
+
+#[test]
+fn runner_grace_period_runs_from_the_exit_not_the_last_line() {
+    let started = std::time::Instant::now();
+    let record = CommandRunner::new()
+        .tick(Duration::from_millis(20))
+        .run(&mut helper("parent"));
+    assert_eq!(record.status, CommandStatus::Exited(0), "{record:?}");
+    assert!(has(&record, Stream::Stdout, "parent done"), "{record:?}");
+    // The grandchild prints for ten seconds; the runner stops about a second
+    // after the parent exits however chatty it is.
+    assert!(started.elapsed() < Duration::from_secs(4), "{record:?}");
+    assert!(has(&record, Stream::Stdout, "bg 1"), "{record:?}");
+}
+
+#[test]
+fn runner_does_not_cancel_a_child_that_has_exited() {
+    let token = CancelToken::new();
+    let trigger = token.clone();
+    let record = CommandRunner::new()
+        .cancel(token)
+        .tick(Duration::from_millis(20))
+        .on_update(move |record| {
+            // The grandchild's first line comes well after the parent exits.
+            if record.lines.iter().any(|line| line.text == "bg 1") {
+                trigger.cancel();
+            }
+        })
+        .run(&mut helper("parent"));
+    assert_eq!(record.status, CommandStatus::Exited(0), "{record:?}");
 }
 
 #[test]
