@@ -1,0 +1,118 @@
+<svg class="rich-terminal" viewBox="0 0 872 391.59999999999997" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .guide_workflow-tree-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .guide_workflow-tree-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .guide_workflow-tree-r1 { fill: #c5c8c6;font-weight: bold }
+.guide_workflow-tree-r2 { fill: #c5c8c6 }
+.guide_workflow-tree-r3 { fill: #868887 }
+.guide_workflow-tree-r4 { fill: #98a84b;font-weight: bold }
+.guide_workflow-tree-r5 { fill: #68a0b3;font-weight: bold }
+.guide_workflow-tree-r6 { fill: #d0b344;font-weight: bold }
+.guide_workflow-tree-r7 { fill: #c5c8c6;font-style: italic; }
+.guide_workflow-tree-r8 { fill: #68a0b3 }
+.guide_workflow-tree-r9 { fill: #868887;font-style: italic; }
+    </style>
+
+    <defs>
+    <clipPath id="guide_workflow-tree-clip-terminal">
+      <rect x="0" y="0" width="853.0" height="340.59999999999997" />
+    </clipPath>
+    <clipPath id="guide_workflow-tree-line-0">
+    <rect x="0" y="1.5" width="854" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_workflow-tree-line-1">
+    <rect x="0" y="25.9" width="854" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_workflow-tree-line-2">
+    <rect x="0" y="50.3" width="854" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_workflow-tree-line-3">
+    <rect x="0" y="74.7" width="854" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_workflow-tree-line-4">
+    <rect x="0" y="99.1" width="854" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_workflow-tree-line-5">
+    <rect x="0" y="123.5" width="854" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_workflow-tree-line-6">
+    <rect x="0" y="147.9" width="854" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_workflow-tree-line-7">
+    <rect x="0" y="172.3" width="854" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_workflow-tree-line-8">
+    <rect x="0" y="196.7" width="854" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_workflow-tree-line-9">
+    <rect x="0" y="221.1" width="854" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_workflow-tree-line-10">
+    <rect x="0" y="245.5" width="854" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_workflow-tree-line-11">
+    <rect x="0" y="269.9" width="854" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_workflow-tree-line-12">
+    <rect x="0" y="294.3" width="854" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="870" height="389.6" rx="8"/><text class="guide_workflow-tree-title" fill="#c5c8c6" text-anchor="middle" x="435" y="27">rich-ext</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#guide_workflow-tree-clip-terminal)">
+    
+    <g class="guide_workflow-tree-matrix">
+    <text class="guide_workflow-tree-r1" x="0" y="20" textLength="73.2" clip-path="url(#guide_workflow-tree-line-0)">Deploy</text><text class="guide_workflow-tree-r2" x="854" y="20" textLength="12.2" clip-path="url(#guide_workflow-tree-line-0)">
+</text><text class="guide_workflow-tree-r3" x="0" y="44.4" textLength="48.8" clip-path="url(#guide_workflow-tree-line-1)">├──&#160;</text><text class="guide_workflow-tree-r4" x="48.8" y="44.4" textLength="48.8" clip-path="url(#guide_workflow-tree-line-1)">✔&#160;ok</text><text class="guide_workflow-tree-r2" x="97.6" y="44.4" textLength="97.6" clip-path="url(#guide_workflow-tree-line-1)">&#160;build&#160;&#160;</text><text class="guide_workflow-tree-r3" x="195.2" y="44.4" textLength="61" clip-path="url(#guide_workflow-tree-line-1)">12.4s</text><text class="guide_workflow-tree-r2" x="854" y="44.4" textLength="12.2" clip-path="url(#guide_workflow-tree-line-1)">
+</text><text class="guide_workflow-tree-r3" x="0" y="68.8" textLength="97.6" clip-path="url(#guide_workflow-tree-line-2)">│&#160;&#160;&#160;├──&#160;</text><text class="guide_workflow-tree-r4" x="97.6" y="68.8" textLength="48.8" clip-path="url(#guide_workflow-tree-line-2)">✔&#160;ok</text><text class="guide_workflow-tree-r2" x="146.4" y="68.8" textLength="122" clip-path="url(#guide_workflow-tree-line-2)">&#160;compile&#160;&#160;</text><text class="guide_workflow-tree-r3" x="268.4" y="68.8" textLength="48.8" clip-path="url(#guide_workflow-tree-line-2)">9.2s</text><text class="guide_workflow-tree-r2" x="854" y="68.8" textLength="12.2" clip-path="url(#guide_workflow-tree-line-2)">
+</text><text class="guide_workflow-tree-r3" x="0" y="93.2" textLength="97.6" clip-path="url(#guide_workflow-tree-line-3)">│&#160;&#160;&#160;└──&#160;</text><text class="guide_workflow-tree-r4" x="97.6" y="93.2" textLength="48.8" clip-path="url(#guide_workflow-tree-line-3)">✔&#160;ok</text><text class="guide_workflow-tree-r2" x="146.4" y="93.2" textLength="85.4" clip-path="url(#guide_workflow-tree-line-3)">&#160;link&#160;&#160;</text><text class="guide_workflow-tree-r3" x="231.8" y="93.2" textLength="48.8" clip-path="url(#guide_workflow-tree-line-3)">3.2s</text><text class="guide_workflow-tree-r2" x="854" y="93.2" textLength="12.2" clip-path="url(#guide_workflow-tree-line-3)">
+</text><text class="guide_workflow-tree-r3" x="0" y="117.6" textLength="48.8" clip-path="url(#guide_workflow-tree-line-4)">├──&#160;</text><text class="guide_workflow-tree-r5" x="48.8" y="117.6" textLength="109.8" clip-path="url(#guide_workflow-tree-line-4)">⠧&#160;running</text><text class="guide_workflow-tree-r1" x="170.8" y="117.6" textLength="73.2" clip-path="url(#guide_workflow-tree-line-4)">upload</text><text class="guide_workflow-tree-r3" x="268.4" y="117.6" textLength="48.8" clip-path="url(#guide_workflow-tree-line-4)">3.0s</text><text class="guide_workflow-tree-r2" x="854" y="117.6" textLength="12.2" clip-path="url(#guide_workflow-tree-line-4)">
+</text><text class="guide_workflow-tree-r3" x="0" y="142" textLength="97.6" clip-path="url(#guide_workflow-tree-line-5)">│&#160;&#160;&#160;├──&#160;</text><text class="guide_workflow-tree-r6" x="97.6" y="142" textLength="109.8" clip-path="url(#guide_workflow-tree-line-5)">⚠&#160;warning</text><text class="guide_workflow-tree-r2" x="207.4" y="142" textLength="109.8" clip-path="url(#guide_workflow-tree-line-5)">&#160;assets&#160;&#160;</text><text class="guide_workflow-tree-r3" x="317.2" y="142" textLength="48.8" clip-path="url(#guide_workflow-tree-line-5)">1.1s</text><text class="guide_workflow-tree-r7" x="390.4" y="142" textLength="207.4" clip-path="url(#guide_workflow-tree-line-5)">2&#160;files&#160;unchanged</text><text class="guide_workflow-tree-r2" x="854" y="142" textLength="12.2" clip-path="url(#guide_workflow-tree-line-5)">
+</text><text class="guide_workflow-tree-r3" x="0" y="166.4" textLength="97.6" clip-path="url(#guide_workflow-tree-line-6)">│&#160;&#160;&#160;└──&#160;</text><text class="guide_workflow-tree-r5" x="97.6" y="166.4" textLength="109.8" clip-path="url(#guide_workflow-tree-line-6)">⠸&#160;running</text><text class="guide_workflow-tree-r1" x="219.6" y="166.4" textLength="73.2" clip-path="url(#guide_workflow-tree-line-6)">images</text><text class="guide_workflow-tree-r8" x="317.2" y="166.4" textLength="134.2" clip-path="url(#guide_workflow-tree-line-6)">21/50&#160;(42%)</text><text class="guide_workflow-tree-r3" x="475.8" y="166.4" textLength="48.8" clip-path="url(#guide_workflow-tree-line-6)">1.9s</text><text class="guide_workflow-tree-r2" x="854" y="166.4" textLength="12.2" clip-path="url(#guide_workflow-tree-line-6)">
+</text><text class="guide_workflow-tree-r3" x="0" y="190.8" textLength="48.8" clip-path="url(#guide_workflow-tree-line-7)">└──&#160;</text><text class="guide_workflow-tree-r3" x="48.8" y="190.8" textLength="109.8" clip-path="url(#guide_workflow-tree-line-7)">…&#160;pending</text><text class="guide_workflow-tree-r2" x="158.6" y="190.8" textLength="85.4" clip-path="url(#guide_workflow-tree-line-7)">&#160;verify</text><text class="guide_workflow-tree-r2" x="854" y="190.8" textLength="12.2" clip-path="url(#guide_workflow-tree-line-7)">
+</text><text class="guide_workflow-tree-r1" x="0" y="215.2" textLength="73.2" clip-path="url(#guide_workflow-tree-line-8)">Deploy</text><text class="guide_workflow-tree-r2" x="854" y="215.2" textLength="12.2" clip-path="url(#guide_workflow-tree-line-8)">
+</text><text class="guide_workflow-tree-r3" x="0" y="239.6" textLength="48.8" clip-path="url(#guide_workflow-tree-line-9)">├──&#160;</text><text class="guide_workflow-tree-r4" x="48.8" y="239.6" textLength="48.8" clip-path="url(#guide_workflow-tree-line-9)">✔&#160;ok</text><text class="guide_workflow-tree-r2" x="97.6" y="239.6" textLength="73.2" clip-path="url(#guide_workflow-tree-line-9)">&#160;build</text><text class="guide_workflow-tree-r9" x="170.8" y="239.6" textLength="134.2" clip-path="url(#guide_workflow-tree-line-9)">&#160;(+2&#160;tasks)</text><text class="guide_workflow-tree-r3" x="329.4" y="239.6" textLength="61" clip-path="url(#guide_workflow-tree-line-9)">12.4s</text><text class="guide_workflow-tree-r2" x="854" y="239.6" textLength="12.2" clip-path="url(#guide_workflow-tree-line-9)">
+</text><text class="guide_workflow-tree-r3" x="0" y="264" textLength="48.8" clip-path="url(#guide_workflow-tree-line-10)">├──&#160;</text><text class="guide_workflow-tree-r5" x="48.8" y="264" textLength="109.8" clip-path="url(#guide_workflow-tree-line-10)">▶&#160;running</text><text class="guide_workflow-tree-r1" x="170.8" y="264" textLength="73.2" clip-path="url(#guide_workflow-tree-line-10)">upload</text><text class="guide_workflow-tree-r3" x="268.4" y="264" textLength="48.8" clip-path="url(#guide_workflow-tree-line-10)">3.0s</text><text class="guide_workflow-tree-r2" x="854" y="264" textLength="12.2" clip-path="url(#guide_workflow-tree-line-10)">
+</text><text class="guide_workflow-tree-r3" x="0" y="288.4" textLength="97.6" clip-path="url(#guide_workflow-tree-line-11)">│&#160;&#160;&#160;├──&#160;</text><text class="guide_workflow-tree-r6" x="97.6" y="288.4" textLength="109.8" clip-path="url(#guide_workflow-tree-line-11)">⚠&#160;warning</text><text class="guide_workflow-tree-r2" x="207.4" y="288.4" textLength="109.8" clip-path="url(#guide_workflow-tree-line-11)">&#160;assets&#160;&#160;</text><text class="guide_workflow-tree-r3" x="317.2" y="288.4" textLength="48.8" clip-path="url(#guide_workflow-tree-line-11)">1.1s</text><text class="guide_workflow-tree-r7" x="390.4" y="288.4" textLength="207.4" clip-path="url(#guide_workflow-tree-line-11)">2&#160;files&#160;unchanged</text><text class="guide_workflow-tree-r2" x="854" y="288.4" textLength="12.2" clip-path="url(#guide_workflow-tree-line-11)">
+</text><text class="guide_workflow-tree-r3" x="0" y="312.8" textLength="97.6" clip-path="url(#guide_workflow-tree-line-12)">│&#160;&#160;&#160;└──&#160;</text><text class="guide_workflow-tree-r5" x="97.6" y="312.8" textLength="109.8" clip-path="url(#guide_workflow-tree-line-12)">▶&#160;running</text><text class="guide_workflow-tree-r1" x="219.6" y="312.8" textLength="73.2" clip-path="url(#guide_workflow-tree-line-12)">images</text><text class="guide_workflow-tree-r8" x="317.2" y="312.8" textLength="134.2" clip-path="url(#guide_workflow-tree-line-12)">21/50&#160;(42%)</text><text class="guide_workflow-tree-r3" x="475.8" y="312.8" textLength="48.8" clip-path="url(#guide_workflow-tree-line-12)">1.9s</text><text class="guide_workflow-tree-r2" x="854" y="312.8" textLength="12.2" clip-path="url(#guide_workflow-tree-line-12)">
+</text><text class="guide_workflow-tree-r3" x="0" y="337.2" textLength="48.8" clip-path="url(#guide_workflow-tree-line-13)">└──&#160;</text><text class="guide_workflow-tree-r3" x="48.8" y="337.2" textLength="109.8" clip-path="url(#guide_workflow-tree-line-13)">…&#160;pending</text><text class="guide_workflow-tree-r2" x="158.6" y="337.2" textLength="85.4" clip-path="url(#guide_workflow-tree-line-13)">&#160;verify</text><text class="guide_workflow-tree-r2" x="854" y="337.2" textLength="12.2" clip-path="url(#guide_workflow-tree-line-13)">
+</text>
+    </g>
+    </g>
+</svg>

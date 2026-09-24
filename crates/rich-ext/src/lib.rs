@@ -37,6 +37,7 @@ pub mod source_view;
 pub mod target;
 pub mod theme;
 pub mod unicode_inspect;
+pub mod workflow;
 
 pub use highlighter::NumberHighlighter;
 pub use registry::{install_defaults, ExtensionRegistry};

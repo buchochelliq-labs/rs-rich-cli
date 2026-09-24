@@ -1,0 +1,74 @@
+<svg class="rich-terminal" viewBox="0 0 872 147.6" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .guide_workflow-summary-plain-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .guide_workflow-summary-plain-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .guide_workflow-summary-plain-r1 { fill: #d0b344;font-weight: bold }
+.guide_workflow-summary-plain-r2 { fill: #c5c8c6 }
+.guide_workflow-summary-plain-r3 { fill: #c5c8c6;font-weight: bold }
+.guide_workflow-summary-plain-r4 { fill: #868887 }
+.guide_workflow-summary-plain-r5 { fill: #98a84b;font-weight: bold }
+    </style>
+
+    <defs>
+    <clipPath id="guide_workflow-summary-plain-clip-terminal">
+      <rect x="0" y="0" width="853.0" height="96.6" />
+    </clipPath>
+    <clipPath id="guide_workflow-summary-plain-line-0">
+    <rect x="0" y="1.5" width="854" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_workflow-summary-plain-line-1">
+    <rect x="0" y="25.9" width="854" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_workflow-summary-plain-line-2">
+    <rect x="0" y="50.3" width="854" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="870" height="145.6" rx="8"/><text class="guide_workflow-summary-plain-title" fill="#c5c8c6" text-anchor="middle" x="435" y="27">rich-ext</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#guide_workflow-summary-plain-clip-terminal)">
+    
+    <g class="guide_workflow-summary-plain-matrix">
+    <text class="guide_workflow-summary-plain-r1" x="0" y="20" textLength="73.2" clip-path="url(#guide_workflow-summary-plain-line-0)">[WARN]</text><text class="guide_workflow-summary-plain-r3" x="85.4" y="20" textLength="48.8" clip-path="url(#guide_workflow-summary-plain-line-0)">Lint</text><text class="guide_workflow-summary-plain-r4" x="158.6" y="20" textLength="48.8" clip-path="url(#guide_workflow-summary-plain-line-0)">6.8s</text><text class="guide_workflow-summary-plain-r2" x="854" y="20" textLength="12.2" clip-path="url(#guide_workflow-summary-plain-line-0)">
+</text><text class="guide_workflow-summary-plain-r1" x="24.4" y="44.4" textLength="122" clip-path="url(#guide_workflow-summary-plain-line-1)">2&#160;warnings</text><text class="guide_workflow-summary-plain-r2" x="146.4" y="44.4" textLength="24.4" clip-path="url(#guide_workflow-summary-plain-line-1)">,&#160;</text><text class="guide_workflow-summary-plain-r5" x="170.8" y="44.4" textLength="158.6" clip-path="url(#guide_workflow-summary-plain-line-1)">118&#160;succeeded</text><text class="guide_workflow-summary-plain-r2" x="854" y="44.4" textLength="12.2" clip-path="url(#guide_workflow-summary-plain-line-1)">
+</text><text class="guide_workflow-summary-plain-r3" x="0" y="68.8" textLength="134.2" clip-path="url(#guide_workflow-summary-plain-line-2)">Next&#160;steps:</text><text class="guide_workflow-summary-plain-r2" x="854" y="68.8" textLength="12.2" clip-path="url(#guide_workflow-summary-plain-line-2)">
+</text><text class="guide_workflow-summary-plain-r2" x="0" y="93.2" textLength="244" clip-path="url(#guide_workflow-summary-plain-line-3)">&#160;&#160;-&#160;run&#160;`lint&#160;--fix`</text><text class="guide_workflow-summary-plain-r2" x="854" y="93.2" textLength="12.2" clip-path="url(#guide_workflow-summary-plain-line-3)">
+</text>
+    </g>
+    </g>
+</svg>
