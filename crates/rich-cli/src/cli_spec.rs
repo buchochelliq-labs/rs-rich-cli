@@ -405,17 +405,18 @@ fn image_options() -> Vec<ArgSpec> {
         .config_key("image_max_height"),
         option(
             "image-background",
-            "#RRGGBB",
+            "BG",
             IMAGE,
-            "With --image: flatten transparency onto this RGB colour (also colours contain \
-             padding; quote the # in your shell)",
+            "With --image: flatten transparency onto #RRGGBB (also colours contain padding; \
+             quote the # in your shell), leave it to the terminal's background (default), or \
+             show it on a gray checkerboard (checkerboard)",
         )
         .config_key("image_background"),
         option(
             "image-color",
             "M",
             IMAGE,
-            "Colour depth, with ASCII/blocks/quadrants images",
+            "Colour depth for --image (not Braille, which is monochrome) and --gif frames",
         )
         .choices(["truecolor", "ansi256", "ansi16", "grayscale"])
         .default_value("truecolor")
@@ -426,9 +427,19 @@ fn image_options() -> Vec<ArgSpec> {
             IMAGE,
             "Dithering (needs a non-truecolor --image-color)",
         )
-        .choices(["none", "floyd-steinberg", "bayer4x4"])
+        .choices(["none", "floyd-steinberg", "bayer4x4", "atkinson"])
         .default_value("none")
         .config_key("image_dither"),
+        option(
+            "image-color-distance",
+            "M",
+            IMAGE,
+            "How the nearest palette colour is measured: encoded RGB, or perceptual OKLab \
+             (needs a non-truecolor --image-color)",
+        )
+        .choices(["rgb", "oklab"])
+        .default_value("rgb")
+        .config_key("image_color_distance"),
         option(
             "image-brightness",
             "F",
@@ -706,6 +717,14 @@ fn config_options() -> Vec<ArgSpec> {
             "Override a theme binding; repeatable and worker-safe",
         )
         .multiple(true),
+        option(
+            "theme-file",
+            "PATH",
+            CONFIG,
+            "Load styles from an upstream rich theme file ([styles] section); --theme and \
+             --theme-style override it",
+        )
+        .config_key("theme_file"),
     ]
 }
 

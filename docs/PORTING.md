@@ -148,6 +148,9 @@ and explicit overrides, not a materialized list of built-in defaults.
 | `--image-color ansi16\|grayscale` (#125) | CLI routing; art `image_color.rs` | `ImageColorMode::Ansi16` (rich `STANDARD_PALETTE`) and `Grayscale` (luma over 16/232–255/231); every dither |
 | `--image-mode quadrants` (#199) | CLI routing; art `quadrant.rs` | `ImageMode::Quadrants`, `QuadrantArt`; cheapest of eight two-colour 2×2 partitions; also draws `--diff` heatmaps |
 | `--image-fit stretch`, `--image-max-width/height`, `--image-brightness/contrast/gamma` (#126) | CLI routing; art `image_art.rs`, `transform.rs` | `ImageFit::Stretch`, `ImageArt::max_width`/`max_height`, `ImageTransforms` brightness/contrast/gamma in a fixed order |
+| `--image-dither atkinson`, `--image-color-distance`, Sixel and `--gif` colour modes (#498) | CLI routing; art `image_color.rs`, `sixel.rs`, `gif.rs` | `Dither::Atkinson`, `ColorDistance::{Rgb, Oklab}`, a fixed-palette indexed Sixel encoder, `AnimatedArt::color_mode`/`dither`/`color_distance`; Braille keeps a documented rejection |
+| `--image-background default\|checkerboard` (#126) | CLI routing; art `image_art.rs` and the text backends | `ImageBackground::{Color, TerminalDefault, Checkerboard}`; alpha kept through fitting; unpainted cells for pixels under half opacity |
+| `--theme-file`, `theme_file` (#499) | CLI main + config | Reads upstream theme files with the public `rich::Theme::from_file`; layered under config themes and `--theme-style`; no core theme-stack change |
 
 Art 0.0.7 owns fixed ANSI256 quantisation and optional Floyd–Steinberg diffusion
 on the final sampled image. Truecolor/no-dither defaults remain unchanged and

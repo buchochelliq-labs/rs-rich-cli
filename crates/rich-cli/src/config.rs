@@ -75,7 +75,12 @@ fn takes_value(arg: &str) -> bool {
     super::VALUE_OPTIONS.contains(&arg)
         || matches!(
             arg,
-            "--image-anchor" | "--interval" | "--theme-style" | "--image-color" | "--image-dither"
+            "--image-anchor"
+                | "--interval"
+                | "--theme-style"
+                | "--image-color"
+                | "--image-dither"
+                | "--image-color-distance"
         )
 }
 
@@ -176,6 +181,7 @@ const VALUE_KEYS: &[&str] = &[
     "image_background",
     "image_color",
     "image_dither",
+    "image_color_distance",
     "image_max_width",
     "image_max_height",
     "image_brightness",
@@ -183,6 +189,7 @@ const VALUE_KEYS: &[&str] = &[
     "image_gamma",
     "log_presentation",
     "format",
+    "theme_file",
 ];
 
 pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
@@ -248,7 +255,8 @@ pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
                 .is_some_and(|v| v.is_finite() && v > 0.0),
             "image_dither" => value
                 .as_str()
-                .is_some_and(|v| matches!(v, "none" | "floyd-steinberg" | "bayer4x4")),
+                .is_some_and(|v| matches!(v, "none" | "floyd-steinberg" | "bayer4x4" | "atkinson")),
+            "image_color_distance" => value.as_str().is_some_and(|v| matches!(v, "rgb" | "oklab")),
             "image_fit" => value
                 .as_str()
                 .is_some_and(|v| matches!(v, "contain" | "cover" | "stretch")),
@@ -266,11 +274,9 @@ pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
                         | "bottom-right"
                 )
             }),
-            "image_background" => value.as_str().is_some_and(|v| {
-                v.len() == 7
-                    && v.starts_with('#')
-                    && v.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit)
-            }),
+            "image_background" => value
+                .as_str()
+                .is_some_and(|v| super::ImageBackdrop::parse(v).is_some()),
             "panel" => value.as_str().is_some_and(|v| {
                 matches!(
                     v.to_ascii_lowercase().as_str(),
@@ -282,6 +288,7 @@ pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
                 matches!(parts.len(), 1 | 2 | 4)
                     && parts.iter().all(|p| p.trim().parse::<usize>().is_ok())
             }),
+            "theme_file" => value.as_str().is_some_and(|v| !v.is_empty()),
             "export_html" | "export_svg" | "batch_input_root" | "batch_name_template" => {
                 value.is_str()
             }
@@ -450,6 +457,20 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
             }
         }
         settings.ignored_color = ignored;
+    }
+    // A theme file named in a config file is relative to that file, so the
+    // config works from any directory.
+    if let Some(dir) = path.parent() {
+        for table in std::iter::once(&mut settings.settings)
+            .chain(std::iter::once(&mut settings.base))
+            .chain(settings.profile.as_mut().map(|(_, table)| table))
+        {
+            if let Some(Value::String(file)) = table.get_mut("theme_file") {
+                if PathBuf::from(&*file).is_relative() {
+                    *file = dir.join(&*file).to_string_lossy().into_owned();
+                }
+            }
+        }
     }
     Ok((settings, Some(path)))
 }

@@ -19,7 +19,7 @@
 //! colours is usually not one.
 
 use crate::image_color::{nearest, preprocess};
-use crate::{Dither, ImageColorMode};
+use crate::{ColorDistance, Dither, ImageColorMode};
 use image::{imageops::FilterType, DynamicImage, GenericImageView};
 use rich::color::Color;
 use rich::console::{Console, ConsoleOptions};
@@ -41,7 +41,16 @@ fn glyph(mask: u8) -> char {
         9 => '\u{259A}',  // ▚
         11 => '\u{259C}', // ▜
         13 => '\u{2599}', // ▙
-        _ => '\u{2588}',  // █
+        // The complements only appear when transparent quadrants are kept.
+        2 => '\u{259D}',  // ▝
+        4 => '\u{2596}',  // ▖
+        6 => '\u{259E}',  // ▞
+        8 => '\u{2597}',  // ▗
+        10 => '\u{2590}', // ▐
+        12 => '\u{2584}', // ▄
+        14 => '\u{259F}', // ▟
+        0 => ' ',
+        _ => '\u{2588}', // █
     }
 }
 
@@ -51,6 +60,9 @@ pub(crate) struct QuadCell {
     pub glyph: char,
     pub fg: [f64; 3],
     pub bg: [f64; 3],
+    /// The unpainted quadrants are transparent: leave the cell background to
+    /// the terminal. Only set when transparency is kept.
+    pub open: bool,
 }
 
 /// Pick the cheapest two-colour partition of four pixels (TL, TR, BL, BR).
@@ -84,11 +96,36 @@ pub(crate) fn choose(pixels: [[f64; 3]; 4]) -> QuadCell {
                     glyph: glyph(mask),
                     fg,
                     bg,
+                    open: false,
                 },
             ));
         }
     }
     best.expect("MASKS is nonempty").1
+}
+
+/// A cell whose `clear` quadrants (same bit order) are transparent: the
+/// opaque ones become the foreground glyph in their mean colour and the rest
+/// is left unpainted. Fully opaque cells use [`choose`] as usual.
+fn choose_with_clear(pixels: [[f64; 3]; 4], clear: u8) -> QuadCell {
+    if clear == 0 {
+        return choose(pixels);
+    }
+    let mask = !clear & 15;
+    let members: Vec<_> = (0..4).filter(|i| mask >> i & 1 == 1).collect();
+    let fg = if members.is_empty() {
+        [0.0; 3]
+    } else {
+        std::array::from_fn(|c| {
+            members.iter().map(|&i| pixels[i][c]).sum::<f64>() / members.len() as f64
+        })
+    };
+    QuadCell {
+        glyph: glyph(mask),
+        fg,
+        bg: [0.0; 3],
+        open: true,
+    }
 }
 
 /// An image drawn with quadrant-block characters.
@@ -98,6 +135,8 @@ pub struct QuadrantArt {
     height: Option<usize>,
     color_mode: ImageColorMode,
     dither: Dither,
+    distance: ColorDistance,
+    transparent: bool,
 }
 
 impl QuadrantArt {
@@ -112,12 +151,27 @@ impl QuadrantArt {
             height: None,
             color_mode: ImageColorMode::default(),
             dither: Dither::default(),
+            distance: ColorDistance::default(),
+            transparent: false,
         }
     }
 
-    pub(crate) fn color_processing(mut self, mode: ImageColorMode, dither: Dither) -> Self {
+    pub(crate) fn color_processing(
+        mut self,
+        mode: ImageColorMode,
+        dither: Dither,
+        distance: ColorDistance,
+    ) -> Self {
         self.color_mode = mode;
         self.dither = dither;
+        self.distance = distance;
+        self
+    }
+
+    /// Leave quadrants under half opacity unpainted (see
+    /// [`BlockArt`](crate::BlockArt)'s equivalent).
+    pub(crate) fn keep_transparency(mut self, transparent: bool) -> Self {
+        self.transparent = transparent;
         self
     }
 
@@ -167,24 +221,41 @@ impl QuadrantArt {
                 FilterType::Triangle,
             )
             .to_rgba8();
+        let clear = crate::image_art::clear_mask(&scaled, self.transparent);
         // Quantization composites alpha onto black itself; truecolor does it here.
-        preprocess(&mut scaled, self.color_mode, self.dither);
+        preprocess(&mut scaled, self.color_mode, self.dither, self.distance);
+        let width = scaled.width() as usize;
         let sample = |x: usize, y: usize| -> [f64; 3] {
             let [r, g, b, a] = scaled.get_pixel(x as u32, y as u32).0;
-            let f = f64::from(a) / 255.0;
+            // Kept transparency shows an opaque-enough pixel's own colour.
+            let f = if clear.is_some() {
+                1.0
+            } else {
+                f64::from(a) / 255.0
+            };
             [f64::from(r) * f, f64::from(g) * f, f64::from(b) * f]
         };
+        let is_clear = |x: usize, y: usize| clear.as_ref().is_some_and(|c| c[y * width + x]);
         (0..rows)
             .map(|row| {
                 (0..columns)
                     .map(|col| {
                         let (x, y) = (col * 2, row * 2);
-                        choose([
-                            sample(x, y),
-                            sample(x + 1, y),
-                            sample(x, y + 1),
-                            sample(x + 1, y + 1),
-                        ])
+                        let clear = [(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)]
+                            .iter()
+                            .enumerate()
+                            .fold(0u8, |bits, (i, &(px, py))| {
+                                bits | (u8::from(is_clear(px, py)) << i)
+                            });
+                        choose_with_clear(
+                            [
+                                sample(x, y),
+                                sample(x + 1, y),
+                                sample(x, y + 1),
+                                sample(x + 1, y + 1),
+                            ],
+                            clear,
+                        )
                     })
                     .collect()
             })
@@ -196,7 +267,7 @@ impl QuadrantArt {
             let [r, g, b] = rgb.map(|v| v.round().clamp(0.0, 255.0) as u8);
             Color::from_rgb(r, g, b)
         } else {
-            Color::from_ansi(nearest(rgb, self.color_mode).0)
+            Color::from_ansi(nearest(rgb, self.color_mode, self.distance).0)
         }
     }
 }
@@ -208,10 +279,16 @@ impl Renderable for QuadrantArt {
         let last = rows.len().saturating_sub(1);
         for (index, row) in rows.iter().enumerate() {
             for cell in row {
-                let style = Style::new()
-                    .with_color(self.color(cell.fg))
-                    .with_bgcolor(self.color(cell.bg));
-                segments.push(Segment::new(cell.glyph.to_string(), Some(style)));
+                let style = match (cell.open, cell.glyph) {
+                    (true, ' ') => None,
+                    (true, _) => Some(Style::new().with_color(self.color(cell.fg))),
+                    (false, _) => Some(
+                        Style::new()
+                            .with_color(self.color(cell.fg))
+                            .with_bgcolor(self.color(cell.bg)),
+                    ),
+                };
+                segments.push(Segment::new(cell.glyph.to_string(), style));
             }
             if index != last {
                 segments.push(Segment::line());

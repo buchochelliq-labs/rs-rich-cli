@@ -26,7 +26,7 @@
 
 use std::sync::Arc;
 
-use image::{imageops::FilterType, DynamicImage, GenericImageView, Rgb, RgbImage};
+use image::{imageops::FilterType, DynamicImage, GenericImageView, Rgb, RgbImage, Rgba, RgbaImage};
 
 use rich::console::{Console, ConsoleOptions};
 use rich::protocol::{ConsoleEnvironment, RenderEnvironment, Renderable, Support};
@@ -36,7 +36,7 @@ use crate::ascii::AsciiArt;
 use crate::block::BlockArt;
 use crate::braille::BrailleArt;
 use crate::quadrant::QuadrantArt;
-use crate::{Dither, ImageColorMode};
+use crate::{ColorDistance, Dither, ImageColorMode};
 
 /// Which backend renders the image.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -95,6 +95,50 @@ pub enum ImageAnchor {
     BottomLeft,
     /// Keep the bottom-right corner.
     BottomRight,
+}
+
+/// What transparent pixels turn into.
+///
+/// [`ImageArt::background`] sets [`Color`](Self::Color); the other two keep
+/// the image's alpha through fitting instead of flattening it first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ImageBackground {
+    /// Composite onto this RGB colour before resizing. Contain padding takes
+    /// the same colour.
+    Color([u8; 3]),
+    /// Leave transparent cells unpainted so the terminal's own background
+    /// shows through: a pixel under half opacity after sampling is a blank
+    /// (ASCII), a half or quadrant left out of the glyph (blocks, quadrants),
+    /// no dot (Braille) or a transparent Sixel pixel. Pixels at or over half
+    /// opacity show their own colour. Contain padding is transparent too.
+    TerminalDefault,
+    /// Composite onto a two-tone gray checkerboard (#999999 and #666666), the
+    /// image-editor convention for showing where an image is transparent.
+    /// With fitting, each square is two cells wide and one cell tall, so it
+    /// looks square; without, squares are a sixteenth of the image's longer
+    /// side and scale with it.
+    Checkerboard,
+}
+
+/// Light and dark squares of [`ImageBackground::Checkerboard`].
+const CHECKER: [[u8; 3]; 2] = [[153, 153, 153], [102, 102, 102]];
+
+/// Composite `image` onto a checkerboard of `square` (width, height) pixels.
+fn checkerboard(image: &RgbaImage, square: (u32, u32)) -> RgbImage {
+    RgbImage::from_fn(image.width(), image.height(), |x, y| {
+        let under = CHECKER[((x / square.0 + y / square.1) % 2) as usize];
+        let rgba = image.get_pixel(x, y).0;
+        let alpha = u32::from(rgba[3]);
+        Rgb(std::array::from_fn(|c| {
+            ((u32::from(rgba[c]) * alpha + u32::from(under[c]) * (255 - alpha) + 127) / 255) as u8
+        }))
+    })
+}
+
+/// Which pixels of a sampled raster count as transparent (under half
+/// opacity), or `None` when transparency is not being kept.
+pub(crate) fn clear_mask(raster: &RgbaImage, keep: bool) -> Option<Vec<bool>> {
+    keep.then(|| raster.pixels().map(|p| p.0[3] < 128).collect())
 }
 
 /// What the destination can actually do, used only to resolve
@@ -178,8 +222,9 @@ pub enum ImageArtError {
     /// Fitting requires positive width and height, a nonempty image and
     /// destination, and raster canvases no larger than 16 megapixels.
     InvalidFitDimensions,
-    /// Quantization supports ASCII, blocks and quadrants only; dithering
-    /// requires a quantized colour mode.
+    /// A reduced colour mode was asked of Braille, which draws monochrome
+    /// dots and has no colours to quantize; or dithering or a colour distance
+    /// was set without a reduced colour mode.
     UnsupportedColorOptions,
     /// Brightness or contrast is negative or not finite, or gamma is not a
     /// finite positive number. See [`ImageTransforms`](crate::ImageTransforms).
@@ -189,7 +234,7 @@ pub enum ImageArtError {
 impl std::fmt::Display for ImageArtError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UnsupportedColorOptions => write!(f, "image color processing requires ASCII, blocks or quadrants; dithering requires ansi256, ansi16 or grayscale"),
+            Self::UnsupportedColorOptions => write!(f, "Braille images are monochrome, so they take no color mode; dithering and color distance require ansi256, ansi16 or grayscale"),
             Self::InvalidAdjustment => write!(f, "image brightness and contrast must be finite and non-negative, and gamma finite and positive"),
             Self::FeatureNotEnabled { mode, feature } => write!(
                 f,
@@ -230,9 +275,10 @@ pub struct ImageArt {
     options: ImageOptions,
     fit: Option<ImageFit>,
     anchor: ImageAnchor,
-    background: Option<[u8; 3]>,
+    background: Option<ImageBackground>,
     color_mode: ImageColorMode,
     dither: Dither,
+    color_distance: ColorDistance,
     transforms: crate::ImageTransforms,
     max_width: Option<usize>,
     max_height: Option<usize>,
@@ -254,6 +300,7 @@ impl ImageArt {
             background: None,
             color_mode: ImageColorMode::default(),
             dither: Dither::default(),
+            color_distance: ColorDistance::default(),
             transforms: crate::ImageTransforms::default(),
             max_width: None,
             max_height: None,
@@ -316,7 +363,15 @@ impl ImageArt {
     /// Composite transparency over this RGB colour before resizing. Also
     /// colours contain padding; fitting without a background uses black.
     /// Without fitting or a background, backend alpha handling is unchanged.
+    /// Shorthand for [`Self::background_mode`] with [`ImageBackground::Color`].
     pub fn background(mut self, background: [u8; 3]) -> Self {
+        self.background = Some(ImageBackground::Color(background));
+        self
+    }
+
+    /// Choose what transparent pixels become: a colour, the terminal's own
+    /// background, or a checkerboard. See [`ImageBackground`].
+    pub fn background_mode(mut self, background: ImageBackground) -> Self {
         self.background = Some(background);
         self
     }
@@ -329,19 +384,28 @@ impl ImageArt {
     }
 
     /// Select truecolor (default) or a reduced palette (ANSI256, ANSI16 or
-    /// grayscale) for the ASCII, half-block and quadrant backends.
+    /// grayscale) for the ASCII, half-block, quadrant and Sixel backends.
     /// Processing occurs after fit/background handling and final sampling,
-    /// before ASCII luminance normalization and glyph selection.
+    /// before ASCII luminance normalization and glyph selection. Sixel then
+    /// encodes exactly the palette colours instead of adaptive ones. Braille
+    /// is monochrome and rejects a reduced palette.
     pub fn color_mode(mut self, mode: ImageColorMode) -> Self {
         self.color_mode = mode;
         self
     }
 
-    /// Select optional dithering (Floyd–Steinberg or Bayer 4×4). It needs a
-    /// reduced palette and the ASCII, half-block or quadrant backend;
-    /// unsupported combinations are errors from [`Self::render`].
+    /// Select optional dithering (Floyd–Steinberg, Bayer 4×4 or Atkinson).
+    /// It needs a reduced palette; unsupported combinations are errors from
+    /// [`Self::render`].
     pub fn dither(mut self, dither: Dither) -> Self {
         self.dither = dither;
+        self
+    }
+
+    /// Measure the nearest palette colour in encoded RGB (the default) or in
+    /// perceptual OKLab. It needs a reduced palette, like dithering.
+    pub fn color_distance(mut self, distance: ColorDistance) -> Self {
+        self.color_distance = distance;
         self
     }
 
@@ -363,6 +427,11 @@ impl ImageArt {
     pub fn max_height(mut self, rows: usize) -> Self {
         self.max_height = Some(rows);
         self
+    }
+
+    /// Whether backends should leave transparent cells unpainted.
+    fn keeps_transparency(&self) -> bool {
+        self.background == Some(ImageBackground::TerminalDefault)
     }
 
     /// The requested row count after the `max_height` cap.
@@ -448,16 +517,23 @@ impl ImageArt {
         mode: ImageMode,
         available: usize,
     ) -> Result<Arc<DynamicImage>, ImageArtError> {
+        // Terminal-default and checkerboard backgrounds keep alpha through
+        // fitting; a colour (or none) flattens first, as it always has.
+        let keep_alpha = matches!(
+            self.background,
+            Some(ImageBackground::TerminalDefault | ImageBackground::Checkerboard)
+        );
+        let color = match self.background {
+            Some(ImageBackground::Color(color)) => color,
+            _ => [0, 0, 0],
+        };
         let (image, background) = if self.transforms == crate::ImageTransforms::default() {
-            (
-                Arc::clone(&self.image),
-                self.background.unwrap_or([0, 0, 0]),
-            )
+            (Arc::clone(&self.image), color)
         } else {
             let (image, background) = crate::transform::prepare(
                 &self.image,
                 self.transforms,
-                self.background.unwrap_or([0, 0, 0]),
+                (!keep_alpha).then_some(color),
             );
             (Arc::new(image), background)
         };
@@ -476,12 +552,7 @@ impl ImageArt {
                 .height
                 .ok_or(ImageArtError::InvalidFitDimensions)?
                 .min(self.max_height.unwrap_or(usize::MAX));
-            let (sx, sy) = match mode {
-                // Square fitting pixels; quadrants resample 2×4 down to 2×2.
-                ImageMode::Braille | ImageMode::Quadrants => (2, 4),
-                ImageMode::Sixel => (8, 16),
-                _ => (1, 2),
-            };
+            let (sx, sy) = cell_pixels(mode);
             let width = columns.checked_mul(sx).and_then(|v| u32::try_from(v).ok());
             let height = rows.checked_mul(sy).and_then(|v| u32::try_from(v).ok());
             match (width, height) {
@@ -499,23 +570,46 @@ impl ImageArt {
         } else {
             None
         };
-        let mut flattened = RgbImage::new(image.width(), image.height());
-        for (x, y, pixel) in flattened.enumerate_pixels_mut() {
-            let rgba = image.get_pixel(x, y).0;
-            let alpha = u32::from(rgba[3]);
-            for channel in 0..3 {
-                pixel.0[channel] = ((u32::from(rgba[channel]) * alpha
-                    + u32::from(background[channel]) * (255 - alpha)
-                    + 127)
-                    / 255) as u8;
+        let source = if keep_alpha {
+            DynamicImage::ImageRgba8(image.to_rgba8())
+        } else {
+            let mut flattened = RgbImage::new(image.width(), image.height());
+            for (x, y, pixel) in flattened.enumerate_pixels_mut() {
+                let rgba = image.get_pixel(x, y).0;
+                let alpha = u32::from(rgba[3]);
+                for channel in 0..3 {
+                    pixel.0[channel] = ((u32::from(rgba[channel]) * alpha
+                        + u32::from(background[channel]) * (255 - alpha)
+                        + 127)
+                        / 255) as u8;
+                }
             }
-        }
-        let source = DynamicImage::ImageRgb8(flattened);
+            DynamicImage::ImageRgb8(flattened)
+        };
+        let checkered = self.background == Some(ImageBackground::Checkerboard);
         let Some((width, height)) = target else {
+            if checkered {
+                let side = source.width().max(source.height()).div_ceil(16).max(1);
+                let flat = checkerboard(&source.to_rgba8(), (side, side));
+                return Ok(Arc::new(DynamicImage::ImageRgb8(flat)));
+            }
             return Ok(Arc::new(source));
         };
         let result = match self.fit.expect("target is present only with fit") {
             ImageFit::Stretch => source.resize_exact(width, height, FilterType::Triangle),
+            ImageFit::Contain if keep_alpha => {
+                let fitted = source
+                    .resize(width, height, FilterType::Triangle)
+                    .to_rgba8();
+                let mut canvas = RgbaImage::from_pixel(width, height, Rgba([0, 0, 0, 0]));
+                image::imageops::replace(
+                    &mut canvas,
+                    &fitted,
+                    i64::from((width - fitted.width()) / 2),
+                    i64::from((height - fitted.height()) / 2),
+                );
+                DynamicImage::ImageRgba8(canvas)
+            }
             ImageFit::Contain => {
                 let fitted = source.resize(width, height, FilterType::Triangle).to_rgb8();
                 let mut canvas = RgbImage::from_pixel(width, height, Rgb(background));
@@ -570,6 +664,12 @@ impl ImageArt {
                     .crop_imm(x, y, width, height)
             }
         };
+        if checkered {
+            // Two cells wide by one tall: square on screen.
+            let (sx, sy) = cell_pixels(mode);
+            let flat = checkerboard(&result.to_rgba8(), (2 * sx as u32, sy as u32));
+            return Ok(Arc::new(DynamicImage::ImageRgb8(flat)));
+        }
         Ok(Arc::new(result))
     }
 
@@ -580,13 +680,9 @@ impl ImageArt {
         console: &Console,
         options: &ConsoleOptions,
     ) -> Result<Vec<Segment>, ImageArtError> {
-        if (self.dither != Dither::None && self.color_mode == ImageColorMode::TrueColor)
-            || ((self.color_mode != ImageColorMode::TrueColor || self.dither != Dither::None)
-                && !matches!(
-                    mode,
-                    ImageMode::Ascii | ImageMode::Blocks | ImageMode::Quadrants
-                ))
-        {
+        let reduced = self.color_mode != ImageColorMode::TrueColor;
+        let tuned = self.dither != Dither::None || self.color_distance != ColorDistance::Rgb;
+        if (tuned && !reduced) || (reduced && mode == ImageMode::Braille) {
             return Err(ImageArtError::UnsupportedColorOptions);
         }
         if !self.transforms.adjustments_valid() {
@@ -613,8 +709,9 @@ impl ImageArt {
             ImageMode::Ascii => {
                 let mut art = AsciiArt::from_shared(Arc::clone(&image))
                     .width(width)
+                    .keep_transparency(self.keeps_transparency())
                     .color(self.options.color)
-                    .color_processing(self.color_mode, self.dither);
+                    .color_processing(self.color_mode, self.dither, self.color_distance);
                 match (self.options.height, self.max_height) {
                     (Some(_), _) => art = art.height(self.rows().expect("height is set")),
                     // ASCII's height is an exact row count, not a cap, so an
@@ -634,7 +731,8 @@ impl ImageArt {
             ImageMode::Blocks => {
                 let mut art = BlockArt::from_shared(Arc::clone(&image))
                     .width(width)
-                    .color_processing(self.color_mode, self.dither);
+                    .keep_transparency(self.keeps_transparency())
+                    .color_processing(self.color_mode, self.dither, self.color_distance);
                 if let Some(height) = self.rows() {
                     art = art.height(height);
                 }
@@ -643,7 +741,8 @@ impl ImageArt {
             ImageMode::Quadrants => {
                 let mut art = QuadrantArt::from_shared(Arc::clone(&image))
                     .width(width)
-                    .color_processing(self.color_mode, self.dither);
+                    .keep_transparency(self.keeps_transparency())
+                    .color_processing(self.color_mode, self.dither, self.color_distance);
                 if let Some(height) = self.rows() {
                     art = art.height(height);
                 }
@@ -673,7 +772,9 @@ impl ImageArt {
         if !console.is_terminal() {
             return Err(ImageArtError::NonTerminalDestination);
         }
-        let mut art = SixelArt::new((*image).clone()).width(width);
+        let mut art = SixelArt::new((*image).clone())
+            .width(width)
+            .color_processing(self.color_mode, self.dither, self.color_distance);
         if let Some(height) = self.rows() {
             art = art.height(height);
         }
@@ -695,6 +796,16 @@ impl ImageArt {
             mode: ImageMode::Sixel,
             feature: "sixel",
         })
+    }
+}
+
+/// Raster pixels per terminal cell when fitting for `mode`: square fitting
+/// pixels, except that quadrants resample 2×4 down to 2×2.
+fn cell_pixels(mode: ImageMode) -> (usize, usize) {
+    match mode {
+        ImageMode::Braille | ImageMode::Quadrants => (2, 4),
+        ImageMode::Sixel => (8, 16),
+        _ => (1, 2),
     }
 }
 
@@ -800,7 +911,10 @@ mod tests {
                 ..ImageOptions::default()
             });
         assert_eq!(explicit.fit, Some(ImageFit::Cover));
-        assert_eq!(explicit.background, Some([12, 34, 56]));
+        assert_eq!(
+            explicit.background,
+            Some(ImageBackground::Color([12, 34, 56]))
+        );
         assert_eq!(
             default
                 .prepare_image(ImageMode::Blocks, 8)

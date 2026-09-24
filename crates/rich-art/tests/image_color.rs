@@ -2,7 +2,7 @@
 use rich::{color::ColorSystem, Console};
 use rich_art::{
     image::{DynamicImage, Rgb, RgbImage, Rgba, RgbaImage},
-    Dither, ImageArt, ImageColorMode, ImageFit, ImageMode,
+    ColorDistance, Dither, ImageArt, ImageColorMode, ImageFit, ImageMode,
 };
 
 fn console() -> Console {
@@ -35,6 +35,7 @@ fn explicit_defaults_preserve_existing_bytes() {
                 &make()
                     .color_mode(ImageColorMode::TrueColor)
                     .dither(Dither::None)
+                    .color_distance(ColorDistance::Rgb)
             )
         );
     }
@@ -87,18 +88,77 @@ fn transparency_is_composited_before_palette_selection() {
 #[test]
 fn unsupported_combinations_are_strict_errors() {
     let c = console();
-    for mode in [ImageMode::Braille, ImageMode::Sixel] {
-        assert!(ImageArt::new(source())
-            .mode(mode)
-            .color_mode(ImageColorMode::Ansi256)
-            .render(&c, &c.options())
-            .is_err());
+    // Braille draws monochrome dots: there is nothing to quantize.
+    for color_mode in [
+        ImageColorMode::Ansi256,
+        ImageColorMode::Ansi16,
+        ImageColorMode::Grayscale,
+    ] {
+        assert_eq!(
+            ImageArt::new(source())
+                .mode(ImageMode::Braille)
+                .color_mode(color_mode)
+                .render(&c, &c.options())
+                .unwrap_err(),
+            rich_art::ImageArtError::UnsupportedColorOptions
+        );
     }
+    // Dithering and a colour distance only mean something with a palette.
     assert!(ImageArt::new(source())
         .mode(ImageMode::Ascii)
         .dither(Dither::FloydSteinberg)
         .render(&c, &c.options())
         .is_err());
+    assert!(ImageArt::new(source())
+        .mode(ImageMode::Blocks)
+        .color_distance(ColorDistance::Oklab)
+        .render(&c, &c.options())
+        .is_err());
+}
+
+#[cfg(feature = "sixel")]
+#[test]
+fn sixel_accepts_every_reduced_palette() {
+    let c = console();
+    for color_mode in [
+        ImageColorMode::Ansi256,
+        ImageColorMode::Ansi16,
+        ImageColorMode::Grayscale,
+    ] {
+        let segments = ImageArt::new(source())
+            .mode(ImageMode::Sixel)
+            .width(2)
+            .color_mode(color_mode)
+            .dither(Dither::Atkinson)
+            .render(&c, &c.options())
+            .unwrap();
+        assert!(
+            segments[0].text.starts_with("\x1bP9;1;0q"),
+            "{color_mode:?}"
+        );
+    }
+}
+
+#[test]
+fn atkinson_and_oklab_render_deterministically_on_every_text_backend() {
+    let c = console();
+    for mode in [ImageMode::Ascii, ImageMode::Blocks, ImageMode::Quadrants] {
+        for distance in [ColorDistance::Rgb, ColorDistance::Oklab] {
+            let make = || {
+                ImageArt::new(source())
+                    .mode(mode)
+                    .width(4)
+                    .height(2)
+                    .color(true)
+                    .color_mode(ImageColorMode::Ansi16)
+                    .dither(Dither::Atkinson)
+                    .color_distance(distance)
+            };
+            let out = c.render_to_string(&make());
+            assert_eq!(out, c.render_to_string(&make()));
+            assert!(!out.contains("38;5;") && !out.contains("38;2;"), "{out:?}");
+        }
+    }
 }
 
 #[test]

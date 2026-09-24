@@ -42,7 +42,7 @@ pub mod image_art;
 mod image_color;
 
 #[cfg(feature = "image")]
-pub use image_color::{Dither, ImageColorMode};
+pub use image_color::{ColorDistance, Dither, ImageColorMode};
 
 #[cfg(feature = "image")]
 pub mod imagediff;
@@ -80,7 +80,8 @@ pub use crate::sixel::SixelArt;
 
 #[cfg(feature = "image")]
 pub use crate::image_art::{
-    ImageAnchor, ImageArt, ImageArtError, ImageFit, ImageMode, ImageOptions, RenderCapabilities,
+    ImageAnchor, ImageArt, ImageArtError, ImageBackground, ImageFit, ImageMode, ImageOptions,
+    RenderCapabilities,
 };
 
 #[cfg(feature = "image")]

@@ -60,6 +60,38 @@ Entries below record subsequent releases and development.
 Cohort versions for 0.0.11 (not published): core 0.0.7, ext 0.0.9, art 0.0.9,
 CLI 0.0.11. Core changes below, so every dependent moves with it.
 
+### Art and CLI carry-over: colour modes, alpha backgrounds and theme files (0.0.11 workstream 12)
+
+- **Art: Atkinson dithering and OKLab distance (#498).**
+  - `Dither::Atkinson` (`--image-dither atkinson`) spreads six eighths of the
+    error over six neighbours.
+  - `ColorDistance::Oklab` (`--image-color-distance oklab`, config
+    `image_color_distance`) picks the nearest palette colour perceptually. The
+    default, `Rgb`, leaves every existing output byte-identical.
+- **Art: colour modes for Sixel and GIF (#498).**
+  - Sixel accepts `--image-color ansi256|ansi16|grayscale`. It quantizes and
+    dithers like the text backends, then encodes exactly the palette's colours.
+    Truecolor Sixel is unchanged.
+  - GIF frames (`AnimatedArt::color_mode`/`dither`/`color_distance`, and the
+    same flags with `--gif`) take a reduced palette.
+  - Braille is monochrome and still rejects a reduced palette, now with an
+    error that says so.
+- **Art: alpha backgrounds (#126).** `ImageBackground` chooses what transparent
+  pixels become. `Color` is what `ImageArt::background` did.
+  - `TerminalDefault` (`--image-background default`) leaves them unpainted, so
+    the terminal's background shows through, including in contain padding.
+  - `Checkerboard` (`--image-background checkerboard`) previews them on gray
+    squares.
+  - Opaque images and every existing option render as before.
+- **CLI: `--theme-file PATH` (#499)** (config `theme_file`, relative to the
+  config file) loads an upstream `[styles]` theme file.
+  - It layers above the built-in theme and below config themes and
+    `--theme-style`.
+  - A bad file is a usage error naming the file and line.
+- **Migration:** exhaustive matches on `Dither` must include `Atkinson`. The
+  internal `ImageArt` background field is now an `ImageBackground`, but the
+  `background([r, g, b])` builder is unchanged.
+
 ### CLI viewers: `view`, `hex`, `unicode`, `env` and `capture` (0.0.11 workstream 11)
 
 - **`rich view FILE` (#401)** shows a file the way it should be read:

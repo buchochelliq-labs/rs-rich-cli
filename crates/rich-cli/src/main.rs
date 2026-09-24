@@ -362,11 +362,13 @@ struct Cli {
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_anchor: Option<String>,
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
-    image_background: Option<[u8; 3]>,
+    image_background: Option<ImageBackdrop>,
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_color: Option<String>,
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_dither: Option<String>,
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
+    image_color_distance: Option<String>,
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_rotate: Option<u16>,
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
@@ -388,6 +390,9 @@ struct Cli {
     image_gamma: Option<f32>,
     log_presentation: String,
     theme_styles: std::collections::BTreeMap<String, Style>,
+    /// `--theme-file PATH`: styles from an upstream `[styles]` theme file,
+    /// layered under config themes and `--theme-style`.
+    theme_file_styles: std::collections::BTreeMap<String, Style>,
     /// `--height N`: with `--image`, render this many rows instead of the
     /// backend's default.
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
@@ -537,8 +542,10 @@ const VALUE_OPTIONS: &[&str] = &[
     "--height",
     "--theme",
     "--theme-style",
+    "--theme-file",
     "--image-color",
     "--image-dither",
+    "--image-color-distance",
     "--image-rotate",
     "--image-max-width",
     "--image-max-height",
@@ -1092,6 +1099,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut image_background = None;
     let mut image_color = None;
     let mut image_dither = None;
+    let mut image_color_distance = None;
     let mut image_rotate = None;
     let mut image_flip_horizontal = false;
     let mut image_flip_vertical = false;
@@ -1103,6 +1111,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut image_gamma = None;
     let mut log_presentation = String::from("plain");
     let mut theme_styles = std::collections::BTreeMap::new();
+    let mut theme_file_styles = std::collections::BTreeMap::new();
     let mut height = None;
     let mut extensions = CliExtensions::default();
     let mut data = inspect::DataOptions::default();
@@ -1224,6 +1233,10 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                     .map_err(|error| format!("invalid theme style {name}: {error}"))?;
                 theme_styles.insert(name.to_owned(), style);
             }
+            "--theme-file" => {
+                let path = iter.next().ok_or("--theme-file requires PATH")?;
+                theme_file_styles = read_theme_file(path)?;
+            }
             "--image-color" => {
                 const USAGE: &str =
                     "--image-color requires truecolor, ansi256, ansi16 or grayscale";
@@ -1286,13 +1299,24 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                 });
             }
             "--image-dither" => {
-                let value = iter
-                    .next()
-                    .ok_or("--image-dither requires none, floyd-steinberg or bayer4x4")?;
-                if !matches!(value.as_str(), "none" | "floyd-steinberg" | "bayer4x4") {
-                    return Err("--image-dither requires none, floyd-steinberg or bayer4x4".into());
+                const USAGE: &str =
+                    "--image-dither requires none, floyd-steinberg, bayer4x4 or atkinson";
+                let value = iter.next().ok_or(USAGE)?;
+                if !matches!(
+                    value.as_str(),
+                    "none" | "floyd-steinberg" | "bayer4x4" | "atkinson"
+                ) {
+                    return Err(USAGE.into());
                 }
                 image_dither = Some(value.clone());
+            }
+            "--image-color-distance" => {
+                const USAGE: &str = "--image-color-distance requires rgb or oklab";
+                let value = iter.next().ok_or(USAGE)?;
+                if !matches!(value.as_str(), "rgb" | "oklab") {
+                    return Err(USAGE.into());
+                }
+                image_color_distance = Some(value.clone());
             }
             "--image-mode" => {
                 let value = iter.next().ok_or(
@@ -1328,20 +1352,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                 image_anchor = Some(value.clone());
             }
             "--image-background" => {
-                let value = iter.next().ok_or("--image-background requires #RRGGBB")?;
-                let bytes = value.as_bytes();
-                if bytes.len() != 7
-                    || bytes[0] != b'#'
-                    || !bytes[1..].iter().all(u8::is_ascii_hexdigit)
-                {
-                    return Err("--image-background requires #RRGGBB".into());
-                }
-                let mut rgb = [0; 3];
-                for (index, channel) in rgb.iter_mut().enumerate() {
-                    *channel = u8::from_str_radix(&value[1 + index * 2..3 + index * 2], 16)
-                        .map_err(|_| "--image-background requires #RRGGBB")?;
-                }
-                image_background = Some(rgb);
+                const USAGE: &str = "--image-background requires #RRGGBB, default or checkerboard";
+                let value = iter.next().ok_or(USAGE)?;
+                image_background = Some(ImageBackdrop::parse(value).ok_or(USAGE)?);
             }
             "--height" => {
                 let value = iter.next().ok_or("--height requires a number")?;
@@ -1649,29 +1662,25 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         image_color.as_deref(),
         Some("ansi256" | "ansi16" | "grayscale")
     );
-    if (quantized
-        || matches!(
-            image_dither.as_deref(),
-            Some("floyd-steinberg" | "bayer4x4")
-        ))
-        && !matches!(
-            image_mode,
-            ImageMode::Auto | ImageMode::Ascii | ImageMode::Blocks | ImageMode::Quadrants
-        )
-    {
-        return Err(
-            "image color processing supports only --image-mode ascii, blocks or quadrants".into(),
-        );
-    }
-    if matches!(
-        image_dither.as_deref(),
-        Some("floyd-steinberg" | "bayer4x4")
-    ) && !quantized
-    {
+    if quantized && image_mode == ImageMode::Braille {
         return Err(format!(
-            "--image-dither {} requires --image-color ansi256, ansi16 or grayscale",
-            image_dither.as_deref().unwrap()
+            "--image-color {} has no effect with --image-mode braille, which is monochrome",
+            image_color.as_deref().unwrap()
         ));
+    }
+    for (flag, value, neutral) in [
+        ("--image-dither", image_dither.as_deref(), "none"),
+        (
+            "--image-color-distance",
+            image_color_distance.as_deref(),
+            "rgb",
+        ),
+    ] {
+        if let Some(value) = value.filter(|v| *v != neutral && !quantized) {
+            return Err(format!(
+                "{flag} {value} requires --image-color ansi256, ansi16 or grayscale"
+            ));
+        }
     }
     if image_anchor.is_some() && image_fit.as_deref() != Some("cover") {
         return Err("--image-anchor requires --image-fit cover".into());
@@ -1770,8 +1779,8 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         (
             "--image-color",
             image_color.is_some(),
-            "--image",
-            mode == Mode::Image,
+            "--image or --gif",
+            mode == Mode::Image || effective_mode == Mode::Gif,
         ),
         (
             "--image-max-width",
@@ -1806,8 +1815,14 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         (
             "--image-dither",
             image_dither.is_some(),
-            "--image",
-            mode == Mode::Image,
+            "--image or --gif",
+            mode == Mode::Image || effective_mode == Mode::Gif,
+        ),
+        (
+            "--image-color-distance",
+            image_color_distance.is_some(),
+            "--image or --gif",
+            mode == Mode::Image || effective_mode == Mode::Gif,
         ),
         (
             "--image-fit",
@@ -1893,6 +1908,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             ),
             ("--width", demo && width.is_some()),
             ("--theme-style", demo && !theme_styles.is_empty()),
+            ("--theme-file", demo && !theme_file_styles.is_empty()),
             (
                 "--hyperlinks",
                 hyperlinks && (effective_mode.streams_records() || demo),
@@ -1929,6 +1945,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         image_background,
         image_color,
         image_dither,
+        image_color_distance,
         image_rotate,
         image_flip_horizontal,
         image_flip_vertical,
@@ -1940,6 +1957,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         image_gamma,
         log_presentation,
         theme_styles,
+        theme_file_styles,
         height,
         extensions,
         width,
@@ -2739,12 +2757,64 @@ fn run_once(cli: Cli) -> ExitCode {
     run_once_with_fetch(cli, None)
 }
 
+/// The console theme: the default theme, then `--theme-file`, then config
+/// themes and `--theme-style` bindings, each overriding the one before.
 fn cli_theme(cli: &Cli) -> rich::Theme {
     let mut theme = rich::Theme::default_theme();
-    for (name, style) in &cli.theme_styles {
+    for (name, style) in cli.theme_file_styles.iter().chain(&cli.theme_styles) {
         theme.insert(name.clone(), style.clone());
     }
     theme
+}
+
+impl Cli {
+    /// Whether any option changes the console theme.
+    fn themed(&self) -> bool {
+        !self.theme_styles.is_empty() || !self.theme_file_styles.is_empty()
+    }
+}
+
+/// Read an upstream theme file (`Theme.read`: a `[styles]` section of
+/// `name = style` lines). Errors name the file and, where the file has one,
+/// the offending line.
+fn read_theme_file(path: &str) -> Result<std::collections::BTreeMap<String, Style>, String> {
+    let text =
+        std::fs::read_to_string(path).map_err(|err| format!("--theme-file {path}: {err}"))?;
+    let theme = rich::Theme::from_file(&text, false).map_err(|err| match &err {
+        // Structural errors already say which line.
+        rich::errors::RichError::ThemeConfig(_) => format!("--theme-file {path}: {err}"),
+        _ => match bad_style_line(&text) {
+            Some(line) => format!("--theme-file {path}: line {line}: {err}"),
+            None => format!("--theme-file {path}: {err}"),
+        },
+    })?;
+    Ok(theme
+        .names()
+        .filter_map(|name| Some((name.to_owned(), theme.get(name)?.clone())))
+        .collect())
+}
+
+/// The 1-based line of the first `name = style` in `[styles]` whose style
+/// does not parse, for pointing at a style error.
+fn bad_style_line(text: &str) -> Option<usize> {
+    let mut in_styles = false;
+    for (index, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_styles = trimmed.eq_ignore_ascii_case("[styles]");
+            continue;
+        }
+        if !in_styles || trimmed.starts_with(['#', ';']) || line.starts_with([' ', '\t']) {
+            continue;
+        }
+        let Some((_, value)) = trimmed.split_once(['=', ':']) else {
+            continue;
+        };
+        if Style::parse(value.trim()).is_err() {
+            return Some(index + 1);
+        }
+    }
+    None
 }
 
 fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)>) -> ExitCode {
@@ -2808,7 +2878,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     // Modes that render incrementally write directly to the console instead of
     // composing one renderable, so no `ForceWidth` wrapper can reach them.
     let mut builder = Console::builder().no_color(cli.no_color);
-    if !cli.theme_styles.is_empty() {
+    if cli.themed() {
         builder = builder.theme(cli_theme(&cli));
     }
     // Parallel workers spool output, but render for the parent's destination.
@@ -4686,24 +4756,21 @@ fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
             _ => ImageAnchor::Center,
         });
     }
-    if let Some(background) = cli.image_background {
-        art = art.background(background);
+    match cli.image_background {
+        Some(ImageBackdrop::Color(rgb)) => art = art.background(rgb),
+        Some(ImageBackdrop::Terminal) => {
+            art = art.background_mode(rich_art::ImageBackground::TerminalDefault)
+        }
+        Some(ImageBackdrop::Checkerboard) => {
+            art = art.background_mode(rich_art::ImageBackground::Checkerboard)
+        }
+        None => {}
     }
-    if let Some(color) = cli.image_color.as_deref() {
-        art = art.color_mode(match color {
-            "ansi256" => rich_art::ImageColorMode::Ansi256,
-            "ansi16" => rich_art::ImageColorMode::Ansi16,
-            "grayscale" => rich_art::ImageColorMode::Grayscale,
-            _ => rich_art::ImageColorMode::TrueColor,
-        });
-    }
-    if let Some(dither) = cli.image_dither.as_deref() {
-        art = art.dither(match dither {
-            "floyd-steinberg" => rich_art::Dither::FloydSteinberg,
-            "bayer4x4" => rich_art::Dither::Bayer4x4,
-            _ => rich_art::Dither::None,
-        });
-    }
+    let (color_mode, dither, distance) = image_color_processing(cli);
+    art = art
+        .color_mode(color_mode)
+        .dither(dither)
+        .color_distance(distance);
 
     // Validate up front: `Renderable::rich_render` cannot fail and would
     // silently fall back to ASCII, which is the wrong answer for a CLI that
@@ -4961,6 +5028,68 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
 }
 
 /// Animate every `--gif` resource at once, sharing the console width.
+/// `--image-background`: what transparent pixels become.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(feature = "art"), allow(dead_code))]
+enum ImageBackdrop {
+    /// `#RRGGBB`: composite onto this colour.
+    Color([u8; 3]),
+    /// `default`: leave transparent cells to the terminal's background.
+    Terminal,
+    /// `checkerboard`: composite onto a gray checkerboard.
+    Checkerboard,
+}
+
+impl ImageBackdrop {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "default" => return Some(ImageBackdrop::Terminal),
+            "checkerboard" => return Some(ImageBackdrop::Checkerboard),
+            _ => {}
+        }
+        let hex = value.strip_prefix('#')?;
+        if hex.len() != 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return None;
+        }
+        let channel = |i: usize| u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).ok();
+        Some(ImageBackdrop::Color([
+            channel(0)?,
+            channel(1)?,
+            channel(2)?,
+        ]))
+    }
+}
+
+/// `--image-color`, `--image-dither` and `--image-color-distance`, shared by
+/// still images and GIF frames. Unset options are the library defaults.
+#[cfg(feature = "art")]
+fn image_color_processing(
+    cli: &Cli,
+) -> (
+    rich_art::ImageColorMode,
+    rich_art::Dither,
+    rich_art::ColorDistance,
+) {
+    use rich_art::{ColorDistance, Dither, ImageColorMode};
+    let mode = match cli.image_color.as_deref() {
+        Some("ansi256") => ImageColorMode::Ansi256,
+        Some("ansi16") => ImageColorMode::Ansi16,
+        Some("grayscale") => ImageColorMode::Grayscale,
+        _ => ImageColorMode::TrueColor,
+    };
+    let dither = match cli.image_dither.as_deref() {
+        Some("floyd-steinberg") => Dither::FloydSteinberg,
+        Some("bayer4x4") => Dither::Bayer4x4,
+        Some("atkinson") => Dither::Atkinson,
+        _ => Dither::None,
+    };
+    let distance = match cli.image_color_distance.as_deref() {
+        Some("oklab") => ColorDistance::Oklab,
+        _ => ColorDistance::Rgb,
+    };
+    (mode, dither, distance)
+}
+
 #[cfg(feature = "art")]
 fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
     use rich_art::{AnimatedArt, Repeat, Stage};
@@ -4989,10 +5118,14 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
     for path in &cli.resources {
         match AnimatedArt::from_path(path) {
             Ok(art) => {
+                let (color_mode, dither, distance) = image_color_processing(cli);
                 stage = stage.with(
                     art.width(per_gif)
                         .blocks(cli.extensions.gif_blocks())
                         .color(!cli.no_color)
+                        .color_mode(color_mode)
+                        .dither(dither)
+                        .color_distance(distance)
                         .repeat(repeat)
                         // Colour art is byte-heavy; keep it comfortable.
                         .max_fps(30.0),
@@ -5010,7 +5143,7 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
 
     // `play` needs its own console (it moves into the Live display).
     let mut builder = Console::builder().no_color(cli.no_color);
-    if !cli.theme_styles.is_empty() {
+    if cli.themed() {
         builder = builder.theme(cli_theme(cli));
     }
     // Parallel workers spool output, but render for the parent's destination.

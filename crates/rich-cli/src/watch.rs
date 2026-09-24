@@ -372,7 +372,7 @@ struct Regions {
 impl Regions {
     fn new(cli: &Cli) -> Self {
         let mut builder = Console::builder().no_color(cli.no_color);
-        if !cli.theme_styles.is_empty() {
+        if cli.themed() {
             builder = builder.theme(super::cli_theme(cli));
         }
         let console = builder.build();

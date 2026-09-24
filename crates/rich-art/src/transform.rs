@@ -76,10 +76,13 @@ impl ImageTransforms {
 fn gray(rgb: [u8; 3]) -> u8 {
     ((77 * u32::from(rgb[0]) + 150 * u32::from(rgb[1]) + 29 * u32::from(rgb[2]) + 128) >> 8) as u8
 }
+/// Apply `t`. Grayscale flattens alpha onto `background` first; with `None`
+/// it keeps alpha instead (for backgrounds that need it later), and the
+/// returned background is black.
 pub(crate) fn prepare(
     image: &DynamicImage,
     t: ImageTransforms,
-    background: [u8; 3],
+    background: Option<[u8; 3]>,
 ) -> (DynamicImage, [u8; 3]) {
     let mut image = match t.rotation {
         Rotation::None => image.clone(),
@@ -103,9 +106,17 @@ pub(crate) fn prepare(
         }
         image = DynamicImage::ImageRgba8(rgba);
     }
-    if !t.grayscale {
-        return (image, background);
-    }
+    let Some(background) = background.filter(|_| t.grayscale) else {
+        if t.grayscale {
+            let mut rgba = image.to_rgba8();
+            for pixel in rgba.pixels_mut() {
+                let level = gray([pixel.0[0], pixel.0[1], pixel.0[2]]);
+                pixel.0 = [level, level, level, pixel.0[3]];
+            }
+            return (DynamicImage::ImageRgba8(rgba), [0; 3]);
+        }
+        return (image, background.unwrap_or([0; 3]));
+    };
     let rgba = image.to_rgba8();
     let mut output = RgbImage::new(rgba.width(), rgba.height());
     for (x, y, pixel) in output.enumerate_pixels_mut() {
@@ -139,7 +150,7 @@ mod tests {
                 flip_vertical: true,
                 ..Default::default()
             },
-            [0, 0, 0],
+            Some([0, 0, 0]),
         );
         let result = result.to_rgba8();
         assert_eq!(result.dimensions(), (3, 2));
@@ -159,7 +170,7 @@ mod tests {
                 grayscale: true,
                 ..Default::default()
             },
-            [255, 0, 0],
+            Some([255, 0, 0]),
         );
         assert_eq!(background, [77, 77, 77]);
         assert_eq!(image.to_rgb8().get_pixel(0, 0).0, [77, 77, 77]);
@@ -171,7 +182,7 @@ mod tests {
                     grayscale: true,
                     ..Default::default()
                 },
-                [0, 0, 0]
+                Some([0, 0, 0])
             )
             .0
             .to_rgb8()
@@ -216,7 +227,7 @@ mod tests {
                 brightness: 2.0,
                 ..Default::default()
             },
-            [0, 0, 0],
+            Some([0, 0, 0]),
         );
         assert_eq!(image.to_rgba8().get_pixel(0, 0).0, [200, 100, 0, 7]);
         let opaque = DynamicImage::ImageRgba8(RgbaImage::from_pixel(1, 1, Rgba([100, 50, 0, 255])));
@@ -227,7 +238,7 @@ mod tests {
                 grayscale: true,
                 ..Default::default()
             },
-            [0, 0, 0],
+            Some([0, 0, 0]),
         );
         // gray([200, 100, 0]) = (77*200 + 150*100 + 128) >> 8 = 119
         assert_eq!(gray.to_rgb8().get_pixel(0, 0).0, [119; 3]);
@@ -252,5 +263,20 @@ mod tests {
         ] {
             assert!(!bad.adjustments_valid(), "{bad:?}");
         }
+    }
+
+    #[test]
+    fn grayscale_without_a_background_keeps_alpha() {
+        let source = DynamicImage::ImageRgba8(RgbaImage::from_pixel(1, 1, Rgba([255, 0, 0, 40])));
+        let (image, background) = prepare(
+            &source,
+            ImageTransforms {
+                grayscale: true,
+                ..Default::default()
+            },
+            None,
+        );
+        assert_eq!(background, [0; 3]);
+        assert_eq!(image.to_rgba8().get_pixel(0, 0).0, [77, 77, 77, 40]);
     }
 }

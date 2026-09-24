@@ -21,6 +21,8 @@
 //! the CLI exposes an explicit picker rather than trusting detection: when the
 //! guess is wrong, the user overrides it.
 
+use crate::image_color::{palette_rgb, preprocess};
+use crate::{ColorDistance, Dither, ImageColorMode};
 use image::{imageops::FilterType, DynamicImage, GenericImageView};
 use rich::console::{Console, ConsoleOptions};
 use rich::protocol::Renderable;
@@ -43,6 +45,9 @@ pub struct SixelArt {
     max_rows: Option<usize>,
     cell_px: (u32, u32),
     max_colors: u16,
+    color_mode: ImageColorMode,
+    dither: Dither,
+    distance: ColorDistance,
 }
 
 impl SixelArt {
@@ -54,6 +59,9 @@ impl SixelArt {
             cell_px: DEFAULT_CELL_PX,
             // 256 is the Sixel maximum and what a photographic image wants.
             max_colors: 256,
+            color_mode: ImageColorMode::TrueColor,
+            dither: Dither::None,
+            distance: ColorDistance::Rgb,
         }
     }
 
@@ -85,6 +93,24 @@ impl SixelArt {
         self
     }
 
+    /// Quantize to a fixed palette (ANSI256, ANSI16 or grayscale) instead of
+    /// letting the encoder choose up to [`max_colors`](Self::max_colors)
+    /// adaptive colours. The raster is snapped to the palette (and dithered)
+    /// exactly as the text backends do, then encoded with exactly those
+    /// colours; pixels under half opacity stay transparent. Truecolor (the
+    /// default) keeps the adaptive encoder and its output unchanged.
+    pub(crate) fn color_processing(
+        mut self,
+        mode: ImageColorMode,
+        dither: Dither,
+        distance: ColorDistance,
+    ) -> Self {
+        self.color_mode = mode;
+        self.dither = dither;
+        self.distance = distance;
+        self
+    }
+
     /// Target size in **pixels** for the given available width in columns.
     fn pixel_size(&self, available: usize) -> (u32, u32) {
         let (iw, ih) = self.image.dimensions();
@@ -111,16 +137,91 @@ impl SixelArt {
     /// chosen Sixel, and the useful response is to fall back to blocks.
     pub fn encode(&self, available: usize) -> Option<String> {
         let (w, h) = self.pixel_size(available);
-        let scaled = self
+        let mut scaled = self
             .image
             .resize_exact(w, h, FilterType::Lanczos3)
             .to_rgba8();
+        if self.color_mode != ImageColorMode::TrueColor {
+            let transparent: Vec<bool> = scaled.pixels().map(|p| p.0[3] < 128).collect();
+            let indices = preprocess(&mut scaled, self.color_mode, self.dither, self.distance)?;
+            let pixels: Vec<Option<u8>> = indices
+                .into_iter()
+                .zip(transparent)
+                .map(|(index, clear)| (!clear).then_some(index))
+                .collect();
+            return Some(encode_indexed(&pixels, w as usize, h as usize));
+        }
         let opts = icy_sixel::EncodeOptions {
             max_colors: self.max_colors,
             ..Default::default()
         };
         icy_sixel::sixel_encode(scaled.as_raw(), w as usize, h as usize, &opts).ok()
     }
+}
+
+/// Encode a raster of fixed-palette indices (`None` = transparent) as Sixel.
+///
+/// Each register is the ANSI palette index itself, defined once with its RGB
+/// in whole percent, so the colours are exact up to Sixel's own precision.
+/// The header matches the adaptive encoder's: square pixels, a transparent
+/// background, and raster attributes for terminals that drop the DCS
+/// parameters.
+pub(crate) fn encode_indexed(pixels: &[Option<u8>], width: usize, height: usize) -> String {
+    use std::fmt::Write;
+    let used: std::collections::BTreeSet<u8> = pixels.iter().flatten().copied().collect();
+    let mut out = format!("\x1bP9;1;0q\"1;1;{width};{height}");
+    let percent = |v: u8| (u32::from(v) * 100 + 127) / 255;
+    for &index in &used {
+        let [r, g, b] = palette_rgb(index);
+        let _ = write!(
+            out,
+            "#{index};2;{};{};{}",
+            percent(r),
+            percent(g),
+            percent(b)
+        );
+    }
+    let bands = height.div_ceil(6);
+    let mut row = vec![0u8; width];
+    for band in 0..bands {
+        let mut first = true;
+        for &index in &used {
+            row.fill(0);
+            for (dy, y) in (band * 6..(band * 6 + 6).min(height)).enumerate() {
+                for (x, bits) in row.iter_mut().enumerate() {
+                    if pixels[y * width + x] == Some(index) {
+                        *bits |= 1 << dy;
+                    }
+                }
+            }
+            // Trailing empty columns need no characters at all.
+            let Some(end) = row.iter().rposition(|&bits| bits != 0) else {
+                continue;
+            };
+            if !first {
+                out.push('$');
+            }
+            first = false;
+            let _ = write!(out, "#{index}");
+            let mut x = 0;
+            while x <= end {
+                let bits = row[x];
+                let run = row[x..=end].iter().take_while(|&&b| b == bits).count();
+                let glyph = char::from(63 + bits);
+                if run > 3 {
+                    let _ = write!(out, "!{run}{glyph}");
+                } else {
+                    (0..run).for_each(|_| out.push(glyph));
+                }
+                x += run;
+            }
+        }
+        if band + 1 < bands {
+            out.push('-');
+        }
+    }
+    out.push_str("\x1b\\");
+    out
 }
 
 impl Renderable for SixelArt {
@@ -194,6 +295,97 @@ mod tests {
 
     fn solid(w: u32, h: u32) -> DynamicImage {
         DynamicImage::ImageRgb8(RgbImage::from_pixel(w, h, Rgb([200, 40, 90])))
+    }
+
+    /// Decode a Sixel sequence back to RGBA pixels.
+    fn decode(sixel: &str) -> icy_sixel::SixelImage {
+        icy_sixel::SixelImage::decode(sixel.as_bytes()).expect("decodes")
+    }
+
+    #[test]
+    fn indexed_encoding_round_trips_exact_palette_colours() {
+        // Two stripes of ANSI16 red (1) and blue (4), a transparent pixel, and
+        // an odd height so the last band is partial.
+        let (w, h) = (5, 7);
+        let pixels: Vec<Option<u8>> = (0..w * h)
+            .map(|i| match (i % w, i / w) {
+                (0, 0) => None,
+                (_, y) if y < 3 => Some(1),
+                _ => Some(4),
+            })
+            .collect();
+        let sixel = encode_indexed(&pixels, w, h);
+        assert!(sixel.starts_with("\x1bP9;1;0q\"1;1;5;7#1;2;67;0;0#4;2;0;0;67#1"));
+        assert!(sixel.ends_with("\x1b\\"));
+        let image = decode(&sixel);
+        // Decoders pad the last band to six rows; the padding is never set.
+        assert_eq!((image.width, image.height), (w, h.div_ceil(6) * 6));
+        let rgba = |x: usize, y: usize| {
+            let i = (y * w + x) * 4;
+            [
+                image.pixels[i],
+                image.pixels[i + 1],
+                image.pixels[i + 2],
+                image.pixels[i + 3],
+            ]
+        };
+        assert_eq!(rgba(0, 0)[3], 0, "unset pixels stay transparent");
+        assert_eq!(rgba(1, 0), [171, 0, 0, 255]);
+        assert_eq!(rgba(4, 6), [0, 0, 171, 255]);
+        assert!((h..image.height).all(|y| (0..w).all(|x| rgba(x, y)[3] == 0)));
+        // A run longer than three uses the repeat introducer.
+        assert!(sixel.contains("!5"), "{sixel:?}");
+    }
+
+    #[test]
+    fn a_reduced_palette_encodes_only_its_own_colours() {
+        let gradient = DynamicImage::ImageRgb8(RgbImage::from_fn(40, 24, |x, y| {
+            Rgb([(x * 6) as u8, (y * 10) as u8, 128])
+        }));
+        for (mode, dither) in [
+            (ImageColorMode::Ansi16, Dither::None),
+            (ImageColorMode::Ansi16, Dither::Atkinson),
+            (ImageColorMode::Grayscale, Dither::FloydSteinberg),
+            (ImageColorMode::Ansi256, Dither::Bayer4x4),
+        ] {
+            let art = SixelArt::new(gradient.clone()).width(5).color_processing(
+                mode,
+                dither,
+                ColorDistance::Rgb,
+            );
+            let sixel = art.encode(5).expect("encodes");
+            assert_eq!(sixel, art.encode(5).unwrap(), "deterministic");
+            let image = decode(&sixel);
+            // Sixel stores whole percents, so compare after the same rounding.
+            let allowed: Vec<[u8; 3]> = (0..=255u8)
+                .filter(|&i| match mode {
+                    ImageColorMode::Ansi16 => i < 16,
+                    ImageColorMode::Grayscale => i == 16 || i >= 231,
+                    _ => i >= 16,
+                })
+                .map(|i| {
+                    palette_rgb(i).map(|v| {
+                        let percent = (u32::from(v) * 100 + 127) / 255;
+                        ((percent * 255 + 50) / 100) as u8
+                    })
+                })
+                .collect();
+            for pixel in image.pixels.chunks(4) {
+                let rgb = [pixel[0], pixel[1], pixel[2]];
+                assert!(allowed.contains(&rgb), "{mode:?} {dither:?}: {rgb:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn truecolor_keeps_the_adaptive_encoder_byte_for_byte() {
+        let art = SixelArt::new(solid(16, 16)).width(2);
+        let explicit = SixelArt::new(solid(16, 16)).width(2).color_processing(
+            ImageColorMode::TrueColor,
+            Dither::None,
+            ColorDistance::Rgb,
+        );
+        assert_eq!(art.encode(2), explicit.encode(2));
     }
 
     #[test]
