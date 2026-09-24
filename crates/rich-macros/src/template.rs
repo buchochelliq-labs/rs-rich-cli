@@ -12,6 +12,11 @@ use crate::markup as checks;
 /// character, so it cannot collide with a tag or text a template means.
 const MARK: char = '\u{E000}';
 
+/// Fences an escaped value off from the markup around it. Backspace is one of
+/// the control codes markup strips from plain text.
+const FENCE: char = '\u{8}';
+const FENCED_BRACKET: &str = "\u{8}[\u{8}";
+
 /// `keys["a", "b"],` before a template.
 fn parse_keys(input: ParseStream<'_>) -> syn::Result<Vec<String>> {
     if !(input.peek(Ident) && input.peek2(syn::token::Bracket)) {
@@ -117,12 +122,7 @@ fn pieces(template: &str) -> Result<Vec<Piece>, String> {
                     ArgRef::Index(next - 1)
                 } else if let Ok(index) = name.parse() {
                     ArgRef::Index(index)
-                } else if name
-                    .chars()
-                    .next()
-                    .is_some_and(|c| c.is_alphabetic() || c == '_')
-                    && name.chars().all(|c| c.is_alphanumeric() || c == '_')
-                {
+                } else if is_ident(name) {
                     ArgRef::Name(name.to_string())
                 } else {
                     return Err(format!("invalid placeholder `{{{inner}}}`"));
@@ -141,6 +141,43 @@ fn pieces(template: &str) -> Result<Vec<Piece>, String> {
     }
     out.push(Piece::Literal(literal));
     Ok(out)
+}
+
+/// Whether `name` is an identifier `Ident::new` accepts (XID, not a keyword).
+/// `char::is_alphanumeric` is wider — `a²` passes it — and `Ident::new`
+/// panics on what it rejects, so names are checked the way the compiler reads
+/// them.
+fn is_ident(name: &str) -> bool {
+    syn::parse_str::<Ident>(name).is_ok()
+}
+
+/// The bytes before `at` end in a `[` that could still open a tag: a `[`
+/// followed by a tag-start character, preceded by an even run of
+/// backslashes, and with neither `[` nor `]` between it and `at`. A `]` in the
+/// value inserted at `at` would complete it, so user data would add a tag.
+fn dangling_opener(checked: &str, at: usize) -> bool {
+    let before = &checked[..at];
+    let Some(open) = before.rfind(['[', ']']) else {
+        return false;
+    };
+    if before.as_bytes()[open] != b'[' {
+        return false;
+    }
+    // A placeholder's stand-in letter right after the `[` does not count: at
+    // run time the value is fenced off, so `[{}` has nothing to open with.
+    let rest = &before[open + 1..];
+    if rest.starts_with(&format!("x{MARK}")) {
+        return false;
+    }
+    let Some(first) = rest.chars().next() else {
+        return false;
+    };
+    let backslashes = before[..open]
+        .bytes()
+        .rev()
+        .take_while(|b| *b == b'\\')
+        .count();
+    checks::is_tag_start(first) && backslashes % 2 == 0
 }
 
 /// `name$` and `N$` references inside a format spec.
@@ -194,6 +231,18 @@ pub fn richf(input: TokenStream) -> syn::Result<TokenStream> {
         .iter()
         .map(|&at| tags.iter().any(|tag| tag.start < at && at < tag.end))
         .collect();
+    // Each offset is just past its stand-in letter; check the text before it.
+    if offsets
+        .iter()
+        .zip(&in_tag)
+        .any(|(&at, &in_tag)| !in_tag && dangling_opener(&checked, at - 1))
+    {
+        return Err(error(
+            "a `[` before a placeholder is neither closed nor escaped, so a `]` in \
+             the value would complete it as a tag; write `\\[` for a literal bracket"
+                .into(),
+        ));
+    }
 
     // Bind every argument once, by reference, in order.
     let mut bindings = Vec::new();
@@ -260,7 +309,12 @@ pub fn richf(input: TokenStream) -> syn::Result<TokenStream> {
                 for reference in spec_references(spec) {
                     let name = match &reference {
                         ArgRef::Index(index) => format_ident!("__rich_ref{}", index),
-                        ArgRef::Name(name) => Ident::new(name, span),
+                        ArgRef::Name(name) if is_ident(name) => Ident::new(name, span),
+                        ArgRef::Name(name) => {
+                            return Err(error(format!(
+                                "`{name}` in `{{:{spec}}}` is not a valid identifier"
+                            )))
+                        }
                     };
                     let bound = resolve(&reference)?;
                     extra.push(quote!(#name = *#bound));
@@ -271,9 +325,21 @@ pub fn richf(input: TokenStream) -> syn::Result<TokenStream> {
                 pushes.push(if in_tag[placeholder] {
                     quote!(__rich_markup.push_str(&#formatted);)
                 } else {
-                    quote!(__rich_markup.push_str(
-                        &::rich_ext::__private::rich::markup::escape(&#formatted)
-                    );)
+                    // `markup::escape` is not enough here: whether a run of
+                    // backslashes escapes a tag depends on what follows it, so
+                    // a value ending in `\\\` escaped the template's next
+                    // tag, and a template `\` before a value un-escaped the
+                    // value's. Instead the value is fenced with a control code
+                    // on each side and one on each side of every `[`: then no
+                    // `\[` or `[a-z#/@]` spans a boundary or appears inside the
+                    // value, so nothing in it is markup and it cannot reach the
+                    // template's. Markup drops these codes from the plain text
+                    // (as upstream does), so the value prints exactly as given.
+                    quote!(
+                        __rich_markup.push(#FENCE);
+                        __rich_markup.push_str(&#formatted.replace('[', #FENCED_BRACKET));
+                        __rich_markup.push(#FENCE);
+                    )
                 });
                 placeholder += 1;
             }
@@ -291,19 +357,12 @@ pub fn richf(input: TokenStream) -> syn::Result<TokenStream> {
             format!("named argument `{}` is never used", named[at].0),
         ));
     }
-    let dynamic = in_tag.iter().any(|dynamic| *dynamic);
-    let build = if dynamic {
-        // A placeholder inside a tag was only checked at run time.
-        quote!(
-            ::rich_ext::__private::rich::Text::from_markup(&__rich_markup)
-                .unwrap_or_else(|_| ::rich_ext::__private::rich::Text::new(__rich_markup.clone()))
-        )
-    } else {
-        quote!(
-            ::rich_ext::__private::rich::Text::from_markup(&__rich_markup)
-                .expect("markup checked by richf!")
-        )
-    };
+    // A placeholder inside a tag was only checked at run time. Otherwise the
+    // markup cannot fail, but values are user data, so never panic on it.
+    let build = quote!(
+        ::rich_ext::__private::rich::Text::from_markup(&__rich_markup)
+            .unwrap_or_else(|_| ::rich_ext::__private::rich::Text::new(__rich_markup.clone()))
+    );
     Ok(quote!({
         #(#bindings)*
         let mut __rich_markup = ::std::string::String::new();
@@ -417,6 +476,24 @@ mod tests {
         assert!(pieces("a }").is_err());
         assert!(pieces("{x").is_err());
         assert!(pieces("{a b}").is_err());
+    }
+
+    #[test]
+    fn dangling_openers_are_found_before_placeholders() {
+        let at = |s: &str| s.len();
+        for open in ["[b ", "a [#f", "\\\\[b"] {
+            assert!(dangling_opener(open, at(open)), "{open:?}");
+        }
+        for fine in ["", "[", "[b]", "\\[b ", "[b [", "[b ]", "[1", "[x\u{E000} "] {
+            assert!(!dangling_opener(fine, at(fine)), "{fine:?}");
+        }
+    }
+
+    #[test]
+    fn placeholder_names_must_be_identifiers() {
+        assert!(pieces("{a²}").is_err());
+        assert!(pieces("{fn}").is_err());
+        assert!(pieces("{_x1}").is_ok());
     }
 
     #[test]

@@ -9,7 +9,7 @@ pub struct Tag {
     pub end: usize,
 }
 
-fn is_tag_start(c: char) -> bool {
+pub fn is_tag_start(c: char) -> bool {
     c.is_ascii_lowercase() || matches!(c, '#' | '/' | '@')
 }
 

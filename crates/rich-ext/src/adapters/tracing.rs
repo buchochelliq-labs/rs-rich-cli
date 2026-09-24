@@ -74,13 +74,17 @@ impl Fields {
                 return;
             }
         }
-        let name = field.name();
-        // A span's `record` replaces the value it was created with.
-        if let Some((_, old)) = self.fields.iter_mut().find(|(key, _)| key == name) {
-            *old = value;
-        } else {
-            self.fields.push((name.into(), value));
-        }
+        set(&mut self.fields, field.name(), value);
+    }
+}
+
+/// Set field `name`: a span's `record` replaces the value it was created
+/// with, in place, as tracing's record semantics say.
+fn set(fields: &mut Vec<(String, Value)>, name: &str, value: Value) {
+    if let Some((_, old)) = fields.iter_mut().find(|(key, _)| key == name) {
+        *old = value;
+    } else {
+        fields.push((name.into(), value));
     }
 }
 
@@ -212,9 +216,7 @@ where
         };
         values.record(&mut fields);
         if let Some(message) = fields.message.take() {
-            fields
-                .fields
-                .push(("message".into(), Value::String(message)));
+            set(&mut fields.fields, "message", Value::String(message));
         }
         data.fields = fields.fields;
     }

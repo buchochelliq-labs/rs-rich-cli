@@ -30,8 +30,11 @@ to.
 ![Formatted, styled text; user data printed literally](../../media/guide/guide_macros-richf.svg)
 
 - **Values are escaped.** A value containing `[red]` prints the brackets; it
-  cannot inject markup. This is the main reason to prefer `richf!` over
-  `print_str(&format!(…))`.
+  cannot inject markup, and it prints exactly as given — backslashes included.
+  Nothing in a value can reach the template's own tags either: a value ending
+  in `\` does not escape the tag after it. This is the main reason to prefer
+  `richf!` over `print_str(&format!(…))`. A template `[` that could still open
+  a tag with a value's `]` (`"[b {}"`) is a compile error; write `\[`.
 - Placeholders work as in `format!`: implicit captures (`{name}`), positions
   (`{0}`), named arguments (`{v}` with `v = …`), format specs (`{count:>3}`,
   `{v:>width$}`) and `{{`/`}}` for literal braces. Unused arguments are an
