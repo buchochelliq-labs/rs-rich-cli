@@ -25,9 +25,12 @@ rich --demo --no-color > tour.txt  # finite, colour-free transcript
 The tour walks through markup, a pushed theme, tables, panels, layouts,
 Markdown (including `~~~` strikethrough), syntax, progress with speed and time
 remaining, notebooks, JSON Lines, logs, config profiles, batch planning and
-parallel HTML/SVG exports, a two-file watch, and rich-art's banners, Braille,
-half-blocks, quadrants, ASCII, ANSI16 and tone adjustments, crop/background
-controls, image diffs and GIF playback. The watch example ends itself: its last
+parallel HTML/SVG exports, a two-file watch, `rich inspect`, a text `rich diff`,
+`rich view`, the `hex`, `unicode` and `ansi explain` inspectors, an upstream
+theme file, a `rich capture --redact` of a shell one-liner, and rich-art's
+banners, Braille, half-blocks, quadrants, ASCII, ANSI16 and tone adjustments,
+Atkinson dithering with OKLab colours, checkerboard and terminal-default alpha
+backgrounds, crop/background controls, image diffs and GIF playback. The watch example ends itself: its last
 edit writes invalid JSON, and `--watch-exit-on-error` stops the watch.
 It shows commands alongside the CLI examples. URL fetching, external paging
 and terminal-specific Sixel support are explained without opening a browser,

@@ -912,7 +912,7 @@ rich --demo-list
 
 ```text
 core       Core renderables and extensions
-workflows  Configuration, batch, exports and watch
+workflows  Configuration, batch, exports, watch, inspectors and capture
 art        Banners, images, image diff and GIF
 ```
 
