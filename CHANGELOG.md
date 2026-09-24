@@ -60,6 +60,66 @@ Entries below record subsequent releases and development.
 Cohort versions for 0.0.11 (not published): core 0.0.7, ext 0.0.9, art 0.0.9,
 CLI 0.0.11. Core changes below, so every dependent moves with it.
 
+### Workflow renderables (0.0.11 workstream 10)
+
+All in `rs-rich-ext`, with no new dependencies and no change to core. Every
+renderable has a plain fallback that carries its meaning without colour and
+follows the accessibility policy (ASCII symbols, reduced motion).
+
+- **Commands, task trees and summaries (`workflow`; #388, #389, #393).**
+  - `CommandRecord` holds a process's argv, working directory, interleaved
+    stdout/stderr, exit status and duration. Running a process
+    (`CommandRunner`, which a `CancelToken` can kill) is separate from showing
+    one (`CommandView`: output folded to its tail, stderr marked `!`, a spinner
+    while running, a diagnostic after a failure).
+  - `TaskTree`: nested tasks whose parents aggregate their children's status,
+    with per-task cancellation, progress, notes and time from an injected
+    `Clock`. It can collapse finished subtrees.
+  - `CompletionSummary`: overall status, counts, duration, the items that need
+    attention and next steps, built by hand or from a finished `TaskTree`.
+- **Transfers, retries and notifications (#390, #391, #392).**
+  - `transfer`: `Transfer`/`Transfers` with a moving-window rate, ETA, retry,
+    pause and cancel states; `transfer_columns()` and `Transfer::task_update()`
+    drive the core `Progress`; `TransferReader`/`TransferWriter` count bytes and
+    stop on a `CancelToken`.
+  - `countdown`: `Backoff` (exponential, capped, attempt limit, seeded jitter),
+    `RetryStatus`, `RateLimit`, `CountdownBar`, and `CountdownWait`, a
+    cancellable wait that redraws in a live region or prints one line per
+    attempt when motion is off or the output is not interactive.
+  - `notify`: `Notification` toasts (one line or a panel) and a `Notifications`
+    stack with expiry, shown below live regions or printed once each when the
+    output is not interactive.
+- **Tables (`table`; #259, #429).**
+  - `StreamingTable`: keyed rows for append and update workloads (upsert keeps a
+    row's place), head and tail windows, and capacity eviction. Only changed
+    rows are laid out again unless a column's width changes, and the output is
+    byte-identical to the same core `Table` built from scratch.
+  - `TableData`: stable multi-column sorting (numbers and digit runs compare by
+    value, empty cells last, `▲`/`▼` or `^`/`v` in headers), grouping with
+    count, sum, min, max, mean or custom aggregates, and totals, rendered as a
+    core `Table`.
+- **Badges, size bars and formatters (#426, #427, #425).**
+  - `Badge`/`Badges`: status, label, link (OSC 8) and metadata chips that read
+    `[OK build]` or `[docs <url>]` without styles, and wrap between badges.
+  - `SizeBar`: a size against a total or limit, with going over shown by glyph,
+    percentage and "over by" text.
+  - `format`: sizes (decimal and binary), rates, durations, clock times,
+    relative times, UTC timestamps, percentages and numbers.
+- **Redaction (`redact`; #224).** `Redactor` masks secrets in strings, ANSI text
+  and rendered segments, keeping styles and cell widths, so output can be
+  redacted between recording and export. Built-in detectors cover secret-named
+  keys, bearer tokens, common token prefixes, AWS access keys, JWTs and URL
+  passwords; custom patterns can mask a named `secret` group. `SECRET_KEYS`
+  moves to `redact`, and `data::SECRET_KEYS` still re-exports it.
+- **CLI: `rich capture --redact` and `--redact-pattern REGEX`** mask the command
+  line and its output before the capture is shown, exported or recorded.
+- **Shared:** `cancel::CancelToken` (with child tokens) and
+  `theme::STYLE_TABLES`, the one list of style tables `extended_theme()`
+  layers, which now includes the new `workflow.*`, `transfer.*`,
+  `countdown.*`, `notify.*`, `table.*`, `badge.*` and `size_bar.*` keys.
+- **Fixed before merge:** a command that had already exited was reported
+  cancelled when its token fired while its pipes drained.
+
 ### Art and CLI carry-over: colour modes, alpha backgrounds and theme files (0.0.11 workstream 12)
 
 - **Art: Atkinson dithering and OKLab distance (#498).**

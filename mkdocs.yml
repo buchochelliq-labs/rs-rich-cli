@@ -97,6 +97,10 @@ nav:
           - Diagnostics and stack traces: guide/ext/diagnostics.md
           - Logging: guide/ext/logging.md
           - Live regions, layouts and targets: guide/ext/live-and-layout.md
+          - Workflows: guide/ext/workflows.md
+          - Transfers, retries and notifications: guide/ext/transfers-and-status.md
+          - Sorting, grouping and streaming tables: guide/ext/tables.md
+          - Badges, size bars and redaction: guide/ext/badges-and-redaction.md
           - Macros and derive: guide/ext/macros.md
           - Structured data: guide/ext/structured-data.md
           - CLI authoring: guide/ext/cli-authoring.md

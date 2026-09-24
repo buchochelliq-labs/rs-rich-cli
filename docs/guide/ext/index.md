@@ -18,7 +18,7 @@ always available. The `use` path is `rich_ext::<module>`.
 | Module | What it gives you | Feature | Guide |
 |---|---|---|---|
 | `ConsoleExt`, `registry` | `install_extensions()` and `ExtensionRegistry`: explicit installation of highlighters | none | [Extensions](extensions.md) |
-| `theme` | `extended_theme()`: upstream's theme plus `error`/`warning`/`info`/`success`, CLI help and diff styles | none | [Extensions](extensions.md#the-extended-theme) |
+| `theme` | `extended_theme()`: upstream's theme plus `error`/`warning`/`info`/`success`, CLI help, diff and workflow styles (`STYLE_TABLES`) | none | [Extensions](extensions.md#the-extended-theme) |
 | `highlighter` | `NumberHighlighter`, the default extension | none | [Extensions](extensions.md#installing-the-default-extensions) |
 | `hyperlink` | `Hyperlinker`: OSC 8 links for URLs, paths, `path:line:col`, `#123`; editor URL templates | none | [Extensions](extensions.md#hyperlinks) |
 | `sanitize` | `sanitize_terminal_controls`: make untrusted text inert | none | [Extensions](extensions.md#sanitizing-untrusted-text) |
@@ -35,6 +35,20 @@ always available. The `use` path is `rich_ext::<module>`.
 | `macros` | `rich_table!`, `rich_panel!`, `rich_tree!`, `rich_progress!`, `rich_dbg!`; with `macros`, `rich_println!`, `rich_eprintln!`, `rich_trace!` | none; `macros` for the print macros | [Macros](macros.md) |
 | `richf!`, `style!`, `theme_key!`, `markup!`, `#[derive(Rich)]` | Compile-time checked markup and styles; derive rendering (re-exported from `rs-rich-macros`) | `macros` | [Macros](macros.md) |
 | `derive` | `RichRecord`, `Field`, `render` and `table`: the runtime behind the derive | none | [Macros](macros.md#many-records-as-a-table) |
+
+## Workflows, tables and status
+
+| Module | What it gives you | Feature | Guide |
+|---|---|---|---|
+| `workflow` | `CommandRecord`/`CommandView`/`CommandRunner`: a process's output, exit status and duration, folded, with a live spinner; `TaskTree`: nested tasks with aggregate status and cancellation; `CompletionSummary` | none | [Workflows](workflows.md) |
+| `transfer` | `Transfer`, `Transfers`, `transfer_columns()`, `TransferReader`/`TransferWriter`: download and upload progress with rate, ETA, retries and cancellation | none | [Transfers and status](transfers-and-status.md#transfers) |
+| `countdown` | `Backoff`, `RetryStatus`, `RateLimit`, `CountdownBar`, `CountdownWait`: retry and rate-limit countdowns | none | [Transfers and status](transfers-and-status.md#retries-and-rate-limits) |
+| `notify` | `Notification`, `Notifications`: transient toasts with expiry | none | [Transfers and status](transfers-and-status.md#notifications) |
+| `cancel` | `CancelToken`: one cancellation flag, with child tokens, shared by the modules above | none | [Workflows](workflows.md#cancellation) |
+| `table` | `TableData`: stable multi-column sort, grouping and aggregates; `StreamingTable`: keyed rows that re-render only what changed | none | [Tables](tables.md) |
+| `badge`, `size_bar` | `Badge`/`Badges`: status, label, link and metadata chips; `SizeBar`: a size against a total or limit | none | [Badges and redaction](badges-and-redaction.md) |
+| `format` | Sizes, rates, durations, relative times, timestamps, percentages and numbers as people read them | none | [Badges and redaction](badges-and-redaction.md#formatters) |
+| `redact` | `Redactor`: mask secrets in strings, ANSI text and rendered segments before they are exported or recorded | none | [Badges and redaction](badges-and-redaction.md#redaction) |
 
 ## Structured data and CLI authoring
 
