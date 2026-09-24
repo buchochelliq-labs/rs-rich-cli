@@ -412,7 +412,7 @@ follows the accessibility policy (ASCII symbols, reduced motion).
   is that example's real output exported to SVG. `scripts/capture_guide.py`
   regenerates them (`--check` fails on a stale image).
 - **`scripts/smoke_cli.py`** runs every CLI command and mode end to end against
-  generated fixtures (75 cases, no network or terminal needed), checks exit codes
+  generated fixtures (86 cases, no network or terminal needed), checks exit codes
   and output, and regenerates the CLI screenshots with `--screenshots`.
 - **Fixes to existing docs:** the tutorial's `Live` example used an API that does
   not exist (it now includes the compiled one); a markup error exits 4, not 1;

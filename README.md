@@ -16,14 +16,16 @@ color, and beautiful formatting in the terminal.
 Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
 (see [`UPSTREAM.toml`](UPSTREAM.toml)).
 
-![Rich-art cover cropping with nine anchors](docs/assets/demos/v8-crop-anchors.gif)
+![The rich CLI 0.0.11 demo tour](docs/assets/demos/v11-demo-tour.gif)
 
-**[Watch the rich-art videos](https://buchochelliq-labs.github.io/rs-rich-cli/demos/)** ·
+**[Watch the CLI and art videos](https://buchochelliq-labs.github.io/rs-rich-cli/demos/)** ·
 [User guide](docs/guide/index.md) · [Output gallery](docs/gallery.md) · [CLI guide](docs/cli.md)
 
-This preview shows crop anchors from the optimized CLI 0.0.8 build.
-[New workflows and reproduction](docs/demos.md#cli-008-workflows) ·
-[0.0.8 release notes](docs/releases/0.0.8.md).
+This preview is the recorded 0.0.11 demo tour: `inspect`, `diff`, `view`, the
+`hex`, `unicode` and `ansi explain` inspectors, a theme file, a redacted
+`capture`, and the new image modes.
+[Tour and reproduction](docs/demos.md) ·
+[0.0.11 release notes](docs/releases/0.0.11.md).
 
 ## Install and try
 
@@ -81,8 +83,9 @@ The published package names carry an `rs-` prefix because `rich` is already take
 on crates.io by an unrelated crate. The library targets keep the short names, so
 you still write `use rich::…`.
 
-The dependency arrow only ever points one way: `rich-cli → rich-ext → rich`
-(`rich-art` also depends only on `rich`). This keeps the core a clean mirror and
+The dependency arrow only ever points one way: `rich-cli → rich-ext → rich` and
+`rich-cli → rich-art → rich`, with `rich-ext → rich-macros` behind ext's optional
+`macros` feature. Nothing depends back on the CLI or ext. This keeps the core a clean mirror and
 makes upstream syncs a mechanical diff-and-port. See
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -97,13 +100,14 @@ markup · `Text` (wrapping, justification incl. full, overflow, spans) ·
 `Console` (capture, export to HTML/SVG, paging, control codes) · `Segment` ·
 themes · highlighters · `Table` · `Panel` · `Rule` · `Align` · `Padding` ·
 `Columns` · `Constrain` · `Tree` · `Layout` · `Screen` · `Markdown` · `Syntax` ·
-`JSON` · `Pretty` · `Traceback` · `Progress` · `Spinner` · `Status` · `Live` ·
-`Bar` · `Prompt` · emoji · filesize.
+`JSON` · `Pretty` · `Traceback` · `Progress` (incl. `track()` and
+`RenderableColumn`) · `Spinner` · `Status` · `Live` · `LogRender` · `Bar` ·
+`Prompt` · emoji · filesize.
 
 **Not ported:** Windows legacy-console support (so pre-Windows-10 terminals fall
-back to plain output), Jupyter integration, `inspect`/`repr` of Python objects
-(no Rust equivalent — see [#19](https://github.com/buchochelliq-labs/rs-rich-cli/issues/19)),
-and a `log`/`tracing` handler.
+back to plain output), Jupyter integration, and `inspect`/`repr` of Python objects
+(no Rust equivalent — see [#19](https://github.com/buchochelliq-labs/rs-rich-cli/issues/19)).
+A `log`/`tracing` handler (`RichHandler`) lives in `rs-rich-ext`.
 
 **Known to differ from upstream**, deliberately and with reasons, in
 [docs/DIVERGENCES.md](docs/DIVERGENCES.md) — most notably syntax highlighting uses
@@ -115,8 +119,8 @@ why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 
 ## Release history and development
 
-The [release notes](docs/releases/0.0.4.md) document the coordinated 0.0.4
-release. Later source changes are tracked in the [roadmap](docs/ROADMAP.md)
+The [0.0.11 release notes](docs/releases/0.0.11.md) document the newest
+cohort; older notes are in [`docs/releases/`](docs/releases/). Later source changes are tracked in the [roadmap](docs/ROADMAP.md)
 and development plans. The manifest table above describes this checkout;
 crates.io is the source for available published versions.
 
@@ -124,14 +128,12 @@ The 0.0.9 cohort (core 0.0.5, ext 0.0.7, art 0.0.7, CLI 0.0.9) is also
 [published](docs/releases/0.0.9-expanded.md). The [0.0.10 cohort](docs/releases/0.0.10.md)
 (core 0.0.6, ext 0.0.8, art 0.0.8, CLI 0.0.10) is published: Progress time, rate and spinner columns, upstream's theme stack, `~~~`
 strikethrough parity, multi-file watch, and quadrant, ANSI16 and grayscale image
-modes with tone adjustments. Source versions do not imply publication. See
-[copyable workflows](docs/recipes.md).
-
-## 0.0.3 release notes
-
-The [0.0.3 notes](docs/releases/0.0.3.md) cover graphical diff exports, notebook
-layout, styled titles, JSON correctness, Windows paging and safer GIF/CSV output.
-See [UAT closeout](docs/remaining-uat-0.0.3.md) for completed and deferred work.
+modes with tone adjustments. The [0.0.11 cohort](docs/releases/0.0.11.md)
+(core 0.0.7, macros 0.0.1 (new), ext 0.0.9, art 0.0.9, CLI 0.0.11) is
+**prepared, not published**: diagnostics, structured data, checked-markup macros,
+`clap` and `tracing` integration, workflow renderables, and the `inspect`, `diff`,
+`view`, `hex`, `unicode`, `env` and `capture` commands. Source versions do not
+imply publication. See [copyable workflows](docs/recipes.md).
 
 ## Install
 
@@ -148,12 +150,23 @@ cargo run -p rs-rich-cli -- --help  # every supported flag
 cargo run -p rs-rich-cli -- FILE    # print a file (type auto-detected)
 ```
 
-The CLI covers `--markdown` · `--syntax` · `--json` · `--csv` · `--ipynb` ·
-`--jsonl` · `--log` · `--print` · `--rule` · `--panel` · `--padding` ·
-`--pager` · `--export-html` · `--export-svg` · `--sanitize` · `--report json` ·
-alignment and width flags, plus fetching an `http(s)` URL directly. Preferred
-subcommands such as `rich json`, `rich markdown`, `rich csv`, `rich jsonl` and
-`rich log` coexist with the legacy flat flags.
+The CLI covers upstream's `--markdown` · `--syntax` · `--json` · `--csv` ·
+`--ipynb` · `--print` · `--rule` · `--panel` · `--padding` · `--pager` ·
+`--export-html` · `--export-svg` and alignment and width flags, plus fetching an
+`http(s)` URL directly. It adds `--jsonl` · `--log` · `--image` · `--gif` ·
+`--diff` · `--sanitize` · `--report json` · `--watch` · `--batch` ·
+`--theme-file` · `--format`. Preferred subcommands such as `rich json`,
+`rich markdown`, `rich csv`, `rich jsonl` and `rich log` coexist with the legacy
+flat flags.
+
+Source 0.0.11 (prepared, not yet published) adds tool commands: `inspect`
+(JSON/YAML/TOML/XML/INI/CSV with `--select`, `--compare` and experimental
+`--redact`), `diff` for text and patches, `view`, `hex` (alias `hexdump`),
+`unicode`, `env`, `capture` (with experimental `--redact`), `ansi explain`,
+`doctor`, `bench compare`, `completions`, `docs`, `config explain|reference`,
+and rich-rendered help (`rich COMMAND --help`). See the
+[CLI guide](docs/guide/cli/walkthrough.md) and
+[CLI reference](docs/cli-reference.md).
 
 Library usage:
 
