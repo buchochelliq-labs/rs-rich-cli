@@ -109,3 +109,8 @@ pub mod cli_doc;
 
 // Diffs: engine, views, source/patch renderers, test reports and assertions.
 pub mod diff;
+
+// Transfers, retry/rate-limit countdowns and transient notifications.
+pub mod countdown;
+pub mod notify;
+pub mod transfer;
