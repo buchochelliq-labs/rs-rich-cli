@@ -29,13 +29,20 @@
 //! tokens retain their exact digits, finite floats use Python's `repr`, and
 //! overflowing exponents become signed Infinity as in Python.
 //!
-//! That leaves nesting *unbounded* where CPython eventually raises
-//! `RecursionError` — somewhere past 10 000 levels, at a depth that depends on
-//! the interpreter's C stack rather than on anything in the format. Reproducing
-//! a number that moves between machines would be a made-up divergence of its
-//! own, so this accepts every document CPython would and then some.
+//! Nesting is still bounded, at [`MAX_DEPTH`] levels, where CPython raises
+//! `RecursionError`: `json.loads` recurses in C, and CPython 3.12+ stops just
+//! short of 10 000 levels (3.11 at its 1 000-frame recursion limit). Rendering
+//! indents every line by its depth, so an unbounded document costs quadratic
+//! memory: a 100 000-deep array asked for tens of gigabytes and was killed
+//! rather than reporting an error. The limit accepts every document CPython
+//! 3.12+ accepts; the few levels between its exact (stack-dependent) cutoff
+//! and `MAX_DEPTH` are the only difference.
 
 use std::collections::HashMap;
+
+/// The deepest nesting [`Json::new`] accepts. Deeper documents fail with the
+/// error CPython's `json.loads` raises (`RecursionError`); see the module docs.
+pub const MAX_DEPTH: usize = 10_000;
 
 use crate::console::{Console, ConsoleOptions};
 use crate::errors::{Result, RichError};
@@ -474,6 +481,17 @@ impl<'a> Parser<'a> {
 
         'descend: loop {
             self.skip_whitespace();
+            // CPython's scanner enters a recursive call per container, empty
+            // ones included, and raises once the recursion limit is reached.
+            if let Some(kind @ (b'[' | b'{')) = self.peek() {
+                if stack.len() >= MAX_DEPTH {
+                    let what = if kind == b'[' { "array" } else { "object" };
+                    return Err(self.error(&format!(
+                        "maximum recursion depth exceeded while decoding a JSON {what} \
+                         from a unicode string"
+                    )));
+                }
+            }
             match self.peek() {
                 Some(b'[') => {
                     self.pos += 1;
@@ -1058,10 +1076,44 @@ mod tests {
     /// overflow, which kills the process without even an error message.
     #[test]
     fn very_deep_nesting_does_not_overflow_the_stack() {
-        let depth = 100_000;
-        let payload = format!("{}1{}", "[".repeat(depth), "]".repeat(depth));
+        let payload = format!("{}1{}", "[".repeat(MAX_DEPTH), "]".repeat(MAX_DEPTH));
         let json = Json::new(&payload).expect("deep document parses");
         drop(json);
+        // Drop glue on a tree far past the parse limit stays iterative too.
+        let mut node = Node::Number("1".to_string());
+        for _ in 0..100_000 {
+            node = Node::Array(vec![node]);
+        }
+        drop(node);
+    }
+
+    /// Past `MAX_DEPTH` the document is refused with CPython's
+    /// `RecursionError` message instead of being rendered: its indentation
+    /// alone is quadratic in the depth, and a 100 000-deep array exhausted
+    /// memory and was killed.
+    #[test]
+    fn nesting_past_the_limit_is_an_error() {
+        for (open, close, what) in [("[", "]", "array"), ("{\"a\":", "}", "object")] {
+            for depth in [MAX_DEPTH + 1, 100_000] {
+                let payload = format!("{}1{}", open.repeat(depth), close.repeat(depth));
+                let error = Json::new(&payload).err().expect("too deep");
+                assert!(
+                    error.to_string().contains(&format!(
+                        "maximum recursion depth exceeded while decoding a JSON {what}"
+                    )),
+                    "{error}"
+                );
+            }
+        }
+        // An empty container counts as a level, as a call in CPython's scanner.
+        let payload = format!("{}[]{}", "[".repeat(MAX_DEPTH), "]".repeat(MAX_DEPTH));
+        assert!(Json::new(&payload).is_err());
+        let payload = format!(
+            "{}[]{}",
+            "[".repeat(MAX_DEPTH - 1),
+            "]".repeat(MAX_DEPTH - 1)
+        );
+        assert!(Json::new(&payload).is_ok());
     }
 
     /// Python's json accepts and emits `NaN` / `Infinity` / `-Infinity`
