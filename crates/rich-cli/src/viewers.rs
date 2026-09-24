@@ -211,10 +211,24 @@ pub(crate) struct Captured {
     /// since the command started.
     pub chunks: Chunks,
     pub status: Option<i32>,
+    /// The signal that killed the command, where the platform reports one.
+    pub signal: Option<i32>,
     pub elapsed: Duration,
 }
 
 impl Captured {
+    /// The status `rich capture` exits with: the command's own, or
+    /// 128 + the signal number when a signal killed it, as a shell reports.
+    /// A status that does not fit a byte, or reads as 0 once truncated, is 1.
+    pub fn exit_code(&self) -> u8 {
+        match (self.status, self.signal) {
+            (Some(0), _) => 0,
+            (Some(code), _) => u8::try_from(code).ok().filter(|&c| c != 0).unwrap_or(1),
+            (None, Some(signal)) => u8::try_from(128 + signal).unwrap_or(1),
+            (None, None) => 1,
+        }
+    }
+
     fn output(&self) -> Vec<u8> {
         self.chunks
             .iter()
@@ -225,7 +239,7 @@ impl Captured {
 
 /// Run `command` with its output piped, as a colour-capable terminal `width`
 /// columns wide would see it (`FORCE_COLOR`, `CLICOLOR_FORCE`, `COLUMNS`).
-/// The command's own exit status is reported, not returned as an error.
+/// The command's own exit status is recorded, not returned as an error.
 pub(crate) fn capture(command: &[String], width: usize) -> Result<Captured, String> {
     let (program, args) = command
         .split_first()
@@ -278,8 +292,19 @@ pub(crate) fn capture(command: &[String], width: usize) -> Result<Captured, Stri
         command: command.to_vec(),
         chunks,
         status: status.code(),
+        signal: exit_signal(&status),
         elapsed,
     })
+}
+
+#[cfg(unix)]
+fn exit_signal(status: &std::process::ExitStatus) -> Option<i32> {
+    std::os::unix::process::ExitStatusExt::signal(status)
+}
+
+#[cfg(not(unix))]
+fn exit_signal(_status: &std::process::ExitStatus) -> Option<i32> {
+    None
 }
 
 /// A command line as a shell would show it.
@@ -325,7 +350,10 @@ pub(crate) fn capture_view(captured: &Captured) -> Box<dyn Renderable> {
     let ok = captured.status == Some(0);
     let status = match captured.status {
         Some(code) => format!("exit {code}"),
-        None => "killed by a signal".to_string(),
+        None => match captured.signal {
+            Some(signal) => format!("killed by signal {signal}"),
+            None => "killed by a signal".to_string(),
+        },
     };
     let panel = Panel::new(Box::new(text))
         .title(format!(
@@ -335,6 +363,28 @@ pub(crate) fn capture_view(captured: &Captured) -> Box<dyn Renderable> {
         .subtitle(format!("{status} · {}", format_elapsed(captured.elapsed)))
         .border_style(Style::parse(if ok { "green" } else { "red" }).unwrap_or_default());
     Box::new(panel)
+}
+
+/// The `--report json` envelope for a command that failed: `code` is
+/// `"command"` and `exit_code` the status `rich capture` exits with.
+pub(crate) fn capture_report(captured: &Captured) -> serde_json::Value {
+    let message = match (captured.status, captured.signal) {
+        (Some(code), _) => format!("command exited with status {code}"),
+        (None, Some(signal)) => format!("command was killed by signal {signal}"),
+        (None, None) => "command was killed by a signal".to_string(),
+    };
+    serde_json::json!({
+        "ok": false,
+        "code": "command",
+        "exit_code": captured.exit_code(),
+        "message": message,
+        "error": { "message": message },
+        "result": {
+            "command": captured.command,
+            "status": captured.status,
+            "signal": captured.signal,
+        },
+    })
 }
 
 /// The capture as an asciicast v2 recording (`asciinema play FILE`).
@@ -510,6 +560,7 @@ mod tests {
             .collect();
         let captured = capture(&command, 40).unwrap();
         assert_eq!(captured.status, Some(3));
+        assert_eq!(captured.exit_code(), 3);
         // One pipe keeps stdout and stderr in the order they were written.
         assert_eq!(String::from_utf8(captured.output()).unwrap(), "a\nb\n");
         let cast = asciicast(&captured, 40, 10);

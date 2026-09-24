@@ -608,8 +608,11 @@ rich capture --export-svg test-run.svg --cast test-run.cast -- cargo test
 asciinema play test-run.cast
 ```
 
-`capture` reports the command's exit status in red but exits 0 itself; there
-is no PNG export.
+`capture` exits with the command's own status (128 + the signal number if a
+signal killed it) after drawing the panel and writing any exports, so
+`rich capture -- cargo test` fails a CI step when the tests fail. Append
+`|| true` to ignore it. With `--report json` a failed command's envelope has
+`"code": "command"` and its status. There is no PNG export.
 
 ## Panels, padding, alignment and style
 

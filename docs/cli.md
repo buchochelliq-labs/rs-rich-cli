@@ -629,6 +629,11 @@ Exit codes are stable by failure class:
 | `5` | Threshold/gate failure, such as `--diff --threshold` exceeded. |
 | `130` | Batch interrupted with Ctrl+C. Started workers are stopped and reaped. |
 
+`rich capture -- CMD` is the exception: once its output is shown and exported
+it exits with the command's own status, or 128 + the signal number if a signal
+killed it, as `time` and `env` do. With `--report json` that failure's envelope
+has `"code": "command"` and the command's `status` and `signal` in `result`.
+
 Check them:
 
 ```bash

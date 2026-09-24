@@ -248,7 +248,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `hex`, `hexdump` | Hex dump with offsets, byte groups and an ASCII panel (--search, --offset, --length) |
 | `unicode` | Show graphemes, code points, UTF-8 bytes, widths and invalid sequences |
 | `env` | List environment variables, secrets masked; `rich env PATH` checks each PATH entry |
-| `capture` | Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE records it) |
+| `capture` | Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE records it), then exit with the command's status |
 | `config` | Show, validate, explain or document configuration |
 | `completions` | Print a shell completion script |
 | `docs` | Print reference documentation generated from this help |
@@ -563,7 +563,7 @@ rich env [OPTIONS] [RESOURCE]
 
 ### rich capture
 
-Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE records it)
+Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE records it), then exit with the command's status
 
 #### Usage
 

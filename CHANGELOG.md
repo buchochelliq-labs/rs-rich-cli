@@ -90,8 +90,9 @@ CLI 0.0.11. Core changes below, so every dependent moves with it.
 - **`rich capture -- CMD` (#424):** runs a command with colour forced and
   `COLUMNS` set, stdout and stderr merged in order through one pipe, and shows
   the output in a panel with its exit status and duration. `--export-svg`,
-  `--export-html` and `--cast FILE` (asciicast v2) record it. It reports the
-  command's status without failing on it; PNG export is not provided.
+  `--export-html` and `--cast FILE` (asciicast v2) record it. It exits with
+  the command's status (128 + the signal for a killed command) once the panel
+  and exports are written; PNG export is not provided.
 - **Ext:** new `source_view::SourceView`, `hex::HexView`,
   `unicode_inspect::UnicodeView` and `env_inspect::{EnvView, PathView}`, all
   width-aware and ASCII-safe, with no new dependencies.

@@ -190,7 +190,7 @@ fn env_redacts_filters_and_checks_path_entries() {
 #[test]
 fn capture_runs_the_command_and_records_a_cast() {
     let dir = temp();
-    let out = ok(&run(
+    let failed = run(
         dir.path(),
         &[
             "capture",
@@ -203,7 +203,10 @@ fn capture_runs_the_command_and_records_a_cast() {
         ],
         b"",
         &[],
-    ));
+    );
+    // The command's status passes through, after the panel and the cast.
+    assert_eq!(failed.status.code(), Some(2), "{failed:?}");
+    let out = text(&failed.stdout);
     let hi = out.find("hi").expect(&out);
     let err = out.find("err").expect(&out);
     assert!(hi < err, "{out}");
@@ -223,6 +226,31 @@ fn capture_runs_the_command_and_records_a_cast() {
     assert!(std::fs::read_to_string(dir.path().join("run.svg"))
         .unwrap()
         .contains("done"));
+    // `--report json` describes the command's failure, not a success.
+    let reported = run(
+        dir.path(),
+        &["--report", "json", "capture", "--", "sh", "-c", "exit 7"],
+        b"",
+        &[],
+    );
+    assert_eq!(reported.status.code(), Some(7), "{reported:?}");
+    let report: serde_json::Value = serde_json::from_str(text(&reported.stderr).trim()).unwrap();
+    assert_eq!(report["ok"], false);
+    assert_eq!(report["code"], "command");
+    assert_eq!(report["exit_code"], 7);
+    assert_eq!(report["result"]["status"], 7);
+    // A command killed by a signal exits 128 + the signal, as in a shell.
+    let killed = run(
+        dir.path(),
+        &["capture", "--", "sh", "-c", "kill -TERM $$"],
+        b"",
+        &[],
+    );
+    assert_eq!(killed.status.code(), Some(128 + 15), "{killed:?}");
+    assert!(
+        text(&killed.stdout).contains("killed by signal 15"),
+        "{killed:?}"
+    );
 }
 
 #[test]

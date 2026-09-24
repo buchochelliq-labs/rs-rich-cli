@@ -1050,7 +1050,7 @@ pub(crate) fn spec() -> CommandSpec {
             "capture",
             &[][..],
             "Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE \
-             records it)",
+             records it), then exit with the command's status",
         ),
     ] {
         spec = spec.subcommand(mode_command(name, aliases, about));

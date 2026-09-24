@@ -2453,6 +2453,19 @@ fn decorate_and_emit(
     renderable: Box<dyn Renderable>,
     fit: Option<usize>,
 ) -> ExitCode {
+    decorate_and_emit_with(cli, console, export, renderable, fit, emit_exit_code)
+}
+
+/// [`decorate_and_emit`], with `finish` turning the print and export result
+/// into the exit code (and its report).
+fn decorate_and_emit_with(
+    cli: &Cli,
+    console: &Console,
+    export: &Export,
+    renderable: Box<dyn Renderable>,
+    fit: Option<usize>,
+    finish: impl FnOnce(&Cli, Result<(), String>) -> ExitCode,
+) -> ExitCode {
     if cli.panel.is_some() {
         if let Err(err) = validate_labels(cli) {
             return fail(cli, ExitClass::Data, err);
@@ -2545,7 +2558,7 @@ fn decorate_and_emit(
         });
     }
 
-    emit_exit_code(cli, emit(console, export, |c| c.print(renderable.as_ref())))
+    finish(cli, emit(console, export, |c| c.print(renderable.as_ref())))
 }
 
 fn run(cli: Cli) -> ExitCode {
@@ -2930,7 +2943,19 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         }
         let view = viewers::capture_view(&captured);
         let fit = view.measure(&console, &console.options()).maximum;
-        return decorate_and_emit(&cli, &console, &export, view, Some(fit));
+        // Like `time` or `env`, exit with the command's status once its
+        // output is shown and exported, so scripts and CI see a failure.
+        let code = captured.exit_code();
+        return decorate_and_emit_with(&cli, &console, &export, view, Some(fit), |cli, shown| {
+            if code == 0 || shown.is_err() {
+                return emit_exit_code(cli, shown);
+            }
+            // A failed command's report replaces the success envelope.
+            if cli.report_format == ReportFormat::Json {
+                eprintln!("{}", viewers::capture_report(&captured));
+            }
+            ExitCode::from(code)
+        });
     }
     if mode == Mode::Env {
         let view = viewers::env(&cli.viewers, &cli.resources);
