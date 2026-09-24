@@ -5,12 +5,12 @@ The point of this project is that output is **byte-identical** to Python
 
 ## How much of the port is done
 
-*Last verified 2026-08-11 against Python `rich` 15.0.0.*
+*Last verified 2026-09-24 against Python `rich` 15.0.0, at the 0.0.11 release test (core 0.0.7, prepared).*
 
 <figure class="port-status">
 --8<-- "docs/assets/port-status.svg"
 <figcaption>
-<strong>55 of 61 upstream modules (90%) have a working implementation.</strong>
+<strong>60 of 65 upstream modules (92%) have a working implementation.</strong>
 Click any bar to jump to that part of the
 <a href="../PORTING/">module status table</a>.
 </figcaption>
@@ -18,8 +18,8 @@ Click any bar to jump to that part of the
 
 **"Partial" is the honest majority, and it is not a synonym for unfinished.** A
 module is marked partial while any part of upstream's surface is unported, even
-when everything the CLI exercises is byte-identical. Six modules are marked
-complete only because a differential sweep says so:
+when everything the CLI exercises is byte-identical. Eight modules are marked
+complete, and only because a differential sweep or the golden fixtures say so:
 
 | Module | Measurement |
 |--------|-------------|
@@ -27,13 +27,15 @@ complete only because a differential sweep says so:
 | `wrap.rs` | 0 mismatches across a **30,680-case** wrap matrix |
 | `cell_widths.rs` | all 21 upstream Unicode tables, selectable via `UNICODE_VERSION` |
 | `control.rs`, `box.rs`, `styled.rs` | full upstream surface, golden-tested |
+| `progress_bar.rs` | full upstream surface, including the pulse animation, ASCII and no-colour bars, golden-tested (`progress_bar.tsv`) |
+| `theme.rs` | full upstream surface, including the theme stack and theme files, golden-tested (`themes.tsv`, `theme_stack.tsv`) |
 
 End to end, the current CLI renders **0 mismatches across 138 document cases**
 (Markdown, JSON and syntax at six widths each) against Python `rich` 15.0.0.
 
 !!! warning "What the percentage does not mean"
 
-    90% of *modules* is not 90% of *upstream's behaviour*, and neither is a
+    92% of *modules* is not 92% of *upstream's behaviour*, and neither is a
     promise about your document. It means most modules have a working
     implementation; the honest per-area detail is in
     [Module status](PORTING.md), and the known gaps are below.

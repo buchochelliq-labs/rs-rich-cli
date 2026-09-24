@@ -62,9 +62,20 @@ Columns: `Description`, `Bar`, `Percentage`, `TaskProgress { show_speed }`,
 (`ProgressColumn::time_remaining()` or `TimeRemainingColumn::new(compact,
 elapsed_when_finished)`), `TransferSpeed`, `FileSize`, `TotalFileSize`,
 `Spinner` (`ProgressColumn::spinner()` or `SpinnerColumn::new(name,
-finished_text)`) and `Text(String, Style)` for a fixed cell. A task with a total
-of `None` is indeterminate; `add_unstarted_task` adds one whose clock has not
-started.
+finished_text)`), `Text(String, Style)` for a fixed cell, `TextFormat` for a
+cell formatted from the task, `Renderable` (upstream's `RenderableColumn`) for
+the same renderable in every row, `BarWith(BarColumn)` for a bar with its own
+width and styles, and `WithTableColumn` (via `ProgressColumn::with_table_column`)
+for a column with explicit table options. A task with a total of `None` is
+indeterminate and its bar pulses; `add_unstarted_task` adds one whose clock has
+not started.
+
+To redraw on its own, `progress.start(console, writer, refresh_per_second)`
+starts a Live-driven display on a background thread (upstream's
+`with progress:`); `.transient(true)` clears it when stopped and
+`.disable(true)` draws nothing. For the common case, `rich::track(iter,
+"Working")` wraps an iterator with a live bar on stdout, like upstream's
+`track()`. The [progress guide](../guide/core/progress-and-live.md) covers these.
 
 ## Spinners
 

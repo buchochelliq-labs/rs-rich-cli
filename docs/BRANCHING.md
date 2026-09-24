@@ -178,8 +178,9 @@ the caret requirement `^0.0.2`. Cargo permits versions `>=0.0.2,<0.0.3`: for a
 dependency can use the local package while developing, but its version must
 still satisfy that requirement, and the requirement is what consumers see in
 the published package. Thus bumping `rs-rich` from `0.0.2` to `0.0.3` requires
-updating the requirements used by its direct dependents (`rs-rich-ext`,
-`rs-rich-art`, and `rs-rich-cli`); bumping `rs-rich-ext` or `rs-rich-art`
+updating the requirements used by its direct dependents (`rs-rich-macros`,
+`rs-rich-ext`, `rs-rich-art`, and `rs-rich-cli`); bumping `rs-rich-macros`
+requires updating `rs-rich-ext`; bumping `rs-rich-ext` or `rs-rich-art`
 requires updating `rs-rich-cli`. Cargo does **not** force unrelated crates to
 share a version. Our coordinated-tag policy does.
 

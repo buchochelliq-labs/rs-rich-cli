@@ -1,16 +1,26 @@
 # Architecture
 
-A four-crate Cargo workspace with a strict, one-directional dependency rule.
+A five-crate Cargo workspace with a strict, one-directional dependency rule.
 Each crate versions independently. The [manifest-version table](index.md#versions-in-this-checkout)
 tracks this checkout; registry badges show published versions.
 
 ```
 ┌────────────┐     ┌────────────┐     ┌───────────────────────────┐
 │  rich-cli  │ ──▶ │  rich-ext  │ ──▶ │  rich (faithful core)     │
-│  (bin:rich)│     │ (our code) │     │  mirrors upstream `rich`  │
-│  rs-rich-  │     │  rs-rich-  │     │  rs-rich (crates.io name)  │
+│ (bin:rich) │     │ (our code) │     │  mirrors upstream `rich`  │
+│rs-rich-cli │     │rs-rich-ext │     │  rs-rich (crates.io name) │
 └────────────┘     └────────────┘     └───────────────────────────┘
-        the arrow never points left ─────────────▶
+      │                  │ macros feature          ▲    ▲
+      │                  ▼                         │    │
+      │            ┌──────────────┐                │    │
+      │            │ rich-macros  │ ───────────────┘    │
+      │            │rs-rich-macros│  (proc-macros)      │
+      │            └──────────────┘                     │
+      │            ┌──────────────┐                     │
+      └──────────▶ │  rich-art    │ ────────────────────┘
+                   │ rs-rich-art  │  (FIGlet, images, GIFs)
+                   └──────────────┘
+        every arrow points towards the core; core depends on none of them
 ```
 
 - **`crates/rich`** — the faithful port of the Python `rich` *library*. Mirrors
@@ -20,14 +30,24 @@ tracks this checkout; registry badges show published versions.
 - **`crates/rich-ext`** — everything that is *ours*: extra highlighters,
   renderables, and the internal plugin registry. Independent SemVer. Talks to core
   only through public APIs and the extension traits.
+- **`crates/rich-macros`** — procedural macros (`richf!`, `style!`,
+  `theme_key!`, `markup!`, `#[derive(Rich)]`) that check markup and styles at
+  compile time. Depends on `rich` only (to parse markup and styles while
+  expanding); users reach it through `rich-ext`'s optional `macros` feature.
+  Independent SemVer.
+- **`crates/rich-art`** — FIGlet banners, images as ASCII, Braille, blocks,
+  quadrants or Sixel, animated GIFs and perceptual image diffs. Depends on
+  `rich` only. Independent SemVer.
 - **`crates/rich-cli`** — the binary mirroring the Python `rich-cli` tool (a
-  separate upstream project with its own version). Built on `rich` + `rich-ext`.
+  separate upstream project with its own version). Built on `rich`, `rich-ext`
+  and (behind its default `art` feature) `rich-art`; its own commands are
+  documented binary-boundary conveniences in [PORTING](PORTING.md).
 
 Why the split: it makes upstream syncs a mechanical diff-and-port of `crates/rich`
 only, and guarantees our features can never make that harder. See
 [AGENTS.md](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/AGENTS.md).
 
-## Render pipeline (first slice)
+## Render pipeline
 
 ```
 &str (markup)

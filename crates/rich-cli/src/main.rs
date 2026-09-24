@@ -9,6 +9,14 @@
 //! plain-file printer (with extension auto-detection), **URL fetch** (`rich <url>`,
 //! behind the default `fetch` feature), **paging** (`--pager`), and a capability
 //! demo — i.e. the whole common rich-cli surface.
+//!
+//! On top of that it has documented binary-boundary conveniences that upstream
+//! lacks (see `docs/PORTING.md`): JSONL/log streaming, images and GIFs (behind
+//! the default `art` feature), `--watch`, `--batch`, config profiles and
+//! `--theme-file`, and the tool commands `inspect`, `diff` (images, text and
+//! patches), `view`, `hex`, `unicode`, `env`, `capture`, `ansi explain`,
+//! `doctor`, `bench compare`, `completions`, `docs` and `config`. Each composes
+//! public `rich` / `rich-ext` / `rich-art` APIs.
 
 use std::io::{BufRead, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};

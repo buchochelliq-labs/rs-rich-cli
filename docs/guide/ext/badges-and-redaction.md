@@ -156,10 +156,15 @@ or a recording. `Redactor::secrets()` turns on the built-in detectors:
 | `Jwt` | `eyJ….eyJ….…` JSON Web Tokens |
 | `UrlCredentials` | The password in `scheme://user:password@host`, up to the last `@` before the host. A bare `user:password@host` without a scheme is not matched |
 
-A key looks secret when it matches `redact::SECRET_KEYS` (`password`,
-`secret`, `token`, `api_key`, `credential`, a whole-word `auth`, …). This is
-the same list that `data::Redaction::secrets()` uses for structured
-documents, so `author` is never masked. The set is kept small to avoid false
+A key looks secret when `redact::is_secret_key` matches it against
+`redact::SECRET_KEYS`: `password`, `secret`, `token`, `api_key`,
+`private_key`, `credential` and the like anywhere in the key, case-insensitive,
+with `-` and `_` interchangeable (so `api-key` and `API-KEY` match), plus the
+whole-key globs `*auth`, `auth_*` and `authorization`. This is the same list
+that `data::Redaction::secrets()` uses for structured documents (where
+everything under a secret key, including XML element text, is masked; see
+[Structured data](structured-data.md#redaction-and-config-files)), so `author`
+is never masked. The set is kept small to avoid false
 positives. It is pattern matching, so it can miss a secret that looks like
 an ordinary word.
 

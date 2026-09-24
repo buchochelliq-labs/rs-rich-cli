@@ -71,8 +71,10 @@ rich -m README.md --export-svg readme.svg
 rich -m README.md -o readme.html --export-svg readme.svg   # both
 ```
 
-`-o` is short for `--export-html`. The output is self-contained — no external
-CSS, fonts or images — which is exactly how every picture on this site is made.
+`-o` is short for `--export-html`. The HTML is self-contained — no external CSS,
+fonts or images. The SVG loads its font from a CDN, so it needs a network
+connection to show in the intended typeface; every picture on this site is an
+SVG export like this one.
 
 ## Paging
 
@@ -83,8 +85,18 @@ rich --pager long-document.md
 Pages through `$PAGER` (falling back to `less -R`, then `more`), keeping the
 styling, unlike piping to a pager yourself.
 
+## More commands
+
+Beyond rendering files, `rich` has tool commands: `inspect` explores JSON, YAML,
+TOML, XML, INI and dotenv as a tree; `diff` compares text files or renders a
+patch; `view` shows any file; `hex`, `unicode` and `ansi explain` look inside
+bytes, characters and escape sequences; `env` lists environment variables with
+secrets masked; `capture` runs a command and shows or exports its output; and
+`doctor` reports what `rich` detected. The [CLI walkthrough](../guide/cli/walkthrough.md)
+shows each one.
+
 ## Full option list
 
-```console
---8<-- "docs/assets/cli-help.txt"
-```
+`rich --help` prints every option, grouped by topic, and `rich COMMAND --help`
+shows one command. The [CLI reference](../cli-reference.md) is generated from
+that help text.

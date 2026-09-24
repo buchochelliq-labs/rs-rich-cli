@@ -1,13 +1,17 @@
 # Using the CLI
 
 `rich` renders files that are painful to read in a terminal — Markdown, JSON,
-CSV, source code, notebooks — and can compare two images. This page is organised
-by what you are trying to do. For the complete list of options, see the
-[CLI reference](cli-reference.md).
+CSV, source code, notebooks, images — and compares images, text files and
+patches. It also explores structured data (`inspect`), shows any file (`view`),
+looks inside bytes, characters and escape sequences (`hex`, `unicode`,
+`ansi explain`), lists the environment (`env`) and captures a command's output
+(`capture`). This page is organised by what you are trying to do. For the
+complete list of options, see the [CLI reference](cli-reference.md).
 
 **Assumes** you can run commands in a terminal. Examples use real CLI output;
-0.0.10 workflows are documented below. See the
-[release notes](releases/0.0.10.md) for validation and publication evidence.
+the 0.0.11 workflows, prepared but not yet published, are documented below. See
+the [0.0.11 release notes](releases/0.0.11.md) for status and the
+[0.0.10 notes](releases/0.0.10.md) for the latest published release.
 
 ---
 
@@ -301,7 +305,7 @@ files show as a key table with their comments. These options change the view:
 | `--table` | Records as a table, or a path/value table |
 | `--max-depth N`, `--max-length N` | Fold deeper containers; show at most N items each |
 | `--show-paths` | Print each value's path next to it |
-| `--redact` | Mask values under keys such as `password`, `token` or `api_key` |
+| `--redact` | Mask values under keys such as `password`, `token` or `api_key` (also spelled with dashes, `api-key`), everything nested under such a key, and XML element text |
 | `--compare PATH` | List what was added, removed or changed in PATH |
 
 A document that does not parse is reported as `file:line:column` and exits 4.
@@ -420,6 +424,10 @@ old.rs → new.rs: 1 added, 1 removed (25.0% of lines changed)
   unchanged lines kept around each change (default 3).
 - `--threshold PCT` gates on the share of changed lines and exits `5` above
   it, as it does for images.
+- Terminal controls in the files, and in their names, are shown as inert
+  symbols by default, so a diff cannot clear the screen or retitle the window;
+  `--no-sanitize` lets them through (see
+  [Neutralize terminal controls in input](#neutralize-terminal-controls-in-input)).
 
 A single input is read as a patch, such as `git diff` output. It renders as a
 tree of the changed files with their counts, then each file's highlighted hunks:
@@ -647,8 +655,11 @@ let art = ImageArt::from_path("photo.png")?
 
 ![Actual same-source 0.0.10 image modes](media/cli-010-image-modes.png)
 
-Every panel is the binary's own SVG export of one gradient fixture. Reproduce it
-with `python scripts/capture_image_modes_010.py --binary target/release/rich`.
+This is a historical capture from the 0.0.10 binary; it predates Atkinson,
+OKLab and the Sixel/GIF colour modes. Every panel is the binary's own SVG export
+of one gradient fixture. The script that made it,
+`python scripts/capture_image_modes_010.py --binary target/release/rich`, checks
+for a 0.0.10 binary.
 
 ## Watch a changing file
 
@@ -841,7 +852,7 @@ overrides, not all built-in CLI defaults. The schema supports image fit/anchor/
 background, watch, sanitization, paging and batch options; see the
 [workflow recipes](recipes.md) for complete examples. Machine reporting remains
 a CLI option (`--report json`), not a config key. Release and validation status
-are recorded in the [0.0.9 preparation notes](releases/0.0.9.md).
+are recorded in the [0.0.11 release notes](releases/0.0.11.md).
 
 To see where each value comes from, and what it overrides:
 
@@ -955,10 +966,14 @@ paging flag is given, and shows terminal controls in the file as inert text
 unless `--no-sanitize` is given (see
 [Neutralize terminal controls in input](#neutralize-terminal-controls-in-input)). `--search` highlights case-insensitive matches and prints
 a summary to stderr; for `hex` it takes bytes (`de ad`, `0xDEAD`, or quoted
-text). `env` masks values of secret-looking names. `capture` sets `FORCE_COLOR`,
+text). `env` masks the values of secret-looking names, matched by whole segment
+(`DB_PASS`, `*_KEY`, `*_TOKEN`, `*_DSN`, …), and masks credentials inside any
+other value (URL passwords, token prefixes, JWTs, AWS key ids); masking is best
+effort, and `--show-secrets` turns it off. `capture` sets `FORCE_COLOR`,
 `CLICOLOR_FORCE` and `COLUMNS` for the child (`COLUMNS` is the panel's inner
 width: `--width`, or the terminal's, less the four border columns), merges
-stdout and stderr in order, reports its exit status without failing on it, and
+stdout and stderr in order, then exits with the command's status (128 + the
+signal number when a signal ended it), and
 `--cast` writes asciicast v2 (the file is created before the command runs, so an
 unwritable path fails first). Once the command exits, `capture` reads for at
 most one more second: a background process that keeps the output open (`sleep
@@ -1072,7 +1087,7 @@ their own options there, and every other `rich` option still applies.
 ## Where to go next
 
 - [CLI reference](cli-reference.md) — every option, generated from the description behind `--help`
-- [Comparing images](image-diff.md) — the `--diff` workflow in depth
+- [Comparing images](image-diff.md) — the image `--diff` workflow in depth
 - [Troubleshooting](troubleshooting.md) — error messages and what to do about them
 - [Parity with Python rich](parity.md) — how close the output is, and where it differs
 
@@ -1194,7 +1209,9 @@ rich image photo.png --image-mode blocks --image-rotate 90 \
 Rotation accepts 0, 90, 180 or 270 clockwise degrees. Flips follow rotation;
 `--image-flip-vertical` is also available. Grayscale composites alpha before
 conversion and includes contain padding. Transform flags require still-image
-mode. Bayer requires ANSI256 ASCII or blocks. Defaults remain unchanged.
+mode. Bayer, like Floyd–Steinberg and Atkinson, needs a quantized
+`--image-color` (see [Colour modes and dithering](#colour-modes-and-dithering)).
+Defaults remain unchanged.
 
 Config keys are `image_rotate` (integer), `image_flip_horizontal`,
 `image_flip_vertical`, `image_grayscale` (booleans), `image_dither` and

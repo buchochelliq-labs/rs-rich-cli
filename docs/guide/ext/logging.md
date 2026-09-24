@@ -128,6 +128,9 @@ tears a progress display:
 --8<-- "crates/rich-ext/examples/guide_logging.rs:live"
 ```
 
+A message containing control characters is still printed, with the controls
+shown as inert symbols (`␛`), rather than dropped.
+
 Render with a console as wide as the coordinator's target, as
 `target.console()` is; longer lines fold.
 

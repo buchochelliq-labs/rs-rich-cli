@@ -194,6 +194,17 @@ frames are dimmed and runs of them collapse into `… N library frames`:
 | `.show_library(true)` | Show every library frame |
 | `.hyperlinker(linker)` | Link frame locations (default: `file://` links) |
 
+Traces are untrusted input, so the parsers and views are bounded and inert:
+
+- The built-in parsers keep at most `stacktrace::MAX_CAUSES` (64) causes below
+  the outermost error, the ones nearest it, and count the rest in
+  `StackTrace::omitted_causes`. The view applies the same cap to a chain you
+  build yourself and prints `… N more causes` in place of the rest. Chains
+  render and drop without recursion, so any length is safe.
+- Locations, function names, source lines, kinds and messages show terminal
+  controls as inert symbols (`␛`), so a crafted trace cannot retitle the window
+  or break out of a link.
+
 What counts as a library frame:
 
 | Language | Library when |

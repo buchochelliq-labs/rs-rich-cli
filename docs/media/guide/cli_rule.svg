@@ -44,7 +44,7 @@
     
     </defs>
 
-    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="626" height="72.4" rx="8"/><text class="rich-cli-title" fill="#c5c8c6" text-anchor="middle" x="313" y="27">Chapter&#160;1</text>
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="626" height="72.4" rx="8"/><text class="rich-cli-title" fill="#c5c8c6" text-anchor="middle" x="313" y="27">rich</text>
             <g transform="translate(26,22)">
             <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
             <circle cx="22" cy="0" r="7" fill="#febc2e"/>

@@ -22,10 +22,27 @@ rich jsonl events.ndjson    # streaming JSON Lines / NDJSON
 rich log app.jsonl          # structured-log JSONL
 ```
 
-The source package targets **`0.0.9`** (source preparation; validation pending) and follows independent
-SemVer; its version does not mirror Python `rich-cli`. The tracked upstream
-release is **`rich-cli` 1.8.1**, recorded in
-[`../../UPSTREAM.toml`](../../UPSTREAM.toml).
+Tools that upstream `rich-cli` does not have:
+
+```bash
+rich inspect deploy.yaml --select '$.servers[*].name'   # JSON/YAML/TOML/XML/INI/dotenv as a tree
+rich diff old.rs new.rs --side-by-side                  # text diff; `git diff | rich diff -` for patches
+rich view src/main.rs --search todo                     # any file, rendered or highlighted, paged
+rich hex firmware.bin --offset 0x200 --length 64        # hex dump (alias: hexdump)
+rich unicode notes.txt                                  # graphemes, code points, widths
+rich env PATH                                           # environment, secrets masked; PATH checked
+rich capture --export-svg run.svg -- cargo test         # run a command and show/export its output
+rich ansi explain capture.ans                           # decode every escape sequence
+rich doctor                                             # what rich detected about this terminal
+rich bench compare base.json new.json --threshold 10    # gate on benchmark regressions
+rich completions bash                                   # shell completions; `rich docs man` for man pages
+rich config explain width                               # where a setting comes from
+```
+
+This source is **`0.0.11`**, prepared but not yet published (the latest
+published version is 0.0.10). It follows independent SemVer; its version does
+not mirror Python `rich-cli`. The tracked upstream release is **`rich-cli`
+1.8.1**, recorded in [`UPSTREAM.toml`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/UPSTREAM.toml).
 
 ## Render modes
 
@@ -40,10 +57,15 @@ release is **`rich-cli` 1.8.1**, recorded in
 | `--jsonl` | streaming JSON Lines / NDJSON |
 | `--log` | streaming structured-log JSONL |
 | `--gif` | animated GIFs, several at once |
-| `--image` | a still image as ASCII, Braille, half-blocks, or Sixel |
+| `--image` | a still image as ASCII, Braille, half-blocks, quadrants, or Sixel |
+| `--diff` | two images, two text files, or one patch |
+| `--inspect` | structured data as a tree (`rich inspect`) |
+| `--ansi-explain` | the escape sequences in a capture (`rich ansi explain`) |
 | `--rule` | a horizontal rule |
 
 With no flag the mode is picked from the file extension; a bare `-` reads stdin.
+`--format auto` (the default) detects piped or extensionless input, and a named
+format (`json`, `yaml`, `toml`, `xml`, `ini`, `env`) overrides the extension.
 Preferred subcommands such as `rich json`, `rich markdown`, `rich csv`,
 `rich jsonl` and `rich log` are aliases over the same renderers. Existing flat
 flags remain supported.
@@ -58,8 +80,9 @@ Layout
   Redirected stdout is never paged.
 
 Export
-: `--export-html` and `--export-svg` emit a self-contained document instead of
-  writing to the terminal — any render mode can be captured this way.
+: `--export-html PATH` and `--export-svg PATH` also write a document, while the
+  output still goes to the terminal — any render mode can be captured this way.
+  The HTML is self-contained; the SVG loads its font from a CDN.
 
 Watch
 : `--watch` re-renders changed local files (several may be given, each in its
@@ -93,20 +116,26 @@ Configuration
   explicit overrides, not every built-in default. `--no-config` disables config.
   `[themes.NAME]` maps style names to styles. Select with defaults/profile `theme`
   or `--theme NAME`; `--theme-style NAME=STYLE` overrides individual bindings.
-  Workers inherit resolved bindings for consistent exports.
+  Workers inherit resolved bindings for consistent exports. `--theme-file PATH`
+  (or `theme_file`) loads the `[styles]` section of an upstream rich theme file.
+  `rich config explain [KEY]` shows which layer sets each value, and
+  `rich config reference` lists every key.
 
 Still-image crop
 : `--image-fit contain|cover` fits the image into an explicit height and bounded
-  width. `--image-background '#RRGGBB'` composites transparency. With cover,
+  width. `--image-background '#RRGGBB'` composites transparency; `default`
+  leaves it to the terminal's background and `checkerboard` shows it on a gray
+  checkerboard. With cover,
   `--image-anchor` selects center (default), top, bottom, left, right or a corner
   such as `top-left`. Contain stays centered.
 
 Image palette
-: `--image-color ansi256|ansi16|grayscale` opts ASCII, half-block and quadrant
-  still images into a fixed palette. Add `--image-dither floyd-steinberg` or
-  `bayer4x4` for dithering. Truecolor/no-dither remains the default. Unsupported
-  combinations are rejected; GIF, diff, Braille and Sixel preprocessing are
-  outside this feature.
+: `--image-color ansi256|ansi16|grayscale` opts ASCII, half-block, quadrant and
+  Sixel still images, and GIF frames, into a fixed palette. Add
+  `--image-dither floyd-steinberg`, `bayer4x4` or `atkinson` for dithering, and
+  `--image-color-distance oklab` to match colours perceptually.
+  Truecolor/no-dither remains the default. Unsupported combinations are
+  rejected: Braille is monochrome, and image diffs ignore these options.
 
 Quadrants and adjustments
 : `--image-mode quadrants` draws 2×2 pixels per cell. `--image-fit stretch`
@@ -121,16 +150,25 @@ Discovery and diagnostics
   requests or pager execution. Its successful `--report json` document goes to
   stdout. Sixel capability is inferred, not tested.
 
-See the [workflow recipes](https://buchochelliq-labs.github.io/rs-rich-cli/recipes/)
-and [0.0.9 preparation notes](https://buchochelliq-labs.github.io/rs-rich-cli/releases/0.0.9/)
-for examples and pending release gates. Source versions do not imply publication.
+Viewers and capture
+: `rich view` sanitises terminal controls by default, as text `rich diff` does
+  (`--no-sanitize` opts out). `view`, `hex`, `unicode`, `inspect` and `capture`
+  read a bounded amount (see [Limits](https://buchochelliq-labs.github.io/rs-rich-cli/cli/#limits)). `rich capture` exits
+  with the command's status; `--cast FILE` records an asciicast, and the
+  experimental `--redact` / `--redact-pattern` mask secrets on a best-effort
+  basis. `rich COMMAND --help` shows one command's options.
+
+See the [workflow recipes](https://buchochelliq-labs.github.io/rs-rich-cli/recipes/), the
+[CLI reference](https://buchochelliq-labs.github.io/rs-rich-cli/cli-reference/) and the
+[0.0.11 release notes](https://buchochelliq-labs.github.io/rs-rich-cli/releases/0.0.11/). Source versions do not imply
+publication.
 
 ## Features
 
 Both are on by default and can be dropped for a smaller binary:
 
 - **`fetch`** — URL support (`rich <url>`), via `ureq` with bundled TLS roots.
-- **`art`** — `--gif` playback and `--diff`/`--image` picture rendering, via [`rich-art`](../rich-art).
+- **`art`** — `--gif` playback and `--diff`/`--image` picture rendering, via [`rs-rich-art`](https://crates.io/crates/rs-rich-art).
 
 ```bash
 cargo install rs-rich-cli --no-default-features   # installs `rich`; no network or image decoders
@@ -148,7 +186,7 @@ off by default and changes no CLI flags. It reuses parsing work within one
 render; varied source files may see no speedup. See the
 [measurements](https://buchochelliq-labs.github.io/rs-rich-cli/benchmarks/#004-repeated-source-syntax-results).
 
-The expanded 0.0.9 preparation adds `--log-presentation rich`, still-image
+Since 0.0.9 the CLI also has `--log-presentation rich`, still-image
 rotation/flips/grayscale and `--image-dither bayer4x4`, HTML/SVG still-image exports,
 and batch `--batch-preserve-dirs`, `--batch-input-root`, `--batch-name-template`.
 Run `rich --help` for accepted values; flags are opt-in. New batch naming modes

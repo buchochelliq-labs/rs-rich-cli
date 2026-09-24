@@ -43,6 +43,8 @@ than unsupported.
     [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) ·
     [`rs-rich-art`](https://crates.io/crates/rs-rich-art) — follow the links for current published versions.
     API documentation is on [docs.rs](https://docs.rs/rs-rich).
+    `rs-rich-macros` is new in the 0.0.11 cohort, which is prepared but not yet
+    published.
 
 ## Check the install worked
 
@@ -90,7 +92,8 @@ use rich::Console;      // what you write
 ```
 
 The same applies to the others: `rs-rich-ext` is `rich_ext`, `rs-rich-art` is
-`rich_art`. The CLI package `rs-rich-cli` installs a binary called `rich`.
+`rich_art`. `rs-rich-macros` is used through `rich_ext` (its `macros` feature),
+for example `rich_ext::richf!`. The CLI package `rs-rich-cli` installs a binary called `rich`.
 
 ## Hello, world
 
@@ -138,7 +141,8 @@ let ansi = console.capture(|c| c.print_str("[bold]hi[/]"));
 assert_eq!(ansi, "\x1b[1mhi\x1b[0m\n");
 ```
 
-That is also how the exports work — see [Exporting](tutorial/06-cli.md#exporting).
+That is also how the exports work — see [Exporting](tutorial/06-cli.md#exporting)
+and the [export guide](guide/core/export.md).
 
 ## Where next
 

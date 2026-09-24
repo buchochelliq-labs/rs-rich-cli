@@ -18,9 +18,10 @@ byte-for-byte against what upstream produces for the same input. CI regenerates
 those fixtures from the pinned upstream release on every run and fails if they
 drift.
 
-Its **version tracks the upstream release it reflects** (currently `15.0.0`),
-so the version number tells you which upstream features exist. It is bumped
-only when syncing upstream — never to ship a local feature.
+The crate has its **own independent SemVer** (`0.0.x` while the API still
+takes breaking changes); the version does not mirror upstream. The upstream
+release it reflects (currently `rich` 15.0.0) is recorded in
+[`UPSTREAM.toml`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/UPSTREAM.toml) and in the changelog.
 
 Every intentional deviation is recorded in
 [`docs/DIVERGENCES.md`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/DIVERGENCES.md).
@@ -39,21 +40,27 @@ Text
 Renderables
 : `Panel`, `Table`, `Tree`, `Layout`, `Columns`, `Align`, `Padding`,
   `Constrain`, `Rule`, `Bar`, `ProgressBar`, `Progress`, `Spinner`, `Status`,
-  `Markdown` (including GFM tables), `Syntax`, `Json`, `Pretty`, `Traceback`.
+  `Markdown` (including GFM tables), `Syntax`, `Json`, `Pretty`, `Traceback`,
+  `LogRender`.
 
 Live output
 : `Live` for in-place redraw — both a deterministic manual-refresh flow and a
-  background auto-refresh thread.
+  background auto-refresh thread. `Progress` has upstream's columns (including
+  `RenderableColumn`), a Live-driven display and `track()` over an iterator.
+
+Input
+: `Prompt`, `Confirm`, `IntPrompt` and `FloatPrompt`.
 
 Export
-: `export_text`, `export_html` (inline **and** CSS-class forms), and
-  `export_svg` — a self-contained SVG of a terminal window.
+: `export_text`, `export_html` (inline **and** CSS-class forms, self-contained),
+  and `export_svg` — an SVG of a terminal window that loads its font from a
+  CDN, as upstream's does.
 
 ## Extending it
 
 The core ships only upstream's own behaviour. Local features and the plugin
-registry live in [`rich-ext`](../rich-ext); ASCII art lives in
-[`rich-art`](../rich-art). That boundary is what keeps upstream syncs from
+registry live in [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext); ASCII
+art lives in [`rs-rich-art`](https://crates.io/crates/rs-rich-art). That boundary is what keeps upstream syncs from
 turning into merge conflicts — see
 [`AGENTS.md`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/AGENTS.md).
 
