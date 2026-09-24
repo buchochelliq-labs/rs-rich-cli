@@ -790,6 +790,7 @@ fn sixel_on_an_unrecognised_terminal_says_how_to_force_it() {
         .unwrap();
     let transcript = text(&out.stdout);
     assert!(transcript.contains("RICH_SIXEL=1"), "{transcript}");
+    assert!(transcript.contains("RICH_GRAPHICS=sixel"), "{transcript}");
     assert!(
         !transcript.contains("when redirecting output"),
         "{transcript}"

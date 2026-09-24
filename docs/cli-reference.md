@@ -264,7 +264,8 @@ Self-contained examples; ignores config; accepts --no-color.
 - COLUMNS: console width (default 80 when unavailable)
 - MANPAGER, PAGER: pager command; fallback is less (Unix), more.com (Windows)
 - FORCE_COLOR: not supported; redirected stdout stays plain
-- RICH_SIXEL: 0/1 overrides Sixel detection for --image-mode auto
+- RICH_GRAPHICS: sixel forces Sixel on; none (or kitty, iterm) rules it out
+- RICH_SIXEL: 0/1 overrides Sixel detection when RICH_GRAPHICS is unset
 
 With no RESOURCE and no mode flag, a capability demo is shown. Layout, style, paging, hyperlinks and export options require a resource or render mode.
 

@@ -1033,11 +1033,13 @@ terminal`, an override). It is the same detection library code gets from
 `rich_ext::capabilities`, and `--report json` carries it as `capabilities`.
 Set `RICH_COLOR`, `RICH_UNICODE`, `RICH_HYPERLINKS`, `RICH_GRAPHICS`,
 `RICH_ANIMATION`, `RICH_WIDTH` or `RICH_HEIGHT` to override a value in this
-report for tests or CI. These overrides change what doctor reports; they do not
-change how images render. `--image` decides Sixel from the terminal and
-`RICH_SIXEL`: on a terminal it does not recognise, `--image-mode sixel` stops
-with an error that says so, and `RICH_SIXEL=1` forces Sixel (`RICH_SIXEL=0`
-turns it off). `RICH_GRAPHICS=sixel` does not.
+report for tests or CI. Except for `RICH_GRAPHICS`, these overrides change only
+what doctor reports, not how output renders. `--image` decides Sixel from the
+terminal, `RICH_GRAPHICS` and `RICH_SIXEL`: on a terminal it does not
+recognise, `--image-mode sixel` stops with an error that says so.
+`RICH_GRAPHICS=sixel` forces Sixel on and `RICH_GRAPHICS=none` (or `kitty`,
+`iterm`) rules it out; a valid `RICH_GRAPHICS` wins over `RICH_SIXEL`, which
+accepts `1`/`true`/`yes`/`on` and `0`/`false`/`no`/`off`.
 
 Doctor also reports package/build features, stdout terminal status, dimensions and
 colour policy, inferred Sixel support and selected image mode, selected

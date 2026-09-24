@@ -1162,7 +1162,8 @@ pub(crate) fn spec() -> CommandSpec {
          - COLUMNS: console width (default 80 when unavailable)\n\
          - MANPAGER, PAGER: pager command; fallback is less (Unix), more.com (Windows)\n\
          - FORCE_COLOR: not supported; redirected stdout stays plain\n\
-         - RICH_SIXEL: 0/1 overrides Sixel detection for --image-mode auto",
+         - RICH_GRAPHICS: sixel forces Sixel on; none (or kitty, iterm) rules it out\n\
+         - RICH_SIXEL: 0/1 overrides Sixel detection when RICH_GRAPHICS is unset",
     )
     .section(
         "",

@@ -5025,13 +5025,14 @@ fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     // the `sixel` feature, or an image Sixel cannot encode).
     let options = console.options();
     if let Err(err) = art.render(console, &options) {
-        // On a terminal, the destination is fine: the terminal is just not
-        // one Sixel detection recognises.
+        // rich-art reports an unrecognised terminal as `SixelNotSupported`;
+        // this covers a console that is a terminal where the art render
+        // target decided it was not (e.g. a forced width on a pipe).
         let message = match err {
             rich_art::ImageArtError::NonTerminalDestination if console.is_terminal() => format!(
                 "this terminal (TERM={}) is not known to support Sixel graphics; set \
-                 RICH_SIXEL=1 to use Sixel anyway, or choose --image-mode blocks, braille or \
-                 ascii",
+                 RICH_SIXEL=1 or RICH_GRAPHICS=sixel to use Sixel anyway, or choose \
+                 --image-mode blocks, braille or ascii",
                 std::env::var("TERM").unwrap_or_default()
             ),
             err => err.to_string(),
