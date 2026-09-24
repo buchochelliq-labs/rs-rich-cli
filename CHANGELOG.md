@@ -105,13 +105,16 @@ follows the accessibility policy (ASCII symbols, reduced motion).
     percentage and "over by" text.
   - `format`: sizes (decimal and binary), rates, durations, clock times,
     relative times, UTC timestamps, percentages and numbers.
-- **Redaction (`redact`; #224).** `Redactor` masks secrets in strings, ANSI text
+- **Redaction (`redact`; #224), experimental.** Best effort, not a guarantee:
+  check redacted output before sharing it, and report anything that gets
+  through as a bug. `Redactor` masks secrets in strings, ANSI text
   and rendered segments, keeping styles and cell widths, so output can be
   redacted between recording and export. Built-in detectors cover secret-named
   keys, bearer tokens, common token prefixes, AWS access keys, JWTs and URL
   passwords; custom patterns can mask a named `secret` group. `SECRET_KEYS`
   moves to `redact`, and `data::SECRET_KEYS` still re-exports it.
-- **CLI: `rich capture --redact` and `--redact-pattern REGEX`** mask the command
+- **CLI: `rich capture --redact` and `--redact-pattern REGEX`** (experimental,
+  with the same caveat) mask the command
   line and its output before the capture is shown, exported or recorded.
 - **Shared:** `cancel::CancelToken` (with child tokens) and
   `theme::STYLE_TABLES`, the one list of style tables `extended_theme()`

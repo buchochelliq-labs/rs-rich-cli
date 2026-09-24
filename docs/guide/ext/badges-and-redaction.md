@@ -131,6 +131,19 @@ between thousands, English words and UTC.
 
 ## Redaction
 
+!!! warning "Experimental: check the output yourself"
+    `rich_ext::redact` and `rich capture --redact` are **experimental**. The
+    detectors, masks and API may change in any release.
+
+    Redaction is best effort, not a guarantee. It only knows the secret shapes
+    listed below, matches within one line, and cannot tell a secret from
+    ordinary text when it looks like ordinary text. **Always read redacted
+    output before you share, publish or store it.**
+
+    If a secret gets through, or anything else does not work as expected,
+    please [report a bug](https://github.com/buchochelliq-labs/rs-rich-cli/issues/new?template=bug_report.yml) with an example (with the real secret
+    replaced).
+
 A `Redactor` masks secrets before they reach the terminal, a log, an export
 or a recording. `Redactor::secrets()` turns on the built-in detectors:
 

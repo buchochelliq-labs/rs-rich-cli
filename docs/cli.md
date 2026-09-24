@@ -920,6 +920,13 @@ text). `env` masks values of secret-looking names. `capture` sets `FORCE_COLOR`,
 reports its exit status without failing on it, and `--cast` writes asciicast v2.
 The viewer options are rejected on other commands.
 
+!!! warning "Experimental: check the output yourself"
+    `capture --redact` and `--redact-pattern` are **experimental** and best
+    effort. They can miss a secret, so read the capture, and any SVG, HTML or
+    cast file it writes, before you share it. If a secret gets through, or
+    anything else does not work as expected, please
+    [report a bug](https://github.com/buchochelliq-labs/rs-rich-cli/issues/new?template=bug_report.yml).
+
 `capture --redact` masks secrets before anything is shown, exported
 (`--export-svg`, `--export-html`) or recorded (`--cast`). It masks the values
 of secret-named keys (`password=…`, `API_KEY: …`, `--token=…`), bearer tokens,

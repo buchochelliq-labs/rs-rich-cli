@@ -1,6 +1,16 @@
 //! Redact secrets from strings, terminal output, rendered segments and
 //! exports.
 //!
+//! # Experimental
+//!
+//! This module is **experimental**: its detectors, masks and API may change
+//! in any release. Redaction is best effort, not a guarantee. The detectors
+//! only know the secret shapes listed on [`Detector`], match within one line,
+//! and cannot recognise a secret that looks like ordinary text. **Always
+//! check redacted output yourself before you share, publish or store it.**
+//! If a secret gets through, or anything else does not work as expected,
+//! please report it: <https://github.com/buchochelliq-labs/rs-rich-cli/issues/new?template=bug_report.yml>.
+//!
 //! A [`Redactor`] holds rules: built-in [`Detector`]s for common secret
 //! shapes and your own regular expressions. It replaces what they match with
 //! a mask (`********` by default) in
@@ -275,6 +285,9 @@ pub struct Match {
 }
 
 /// Replaces secrets with a mask. See the [module docs](self).
+///
+/// **Experimental**, and best effort: check redacted output before you share
+/// it, and report anything that gets through (see the [module docs](self)).
 #[derive(Clone, Debug)]
 pub struct Redactor {
     rules: Vec<Rule>,

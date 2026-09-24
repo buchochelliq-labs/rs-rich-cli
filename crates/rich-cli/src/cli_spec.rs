@@ -218,7 +218,7 @@ fn viewer_options() -> Vec<ArgSpec> {
             "REGEX",
             VIEWERS,
             "With `rich capture`, also mask matches of REGEX (only its `secret` group when it \
-             has one); repeatable",
+             has one); repeatable. Experimental: check the output before sharing it",
         )
         .multiple(true),
     ]
@@ -538,7 +538,8 @@ fn inspect_options() -> Vec<ArgSpec> {
             "Mask secret-looking keys such as password, token and api_key. With `rich \
              capture`, mask secrets in the output before it is shown, exported or recorded: \
              secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` \
-             tokens, AWS key ids, JWTs and URL passwords",
+             tokens, AWS key ids, JWTs and URL passwords. Capture redaction is experimental \
+             and best effort: check the output before sharing it",
         ),
         option(
             "compare",

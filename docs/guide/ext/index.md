@@ -48,7 +48,7 @@ always available. The `use` path is `rich_ext::<module>`.
 | `table` | `TableData`: stable multi-column sort, grouping and aggregates; `StreamingTable`: keyed rows that re-render only what changed | none | [Tables](tables.md) |
 | `badge`, `size_bar` | `Badge`/`Badges`: status, label, link and metadata chips; `SizeBar`: a size against a total or limit | none | [Badges and redaction](badges-and-redaction.md) |
 | `format` | Sizes, rates, durations, relative times, timestamps, percentages and numbers as people read them | none | [Badges and redaction](badges-and-redaction.md#formatters) |
-| `redact` | `Redactor`: mask secrets in strings, ANSI text and rendered segments before they are exported or recorded | none | [Badges and redaction](badges-and-redaction.md#redaction) |
+| `redact` | `Redactor` (**experimental**, best effort: check its output): mask secrets in strings, ANSI text and rendered segments before they are exported or recorded | none | [Badges and redaction](badges-and-redaction.md#redaction) |
 
 ## Structured data and CLI authoring
 
