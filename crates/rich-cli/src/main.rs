@@ -22,6 +22,7 @@ mod batch_paths;
 mod batch_races;
 mod cli_spec;
 mod config;
+mod controls;
 mod demo;
 mod doctor;
 mod inspect;
@@ -618,6 +619,23 @@ fn explicit_mode(args: &[String]) -> Option<Mode> {
     None
 }
 
+/// The command word (`hex`, `view`, …) the command line starts with, if its
+/// first positional is one.
+fn command_word(args: &[String]) -> Option<&str> {
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        if arg == "--" {
+            return None;
+        }
+        if VALUE_OPTIONS.contains(&arg.as_str()) {
+            iter.next();
+        } else if !arg.starts_with('-') || arg == "-" {
+            return command_mode(arg).map(|_| arg.as_str());
+        }
+    }
+    None
+}
+
 /// The canonical long flag for a render-mode option, or `None` for anything else.
 fn mode_flag_alias(arg: &str) -> Option<&'static str> {
     Some(match arg {
@@ -640,6 +658,9 @@ fn mode_flag_alias(arg: &str) -> Option<&'static str> {
 }
 
 fn emit_error(json: bool, class: ExitClass, message: &str) -> ExitCode {
+    // Messages quote paths and other input, which may carry terminal controls
+    // (a file named `x\e]0;title\a.txt`): show them, never execute them.
+    let message = &controls::shown(message);
     if json {
         eprintln!(
             "{}",
@@ -674,15 +695,12 @@ fn emit_success_report(format: ReportFormat) {
 }
 
 fn fail(cli: &Cli, class: ExitClass, message: impl AsRef<str>) -> ExitCode {
+    let message = controls::shown(message.as_ref());
     // A watched resource's live region shows its own error.
-    if watch::capture_error(message.as_ref()) {
+    if watch::capture_error(&message) {
         return class.exit_code();
     }
-    emit_error(
-        cli.report_format == ReportFormat::Json,
-        class,
-        message.as_ref(),
-    )
+    emit_error(cli.report_format == ReportFormat::Json, class, &message)
 }
 
 fn success(cli: &Cli) -> ExitCode {
@@ -1082,7 +1100,7 @@ fn parse(args: &[String]) -> Result<Option<Cli>, String> {
         return Ok(None);
     }
     if let Some(output) = config::inspect(args, &roots)? {
-        println!("{output}");
+        authoring::out(&format!("{output}\n"));
         return Ok(None);
     }
     let merged = config_args(args, &roots)?;
@@ -1137,7 +1155,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut pager = false;
     let mut auto_pager = false;
     let mut hyperlinks = false;
-    let mut sanitize = false;
+    // Unset means each command's default: off for the upstream modes, on
+    // for `view` and text `diff` (see `run_once_with_fetch`).
+    let mut sanitize = None;
     let mut report_format = ReportFormat::Human;
     let mut watch = false;
     let mut watch_interval = 1.0;
@@ -1186,7 +1206,14 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         match arg.as_str() {
             "--" => end_of_options = true,
             "-h" | "--help" => {
-                print_help(no_color || cli_spec::no_color_requested(args));
+                let no_color = no_color || cli_spec::no_color_requested(args);
+                // `rich hex --help` shows the command, not the whole CLI.
+                let help = command_word(args)
+                    .and_then(|command| cli_spec::subcommand_help(&[command], no_color));
+                match help {
+                    Some(help) => authoring::out(&format!("{help}\n")),
+                    None => print_help(no_color),
+                }
                 return Ok(None);
             }
             "-V" | "--version" => {
@@ -1236,7 +1263,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             }
             "--theme-file" => {
                 let path = iter.next().ok_or("--theme-file requires PATH")?;
-                theme_file_styles = read_theme_file(path)?;
+                theme_file_styles = read_theme_file(path, &format!("--theme-file {path}"))?;
             }
             "--image-color" => {
                 const USAGE: &str =
@@ -1424,7 +1451,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                 overwrite = false;
                 collision = CollisionPolicy::Error;
             }
-            "--no-sanitize" => sanitize = false,
+            "--no-sanitize" => sanitize = Some(false),
             "--dry-run" => dry_run = true,
             "--batch-preserve-dirs" => batch_paths.preserve_dirs = true,
             "--no-batch-preserve-dirs" => batch_paths.preserve_dirs = false,
@@ -1498,7 +1525,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                     return Err("--jobs must be at least 1".into());
                 }
             }
-            "--sanitize" => sanitize = true,
+            "--sanitize" => sanitize = Some(true),
             // Upstream's `@click.option("--hyperlinks", "-y", is_flag=True,
             // help="Render hyperlinks in markdown.")`. Accepted in every mode,
             // as click accepts it — it is read only where markdown is rendered.
@@ -1938,6 +1965,14 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     if !mode.accepts_multiple_resources() && resources.len() > 1 && !batch && !watch {
         return Err("only one resource may be given (except with --gif or --watch)".into());
     }
+    // `view` and the text diff are new here, with no upstream output to keep:
+    // like `less`, they show terminal controls in what they display instead
+    // of letting them act, unless `--no-sanitize` says otherwise.
+    let sanitize = sanitize.unwrap_or_else(|| {
+        mode == Mode::View
+            || (mode == Mode::Diff
+                && !(resources.len() == 2 && resources.iter().all(|r| looks_like_image(r))))
+    });
     let resource = resources.first().cloned();
 
     Ok(Some(Cli {
@@ -2005,32 +2040,89 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     }))
 }
 
-/// The resource's bytes, unconverted: a URL is fetched as text, stdin and
-/// files are read raw so binary input survives. With `--encoding` the text is
-/// decoded first, as every other mode does.
-fn read_bytes(cli: &Cli) -> Result<Vec<u8>, String> {
+/// At most `max` of the resource's bytes from `offset` on, unconverted, and
+/// whether more follow: a URL is fetched as text, stdin and files are read
+/// raw so binary input survives. With `--encoding` the text is decoded first,
+/// as every other mode does (reading at most
+/// [`controls::INSPECT_LIMIT`] bytes).
+///
+/// A file is read from `offset` (seeking where it can) and no further than
+/// the window needs, so `rich hex /dev/urandom --length 16` ends and a sparse
+/// gigabyte costs only the bytes shown.
+fn read_window(cli: &Cli, offset: u64, max: u64) -> Result<(Vec<u8>, bool), String> {
+    use std::io::{Seek, SeekFrom};
     let resource = cli.resource.as_deref();
     let name = resource.unwrap_or("<stdin>");
+    let window = |bytes: Vec<u8>| {
+        let start = usize::try_from(offset)
+            .unwrap_or(usize::MAX)
+            .min(bytes.len());
+        let mut rest = bytes[start..].to_vec();
+        let more = rest.len() as u64 > max;
+        rest.truncate(usize::try_from(max).unwrap_or(usize::MAX));
+        (rest, more)
+    };
     if let Some(url) = resource.filter(|r| is_url(r)) {
-        return fetch_url(url, cli.extensions.encoding).map(|(text, _)| text.into_bytes());
+        return fetch_url(url, cli.extensions.encoding).map(|(text, _)| window(text.into_bytes()));
     }
     if cli.extensions.encoding.is_some() {
-        return read_resource(resource, cli.extensions.encoding)
-            .map(String::into_bytes)
-            .map_err(|err| format!("cannot read {name}: {err}"));
+        return read_resource_limited(
+            resource,
+            cli.extensions.encoding,
+            Some(controls::INSPECT_LIMIT),
+        )
+        .map(|text| window(text.into_bytes()))
+        .map_err(|err| format!("cannot read {name}: {err}"));
     }
+    let error = |err: std::io::Error| format!("cannot read {name}: {err}");
+    // One byte past the window says whether more follow.
+    let take = max.saturating_add(1);
+    let mut bytes = Vec::new();
     match resource.filter(|r| *r != "-") {
         Some(path) if std::path::Path::new(path).is_dir() => {
-            Err(format!("cannot read {path}: it is a directory"))
+            return Err(format!("cannot read {path}: it is a directory"));
         }
-        Some(path) => std::fs::read(path).map_err(|err| format!("cannot read {path}: {err}")),
+        Some(path) => {
+            let mut file = std::fs::File::open(path).map_err(error)?;
+            // A pipe or FIFO cannot seek: skip by reading instead.
+            if offset > 0 && file.seek(SeekFrom::Start(offset)).is_err() {
+                std::io::copy(&mut (&mut file).take(offset), &mut std::io::sink())
+                    .map_err(error)?;
+            }
+            file.take(take).read_to_end(&mut bytes).map_err(error)?;
+        }
         None => {
-            let mut bytes = Vec::new();
-            std::io::Read::read_to_end(&mut std::io::stdin(), &mut bytes)
-                .map_err(|err| format!("cannot read <stdin>: {err}"))?;
-            Ok(bytes)
+            let mut stdin = std::io::stdin().lock();
+            std::io::copy(&mut (&mut stdin).take(offset), &mut std::io::sink()).map_err(error)?;
+            stdin.take(take).read_to_end(&mut bytes).map_err(error)?;
         }
     }
+    let more = bytes.len() as u64 > max;
+    bytes.truncate(usize::try_from(max).unwrap_or(usize::MAX));
+    Ok((bytes, more))
+}
+
+/// Read up to `limit` bytes (all of them for `None`); more is an error.
+fn read_limited(reader: impl Read, limit: Option<u64>) -> std::io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    match limit {
+        None => {
+            let mut reader = reader;
+            reader.read_to_end(&mut bytes)?;
+        }
+        Some(limit) => {
+            reader
+                .take(limit.saturating_add(1))
+                .read_to_end(&mut bytes)?;
+            if bytes.len() as u64 > limit {
+                return Err(std::io::Error::other(format!(
+                    "larger than {}, the most this command reads",
+                    controls::size(limit)
+                )));
+            }
+        }
+    }
+    Ok(bytes)
 }
 
 /// Read a resource: `-` (or `None`) means stdin, otherwise a file path.
@@ -2046,6 +2138,17 @@ fn read_bytes(cli: &Cli) -> Result<Vec<u8>, String> {
 /// decode error escapes into rich-cli's `except Exception` and exits non-zero;
 /// there is no `errors="replace"` on that path.
 fn read_resource(resource: Option<&str>, encoding: Option<Encoding>) -> std::io::Result<String> {
+    read_resource_limited(resource, encoding, None)
+}
+
+/// [`read_resource`], reading at most `limit` bytes (all of them for `None`):
+/// more is an error. The upstream modes read without a limit, as upstream
+/// does.
+fn read_resource_limited(
+    resource: Option<&str>,
+    encoding: Option<Encoding>,
+    limit: Option<u64>,
+) -> std::io::Result<String> {
     let content = match resource {
         Some(path) if path != "-" => {
             let file = std::path::Path::new(path);
@@ -2057,12 +2160,15 @@ fn read_resource(resource: Option<&str>, encoding: Option<Encoding>) -> std::io:
                     "is a directory, not a file",
                 ));
             }
-            let bytes = std::fs::read(file)?;
+            let bytes = match limit {
+                None => std::fs::read(file)?,
+                Some(_) => read_limited(std::fs::File::open(file)?, limit)?,
+            };
             if let Some(encoding) = encoding {
                 return encoding.decode(&bytes).map(normalize_newlines);
             }
             if has_utf16_bom(&bytes) {
-                eprintln!("rich: {path} has a UTF-16 BOM; use --encoding utf-16 to decode it (default remains UTF-8 replacement)");
+                eprintln!("rich: {} has a UTF-16 BOM; use --encoding utf-16 to decode it (default remains UTF-8 replacement)", controls::shown(path));
             }
             match String::from_utf8(bytes) {
                 Ok(text) => text,
@@ -2089,8 +2195,7 @@ fn read_resource(resource: Option<&str>, encoding: Option<Encoding>) -> std::io:
                 };
                 eprintln!("rich: reading stdin; finish input with {eof}");
             }
-            let mut buffer = Vec::new();
-            std::io::stdin().read_to_end(&mut buffer)?;
+            let buffer = read_limited(std::io::stdin(), limit)?;
             decode_strict(buffer, encoding)?
         }
     };
@@ -2783,16 +2888,45 @@ impl Cli {
 
 /// Read an upstream theme file (`Theme.read`: a `[styles]` section of
 /// `name = style` lines). Errors name the file and, where the file has one,
-/// the offending line.
-fn read_theme_file(path: &str) -> Result<std::collections::BTreeMap<String, Style>, String> {
-    let text =
-        std::fs::read_to_string(path).map_err(|err| format!("--theme-file {path}: {err}"))?;
+/// the offending line, after `label` (`--theme-file PATH`, or the config
+/// setting that named it).
+///
+/// Only a regular file of at most [`controls::THEME_FILE_LIMIT`] is read: a
+/// FIFO would block every run and `/dev/zero` would never end.
+fn read_theme_file(
+    path: &str,
+    label: &str,
+) -> Result<std::collections::BTreeMap<String, Style>, String> {
+    let limit = controls::THEME_FILE_LIMIT;
+    // Checked before opening: opening a FIFO blocks until a writer appears.
+    let metadata = std::fs::metadata(path).map_err(|err| format!("{label}: {err}"))?;
+    if !metadata.is_file() {
+        return Err(format!("{label}: not a regular file"));
+    }
+    let too_large = || {
+        format!(
+            "{label}: larger than {}, the most read from a theme file",
+            controls::size(limit)
+        )
+    };
+    if metadata.len() > limit {
+        return Err(too_large());
+    }
+    let file = std::fs::File::open(path).map_err(|err| format!("{label}: {err}"))?;
+    let mut bytes = Vec::new();
+    file.take(limit + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|err| format!("{label}: {err}"))?;
+    if bytes.len() as u64 > limit {
+        return Err(too_large());
+    }
+    let text = String::from_utf8(bytes).map_err(|err| format!("{label}: {err}"))?;
     let theme = rich::Theme::from_file(&text, false).map_err(|err| match &err {
         // Structural errors already say which line.
-        rich::errors::RichError::ThemeConfig(_) => format!("--theme-file {path}: {err}"),
+        rich::errors::RichError::ThemeConfig(_) => format!("{label}: {err}"),
         _ => match bad_style_line(&text) {
-            Some(line) => format!("--theme-file {path}: line {line}: {err}"),
-            None => format!("--theme-file {path}: {err}"),
+            Some(line) => format!("{label}: line {line}: {err}"),
+            None => format!("{label}: {err}"),
         },
     })?;
     Ok(theme
@@ -2858,15 +2992,59 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     let mut view_as = None;
     let mut view_bytes = Vec::new();
     if mode == Mode::View {
-        view_bytes = match read_bytes(&cli) {
-            Ok(bytes) => bytes,
-            Err(err) => return fail(&cli, ExitClass::Input, err),
-        };
         let ext = cli
             .resource
             .as_deref()
             .filter(|r| *r != "-")
             .and_then(resource_ext);
+        // Images and logs are read by their own renderers; anything else is
+        // read here, up to a limit, and sniffed.
+        let by_name = viewers::detect(ext.as_deref(), cli.resource.as_deref(), b"");
+        if !matches!(
+            by_name,
+            viewers::ViewAs::Image | viewers::ViewAs::Gif | viewers::ViewAs::Log
+        ) {
+            // A notebook is one JSON document, often large with its outputs:
+            // cutting it short would only make it invalid.
+            let limit = if by_name == viewers::ViewAs::Notebook {
+                controls::INSPECT_LIMIT
+            } else {
+                controls::VIEW_LIMIT
+            };
+            let more;
+            (view_bytes, more) = match read_window(&cli, 0, limit) {
+                Ok(read) => read,
+                Err(err) => return fail(&cli, ExitClass::Input, err),
+            };
+            let name = cli.resource.as_deref().unwrap_or("<stdin>");
+            let kind = viewers::detect(ext.as_deref(), cli.resource.as_deref(), &view_bytes);
+            if kind == viewers::ViewAs::Binary {
+                if more || view_bytes.len() as u64 > controls::BYTES_LIMIT {
+                    view_bytes.truncate(controls::BYTES_LIMIT as usize);
+                    viewers::notice(
+                        name,
+                        &controls::size(controls::BYTES_LIMIT),
+                        "use rich hex with --offset and --length for the rest",
+                    );
+                }
+            } else if let Some(end) = viewers::line_end(&view_bytes, controls::LINE_LIMIT)
+                .filter(|_| matches!(kind, viewers::ViewAs::Source(_) | viewers::ViewAs::Patch))
+            {
+                // Numbered source and patches render line by line.
+                view_bytes.truncate(end);
+                viewers::notice(
+                    name,
+                    &format!("{} lines", controls::LINE_LIMIT),
+                    "use a pager or rich --syntax for the whole file",
+                );
+            } else if more {
+                viewers::notice(
+                    name,
+                    &controls::size(limit),
+                    "use a pager or rich --syntax for the whole file",
+                );
+            }
+        }
         let kind = viewers::detect(ext.as_deref(), cli.resource.as_deref(), &view_bytes);
         mode = match kind {
             viewers::ViewAs::Markdown => Mode::Markdown,
@@ -3008,17 +3186,45 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             Ok(redactor) => redactor,
             Err(err) => return fail(&cli, ExitClass::Usage, err),
         };
-        let mut captured = match viewers::capture(&cli.resources, console.width()) {
+        // The command draws inside the panel: its width, less the two
+        // borders and their padding.
+        let width = cli
+            .width
+            .unwrap_or_else(|| console.width())
+            .saturating_sub(4)
+            .max(1);
+        // A recording that cannot be written is found out before the
+        // command runs, not after.
+        let cast = match viewers::cast_path(&cli.viewers) {
+            Some(path) => match std::fs::File::create(path) {
+                Ok(file) => Some((path, file)),
+                Err(err) => {
+                    return fail(
+                        &cli,
+                        ExitClass::Input,
+                        format!("cannot write {path}: {err}"),
+                    )
+                }
+            },
+            None => None,
+        };
+        let mut captured = match viewers::capture(&cli.resources, width) {
             Ok(captured) => captured,
             Err(err) => return fail(&cli, ExitClass::Input, err),
         };
+        if let Some(notice) = &captured.notice {
+            eprintln!("rich: capture: {notice}");
+        }
         // Before the panel, the exports and the cast see any of it.
         if let Some(redactor) = &redactor {
             captured.redact(redactor);
         }
-        if let Some(path) = viewers::cast_path(&cli.viewers) {
-            let cast = viewers::asciicast(&captured, console.width(), console.height());
-            if let Err(err) = std::fs::write(path, cast) {
+        if cli.sanitize {
+            captured.sanitize();
+        }
+        if let Some((path, mut file)) = cast {
+            let cast = viewers::asciicast(&captured, width, console.height());
+            if let Err(err) = file.write_all(cast.as_bytes()) {
                 return fail(
                     &cli,
                     ExitClass::Input,
@@ -3048,12 +3254,30 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         return decorate_and_emit(&cli, &console, &export, view, Some(fit));
     }
     if matches!(mode, Mode::Hex | Mode::Unicode) {
-        let bytes = match read_bytes(&cli) {
-            Ok(bytes) => bytes,
+        // Only the bytes shown are read: an explicit `--length`, else up to
+        // the limit, with a notice when more follow.
+        let hex = mode == Mode::Hex;
+        let offset = cli.viewers.offset().filter(|_| hex).unwrap_or(0);
+        let length = cli.viewers.length().filter(|_| hex);
+        let max = length.map_or(controls::BYTES_LIMIT, |n| n as u64);
+        let (bytes, more) = match read_window(&cli, offset, max) {
+            Ok(read) => read,
             Err(err) => return fail(&cli, ExitClass::Input, err),
         };
-        let view = if mode == Mode::Hex {
-            viewers::hex(&cli.viewers, bytes)
+        if more && length.is_none() {
+            let hint = if hex {
+                "use --offset and --length for the rest"
+            } else {
+                "pass a shorter input"
+            };
+            viewers::notice(
+                cli.resource.as_deref().unwrap_or("<stdin>"),
+                &controls::size(controls::BYTES_LIMIT),
+                hint,
+            );
+        }
+        let view = if hex {
+            viewers::hex(&cli.viewers, bytes, offset)
         } else {
             viewers::unicode(&cli.viewers, &bytes)
         };
@@ -3081,7 +3305,9 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     } else if mode == Mode::Print && matches!(cli.resource.as_deref(), Some(r) if r != "-") {
         (cli.resource.clone().unwrap(), None)
     } else {
-        match read_resource(cli.resource.as_deref(), cli.extensions.encoding) {
+        // `inspect` is ours: it parses at most a documented limit.
+        let limit = (mode == Mode::Inspect).then_some(controls::INSPECT_LIMIT);
+        match read_resource_limited(cli.resource.as_deref(), cli.extensions.encoding, limit) {
             Ok(content) => (content, None),
             Err(err) => {
                 let name = cli.resource.as_deref().unwrap_or("<stdin>");
@@ -3315,13 +3541,13 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             let view: Box<dyn Renderable> = match view_as {
                 Some(viewers::ViewAs::Patch) => {
                     let name = cli.resource.clone().unwrap_or_else(|| "<stdin>".into());
-                    match tools::text_diff(&cli.tools, &[name], &[content.clone()], None) {
+                    match tools::text_diff(&cli.tools, &[name], &[content.clone()], None, false) {
                         Ok(outcome) => outcome.renderable,
                         Err(err) => return fail(&cli, ExitClass::Data, err),
                     }
                 }
                 Some(viewers::ViewAs::Binary) => {
-                    match viewers::hex(&cli.viewers, std::mem::take(&mut view_bytes)) {
+                    match viewers::hex(&cli.viewers, std::mem::take(&mut view_bytes), 0) {
                         Ok(view) => view,
                         Err(err) => return fail(&cli, ExitClass::Usage, err),
                     }
@@ -3345,7 +3571,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         Mode::Inspect => {
             let encoding = cli.extensions.encoding;
             let read = |path: &str| {
-                read_resource(Some(path), encoding)
+                read_resource_limited(Some(path), encoding, Some(controls::INSPECT_LIMIT))
                     .map_err(|err| format!("cannot read {path}: {err}"))
             };
             let view = match inspect::build(&cli.data, &content, cli.resource.as_deref(), read) {
@@ -4608,7 +4834,13 @@ fn run_text_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
             }
         })
         .collect();
-    let outcome = match tools::text_diff(&cli.tools, &names, &contents, cli.diff_threshold) {
+    let outcome = match tools::text_diff(
+        &cli.tools,
+        &names,
+        &contents,
+        cli.diff_threshold,
+        cli.sanitize,
+    ) {
         Ok(outcome) => outcome,
         Err(err) => return fail(cli, ExitClass::Data, err),
     };
@@ -4793,7 +5025,18 @@ fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     // the `sixel` feature, or an image Sixel cannot encode).
     let options = console.options();
     if let Err(err) = art.render(console, &options) {
-        return fail(cli, ExitClass::Input, err.to_string());
+        // On a terminal, the destination is fine: the terminal is just not
+        // one Sixel detection recognises.
+        let message = match err {
+            rich_art::ImageArtError::NonTerminalDestination if console.is_terminal() => format!(
+                "this terminal (TERM={}) is not known to support Sixel graphics; set \
+                 RICH_SIXEL=1 to use Sixel anyway, or choose --image-mode blocks, braille or \
+                 ascii",
+                std::env::var("TERM").unwrap_or_default()
+            ),
+            err => err.to_string(),
+        };
+        return fail(cli, ExitClass::Input, message);
     }
 
     let terminal_only = Export {

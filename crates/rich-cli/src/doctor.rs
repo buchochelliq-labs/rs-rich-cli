@@ -22,6 +22,17 @@ pub(super) fn requested(args: &[String]) -> bool {
 }
 
 pub(super) fn dispatch(args: &[String]) -> ExitCode {
+    if args
+        .iter()
+        .take_while(|arg| *arg != "--")
+        .any(|arg| arg == "--help" || arg == "-h")
+    {
+        let no_color = cli_spec::no_color_requested(args);
+        if let Some(help) = cli_spec::subcommand_help(&["doctor"], no_color) {
+            authoring::out(&format!("{help}\n"));
+        }
+        return ExitCode::SUCCESS;
+    }
     // Consume values before interpreting report flags, even option-looking values.
     let mut json = false;
     let mut iter = args.iter();
@@ -38,49 +49,58 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
     }
     match report(args) {
         Ok((report, capabilities, no_color)) => {
+            // Written as one piece, and a closed pipe (`rich doctor | head`)
+            // is not a panic.
+            let mut text = String::new();
             if json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&report).expect("diagnostic JSON")
-                );
+                text.push_str(&serde_json::to_string_pretty(&report).expect("diagnostic JSON"));
+                text.push('\n');
             } else {
-                println!(
-                    "Rich doctor — {} {}",
-                    env!("CARGO_PKG_NAME"),
-                    env!("CARGO_PKG_VERSION")
-                );
-                println!("Build features: {}", report["features"]);
-                println!(
-                    "Terminal: stdout TTY={}, {}×{} cells, colour={} ({}); NO_COLOR={}",
-                    report["terminal"]["stdout_tty"],
-                    report["terminal"]["width"],
-                    report["terminal"]["height"],
-                    report["terminal"]["color"].as_str().unwrap(),
-                    report["terminal"]["provenance"]["color_system"]
-                        .as_str()
-                        .unwrap(),
-                    report["terminal"]["no_color"]
-                );
-                println!(
-                    "Image backend: {}; Sixel support={} (inferred, no probe)",
-                    report["image"]["selected_mode"].as_str().unwrap(),
-                    report["image"]["sixel_inferred"]
-                );
-                println!(
-                    "Configuration: source={}, profile={}, disabled={}",
-                    report["config"]["source"],
-                    report["config"]["profile"],
-                    report["config"]["disabled"]
-                );
-                println!(
-                    "Pager: {} from {}; availability not checked; never launched",
-                    report["pager"]["program"].as_str().unwrap(),
-                    report["pager"]["source"].as_str().unwrap()
-                );
-                println!();
+                let lines = [
+                    format!(
+                        "Rich doctor — {} {}",
+                        env!("CARGO_PKG_NAME"),
+                        env!("CARGO_PKG_VERSION")
+                    ),
+                    format!("Build features: {}", report["features"]),
+                    format!(
+                        "Terminal: stdout TTY={}, {}×{} cells, colour={} ({}); NO_COLOR={}",
+                        report["terminal"]["stdout_tty"],
+                        report["terminal"]["width"],
+                        report["terminal"]["height"],
+                        report["terminal"]["color"].as_str().unwrap(),
+                        report["terminal"]["provenance"]["color_system"]
+                            .as_str()
+                            .unwrap(),
+                        report["terminal"]["no_color"]
+                    ),
+                    format!(
+                        "Image backend: {}; Sixel support={} (inferred, no probe)",
+                        report["image"]["selected_mode"].as_str().unwrap(),
+                        report["image"]["sixel_inferred"]
+                    ),
+                    format!(
+                        "Configuration: source={}, profile={}, disabled={}",
+                        report["config"]["source"],
+                        report["config"]["profile"],
+                        report["config"]["disabled"]
+                    ),
+                    format!(
+                        "Pager: {} from {}; availability not checked; never launched",
+                        report["pager"]["program"].as_str().unwrap(),
+                        report["pager"]["source"].as_str().unwrap()
+                    ),
+                    String::new(),
+                ];
+                for line in lines {
+                    text.push_str(&line);
+                    text.push('\n');
+                }
                 let console = Console::builder().no_color(no_color).build();
-                console.print(&CapabilityReport::new(&capabilities));
+                text.push_str(&console.render_to_string(&CapabilityReport::new(&capabilities)));
+                text.push('\n');
             }
+            authoring::out(&text);
             ExitCode::SUCCESS
         }
         Err(message) => emit_error(json, ExitClass::Usage, &format!("doctor: {message}")),

@@ -398,8 +398,9 @@ pub(super) fn run_batch(cli: &Cli) -> ExitCode {
     } else {
         for (input, class, message) in &failures {
             eprintln!(
-                "rich: {input}: {}",
-                message.as_deref().unwrap_or(class.name())
+                "rich: {}: {}",
+                crate::controls::shown(input),
+                crate::controls::shown(message.as_deref().unwrap_or(class.name()))
             );
         }
     }

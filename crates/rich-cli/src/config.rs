@@ -18,6 +18,12 @@ struct Configuration {
     /// Set when a working-directory `rich.toml` asked for `no_color = false`
     /// while `NO_COLOR` is set, and was ignored (see `load`).
     ignored_color: bool,
+    /// Set when a working-directory `rich.toml` named a `theme_file`, which
+    /// was ignored (see `load`).
+    ignored_theme_file: bool,
+    /// Set when a working-directory `rich.toml` asked for `sanitize = false`,
+    /// which was ignored (see `load`).
+    ignored_sanitize: bool,
 }
 
 pub(crate) fn validate_theme_name(name: &str) -> Result<(), String> {
@@ -396,6 +402,8 @@ fn decode_configuration(text: &str, selected: Option<&str>) -> Result<Configurat
         base,
         profile: applied,
         ignored_color: false,
+        ignored_theme_file: false,
+        ignored_sanitize: false,
     })
 }
 
@@ -443,7 +451,8 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
     // on against `NO_COLOR`. The user's own config (`~/.config/rich`, or a file
     // named with `--config`) still can, as the NO_COLOR convention allows, and
     // so can `--color`.
-    if roots.no_color_env && args.path.is_none() && path == roots.cwd.join("rich.toml") {
+    let untrusted = args.path.is_none() && path == roots.cwd.join("rich.toml");
+    if untrusted && roots.no_color_env {
         let enables =
             |settings: &Settings| settings.get("no_color") == Some(&Value::Boolean(false));
         let mut ignored = false;
@@ -457,6 +466,24 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
             }
         }
         settings.ignored_color = ignored;
+    }
+    // For the same reason it may not name a file for every command to read
+    // (`theme_file`: a FIFO hangs every run), nor turn off the sanitizing
+    // `rich view` and `rich diff` do by default.
+    if untrusted {
+        let (mut theme_file, mut sanitize) = (false, false);
+        for table in std::iter::once(&mut settings.settings)
+            .chain(std::iter::once(&mut settings.base))
+            .chain(settings.profile.as_mut().map(|(_, table)| table))
+        {
+            theme_file |= table.remove("theme_file").is_some();
+            if table.get("sanitize") == Some(&Value::Boolean(false)) {
+                table.remove("sanitize");
+                sanitize = true;
+            }
+        }
+        settings.ignored_theme_file = theme_file;
+        settings.ignored_sanitize = sanitize;
     }
     // A theme file named in a config file is relative to that file, so the
     // config works from any directory.
@@ -658,14 +685,19 @@ fn explicit_theme_styles(args: &[String]) -> Result<ThemeStyles, String> {
 }
 
 pub(crate) fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<String>, String> {
+    let json_report = super::wants_json_report(args);
     let args = arguments(args)?;
-    let (mut configuration, _) = load(&args, roots)?;
+    let (mut configuration, source) = load(&args, roots)?;
     let theme_styles = selected_theme(&mut configuration, &args)?;
     explicit_theme_styles(&args.cleaned)?;
     let mut settings = configuration.settings;
     let overrides = overrides(&args.cleaned);
     normalize_watch(&mut settings, &overrides)?;
     let explicit: BTreeSet<_> = overrides.into_keys().collect();
+    // Moot when the command line names its own theme file.
+    if configuration.ignored_theme_file && !json_report && !explicit.contains("theme_file") {
+        eprintln!("rich: warning: {UNTRUSTED_THEME_FILE}");
+    }
     let mut result = Vec::new();
     for (name, style) in theme_styles {
         result.extend(["--theme-style".into(), format!("{name}={style}")]);
@@ -687,6 +719,13 @@ pub(crate) fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<St
             || (key == "format" && explicit_mode.is_some_and(|mode| mode != super::Mode::Inspect))
         {
             continue;
+        }
+        if let (Some(file), Some(config)) =
+            (value.as_str().filter(|_| key == "theme_file"), &source)
+        {
+            // Name the setting in errors: the command line has no --theme-file.
+            let label = format!("config {}: theme_file {file}", config.display());
+            super::read_theme_file(file, &label)?;
         }
         if let Some((yes, no)) = boolean_flags(&key) {
             result.push(if value.as_bool().unwrap() { yes } else { no }.to_string());
@@ -805,6 +844,8 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
             overrides: &overrides,
             no_color_env: roots.no_color_env,
             ignored_color: configuration.ignored_color,
+            ignored_theme_file: configuration.ignored_theme_file,
+            ignored_sanitize: configuration.ignored_sanitize,
         };
         return Ok(Some(explain(&layers, key)));
     }
@@ -834,6 +875,10 @@ struct Layers<'a> {
     no_color_env: bool,
     /// The working-directory config's `no_color = false` was ignored.
     ignored_color: bool,
+    /// The working-directory config's `theme_file` was ignored.
+    ignored_theme_file: bool,
+    /// The working-directory config's `sanitize = false` was ignored.
+    ignored_sanitize: bool,
 }
 
 /// A config path relative to the working directory, or under `~`, when it is.
@@ -913,8 +958,34 @@ fn explain(layers: &Layers, key: Option<&str>) -> String {
              pass --color, or set it in ~/.config/rich/config.toml, to override NO_COLOR\n",
         );
     }
+    for (ignored, name, note) in [
+        (
+            layers.ignored_theme_file,
+            "theme_file",
+            UNTRUSTED_THEME_FILE,
+        ),
+        (layers.ignored_sanitize, "sanitize", UNTRUSTED_SANITIZE),
+    ] {
+        if ignored && key.is_none_or(|key| key == name) {
+            if !output.ends_with('\n') {
+                output.push('\n');
+            }
+            output.push_str(&format!("note: {note}\n"));
+        }
+    }
     output
 }
+
+/// Why a working-directory `rich.toml`'s `theme_file` has no effect.
+pub(crate) const UNTRUSTED_THEME_FILE: &str =
+    "theme_file in ./rich.toml is ignored: a project's config may not name a file for every \
+     command to read; pass --theme-file, or set it in ~/.config/rich/config.toml or a file \
+     given with --config";
+
+/// Why a working-directory `rich.toml`'s `sanitize = false` has no effect.
+const UNTRUSTED_SANITIZE: &str =
+    "sanitize = false in ./rich.toml is ignored: a project's config may not let input control \
+     the terminal; pass --no-sanitize, or set it in ~/.config/rich/config.toml";
 
 /// Every key `validate_value` accepts.
 #[cfg(test)]
