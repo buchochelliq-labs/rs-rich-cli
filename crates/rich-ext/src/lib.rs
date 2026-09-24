@@ -27,6 +27,7 @@ pub mod cli;
 pub mod encoding;
 pub mod env_inspect;
 pub mod fidelity;
+pub mod format;
 pub mod hex;
 pub mod highlighter;
 pub mod registry;
