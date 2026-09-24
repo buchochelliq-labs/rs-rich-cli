@@ -48,6 +48,7 @@ pub fn extended_theme() -> Theme {
         .chain(crate::transfer::STYLES)
         .chain(crate::countdown::STYLES)
         .chain(crate::notify::STYLES)
+        .chain(crate::table::STYLES)
     {
         if let Ok(style) = Style::parse(spec) {
             theme.insert(*name, style);
@@ -74,6 +75,7 @@ mod tests {
                 + crate::transfer::STYLES.len()
                 + crate::countdown::STYLES.len()
                 + crate::notify::STYLES.len()
+                + crate::table::STYLES.len()
         );
         // Upstream entries survive...
         assert!(extended.get("repr.number").is_some());
@@ -97,6 +99,7 @@ mod tests {
             .chain(crate::transfer::STYLES)
             .chain(crate::countdown::STYLES)
             .chain(crate::notify::STYLES)
+            .chain(crate::table::STYLES)
         {
             assert!(
                 base.get(name).is_none(),
