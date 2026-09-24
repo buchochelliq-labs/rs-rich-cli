@@ -598,7 +598,12 @@ impl<'a> CommandRunner<'a> {
                 }
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             }
-            if !killed && self.cancel.as_ref().is_some_and(CancelToken::is_cancelled) {
+            // Only a running child can be cancelled: once it has exited, its
+            // status stands even if the token fires while its pipes drain.
+            if !killed
+                && exited.is_none()
+                && self.cancel.as_ref().is_some_and(CancelToken::is_cancelled)
+            {
                 let _ = child.kill();
                 killed = true;
             }
