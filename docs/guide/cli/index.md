@@ -98,9 +98,9 @@ records exactly which parts are upstream and which are additions.
 | `gif` | `--gif` | Play animated GIFs | [Images](walkthrough.md#images-gifs-and-image-diffs) |
 | `ansi explain` | `--ansi-explain` | List and decode escape sequences in a capture | [Escape sequences](walkthrough.md#decoding-escape-sequences) |
 | `view` | — | Show any file: rendered, numbered and highlighted, or as hex; paged and searchable | [Viewers](walkthrough.md#viewing-and-inspecting-anything) |
-| `hex` | — | Hex dump with offsets, byte groups and an ASCII panel | [Viewers](walkthrough.md#viewing-and-inspecting-anything) |
+| `hex`, `hexdump` | — | Hex dump with offsets, byte groups and an ASCII panel | [Viewers](walkthrough.md#viewing-and-inspecting-anything) |
 | `unicode` | — | Graphemes, code points, UTF-8 bytes, widths and invalid sequences | [Viewers](walkthrough.md#viewing-and-inspecting-anything) |
-| `env` | — | Environment variables with secrets masked; PATH entries checked | [Viewers](walkthrough.md#viewing-and-inspecting-anything) |
+| `env` | — | Environment variables, with secret-named values and credentials inside values masked (best effort); PATH entries checked | [Viewers](walkthrough.md#viewing-and-inspecting-anything) |
 | `capture` | — | Run a command and show, export or record its output | [Viewers](walkthrough.md#viewing-and-inspecting-anything) |
 | — | `--watch` | Re-render files as they change | [Watch](walkthrough.md#watching-files) |
 | — | `--batch` | Convert many files to HTML/SVG | [Batch](walkthrough.md#converting-many-files) |
@@ -123,6 +123,9 @@ records exactly which parts are upstream and which are additions.
 | `4` | Parse or render error in the data |
 | `5` | A threshold or gate failed (`diff --threshold`, `bench compare`) |
 | `130` | A batch was interrupted with Ctrl+C |
+
+`rich capture` is the exception: it exits with the captured command's own
+status, or 128 plus the signal number when a signal ended it.
 
 ## Where to go next
 
