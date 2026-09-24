@@ -8,9 +8,10 @@ plus the porting status of each. It is the lookup table used by both the
 **Status:** ⬜ not started · 🟡 partial (subset ported) · 🟢 complete
 **Parity:** ✅ golden-tested against real `rich` · — none yet
 
-**Last verified:** 2026-08-11, against Python `rich` 15.0.0 on `rc/0.0.2`
-(`9d2610d`). The status column is what the differential sweeps measured, not
-an estimate — see [Parity](parity.md) for the figures.
+**Last verified:** 2026-09-24, against Python `rich` 15.0.0, at the 0.0.11
+release test (core 0.0.7, prepared). The status column is what the golden
+fixtures and differential sweeps measured, not an estimate — see
+[Parity](parity.md) for the figures.
 
 Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/UPSTREAM.toml)).
 
@@ -25,7 +26,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `markup.py`                           | `markup.rs`              | 🟡 | ✅ |
 | `text.py` (+ justify, overflow)       | `text.rs`                | 🟡 | ✅ |
 | `_wrap.py`                            | `wrap.rs`                | 🟢 | ✅ 0 / 30,680 wrap cases |
-| `theme.py`, `themes.py`, `default_styles.py` | `theme.rs` | ✅ | ✅ |
+| `theme.py`, `themes.py`, `default_styles.py` | `theme.rs` | 🟢 | ✅ (theme stack and theme files since core 0.0.6) |
 | `terminal_theme.py` | `terminal_theme.rs` | 🟡 | ✅ |
 | `console.py` (+ `ConsoleOptions`, `render_lines`) | `console.rs`  | 🟡 | ✅ (+ `no_color.tsv`: colour removal, exports) |
 | `protocol.py`, `abc.py`, `_extension.py` | `protocol.rs`         | 🟡 | — |
@@ -75,7 +76,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `pretty.py` | `pretty.rs` | 🟡 | Rust-native (`Debug` + repr highlight, #19) |
 | `repr.py`, `_inspect.py` | resp. | ⬜ | need Rust reflection — see #19 |
 | `traceback.py` | `traceback.rs` | 🟡 | Rust-native (error `source()` chain, #19) |
-| `_log_render.py` | `log_render.rs` | ✅ | ✅ `log_render.tsv`; takes a pre-formatted time (DIVERGENCES §19) |
+| `_log_render.py` | `log_render.rs` | 🟡 | ✅ `log_render.tsv`; takes a pre-formatted time (DIVERGENCES §19) |
 | `logging.py` (log::Log handler) | `rich-ext` `log_handler.rs` | 🟡 | `RichHandler` over the `log`/`tracing` adapters; UTC default time, no rich tracebacks (DIVERGENCES §19) |
 
 ## Utilities & platform
@@ -104,7 +105,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | HTML export (`--export-html`) + SVG export (`--export-svg`) | `main.rs` | 🟡 both done |
 | `--panel`/`--padding` decorators (+ title/caption/style), `--ipynb`, URL fetch (`fetch` feature) | `main.rs` | 🟡 done |
 | paging (`--pager`) | `pager.rs` + `main.rs` | 🟡 done |
-| preferred subcommands (`print`, `markdown`, `syntax`, `json`, `csv`/`tsv`, `ipynb`, `jsonl`, `log`, `gif`, `diff`, `image`, `rule`) while preserving flat flags | `main.rs` | 🟡 done; `image` is a local rich-art convenience |
+| preferred subcommands (`print`, `markdown`, `syntax`, `json`, `csv`/`tsv`, `ipynb`, `jsonl`, `log`, `gif`, `diff`, `image`, `rule`) while preserving flat flags | `main.rs` | 🟡 done; `image` is a local rich-art convenience, and the tool commands (`inspect`, `ansi explain`, `view`, …) are listed under the conveniences below |
 | stable exit-code classes and `--report json` / `--machine-json` result/error envelopes | `main.rs` | 🟡 done |
 | JSONL / NDJSON and structured-log streaming from files/stdin | `main.rs` | 🟡 done |
 | 0.0.7 binary-boundary `--watch` polling for files and fetch-enabled URLs | `main.rs` | 🟡 done; deliberate CLI convenience |
@@ -128,6 +129,10 @@ core mirror is untouched and a sync does not have to reconcile them.
 | `rich view`, `hex`, `unicode`, `env`, `capture` (0.0.11 WS11) | `viewers.rs` + `main.rs` | compose `rich_ext::{source_view, hex, unicode_inspect, env_inspect}` and core's `AnsiDecoder`; `view` routes to the existing modes by extension and content; no core change |
 | `rich capture --redact` and `--redact-pattern` (0.0.11 WS10, #224) | `viewers.rs` + `main.rs` | masks the capture with the public `rich_ext::redact::Redactor` before it is shown, exported or recorded; no core change |
 | terminal-control hygiene and input limits for the 0.0.11 commands: `view` and text `diff` sanitize by default (`--no-sanitize` opts out), `capture --sanitize`, inert capture titles and error-message paths, bounded `view`/`hex`/`unicode`/`inspect`/`capture` reads, the capture exit grace, regular-file 1 MiB theme files, and a working-directory `rich.toml` that cannot set `theme_file` or `sanitize = false` | `controls.rs` + `viewers.rs` + `tools.rs` + `config.rs` + `main.rs` | composes the public `rich_ext::sanitize_terminal_controls`; none of these commands exists upstream, and the upstream modes keep their ESC-preserving default; no core change |
+| `rich inspect` / `--inspect` and `--format` (0.0.11 WS4) | `inspect.rs` + `main.rs` | composes `rich_ext::data` parsers, `Explorer`, `select`, `Redaction` and document diff; `--format auto` routes piped or extensionless input to the existing modes; no core change |
+| text and patch `rich diff`, with `--side-by-side`, `--context`, `--language` and `--threshold` for text (0.0.11 WS8) | `main.rs` + `tools.rs` | composes `rich_ext::diff` (engine, `DiffView`, patch view); image diffs keep their existing path; exit 5 above the threshold as for images; no core change |
+| `rich ansi explain` / `--ansi-explain` (0.0.11 WS9) | `tools.rs` + `main.rs` | composes `rich_ext::ansi_explain` and its `ExplanationView`; no core change |
+| `rich bench compare` (0.0.11 WS8) | `tools.rs` + `main.rs` | composes `rich_ext::qa::bench` comparison and its table; exit 5 on a regression; no core change |
 | rich-rendered `--help`, `rich <command> --help`, `rich completions`, `rich docs markdown\|man\|config`, `rich config explain\|reference` (0.0.11 WS6) | `cli_spec.rs` + `authoring.rs` + `config.rs` | one `rich_ext::cli_doc::CommandSpec` feeds help, completion scripts, Markdown/man pages and the config reference; a unit test keeps it in step with the hand-written parser; upstream prints click's help, and core is untouched |
 
 The 0.0.8 additions are published; workflow and registry-consumer evidence is
@@ -137,7 +142,7 @@ but lets in-flight workers finish. Config inspection includes configured setting
 and explicit overrides, not a materialized list of built-in defaults.
 
 
-### CLI 0.0.9 preparation boundaries
+### Image, theme and doctor boundaries (CLI 0.0.9–0.0.11)
 
 | Convenience | Owner | Boundary |
 |---|---|---|
@@ -146,7 +151,7 @@ and explicit overrides, not a materialized list of built-in defaults.
 | Batch progress and Ctrl+C | CLI batch + main | Human-report stderr TTY only; kill/wait workers and exit 130; no core Live/progress behavior changes |
 | `--demo-list`, `--demo-section` | CLI demo + main | Routes stable groups of existing renderers; preserves cleanup and finite pipes |
 | `rich doctor` | CLI doctor + main | Read-only selected diagnostics; JSON stdout; no terminal probes, network fetch or pager execution |
-| `--image-color`, `--image-dither` | CLI routing; art implementation | Public `ImageColorMode`, `Dither`, `ImageArt::color_mode`/`dither`; ASCII/blocks/quadrants preprocessing only |
+| `--image-color`, `--image-dither` | CLI routing; art implementation | Public `ImageColorMode`, `Dither`, `ImageArt::color_mode`/`dither`; ASCII/blocks preprocessing in 0.0.9, then quadrants (0.0.10) and Sixel and GIF frames (0.0.11, row below) |
 | `--image-color ansi16\|grayscale` (#125) | CLI routing; art `image_color.rs` | `ImageColorMode::Ansi16` (rich `STANDARD_PALETTE`) and `Grayscale` (luma over 16/232–255/231); every dither |
 | `--image-mode quadrants` (#199) | CLI routing; art `quadrant.rs` | `ImageMode::Quadrants`, `QuadrantArt`; cheapest of eight two-colour 2×2 partitions; also draws `--diff` heatmaps |
 | `--image-fit stretch`, `--image-max-width/height`, `--image-brightness/contrast/gamma` (#126) | CLI routing; art `image_art.rs`, `transform.rs` | `ImageFit::Stretch`, `ImageArt::max_width`/`max_height`, `ImageTransforms` brightness/contrast/gamma in a fixed order |
@@ -154,11 +159,13 @@ and explicit overrides, not a materialized list of built-in defaults.
 | `--image-background default\|checkerboard` (#126) | CLI routing; art `image_art.rs` and the text backends | `ImageBackground::{Color, TerminalDefault, Checkerboard}`; alpha kept through fitting; unpainted cells for pixels under half opacity |
 | `--theme-file`, `theme_file` (#499) | CLI main + config | Reads upstream theme files with the public `rich::Theme::from_file`; layered under config themes and `--theme-style`; no core theme-stack change |
 
-Art 0.0.7 owns fixed ANSI256 quantisation and optional Floyd–Steinberg diffusion
-on the final sampled image. Truecolor/no-dither defaults remain unchanged and
-`ImageOptions` remains source-compatible. CLI 0.0.9 composes these APIs; core
-0.0.4 and ext 0.0.6 remain unchanged. Combined validation is pending in the
-[0.0.9 preparation notes](releases/0.0.9.md).
+Art owns palette quantisation (ANSI256, ANSI16, grayscale) and the
+Floyd–Steinberg, Bayer and Atkinson dithers on the final sampled image, with RGB
+or OKLab colour distance. Truecolor/no-dither defaults remain unchanged and
+`ImageOptions` remains source-compatible. The CLI only routes flags to these
+public APIs; none of them changes core. The rows were validated by the 0.0.9,
+0.0.10 and 0.0.11 release tests; see the
+[0.0.11 release notes](releases/0.0.11.md).
 
 ---
 
