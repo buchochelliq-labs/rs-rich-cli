@@ -60,6 +60,42 @@ Entries below record subsequent releases and development.
 Cohort versions for 0.0.11 (not published): core 0.0.7, ext 0.0.9, art 0.0.9,
 CLI 0.0.11. Core changes below, so every dependent moves with it.
 
+### CLI viewers: `view`, `hex`, `unicode`, `env` and `capture` (0.0.11 workstream 11)
+
+- **`rich view FILE` (#401)** shows a file the way it should be read:
+  - Markdown, CSV, notebooks, JSON Lines, images, GIFs and patches go to their
+    renderers.
+  - Source code and structured data (JSON, YAML, TOML, XML, INI) are
+    highlighted with line numbers.
+  - Binary input becomes a hex dump.
+  - It detects the format from the extension, else from the content (stdin
+    included, read once), and pages by default.
+  - `--search TEXT` highlights case-insensitive matches, marks their line
+    numbers and prints a summary to stderr; `--no-line-numbers` drops the
+    gutter.
+- **`rich hex` (#410):** a `hexdump -C`-style dump with offsets, byte groups, an
+  ASCII panel, colour by byte class and `*` for repeated lines. `--offset`,
+  `--length`, `--bytes-per-line`, `--group`, and `--search BYTES` (hex or
+  quoted text) shape and search it.
+- **`rich unicode` (#411):** one row per grapheme (code points, UTF-8 bytes,
+  width, a Rust escape and a kind), invalid UTF-8 as rows of its own, and a
+  summary; `--limit N`.
+- **`rich env` (#412):**
+  - Lists environment variables, masking secret-looking names unless
+    `--show-secrets` (`AUTH` only as a whole word, so `AUTHOR` shows).
+  - Arguments filter names.
+  - `rich env PATH` checks each entry: missing, duplicate of #N, empty, not a
+    directory.
+  - Control characters in names and values are shown inert.
+- **`rich capture -- CMD` (#424):** runs a command with colour forced and
+  `COLUMNS` set, stdout and stderr merged in order through one pipe, and shows
+  the output in a panel with its exit status and duration. `--export-svg`,
+  `--export-html` and `--cast FILE` (asciicast v2) record it. It reports the
+  command's status without failing on it; PNG export is not provided.
+- **Ext:** new `source_view::SourceView`, `hex::HexView`,
+  `unicode_inspect::UnicodeView` and `env_inspect::{EnvView, PathView}`, all
+  width-aware and ASCII-safe, with no new dependencies.
+
 ### CLI: a project's `rich.toml` cannot undo `NO_COLOR`
 
 - A `no_color = false` in a `rich.toml` found in the working directory used to

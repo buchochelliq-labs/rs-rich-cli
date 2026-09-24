@@ -68,7 +68,8 @@ On top of that it adds, without changing the mirrored behaviour:
 
 - subcommands (`rich markdown FILE`) alongside the flags;
 - new modes: JSON Lines and logs, `inspect` for structured data, text and
-  patch diffs, perceptual image diffs, still images and GIFs, `ansi explain`;
+  patch diffs, perceptual image diffs, still images and GIFs, `ansi explain`,
+  and the viewers `view`, `hex`, `unicode`, `env` and `capture`;
 - workflow features: `--watch`, `--batch`, config profiles and themes,
   `--report json`, stable exit codes, `doctor`, `bench compare`, generated
   completions and man pages, and a guided `--demo`.
@@ -96,6 +97,11 @@ records exactly which parts are upstream and which are additions.
 | `image` | `--image` | Draw a still image | [Images](walkthrough.md#images-gifs-and-image-diffs) |
 | `gif` | `--gif` | Play animated GIFs | [Images](walkthrough.md#images-gifs-and-image-diffs) |
 | `ansi explain` | `--ansi-explain` | List and decode escape sequences in a capture | [Escape sequences](walkthrough.md#decoding-escape-sequences) |
+| `view` | — | Show any file: rendered, numbered and highlighted, or as hex; paged and searchable | [Viewers](walkthrough.md#viewing-and-inspecting-anything) |
+| `hex` | — | Hex dump with offsets, byte groups and an ASCII panel | [Viewers](walkthrough.md#viewing-and-inspecting-anything) |
+| `unicode` | — | Graphemes, code points, UTF-8 bytes, widths and invalid sequences | [Viewers](walkthrough.md#viewing-and-inspecting-anything) |
+| `env` | — | Environment variables with secrets masked; PATH entries checked | [Viewers](walkthrough.md#viewing-and-inspecting-anything) |
+| `capture` | — | Run a command and show, export or record its output | [Viewers](walkthrough.md#viewing-and-inspecting-anything) |
 | — | `--watch` | Re-render files as they change | [Watch](walkthrough.md#watching-files) |
 | — | `--batch` | Convert many files to HTML/SVG | [Batch](walkthrough.md#converting-many-files) |
 | — | `--pager`, `--auto-pager` | Page long output | [Paging](walkthrough.md#paging) |

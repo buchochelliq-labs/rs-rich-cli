@@ -132,6 +132,20 @@ Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by exten
 | `--ansi-inline` | With --ansi-explain, mark escapes inline in the text instead of a table. |
 | `--escapes-only` | With --ansi-explain, list only escape sequences, not text runs. |
 
+### Viewers
+
+| Option | Description |
+| --- | --- |
+| `--search <TEXT>` | With `rich view`, highlight every case-insensitive match and mark its line; with `rich hex`, highlight a byte string: hex such as `de ad` or `0xDEAD`, or quoted text such as '"PNG"'. |
+| `--no-line-numbers` | With `rich view`, leave out the line-number gutter. |
+| `--offset <N>` | With `rich hex`, start N bytes in (decimal or 0x hex) |
+| `--length <N>` | With `rich hex`, show at most N bytes. |
+| `--bytes-per-line <N>` | With `rich hex`, bytes on each line (default: fit the width, up to 16) |
+| `--group <N>` | With `rich hex`, bytes per group. Default: `8`. |
+| `--limit <N>` | With `rich unicode`, show at most N graphemes. |
+| `--show-secrets` | With `rich env`, show values whose names look secret instead of masking them. |
+| `--cast <FILE>` | With `rich capture`, also write an asciicast v2 recording (`asciinema play FILE`) |
+
 ### Export
 
 | Option | Description |
@@ -230,6 +244,11 @@ Self-contained examples; ignores config; accepts --no-color.
 | `rule` | Draw a horizontal rule (`--rule`) |
 | `inspect` | Explore structured data (JSON, YAML, TOML, XML, INI, dotenv) as a tree (`--inspect`) |
 | `ansi`, `ansi-explain` | Decode escape sequences: `rich ansi explain FILE` (`--ansi-explain`) |
+| `view` | Show any file: Markdown, CSV, notebooks, images and patches rendered, source and data numbered and highlighted, binary as hex; paged, searchable with --search |
+| `hex`, `hexdump` | Hex dump with offsets, byte groups and an ASCII panel (--search, --offset, --length) |
+| `unicode` | Show graphemes, code points, UTF-8 bytes, widths and invalid sequences |
+| `env` | List environment variables, secrets masked; `rich env PATH` checks each PATH entry |
+| `capture` | Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE records it) |
 | `config` | Show, validate, explain or document configuration |
 | `completions` | Print a shell completion script |
 | `docs` | Print reference documentation generated from this help |
@@ -470,6 +489,86 @@ Decode escape sequences: `rich ansi explain FILE` (`--ansi-explain`)
 
 ```text
 rich ansi [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich view
+
+Show any file: Markdown, CSV, notebooks, images and patches rendered, source and data numbered and highlighted, binary as hex; paged, searchable with --search
+
+#### Usage
+
+```text
+rich view [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich hex
+
+Hex dump with offsets, byte groups and an ASCII panel (--search, --offset, --length)
+
+#### Usage
+
+```text
+rich hex [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich unicode
+
+Show graphemes, code points, UTF-8 bytes, widths and invalid sequences
+
+#### Usage
+
+```text
+rich unicode [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich env
+
+List environment variables, secrets masked; `rich env PATH` checks each PATH entry
+
+#### Usage
+
+```text
+rich env [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich capture
+
+Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE records it)
+
+#### Usage
+
+```text
+rich capture [OPTIONS] [RESOURCE]
 ```
 
 #### Arguments

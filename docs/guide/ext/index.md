@@ -62,6 +62,8 @@ always available. The `use` path is `rich_ext::<module>`.
 | `fidelity` | `Fidelity` levels and `Degrade`: render anything without colour, without styles, or ASCII only | none | [Capabilities](capabilities.md) |
 | `a11y` | `semantic::AccessibleText` for screen readers; `policy::AccessibilityPolicy` (reduced motion, high contrast, monochrome); `contrast::check_theme` | none; `serde` to serialize findings | [Accessibility](accessibility.md) |
 | `ansi_explain` | `explain`: decode escape sequences into words | none; `serde` to serialize explanations | [ANSI explained](ansi.md) |
+| `source_view` | `SourceView`: source with line numbers and search highlights | none | [CLI viewers](../cli/walkthrough.md#viewing-and-inspecting-anything) |
+| `hex`, `unicode_inspect`, `env_inspect` | `HexView`, `UnicodeView`, `EnvView` / `PathView`: bytes, graphemes and environment | none | [CLI viewers](../cli/walkthrough.md#viewing-and-inspecting-anything) |
 
 ## Feature flags
 

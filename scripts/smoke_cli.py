@@ -411,6 +411,18 @@ CASES: list[Case] = [
          shot="ansi_explain", width=90),
     Case("ansi-inline", ["ansi", "explain", "capture.ans", "--ansi-inline"], "⟨"),
     Case("sanitize", ["--sanitize", "capture.ans", "--syntax"], "␛"),
+    # Viewers
+    Case("view-source", ["view", "greet.py", "--search", "name"], "1 │", shot="view", width=70),
+    Case("view-markdown", ["view", "notes.md"], "Release notes"),
+    Case("view-stdin-json", ["view", "-"], '1 │ {"ok": true}', stdin='{"ok": true}\n'),
+    Case("hex", ["hex", "logo.png", "--length", "48", "--search", "49 48 44 52"], "89 50 4e 47",
+         shot="hex", width=80),
+    Case("unicode", ["unicode", "-"], "U+0301", stdin="cafe\u0301 👍🏽 ok\n", shot="unicode",
+         width=90),
+    Case("env", ["env", "RICH_SMOKE"], "RICH_SMOKE_REGION", shot="env", width=60,
+         env={"RICH_SMOKE_TOKEN": "s3cret", "RICH_SMOKE_REGION": "eu-west-1"}),
+    Case("capture", ["capture", "--", sys.executable, "-c",
+                     "print('\\033[1;32mPASS\\033[0m 12 tests')"], "PASS"),
     # Decoration, layout and export
     Case("panel", ["print", "-", "--panel", "rounded", "--title", "CI", "--caption", "main",
                    "--padding", "1,2", "--panel-style", "green"], "Build passed",

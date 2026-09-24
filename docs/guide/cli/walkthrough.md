@@ -537,6 +537,80 @@ text rows from the table.
 Related: `--sanitize` replaces control characters in *any* input with visible,
 inert symbols (`ESC[2J` becomes `␛[2J`). Use it for files you do not trust.
 
+## Viewing and inspecting anything
+
+`view` shows a file the way it should be read, and pages it when it is taller
+than the terminal:
+
+```bash
+rich view src/main.rs
+rich view src/main.rs --search todo     # highlight matches; a summary goes to stderr
+cat config.yaml | rich view -           # the format is detected from the content
+```
+
+![A Python file with a line-number gutter and one search match highlighted](../../media/guide/cli_view.svg)
+
+| The file is | `view` shows it as |
+|---|---|
+| Markdown, CSV/TSV, a notebook, JSON Lines | the matching renderer, as `rich FILE` does |
+| an image or GIF | the image or animation |
+| a `.diff` / `.patch`, or text starting with `diff --git` | a rendered patch |
+| source code, JSON, YAML, TOML, XML, INI or plain text | highlighted, with line numbers (`--no-line-numbers` leaves them out) |
+| binary (a NUL byte, or not UTF-8) | a hex dump |
+
+Paging is on by default; any paging flag, on the command line or in the
+config, overrides it. Folding and interactive search are left to your pager.
+
+`hex` is a hex dump in the style of `hexdump -C`: offsets, bytes in groups,
+an ASCII panel, and `*` for runs of repeated lines. `--offset` and `--length`
+slice the input, `--bytes-per-line` and `--group` shape it, and `--search`
+highlights a byte string:
+
+```bash
+rich hex logo.png --length 48 --search "49 48 44 52"
+rich hex firmware.bin --offset 0x200 --search '"MAGIC"'
+```
+
+![A hex dump of a PNG header with IHDR highlighted](../../media/guide/cli_hex.svg)
+
+`unicode` splits text into graphemes and shows each one's code points, UTF-8
+bytes, width in cells, an escape you can paste into Rust, and a kind
+(combining, emoji, zero-width, control…). Invalid UTF-8 gets a row of its own:
+
+```bash
+printf 'cafe\u0301 👍🏽 ok' | rich unicode -
+```
+
+![A table of graphemes: a combining accent, an emoji with a skin-tone modifier](../../media/guide/cli_unicode.svg)
+
+`env` lists environment variables. Values whose names look secret (`TOKEN`,
+`PASSWORD`, `API_KEY`, `AUTH` as a whole word…) are masked unless you pass
+`--show-secrets`. Arguments filter the names, as substrings or `*` globs, and a
+single PATH-like variable is checked entry by entry, flagging missing,
+duplicate and empty ones:
+
+```bash
+rich env AWS
+rich env PATH
+```
+
+![Two variables, one masked](../../media/guide/cli_env.svg)
+
+`capture` runs a command as a colour terminal would (`FORCE_COLOR`,
+`CLICOLOR_FORCE` and `COLUMNS` set), then shows its output in a panel titled with
+the command, with its exit status and duration below. stdout and stderr share
+one pipe, so they interleave in the order they were written. Every export
+works, and `--cast FILE` also writes an asciicast v2 recording:
+
+```bash
+rich capture -- cargo test
+rich capture --export-svg test-run.svg --cast test-run.cast -- cargo test
+asciinema play test-run.cast
+```
+
+`capture` reports the command's exit status in red but exits 0 itself; there
+is no PNG export.
+
 ## Panels, padding, alignment and style
 
 These options decorate the output of any mode:

@@ -25,12 +25,16 @@ pub mod ansi_explain;
 pub mod capabilities;
 pub mod cli;
 pub mod encoding;
+pub mod env_inspect;
 pub mod fidelity;
+pub mod hex;
 pub mod highlighter;
 pub mod registry;
 pub mod sanitize;
+pub mod source_view;
 pub mod target;
 pub mod theme;
+pub mod unicode_inspect;
 
 pub use highlighter::NumberHighlighter;
 pub use registry::{install_defaults, ExtensionRegistry};

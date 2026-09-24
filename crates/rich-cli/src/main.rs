@@ -28,6 +28,7 @@ mod inspect;
 mod render_target;
 mod structured_log;
 mod tools;
+mod viewers;
 mod watch;
 use batch::run_batch;
 use config::{config_args, ConfigRoots};
@@ -90,6 +91,17 @@ enum Mode {
     Inspect,
     /// `ansi explain` / `--ansi-explain`: decode escape sequences (`tools.rs`).
     AnsiExplain,
+    /// `view`: detect the format, then show it paged, numbered and searchable
+    /// (not upstream; see `viewers.rs`).
+    View,
+    /// `hex`: a hex dump with an ASCII panel (`viewers.rs`).
+    Hex,
+    /// `unicode`: graphemes, code points, widths and invalid UTF-8.
+    Unicode,
+    /// `env`: environment variables, redacted, or one PATH-like variable.
+    Env,
+    /// `capture -- CMD…`: run a command and show or export its output.
+    Capture,
 }
 
 impl Mode {
@@ -107,7 +119,7 @@ impl Mode {
     }
 
     fn accepts_multiple_resources(self) -> bool {
-        matches!(self, Self::Gif | Self::Diff)
+        matches!(self, Self::Gif | Self::Diff | Self::Env | Self::Capture)
     }
 }
 
@@ -192,6 +204,31 @@ const MODE_SPECS: &[ModeSpec] = &[
         mode: Mode::AnsiExplain,
         primary: "ansi",
         aliases: &["ansi", "ansi-explain"],
+    },
+    ModeSpec {
+        mode: Mode::View,
+        primary: "view",
+        aliases: &["view"],
+    },
+    ModeSpec {
+        mode: Mode::Hex,
+        primary: "hex",
+        aliases: &["hex", "hexdump"],
+    },
+    ModeSpec {
+        mode: Mode::Unicode,
+        primary: "unicode",
+        aliases: &["unicode"],
+    },
+    ModeSpec {
+        mode: Mode::Env,
+        primary: "env",
+        aliases: &["env"],
+    },
+    ModeSpec {
+        mode: Mode::Capture,
+        primary: "capture",
+        aliases: &["capture"],
     },
 ];
 
@@ -418,6 +455,7 @@ struct Cli {
     collision: CollisionPolicy,
     data: inspect::DataOptions,
     tools: tools::ToolOptions,
+    viewers: viewers::ViewerOptions,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -526,6 +564,13 @@ const VALUE_OPTIONS: &[&str] = &[
     "--compare",
     "--context",
     "--language",
+    "--search",
+    "--offset",
+    "--length",
+    "--bytes-per-line",
+    "--group",
+    "--limit",
+    "--cast",
     "--config",
     "--profile",
 ];
@@ -1062,6 +1107,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut extensions = CliExtensions::default();
     let mut data = inspect::DataOptions::default();
     let mut tool_options = tools::ToolOptions::default();
+    let mut viewer_options = viewers::ViewerOptions::default();
+    // Whether any paging flag was given: `view` pages automatically otherwise.
+    let mut paging_explicit = false;
     // `rich ansi explain FILE`: the second word belongs to the command.
     let mut ansi_word = false;
     let mut width = None;
@@ -1115,6 +1163,15 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         }
         if tool_options.parse_option(arg, &mut iter)? {
             continue;
+        }
+        if viewer_options.parse_option(arg, &mut iter)? {
+            continue;
+        }
+        if matches!(
+            arg.as_str(),
+            "--pager" | "--auto-pager" | "--no-pager" | "--no-auto-pager"
+        ) {
+            paging_explicit = true;
         }
         match arg.as_str() {
             "--" => end_of_options = true,
@@ -1525,6 +1582,20 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     {
         return Err(format!("{flag} only has an effect with --ansi-explain"));
     }
+    for (flag, commands) in viewer_options.given() {
+        if !commands.contains(&mode_name(mode)) {
+            return Err(format!(
+                "{flag} only has an effect with `rich {}`",
+                commands.join("` or `rich ")
+            ));
+        }
+    }
+    if mode == Mode::Capture && resources.is_empty() {
+        return Err("capture needs a command: rich capture [OPTIONS] -- COMMAND [ARGS...]".into());
+    }
+    if mode == Mode::View && !paging_explicit {
+        auto_pager = true;
+    }
     data.validate()?;
 
     if watch && (batch || pager || auto_pager) {
@@ -1905,7 +1976,36 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         collision,
         data,
         tools: tool_options,
+        viewers: viewer_options,
     }))
+}
+
+/// The resource's bytes, unconverted: a URL is fetched as text, stdin and
+/// files are read raw so binary input survives. With `--encoding` the text is
+/// decoded first, as every other mode does.
+fn read_bytes(cli: &Cli) -> Result<Vec<u8>, String> {
+    let resource = cli.resource.as_deref();
+    let name = resource.unwrap_or("<stdin>");
+    if let Some(url) = resource.filter(|r| is_url(r)) {
+        return fetch_url(url, cli.extensions.encoding).map(|(text, _)| text.into_bytes());
+    }
+    if cli.extensions.encoding.is_some() {
+        return read_resource(resource, cli.extensions.encoding)
+            .map(String::into_bytes)
+            .map_err(|err| format!("cannot read {name}: {err}"));
+    }
+    match resource.filter(|r| *r != "-") {
+        Some(path) if std::path::Path::new(path).is_dir() => {
+            Err(format!("cannot read {path}: it is a directory"))
+        }
+        Some(path) => std::fs::read(path).map_err(|err| format!("cannot read {path}: {err}")),
+        None => {
+            let mut bytes = Vec::new();
+            std::io::Read::read_to_end(&mut std::io::stdin(), &mut bytes)
+                .map_err(|err| format!("cannot read <stdin>: {err}"))?;
+            Ok(bytes)
+        }
+    }
 }
 
 /// Read a resource: `-` (or `None`) means stdin, otherwise a file path.
@@ -2661,6 +2761,37 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         other => other,
     };
 
+    // `view` decides what to show from the resource itself: an existing
+    // renderer, a numbered source view, or a hex dump of binary input. The
+    // resource is read once, here, so stdin is not read twice.
+    let mut prefetched = prefetched;
+    let mut view_as = None;
+    let mut view_bytes = Vec::new();
+    if mode == Mode::View {
+        view_bytes = match read_bytes(&cli) {
+            Ok(bytes) => bytes,
+            Err(err) => return fail(&cli, ExitClass::Input, err),
+        };
+        let ext = cli
+            .resource
+            .as_deref()
+            .filter(|r| *r != "-")
+            .and_then(resource_ext);
+        let kind = viewers::detect(ext.as_deref(), cli.resource.as_deref(), &view_bytes);
+        mode = match kind {
+            viewers::ViewAs::Markdown => Mode::Markdown,
+            viewers::ViewAs::Csv => Mode::Csv,
+            viewers::ViewAs::Notebook => Mode::Ipynb,
+            viewers::ViewAs::Image => Mode::Image,
+            viewers::ViewAs::Gif => Mode::Gif,
+            viewers::ViewAs::Log => Mode::Log,
+            _ => Mode::View,
+        };
+        let text = String::from_utf8_lossy(&view_bytes).into_owned();
+        prefetched = Some((text, None));
+        view_as = Some(kind);
+    }
+
     // Modes that render incrementally write directly to the console instead of
     // composing one renderable, so no `ForceWidth` wrapper can reach them.
     let mut builder = Console::builder().no_color(cli.no_color);
@@ -2779,6 +2910,49 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         // `Rule.__rich_measure__` is `Measurement(1, 1)`: a rule claims no width
         // of its own, so a fitted panel around one is 5 cells wide.
         return decorate_and_emit(&cli, &console, &export, Box::new(rule), Some(1));
+    }
+
+    // The viewer commands that need no text content.
+    if mode == Mode::Capture {
+        let captured = match viewers::capture(&cli.resources, console.width()) {
+            Ok(captured) => captured,
+            Err(err) => return fail(&cli, ExitClass::Input, err),
+        };
+        if let Some(path) = viewers::cast_path(&cli.viewers) {
+            let cast = viewers::asciicast(&captured, console.width(), console.height());
+            if let Err(err) = std::fs::write(path, cast) {
+                return fail(
+                    &cli,
+                    ExitClass::Input,
+                    format!("cannot write {path}: {err}"),
+                );
+            }
+        }
+        let view = viewers::capture_view(&captured);
+        let fit = view.measure(&console, &console.options()).maximum;
+        return decorate_and_emit(&cli, &console, &export, view, Some(fit));
+    }
+    if mode == Mode::Env {
+        let view = viewers::env(&cli.viewers, &cli.resources);
+        let fit = view.measure(&console, &console.options()).maximum;
+        return decorate_and_emit(&cli, &console, &export, view, Some(fit));
+    }
+    if matches!(mode, Mode::Hex | Mode::Unicode) {
+        let bytes = match read_bytes(&cli) {
+            Ok(bytes) => bytes,
+            Err(err) => return fail(&cli, ExitClass::Input, err),
+        };
+        let view = if mode == Mode::Hex {
+            viewers::hex(&cli.viewers, bytes)
+        } else {
+            viewers::unicode(&cli.viewers, &bytes)
+        };
+        let view = match view {
+            Ok(view) => view,
+            Err(err) => return fail(&cli, ExitClass::Usage, err),
+        };
+        let fit = view.measure(&console, &console.options()).maximum;
+        return decorate_and_emit(&cli, &console, &export, view, Some(fit));
     }
 
     // Obtain the content: fetch it over HTTP(S) when the resource is a URL,
@@ -3026,6 +3200,32 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 Box::new(Syntax::new(content.as_str(), language.as_str()).word_wrap(true)),
                 Some(fit),
             )
+        }
+        Mode::View => {
+            let view: Box<dyn Renderable> = match view_as {
+                Some(viewers::ViewAs::Patch) => {
+                    let name = cli.resource.clone().unwrap_or_else(|| "<stdin>".into());
+                    match tools::text_diff(&cli.tools, &[name], &[content.clone()], None) {
+                        Ok(outcome) => outcome.renderable,
+                        Err(err) => return fail(&cli, ExitClass::Data, err),
+                    }
+                }
+                Some(viewers::ViewAs::Binary) => {
+                    match viewers::hex(&cli.viewers, std::mem::take(&mut view_bytes)) {
+                        Ok(view) => view,
+                        Err(err) => return fail(&cli, ExitClass::Usage, err),
+                    }
+                }
+                Some(viewers::ViewAs::Source(ref lexer)) => {
+                    if let Some(summary) = viewers::search_summary(&cli.viewers, &content) {
+                        eprintln!("{summary}");
+                    }
+                    viewers::source(&cli.viewers, &content, lexer)
+                }
+                _ => viewers::source(&cli.viewers, &content, "txt"),
+            };
+            let fit = view.measure(&console, &console.options()).maximum;
+            (view, Some(fit))
         }
         Mode::AnsiExplain => {
             let view = tools::ansi_explain(&cli.tools, &content);
