@@ -167,7 +167,7 @@ fn render_modes() -> Vec<ArgSpec> {
         mode(
             "image",
             None,
-            "Render RESOURCE as a still image (ASCII/Braille/blocks/Sixel)",
+            "Render RESOURCE as a still image (ASCII/Braille/blocks/quadrants/Sixel)",
         ),
         mode(
             "inspect",
@@ -1097,7 +1097,7 @@ pub(crate) fn spec() -> CommandSpec {
         (
             "image",
             &[][..],
-            "Render a still image as ASCII/Braille/blocks/Sixel (`--image`)",
+            "Render a still image as ASCII/Braille/blocks/quadrants/Sixel (`--image`)",
         ),
         ("rule", &[][..], "Draw a horizontal rule (`--rule`)"),
         (

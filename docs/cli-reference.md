@@ -50,7 +50,7 @@ Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by exten
 | `--gif` | Animate GIFs side by side; pipes receive the first frame. |
 | `--rule` | Draw a horizontal rule (RESOURCE is its title) |
 | `--diff` | Compare two images perceptually, two text files as a diff (syntax-aware; ANSI captures by visible text and style), or render one patch such as `git diff` output. |
-| `--image` | Render RESOURCE as a still image (ASCII/Braille/blocks/Sixel) |
+| `--image` | Render RESOURCE as a still image (ASCII/Braille/blocks/quadrants/Sixel) |
 | `--inspect` | Explore structured data (JSON, YAML, TOML, XML, INI, dotenv) as a tree. |
 | `--ansi-explain` | Decode every escape sequence in RESOURCE and show the visible text. |
 
@@ -243,7 +243,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `log`, `logs` | Stream common structured-log JSONL records (`--log`) |
 | `gif` | Animate GIFs (`--gif`) |
 | `diff` | Compare two images, two text files, or render one patch (`--diff`) |
-| `image` | Render a still image as ASCII/Braille/blocks/Sixel (`--image`) |
+| `image` | Render a still image as ASCII/Braille/blocks/quadrants/Sixel (`--image`) |
 | `rule` | Draw a horizontal rule (`--rule`) |
 | `inspect` | Explore structured data (JSON, YAML, TOML, XML, INI, dotenv) as a tree (`--inspect`) |
 | `ansi`, `ansi-explain` | Decode escape sequences: `rich ansi explain FILE` (`--ansi-explain`) |
@@ -459,7 +459,7 @@ rich diff [OPTIONS] [RESOURCE]
 
 ### rich image
 
-Render a still image as ASCII/Braille/blocks/Sixel (`--image`)
+Render a still image as ASCII/Braille/blocks/quadrants/Sixel (`--image`)
 
 #### Usage
 

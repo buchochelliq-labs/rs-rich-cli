@@ -11,7 +11,7 @@
 [package]
 name = "rs-rich-art"
 version = "0.0.9"
-description = "Art renderables for `rich`: FIGlet banners, images as ASCII/Braille/blocks/Sixel, GIFs and image diffs"
+description = "Art renderables for `rich`: FIGlet banners, images as ASCII/Braille/blocks/quadrants/Sixel, GIFs and image diffs"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
