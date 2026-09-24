@@ -284,12 +284,15 @@ fn helper_process() {
             std::process::exit(0);
         }
         "parent" => {
+            // Finish our line before the grandchild starts: it is a libtest
+            // binary too, and its `test helper_process ... ` header shares
+            // the pipe, so a later "parent done" could land on the end of it.
+            writeln!(out, "parent done").unwrap();
+            out.flush().unwrap();
             // A background grandchild inherits both pipes and outlives us.
             let mut grandchild = helper("chatter");
             grandchild.stdin(std::process::Stdio::null());
             grandchild.spawn().expect("the grandchild");
-            writeln!(out, "parent done").unwrap();
-            out.flush().unwrap();
             std::process::exit(0);
         }
         "chatter" => {
