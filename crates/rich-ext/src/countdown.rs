@@ -67,7 +67,9 @@ fn style(console: &Console, key: &str) -> Style {
 /// Time left as a countdown reads it: whole seconds rounded up, `4s`, `59s`,
 /// then [`format::duration`] from a minute (`1m 05s`, `2h 00m 00s`).
 pub fn remaining_label(left: Duration) -> String {
-    let secs = left.as_secs() + u64::from(left.subsec_nanos() > 0);
+    let secs = left
+        .as_secs()
+        .saturating_add(u64::from(left.subsec_nanos() > 0));
     if secs < 60 {
         format!("{secs}s")
     } else {
@@ -177,11 +179,20 @@ impl Backoff {
         if self.max_attempts.is_some_and(|max| attempt >= max) {
             return None;
         }
-        let base = self.initial.as_secs_f64() * self.factor.powi((attempt - 1) as i32);
+        // factorⁿ may overflow to infinity; zero times it is still zero.
+        let exponent = i32::try_from(attempt - 1).unwrap_or(i32::MAX);
+        let base = if self.initial.is_zero() {
+            0.0
+        } else {
+            self.initial.as_secs_f64() * self.factor.powi(exponent)
+        };
         let capped = base.min(self.max.as_secs_f64());
         let unit = (splitmix64(self.seed ^ u64::from(attempt)) >> 11) as f64 / (1u64 << 53) as f64;
+        // Jitter scales by a factor in (0, 1], so it never lengthens the
+        // delay; a value too big for a `Duration` is the cap itself.
         let delay = capped * (1.0 - self.jitter * unit);
-        Some(Duration::from_secs_f64(delay.max(0.0)))
+        let delay = Duration::try_from_secs_f64(delay).unwrap_or(self.max);
+        Some(delay.min(self.max))
     }
 
     /// The delays between attempts, in order; endless without an attempt
