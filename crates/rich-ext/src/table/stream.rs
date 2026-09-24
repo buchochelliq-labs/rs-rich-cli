@@ -99,7 +99,7 @@ use std::fmt;
 use std::hash::Hash;
 use std::sync::{Mutex, PoisonError};
 
-use rich::{Console, ConsoleOptions, LineRenderable, Renderable, Segment, Table, Text};
+use rich::{Console, ConsoleOptions, LineRenderable, Overflow, Renderable, Segment, Table, Text};
 
 use super::data::{normalize, TableData};
 use super::sort::{compare_rows, SortKey};
@@ -465,8 +465,11 @@ impl<K: Eq + Hash + Clone> StreamingTable<K> {
         let text = Text::styled(
             format!("{ellipsis} {count} {what} row{plural}"),
             style(console, "table.more"),
-        );
-        // One line per indicator, whatever height the frame is given.
+        )
+        .no_wrap(true)
+        .overflow(Overflow::Ellipsis);
+        // One line per indicator, whatever width or height the frame is
+        // given: too narrow a frame cuts it short with an ellipsis.
         let mut options = options.clone();
         options.height = None;
         console.render_lines(&text, &options, false)
