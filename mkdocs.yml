@@ -135,6 +135,7 @@ nav:
       - CLI usability: plans/0.0.7.md
       - Performance and confidence: plans/0.0.6.md
   - Releases:
+      - 0.0.11: releases/0.0.11.md
       - 0.0.10: releases/0.0.10.md
       - 0.0.9: releases/0.0.9.md
       - 0.0.9 expanded release: releases/0.0.9-expanded.md
