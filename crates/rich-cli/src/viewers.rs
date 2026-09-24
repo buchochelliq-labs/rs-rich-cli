@@ -201,12 +201,15 @@ pub(crate) fn search_summary(options: &ViewerOptions, content: &str) -> Option<S
     })
 }
 
+/// Output chunks with the time since the command started.
+type Chunks = Vec<(Duration, Vec<u8>)>;
+
 /// One command's captured output.
 pub(crate) struct Captured {
     pub command: Vec<String>,
     /// Output chunks from stdout and stderr, in arrival order, with the time
     /// since the command started.
-    pub chunks: Vec<(Duration, Vec<u8>)>,
+    pub chunks: Chunks,
     pub status: Option<i32>,
     pub elapsed: Duration,
 }
@@ -248,7 +251,7 @@ pub(crate) fn capture(command: &[String], width: usize) -> Result<Captured, Stri
     // Our copies of the write end must close, or the read never ends.
     drop(process);
     let mut child = spawned.map_err(|e| format!("cannot run {program}: {e}"))?;
-    let chunks: Arc<Mutex<Vec<(Duration, Vec<u8>)>>> = Arc::default();
+    let chunks: Arc<Mutex<Chunks>> = Arc::default();
     let pump = {
         let chunks = chunks.clone();
         std::thread::spawn(move || {
