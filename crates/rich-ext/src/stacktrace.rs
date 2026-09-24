@@ -18,6 +18,11 @@ use std::sync::OnceLock;
 use crate::event::theme_style;
 use crate::hyperlink::Hyperlinker;
 
+/// The most causes the built-in parsers keep, and a view renders, below the
+/// outermost error. Traces are untrusted input; a longer chain keeps the
+/// causes nearest the error and records how many were left out.
+pub const MAX_CAUSES: usize = 64;
+
 /// The language a trace came from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Language {
@@ -75,6 +80,9 @@ pub struct StackTrace {
     pub cause: Option<Box<StackTrace>>,
     /// How `cause` relates to this error.
     pub cause_kind: CauseKind,
+    /// Causes below this one that were left out because the chain was longer
+    /// than [`MAX_CAUSES`]. Rendered as `… N more causes`.
+    pub omitted_causes: usize,
     /// Where the error was raised, when the trace names it apart from the
     /// frames (a Rust panic's `panicked at` location).
     pub location: Option<Frame>,
@@ -90,6 +98,7 @@ impl StackTrace {
             frames: Vec::new(),
             cause: None,
             cause_kind: CauseKind::CausedBy,
+            omitted_causes: 0,
             location: None,
         }
     }
@@ -112,6 +121,34 @@ impl StackTrace {
             show_library: false,
         }
     }
+}
+
+/// Unlinks the cause chain one trace at a time: the derived drop recurses
+/// once per cause and overflows the stack on a long hand-built chain.
+impl Drop for StackTrace {
+    fn drop(&mut self) {
+        let mut next = self.cause.take();
+        while let Some(mut trace) = next {
+            next = trace.cause.take();
+        }
+    }
+}
+
+/// Link `traces`, outermost first, each the cause of the one before it,
+/// keeping at most [`MAX_CAUSES`] causes. The deepest kept trace counts the
+/// ones left out.
+fn link_causes(mut traces: Vec<StackTrace>) -> Option<StackTrace> {
+    let omitted = traces.len().saturating_sub(MAX_CAUSES + 1);
+    traces.truncate(MAX_CAUSES + 1);
+    if let Some(last) = traces.last_mut() {
+        last.omitted_causes += omitted;
+    }
+    let mut result: Option<StackTrace> = None;
+    for mut trace in traces.into_iter().rev() {
+        trace.cause = result.take().map(Box::new);
+        result = Some(trace);
+    }
+    result
 }
 
 /// Recognises and parses one trace format.
@@ -390,18 +427,20 @@ impl TraceParser for PythonParser {
             }
         }
         blocks.push((current, kind));
-        let mut result: Option<StackTrace> = None;
+        // Root cause first; a block with no relation starts a new chain.
+        let mut chain: Vec<StackTrace> = Vec::new();
         for (block, relation) in blocks {
             let Some(mut trace) = Self::block(&block) else {
                 continue;
             };
-            if let (Some(cause), Some(relation)) = (result.take(), relation) {
-                trace.cause = Some(Box::new(cause));
-                trace.cause_kind = relation;
+            match relation {
+                Some(relation) if !chain.is_empty() => trace.cause_kind = relation,
+                _ => chain.clear(),
             }
-            result = Some(trace);
+            chain.push(trace);
         }
-        result
+        chain.reverse();
+        link_causes(chain)
     }
 }
 
@@ -478,15 +517,10 @@ impl TraceParser for JavaParser {
         }
         // JVM frames list the most recent call first; each `Caused by` is
         // the cause of the trace before it.
-        let mut result: Option<StackTrace> = None;
-        for mut trace in traces.into_iter().rev() {
+        for trace in &mut traces {
             trace.frames.reverse();
-            if let Some(cause) = result.take() {
-                trace.cause = Some(Box::new(cause));
-            }
-            result = Some(trace);
         }
-        result
+        link_causes(traces)
     }
 }
 
@@ -546,15 +580,10 @@ impl TraceParser for JavaScriptParser {
                 header = Some(line);
             }
         }
-        let mut result: Option<StackTrace> = None;
-        for mut trace in traces.into_iter().rev() {
+        for trace in &mut traces {
             trace.frames.reverse();
-            if let Some(cause) = result.take() {
-                trace.cause = Some(Box::new(cause));
-            }
-            result = Some(trace);
         }
-        result
+        link_causes(traces)
     }
 }
 
@@ -619,10 +648,35 @@ impl StackTraceView<'_> {
         self
     }
 
-    fn append_trace(&self, console: &Console, text: &mut Text, trace: &StackTrace) {
-        if let Some(cause) = &trace.cause {
-            self.append_trace(console, text, cause);
-            let bridge = match trace.cause_kind {
+    /// Every trace in the chain, root cause first, each after its cause and
+    /// the bridge naming how they relate. Iterative, and capped at
+    /// [`MAX_CAUSES`] causes like the parsers, so any chain renders.
+    fn append_chain(&self, console: &Console, text: &mut Text) {
+        let mut chain: Vec<&StackTrace> = Vec::new();
+        let mut omitted = 0usize;
+        for trace in self.trace.chain() {
+            if chain.len() <= MAX_CAUSES {
+                chain.push(trace);
+            } else {
+                omitted += 1;
+            }
+        }
+        if let Some(last) = chain.last() {
+            omitted += last.omitted_causes;
+        }
+        if omitted > 0 {
+            let label = if omitted == 1 { "cause" } else { "causes" };
+            text.append(
+                &format!("… {omitted} more {label}\n\n"),
+                Some(theme_style(console, "stacktrace.library", "dim").into()),
+            );
+        }
+        for (index, trace) in chain.iter().enumerate().rev() {
+            self.append_trace(console, text, trace);
+            let Some(caused) = index.checked_sub(1).map(|at| chain[at]) else {
+                continue;
+            };
+            let bridge = match caused.cause_kind {
                 CauseKind::CausedBy => "The error above caused the following error:",
                 CauseKind::DuringHandling => {
                     "The error below happened while handling the error above:"
@@ -635,6 +689,10 @@ impl StackTraceView<'_> {
             );
             text.append("\n\n", None);
         }
+    }
+
+    /// One trace's frames and error line, without its causes.
+    fn append_trace(&self, console: &Console, text: &mut Text, trace: &StackTrace) {
         let dim = theme_style(console, "stacktrace.library", "dim");
         let function_style = theme_style(console, "stacktrace.function", "green");
         let location_style = theme_style(console, "stacktrace.location", "magenta");
@@ -709,7 +767,7 @@ impl StackTraceView<'_> {
 impl Renderable for StackTraceView<'_> {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let mut text = Text::new("");
-        self.append_trace(console, &mut text, self.trace);
+        self.append_chain(console, &mut text);
         text.rich_render(console, options)
     }
 }
