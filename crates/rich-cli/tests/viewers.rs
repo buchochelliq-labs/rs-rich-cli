@@ -33,6 +33,23 @@ fn text(bytes: &[u8]) -> String {
     String::from_utf8(bytes.to_vec()).unwrap()
 }
 
+/// Fail if any of `secrets` appears in `body`, saying which output leaked,
+/// which secret (by position) and where, but never the value itself or the
+/// output around it: a failing redaction test must not print the secret it
+/// guards into the CI log.
+// Only the Unix capture tests (they run shell scripts) call this.
+#[cfg_attr(not(unix), allow(dead_code))]
+fn assert_no_leaks(name: &str, body: &str, secrets: &[&str]) {
+    for (index, secret) in secrets.iter().enumerate() {
+        if let Some(at) = body.find(secret) {
+            panic!(
+                "{name} leaks secret #{index} at byte {at} of {}",
+                body.len()
+            );
+        }
+    }
+}
+
 fn ok(output: &Output) -> String {
     assert!(output.status.success(), "{output:?}");
     text(&output.stdout)
@@ -319,9 +336,7 @@ fn capture_redacts_before_showing_exporting_or_recording() {
         ("svg", &svg),
         ("html", &html),
     ] {
-        for secret in [token, "hunter2", "ter2", "1234"] {
-            assert!(!body.contains(secret), "{name} leaks {secret:?}:\n{body}");
-        }
+        assert_no_leaks(name, body, &[token, "hunter2", "ter2", "1234"]);
     }
     // Masks keep the width of what they replace, so the panel stays aligned.
     let stars = "*".repeat(token.len());
@@ -394,9 +409,7 @@ fn capture_redacts_link_targets_and_skips_whole_escapes() {
     ));
     let cast = std::fs::read_to_string(dir.path().join("run.cast")).unwrap();
     for (name, body) in [("stdout", &out), ("cast", &cast)] {
-        for secret in ["hunter2pw", token, "abc123"] {
-            assert!(!body.contains(secret), "{name} leaks {secret:?}:\n{body}");
-        }
+        assert_no_leaks(name, body, &["hunter2pw", token, "abc123"]);
     }
     // The escapes stay well formed around the masks.
     assert!(
@@ -456,9 +469,7 @@ fn capture_redacts_secret_flag_values_in_the_command_line() {
     let report = text(&output.stderr);
     let cast = std::fs::read_to_string(dir.path().join("run.cast")).unwrap();
     for (name, body) in [("panel", &out), ("report", &report), ("cast", &cast)] {
-        for secret in ["hunter2", "abc123"] {
-            assert!(!body.contains(secret), "{name} leaks {secret:?}:\n{body}");
-        }
+        assert_no_leaks(name, body, &["hunter2", "abc123"]);
     }
     // The title quotes the masks as a shell would.
     assert!(
