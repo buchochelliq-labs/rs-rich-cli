@@ -1,0 +1,111 @@
+<svg class="rich-terminal" viewBox="0 0 750 391.59999999999997" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .guide_badges-format-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .guide_badges-format-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .guide_badges-format-r1 { fill: #c5c8c6 }
+.guide_badges-format-r2 { fill: #c5c8c6;font-weight: bold }
+    </style>
+
+    <defs>
+    <clipPath id="guide_badges-format-clip-terminal">
+      <rect x="0" y="0" width="731.0" height="340.59999999999997" />
+    </clipPath>
+    <clipPath id="guide_badges-format-line-0">
+    <rect x="0" y="1.5" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_badges-format-line-1">
+    <rect x="0" y="25.9" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_badges-format-line-2">
+    <rect x="0" y="50.3" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_badges-format-line-3">
+    <rect x="0" y="74.7" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_badges-format-line-4">
+    <rect x="0" y="99.1" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_badges-format-line-5">
+    <rect x="0" y="123.5" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_badges-format-line-6">
+    <rect x="0" y="147.9" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_badges-format-line-7">
+    <rect x="0" y="172.3" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_badges-format-line-8">
+    <rect x="0" y="196.7" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_badges-format-line-9">
+    <rect x="0" y="221.1" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_badges-format-line-10">
+    <rect x="0" y="245.5" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_badges-format-line-11">
+    <rect x="0" y="269.9" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_badges-format-line-12">
+    <rect x="0" y="294.3" width="732" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="748" height="389.6" rx="8"/><text class="guide_badges-format-title" fill="#c5c8c6" text-anchor="middle" x="374" y="27">rich_ext::format</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#guide_badges-format-clip-terminal)">
+    
+    <g class="guide_badges-format-matrix">
+    <text class="guide_badges-format-r1" x="0" y="20" textLength="646.6" clip-path="url(#guide_badges-format-line-0)">┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┓</text><text class="guide_badges-format-r1" x="732" y="20" textLength="12.2" clip-path="url(#guide_badges-format-line-0)">
+</text><text class="guide_badges-format-r1" x="0" y="44.4" textLength="12.2" clip-path="url(#guide_badges-format-line-1)">┃</text><text class="guide_badges-format-r2" x="24.4" y="44.4" textLength="317.2" clip-path="url(#guide_badges-format-line-1)">Call&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="353.8" y="44.4" textLength="12.2" clip-path="url(#guide_badges-format-line-1)">┃</text><text class="guide_badges-format-r2" x="378.2" y="44.4" textLength="244" clip-path="url(#guide_badges-format-line-1)">Result&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="634.4" y="44.4" textLength="12.2" clip-path="url(#guide_badges-format-line-1)">┃</text><text class="guide_badges-format-r1" x="732" y="44.4" textLength="12.2" clip-path="url(#guide_badges-format-line-1)">
+</text><text class="guide_badges-format-r1" x="0" y="68.8" textLength="646.6" clip-path="url(#guide_badges-format-line-2)">┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━┩</text><text class="guide_badges-format-r1" x="732" y="68.8" textLength="12.2" clip-path="url(#guide_badges-format-line-2)">
+</text><text class="guide_badges-format-r1" x="0" y="93.2" textLength="12.2" clip-path="url(#guide_badges-format-line-3)">│</text><text class="guide_badges-format-r1" x="24.4" y="93.2" textLength="317.2" clip-path="url(#guide_badges-format-line-3)">bytes(1_500_000)&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="353.8" y="93.2" textLength="12.2" clip-path="url(#guide_badges-format-line-3)">│</text><text class="guide_badges-format-r1" x="378.2" y="93.2" textLength="244" clip-path="url(#guide_badges-format-line-3)">1.5&#160;MB&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="634.4" y="93.2" textLength="12.2" clip-path="url(#guide_badges-format-line-3)">│</text><text class="guide_badges-format-r1" x="732" y="93.2" textLength="12.2" clip-path="url(#guide_badges-format-line-3)">
+</text><text class="guide_badges-format-r1" x="0" y="117.6" textLength="12.2" clip-path="url(#guide_badges-format-line-4)">│</text><text class="guide_badges-format-r1" x="24.4" y="117.6" textLength="317.2" clip-path="url(#guide_badges-format-line-4)">bytes_binary(1_572_864)&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="353.8" y="117.6" textLength="12.2" clip-path="url(#guide_badges-format-line-4)">│</text><text class="guide_badges-format-r1" x="378.2" y="117.6" textLength="244" clip-path="url(#guide_badges-format-line-4)">1.5&#160;MiB&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="634.4" y="117.6" textLength="12.2" clip-path="url(#guide_badges-format-line-4)">│</text><text class="guide_badges-format-r1" x="732" y="117.6" textLength="12.2" clip-path="url(#guide_badges-format-line-4)">
+</text><text class="guide_badges-format-r1" x="0" y="142" textLength="12.2" clip-path="url(#guide_badges-format-line-5)">│</text><text class="guide_badges-format-r1" x="24.4" y="142" textLength="317.2" clip-path="url(#guide_badges-format-line-5)">rate(2_400_000.0)&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="353.8" y="142" textLength="12.2" clip-path="url(#guide_badges-format-line-5)">│</text><text class="guide_badges-format-r1" x="378.2" y="142" textLength="244" clip-path="url(#guide_badges-format-line-5)">2.4&#160;MB/s&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="634.4" y="142" textLength="12.2" clip-path="url(#guide_badges-format-line-5)">│</text><text class="guide_badges-format-r1" x="732" y="142" textLength="12.2" clip-path="url(#guide_badges-format-line-5)">
+</text><text class="guide_badges-format-r1" x="0" y="166.4" textLength="12.2" clip-path="url(#guide_badges-format-line-6)">│</text><text class="guide_badges-format-r1" x="24.4" y="166.4" textLength="317.2" clip-path="url(#guide_badges-format-line-6)">duration(3723&#160;s)&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="353.8" y="166.4" textLength="12.2" clip-path="url(#guide_badges-format-line-6)">│</text><text class="guide_badges-format-r1" x="378.2" y="166.4" textLength="244" clip-path="url(#guide_badges-format-line-6)">1h&#160;02m&#160;03s&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="634.4" y="166.4" textLength="12.2" clip-path="url(#guide_badges-format-line-6)">│</text><text class="guide_badges-format-r1" x="732" y="166.4" textLength="12.2" clip-path="url(#guide_badges-format-line-6)">
+</text><text class="guide_badges-format-r1" x="0" y="190.8" textLength="12.2" clip-path="url(#guide_badges-format-line-7)">│</text><text class="guide_badges-format-r1" x="24.4" y="190.8" textLength="317.2" clip-path="url(#guide_badges-format-line-7)">clock(3723&#160;s)&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="353.8" y="190.8" textLength="12.2" clip-path="url(#guide_badges-format-line-7)">│</text><text class="guide_badges-format-r1" x="378.2" y="190.8" textLength="244" clip-path="url(#guide_badges-format-line-7)">1:02:03&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="634.4" y="190.8" textLength="12.2" clip-path="url(#guide_badges-format-line-7)">│</text><text class="guide_badges-format-r1" x="732" y="190.8" textLength="12.2" clip-path="url(#guide_badges-format-line-7)">
+</text><text class="guide_badges-format-r1" x="0" y="215.2" textLength="12.2" clip-path="url(#guide_badges-format-line-8)">│</text><text class="guide_badges-format-r1" x="24.4" y="215.2" textLength="317.2" clip-path="url(#guide_badges-format-line-8)">relative(then,&#160;then&#160;+&#160;3&#160;h)</text><text class="guide_badges-format-r1" x="353.8" y="215.2" textLength="12.2" clip-path="url(#guide_badges-format-line-8)">│</text><text class="guide_badges-format-r1" x="378.2" y="215.2" textLength="244" clip-path="url(#guide_badges-format-line-8)">3&#160;hours&#160;ago&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="634.4" y="215.2" textLength="12.2" clip-path="url(#guide_badges-format-line-8)">│</text><text class="guide_badges-format-r1" x="732" y="215.2" textLength="12.2" clip-path="url(#guide_badges-format-line-8)">
+</text><text class="guide_badges-format-r1" x="0" y="239.6" textLength="12.2" clip-path="url(#guide_badges-format-line-9)">│</text><text class="guide_badges-format-r1" x="24.4" y="239.6" textLength="317.2" clip-path="url(#guide_badges-format-line-9)">timestamp(then)&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="353.8" y="239.6" textLength="12.2" clip-path="url(#guide_badges-format-line-9)">│</text><text class="guide_badges-format-r1" x="378.2" y="239.6" textLength="244" clip-path="url(#guide_badges-format-line-9)">2026-09-21T14:13:20Z</text><text class="guide_badges-format-r1" x="634.4" y="239.6" textLength="12.2" clip-path="url(#guide_badges-format-line-9)">│</text><text class="guide_badges-format-r1" x="732" y="239.6" textLength="12.2" clip-path="url(#guide_badges-format-line-9)">
+</text><text class="guide_badges-format-r1" x="0" y="264" textLength="12.2" clip-path="url(#guide_badges-format-line-10)">│</text><text class="guide_badges-format-r1" x="24.4" y="264" textLength="317.2" clip-path="url(#guide_badges-format-line-10)">percent(0.4251,&#160;1)&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="353.8" y="264" textLength="12.2" clip-path="url(#guide_badges-format-line-10)">│</text><text class="guide_badges-format-r1" x="378.2" y="264" textLength="244" clip-path="url(#guide_badges-format-line-10)">42.5%&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="634.4" y="264" textLength="12.2" clip-path="url(#guide_badges-format-line-10)">│</text><text class="guide_badges-format-r1" x="732" y="264" textLength="12.2" clip-path="url(#guide_badges-format-line-10)">
+</text><text class="guide_badges-format-r1" x="0" y="288.4" textLength="12.2" clip-path="url(#guide_badges-format-line-11)">│</text><text class="guide_badges-format-r1" x="24.4" y="288.4" textLength="317.2" clip-path="url(#guide_badges-format-line-11)">number(1234567)&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="353.8" y="288.4" textLength="12.2" clip-path="url(#guide_badges-format-line-11)">│</text><text class="guide_badges-format-r1" x="378.2" y="288.4" textLength="244" clip-path="url(#guide_badges-format-line-11)">1,234,567&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="634.4" y="288.4" textLength="12.2" clip-path="url(#guide_badges-format-line-11)">│</text><text class="guide_badges-format-r1" x="732" y="288.4" textLength="12.2" clip-path="url(#guide_badges-format-line-11)">
+</text><text class="guide_badges-format-r1" x="0" y="312.8" textLength="12.2" clip-path="url(#guide_badges-format-line-12)">│</text><text class="guide_badges-format-r1" x="24.4" y="312.8" textLength="317.2" clip-path="url(#guide_badges-format-line-12)">compact(1_250_000.0)&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="353.8" y="312.8" textLength="12.2" clip-path="url(#guide_badges-format-line-12)">│</text><text class="guide_badges-format-r1" x="378.2" y="312.8" textLength="244" clip-path="url(#guide_badges-format-line-12)">1.2M&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="guide_badges-format-r1" x="634.4" y="312.8" textLength="12.2" clip-path="url(#guide_badges-format-line-12)">│</text><text class="guide_badges-format-r1" x="732" y="312.8" textLength="12.2" clip-path="url(#guide_badges-format-line-12)">
+</text><text class="guide_badges-format-r1" x="0" y="337.2" textLength="646.6" clip-path="url(#guide_badges-format-line-13)">└────────────────────────────┴──────────────────────┘</text><text class="guide_badges-format-r1" x="732" y="337.2" textLength="12.2" clip-path="url(#guide_badges-format-line-13)">
+</text>
+    </g>
+    </g>
+</svg>

@@ -22,6 +22,7 @@
 
 pub mod a11y;
 pub mod ansi_explain;
+pub mod badge;
 pub mod cancel;
 pub mod capabilities;
 pub mod cli;
@@ -31,8 +32,10 @@ pub mod fidelity;
 pub mod format;
 pub mod hex;
 pub mod highlighter;
+pub mod redact;
 pub mod registry;
 pub mod sanitize;
+pub mod size_bar;
 pub mod source_view;
 pub mod target;
 pub mod theme;
