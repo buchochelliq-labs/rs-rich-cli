@@ -34,6 +34,7 @@ pub mod highlighter;
 pub mod registry;
 pub mod sanitize;
 pub mod source_view;
+pub mod table;
 pub mod target;
 pub mod theme;
 pub mod unicode_inspect;

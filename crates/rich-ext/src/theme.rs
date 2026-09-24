@@ -21,7 +21,8 @@ pub const EXTRA_STYLES: &[(&str, &str)] = &[
 
 /// Upstream's default theme plus [`EXTRA_STYLES`] and the CLI help, config
 /// and precedence styles in [`cli_doc::STYLES`](crate::cli_doc::STYLES), and
-/// the diff and test-report styles in [`diff::STYLES`](crate::diff::STYLES).
+/// the diff and test-report styles in [`diff::STYLES`](crate::diff::STYLES),
+/// and the table sort/group styles in [`table::STYLES`](crate::table::STYLES).
 ///
 /// Pass to `Console::builder().theme(..)` to get `[error]`-style markup:
 ///
@@ -41,6 +42,7 @@ pub fn extended_theme() -> Theme {
         .iter()
         .chain(crate::cli_doc::STYLES)
         .chain(crate::diff::STYLES)
+        .chain(crate::table::STYLES)
     {
         if let Ok(style) = Style::parse(spec) {
             theme.insert(*name, style);
@@ -63,6 +65,7 @@ mod tests {
                 + EXTRA_STYLES.len()
                 + crate::cli_doc::STYLES.len()
                 + crate::diff::STYLES.len()
+                + crate::table::STYLES.len()
         );
         // Upstream entries survive...
         assert!(extended.get("repr.number").is_some());
@@ -82,6 +85,7 @@ mod tests {
             .iter()
             .chain(crate::cli_doc::STYLES)
             .chain(crate::diff::STYLES)
+            .chain(crate::table::STYLES)
         {
             assert!(
                 base.get(name).is_none(),
