@@ -134,3 +134,79 @@ fn removing_last_region_restores_cursor() {
     assert!(screen.borrow().visible);
     assert!(screen.borrow().lines().iter().all(|s| s.is_empty()));
 }
+
+#[derive(Clone, Default)]
+struct SharedBytes(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+impl Write for SharedBytes {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// The coordinator rejects control codes, and the handler used to discard
+/// that error: a log line containing ESC or NUL vanished without a trace.
+#[test]
+fn live_log_lines_with_control_codes_print_neutralised() {
+    use rich_ext::event::{
+        EventContext, Message, Severity, SourceLocation, StructuredEvent, Value,
+    };
+    use std::sync::{Arc, Mutex};
+    for interactive in [false, true] {
+        let out = SharedBytes::default();
+        let target = RenderTarget::new(
+            TargetKind::Custom,
+            TargetCapabilities {
+                width: 80,
+                height: 24,
+                color_system: Some(rich::ColorSystem::Truecolor),
+                interactive,
+                unicode: true,
+                hyperlinks: true,
+                sixel: Support::Unsupported,
+            },
+            Theme::default_theme(),
+        );
+        let live = Arc::new(Mutex::new(LiveCoordinator::new(
+            out.clone(),
+            target.clone(),
+        )));
+        let handler = rich_ext::RichHandler::new(target.console())
+            .time_format(|| "[12:00:00]".into())
+            .live(live.clone());
+        let event = |message: &str| {
+            StructuredEvent::new(Message::Literal(message.into()))
+                .field("k", Value::String("v\x1b[2J".into()))
+                .context(EventContext {
+                    severity: Some(Severity::Info),
+                    source: Some(SourceLocation {
+                        path: "/src/a\x1b]0;PWN\x07.rs".into(),
+                        line: 3,
+                        column: None,
+                    }),
+                    ..Default::default()
+                })
+        };
+        handler.emit_event(&event("esc \x1b[31m here"));
+        handler.emit_event(&event("nul \0 here"));
+        live.lock().unwrap().finish().unwrap();
+        let text = String::from_utf8(out.0.lock().unwrap().clone()).unwrap();
+        // The highlighter styles the `[`, so check either side of it.
+        assert!(
+            text.contains("esc ␛") && text.contains("31m here"),
+            "{text:?}"
+        );
+        assert!(text.contains("nul ␀ here"), "{text:?}");
+        assert!(
+            !text.contains("\x1b[31m here") && !text.contains('\0'),
+            "{text:?}"
+        );
+        assert!(
+            !text.contains("\x1b]0;") && !text.contains("\x1b[2J"),
+            "{text:?}"
+        );
+    }
+}
