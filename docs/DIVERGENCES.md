@@ -345,6 +345,31 @@ Format: what differs · why · how to remove it (if temporary).
   `balance_pairs` pass, under the Markdown issue (#9). Pinned by
   `tildes_crossing_a_later_emphasis_stay_literal`.
 
+### 24. A refused Markdown reference definition is not printed
+- **Differs:** link, image and autolink destinations go through markdown-it's
+  `normalizeLink` and `validateLink` as upstream (`markdown_url.rs`, golden
+  `markdown_links.tsv`), so `[j](javascript:x)` stays literal text. But a
+  *reference definition* whose destination `validateLink` refuses
+  (`[1]: javascript:x`) is not a definition upstream, so its line prints as a
+  paragraph; pulldown-cmark consumes the line as a definition, and it prints
+  nothing here. The link using it (`[r][1]`) does print as literal text, as
+  upstream.
+- **Why:** pulldown-cmark resolves definitions during block parsing, and turns
+  no event for the consumed line that could be put back.
+- **Remove:** re-emit the source span of each refused definition
+  (`Parser::reference_definitions()` carries it) as a paragraph block.
+
+### 25. JSON nesting stops at exactly 10 000 levels
+- **Differs:** `Json::new` refuses documents nested deeper than
+  `json::MAX_DEPTH` (10 000) with CPython's `RecursionError` message. CPython's
+  own cutoff depends on its C stack: 3.12+ refuses from about 9 998 levels, 3.11
+  from about 995 (its 1 000-frame recursion limit). Documents between those
+  cutoffs and 10 000 levels parse here.
+- **Why:** an unbounded depth made rendering (which indents every line by its
+  depth) cost quadratic memory until the process was killed; a machine-dependent
+  cutoff cannot be reproduced exactly.
+- **Remove:** not removable exactly; the constant can be tuned.
+
 ## Feature-flagged divergences
 
 ### 22. Escape-safe JSON presentation (`json-escape-safe`)

@@ -1,20 +1,28 @@
 //! # rich
 //!
 //! A **faithful** Rust port of the Python [`rich`](https://github.com/Textualize/rich)
-//! terminal-rendering library. This crate mirrors upstream module-for-module and
-//! its version tracks the upstream release it reflects (see `UPSTREAM.toml`).
+//! terminal-rendering library. This crate mirrors upstream module-for-module.
+//! Its version is independent SemVer; the upstream release it reflects
+//! (currently `rich` 15.0.0) is recorded in `UPSTREAM.toml`.
 //!
 //! Local features and the plugin registry live in the separate `rich-ext` crate
 //! — do **not** add non-upstream behavior here. See `AGENTS.md`.
 //!
-//! ## Ported so far (the first vertical slice)
+//! ## What is ported
 //!
-//! [`color`] · [`style`] · [`cells`] · [`segment`] · [`markup`] · [`text`] ·
-//! [`theme`] · [`console`] · [`protocol`] (extension points) · [`measure`] ·
-//! [`errors`]
+//! - Console and styling: [`console`], [`style`], [`color`], [`segment`],
+//!   [`markup`], [`theme`], [`control`], [`screen`], [`export`].
+//! - Text: [`text`], [`cells`], [`wrap`], [`emoji`], [`highlighter`], [`ansi`].
+//! - Renderables: [`panel`], [`table`], [`tree`], [`layout`], [`columns`],
+//!   [`align`], [`padding`], [`constrain`], [`rule`], [`bar`], [`markdown`],
+//!   [`syntax`], [`json`], [`pretty`], [`traceback`], [`log_render`].
+//! - Live output: [`live`], [`progress`] (with [`track`]), [`progress_bar`],
+//!   [`spinner`], [`status`].
+//! - Input and paging: [`prompt`], [`pager`].
+//! - Extension points: [`protocol`], [`measure`].
 //!
-//! The remaining modules are tracked as roadmap issues; see `docs/PORTING.md`
-//! for the module map and per-module parity status.
+//! Most modules are partial ports of their upstream counterpart; the per-module
+//! status and parity evidence are in `docs/PORTING.md`.
 
 pub mod align;
 pub mod ansi;
@@ -40,6 +48,7 @@ pub mod live;
 pub mod live_render;
 pub mod log_render;
 pub mod markdown;
+mod markdown_url;
 pub mod markup;
 pub mod measure;
 pub mod padding;
@@ -84,7 +93,7 @@ pub use crate::errors::{Result, RichError};
 pub use crate::highlighter::{ISO8601Highlighter, RegexHighlighter, ReprHighlighter};
 pub use crate::json::Json;
 pub use crate::layout::Layout;
-pub use crate::live::{AutoLive, Live};
+pub use crate::live::{AutoLive, Live, LivePanic};
 pub use crate::live_render::LiveRender;
 pub use crate::log_render::{level_text, LogLevel, LogRecord, LogRender};
 pub use crate::padding::Padding;

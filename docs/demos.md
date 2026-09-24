@@ -1,4 +1,4 @@
-# Rich-art videos
+# CLI and art videos
 
 ## Run the suite in your terminal
 
@@ -6,23 +6,37 @@ CLI 0.0.8 introduced `rich --demo`: a single guided pass through the
 suite with three-second section pauses. Use `--demo-delay 5` to slow it down;
 Ctrl+C stops cleanly. See [the tour instructions](cli.md#take-the-guided-tour).
 
-<video controls playsinline preload="none" poster="../assets/demos/v10-demo-tour.png" style="width:100%;max-width:1100px" aria-label="Guided tour of the rich CLI suite">
-  <source src="../assets/demos/v10-demo-tour.mp4" type="video/mp4">
+<video controls playsinline preload="none" poster="../assets/demos/v11-demo-tour.png" style="width:100%;max-width:1100px" aria-label="Guided tour of the rich CLI suite">
+  <source src="../assets/demos/v11-demo-tour.mp4" type="video/mp4">
   Your browser cannot play this video. Use the download below.
 </video>
 
-[Tour MP4](assets/demos/v10-demo-tour.mp4) · [Tour GIF](assets/demos/v10-demo-tour.gif)
+[Tour MP4](assets/demos/v11-demo-tour.mp4) · [Tour GIF](assets/demos/v11-demo-tour.gif)
 
-This recording runs the 0.0.10 `rich --demo --demo-delay 0.5` in a real terminal,
-faster than the default three-second pace. New in 0.0.10: a line printed through a
-pushed theme, `~~~` strikethrough in the Markdown section, Progress with speed and
-time remaining, two files watched in Live regions (the last edit writes invalid
-JSON, so `--watch-exit-on-error` ends the watch), and quadrant, ANSI16 and tone
-adjustments in the art section. Playback and command output are captured from the
-optimized build, with a caption added and no audio. Reproduce with
-`python scripts/capture_demo_tour.py --binary target/release/rich --release 0.0.10`
+This recording runs the 0.0.11 `rich --demo --demo-delay 0.5` (prepared, not yet
+published) in a real terminal, faster than the default three-second pace. New in
+0.0.11:
+
+- `rich inspect` drawing a structured document as a tree;
+- `rich diff` comparing two source files, with the changed words highlighted;
+- `rich view` showing a file numbered and highlighted;
+- the `hex`, `unicode` and `ansi explain` inspectors looking inside bytes,
+  graphemes and escape sequences;
+- a line styled from an upstream rich theme file (`--theme-file`);
+- `rich capture --redact` masking a secret in a command's output;
+- Atkinson dithering with OKLab colour distance, and a transparent image on the
+  terminal's own background and on a checkerboard.
+
+Playback and command output are captured from the optimized build, with a
+caption added and no audio. Reproduce with
+`python scripts/capture_demo_tour.py --binary target/release/rich --release 0.0.11`
 after installing the docs-media dependencies listed below; provenance is in
-`.github/evidence/0.0.10/demo-tour/capture.json`.
+`.github/evidence/0.0.11/demo-tour/capture.json`.
+
+The 0.0.10 tour is kept as a historical recording:
+[MP4](assets/demos/v10-demo-tour.mp4) · [GIF](assets/demos/v10-demo-tour.gif).
+It shows a pushed theme, `~~~` strikethrough, Progress with speed and time
+remaining, a two-file watch, and quadrant, ANSI16 and tone adjustments.
 
 ## CLI 0.0.9 workflows
 

@@ -1,17 +1,33 @@
 # Troubleshooting
 
 Error messages exactly as `rich` prints them, with what causes each and what to
-do. All diagnostics go to **stderr** and every failure exits **1**, so a failed
-render never looks like a successful one to a script.
+do. All diagnostics go to **stderr** and every failure exits non-zero, so a
+failed render never looks like a successful one to a script. The exit code says
+what kind of failure it was:
 
-**Applies to** `rich 0.0.2`. If your version differs, check
+| Code | Meaning |
+|---|---|
+| 0 | success |
+| 2 | usage or config error (a bad flag, value or config file) |
+| 3 | input, read or write error (a missing file, an unreadable image) |
+| 4 | parse or render error in the data (bad markup, invalid JSON) |
+| 5 | a `--threshold` gate failed |
+| 130 | interrupted with Ctrl+C |
+
+`rich capture` is the exception: it exits with the captured command's own
+status (128 + the signal number when a signal ended it).
+
+**Applies to** `rich 0.0.11` (`rs-rich-cli` 0.0.11, prepared but not yet
+published). If your version differs, check
 [the changelog](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/CHANGELOG.md).
 
 ---
 
-## `rich: cannot read <path>: The system cannot find the file specified. (os error 2)`
+## `rich: cannot read <path>: No such file or directory (os error 2)`
 
-The resource does not exist at that path.
+The resource does not exist at that path. This is the Linux and macOS wording;
+Windows says `The system cannot find the file specified. (os error 2)`. Either
+way the exit code is 3.
 
 Check the path, and remember that a leading `-` makes `rich` read the argument
 as an option. Put it after `--`:
@@ -23,11 +39,14 @@ rich -- -leading-dash.md
 ## `rich: cannot read <path>: is a directory, not a file`
 
 You passed a directory. `rich` renders one resource at a time; point it at a
-file, or loop:
+file, or convert many files at once with `--batch`, which takes files,
+directories and globs:
 
 ```bash
-for f in docs/*.md; do rich "$f"; done
+rich --batch --markdown --export-html out.html docs/
 ```
+
+See [Convert many files at once](cli.md#convert-many-files-at-once).
 
 ## `rich: Could not determine delimiter`
 
@@ -48,21 +67,21 @@ The document is not valid JSON. The line and column point at the first problem.
 `rich` accepts `NaN`, `Infinity` and `-Infinity` (as Python's `json` module
 emits them) and nests arbitrarily deep, so those are not the cause.
 
-## `rich: only one render mode (--print/--markdown/--json/--syntax/--csv/--ipynb/--rule) may be given`
+## `rich: only one render mode (--print/--markdown/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--image/--jsonl/--log/--inspect/--ansi-explain) may be given (try --help)`
 
 Two mode flags were passed. Pick one — they are alternatives, not layers.
 
-## `rich: unknown option "--<name>"`
+## `rich: unknown option "--<name>" (try --help)`
 
 No such flag. `rich --help` lists all of them, and the
 [CLI reference](cli-reference.md) is the same content in a searchable page.
 
-## `rich: --<flag> requires a number` / `rich: invalid width '<value>'`
+## `rich: --<flag> requires a value (try --help)` / `rich: invalid width '<value>' (try --help)`
 
 The flag needs a value and either got none or got something that is not a
 number. `--width 80`, not `--width` or `--width wide`.
 
-## `rich: --panel-style only has an effect with --panel`
+## `rich: --panel-style only has an effect with --panel (try --help)`
 
 The flag was passed but nothing would use it. `rich` refuses rather than
 silently ignoring it, so a typo in a script surfaces instead of quietly doing
@@ -74,9 +93,42 @@ Add the flag it depends on, or drop it:
 rich --panel rounded --panel-style dim notes.md
 ```
 
-## `rich: --diff needs exactly two images: --diff before.png after.png`
+## `rich: --diff needs two images or files to compare, or one patch: --diff before after (try --help)`
 
-`--diff` compares exactly two images. See [Comparing images](image-diff.md).
+`--diff` (or `rich diff`) takes two images, two text files, or one patch such
+as `git diff` output. Anything else is a usage error (exit 2). See
+[Comparing images](image-diff.md) and
+[Compare text, source and patches](cli.md#compare-text-source-and-patches).
+
+## `rich: <file>: no file changes found in it; give two files to compare`
+
+A single input to `rich diff` is read as a patch, and this one has no file
+changes in it. Give two files to compare them, or pipe a real patch:
+`git diff | rich diff -`. The exit code is 4.
+
+## `rich: cannot read <file>: The image format <Name> is not supported`
+
+`--image` (or `rich image`) recognised the file as an image in a format `rich`
+cannot decode. Convert it to PNG, JPEG, GIF, WebP or BMP first. A truncated or
+corrupt image fails the same way, with the decoder's message (such as
+`unexpected end of file`). The exit code is 3.
+
+## `rich: --theme-file <path>: line <N>: <problem> (try --help)`
+
+The theme file is not a valid upstream rich theme file: every line in its
+`[styles]` section must be `name = style`. The message names the line. A file
+that cannot be read (`No such file or directory`), is not a regular file, or is
+over 1 MiB fails the same way. All of these are usage errors (exit 2). See
+[Load an upstream theme file](cli.md#load-an-upstream-theme-file).
+
+## A notice that input was cut short
+
+`view`, `hex`, `unicode`, `inspect` and `capture` read a bounded amount, so an
+endless input such as `/dev/zero` ends instead of exhausting memory. Beyond the
+limit, `view`, `hex` and `unicode` show the first part and print a notice on
+stderr; `capture` stops the command; `inspect` fails with an input error
+(exit 3). The table in [Limits](cli.md#limits) lists each cap. For a large
+binary file, `rich hex --offset N --length N` reads any window.
 
 ---
 
@@ -86,7 +138,8 @@ rich --panel rounded --panel-style dim notes.md
 
 Colour is disabled when stdout is **not a terminal** — piping or redirecting is
 enough. It is also disabled by a non-empty `NO_COLOR` environment variable or by
-`--no-color`.
+`--no-color`. In a terminal, those remove colour only: bold, italic, underline
+and the other attributes stay, as in upstream rich.
 
 To keep colour through a pager, use `--pager`, which `rich` sets up itself.
 
@@ -155,7 +208,8 @@ Include:
 
 1. The exact command, with the file if you can share it.
 2. What you saw and what you expected.
-3. `rich --version`, your OS, and your terminal.
+3. `rich --version`, your OS, and your terminal. `rich doctor --report json`
+   records these and what `rich` detected; attach its output.
 4. Whether it also happens with `--no-color` and at a fixed `--width`, which
    separates rendering problems from terminal ones.
 

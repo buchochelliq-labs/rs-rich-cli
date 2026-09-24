@@ -50,7 +50,7 @@ Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by exten
 | `--gif` | Animate GIFs side by side; pipes receive the first frame. |
 | `--rule` | Draw a horizontal rule (RESOURCE is its title) |
 | `--diff` | Compare two images perceptually, two text files as a diff (syntax-aware; ANSI captures by visible text and style), or render one patch such as `git diff` output. |
-| `--image` | Render RESOURCE as a still image (ASCII/Braille/blocks/Sixel) |
+| `--image` | Render RESOURCE as a still image (ASCII/Braille/blocks/quadrants/Sixel) |
 | `--inspect` | Explore structured data (JSON, YAML, TOML, XML, INI, dotenv) as a tree. |
 | `--ansi-explain` | Decode every escape sequence in RESOURCE and show the visible text. |
 
@@ -207,7 +207,7 @@ Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by exten
 | --- | --- |
 | `--no-color` | Disable colored output (as does a non-empty NO_COLOR) Environment: `NO_COLOR`. Config: `no_color`. |
 | `--color` | Override a config no_color setting (pipes remain plain) |
-| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. Config: `sanitize`. |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view` and text `rich diff`; --no-sanitize turns it off there. Config: `sanitize`. |
 | `--report <F>` | Emit a result/error envelope on stderr. Default: `human`. Possible values: `human`, `json`. |
 | `--machine-json` | Alias for --report json. |
 
@@ -243,7 +243,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `log`, `logs` | Stream common structured-log JSONL records (`--log`) |
 | `gif` | Animate GIFs (`--gif`) |
 | `diff` | Compare two images, two text files, or render one patch (`--diff`) |
-| `image` | Render a still image as ASCII/Braille/blocks/Sixel (`--image`) |
+| `image` | Render a still image as ASCII/Braille/blocks/quadrants/Sixel (`--image`) |
 | `rule` | Draw a horizontal rule (`--rule`) |
 | `inspect` | Explore structured data (JSON, YAML, TOML, XML, INI, dotenv) as a tree (`--inspect`) |
 | `ansi`, `ansi-explain` | Decode escape sequences: `rich ansi explain FILE` (`--ansi-explain`) |
@@ -264,7 +264,8 @@ Self-contained examples; ignores config; accepts --no-color.
 - COLUMNS: console width (default 80 when unavailable)
 - MANPAGER, PAGER: pager command; fallback is less (Unix), more.com (Windows)
 - FORCE_COLOR: not supported; redirected stdout stays plain
-- RICH_SIXEL: 0/1 overrides Sixel detection for --image-mode auto
+- RICH_GRAPHICS: sixel forces Sixel on; none (or kitty, iterm) rules it out
+- RICH_SIXEL: 0/1 overrides Sixel detection when RICH_GRAPHICS is unset
 
 With no RESOURCE and no mode flag, a capability demo is shown. Layout, style, paging, hyperlinks and export options require a resource or render mode.
 
@@ -430,6 +431,26 @@ Compare two images, two text files, or render one patch (`--diff`)
 rich diff [OPTIONS] [RESOURCE]
 ```
 
+#### Diff & ANSI
+
+| Option | Description |
+| --- | --- |
+| `--side-by-side` | With a text --diff, show old and new in two columns. |
+| `--context <N>` | With a text --diff, unchanged lines around each change. Default: `3`. |
+| `--language <NAME>` | With a text --diff, highlight as this language instead of guessing from the file name. |
+
+#### Image
+
+| Option | Description |
+| --- | --- |
+| `--threshold <PCT>` | With --diff, exit non-zero above PCT% changed (pixels for images, lines for text). Also sets the exit code: 0 within, 5 over. |
+
+#### Output & reports
+
+| Option | Description |
+| --- | --- |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view` and text `rich diff`; --no-sanitize turns it off there. |
+
 #### Arguments
 
 | Argument | Description |
@@ -438,7 +459,7 @@ rich diff [OPTIONS] [RESOURCE]
 
 ### rich image
 
-Render a still image as ASCII/Braille/blocks/Sixel (`--image`)
+Render a still image as ASCII/Braille/blocks/quadrants/Sixel (`--image`)
 
 #### Usage
 
@@ -478,6 +499,26 @@ Explore structured data (JSON, YAML, TOML, XML, INI, dotenv) as a tree (`--inspe
 rich inspect [OPTIONS] [RESOURCE]
 ```
 
+#### Input
+
+| Option | Description |
+| --- | --- |
+| `--format <F>` | Input format. With --inspect, the parser (default auto-detect); otherwise `auto` detects piped or extensionless input and routes it (JSON to --json, other formats to highlighting, anything else to plain text), and a named format overrides the extension. Default: `auto`. Possible values: `auto`, `json`, `yaml`, `toml`, `xml`, `ini`, `env`. |
+
+#### Inspect
+
+| Option | Description |
+| --- | --- |
+| `--select <EXPR>` | Show only what a JSONPath expression selects, e.g. `$.servers[*].name`. |
+| `--find <TEXT>` | Search keys and values (case-insensitive), highlighting matches. |
+| `--flatten` | Show `path = value` rows instead of a tree. |
+| `--table` | Show records, or a path/value table, instead of a tree. |
+| `--max-depth <N>` | Fold containers deeper than N levels. |
+| `--max-length <N>` | Show at most N items per container. |
+| `--show-paths` | Append each value's path. |
+| `--redact` | Mask secret-looking keys such as password, token and api_key. With `rich capture`, mask secrets in the output before it is shown, exported or recorded: secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` tokens, AWS key ids, JWTs and URL passwords. Capture redaction is experimental and best effort: check the output before sharing it. |
+| `--compare <PATH>` | Show added, removed and changed values against another document. |
+
 #### Arguments
 
 | Argument | Description |
@@ -493,6 +534,13 @@ Decode escape sequences: `rich ansi explain FILE` (`--ansi-explain`)
 ```text
 rich ansi [OPTIONS] [RESOURCE]
 ```
+
+#### Diff & ANSI
+
+| Option | Description |
+| --- | --- |
+| `--ansi-inline` | With --ansi-explain, mark escapes inline in the text instead of a table. |
+| `--escapes-only` | With --ansi-explain, list only escape sequences, not text runs. |
 
 #### Arguments
 
@@ -510,6 +558,31 @@ Show any file: Markdown, CSV, notebooks, images and patches rendered, source and
 rich view [OPTIONS] [RESOURCE]
 ```
 
+#### Viewers
+
+| Option | Description |
+| --- | --- |
+| `--search <TEXT>` | With `rich view`, highlight every case-insensitive match and mark its line; with `rich hex`, highlight a byte string: hex such as `de ad` or `0xDEAD`, or quoted text such as '"PNG"'. |
+| `--no-line-numbers` | With `rich view`, leave out the line-number gutter. |
+
+#### Output & reports
+
+| Option | Description |
+| --- | --- |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view` and text `rich diff`; --no-sanitize turns it off there. |
+
+#### Paging
+
+| Option | Description |
+| --- | --- |
+| `--pager` | Page terminal output via MANPAGER, PAGER, then less/more.com. |
+
+#### Layout
+
+| Option | Description |
+| --- | --- |
+| `-w`, `--width <N>` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) |
+
 #### Arguments
 
 | Argument | Description |
@@ -525,6 +598,22 @@ Hex dump with offsets, byte groups and an ASCII panel (--search, --offset, --len
 ```text
 rich hex [OPTIONS] [RESOURCE]
 ```
+
+#### Viewers
+
+| Option | Description |
+| --- | --- |
+| `--search <TEXT>` | With `rich view`, highlight every case-insensitive match and mark its line; with `rich hex`, highlight a byte string: hex such as `de ad` or `0xDEAD`, or quoted text such as '"PNG"'. |
+| `--offset <N>` | With `rich hex`, start N bytes in (decimal or 0x hex) |
+| `--length <N>` | With `rich hex`, show at most N bytes. |
+| `--bytes-per-line <N>` | With `rich hex`, bytes on each line (default: fit the width, up to 16) |
+| `--group <N>` | With `rich hex`, bytes per group. Default: `8`. |
+
+#### Layout
+
+| Option | Description |
+| --- | --- |
+| `-w`, `--width <N>` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) |
 
 #### Arguments
 
@@ -542,6 +631,18 @@ Show graphemes, code points, UTF-8 bytes, widths and invalid sequences
 rich unicode [OPTIONS] [RESOURCE]
 ```
 
+#### Viewers
+
+| Option | Description |
+| --- | --- |
+| `--limit <N>` | With `rich unicode`, show at most N graphemes. |
+
+#### Layout
+
+| Option | Description |
+| --- | --- |
+| `-w`, `--width <N>` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) |
+
 #### Arguments
 
 | Argument | Description |
@@ -558,6 +659,18 @@ List environment variables, secrets masked; `rich env PATH` checks each PATH ent
 rich env [OPTIONS] [RESOURCE]
 ```
 
+#### Viewers
+
+| Option | Description |
+| --- | --- |
+| `--show-secrets` | With `rich env`, show values whose names look secret instead of masking them. |
+
+#### Layout
+
+| Option | Description |
+| --- | --- |
+| `-w`, `--width <N>` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) |
+
 #### Arguments
 
 | Argument | Description |
@@ -573,6 +686,31 @@ Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE
 ```text
 rich capture [OPTIONS] [RESOURCE]
 ```
+
+#### Viewers
+
+| Option | Description |
+| --- | --- |
+| `--cast <FILE>` | With `rich capture`, also write an asciicast v2 recording (`asciinema play FILE`) |
+| `--redact-pattern <REGEX>...` | With `rich capture`, also mask matches of REGEX (only its `secret` group when it has one); repeatable. Experimental: check the output before sharing it. |
+
+#### Inspect
+
+| Option | Description |
+| --- | --- |
+| `--redact` | Mask secret-looking keys such as password, token and api_key. With `rich capture`, mask secrets in the output before it is shown, exported or recorded: secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` tokens, AWS key ids, JWTs and URL passwords. Capture redaction is experimental and best effort: check the output before sharing it. |
+
+#### Output & reports
+
+| Option | Description |
+| --- | --- |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view` and text `rich diff`; --no-sanitize turns it off there. |
+
+#### Layout
+
+| Option | Description |
+| --- | --- |
+| `-w`, `--width <N>` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) |
 
 #### Arguments
 
@@ -862,7 +1000,7 @@ Settings are read from these sources, lowest precedence first; a later source ov
 | `theme` | string | | | `--theme` | Select a named theme from config |
 | `theme_file` | string | | | `--theme-file` | Load styles from an upstream rich theme file ([styles] section); --theme and --theme-style override it |
 | `no_color` | bool | | `NO_COLOR` | `--no-color` | Disable colored output (as does a non-empty NO_COLOR) |
-| `sanitize` | bool | | | `--sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text |
+| `sanitize` | bool | | | `--sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view` and text `rich diff`; --no-sanitize turns it off there |
 
 `rich` writes diagnostics to stderr and rendered output to stdout, so
 `rich --csv data.csv > table.txt` keeps the two apart.

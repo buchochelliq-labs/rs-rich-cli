@@ -57,8 +57,158 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
-Cohort versions for 0.0.11 (not published): core 0.0.7, ext 0.0.9, art 0.0.9,
-CLI 0.0.11. Core changes below, so every dependent moves with it.
+Cohort versions for 0.0.11 (not published): core 0.0.7, macros 0.0.1 (new),
+ext 0.0.9, art 0.0.9, CLI 0.0.11. Core changes below, so every dependent moves with it.
+
+### Release test: security, robustness and parity fixes
+
+Six independent audits of the whole 0.0.11 delta found the issues below. Each was
+confirmed by reproduction, and each fix came with a regression test that failed
+first. See the [0.0.11 release notes](docs/releases/0.0.11.md#what-the-release-test-found-and-fixed).
+
+- **Dependencies.** `rustls` 0.23.45 for RUSTSEC-2026-0285 (reaches only the
+  CLI's `fetch` feature). Core loads only syntect's bundled dumps, which drops
+  the unmaintained `yaml-rust` and `plist` from the tree.
+- **Core: Markdown links (security and parity).** Link and image destinations
+  now go through a port of markdown-it's `normalizeLink`: mdurl
+  percent-encoding, plus punycode written by hand, so no new dependency. They are
+  also checked with markdown-it's `validateLink`. An escape sequence in a link can
+  no longer reach the terminal, `é.com/ü` becomes `xn--9ca.com/%C3%BC`, and
+  `javascript:`, `vbscript:`, `file:` and non-image `data:` links print as
+  literal text, as upstream does. `~~` inside an autolink is no longer
+  strikethrough. A refused reference definition still prints nothing
+  (DIVERGENCES #24).
+- **Core: parity.**
+  - A printed `Text`'s base style no longer colours justify padding.
+  - Zero-width table cells get no vertical padding.
+  - Byte columns and speeds keep negative values (`-8/100 bytes`).
+  - `TextColumn` format specs follow CPython's `format()`: 3,836 golden cases,
+    up from 509 that diverged.
+- **Core: robustness.**
+  - A `LiveProgress::refresh()` inside `with()` no longer deadlocks; a nested
+    `with()` panics with a clear message.
+  - A render panic on the live thread restores the cursor. `AutoLive::try_stop`
+    reports the panic.
+  - `ProgressBar` no longer overflows on huge totals.
+  - `Tree` renders, measures and drops without recursion, tested at 20,000
+    levels.
+  - Theme files parse in linear time.
+  - JSON deeper than 10,000 levels is an error rather than an unbounded render
+    (DIVERGENCES #25).
+- **Ext: terminal-control injection.**
+  - OSC 8 links could be broken out of in three places, each letting a crafted
+    path or URL set the window title:
+    - control characters in `LiveCoordinator` link URLs;
+    - control characters in `Hyperlinker` file and editor URLs;
+    - control characters in diff `TemplateLinks`.
+  - File URLs are now percent-encoded outside the RFC 3986 path set, including
+    non-ASCII.
+  - Stack-trace labels, patch paths decoded from git's octal quoting, and
+    JUnit/libtest names and output decoded from `&#x1b;` or `\u001b` now render
+    inert.
+  - Bidi controls (Trojan Source) are shown as escapes in `rich unicode` and in
+    env views.
+- **Ext: secrets.** `rich env` / `EnvView` mask secret names by whole segment
+  (`*_KEY`, `DB_PASS`, `MYSQL_PWD`, `*_DSN`, `*_COOKIE`, `JWT`, …). They also mask
+  credentials inside any value (URL passwords, token prefixes, JWTs, AWS key ids)
+  through `redact_value`. Masking is best effort.
+- **Ext: crashes and hangs.**
+  - Values that panicked `richf!` at run time can no longer escape the template's
+    markup.
+  - Stack-trace cause chains are capped at 64, and render and drop without
+    recursion.
+  - Hunk headers with impossible numbers and huge hex line widths are now errors
+    or clamped instead of overflowing.
+  - A CRLF `Suggestion` span no longer panics.
+  - libtest reports and wrapped `SourceView` lines (minified JSON in `rich view`)
+    are no longer quadratic.
+- **Ext: correctness.**
+  - `RichHandler::live` no longer drops lines containing control characters.
+  - Non-interactive `LiveCoordinator` output keeps the whole final snapshot.
+  - A truncated JUnit file is an error, not a pass.
+  - Tracing span fields are replaced, not duplicated.
+  - An empty `FORCE_COLOR` is ignored.
+  - QA screenshot names can't leave their directory.
+- **Ext: structured data (`rich inspect`) and CLI authoring.**
+  - YAML aliases are charged by the bytes they copy (64 MiB), and only aliased
+    anchors are cloned, which stops alias and nested-anchor memory bombs.
+  - JSONPath slices with huge steps no longer overflow; filters nest at most 128
+    levels, and a selection past 1,000,000 nodes is an error.
+  - YAML anchor names, C1 controls and DEL in keys and values, parse-error
+    messages and diagnostic snippets are all escaped.
+  - `--redact` masks dash spellings (`api-key`), everything under a secret key,
+    and XML element text.
+  - Generated completion scripts and man pages can no longer be injected into:
+    - zsh/fish command names and fish subcommand words;
+    - man page requests from multi-line fields.
+  - Man pages escape non-ASCII for groff.
+  - Completions offer each subcommand's own and global options.
+  - Minified (single-line) XML and TOML parse in linear time: 200,000 elements
+    took 35 s and now take 0.3 s.
+  - JSON `-0` reads as `0`.
+  - YAML duplicate keys, an INI key shadowed by a section, and content after the
+    XML root are errors.
+- **Core: speed.** `Text::divide` visits only the lines each span touches, as
+  upstream does. Rendering 40,000 highlighted lines in `rich view` went from
+  132 s to 11 s.
+- **CLI: terminal controls.**
+  - `rich view` and text `rich diff` neutralise terminal controls by default
+    (`--no-sanitize` opts out). Both are new commands with no upstream behaviour
+    to mirror, and `view` could otherwise pass clipboard-writing OSC 52 to the
+    terminal.
+  - `rich diff --sanitize` now covers patches, file names and C1 codes.
+  - `rich capture` always cleans its title, and with `--sanitize` also C1 codes
+    and the cast.
+  - File names in error messages show control characters as symbols.
+- **CLI: resources.**
+  - `hex` reads only the window it shows.
+  - `view`, `hex`, `unicode`, `inspect` and `capture` have documented size
+    limits (docs/cli.md "Limits").
+  - `capture` stops reading 1 s after the command exits, even while a background
+    child still holds the pipe.
+- **CLI: correctness.**
+  - `capture` gives the command the panel's real width.
+  - `config` and `doctor` no longer panic on a closed pipe.
+  - `rich <command> --help` shows that command's help.
+  - `bench compare` reports success in JSON, and a 0 ns baseline is a change.
+  - `hex --bytes-per-line` must be 1–4096.
+  - A bad `--select` is a usage error.
+- **CLI: config trust.** A working-directory `rich.toml` can no longer set
+  `theme_file` or turn off the new `view`/`diff` sanitising, the same rule as
+  `NO_COLOR`. Theme files must be regular files of at most 1 MiB, so a FIFO no
+  longer hangs `rich`.
+- **Tests.** Two intermittent failures were traced to the tests:
+  - `test_batch_v9.py` stopped a worker before it exec'd, which suspended the
+    parent in `posix_spawn`'s vfork. It now stops only exec'd workers.
+  - The XML linearity test compared against a wall-clock limit. It now compares
+    two sizes, which is how the quadratic XML parse above was found.
+- **Art.**
+  - GIF decoding is capped at 512 MiB (a 35-byte GIF used to abort on a 17 GB
+    allocation).
+  - Sixel rasters are capped at 16 megapixels before resizing, and repeat runs are
+    split at 65535.
+  - `TerminalDefault` keeps the colour of pixels at or above half opacity in every
+    palette, and in ASCII and Braille.
+  - Reduced-palette Sixel is 4–16× faster, with byte-identical output.
+  - Sixel errors now tell "not a terminal" from "terminal not known to support
+    Sixel", and `RICH_GRAPHICS=sixel|none` works as documented.
+- **Release docs.** A new crate's first version cannot use Trusted Publishing, so
+  `rs-rich-macros` 0.0.1 needs one token-authenticated upload before the ext tag
+  (`docs/BRANCHING.md`).
+- **Demo.** The tour shows `inspect`, `diff`, `view`, the `hex`, `unicode` and
+  `ansi explain` inspectors, a theme file, a redacted `capture`, Atkinson with
+  OKLab, and both alpha backgrounds.
+- **Migration.**
+  - `StackTrace` has a new public `omitted_causes` field.
+  - New enum variants: `unicode_inspect::Kind::Bidi`,
+    `ImageArtError::{SixelTooLarge, SixelNotSupported}`.
+  - `richf!` prints a value's `\[` literally; it used to unescape it.
+  - New ext items: `ArgSpec::global`, `env_inspect::redact_value`,
+    `hex::MAX_BYTES_PER_LINE`, and the `sanitize` helpers
+    `sanitize_terminal_and_bidi_controls` and `sanitize_single_line`.
+  - `junit::parse` rejects a truncated file.
+  - Core additions: `LivePanic`, `AutoLive::try_stop`,
+    `filesize::{decimal_signed, pick_unit_and_suffix_signed}`, `json::MAX_DEPTH`.
 
 ### Workflow renderables (0.0.11 workstream 10)
 
@@ -262,7 +412,7 @@ follows the accessibility policy (ASCII symbols, reduced motion).
   is that example's real output exported to SVG. `scripts/capture_guide.py`
   regenerates them (`--check` fails on a stale image).
 - **`scripts/smoke_cli.py`** runs every CLI command and mode end to end against
-  generated fixtures (75 cases, no network or terminal needed), checks exit codes
+  generated fixtures (86 cases, no network or terminal needed), checks exit codes
   and output, and regenerates the CLI screenshots with `--screenshots`.
 - **Fixes to existing docs:** the tutorial's `Live` example used an API that does
   not exist (it now includes the compiled one); a markup error exits 4, not 1;

@@ -197,3 +197,18 @@ fn a_stack_trace_renders_in_the_expanded_view() {
     assert!(text.contains("at /app/x.py:3"), "{text}");
     assert!(text.contains("KeyError: 'k'"), "{text}");
 }
+
+/// A span starting between a CRLF line's `\r` and `\n` is past the line once
+/// the `\r` is dropped; it used to slice out of bounds and panic.
+#[test]
+fn a_suggestion_between_cr_and_lf_inserts_at_the_line_end() {
+    for span in [3..3, 2..3, 3..4] {
+        let suggestion = Suggestion::replace("x", "ab\r\ncd", span.clone(), "Z")
+            .unwrap_or_else(|e| panic!("{span:?}: {e}"));
+        let diagnostic = Diagnostic::error("m")
+            .view(EventView::Expanded)
+            .suggestion(suggestion);
+        let text = plain(&diagnostic, 40);
+        assert!(text.contains("abZ"), "{span:?}: {text}");
+    }
+}

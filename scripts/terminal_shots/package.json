@@ -3,6 +3,7 @@
   "private": true,
   "description": "Replay real PTY output into xterm.js and screenshot it",
   "dependencies": {
+    "@xterm/addon-unicode11": "^0.8.0",
     "@xterm/xterm": "^5.5.0",
     "node-pty": "^1.1.0",
     "playwright-core": "^1.63.0"

@@ -263,9 +263,24 @@ impl Text {
             })
             .collect();
 
+        // Upstream binary-searches for the first and last line a span touches
+        // rather than visiting every line for every span, which made
+        // splitting a highlighted file quadratic in its line count. Offsets
+        // from `split` are sorted; for anything else keep the full scan, whose
+        // result the search would not reproduce.
+        let sorted = bounds.windows(2).all(|w| w[0] <= w[1]);
         for span in &self.spans {
-            for (index, window) in bounds.windows(2).enumerate() {
-                let (line_start, line_end) = (window[0], window[1]);
+            let lines_touched = if sorted {
+                // Lines ending at or before the span starts cannot hold it,
+                // nor can lines starting at or after it ends.
+                let first = bounds[1..].partition_point(|&end| end <= span.start);
+                let last = bounds[..bounds.len() - 1].partition_point(|&start| start < span.end);
+                first..last.max(first)
+            } else {
+                0..bounds.len() - 1
+            };
+            for index in lines_touched {
+                let (line_start, line_end) = (bounds[index], bounds[index + 1]);
                 let new_start = span.start.max(line_start) - line_start;
                 let new_end = span.end.min(line_end).saturating_sub(line_start);
                 if new_end > new_start {
@@ -653,6 +668,26 @@ impl Text {
         self.justify = Justify::Default;
         self.overflow = None;
         self.no_wrap = None;
+    }
+
+    /// Move the base style into a span over the whole text, ahead of the
+    /// existing spans — what `Text.join` does to each joined text. A falsy
+    /// style (null, or an empty name) adds no span, as `if text.style:` skips
+    /// it upstream.
+    pub(crate) fn base_style_to_span(&mut self) {
+        let style = std::mem::take(&mut self.style);
+        let falsy =
+            style.is_null_style() || matches!(&style, StyleType::Name(name) if name.is_empty());
+        if !falsy {
+            self.spans.insert(
+                0,
+                Span {
+                    start: 0,
+                    end: self.plain.len(),
+                    style,
+                },
+            );
+        }
     }
 
     /// Set the whole-text base style, resolved or named.
@@ -1270,6 +1305,97 @@ pub(crate) fn measure_plain(plain: &str) -> (usize, usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Each divided line's text and its spans as (start, end, style).
+    type Divided = Vec<(String, Vec<(usize, usize, String)>)>;
+
+    /// `divide` as it was before the per-span line search: every line for
+    /// every span. The search must give the same lines, spans and span order.
+    fn divide_by_scanning(text: &Text, offsets: &[usize]) -> Divided {
+        if offsets.is_empty() {
+            let spans = text
+                .spans
+                .iter()
+                .map(|s| (s.start, s.end, format!("{:?}", s.style)))
+                .collect();
+            return vec![(text.plain.clone(), spans)];
+        }
+        let mut bounds = vec![0];
+        bounds.extend(offsets.iter().copied());
+        bounds.push(text.plain.len());
+        let mut lines: Divided = bounds
+            .windows(2)
+            .map(|w| {
+                let (start, end) = (w[0].min(text.plain.len()), w[1].min(text.plain.len()));
+                let plain = if start < end {
+                    text.plain[start..end].to_string()
+                } else {
+                    String::new()
+                };
+                (plain, Vec::new())
+            })
+            .collect();
+        for span in &text.spans {
+            for (index, window) in bounds.windows(2).enumerate() {
+                let (line_start, line_end) = (window[0], window[1]);
+                let new_start = span.start.max(line_start) - line_start;
+                let new_end = span.end.min(line_end).saturating_sub(line_start);
+                if new_end > new_start {
+                    lines[index]
+                        .1
+                        .push((new_start, new_end, format!("{:?}", span.style)));
+                }
+            }
+        }
+        lines
+    }
+
+    #[test]
+    fn divide_matches_the_full_scan_for_sorted_offsets() {
+        let mut state = 0x5eed_u64;
+        let mut next = |bound: usize| {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (state >> 33) as usize % bound.max(1)
+        };
+        for case in 0..500 {
+            let len = next(40);
+            let plain: String = (0..len)
+                .map(|i| if i % 7 == 3 { '\n' } else { 'a' })
+                .collect();
+            let mut text = Text::new(plain.clone());
+            for i in 0..next(12) {
+                // Empty, overlapping and past-the-end spans included.
+                let start = next(len + 3);
+                let end = start + next(len + 3);
+                text.spans.push(Span {
+                    start,
+                    end,
+                    style: format!("s{i}").as_str().into(),
+                });
+            }
+            let mut offsets: Vec<usize> = (0..next(10)).map(|_| next(len + 4)).collect();
+            offsets.sort_unstable();
+            let divided: Divided = text
+                .divide(&offsets)
+                .into_iter()
+                .map(|line| {
+                    let spans = line
+                        .spans
+                        .iter()
+                        .map(|s| (s.start, s.end, format!("{:?}", s.style)))
+                        .collect();
+                    (line.plain, spans)
+                })
+                .collect();
+            assert_eq!(
+                divided,
+                divide_by_scanning(&text, &offsets),
+                "case {case}: {plain:?} {offsets:?}"
+            );
+        }
+    }
 
     /// An unbroken run of VS16 emoji must fold at the width like anything else.
     /// Measured per code point it did not: the heart reads one cell and the

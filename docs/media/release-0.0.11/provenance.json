@@ -1,0 +1,146 @@
+{
+  "binary": "rich (rs-rich-cli) 0.0.11 installed with cargo install from target/package/rs-rich-cli-0.0.11.crate, siblings (core, macros, ext, art) patched to their packaged .crate sources",
+  "binary_sha256": "eaa2f85fdb8641987af98ef00f66561d68f99ac3bc10eab6f153ec851d52112b",
+  "packaged_crates_sha256": {
+    "rs-rich-0.0.7.crate": "d9047ef79716b44e2e505b19d17e470f08bddf902e64723f61a75c490dee1ced",
+    "rs-rich-art-0.0.9.crate": "4d82b832608055dd279eb0291eec46afb945d657e484f57acc23192347751aed",
+    "rs-rich-cli-0.0.11.crate": "4679650a89ec6fa1c7ff7f4b70b0c2640ba4b4eb123fd2626764e74ae526fa52",
+    "rs-rich-ext-0.0.9.crate": "143961afdfbb6c5621a12d26404beefbd312cfb46538f8337944f032de934e56",
+    "rs-rich-macros-0.0.1.crate": "ab929b336cb810d4040782bc04f1918be007042f83250398edb7e5bce3f931ef"
+  },
+  "source_commit": "d60aa1f43e549e6110d65e654fc25d41777b9e04",
+  "renderer": "xterm.js 5 with Unicode 11 widths in headless Chromium replaying the captured PTY bytes verbatim",
+  "reproduce": "scripts/terminal_shots/make_cases.py --release 0.0.11 + shoot.js",
+  "cases": [
+    {
+      "name": "01-version-doctor",
+      "title": "Installed from the packaged crates: version and read-only diagnostics",
+      "exit_code": 0,
+      "pty": {
+        "cols": 100,
+        "rows": 25,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "334b50abd25b2945d85071b5686e08cf18ba07451e2e45bc96c9c9275423512f",
+      "png_sha256": "c392577cc5f36224dc2d770c45e62e37c025384e091a8879f09b97490159be3e"
+    },
+    {
+      "name": "02-inspect",
+      "title": "rich inspect: structured data as a tree",
+      "exit_code": 0,
+      "pty": {
+        "cols": 80,
+        "rows": 15,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "82a49b6caea33821297c630128f45b627f2ec5967f063bcdd1e01baba2f41211",
+      "png_sha256": "5992dbf6cbc37ebda0807085789d4c565839b47ae10359e10e586267ac1b4dd1"
+    },
+    {
+      "name": "03-diff",
+      "title": "rich diff: a text diff with line numbers and a summary",
+      "exit_code": 0,
+      "pty": {
+        "cols": 80,
+        "rows": 13,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "95c7c39e00e9c497db79f43c3cfa270503704c326f84ce4f897e3eb740ec6265",
+      "png_sha256": "ceb4ea619f442c50111fbe3754cdf7cc3a9632483281cc8ffaf14adf429e6a7b"
+    },
+    {
+      "name": "04-view-search",
+      "title": "rich view: detect, highlight and search any file",
+      "exit_code": 0,
+      "pty": {
+        "cols": 80,
+        "rows": 13,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "705245a66e0a51cd10867c49710575018268fe5a1db6a7bc98f6f76b1c63df93",
+      "png_sha256": "140f65528af858ee8efad97d6029ad657be4315658a7c574302ef6c151af792c"
+    },
+    {
+      "name": "05-hex-unicode",
+      "title": "rich hex and rich unicode: bytes and graphemes",
+      "exit_code": 0,
+      "pty": {
+        "cols": 90,
+        "rows": 24,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "532aef733b286a4640371fbbd16c486242caf9a503651d13984601c060909cce",
+      "png_sha256": "4c5cd935730d895aeaef363d12d46835999557f8c4319aa5752ecc67bb7acc88"
+    },
+    {
+      "name": "06-ansi-explain",
+      "title": "rich ansi explain: escape sequences in words",
+      "exit_code": 0,
+      "pty": {
+        "cols": 90,
+        "rows": 21,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "3dd5e3604f43ea41cc0e0f3fe1f7eb5d48ae4f954431c3ff354c884b0f8118dc",
+      "png_sha256": "8eff3be60eb621a44a3fa33fc08560cc3e340e1413507b54e47f7084c9431106"
+    },
+    {
+      "name": "07-capture-redact",
+      "title": "rich capture --redact (experimental): check captures before sharing",
+      "exit_code": 0,
+      "pty": {
+        "cols": 90,
+        "rows": 7,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "878090b9430370f6ec156dce46dfae5e39833b74732503daa53815bb87a24db5",
+      "png_sha256": "3cde3741ed16b352d66efbefcc1f019e4b79491928d2c55e2804d04efb641bdf"
+    },
+    {
+      "name": "08-image-atkinson-oklab",
+      "title": "Image: ANSI16 with Atkinson dithering and OKLab colour matching",
+      "exit_code": 0,
+      "pty": {
+        "cols": 100,
+        "rows": 20,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "f26b4ae6e3382c993a94d379effcead88ff70681a071311b70e591c5e6ee25dc",
+      "png_sha256": "cb6907b39e092b98f6f80741e373ac8a64e27f120ce6e3cd08a5db0fd94b65ed"
+    },
+    {
+      "name": "09-alpha-backgrounds",
+      "title": "Transparent pixels: checkerboard preview, then the terminal's own background",
+      "exit_code": 0,
+      "pty": {
+        "cols": 72,
+        "rows": 32,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "8abc6d6d444d552bfb14e917d327d42d76a4ea8280b7e0989847ee658732812f",
+      "png_sha256": "ed1e5ae782aa42b4764f1fc5a492b8b891d46791b43b3a3f1bf0976bc10d8b57"
+    },
+    {
+      "name": "10-theme-file",
+      "title": "An upstream [styles] theme file with --theme-file",
+      "exit_code": 0,
+      "pty": {
+        "cols": 80,
+        "rows": 4,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "da6c1fb3c04a5576e01ff60062a510d92a354dc056f31be57214a64fd0cb4b58",
+      "png_sha256": "333f012a8843617b400a18a7e0e7e619aaecdd729714726bf83cb0cad2b54459"
+    }
+  ]
+}

@@ -8,7 +8,7 @@
 [package]
 name = "rs-rich-ext"
 version = "0.0.9"
-description = "Extensions and the internal plugin registry for the `rich` Rust port"
+description = "Extensions for the `rich` Rust port: diagnostics, structured data, clap and tracing integration, diffs, workflow renderables and a plugin registry"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -19,7 +19,7 @@ readme = "README.md"
 # Must match the PACKAGE name, not the lib name: `docs.rs/rich` is a real,
 # unrelated crate, and crates.io metadata cannot be edited after publishing.
 documentation = "https://docs.rs/rs-rich-ext"
-keywords = ["terminal", "console", "plugin", "extension", "highlighter"]
+keywords = ["terminal", "console", "diagnostics", "clap", "tracing"]
 categories = ["command-line-interface", "text-processing"]
 include = ["src/**/*", "examples/**/*", "README.md", "LICENSE", "Cargo.toml"]
 

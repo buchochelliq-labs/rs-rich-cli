@@ -98,6 +98,10 @@ pub struct ArgSpec {
     /// positional).
     pub heading: Option<String>,
     pub positional: bool,
+    /// A global option applies to every subcommand below the command that
+    /// declares it, so completions offer it there too (clap's
+    /// `Arg::global`).
+    pub global: bool,
 }
 
 impl ArgSpec {
@@ -216,6 +220,11 @@ impl ArgSpec {
     }
     pub fn hidden(mut self, hidden: bool) -> Self {
         self.hidden = hidden;
+        self
+    }
+    /// Offer this option in every subcommand below its command, too.
+    pub fn global(mut self, global: bool) -> Self {
+        self.global = global;
         self
     }
     pub fn heading(mut self, heading: impl Into<String>) -> Self {

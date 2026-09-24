@@ -195,19 +195,21 @@ impl CliError {
 
     /// The error as an expanded, error-level [`Diagnostic`]: the headline,
     /// the usage as a note, the possible values as a note, then a help line
-    /// for the suggestions and the help flag.
+    /// for the suggestions and the help flag. Control characters (from the
+    /// command line, say) are escaped, `\u{1b}`-style.
     pub fn to_diagnostic(&self) -> Diagnostic {
-        let mut diagnostic = Diagnostic::error(self.headline()).view(EventView::Expanded);
+        let mut diagnostic =
+            Diagnostic::error(escape_controls(&self.headline())).view(EventView::Expanded);
         if let Some(usage) = &self.usage {
             for line in usage.lines() {
-                diagnostic = diagnostic.note(format!("usage: {line}"));
+                diagnostic = diagnostic.note(escape_controls(&format!("usage: {line}")));
             }
         }
         if !self.possible_values.is_empty() {
-            diagnostic = diagnostic.note(format!(
+            diagnostic = diagnostic.note(escape_controls(&format!(
                 "possible values: {}",
                 self.possible_values.join(", ")
-            ));
+            )));
         }
         if !self.suggestions.is_empty() {
             let noun = match self.kind {
@@ -216,21 +218,40 @@ impl CliError {
                 _ => ("argument", "arguments"),
             };
             let quoted: Vec<String> = self.suggestions.iter().map(|s| format!("'{s}'")).collect();
-            diagnostic = diagnostic.help(match quoted.len() {
+            diagnostic = diagnostic.help(escape_controls(&match quoted.len() {
                 1 => format!("a similar {} exists: {}", noun.0, quoted[0]),
                 _ => format!("similar {} exist: {}", noun.1, quoted.join(", ")),
-            });
+            }));
         }
         if let Some(flag) = &self.help_flag {
-            diagnostic = diagnostic.help(format!("for more information, try '{flag}'"));
+            diagnostic = diagnostic.help(escape_controls(&format!(
+                "for more information, try '{flag}'"
+            )));
         }
         diagnostic
     }
 }
 
+/// `text` with control characters escaped as `\u{…}` (newline, tab and CR
+/// as `\n`, `\t`, `\r`), so hostile arguments cannot drive the terminal.
+fn escape_controls(text: &str) -> String {
+    if !text.chars().any(char::is_control) {
+        return text.to_string();
+    }
+    text.chars()
+        .map(|c| match c {
+            '\n' => r"\n".to_string(),
+            '\t' => r"\t".to_string(),
+            '\r' => r"\r".to_string(),
+            c if c.is_control() => format!("\\u{{{:x}}}", c as u32),
+            c => c.to_string(),
+        })
+        .collect()
+}
+
 impl std::fmt::Display for CliError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.headline())
+        f.write_str(&escape_controls(&self.headline()))
     }
 }
 

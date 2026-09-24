@@ -158,8 +158,9 @@ pub(crate) fn parse(content: &str) -> Result<Node, DataError> {
                 None
             }
             Event::CData(data) => {
-                if let Some(element) = stack.last_mut() {
-                    element.text.push_str(&data.xml10_content());
+                match stack.last_mut() {
+                    Some(element) => element.text.push_str(&data.xml10_content()),
+                    None => return Err(error("text outside the root element", at(start))),
                 }
                 None
             }
@@ -171,8 +172,9 @@ pub(crate) fn parse(content: &str) -> Result<Node, DataError> {
                         .into_owned(),
                     Err(e) => return Err(error(e.to_string(), at(start))),
                 };
-                if let Some(element) = stack.last_mut() {
-                    element.text.push_str(&resolved);
+                match stack.last_mut() {
+                    Some(element) => element.text.push_str(&resolved),
+                    None => return Err(error("text outside the root element", at(start))),
                 }
                 None
             }

@@ -398,8 +398,10 @@ impl Suggestion {
             .map_or(source.len(), |i| span.start + i);
         let line = &source[line_start..line_end];
         let line = line.strip_suffix('\r').unwrap_or(line);
-        let a = span.start - line_start;
-        let b = (span.end.min(line_end) - line_start).min(line.len());
+        // A span starting at a CRLF line's `\n` is past the line once its
+        // `\r` is dropped: clamp it to the line's end.
+        let a = (span.start - line_start).min(line.len());
+        let b = (span.end.min(line_end) - line_start).clamp(a, line.len());
         let edited = format!("{}{replacement}{}", &line[..a], &line[b..]);
         let (left, count) = marker_cells(&edited, a, a + replacement.len());
         let mut shown = Text::new(edited);

@@ -66,7 +66,61 @@ fn mode_command(name: &str, aliases: &[&str], about: &str) -> CommandSpec {
     for alias in aliases {
         command = command.alias(*alias);
     }
-    command
+    command.args(command_options(name))
+}
+
+/// The options `rich <command> --help` lists for the commands that have
+/// their own, as copies of the root options (the root keeps their config
+/// keys). Every other `rich` option still applies.
+fn command_options(name: &str) -> Vec<ArgSpec> {
+    let names: &[&str] = match name {
+        "view" => &["search", "no-line-numbers", "sanitize", "pager", "width"],
+        "hex" => &[
+            "search",
+            "offset",
+            "length",
+            "bytes-per-line",
+            "group",
+            "width",
+        ],
+        "unicode" => &["limit", "width"],
+        "env" => &["show-secrets", "width"],
+        "capture" => &["cast", "redact", "redact-pattern", "sanitize", "width"],
+        "inspect" => &[
+            "format",
+            "select",
+            "find",
+            "flatten",
+            "table",
+            "max-depth",
+            "max-length",
+            "show-paths",
+            "redact",
+            "compare",
+        ],
+        "ansi" => &["ansi-inline", "escapes-only"],
+        "diff" => &[
+            "side-by-side",
+            "context",
+            "language",
+            "threshold",
+            "sanitize",
+        ],
+        _ => &[],
+    };
+    let all = root_args();
+    names
+        .iter()
+        .map(|long| {
+            let mut arg = all
+                .iter()
+                .find(|arg| arg.long.as_deref() == Some(*long))
+                .unwrap_or_else(|| panic!("no --{long} option"))
+                .clone();
+            arg.config_key = None;
+            arg
+        })
+        .collect()
 }
 
 fn render_modes() -> Vec<ArgSpec> {
@@ -113,7 +167,7 @@ fn render_modes() -> Vec<ArgSpec> {
         mode(
             "image",
             None,
-            "Render RESOURCE as a still image (ASCII/Braille/blocks/Sixel)",
+            "Render RESOURCE as a still image (ASCII/Braille/blocks/quadrants/Sixel)",
         ),
         mode(
             "inspect",
@@ -759,7 +813,8 @@ fn output_options() -> Vec<ArgSpec> {
             "sanitize",
             OUTPUT,
             "Replace input terminal controls, JSON/notebook strings, titles and captions \
-             with visible inert text",
+             with visible inert text. On by default for `rich view` and text `rich diff`; \
+             --no-sanitize turns it off there",
         ),
         option(
             "report",
@@ -1042,7 +1097,7 @@ pub(crate) fn spec() -> CommandSpec {
         (
             "image",
             &[][..],
-            "Render a still image as ASCII/Braille/blocks/Sixel (`--image`)",
+            "Render a still image as ASCII/Braille/blocks/quadrants/Sixel (`--image`)",
         ),
         ("rule", &[][..], "Draw a horizontal rule (`--rule`)"),
         (
@@ -1107,7 +1162,8 @@ pub(crate) fn spec() -> CommandSpec {
          - COLUMNS: console width (default 80 when unavailable)\n\
          - MANPAGER, PAGER: pager command; fallback is less (Unix), more.com (Windows)\n\
          - FORCE_COLOR: not supported; redirected stdout stays plain\n\
-         - RICH_SIXEL: 0/1 overrides Sixel detection for --image-mode auto",
+         - RICH_GRAPHICS: sixel forces Sixel on; none (or kitty, iterm) rules it out\n\
+         - RICH_SIXEL: 0/1 overrides Sixel detection when RICH_GRAPHICS is unset",
     )
     .section(
         "",

@@ -1,5 +1,6 @@
 //! Reference documentation (#408): Markdown and man pages from a
-//! [`CommandSpec`]. Output is deterministic: no date unless one is given.
+//! [`CommandSpec`]. Output is deterministic: a man page is dated only when a
+//! date is given or `SOURCE_DATE_EPOCH` is set.
 
 use super::paragraphs;
 use super::spec::{ArgSpec, CommandSpec};
@@ -188,13 +189,17 @@ fn markdown_command(out: &mut String, spec: &CommandSpec, path: &str, level: usi
 
 // ---------------------------------------------------------------- man
 
-/// Escape one line of running text for roff.
+/// Escape one line of running text for roff. Line breaks become spaces (a
+/// `.` after one would start a request), control characters are dropped,
+/// and anything outside ASCII becomes a named or `\[uXXXX]` escape, which
+/// groff and mandoc read whatever the input encoding.
 fn roff(text: &str) -> String {
-    let escaped = text.trim().replace('\\', r"\e").replace('-', r"\-");
+    let escaped = roff_keep(text.trim());
+    let escaped = escaped.trim();
     if escaped.starts_with(['.', '\'']) {
         format!(r"\&{escaped}")
     } else {
-        escaped
+        escaped.to_string()
     }
 }
 
@@ -249,7 +254,8 @@ fn man_names(arg: &ArgSpec) -> String {
 }
 
 /// A man page for `spec`. `section` is the manual section (`"1"`); `date`
-/// goes in the header only when given. Subcommands are listed under
+/// goes in the header when given, else the `SOURCE_DATE_EPOCH` date when
+/// that is set (reproducible builds), else none. Subcommands are listed under
 /// COMMANDS and SEE ALSO; [`to_man_pages`] writes their own pages.
 ///
 /// ```
@@ -320,11 +326,12 @@ fn man_page(
         ""
     };
     // The date stays unescaped: mandoc parses `YYYY-MM-DD` only without `\-`.
+    let date = date.map(str::to_string).or_else(source_date);
     out.push_str(&format!(
         ".TH {} {} \"{}\" {} {}\n",
         roff_arg(&page.to_uppercase()),
         roff_arg(section),
-        date.unwrap_or("").replace('"', ""),
+        roff_date(date.as_deref().unwrap_or("")),
         roff_arg(&source),
         roff_arg(manual)
     ));
@@ -493,9 +500,63 @@ fn man_page(
     out
 }
 
-/// [`roff`] without trimming, for the tail of a line.
+/// [`roff`] without trimming or the control-line guard, for the tail of a
+/// line.
 fn roff_keep(text: &str) -> String {
-    text.replace('\\', r"\e").replace('-', r"\-")
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str(r"\e"),
+            '-' => out.push_str(r"\-"),
+            '\n' | '\r' | '\t' => out.push(' '),
+            c if c.is_control() => {}
+            c if c.is_ascii() => out.push(c),
+            '\u{2014}' => out.push_str(r"\(em"),
+            '\u{2013}' => out.push_str(r"\(en"),
+            '\u{2018}' => out.push_str(r"\(oq"),
+            '\u{2019}' => out.push_str(r"\(cq"),
+            '\u{201c}' => out.push_str(r"\(lq"),
+            '\u{201d}' => out.push_str(r"\(rq"),
+            c => out.push_str(&format!(r"\[u{:04X}]", c as u32)),
+        }
+    }
+    out
+}
+
+/// A `.TH` date: quotes, backslashes and control characters dropped.
+fn roff_date(date: &str) -> String {
+    let date: String = date
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .filter(|c| !matches!(c, '"' | '\\') && c.is_ascii())
+        .collect();
+    date.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// `SOURCE_DATE_EPOCH` (seconds since 1970, UTC) as `YYYY-MM-DD`, the
+/// reproducible-builds date for undated pages.
+fn source_date() -> Option<String> {
+    let seconds: i64 = std::env::var("SOURCE_DATE_EPOCH")
+        .ok()?
+        .trim()
+        .parse()
+        .ok()?;
+    Some(civil_date(seconds.div_euclid(86_400)))
+}
+
+/// Days since 1970-01-01 as `YYYY-MM-DD` (proleptic Gregorian).
+fn civil_date(days: i64) -> String {
+    // Howard Hinnant's `civil_from_days`.
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02}")
 }
 
 #[cfg(test)]
@@ -508,6 +569,19 @@ mod tests {
         assert_eq!(roff("'quote"), r"\&'quote");
         assert_eq!(roff(r"a-b\c"), r"a\-b\ec");
         assert_eq!(roff_arg("say \"hi\""), r#""say \(dqhi\(dq""#);
+        assert_eq!(roff("a\n.so x"), r"a .so x");
+        assert_eq!(roff("\n.so x"), r"\&.so x");
+        assert_eq!(roff("é — …\u{1b}"), r"\[u00E9] \(em \[u2026]");
+        assert_eq!(roff_date("2026-01-01\"\n.so x\\"), "2026-01-01 .so x");
+    }
+
+    #[test]
+    fn civil_dates() {
+        assert_eq!(civil_date(0), "1970-01-01");
+        assert_eq!(civil_date(-1), "1969-12-31");
+        assert_eq!(civil_date(19_723), "2024-01-01");
+        assert_eq!(civil_date(19_782), "2024-02-29");
+        assert_eq!(civil_date(20_719), "2026-09-23");
     }
 
     #[test]

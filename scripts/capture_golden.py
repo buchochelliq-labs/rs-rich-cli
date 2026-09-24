@@ -359,6 +359,17 @@ def _vpad_table(
     return table
 
 
+def _zero_width_table(padding: tuple) -> Table:
+    """Columns squeezed to no content width: `Console.render` yields nothing
+    for a cell narrower than 1, so its vertical padding never appears."""
+    table = Table(box=box.SQUARE, padding=padding)
+    table.add_column("h")
+    table.add_column("i")
+    table.add_row("a", "b")
+    table.add_row("c", "d")
+    return table
+
+
 def _table_style() -> Table:
     table = Table(box=box.SQUARE, style="blue")
     table.add_column("Name")
@@ -676,6 +687,15 @@ RENDERABLE_CASES = [
     ("panel_fit_tree", 30, Panel.fit(_markup_tree())),
     ("align_table", 40, Align.center(_name_age_table())),
     ("align_panel_fit", 30, Align.right(Panel.fit("x"))),
+    # Vertical padding of cells whose width collapsed to zero.
+    ("table_zero_width_p10_w2", 2, _zero_width_table((1, 0))),
+    ("table_zero_width_p21_w1", 1, _zero_width_table((2, 1))),
+    ("table_zero_width_p21_w2", 2, _zero_width_table((2, 1))),
+    ("table_zero_width_p21_w3", 3, _zero_width_table((2, 1))),
+    ("table_zero_width_p21_w5", 5, _zero_width_table((2, 1))),
+    ("table_zero_width_p21_w7", 7, _zero_width_table((2, 1))),
+    ("panel_fit_zero_width_table_w6", 6, Panel.fit(_zero_width_table((1, 0)), box=box.SQUARE)),
+    ("panel_fit_zero_width_table_p21_w6", 6, Panel.fit(_zero_width_table((2, 1)))),
 ]
 
 HIGHLIGHT_RENDERABLE_HEADER = """\
@@ -1290,6 +1310,19 @@ PROGRESS_TIME_CASES: list[tuple[str, dict]] = [
         "columns": [["description"], ["filesize"], ["total_filesize"], ["download", False], ["download", True], ["speed"]],
         "steps": [["time", 0], ["add", "iso", 3500000000, 0, True], ["time", 1], ["advance", 0, 1250000],
                   ["time", 3], ["advance", 0, 2500000], ["render", 80]],
+    }),
+    # Negative counts go through `int()` upstream, not a clamp to zero:
+    # `filesize.decimal(-8)` is "-8 bytes" and the download column "-8/100 bytes".
+    ("negative_completed", {
+        "columns": [["description"], ["filesize"], ["total_filesize"], ["download", False],
+                    ["download", True], ["mofn"]],
+        "steps": [["time", 0], ["add", "neg", 100, -8.7, True], ["add", "big", 5000, -1234, True],
+                  ["add", "none", None, -3, True], ["add", "total", -5, 0, True], ["render", 90]],
+    }),
+    ("negative_speed", {
+        "columns": [["description"], ["speed"], ["task_progress", True]],
+        "steps": [["time", 0], ["add", "back", None, 5000, True], ["time", 1], ["advance", 0, -1500],
+                  ["time", 2], ["advance", 0, -1500], ["render", 60]],
     }),
     ("expand_default_bar", {
         "expand": True, "columns": [["description"], ["bar"], ["percentage"]],
@@ -2178,6 +2211,171 @@ def _measure_input(kind: str, source: str, padding: int):
     return JSON(source)
 
 
+PRINT_JUSTIFY_HEADER = """\
+# Golden parity fixtures for print-level justify of a printed Text — captured
+# from real Python `rich`. Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<width>\t<justify>\t<expected output as JSON>
+# Captured via `Console.print(text, justify=...)`. `Console.print` passes the
+# text through `Text("").join([text])`, which turns the text's base style into
+# a leading span: the justify padding is therefore left unstyled.
+# Console: force_terminal=True, color_system="truecolor", highlight=False.
+# The Rust test builds the text matching each <name>; keep them in sync.
+"""
+
+
+def _print_justify_spans() -> Text:
+    text = Text("ab cd", style="bold")
+    text.stylize("red", 0, 2)
+    return text
+
+
+PRINT_JUSTIFY_CASES = [
+    ("base_style_center", 10, lambda: Text("hi", style="on red"), "center"),
+    ("base_style_right", 10, lambda: Text("hi", style="on red"), "right"),
+    ("base_style_left", 10, lambda: Text("hi", style="on red"), "left"),
+    ("base_style_default", 10, lambda: Text("hi", style="on red"), "default"),
+    ("base_style_and_spans_center", 11, _print_justify_spans, "center"),
+    ("base_style_wrapped_center", 8, lambda: Text("hello world", style="on blue"), "center"),
+    ("base_style_full", 8, lambda: Text("aa bb cc dd", style="on blue"), "full"),
+    ("base_style_multiline_right", 6, lambda: Text("a\nbcd", style="on green"), "right"),
+    ("markup_span_center", 10, lambda: Text.from_markup("[on red]hi[/]"), "center"),
+]
+
+
+MARKDOWN_LINKS_HEADER = """\
+# Golden parity fixtures for MARKDOWN LINK DESTINATIONS — captured from real
+# Python `rich`. Regenerate with: python scripts/capture_golden.py
+#
+# markdown-it runs every link, image and autolink destination through
+# `normalizeLink` (percent-encoding + punycode host) and an autolink's text
+# through `normalizeLinkText` before rich sees them.
+# Format: <name>\t<markdown source as JSON>\t<hyperlinks: true|false>\t<output as JSON>
+# Console: force_terminal=True, color_system="truecolor", width=60,
+#          highlight=False. OSC 8 `id=<n>` parameters (random upstream, absent
+#          in the port) are stripped from the captured output.
+"""
+
+MARKDOWN_LINKS_CASES = [
+    ("osc_in_destination", "[x](<http://a\x1b]0;PWN\x07>) end"),
+    ("idn_host_and_path", "[y](http://\u00e9.com/\u00fc)"),
+    ("space_in_angle_destination", "[z](<http://a b>)"),
+    ("existing_escapes_kept", "[p](http://a/%41%zz%2F)"),
+    ("uppercase_scheme_not_punycoded", "[u](HTTP://\u00e9.com)"),
+    ("mailto_link", "[m](mailto:\u00fc@\u00e9.de)"),
+    ("reference_link", "[r][1]\n\n[1]: http://\u00e9.com/\u00fc"),
+    ("autolink_decodes_text", "<http://xn--9ca.com/%C3%BC%2F%25>"),
+    ("email_autolink", "<a+b@x.de>"),
+    ("image_destination", "![alt](<http://\u00e9.com/a b.png>)"),
+    ("image_without_alt", "![](<http://\u00e9.com/\u00fc.png>)"),
+    ("linked_image", "[![a](http://x/\u00fc.png)](http://\u00e9.com)"),
+    # `validateLink` refuses these, so the link/image/autolink rule fails and
+    # the source prints as text (the label's own markup still parses).
+    ("refused_javascript_link", "[j](javascript:alert(1)) t"),
+    ("refused_link_keeps_label_markup", "[*j*](vbscript:x)"),
+    ("refused_uppercase_file_link", "[f](FILE:///etc/passwd)"),
+    ("refused_autolink", "<javascript:alert(1)>"),
+    ("refused_data_image", "![i](data:text/html,x)"),
+    ("allowed_data_image_link", "[ok](data:image/png;base64,xx)"),
+    # An autolink is consumed whole: its tildes are not strikethrough.
+    ("autolink_tildes_literal", "<http://a~~b~~c>"),
+]
+
+
+PYFORMAT_HEADER = """\
+# Parity fixtures for Python's format() mini-language, as `TextColumn`
+# templates reach it (`rich::pyformat::format_value`). Captured from the
+# CPython running this script (3.11+, for the `z` flag; 3.11-3.13 agree).
+# Regenerate with: python scripts/capture_golden.py
+#
+# Format: <value as JSON>\t<spec as JSON>\t<format(value, spec) as JSON, or null
+#   where Python raises>
+# Values: {"float": repr}, {"int": n}, {"str": s}, {"bool": b}, {"none": null}.
+"""
+
+
+def _pyformat_cases() -> list:
+    """A deterministic sweep of values x specs (several thousand cases)."""
+    floats = [
+        0.0, -0.0, 0.5, 1.0, 1.5, 2.5, 12.5, 9.99, 99.95, 0.125, 100.0, 123.456,
+        -123.456, 0.1, 0.0001, 1e-05, -0.0001, 1.23e-10, 1234567.891, 123456789.0,
+        1e15, 1e16, 1.5e16, 1e100, float("inf"), float("-inf"), float("nan"),
+    ]
+    ints = [0, 7, -42, 255, -1, 1234567, 10**15, 65]
+    strs = ["ab", "h\u00e9llo", "", "\u754cx"]
+    flag_sets = ["", "#", "0", "z", "+", " ", ",", "_", "-", "z#", "+,", "#0", " _", "z0"]
+    aligns = ["", "<", ">", "^", "=", "*^", "0>", "x="]
+    widths = ["", "1", "8", "12"]
+    precisions = ["", ".0", ".1", ".2", ".3", ".6", ".10"]
+    float_types = ["", "e", "E", "f", "F", "g", "G", "%", "n"]
+    int_types = ["", "d", "n", "x", "X", "o", "b", "c", "e", "f", "g", "%"]
+    str_types = ["", "s"]
+
+    cases = []
+    counter = 0
+
+    def pick(options):
+        nonlocal counter
+        counter += 1
+        return options[(counter * 7 + counter // len(options)) % len(options)]
+
+    def spec_for(kind, precision):
+        return pick(aligns) + pick(flag_sets) + pick(widths) + precision + kind
+
+    for value in floats:
+        for kind in float_types:
+            for precision in precisions:
+                cases.append(({"float": repr(value)}, spec_for(kind, precision)))
+                cases.append(({"float": repr(value)}, pick(flag_sets) + precision + kind))
+    for value in ints:
+        for kind in int_types:
+            for _ in range(4):
+                precision = pick(precisions) if kind in ("e", "f", "g", "%") else ""
+                cases.append(({"int": value}, spec_for(kind, precision)))
+    for value in strs:
+        for kind in str_types:
+            for precision in ["", ".0", ".2", ".4"]:
+                for _ in range(3):
+                    cases.append(({"str": value}, spec_for(kind, precision)))
+    for flag in [True, False]:
+        for spec in ["", "d", "5", ">5", "05", "x", ".1f", "s", ","]:
+            cases.append(({"bool": flag}, spec))
+    for spec in ["", "s", "5", ">5", "d"]:
+        cases.append(({"none": None}, spec))
+    # Named regressions from the audit.
+    named = [
+        (12.5, ".2"), (2.5, ".0"), (1e16, ","), (1e16, "_"), (float("inf"), "%"),
+        (float("nan"), ".1%"), (123.0, "#g"), (123.0, "#.3g"), (-0.0001, "z.2f"),
+        (-0.0, "z"), (1234.5, "n"), (1234.5, ".3n"), (0.0, ".2"), (-0.0, ".2"),
+        (1e-05, ","), (1234567.891, ",.2e"), (1e100, ",.2f"),
+    ]
+    for value, spec in named:
+        cases.append(({"float": repr(value)}, spec))
+    cases.append(({"str": "h\u00e9llo"}, "08"))
+    cases.append(({"str": "ab"}, "=5"))
+    cases.append(({"str": "ab"}, "05s"))
+    cases.append(({"int": 1234}, ",n"))
+    cases.append(({"int": 1234}, "n"))
+
+    seen = set()
+    unique = []
+    for value, spec in cases:
+        key = (json.dumps(value), spec)
+        if key not in seen:
+            seen.add(key)
+            unique.append((value, spec))
+    return unique
+
+
+def _pyformat_value(value: dict):
+    (kind, raw), = value.items()
+    if kind == "float":
+        return float(raw)
+    if kind == "none":
+        return None
+    return raw
+
+
 def main() -> None:
     version = verify_upstream_version()
     print(f"verified Python rich {version} against UPSTREAM.toml")
@@ -2607,6 +2805,63 @@ def main() -> None:
         tlines.append(f"{theme_name}\t{json.dumps(payload)}")
     themes_path.write_text("\n".join(tlines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(tlines) - 1} terminal themes to {themes_path}")
+
+    # --- Python format() mini-language ---------------------------------
+    pyformat_path = golden_dir() / "pyformat.tsv"
+    pflines = [PYFORMAT_HEADER.rstrip("\n")]
+    for value, spec in _pyformat_cases():
+        try:
+            result = json.dumps(format(_pyformat_value(value), spec), ensure_ascii=False)
+        except (ValueError, TypeError, OverflowError):
+            result = "null"
+        pflines.append(
+            f"{json.dumps(value, ensure_ascii=False)}\t{json.dumps(spec)}\t{result}"
+        )
+    pyformat_path.write_text("\n".join(pflines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(pflines) - 1} format() cases to {pyformat_path}")
+
+    # --- markdown link destinations ------------------------------------
+    import re as _re
+
+    links_path = golden_dir() / "markdown_links.tsv"
+    mllines = [MARKDOWN_LINKS_HEADER.rstrip("\n")]
+    for name, source in MARKDOWN_LINKS_CASES:
+        for hyperlinks in (False, True):
+            mlconsole = Console(
+                force_terminal=True,
+                color_system="truecolor",
+                width=60,
+                highlight=False,
+                no_color=False,
+            )
+            with mlconsole.capture() as capture:
+                mlconsole.print(Markdown(source, hyperlinks=hyperlinks))
+            output = _re.sub(r"\x1b\]8;id=\d+;", "\x1b]8;;", capture.get())
+            mllines.append(
+                f"{name}\t{json.dumps(source)}\t{str(hyperlinks).lower()}"
+                f"\t{json.dumps(output)}"
+            )
+    links_path.write_text("\n".join(mllines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(MARKDOWN_LINKS_CASES) * 2} markdown link cases to {links_path}")
+
+    # --- print-level justify of a printed Text -------------------------
+    pj_path = golden_dir() / "print_justify.tsv"
+    pjlines = [PRINT_JUSTIFY_HEADER.rstrip("\n")]
+    for name, width, build, justify in PRINT_JUSTIFY_CASES:
+        pjconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=width,
+            highlight=False,
+            no_color=False,
+        )
+        with pjconsole.capture() as capture:
+            pjconsole.print(build(), justify=None if justify == "default" else justify)
+        pjlines.append(
+            f"{name}\t{width}\t{justify}\t{json.dumps(capture.get(), ensure_ascii=False)}"
+        )
+    pj_path.write_text("\n".join(pjlines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(PRINT_JUSTIFY_CASES)} print justify cases to {pj_path}")
 
     # --- exports --------------------------------------------------------
     # These were previously pasted into Rust source as string literals, which

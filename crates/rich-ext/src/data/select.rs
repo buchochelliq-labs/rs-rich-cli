@@ -185,10 +185,21 @@ mod jsonpath {
         Filter(Box<Expr>),
     }
 
+    /// How deeply `!` and parentheses may nest in a filter. Parsing and
+    /// evaluation recurse per level, so the limit keeps hostile expressions
+    /// off the end of the stack. (`||` and `&&` chains are flat lists and
+    /// cost no depth.)
+    const MAX_FILTER_DEPTH: usize = 128;
+
+    /// How many nodes one selection may produce (or visit through
+    /// recursive descent) before it stops with an error: each carries its
+    /// own path, and chained `..*` steps multiply.
+    const MAX_SELECTED: usize = 1_000_000;
+
     #[derive(Clone, Debug)]
     enum Expr {
-        Or(Box<Expr>, Box<Expr>),
-        And(Box<Expr>, Box<Expr>),
+        Or(Vec<Expr>),
+        And(Vec<Expr>),
         Not(Box<Expr>),
         Compare(Operand, Op, Operand),
         Exists(Operand),
@@ -214,6 +225,8 @@ mod jsonpath {
     struct Parser {
         chars: Vec<char>,
         pos: usize,
+        /// Current `!` / parenthesis nesting inside a filter.
+        depth: usize,
     }
 
     fn is_name_char(c: char) -> bool {
@@ -444,41 +457,62 @@ mod jsonpath {
         }
 
         fn or(&mut self) -> Result<Expr, SelectError> {
-            let mut left = self.and()?;
+            let mut terms = vec![self.and()?];
             loop {
                 self.blanks();
                 if self.peek() == Some('|') && self.peek_at(1) == Some('|') {
                     self.pos += 2;
-                    left = Expr::Or(Box::new(left), Box::new(self.and()?));
+                    terms.push(self.and()?);
+                } else if terms.len() == 1 {
+                    return Ok(terms.pop().expect("one term"));
                 } else {
-                    return Ok(left);
+                    return Ok(Expr::Or(terms));
                 }
             }
         }
 
         fn and(&mut self) -> Result<Expr, SelectError> {
-            let mut left = self.unary()?;
+            let mut terms = vec![self.unary()?];
             loop {
                 self.blanks();
                 if self.peek() == Some('&') && self.peek_at(1) == Some('&') {
                     self.pos += 2;
-                    left = Expr::And(Box::new(left), Box::new(self.unary()?));
+                    terms.push(self.unary()?);
+                } else if terms.len() == 1 {
+                    return Ok(terms.pop().expect("one term"));
                 } else {
-                    return Ok(left);
+                    return Ok(Expr::And(terms));
                 }
             }
+        }
+
+        /// Enter one level of `!` or parentheses.
+        fn nest(&mut self) -> Result<(), SelectError> {
+            if self.depth >= MAX_FILTER_DEPTH {
+                return self.error(format!(
+                    "filter nested too deeply (more than {MAX_FILTER_DEPTH} levels)"
+                ));
+            }
+            self.depth += 1;
+            Ok(())
         }
 
         fn unary(&mut self) -> Result<Expr, SelectError> {
             self.blanks();
             if self.peek() == Some('!') && self.peek_at(1) != Some('=') {
+                self.nest()?;
                 self.pos += 1;
-                return Ok(Expr::Not(Box::new(self.unary()?)));
+                let inner = self.unary()?;
+                self.depth -= 1;
+                return Ok(Expr::Not(Box::new(inner)));
             }
-            if self.eat('(') {
+            if self.peek() == Some('(') {
+                self.nest()?;
+                self.pos += 1;
                 let inner = self.or()?;
                 self.blanks();
                 self.expect(')')?;
+                self.depth -= 1;
                 return Ok(inner);
             }
             let left = self.operand()?;
@@ -526,9 +560,10 @@ mod jsonpath {
                                         if index < 0 {
                                             negatives.push(keys.len() as i64);
                                         }
-                                        keys.push(
-                                            PathSegment::Index(index.unsigned_abs() as usize),
-                                        );
+                                        // `unsigned_abs` fits even `i64::MIN`.
+                                        let magnitude = usize::try_from(index.unsigned_abs())
+                                            .unwrap_or(usize::MAX);
+                                        keys.push(PathSegment::Index(magnitude));
                                     }
                                 }
                                 self.blanks();
@@ -595,6 +630,7 @@ mod jsonpath {
             let mut parser = Parser {
                 chars: expr.chars().collect(),
                 pos: 0,
+                depth: 0,
             };
             if parser.chars.iter().all(|c| c.is_whitespace()) {
                 return parser.error("empty expression");
@@ -634,12 +670,13 @@ mod jsonpath {
             node = match key {
                 PathSegment::Key(k) => node.get(k)?,
                 PathSegment::Index(n) => {
+                    // A negative index counts back from the end.
                     let n = if negatives.contains(&(i as i64)) {
-                        normalize(-(*n as i64), node.len())
+                        node.len().checked_sub(*n)?
                     } else {
-                        *n as i64
+                        *n
                     };
-                    node.index(usize::try_from(n).ok()?)?
+                    node.index(n)?
                 }
             };
         }
@@ -696,8 +733,8 @@ mod jsonpath {
 
     fn eval(expr: &Expr, current: &Node, root: &Node) -> bool {
         match expr {
-            Expr::Or(a, b) => eval(a, current, root) || eval(b, current, root),
-            Expr::And(a, b) => eval(a, current, root) && eval(b, current, root),
+            Expr::Or(terms) => terms.iter().any(|t| eval(t, current, root)),
+            Expr::And(terms) => terms.iter().all(|t| eval(t, current, root)),
             Expr::Not(a) => !eval(a, current, root),
             Expr::Exists(o) => match o {
                 Operand::Literal(node) => node.value == Value::Bool(true),
@@ -747,7 +784,10 @@ mod jsonpath {
                         let mut i = lower;
                         while i < upper {
                             push(i);
-                            i += step;
+                            let Some(following) = i.checked_add(step) else {
+                                break;
+                            };
+                            i = following;
                         }
                     } else {
                         let upper = clamp(
@@ -760,7 +800,10 @@ mod jsonpath {
                         let mut i = upper;
                         while lower < i {
                             push(i);
-                            i += step;
+                            let Some(following) = i.checked_add(step) else {
+                                break;
+                            };
+                            i = following;
                         }
                     }
                 }
@@ -775,9 +818,18 @@ mod jsonpath {
         }
     }
 
+    fn too_many() -> SelectError {
+        SelectError::new(
+            format!("the selection matches more than {MAX_SELECTED} nodes"),
+            None,
+        )
+    }
+
     impl Selector for JsonPathSelector {
         fn select<'a>(&self, root: &'a Node) -> Result<Vec<(Path, &'a Node)>, SelectError> {
             let mut current: Vec<(Path, &'a Node)> = vec![(Path::root(), root)];
+            // Nodes visited through recursive descent, over all steps.
+            let mut visited = 0usize;
             for step in &self.steps {
                 let mut next = Vec::new();
                 for (path, node) in &current {
@@ -786,6 +838,10 @@ mod jsonpath {
                         let mut all = Vec::new();
                         let mut stack = vec![(path.clone(), *node)];
                         while let Some((p, n)) = stack.pop() {
+                            visited += 1;
+                            if visited > MAX_SELECTED {
+                                return Err(too_many());
+                            }
                             let mut kids = children(&p, n);
                             kids.reverse();
                             all.push((p, n));
@@ -798,6 +854,9 @@ mod jsonpath {
                     for (target_path, target) in &targets {
                         for sel in &step.selectors {
                             apply(sel, target_path, target, root, &mut next);
+                        }
+                        if next.len() > MAX_SELECTED {
+                            return Err(too_many());
                         }
                     }
                 }

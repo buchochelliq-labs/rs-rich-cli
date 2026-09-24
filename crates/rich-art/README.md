@@ -1,13 +1,14 @@
 # rich-art
 
-ASCII-art renderables for [`rich`](../rich): **FIGlet-style text banners**
-(`figlet(6)` / `pyfiglet`), **image → ASCII/ANSI/Braille art** (`jp2a`), and **animated
-GIF playback** in the terminal.
+Art renderables for [`rich`](https://crates.io/crates/rs-rich): **FIGlet-style
+text banners** (`figlet(6)` / `pyfiglet`), **images as ASCII, Braille, half
+blocks, quadrant blocks or Sixel graphics** (`jp2a` and beyond), **animated GIF
+playback** and **perceptual image diffs** in the terminal.
 
 | Feature | Default | Pulls in |
 | --- | --- | --- |
 | FIGlet banners | ✅ always | no optional dependencies — just `rs-rich` |
-| `image` — image → ASCII/ANSI/Braille art | off | `image` (png + jpeg decoders) |
+| `image` — images as ASCII, Braille, half blocks or quadrants | off | `image` (png + jpeg decoders) |
 | `gif` — animated GIF playback | off | `image` + its gif decoder |
 | `sixel` — real pixels through the Sixel graphics protocol | off | `image` + `icy_sixel` |
 
@@ -86,7 +87,7 @@ so images aren't stretched. `invert()` suits light-on-dark terminals, and
 `ramp()` takes a custom density ramp.
 
 `ImageArt` is the reusable capability-aware facade for CLI and application
-code. It selects ASCII, half-block, Braille, or Sixel rendering from
+code. It selects ASCII, half-block, quadrant, Braille, or Sixel rendering from
 `ImageOptions` and `RenderCapabilities`. By default, sizing and alpha handling
 remain in the individual renderers. Optional fitting and background compositing
 preprocess still images consistently across backends:
@@ -114,11 +115,14 @@ Fitting requires positive explicit width and height, clamps width to the
 available terminal columns, and preserves aspect ratio assuming cells are twice
 as tall as wide. Output and intermediate rasters are limited to 16 megapixels.
 `background()` composites transparency before resizing and colors contain
-padding; fitting without a background uses black. Use `render()` to receive
-validation errors. These APIs require the `image` feature; crop anchors are part
-of the independently published art 0.0.6 release.
+padding; fitting without a background uses black. `background_mode()` takes an
+`ImageBackground`: `Color([r, g, b])` (what `background()` sets),
+`TerminalDefault` (leave pixels under half opacity unpainted so the terminal's
+own background shows through) or `Checkerboard` (a two-tone gray checkerboard).
+Use `render()` to receive validation errors. These APIs require the `image`
+feature; crop anchors have been available since art 0.0.6.
 
-Art 0.0.7 source preparation adds optional palette reduction and diffusion:
+Optional palette reduction and dithering:
 
 ```rust
 use rich_art::{Dither, ImageArt, ImageColorMode, ImageMode};
@@ -131,21 +135,23 @@ let art = ImageArt::from_path("photo.png")?
 ```
 
 `ImageColorMode::TrueColor` and `Dither::None` remain the defaults. The reduced
-palettes (`Ansi256`, `Ansi16`, `Grayscale`) and both dithers (Floyd–Steinberg,
-Bayer 4×4) work with the ASCII, half-block and quadrant backends; dithering needs
-a reduced palette. Braille and Sixel reject them, and so does an Auto mode that
-resolves to one of those, with a validation error from `render()`. The builders
-preserve the public `ImageOptions` struct shape and require the `image` feature.
-The [images guide](../../docs/guide/art/images.md) shows every mode and option.
+palettes (`Ansi256`, `Ansi16`, `Grayscale`) and the three dithers
+(Floyd–Steinberg, Bayer 4×4, Atkinson) work with the ASCII, half-block, quadrant
+and Sixel backends and with GIF frames; dithering needs a reduced palette, and
+Sixel then encodes exactly the palette's colours. Braille is monochrome and
+rejects a reduced palette, as does an Auto mode that resolves to Braille, with
+a validation error from `render()`. The builders preserve the public
+`ImageOptions` struct shape and require the `image` feature. The
+[images guide](https://buchochelliq-labs.github.io/rs-rich-cli/guide/art/images/) shows every mode and option.
 
 Palette reduction runs after fitting, background compositing and final sampling,
-before glyph selection. It chooses fixed ANSI256 entries 16–255 with squared
-encoded-RGB distance and lowest-index ties; terminal-dependent entries 0–15 are
-excluded. Diffusion scans left-to-right, top-to-bottom and discards error at image
-boundaries. This is deterministic rather than perceptually calibrated. GIF,
-Braille and Sixel preprocessing remain outside this slice. The
-[0.0.9 CLI / 0.0.7 art preparation notes](../../docs/releases/0.0.9.md) track pending
-combined validation and publication gates.
+before glyph selection. ANSI256 uses fixed entries 16–255 (terminal-dependent
+entries 0–15 are excluded). By default the nearest colour is the one at the
+smallest squared encoded-RGB distance, with lowest-index ties;
+`color_distance(ColorDistance::Oklab)` measures perceptually in OKLab instead,
+which keeps hues truer on small palettes. Diffusion scans left-to-right,
+top-to-bottom and discards error at image boundaries; the output is
+deterministic.
 
 The image APIs intentionally live in `rich-art`, the repository's dedicated
 art crate, rather than `rich-ext`: `rich-ext` provides console/plugin
@@ -203,9 +209,10 @@ fit/anchor, final sampling, palette quantization and glyph selection. Geometry
 alone retains alpha. Grayscale uses `(77R + 150G + 29B + 128) >> 8` after
 compositing; contain padding uses the same grayscale background.
 
-`Dither::Bayer4x4` is an opt-in, origin-anchored ordered dither for ANSI256 ASCII
-and half-block output. Truecolor, Braille and Sixel reject this combination.
-Exhaustive matches on `Dither` must handle the new variant. Defaults retain the
+`Dither::Bayer4x4` is an opt-in, origin-anchored ordered dither, and
+`Dither::Atkinson` an error diffusion that spreads six eighths of the error.
+Like Floyd–Steinberg, both need a reduced palette; truecolor and Braille reject
+them. Exhaustive matches on `Dither` must handle every variant. Defaults retain the
 previous output. Still-image transforms do not apply to animation or image diff.
 
 Explicit-context Auto selects ASCII for `unicode=false`. Explicit Blocks/Braille

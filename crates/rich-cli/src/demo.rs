@@ -30,7 +30,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
     };
     if options.list {
         println!("core       Core renderables and extensions");
-        println!("workflows  Configuration, batch, exports and watch");
+        println!("workflows  Configuration, batch, exports, watch, inspectors and capture");
         println!(
             "art        {}",
             if cfg!(feature = "art") {
@@ -310,6 +310,7 @@ fn tour(no_color: bool, delay: Duration, group: Option<&str>) -> std::io::Result
             [&file("first.json"), &file("second.json")],
             &watch_child,
         )?;
+        tools(&console, no_color, delay, root.path())?;
         section(&console, delay, "Pager, input and confidence controls");
         console.print(&Text::new("--auto-pager opens a pager for tall TTY output; --no-pager opts out.\nURL fetch, encoding, sanitization and JSON reports support scripts and CI.\nThe tour stays offline and does not open an external pager."));
         command(
@@ -334,6 +335,73 @@ fn tour(no_color: bool, delay: Duration, group: Option<&str>) -> std::io::Result
         "Try rich --help for every option. Run rich --demo again to replay the tour.",
     ));
     Ok(())
+}
+
+/// The 0.0.11 inspectors and viewers: structured data, text diffs, the
+/// universal viewer, byte/grapheme/escape inspectors, theme files and a
+/// redacted capture. Every input is written into the tour's temporary
+/// directory, and the captured command is a shell one-liner, so it stays
+/// offline and portable.
+fn tools(console: &Console, no_color: bool, delay: Duration, root: &Path) -> std::io::Result<()> {
+    let file = |name: &str| root.join(name).to_string_lossy().into_owned();
+    for (name, contents) in [
+        (
+            "deploy.yaml",
+            "service: api\nreplicas: 3\nimage:\n  name: rs-rich\n  tag: \"0.0.11\"\nports: [8080, 8443]\n",
+        ),
+        ("old.toml", "retries = 2\ntimeout = 30\nmode = \"fast\"\n"),
+        ("new.toml", "retries = 3\ntimeout = 30\nmode = \"safe\"\nlog = true\n"),
+        ("text.txt", "café 👩‍👩‍👧\n"),
+        ("codes.txt", "\x1b[1;31mError\x1b[0m done\n"),
+        ("demo.theme", "[styles]\nrelease = bold magenta\n"),
+    ] {
+        std::fs::write(file(name), contents)?;
+    }
+    let run = |label: &str, args: &[&str]| {
+        let args = args
+            .iter()
+            .map(|arg| match *arg {
+                "deploy.yaml" | "old.toml" | "new.toml" | "text.txt" | "codes.txt"
+                | "demo.theme" => file(arg),
+                other => other.to_owned(),
+            })
+            .collect();
+        command(console, no_color, label, args)
+    };
+
+    section(console, delay, "Inspect structured data");
+    run("inspect deploy.yaml", &["inspect", "deploy.yaml"])?;
+    section(console, delay, "Text diffs");
+    run("diff old.toml new.toml", &["diff", "old.toml", "new.toml"])?;
+    section(console, delay, "View any file");
+    run("view deploy.yaml", &["view", "deploy.yaml"])?;
+    section(console, delay, "Bytes, graphemes and escape sequences");
+    run("hex text.txt", &["hex", "text.txt"])?;
+    run("unicode text.txt", &["unicode", "text.txt"])?;
+    run("ansi explain codes.txt", &["ansi", "explain", "codes.txt"])?;
+    section(console, delay, "Upstream theme files");
+    run(
+        "--theme-file demo.theme --print '[release]0.0.11[/] adds inspectors'",
+        &[
+            "--theme-file",
+            "demo.theme",
+            "--print",
+            "[release]0.0.11[/] adds inspectors",
+        ],
+    )?;
+    section(console, delay, "Capture a command, with redaction");
+    console.print(&Text::new(
+        "Redaction is experimental and best effort: check captures before sharing them.",
+    ));
+    let secret = "echo deploy token=ghp_0123456789abcdefghijklmnopqrstuvwxyzAB";
+    #[cfg(windows)]
+    let shell = ["cmd", "/C"];
+    #[cfg(not(windows))]
+    let shell = ["sh", "-c"];
+    run(
+        &format!("capture --redact -- {} {} '{secret}'", shell[0], shell[1]),
+        &["capture", "--redact", "--", shell[0], shell[1], secret],
+    )
 }
 
 /// Watch two files, each in its own Live region. The tour cannot deliver a
@@ -498,6 +566,53 @@ fn art(console: &Console, no_color: bool, delay: Duration, root: &Path) -> std::
             console,
             no_color,
             &format!("--image art.png {shown} --width {width} --height 12"),
+            args,
+        )?;
+    }
+    section(
+        console,
+        delay,
+        "Atkinson dithering, OKLab colours and alpha backgrounds",
+    );
+    for (shown, extra) in [
+        (
+            "--image-color ansi16 --image-dither atkinson --image-color-distance oklab",
+            &[
+                "--image-color",
+                "ansi16",
+                "--image-dither",
+                "atkinson",
+                "--image-color-distance",
+                "oklab",
+            ][..],
+        ),
+        (
+            "--image-background checkerboard",
+            &["--image-background", "checkerboard"][..],
+        ),
+        (
+            "--image-background default",
+            &["--image-background", "default"][..],
+        ),
+    ] {
+        let mut args: Vec<String> = [
+            "--image",
+            &source,
+            "--image-mode",
+            "quadrants",
+            "--width",
+            &width,
+            "--height",
+            "12",
+        ]
+        .iter()
+        .map(|arg| arg.to_string())
+        .collect();
+        args.extend(extra.iter().map(|arg| arg.to_string()));
+        command(
+            console,
+            no_color,
+            &format!("--image art.png --image-mode quadrants {shown} --width {width} --height 12"),
             args,
         )?;
     }

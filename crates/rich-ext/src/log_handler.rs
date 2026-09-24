@@ -107,12 +107,15 @@ impl RichHandler {
 
     /// Print through `live`, above its regions, so log lines never tear a
     /// live display. Render with a console as wide as `live`'s target (see
-    /// `RenderTarget::console`); longer lines fold.
+    /// `RenderTarget::console`); longer lines fold. The coordinator refuses
+    /// control codes, so any in a line (a message, field, span or path) are
+    /// shown as symbols instead: every line prints.
     pub fn live<W: Write + Send + 'static>(mut self, live: Arc<Mutex<LiveCoordinator<W>>>) -> Self {
         self.output = Some(Box::new(move |segments| {
+            let segments = neutralise(segments);
             live.lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .print(segments)
+                .print(&segments)
                 .map_err(|error| match error {
                     LiveError::Io(error) => error,
                     other => std::io::Error::other(other.to_string()),
@@ -381,6 +384,48 @@ impl RichHandler {
             }
         }
     }
+}
+
+/// `segments` with the control codes a [`LiveCoordinator`] rejects made
+/// inert: control segments dropped, text passed through
+/// [`sanitize_terminal_controls`](crate::sanitize_terminal_controls) and
+/// control characters in links percent-encoded.
+fn neutralise(segments: &[Segment]) -> Vec<Segment> {
+    segments
+        .iter()
+        .filter(|segment| !segment.control)
+        .map(|segment| {
+            let mut segment = segment.clone();
+            if segment
+                .text
+                .chars()
+                .any(|c| c.is_control() && c != '\n' && c != '\t')
+            {
+                segment.text = crate::sanitize_terminal_controls(&segment.text);
+            }
+            if let Some(style) = &segment.style {
+                if let Some(link) = style
+                    .link()
+                    .filter(|link| link.chars().any(char::is_control))
+                {
+                    use std::fmt::Write as _;
+                    let mut encoded = String::with_capacity(link.len());
+                    for c in link.chars() {
+                        if c.is_control() {
+                            let mut bytes = [0; 4];
+                            for byte in c.encode_utf8(&mut bytes).bytes() {
+                                let _ = write!(encoded, "%{byte:02X}");
+                            }
+                        } else {
+                            encoded.push(c);
+                        }
+                    }
+                    segment.style = Some(style.update_link(Some(encoded)));
+                }
+            }
+            segment
+        })
+        .collect()
 }
 
 /// One tree level: `│ ` (or `| ` in ASCII).

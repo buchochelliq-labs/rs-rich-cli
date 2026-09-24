@@ -125,7 +125,28 @@ pub(crate) fn text_diff(
     names: &[String],
     contents: &[String],
     threshold: Option<f32>,
+    sanitize: bool,
 ) -> Result<TextDiffOutcome, String> {
+    if sanitize {
+        // Names and contents both reach the terminal. ANSI captures keep the
+        // styles they are compared by; everything else in them is shown.
+        let ansi = contents.len() == 2 && contents.iter().any(|c| has_ansi(c));
+        let names: Vec<String> = names
+            .iter()
+            .map(|n| rich_ext::sanitize_terminal_controls(n))
+            .collect();
+        let contents: Vec<String> = contents
+            .iter()
+            .map(|c| {
+                if ansi {
+                    crate::controls::neutralize_for_decoder(c)
+                } else {
+                    rich_ext::sanitize_terminal_controls(c)
+                }
+            })
+            .collect();
+        return text_diff(options, &names, &contents, threshold, false);
+    }
     if let [patch] = contents {
         let parsed = git::parse_unified(patch).map_err(|err| {
             format!(
@@ -271,8 +292,26 @@ pub(crate) fn bench_dispatch(args: &[String]) -> Result<bool, String> {
     if !is_bench(args) {
         return Ok(false);
     }
+    // `rich bench --help` and `rich bench compare --help` show that command.
+    if args
+        .iter()
+        .take_while(|arg| *arg != "--")
+        .any(|arg| arg == "--help" || arg == "-h")
+    {
+        let mut path = vec!["bench"];
+        let mut words = args.iter().filter(|arg| !arg.starts_with('-'));
+        if words.nth(1).is_some_and(|word| word == "compare") {
+            path.push("compare");
+        }
+        let no_color = super::cli_spec::no_color_requested(args);
+        if let Some(help) = super::cli_spec::subcommand_help(&path, no_color) {
+            super::authoring::out(&format!("{help}\n"));
+        }
+        return Ok(true);
+    }
     let mut positionals = Vec::new();
     let mut threshold = None;
+    let mut width = None;
     let mut no_color = std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty());
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -285,6 +324,14 @@ pub(crate) fn bench_dispatch(args: &[String]) -> Result<bool, String> {
                         .ok_or("--threshold requires a percentage")?,
                 );
             }
+            "-w" | "--width" => {
+                width = Some(
+                    iter.next()
+                        .and_then(|v| v.parse::<usize>().ok())
+                        .filter(|v| *v > 0)
+                        .ok_or(format!("{arg} requires a positive number of columns"))?,
+                );
+            }
             "--no-color" => no_color = true,
             "--color" => no_color = false,
             "--no-config" | "--machine-json" => {}
@@ -293,7 +340,8 @@ pub(crate) fn bench_dispatch(args: &[String]) -> Result<bool, String> {
             }
             other if other.starts_with('-') && other != "-" => {
                 return Err(format!(
-                    "unknown option {other:?} for rich bench compare; it takes --threshold PCT"
+                    "unknown option {other:?} for rich bench compare; it takes --threshold PCT \
+                     and --width N"
                 ));
             }
             other => positionals.push(other.to_string()),
@@ -313,7 +361,7 @@ pub(crate) fn bench_dispatch(args: &[String]) -> Result<bool, String> {
         };
         result.map_err(|err| format!("cannot read benchmark run {path}: {err}"))
     };
-    let (baseline, candidate) = match (load(baseline), load(candidate)) {
+    let (mut baseline, mut candidate) = match (load(baseline), load(candidate)) {
         (Ok(a), Ok(b)) => (a, b),
         (Err(err), _) | (_, Err(err)) => {
             let _ = super::emit_error(
@@ -328,9 +376,19 @@ pub(crate) fn bench_dispatch(args: &[String]) -> Result<bool, String> {
     if let Some(threshold) = threshold {
         options.threshold_pct = threshold;
     }
-    let comparison = compare(&baseline, &candidate, &options);
-    let console = Console::builder().no_color(no_color).build();
-    console.print(&ComparisonView::new(&comparison));
+    // Benchmark names come from the files; show any controls in them.
+    for run in [&mut baseline, &mut candidate] {
+        for measurement in &mut run.measurements {
+            measurement.name = rich_ext::sanitize_terminal_controls(&measurement.name);
+        }
+    }
+    let mut comparison = compare(&baseline, &candidate, &options);
+    flag_changes_from_zero(&mut comparison, &options);
+    let mut console = Console::builder().no_color(no_color);
+    if let Some(width) = width {
+        console = console.width(width);
+    }
+    console.build().print(&ComparisonView::new(&comparison));
     if comparison.has_regressions() {
         let _ = super::emit_error(
             super::wants_json_report(args),
@@ -339,7 +397,47 @@ pub(crate) fn bench_dispatch(args: &[String]) -> Result<bool, String> {
         );
         std::process::exit(i32::from(super::ExitClass::Gate.code()));
     }
+    if super::wants_json_report(args) {
+        super::emit_success_report(super::ReportFormat::Json);
+    }
     Ok(true)
+}
+
+/// `compare` calls any change from a 0 ns baseline 0% and so unchanged, but
+/// 0 → 5 ns is a change of unbounded size: show it as `+inf%` (or `-inf%`)
+/// and judge it as a regression (or improvement) unless it is within the
+/// noise.
+fn flag_changes_from_zero(
+    comparison: &mut rich_ext::qa::bench::Comparison,
+    options: &rich_ext::qa::bench::CompareOptions,
+) {
+    use rich_ext::qa::bench::{Noise, Statistic, Verdict};
+    for row in &mut comparison.rows {
+        let (Some(b), Some(c)) = (&row.baseline, &row.candidate) else {
+            continue;
+        };
+        let value = |m: &rich_ext::qa::bench::Measurement| match options.statistic {
+            Statistic::Mean => m.mean,
+            Statistic::Median => m.median,
+        };
+        let (bv, cv) = (value(b), value(c));
+        if bv > 0.0 || cv == bv {
+            continue;
+        }
+        let noisy = match options.noise {
+            Noise::Stddev => (cv - bv).abs() <= (b.stddev.powi(2) + c.stddev.powi(2)).sqrt(),
+            Noise::Ignore => false,
+        };
+        let up = cv > bv;
+        row.change_pct = Some(if up { f64::INFINITY } else { f64::NEG_INFINITY });
+        if !noisy {
+            row.verdict = if up {
+                Verdict::Regression
+            } else {
+                Verdict::Improvement
+            };
+        }
+    }
 }
 
 #[cfg(test)]
@@ -366,6 +464,7 @@ mod tests {
             &names(&["old.txt", "new.txt"]),
             &contents,
             Some(10.0),
+            false,
         )
         .unwrap();
         let out = render(outcome.renderable.as_ref());
@@ -386,6 +485,7 @@ mod tests {
             &names(&["change.patch"]),
             &names(&[patch]),
             None,
+            false,
         )
         .unwrap();
         let out = render(outcome.renderable.as_ref());
@@ -397,6 +497,7 @@ mod tests {
             &names(&["notes.txt"]),
             &names(&["just text\n"]),
             None,
+            false,
         )
         .err()
         .unwrap();
@@ -407,15 +508,19 @@ mod tests {
     fn ansi_inputs_diff_on_visible_text_and_styles() {
         let old = "\u{1b}[31mred\u{1b}[0m\nsame\n";
         let new = "\u{1b}[32mred\u{1b}[0m\nsame\n";
-        let outcome = text_diff(
-            &ToolOptions::default(),
-            &names(&["a.ansi", "b.ansi"]),
-            &names(&[old, new]),
-            None,
-        )
-        .unwrap();
-        let out = render(outcome.renderable.as_ref());
-        assert!(out.contains('~'), "a style-only change must show:\n{out}");
+        // Sanitizing keeps the styles an ANSI capture is compared by.
+        for sanitize in [false, true] {
+            let outcome = text_diff(
+                &ToolOptions::default(),
+                &names(&["a.ansi", "b.ansi"]),
+                &names(&[old, new]),
+                None,
+                sanitize,
+            )
+            .unwrap();
+            let out = render(outcome.renderable.as_ref());
+            assert!(out.contains('~'), "a style-only change must show:\n{out}");
+        }
     }
 
     #[test]

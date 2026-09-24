@@ -7,6 +7,27 @@
 //! This crate carries its own independent SemVer (it does not track any upstream
 //! version). See `AGENTS.md` → Versioning and `docs/PLUGINS.md`.
 //!
+//! ## Modules
+//!
+//! - Errors and logs: [`diagnostic`], [`dashboard`], [`stacktrace`],
+//!   [`hyperlink`], [`log_handler`] (`RichHandler`, `SpanView`), `adapters`
+//!   (`log` / `tracing` features), [`event`].
+//! - Data and authoring: `data` (`data` feature), [`derive`](mod@derive), [`macros`] (the
+//!   `macros` feature re-exports `richf!` and `#[derive(Rich)]`), [`cli_doc`]
+//!   (`clap` feature for `clap::Command`).
+//! - Diffs and testing: [`diff`], `testing` and `qa` (`testing` feature).
+//! - Terminals: [`capabilities`], [`fidelity`], [`a11y`], [`target`],
+//!   [`ansi_explain`], [`sanitize`], [`encoding`].
+//! - Workflows: [`workflow`], [`transfer`], [`countdown`], [`notify`],
+//!   [`cancel`], [`table`], [`badge`], [`size_bar`], [`format`](mod@format), [`redact`]
+//!   (experimental).
+//! - Inspectors: [`source_view`], [`hex`], [`unicode_inspect`],
+//!   [`env_inspect`].
+//! - Layout and live output: [`layout`], [`live`].
+//!
+//! The user guide (<https://buchochelliq-labs.github.io/rs-rich-cli/guide/ext/>)
+//! covers each module with compiled examples.
+//!
 //! ```
 //! use rich::{Console, ColorSystem};
 //! use rich_ext::ConsoleExt;

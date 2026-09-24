@@ -12,7 +12,9 @@
 //! `transient` displays that erase themselves on stop. The alt-screen mode and
 //! IO redirection remain deferred (see the Live/progress issue).
 
+use std::any::Any;
 use std::io::Write;
+use std::panic::{self, AssertUnwindSafe};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -125,6 +127,20 @@ impl<W: Write> Live<W> {
         self.started = false;
     }
 
+    /// Restore the terminal after a render panicked mid-display: end the
+    /// partial frame's line and show the cursor, as the `finally` of
+    /// upstream's `stop()` does whatever its refresh raised.
+    fn abort(&mut self) {
+        if !self.started {
+            return;
+        }
+        self.started = false;
+        if self.console.is_terminal() {
+            let _ = write!(self.writer, "\n{}", Control::show_cursor(true).as_str());
+            let _ = self.writer.flush();
+        }
+    }
+
     /// The output sink (for inspecting captured bytes in tests).
     pub fn writer(&self) -> &W {
         &self.writer
@@ -179,24 +195,34 @@ impl<W: Write + Send + 'static> Live<W> {
             // The `Live` (and its non-`Send` `LiveRender`) is built and owned
             // entirely within this thread — only the `Send` inputs cross over.
             let mut live = Live::new(renderable, console, writer).transient(transient);
-            live.start();
-            let _ = started.send(());
-            loop {
-                match receiver.recv_timeout(interval) {
-                    Ok(LiveMessage::Update(renderable)) => live.update(renderable),
-                    Ok(LiveMessage::Refresh) | Err(RecvTimeoutError::Timeout) => live.refresh(),
-                    Ok(LiveMessage::RefreshAck(done)) => {
-                        live.refresh();
-                        let _ = done.send(());
-                    }
-                    // Stop, or the handle was dropped: finalize and exit.
-                    Ok(LiveMessage::Stop) | Err(RecvTimeoutError::Disconnected) => {
-                        live.stop();
-                        break;
+            // A panicking render must not take the writer down with it:
+            // upstream's `stop()` restores the terminal in a `finally`, so the
+            // failure is caught here, the cursor shown again, and the panic
+            // handed back to `try_stop` instead of being re-raised by `join`.
+            let outcome = panic::catch_unwind(AssertUnwindSafe(|| {
+                live.start();
+                let _ = started.send(());
+                loop {
+                    match receiver.recv_timeout(interval) {
+                        Ok(LiveMessage::Update(renderable)) => live.update(renderable),
+                        Ok(LiveMessage::Refresh) | Err(RecvTimeoutError::Timeout) => live.refresh(),
+                        Ok(LiveMessage::RefreshAck(done)) => {
+                            live.refresh();
+                            let _ = done.send(());
+                        }
+                        // Stop, or the handle was dropped: finalize and exit.
+                        Ok(LiveMessage::Stop) | Err(RecvTimeoutError::Disconnected) => {
+                            live.stop();
+                            break;
+                        }
                     }
                 }
-            }
-            live.into_writer()
+            }));
+            let failure = outcome.err().map(|payload| {
+                live.abort();
+                panic_message(payload.as_ref())
+            });
+            (live.into_writer(), failure)
         });
         // Upstream's `Live.start()` draws the first frame before returning;
         // without this wait, a change made right after spawning could land in
@@ -213,7 +239,29 @@ impl<W: Write + Send + 'static> Live<W> {
 /// Dropping the handle (or calling [`stop`](Self::stop)) finalizes the display.
 pub struct AutoLive<W: Write + Send + 'static> {
     sender: mpsc::Sender<LiveMessage>,
-    handle: Option<JoinHandle<W>>,
+    handle: Option<JoinHandle<(W, Option<String>)>>,
+}
+
+/// A render that panicked on an [`AutoLive`] refresh thread, returned by
+/// [`AutoLive::try_stop`]. The terminal was restored before the thread exited.
+#[derive(Debug)]
+pub struct LivePanic<W> {
+    /// The output sink, with everything written up to and including the
+    /// cursor restore.
+    pub writer: W,
+    /// The panic message (`"<non-string panic payload>"` when it had none).
+    pub message: String,
+}
+
+/// The message of a caught panic payload.
+fn panic_message(payload: &(dyn Any + Send)) -> String {
+    if let Some(message) = payload.downcast_ref::<&str>() {
+        (*message).to_string()
+    } else if let Some(message) = payload.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "<non-string panic payload>".to_string()
+    }
 }
 
 impl<W: Write + Send + 'static> AutoLive<W> {
@@ -238,13 +286,35 @@ impl<W: Write + Send + 'static> AutoLive<W> {
     }
 
     /// Commit the final frame, join the thread, and return the output sink.
-    pub fn stop(mut self) -> W {
+    ///
+    /// If a render panicked on the refresh thread, the cursor has already been
+    /// shown again and the failure is swallowed (the panic hook reported it
+    /// when it happened); use [`try_stop`](Self::try_stop) to observe it.
+    pub fn stop(self) -> W {
+        match self.try_stop() {
+            Ok(writer) => writer,
+            Err(failure) => failure.writer,
+        }
+    }
+
+    /// [`stop`](Self::stop), reporting a render that panicked on the refresh
+    /// thread as an error that still carries the output sink.
+    pub fn try_stop(mut self) -> Result<W, LivePanic<W>> {
         let _ = self.sender.send(LiveMessage::Stop);
-        self.handle
+        let handle = self
+            .handle
             .take()
-            .expect("thread handle present until stop/drop")
-            .join()
-            .expect("live refresh thread panicked")
+            .expect("thread handle present until stop/drop");
+        // The thread catches every panic from rendering, so a join error
+        // cannot carry a writer; there is nothing to return but the payload.
+        let (writer, failure) = match handle.join() {
+            Ok(result) => result,
+            Err(payload) => panic::resume_unwind(payload),
+        };
+        match failure {
+            None => Ok(writer),
+            Some(message) => Err(LivePanic { writer, message }),
+        }
     }
 }
 
@@ -321,6 +391,72 @@ mod tests {
 
         let expected = "\x1b[?25lframe one\r\x1b[2Kframe two\r\x1b[2Kframe three\r\x1b[2Kframe three\n\x1b[?25h";
         assert_eq!(String::from_utf8(output).unwrap(), expected);
+    }
+
+    /// Renders `ok` until `fail_after` renders have happened, then panics.
+    struct PanicsLater {
+        renders: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        fail_after: usize,
+    }
+
+    impl Renderable for PanicsLater {
+        fn rich_render(
+            &self,
+            console: &Console,
+            options: &crate::console::ConsoleOptions,
+        ) -> Vec<crate::segment::Segment> {
+            use std::sync::atomic::Ordering;
+            if self.renders.fetch_add(1, Ordering::SeqCst) >= self.fail_after {
+                panic!("render failed");
+            }
+            Text::new("ok").rich_render(console, options)
+        }
+    }
+
+    #[test]
+    fn a_panicking_render_still_restores_the_cursor() {
+        // Upstream's `stop()` shows the cursor again in a `finally`, whatever
+        // the refresh raised. A render that panics on the refresh thread must
+        // neither leave the cursor hidden nor make `stop()` panic in turn.
+        let renders = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let auto = Live::spawn(
+            Box::new(PanicsLater {
+                renders: renders.clone(),
+                fail_after: 1,
+            }),
+            console(),
+            Vec::<u8>::new(),
+            0.1,
+        );
+        auto.refresh_wait(); // panics on the thread; must not hang here
+        let (output, error) = match auto.try_stop() {
+            Ok(output) => (output, None),
+            Err(failure) => (failure.writer, Some(failure.message)),
+        };
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.starts_with("\x1b[?25lok"), "{output:?}");
+        assert!(
+            output.ends_with("\x1b[?25h"),
+            "cursor left hidden: {output:?}"
+        );
+        assert_eq!(error.as_deref(), Some("render failed"));
+
+        // `stop()` swallows the failure after restoring the terminal.
+        let auto = Live::spawn(
+            Box::new(PanicsLater {
+                renders: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                fail_after: 1,
+            }),
+            console(),
+            Vec::<u8>::new(),
+            0.1,
+        );
+        auto.refresh();
+        let output = String::from_utf8(auto.stop()).unwrap();
+        assert!(
+            output.ends_with("\x1b[?25h"),
+            "cursor left hidden: {output:?}"
+        );
     }
 
     #[test]

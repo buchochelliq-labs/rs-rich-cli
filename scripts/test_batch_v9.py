@@ -20,6 +20,26 @@ def children(pid):
             if int(parent) == pid]
 
 
+def worker_children(pid):
+    """Children that have exec'd into batch workers.
+
+    Rust's `Command::spawn` uses posix_spawn, which glibc implements with
+    clone(CLONE_VFORK): the parent stays suspended until the child execs.
+    Stopping a child in that window leaves the parent stuck in `spawn`, so the
+    next worker never starts. Before exec a child still has the parent's
+    arguments; a worker's end with `-- INPUT`, and the parent has no bare `--`.
+    """
+    workers = []
+    for child in children(pid):
+        try:
+            args = Path(f'/proc/{child}/cmdline').read_bytes().split(b'\0')
+        except OSError:
+            continue
+        if b'--' in args:
+            workers.append(child)
+    return workers
+
+
 def cancellation(root, jobs):
     for name in ('a', 'b', 'c'):
         (root / f'{name}.txt').write_text(name * (2 * 1024 * 1024))
@@ -31,7 +51,7 @@ def cancellation(root, jobs):
     try:
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
-            workers = children(proc.pid)
+            workers = worker_children(proc.pid)
             for pid in workers:
                 os.kill(pid, signal.SIGSTOP)
             if len(workers) == jobs:

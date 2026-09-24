@@ -831,6 +831,12 @@ impl Table {
     ) -> Vec<Vec<Segment>> {
         let cell_fill = Some(style.clone());
         let cell_width = cpl + width + cpr;
+        // The cell's `Padding` renders at the whole cell width, and
+        // `Console.render` yields nothing at all below width 1: no content and
+        // no vertical padding either (the row keeps its minimum height of 1).
+        if cell_width == 0 {
+            return Vec::new();
+        }
         let blank = || vec![Segment::new(" ".repeat(cell_width), cell_fill.clone())];
         let mut padded_lines: Vec<Vec<Segment>> = Vec::new();
         for _ in 0..pt {

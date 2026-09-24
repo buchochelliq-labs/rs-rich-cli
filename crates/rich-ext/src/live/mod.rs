@@ -267,7 +267,9 @@ impl<W: Write> LiveCoordinator<W> {
         self.closed = true;
         let mut error = None;
         if !self.target.capabilities().interactive {
-            for row in self.rows(self.width, self.height) {
+            // A pipe or CI log scrolls: the final snapshot is written whole,
+            // not cut to the height a terminal would show.
+            for row in self.rows(self.width, usize::MAX) {
                 if let Err(e) = writeln!(self.writer, "{row}") {
                     error = Some(e);
                     break;
@@ -311,12 +313,19 @@ impl<W: Write> LiveHandle<'_, W> {
         self.live.refresh()
     }
 }
+/// Content must not carry terminal controls: not as control segments, not in
+/// its text, and not in a link, which is written inside an OSC 8 sequence
+/// where a BEL or ESC ends it early and starts whatever follows.
 fn validate(content: &[Segment]) -> Result<(), LiveError> {
     if content.iter().any(|s| {
         s.control
             || s.text
                 .chars()
                 .any(|c| c.is_control() && c != '\n' && c != '\t')
+            || s.style
+                .as_ref()
+                .and_then(|style| style.link())
+                .is_some_and(|link| link.chars().any(char::is_control))
     }) {
         Err(LiveError::UnsupportedControl)
     } else {

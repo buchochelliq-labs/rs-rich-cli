@@ -213,12 +213,13 @@ How it behaves:
 - **Safe viewport.** Regions get `width - 1` columns and `height - 1` rows: one
   guard column avoids terminal auto-wrap and one row is left for insertion.
   Region rows are cropped, printed lines are folded.
-- **Plain content only.** Content with control segments or control characters
-  (other than newline and tab) is rejected with
-  `LiveError::UnsupportedControl`.
+- **Plain content only.** Content with control segments, control characters
+  (other than newline and tab) in its text, or any control character in a
+  style's link is rejected with `LiveError::UnsupportedControl`.
 - **Non-interactive targets.** With `interactive: false` (a `PlainStream`,
   say) nothing is repainted: printed lines are written as they come and
-  `finish` writes the regions' final state once, so logs stay readable.
+  `finish` writes the regions' final state once, every row of it whatever
+  the target's height, so logs stay readable.
 - **Resize.** `resize(width, height)` updates the viewport and repaints;
   rerender your region content for the new width yourself. Interactivity and
   the writer are fixed for the coordinator's lifetime: finish it and create a

@@ -76,7 +76,7 @@ markdown-command        PASS      0.33s  rich markdown notes.md --hyperlinks
 demo-list               PASS      0.00s  rich --demo-list
 demo-core               PASS      0.43s  rich --demo --demo-section core --no-color
 
-75 passed, 0 failed, 0 skipped in 7.4s
+86 passed, 0 failed, 0 skipped in 13.7s
 ```
 
 A failure explains itself under its row:

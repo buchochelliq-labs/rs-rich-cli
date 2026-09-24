@@ -596,7 +596,7 @@ fn run_loop(
     let stop = |presenter: &mut dyn Presenter, status: ExitCode, message: &str| {
         presenter.finish();
         if !message.is_empty() {
-            eprintln!("rich: {message}");
+            eprintln!("rich: {}", crate::controls::shown(message));
         }
         status
     };

@@ -170,3 +170,96 @@ fn capture_reads_this_threads_backtrace() {
     assert_eq!(trace.message.as_deref(), Some("boom"));
     assert!(!trace.frames.is_empty());
 }
+
+/// Run `f` on a thread with the default (2 MiB) spawned-thread stack, so a
+/// recursion over a long cause chain overflows here as it would in an app.
+fn on_normal_stack(f: impl FnOnce() + Send + 'static) {
+    std::thread::Builder::new()
+        .stack_size(2 * 1024 * 1024)
+        .spawn(f)
+        .unwrap()
+        .join()
+        .expect("no stack overflow");
+}
+
+#[test]
+fn long_java_cause_chains_are_capped_and_render() {
+    on_normal_stack(|| {
+        let mut input = String::from("E: top\n\tat a.B.c(B.java:1)\n");
+        for i in 0..2000 {
+            input.push_str(&format!("Caused by: E: x{i}\n"));
+        }
+        let trace = stacktrace::parse(&input).unwrap();
+        let chain: Vec<_> = trace.chain().collect();
+        assert_eq!(chain.len(), stacktrace::MAX_CAUSES + 1);
+        assert_eq!(
+            chain.last().unwrap().omitted_causes,
+            2000 - stacktrace::MAX_CAUSES
+        );
+        let text = plain(&trace);
+        assert!(text.contains("… 1936 more causes"), "{}", &text[..200]);
+        assert!(text.contains("E: top") && text.contains("E: x63") && !text.contains("E: x64"));
+    });
+}
+
+#[test]
+fn long_python_and_node_cause_chains_are_capped() {
+    on_normal_stack(|| {
+        let block =
+            "Traceback (most recent call last):\n  File \"a.py\", line 1, in f\nValueError: x\n";
+        let mut input = String::from(block);
+        for _ in 0..50_000 {
+            input.push_str(
+                "\nThe above exception was the direct cause of the following exception:\n\n",
+            );
+            input.push_str(block);
+        }
+        let trace = stacktrace::parse(&input).unwrap();
+        assert_eq!(trace.chain().count(), stacktrace::MAX_CAUSES + 1);
+        assert!(plain(&trace).contains("… 49936 more causes"));
+
+        let mut input = String::from("Error: top\n    at f (/a.js:1:1)\n");
+        for _ in 0..5000 {
+            input.push_str("  [cause]: Error: x\n      at g (/b.js:2:2)\n");
+        }
+        let trace = stacktrace::parse(&input).unwrap();
+        assert_eq!(trace.chain().count(), stacktrace::MAX_CAUSES + 1);
+        assert!(plain(&trace).contains("… 4936 more causes"));
+    });
+}
+
+#[test]
+fn deep_hand_built_chains_drop_and_render_without_recursing() {
+    on_normal_stack(|| {
+        let mut trace = StackTrace::new(Language::Rust);
+        for i in 0..200_000 {
+            let mut next = StackTrace::new(Language::Rust);
+            next.message = Some(format!("m{i}"));
+            next.cause = Some(Box::new(trace));
+            trace = next;
+        }
+        let text = plain(&trace);
+        assert!(text.contains("more causes"), "{}", &text[..200]);
+        drop(trace);
+    });
+}
+
+#[test]
+fn control_codes_in_trace_paths_cannot_escape_the_link() {
+    let input = "Traceback (most recent call last):\n  File \"/tmp/a\x07\x1b]0;PWNED\x07.py\", line 1, in f\nValueError: x\x1b[2J\n";
+    let trace = stacktrace::parse(input).unwrap();
+    let terminal = Console::builder().force_terminal(true).width(100).build();
+    for view in [
+        trace.render_options(),
+        trace
+            .render_options()
+            .hyperlinker(Hyperlinker::new().editor("vscode://file{path}:{line}:{column}")),
+    ] {
+        let out = terminal.render_to_string(&view);
+        assert!(!out.contains("\x1b]0;"), "{out:?}");
+        assert!(out.contains("/tmp/a%07%1B%5D0;PWNED%07.py"), "{out:?}");
+        // The visible label shows the codes instead of running them.
+        assert!(out.contains("/tmp/a␇␛]0;PWNED␇.py:1"), "{out:?}");
+        assert!(out.contains("x␛[2J") && !out.contains("\x1b[2J"), "{out:?}");
+    }
+}

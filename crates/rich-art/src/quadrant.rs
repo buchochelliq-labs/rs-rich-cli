@@ -221,9 +221,15 @@ impl QuadrantArt {
                 FilterType::Triangle,
             )
             .to_rgba8();
-        let clear = crate::image_art::clear_mask(&scaled, self.transparent);
+        let clear = crate::image_art::clear_mask(&mut scaled, self.transparent);
         // Quantization composites alpha onto black itself; truecolor does it here.
-        preprocess(&mut scaled, self.color_mode, self.dither, self.distance);
+        preprocess(
+            &mut scaled,
+            self.color_mode,
+            self.dither,
+            self.distance,
+            clear.as_deref(),
+        );
         let width = scaled.width() as usize;
         let sample = |x: usize, y: usize| -> [f64; 3] {
             let [r, g, b, a] = scaled.get_pixel(x as u32, y as u32).0;

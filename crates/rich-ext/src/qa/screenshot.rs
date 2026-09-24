@@ -345,9 +345,12 @@ fn approve_from_env() -> bool {
         .unwrap_or(false)
 }
 
-/// A file-system-safe directory name for a capture name.
+/// A file-system-safe directory name for a capture name: one normal path
+/// component. A name that is empty or only dots (`.`, `..`) would name the
+/// directory itself or its parent, so its dots become `_` too.
 fn safe_name(name: &str) -> String {
-    name.chars()
+    let safe: String = name
+        .chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '@') {
                 c
@@ -355,7 +358,12 @@ fn safe_name(name: &str) -> String {
                 '_'
             }
         })
-        .collect()
+        .collect();
+    if safe.chars().all(|c| c == '.') {
+        "_".repeat(safe.len().max(1))
+    } else {
+        safe
+    }
 }
 
 impl Approvals {
@@ -514,5 +522,25 @@ pub fn assert_screenshots_with(
             approvals.dir().display(),
             outcome.report()
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::safe_name;
+    use std::path::{Component, Path};
+
+    #[test]
+    fn safe_names_never_leave_the_directory() {
+        for name in ["..", ".", "", "...", "a/../..", "../x", "..\\..", "/", "\0"] {
+            let safe = safe_name(name);
+            let components: Vec<Component<'_>> = Path::new(&safe).components().collect();
+            assert!(
+                matches!(components.as_slice(), [Component::Normal(_)]),
+                "{name:?} became {safe:?}"
+            );
+            assert!(!safe.chars().all(|c| c == '.'), "{name:?} became {safe:?}");
+        }
+        assert_eq!(safe_name("table@80.none"), "table@80.none");
     }
 }

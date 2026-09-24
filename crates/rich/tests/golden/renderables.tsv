@@ -164,3 +164,11 @@ panel_width	30	╭──────────╮\n│ x        │\n╰──
 panel_fit_tree	30	╭───────────────────╮\n│ \x1b[1mroot\x1b[0m 🚀           │\n│ ├── \x1b[3mchild\x1b[0m 1       │\n│ │   └── \x1b[31mleaf\x1b[0m True │\n│ └── [b]literal    │\n╰───────────────────╯\n
 align_table	40	            ┌───────┬─────┐             \n            │\x1b[1m \x1b[0m\x1b[1mName \x1b[0m\x1b[1m \x1b[0m│\x1b[1m \x1b[0m\x1b[1mAge\x1b[0m\x1b[1m \x1b[0m│             \n            ├───────┼─────┤             \n            │ Alice │ 30  │             \n            │ Bob   │ 7   │             \n            └───────┴─────┘             \n
 align_panel_fit	30	                         ╭───╮\n                         │ x │\n                         ╰───╯\n
+table_zero_width_p10_w2	2	┌┬\n││\n├┼\n││\n││\n└┴\n
+table_zero_width_p21_w1	1	┌\n│\n├\n│\n│\n└\n
+table_zero_width_p21_w2	2	┌┬\n││\n├┼\n││\n││\n└┴\n
+table_zero_width_p21_w3	3	┌┬┐\n│││\n├┼┤\n│││\n│││\n└┴┘\n
+table_zero_width_p21_w5	5	┌─┬─┐\n│\x1b[1m \x1b[0m│\x1b[1m \x1b[0m│\n│\x1b[1m \x1b[0m│\x1b[1m \x1b[0m│\n│\x1b[1m \x1b[0m│\x1b[1m \x1b[0m│\n│\x1b[1m \x1b[0m│\x1b[1m \x1b[0m│\n├─┼─┤\n│ │ │\n│ │ │\n│ │ │\n│ │ │\n│ │ │\n│ │ │\n│ │ │\n│ │ │\n└─┴─┘\n
+table_zero_width_p21_w7	7	┌──┬──┐\n│\x1b[1m  \x1b[0m│\x1b[1m  \x1b[0m│\n│\x1b[1m  \x1b[0m│\x1b[1m  \x1b[0m│\n│\x1b[1m  \x1b[0m│\x1b[1m  \x1b[0m│\n│\x1b[1m  \x1b[0m│\x1b[1m  \x1b[0m│\n├──┼──┤\n│  │  │\n│  │  │\n│  │  │\n│  │  │\n│  │  │\n│  │  │\n│  │  │\n│  │  │\n└──┴──┘\n
+panel_fit_zero_width_table_w6	6	┌────┐\n│ ┌┬ │\n│ ││ │\n│ ├┼ │\n│ ││ │\n│ ││ │\n│ └┴ │\n└────┘\n
+panel_fit_zero_width_table_p21_w6	6	╭────╮\n│ ┌┬ │\n│ ││ │\n│ ├┼ │\n│ ││ │\n│ ││ │\n│ └┴ │\n╰────╯\n

@@ -219,8 +219,12 @@ impl Renderable for ProgressBar {
             ("\u{2501}", "\u{2578}", "\u{257a}")
         };
         // `int(width * 2 * completed / total) if total else width * 2`.
+        // `completed <= total`, so the quotient never exceeds `width * 2`
+        // except when `width * 2 * completed` overflows to infinity for
+        // totals near `f64::MAX` (where upstream's `int(inf)` raises); the
+        // clamp keeps that from asking `repeat` for `usize::MAX` cells.
         let complete_halves = if total != 0.0 {
-            (width as f64 * 2.0 * completed / total) as usize
+            ((width as f64 * 2.0 * completed / total) as usize).min(width * 2)
         } else {
             width * 2
         };
@@ -278,6 +282,30 @@ mod tests {
             .width(20)
             .build();
         console.render_to_string(&ProgressBar::new(100.0, completed).width(20))
+    }
+
+    #[test]
+    fn huge_totals_do_not_overflow_the_bar_width() {
+        // `width * 2 * completed` overflows to infinity for totals near
+        // `f64::MAX`; the bar must still render full rather than asking
+        // `repeat` for `usize::MAX` cells.
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(20)
+            .build();
+        for (total, completed) in [(1e308, 1e308), (f64::MAX, f64::MAX), (1e308, 5e307)] {
+            let got = console.render_to_string(&ProgressBar::new(total, completed).width(20));
+            assert!(got.contains('\u{2501}'), "{total}/{completed}: {got:?}");
+        }
+        assert_eq!(render(100.0), {
+            let console = Console::builder()
+                .force_terminal(true)
+                .color_system(Some(ColorSystem::Truecolor))
+                .width(20)
+                .build();
+            console.render_to_string(&ProgressBar::new(1e308, 1e308).width(20))
+        });
     }
 
     #[test]

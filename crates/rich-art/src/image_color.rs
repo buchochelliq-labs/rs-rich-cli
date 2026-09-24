@@ -114,13 +114,49 @@ fn palette_oklab() -> &'static [[f64; 3]; 256] {
     TABLE.get_or_init(|| std::array::from_fn(|i| oklab(palette_rgb(i as u8).map(f64::from))))
 }
 
-/// The palette entries `mode` may choose, in ascending index order.
-fn candidates(mode: ImageColorMode) -> Box<dyn Iterator<Item = u8>> {
-    match mode {
-        ImageColorMode::TrueColor | ImageColorMode::Ansi256 => Box::new(16u8..=255),
-        ImageColorMode::Ansi16 => Box::new(0u8..16),
-        ImageColorMode::Grayscale => Box::new(std::iter::once(16).chain(231..=255)),
+/// Encoded RGB of every palette entry, computed once.
+fn palette_table() -> &'static [[u8; 3]; 256] {
+    static TABLE: std::sync::OnceLock<[[u8; 3]; 256]> = std::sync::OnceLock::new();
+    TABLE.get_or_init(|| std::array::from_fn(|i| palette_rgb(i as u8)))
+}
+
+/// `N` consecutive palette indices from `start`.
+const fn index_run<const N: usize>(start: u8) -> [u8; N] {
+    let mut out = [0; N];
+    let mut i = 0;
+    while i < N {
+        out[i] = start + i as u8;
+        i += 1;
     }
+    out
+}
+
+const ANSI256_ENTRIES: [u8; 240] = index_run(16);
+const ANSI16_ENTRIES: [u8; 16] = index_run(0);
+const GRAYSCALE_ENTRIES: [u8; 26] = {
+    let ramp: [u8; 25] = index_run(231);
+    let mut out = [16; 26];
+    let mut i = 0;
+    while i < 25 {
+        out[i + 1] = ramp[i];
+        i += 1;
+    }
+    out
+};
+
+/// The palette entries `mode` may choose, in ascending index order.
+fn candidates(mode: ImageColorMode) -> &'static [u8] {
+    match mode {
+        ImageColorMode::TrueColor | ImageColorMode::Ansi256 => &ANSI256_ENTRIES,
+        ImageColorMode::Ansi16 => &ANSI16_ENTRIES,
+        ImageColorMode::Grayscale => &GRAYSCALE_ENTRIES,
+    }
+}
+
+/// Squared Euclidean distance in encoded RGB. Every search uses this one
+/// expression, so the fast and exhaustive paths compute identical values.
+fn rgb_distance(rgb: [f64; 3], c: [u8; 3]) -> f64 {
+    (0..3).map(|i| (rgb[i] - f64::from(c[i])).powi(2)).sum()
 }
 
 /// Nearest palette entry for `mode` (never `TrueColor`) under `distance`.
@@ -133,19 +169,35 @@ pub(crate) fn nearest(
     mode: ImageColorMode,
     distance: ColorDistance,
 ) -> (u8, [u8; 3]) {
+    let direct = matches!(mode, ImageColorMode::TrueColor | ImageColorMode::Ansi256)
+        && distance == ColorDistance::Rgb
+        && rgb.iter().all(|v| (-1e6..=1e6).contains(v));
+    if direct {
+        return nearest_ansi256_rgb(rgb);
+    }
+    nearest_exhaustive(rgb, mode, distance)
+}
+
+/// [`nearest`] by scanning every candidate.
+fn nearest_exhaustive(
+    rgb: [f64; 3],
+    mode: ImageColorMode,
+    distance: ColorDistance,
+) -> (u8, [u8; 3]) {
     let luma = (77.0 * rgb[0] + 150.0 * rgb[1] + 29.0 * rgb[2]) / 256.0;
     let lab = (distance == ColorDistance::Oklab).then(|| oklab(rgb));
+    let (table, labs) = (palette_table(), palette_oklab());
     let mut best = (0, [0; 3]);
     let mut closest = f64::INFINITY;
-    for index in candidates(mode) {
-        let c = palette_rgb(index);
+    for &index in candidates(mode) {
+        let c = table[index as usize];
         let d = match (lab, mode) {
             (Some(lab), _) => {
-                let p = palette_oklab()[index as usize];
+                let p = labs[index as usize];
                 (0..3).map(|i| (lab[i] - p[i]).powi(2)).sum()
             }
             (None, ImageColorMode::Grayscale) => (luma - f64::from(c[0])).powi(2),
-            (None, _) => (0..3).map(|i| (rgb[i] - f64::from(c[i])).powi(2)).sum(),
+            (None, _) => rgb_distance(rgb, c),
         };
         if d < closest {
             closest = d;
@@ -155,14 +207,60 @@ pub(crate) fn nearest(
     best
 }
 
+/// [`nearest`] for the ANSI256 cube and ramp in encoded RGB, without a scan.
+///
+/// The cube distance is a sum of per-channel terms, so its minimum lies at
+/// the two cube levels bracketing each channel; any other level is at least
+/// 1600 (squared units) further away, far beyond rounding. Likewise the ramp
+/// minimum lies within one step of the channel mean. Scoring only those 8 + 4
+/// candidates, in ascending index order with the same distance expression and
+/// strict comparison, therefore picks exactly what the full scan picks.
+fn nearest_ansi256_rgb(rgb: [f64; 3]) -> (u8, [u8; 3]) {
+    const LEVELS: [f64; 6] = [0.0, 95.0, 135.0, 175.0, 215.0, 255.0];
+    // Index of the lower of the two levels bracketing `v` (clamped).
+    let lower = |v: f64| LEVELS[1..5].iter().take_while(|&&level| level <= v).count();
+    let [r, g, b] = rgb.map(lower);
+    let table = palette_table();
+    let mut best = (0, [0; 3]);
+    let mut closest = f64::INFINITY;
+    let mut consider = |index: usize| {
+        let c = table[index];
+        let d = rgb_distance(rgb, c);
+        if d < closest {
+            closest = d;
+            best = (index as u8, c);
+        }
+    };
+    for ri in r..=r + 1 {
+        for gi in g..=g + 1 {
+            for bi in b..=b + 1 {
+                consider(16 + 36 * ri + 6 * gi + bi);
+            }
+        }
+    }
+    // Ramp entry j is 8 + 10j; take the steps around the mean.
+    let mean = (rgb[0] + rgb[1] + rgb[2]) / 3.0;
+    let step = (((mean - 8.0) / 10.0).floor().clamp(0.0, 23.0)) as usize;
+    for j in step.saturating_sub(1)..=(step + 2).min(23) {
+        consider(232 + j);
+    }
+    best
+}
+
 /// Mutate only the final sampled raster; returned indices correspond one-to-one
 /// with its row-major pixels. Remaining alpha is composited onto black before
 /// diffusion. Three error rows bound auxiliary storage to the sampled width.
+///
+/// `clear` (from [`clear_mask`](crate::image_art::clear_mask)) marks pixels
+/// left unpainted: they still get an index, from their own colour alone, but
+/// neither take in nor pass on diffused error, so a transparent hole does not
+/// bleed into the opaque pixels around it.
 pub(crate) fn preprocess(
     raster: &mut RgbaImage,
     mode: ImageColorMode,
     dither: Dither,
     distance: ColorDistance,
+    clear: Option<&[bool]>,
 ) -> Option<Vec<u8>> {
     if mode == ImageColorMode::TrueColor {
         return None;
@@ -184,6 +282,13 @@ pub(crate) fn preprocess(
             } else {
                 0.0
             };
+            if clear.is_some_and(|clear| clear[y as usize * width + x]) {
+                let rgb = std::array::from_fn(|c| f64::from(pixel.0[c]) * alpha);
+                let (index, color) = nearest(rgb, mode, distance);
+                indices.push(index);
+                pixel.0 = [color[0], color[1], color[2], 255];
+                continue;
+            }
             let rgb = std::array::from_fn(|c| {
                 (f64::from(pixel.0[c]) * alpha + current[x][c] + offset).clamp(0.0, 255.0)
             });
@@ -252,7 +357,8 @@ mod tests {
                 &mut pixels,
                 ImageColorMode::TrueColor,
                 Dither::None,
-                ColorDistance::Rgb
+                ColorDistance::Rgb,
+                None
             ),
             None
         );
@@ -274,7 +380,8 @@ mod tests {
                 &mut pixels,
                 ImageColorMode::Ansi256,
                 Dither::None,
-                ColorDistance::Rgb
+                ColorDistance::Rgb,
+                None
             ),
             Some(vec![196, 67, 244])
         );
@@ -292,7 +399,8 @@ mod tests {
                 &mut pixels,
                 ImageColorMode::Ansi256,
                 Dither::FloydSteinberg,
-                ColorDistance::Rgb
+                ColorDistance::Rgb,
+                None
             ),
             Some(vec![232, 233, 232, 232])
         );
@@ -303,6 +411,33 @@ mod tests {
     }
 
     #[test]
+    fn clear_pixels_neither_take_nor_pass_on_diffused_error() {
+        // 13 is exactly between the 8 and 18 ramp entries, so it snaps to 8
+        // (the lower index) unless some error reaches it.
+        let row = |clear: Option<&[bool]>| {
+            let mut pixels = RgbaImage::from_fn(3, 1, |x, _| {
+                Rgba(if x == 1 {
+                    [200, 200, 200, 100]
+                } else {
+                    [13, 13, 13, 255]
+                })
+            });
+            preprocess(
+                &mut pixels,
+                ImageColorMode::Ansi256,
+                Dither::FloydSteinberg,
+                ColorDistance::Rgb,
+                clear,
+            )
+            .unwrap()
+        };
+        // Unmasked, the premultiplied middle pixel passes its error right.
+        assert_eq!(row(None)[2], 233);
+        // Masked, the right pixel sees no error at all, as if alone.
+        assert_eq!(row(Some(&[false, true, false]))[2], 232);
+    }
+
+    #[test]
     fn transparent_and_tiny_rasters_are_bounded() {
         let mut transparent = RgbaImage::from_pixel(1, 1, Rgba([255, 255, 255, 0]));
         assert_eq!(
@@ -310,7 +445,8 @@ mod tests {
                 &mut transparent,
                 ImageColorMode::Ansi256,
                 Dither::FloydSteinberg,
-                ColorDistance::Rgb
+                ColorDistance::Rgb,
+                None
             ),
             Some(vec![16])
         );
@@ -321,7 +457,8 @@ mod tests {
                 &mut empty,
                 ImageColorMode::Ansi256,
                 Dither::FloydSteinberg,
-                ColorDistance::Rgb
+                ColorDistance::Rgb,
+                None
             ),
             Some(vec![])
         );
@@ -373,7 +510,7 @@ mod tests {
                 let mut pixels = RgbaImage::from_fn(5, 3, |x, y| {
                     Rgba([(x * 50) as u8, (y * 90) as u8, 120, 255])
                 });
-                let indices = preprocess(&mut pixels, mode, dither, distance).unwrap();
+                let indices = preprocess(&mut pixels, mode, dither, distance, None).unwrap();
                 assert_eq!(indices.len(), 15);
                 for (index, pixel) in indices.iter().zip(pixels.pixels()) {
                     let rgb = pixel.0.map(f64::from)[..3].try_into().unwrap();
@@ -427,6 +564,7 @@ mod tests {
                 ImageColorMode::Grayscale,
                 dither,
                 ColorDistance::Rgb,
+                None,
             )
             .unwrap()
         };
@@ -445,6 +583,7 @@ mod tests {
             ImageColorMode::Grayscale,
             Dither::Atkinson,
             ColorDistance::Rgb,
+            None,
         )
         .unwrap();
         assert_eq!(
@@ -477,6 +616,161 @@ mod tests {
         for index in 0..16u8 {
             let rgb = palette_rgb(index).map(f64::from);
             assert_eq!(pick(rgb, ColorDistance::Oklab), index);
+        }
+    }
+
+    /// The search as it was before the direct ANSI256 path and static tables:
+    /// a boxed iterator over every candidate. Kept verbatim as the oracle.
+    fn nearest_reference(
+        rgb: [f64; 3],
+        mode: ImageColorMode,
+        distance: ColorDistance,
+    ) -> (u8, [u8; 3]) {
+        let candidates: Box<dyn Iterator<Item = u8>> = match mode {
+            ImageColorMode::TrueColor | ImageColorMode::Ansi256 => Box::new(16u8..=255),
+            ImageColorMode::Ansi16 => Box::new(0u8..16),
+            ImageColorMode::Grayscale => Box::new(std::iter::once(16).chain(231..=255)),
+        };
+        let luma = (77.0 * rgb[0] + 150.0 * rgb[1] + 29.0 * rgb[2]) / 256.0;
+        let lab = (distance == ColorDistance::Oklab).then(|| oklab(rgb));
+        let mut best = (0, [0; 3]);
+        let mut closest = f64::INFINITY;
+        for index in candidates {
+            let c = palette_rgb(index);
+            let d = match (lab, mode) {
+                (Some(lab), _) => {
+                    let p = palette_oklab()[index as usize];
+                    (0..3).map(|i| (lab[i] - p[i]).powi(2)).sum()
+                }
+                (None, ImageColorMode::Grayscale) => (luma - f64::from(c[0])).powi(2),
+                (None, _) => (0..3).map(|i| (rgb[i] - f64::from(c[i])).powi(2)).sum(),
+            };
+            if d < closest {
+                closest = d;
+                best = (index, c);
+            }
+        }
+        best
+    }
+
+    /// Deterministic values in `lo..hi`, from a 64-bit LCG.
+    fn random_values(count: usize, lo: f64, hi: f64) -> Vec<f64> {
+        let mut state = 0x9E37_79B9_7F4A_7C15u64;
+        (0..count)
+            .map(|_| {
+                state = state
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                lo + (hi - lo) * ((state >> 11) as f64 / (1u64 << 53) as f64)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn direct_ansi256_search_matches_the_exhaustive_one() {
+        let check = |rgb: [f64; 3]| {
+            let expected = nearest_reference(rgb, ImageColorMode::Ansi256, ColorDistance::Rgb);
+            assert_eq!(
+                nearest(rgb, ImageColorMode::Ansi256, ColorDistance::Rgb),
+                expected,
+                "{rgb:?}"
+            );
+            assert_eq!(
+                nearest(rgb, ImageColorMode::TrueColor, ColorDistance::Rgb),
+                expected
+            );
+        };
+        // A lattice of integer colours, every channel hitting 0 and 255.
+        let lattice: Vec<f64> = (0..=255).step_by(15).map(f64::from).collect();
+        for &r in &lattice {
+            for &g in &lattice {
+                for &b in &lattice {
+                    check([r, g, b]);
+                }
+            }
+        }
+        // Exact ties and near-ties: cube midpoints, ramp midpoints, levels
+        // and ramp values themselves, each nudged by an ulp either way.
+        let mut edges = vec![-3.0, 0.0, 255.0, 258.0];
+        for v in [47.5, 115.0, 155.0, 195.0, 235.0, 95.0, 135.0, 175.0, 215.0] {
+            edges.push(v);
+        }
+        for j in 0..24 {
+            edges.push(8.0 + 10.0 * f64::from(j));
+            edges.push(13.0 + 10.0 * f64::from(j));
+        }
+        let nudged: Vec<f64> = edges
+            .iter()
+            .flat_map(|&v: &f64| [v.next_down(), v, v.next_up()])
+            .collect();
+        for &r in &nudged {
+            for &g in nudged.iter().step_by(3) {
+                for &b in nudged.iter().step_by(17) {
+                    check([r, g, b]);
+                }
+            }
+        }
+        // Grays straddling every ramp and cube boundary.
+        for &v in &nudged {
+            check([v, v, v]);
+            check([v, v + 0.25, v - 0.25]);
+        }
+        // Random real-valued colours, including slightly out of range ones
+        // (diffused error is clamped, but other callers need not be).
+        let values = random_values(3 * 10_000, -10.0, 265.0);
+        for rgb in values.chunks(3) {
+            check([rgb[0], rgb[1], rgb[2]]);
+        }
+        // Non-finite input falls back to the scan, and so agrees too.
+        for v in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 1e200] {
+            check([v, 10.0, 10.0]);
+        }
+    }
+
+    /// All 16.7M integer colours; slow in debug builds, so run on demand:
+    /// `cargo test --release -p rs-rich-art --features image -- --ignored`.
+    #[test]
+    #[ignore = "exhaustive; run with --release -- --ignored"]
+    fn direct_ansi256_search_matches_for_every_integer_colour() {
+        for r in 0..=255u8 {
+            for g in 0..=255u8 {
+                for b in 0..=255u8 {
+                    let rgb = [r, g, b].map(f64::from);
+                    assert_eq!(
+                        nearest(rgb, ImageColorMode::Ansi256, ColorDistance::Rgb),
+                        nearest_reference(rgb, ImageColorMode::Ansi256, ColorDistance::Rgb),
+                        "{rgb:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn static_tables_match_the_reference_for_every_mode_and_distance() {
+        let values = random_values(3 * 2_000, -5.0, 260.0);
+        for mode in [
+            ImageColorMode::Ansi256,
+            ImageColorMode::Ansi16,
+            ImageColorMode::Grayscale,
+        ] {
+            for distance in [ColorDistance::Rgb, ColorDistance::Oklab] {
+                for rgb in values.chunks(3) {
+                    let rgb = [rgb[0], rgb[1], rgb[2]];
+                    assert_eq!(
+                        nearest(rgb, mode, distance),
+                        nearest_reference(rgb, mode, distance),
+                        "{mode:?} {distance:?} {rgb:?}"
+                    );
+                }
+                for index in 0..=255u8 {
+                    let rgb = palette_rgb(index).map(f64::from);
+                    assert_eq!(
+                        nearest(rgb, mode, distance),
+                        nearest_reference(rgb, mode, distance)
+                    );
+                }
+            }
         }
     }
 }

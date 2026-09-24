@@ -203,6 +203,14 @@ spans are clickable.)
 touching anything; `link(&mut text)` adds the link spans; `file_url` and
 `reference_url` build single URLs.
 
+Paths are percent-encoded in `file://` URLs and in an editor template's
+`{path}`: every byte outside RFC 3986's path characters becomes `%XX`, which
+covers control characters, space, `"`, `%`, `#`, `?`, `<`, `>`, `^`, the
+backtick, braces, `|`, brackets and non-ASCII (as its UTF-8 bytes). Backslashes
+become `/` first. So `/tmp/café report.rs`
+links to `file:///tmp/caf%C3%A9%20report.rs`, and a crafted file name cannot
+break out of the OSC 8 escape.
+
 ### Editor links
 
 With an editor template, file links open in your editor at the right place.

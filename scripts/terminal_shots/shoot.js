@@ -14,20 +14,34 @@ function run(c) {
     const env = { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', ...(c.env || {}) };
     delete env.NO_COLOR;
     for (const k of c.unset || []) delete env[k];
-    const p = pty.spawn(c.cmd, c.args, { cols: c.cols || 100, rows: c.rows || 30, cwd: c.cwd, env });
+    // Hold the PTY open for a second after the command exits (keeping its
+    // status): node-pty drops output still buffered when the last writer closes.
+    const held = ['-c', '"$0" "$@"; status=$?; sleep 1; exit $status', c.cmd, ...c.args];
+    const p = pty.spawn('/bin/sh', held, { cols: c.cols || 100, rows: c.rows || 30, cwd: c.cwd, env });
     const chunks = [];
-    p.onData((d) => chunks.push(d));
+    let last = Date.now();
+    p.onData((d) => { chunks.push(d); last = Date.now(); });
     for (const step of c.input || []) setTimeout(() => p.write(step.data), step.afterMs);
     const kill = setTimeout(() => p.kill(), c.timeoutMs || 15000);
+    // node-pty can report the exit before the last output is read: keep
+    // reading until the PTY has been quiet for 300 ms (at most 5 s).
     p.onExit(({ exitCode, signal }) => {
       clearTimeout(kill);
-      resolve({ data: chunks.join(''), exitCode, signal });
+      const exited = Date.now();
+      const drain = setInterval(() => {
+        if (Date.now() - last >= 300 || Date.now() - exited >= 5000) {
+          clearInterval(drain);
+          resolve({ data: chunks.join(''), exitCode, signal });
+        }
+      }, 50);
     });
   });
 }
 
 (async () => {
   const xtermJs = fs.readFileSync(require.resolve('@xterm/xterm/lib/xterm.js'), 'utf8');
+  // Unicode 11 widths, so emoji take two cells as they do in rich's measure.
+  const unicode11Js = fs.readFileSync(require.resolve('@xterm/addon-unicode11'), 'utf8');
   const xtermCss = fs.readFileSync(require.resolve('@xterm/xterm/css/xterm.css'), 'utf8');
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || undefined });
   const results = [];
@@ -38,11 +52,13 @@ function run(c) {
     await page.setContent(`<html><head><style>${xtermCss}
       body{margin:0;background:#161922;padding:16px;display:inline-block}
       .title{font:600 14px sans-serif;color:#c8ccd4;margin:0 0 8px 2px}
-      </style></head><body><div class="title"></div><div id="t"></div><script>${xtermJs}</script></body></html>`);
+      </style></head><body><div class="title"></div><div id="t"></div><script>${xtermJs}</script><script>${unicode11Js}</script></body></html>`);
     await page.evaluate(({ data, cols, rows, title }) => new Promise((done) => {
       document.querySelector('.title').textContent = title;
-      const term = new Terminal({ cols, rows, convertEol: false, fontSize: 14,
+      const term = new Terminal({ cols, rows, convertEol: false, fontSize: 14, allowProposedApi: true,
         fontFamily: 'DejaVu Sans Mono, monospace', theme: { background: '#161922' } });
+      term.loadAddon(new Unicode11Addon.Unicode11Addon());
+      term.unicode.activeVersion = '11';
       term.open(document.getElementById('t'));
       term.write(data, done);
     }), { data: r.data, cols: c.cols || 100, rows: c.rows || 30, title: c.title || c.name });

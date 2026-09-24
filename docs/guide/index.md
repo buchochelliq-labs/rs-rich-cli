@@ -4,7 +4,8 @@ rs-rich brings Python's [rich](https://github.com/Textualize/rich) to Rust:
 styled text, tables, trees, progress bars, syntax highlighting, Markdown and more
 in the terminal, plus exports to HTML and SVG. On top of that faithful core it
 adds Rust-first extensions (diagnostics, structured data, CLI authoring,
-diffs, test tooling, capability detection and accessibility), image and GIF art,
+diffs, test tooling, capability detection, accessibility, tracing spans and
+workflow renderables), image and GIF art,
 and the `rich` command-line tool.
 
 This guide walks through all of it. Every code sample on these pages is taken
@@ -16,10 +17,10 @@ real output, exported to SVG by the library itself.
 | Crate | Import as | What it gives you | Guide |
 |---|---|---|---|
 | [`rs-rich`](https://crates.io/crates/rs-rich) | `rich` | The core: `Console`, markup, `Text`, `Style`, tables, panels, trees, columns, layout, progress, live displays, Markdown, syntax, JSON, logging, prompts, export. A line-for-line port of rich 15.0.0, proven byte-for-byte against it. | [Core](core/index.md) |
-| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `rich_ext` | Everything that is not in upstream rich: diagnostics, hyperlinks, logging adapters, structured data, CLI authoring, diffs, test and QA tooling, capability detection, accessibility. Mostly opt-in features. | [Extensions](ext/index.md) |
-| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | through `rich_ext` | Compile-time checked markup (`richf!`), `#[derive(Rich)]` and print macros. Enabled by ext's `macros` feature. | [Macros](ext/macros.md) |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `rich_ext` | Everything that is not in upstream rich: diagnostics, hyperlinks, logging adapters and tracing spans, structured data, CLI authoring, diffs, test and QA tooling, capability detection, accessibility, and workflow renderables (commands, task trees, transfers, countdowns, notifications, tables, badges, size bars, formatters, experimental redaction). Mostly opt-in features. | [Extensions](ext/index.md) |
+| `rs-rich-macros` (new in 0.0.11, not yet published) | through `rich_ext` | Compile-time checked markup (`richf!`), `#[derive(Rich)]` and print macros. Enabled by ext's `macros` feature. | [Macros](ext/macros.md) |
 | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `rich_art` | FIGlet banners, images as ASCII, Braille, blocks, quadrants or Sixel, animated GIFs, perceptual image diffs. | [Art](art/index.md) |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | the `rich` binary | Upstream rich-cli's commands, plus inspect, diff, ANSI explain, batch, watch, config, completions and doctor. | [CLI](cli/index.md) |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | the `rich` binary | Upstream rich-cli's commands, plus image, gif, inspect, diff, view, hex, unicode, env, capture, ANSI explain, bench compare, batch, watch, config, completions, docs and doctor. | [CLI](cli/index.md) |
 
 Each crate versions independently; see [the home page](../index.md) for the
 current numbers.
@@ -70,7 +71,7 @@ images all rely on that.
 |---|---|---|
 | `rs-rich` | *(none by default)* | The whole faithful core. |
 | | `syntax-cache`, `json-escape-safe` | Opt-in divergences from upstream, documented in [Divergences](../DIVERGENCES.md). |
-| `rs-rich-ext` | *(default)* | Registry, highlighters, hyperlinks, diagnostics, stack traces, dashboard, live coordinator, layouts, targets, capabilities, fidelity, accessibility, ANSI explain, diffs, CLI authoring model. |
+| `rs-rich-ext` | *(default)* | Registry, highlighters, hyperlinks, diagnostics, stack traces, dashboard, live coordinator, `RichHandler` and `SpanView`, layouts, targets, capabilities, fidelity, accessibility, ANSI explain, diffs, CLI authoring model, and the workflow modules: `workflow`, `transfer`, `countdown`, `notify`, `cancel`, `table`, `badge`, `size_bar`, `format`, `redact`, plus the inspector views `source_view`, `hex`, `unicode_inspect` and `env_inspect`. |
 | | `macros` | `richf!`, `#[derive(Rich)]` and the print macros. |
 | | `anyhow` | `Diagnostic::from_anyhow`. |
 | | `log`, `tracing` | Logging adapters. |

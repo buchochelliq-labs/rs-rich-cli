@@ -399,6 +399,11 @@ echo $?    # 5
 `--context N` sets the unchanged lines around each change (default 3) and
 `--language NAME` overrides the highlighting language.
 
+Text diffs show terminal controls in the files as inert symbols (`␛[2J`), so
+diffing a hostile file cannot clear the screen or retitle the window; two ANSI
+captures are still compared by their colours. `--no-sanitize` lets the escapes
+through. Image diffs are unaffected.
+
 ## Images, GIFs and image diffs
 
 These need a binary with the `art` feature (the default) and the sample images
@@ -451,6 +456,10 @@ rich image logo.png --image-mode blocks --width 40 --image-background '#542080'
 
 ![A blue disc on a purple background](../../media/guide/cli_image_background.svg)
 
+Without `--image-background`, transparent pixels are left to the terminal's own
+background (`--image-background default`); `--image-background checkerboard`
+shows them on a gray checkerboard instead.
+
 Reduce the colours, with dithering:
 
 ```bash
@@ -459,6 +468,17 @@ rich image before.png --image-mode blocks --width 48 \
 ```
 
 ![The image in the 16 ANSI colours with an ordered dither](../../media/guide/cli_image_ansi16.svg)
+
+The colour modes are `truecolor` (the default), `ansi256`, `ansi16` and
+`grayscale`, for ASCII, half-block, quadrant and Sixel images and for GIF
+frames. The dithers are `floyd-steinberg`, `bayer4x4` and `atkinson`, and
+`--image-color-distance oklab` picks the nearest palette colour perceptually,
+which keeps hues truer in the small ANSI16 palette:
+
+```bash
+rich image before.png --image-mode quadrants --width 48 \
+  --image-color ansi16 --image-dither atkinson --image-color-distance oklab
+```
 
 Rotate, convert to grayscale and adjust the tone:
 
@@ -536,6 +556,8 @@ text rows from the table.
 
 Related: `--sanitize` replaces control characters in *any* input with visible,
 inert symbols (`ESC[2J` becomes `␛[2J`). Use it for files you do not trust.
+`rich view` and the text `rich diff` do this by default; `--no-sanitize` turns
+it off there.
 
 ## Viewing and inspecting anything
 
@@ -560,11 +582,16 @@ cat config.yaml | rich view -           # the format is detected from the conten
 
 Paging is on by default; any paging flag, on the command line or in the
 config, overrides it. Folding and interactive search are left to your pager.
+Like `less`, `view` shows escape sequences in the file as inert text (`␛]0;…`)
+instead of letting them retitle the window or write the clipboard; pass
+`--no-sanitize` to let them through. It shows at most 8 MiB and 20,000 lines of
+source or text (64 KiB of binary), and says so on stderr when it stops early.
 
-`hex` is a hex dump in the style of `hexdump -C`: offsets, bytes in groups,
+`hex` (alias `hexdump`) is a hex dump in the style of `hexdump -C`: offsets, bytes in groups,
 an ASCII panel, and `*` for runs of repeated lines. `--offset` and `--length`
-slice the input, `--bytes-per-line` and `--group` shape it, and `--search`
-highlights a byte string:
+slice the input, reading only that window, `--bytes-per-line` (1–4096) and
+`--group` shape it, and `--search` highlights a byte string. Without
+`--length` it shows at most 64 KiB:
 
 ```bash
 rich hex logo.png --length 48 --search "49 48 44 52"
@@ -584,8 +611,12 @@ printf 'cafe\u0301 👍🏽 ok' | rich unicode -
 ![A table of graphemes: a combining accent, an emoji with a skin-tone modifier](../../media/guide/cli_unicode.svg)
 
 `env` lists environment variables. Values whose names look secret (`TOKEN`,
-`PASSWORD`, `API_KEY`, `AUTH` as a whole word…) are masked unless you pass
-`--show-secrets`. Arguments filter the names, as substrings or `*` globs, and a
+`PASSWORD`, `API_KEY`, or `AUTH`, `KEY`, `PASS`, `PWD`, `DSN`, `COOKIE`, `JWT`
+as a whole word…) are masked, and so is the secret part of any value that looks
+like a credential (the password in `postgres://user:pw@host`, `ghp_…` and
+`sk_live_…` tokens, JWTs), unless you pass `--show-secrets`. Masking is best
+effort: it can miss a secret, so check the output before you share it.
+Arguments filter the names, as substrings or `*` globs, and a
 single PATH-like variable is checked entry by entry, flagging missing,
 duplicate and empty ones:
 
@@ -613,6 +644,29 @@ signal killed it) after drawing the panel and writing any exports, so
 `rich capture -- cargo test` fails a CI step when the tests fail. Append
 `|| true` to ignore it. With `--report json` a failed command's envelope has
 `"code": "command"` and its status. There is no PNG export.
+
+The command sees `COLUMNS` as the panel's inner width. `capture` keeps at most
+1 MiB or 20,000 lines of output, stopping the command beyond that, and stops
+reading one second after the command exits, even if something it started in
+the background still holds the output open; either leaves a notice on stderr.
+`--sanitize` makes controls in the output inert, keeping its colours.
+
+!!! warning "Experimental: check the output yourself"
+    `--redact` and `--redact-pattern` are experimental and best effort. Read
+    the capture, and any file it writes, before sharing it.
+
+`--redact` masks secrets before anything is shown, exported or recorded:
+values of secret-named keys (`password=…`, `--token=…`), bearer tokens, common
+token prefixes, AWS key ids, JWTs and URL passwords, in the output and in the
+command line in the title. `--redact-pattern REGEX` adds your own pattern (only
+its `secret` group is masked when it has one) and can be repeated:
+
+```bash
+rich capture --redact --export-svg deploy.svg -- ./deploy.sh
+rich capture --redact-pattern 'order (?P<secret>\d{4})' -- ./report.sh
+```
+
+[Using the CLI](../../cli.md#viewers) lists exactly what is masked.
 
 ## Panels, padding, alignment and style
 
@@ -785,7 +839,10 @@ echo '[notice]Ready[/] [warning]2 warnings[/]' | rich --config rich.toml print -
 ![Ready in bold cyan and 2 warnings in bold yellow](../../media/guide/cli_theme.svg)
 
 `--theme NAME` picks another theme and `--theme-style 'notice=bold green'`
-overrides one style for a single run. Unknown keys, bad values and missing
+overrides one style for a single run. `--theme-file PATH` (or `theme_file` in
+your own config) loads the `[styles]` section of an upstream rich theme file;
+`--theme` and `--theme-style` override it. A working-directory `rich.toml`
+cannot set `theme_file`. Unknown keys, bad values and missing
 profiles are errors (exit `2`), even in profiles you did not select.
 
 ## Completions and generated docs
@@ -912,7 +969,7 @@ rich --demo-list
 
 ```text
 core       Core renderables and extensions
-workflows  Configuration, batch, exports and watch
+workflows  Configuration, batch, exports, watch, inspectors and capture
 art        Banners, images, image diff and GIF
 ```
 

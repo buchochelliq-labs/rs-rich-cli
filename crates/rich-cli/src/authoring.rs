@@ -174,7 +174,7 @@ pub(crate) fn dispatch(args: &[String]) -> Result<bool, String> {
 }
 
 /// Write to stdout, ignoring a closed pipe (`rich docs markdown | head`).
-fn out(text: &str) {
+pub(crate) fn out(text: &str) {
     use std::io::Write;
     let mut stdout = std::io::stdout().lock();
     let _ = stdout.write_all(text.as_bytes());

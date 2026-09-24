@@ -19,6 +19,10 @@ console.print(&table);
 
 ![Table](../assets/table.svg)
 
+Plain-string headers and cells are console markup, as in upstream rich, so
+`"[green]ok[/]"` is styled. Pass a `Text`, or wrap the string in
+`rich::markup::escape`, to show brackets literally.
+
 ## Sizing
 
 Columns size themselves to their widest cell, then shrink to fit the console if
