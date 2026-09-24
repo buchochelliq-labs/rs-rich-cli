@@ -91,7 +91,7 @@ pub mod hyperlink;
 pub mod stacktrace;
 
 pub mod log_handler;
-pub use log_handler::RichHandler;
+pub use log_handler::{RichHandler, SpanView};
 
 #[cfg(any(feature = "log", feature = "tracing"))]
 pub mod adapters;

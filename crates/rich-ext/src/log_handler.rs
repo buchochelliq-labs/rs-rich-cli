@@ -8,17 +8,33 @@
 //! is an `adapters::EventSink`, so the existing `LogAdapter` and `EventLayer`
 //! print through it.
 //!
+//! Beyond upstream, which has no spans:
+//!
+//! - An event's [spans](StructuredEvent::span_context) show before its message
+//!   (`outer{id=7}:inner: message`), or as tree guides with
+//!   [`SpanView::Tree`], where span open and close events draw the branches.
+//! - [`RichHandler::hyperlinker`] links the path column through a
+//!   [`Hyperlinker`], so an editor URL template or a base directory for
+//!   relative paths applies.
+//! - [`RichHandler::live`] prints through a [`LiveCoordinator`], above its
+//!   regions, instead of writing to the console under them.
+//!
 //! Upstream formats `record.created` in local time with `[%x %X]`. Local time
 //! needs a time-zone dependency, so the default here is UTC `[HH:MM:SS]`; an
 //! event's own `timestamp` or a [`RichHandler::time_format`] closure replaces
 //! it. Traceback rendering (`rich_tracebacks`) has no Rust counterpart.
 
-use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::io::Write;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use rich::{Console, Highlighter, LogRender, ReprHighlighter, Table, Text};
+use rich::{
+    Console, ConsoleOptions, Highlighter, LogRender, ReprHighlighter, Segment, Table, Text,
+};
 
-use crate::event::{Message, Severity, StructuredEvent};
+use crate::event::{Message, Severity, SpanContext, SpanEvent, StructuredEvent};
+use crate::hyperlink::Hyperlinker;
+use crate::live::{LiveCoordinator, LiveError};
 
 /// Upstream `RichHandler.KEYWORDS`: HTTP methods, styled `logging.keyword`.
 pub const KEYWORDS: &[&str] = &[
@@ -26,6 +42,21 @@ pub const KEYWORDS: &[&str] = &[
 ];
 
 type TimeFormat = Box<dyn Fn() -> String + Send + Sync>;
+type Output = Box<dyn Fn(&[Segment]) -> std::io::Result<()> + Send + Sync>;
+
+/// How an event's spans are shown.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SpanView {
+    /// Before the message, outermost first: `outer{id=7}:inner: message`.
+    #[default]
+    Inline,
+    /// As guides: each span indents the events inside it by one `│ `, its
+    /// open event draws `┌ name field=value` and its close event
+    /// `└ name 1.20ms`.
+    Tree,
+    /// Not shown.
+    Hidden,
+}
 
 /// Renders log events like upstream's `RichHandler`.
 pub struct RichHandler {
@@ -36,6 +67,9 @@ pub struct RichHandler {
     keywords: Vec<String>,
     enable_link_path: bool,
     time_format: TimeFormat,
+    span_view: SpanView,
+    hyperlinker: Option<Hyperlinker>,
+    output: Option<Output>,
 }
 
 impl RichHandler {
@@ -51,7 +85,40 @@ impl RichHandler {
             keywords: KEYWORDS.iter().map(|word| word.to_string()).collect(),
             enable_link_path: true,
             time_format: Box::new(utc_time),
+            span_view: SpanView::Inline,
+            hyperlinker: None,
+            output: None,
         }
+    }
+
+    /// How an event's spans are shown (default [`SpanView::Inline`]).
+    pub fn span_view(mut self, view: SpanView) -> Self {
+        self.span_view = view;
+        self
+    }
+
+    /// Link the path column through `hyperlinker` instead of a bare `file://`
+    /// URL: its editor template, base directory for relative paths (as
+    /// `tracing` reports them) and on/off switch apply.
+    pub fn hyperlinker(mut self, hyperlinker: Hyperlinker) -> Self {
+        self.hyperlinker = Some(hyperlinker);
+        self
+    }
+
+    /// Print through `live`, above its regions, so log lines never tear a
+    /// live display. Render with a console as wide as `live`'s target (see
+    /// `RenderTarget::console`); longer lines fold.
+    pub fn live<W: Write + Send + 'static>(mut self, live: Arc<Mutex<LiveCoordinator<W>>>) -> Self {
+        self.output = Some(Box::new(move |segments| {
+            live.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .print(segments)
+                .map_err(|error| match error {
+                    LiveError::Io(error) => error,
+                    other => std::io::Error::other(other.to_string()),
+                })
+        }));
+        self
     }
 
     fn map_render(self, f: impl FnOnce(LogRender) -> LogRender) -> Self {
@@ -143,21 +210,119 @@ impl RichHandler {
     /// The message column. Port of `RichHandler.render_message`; structured
     /// fields follow the message as `key=value`.
     pub fn render_message(&self, event: &StructuredEvent) -> Text {
-        let mut text = match &event.message {
-            Message::Literal(message) if !self.markup => Text::new(message.clone()),
-            Message::Literal(markup) | Message::Markup(markup) => {
-                Text::from_markup(markup).unwrap_or_else(|_| Text::new(markup.clone()))
+        let ascii = self
+            .console
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .ascii_only();
+        self.message_text(event, ascii)
+    }
+
+    /// [`render_message`](Self::render_message) with tree guides in ASCII when
+    /// `ascii`; callers holding the console lock pass it in.
+    fn message_text(&self, event: &StructuredEvent, ascii: bool) -> Text {
+        let spans = event.span_context();
+        let mut text = match event.span_marker() {
+            Some(marker) => self.span_line(event, marker, ascii),
+            None => {
+                let mut text = self.prefix(spans, ascii);
+                text = text.append_text(&match &event.message {
+                    Message::Literal(message) if !self.markup => Text::new(message.clone()),
+                    Message::Literal(markup) | Message::Markup(markup) => {
+                        Text::from_markup(markup).unwrap_or_else(|_| Text::new(markup.clone()))
+                    }
+                });
+                for (key, value) in &event.fields {
+                    text.append(&format!(" {key}={}", value.format(false, 0)), None);
+                }
+                text
             }
         };
-        for (key, value) in &event.fields {
-            text.append(&format!(" {key}={}", value.format(false, 0)), None);
-        }
         if let Some(highlighter) = &self.highlighter {
             highlighter.highlight(&mut text);
         }
         if !self.keywords.is_empty() {
             let words: Vec<&str> = self.keywords.iter().map(String::as_str).collect();
             let _ = text.highlight_words(&words, "logging.keyword", true);
+        }
+        text
+    }
+
+    /// What comes before a message for `spans`: the span chain, tree guides
+    /// or nothing, as [`SpanView`] says.
+    fn prefix(&self, spans: &[SpanContext], ascii: bool) -> Text {
+        let mut text = Text::new("");
+        match self.span_view {
+            SpanView::Hidden => {}
+            SpanView::Tree => text.append(&guide(ascii).repeat(spans.len()), Some("dim".into())),
+            SpanView::Inline if spans.is_empty() => {}
+            SpanView::Inline => {
+                for (index, span) in spans.iter().enumerate() {
+                    if index > 0 {
+                        text.append(":", Some("dim".into()));
+                    }
+                    text = text.append_text(&span_label(span, "{", "}"));
+                }
+                text.append(": ", Some("dim".into()));
+            }
+        }
+        text
+    }
+
+    /// The message of a span open or close event: `event`'s message is the
+    /// span's name, its fields the span's and its spans the span's parents.
+    fn span_line(&self, event: &StructuredEvent, marker: SpanEvent, ascii: bool) -> Text {
+        let name = match &event.message {
+            Message::Literal(name) | Message::Markup(name) => name.clone(),
+        };
+        let span = SpanContext {
+            name,
+            fields: event.fields.clone(),
+        };
+        let parents = event.span_context();
+        let elapsed = match marker {
+            SpanEvent::Open => None,
+            SpanEvent::Close { elapsed } => Some(elapsed),
+        };
+        let mut text = Text::new("");
+        match self.span_view {
+            SpanView::Tree => {
+                text.append(&guide(ascii).repeat(parents.len()), Some("dim".into()));
+                let corner = match (elapsed.is_some(), ascii) {
+                    (false, false) => "┌ ",
+                    (true, false) => "└ ",
+                    (false, true) => "+ ",
+                    (true, true) => "` ",
+                };
+                text.append(corner, Some("dim".into()));
+                // The open line shows the fields; the close line only times it.
+                if elapsed.is_some() {
+                    text = text.append_text(&Text::styled(span.name.clone(), "bold"));
+                } else {
+                    text = text.append_text(&span_label(&span, " ", ""));
+                }
+            }
+            SpanView::Inline | SpanView::Hidden => {
+                if self.span_view == SpanView::Inline {
+                    for parent in parents {
+                        text = text.append_text(&span_label(parent, "{", "}"));
+                        text.append(":", Some("dim".into()));
+                    }
+                }
+                text = text.append_text(&span_label(&span, "{", "}"));
+                text.append(
+                    if elapsed.is_some() {
+                        " closed"
+                    } else {
+                        " opened"
+                    },
+                    Some("dim".into()),
+                );
+            }
+        }
+        if let Some(elapsed) = elapsed {
+            text.append(" ", None);
+            text.append(&format_elapsed(elapsed), Some("dim".into()));
         }
         text
     }
@@ -181,7 +346,7 @@ impl RichHandler {
         let render = self.render.lock().unwrap_or_else(|e| e.into_inner());
         render.render(
             console,
-            self.render_message(event),
+            self.message_text(event, console.ascii_only()),
             Some(Text::new(time)),
             level,
             name,
@@ -192,9 +357,104 @@ impl RichHandler {
 
     /// Print one event. Port of `RichHandler.emit`.
     pub fn emit_event(&self, event: &StructuredEvent) {
+        let _ = self.try_emit(event);
+    }
+
+    fn try_emit(&self, event: &StructuredEvent) -> std::io::Result<()> {
         let console = self.console.lock().unwrap_or_else(|e| e.into_inner());
         let table = self.render_with(&console, event);
-        console.print(&table);
+        if self.hyperlinker.is_none() && self.output.is_none() {
+            console.print(&table);
+            return Ok(());
+        }
+        let mut lines = console.render_lines(&table, &console.options(), false);
+        if let (Some(hyperlinker), Some(source)) = (&self.hyperlinker, &event.context.source) {
+            let line = Some(source.line).filter(|&line| line > 0);
+            let url = hyperlinker.file_url(&source.path, line, None);
+            relink(&mut lines, &source.path, url.as_deref());
+        }
+        match &self.output {
+            Some(output) => output(&join_lines(lines)),
+            None => {
+                console.print(&Lines(lines));
+                Ok(())
+            }
+        }
+    }
+}
+
+/// One tree level: `│ ` (or `| ` in ASCII).
+fn guide(ascii: bool) -> &'static str {
+    if ascii {
+        "| "
+    } else {
+        "│ "
+    }
+}
+
+/// `name{a=1 b=2}` (or `name a=1 b=2`, with `open` = `" "` and `close` = `""`),
+/// the name bold.
+fn span_label(span: &SpanContext, open: &str, close: &str) -> Text {
+    let mut text = Text::styled(span.name.clone(), "bold");
+    if !span.fields.is_empty() {
+        let fields: Vec<String> = span
+            .fields
+            .iter()
+            .map(|(key, value)| format!("{key}={}", value.format(false, 0)))
+            .collect();
+        text.append(open, Some("dim".into()));
+        text.append(&fields.join(" "), None);
+        text.append(close, Some("dim".into()));
+    }
+    text
+}
+
+/// `850µs`, `1.20ms` or `2.50s`.
+fn format_elapsed(elapsed: Duration) -> String {
+    let micros = elapsed.as_secs_f64() * 1e6;
+    if micros < 1000.0 {
+        format!("{micros:.0}µs")
+    } else if micros < 1e6 {
+        format!("{:.2}ms", micros / 1e3)
+    } else {
+        format!("{:.2}s", micros / 1e6)
+    }
+}
+
+/// Point the path column's `file://` link (from `LogRender`) at `url`, or
+/// drop it when the hyperlinker is off.
+fn relink(lines: &mut [Vec<Segment>], path: &str, url: Option<&str>) {
+    let bare = format!("file://{path}");
+    for segment in lines.iter_mut().flatten() {
+        let Some(style) = &segment.style else {
+            continue;
+        };
+        let linked = style
+            .link()
+            .is_some_and(|link| link == bare || link.starts_with(&format!("{bare}#")));
+        if linked {
+            segment.style = Some(style.update_link(url.map(str::to_owned)));
+        }
+    }
+}
+
+fn join_lines(lines: Vec<Vec<Segment>>) -> Vec<Segment> {
+    let mut segments = Vec::new();
+    for (index, line) in lines.into_iter().enumerate() {
+        if index > 0 {
+            segments.push(Segment::line());
+        }
+        segments.extend(line);
+    }
+    segments
+}
+
+/// Lines already rendered, printed as they are.
+struct Lines(Vec<Vec<Segment>>);
+
+impl rich::Renderable for Lines {
+    fn rich_render(&self, _: &Console, _: &ConsoleOptions) -> Vec<Segment> {
+        join_lines(self.0.clone())
     }
 }
 

@@ -96,6 +96,31 @@ CLI 0.0.11. Core changes below, so every dependent moves with it.
   `unicode_inspect::UnicodeView` and `env_inspect::{EnvView, PathView}`, all
   width-aware and ASCII-safe, with no new dependencies.
 
+### Ext: tracing spans, span trees, editor links and Live-safe logging (0.0.11 workstream 7)
+
+- **Spans (#286):** `EventLayer` now tracks spans in the subscriber's registry.
+  Every event carries the spans it happened in, outermost first, with their
+  fields as last recorded (`StructuredEvent::span_context`). With
+  `span_open(true)` and `span_close(true)` it also reports spans opening and
+  closing, with how long they were open (`span_marker`).
+- **`RichHandler` span views:** `SpanView::Inline` (the default) prints
+  `outer{a=1}:inner: message`. `SpanView::Tree` indents events under their
+  spans with `│ ` guides and draws `┌ name` and `└ name 1.20ms` branches, in
+  ASCII on ASCII consoles. `SpanView::Hidden` shows the message alone.
+- **Editor links:** `RichHandler::hyperlinker` links the path column through a
+  `Hyperlinker`, so its editor template and a base directory for `tracing`'s
+  relative paths apply. Core's `LogRender` is unchanged.
+- **Live-safe output:** `RichHandler::live` prints through a `LiveCoordinator`,
+  above its regions, so logging never tears a live display.
+- **Breaking:** `EventLayer` now requires `S: LookupSpan`, as every
+  `tracing_subscriber` registry-based subscriber is. Events logged inside spans
+  now show the span chain before the message; `span_view(SpanView::Hidden)`
+  restores the old output.
+- `rich_eprintln!` and `rich_trace!` (#285) shipped with the macros in
+  workstream 5; they print through the themed console and are unchanged here.
+- The logging guide covers spans, both views, editor links and Live output,
+  with two new screenshots. Its example compiles every snippet.
+
 ### CLI: a project's `rich.toml` cannot undo `NO_COLOR`
 
 - A `no_color = false` in a `rich.toml` found in the working directory used to
