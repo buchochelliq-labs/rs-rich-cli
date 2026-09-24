@@ -22,6 +22,7 @@
 
 pub mod a11y;
 pub mod ansi_explain;
+pub mod cancel;
 pub mod capabilities;
 pub mod cli;
 pub mod encoding;
