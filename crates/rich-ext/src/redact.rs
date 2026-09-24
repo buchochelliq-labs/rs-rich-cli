@@ -8,7 +8,9 @@
 //! * plain strings and log lines ([`Redactor::redact_str`]);
 //! * text with ANSI escape sequences, keeping the escapes
 //!   ([`Redactor::redact_ansi`]), or a stream of such chunks
-//!   ([`Redactor::redact_chunks`]);
+//!   ([`Redactor::redact_chunks`], or [`Redactor::redact_byte_chunks`] for
+//!   raw bytes from a pipe);
+//! * command lines ([`Redactor::redact_args`]);
 //! * rendered [`Segment`]s, between [`Console::record_output`] and an export
 //!   ([`Redactor::redact_segments`]), with helpers that record, redact and
 //!   export in one call ([`Redactor::export_svg`], [`Redactor::export_html`],
@@ -49,6 +51,17 @@
 //! with [`Redactor::redact_str`] before rendering when that can happen.
 //! Masks that keep the width (in segments, or with
 //! [`preserve_width`](Redactor::preserve_width)) reveal the secret's length.
+//!
+//! Hidden text is searched too: the bodies of control strings (an OSC 8
+//! hyperlink's URL, a window title, DCS and APC payloads) and a segment's
+//! link target. There the mask is the plain one, with control characters
+//! made `*`, so the escape stays well formed; masking inside a binary
+//! payload (an inline image) can spoil it. Eight-bit C1 controls are read
+//! as text, not as escapes.
+//!
+//! Matching fails closed: when a regex gives up (a user pattern that hits
+//! the backtracking limit), the rest of the line is masked. The built-in
+//! detectors run in time linear in the line's length.
 
 use std::fmt;
 use std::sync::OnceLock;
@@ -94,11 +107,21 @@ pub const SECRET_KEYS: &[&str] = &[
 /// assert!(!is_secret_key("author"));
 /// ```
 pub fn is_secret_key(key: &str) -> bool {
-    let normalized = key.replace('-', "_");
+    // Called for every key a line holds, so lowercase once and glob only
+    // when a glob could match (every glob entry names `auth`). No entry
+    // matches fewer than four characters.
+    if key.chars().nth(3).is_none() {
+        return false;
+    }
+    let lower = key.to_lowercase();
+    let normalized = lower.replace('-', "_");
+    let globs = lower.contains("auth");
     SECRET_KEYS.iter().any(|pattern| {
-        crate::env_inspect::name_matches(pattern, key)
-            || (!pattern.contains(['*', '?'])
-                && crate::env_inspect::name_matches(pattern, &normalized))
+        if pattern.contains(['*', '?']) {
+            globs && crate::env_inspect::name_matches(pattern, &lower)
+        } else {
+            lower.contains(pattern) || normalized.contains(pattern)
+        }
     })
 }
 
@@ -108,7 +131,10 @@ pub enum Detector {
     /// The value in `key=value`, `key: value`, `"key": "value"` or
     /// `--key=value` when the key is secret by [`is_secret_key`]. An
     /// `Authorization: Bearer …` scheme word is kept and only the credential
-    /// masked.
+    /// masked. A value in quotes is masked up to the closing quote, spaces
+    /// and commas included (`\"` does not close a `"…"` value); an unquoted
+    /// value, or one whose quote never closes, ends at whitespace or one of
+    /// `"',;&`.
     KeyValue,
     /// The token after `Bearer ` (at least 12 characters with a digit).
     Bearer,
@@ -123,7 +149,8 @@ pub enum Detector {
     AwsAccessKey,
     /// JSON Web Tokens: three base64url parts, the first two starting `eyJ`.
     Jwt,
-    /// The password in a URL's `user:password@`.
+    /// The password in a URL's `user:password@` (`scheme://` required), up
+    /// to the last `@` before the host.
     UrlCredentials,
 }
 
@@ -152,9 +179,13 @@ impl Detector {
 
     fn pattern(self) -> &'static str {
         match self {
+            // Only the key and its separator: the value is read by
+            // `key_value_secret`, and only for a secret key, so a line of
+            // ordinary keys is scanned once. A key starts a word (leading
+            // dashes of a flag included), so no suffix of a key is retried.
             Detector::KeyValue => concat!(
-                r#"(?i)(?<![\w.])(?P<key>[a-z_][\w.-]*)["']?[ \t]*[:=][ \t]*"#,
-                r#"(?:(?:bearer|basic|token)[ \t]+)?["']?(?P<secret>[^\s"',;&]+)"#,
+                r#"(?i)(?<![\w.-])-*(?P<key>[a-z_][\w.-]*)["']?[ \t]*[:=][ \t]*"#,
+                r#"(?:(?:bearer|basic|token)[ \t]+)?"#,
             ),
             Detector::Bearer => {
                 r"(?i)\bbearer[ \t]+(?P<secret>(?=[a-z._~+/=-]*[0-9])[a-z0-9._~+/=-]{12,})"
@@ -169,8 +200,11 @@ impl Detector {
             Detector::Jwt => {
                 r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{5,}\.eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*"
             }
+            // The password runs to the last `@` of the authority (which ends
+            // at `/`, `?`, `#` or whitespace), so a password holding `@` is
+            // masked whole. A scheme starts a run of scheme characters.
             Detector::UrlCredentials => {
-                r"(?i)\b[a-z][a-z0-9+.-]*://[^\s/:@]+:(?P<secret>[^\s/@]+)@"
+                r"(?i)(?<![a-z0-9+.-])[a-z][a-z0-9+.-]*://[^\s/?#:@]*:(?P<secret>[^\s/?#]+)@"
             }
         }
     }
@@ -282,7 +316,9 @@ impl Redactor {
 
     /// Add a regular expression (fancy-regex syntax, so lookaround works).
     /// When it has a group named `secret`, only that group is masked;
-    /// otherwise the whole match is. Its `{kind}` is `pattern`.
+    /// otherwise the whole match is. Its `{kind}` is `pattern`. A pattern
+    /// that fails at run time (too much backtracking) masks the rest of the
+    /// line rather than none of it; see [`find`](Self::find).
     pub fn pattern(self, pattern: &str) -> Result<Self, PatternError> {
         self.named_pattern("pattern", pattern)
     }
@@ -330,30 +366,59 @@ impl Redactor {
     /// The spans of `line` to mask, sorted and merged where they overlap.
     /// Rules match within one line; pass lines, not whole documents, when
     /// a pattern could otherwise cross a line break.
+    ///
+    /// Matching fails closed: when a rule's regex cannot finish (a pattern
+    /// that exceeds the backtracking limit, say), everything from where
+    /// that search started to the end of the line is masked.
     pub fn find(&self, line: &str) -> Vec<Match> {
         let mut found: Vec<Match> = Vec::new();
         for rule in &self.rules {
             let regex = rule.regex();
             let has_secret = regex.capture_names().any(|n| n == Some("secret"));
             let key_value = matches!(rule, Rule::Detector(Detector::KeyValue));
+            // Where a quoted value's search for its closing quote failed:
+            // a later search for the same quote fails too.
+            let mut unclosed = [usize::MAX; 2];
             let mut pos = 0;
             while pos <= line.len() {
-                let Ok(Some(captures)) = regex.captures_from_pos(line, pos) else {
-                    break;
+                let captures = match regex.captures_from_pos(line, pos) {
+                    Ok(Some(captures)) => captures,
+                    Ok(None) => break,
+                    Err(_) => {
+                        found.push(Match {
+                            start: pos,
+                            end: line.len(),
+                            kind: rule.name().to_string(),
+                        });
+                        break;
+                    }
                 };
                 let whole = captures.get(0).expect("group 0 always matches");
-                let mut next = if whole.end() > whole.start() {
+                let next = if whole.end() > whole.start() {
                     whole.end()
                 } else {
                     // An empty match: step past one character.
                     whole.end() + line[whole.end()..].chars().next().map_or(1, char::len_utf8)
                 };
-                let key = captures.name("key");
-                if key_value && !key.is_some_and(|key| is_secret_key(key.as_str())) {
-                    // Not a secret key; its value may still hold one
-                    // (`url=https://x/?token=…`), so search on after the key.
-                    next = key.map_or(next, |key| key.end());
+                if key_value {
+                    // After a secret value, search on after it; otherwise
+                    // after the separator, as a value that is not secret
+                    // may still hold a key that is (`url=https://x/?token=…`).
                     pos = next;
+                    let secret = captures
+                        .name("key")
+                        .is_some_and(|key| is_secret_key(key.as_str()));
+                    if let Some((start, end)) = secret
+                        .then(|| key_value_secret(line, whole.end(), &mut unclosed))
+                        .flatten()
+                    {
+                        pos = end;
+                        found.push(Match {
+                            start,
+                            end,
+                            kind: rule.name().to_string(),
+                        });
+                    }
                     continue;
                 }
                 let span = if has_secret {
@@ -418,7 +483,8 @@ impl Redactor {
 
     /// `text` holding ANSI escape sequences with every match masked. Rules
     /// see the visible text, so a secret interrupted by a colour change is
-    /// still found; the escape sequences themselves are kept.
+    /// still found; the escape sequences themselves are kept, with secrets
+    /// in their bodies (an OSC 8 link's URL) masked in place.
     pub fn redact_ansi(&self, text: &str) -> String {
         apply_edits(text, &self.ansi_edits(text))
     }
@@ -432,16 +498,130 @@ impl Redactor {
         if edits.is_empty() {
             return chunks.iter().map(|c| c.as_ref().to_string()).collect();
         }
-        let redacted = apply_edits(&joined, &edits);
-        let mut out = Vec::with_capacity(chunks.len());
-        let (mut original, mut from) = (0, 0);
-        for chunk in chunks {
-            original += chunk.as_ref().len();
-            let to = map_offset(original, &edits);
-            out.push(redacted[from..to].to_string());
-            from = to;
+        let ends = chunk_ends(chunks.iter().map(|c| c.as_ref().len()));
+        split_edited(joined.as_bytes(), &edits, &ends)
+            .into_iter()
+            .map(|bytes| String::from_utf8(bytes).expect("edits keep char boundaries"))
+            .collect()
+    }
+
+    /// As [`redact_chunks`](Self::redact_chunks) for raw bytes, as read
+    /// from a pipe: a character may be split between chunks, and the bytes
+    /// need not be valid UTF-8. The stream is decoded once, so a split
+    /// character stays whole; rules see each invalid sequence as `U+FFFD`,
+    /// and it is kept byte for byte unless a mask covers it. When nothing
+    /// matches, the chunks come back unchanged.
+    pub fn redact_byte_chunks<B: AsRef<[u8]>>(&self, chunks: &[B]) -> Vec<Vec<u8>> {
+        let unchanged = || chunks.iter().map(|c| c.as_ref().to_vec()).collect();
+        if self.is_empty() {
+            return unchanged();
+        }
+        let joined: Vec<u8> = chunks.iter().flat_map(|c| c.as_ref()).copied().collect();
+        // The decoded text, and for each of its bytes (and its end) the
+        // offset in `joined`; a replacement character maps to the start of
+        // the invalid bytes it stands for.
+        let mut text = String::with_capacity(joined.len());
+        let mut origin = Vec::with_capacity(joined.len() + 1);
+        let mut at = 0;
+        for piece in joined.utf8_chunks() {
+            let valid = piece.valid();
+            text.push_str(valid);
+            origin.extend(at..at + valid.len());
+            at += valid.len();
+            if !piece.invalid().is_empty() {
+                text.push(char::REPLACEMENT_CHARACTER);
+                origin.extend([at; 3]);
+                at += piece.invalid().len();
+            }
+        }
+        origin.push(at);
+        let edits: Vec<Edit> = self
+            .ansi_edits(&text)
+            .into_iter()
+            .map(|edit| Edit {
+                start: origin[edit.start],
+                end: origin[edit.end],
+                text: edit.text,
+            })
+            .collect();
+        if edits.is_empty() {
+            return unchanged();
+        }
+        let ends = chunk_ends(chunks.iter().map(|c| c.as_ref().len()));
+        split_edited(&joined, &edits, &ends)
+    }
+
+    /// A command line with every match masked word by word. With the
+    /// [`KeyValue`](Detector::KeyValue) detector, the value of a flag whose
+    /// name is secret by [`is_secret_key`] is masked too, whether it is the
+    /// next word (`--token X`) or after `=` (`--api-key=X`). One-letter
+    /// flags (`-p`, `-u`) are not: they mean a password in one tool and a
+    /// port or a user in the next.
+    ///
+    /// ```
+    /// use rich_ext::redact::Redactor;
+    ///
+    /// let argv = ["deploy", "--token", "abc123", "--api-key=xyz", "-p", "80"];
+    /// assert_eq!(
+    ///     Redactor::secrets().redact_args(&argv),
+    ///     ["deploy", "--token", "********", "--api-key=********", "-p", "80"]
+    /// );
+    /// ```
+    pub fn redact_args<S: AsRef<str>>(&self, args: &[S]) -> Vec<String> {
+        let flags = self
+            .rules
+            .iter()
+            .any(|rule| matches!(rule, Rule::Detector(Detector::KeyValue)));
+        let kind = Detector::KeyValue.name();
+        let mut out = Vec::with_capacity(args.len());
+        let mut mask_next = false;
+        for arg in args {
+            let arg = arg.as_ref();
+            let flag = if flags { secret_flag(arg) } else { None };
+            let word = if std::mem::take(&mut mask_next) && !arg.is_empty() {
+                self.mask_text(kind, arg, self.preserve_width)
+            } else {
+                match flag {
+                    Some(Some(at)) if at < arg.len() => format!(
+                        "{}{}",
+                        &arg[..at],
+                        self.mask_text(kind, &arg[at..], self.preserve_width)
+                    ),
+                    _ => self.redact_str(arg),
+                }
+            };
+            mask_next = flag == Some(None);
+            out.push(word);
         }
         out
+    }
+
+    fn mask_text(&self, kind: &str, original: &str, fit: bool) -> String {
+        let mask = self.mask_for(kind);
+        if fit {
+            fit_mask(&mask, cell_len(original))
+        } else {
+            mask
+        }
+    }
+
+    /// `text` (a URL or an escape's body) with every match replaced by the
+    /// plain mask, control characters in it made `*` so an escape stays
+    /// well formed; `None` when nothing matched.
+    fn redact_invisible(&self, text: &str) -> Option<String> {
+        let matches = self.find(text);
+        if matches.is_empty() {
+            return None;
+        }
+        let mut out = String::with_capacity(text.len());
+        let mut at = 0;
+        for m in matches {
+            out.push_str(&text[at..m.start]);
+            out.push_str(&control_free(&self.mask_for(&m.kind)));
+            at = m.end;
+        }
+        out.push_str(&text[at..]);
+        Some(out)
     }
 
     fn ansi_edits(&self, text: &str) -> Vec<Edit> {
@@ -451,7 +631,20 @@ impl Redactor {
         }
         let mut line_start = 0;
         for line in text.split('\n') {
-            let (visible, offsets) = visible_text(line);
+            let scan = scan_line(line);
+            let (visible, offsets) = (scan.visible, scan.offsets);
+            // Control-string bodies (an OSC 8 link's URL, a window title)
+            // are not shown but still land in recordings: search them too.
+            for (start, end) in scan.bodies {
+                let body = &line[start..end];
+                for m in self.find(body) {
+                    edits.push(Edit {
+                        start: line_start + start + m.start,
+                        end: line_start + start + m.end,
+                        text: control_free(&self.mask_for(&m.kind)),
+                    });
+                }
+            }
             for m in self.find(&visible) {
                 // Contiguous runs of visible bytes in the original; escapes
                 // between them are kept.
@@ -486,6 +679,7 @@ impl Redactor {
             }
             line_start += line.len() + 1;
         }
+        edits.sort_by_key(|edit| edit.start);
         edits
     }
 
@@ -493,14 +687,20 @@ impl Redactor {
     ///
     /// Each line keeps its cell width: the mask is fitted to the width of
     /// what it covers and spread over the covered segments, so every part
-    /// keeps its segment's style. Control segments are kept.
+    /// keeps its segment's style. A hyperlink target (`Style::link`) is
+    /// redacted with the plain mask. Control segments are kept, with any
+    /// secret in an escape's body (a window title, say) masked.
     pub fn redact_segments(&self, segments: &[Segment]) -> Vec<Segment> {
         if self.is_empty() {
             return segments.to_vec();
         }
+        let mut changed = false;
         // Pieces: segment text split at newlines, a newline its own piece.
         let mut lines: Vec<Vec<Segment>> = vec![Vec::new()];
         for segment in segments {
+            let redacted = self.redact_segment_escapes(segment);
+            changed |= redacted.is_some();
+            let segment = redacted.as_ref().unwrap_or(segment);
             if segment.control || !segment.text.contains('\n') {
                 lines
                     .last_mut()
@@ -522,7 +722,6 @@ impl Redactor {
                 }
             }
         }
-        let mut changed = false;
         let mut out = Vec::with_capacity(segments.len());
         for line in lines {
             let plain: String = line
@@ -543,6 +742,24 @@ impl Redactor {
         } else {
             segments.to_vec()
         }
+    }
+
+    /// `segment` with its link target, or a control segment's escape
+    /// bodies, redacted; `None` when there was nothing to mask.
+    fn redact_segment_escapes(&self, segment: &Segment) -> Option<Segment> {
+        if segment.control {
+            let text = self.redact_ansi(&segment.text);
+            return (text != segment.text).then(|| Segment {
+                text,
+                ..segment.clone()
+            });
+        }
+        let style = segment.style.as_ref()?;
+        let link = self.redact_invisible(style.link()?)?;
+        Some(Segment::new(
+            segment.text.clone(),
+            Some(style.update_link(Some(link))),
+        ))
     }
 
     fn mask_line(&self, line: Vec<Segment>, plain: &str, matches: &[Match]) -> Vec<Segment> {
@@ -702,15 +919,17 @@ fn fit_mask(mask: &str, width: usize) -> String {
 fn take_cells(mask: &mut Vec<char>, width: usize, last: bool) -> String {
     let mut out = String::new();
     let mut used = 0;
-    while let Some(&c) = mask.first() {
+    let mut taken = 0;
+    for &c in mask.iter() {
         let w = char_cell_width(c);
         if used + w > width {
             break;
         }
         out.push(c);
         used += w;
-        mask.remove(0);
+        taken += 1;
     }
+    mask.drain(..taken);
     out.extend(std::iter::repeat_n(' ', width - used));
     if last {
         mask.clear();
@@ -738,75 +957,199 @@ fn apply_edits(text: &str, edits: &[Edit]) -> String {
     out
 }
 
-/// Where `offset` in the original lands after `edits`; an offset inside an
-/// edit lands after its replacement.
-fn map_offset(offset: usize, edits: &[Edit]) -> usize {
-    let mut shift: isize = 0;
-    for edit in edits {
-        if edit.start >= offset {
-            break;
-        }
-        let delta = edit.text.len() as isize - (edit.end - edit.start) as isize;
-        if edit.end > offset {
-            return (edit.start as isize + shift) as usize + edit.text.len();
-        }
-        shift += delta;
-    }
-    (offset as isize + shift) as usize
+/// The running totals of chunk lengths: where each chunk ends.
+fn chunk_ends(lengths: impl Iterator<Item = usize>) -> Vec<usize> {
+    lengths
+        .scan(0, |total, len| {
+            *total += len;
+            Some(*total)
+        })
+        .collect()
 }
 
-/// The text of `line` without escape sequences, and for each of its bytes
-/// the byte offset in `line`.
-fn visible_text(line: &str) -> (String, Vec<usize>) {
+/// `text` with `edits` applied, cut where the original chunks ended
+/// (`ends`, ascending). A chunk end inside an edit lands after its
+/// replacement, so a mask goes in the chunk where the secret starts. One
+/// pass over the edits.
+fn split_edited(text: &[u8], edits: &[Edit], ends: &[usize]) -> Vec<Vec<u8>> {
+    let mut edited = Vec::with_capacity(text.len());
+    let mut at = 0;
+    for edit in edits {
+        edited.extend_from_slice(&text[at..edit.start]);
+        edited.extend_from_slice(edit.text.as_bytes());
+        at = edit.end;
+    }
+    edited.extend_from_slice(&text[at..]);
+    let mut out = Vec::with_capacity(ends.len());
+    let (mut next, mut shift, mut from) = (0, 0isize, 0);
+    for &end in ends {
+        let to = loop {
+            match edits.get(next) {
+                Some(edit) if edit.start < end => {
+                    if edit.end > end {
+                        break (edit.start as isize + shift) as usize + edit.text.len();
+                    }
+                    shift += edit.text.len() as isize - (edit.end - edit.start) as isize;
+                    next += 1;
+                }
+                _ => break (end as isize + shift) as usize,
+            }
+        };
+        let to = to.max(from);
+        out.push(edited[from..to].to_vec());
+        from = to;
+    }
+    out
+}
+
+/// `mask` with control characters (which could end or corrupt an escape
+/// sequence it is written into) replaced by `*`.
+fn control_free(mask: &str) -> String {
+    mask.chars()
+        .map(|c| if c.is_control() { '*' } else { c })
+        .collect()
+}
+
+/// The secret value of a secret key whose separator ends at `at`, as a
+/// byte range of `line`. A quoted value runs to its closing quote (a
+/// backslash escapes the next character in `"…"`); an unquoted value, or
+/// one whose quote never closes, to whitespace or one of `"',;&`.
+/// `unclosed` remembers, per quote, where a search for the closing quote
+/// found none, so no stretch of the line is searched twice.
+fn key_value_secret(line: &str, at: usize, unclosed: &mut [usize; 2]) -> Option<(usize, usize)> {
     let bytes = line.as_bytes();
-    let mut visible = String::with_capacity(line.len());
-    let mut offsets = Vec::with_capacity(line.len());
+    let mut start = at;
+    if let Some(&quote @ (b'"' | b'\'')) = bytes.get(at) {
+        start = at + 1;
+        let slot = usize::from(quote == b'\'');
+        if start < unclosed[slot] {
+            let mut i = start;
+            while i < bytes.len() {
+                match bytes[i] {
+                    b'\\' if quote == b'"' => i += 2,
+                    b if b == quote => return (i > start).then_some((start, i)),
+                    _ => i += 1,
+                }
+            }
+            unclosed[slot] = start;
+        }
+    }
+    let end = line[start..]
+        .find(|c: char| c.is_whitespace() || "\"',;&".contains(c))
+        .map_or(line.len(), |len| start + len);
+    (end > start).then_some((start, end))
+}
+
+/// For a command-line word that is a flag named like a secret key: `Some`
+/// with the offset of its value after `=`, or `Some(None)` when the value
+/// is the next word.
+fn secret_flag(word: &str) -> Option<Option<usize>> {
+    let name = word.strip_prefix('-')?.trim_start_matches('-');
+    let (name, value) = match name.find('=') {
+        Some(eq) => (&name[..eq], Some(word.len() - name.len() + eq + 1)),
+        None => (name, None),
+    };
+    let valid = name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "_.-".contains(c));
+    (valid && is_secret_key(name)).then_some(value)
+}
+
+/// A line split into what a terminal shows and what it does not.
+struct Scan {
+    /// The text without escape sequences.
+    visible: String,
+    /// For each byte of `visible`, its offset in the line.
+    offsets: Vec<usize>,
+    /// The bodies of control strings (OSC, DCS, SOS, PM, APC), as byte
+    /// ranges of the line.
+    bodies: Vec<(usize, usize)>,
+}
+
+fn scan_line(line: &str) -> Scan {
+    let bytes = line.as_bytes();
+    let mut scan = Scan {
+        visible: String::with_capacity(line.len()),
+        offsets: Vec::with_capacity(line.len()),
+        bodies: Vec::new(),
+    };
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == 0x1b {
-            i = skip_escape(bytes, i);
+            let (end, body) = skip_escape(bytes, i);
+            scan.bodies.extend(body.filter(|(start, end)| start < end));
+            i = end;
             continue;
         }
         let c = line[i..].chars().next().expect("char boundary");
         let len = c.len_utf8();
-        visible.push(c);
-        offsets.extend(i..i + len);
+        scan.visible.push(c);
+        scan.offsets.extend(i..i + len);
         i += len;
     }
-    (visible, offsets)
+    scan
 }
 
-/// The index after the escape sequence starting at `i` (CSI, OSC, other
-/// string sequences, or a two-byte escape).
-fn skip_escape(bytes: &[u8], i: usize) -> usize {
+/// The ECMA-48 escape sequence starting with the ESC at `i`: the index
+/// after it and, for a control string, the byte range of its body.
+///
+/// * CSI (`ESC [`): parameter and intermediate bytes (0x20–0x3F), then a
+///   final byte (0x40–0x7E).
+/// * OSC (`ESC ]`), ended by ST (`ESC \`) or BEL; DCS (`ESC P`), SOS
+///   (`ESC X`), PM (`ESC ^`) and APC (`ESC _`), ended by ST. CAN, SUB or
+///   an ESC that does not start ST cut a string short, as in a terminal;
+///   an unended string runs to the end of the line.
+/// * Other escapes: intermediate bytes (0x20–0x2F, as in `ESC ( B`), then
+///   a final byte (0x30–0x7E).
+///
+/// A sequence cut short by a byte it cannot hold (a control, DEL,
+/// non-ASCII) ends before that byte, which is then read as text; an ESC
+/// followed by such a byte, or by nothing, is a lone ESC. Eight-bit C1
+/// controls (U+0080–U+009F) are not read as escapes: they are text, so
+/// what follows them is searched like any other text.
+fn skip_escape(bytes: &[u8], i: usize) -> (usize, Option<(usize, usize)>) {
     let Some(&kind) = bytes.get(i + 1) else {
-        return i + 1;
+        return (i + 1, None);
     };
     match kind {
         b'[' => {
             let mut j = i + 2;
-            while j < bytes.len() && !(0x40..=0x7e).contains(&bytes[j]) {
-                j += 1;
-            }
-            (j + 1).min(bytes.len())
-        }
-        b']' | b'P' | b'_' | b'^' | b'X' => {
-            let mut j = i + 2;
-            while j < bytes.len() {
-                if bytes[j] == 0x07 {
-                    return j + 1;
+            while let Some(&b) = bytes.get(j) {
+                match b {
+                    0x20..=0x3f => j += 1,
+                    0x40..=0x7e => return (j + 1, None),
+                    _ => break,
                 }
-                if bytes[j] == 0x1b && bytes.get(j + 1) == Some(&b'\\') {
-                    return j + 2;
-                }
-                j += 1;
             }
-            j
+            (j, None)
         }
-        // A two-byte escape; the byte after ESC is ASCII here only when it
-        // is a real sequence, so stepping one past it stays on a boundary.
-        c if c.is_ascii() => i + 2,
-        _ => i + 1,
+        b']' | b'P' | b'X' | b'^' | b'_' => {
+            let start = i + 2;
+            let mut j = start;
+            while let Some(&b) = bytes.get(j) {
+                match b {
+                    0x07 if kind == b']' => return (j + 1, Some((start, j))),
+                    0x1b if bytes.get(j + 1) == Some(&b'\\') => return (j + 2, Some((start, j))),
+                    0x1b | 0x18 | 0x1a => return (j, Some((start, j))),
+                    _ => j += 1,
+                }
+            }
+            (j, Some((start, j)))
+        }
+        0x20..=0x2f => {
+            let mut j = i + 1;
+            while let Some(&b) = bytes.get(j) {
+                match b {
+                    0x20..=0x2f => j += 1,
+                    0x30..=0x7e => return (j + 1, None),
+                    _ => break,
+                }
+            }
+            (j, None)
+        }
+        0x30..=0x7e => (i + 2, None),
+        _ => (i + 1, None),
     }
 }
 
@@ -824,16 +1167,36 @@ mod tests {
     }
 
     #[test]
-    fn offsets_map_through_edits() {
+    fn chunk_ends_map_through_edits() {
         let edits = vec![Edit {
             start: 2,
             end: 6,
             text: "*".into(),
         }];
-        assert_eq!(map_offset(1, &edits), 1);
-        assert_eq!(map_offset(4, &edits), 3);
-        assert_eq!(map_offset(6, &edits), 3);
-        assert_eq!(map_offset(8, &edits), 5);
+        // Chunk ends before, inside, at the end of and after the edit.
+        assert_eq!(
+            split_edited(b"abcdefgh", &edits, &[1, 4, 6, 8]),
+            [&b"a"[..], b"b*", b"", b"gh"]
+        );
+        assert_eq!(chunk_ends([1, 3, 0].into_iter()), [1, 4, 4]);
+    }
+
+    #[test]
+    fn key_values_and_flags() {
+        let mut unclosed = [usize::MAX; 2];
+        assert_eq!(
+            key_value_secret("k=\"a b\" c", 2, &mut unclosed),
+            Some((3, 6))
+        );
+        assert_eq!(key_value_secret("k=\"\"", 2, &mut unclosed), None);
+        assert_eq!(key_value_secret("k=\"a b", 2, &mut unclosed), Some((3, 4)));
+        assert_eq!(unclosed, [3, usize::MAX]);
+        assert_eq!(secret_flag("--token"), Some(None));
+        assert_eq!(secret_flag("--api-key=x"), Some(Some(10)));
+        assert_eq!(secret_flag("-p"), None);
+        assert_eq!(secret_flag("--"), None);
+        assert_eq!(secret_flag("--author"), None);
+        assert_eq!(secret_flag("token"), None);
     }
 
     #[test]
@@ -846,8 +1209,30 @@ mod tests {
 
     #[test]
     fn escapes_are_skipped() {
-        let (visible, offsets) = visible_text("a\x1b[1mb\x1b]8;;u\x1b\\c");
-        assert_eq!(visible, "abc");
-        assert_eq!(offsets, [0, 5, 14]);
+        let scan = scan_line("a\x1b[1mb\x1b]8;;u\x1b\\c");
+        assert_eq!(scan.visible, "abc");
+        assert_eq!(scan.offsets, [0, 5, 14]);
+        assert_eq!(scan.bodies, [(8, 12)]);
+        // Input, end of the escape, body.
+        type Case = (&'static [u8], usize, Option<(usize, usize)>);
+        let cases: [Case; 14] = [
+            (b"\x1b", 1, None),
+            (b"\x1b[", 2, None),
+            (b"\x1b[?25l", 6, None),
+            (b"\x1b[1 q", 5, None),
+            (b"\x1b[31\x1bx", 4, None),
+            (b"\x1b(B", 3, None),
+            (b"\x1b$(Bx", 4, None),
+            (b"\x1b(\x07", 2, None),
+            (b"\x1b7x", 2, None),
+            (b"\x1b\x1b", 1, None),
+            (b"\x1b]0;t\x07x", 6, Some((2, 5))),
+            (b"\x1bPq\x07x\x1b\\", 7, Some((2, 5))),
+            (b"\x1b_a\x1b[m", 3, Some((2, 3))),
+            (b"\x1b^a\x18b", 3, Some((2, 3))),
+        ];
+        for (bytes, end, body) in cases {
+            assert_eq!(skip_escape(bytes, 0), (end, body), "{bytes:?}");
+        }
     }
 }
