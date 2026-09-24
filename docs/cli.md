@@ -927,8 +927,15 @@ GitHub, GitLab, Slack, Stripe, npm and `sk-` tokens, AWS access key ids, JWTs
 and URL passwords. `--redact-pattern REGEX` adds a pattern of your own, and
 can be repeated. When the pattern has a group named `secret`, only that group
 is masked. Masks are stars as wide as what they replace, so the captured
-screen keeps its layout. The command line in the title and in the cast header
-is masked the same way. An invalid pattern is a usage error (exit 2). The
+screen keeps its layout. Hyperlink targets and other escape bodies are masked
+too, with plain `********`. A pattern that gives up at run time (too much
+backtracking) masks the rest of its line. The command line in the title, the
+cast header and the `--report json` result is masked the same way, word by
+word. With `--redact`, the value of a flag with a secret name is masked too,
+both `--token VALUE` and `--api-key=VALUE`. One-letter flags such as `-p` or
+`-u` are not masked, because they mean different things in different tools.
+Keep secrets for those in the environment or a file. Output bytes are kept as
+they are unless a mask covers them. An invalid pattern is a usage error (exit 2). The
 detectors are `rich_ext::redact`; see
 [Badges, size bars, formatters and redaction](guide/ext/badges-and-redaction.md#redaction).
 

@@ -136,12 +136,12 @@ or a recording. `Redactor::secrets()` turns on the built-in detectors:
 
 | Detector | Masks |
 |---|---|
-| `KeyValue` | The value in `key=value`, `key: value`, `"key": "value"` or `--key=value` when the key looks secret |
+| `KeyValue` | The value in `key=value`, `key: value`, `"key": "value"` or `--key=value` when the key looks secret. A quoted value is masked up to its closing quote, spaces and commas included |
 | `Bearer` | The token after `Bearer ` (12+ characters with a digit) |
 | `TokenPrefix` | GitHub (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`), GitLab (`glpat-`), Slack (`xox?-`), Stripe secret keys (`sk_live_`, `rk_test_`, …), npm (`npm_`) and `sk-` API keys |
 | `AwsAccessKey` | `AKIA…` / `ASIA…` access key ids |
 | `Jwt` | `eyJ….eyJ….…` JSON Web Tokens |
-| `UrlCredentials` | The password in `scheme://user:password@host` |
+| `UrlCredentials` | The password in `scheme://user:password@host`, up to the last `@` before the host. A bare `user:password@host` without a scheme is not matched |
 
 A key looks secret when it matches `redact::SECRET_KEYS` (`password`,
 `secret`, `token`, `api_key`, `credential`, a whole-word `auth`, …). This is
@@ -153,7 +153,8 @@ an ordinary word.
 Add your own rules with `.pattern(regex)` or `.named_pattern(name, regex)`.
 If the pattern has a group named `secret`, only that group is masked. The
 mask is `********` by default. `.mask("[{kind}]")` writes the rule's name
-instead, for example `[jwt]`.
+instead, for example `[jwt]`. Matching fails closed: if a pattern gives up
+at run time (too much backtracking), the rest of that line is masked.
 
 ```rust
 --8<-- "crates/rich-ext/examples/guide_badges.rs:redact"
@@ -168,6 +169,8 @@ instead, for example `[jwt]`.
 | A string or log line | `redact_str` |
 | Text with ANSI escapes | `redact_ansi`: rules see the visible text, the escapes stay |
 | A stream of chunks (a recording) | `redact_chunks`: a secret split across chunks is still found |
+| Raw bytes from a pipe | `redact_byte_chunks`: a character split between reads stays whole, invalid bytes are kept |
+| A command line | `redact_args`: also masks the value of a secret-named flag (`--token X`) |
 | Rendered segments | `redact_segments`, or wrap a renderable in `Redacted` |
 | A recording to export | `capture`, `export_text`, `export_html`, `export_html_classes`, `export_svg` |
 
@@ -175,6 +178,12 @@ In segments, a secret can span several segments with different styles.
 Rules match on each line's text. Each part of the mask keeps the style of
 the cells it covers, and the line keeps its width, so borders and columns
 stay aligned. To get the same in strings, use `.preserve_width(true)`.
+
+Hidden text is searched too. With ANSI text, that is the body of each
+escape string: an OSC 8 hyperlink's URL, a window title, DCS and APC
+payloads. With segments, it is each style's link target. There the plain
+mask is used, with any control characters in it turned into `*`, so the
+escape stays well formed.
 
 The export helpers record what the closure prints, redact it, and export
 it. The secret never reaches the file:
@@ -191,7 +200,9 @@ function.
     Rules match within one line. If a renderable wraps a long secret onto
     two lines, neither half matches. When that can happen, redact the input
     with `redact_str` before you render it. Masks that keep their width also
-    reveal the secret's length.
+    reveal the secret's length. A mask inside a binary escape payload, such
+    as an inline image, can spoil the image. Eight-bit C1 controls are read
+    as text, not as escapes.
 
 ### From the command line
 
