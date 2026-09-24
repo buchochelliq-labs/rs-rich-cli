@@ -386,6 +386,7 @@ fn new_image_options_reject_bad_values_combinations_and_other_modes() {
 
 /// Sixel and GIF frames now take a reduced palette; only a usage error
 /// (exit 2) would mean the combination was still rejected.
+#[cfg(feature = "art")]
 #[test]
 fn reduced_palettes_are_accepted_for_sixel_and_gif() {
     for args in [
