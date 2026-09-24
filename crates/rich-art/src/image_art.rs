@@ -235,6 +235,10 @@ pub enum ImageArtError {
     SixelEncodeFailed,
     /// Sixel output requires a real terminal destination.
     NonTerminalDestination,
+    /// The destination is a terminal, but not one known to understand Sixel.
+    /// Setting `RICH_SIXEL=1` or `RICH_GRAPHICS=sixel` overrides the guess
+    /// (see [`sixel::is_probably_supported`](crate::sixel::is_probably_supported)).
+    SixelNotSupported,
     /// Fitting requires positive width and height, a nonempty image and
     /// destination, and raster canvases no larger than 16 megapixels.
     InvalidFitDimensions,
@@ -265,6 +269,9 @@ impl std::fmt::Display for ImageArtError {
             }
             Self::NonTerminalDestination => {
                 write!(f, "Sixel graphics require a terminal destination; use ASCII, Braille, or blocks when redirecting output")
+            }
+            Self::SixelNotSupported => {
+                write!(f, "this terminal is not known to support Sixel graphics; set RICH_SIXEL=1 or RICH_GRAPHICS=sixel to force it, or use ASCII, Braille, blocks or quadrants")
             }
         }
     }
@@ -512,10 +519,13 @@ impl ImageArt {
         {
             return Ok(Vec::new());
         }
-        if self.options.mode == ImageMode::Sixel
-            && (!caps.interactive || caps.sixel == Support::Unsupported)
-        {
-            return Err(ImageArtError::NonTerminalDestination);
+        if self.options.mode == ImageMode::Sixel {
+            if !caps.interactive {
+                return Err(ImageArtError::NonTerminalDestination);
+            }
+            if caps.sixel == Support::Unsupported {
+                return Err(ImageArtError::SixelNotSupported);
+            }
         }
         let mode = if self.options.mode == ImageMode::Auto && !caps.unicode {
             ImageMode::Ascii
@@ -1336,5 +1346,41 @@ mod tests {
             art.render(&console, &options),
             Err(ImageArtError::NonTerminalDestination)
         );
+    }
+
+    #[test]
+    fn explicit_sixel_tells_redirection_from_an_unrecognised_terminal() {
+        use rich::protocol::{RenderEnvironment, Support, TargetCapabilities};
+        struct Target(bool, Support);
+        impl RenderEnvironment for Target {
+            fn capabilities(&self) -> TargetCapabilities {
+                TargetCapabilities {
+                    width: 8,
+                    height: 8,
+                    color_system: Some(ColorSystem::Truecolor),
+                    interactive: self.0,
+                    unicode: true,
+                    hyperlinks: false,
+                    sixel: self.1,
+                }
+            }
+        }
+        let console = console(true);
+        let options = console.options();
+        let art = ImageArt::new(solid(8, 8, [10, 20, 30])).mode(ImageMode::Sixel);
+        let render = |interactive, sixel| {
+            art.render_with_environment(&console, &options, &Target(interactive, sixel))
+        };
+        assert_eq!(
+            render(false, Support::Inferred),
+            Err(ImageArtError::NonTerminalDestination)
+        );
+        // A real terminal that just is not recognised is not "redirected".
+        let error = render(true, Support::Unsupported).unwrap_err();
+        assert_eq!(error, ImageArtError::SixelNotSupported);
+        let message = error.to_string();
+        assert!(!message.contains("redirect"), "{message}");
+        assert!(message.contains("RICH_SIXEL=1"), "{message}");
+        assert!(message.contains("RICH_GRAPHICS=sixel"), "{message}");
     }
 }

@@ -200,6 +200,7 @@ to know why:
 |---|---|
 | `FeatureNotEnabled { mode, feature }` | An explicit mode this build cannot draw, e.g. Sixel without `sixel`. |
 | `NonTerminalDestination` | Sixel requested for output that is not a terminal. |
+| `SixelNotSupported` | Sixel requested on a terminal not known to support it; `RICH_SIXEL=1` or `RICH_GRAPHICS=sixel` forces it. |
 | `SixelEncodeFailed` | The encoder rejected this image or size. |
 | `InvalidFitDimensions` | Fitting without a positive width and height, or above 16 megapixels. |
 | `UnsupportedColorOptions` | Palette reduction or dithering with a backend that cannot do it, or dithering with truecolor. |
@@ -231,8 +232,9 @@ WezTerm, mintty, foot or mlterm.
 There is no reliable way to ask a terminal whether it supports Sixel without a
 round trip on a tty, so support is guessed from environment variables (`TERM`,
 `TERM_PROGRAM`, `WT_SESSION`).
-`RICH_SIXEL=1` or `RICH_SIXEL=0` overrides the guess. With the feature on you
-can also use `SixelArt` directly:
+`RICH_GRAPHICS=sixel` forces Sixel on and `RICH_GRAPHICS=none` (or `kitty`,
+`iterm`) rules it out; otherwise `RICH_SIXEL=1` or `RICH_SIXEL=0` overrides the
+guess. With the feature on you can also use `SixelArt` directly:
 
 ```rust
 --8<-- "crates/rich-art/examples/guide_images.rs:sixel-direct"

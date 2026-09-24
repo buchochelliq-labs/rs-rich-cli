@@ -263,8 +263,16 @@ impl Renderable for SixelArt {
 /// **A heuristic, not a probe.** The reliable test is a DA1 query, which needs
 /// a tty round trip. Callers should treat this as a default that the user can
 /// override, never as a fact.
+///
+/// Two variables override the guess. `RICH_GRAPHICS` names the graphics
+/// protocol (`sixel` forces Sixel on; `none`, `kitty` or `iterm` turn it off)
+/// and wins when set to one of those. Otherwise `RICH_SIXEL` (`1`/`true`/`yes`/
+/// `on` or `0`/`false`/`no`/`off`) forces it either way. These are the same
+/// rules `rich-ext`'s capability detection follows. Unrecognised values are
+/// ignored.
 pub fn is_probably_supported() -> bool {
     guess_support(
+        std::env::var("RICH_GRAPHICS").ok().as_deref(),
         std::env::var("RICH_SIXEL").ok().as_deref(),
         std::env::var_os("WT_SESSION").is_some(),
         std::env::var("TERM").ok().as_deref(),
@@ -276,15 +284,22 @@ pub fn is_probably_supported() -> bool {
 /// so it can be tested without mutating process state (which is `unsafe` in
 /// this edition, and racy across threads besides).
 fn guess_support(
+    graphics_var: Option<&str>,
     override_var: Option<&str>,
     windows_terminal: bool,
     term: Option<&str>,
     term_program: Option<&str>,
 ) -> bool {
     // Explicit opt-out/opt-in first: whatever we guess, the user wins.
-    match override_var {
-        Some("0") | Some("false") | Some("no") => return false,
-        Some("1") | Some("true") | Some("yes") => return true,
+    let normalized = |value: Option<&str>| value.map(|v| v.trim().to_ascii_lowercase());
+    match normalized(graphics_var).as_deref() {
+        Some("sixel") => return true,
+        Some("none" | "0" | "no" | "off" | "false" | "kitty" | "iterm" | "iterm2") => return false,
+        _ => {}
+    }
+    match normalized(override_var).as_deref() {
+        Some("0" | "false" | "no" | "off") => return false,
+        Some("1" | "true" | "yes" | "on") => return true,
         _ => {}
     }
 
@@ -456,23 +471,61 @@ mod tests {
     #[test]
     fn the_override_beats_every_other_signal() {
         // Even inside Windows Terminal, an explicit "no" must win.
-        assert!(!guess_support(Some("0"), true, None, None));
+        assert!(!guess_support(None, Some("0"), true, None, None));
         // And an explicit "yes" must win in a terminal we would otherwise
         // assume knows nothing about Sixel.
-        assert!(guess_support(Some("1"), false, Some("dumb"), None));
+        assert!(guess_support(None, Some("1"), false, Some("dumb"), None));
+    }
+
+    #[test]
+    fn rich_graphics_selects_or_rules_out_sixel() {
+        // As documented for the CLI: RICH_GRAPHICS=sixel forces it on...
+        assert!(guess_support(
+            Some("sixel"),
+            None,
+            false,
+            Some("dumb"),
+            None
+        ));
+        assert!(guess_support(Some(" SIXEL "), None, false, None, None));
+        // ...and beats RICH_SIXEL, as in rich-ext's capability detection.
+        assert!(guess_support(Some("sixel"), Some("0"), false, None, None));
+        assert!(!guess_support(Some("kitty"), Some("1"), true, None, None));
+        assert!(!guess_support(Some("none"), None, true, None, None));
+        // An unrecognised value is ignored, not treated as "off".
+        assert!(guess_support(Some("bogus"), Some("1"), false, None, None));
+        assert!(guess_support(Some("bogus"), None, true, None, None));
+        // RICH_SIXEL accepts the same boolean spellings as rich-ext.
+        assert!(guess_support(None, Some("on"), false, None, None));
+        assert!(!guess_support(None, Some("OFF"), true, None, None));
     }
 
     #[test]
     fn recognises_terminals_that_support_sixel() {
-        assert!(guess_support(None, true, None, None), "Windows Terminal");
-        assert!(guess_support(None, false, Some("foot"), None), "foot");
-        assert!(guess_support(None, false, Some("mlterm"), None), "mlterm");
-        assert!(guess_support(None, false, None, Some("WezTerm")), "WezTerm");
+        assert!(
+            guess_support(None, None, true, None, None),
+            "Windows Terminal"
+        );
+        assert!(guess_support(None, None, false, Some("foot"), None), "foot");
+        assert!(
+            guess_support(None, None, false, Some("mlterm"), None),
+            "mlterm"
+        );
+        assert!(
+            guess_support(None, None, false, None, Some("WezTerm")),
+            "WezTerm"
+        );
     }
 
     #[test]
     fn assumes_no_support_when_nothing_says_otherwise() {
-        assert!(!guess_support(None, false, Some("xterm-256color"), None));
-        assert!(!guess_support(None, false, None, None));
+        assert!(!guess_support(
+            None,
+            None,
+            false,
+            Some("xterm-256color"),
+            None
+        ));
+        assert!(!guess_support(None, None, false, None, None));
     }
 }

@@ -337,7 +337,7 @@ fn sixel(console: &Console) {
 fn sixel_direct(console: &Console) {
     // --8<-- [start:sixel-direct]
     use rich_art::sixel::{is_probably_supported, SixelArt};
-    // A guess from environment variables (RICH_SIXEL=0/1 overrides it).
+    // A guess from environment variables (RICH_GRAPHICS or RICH_SIXEL override it).
     if console.is_terminal() && is_probably_supported() {
         console.print(&SixelArt::new(test_card()).width(40).max_colors(64));
     }
