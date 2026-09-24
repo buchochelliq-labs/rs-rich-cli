@@ -906,7 +906,8 @@ rich view FILE [--search TEXT] [--no-line-numbers]   # detect, render, page
 rich hex FILE [--offset N] [--length N] [--bytes-per-line N] [--group N] [--search BYTES]
 rich unicode FILE [--limit N]                        # graphemes, code points, widths
 rich env [PATTERN...] [--show-secrets]               # variables; `rich env PATH` checks entries
-rich capture [--cast FILE] -- COMMAND [ARGS...]      # run, show, export or record
+rich capture [--cast FILE] [--redact] [--redact-pattern REGEX]... -- COMMAND [ARGS...]
+                                                     # run, show, export or record
 ```
 
 `view` routes Markdown, CSV, notebooks, JSON Lines, images, GIFs and patches to
@@ -918,6 +919,23 @@ text). `env` masks values of secret-looking names. `capture` sets `FORCE_COLOR`,
 `CLICOLOR_FORCE` and `COLUMNS` for the child, merges stdout and stderr in order,
 reports its exit status without failing on it, and `--cast` writes asciicast v2.
 The viewer options are rejected on other commands.
+
+`capture --redact` masks secrets before anything is shown, exported
+(`--export-svg`, `--export-html`) or recorded (`--cast`). It masks the values
+of secret-named keys (`password=…`, `API_KEY: …`, `--token=…`), bearer tokens,
+GitHub, GitLab, Slack, Stripe, npm and `sk-` tokens, AWS access key ids, JWTs
+and URL passwords. `--redact-pattern REGEX` adds a pattern of your own, and
+can be repeated. When the pattern has a group named `secret`, only that group
+is masked. Masks are stars as wide as what they replace, so the captured
+screen keeps its layout. The command line in the title and in the cast header
+is masked the same way. An invalid pattern is a usage error (exit 2). The
+detectors are `rich_ext::redact`; see
+[Badges, size bars, formatters and redaction](guide/ext/badges-and-redaction.md#redaction).
+
+```bash
+rich capture --redact --export-svg deploy.svg -- ./deploy.sh
+rich capture --redact-pattern 'order (?P<secret>\d{4})' --cast run.cast -- ./report.sh
+```
 
 ## Inspect your environment
 

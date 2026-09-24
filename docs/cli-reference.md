@@ -120,7 +120,7 @@ Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by exten
 | `--max-depth <N>` | Fold containers deeper than N levels. |
 | `--max-length <N>` | Show at most N items per container. |
 | `--show-paths` | Append each value's path. |
-| `--redact` | Mask secret-looking keys such as password, token and api_key. |
+| `--redact` | Mask secret-looking keys such as password, token and api_key. With `rich capture`, mask secrets in the output before it is shown, exported or recorded: secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` tokens, AWS key ids, JWTs and URL passwords. |
 | `--compare <PATH>` | Show added, removed and changed values against another document. |
 
 ### Diff & ANSI
@@ -146,6 +146,7 @@ Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by exten
 | `--limit <N>` | With `rich unicode`, show at most N graphemes. |
 | `--show-secrets` | With `rich env`, show values whose names look secret instead of masking them. |
 | `--cast <FILE>` | With `rich capture`, also write an asciicast v2 recording (`asciinema play FILE`) |
+| `--redact-pattern <REGEX>...` | With `rich capture`, also mask matches of REGEX (only its `secret` group when it has one); repeatable. |
 
 ### Export
 
@@ -250,7 +251,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `hex`, `hexdump` | Hex dump with offsets, byte groups and an ASCII panel (--search, --offset, --length) |
 | `unicode` | Show graphemes, code points, UTF-8 bytes, widths and invalid sequences |
 | `env` | List environment variables, secrets masked; `rich env PATH` checks each PATH entry |
-| `capture` | Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE records it), then exit with the command's status |
+| `capture` | Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE records it, --redact masks secrets), then exit with the command's status |
 | `config` | Show, validate, explain or document configuration |
 | `completions` | Print a shell completion script |
 | `docs` | Print reference documentation generated from this help |
@@ -565,7 +566,7 @@ rich env [OPTIONS] [RESOURCE]
 
 ### rich capture
 
-Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE records it), then exit with the command's status
+Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE records it, --redact masks secrets), then exit with the command's status
 
 #### Usage
 

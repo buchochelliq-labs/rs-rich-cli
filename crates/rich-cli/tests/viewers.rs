@@ -278,3 +278,120 @@ fn viewer_options_are_rejected_elsewhere_and_capture_needs_a_command() {
     );
     assert_eq!(missing.status.code(), Some(3), "{missing:?}");
 }
+
+#[cfg(unix)]
+#[test]
+fn capture_redacts_before_showing_exporting_or_recording() {
+    let dir = temp();
+    let token = "ghp_0123456789abcdefghijklmnopqrstuvwxyzAB";
+    let script = format!(
+        "echo 'GITHUB_TOKEN={token}'; printf 'pass\\033[31mword=hun\\033[0mter2\\n'; \
+         echo 'order 1234-5678'; echo 'plain line'"
+    );
+    // From a file, so the secrets are not on the (also redacted) command line.
+    std::fs::write(dir.path().join("script.sh"), script).unwrap();
+    let out = ok(&run(
+        dir.path(),
+        &[
+            "capture",
+            "--redact",
+            "--redact-pattern",
+            r"order (?P<secret>\d{4})",
+            "--cast",
+            "run.cast",
+            "--export-svg",
+            "run.svg",
+            "--export-html",
+            "run.html",
+            "--",
+            "sh",
+            "script.sh",
+        ],
+        b"",
+        &[],
+    ));
+    let cast = std::fs::read_to_string(dir.path().join("run.cast")).unwrap();
+    let svg = std::fs::read_to_string(dir.path().join("run.svg")).unwrap();
+    let html = std::fs::read_to_string(dir.path().join("run.html")).unwrap();
+    for (name, body) in [
+        ("stdout", &out),
+        ("cast", &cast),
+        ("svg", &svg),
+        ("html", &html),
+    ] {
+        for secret in [token, "hunter2", "ter2", "1234"] {
+            assert!(!body.contains(secret), "{name} leaks {secret:?}:\n{body}");
+        }
+    }
+    // Masks keep the width of what they replace, so the panel stays aligned.
+    let stars = "*".repeat(token.len());
+    assert!(out.contains(&format!("GITHUB_TOKEN={stars}")), "{out}");
+    assert!(out.contains("password=*******"), "{out}");
+    assert!(out.contains("order ****-5678"), "{out}");
+    assert!(out.contains("plain line"), "{out}");
+    // The recording keeps its escapes around the masked cells.
+    assert!(
+        cast.contains(r"pass\u001b[31mword=***\u001b[0m****"),
+        "{cast}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn capture_redacts_the_command_line_too() {
+    let dir = temp();
+    let out = ok(&run(
+        dir.path(),
+        &[
+            "capture",
+            "--redact",
+            "--",
+            "sh",
+            "-c",
+            "true",
+            "password=hunter2",
+        ],
+        b"",
+        &[],
+    ));
+    assert!(!out.contains("hunter2"), "{out}");
+    assert!(out.contains("password=*******"), "{out}");
+    // Without the flag nothing is masked.
+    let out = ok(&run(
+        dir.path(),
+        &["capture", "--", "echo", "token=abc"],
+        b"",
+        &[],
+    ));
+    assert!(out.contains("token=abc"), "{out}");
+}
+
+#[test]
+fn redact_options_are_checked() {
+    let dir = temp();
+    let error = usage(&run(
+        dir.path(),
+        &["capture", "--redact-pattern", "(", "--", "true"],
+        b"",
+        &[],
+    ));
+    assert!(
+        error.contains("--redact-pattern: invalid pattern \"(\""),
+        "{error}"
+    );
+    let error = usage(&run(
+        dir.path(),
+        &["view", "--redact-pattern", "x", "main.rs"],
+        b"",
+        &[],
+    ));
+    assert!(
+        error.contains("--redact-pattern only has an effect with `rich capture`"),
+        "{error}"
+    );
+    let error = usage(&run(dir.path(), &["--redact", "main.rs"], b"", &[]));
+    assert!(
+        error.contains("--redact only has an effect with --inspect or `rich capture`"),
+        "{error}"
+    );
+}
