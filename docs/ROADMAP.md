@@ -1,8 +1,8 @@
 # Roadmap
 
-What each release delivered, and where this goes after the 0.0.11 cohort
-(published 2026-09-24). Ordered by what unblocks people, not by what is
-most interesting to build.
+What each release delivered, and where this goes next: the
+[0.0.12 plan](plans/0.0.12.md), after the 0.0.11 cohort (published 2026-09-24).
+Ordered by what unblocks people, not by what is most interesting to build.
 
 Two rules constrain everything here:
 
@@ -214,6 +214,20 @@ and #499). Delivered:
   and `capture` commands;
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
+
+## 0.0.12 — plugin platform and extensibility (planned)
+
+The [0.0.12 plan](plans/0.0.12.md) covers
+[milestone 3](https://github.com/buchochelliq-labs/rs-rich-cli/milestone/3):
+
+- pluggable code highlighters with syntect and lumis adapters (#521–#526);
+- a public plugin API on the extension registry (#14, #232 phase 1);
+- Markdown fence extensions, with Mermaid flowcharts as the first plugin (#222);
+- composable transforms (#216);
+- a render-tree design spike (#226);
+- native image sizing (#519).
+
+Core gains extension points only, and its default output stays upstream's.
 
 ---
 

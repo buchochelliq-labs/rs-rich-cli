@@ -128,6 +128,7 @@ nav:
   - Troubleshooting: troubleshooting.md
   - Known issues: known-issues.md
   - Development plans:
+      - Plugin platform and extensibility: plans/0.0.12.md
       - Developer ergonomics and core usability: plans/0.0.11.md
       - Progress, themes, watch and images: plans/0.0.10.md
       - Themes, diagnostics and image quality: plans/0.0.9.md
