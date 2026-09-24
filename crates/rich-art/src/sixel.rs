@@ -226,47 +226,81 @@ pub(crate) fn encode_indexed(pixels: &[Option<u8>], width: usize, height: usize)
             percent(b)
         );
     }
+    // Write `len` columns of `bits` for the current colour. Decoders cap a
+    // repeat count at 65 535 (icy_sixel rejects anything larger), so a longer
+    // run is written in pieces.
+    let write_run = |out: &mut String, bits: u8, len: usize| {
+        let glyph = char::from(63 + bits);
+        let mut left = len;
+        while left > 0 {
+            let piece = left.min(SIXEL_REPEAT_MAX);
+            if piece > 3 {
+                let _ = write!(out, "!{piece}{glyph}");
+            } else {
+                (0..piece).for_each(|_| out.push(glyph));
+            }
+            left -= piece;
+        }
+    };
+    // One pass over each band collects, per colour, the columns it touches
+    // and their six-pixel bit patterns, so the work is proportional to the
+    // pixels rather than to pixels times colours. Storage is bounded by six
+    // entries per column.
     let bands = height.div_ceil(6);
-    let mut row = vec![0u8; width];
+    let mut columns: Vec<Vec<(usize, u8)>> = vec![Vec::new(); 256];
     for band in 0..bands {
-        let mut first = true;
-        for &index in &used {
-            row.fill(0);
-            for (dy, y) in (band * 6..(band * 6 + 6).min(height)).enumerate() {
-                for (x, bits) in row.iter_mut().enumerate() {
-                    if pixels[y * width + x] == Some(index) {
-                        *bits |= 1 << dy;
+        columns.iter_mut().for_each(Vec::clear);
+        let rows = band * 6..(band * 6 + 6).min(height);
+        for x in 0..width {
+            let mut cell = [(0u8, 0u8); 6];
+            let mut count = 0;
+            for (dy, y) in rows.clone().enumerate() {
+                let Some(index) = pixels[y * width + x] else {
+                    continue;
+                };
+                match cell[..count].iter_mut().find(|(i, _)| *i == index) {
+                    Some((_, bits)) => *bits |= 1 << dy,
+                    None => {
+                        cell[count] = (index, 1 << dy);
+                        count += 1;
                     }
                 }
             }
-            // Trailing empty columns need no characters at all.
-            let Some(end) = row.iter().rposition(|&bits| bits != 0) else {
+            for &(index, bits) in &cell[..count] {
+                columns[index as usize].push((x, bits));
+            }
+        }
+        let mut first = true;
+        for &index in &used {
+            // Trailing empty columns need no characters at all, and a colour
+            // absent from this band needs none either.
+            let entries = &columns[index as usize];
+            if entries.is_empty() {
                 continue;
-            };
+            }
             if !first {
                 out.push('$');
             }
             first = false;
             let _ = write!(out, "#{index}");
-            let mut x = 0;
-            while x <= end {
-                let bits = row[x];
-                let run = row[x..=end].iter().take_while(|&&b| b == bits).count();
-                let glyph = char::from(63 + bits);
-                // Decoders cap a repeat count at 65 535 (icy_sixel rejects
-                // anything larger), so a longer run is written in pieces.
-                let mut left = run;
-                while left > 0 {
-                    let piece = left.min(SIXEL_REPEAT_MAX);
-                    if piece > 3 {
-                        let _ = write!(out, "!{piece}{glyph}");
-                    } else {
-                        (0..piece).for_each(|_| out.push(glyph));
+            // Merge equal neighbours (including the empty gaps between
+            // entries) into maximal runs.
+            let (mut run_bits, mut run_len, mut next_x) = (0u8, 0usize, 0usize);
+            for &(x, bits) in entries {
+                for (segment_bits, segment_len) in [(0, x - next_x), (bits, 1)] {
+                    if segment_len == 0 {
+                        continue;
                     }
-                    left -= piece;
+                    if segment_bits == run_bits {
+                        run_len += segment_len;
+                    } else {
+                        write_run(&mut out, run_bits, run_len);
+                        (run_bits, run_len) = (segment_bits, segment_len);
+                    }
                 }
-                x += run;
+                next_x = x + 1;
             }
+            write_run(&mut out, run_bits, run_len);
         }
         if band + 1 < bands {
             out.push('-');
@@ -503,6 +537,109 @@ mod tests {
             .pixels
             .chunks(4)
             .all(|p| p == [171, 0, 0, 255].as_slice()));
+    }
+
+    /// The per-colour, full-row encoder the single-pass one replaced, kept
+    /// as the oracle (with the run splitting both share).
+    fn encode_indexed_reference(pixels: &[Option<u8>], width: usize, height: usize) -> String {
+        use std::fmt::Write;
+        let used: std::collections::BTreeSet<u8> = pixels.iter().flatten().copied().collect();
+        let mut out = format!("\x1bP9;1;0q\"1;1;{width};{height}");
+        let percent = |v: u8| (u32::from(v) * 100 + 127) / 255;
+        for &index in &used {
+            let [r, g, b] = palette_rgb(index);
+            let _ = write!(
+                out,
+                "#{index};2;{};{};{}",
+                percent(r),
+                percent(g),
+                percent(b)
+            );
+        }
+        let bands = height.div_ceil(6);
+        let mut row = vec![0u8; width];
+        for band in 0..bands {
+            let mut first = true;
+            for &index in &used {
+                row.fill(0);
+                for (dy, y) in (band * 6..(band * 6 + 6).min(height)).enumerate() {
+                    for (x, bits) in row.iter_mut().enumerate() {
+                        if pixels[y * width + x] == Some(index) {
+                            *bits |= 1 << dy;
+                        }
+                    }
+                }
+                let Some(end) = row.iter().rposition(|&bits| bits != 0) else {
+                    continue;
+                };
+                if !first {
+                    out.push('$');
+                }
+                first = false;
+                let _ = write!(out, "#{index}");
+                let mut x = 0;
+                while x <= end {
+                    let bits = row[x];
+                    let run = row[x..=end].iter().take_while(|&&b| b == bits).count();
+                    let glyph = char::from(63 + bits);
+                    let mut left = run;
+                    while left > 0 {
+                        let piece = left.min(SIXEL_REPEAT_MAX);
+                        if piece > 3 {
+                            let _ = write!(out, "!{piece}{glyph}");
+                        } else {
+                            (0..piece).for_each(|_| out.push(glyph));
+                        }
+                        left -= piece;
+                    }
+                    x += run;
+                }
+            }
+            if band + 1 < bands {
+                out.push('-');
+            }
+        }
+        out.push_str("\x1b\\");
+        out
+    }
+
+    #[test]
+    fn single_pass_encoding_matches_the_reference_byte_for_byte() {
+        let mut state = 0x2545_F491_4F6C_DD1Du64;
+        let mut next = move |n: u64| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state % n
+        };
+        for (w, h, colours, holes) in [
+            (1, 1, 1, 0),
+            (5, 7, 2, 3),
+            (17, 13, 4, 5),
+            (40, 25, 240, 10),
+            (64, 12, 3, 2),
+            (9, 30, 256, 0),
+            (70_000, 6, 1, 0),
+        ] {
+            // Runs of a colour (so repeats occur), with some holes.
+            let mut pixels = Vec::with_capacity(w * h);
+            let mut current = Some(0u8);
+            for _ in 0..w * h {
+                if next(8) == 0 {
+                    current = if holes > 0 && next(holes + 1) == 0 {
+                        None
+                    } else {
+                        Some(next(colours) as u8)
+                    };
+                }
+                pixels.push(current);
+            }
+            assert_eq!(
+                encode_indexed(&pixels, w, h).expect("valid"),
+                encode_indexed_reference(&pixels, w, h),
+                "{w}x{h}"
+            );
+        }
     }
 
     #[test]
