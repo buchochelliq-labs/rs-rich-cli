@@ -23,8 +23,11 @@ fn render(art: &ImageArt) -> Vec<Segment> {
     art.render(&c, &c.options()).unwrap()
 }
 
-/// Every cell as `(text, foreground, background)`, one row per line.
-fn cells(segments: &[Segment]) -> Vec<Vec<(String, Option<Color>, Option<Color>)>> {
+/// One rendered cell: its text, foreground and background.
+type Cell = (String, Option<Color>, Option<Color>);
+
+/// Every cell, one row per line.
+fn cells(segments: &[Segment]) -> Vec<Vec<Cell>> {
     Segment::split_lines(segments)
         .into_iter()
         .map(|line| {
