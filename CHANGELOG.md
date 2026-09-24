@@ -57,7 +57,38 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
-Nothing yet.
+Cohort versions for 0.0.12 (not published): core 0.0.8, macros 0.0.2, ext
+0.0.10, art 0.0.10, CLI 0.0.12. Core changes below, so every dependent moves
+with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
+
+### Pluggable code highlighters, core (0.0.12 workstream 1: #522, #523)
+
+- **`CodeHighlighter` (#522).** A new extension point in `rich::protocol`: an
+  engine takes source, a language and a theme, and returns styled spans per
+  line (`HighlightedCode`, `HighlightedLine`, `HighlightSpan`, `HighlightError`).
+  `Syntax::highlighter` and `Markdown::highlighter` take any engine; Markdown
+  passes it to code blocks and to lexer-highlighted inline code.
+  - Core validates what an engine returns against the source. It drops
+    out-of-range, overlapping or misaligned spans and hyperlinks in span styles,
+    renders missing lines unstyled, and falls back to the default theme for an
+    unknown theme and to plain text if the engine fails. The rendered characters
+    always come from the source, so an engine cannot add text or control
+    sequences.
+- **`SyntectHighlighter` (#523)** is the default and holds the whole `syntect`
+  dependency. Output is byte-identical to 0.0.11: all 558 source, docs and data
+  files in the repository render the same through `rich FILE` (default and
+  `onig` builds, and with `syntax-cache`), and 150 through `rich view`.
+- **ANSI themes (#523).** `ansi_dark` and `ansi_light` use upstream's
+  `ANSI_DARK`/`ANSI_LIGHT` styles with the terminal's 16 colours and no
+  background. Pygments token types map to TextMate scopes (DIVERGENCES #18).
+- **Migration.** `Syntax::theme` names are now the highlighter's own; with the
+  default nothing changes, and `ansi_dark`/`ansi_light` are new.
+
+### Packaging
+
+- The CLI README's "prepared, not yet published" line now names 0.0.12. It
+  shipped inside the published `rs-rich-cli` 0.0.11 package, so it could only
+  change with a new CLI version.
 
 ## Core 0.0.7 / macros 0.0.1 / ext 0.0.9 / art 0.0.9 / CLI 0.0.11 — published 2026-09-24
 

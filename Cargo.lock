@@ -941,7 +941,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "anstyle-query",
  "fancy-regex 0.19.2",
@@ -953,7 +953,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-art"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "icy_sixel",
  "image",
@@ -962,7 +962,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-cli"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
@@ -983,7 +983,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-ext"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "anyhow",
  "clap",
@@ -1004,7 +1004,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-macros"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "proc-macro2",
  "quote",
