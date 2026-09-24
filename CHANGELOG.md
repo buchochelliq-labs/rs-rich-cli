@@ -129,6 +129,59 @@ first. See the [0.0.11 release notes](docs/releases/0.0.11.md#what-the-release-t
   - Tracing span fields are replaced, not duplicated.
   - An empty `FORCE_COLOR` is ignored.
   - QA screenshot names can't leave their directory.
+- **Ext: structured data (`rich inspect`) and CLI authoring.**
+  - YAML aliases are charged by the bytes they copy (64 MiB), and only aliased
+    anchors are cloned, which stops alias and nested-anchor memory bombs.
+  - JSONPath slices with huge steps no longer overflow; filters nest at most 128
+    levels, and a selection past 1,000,000 nodes is an error.
+  - YAML anchor names, C1 controls and DEL in keys and values, parse-error
+    messages and diagnostic snippets are all escaped.
+  - `--redact` masks dash spellings (`api-key`), everything under a secret key,
+    and XML element text.
+  - Generated completion scripts and man pages can no longer be injected into:
+    - zsh/fish command names and fish subcommand words;
+    - man page requests from multi-line fields.
+  - Man pages escape non-ASCII for groff.
+  - Completions offer each subcommand's own and global options.
+  - Minified (single-line) XML and TOML parse in linear time: 200,000 elements
+    took 35 s and now take 0.3 s.
+  - JSON `-0` reads as `0`.
+  - YAML duplicate keys, an INI key shadowed by a section, and content after the
+    XML root are errors.
+- **Core: speed.** `Text::divide` visits only the lines each span touches, as
+  upstream does. Rendering 40,000 highlighted lines in `rich view` went from
+  132 s to 11 s.
+- **CLI: terminal controls.**
+  - `rich view` and text `rich diff` neutralise terminal controls by default
+    (`--no-sanitize` opts out). Both are new commands with no upstream behaviour
+    to mirror, and `view` could otherwise pass clipboard-writing OSC 52 to the
+    terminal.
+  - `rich diff --sanitize` now covers patches, file names and C1 codes.
+  - `rich capture` always cleans its title, and with `--sanitize` also C1 codes
+    and the cast.
+  - File names in error messages show control characters as symbols.
+- **CLI: resources.**
+  - `hex` reads only the window it shows.
+  - `view`, `hex`, `unicode`, `inspect` and `capture` have documented size
+    limits (docs/cli.md "Limits").
+  - `capture` stops reading 1 s after the command exits, even while a background
+    child still holds the pipe.
+- **CLI: correctness.**
+  - `capture` gives the command the panel's real width.
+  - `config` and `doctor` no longer panic on a closed pipe.
+  - `rich <command> --help` shows that command's help.
+  - `bench compare` reports success in JSON, and a 0 ns baseline is a change.
+  - `hex --bytes-per-line` must be 1–4096.
+  - A bad `--select` is a usage error.
+- **CLI: config trust.** A working-directory `rich.toml` can no longer set
+  `theme_file` or turn off the new `view`/`diff` sanitising, the same rule as
+  `NO_COLOR`. Theme files must be regular files of at most 1 MiB, so a FIFO no
+  longer hangs `rich`.
+- **Tests.** Two intermittent failures were traced to the tests:
+  - `test_batch_v9.py` stopped a worker before it exec'd, which suspended the
+    parent in `posix_spawn`'s vfork. It now stops only exec'd workers.
+  - The XML linearity test compared against a wall-clock limit. It now compares
+    two sizes, which is how the quadratic XML parse above was found.
 - **Art.**
   - GIF decoding is capped at 512 MiB (a 35-byte GIF used to abort on a 17 GB
     allocation).
@@ -150,6 +203,10 @@ first. See the [0.0.11 release notes](docs/releases/0.0.11.md#what-the-release-t
   - New enum variants: `unicode_inspect::Kind::Bidi`,
     `ImageArtError::{SixelTooLarge, SixelNotSupported}`.
   - `richf!` prints a value's `\[` literally; it used to unescape it.
+  - New ext items: `ArgSpec::global`, `env_inspect::redact_value`,
+    `hex::MAX_BYTES_PER_LINE`, and the `sanitize` helpers
+    `sanitize_terminal_and_bidi_controls` and `sanitize_single_line`.
+  - `junit::parse` rejects a truncated file.
   - Core additions: `LivePanic`, `AutoLive::try_stop`,
     `filesize::{decimal_signed, pick_unit_and_suffix_signed}`, `json::MAX_DEPTH`.
 
