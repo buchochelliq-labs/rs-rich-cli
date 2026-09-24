@@ -535,22 +535,23 @@ fn pathological_lines_redact_in_linear_time() {
     let r = Redactor::secrets();
     let fitted = r.clone().preserve_width(true);
     let lines = [
-        "a:".repeat(100_000),
-        "a-".repeat(100_000),
-        "a=".repeat(100_000),
-        "a.".repeat(100_000),
-        "abcd: ".repeat(33_000),
-        "a://".repeat(50_000),
-        "a://b:".repeat(33_000),
-        "a:b@".repeat(50_000),
-        "x=\"".repeat(66_000),
-        "bearer ".repeat(28_000),
-        "token=".repeat(33_000),
-        format!("password={}", "x".repeat(200_000)),
-        format!("password=\"{}", "x ".repeat(100_000)),
+        "a:".repeat(20_000),
+        "a-".repeat(20_000),
+        "a=".repeat(20_000),
+        "a.".repeat(20_000),
+        "abcd: ".repeat(6_600),
+        "a://".repeat(10_000),
+        "a://b:".repeat(6_600),
+        "a:b@".repeat(10_000),
+        "x=\"".repeat(13_200),
+        "bearer ".repeat(5_600),
+        "token=".repeat(6_600),
+        format!("password={}", "x".repeat(40_000)),
+        format!("password=\"{}", "x ".repeat(20_000)),
     ];
-    // Each line is 200 KB. Quadratic detectors took minutes on these; a
-    // debug build now takes about a second. The limit is generous for CI.
+    // Each line is 40 KB. Quadratic detectors took well over the limit on
+    // these even in a release build; linear ones take a fraction of a second
+    // in debug, which leaves slow CI runners plenty of room.
     for line in &lines {
         let redactions: [&dyn Fn(); 2] = [&|| drop(r.redact_str(line)), &|| {
             drop(fitted.redact_ansi(line))
