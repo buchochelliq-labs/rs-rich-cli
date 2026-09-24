@@ -131,3 +131,53 @@ fn tiny_interactive_viewports_still_deliver_ordinary_writes() {
         assert!(!text.contains("hidden"), "width {w}: {text:?}");
     }
 }
+#[test]
+fn links_carrying_control_codes_are_rejected() {
+    use rich::Style;
+    let mut bytes = Vec::new();
+    let mut live = LiveCoordinator::new(&mut bytes, target(80, 24, true));
+    for link in [
+        "http://x\x1b\\\x1b]0;PWN\x07",
+        "http://x\x07",
+        "http://x\x7f",
+        "http://x\u{9c}",
+    ] {
+        let content = vec![Segment::new("click", Some(Style::new().with_link(link)))];
+        assert!(
+            matches!(live.print(&content), Err(LiveError::UnsupportedControl)),
+            "{link:?}"
+        );
+        assert!(matches!(
+            live.add(content),
+            Err(LiveError::UnsupportedControl)
+        ));
+    }
+    let fine = vec![Segment::new(
+        "ok",
+        Some(Style::new().with_link("https://x.io/a?b=1")),
+    )];
+    live.print(&fine).unwrap();
+    live.finish().unwrap();
+    drop(live);
+    let text = String::from_utf8(bytes).unwrap();
+    assert!(!text.contains("PWN"), "{text:?}");
+}
+#[test]
+fn pipes_write_the_whole_final_snapshot_whatever_the_height() {
+    let mut bytes = Vec::new();
+    let mut live = LiveCoordinator::new(&mut bytes, target(80, 5, false));
+    let rows: Vec<Segment> = (0..10)
+        .map(|i| Segment::new(format!("row{i}\n"), None))
+        .collect();
+    live.add(rows).unwrap();
+    live.refresh().unwrap();
+    live.finish().unwrap();
+    drop(live);
+    let text = String::from_utf8(bytes).unwrap();
+    for i in 0..10 {
+        assert!(
+            text.contains(&format!("row{i}")),
+            "row{i} missing: {text:?}"
+        );
+    }
+}
