@@ -50,6 +50,7 @@ ways to create an argument:
 | `config_key("deploy.region")` | Shown as `[config: …]`, and listed by `ConfigReference` |
 | `required(true)`, `multiple(true)`, `hidden(true)` | Usage, `...` suffix, left out of help |
 | `heading("Targets")` | Group the argument under its own heading |
+| `global(true)` | Completions offer the option in every subcommand below, too (clap's `Arg::global` maps to it) |
 | `help(…)`, `long_help(…)` | Short help, and the longer form for `--help` |
 
 `CommandSpec` builders: `version`, `about`, `long_about`, `alias`, `usage`
@@ -93,7 +94,8 @@ plain text on a console without colour.
 ## Errors
 
 `CliError` describes a usage error and renders it as a
-[diagnostic](diagnostics.md). Constructors fill in suggestions for you:
+[diagnostic](diagnostics.md), with control characters from the command line
+escaped (`\u{1b}`). Constructors fill in suggestions for you:
 
 - `CliError::unknown_in(&spec, "--paralel")` checks switches (for `-…`) or
   subcommand names and takes the usage line from the spec;
@@ -117,8 +119,15 @@ status clap uses.
 
 `generate(&spec, shell)` returns a completion script for `Shell::Bash`,
 `Zsh`, `Fish` or `PowerShell`. Scripts complete subcommands, switches,
-choices (with their help as descriptions) and file or directory values.
-`"pwsh".parse::<Shell>()` also works.
+choices (with their help as descriptions) and file or directory values. A
+subcommand completes its own options plus the `global` options of the
+commands above it. `"pwsh".parse::<Shell>()` also works.
+
+Names and values are quoted for each shell. The command name loses any
+whitespace and control characters where a script names it (a newline in
+`#compdef` would start a shell command), zsh action values escape shell
+metacharacters, and fish receives subcommand words and choices only as
+`printf` output, which it does not expand again.
 
 ```rust
 --8<-- "crates/rich-ext/examples/guide_cli.rs:completions"
@@ -151,7 +160,11 @@ section per subcommand. `markdown_view` returns it as core's `Markdown`
 renderable. `to_man(&spec, section, date)` writes one roff page, and
 `to_man_pages` writes one page per subcommand (`deploy.1`,
 `deploy-rollback.1`, …). The man pages pass `mandoc -T lint` and
-`groff -ww`. Pass a date for reproducible output; `None` leaves it out.
+`groff -ww`: line breaks inside a value (a default, an example command) become
+spaces so they cannot start a roff request, and non-ASCII text is written as
+roff escapes (`\(em`, `\[u2026]`). Pass a date for reproducible output; with
+`None` the page takes its date from `SOURCE_DATE_EPOCH` when that is set, and
+is undated otherwise (mandoc then warns about the missing date).
 
 ```rust
 --8<-- "crates/rich-ext/examples/guide_cli.rs:docs"

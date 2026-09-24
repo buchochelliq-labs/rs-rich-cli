@@ -93,6 +93,7 @@ fn convert_arg(arg: &clap::Arg) -> ArgSpec {
         .map(str::to_string)
         .collect();
     spec.positional = arg.is_positional();
+    spec.global = arg.is_global_set();
     spec.help = arg.get_help().map(|h| h.to_string()).unwrap_or_default();
     spec.long_help = arg.get_long_help().map(|h| h.to_string());
     spec.required = arg.is_required_set();

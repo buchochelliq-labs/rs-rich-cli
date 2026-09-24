@@ -75,16 +75,17 @@ the feature; `Format::is_enabled` checks first.
 
 | Format | Notes |
 |---|---|
-| JSON | Numbers become `Int`, `UInt` or `Float`. |
-| YAML | YAML 1.2 core schema. Anchors (`&name`) and aliases (`*name`) are recorded in `Meta`; an alias holds a copy of its anchor's value. Merge keys (`<<`) stay ordinary keys and are not merged. Several documents parse to a sequence. Comments are dropped. |
+| JSON | Numbers become `Int`, `UInt` or `Float`; `-0` is the integer `0`, as in Python. |
+| YAML | YAML 1.2 core schema. Anchors (`&name`) and aliases (`*name`) are recorded in `Meta`; an alias holds a copy of its anchor's value. Merge keys (`<<`) stay ordinary keys and are not merged. A repeated key in one mapping is an error. Several documents parse to a sequence. Comments are dropped. |
 | TOML | Tables keep document order. Dates and times stay as written (`Value::DateTime`). |
-| XML | The document becomes `{root: …}`. Attributes are `@name` keys, repeated child elements become sequences, and mixed text goes under `#text`. Comments and processing instructions are dropped. |
-| INI | Sections become maps. Values are always strings, and inline comments are not stripped. A comment line directly above an entry becomes its `Meta::comment`. |
+| XML | The document becomes `{root: …}`. Attributes are `@name` keys, repeated child elements become sequences, and mixed text goes under `#text`. Comments and processing instructions are dropped. Text, CDATA or a reference outside the root element is an error. |
+| INI | Sections become maps. Values are always strings, and inline comments are not stripped. A comment line directly above an entry becomes its `Meta::comment`. A section named like a key before the first section is an error, since both would share the root map. |
 | dotenv | `KEY=VALUE` and `export KEY=VALUE`. Values are strings with no variable expansion (`$HOME` stays `$HOME`). |
 
 Deep nesting (over 512 levels in YAML or XML) is an error, and YAML alias
-expansion stops after one million copied nodes, so hostile input cannot
-exhaust memory.
+expansion stops after one million copied nodes or 64 MiB of copied strings,
+so hostile input cannot exhaust memory. Only anchors that some alias uses are
+copied, and those copies count against the same budget.
 
 ![TOML and XML documents as trees](../../media/guide/guide_data-formats.svg)
 
@@ -107,7 +108,10 @@ return `None` rather than a wrong guess.
 
 A `DataError` carries the format, a message and, when known, a `Position`.
 `Display` gives one line; `to_diagnostic(source, name)` gives a
-[diagnostic](diagnostics.md) with the offending character underlined:
+[diagnostic](diagnostics.md) with the offending character underlined.
+Parsers often repeat the offending input, so control characters in messages
+are escaped (`\u001b`), and in the snippet they show as one-column pictures
+(`␛`), keeping the underline aligned:
 
 ```rust
 --8<-- "crates/rich-ext/examples/guide_data.rs:errors"
@@ -230,6 +234,11 @@ The built-in JSONPath supports `$`, `.key`, `['key']`, `[n]`, `[-n]`, `[*]`,
 `&&`, `||`, `!`). The leading `$` is optional. A `SelectError` names the
 column of the problem: ``expected `]` at column 10``.
 
+Two limits keep hostile expressions cheap: `!` and parentheses nest at most
+128 levels in a filter, and a selection that produces, or visits through
+recursive descent, more than a million nodes stops with an error (chained
+`..*` steps multiply).
+
 ```rust
 --8<-- "crates/rich-ext/examples/guide_data.rs:select"
 ```
@@ -264,10 +273,13 @@ For line diffs of text, source and patches, see
 
 `Redaction` masks string and number leaves whose key matches a pattern
 (case-insensitive substring, or a whole-key glob when the pattern contains
-`*` or `?`). `Redaction::secrets()` starts from `SECRET_KEYS`: password,
-secret, token, key and similar. `pattern` adds a pattern and `mask` changes
-the replacement (default `********`). Structure, booleans and nulls are left
-alone.
+`*` or `?`; `-` and `_` are interchangeable, so `api-key` matches `api_key`).
+Everything under a matching key is masked: `{"password": {"value": …}}`, a
+`credentials:` section, and XML `<password type="plain">…</password>`, whose
+text sits under `#text`. `Redaction::secrets()` starts from `SECRET_KEYS`:
+password, secret, token, key and similar. `pattern` adds a pattern and `mask`
+changes the replacement (default `********`). Structure, booleans and nulls
+are left alone.
 
 `node.redacted(&redactor)` returns a masked copy for any view.
 `ConfigFileView` shows INI and dotenv files as a `section | key | value |
@@ -290,6 +302,13 @@ implement it, so you can redact by path or value shape as well as by key.
 - **Merge keys are not merged.** `<<: *base` shows as a `<<` key holding a
   copy of `base`.
 - **XML text is a string.** `<port>8080</port>` gives `"8080"`, not a number.
+- **JSON numbers are 64-bit.** An integer beyond the `i64`/`u64` range
+  becomes a `Float` and loses precision (Python keeps it exact). `1e400` and
+  lone surrogate escapes such as `"\ud800"` are parse errors here, where
+  Python reads infinity and a lone surrogate.
+- **Terminal safety.** Every view escapes control characters in keys,
+  values, anchor names and comments (C0, DEL and C1, so the one-character
+  CSI `U+009B` too) as `\u009b`-style escapes.
 - **Theme keys.** This module's own style names and their defaults are listed
   in `DATA_STYLES`.
 

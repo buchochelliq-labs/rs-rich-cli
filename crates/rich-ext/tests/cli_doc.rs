@@ -680,7 +680,10 @@ fn man_page_passes_lint() {
     assert!(pages[1].1.contains(".SH \"SEE ALSO\"\n\\fBrich\\fR(1),\n"));
     // Deterministic, and dated only when asked.
     assert_eq!(to_man(&sample(), "1", None), to_man(&sample(), "1", None));
-    assert!(to_man(&sample(), "1", None).starts_with(".TH \"RICH\" \"1\" \"\" "));
+    // (Undated unless SOURCE_DATE_EPOCH supplies a date.)
+    if std::env::var_os("SOURCE_DATE_EPOCH").is_none() {
+        assert!(to_man(&sample(), "1", None).starts_with(".TH \"RICH\" \"1\" \"\" "));
+    }
     // A line starting with a control character is escaped.
     let dotty = CommandSpec::new("x")
         .about("x")
@@ -1065,5 +1068,270 @@ mod clap_adapter {
              note: usage: tool init [OPTIONS] <name>\n\
              help: for more information, try '--help'\n"
         );
+    }
+
+    #[test]
+    fn from_clap_marks_global_arguments() {
+        let cmd = Clap::new("tool")
+            .arg(
+                Arg::new("quiet")
+                    .long("quiet")
+                    .short('q')
+                    .action(ArgAction::SetTrue)
+                    .global(true),
+            )
+            .subcommand(
+                Clap::new("run").arg(Arg::new("fast").long("fast").action(ArgAction::SetTrue)),
+            );
+        let spec = CommandSpec::from_clap(&cmd);
+        assert!(spec.args.iter().find(|a| a.id == "quiet").unwrap().global);
+        // clap propagates the argument itself; completions must not list it twice.
+        let script = generate(&spec, Shell::Bash);
+        let run_node = script.split("        n1)\n").nth(1).unwrap();
+        let run_node = run_node.split("esac ;;\n").next().unwrap();
+        assert_eq!(run_node.matches("'--quiet'").count(), 1, "{run_node}");
+    }
+}
+
+// ---------------------------------------------------------------- hardening
+
+/// A spec with an option on a subcommand and a global option on the root.
+fn nested() -> CommandSpec {
+    CommandSpec::new("tool")
+        .arg(
+            ArgSpec::option("dither")
+                .choices(["none", "floyd"])
+                .global(true)
+                .help("Dithering"),
+        )
+        .arg(ArgSpec::flag("local").help("Root only"))
+        .subcommand(
+            CommandSpec::new("hex")
+                .arg(ArgSpec::option("offset").help("Start here"))
+                .arg(ArgSpec::positional("file").value(ValueHint::File)),
+        )
+}
+
+#[test]
+fn subcommands_complete_their_own_and_global_options() {
+    let bash = generate(&nested(), Shell::Bash);
+    let hex = bash.split("        n1)\n").nth(1).unwrap();
+    let hex = hex.split("esac ;;\n").next().unwrap();
+    assert!(hex.contains("'--offset'"), "{hex}");
+    assert!(
+        hex.contains("'--dither') _tool__match \"$cur\" 'none' 'floyd'"),
+        "{hex}"
+    );
+    assert!(!hex.contains("'--local'"), "{hex}");
+    let fish = generate(&nested(), Shell::Fish);
+    assert!(fish.contains("'__fish_tool_at n1' -l 'offset'"), "{fish}");
+    assert!(
+        fish.contains("'__fish_tool_at n1' -l 'dither' -x -a"),
+        "{fish}"
+    );
+    let zsh = generate(&nested(), Shell::Zsh);
+    let hex = zsh.split("_tool__hex__n1() {").nth(1).unwrap();
+    assert!(hex.contains("--offset="), "{hex}");
+    assert!(
+        hex.contains("--dither=[Dithering]:DITHER:(none floyd)"),
+        "{hex}"
+    );
+    let ps = generate(&nested(), Shell::PowerShell);
+    let hex = ps.split("'n1' {").nth(1).unwrap();
+    assert!(
+        hex.contains("'--offset'") && hex.contains("'--dither'"),
+        "{hex}"
+    );
+    for shell in [Shell::Bash, Shell::Zsh, Shell::Fish] {
+        let binary = shell.to_string();
+        if !have(&binary) {
+            continue;
+        }
+        let flag = if shell == Shell::Fish {
+            "--no-execute"
+        } else {
+            "-n"
+        };
+        let path = scratch(&format!("nested.{binary}"), &generate(&nested(), shell));
+        let out = Command::new(&binary).arg(flag).arg(&path).output().unwrap();
+        assert!(
+            out.status.success() && out.stderr.is_empty(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    if have("bash") {
+        let path = scratch("tool.bash", &bash);
+        let complete = |words: &[&str]| {
+            let quoted: Vec<String> = words.iter().map(|w| format!("'{w}'")).collect();
+            let program = format!(
+                "source '{}'; COMP_WORDS=({}); COMP_CWORD={}; _tool; printf '%s\\n' \"${{COMPREPLY[@]}}\"",
+                path.display(),
+                quoted.join(" "),
+                words.len() - 1
+            );
+            let out = Command::new("bash")
+                .args(["--norc", "--noprofile", "-c", &program])
+                .output()
+                .unwrap();
+            String::from_utf8(out.stdout).unwrap()
+        };
+        assert_eq!(complete(&["tool", "hex", "--of"]), "--offset\n");
+        assert_eq!(
+            complete(&["tool", "hex", "x", "--dither", ""]),
+            "none\nfloyd\n"
+        );
+    }
+    if have("fish") {
+        let path = scratch("tool.fish", &fish);
+        let program = format!("source '{}'; complete -C 'tool hex --of'", path.display());
+        let out = Command::new("fish")
+            .args(["--no-config", "-c", &program])
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8(out.stdout).unwrap(),
+            "--offset\tStart here\n"
+        );
+    }
+}
+
+#[test]
+fn command_names_cannot_break_out_of_script_headers() {
+    let spec = CommandSpec::new("tool")
+        .bin_name("tool\ntouch /tmp/PWN")
+        .subcommand(CommandSpec::new("run"));
+    for shell in Shell::ALL {
+        let script = generate(&spec, shell);
+        for line in script.lines() {
+            assert!(!line.trim_start().starts_with("touch"), "{shell}: {line}");
+        }
+    }
+    let zsh = generate(&spec, Shell::Zsh);
+    assert!(zsh.starts_with("#compdef tooltouch/tmp/PWN\n"), "{zsh}");
+}
+
+#[test]
+fn fish_subcommand_words_are_not_expanded() {
+    let marker = std::env::temp_dir().join(format!("rich-ext-fish-pwn-{}", std::process::id()));
+    let _ = std::fs::remove_file(&marker);
+    let evil = format!("(touch {})", marker.display());
+    let dollar = format!("$(touch {})", marker.display());
+    let spec = CommandSpec::new("tool")
+        .subcommand(CommandSpec::new(evil.clone()).alias(dollar.clone()))
+        .subcommand(CommandSpec::new("ok*{a,b}~"));
+    let script = generate(&spec, Shell::Fish);
+    // Words reach fish only as printf arguments inside a function.
+    for line in script.lines().filter(|l| l.starts_with("complete ")) {
+        assert!(!line.contains("touch"), "{line}");
+    }
+    if have("fish") {
+        let path = scratch("evil.fish", &script);
+        let program = format!("source '{}'; complete -C 'tool '", path.display());
+        let out = Command::new("fish")
+            .args(["--no-config", "-c", &program])
+            .output()
+            .unwrap();
+        let offered = String::from_utf8(out.stdout).unwrap();
+        assert!(!marker.exists(), "fish ran a subcommand name");
+        let words: Vec<&str> = offered.lines().collect();
+        assert!(words.contains(&evil.as_str()), "{offered}");
+        assert!(words.contains(&dollar.as_str()), "{offered}");
+        assert!(words.contains(&"ok*{a,b}~"), "{offered}");
+    }
+}
+
+#[test]
+fn zsh_choice_values_escape_shell_metacharacters() {
+    let spec = CommandSpec::new("tool")
+        .arg(ArgSpec::option("mode").choices(["a;b", "c|d", "e&f", "g<h>", "=i", "~j"]));
+    let script = generate(&spec, Shell::Zsh);
+    assert!(
+        script.contains(r":(a\;b c\|d e\&f g\<h\> \=i \~j)'"),
+        "{script}"
+    );
+}
+
+#[test]
+fn cli_error_diagnostics_escape_controls() {
+    let error = CliError::unknown_argument("--x\u{1b}]0;pwn\u{7}", ["--y"])
+        .usage("tool \u{9b}2J")
+        .suggestion("\u{1b}c");
+    let out = render(&error.to_diagnostic(), 80);
+    assert!(!out.chars().any(|c| c != '\n' && c.is_control()), "{out:?}");
+    assert!(!error.to_string().chars().any(char::is_control));
+}
+
+#[test]
+fn man_pages_cannot_start_requests_from_text() {
+    let spec = CommandSpec::new("tool")
+        .about("Does — things…")
+        .arg(
+            ArgSpec::option("mode")
+                .default_value("x\n.so /etc/hostname")
+                .env("A\n.SH EVIL")
+                .config_key("k\r\n.de x")
+                .choices(["a\n.SH CHOICE", "b"]),
+        )
+        .example("tool run\n.SH INJECTED", "")
+        .example("tool go", "why\n'also");
+    let page = to_man(&spec, "1", Some("2026-01-01\"\n.so /etc/passwd"));
+    for line in page.lines() {
+        assert!(
+            !line.starts_with(".so")
+                && !line.starts_with(".de")
+                && !line.starts_with(".SH INJECTED")
+                && !line.starts_with(".SH EVIL")
+                && !line.starts_with(".SH CHOICE"),
+            "{line}\n{page}"
+        );
+    }
+    assert!(page.is_ascii(), "{page}");
+    assert!(page.contains(r"Does \(em things\[u2026]"), "{page}");
+    assert!(
+        page.starts_with(".TH \"TOOL\" \"1\" \"2026-01-01 .so /etc/passwd\""),
+        "{page}"
+    );
+    let path = scratch("tool-hostile.1", &page);
+    if have("groff") {
+        let out = Command::new("groff")
+            .args(["-man", "-Tutf8", "-ww", "-z"])
+            .arg(&path)
+            .output()
+            .unwrap();
+        assert!(
+            out.stderr.is_empty(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    // Non-ASCII help passes groff's input check.
+    let unicode = CommandSpec::new("uni")
+        .about("Résumé — ok")
+        .arg(ArgSpec::flag("x").help("Emoji 🎉 and ‘quotes’"));
+    let page = to_man(&unicode, "1", Some("2026-01-01"));
+    assert!(page.is_ascii(), "{page}");
+    let path = scratch("uni.1", &page);
+    if have("groff") {
+        let out = Command::new("groff")
+            .args(["-man", "-Tutf8", "-ww", "-z"])
+            .arg(&path)
+            .output()
+            .unwrap();
+        assert!(
+            out.stderr.is_empty(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    if have("mandoc") {
+        let out = Command::new("mandoc")
+            .args(["-T", "lint", "-W", "warning"])
+            .arg(&path)
+            .output()
+            .unwrap();
+        let report = String::from_utf8_lossy(&out.stdout).to_string()
+            + &String::from_utf8_lossy(&out.stderr);
+        assert!(report.trim().is_empty(), "{report}\n{page}");
     }
 }

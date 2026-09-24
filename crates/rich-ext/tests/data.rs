@@ -1325,3 +1325,288 @@ mod jsonpath {
         assert_eq!(error("$.a)"), "unexpected `)` at column 4");
     }
 }
+
+// --- hardening: hostile input -----------------------------------------------
+
+/// Whether `text` holds a control character other than a newline: C0, DEL
+/// or C1.
+fn has_raw_controls(text: &str) -> bool {
+    text.chars().any(|c| c != '\n' && c.is_control())
+}
+
+#[test]
+fn c1_controls_and_del_are_escaped_in_every_view() {
+    let node = json(r#"{"k\u009b": "v\u009b\u007f", "list": ["\u0085x"]}"#);
+    let explorer = plain(60, &Explorer::new(&node));
+    assert!(!has_raw_controls(&explorer), "{explorer:?}");
+    assert!(explorer.contains(r"k\u009b"), "{explorer}");
+    assert!(explorer.contains(r#""v\u009b\u007f""#), "{explorer}");
+    let flat = plain(60, &FlatView::new(&node));
+    assert!(!has_raw_controls(&flat), "{flat:?}");
+    let table = plain(60, &TableView::new(&node));
+    assert!(!has_raw_controls(&table), "{table:?}");
+}
+
+#[test]
+fn parse_error_messages_escape_controls() {
+    let error = DataError::new(Format::Json, "bad \u{1b}]0;pwn\u{7} here", None);
+    assert!(!has_raw_controls(&error.to_string()), "{error:?}");
+    assert!(!has_raw_controls(&error.message), "{error:?}");
+}
+
+#[test]
+fn diagnostic_snippets_escape_controls() {
+    let source = "{\"a\": 1,\n \u{1b}[2J oops}";
+    let error = parse(Format::Json, source).unwrap_err();
+    let out = plain(80, &error.to_diagnostic(source, "input"));
+    assert!(!has_raw_controls(&out), "{out:?}");
+    // The caret still sits under the offending character.
+    let lines: Vec<&str> = out.lines().collect();
+    let code = lines.iter().position(|l| l.starts_with("2 |")).unwrap();
+    let caret = lines[code + 1].chars().position(|c| c == '^').unwrap();
+    let column = error.position.unwrap().column;
+    assert_eq!(caret, "2 | ".len() + column - 1, "{out}");
+}
+
+#[test]
+fn redaction_covers_dashes_containers_and_xml_text() {
+    let node = json(
+        r#"{"api-key": "k1", "private-key": "k2", "Access-Key": "k3",
+            "password": {"value": "hunter2", "n": 5},
+            "credentials": [{"pass": "p"}], "author": "Ada", "auth": {"enabled": true}}"#,
+    );
+    let safe = node.redacted(&Redaction::secrets()).to_json();
+    assert_eq!(
+        safe,
+        serde_json::json!({
+            "api-key": "********", "private-key": "********", "Access-Key": "********",
+            "password": {"value": "********", "n": "********"},
+            "credentials": [{"pass": "********"}], "author": "Ada", "auth": {"enabled": true}
+        })
+    );
+}
+
+#[test]
+fn json_negative_zero_is_an_integer() {
+    // Python's json.loads('-0') is the int 0; '-0.0' stays a float.
+    let node = json(r#"{"a": -0, "b": -0.0, "c": [-0, 1e0, -0e0], "d": "-0"}"#);
+    assert_eq!(node.get("a").unwrap().value, Value::Int(0));
+    assert!(
+        matches!(node.get("b").unwrap().value, Value::Float(f) if f == 0.0 && f.is_sign_negative())
+    );
+    let c = node.get("c").unwrap();
+    assert_eq!(c.index(0).unwrap().value, Value::Int(0));
+    assert!(matches!(c.index(2).unwrap().value, Value::Float(f) if f.is_sign_negative()));
+    assert_eq!(
+        plain(40, &Explorer::new(json("[-0]"))),
+        "[…] 1 item\n└── [0]: 0\n"
+    );
+}
+
+#[test]
+fn ini_root_key_and_section_of_the_same_name_is_an_error() {
+    let error = parse_ini("a = 1\n[a]\nb = 2\n").unwrap_err();
+    assert_eq!(error.position, Some(Position::new(2, 1)));
+    assert!(error.message.contains("`a`"), "{error}");
+}
+
+#[test]
+fn path_globs_with_many_deep_wildcards_stay_fast() {
+    let mut source = String::new();
+    for _ in 0..80 {
+        source.push_str("{\"a\": ");
+    }
+    source.push('1');
+    source.push_str(&"}".repeat(80));
+    let node = json(&source);
+    let started = std::time::Instant::now();
+    let hits = search(&node, &SearchQuery::path("**.**.**.**.**.zz"));
+    assert!(hits.is_empty());
+    let hits = search(&node, &SearchQuery::path("**.**.**.**.**.a"));
+    assert_eq!(hits.len(), 80);
+    assert!(
+        started.elapsed().as_secs() < 2,
+        "took {:?}",
+        started.elapsed()
+    );
+}
+
+#[cfg(feature = "yaml")]
+mod yaml_hardening {
+    use super::*;
+
+    #[test]
+    fn alias_expansion_is_charged_by_bytes() {
+        // Few nodes, many bytes: 6000 copies of a 1 MiB string.
+        let mut source = format!("a: &a \"{}\"\nb: [", "x".repeat(1 << 20));
+        source.push_str(&"*a, ".repeat(6000));
+        source.push_str("]\n");
+        let error = parse_yaml(&source).unwrap_err();
+        assert!(
+            error.message.starts_with("aliases expand to more than"),
+            "{error}"
+        );
+        assert!(error.message.contains("MiB"), "{error}");
+    }
+
+    fn nested_anchors(aliased: bool) -> String {
+        let mut source = String::from("root: ");
+        for i in 0..250 {
+            source.push_str(&format!("&a{i} ["));
+        }
+        source.push_str(&format!("\"{}\"", "y".repeat(2 << 20)));
+        source.push_str(&"]".repeat(250));
+        source.push('\n');
+        if aliased {
+            source.push_str("refs: [");
+            for i in 0..250 {
+                source.push_str(&format!("*a{i}, "));
+            }
+            source.push_str("]\n");
+        }
+        source
+    }
+
+    #[test]
+    fn nested_anchors_are_not_cloned_unless_aliased() {
+        // Unused anchors cost nothing...
+        let node = parse_yaml(&nested_anchors(false)).unwrap();
+        assert_eq!(node.get("root").unwrap().meta.anchor.as_deref(), Some("a0"));
+        // ...and the copies aliased anchors need count against the budget.
+        let error = parse_yaml(&nested_anchors(true)).unwrap_err();
+        assert!(
+            error.message.starts_with("aliases expand to more than"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn anchor_names_are_escaped_in_the_explorer() {
+        let node = parse_yaml("a: &x\u{1b}c\u{1b}(0 1\nb: *x\u{1b}c\u{1b}(0\n").unwrap();
+        let out = plain(60, &Explorer::new(&node));
+        assert!(!has_raw_controls(&out), "{out:?}");
+        assert!(out.contains(r"&x\u001bc\u001b(0"), "{out}");
+        assert!(out.contains(r"*x\u001bc\u001b(0"), "{out}");
+    }
+
+    #[test]
+    fn duplicate_keys_are_an_error() {
+        let error = parse_yaml("a: 1\nb: 2\na: 3\n").unwrap_err();
+        assert_eq!(error.position, Some(Position::new(3, 1)));
+        assert!(error.message.contains("duplicate key `a`"), "{error}");
+    }
+}
+
+#[cfg(feature = "xml")]
+mod xml_hardening {
+    use super::*;
+
+    #[test]
+    fn error_messages_do_not_repeat_raw_escapes() {
+        let error = parse_xml("<a>x</a\u{1b}]0;pwn\u{1b}\\>").unwrap_err();
+        assert!(!has_raw_controls(&error.to_string()), "{error:?}");
+        assert!(!has_raw_controls(&error.message), "{error:?}");
+    }
+
+    #[test]
+    fn content_after_the_root_is_an_error() {
+        for source in ["<a/><![CDATA[x]]>", "<a/>&amp;", "<a>1</a>&#65;"] {
+            let error = parse_xml(source).unwrap_err();
+            assert!(
+                error.message.contains("outside the root element"),
+                "{source}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn redaction_masks_element_text_under_a_secret_name() {
+        let node =
+            parse_xml("<c><password type=\"plain\">hunter2</password><user>u</user></c>").unwrap();
+        let safe = node.redacted(&Redaction::secrets());
+        let password = safe.at(&path("c.password")).unwrap();
+        assert_eq!(password.get("#text").unwrap().as_str(), Some("********"));
+        assert_eq!(safe.at(&path("c.user")).unwrap().as_str(), Some("u"));
+    }
+}
+
+#[cfg(feature = "jsonpath")]
+mod jsonpath_hardening {
+    use super::*;
+
+    fn select(node: &Node, expr: &str) -> Result<Vec<String>, SelectError> {
+        Ok(JsonPathSelector::parse(expr)?
+            .select(node)?
+            .into_iter()
+            .map(|(p, _)| p.to_string())
+            .collect())
+    }
+
+    #[test]
+    fn slices_with_huge_steps_do_not_overflow() {
+        let node = json("[0, 1, 2, 3, 4]");
+        assert_eq!(
+            select(&node, "$[1:5:9223372036854775807]").unwrap(),
+            ["[1]"]
+        );
+        assert_eq!(
+            select(&node, "$[3::-9223372036854775808]").unwrap(),
+            ["[3]"]
+        );
+        assert_eq!(
+            select(&node, "$[-9223372036854775808:9223372036854775807:2]").unwrap(),
+            ["[0]", "[2]", "[4]"]
+        );
+    }
+
+    #[test]
+    fn filter_nesting_is_limited() {
+        let node = json(r#"[{"a": 1}]"#);
+        let deep = format!("$[?({}@.a{})]", "(".repeat(3000), ")".repeat(3000));
+        let error = JsonPathSelector::parse(&deep).unwrap_err();
+        assert!(error.message.contains("nested too deeply"), "{error}");
+        let nots = format!("$[?({}@.a)]", "!".repeat(100_000));
+        let error = JsonPathSelector::parse(&nots).unwrap_err();
+        assert!(error.message.contains("nested too deeply"), "{error}");
+        // Long flat chains are fine and evaluate without deep recursion.
+        let chain = format!("$[?(@.a{})]", " || @.b".repeat(100_000));
+        assert_eq!(select(&node, &chain).unwrap(), ["[0]"]);
+        let chain = format!("$[?(@.a{})]", " && @.a".repeat(100_000));
+        assert_eq!(select(&node, &chain).unwrap(), ["[0]"]);
+        // Moderate nesting still works.
+        let fine = format!("$[?({}@.a{})]", "(".repeat(126), ")".repeat(126));
+        assert_eq!(select(&node, &fine).unwrap(), ["[0]"]);
+    }
+
+    #[test]
+    fn extreme_negative_indexes_in_filters_do_not_panic() {
+        let node = json("[[1, 2], [3]]");
+        assert!(select(&node, "$[?(@[-9223372036854775808])]")
+            .unwrap()
+            .is_empty());
+        assert_eq!(select(&node, "$[?(@[-2])]").unwrap(), ["[0]"]);
+    }
+
+    #[test]
+    fn runaway_selections_stop_with_an_error() {
+        // Chained `..*` multiplies (the audit's `$..*..*..*` on a deep
+        // document); the cap counts visited nodes, so a wide document shows
+        // it cheaply.
+        let wide = json(&format!("[{}0]", "0,".repeat(1_000_000)));
+        let error = select(&wide, "$..*").unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "the selection matches more than 1000000 nodes"
+        );
+        let mut source = String::new();
+        for _ in 0..40 {
+            source.push_str("{\"a\": [1, 2], \"b\": ");
+        }
+        source.push('1');
+        source.push_str(&"}".repeat(40));
+        let node = json(&source);
+        // Ordinary recursive descent still works.
+        assert_eq!(select(&node, "$..b").unwrap().len(), 40);
+        assert_eq!(select(&node, "$..*..*").unwrap().len(), 3200);
+    }
+}

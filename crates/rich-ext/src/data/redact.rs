@@ -22,10 +22,13 @@ impl<F: Fn(&Path, &Node) -> Option<Node>> Redactor for F {
 /// Mask string and number leaves whose key matches a pattern.
 ///
 /// A leaf's key is the last key on its path, so the items of a `tokens`
-/// list are masked too. Patterns match case-insensitively: as a substring,
-/// or as a whole-key glob when they contain `*` or `?`. Masked leaves become
-/// the mask string and keep their metadata; booleans and nulls are left
-/// alone, and so is the structure.
+/// list are masked too. Everything under a matching key is masked, so
+/// `{"password": {"value": "…"}}` and an XML `<password type="…">…</password>`
+/// (whose text sits under `#text`) are covered. Patterns match
+/// case-insensitively, with `-` and `_` interchangeable (`api-key` matches
+/// `api_key`): as a substring, or as a whole-key glob when they contain `*`
+/// or `?`. Masked leaves become the mask string and keep their metadata;
+/// booleans and nulls are left alone, and so is the structure.
 ///
 /// ```
 /// use rich_ext::data::{parse, Format, Redaction, Value};
@@ -84,30 +87,47 @@ impl Redaction {
         self
     }
 
-    /// Whether `key` matches a pattern.
+    /// Whether `key` matches a pattern. `-` and `_` are interchangeable.
     pub fn matches_key(&self, key: &str) -> bool {
+        let dashless = key.replace('-', "_");
         self.patterns.iter().any(|pattern| {
             if pattern.contains(['*', '?']) {
                 wildcard(pattern, key, true)
+                    || wildcard(&pattern.replace('-', "_"), &dashless, true)
             } else {
-                find(key, pattern, true).is_some()
+                find(&dashless, &pattern.replace('-', "_"), true).is_some()
             }
         })
+    }
+
+    /// The masked copy of `node`: scalar leaves replaced, structure and
+    /// metadata kept.
+    fn masked(&self, node: &Node) -> Node {
+        let value = match &node.value {
+            Value::String(_)
+            | Value::DateTime(_)
+            | Value::Int(_)
+            | Value::UInt(_)
+            | Value::Float(_) => Value::String(self.mask.clone()),
+            Value::Seq(items) => Value::Seq(items.iter().map(|item| self.masked(item)).collect()),
+            Value::Map(entries) => Value::Map(
+                entries
+                    .iter()
+                    .map(|(key, value)| (key.clone(), self.masked(value)))
+                    .collect(),
+            ),
+            other => other.clone(),
+        };
+        Node::with_meta(value, node.meta.clone())
     }
 }
 
 impl Redactor for Redaction {
     fn redact(&self, path: &Path, node: &Node) -> Option<Node> {
-        let maskable = matches!(
-            node.value,
-            Value::String(_)
-                | Value::DateTime(_)
-                | Value::Int(_)
-                | Value::UInt(_)
-                | Value::Float(_)
-        );
-        (maskable && path.last_key().is_some_and(|key| self.matches_key(key)))
-            .then(|| Node::with_meta(Value::String(self.mask.clone()), node.meta.clone()))
+        // Parents come first, so a match masks the whole subtree here.
+        path.last_key()
+            .is_some_and(|key| self.matches_key(key))
+            .then(|| self.masked(node))
     }
 }
 

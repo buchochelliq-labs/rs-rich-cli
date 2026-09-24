@@ -23,6 +23,10 @@ impl Entries {
         }
     }
 
+    pub(crate) fn contains(&self, key: &str) -> bool {
+        self.index.contains_key(key)
+    }
+
     fn get_mut(&mut self, key: &str) -> Option<&mut Node> {
         let slot = *self.index.get(key)?;
         Some(&mut self.entries[slot].1)
@@ -101,6 +105,15 @@ pub(crate) fn parse(content: &str) -> Result<Node, DataError> {
             let name = name.trim();
             if name.is_empty() {
                 return Err(error("empty section name", number, column));
+            }
+            // Sections share the root map with the keys before the first
+            // section; one would silently replace the other.
+            if root.contains(name) {
+                return Err(error(
+                    format!("section `[{name}]` has the same name as the key `{name}` before the first section"),
+                    number,
+                    column,
+                ));
             }
             let meta = Meta {
                 position: Some(Position::new(number, column)),
