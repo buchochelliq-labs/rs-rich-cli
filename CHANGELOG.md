@@ -60,6 +60,15 @@ Entries below record subsequent releases and development.
 Cohort versions for 0.0.11 (not published): core 0.0.7, macros 0.0.1 (new),
 ext 0.0.9, art 0.0.9, CLI 0.0.11. Core changes below, so every dependent moves with it.
 
+### Optional Oniguruma highlighting (`onig`)
+
+- **Core, CLI.** A new `onig` Cargo feature, off by default, runs syntect on
+  Oniguruma instead of pure-Rust `fancy-regex` (DIVERGENCES #26). Highlighting
+  is 2–4× faster: a full `rich` run on a 1,784-line Rust file went from 0.43 s
+  to 0.16 s. Output is unchanged: 558 repository files rendered byte-identically
+  under both engines. It needs a C compiler at build time and adds about 330 KB.
+  `rich doctor` lists it under build features.
+
 ### Release test: security, robustness and parity fixes
 
 Six independent audits of the whole 0.0.11 delta found the issues below. Each was

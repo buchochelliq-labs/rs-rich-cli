@@ -71,6 +71,7 @@ images all rely on that.
 |---|---|---|
 | `rs-rich` | *(none by default)* | The whole faithful core. |
 | | `syntax-cache`, `json-escape-safe` | Opt-in divergences from upstream, documented in [Divergences](../DIVERGENCES.md). |
+| | `onig` | Oniguruma instead of pure-Rust `fancy-regex` for syntax highlighting: 2–4× faster, same output, needs a C compiler ([Divergences #26](../DIVERGENCES.md)). |
 | `rs-rich-ext` | *(default)* | Registry, highlighters, hyperlinks, diagnostics, stack traces, dashboard, live coordinator, `RichHandler` and `SpanView`, layouts, targets, capabilities, fidelity, accessibility, ANSI explain, diffs, CLI authoring model, and the workflow modules: `workflow`, `transfer`, `countdown`, `notify`, `cancel`, `table`, `badge`, `size_bar`, `format`, `redact`, plus the inspector views `source_view`, `hex`, `unicode_inspect` and `env_inspect`. |
 | | `macros` | `richf!`, `#[derive(Rich)]` and the print macros. |
 | | `anyhow` | `Diagnostic::from_anyhow`. |

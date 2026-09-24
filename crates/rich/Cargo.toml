@@ -35,6 +35,9 @@ workspace = true
 [features]
 # Optional parser reuse; disabled in the default mirror (DIVERGENCES #23).
 syntax-cache = []
+# Oniguruma (C) as syntect's regex engine instead of pure-Rust fancy-regex:
+# faster highlighting, same grammars and themes (DIVERGENCES #26).
+onig = ["syntect/regex-onig"]
 default = []
 # Explicit opt-in to JSON escape-aware display boundaries (DIVERGENCES #22).
 json-escape-safe = []

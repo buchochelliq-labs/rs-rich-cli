@@ -28,6 +28,8 @@ workspace = true
 [features]
 # Optional parser reuse; disabled in the default mirror (DIVERGENCES #23).
 syntax-cache = ["rich/syntax-cache"]
+# Oniguruma regex engine for syntax highlighting (DIVERGENCES #26).
+onig = ["rich/onig"]
 default = ["fetch", "art"]
 # Optional JSON display divergence; never enabled by default.
 json-escape-safe = ["rich/json-escape-safe"]

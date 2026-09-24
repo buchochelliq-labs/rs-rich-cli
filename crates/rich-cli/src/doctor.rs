@@ -232,7 +232,7 @@ fn report(args: &[String]) -> Result<(serde_json::Value, Report, bool), String> 
     let capabilities_json = serde_json::to_value(&capabilities).map_err(|e| e.to_string())?;
     let json = serde_json::json!({
         "package": {"name": env!("CARGO_PKG_NAME"), "version": env!("CARGO_PKG_VERSION")},
-        "features": {"art": cfg!(feature="art"), "fetch": cfg!(feature="fetch"), "syntax-cache": cfg!(feature="syntax-cache"), "json-escape-safe": cfg!(feature="json-escape-safe")},
+        "features": {"art": cfg!(feature="art"), "fetch": cfg!(feature="fetch"), "syntax-cache": cfg!(feature="syntax-cache"), "onig": cfg!(feature="onig"), "json-escape-safe": cfg!(feature="json-escape-safe")},
         "terminal": {"stdout_tty": console.is_terminal(), "width": console.width(), "height": console.height(), "color": color, "no_color": no_color, "detection": "local terminal and environment; no probe", "provenance": provenance},
         "image": {"requested_mode": requested_mode, "selected_mode": selected_mode, "sixel_inferred": sixel, "detection": "inferred from environment; no probe"},
         "config": {"source": config["source"], "profile": config["profile"], "disabled": config["disabled"]},

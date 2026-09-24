@@ -874,7 +874,7 @@ rich doctor
 
 ```text
 Rich doctor — rs-rich-cli 0.0.11
-Build features: {"art":true,"fetch":true,"syntax-cache":false,"json-escape-safe":false}
+Build features: {"art":true,"fetch":true,"syntax-cache":false,"onig":false,"json-escape-safe":false}
 Terminal: stdout TTY=false, 80×25 cells, colour=none (detected); NO_COLOR=false
 Image backend: ascii; Sixel support=false (inferred, no probe)
 Configuration: source="/…/rich-tour/rich.toml", profile="default", disabled=false

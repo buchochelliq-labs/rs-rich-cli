@@ -1153,6 +1153,11 @@ off by default and changes no CLI flags. It reuses parsing work within one
 render; varied source files may see no speedup. See the
 [measurements](benchmarks.md#004-repeated-source-syntax-results).
 
+For faster highlighting of any source file, build with `--features onig`. That
+uses the Oniguruma regex engine (C, compiled from bundled source, so a C compiler
+is needed) instead of pure-Rust `fancy-regex`: 2–4× faster, with the same
+output. It is off by default ([Divergences #26](DIVERGENCES.md)).
+
 Disabling configured watch with `watch = false` or `--no-watch` also suppresses
 inherited `watch_interval`, `watch_cache`, `watch_debounce`, `watch_poll` and
 `watch_exit_on_error`. Explicitly passing those watch options without enabling

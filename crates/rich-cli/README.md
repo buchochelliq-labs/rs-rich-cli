@@ -186,6 +186,10 @@ off by default and changes no CLI flags. It reuses parsing work within one
 render; varied source files may see no speedup. See the
 [measurements](https://buchochelliq-labs.github.io/rs-rich-cli/benchmarks/#004-repeated-source-syntax-results).
 
+For faster highlighting of any source file, build with `--features onig`. That
+uses the Oniguruma regex engine (C, compiled from bundled source, so a C compiler
+is needed): 2–4× faster, with the same output. It is off by default.
+
 Since 0.0.9 the CLI also has `--log-presentation rich`, still-image
 rotation/flips/grayscale and `--image-dither bayer4x4`, HTML/SVG still-image exports,
 and batch `--batch-preserve-dirs`, `--batch-input-root`, `--batch-name-template`.
