@@ -424,6 +424,10 @@ old.rs → new.rs: 1 added, 1 removed (25.0% of lines changed)
   unchanged lines kept around each change (default 3).
 - `--threshold PCT` gates on the share of changed lines and exits `5` above
   it, as it does for images.
+- Terminal controls in the files, and in their names, are shown as inert
+  symbols by default, so a diff cannot clear the screen or retitle the window;
+  `--no-sanitize` lets them through (see
+  [Neutralize terminal controls in input](#neutralize-terminal-controls-in-input)).
 
 A single input is read as a patch, such as `git diff` output. It renders as a
 tree of the changed files with their counts, then each file's highlighted hunks:
