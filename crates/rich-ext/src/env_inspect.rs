@@ -1,8 +1,13 @@
 //! Inspect environment variables and PATH-like lists.
 //!
 //! [`EnvView`] shows variables as a name/value table, sorted by name. It masks
-//! the values of names that look secret (see [`is_secret_name`]) and splits
-//! PATH-like values one entry per line. [`PathView`] checks one PATH-like
+//! the values of names that look secret (see [`is_secret_name`]), masks the
+//! secret part of any other value that looks like a credential (see
+//! [`redact_value`]) and splits PATH-like values one entry per line.
+//!
+//! Masking is **best effort**: it recognises common names and value shapes,
+//! not every secret. A secret in a variable with an ordinary name and an
+//! ordinary-looking value is shown. Check the output before you share it. [`PathView`] checks one PATH-like
 //! variable entry by entry: whether each exists, is a directory, repeats an
 //! earlier entry or is empty.
 //!
@@ -36,6 +41,7 @@ use rich::table::ColumnOptions;
 use rich::{Console, ConsoleOptions, Justify, Overflow, Renderable, Segment, Table, Text};
 
 use crate::event::theme_style;
+use crate::sanitize::is_bidi_control;
 use crate::unicode_inspect::control_picture;
 
 /// The separator between entries of `PATH` on this OS.
@@ -56,16 +62,67 @@ pub const SECRET_FRAGMENTS: &[&str] = &[
 ];
 
 /// Name segments (between `_`, `-` or `.`) that mark a variable as secret
-/// only as a whole segment, so `AUTHOR` is not masked but `GH_AUTH` is.
-pub const SECRET_SEGMENTS: &[&str] = &["AUTH"];
+/// only as a whole segment, so `AUTHOR`, `KEYBOARD_LAYOUT` and `MONKEY` are
+/// not masked but `GH_AUTH`, `STRIPE_KEY` and `DB_PASS` are.
+pub const SECRET_SEGMENTS: &[&str] = &[
+    "AUTH",
+    "KEY",
+    "PASS",
+    "PWD",
+    "DSN",
+    "PASSPHRASE",
+    "COOKIE",
+    "JWT",
+    "PRIVATEKEY",
+];
 
-/// Whether `name` looks like it holds a secret. Case-insensitive.
+/// Name segments that mark a variable as secret only as its *last* segment:
+/// `FLASK_SESSION` is masked, `XDG_SESSION_TYPE` is not.
+pub const SECRET_LAST_SEGMENTS: &[&str] = &["SESSION"];
+
+/// Well-known variables whose names match a secret segment but whose values
+/// are not secret: the shell's working directory and the desktop session name.
+pub const PUBLIC_NAMES: &[&str] = &["PWD", "DESKTOP_SESSION"];
+
+/// Whether `name` looks like it holds a secret. Case-insensitive, and `-`
+/// counts as `_` (`API-KEY` is `API_KEY`).
+///
+/// A name is secret when it contains one of [`SECRET_FRAGMENTS`], has one of
+/// [`SECRET_SEGMENTS`] as a whole segment, or ends in one of
+/// [`SECRET_LAST_SEGMENTS`], and is not one of [`PUBLIC_NAMES`].
 pub fn is_secret_name(name: &str) -> bool {
-    let upper = name.to_ascii_uppercase();
+    let upper = name.to_ascii_uppercase().replace('-', "_");
+    if PUBLIC_NAMES.contains(&upper.as_str()) {
+        return false;
+    }
+    let segments: Vec<&str> = upper.split(['_', '.']).collect();
     SECRET_FRAGMENTS.iter().any(|f| upper.contains(f))
-        || upper
-            .split(['_', '-', '.'])
-            .any(|segment| SECRET_SEGMENTS.contains(&segment))
+        || segments
+            .iter()
+            .any(|segment| SECRET_SEGMENTS.contains(segment))
+        || segments
+            .last()
+            .is_some_and(|segment| SECRET_LAST_SEGMENTS.contains(segment))
+}
+
+/// `value` with the secret parts of anything that looks like a credential
+/// masked as `********`, whatever the variable is called: the password in a
+/// URL's `user:password@`, `key=value` pairs with a secret key, `Bearer`
+/// tokens, well-known token prefixes (`ghp_`, `sk_live_`, …), AWS access key
+/// ids and JWTs. These are [`crate::redact::Redactor::secrets`]' detectors,
+/// and share their limits: best effort, not a guarantee.
+///
+/// ```
+/// use rich_ext::env_inspect::redact_value;
+///
+/// assert_eq!(redact_value("postgres://admin:hunter2@db/x"), "postgres://admin:********@db/x");
+/// assert_eq!(redact_value("/usr/bin"), "/usr/bin");
+/// ```
+pub fn redact_value(value: &str) -> String {
+    static SECRETS: std::sync::OnceLock<crate::redact::Redactor> = std::sync::OnceLock::new();
+    SECRETS
+        .get_or_init(crate::redact::Redactor::secrets)
+        .redact_str(value)
 }
 
 /// Case-insensitive match of `name` against a filter: a whole-name glob
@@ -119,12 +176,14 @@ pub fn is_path_like(name: &str, value: &str, separator: char) -> bool {
     entries.peek().is_some() && entries.all(|e| e.contains(['/', '\\']))
 }
 
-/// Replace controls with visible pictures (`^[` when `ascii`).
+/// Replace controls with visible pictures (`^[` when `ascii`), and bidi
+/// controls with escapes (`\u{202e}`), so a value cannot reorder the table.
 fn visible(s: &str, ascii: bool) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         match control_picture(c, ascii) {
             Some(picture) => out.push_str(&picture),
+            None if is_bidi_control(c) => out.push_str(&format!("\\u{{{:x}}}", c as u32)),
             None => out.push(c),
         }
     }
@@ -179,7 +238,9 @@ impl EnvView {
         self
     }
 
-    /// Mask the values of secret-looking names (default on).
+    /// Mask the values of secret-looking names, and the secret parts of
+    /// credential-looking values (default on; see [`is_secret_name`] and
+    /// [`redact_value`]). Best effort: check the output before sharing it.
     pub fn redact(mut self, on: bool) -> Self {
         self.redact = on;
         self
@@ -191,7 +252,8 @@ impl EnvView {
         self
     }
 
-    /// Whether the value of `name` is masked.
+    /// Whether the value of `name` is masked whole (by its name; a value
+    /// can also be masked in part by its content, see [`redact_value`]).
     pub fn is_redacted(&self, name: &str) -> bool {
         self.redact && is_secret_name(name)
     }
@@ -246,7 +308,15 @@ impl Renderable for EnvView {
             );
         }
         for (name, value) in vars {
-            let shown = if self.is_redacted(name) {
+            let masked_whole = self.is_redacted(name);
+            let redacted;
+            let value = if self.redact && !masked_whole {
+                redacted = redact_value(value);
+                redacted.as_str()
+            } else {
+                value
+            };
+            let shown = if masked_whole {
                 Text::styled(mask(value, ascii), redacted_style.clone())
             } else if is_path_like(name, value, self.separator) && !value.is_empty() {
                 let entries: Vec<String> = value

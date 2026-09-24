@@ -9,6 +9,8 @@
 //! skipped. A failure's `assertion `left == right` failed` block becomes its
 //! expected (`right`) and actual (`left`) values.
 
+use std::collections::HashMap;
+
 use serde_json::Value;
 
 use super::{duration, Case, Status, Suite, TestAdapter, TestParseError, TestRun};
@@ -104,6 +106,9 @@ fn secs(event: &Value) -> Option<std::time::Duration> {
 pub fn parse(input: &str) -> Result<TestRun, TestParseError> {
     let mut run = TestRun::default();
     let mut current: Option<Suite> = None;
+    // The current suite's cases by name, so each event finds its case in
+    // constant time; cases stay in order of first appearance.
+    let mut by_name: HashMap<String, usize> = HashMap::new();
     let mut next_name: Option<String> = None;
     let mut events = 0usize;
     for (index, line) in input.lines().enumerate() {
@@ -136,6 +141,7 @@ pub fn parse(input: &str) -> Result<TestRun, TestParseError> {
                         if let Some(suite) = current.take() {
                             run.suites.push(suite);
                         }
+                        by_name.clear();
                         let n = run.suites.len() + 1;
                         current = Some(Suite {
                             name: next_name.take().unwrap_or_else(|| format!("suite {n}")),
@@ -145,6 +151,7 @@ pub fn parse(input: &str) -> Result<TestRun, TestParseError> {
                     }
                     _ => {
                         let mut suite = current.take().unwrap_or_default();
+                        by_name.clear();
                         suite.duration = secs(&event);
                         run.suites.push(suite);
                     }
@@ -161,10 +168,11 @@ pub fn parse(input: &str) -> Result<TestRun, TestParseError> {
                     duration: None,
                 });
                 let classname = test.rsplit_once("::").map_or("", |(m, _)| m);
-                let slot = match suite.cases.iter().position(|c| c.name == test) {
-                    Some(i) => i,
+                let slot = match by_name.get(test) {
+                    Some(&i) => i,
                     None => {
                         suite.cases.push(Case::new(test, classname, Status::Passed));
+                        by_name.insert(test.to_string(), suite.cases.len() - 1);
                         suite.cases.len() - 1
                     }
                 };

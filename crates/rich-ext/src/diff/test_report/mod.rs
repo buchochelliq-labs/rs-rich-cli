@@ -6,6 +6,12 @@
 //! expected against actual — then a per-suite summary table and a total
 //! line. It is an ordinary renderable, so console HTML and SVG export apply;
 //! [`TestRun::to_junit_xml`] writes normalized JUnit for CI.
+//!
+//! The parsers decode escapes (JUnit's `&#x1b;`, JSON's `\u001b`), so a
+//! [`TestRun`] holds names, messages and output exactly as the report gave
+//! them, control characters included. [`TestReport`] shows every such field
+//! with terminal and bidi controls made visible (`␛[31m`), so a report
+//! cannot move the cursor, recolour or reorder the terminal it is shown on.
 
 pub mod junit;
 pub mod libtest;
@@ -18,6 +24,12 @@ use serde::{Deserialize, Serialize};
 
 use super::render::{banner, join, trim_end, wrap_text};
 use super::{style, DiffView};
+use crate::sanitize::{sanitize_single_line, sanitize_terminal_and_bidi_controls};
+
+/// Multi-line report text (a message, a trace, captured output), inert.
+fn inert(text: &str) -> String {
+    sanitize_terminal_and_bidi_controls(text)
+}
 
 /// How a test case ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -288,12 +300,12 @@ impl TestReport {
         );
         if !suite.name.is_empty() {
             text.append(
-                &format!("{} > ", suite.name),
+                &format!("{} > ", sanitize_single_line(&suite.name)),
                 Some(style(console, "diff.line_number").into()),
             );
         }
         text.append(
-            &case.full_name(),
+            &sanitize_single_line(&case.full_name()),
             Some(style(console, "diff.header").into()),
         );
         if let Some(d) = case.duration {
@@ -335,14 +347,14 @@ impl TestReport {
         if let Some(message) = &case.message {
             rows.extend(Self::indented(
                 console,
-                &Text::new(message.trim_end()),
+                &Text::new(inert(message.trim_end())),
                 width,
                 2,
             ));
         }
         if let (Some(expected), Some(actual)) = (&case.expected, &case.actual) {
-            let mut e = expected.clone();
-            let mut a = actual.clone();
+            let mut e = inert(expected);
+            let mut a = inert(actual);
             e.push('\n');
             a.push('\n');
             let view = DiffView::new(&e, &a)
@@ -361,7 +373,7 @@ impl TestReport {
             if case.message.as_deref().map(str::trim) != Some(details.trim()) {
                 rows.extend(Self::indented(
                     console,
-                    &Text::new(details.trim_end()),
+                    &Text::new(inert(details.trim_end())),
                     width,
                     2,
                 ));
@@ -375,7 +387,7 @@ impl TestReport {
                 rows.extend(banner(&format!("  captured {label}:"), dim.clone(), width));
                 rows.extend(Self::indented(
                     console,
-                    &Text::new(output.trim_end()),
+                    &Text::new(inert(output.trim_end())),
                     width,
                     4,
                 ));
@@ -397,7 +409,7 @@ impl TestReport {
                 .unwrap_or_default();
             // Suite names are data: pytest ids such as `test_x[a]` stay literal.
             table.add_row_text(vec![
-                Text::new(suite.name.as_str()),
+                Text::new(sanitize_single_line(&suite.name)),
                 Text::new(t.passed.to_string()),
                 Text::new((t.failed + t.errored).to_string()),
                 Text::new(t.skipped.to_string()),
