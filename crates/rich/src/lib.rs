@@ -84,7 +84,7 @@ pub use crate::errors::{Result, RichError};
 pub use crate::highlighter::{ISO8601Highlighter, RegexHighlighter, ReprHighlighter};
 pub use crate::json::Json;
 pub use crate::layout::Layout;
-pub use crate::live::{AutoLive, Live};
+pub use crate::live::{AutoLive, Live, LivePanic};
 pub use crate::live_render::LiveRender;
 pub use crate::log_render::{level_text, LogLevel, LogRecord, LogRender};
 pub use crate::padding::Padding;
