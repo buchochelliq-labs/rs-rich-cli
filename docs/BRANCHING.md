@@ -138,7 +138,7 @@ There are two separate decisions here:
    crate does not, by policy alone, require an unrelated crate's version to
    change.
 2. **The tag explicitly selects what ships.** A `vX.Y.Z` tag retains the
-   coordinated workspace meaning: all four manifests and their internal
+   coordinated workspace meaning: all five manifests and their internal
    requirements must agree at `X.Y.Z`. A `<crate>-vX.Y.Z` tag selects only that
    crate, whose manifest must match the tag. Unselected crates keep their own
    versions and are neither published nor verified as if they had changed.
@@ -338,13 +338,32 @@ GitHub OIDC token (`id-token: write` on the `publish` job only) for a short-live
 crates.io token, which only the upload step receives. A failed exchange stops
 the job before any crate is uploaded; `verify_only` runs never request a token.
 
-Each of the four crates needs a Trusted Publishing entry on crates.io
+Each of the five crates needs a Trusted Publishing entry on crates.io
 (crate → Settings → Trusted Publishing) with repository
 `buchochelliq-labs/rs-rich-cli`, workflow `release.yml` and environment
 `crates-io`. A crate set to "trusted publishing only" rejects token uploads
 with `403 Forbidden`, which is how the first 0.0.9 core upload failed. Once the
 first trusted publish succeeds, delete the old `CARGO_REGISTRY_TOKEN`
 repository secret.
+
+**A brand-new crate cannot start with Trusted Publishing.** crates.io only
+offers the setting on a crate that already exists, so a new crate's first
+version must be uploaded with a maintainer's API token, either by hand as below
+or through the workflow with a token secret added for that one run; the
+maintainer chooses. After that, add the Trusted Publishing entry and publish
+later versions from the workflow.
+`rs-rich-macros` is in this position for 0.0.11: its `rs-rich-macros-v0.0.1`
+tag run would fail the token exchange. Publish it by hand after `rs-rich` 0.0.7
+is on crates.io (it depends on the core) and before tagging `rs-rich-ext`
+0.0.9. `rs-rich-ext`'s optional `macros` dependency must resolve on crates.io
+for its own upload. From the tagged commit on `main`:
+
+```bash
+cargo publish -p rs-rich-macros --locked   # with a maintainer's API token
+```
+
+Then add its Trusted Publishing entry, and continue with the ext, art and CLI
+tags in order.
 
 A tag push runs the workflow file from the tagged commit. To publish an existing
 tag with a newer workflow on `main`, dispatch the workflow manually from `main`
