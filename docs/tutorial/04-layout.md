@@ -50,7 +50,9 @@ console.print(&Columns::new(items));
 
 ![Columns](../assets/columns.svg)
 
-As many equal columns as fit, filled row by row.
+As many columns as fit, filled row by row. As in upstream rich, each column is
+as wide as its widest item; `Columns::new(items).equal(true)` makes them all the
+same width. An item wider than the console wraps, or ends with `…` if it cannot.
 
 ## Rules
 
