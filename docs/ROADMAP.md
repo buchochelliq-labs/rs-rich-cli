@@ -1,6 +1,7 @@
 # Roadmap
 
-Where this goes after `0.0.4`. Ordered by what unblocks people, not by what is
+What each release delivered, and where this goes after the 0.0.11 cohort
+(prepared, not yet published). Ordered by what unblocks people, not by what is
 most interesting to build.
 
 Two rules constrain everything here:
@@ -72,17 +73,20 @@ limitations and successful exact-version consumer verification.
 
 ---
 
-## 0.0.5 — proposed confidence and input-control work
+## 0.0.5 — published 2026-09-13
 
-The [0.0.5 preparation plan](plans/0.0.5.md) proposes four bounded workstreams:
+`rs-rich-ext` and `rs-rich-cli` 0.0.5 were published on 2026-09-13; core and art
+stayed at 0.0.4. They shipped the `--sanitize` opt-in (#64), the version-checked
+golden capture, the differential corpus harness and the `library_bench` probe.
+
+The [0.0.5 preparation plan](plans/0.0.5.md) proposed four bounded workstreams:
 issue #15 golden-test gaps, #34 reproducible differential fuzzing, #35 library
 benchmarks with CI artifacts, and #64 explicit input sanitization. Start with
 the oracle/case contract; benchmark work can proceed independently. Keep default
 rendering unchanged and sanitizer policy in extensions.
 
 The plan audits existing evidence and dependency PRs, defines acceptance gates,
-and preserves independent package selection. It is planning only: 0.0.5 code,
-manifest bumps and publication are not included in this documentation update.
+and preserves independent package selection.
 
 ---
 
@@ -148,19 +152,6 @@ regions, render snapshots, batch naming and hardened publication (#196), and ima
 transforms with Bayer dithering. All four packages were published on 2026-09-22;
 see the [expanded release notes](releases/0.0.9-expanded.md).
 
-## 0.0.11 — developer ergonomics and core usability (in progress)
-
-The [0.0.11 plan](plans/0.0.11.md) covers
-[milestone 2](https://github.com/buchochelliq-labs/rs-rich-cli/milestone/2) plus
-everything unfinished from 0.0.10. Unfinished 0.0.10 issues: #6, #9, #34, #126
-and #144. New issues for the 0.0.10 deferrals: #498 (the #125 remainder) and #499
-(`--theme-file`). Work starts with the core parity divergences the fuzzer found
-(#442–#449). Then come Rust-native ergonomics on public APIs: diagnostics with
-`anyhow`/`thiserror` adapters, serde-driven rendering and structured-data viewers,
-derive and checked-markup macros (a new `rs-rich-macros` crate), `clap` help and
-errors, `tracing` polish, a shared diff engine with test helpers, and
-terminal-capability and accessibility policies.
-
 ## 0.0.10 — progress you can ship with (published)
 
 Every workstream is merged to `main`, and the cohort was published on 2026-09-23. The
@@ -200,6 +191,31 @@ Image behavior remains covered by the existing focused `rich-cli` integration
 tests. Snapshot cases for the merged batch/profile/watch/image workflows remain
 follow-up work; capability/RenderTarget decisions (#147/#148) remain separate.
 
+## 0.0.11 — developer ergonomics and core usability (prepared, not published)
+
+All 12 workstreams of the [0.0.11 plan](plans/0.0.11.md) are merged to `main`
+and the release test's fixes have landed. Nothing is tagged or published yet;
+the cohort is core 0.0.7, the new `rs-rich-macros` 0.0.1, ext 0.0.9, art 0.0.9
+and CLI 0.0.11. See the [0.0.11 release notes](releases/0.0.11.md).
+
+The plan covered
+[milestone 2](https://github.com/buchochelliq-labs/rs-rich-cli/milestone/2) plus
+everything unfinished from 0.0.10 (#6, #9, #34, #126, #144, and the new #498
+and #499). Delivered:
+
+- core parity fixes for the fuzzer's findings (#442–#449), Markdown styled
+  table cells (#9), the rest of Progress (#6: Live-driven display, `track()`,
+  `RenderableColumn`, transient and disabled displays) and `LogRender` (#10);
+- diagnostics and stack traces with `anyhow` adapters, structured data and serde
+  helpers with `rich inspect`, the `richf!`/`#[derive(Rich)]` macros, `clap`
+  help and errors, `tracing` spans and `RichHandler`;
+- a shared diff engine with test helpers and `rich diff` / `rich bench compare`,
+  capability and accessibility policies with `rich ansi explain` and
+  `rich doctor`, workflow renderables, and the `view`, `hex`, `unicode`, `env`
+  and `capture` commands;
+- Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
+  (#498) and `--theme-file` (#499).
+
 ---
 
 ## 0.0.2 planning record
@@ -229,9 +245,10 @@ and a `use_theme` guard that derefs to the console; see [§14](DIVERGENCES.md).
 Needs an explicit `unsafe` opt-in, since the workspace denies `unsafe_code`.
 Without it, pre-Windows-10 terminals silently fall back to plain output.
 
-**Progress time/rate columns and Live integration** — [§16](DIVERGENCES.md),
-[§17](DIVERGENCES.md). A progress bar with no ETA is half a feature, and it is
-the most visible gap for anyone writing a CLI.
+~~**Progress time/rate columns and Live integration**~~ — done: time, rate and
+spinner columns in 0.0.10 (core 0.0.6); the Live-driven display, `track()` and
+`RenderableColumn` in 0.0.11 (core 0.0.7). See [§16](DIVERGENCES.md) and
+[§17](DIVERGENCES.md).
 
 Independent per-crate versioning already applies below `0.1.0`. A `0.0.x`
 dependency bump requires updating its dependents and publishing changed
@@ -250,19 +267,19 @@ tests and looked finished. Every one was found the same way: generate an input,
 run both implementations, compare bytes. That is what a fuzzer does, tirelessly
 and without getting bored.
 
-Both halves already exist — `scripts/capture_golden.py` drives real `rich`, and
-the port is deterministic given a fixed console. Wiring them into a property test
-that generates markup, styles, widths and overflow combinations and asserts
-byte-equality converts *"we reviewed this carefully"* into *"we checked ten
-million cases"* — and keeps paying out on every future change, including upstream
-syncs.
+**Done.** `scripts/diff_rich.py` generates markup, styles, widths, overflow
+and box renderables, compares the port against real `rich` byte for byte, and
+shrinks any mismatch. It has run nightly on `main` (20,000 cases) since 0.0.10;
+its first runs filed #442–#449, all fixed in 0.0.11. See
+[parity](parity.md#differential-fuzzing).
 
 ### Benchmarks
 
 CLI timing and CSV memory measurements now exist in the
-[benchmarks](benchmarks.md) and [runtime audit](runtime-audit-0.0.3.md). A repeatable
-library microbenchmark suite and tracked regression thresholds remain useful
-follow-up work.
+[benchmarks](benchmarks.md) and [runtime audit](runtime-audit-0.0.3.md). Partly
+done in 0.0.11: `rich_ext::qa::bench` records benchmark runs and
+`rich bench compare` gates on regressions (exit 5). A tracked library
+microbenchmark suite with thresholds enforced in CI remains follow-up work.
 
 ---
 
@@ -271,7 +288,11 @@ follow-up work.
 These are **additions**, so they live outside the faithful core. Ordered by how
 much they'd change day-to-day use.
 
-### Compile-time checked markup
+### ~~Compile-time checked markup~~ — delivered in 0.0.11
+
+`rs-rich-macros` 0.0.1 (through ext's `macros` feature) provides `richf!`,
+`style!`, `theme_key!` and `markup!`; see [Macros](guide/ext/macros.md). The
+original proposal:
 
 ```rust
 // Unbalanced tag, unknown style name → a compile error, not a silent no-op.
@@ -284,7 +305,11 @@ tag name renders as a *no-op* upstream, so a typo silently produces unstyled
 text. Making that a compile error is a genuine improvement on the original, not
 just a port of it.
 
-### Derive-driven rendering
+### ~~Derive-driven rendering~~ — delivered in 0.0.11
+
+Delivered as `#[derive(Rich)]` and the serde-driven `data::print_json`,
+`print_table`, `print_tree` and `Explorer`; see
+[Structured data](guide/ext/structured-data.md). The original proposal:
 
 ```rust
 #[derive(Table)]
@@ -298,9 +323,10 @@ table. This is the honest Rust answer to upstream's `inspect`/`repr` modules,
 which don't map onto a language without runtime reflection — *type-driven*
 instead of repr-parsing, and better than the original for it.
 
-### `clap` integration
+### ~~`clap` integration~~ — delivered in 0.0.11
 
-Render `clap` help, errors and usage through `rich`. `clap` is close to universal
+Delivered as ext's `clap` feature on top of `cli_doc`; see
+[CLI authoring](guide/ext/cli-authoring.md). The original proposal: render `clap` help, errors and usage through `rich`. `clap` is close to universal
 in Rust CLIs, so this is the single widest-reach item here — and it is the kind
 of thing people would adopt the crate *for*.
 
@@ -308,16 +334,21 @@ of thing people would adopt the crate *for*.
 
 `rich-art` already does image→ASCII. Kitty's graphics protocol, iTerm2's inline
 images and Sixel would render *actual* images — something upstream `rich` has no
-answer to at all.
+answer to at all. Sixel shipped in 0.0.7 (art 0.0.5); Kitty and iTerm2 remain.
 
 ### Diagnostics integration
 
 `miette` / `color-eyre` / `anyhow` reporters rendered through `rich`, so error
-output matches the rest of an application's styling.
+output matches the rest of an application's styling. The `Diagnostic` type and
+its `anyhow` adapter shipped in 0.0.11 (see [Diagnostics](guide/ext/diagnostics.md));
+`miette` and `color-eyre` remain.
 
-### A snapshot-testing helper
+### ~~A snapshot-testing helper~~ — delivered
 
-`rich-test`: assert terminal output in *users'* test suites, with readable diffs
+Delivered in ext's `testing` feature rather than a separate crate:
+`RenderSnapshot` (ext 0.0.7), then `assert_rich_eq!` and `qa::screenshot` in
+0.0.11; see [QA tooling](guide/ext/qa.md). The original proposal, `rich-test`:
+assert terminal output in *users'* test suites, with readable diffs
 and SVG artifacts on failure. It dogfoods `Console::export_svg` — the same
 mechanism that generates every image in these docs.
 
@@ -326,7 +357,7 @@ mechanism that generates every image in these docs.
 ## Deliberately not planned
 
 **Jupyter integration** and **`inspect`/`repr` of Python objects**
-([#10](https://github.com/buchochelliq-labs/rs-rich-cli/issues/10),
+([#19](https://github.com/buchochelliq-labs/rs-rich-cli/issues/19),
 [§19](DIVERGENCES.md)). These don't map onto Rust. Reimagining them is a design
 project rather than a port, nobody has asked, and the derive/serde work above is
 the useful half of the same idea.
