@@ -93,7 +93,11 @@ from a clock, so a redraw moves it and a test can pin it:
   (100 ms by default). Render `record.view()` into a
   [`LiveCoordinator`](live-and-layout.md) region there.
 - When the `CancelToken` is cancelled, the runner kills the child, and the
-  record ends as `CommandStatus::Cancelled`.
+  record ends as `CommandStatus::Cancelled`. Ticks and cancellation keep
+  working if the child closes its output and keeps running.
+- After the child exits, the runner reads output for about one more second.
+  A background process that inherited the pipes cannot keep `run` waiting,
+  and cancelling in that second does not change the recorded exit status.
 - A program that cannot start gives a record with
   `CommandStatus::FailedToStart(reason)`. The runner does not panic or return
   an error.

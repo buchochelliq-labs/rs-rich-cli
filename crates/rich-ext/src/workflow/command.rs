@@ -477,7 +477,11 @@ impl Renderable for CommandView<'_> {
 /// (the order across streams is as close as the pipes allow, not exact).
 /// Stdin is closed. [`on_update`](Self::on_update) sees the record after
 /// every line and every [`tick`](Self::tick), so a live view can redraw the
-/// spinner and elapsed time; a [`CancelToken`] kills the child.
+/// spinner and elapsed time; a [`CancelToken`] kills the child. Both keep
+/// working if the child closes its pipes but keeps running. Once the child
+/// exits, output still arriving (from a background grandchild holding the
+/// pipes) is read for about a second more, and cancellation no longer
+/// changes the recorded status.
 ///
 /// ```
 /// use std::process::Command;
@@ -511,7 +515,8 @@ impl std::fmt::Debug for CommandRunner<'_> {
 }
 
 /// How long to keep reading after the child exits while its pipes stay open
-/// (a background grandchild can hold them forever).
+/// (a background grandchild can hold them forever). Measured from the exit,
+/// not from the last line, so a chatty grandchild cannot extend it.
 const GRACE: Duration = Duration::from_secs(1);
 
 impl<'a> CommandRunner<'a> {
@@ -572,31 +577,40 @@ impl<'a> CommandRunner<'a> {
             drop(tx);
         }
 
+        // The child's exit status and when it was first seen.
         let mut exited: Option<(ExitStatus, Instant)> = None;
         let mut killed = false;
-        loop {
-            match rx.recv_timeout(self.tick) {
-                Ok((stream, bytes)) => {
-                    let text = String::from_utf8_lossy(&bytes);
-                    let text = text.strip_suffix('\n').unwrap_or(&text);
-                    let text = text.strip_suffix('\r').unwrap_or(text);
-                    record.lines.push(OutputLine {
-                        stream,
-                        text: text.to_string(),
-                    });
-                    match &mut exited {
-                        Some((_, quiet)) => *quiet = Instant::now(),
-                        None => record.duration = start.elapsed(),
-                    }
-                    self.notify(&record);
-                }
-                Err(mpsc::RecvTimeoutError::Timeout) => {
-                    if exited.is_none() {
-                        record.duration = start.elapsed();
+        let mut pipes_open = true;
+        let status = loop {
+            if pipes_open {
+                match rx.recv_timeout(self.tick) {
+                    Ok((stream, bytes)) => {
+                        let text = String::from_utf8_lossy(&bytes);
+                        let text = text.strip_suffix('\n').unwrap_or(&text);
+                        let text = text.strip_suffix('\r').unwrap_or(text);
+                        record.lines.push(OutputLine {
+                            stream,
+                            text: text.to_string(),
+                        });
+                        if exited.is_none() {
+                            record.duration = start.elapsed();
+                        }
                         self.notify(&record);
                     }
+                    Err(mpsc::RecvTimeoutError::Timeout) => {
+                        if exited.is_none() {
+                            record.duration = start.elapsed();
+                            self.notify(&record);
+                        }
+                    }
+                    Err(mpsc::RecvTimeoutError::Disconnected) => pipes_open = false,
                 }
-                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            } else if exited.is_none() {
+                // The child closed its pipes but is still running: keep
+                // ticking and checking for cancellation until it exits.
+                std::thread::sleep(self.tick);
+                record.duration = start.elapsed();
+                self.notify(&record);
             }
             // Only a running child can be cancelled: once it has exited, its
             // status stands even if the token fires while its pipes drain.
@@ -607,23 +621,25 @@ impl<'a> CommandRunner<'a> {
                 let _ = child.kill();
                 killed = true;
             }
-            match exited {
-                None => {
-                    if let Ok(Some(status)) = child.try_wait() {
+            if exited.is_none() {
+                match child.try_wait() {
+                    Ok(Some(status)) => {
                         record.duration = start.elapsed();
                         exited = Some((status, Instant::now()));
                     }
+                    Ok(None) => {}
+                    Err(error) => {
+                        record.duration = start.elapsed();
+                        break Err(error);
+                    }
                 }
-                Some((_, quiet)) if quiet.elapsed() > GRACE => break,
-                Some(_) => {}
             }
-        }
-        let status = match exited {
-            Some((status, _)) => Ok(status),
-            None => {
-                let status = child.wait();
-                record.duration = start.elapsed();
-                status
+            // The grace period runs from the exit, however much a background
+            // grandchild still prints.
+            match exited {
+                Some((status, _)) if !pipes_open => break Ok(status),
+                Some((status, at)) if at.elapsed() > GRACE => break Ok(status),
+                _ => {}
             }
         };
         record.status = match status {

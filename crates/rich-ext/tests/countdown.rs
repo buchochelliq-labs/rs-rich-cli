@@ -78,6 +78,50 @@ fn jitter_is_deterministic_per_seed() {
 }
 
 #[test]
+fn backoff_with_an_unbounded_cap_saturates_instead_of_panicking() {
+    let backoff = Backoff::new(secs(1)).max(Duration::MAX);
+    assert_eq!(backoff.delay(80), Some(Duration::MAX));
+    assert_eq!(backoff.delay(u32::MAX), Some(Duration::MAX));
+    // Jitter only ever shortens the capped delay.
+    let jittered = backoff.jitter(0.5, 3);
+    for attempt in [1, 10, 80, 5000, u32::MAX] {
+        let delay = jittered.delay(attempt).unwrap();
+        let exact = Backoff::new(secs(1))
+            .max(Duration::MAX)
+            .delay(attempt)
+            .unwrap();
+        assert!(delay <= exact && delay >= exact / 2, "{attempt}: {delay:?}");
+    }
+}
+
+#[test]
+fn backoff_at_huge_attempt_numbers_stays_at_the_cap() {
+    let backoff = Backoff::new(secs(1)).max(secs(60));
+    assert_eq!(backoff.delay(u32::MAX), Some(secs(60)));
+    assert_eq!(backoff.delay(1 << 31), Some(secs(60)));
+    let jittered = backoff.jitter(1.0, 5);
+    assert!(jittered.delay(u32::MAX).unwrap() <= secs(60));
+}
+
+#[test]
+fn backoff_from_zero_stays_zero() {
+    // 0 × factorⁿ is zero even once factorⁿ overflows to infinity.
+    let backoff = Backoff::new(Duration::ZERO);
+    assert_eq!(backoff.delay(1), Some(Duration::ZERO));
+    assert_eq!(backoff.delay(5000), Some(Duration::ZERO));
+    assert_eq!(backoff.delay(u32::MAX), Some(Duration::ZERO));
+}
+
+#[test]
+fn remaining_label_of_the_longest_duration() {
+    let label = remaining_label(Duration::MAX);
+    assert_eq!(
+        label,
+        format!("{}d {:02}h", u64::MAX / 86_400, u64::MAX / 3600 % 24)
+    );
+}
+
+#[test]
 fn retry_status_lines() {
     let retrying = RetryStatus::new(3)
         .max_attempts(5)

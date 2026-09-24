@@ -259,6 +259,20 @@ fn tail_window_keeps_the_last_rows_and_counts_the_rest() {
 }
 
 #[test]
+fn window_indicators_stay_on_one_line_when_narrow() {
+    let narrow = plain(9);
+    let head = narrow.render_export(&jobs().window(Window::Head(1)));
+    let lines: Vec<&str> = head.lines().collect();
+    assert_eq!(lines.last(), Some(&"… 2 more…"), "{head}");
+    assert!(lines[lines.len() - 2].starts_with('└'), "{head}");
+
+    let tail = narrow.render_export(&jobs().window(Window::Tail(1)));
+    let lines: Vec<&str> = tail.lines().collect();
+    assert_eq!(lines[0], "… 2 earl…", "{tail}");
+    assert!(lines[1].starts_with('┏'), "{tail}");
+}
+
+#[test]
 fn capacity_evicts_the_oldest_rows() {
     let mut log = StreamingTable::new([Column::new("#"), Column::new("event")])
         .capacity(2)
