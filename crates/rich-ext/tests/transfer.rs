@@ -203,6 +203,18 @@ fn group_aligns_columns_and_sums_totals() {
 }
 
 #[test]
+fn group_summary_saturates_huge_byte_counts() {
+    let mut group = Transfers::new().summary(true);
+    for name in ["a", "b"] {
+        let i = group.push(Transfer::download(name).total(u64::MAX));
+        group[i].advance(u64::MAX, secs(0));
+    }
+    let out = plain(72, &group);
+    let summary = out.lines().last().unwrap();
+    assert_eq!(summary, "2 transfers  18.4/18.4 EB", "{out}");
+}
+
+#[test]
 fn task_update_drives_core_progress() {
     let mut progress = Progress::new().columns(transfer_columns()).clock(|| 0.0);
     let mut t = Transfer::download("data.bin")

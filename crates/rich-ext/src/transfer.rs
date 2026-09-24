@@ -414,7 +414,7 @@ impl Transfer {
             self.state = TransferState::Failed;
             return false;
         }
-        self.attempt += 1;
+        self.attempt = self.attempt.saturating_add(1);
         self.state = TransferState::Retrying;
         true
     }
@@ -815,8 +815,14 @@ impl Transfers {
                 words.push(format!("{n} {word}"));
             }
         }
-        let completed: u64 = self.items.iter().map(|t| t.completed).sum();
-        let totals: Option<u64> = self.items.iter().map(|t| t.total).sum();
+        let completed = self
+            .items
+            .iter()
+            .fold(0u64, |sum, t| sum.saturating_add(t.completed));
+        let totals = self
+            .items
+            .iter()
+            .try_fold(0u64, |sum, t| Some(sum.saturating_add(t.total?)));
         let mut aggregate = Transfer::download("");
         aggregate.completed = completed;
         aggregate.total = totals;
