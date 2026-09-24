@@ -1,0 +1,27 @@
+{
+  "version": "rich (rs-rich-cli) 0.0.11",
+  "binary_path": "/tmp/claude-0/-home-user-rs-rich-cli/7cbf4dca-c321-56fc-954d-8ee4af3b0ca7/scratchpad/consumer/install/bin/rich",
+  "binary_sha256": "eaa2f85fdb8641987af98ef00f66561d68f99ac3bc10eab6f153ec851d52112b",
+  "source_sha256": "81708f61ccab2acc93aaa4f8f3243af1b8820f8b3d7a795155028700a71ddeb2",
+  "source_digest_recipe": "Sorted crates/**/*.rs, crates/**/Cargo.toml, Cargo.toml, Cargo.lock; relative path + NUL + bytes",
+  "git_head": "883c9afb7e5178fad02506bbf1c9de12e7cd9c7e",
+  "git_worktree_changes": [],
+  "args": [
+    "--demo",
+    "--demo-delay",
+    "0.5"
+  ],
+  "exit_code": 0,
+  "terminal": {
+    "width": 88,
+    "height": 28,
+    "RICH_SIXEL": "1"
+  },
+  "recording_sha256": "5a565e5151287299b3e864c4829e311edfc9e814c00f9899aff5b393e603e793",
+  "presentation": "Actual 88x28 PTY playback at half-second section pacing; captions added, no audio.",
+  "media": {
+    "v11-demo-tour.mp4": "1f6e3f547bdf75f1ccb361124a160b7bd9e87c788b57a94b81976e182c0dedce",
+    "v11-demo-tour.gif": "57beaa49d5a4091caec55d9cb461e0b4a9a06f34c52f8aed94b5d4f1a2866972",
+    "v11-demo-tour.png": "f547a1b51c8fc413af2505a9b3d4f9bf5659e12abf276fbdc616de6108badcaf"
+  }
+}
