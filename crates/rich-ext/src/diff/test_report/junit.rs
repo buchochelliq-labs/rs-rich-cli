@@ -7,6 +7,11 @@
 //! text without a `message` attribute, `Expected:`/`Received:` lines).
 //! Nested suites are flattened. Case-level `expected`/`actual` properties,
 //! which [`write()`] emits, are read back.
+//!
+//! A file that ends while elements are still open — a report cut short by a
+//! crashed or killed runner — is an error, not a partial run: the failing
+//! case being written when it stopped would otherwise be lost, and the
+//! report would read as a success.
 
 use std::time::Duration;
 
@@ -96,6 +101,8 @@ pub fn parse(input: &str) -> Result<TestRun, TestParseError> {
     let mut capture = Capture::None;
     let mut text = String::new();
     let mut saw_root = false;
+    // Elements opened and not yet closed, for truncation.
+    let mut open: Vec<String> = Vec::new();
 
     fn start_element(
         name: &str,
@@ -264,6 +271,7 @@ pub fn parse(input: &str) -> Result<TestRun, TestParseError> {
                 let name = start.local_name().as_ref().to_string();
                 saw_root |= matches!(name.as_str(), "testsuites" | "testsuite");
                 let a = attrs(&start)?;
+                open.push(name.clone());
                 start_element(
                     &name,
                     a,
@@ -298,6 +306,7 @@ pub fn parse(input: &str) -> Result<TestRun, TestParseError> {
             }
             Event::End(end) => {
                 let name = end.local_name().as_ref().to_string();
+                open.pop();
                 end_element(
                     &name,
                     &mut run,
@@ -335,7 +344,13 @@ pub fn parse(input: &str) -> Result<TestRun, TestParseError> {
     if !saw_root {
         return Err(error("no <testsuites> or <testsuite> element"));
     }
-    // Suites left open by a truncated file still count.
+    if let Some(innermost) = open.last() {
+        return Err(error(format!(
+            "truncated: the file ends inside <{innermost}> ({} element{} left open)",
+            open.len(),
+            if open.len() == 1 { "" } else { "s" }
+        )));
+    }
     run.suites.extend(suites);
     Ok(run)
 }

@@ -29,9 +29,69 @@ pub fn sanitize_terminal_controls(input: &str) -> String {
     out
 }
 
+/// Whether `c` is a bidirectional formatting control: ALM (U+061C), LRM and
+/// RLM (U+200E, U+200F), the embeddings and overrides U+202A–U+202E and the
+/// isolates U+2066–U+2069. They print nothing but reorder the text around
+/// them, which lets one string display as another ("Trojan Source").
+pub fn is_bidi_control(c: char) -> bool {
+    matches!(
+        c as u32,
+        0x061c | 0x200e | 0x200f | 0x202a..=0x202e | 0x2066..=0x2069
+    )
+}
+
+/// [`sanitize_terminal_controls`], and bidi controls (see
+/// [`is_bidi_control`]) shown as `\u{202E}` escapes too.
+///
+/// A separate function because [`sanitize_terminal_controls`] promises to
+/// leave everything but terminal controls alone.
+pub fn sanitize_terminal_and_bidi_controls(input: &str) -> String {
+    escape_bidi(&sanitize_terminal_controls(input))
+}
+
+/// Text for a one-line label (a file name, a test name): like
+/// [`sanitize_terminal_and_bidi_controls`], but LF and TAB become visible
+/// too (`␊`, `␉`), so the label cannot break or push the line it sits on.
+pub fn sanitize_single_line(input: &str) -> String {
+    sanitize_terminal_and_bidi_controls(input)
+        .replace('\n', "␊")
+        .replace('\t', "␉")
+}
+
+fn escape_bidi(input: &str) -> String {
+    if !input.chars().any(is_bidi_control) {
+        return input.to_string();
+    }
+    let mut out = String::with_capacity(input.len() + 8);
+    for ch in input.chars() {
+        if is_bidi_control(ch) {
+            out.push_str(&format!("\\u{{{:04X}}}", ch as u32));
+        } else {
+            out.push(ch);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
-    use super::sanitize_terminal_controls;
+    use super::{
+        sanitize_single_line, sanitize_terminal_and_bidi_controls, sanitize_terminal_controls,
+    };
+
+    #[test]
+    fn bidi_controls_are_escaped_only_by_the_bidi_variants() {
+        let evil = "a\u{202e}b\u{2066}\u{61c}\x1b";
+        assert_eq!(
+            sanitize_terminal_controls(evil),
+            "a\u{202e}b\u{2066}\u{61c}␛"
+        );
+        assert_eq!(
+            sanitize_terminal_and_bidi_controls(evil),
+            "a\\u{202E}b\\u{2066}\\u{061C}␛"
+        );
+        assert_eq!(sanitize_single_line("a\tb\nc\u{200f}"), "a␉b␊c\\u{200F}");
+    }
 
     #[test]
     fn esc_and_csi_are_visible_not_executable() {

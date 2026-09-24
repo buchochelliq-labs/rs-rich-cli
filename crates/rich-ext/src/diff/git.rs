@@ -6,6 +6,13 @@
 //! file`. [`PatchView`] renders a [`Patch`] with a file tree summary,
 //! syntax-highlighted hunks, inline [`Annotation`]s and links from a
 //! [`LinkProvider`].
+//!
+//! Paths are decoded from git's C-style quoting (`"b/\033[2J"`), so a
+//! [`FilePatch`] holds them exactly as named, control characters included.
+//! [`PatchView`] shows paths, modes and hunk sections with controls made
+//! visible (`␛[2J`) and percent-encodes controls in link targets; line
+//! *content* is shown as given, so sanitize untrusted patch text before
+//! parsing if its content must be inert too.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -15,7 +22,7 @@ use rich::{Console, ConsoleOptions, Renderable, Segment, Style, Text};
 
 use super::render::{self, Block, Kind, Options, Row};
 use super::source::{highlight_lines, language_for_path};
-use super::{hunk_header, style, Layout};
+use super::{style, Layout};
 use crate::diagnostic::Level;
 use crate::hyperlink::Hyperlinker;
 
@@ -79,16 +86,20 @@ pub struct PatchHunk {
 
 impl PatchHunk {
     /// The `@@ … @@` header, with the section text.
+    ///
+    /// The numbers are written as the file gave them (`-5,0`, `-5`, `-5,3`),
+    /// with no arithmetic, so a hand-built hunk with absurd numbers still
+    /// formats. The section is raw input: sanitize it before printing it
+    /// yourself ([`PatchView`] does).
     pub fn header(&self) -> String {
-        let range = |start: usize, len: usize| {
-            // `hunk_header` takes 0-based ranges; an empty range names the
-            // line before it, which is what the file said.
-            let s = if len == 0 { start } else { start - 1 };
-            s..s + len
+        let part = |start: usize, len: usize| match len {
+            1 => start.to_string(),
+            n => format!("{start},{n}"),
         };
-        let mut header = hunk_header(
-            range(self.old_start, self.old_len),
-            range(self.new_start, self.new_len),
+        let mut header = format!(
+            "@@ -{} +{} @@",
+            part(self.old_start, self.old_len),
+            part(self.new_start, self.new_len)
         );
         if !self.section.is_empty() {
             header.push(' ');
@@ -274,12 +285,23 @@ fn parse_range(s: &str) -> Option<(usize, usize)> {
     }
 }
 
+/// A hunk's `start,len` pair, rejected when it cannot describe lines of a
+/// file: a non-empty range must start at line 1 or later, and its last line
+/// must be a representable number.
+fn valid_range((start, len): (usize, usize)) -> Option<(usize, usize)> {
+    if start == 0 && len > 0 {
+        return None;
+    }
+    start.checked_add(len)?;
+    Some((start, len))
+}
+
 fn parse_hunk_header(line: &str) -> Option<PatchHunk> {
     let rest = line.strip_prefix("@@ -")?;
     let (ranges, section) = rest.split_once(" @@")?;
     let (old, new) = ranges.split_once(" +")?;
-    let (old_start, old_len) = parse_range(old)?;
-    let (new_start, new_len) = parse_range(new)?;
+    let (old_start, old_len) = valid_range(parse_range(old)?)?;
+    let (new_start, new_len) = valid_range(parse_range(new)?)?;
     Some(PatchHunk {
         old_start,
         old_len,
@@ -510,7 +532,7 @@ pub fn parse_unified(input: &str) -> Result<Patch, ParseError> {
                 line: input.lines().count(),
                 message: format!(
                     "hunk {} ended early: expected {old_left} more old and {new_left} more new lines",
-                    h.header()
+                    shown(&h.header())
                 ),
             });
         }
@@ -609,18 +631,67 @@ impl TemplateLinks {
     }
 }
 
+/// `path` percent-encoded for a URL path: everything outside RFC 3986's
+/// path characters (unreserved, sub-delims, `:`, `@` and `/`) becomes `%XX`
+/// UTF-8 bytes. Controls in particular are encoded, so a file name cannot end
+/// an OSC 8 hyperlink early or smuggle an escape sequence into it.
 fn encode_path(path: &str) -> String {
     let mut out = String::with_capacity(path.len());
-    for c in path.chars() {
-        match c {
-            '%' => out.push_str("%25"),
-            ' ' => out.push_str("%20"),
-            '#' => out.push_str("%23"),
-            '?' => out.push_str("%3F"),
-            _ => out.push(c),
+    for &b in path.as_bytes() {
+        let keep = b.is_ascii_alphanumeric()
+            || matches!(
+                b,
+                b'-' | b'.'
+                    | b'_'
+                    | b'~'
+                    | b'!'
+                    | b'$'
+                    | b'&'
+                    | b'\''
+                    | b'('
+                    | b')'
+                    | b'*'
+                    | b'+'
+                    | b','
+                    | b';'
+                    | b'='
+                    | b':'
+                    | b'@'
+                    | b'/'
+            );
+        if keep {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
         }
     }
     out
+}
+
+/// A link target with any control character percent-encoded, whatever
+/// [`LinkProvider`] built it, so it cannot break out of an OSC 8 sequence.
+fn inert_url(url: String) -> String {
+    if !url.chars().any(char::is_control) {
+        return url;
+    }
+    let mut out = String::with_capacity(url.len() + 8);
+    for c in url.chars() {
+        if c.is_control() {
+            let mut buf = [0; 4];
+            for b in c.encode_utf8(&mut buf).bytes() {
+                out.push_str(&format!("%{b:02X}"));
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// A path, mode or section for display: decoded escapes (git's `\033`)
+/// become visible text instead of terminal controls.
+fn shown(text: &str) -> String {
+    crate::sanitize::sanitize_single_line(text)
 }
 
 impl LinkProvider for TemplateLinks {
@@ -749,7 +820,7 @@ impl PatchView {
                 side(LineKind::Added).into_iter(),
             );
             let mut block = Block {
-                header: Some(hunk.header()),
+                header: Some(shown(&hunk.header())),
                 rows: Vec::new(),
             };
             for line in &hunk.lines {
@@ -767,7 +838,7 @@ impl PatchView {
                 if let (Some(n), Some(path), Some(links)) =
                     (line.new_line, &file.new_path, &self.links)
                 {
-                    row.link = links.line_url(path, n);
+                    row.link = links.line_url(path, n).map(inert_url);
                 }
                 if let (Some(n), Some(path)) = (line.new_line, &file.new_path) {
                     row.notes = self
@@ -787,10 +858,15 @@ impl PatchView {
         blocks
     }
 
+    /// `path`, shown inert, linked to the raw path's URL.
     fn path_segment(&self, path: &str, style: Style) -> Segment {
-        let url = self.links.as_ref().and_then(|l| l.file_url(path));
+        let url = self
+            .links
+            .as_ref()
+            .and_then(|l| l.file_url(path))
+            .map(inert_url);
         Segment::new(
-            path.to_string(),
+            shown(path),
             Some(match url {
                 Some(url) => style.with_link(url),
                 None => style,
@@ -853,9 +929,9 @@ impl PatchView {
         }
         let mut root = Dir::default();
         for file in &self.patch.files {
-            let path = file.path();
+            let path = shown(file.path());
             let mut parts: Vec<&str> = path.split('/').collect();
-            let name = parts.pop().unwrap_or(path);
+            let name = parts.pop().unwrap_or(&path);
             let mut dir = &mut root;
             for part in parts {
                 dir = dir.dirs.entry(part.to_string()).or_default();
@@ -864,14 +940,17 @@ impl PatchView {
             match file.status {
                 FileStatus::Renamed | FileStatus::Copied => {
                     if let Some(old) = &file.old_path {
-                        label = format!("{name} ({} from {old})", file.status.label());
+                        label = format!("{name} ({} from {})", file.status.label(), shown(old));
                     }
                 }
                 FileStatus::Added | FileStatus::Deleted => {
                     label = format!("{name} ({})", file.status.label());
                 }
                 _ if file.mode_changed() => {
-                    label = format!("{name} (mode {})", file.new_mode.as_deref().unwrap_or(""));
+                    label = format!(
+                        "{name} (mode {})",
+                        shown(file.new_mode.as_deref().unwrap_or(""))
+                    );
                 }
                 _ => {}
             }
@@ -994,8 +1073,8 @@ impl PatchView {
             rows.push(vec![Segment::new(
                 format!(
                     "mode {} -> {}",
-                    file.old_mode.as_deref().unwrap_or(""),
-                    file.new_mode.as_deref().unwrap_or("")
+                    shown(file.old_mode.as_deref().unwrap_or("")),
+                    shown(file.new_mode.as_deref().unwrap_or(""))
                 ),
                 Some(style(console, "diff.line_number")),
             )]);

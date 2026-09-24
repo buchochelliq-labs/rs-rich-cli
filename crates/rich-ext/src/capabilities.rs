@@ -619,7 +619,53 @@ impl Capabilities {
                 }
             }
         };
+        report.escape_controls();
         report
+    }
+}
+
+/// `text` with control and bidi characters written as escapes (`\u{1b}`),
+/// so an environment value quoted in a reason is inert wherever it is shown.
+fn escape_controls(text: &str) -> String {
+    if !text
+        .chars()
+        .any(|c| c.is_control() || crate::sanitize::is_bidi_control(c))
+    {
+        return text.to_owned();
+    }
+    let mut out = String::with_capacity(text.len() + 8);
+    for c in text.chars() {
+        if c.is_control() || crate::sanitize::is_bidi_control(c) {
+            out.push_str(&format!("\\u{{{:x}}}", c as u32));
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+impl Report {
+    /// Escape the environment values that reasons and facts quote.
+    fn escape_controls(&mut self) {
+        for reason in [
+            &mut self.color.reason,
+            &mut self.unicode.reason,
+            &mut self.hyperlinks.reason,
+            &mut self.graphics.reason,
+            &mut self.sixel.reason,
+            &mut self.width.reason,
+            &mut self.height.reason,
+            &mut self.interactive.reason,
+            &mut self.animation.reason,
+        ] {
+            *reason = escape_controls(reason);
+        }
+        for warning in &mut self.warnings {
+            *warning = escape_controls(warning);
+        }
+        for value in [&mut self.terminal, &mut self.ci].into_iter().flatten() {
+            *value = escape_controls(value);
+        }
     }
 }
 
@@ -635,7 +681,8 @@ fn detect_color(
     if let Some(v) = p.get("NO_COLOR") {
         return Field::new(None, from_var("NO_COLOR"), format!("NO_COLOR={v}"));
     }
-    let force = p.env.var("FORCE_COLOR");
+    // An empty FORCE_COLOR is ignored, as force-color.org specifies.
+    let force = p.get("FORCE_COLOR");
     if let Some(force) = &force {
         let reason = format!("FORCE_COLOR={force}");
         match force.trim().to_ascii_lowercase().as_str() {

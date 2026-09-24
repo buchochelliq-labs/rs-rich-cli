@@ -584,8 +584,12 @@ printf 'cafe\u0301 👍🏽 ok' | rich unicode -
 ![A table of graphemes: a combining accent, an emoji with a skin-tone modifier](../../media/guide/cli_unicode.svg)
 
 `env` lists environment variables. Values whose names look secret (`TOKEN`,
-`PASSWORD`, `API_KEY`, `AUTH` as a whole word…) are masked unless you pass
-`--show-secrets`. Arguments filter the names, as substrings or `*` globs, and a
+`PASSWORD`, `API_KEY`, or `AUTH`, `KEY`, `PASS`, `PWD`, `DSN`, `COOKIE`, `JWT`
+as a whole word…) are masked, and so is the secret part of any value that looks
+like a credential (the password in `postgres://user:pw@host`, `ghp_…` and
+`sk_live_…` tokens, JWTs), unless you pass `--show-secrets`. Masking is best
+effort: it can miss a secret, so check the output before you share it.
+Arguments filter the names, as substrings or `*` globs, and a
 single PATH-like variable is checked entry by entry, flagging missing,
 duplicate and empty ones:
 

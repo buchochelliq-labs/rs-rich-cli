@@ -6,6 +6,10 @@
 //! bytes, its cell width, an escape form and a short [`Kind`] label from a
 //! small hand-written classifier. Controls are always rows of their own and
 //! display as Unicode control pictures (`␊`), or `^J` on ASCII-only consoles.
+//! Bidirectional formatting controls (U+202E and friends, see
+//! [`is_bidi_control`](crate::sanitize::is_bidi_control)) are rows of their
+//! own too, of kind [`Kind::Bidi`], and display as escapes (`\u{202e}`), so
+//! they cannot reorder the table ("Trojan Source").
 //! A summary line follows the table. Below [`FULL_LAYOUT_WIDTH`] columns (or
 //! whenever the seven-column table would not fit) the code points, bytes,
 //! width, escape and kind stack in one `Details` column, so the table still
@@ -40,6 +44,7 @@ use rich::table::ColumnOptions;
 use rich::{Console, ConsoleOptions, Justify, Overflow, Renderable, Segment, Table, Text};
 
 use crate::event::theme_style;
+use crate::sanitize::is_bidi_control;
 
 /// The label of a cluster.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -64,6 +69,9 @@ pub enum Kind {
     Other,
     /// Bytes that are not valid UTF-8.
     Invalid,
+    /// A bidirectional formatting control (U+061C, U+200E/F, U+202A–U+202E,
+    /// U+2066–U+2069), which can reorder the text around it.
+    Bidi,
 }
 
 impl Kind {
@@ -80,6 +88,7 @@ impl Kind {
             Kind::Ascii => "ascii",
             Kind::Other => "other",
             Kind::Invalid => "invalid",
+            Kind::Bidi => "bidi",
         }
     }
 }
@@ -132,6 +141,8 @@ pub fn classify(cluster: &str, width: usize) -> Kind {
     let single = chars.next().is_none();
     if single && is_control(first) {
         Kind::Control
+    } else if single && is_bidi_control(first) {
+        Kind::Bidi
     } else if cluster.chars().any(is_emoji) {
         Kind::Emoji
     } else if cluster.chars().any(is_combining) {
@@ -222,7 +233,8 @@ impl Cluster {
         out
     }
 
-    /// The cluster as the table shows it. Controls become pictures, a
+    /// The cluster as the table shows it. Controls become pictures, bidi
+    /// controls escapes (`\u{202e}`), a
     /// leading combining mark sits on `◌`, lone zero-width characters show
     /// as nothing. With `ascii`, non-ASCII clusters show as `.` and invalid
     /// ones as `?`.
@@ -234,6 +246,9 @@ impl Cluster {
         let first = chars.next().unwrap_or(' ');
         if self.kind == Kind::Control {
             return control_picture(first, ascii).unwrap_or_default();
+        }
+        if self.kind == Kind::Bidi {
+            return format!("\\u{{{:x}}}", first as u32);
         }
         if ascii {
             return if text.is_ascii() {
@@ -283,10 +298,11 @@ fn push_clusters(out: &mut Vec<Cluster>, text: &str, base: usize) {
     for (start, end, _) in spans {
         let span = &text[start..end];
         // The core attaches zero-width characters, controls included, to the
-        // grapheme before them; an inspector wants each control on its own.
+        // grapheme before them; an inspector wants each control (and each
+        // bidi control) on its own.
         let mut piece_start = start;
         for (i, c) in span.char_indices() {
-            if !is_control(c) {
+            if !is_control(c) && !is_bidi_control(c) {
                 continue;
             }
             let at = start + i;

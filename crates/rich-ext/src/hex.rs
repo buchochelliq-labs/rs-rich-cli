@@ -173,6 +173,10 @@ pub struct HexView {
     collapse: bool,
 }
 
+/// The most bytes per line [`HexView::bytes_per_line`] accepts; larger
+/// values are clamped to it.
+pub const MAX_BYTES_PER_LINE: usize = 4096;
+
 /// The bytes per line [`HexView`] prefers when fitting the width.
 const PREFERRED_PER_LINE: usize = 16;
 
@@ -199,9 +203,10 @@ impl HexView {
     /// Bytes per line. `None` (the default) fits the width: 16 when it fits,
     /// otherwise the largest multiple of the group size between 8 and 32 that
     /// fits, and fewer than 8 only when nothing else does. `Some(n)` is used
-    /// as given (at least 1); lines wider than the console fold.
+    /// as given, between 1 and [`MAX_BYTES_PER_LINE`]; lines wider than the
+    /// console fold.
     pub fn bytes_per_line(mut self, n: Option<usize>) -> Self {
-        self.bytes_per_line = n.map(|n| n.max(1));
+        self.bytes_per_line = n.map(|n| n.clamp(1, MAX_BYTES_PER_LINE));
         self
     }
 
@@ -246,18 +251,29 @@ impl HexView {
     }
 
     /// The cell width of a full line with `n` bytes per line.
+    /// Saturates rather than overflowing for absurd `n`.
     pub fn line_width(&self, n: usize) -> usize {
         let n = n.max(1);
         let groups = n.div_ceil(self.group);
-        let hex = 3 * n - 1 + (groups - 1);
-        let panel = if self.ascii_panel { 2 + n + 2 } else { 0 };
-        self.offset_digits() + 2 + hex + panel
+        let hex = n
+            .saturating_mul(3)
+            .saturating_sub(1)
+            .saturating_add(groups - 1);
+        let panel = if self.ascii_panel {
+            n.saturating_add(4)
+        } else {
+            0
+        };
+        self.offset_digits()
+            .saturating_add(2)
+            .saturating_add(hex)
+            .saturating_add(panel)
     }
 
     /// The bytes per line used at `width` cells.
     pub fn resolved_bytes_per_line(&self, width: usize) -> usize {
         if let Some(n) = self.bytes_per_line {
-            return n;
+            return n.clamp(1, MAX_BYTES_PER_LINE);
         }
         let fits = |n: usize| self.line_width(n) <= width;
         let candidates: Vec<usize> = (1..=32 / self.group.min(32))
@@ -302,10 +318,13 @@ impl HexView {
             }
         };
 
-        let hex_width = self.line_width(per_line)
-            - digits
-            - 2
-            - if self.ascii_panel { per_line + 4 } else { 0 };
+        // The ASCII panel lines up after the hex column of a full line. When
+        // the data is shorter than a line, the column is only as wide as the
+        // data needs (but never narrower than the usual 16 bytes), so a huge
+        // `bytes_per_line` does not pad a small file with thousands of spaces.
+        let pad_bytes = per_line.min(self.bytes.len().max(PREFERRED_PER_LINE));
+        let groups = pad_bytes.div_ceil(self.group);
+        let hex_width = 3 * pad_bytes - 1 + (groups - 1);
         let mut out = Vec::new();
         let mut previous: Option<&[u8]> = None;
         let mut starred = false;
@@ -345,7 +364,7 @@ impl HexView {
                 used += 2;
             }
             if self.ascii_panel {
-                line.append(&" ".repeat(hex_width - used + 2), None);
+                line.append(&" ".repeat(hex_width.saturating_sub(used) + 2), None);
                 line.append(bar, Some(border_style.clone().into()));
                 for (k, &byte) in chunk.iter().enumerate() {
                     let shown = if (0x20..=0x7e).contains(&byte) {

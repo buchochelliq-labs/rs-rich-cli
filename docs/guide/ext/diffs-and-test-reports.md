@@ -233,6 +233,18 @@ Without colour the message is plain ASCII, which keeps CI logs readable.
   counts restyled lines.
 - **libtest JSON needs nightly** (`-Z unstable-options`). On stable, use a
   JUnit reporter such as `cargo nextest`'s.
+- **A truncated JUnit file is an error.** When the XML ends with elements
+  still open (a runner killed mid-write), `junit::parse` fails instead of
+  returning the cases it saw, so a cut-off report never reads as a success.
+- **Decoded controls are shown, not obeyed.** Git's quoted paths
+  (`"b/\033[2J"`), JUnit's `&#x1b;` and JSON's `\u001b` decode to real
+  control characters. The parsed `Patch` and `TestRun` keep them, while
+  `PatchView` and `TestReport` show paths, names, messages and output with
+  terminal and bidi controls made visible (`␛[2J`). Line *content* in a
+  `PatchView` is shown as given: sanitize untrusted patch text (for example
+  with `rich_ext::sanitize_terminal_controls`) before parsing it.
+- **Hunk headers must be possible.** `@@ -0,1 …` (a non-empty range at line
+  0) and ranges whose end overflows are parse errors.
 
 ## See also
 
