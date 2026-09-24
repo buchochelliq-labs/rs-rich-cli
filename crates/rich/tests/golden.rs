@@ -2401,10 +2401,35 @@ fn tsv_rows(data: &str, fields: usize) -> Vec<(usize, Vec<&str>)> {
         .filter(|(_, line)| !line.trim().is_empty() && !line.starts_with('#'))
         .map(|(number, line)| {
             let columns: Vec<&str> = line.splitn(fields, '\t').collect();
-            assert_eq!(columns.len(), fields, "line {number}: expected {fields} columns");
+            assert_eq!(
+                columns.len(),
+                fields,
+                "line {number}: expected {fields} columns"
+            );
             (number, columns)
         })
         .collect()
+}
+
+/// Link, image and autolink destinations go through markdown-it's
+/// `normalizeLink` (and autolink text through `normalizeLinkText`) upstream:
+/// percent-encoded, punycoded hosts, and no raw control bytes in an OSC 8.
+#[test]
+fn markdown_links_parity() {
+    let rows = tsv_rows(include_str!("golden/markdown_links.tsv"), 4);
+    for (line, columns) in &rows {
+        let name = columns[0];
+        let source: String = serde_json::from_str(columns[1]).expect("source json");
+        let hyperlinks = columns[2] == "true";
+        let expected: String = serde_json::from_str(columns[3]).expect("expected json");
+        let console = truecolor_console(60);
+        let got = console.capture(|c| c.print(&Markdown::new(&source).hyperlinks(hyperlinks)));
+        assert_eq!(
+            got, expected,
+            "markdown link case {name:?} hyperlinks={hyperlinks} (line {line}) diverged"
+        );
+    }
+    assert_eq!(rows.len(), 38, "expected every markdown link case to run");
 }
 
 /// The text matching a `print_justify.tsv` case. Must stay in sync with
@@ -2448,7 +2473,10 @@ fn print_justify_parity() {
         let mut options = console.options();
         options.justify = justify;
         let got = console.render_export_with(&build_print_justify_text(name), &options);
-        assert_eq!(got, expected, "print justify case {name:?} (line {line}) diverged");
+        assert_eq!(
+            got, expected,
+            "print justify case {name:?} (line {line}) diverged"
+        );
     }
     assert_eq!(rows.len(), 9, "expected every print justify case to run");
 }

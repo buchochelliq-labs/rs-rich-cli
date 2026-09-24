@@ -17,6 +17,7 @@ use pulldown_cmark::{
 
 use crate::cells::cell_len;
 use crate::console::{Console, ConsoleOptions, Justify};
+use crate::markdown_url::{normalize_link, normalize_link_text, validate_link};
 use crate::protocol::Renderable;
 use crate::r#box::SIMPLE;
 use crate::segment::Segment;
@@ -604,6 +605,101 @@ fn process_delimiters(delimiters: &mut [Delimiter]) {
     }
 }
 
+/// A link or image whose destination markdown-it's `validateLink` refuses.
+enum Rejected {
+    /// `<javascript:…>`: the whole autolink is literal text.
+    Autolink,
+    /// `[label](…)` / `![alt](…)`: the brackets and destination are literal,
+    /// the label still parses. `range` is the whole link's source; `last_end`
+    /// where its last inner event ended (the closing `]` follows it).
+    Bracket {
+        range: std::ops::Range<usize>,
+        last_end: usize,
+    },
+}
+
+/// Un-link destinations markdown-it would refuse (`validateLink`): upstream's
+/// link, image and autolink rules fail on them, so the source stays text —
+/// `[j](javascript:x)` prints as written, with only its label's own inline
+/// markup (emphasis, code…) still parsed. pulldown-cmark makes a link of any
+/// destination, so the refused ones are turned back into their source here.
+///
+/// A refused *reference definition* (`[1]: javascript:x`) is not recovered:
+/// pulldown-cmark consumes the definition line, which upstream prints as a
+/// paragraph. The link using it does print as literal text.
+fn reject_invalid_links<'a>(
+    source: &'a str,
+    events: impl Iterator<Item = (Event<'a>, std::ops::Range<usize>)>,
+) -> Vec<(Event<'a>, std::ops::Range<usize>)> {
+    let literal = |range: std::ops::Range<usize>| {
+        (Event::Text(CowStr::Borrowed(&source[range.clone()])), range)
+    };
+    let mut out = Vec::new();
+    // One entry per open link or image: `None` when it is kept.
+    let mut open: Vec<Option<Rejected>> = Vec::new();
+    for (event, range) in events {
+        let href = match &event {
+            Event::Start(Tag::Link {
+                link_type: LinkType::Email,
+                dest_url,
+                ..
+            }) => Some(normalize_link(&format!("mailto:{dest_url}"))),
+            Event::Start(Tag::Link { dest_url, .. } | Tag::Image { dest_url, .. }) => {
+                Some(normalize_link(dest_url))
+            }
+            _ => None,
+        };
+        let pushed = match (&event, href) {
+            (_, Some(href)) if validate_link(&href) => {
+                open.push(None);
+                vec![(event, range.clone())]
+            }
+            (
+                Event::Start(Tag::Link {
+                    link_type: LinkType::Autolink | LinkType::Email,
+                    ..
+                }),
+                Some(_),
+            ) => {
+                open.push(Some(Rejected::Autolink));
+                vec![literal(range.clone())]
+            }
+            (Event::Start(tag), Some(_)) => {
+                let opener = if matches!(tag, Tag::Image { .. }) {
+                    2
+                } else {
+                    1
+                };
+                let opener = range.start..(range.start + opener).min(range.end);
+                open.push(Some(Rejected::Bracket {
+                    range: range.clone(),
+                    last_end: opener.end,
+                }));
+                vec![literal(opener)]
+            }
+            (Event::End(TagEnd::Link | TagEnd::Image), _) => match open.pop() {
+                Some(Some(Rejected::Autolink)) => Vec::new(),
+                Some(Some(Rejected::Bracket { range, last_end })) => {
+                    vec![literal(last_end.min(range.end)..range.end)]
+                }
+                Some(None) | None => vec![(event, range.clone())],
+            },
+            // The text inside a refused autolink is already in its literal.
+            _ if matches!(open.last(), Some(Some(Rejected::Autolink))) => Vec::new(),
+            _ => vec![(event, range.clone())],
+        };
+        for (_, pushed_range) in &pushed {
+            for entry in open.iter_mut() {
+                if let Some(Rejected::Bracket { last_end, .. }) = entry {
+                    *last_end = (*last_end).max(pushed_range.end);
+                }
+            }
+        }
+        out.extend(pushed);
+    }
+    out
+}
+
 /// Pair tilde runs the way upstream's markdown-it does (its `strikethrough`
 /// tokenize + `balance_pairs` + postProcess), over pulldown-cmark events parsed
 /// *without* strikethrough.
@@ -627,6 +723,9 @@ fn pair_strikethrough<'a>(
     let mut in_code = false;
     let mut in_cell = false;
     let mut image_depth = 0usize;
+    // markdown-it's autolink rule consumes `<…>` whole, so tildes inside one
+    // are never delimiters.
+    let mut in_autolink = false;
 
     let neighbour = |c: Option<char>, in_cell: bool| match c {
         None => ' ',
@@ -646,7 +745,7 @@ fn pair_strikethrough<'a>(
             continue;
         }
         match &event {
-            Event::Text(text) if !in_code && **text == source[range.clone()] => {
+            Event::Text(text) if !in_code && !in_autolink && **text == source[range.clone()] => {
                 // Merge with a directly preceding literal so a run split across
                 // two text events is scanned as one.
                 let mut start = range.start;
@@ -710,8 +809,12 @@ fn pair_strikethrough<'a>(
             Event::End(TagEnd::Emphasis | TagEnd::Strong) => {
                 emphasis_stack.pop();
             }
-            Event::Start(Tag::Link { .. }) => scopes.push(Vec::new()),
+            Event::Start(Tag::Link { link_type, .. }) => {
+                in_autolink = matches!(link_type, LinkType::Autolink | LinkType::Email);
+                scopes.push(Vec::new());
+            }
             Event::End(TagEnd::Link) => {
+                in_autolink = false;
                 if scopes.len() > 1 {
                     finished.push(scopes.pop().expect("link scope"));
                 }
@@ -827,6 +930,9 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
     let mut code: Option<(String, String)> = None;
     // The destination URL while inside a link.
     let mut link: Option<String> = None;
+    // Inside an autolink (`<http://…>`, `<user@host>`), whose text is shown
+    // normalised.
+    let mut autolink = false;
     // The label of the open link, when hyperlinks are off. Upstream pushes a
     // `Link` **element** at `link_close`-time rather than a style, so every
     // token in between is captured by it instead of by the paragraph, and only
@@ -854,7 +960,8 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
     // range is the `~~` delimiter.
     let options = Options::ENABLE_TABLES;
     let events = Parser::new_ext(source, options).into_offset_iter();
-    for (event, range) in pair_strikethrough(source, events) {
+    let events = reject_invalid_links(source, events);
+    for (event, range) in pair_strikethrough(source, events.into_iter()) {
         // Everything between an image's brackets is its alt text, and upstream
         // takes that from the *raw* markdown (`token.content`) rather than from
         // parsed inline events: `![alt *em*](u)` shows `alt *em*`, asterisks and
@@ -907,15 +1014,24 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                 // scheme to the renderer and hands us the bare address. Adding
                 // it is what makes the destination a usable URL — upstream's
                 // markdown-it puts it in the `href` itself.
-                link = Some(match link_type {
+                //
+                // Every destination then goes through markdown-it's
+                // `normalizeLink` (percent-encoding, punycoded host), as
+                // upstream's does before rich ever sees it; pulldown-cmark
+                // passes it through raw, control characters included.
+                link = Some(normalize_link(&match link_type {
                     LinkType::Email => format!("mailto:{dest_url}"),
                     _ => dest_url.to_string(),
-                });
+                }));
+                // An autolink's text is its destination, which markdown-it
+                // shows through `normalizeLinkText` instead.
+                autolink = matches!(link_type, LinkType::Autolink | LinkType::Email);
                 if !hyperlinks {
                     link_label = Some(String::new());
                 }
             }
             Event::End(TagEnd::Link) => {
+                autolink = false;
                 let url = link.take();
                 let label = link_label.take();
                 // `hyperlinks=False`: upstream flushes the buffered label under
@@ -960,7 +1076,7 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
             // `on_child_close`, so an image in a cell is hoisted above the
             // eventual table and contributes no text to the cell.
             Event::Start(Tag::Image { dest_url, .. }) => {
-                image = Some(dest_url.to_string());
+                image = Some(normalize_link(&dest_url));
                 image_span = None;
             }
             Event::End(TagEnd::Image) => {
@@ -1229,6 +1345,11 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
             Event::Start(Tag::Emphasis) => emphasis += 1,
             Event::End(TagEnd::Emphasis) => emphasis = emphasis.saturating_sub(1),
             Event::Text(text) => {
+                let text = if autolink {
+                    CowStr::from(normalize_link_text(&text))
+                } else {
+                    text
+                };
                 if let Some(label) = link_label.as_mut() {
                     label.push_str(&text);
                 } else if let Some((_, source)) = code.as_mut() {

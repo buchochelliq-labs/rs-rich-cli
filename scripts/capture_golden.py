@@ -2243,6 +2243,45 @@ PRINT_JUSTIFY_CASES = [
 ]
 
 
+MARKDOWN_LINKS_HEADER = """\
+# Golden parity fixtures for MARKDOWN LINK DESTINATIONS — captured from real
+# Python `rich`. Regenerate with: python scripts/capture_golden.py
+#
+# markdown-it runs every link, image and autolink destination through
+# `normalizeLink` (percent-encoding + punycode host) and an autolink's text
+# through `normalizeLinkText` before rich sees them.
+# Format: <name>\t<markdown source as JSON>\t<hyperlinks: true|false>\t<output as JSON>
+# Console: force_terminal=True, color_system="truecolor", width=60,
+#          highlight=False. OSC 8 `id=<n>` parameters (random upstream, absent
+#          in the port) are stripped from the captured output.
+"""
+
+MARKDOWN_LINKS_CASES = [
+    ("osc_in_destination", "[x](<http://a\x1b]0;PWN\x07>) end"),
+    ("idn_host_and_path", "[y](http://\u00e9.com/\u00fc)"),
+    ("space_in_angle_destination", "[z](<http://a b>)"),
+    ("existing_escapes_kept", "[p](http://a/%41%zz%2F)"),
+    ("uppercase_scheme_not_punycoded", "[u](HTTP://\u00e9.com)"),
+    ("mailto_link", "[m](mailto:\u00fc@\u00e9.de)"),
+    ("reference_link", "[r][1]\n\n[1]: http://\u00e9.com/\u00fc"),
+    ("autolink_decodes_text", "<http://xn--9ca.com/%C3%BC%2F%25>"),
+    ("email_autolink", "<a+b@x.de>"),
+    ("image_destination", "![alt](<http://\u00e9.com/a b.png>)"),
+    ("image_without_alt", "![](<http://\u00e9.com/\u00fc.png>)"),
+    ("linked_image", "[![a](http://x/\u00fc.png)](http://\u00e9.com)"),
+    # `validateLink` refuses these, so the link/image/autolink rule fails and
+    # the source prints as text (the label's own markup still parses).
+    ("refused_javascript_link", "[j](javascript:alert(1)) t"),
+    ("refused_link_keeps_label_markup", "[*j*](vbscript:x)"),
+    ("refused_uppercase_file_link", "[f](FILE:///etc/passwd)"),
+    ("refused_autolink", "<javascript:alert(1)>"),
+    ("refused_data_image", "![i](data:text/html,x)"),
+    ("allowed_data_image_link", "[ok](data:image/png;base64,xx)"),
+    # An autolink is consumed whole: its tildes are not strikethrough.
+    ("autolink_tildes_literal", "<http://a~~b~~c>"),
+]
+
+
 def main() -> None:
     version = verify_upstream_version()
     print(f"verified Python rich {version} against UPSTREAM.toml")
@@ -2672,6 +2711,30 @@ def main() -> None:
         tlines.append(f"{theme_name}\t{json.dumps(payload)}")
     themes_path.write_text("\n".join(tlines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(tlines) - 1} terminal themes to {themes_path}")
+
+    # --- markdown link destinations ------------------------------------
+    import re as _re
+
+    links_path = golden_dir() / "markdown_links.tsv"
+    mllines = [MARKDOWN_LINKS_HEADER.rstrip("\n")]
+    for name, source in MARKDOWN_LINKS_CASES:
+        for hyperlinks in (False, True):
+            mlconsole = Console(
+                force_terminal=True,
+                color_system="truecolor",
+                width=60,
+                highlight=False,
+                no_color=False,
+            )
+            with mlconsole.capture() as capture:
+                mlconsole.print(Markdown(source, hyperlinks=hyperlinks))
+            output = _re.sub(r"\x1b\]8;id=\d+;", "\x1b]8;;", capture.get())
+            mllines.append(
+                f"{name}\t{json.dumps(source)}\t{str(hyperlinks).lower()}"
+                f"\t{json.dumps(output)}"
+            )
+    links_path.write_text("\n".join(mllines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(MARKDOWN_LINKS_CASES) * 2} markdown link cases to {links_path}")
 
     # --- print-level justify of a printed Text -------------------------
     pj_path = golden_dir() / "print_justify.tsv"
