@@ -137,8 +137,24 @@ fn checkerboard(image: &RgbaImage, square: (u32, u32)) -> RgbImage {
 
 /// Which pixels of a sampled raster count as transparent (under half
 /// opacity), or `None` when transparency is not being kept.
-pub(crate) fn clear_mask(raster: &RgbaImage, keep: bool) -> Option<Vec<bool>> {
-    keep.then(|| raster.pixels().map(|p| p.0[3] < 128).collect())
+///
+/// When it is kept, every other pixel is made fully opaque in place: a pixel
+/// at or over half opacity shows its own colour, so nothing downstream
+/// (palette quantization, luminance, thresholds) may darken it by its alpha.
+/// Without it the raster is left untouched.
+pub(crate) fn clear_mask(raster: &mut RgbaImage, keep: bool) -> Option<Vec<bool>> {
+    keep.then(|| {
+        raster
+            .pixels_mut()
+            .map(|p| {
+                let clear = p.0[3] < 128;
+                if !clear {
+                    p.0[3] = 255;
+                }
+                clear
+            })
+            .collect()
+    })
 }
 
 /// What the destination can actually do, used only to resolve
@@ -749,7 +765,9 @@ impl ImageArt {
                 Ok(art.rich_render(console, options))
             }
             ImageMode::Braille => {
-                let mut art = BrailleArt::from_shared(Arc::clone(&image)).width(width);
+                let mut art = BrailleArt::from_shared(Arc::clone(&image))
+                    .width(width)
+                    .keep_transparency(self.keeps_transparency());
                 if let Some(height) = self.rows() {
                     art = art.height(height);
                 }
@@ -774,6 +792,7 @@ impl ImageArt {
         }
         let mut art = SixelArt::new((*image).clone())
             .width(width)
+            .keep_transparency(self.keeps_transparency())
             .color_processing(self.color_mode, self.dither, self.color_distance);
         if let Some(height) = self.rows() {
             art = art.height(height);

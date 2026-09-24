@@ -83,7 +83,12 @@ fn terminal_default_keeps_opaque_images_byte_identical() {
     let image = DynamicImage::ImageRgb8(RgbImage::from_fn(9, 6, |x, y| {
         Rgb([(x * 29) as u8, (y * 41) as u8, 90])
     }));
-    for mode in [ImageMode::Ascii, ImageMode::Blocks, ImageMode::Quadrants] {
+    for mode in [
+        ImageMode::Ascii,
+        ImageMode::Blocks,
+        ImageMode::Quadrants,
+        ImageMode::Braille,
+    ] {
         let make = || ImageArt::new(image.clone()).mode(mode).width(5).color(true);
         assert_eq!(
             console().render_to_string(&make()),
@@ -237,4 +242,115 @@ fn sixel_keeps_transparent_pixels_transparent() {
     let alpha = |x: usize| decoded.pixels[x * 4 + 3];
     assert_eq!(alpha(0), 0);
     assert_eq!(alpha(decoded.width - 1), 255);
+}
+
+/// Left column red at alpha 130 (just over half), right column opaque red.
+fn half_opaque_red() -> DynamicImage {
+    rgba(2, 2, |x, _| if x == 0 { [255, 0, 0, 130] } else { RED })
+}
+
+/// Every colour a rendered row paints, foreground and background.
+fn painted(row: &[Cell]) -> Vec<Color> {
+    row.iter()
+        .flat_map(|(_, fg, bg)| [fg.clone(), bg.clone()])
+        .flatten()
+        .collect()
+}
+
+#[test]
+fn terminal_default_blocks_keep_half_opaque_colour_in_reduced_palettes() {
+    let art = ImageArt::new(half_opaque_red())
+        .mode(ImageMode::Blocks)
+        .width(2)
+        .color_mode(ImageColorMode::Ansi256)
+        .background_mode(ImageBackground::TerminalDefault);
+    let row = &cells(&render(&art))[0];
+    // Pure red is ANSI 196; a premultiplied alpha-130 red would snap to 88.
+    let colours = painted(row);
+    assert!(!colours.is_empty());
+    assert!(
+        colours.iter().all(|c| *c == Color::from_ansi(196)),
+        "{row:?}"
+    );
+}
+
+#[test]
+fn terminal_default_quadrants_keep_a_uniform_cell_whole() {
+    let art = ImageArt::new(half_opaque_red())
+        .mode(ImageMode::Quadrants)
+        .width(1)
+        .color_mode(ImageColorMode::Ansi256)
+        .background_mode(ImageBackground::TerminalDefault);
+    let row = &cells(&render(&art))[0];
+    let colours = painted(row);
+    assert!(!colours.is_empty());
+    assert!(
+        colours.iter().all(|c| *c == Color::from_ansi(196)),
+        "{row:?}"
+    );
+}
+
+#[test]
+fn terminal_default_ascii_keeps_half_opaque_pixels_visible() {
+    let art = ImageArt::new(half_opaque_red())
+        .mode(ImageMode::Ascii)
+        .width(2)
+        .height(1)
+        .color(true)
+        .background_mode(ImageBackground::TerminalDefault);
+    let row = &cells(&render(&art))[0];
+    // Both pixels are the same colour once opacity is kept: same glyph too.
+    assert_ne!(row[0].0, " ", "{row:?}");
+    assert_eq!(row[0].0, row[1].0, "{row:?}");
+    assert_eq!(row[0].1, Some(Color::from_rgb(255, 0, 0)));
+}
+
+#[test]
+fn terminal_default_braille_uses_unpremultiplied_luma() {
+    // Gray 150 at alpha 200: over half opacity and brighter than 128, so
+    // every dot is set. Premultiplied it would be 117 and show nothing.
+    let image = rgba(2, 4, |_, _| [150, 150, 150, 200]);
+    let make = || {
+        ImageArt::new(image.clone())
+            .mode(ImageMode::Braille)
+            .width(1)
+    };
+    let kept = make().background_mode(ImageBackground::TerminalDefault);
+    assert_eq!(cells(&render(&kept))[0][0].0, "\u{28FF}");
+    // Pixels under half opacity still show no dot, however bright.
+    let faint = ImageArt::new(rgba(2, 4, |_, _| [255, 255, 255, 127]))
+        .mode(ImageMode::Braille)
+        .width(1)
+        .background_mode(ImageBackground::TerminalDefault);
+    assert_eq!(cells(&render(&faint))[0][0].0, "\u{2800}");
+    // The default still composites onto black: unchanged.
+    assert_eq!(cells(&render(&make()))[0][0].0, "\u{2800}");
+}
+
+#[test]
+fn default_background_still_composites_partial_alpha_onto_black() {
+    // Without TerminalDefault nothing changes: alpha 130 red is darkened.
+    let art = ImageArt::new(half_opaque_red())
+        .mode(ImageMode::Blocks)
+        .width(2)
+        .color_mode(ImageColorMode::Ansi256);
+    let row = &cells(&render(&art))[0];
+    assert_eq!(row[0].1, Some(Color::from_ansi(88)), "{row:?}");
+    assert_eq!(row[1].1, Some(Color::from_ansi(196)), "{row:?}");
+}
+
+#[cfg(feature = "sixel")]
+#[test]
+fn terminal_default_sixel_keeps_half_opaque_colour_in_reduced_palettes() {
+    let image = rgba(16, 16, |x, _| if x < 8 { [255, 0, 0, 130] } else { RED });
+    let art = ImageArt::new(image)
+        .mode(ImageMode::Sixel)
+        .width(2)
+        .color_mode(ImageColorMode::Ansi256)
+        .background_mode(ImageBackground::TerminalDefault);
+    let segments = render(&art);
+    let decoded = icy_sixel::SixelImage::decode(segments[0].text.as_bytes()).unwrap();
+    let pixel = |x: usize| decoded.pixels[x * 4..x * 4 + 4].to_vec();
+    assert_eq!(pixel(0), vec![255, 0, 0, 255]);
+    assert_eq!(pixel(decoded.width - 1), vec![255, 0, 0, 255]);
 }

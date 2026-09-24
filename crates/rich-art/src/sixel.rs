@@ -48,6 +48,9 @@ pub struct SixelArt {
     color_mode: ImageColorMode,
     dither: Dither,
     distance: ColorDistance,
+    /// Keep transparency as `ImageBackground::TerminalDefault` defines it:
+    /// pixels at or over half opacity show their own colour.
+    transparent: bool,
 }
 
 impl SixelArt {
@@ -62,6 +65,7 @@ impl SixelArt {
             color_mode: ImageColorMode::TrueColor,
             dither: Dither::None,
             distance: ColorDistance::Rgb,
+            transparent: false,
         }
     }
 
@@ -111,6 +115,14 @@ impl SixelArt {
         self
     }
 
+    /// Show pixels at or over half opacity in their own colour rather than
+    /// darkened by their alpha when quantizing to a reduced palette; those
+    /// under half opacity stay transparent either way.
+    pub(crate) fn keep_transparency(mut self, transparent: bool) -> Self {
+        self.transparent = transparent;
+        self
+    }
+
     /// Target size in **pixels** for the given available width in columns.
     fn pixel_size(&self, available: usize) -> (u32, u32) {
         let (iw, ih) = self.image.dimensions();
@@ -142,8 +154,18 @@ impl SixelArt {
             .resize_exact(w, h, FilterType::Lanczos3)
             .to_rgba8();
         if self.color_mode != ImageColorMode::TrueColor {
-            let transparent: Vec<bool> = scaled.pixels().map(|p| p.0[3] < 128).collect();
-            let indices = preprocess(&mut scaled, self.color_mode, self.dither, self.distance)?;
+            let kept = crate::image_art::clear_mask(&mut scaled, self.transparent);
+            let transparent: Vec<bool> = match &kept {
+                Some(clear) => clear.clone(),
+                None => scaled.pixels().map(|p| p.0[3] < 128).collect(),
+            };
+            let indices = preprocess(
+                &mut scaled,
+                self.color_mode,
+                self.dither,
+                self.distance,
+                kept.as_deref(),
+            )?;
             let pixels: Vec<Option<u8>> = indices
                 .into_iter()
                 .zip(transparent)

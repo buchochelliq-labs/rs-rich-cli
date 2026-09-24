@@ -158,11 +158,17 @@ pub(crate) fn nearest(
 /// Mutate only the final sampled raster; returned indices correspond one-to-one
 /// with its row-major pixels. Remaining alpha is composited onto black before
 /// diffusion. Three error rows bound auxiliary storage to the sampled width.
+///
+/// `clear` (from [`clear_mask`](crate::image_art::clear_mask)) marks pixels
+/// left unpainted: they still get an index, from their own colour alone, but
+/// neither take in nor pass on diffused error, so a transparent hole does not
+/// bleed into the opaque pixels around it.
 pub(crate) fn preprocess(
     raster: &mut RgbaImage,
     mode: ImageColorMode,
     dither: Dither,
     distance: ColorDistance,
+    clear: Option<&[bool]>,
 ) -> Option<Vec<u8>> {
     if mode == ImageColorMode::TrueColor {
         return None;
@@ -184,6 +190,13 @@ pub(crate) fn preprocess(
             } else {
                 0.0
             };
+            if clear.is_some_and(|clear| clear[y as usize * width + x]) {
+                let rgb = std::array::from_fn(|c| f64::from(pixel.0[c]) * alpha);
+                let (index, color) = nearest(rgb, mode, distance);
+                indices.push(index);
+                pixel.0 = [color[0], color[1], color[2], 255];
+                continue;
+            }
             let rgb = std::array::from_fn(|c| {
                 (f64::from(pixel.0[c]) * alpha + current[x][c] + offset).clamp(0.0, 255.0)
             });
@@ -252,7 +265,8 @@ mod tests {
                 &mut pixels,
                 ImageColorMode::TrueColor,
                 Dither::None,
-                ColorDistance::Rgb
+                ColorDistance::Rgb,
+                None
             ),
             None
         );
@@ -274,7 +288,8 @@ mod tests {
                 &mut pixels,
                 ImageColorMode::Ansi256,
                 Dither::None,
-                ColorDistance::Rgb
+                ColorDistance::Rgb,
+                None
             ),
             Some(vec![196, 67, 244])
         );
@@ -292,7 +307,8 @@ mod tests {
                 &mut pixels,
                 ImageColorMode::Ansi256,
                 Dither::FloydSteinberg,
-                ColorDistance::Rgb
+                ColorDistance::Rgb,
+                None
             ),
             Some(vec![232, 233, 232, 232])
         );
@@ -303,6 +319,33 @@ mod tests {
     }
 
     #[test]
+    fn clear_pixels_neither_take_nor_pass_on_diffused_error() {
+        // 13 is exactly between the 8 and 18 ramp entries, so it snaps to 8
+        // (the lower index) unless some error reaches it.
+        let row = |clear: Option<&[bool]>| {
+            let mut pixels = RgbaImage::from_fn(3, 1, |x, _| {
+                Rgba(if x == 1 {
+                    [200, 200, 200, 100]
+                } else {
+                    [13, 13, 13, 255]
+                })
+            });
+            preprocess(
+                &mut pixels,
+                ImageColorMode::Ansi256,
+                Dither::FloydSteinberg,
+                ColorDistance::Rgb,
+                clear,
+            )
+            .unwrap()
+        };
+        // Unmasked, the premultiplied middle pixel passes its error right.
+        assert_eq!(row(None)[2], 233);
+        // Masked, the right pixel sees no error at all, as if alone.
+        assert_eq!(row(Some(&[false, true, false]))[2], 232);
+    }
+
+    #[test]
     fn transparent_and_tiny_rasters_are_bounded() {
         let mut transparent = RgbaImage::from_pixel(1, 1, Rgba([255, 255, 255, 0]));
         assert_eq!(
@@ -310,7 +353,8 @@ mod tests {
                 &mut transparent,
                 ImageColorMode::Ansi256,
                 Dither::FloydSteinberg,
-                ColorDistance::Rgb
+                ColorDistance::Rgb,
+                None
             ),
             Some(vec![16])
         );
@@ -321,7 +365,8 @@ mod tests {
                 &mut empty,
                 ImageColorMode::Ansi256,
                 Dither::FloydSteinberg,
-                ColorDistance::Rgb
+                ColorDistance::Rgb,
+                None
             ),
             Some(vec![])
         );
@@ -373,7 +418,7 @@ mod tests {
                 let mut pixels = RgbaImage::from_fn(5, 3, |x, y| {
                     Rgba([(x * 50) as u8, (y * 90) as u8, 120, 255])
                 });
-                let indices = preprocess(&mut pixels, mode, dither, distance).unwrap();
+                let indices = preprocess(&mut pixels, mode, dither, distance, None).unwrap();
                 assert_eq!(indices.len(), 15);
                 for (index, pixel) in indices.iter().zip(pixels.pixels()) {
                     let rgb = pixel.0.map(f64::from)[..3].try_into().unwrap();
@@ -427,6 +472,7 @@ mod tests {
                 ImageColorMode::Grayscale,
                 dither,
                 ColorDistance::Rgb,
+                None,
             )
             .unwrap()
         };
@@ -445,6 +491,7 @@ mod tests {
             ImageColorMode::Grayscale,
             Dither::Atkinson,
             ColorDistance::Rgb,
+            None,
         )
         .unwrap();
         assert_eq!(

@@ -12,6 +12,9 @@ pub struct BrailleArt {
     image: std::sync::Arc<DynamicImage>,
     width: Option<usize>,
     height: Option<usize>,
+    /// Keep transparency (`ImageBackground::TerminalDefault`): a dot needs at
+    /// least half opacity and luma 128 of its own, not alpha-darkened luma.
+    transparent: bool,
 }
 
 impl BrailleArt {
@@ -20,6 +23,7 @@ impl BrailleArt {
             image: std::sync::Arc::new(image),
             width: None,
             height: None,
+            transparent: false,
         }
     }
 
@@ -28,7 +32,17 @@ impl BrailleArt {
             image,
             width: None,
             height: None,
+            transparent: false,
         }
+    }
+
+    /// Leave pixels under half opacity dotless and judge the rest by their
+    /// own brightness, as [`ImageBackground::TerminalDefault`] promises.
+    ///
+    /// [`ImageBackground::TerminalDefault`]: crate::ImageBackground::TerminalDefault
+    pub(crate) fn keep_transparency(mut self, transparent: bool) -> Self {
+        self.transparent = transparent;
+        self
     }
 
     pub fn width(mut self, width: usize) -> Self {
@@ -58,7 +72,7 @@ impl BrailleArt {
 
     fn rows(&self, available: usize) -> Vec<String> {
         let (columns, rows) = self.grid(available);
-        let scaled = self
+        let mut scaled = self
             .image
             .resize_exact(
                 (columns * 2) as u32,
@@ -66,6 +80,9 @@ impl BrailleArt {
                 FilterType::Triangle,
             )
             .to_rgba8();
+        // Kept transparency: clear pixels are marked, the rest made opaque.
+        let clear = crate::image_art::clear_mask(&mut scaled, self.transparent);
+        let width = scaled.width() as usize;
         (0..rows)
             .map(|row| {
                 (0..columns)
@@ -81,7 +98,8 @@ impl BrailleArt {
                                     + 0.587 * f32::from(green)
                                     + 0.114 * f32::from(blue))
                                     * (f32::from(alpha) / 255.0);
-                                if luminance >= 128.0 {
+                                let hidden = clear.as_ref().is_some_and(|c| c[y * width + x]);
+                                if luminance >= 128.0 && !hidden {
                                     bits |= 1 << dot;
                                 }
                             }

@@ -130,8 +130,14 @@ impl BlockArt {
             .image
             .resize_exact(columns as u32, (rows * 2) as u32, FilterType::Triangle)
             .to_rgba8();
-        let clear = crate::image_art::clear_mask(&scaled, self.transparent);
-        let indices = preprocess(&mut scaled, self.color_mode, self.dither, self.distance);
+        let clear = crate::image_art::clear_mask(&mut scaled, self.transparent);
+        let indices = preprocess(
+            &mut scaled,
+            self.color_mode,
+            self.dither,
+            self.distance,
+            clear.as_deref(),
+        );
 
         (0..rows)
             .map(|row| {
