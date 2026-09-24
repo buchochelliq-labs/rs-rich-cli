@@ -8,7 +8,6 @@
 //! `expanded` and the ASCII/heavy guide sets are deferred with the rest of
 //! `tree.py`.
 
-use crate::cells::cell_len;
 use crate::console::{Console, ConsoleOptions};
 use crate::measure::Measurement;
 use crate::protocol::Renderable;
@@ -55,11 +54,10 @@ impl Tree {
         self.children.last_mut().expect("just pushed a child")
     }
 
-    /// Recursively render into `lines`. `prefix_first` precedes the label's first
-    /// line; `prefix_rest` precedes wrapped continuation lines and is the base
-    /// for this node's children.
+    /// Render this node's label into `lines`. `prefix_first` precedes the
+    /// label's first line; `prefix_rest` precedes wrapped continuation lines.
     #[allow(clippy::too_many_arguments)]
-    fn render_into(
+    fn render_label(
         &self,
         console: &Console,
         options: &ConsoleOptions,
@@ -67,18 +65,12 @@ impl Tree {
         lines: &mut Vec<Vec<Segment>>,
         prefix_first: &str,
         prefix_rest: &str,
-        width: usize,
+        available: usize,
     ) {
         let guide_style = Some(Style::new());
-        // Upstream renders the label at `options.max_width - sum(guide widths)`;
-        // with no room left, `Console.render` yields nothing, so neither the
-        // label nor its guides are emitted (its children still recurse).
-        let available = width.saturating_sub(cell_len(prefix_first));
         // The label renders with `options.update(highlight=self.highlight)`,
         // so a string goes through `render_str` with the root's setting.
-        let mut label_lines = if available < 1 {
-            Vec::new()
-        } else if let Cell::Renderable(renderable) = &self.label {
+        let mut label_lines = if let Cell::Renderable(renderable) = &self.label {
             let mut label_options = options.update_width(available);
             label_options.height = None;
             console.render_lines(renderable.as_ref(), &label_options, false)
@@ -88,7 +80,7 @@ impl Tree {
                 .unwrap_or_default()
                 .render_lines(console.theme(), &Style::new(), Some(available))
         };
-        if available >= 1 && label_lines.is_empty() {
+        if label_lines.is_empty() {
             label_lines.push(Vec::new());
         }
 
@@ -105,21 +97,81 @@ impl Tree {
             line.extend(label_line);
             lines.push(line);
         }
+    }
 
-        let last_index = self.children.len().saturating_sub(1);
-        for (index, child) in self.children.iter().enumerate() {
-            let last = index == last_index;
-            let child_first = format!("{prefix_rest}{}", if last { END } else { FORK });
-            let child_rest = format!("{prefix_rest}{}", if last { SPACE } else { CONTINUE });
-            child.render_into(
+    /// Render the whole hierarchy into `lines`, depth first.
+    ///
+    /// Like upstream's `__rich_console__`, this walks an explicit stack rather
+    /// than recursing, so a very deep tree cannot overflow the thread stack.
+    /// The guides are kept as one `is_last` flag per level and only turned
+    /// into prefix strings for nodes that still have room to render: a guide
+    /// is four cells per level, so materialising every prefix would cost
+    /// quadratic memory on a deep chain.
+    fn render_into(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        highlight: bool,
+        lines: &mut Vec<Vec<Segment>>,
+        width: usize,
+    ) {
+        // `(node, index of the next child to visit)`; `levels[d]` is whether
+        // the ancestor at depth `d + 1` on the current path is a last child.
+        let mut stack: Vec<(&Tree, usize)> = vec![(self, 0)];
+        let mut levels: Vec<bool> = Vec::new();
+        let visit = |node: &Tree, levels: &[bool], lines: &mut Vec<Vec<Segment>>| {
+            // Upstream renders the label at `options.max_width - sum(guide
+            // widths)`; with no room left, `Console.render` yields nothing, so
+            // neither the label nor its guides are emitted (its children
+            // still render, and get no room either).
+            let guide_width = levels.len() * 4;
+            if guide_width >= width {
+                return;
+            }
+            let mut prefix_rest = String::new();
+            for &last in levels {
+                prefix_rest.push_str(if last { SPACE } else { CONTINUE });
+            }
+            let mut prefix_first = String::new();
+            if let Some((&last, parents)) = levels.split_last() {
+                for &parent_last in parents {
+                    prefix_first.push_str(if parent_last { SPACE } else { CONTINUE });
+                }
+                prefix_first.push_str(if last { END } else { FORK });
+            }
+            node.render_label(
                 console,
                 options,
                 highlight,
                 lines,
-                &child_first,
-                &child_rest,
-                width,
+                &prefix_first,
+                &prefix_rest,
+                width - guide_width,
             );
+        };
+        visit(self, &levels, lines);
+        while let Some((node, next)) = stack.last_mut() {
+            let node: &Tree = node;
+            if let Some(child) = node.children.get(*next) {
+                *next += 1;
+                levels.push(*next == node.children.len());
+                visit(child, &levels, lines);
+                stack.push((child, 0));
+            } else {
+                stack.pop();
+                levels.pop();
+            }
+        }
+    }
+}
+
+impl Drop for Tree {
+    /// Drop descendants from an explicit stack: the derived drop recurses
+    /// once per level and overflows the stack on a very deep tree.
+    fn drop(&mut self) {
+        let mut pending = std::mem::take(&mut self.children);
+        while let Some(mut child) = pending.pop() {
+            pending.append(&mut child.children);
         }
     }
 }
@@ -127,15 +179,7 @@ impl Tree {
 impl Renderable for Tree {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let mut lines: Vec<Vec<Segment>> = Vec::new();
-        self.render_into(
-            console,
-            options,
-            self.highlight,
-            &mut lines,
-            "",
-            "",
-            options.max_width,
-        );
+        self.render_into(console, options, self.highlight, &mut lines, options.max_width);
 
         let mut segments = Vec::new();
         let last = lines.len().saturating_sub(1);
@@ -151,23 +195,16 @@ impl Renderable for Tree {
     /// Port of `Tree.__rich_measure__`: the widest label plus its indent of
     /// four cells per level, for both bounds.
     fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
-        fn walk(
-            tree: &Tree,
-            console: &Console,
-            options: &ConsoleOptions,
-            level: usize,
-            width: &mut (usize, usize),
-        ) {
+        // Iterative, like the render: `(node, level)` pairs to visit.
+        let mut width = (0, 0);
+        let mut pending: Vec<(&Tree, usize)> = vec![(self, 0)];
+        while let Some((tree, level)) = pending.pop() {
             let label = tree.label.measure_cell(console, options);
             let indent = level * 4;
             width.0 = width.0.max(label.minimum + indent);
             width.1 = width.1.max(label.maximum + indent);
-            for child in &tree.children {
-                walk(child, console, options, level + 1, width);
-            }
+            pending.extend(tree.children.iter().map(|child| (child, level + 1)));
         }
-        let mut width = (0, 0);
-        walk(self, console, options, 0, &mut width);
         Measurement::new(width.0, width.1)
     }
 }
@@ -201,5 +238,32 @@ mod tests {
             "└── child B\n",
         );
         assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn deep_tree_renders_without_recursion() {
+        // Upstream renders from an explicit stack, so a 20 000-level chain is
+        // fine; a recursive render (or drop, or measure) overflows a normal
+        // 2 MiB thread stack long before that.
+        let handle = std::thread::Builder::new()
+            .stack_size(2 * 1024 * 1024)
+            .spawn(|| {
+                let mut tree = Tree::new("0");
+                let mut node = &mut tree;
+                for depth in 1..20_000 {
+                    node = node.add(depth.to_string());
+                }
+                let console = Console::builder().width(12).build();
+                let out = console.render_export(&tree);
+                let measured = Measurement::get(&console, &console.options(), &tree);
+                (out, measured)
+            })
+            .expect("spawn");
+        let (out, measured) = handle.join().expect("deep tree render overflowed");
+        // Labels render while the guides leave room (4 cells per level at
+        // width 12: depths 0-2); deeper nodes have no room and emit nothing.
+        assert_eq!(out, "0\n└── 1\n    └── 2\n");
+        // `Measurement.get` clamps the 80 001-cell measure to the width.
+        assert_eq!(measured, Measurement::new(12, 12));
     }
 }
