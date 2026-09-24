@@ -60,6 +60,71 @@ Entries below record subsequent releases and development.
 Cohort versions for 0.0.11 (not published): core 0.0.7, ext 0.0.9, art 0.0.9,
 CLI 0.0.11. Core changes below, so every dependent moves with it.
 
+### Release test: security, robustness and parity fixes
+
+Six independent audits of the whole 0.0.11 delta found the issues below. Each was
+confirmed by reproduction, and each fix came with a regression test that failed
+first. See the [0.0.11 release notes](docs/releases/0.0.11.md#what-the-release-test-found-and-fixed).
+
+- **Dependencies.** `rustls` 0.23.45 for RUSTSEC-2026-0285 (reaches only the
+  CLI's `fetch` feature). Core loads only syntect's bundled dumps, which drops
+  the unmaintained `yaml-rust` and `plist` from the tree.
+- **Ext: terminal-control injection.**
+  - OSC 8 links could be broken out of in three places, each letting a crafted
+    path or URL set the window title:
+    - control characters in `LiveCoordinator` link URLs;
+    - control characters in `Hyperlinker` file and editor URLs;
+    - control characters in diff `TemplateLinks`.
+  - File URLs are now percent-encoded outside the RFC 3986 path set, including
+    non-ASCII.
+  - Stack-trace labels, patch paths decoded from git's octal quoting, and
+    JUnit/libtest names and output decoded from `&#x1b;` or `\u001b` now render
+    inert.
+  - Bidi controls (Trojan Source) are shown as escapes in `rich unicode` and in
+    env views.
+- **Ext: secrets.** `rich env` / `EnvView` mask secret names by whole segment
+  (`*_KEY`, `DB_PASS`, `MYSQL_PWD`, `*_DSN`, `*_COOKIE`, `JWT`, …). They also mask
+  credentials inside any value (URL passwords, token prefixes, JWTs, AWS key ids)
+  through `redact_value`. Masking is best effort.
+- **Ext: crashes and hangs.**
+  - Values that panicked `richf!` at run time can no longer escape the template's
+    markup.
+  - Stack-trace cause chains are capped at 64, and render and drop without
+    recursion.
+  - Hunk headers with impossible numbers and huge hex line widths are now errors
+    or clamped instead of overflowing.
+  - A CRLF `Suggestion` span no longer panics.
+  - libtest reports and wrapped `SourceView` lines (minified JSON in `rich view`)
+    are no longer quadratic.
+- **Ext: correctness.**
+  - `RichHandler::live` no longer drops lines containing control characters.
+  - Non-interactive `LiveCoordinator` output keeps the whole final snapshot.
+  - A truncated JUnit file is an error, not a pass.
+  - Tracing span fields are replaced, not duplicated.
+  - An empty `FORCE_COLOR` is ignored.
+  - QA screenshot names can't leave their directory.
+- **Art.**
+  - GIF decoding is capped at 512 MiB (a 35-byte GIF used to abort on a 17 GB
+    allocation).
+  - Sixel rasters are capped at 16 megapixels before resizing, and repeat runs are
+    split at 65535.
+  - `TerminalDefault` keeps the colour of pixels at or above half opacity in every
+    palette, and in ASCII and Braille.
+  - Reduced-palette Sixel is 4–16× faster, with byte-identical output.
+  - Sixel errors now tell "not a terminal" from "terminal not known to support
+    Sixel", and `RICH_GRAPHICS=sixel|none` works as documented.
+- **Release docs.** A new crate's first version cannot use Trusted Publishing, so
+  `rs-rich-macros` 0.0.1 needs one token-authenticated upload before the ext tag
+  (`docs/BRANCHING.md`).
+- **Demo.** The tour shows `inspect`, `diff`, `view`, the `hex`, `unicode` and
+  `ansi explain` inspectors, a theme file, a redacted `capture`, Atkinson with
+  OKLab, and both alpha backgrounds.
+- **Migration.**
+  - `StackTrace` has a new public `omitted_causes` field.
+  - New enum variants: `unicode_inspect::Kind::Bidi`,
+    `ImageArtError::{SixelTooLarge, SixelNotSupported}`.
+  - `richf!` prints a value's `\[` literally; it used to unescape it.
+
 ### Workflow renderables (0.0.11 workstream 10)
 
 All in `rs-rich-ext`, with no new dependencies and no change to core. Every
