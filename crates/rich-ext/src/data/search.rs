@@ -211,26 +211,44 @@ fn parse_glob(pattern: &str) -> Vec<Glob> {
     out
 }
 
+/// Whether `glob` matches the whole of `path`. A table over path positions,
+/// glob step by glob step, so `**` costs O(glob × path) however many there
+/// are (backtracking would be polynomial in their number).
 fn glob_match(glob: &[Glob], path: &[PathSegment], ci: bool) -> bool {
-    match glob.split_first() {
-        None => path.is_empty(),
-        Some((Glob::Deep, rest)) => {
-            (0..=path.len()).any(|skip| glob_match(rest, &path[skip..], ci))
+    // `reach[j]`: the glob so far matches exactly `path[..j]`.
+    let mut reach = vec![false; path.len() + 1];
+    reach[0] = true;
+    for step in glob {
+        let mut next = vec![false; path.len() + 1];
+        match step {
+            Glob::Deep => {
+                let mut any = false;
+                for (j, slot) in next.iter_mut().enumerate() {
+                    any |= reach[j];
+                    *slot = any;
+                }
+            }
+            _ => {
+                for (j, segment) in path.iter().enumerate() {
+                    next[j + 1] = reach[j]
+                        && match (step, segment) {
+                            (Glob::Any, _) => true,
+                            (Glob::AnyIndex, PathSegment::Index(_)) => true,
+                            (Glob::Index(a), PathSegment::Index(b)) => a == b,
+                            (Glob::Key(pattern), PathSegment::Key(key)) => {
+                                wildcard(pattern, key, ci)
+                            }
+                            _ => false,
+                        };
+                }
+            }
         }
-        Some((first, rest)) => {
-            let Some((segment, tail)) = path.split_first() else {
-                return false;
-            };
-            let ok = match (first, segment) {
-                (Glob::Any, _) => true,
-                (Glob::AnyIndex, PathSegment::Index(_)) => true,
-                (Glob::Index(a), PathSegment::Index(b)) => a == b,
-                (Glob::Key(pattern), PathSegment::Key(key)) => wildcard(pattern, key, ci),
-                _ => false,
-            };
-            ok && glob_match(rest, tail, ci)
+        if !next.contains(&true) {
+            return false;
         }
+        reach = next;
     }
+    reach[path.len()]
 }
 
 /// Every node matching `query`, in document order. The root itself never

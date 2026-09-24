@@ -219,13 +219,13 @@ impl<'a> Explorer<'a> {
         let mut badges = Text::new("");
         if let Some(anchor) = &node.meta.anchor {
             badges.append(
-                &format!(" &{anchor}"),
+                &format!(" &{}", super::escape_controls(anchor)),
                 Some(style(console, "data.anchor").into()),
             );
         }
         if let Some(alias) = &node.meta.alias {
             badges.append(
-                &format!(" *{alias}"),
+                &format!(" *{}", super::escape_controls(alias)),
                 Some(style(console, "data.alias").into()),
             );
         }

@@ -3,7 +3,7 @@
 //! scalars resolve per the YAML 1.2 core schema; quoted and block scalars are
 //! always strings.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use saphyr_parser::{Event, Parser, ScalarStyle, ScanError, Span};
 
@@ -13,6 +13,32 @@ use super::{DataError, Format, Meta, Node, Position, Value};
 /// How many nodes aliases may copy in total before parsing stops. Guards
 /// against "billion laughs" documents whose aliases expand exponentially.
 const ALIAS_BUDGET: usize = 1_000_000;
+
+/// How many bytes of strings (values and keys) aliases may copy in total:
+/// a few nodes can hold a lot of text, so nodes alone are not a measure.
+const ALIAS_BYTE_BUDGET: usize = 64 << 20;
+
+/// The nodes in `node` and the bytes of its strings and keys. Iterative:
+/// documents may nest deeper than the call stack allows.
+fn cost(node: &Node) -> (usize, usize) {
+    let (mut nodes, mut bytes) = (0, 0);
+    let mut stack = vec![node];
+    while let Some(node) = stack.pop() {
+        nodes += 1;
+        match &node.value {
+            Value::String(s) | Value::DateTime(s) => bytes += s.len(),
+            Value::Seq(items) => stack.extend(items),
+            Value::Map(entries) => {
+                for (key, value) in entries {
+                    bytes += key.len();
+                    stack.push(value);
+                }
+            }
+            _ => {}
+        }
+    }
+    (nodes, bytes)
+}
 
 fn scan_error(error: &ScanError) -> DataError {
     let mark = error.marker();
@@ -132,11 +158,15 @@ struct Builder<'a> {
     previous_end: usize,
     stack: Vec<Frame>,
     documents: Vec<Node>,
-    /// Anchor id → (name, value). Filled when the anchored node completes.
-    anchors: HashMap<usize, (String, Node)>,
+    /// Anchor id → (name, value, cost). Filled when the anchored node
+    /// completes, and only for anchors that some alias refers to.
+    anchors: HashMap<usize, (String, Node, (usize, usize))>,
+    /// Anchor ids that aliases refer to (from a first pass).
+    aliased: HashSet<usize>,
     /// Names of anchors whose nodes are still open.
     open_anchors: HashMap<usize, String>,
-    copied: usize,
+    /// Nodes and bytes copied so far, by aliases and into the anchor table.
+    copied: (usize, usize),
 }
 
 impl Builder<'_> {
@@ -186,11 +216,42 @@ impl Builder<'_> {
         }
     }
 
+    /// Charge a copy of `cost` (nodes, bytes) against the alias budgets.
+    fn charge(&mut self, cost: (usize, usize), span: &Span) -> Result<(), DataError> {
+        self.copied.0 = self.copied.0.saturating_add(cost.0);
+        self.copied.1 = self.copied.1.saturating_add(cost.1);
+        let over = if self.copied.0 > ALIAS_BUDGET {
+            format!("{ALIAS_BUDGET} nodes")
+        } else if self.copied.1 > ALIAS_BYTE_BUDGET {
+            format!("{} MiB", ALIAS_BYTE_BUDGET >> 20)
+        } else {
+            return Ok(());
+        };
+        Err(DataError::new(
+            Format::Yaml,
+            format!("aliases expand to more than {over}"),
+            Some(position(span)),
+        ))
+    }
+
     /// A node is complete: record its anchor and hand it to its parent.
-    fn complete(&mut self, anchor: usize, node: Node, raw_key: Option<&str>) {
+    fn complete(
+        &mut self,
+        anchor: usize,
+        node: Node,
+        raw_key: Option<&str>,
+        span: &Span,
+    ) -> Result<(), DataError> {
         if anchor > 0 {
             let name = self.open_anchors.remove(&anchor).unwrap_or_default();
-            self.anchors.insert(anchor, (name, node.clone()));
+            // Only anchors that an alias uses are copied, and the copy
+            // counts against the budget: nested anchors would otherwise
+            // cost depth × subtree.
+            if self.aliased.contains(&anchor) {
+                let cost = cost(&node);
+                self.charge(cost, span)?;
+                self.anchors.insert(anchor, (name, node.clone(), cost));
+            }
         }
         match self.stack.last_mut() {
             None => self.documents.push(node),
@@ -198,12 +259,20 @@ impl Builder<'_> {
             Some(Frame::Map { entries, key, .. }) => match key.take() {
                 None => *key = Some((key_string(&node, raw_key), node.meta.position)),
                 Some((name, position)) => {
+                    if entries.contains(&name) {
+                        return Err(DataError::new(
+                            Format::Yaml,
+                            format!("duplicate key `{name}`"),
+                            position.or(node.meta.position),
+                        ));
+                    }
                     let mut node = node;
                     node.meta.position = position.or(node.meta.position);
                     entries.insert(name, node);
                 }
             },
         }
+        Ok(())
     }
 
     fn event(&mut self, event: Event<'_>, span: Span) -> Result<(), DataError> {
@@ -218,7 +287,7 @@ impl Builder<'_> {
                 } else {
                     Value::String(text.to_string())
                 };
-                self.complete(anchor, Node::with_meta(value, meta), Some(&text));
+                self.complete(anchor, Node::with_meta(value, meta), Some(&text), &span)?;
             }
             Event::SequenceStart(..) | Event::MappingStart(..)
                 if self.stack.len() >= super::MAX_DEPTH =>
@@ -251,7 +320,12 @@ impl Builder<'_> {
                     meta,
                     anchor,
                     items,
-                }) => self.complete(anchor, Node::with_meta(Value::Seq(items), meta), None),
+                }) => self.complete(
+                    anchor,
+                    Node::with_meta(Value::Seq(items), meta),
+                    None,
+                    &span,
+                )?,
                 Some(Frame::Map {
                     meta,
                     anchor,
@@ -261,11 +335,12 @@ impl Builder<'_> {
                     anchor,
                     Node::with_meta(Value::Map(entries.entries), meta),
                     None,
-                ),
+                    &span,
+                )?,
                 None => {}
             },
             Event::Alias(id) => {
-                let Some((name, target)) = self.anchors.get(&id) else {
+                let Some(cost) = self.anchors.get(&id).map(|entry| entry.2) else {
                     let name = self.open_anchors.get(&id).cloned().unwrap_or_default();
                     return Err(DataError::new(
                         Format::Yaml,
@@ -273,21 +348,13 @@ impl Builder<'_> {
                         Some(position(&span)),
                     ));
                 };
-                let mut count = 0;
-                target.walk(|_, _| count += 1);
-                self.copied += count;
-                if self.copied > ALIAS_BUDGET {
-                    return Err(DataError::new(
-                        Format::Yaml,
-                        format!("aliases expand to more than {ALIAS_BUDGET} nodes"),
-                        Some(position(&span)),
-                    ));
-                }
+                self.charge(cost, &span)?;
+                let (name, target, _) = &self.anchors[&id];
                 let mut node = target.clone();
                 node.meta.anchor = None;
                 node.meta.alias = Some(name.clone());
                 node.meta.position = Some(position(&span));
-                self.complete(0, node, None);
+                self.complete(0, node, None, &span)?;
             }
             Event::StreamStart
             | Event::StreamEnd
@@ -300,6 +367,19 @@ impl Builder<'_> {
     }
 }
 
+/// The anchor ids that aliases in `content` refer to: a cheap first pass, so
+/// that only those anchors are copied. A scan error ends the pass (the
+/// second pass reports it).
+fn aliased(content: &str) -> HashSet<usize> {
+    Parser::new_from_str(content)
+        .map_while(Result::ok)
+        .filter_map(|(event, _)| match event {
+            Event::Alias(id) => Some(id),
+            _ => None,
+        })
+        .collect()
+}
+
 /// Each document of `content`.
 fn documents(content: &str) -> Result<Vec<Node>, DataError> {
     let mut builder = Builder {
@@ -309,8 +389,9 @@ fn documents(content: &str) -> Result<Vec<Node>, DataError> {
         stack: Vec::new(),
         documents: Vec::new(),
         anchors: HashMap::new(),
+        aliased: aliased(content),
         open_anchors: HashMap::new(),
-        copied: 0,
+        copied: (0, 0),
     };
     for event in Parser::new_from_str(content) {
         let (event, span) = event.map_err(|e| scan_error(&e))?;

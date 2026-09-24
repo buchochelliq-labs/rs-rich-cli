@@ -452,9 +452,24 @@ pub(crate) fn scalar_text(value: &Value, quote: bool) -> (String, &'static str) 
     }
 }
 
-/// `s` as a JSON string literal.
+/// `s` as a JSON string literal. serde_json escapes only U+0000–U+001F, so
+/// DEL and the C1 controls (U+0080–U+009F, among them the one-character
+/// CSI U+009B) are escaped here too: no control character reaches the
+/// terminal raw.
 pub(crate) fn quote_str(s: &str) -> String {
-    serde_json::to_string(s).unwrap_or_else(|_| format!("{s:?}"))
+    let quoted = serde_json::to_string(s).unwrap_or_else(|_| format!("{s:?}"));
+    if !quoted.chars().any(char::is_control) {
+        return quoted;
+    }
+    let mut out = String::with_capacity(quoted.len() + 8);
+    for c in quoted.chars() {
+        if c.is_control() {
+            out.push_str(&format!("\\u{:04x}", c as u32));
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 /// `s` with newlines, tabs and other control characters escaped, for
@@ -862,10 +877,13 @@ pub struct DataError {
 }
 
 impl DataError {
+    /// Control characters in `message` are escaped (`\u001b`): parser
+    /// messages often repeat the offending input, which must not reach the
+    /// terminal raw.
     pub fn new(format: Format, message: impl Into<String>, position: Option<Position>) -> Self {
         DataError {
             format,
-            message: message.into(),
+            message: escape_controls(&message.into()),
             position,
         }
     }
@@ -906,23 +924,58 @@ impl DataError {
             .next()
             .filter(|c| *c != '\n' && *c != '\r')
             .map_or(start, |c| start + c.len_utf8());
-        if let Ok(snippet) = SourceSnippet::new(name.to_string(), source.to_string(), start..end, 1)
-        {
+        // The snippet shows source lines as they are, so control characters
+        // become one-column pictures first (keeping the caret aligned).
+        let (source, [start, end]) = picture_controls(source, [start, end]);
+        if let Ok(snippet) = SourceSnippet::new(name.to_string(), source, start..end, 1) {
             diagnostic = diagnostic.snippet(snippet.primary_label(self.message.clone()));
         }
         diagnostic
     }
 }
 
+/// `source` with each control character but newline, tab and a CR ending a
+/// line replaced by one visible character: its Control Picture (`␛` for
+/// ESC, `␡` for DEL), or `�` for a C1 control. `offsets` (byte offsets
+/// into `source`) come back mapped into the result.
+fn picture_controls(source: &str, mut offsets: [usize; 2]) -> (String, [usize; 2]) {
+    let mut out = String::with_capacity(source.len());
+    let original = offsets;
+    let mut chars = source.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        for (offset, at) in offsets.iter_mut().zip(original) {
+            if at == i {
+                *offset = out.len();
+            }
+        }
+        let keep = matches!(c, '\n' | '\t')
+            || (c == '\r' && matches!(chars.peek(), None | Some((_, '\n'))));
+        out.push(match c {
+            _ if keep || !c.is_control() => c,
+            '\u{0}'..='\u{1f}' => char::from_u32(0x2400 + c as u32).unwrap_or('\u{fffd}'),
+            '\u{7f}' => '\u{2421}',
+            _ => '\u{fffd}',
+        });
+    }
+    for (offset, at) in offsets.iter_mut().zip(original) {
+        if at >= source.len() {
+            *offset = out.len();
+        }
+    }
+    (out, offsets)
+}
+
 impl fmt::Display for DataError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // `message` is public, so escape again for errors built by hand.
+        let message = escape_controls(&self.message);
         match self.position {
             Some(p) => write!(
                 f,
-                "invalid {} at line {}, column {}: {}",
-                self.format, p.line, p.column, self.message
+                "invalid {} at line {}, column {}: {message}",
+                self.format, p.line, p.column
             ),
-            None => write!(f, "invalid {}: {}", self.format, self.message),
+            None => write!(f, "invalid {}: {message}", self.format),
         }
     }
 }
@@ -1006,7 +1059,9 @@ pub fn parse(format: Format, content: &str) -> Result<Node, DataError> {
     }
 }
 
-/// Parse JSON (object key order is kept; the last duplicate key wins).
+/// Parse JSON (object key order is kept; the last duplicate key wins). The
+/// integer `-0` reads as `Int(0)`, as Python's `json` reads it; `-0.0` stays
+/// a float.
 pub fn parse_json(content: &str) -> Result<Node, DataError> {
     json::parse(content)
 }
@@ -1019,7 +1074,8 @@ pub fn parse_json(content: &str) -> Result<Node, DataError> {
 /// comment stripping), indented lines continue the previous value, and a
 /// repeated key keeps its first slot but takes the last value and position.
 /// `;` and `#` comment lines directly above an entry (no blank line between)
-/// become its `meta.comment`.
+/// become its `meta.comment`. A section named like a key before the first
+/// section is an error: both would live in the root map.
 pub fn parse_ini(content: &str) -> Result<Node, DataError> {
     ini::parse(content)
 }
@@ -1041,8 +1097,10 @@ pub fn parse_dotenv(content: &str) -> Result<Node, DataError> {
 ///
 /// Anchors and aliases are recorded in [`Meta`]; an alias node holds a copy
 /// of its anchor's value, and expansion stops with an error past one million
-/// copied nodes (the "billion laughs" guard). Merge keys (`<<`) are kept as
-/// ordinary keys. Several documents parse to a sequence of documents.
+/// copied nodes or 64 MiB of copied strings (the "billion laughs" guard;
+/// only anchors that an alias uses are copied, and those copies count too).
+/// Merge keys (`<<`) are kept as ordinary keys; a key repeated in one mapping
+/// is an error. Several documents parse to a sequence of documents.
 /// Comments are not kept. Nesting deeper than 512 levels is an error.
 #[cfg(feature = "yaml")]
 pub fn parse_yaml(content: &str) -> Result<Node, DataError> {
@@ -1058,7 +1116,8 @@ pub fn parse_toml(content: &str) -> Result<Node, DataError> {
 /// Parse XML into `{root: …}`: attributes as `@name` keys, repeated child
 /// elements as sequences, text as the element's value or, beside
 /// attributes or children, under `#text`. Namespace prefixes are kept as
-/// written; comments and processing instructions are dropped. Parsing
+/// written; comments and processing instructions are dropped, and text
+/// outside the root element is an error. Parsing
 /// streams, so size is not limited here (the views have limits), but nesting
 /// deeper than 512 elements is an error.
 #[cfg(feature = "xml")]
