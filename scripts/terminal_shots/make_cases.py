@@ -71,7 +71,7 @@ def cases_009(c, work):
            "--height 14 --image-fit contain")
     return [
         c("01-version-doctor", "Installed from the packaged crates: version and read-only diagnostics",
-          ["rich --version", "rich doctor --no-config"], rows=11),
+          ["rich --version", "rich doctor --no-config"], rows=25),
         c("02-themes", "Named theme from config, then an explicit --theme-style override",
           [f"rich --config rich.toml --theme night --print {notice}",
            f"rich --config rich.toml --theme night --theme-style 'notice=bold green' --print {notice}",
@@ -101,7 +101,7 @@ def cases_010(c, work):
 
     return [
         c("01-version-doctor", "Installed from the packaged crates: version and read-only diagnostics",
-          ["rich --version", "rich doctor --no-config"], rows=11),
+          ["rich --version", "rich doctor --no-config"], rows=25),
         c("02-image-quadrants", "Image: quadrant blocks, 2×2 pixels per cell",
           [image("--image-mode quadrants")], rows=19),
         c("03-image-ansi16-bayer", "Image: quadrants in the 16 theme colours with Bayer 4×4",
@@ -144,7 +144,7 @@ def fixtures_011(work: Path) -> None:
     )
     (work / "old.toml").write_text("retries = 2\ntimeout = 30\nmode = \"fast\"\n")
     (work / "new.toml").write_text("retries = 3\ntimeout = 30\nmode = \"safe\"\nlog = true\n")
-    (work / "text.txt").write_text("café 👩‍👩‍👧 ok\n")
+    (work / "text.txt").write_text("cafe\u0301 🦀 ok\n")
     (work / "codes.txt").write_text(
         "\x1b[1;31mError\x1b[0m \x1b]8;;https://example.com\x1b\\docs\x1b]8;;\x1b\\\n"
     )
@@ -172,7 +172,7 @@ def cases_011(c, work):
 
     return [
         c("01-version-doctor", "Installed from the packaged crates: version and read-only diagnostics",
-          ["rich --version", "rich doctor --no-config"], rows=11),
+          ["rich --version", "rich doctor --no-config"], rows=25),
         c("02-inspect", "rich inspect: structured data as a tree",
           ["rich --no-config inspect deploy.yaml"], cols=80, rows=15),
         c("03-diff", "rich diff: a text diff with line numbers and a summary",
@@ -182,7 +182,7 @@ def cases_011(c, work):
         c("05-hex-unicode", "rich hex and rich unicode: bytes and graphemes",
           ["rich --no-config hex text.txt", "rich --no-config unicode text.txt"], cols=90, rows=24),
         c("06-ansi-explain", "rich ansi explain: escape sequences in words",
-          ["rich --no-config ansi explain codes.txt"], cols=90, rows=17),
+          ["rich --no-config ansi explain codes.txt"], cols=90, rows=21),
         c("07-capture-redact", "rich capture --redact (experimental): check captures before sharing",
           [f"rich --no-config capture --redact -- sh -c '{secret}'"], cols=90, rows=7),
         c("08-image-atkinson-oklab", "Image: ANSI16 with Atkinson dithering and OKLab colour matching",
@@ -190,7 +190,7 @@ def cases_011(c, work):
                  "--image-dither atkinson --image-color-distance oklab")], rows=20),
         c("09-alpha-backgrounds", "Transparent pixels: checkerboard preview, then the terminal's own background",
           [f"{alpha} --image-background checkerboard",
-           f"{alpha} --image-background default"], cols=72, rows=28),
+           f"{alpha} --image-background default"], cols=72, rows=32),
         c("10-theme-file", "An upstream [styles] theme file with --theme-file",
           ["rich --no-config --theme-file demo.theme --print '[release]0.0.11[/] ships 12 workstreams'"],
           cols=80, rows=4),
