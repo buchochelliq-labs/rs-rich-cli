@@ -29,6 +29,7 @@ pub(crate) struct ViewerOptions {
     limit: Option<usize>,
     show_secrets: bool,
     cast: Option<String>,
+    redact_patterns: Vec<String>,
 }
 
 fn number<'a, T: std::str::FromStr>(
@@ -74,6 +75,11 @@ impl ViewerOptions {
             "--limit" => self.limit = Some(number(arg, rest)?),
             "--show-secrets" => self.show_secrets = true,
             "--cast" => self.cast = Some(rest.next().ok_or("--cast requires a file")?.clone()),
+            "--redact-pattern" => self.redact_patterns.push(
+                rest.next()
+                    .ok_or("--redact-pattern requires a regular expression")?
+                    .clone(),
+            ),
             _ => return Ok(false),
         }
         Ok(true)
@@ -92,6 +98,11 @@ impl ViewerOptions {
             ("--limit", self.limit.is_some(), &["unicode"]),
             ("--show-secrets", self.show_secrets, &["env"]),
             ("--cast", self.cast.is_some(), &["capture"]),
+            (
+                "--redact-pattern",
+                !self.redact_patterns.is_empty(),
+                &["capture"],
+            ),
         ]
         .into_iter()
         .filter(|(_, given, _)| *given)
@@ -226,6 +237,23 @@ impl Captured {
             (Some(code), _) => u8::try_from(code).ok().filter(|&c| c != 0).unwrap_or(1),
             (None, Some(signal)) => u8::try_from(128 + signal).unwrap_or(1),
             (None, None) => 1,
+        }
+    }
+
+    /// Mask secrets in the output and the command line, before anything is
+    /// shown, exported or recorded. Chunks keep their timing; a secret split
+    /// across chunks is masked where it starts.
+    pub fn redact(&mut self, redactor: &rich_ext::redact::Redactor) {
+        let chunks: Vec<String> = self
+            .chunks
+            .iter()
+            .map(|(_, bytes)| String::from_utf8_lossy(bytes).into_owned())
+            .collect();
+        for ((_, bytes), text) in self.chunks.iter_mut().zip(redactor.redact_chunks(&chunks)) {
+            *bytes = text.into_bytes();
+        }
+        for word in &mut self.command {
+            *word = redactor.redact_str(word);
         }
     }
 
@@ -471,6 +499,31 @@ pub(crate) fn env(options: &ViewerOptions, patterns: &[String]) -> Box<dyn Rende
 
 pub(crate) fn cast_path(options: &ViewerOptions) -> Option<&str> {
     options.cast.as_deref()
+}
+
+/// The redactor `--redact` (parsed with the `--inspect` options, which share
+/// it) and `--redact-pattern` ask for, if any: the built-in detectors, then
+/// each pattern. Masks keep their width, so the captured screen keeps its
+/// layout.
+pub(crate) fn capture_redactor(
+    options: &ViewerOptions,
+    redact: bool,
+) -> Result<Option<rich_ext::redact::Redactor>, String> {
+    use rich_ext::redact::Redactor;
+    if !redact && options.redact_patterns.is_empty() {
+        return Ok(None);
+    }
+    let mut redactor = if redact {
+        Redactor::secrets()
+    } else {
+        Redactor::new()
+    };
+    for pattern in &options.redact_patterns {
+        redactor = redactor
+            .pattern(pattern)
+            .map_err(|e| format!("--redact-pattern: {e}"))?;
+    }
+    Ok(Some(redactor.preserve_width(true)))
 }
 
 #[cfg(test)]

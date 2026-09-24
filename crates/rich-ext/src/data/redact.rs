@@ -41,23 +41,10 @@ pub struct Redaction {
     mask: String,
 }
 
-/// The key fragments [`Redaction::secrets`] masks.
-pub const SECRET_KEYS: &[&str] = &[
-    "password",
-    "passwd",
-    "secret",
-    "token",
-    "api_key",
-    "apikey",
-    "access_key",
-    "private_key",
-    "credential",
-    // Whole-key globs: a bare `auth` substring would also mask `author`.
-    "*auth",
-    "auth_*",
-    "auth-*",
-    "authorization",
-];
+/// The key fragments [`Redaction::secrets`] masks. Shared with the text
+/// detectors in [`crate::redact`], where it is defined so that builds
+/// without the `data` feature have it too.
+pub use crate::redact::SECRET_KEYS;
 
 impl Default for Redaction {
     fn default() -> Self {

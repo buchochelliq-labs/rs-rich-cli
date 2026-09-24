@@ -213,6 +213,14 @@ fn viewer_options() -> Vec<ArgSpec> {
             VIEWERS,
             "With `rich capture`, also write an asciicast v2 recording (`asciinema play FILE`)",
         ),
+        option(
+            "redact-pattern",
+            "REGEX",
+            VIEWERS,
+            "With `rich capture`, also mask matches of REGEX (only its `secret` group when it \
+             has one); repeatable",
+        )
+        .multiple(true),
     ]
 }
 
@@ -527,7 +535,10 @@ fn inspect_options() -> Vec<ArgSpec> {
         flag(
             "redact",
             INSPECT,
-            "Mask secret-looking keys such as password, token and api_key",
+            "Mask secret-looking keys such as password, token and api_key. With `rich \
+             capture`, mask secrets in the output before it is shown, exported or recorded: \
+             secret-named `key=value` values, bearer tokens, GitHub/GitLab/Slack/Stripe/npm/`sk-` \
+             tokens, AWS key ids, JWTs and URL passwords",
         ),
         option(
             "compare",
@@ -1069,7 +1080,7 @@ pub(crate) fn spec() -> CommandSpec {
             "capture",
             &[][..],
             "Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE \
-             records it), then exit with the command's status",
+             records it, --redact masks secrets), then exit with the command's status",
         ),
     ] {
         spec = spec.subcommand(mode_command(name, aliases, about));

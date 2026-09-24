@@ -578,6 +578,7 @@ const VALUE_OPTIONS: &[&str] = &[
     "--group",
     "--limit",
     "--cast",
+    "--redact-pattern",
     "--config",
     "--profile",
 ];
@@ -1583,7 +1584,13 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             resources.push("-".into());
         }
     }
-    if let Some(flag) = data.inspect_only_option().filter(|_| mode != Mode::Inspect) {
+    if let Some(flag) = data
+        .inspect_only_option(mode == Mode::Capture)
+        .filter(|_| mode != Mode::Inspect)
+    {
+        if flag == "--redact" {
+            return Err("--redact only has an effect with --inspect or `rich capture`".into());
+        }
         return Err(format!("{flag} only has an effect with --inspect"));
     }
     if let Some(flag) = tool_options.diff_option().filter(|_| mode != Mode::Diff) {
@@ -2997,10 +3004,18 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
 
     // The viewer commands that need no text content.
     if mode == Mode::Capture {
-        let captured = match viewers::capture(&cli.resources, console.width()) {
+        let redactor = match viewers::capture_redactor(&cli.viewers, cli.data.redact()) {
+            Ok(redactor) => redactor,
+            Err(err) => return fail(&cli, ExitClass::Usage, err),
+        };
+        let mut captured = match viewers::capture(&cli.resources, console.width()) {
             Ok(captured) => captured,
             Err(err) => return fail(&cli, ExitClass::Input, err),
         };
+        // Before the panel, the exports and the cast see any of it.
+        if let Some(redactor) = &redactor {
+            captured.redact(redactor);
+        }
         if let Some(path) = viewers::cast_path(&cli.viewers) {
             let cast = viewers::asciicast(&captured, console.width(), console.height());
             if let Err(err) = std::fs::write(path, cast) {
