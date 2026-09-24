@@ -1,7 +1,10 @@
 # CLI workflow recipes
 
-These recipes target the 0.0.9 source preparation. Build the current CLI with
+These recipes target the 0.0.11 source (prepared, not yet published; 0.0.10
+is the latest published CLI). Build the current CLI with
 `cargo build -p rs-rich-cli` and put the resulting `rich` binary on your PATH.
+The sections from [Gate CI on a text diff](#gate-ci-on-a-text-diff) onwards
+need 0.0.11.
 Commands below use a POSIX shell; run them from the repository root unless
 using your own input paths.
 
@@ -153,7 +156,12 @@ built-in CLI default. An empty object does not mean the renderer has no defaults
 Supported settings include the earlier mode, width, export, batch and decoration
 options, plus `height`, `watch`, `watch_cache`, `watch_interval`, `watch_debounce`,
 `watch_poll`, `watch_exit_on_error`, `sanitize`,
-`auto_pager`, `image_fit`, `image_anchor` and `image_background`. Use a still-image
+`auto_pager`, `format`, `theme_file`, `log_presentation`, `image_fit`,
+`image_anchor`, `image_background`, `image_max_width`, `image_max_height`,
+`image_color`, `image_dither`, `image_color_distance`, `image_brightness`,
+`image_contrast`, `image_gamma`, `image_rotate`, `image_flip_horizontal`,
+`image_flip_vertical` and `image_grayscale`. `rich config reference` lists every
+key with its type, default and flag. Use a still-image
 command explicitly when configuring image geometry:
 
 ```toml
@@ -192,7 +200,7 @@ whole image with padding. In the library, `ImageArt::anchor(ImageAnchor::TopLeft
 is ignored for contain or unfitted images.
 
 See [Using the CLI](cli.md) for individual options and the
-[0.0.9 preparation notes](releases/0.0.9.md) for release status.
+[0.0.11 release notes](releases/0.0.11.md) for release status.
 
 
 ## Style a team notice and its export
@@ -274,8 +282,90 @@ rich image photo.png --no-config --image-mode ascii --width 60 \
   --image-color ansi256 --image-dither floyd-steinberg --export-html dither.html
 ```
 
-Dithering requires ANSI256 and only supports ASCII/half-block still images.
-GIF, diff, Braille and Sixel are outside this slice. Palette reduction uses fixed
-entries 16–255 and encoded-RGB distance; it is not a perceptual colour model.
+Dithering needs a quantized `--image-color`: `ansi256`, `ansi16` or
+`grayscale`. It works with ASCII, half-block, quadrant and Sixel still images and
+with GIF frames; Braille is monochrome and rejects a reduced palette, and image
+diffs ignore these controls. The dithers are `floyd-steinberg`, `bayer4x4` and
+`atkinson`. The nearest colour is measured in encoded RGB by default;
+`--image-color-distance oklab` measures perceptually instead, which keeps hues
+truer on the ANSI16 palette:
+
+```bash
+rich image photo.png --no-config --image-mode quadrants --width 60 \
+  --image-color ansi16 --image-dither atkinson --image-color-distance oklab
+```
+
 `--image-dither none` restores the default no-diffusion path; truecolor/no-dither
 preserves the existing rendering policy. These controls require the `art` feature.
+
+## Gate CI on a text diff
+
+```bash
+rich diff expected.txt actual.txt --threshold 5 --no-pager
+```
+
+The diff is printed either way. When more than 5% of the lines changed, `rich`
+prints `FAIL` and exits `5`, so the CI step fails. Text diffs show terminal
+controls in the files as inert symbols by default.
+
+## Gate CI on a benchmark regression
+
+```bash
+rich bench compare baseline.json candidate.json --threshold 10
+rich bench compare target/criterion-main target/criterion
+```
+
+Any benchmark slower by more than 10% (and outside the noise) exits `5`. The
+inputs are runs saved by `rich_ext::qa::bench` or criterion output directories.
+
+## Capture a command's output in CI
+
+```bash
+rich capture --export-svg test-run.svg --cast test-run.cast -- cargo test
+```
+
+`capture` runs the command with colour forced, shows its output in a panel, and
+exits with the command's own status, so a failing `cargo test` still fails the
+step while the SVG and asciicast are written. Add `--redact` to mask secrets
+before anything is shown or written; it is experimental and best effort, so
+read the output before publishing it:
+
+```bash
+rich capture --redact --export-html deploy.html -- ./deploy.sh
+```
+
+## Check PATH and secrets in the environment
+
+```bash
+rich env PATH           # one row per entry: ok, missing, duplicate or empty
+rich env AWS 'DB_*'     # filter names by substring or glob; secrets are masked
+```
+
+## Read any file, and compare two configs
+
+```bash
+rich view src/main.rs --search todo
+rich inspect deploy.yaml --compare deploy.prod.yaml
+rich inspect settings.json --select '$.servers[*].name' --redact
+```
+
+`view` picks the right renderer (or a hex dump for binary) and pages tall
+output. `inspect --compare` lists added, removed and changed values.
+
+## Use an upstream rich theme file
+
+```bash
+rich --theme-file night.ini --print '[notice]Ready[/] in 42 ms'
+```
+
+The file's `[styles]` section is read as upstream rich reads it. Put
+`theme_file = "night.ini"` in your own config to make it the default; a
+working-directory `rich.toml` cannot set it.
+
+## Install shell completions
+
+```bash
+rich completions bash > ~/.local/share/bash-completion/completions/rich
+rich completions zsh  > "${fpath[1]}/_rich"
+rich completions fish > ~/.config/fish/completions/rich.fish
+```

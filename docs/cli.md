@@ -305,7 +305,7 @@ files show as a key table with their comments. These options change the view:
 | `--table` | Records as a table, or a path/value table |
 | `--max-depth N`, `--max-length N` | Fold deeper containers; show at most N items each |
 | `--show-paths` | Print each value's path next to it |
-| `--redact` | Mask values under keys such as `password`, `token` or `api_key` |
+| `--redact` | Mask values under keys such as `password`, `token` or `api_key` (also spelled with dashes, `api-key`), everything nested under such a key, and XML element text |
 | `--compare PATH` | List what was added, removed or changed in PATH |
 
 A document that does not parse is reported as `file:line:column` and exits 4.
