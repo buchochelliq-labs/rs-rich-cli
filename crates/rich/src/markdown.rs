@@ -624,9 +624,9 @@ enum Rejected {
 /// markup (emphasis, code…) still parsed. pulldown-cmark makes a link of any
 /// destination, so the refused ones are turned back into their source here.
 ///
-/// A refused *reference definition* (`[1]: javascript:x`) is not recovered:
-/// pulldown-cmark consumes the definition line, which upstream prints as a
-/// paragraph. The link using it does print as literal text.
+/// A refused *reference definition* (`[1]: javascript:x`) is not recovered
+/// (DIVERGENCES #24): pulldown-cmark consumes the definition line, which
+/// upstream prints as a paragraph. The link using it does print as literal text.
 fn reject_invalid_links<'a>(
     source: &'a str,
     events: impl Iterator<Item = (Event<'a>, std::ops::Range<usize>)>,

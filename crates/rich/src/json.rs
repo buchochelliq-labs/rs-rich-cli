@@ -40,8 +40,9 @@
 
 use std::collections::HashMap;
 
-/// The deepest nesting [`Json::new`] accepts. Deeper documents fail with the
-/// error CPython's `json.loads` raises (`RecursionError`); see the module docs.
+/// The deepest nesting [`Json::new`] accepts (DIVERGENCES #25). Deeper
+/// documents fail with the error CPython's `json.loads` raises
+/// (`RecursionError`); see the module docs.
 pub const MAX_DEPTH: usize = 10_000;
 
 use crate::console::{Console, ConsoleOptions};
