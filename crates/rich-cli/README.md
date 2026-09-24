@@ -39,8 +39,7 @@ rich completions bash                                   # shell completions; `ri
 rich config explain width                               # where a setting comes from
 ```
 
-This source is **`0.0.11`**, prepared but not yet published (the latest
-published version is 0.0.10). It follows independent SemVer; its version does
+This is **`0.0.11`**. It follows independent SemVer; its version does
 not mirror Python `rich-cli`. The tracked upstream release is **`rich-cli`
 1.8.1**, recorded in [`UPSTREAM.toml`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/UPSTREAM.toml).
 

@@ -1,7 +1,7 @@
 # Roadmap
 
 What each release delivered, and where this goes after the 0.0.11 cohort
-(prepared, not yet published). Ordered by what unblocks people, not by what is
+(published 2026-09-24). Ordered by what unblocks people, not by what is
 most interesting to build.
 
 Two rules constrain everything here:
@@ -191,11 +191,10 @@ Image behavior remains covered by the existing focused `rich-cli` integration
 tests. Snapshot cases for the merged batch/profile/watch/image workflows remain
 follow-up work; capability/RenderTarget decisions (#147/#148) remain separate.
 
-## 0.0.11 — developer ergonomics and core usability (prepared, not published)
+## 0.0.11 — developer ergonomics and core usability (published 2026-09-24)
 
-All 12 workstreams of the [0.0.11 plan](plans/0.0.11.md) are merged to `main`
-and the release test's fixes have landed. Nothing is tagged or published yet;
-the cohort is core 0.0.7, the new `rs-rich-macros` 0.0.1, ext 0.0.9, art 0.0.9
+All 12 workstreams of the [0.0.11 plan](plans/0.0.11.md) and the release test's
+fixes shipped. The published cohort is core 0.0.7, the new `rs-rich-macros` 0.0.1, ext 0.0.9, art 0.0.9
 and CLI 0.0.11. See the [0.0.11 release notes](releases/0.0.11.md).
 
 The plan covered

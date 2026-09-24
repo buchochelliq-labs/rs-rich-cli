@@ -5,9 +5,8 @@ purpose. Three different things, kept apart — a deliberate trade-off listed as
 bug makes a considered decision look like neglect.
 
 **Applies to** the 0.0.11 cohort (`rs-rich-cli` 0.0.11, `rs-rich` 0.0.7,
-`rs-rich-ext` 0.0.9, `rs-rich-art` 0.0.9, `rs-rich-macros` 0.0.1), prepared but
-not yet published, reviewed 2026-09-24 against Python `rich` 15.0.0. The latest
-published cohort is 0.0.10. Each entry links to its issue so you can check the status without
+`rs-rich-ext` 0.0.9, `rs-rich-art` 0.0.9, `rs-rich-macros` 0.0.1), published
+2026-09-24 and reviewed against Python `rich` 15.0.0. Each entry links to its issue so you can check the status without
 waiting for this page to be updated.
 
 ---
@@ -187,11 +186,11 @@ fixes to `view`, stack traces and hyperlinks) are in the changelog instead. Full
 
 | Symptom | Fixed in |
 |---------|----------|
-| `NO_COLOR` also dropped bold and underline in a terminal | core `0.0.7` (prepared) |
-| A project `rich.toml` with `no_color = false` undid `NO_COLOR` | CLI `0.0.11` (prepared) |
-| Markup in plain-string table cells and tree labels printed literally | core `0.0.7` (prepared) |
-| `Columns` and `Tree` overflowed narrow widths | core `0.0.7` (prepared) |
-| `--export-svg` titled literal print text and rules with a fragment of the markup | CLI `0.0.11` (prepared) |
+| `NO_COLOR` also dropped bold and underline in a terminal | core `0.0.7` |
+| A project `rich.toml` with `no_color = false` undid `NO_COLOR` | CLI `0.0.11` |
+| Markup in plain-string table cells and tree labels printed literally | core `0.0.7` |
+| `Columns` and `Tree` overflowed narrow widths | core `0.0.7` |
+| `--export-svg` titled literal print text and rules with a fragment of the markup | CLI `0.0.11` |
 | A multi-file `--watch --watch-exit-on-error` promised a retry it never made | CLI `0.0.10` |
 | Live `print` dropped ordinary writes at widths 0 and 1; diagnostic snippets kept CRLF carriage returns | ext `0.0.7` |
 | `--watch` missed same-size edits and atomic saves | CLI `0.0.7` |

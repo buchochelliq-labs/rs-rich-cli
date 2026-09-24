@@ -130,10 +130,9 @@ The 0.0.9 cohort (core 0.0.5, ext 0.0.7, art 0.0.7, CLI 0.0.9) is also
 strikethrough parity, multi-file watch, and quadrant, ANSI16 and grayscale image
 modes with tone adjustments. The [0.0.11 cohort](docs/releases/0.0.11.md)
 (core 0.0.7, macros 0.0.1 (new), ext 0.0.9, art 0.0.9, CLI 0.0.11) is
-**prepared, not published**: diagnostics, structured data, checked-markup macros,
+published: diagnostics, structured data, checked-markup macros,
 `clap` and `tracing` integration, workflow renderables, and the `inspect`, `diff`,
-`view`, `hex`, `unicode`, `env` and `capture` commands. Source versions do not
-imply publication. See [copyable workflows](docs/recipes.md).
+`view`, `hex`, `unicode`, `env` and `capture` commands. See [copyable workflows](docs/recipes.md).
 
 ## Install
 
@@ -159,7 +158,7 @@ The CLI covers upstream's `--markdown` · `--syntax` · `--json` · `--csv` ·
 `rich markdown`, `rich csv`, `rich jsonl` and `rich log` coexist with the legacy
 flat flags.
 
-Source 0.0.11 (prepared, not yet published) adds tool commands: `inspect`
+0.0.11 adds tool commands: `inspect`
 (JSON/YAML/TOML/XML/INI/CSV with `--select`, `--compare` and experimental
 `--redact`), `diff` for text and patches, `view`, `hex` (alias `hexdump`),
 `unicode`, `env`, `capture` (with experimental `--redact`), `ansi explain`,

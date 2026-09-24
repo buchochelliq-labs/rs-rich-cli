@@ -1,10 +1,8 @@
 # CLI workflow recipes
 
-These recipes target the 0.0.11 source (prepared, not yet published; 0.0.10
-is the latest published CLI). Build the current CLI with
-`cargo build -p rs-rich-cli` and put the resulting `rich` binary on your PATH.
-The sections from [Gate CI on a text diff](#gate-ci-on-a-text-diff) onwards
-need 0.0.11.
+These recipes target `rich` 0.0.11 (`cargo install rs-rich-cli`); the sections
+from [Gate CI on a text diff](#gate-ci-on-a-text-diff) onwards need at least
+that version.
 Commands below use a POSIX shell; run them from the repository root unless
 using your own input paths.
 

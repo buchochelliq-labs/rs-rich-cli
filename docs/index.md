@@ -47,7 +47,7 @@ The [0.0.9 cohort](releases/0.0.9-expanded.md) is published. The
 Progress time, rate and spinner columns, upstream's theme stack, `~~~` strikethrough
 parity, multi-file watch, and quadrant, ANSI16 and grayscale image modes.
 The [0.0.11 cohort](releases/0.0.11.md) (core 0.0.7, macros 0.0.1 (new),
-ext 0.0.9, art 0.0.9, CLI 0.0.11) is **prepared, not published**. It adds
+ext 0.0.9, art 0.0.9, CLI 0.0.11) is published. It adds
 diagnostics, structured data, checked-markup macros, `clap` and `tracing`
 integration, workflow renderables, and the `inspect`, `diff`, `view`, `hex`,
 `unicode`, `env` and `capture` commands.
@@ -131,7 +131,7 @@ The badges below show the versions currently available on crates.io.
 | [`rs-rich`](https://crates.io/crates/rs-rich) | [![rs-rich](https://img.shields.io/crates/v/rs-rich.svg)](https://crates.io/crates/rs-rich) | [docs.rs](https://docs.rs/rs-rich) | the library — `use rich::…` |
 | [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | [![rs-rich-cli](https://img.shields.io/crates/v/rs-rich-cli.svg)](https://crates.io/crates/rs-rich-cli) | — | the `rich` command |
 | [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | [![rs-rich-ext](https://img.shields.io/crates/v/rs-rich-ext.svg)](https://crates.io/crates/rs-rich-ext) | [docs.rs](https://docs.rs/rs-rich-ext) | extensions + plugin registry |
-| `rs-rich-macros` | new in 0.0.11, not yet published | — | checked markup and derive macros, used through `rs-rich-ext` |
+| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | [![rs-rich-macros](https://img.shields.io/crates/v/rs-rich-macros.svg)](https://crates.io/crates/rs-rich-macros) | [docs.rs](https://docs.rs/rs-rich-macros) | checked markup and derive macros, used through `rs-rich-ext` |
 | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | [![rs-rich-art](https://img.shields.io/crates/v/rs-rich-art.svg)](https://crates.io/crates/rs-rich-art) | [docs.rs](https://docs.rs/rs-rich-art) | FIGlet text, image→ASCII, GIFs |
 
 <a id="versions-prepared-in-this-checkout"></a>

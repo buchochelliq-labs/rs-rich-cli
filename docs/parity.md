@@ -5,7 +5,7 @@ The point of this project is that output is **byte-identical** to Python
 
 ## How much of the port is done
 
-*Last verified 2026-09-24 against Python `rich` 15.0.0, at the 0.0.11 release test (core 0.0.7, prepared).*
+*Last verified 2026-09-24 against Python `rich` 15.0.0, at the 0.0.11 release test (core 0.0.7).*
 
 <figure class="port-status">
 --8<-- "docs/assets/port-status.svg"
