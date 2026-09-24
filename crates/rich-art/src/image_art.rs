@@ -239,6 +239,11 @@ pub enum ImageArtError {
     /// Setting `RICH_SIXEL=1` or `RICH_GRAPHICS=sixel` overrides the guess
     /// (see [`sixel::is_probably_supported`](crate::sixel::is_probably_supported)).
     SixelNotSupported,
+    /// The Sixel raster for this width and height would exceed
+    /// [`sixel::MAX_PIXELS`](crate::sixel::MAX_PIXELS) (16 megapixels, at
+    /// 8×16 pixels per cell) or its size overflows. A narrower width or a
+    /// height cap brings it back in range.
+    SixelTooLarge,
     /// Fitting requires positive width and height, a nonempty image and
     /// destination, and raster canvases no larger than 16 megapixels.
     InvalidFitDimensions,
@@ -269,6 +274,9 @@ impl std::fmt::Display for ImageArtError {
             }
             Self::NonTerminalDestination => {
                 write!(f, "Sixel graphics require a terminal destination; use ASCII, Braille, or blocks when redirecting output")
+            }
+            Self::SixelTooLarge => {
+                write!(f, "the Sixel image would exceed 16 megapixels at this size; set a smaller width or a height")
             }
             Self::SixelNotSupported => {
                 write!(f, "this terminal is not known to support Sixel graphics; set RICH_SIXEL=1 or RICH_GRAPHICS=sixel to force it, or use ASCII, Braille, blocks or quadrants")
@@ -793,7 +801,7 @@ impl ImageArt {
         image: Arc<DynamicImage>,
         width: usize,
         console: &Console,
-        options: &ConsoleOptions,
+        _options: &ConsoleOptions,
     ) -> Result<Vec<Segment>, ImageArtError> {
         use crate::sixel::SixelArt;
 
@@ -807,10 +815,15 @@ impl ImageArt {
         if let Some(height) = self.rows() {
             art = art.height(height);
         }
-        if art.encode(width).is_none() {
-            return Err(ImageArtError::SixelEncodeFailed);
+        if art.checked_pixel_size(width).is_none() {
+            return Err(ImageArtError::SixelTooLarge);
         }
-        Ok(art.rich_render(console, options))
+        // Encode once and emit it exactly as `SixelArt`'s renderable does
+        // (with the width pinned, the console options cannot change it).
+        match art.encode(width) {
+            Some(sixel) => Ok(vec![Segment::control(sixel), Segment::line()]),
+            None => Err(ImageArtError::SixelEncodeFailed),
+        }
     }
 
     #[cfg(not(feature = "sixel"))]
@@ -1346,6 +1359,27 @@ mod tests {
             art.render(&console, &options),
             Err(ImageArtError::NonTerminalDestination)
         );
+    }
+
+    #[cfg(feature = "sixel")]
+    #[test]
+    fn explicit_sixel_refuses_rasters_over_the_cap() {
+        // 1x400 at 80 columns: 640 x 256 000 Sixel pixels.
+        let console = Console::builder().force_terminal(true).width(80).build();
+        let options = console.options();
+        let art = ImageArt::new(solid(1, 400, [10, 20, 30]))
+            .mode(ImageMode::Sixel)
+            .width(80);
+        assert_eq!(
+            art.render(&console, &options),
+            Err(ImageArtError::SixelTooLarge)
+        );
+        // A height cap brings it back in range.
+        let capped = ImageArt::new(solid(1, 400, [10, 20, 30]))
+            .mode(ImageMode::Sixel)
+            .width(80)
+            .height(4);
+        assert!(capped.render(&console, &options).is_ok());
     }
 
     #[test]

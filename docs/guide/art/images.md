@@ -202,6 +202,7 @@ to know why:
 | `NonTerminalDestination` | Sixel requested for output that is not a terminal. |
 | `SixelNotSupported` | Sixel requested on a terminal not known to support it; `RICH_SIXEL=1` or `RICH_GRAPHICS=sixel` forces it. |
 | `SixelEncodeFailed` | The encoder rejected this image or size. |
+| `SixelTooLarge` | The Sixel raster would exceed 16 megapixels (8×16 pixels per cell); narrow it or cap its height. |
 | `InvalidFitDimensions` | Fitting without a positive width and height, or above 16 megapixels. |
 | `UnsupportedColorOptions` | Palette reduction or dithering with a backend that cannot do it, or dithering with truecolor. |
 | `InvalidAdjustment` | Brightness, contrast or gamma out of range. |

@@ -37,6 +37,15 @@ use rich::segment::Segment;
 /// line the image spans, not whether it renders.
 pub const DEFAULT_CELL_PX: (u32, u32) = (8, 16);
 
+/// Largest raster, in pixels, that [`SixelArt::encode`] will produce: 16 Mpx,
+/// the same cap [`ImageArt`](crate::ImageArt)'s fitting applies. A tall, thin
+/// image asked to fill a wide terminal would otherwise scale to hundreds of
+/// megapixels (gigabytes of RGBA) before a byte is written.
+pub const MAX_PIXELS: u64 = 16 * 1024 * 1024;
+
+/// Largest repeat count (`!n`) a Sixel decoder accepts in one introducer.
+const SIXEL_REPEAT_MAX: usize = 65_535;
+
 /// An image rendered as Sixel graphics.
 pub struct SixelArt {
     image: DynamicImage,
@@ -123,32 +132,40 @@ impl SixelArt {
         self
     }
 
-    /// Target size in **pixels** for the given available width in columns.
-    fn pixel_size(&self, available: usize) -> (u32, u32) {
+    /// Target size in **pixels** for the given available width in columns, or
+    /// `None` when it overflows or exceeds [`MAX_PIXELS`].
+    pub(crate) fn checked_pixel_size(&self, available: usize) -> Option<(u32, u32)> {
         let (iw, ih) = self.image.dimensions();
         if iw == 0 || ih == 0 {
-            return (1, 1);
+            return Some((1, 1));
         }
-        let columns = self.columns.unwrap_or(available).max(1) as u32;
-        let mut px_w = columns * self.cell_px.0;
-        let mut px_h = ((u64::from(px_w) * u64::from(ih)) / u64::from(iw)) as u32;
+        let columns = u64::try_from(self.columns.unwrap_or(available).max(1)).ok()?;
+        let mut px_w = columns.checked_mul(u64::from(self.cell_px.0))?;
+        let mut px_h = px_w.checked_mul(u64::from(ih))? / u64::from(iw);
 
         if let Some(rows) = self.max_rows {
-            let cap = (rows.max(1) as u32) * self.cell_px.1;
+            let cap = u64::try_from(rows.max(1))
+                .ok()?
+                .checked_mul(u64::from(self.cell_px.1))?;
             if px_h > cap {
-                px_w = ((u64::from(px_w) * u64::from(cap)) / u64::from(px_h)) as u32;
+                px_w = px_w.checked_mul(cap)? / px_h;
                 px_h = cap;
             }
         }
-        (px_w.max(1), px_h.max(1))
+        let (w, h) = (px_w.max(1), px_h.max(1));
+        if w.checked_mul(h)? > MAX_PIXELS {
+            return None;
+        }
+        Some((u32::try_from(w).ok()?, u32::try_from(h).ok()?))
     }
 
-    /// The Sixel escape sequence for this image, or `None` if encoding failed.
+    /// The Sixel escape sequence for this image, or `None` if encoding failed
+    /// or the raster would exceed [`MAX_PIXELS`] (checked before resizing).
     ///
     /// Failure is not worth propagating to a renderable: the caller has already
     /// chosen Sixel, and the useful response is to fall back to blocks.
     pub fn encode(&self, available: usize) -> Option<String> {
-        let (w, h) = self.pixel_size(available);
+        let (w, h) = self.checked_pixel_size(available)?;
         let mut scaled = self
             .image
             .resize_exact(w, h, FilterType::Lanczos3)
@@ -171,7 +188,7 @@ impl SixelArt {
                 .zip(transparent)
                 .map(|(index, clear)| (!clear).then_some(index))
                 .collect();
-            return Some(encode_indexed(&pixels, w as usize, h as usize));
+            return encode_indexed(&pixels, w as usize, h as usize);
         }
         let opts = icy_sixel::EncodeOptions {
             max_colors: self.max_colors,
@@ -181,15 +198,21 @@ impl SixelArt {
     }
 }
 
-/// Encode a raster of fixed-palette indices (`None` = transparent) as Sixel.
+/// Encode a raster of fixed-palette indices (`None` = transparent) as Sixel,
+/// or `None` when `pixels` is not `width * height` long or the raster exceeds
+/// [`MAX_PIXELS`].
 ///
 /// Each register is the ANSI palette index itself, defined once with its RGB
 /// in whole percent, so the colours are exact up to Sixel's own precision.
 /// The header matches the adaptive encoder's: square pixels, a transparent
 /// background, and raster attributes for terminals that drop the DCS
 /// parameters.
-pub(crate) fn encode_indexed(pixels: &[Option<u8>], width: usize, height: usize) -> String {
+pub(crate) fn encode_indexed(pixels: &[Option<u8>], width: usize, height: usize) -> Option<String> {
     use std::fmt::Write;
+    let area = width.checked_mul(height)?;
+    if area != pixels.len() || area as u64 > MAX_PIXELS {
+        return None;
+    }
     let used: std::collections::BTreeSet<u8> = pixels.iter().flatten().copied().collect();
     let mut out = format!("\x1bP9;1;0q\"1;1;{width};{height}");
     let percent = |v: u8| (u32::from(v) * 100 + 127) / 255;
@@ -230,10 +253,17 @@ pub(crate) fn encode_indexed(pixels: &[Option<u8>], width: usize, height: usize)
                 let bits = row[x];
                 let run = row[x..=end].iter().take_while(|&&b| b == bits).count();
                 let glyph = char::from(63 + bits);
-                if run > 3 {
-                    let _ = write!(out, "!{run}{glyph}");
-                } else {
-                    (0..run).for_each(|_| out.push(glyph));
+                // Decoders cap a repeat count at 65 535 (icy_sixel rejects
+                // anything larger), so a longer run is written in pieces.
+                let mut left = run;
+                while left > 0 {
+                    let piece = left.min(SIXEL_REPEAT_MAX);
+                    if piece > 3 {
+                        let _ = write!(out, "!{piece}{glyph}");
+                    } else {
+                        (0..piece).for_each(|_| out.push(glyph));
+                    }
+                    left -= piece;
                 }
                 x += run;
             }
@@ -243,7 +273,7 @@ pub(crate) fn encode_indexed(pixels: &[Option<u8>], width: usize, height: usize)
         }
     }
     out.push_str("\x1b\\");
-    out
+    Some(out)
 }
 
 impl Renderable for SixelArt {
@@ -351,7 +381,7 @@ mod tests {
                 _ => Some(4),
             })
             .collect();
-        let sixel = encode_indexed(&pixels, w, h);
+        let sixel = encode_indexed(&pixels, w, h).expect("valid raster");
         assert!(sixel.starts_with("\x1bP9;1;0q\"1;1;5;7#1;2;67;0;0#4;2;0;0;67#1"));
         assert!(sixel.ends_with("\x1b\\"));
         let image = decode(&sixel);
@@ -426,10 +456,68 @@ mod tests {
     }
 
     #[test]
+    fn a_tall_thin_image_is_refused_before_resizing() {
+        // 1x400 at 80 columns would be 640 x 256 000 px (164 Mpx, 650 MB of
+        // RGBA): refused up front, so this stays instant and small.
+        let tall = DynamicImage::ImageRgb8(RgbImage::from_pixel(1, 400, Rgb([9, 9, 9])));
+        let started = std::time::Instant::now();
+        assert!(SixelArt::new(tall.clone()).width(80).encode(80).is_none());
+        let reduced = SixelArt::new(tall).width(80).color_processing(
+            ImageColorMode::Ansi256,
+            Dither::None,
+            ColorDistance::Rgb,
+        );
+        assert!(reduced.encode(80).is_none());
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+    }
+
+    #[test]
+    fn huge_column_counts_are_refused_not_wrapped() {
+        // 536 870 912 * 8 is 2^32: it used to wrap to a 1-pixel-wide raster
+        // in release builds (and overflow-panic in debug ones).
+        let art = SixelArt::new(solid(2, 1)).width(536_870_912);
+        assert!(art.encode(80).is_none());
+        let art = SixelArt::new(solid(2, 1)).width(usize::MAX);
+        assert!(art.encode(80).is_none());
+    }
+
+    #[test]
+    fn rasters_up_to_the_cap_still_encode() {
+        // 4096 x 4096 is exactly 16 Mpx; one more row is over.
+        let art = SixelArt::new(solid(1, 1)).cell_px(4096, 1).height(4096);
+        assert_eq!(art.checked_pixel_size(1), Some((4096, 4096)));
+        let over = SixelArt::new(solid(4096, 4097)).cell_px(1, 1).width(4096);
+        assert_eq!(over.checked_pixel_size(1), None);
+    }
+
+    #[test]
+    fn runs_longer_than_the_repeat_maximum_are_split() {
+        // Decoders cap a repeat count at 65 535; one 70 000-pixel run must be
+        // written as two, or the row fails to decode.
+        let (w, h) = (70_000, 6);
+        let sixel = encode_indexed(&vec![Some(1); w * h], w, h).expect("valid");
+        assert!(sixel.contains("!65535~!4465~"), "split runs");
+        let image = decode(&sixel);
+        assert_eq!((image.width, image.height), (w, h));
+        assert!(image
+            .pixels
+            .chunks(4)
+            .all(|p| p == [171, 0, 0, 255].as_slice()));
+    }
+
+    #[test]
+    fn indexed_encoding_validates_its_raster() {
+        assert!(encode_indexed(&[Some(1); 6], 3, 2).is_some());
+        assert!(encode_indexed(&[Some(1); 5], 3, 2).is_none(), "short");
+        assert!(encode_indexed(&[], usize::MAX, 2).is_none(), "overflow");
+        assert!(encode_indexed(&[], 4097, 4096).is_none(), "over the cap");
+    }
+
+    #[test]
     fn width_in_columns_becomes_width_in_pixels() {
         let art = SixelArt::new(solid(100, 50)).width(40).cell_px(8, 16);
         // 40 columns * 8 px, and the height follows the 2:1 aspect ratio.
-        assert_eq!(art.pixel_size(80), (320, 160));
+        assert_eq!(art.checked_pixel_size(80), Some((320, 160)));
     }
 
     #[test]
@@ -438,7 +526,7 @@ mod tests {
             .width(40)
             .height(10)
             .cell_px(8, 16);
-        let (w, h) = art.pixel_size(80);
+        let (w, h) = art.checked_pixel_size(80).expect("small");
         assert_eq!(h, 160, "capped to 10 rows * 16 px");
         assert!(w < 320, "width must shrink with it, got {w}");
     }
