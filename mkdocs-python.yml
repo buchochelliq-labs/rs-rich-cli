@@ -1,0 +1,128 @@
+# The Python package's own docs site: built from docs/python into
+# site/python, and published with the main site under /python/.
+site_name: rs-rich for Python
+site_description: Rich's Python API, rendered by the Rust port — install, guides and API reference.
+site_url: https://buchochelliq-labs.github.io/rs-rich-cli/python/
+repo_url: https://github.com/buchochelliq-labs/rs-rich-cli
+repo_name: buchochelliq-labs/rs-rich-cli
+copyright: MIT — a port of <a href="https://github.com/Textualize/rich">Textualize/rich</a>
+
+docs_dir: docs/python
+site_dir: site/python
+
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    # The docs are about terminal output, so dark is the honest default.
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: deep purple
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: deep purple
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - content.code.copy
+    - search.highlight
+    - search.suggest
+    - toc.follow
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          # Read the stubs and modules from source: no compiled wheel needed.
+          paths: [crates/rich-py/python]
+          options:
+            allow_inspection: false
+            members_order: source
+            show_if_no_docstring: true
+            show_root_heading: false
+            show_source: false
+            show_signature_annotations: true
+            separate_signature: true
+            filters: ["!^_"]
+            show_submodules: false
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      # Guide snippets come from compiled examples; drop their source indent.
+      dedent_subsections: true
+      check_paths: true
+
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Core API:
+      - Console: console.md
+      - The render protocol: protocol.md
+      - Text: text.md
+      - Style: style.md
+      - Color: color.md
+      - Boxes, markup and errors: box-markup-errors.md
+  - Renderables:
+      - Table: table.md
+      - Panel: panel.md
+      - Rules, padding, alignment and bars: rule.md
+      - Layout, columns and groups: layout.md
+      - Tree: tree.md
+  - Code and data:
+      - Markdown: markdown.md
+      - Syntax: syntax.md
+      - Pretty, JSON, inspect and highlighters: pretty.md
+      - Traceback: traceback.md
+  - Live and interactive:
+      - Live, status, screen and pager: live.md
+      - Progress: progress.md
+      - Prompts: prompt.md
+      - Logging: logging.md
+  - Extensions (rs_rich.ext):
+      - ext/index.md
+      - Diagnostics and logs: ext/diagnostics.md
+      - Structured data: ext/data.md
+      - Diffs and test reports: ext/diffs.md
+      - Transforms: ext/transforms.md
+      - Workflows and status: ext/workflows.md
+      - Tables, badges and formatting: ext/tables.md
+      - Terminals and accessibility: ext/terminals.md
+      - Inspectors: ext/inspectors.md
+      - Layout and live output: ext/layout.md
+      - CLI authoring: ext/cli-authoring.md
+      - Testing and QA: ext/testing.md
+  - Art and Mermaid:
+      - Art (images, FIGlet, GIFs, diffs): art.md
+      - Mermaid: mermaid.md
+  - Plugins: plugins.md
+  - The command line: cli.md
+  - Compatibility: compatibility.md
+  - API reference: api/index.md
+  - Rust port docs: https://buchochelliq-labs.github.io/rs-rich-cli/

@@ -46,11 +46,11 @@ The port's own crates:
 
 | Difference | Why |
 |---|---|
-| Code colours (`Syntax`, and code in `Markdown` and `Traceback`) come from syntect, not Pygments: `monokai` is not a theme, and some token classes differ | The port highlights with syntect ([Divergences #18](../DIVERGENCES.md)); layout is Rich's byte for byte ([Syntax: colours](syntax.md#colours)). |
+| Code colours (`Syntax`, and code in `Markdown` and `Traceback`) come from syntect, not Pygments: `monokai` is not a theme, and some token classes differ | The port highlights with syntect ([Divergences #18](https://buchochelliq-labs.github.io/rs-rich-cli/DIVERGENCES/)); layout is Rich's byte for byte ([Syntax: colours](syntax.md#colours)). |
 | `Console(force_jupyter=True)` raises `NotImplementedError` | There is no Jupyter output. |
 | A `Syntax.stylize_range` position so far before the first line that Rich raises `IndexError` is ignored | Core applies ranges when it renders, where it cannot raise. |
 | `export_svg(unique_id=None)` gives a different (stable) id | Rich derives the default id from Python reprs. With an explicit `unique_id` the SVG is Rich's. |
-| Hyperlinks carry no `id=` | Rich tags each link with a random id. The Rust port leaves it out so output is reproducible ([Divergences #20](../DIVERGENCES.md)). |
+| Hyperlinks carry no `id=` | Rich tags each link with a random id. The Rust port leaves it out so output is reproducible ([Divergences #20](https://buchochelliq-labs.github.io/rs-rich-cli/DIVERGENCES/)). |
 | `text.spans` returns a copy | Spans live in the core `Text`; assign `text.spans` to change them. |
 | Meta data on `Text` spans holds `None`, `bool`, `int`, `float`, `str` and lists or tuples of them (a tuple reads back as a list); other values raise `TypeError` | Core's style meta keeps that subset of what `marshal` can store. A `Style` alone keeps any meta. |
 | `Spinner.render()` with renderable text returns a grid, not a `Table`; `Status.renderable` is not a `Spinner` | The live area's spinner is core's; both print the same. |

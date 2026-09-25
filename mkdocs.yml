@@ -8,6 +8,9 @@ copyright: MIT — a port of <a href="https://github.com/Textualize/rich">Textua
 
 docs_dir: docs
 site_dir: site
+# docs/python is its own site (mkdocs-python.yml), published under /python/.
+exclude_docs: |
+  python/
 
 theme:
   name: material
@@ -125,51 +128,7 @@ nav:
   - CLI and art videos: demos.md
   - Using the CLI: cli.md
   - CLI reference: cli-reference.md
-  - Python bindings:
-      - python/index.md
-      - Getting started: python/getting-started.md
-      - Core API:
-          - Console: python/console.md
-          - The render protocol: python/protocol.md
-          - Text: python/text.md
-          - Style: python/style.md
-          - Color: python/color.md
-          - Boxes, markup and errors: python/box-markup-errors.md
-      - Renderables:
-          - Table: python/table.md
-          - Panel: python/panel.md
-          - Rules, padding, alignment and bars: python/rule.md
-          - Layout, columns and groups: python/layout.md
-          - Tree: python/tree.md
-      - Code and data:
-          - Markdown: python/markdown.md
-          - Syntax: python/syntax.md
-          - Pretty, JSON, inspect and highlighters: python/pretty.md
-          - Traceback: python/traceback.md
-      - Live and interactive:
-          - Live, status, screen and pager: python/live.md
-          - Progress: python/progress.md
-          - Prompts: python/prompt.md
-          - Logging: python/logging.md
-      - Extensions (rs_rich.ext):
-          - python/ext/index.md
-          - Diagnostics and logs: python/ext/diagnostics.md
-          - Structured data: python/ext/data.md
-          - Diffs and test reports: python/ext/diffs.md
-          - Transforms: python/ext/transforms.md
-          - Workflows and status: python/ext/workflows.md
-          - Tables, badges and formatting: python/ext/tables.md
-          - Terminals and accessibility: python/ext/terminals.md
-          - Inspectors: python/ext/inspectors.md
-          - Layout and live output: python/ext/layout.md
-          - CLI authoring: python/ext/cli-authoring.md
-          - Testing and QA: python/ext/testing.md
-      - Art and Mermaid:
-          - Art (images, FIGlet, GIFs, diffs): python/art.md
-          - Mermaid: python/mermaid.md
-      - Plugins: python/plugins.md
-      - The command line: python/cli.md
-      - Compatibility: python/compatibility.md
+  - Python (rs_rich): https://buchochelliq-labs.github.io/rs-rich-cli/python/
   - Workflow recipes: recipes.md
   - Comparing images: image-diff.md
   - Troubleshooting: troubleshooting.md

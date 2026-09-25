@@ -116,7 +116,7 @@ checkers see the signatures documented here.
   sdist, runs the whole test suite (compatibility with Rich 15.0.0 included)
   against the Linux x86-64 wheel, and only then publishes them with PyPI Trusted Publishing from the `pypi`
   environment, with no token secret. See
-  [Branching and releases](../BRANCHING.md#python-package-pypi).
+  [Branching and releases](https://buchochelliq-labs.github.io/rs-rich-cli/BRANCHING/#python-package-pypi).
 - **Versions.** The package has its own version, starting at 0.0.1. It
   bundles the Rust crates from its tag's commit, and `crates/rich-py` is never
   published to crates.io.

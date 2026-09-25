@@ -13,7 +13,7 @@ rich-rs --help
 The console script is `rich-rs`, because `rich` is `rich-cli`'s command. Both
 forms run the same code as the `rich` binary built from the same source, so
 their output, errors and exit statuses are the binary's, byte for byte (the
-tests compare them). See the [CLI reference](../cli-reference.md) for the commands and
+tests compare them). See the [CLI reference](https://buchochelliq-labs.github.io/rs-rich-cli/cli-reference/) for the commands and
 options.
 
 Python `rich` has no command line of its own; this page is about `rich-cli`'s.

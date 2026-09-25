@@ -8,6 +8,10 @@ Rich-compatible terminal rendering for Python, backed by
 pip install rs-rich
 ```
 
+Documentation: <https://buchochelliq-labs.github.io/rs-rich-cli/python/>, with a
+[getting started guide](https://buchochelliq-labs.github.io/rs-rich-cli/python/getting-started/)
+and an API reference for every module.
+
 Move a Rich program over by changing its imports:
 
 ```python

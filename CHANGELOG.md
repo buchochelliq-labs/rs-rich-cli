@@ -230,6 +230,11 @@ reproduced by a test that failed first.
 
 ### Python bindings: full parity (0.0.12 workstream 8)
 
+- **Its own docs site**, published under `/python/` beside the main one: a
+  getting started guide, a page per area, and an API reference for every module
+  generated from the type stubs (`mkdocs-python.yml`,
+  `scripts/gen_python_api.py`).
+
 `rs_rich` now covers all of Rich 15.0.0's API and exposes every Rust crate.
 Output is byte-compared with Rich (and, for the port's own crates, with the
 Rust crates); 850+ tests and every documentation example run in CI.

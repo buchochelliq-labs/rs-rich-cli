@@ -4,7 +4,7 @@
 from rs_rich import art
 ```
 
-`rs_rich.art` is the [`rs-rich-art`](../guide/art/index.md) crate
+`rs_rich.art` is the [`rs-rich-art`](https://buchochelliq-labs.github.io/rs-rich-cli/guide/art/) crate
 from Python. Rich has no counterpart, so the API follows the Rust one: each
 builder method is a keyword argument and each enum a lowercase name (the
 `rich` command line's spelling). Everything renders in Rust, and every class
