@@ -65,7 +65,9 @@ pub mod unicode_inspect;
 pub mod workflow;
 
 pub use highlighter::NumberHighlighter;
-pub use registry::{install_defaults, BuiltinPlugin, ExtensionRegistry, RegisteredPlugin};
+pub use registry::{
+    install_defaults, BuiltinPlugin, ExtensionRegistry, HighlighterChoiceError, RegisteredPlugin,
+};
 /// The plugin contract, re-exported so a host needs only `rich_ext`.
 pub use rich_plugin_api as plugin;
 pub use sanitize::sanitize_terminal_controls;

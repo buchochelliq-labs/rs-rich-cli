@@ -408,6 +408,10 @@ struct Cli {
     /// `--mermaid-backend`: how Mermaid diagrams are drawn; `None` when not
     /// given (see [`MermaidBackend`]).
     mermaid_backend: Option<MermaidBackend>,
+    /// `--highlighter NAME`: the console-wide code highlighter.
+    highlighter: Option<String>,
+    /// `--code-theme NAME`: a theme of the chosen code highlighter.
+    code_theme: Option<String>,
     theme_styles: std::collections::BTreeMap<String, Style>,
     /// `--theme-file PATH`: styles from an upstream `[styles]` theme file,
     /// layered under config themes and `--theme-style`.
@@ -536,7 +540,65 @@ fn plugin_registry(mermaid: MermaidBackend) -> rich_ext::ExtensionRegistry {
     }
     #[cfg(not(feature = "mermaid"))]
     let _ = mermaid;
+    #[cfg(feature = "lumis")]
     registry
+        .add_plugin(&rich_lumis::LumisPlugin)
+        .expect("the lumis plugin registers cleanly");
+    registry
+}
+
+/// The console-wide code highlighting `--highlighter` and `--code-theme`
+/// choose; `None` when neither is given, which leaves every console on the
+/// default syntect highlighter and its default theme.
+fn code_highlighting(
+    highlighter: Option<&str>,
+    theme: Option<&str>,
+) -> Result<Option<rich::CodeHighlighting>, String> {
+    if highlighter.is_none() && theme.is_none() {
+        return Ok(None);
+    }
+    let mut registry = plugin_registry(MermaidBackend::Off);
+    let name = highlighter.unwrap_or("syntect");
+    if let Err(error) = registry.set_default_code_highlighter(name, theme) {
+        return Err(match error {
+            rich_ext::HighlighterChoiceError::UnknownHighlighter { .. }
+                if name == "lumis" && !cfg!(feature = "lumis") =>
+            {
+                format!(
+                    "{error} (lumis needs a build with the lumis feature: cargo install \
+                     rs-rich-cli --features lumis)"
+                )
+            }
+            rich_ext::HighlighterChoiceError::UnknownTheme { .. } => {
+                let themes = registry
+                    .code_highlighter(name)
+                    .map(|engine| engine.themes())
+                    .unwrap_or_default();
+                if themes.len() <= 40 {
+                    format!("{error}; its themes: {}", themes.join(", "))
+                } else {
+                    format!(
+                        "{error}; it has {} themes, such as {}; `rich doctor --report json` \
+                         lists them all",
+                        themes.len(),
+                        themes[..12].join(", ")
+                    )
+                }
+            }
+            other => other.to_string(),
+        });
+    }
+    Ok(registry.code_highlighting())
+}
+
+/// Give `console` the code highlighting `cli` chose (parsing checked it).
+fn apply_code_highlighting(console: &mut Console, cli: &Cli) {
+    use rich::ConsoleCodeHighlighting;
+    if let Ok(Some(highlighting)) =
+        code_highlighting(cli.highlighter.as_deref(), cli.code_theme.as_deref())
+    {
+        console.set_code_highlighting(Some(highlighting));
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -598,6 +660,8 @@ const VALUE_OPTIONS: &[&str] = &[
     "--batch-name-template",
     "--log-presentation",
     "--mermaid-backend",
+    "--highlighter",
+    "--code-theme",
     "-w",
     "--width",
     "-o",
@@ -1206,6 +1270,8 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut image_gamma = None;
     let mut log_presentation = String::from("plain");
     let mut mermaid_backend = None;
+    let mut highlighter: Option<String> = None;
+    let mut code_theme: Option<String> = None;
     let mut theme_styles = std::collections::BTreeMap::new();
     let mut theme_file_styles = std::collections::BTreeMap::new();
     let mut height = None;
@@ -1310,6 +1376,16 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--log" => set_mode(&mut mode, Mode::Log)?,
             "--inspect" => set_mode(&mut mode, Mode::Inspect)?,
             "--ansi-explain" => set_mode(&mut mode, Mode::AnsiExplain)?,
+            "--highlighter" => {
+                let value = iter
+                    .next()
+                    .ok_or("--highlighter requires a code highlighter's name")?;
+                highlighter = Some(value.clone());
+            }
+            "--code-theme" => {
+                let value = iter.next().ok_or("--code-theme requires a theme name")?;
+                code_theme = Some(value.clone());
+            }
             "--mermaid-backend" => {
                 let value = iter
                     .next()
@@ -2058,6 +2134,8 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     });
     let resource = resources.first().cloned();
 
+    // An unknown highlighter or theme is a usage error, listing the choices.
+    code_highlighting(highlighter.as_deref(), code_theme.as_deref())?;
     Ok(Some(Cli {
         mode,
         resource,
@@ -2082,6 +2160,8 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         image_gamma,
         log_presentation,
         mermaid_backend,
+        highlighter,
+        code_theme,
         theme_styles,
         theme_file_styles,
         height,
@@ -3167,6 +3247,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     let mut console = builder.build();
     render_target::attach(&mut console);
     console.install_extensions();
+    apply_code_highlighting(&mut console, &cli);
 
     if mode == Mode::Rule {
         if let Some(title) = &cli.resource {
@@ -6323,6 +6404,32 @@ mod tests {
         assert_eq!(
             worker_args(&args),
             ["--no-config", "--title", "--batch", "--json"]
+        );
+    }
+
+    /// Batch workers render with the parent's code highlighter and theme.
+    #[test]
+    fn worker_arguments_keep_the_code_highlighter() {
+        let args: Vec<String> = [
+            "--batch",
+            "--highlighter",
+            "syntect",
+            "--code-theme",
+            "ansi_dark",
+            "a.py",
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+        assert_eq!(
+            worker_args(&args),
+            [
+                "--no-config",
+                "--highlighter",
+                "syntect",
+                "--code-theme",
+                "ansi_dark"
+            ]
         );
     }
 

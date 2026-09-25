@@ -86,6 +86,22 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                             .join("; ")
                     ),
                     format!(
+                        "Code highlighter: {} (theme {}); compiled in: {}",
+                        report["code_highlighters"]["active"]["name"]
+                            .as_str()
+                            .unwrap_or_default(),
+                        report["code_highlighters"]["active"]["theme"]
+                            .as_str()
+                            .unwrap_or_default(),
+                        report["code_highlighters"]["available"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|h| h["name"].as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                    format!(
                         "Terminal: stdout TTY={}, {}×{} cells, colour={} ({}); NO_COLOR={}",
                         report["terminal"]["stdout_tty"],
                         report["terminal"]["width"],
@@ -139,7 +155,8 @@ fn report(args: &[String]) -> Result<(serde_json::Value, Report, bool), String> 
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             "doctor" if !command_seen => command_seen = true,
-            "--config" | "--profile" | "--width" | "-w" | "--height" => {
+            "--config" | "--profile" | "--width" | "-w" | "--height" | "--highlighter"
+            | "--code-theme" => {
                 inspect_args.push(arg.clone());
                 inspect_args.push(iter.next().ok_or_else(|| format!("{arg} requires a value"))?.clone());
             }
@@ -152,7 +169,7 @@ fn report(args: &[String]) -> Result<(serde_json::Value, Report, bool), String> 
                 if iter.next().map(String::as_str) != Some("json") { return Err("--report requires json".into()); }
             }
             "--no-config" | "--no-color" | "--color" | "--pager" | "--no-pager" | "--auto-pager" | "--no-auto-pager" => inspect_args.push(arg.clone()),
-            _ => return Err(format!("unexpected argument {arg:?}; use doctor [--report json] [--config PATH] [--profile NAME] [--no-config] [--no-color]")),
+            _ => return Err(format!("unexpected argument {arg:?}; use doctor [--report json] [--config PATH] [--profile NAME] [--highlighter NAME] [--code-theme NAME] [--no-config] [--no-color]")),
         }
     }
     let config = config::inspect(&inspect_args, &ConfigRoots::default())?
@@ -270,14 +287,43 @@ fn report(args: &[String]) -> Result<(serde_json::Value, Report, bool), String> 
             })
         })
         .collect();
+    // The engines compiled in, and the one `highlighter` / `code_theme` (from
+    // config or the command line) select; an unknown choice is reported.
+    let active_name = settings["highlighter"].as_str().unwrap_or("syntect");
+    super::code_highlighting(
+        settings["highlighter"].as_str(),
+        settings["code_theme"].as_str(),
+    )?;
+    let available: Vec<serde_json::Value> = registry
+        .code_highlighter_names()
+        .into_iter()
+        .filter_map(|name| {
+            let engine = registry.code_highlighter(name)?;
+            Some(serde_json::json!({
+                "name": name,
+                "default_theme": engine.default_theme(),
+                "themes": engine.themes(),
+            }))
+        })
+        .collect();
+    let active_theme = settings["code_theme"]
+        .as_str()
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            registry
+                .code_highlighter(active_name)
+                .map(|engine| engine.default_theme().to_string())
+                .unwrap_or_default()
+        });
     let json = serde_json::json!({
         "package": {"name": env!("CARGO_PKG_NAME"), "version": env!("CARGO_PKG_VERSION")},
-        "features": {"art": cfg!(feature="art"), "fetch": cfg!(feature="fetch"), "syntax-cache": cfg!(feature="syntax-cache"), "onig": cfg!(feature="onig"), "json-escape-safe": cfg!(feature="json-escape-safe"), "mermaid": cfg!(feature="mermaid"), "mmdc": cfg!(feature="mmdc")},
+        "features": {"art": cfg!(feature="art"), "fetch": cfg!(feature="fetch"), "syntax-cache": cfg!(feature="syntax-cache"), "onig": cfg!(feature="onig"), "json-escape-safe": cfg!(feature="json-escape-safe"), "mermaid": cfg!(feature="mermaid"), "mmdc": cfg!(feature="mmdc"), "lumis": cfg!(feature="lumis")},
         "terminal": {"stdout_tty": console.is_terminal(), "width": console.width(), "height": console.height(), "color": color, "no_color": no_color, "detection": "local terminal and environment; no probe", "provenance": provenance},
         "image": {"requested_mode": requested_mode, "selected_mode": selected_mode, "sixel_inferred": sixel, "detection": "inferred from environment; no probe"},
         "config": {"source": config["source"], "profile": config["profile"], "disabled": config["disabled"]},
         "pager": {"source": pager_source, "program": pager_program, "availability": "not checked", "terminal_eligible": pager_eligible, "explicit": settings["pager"].as_bool().unwrap_or(false), "automatic": settings["auto_pager"].as_bool().unwrap_or(false)},
         "plugins": {"api_version": rich_ext::plugin::PLUGIN_API_VERSION, "registered": plugins},
+        "code_highlighters": {"available": available, "active": {"name": active_name, "theme": active_theme}},
         "capabilities": capabilities_json
     });
     Ok((json, capabilities, no_color))

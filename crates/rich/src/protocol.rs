@@ -240,6 +240,36 @@ pub trait FenceRenderer: Send + Sync {
     ) -> Option<Vec<Segment>>;
 }
 
+/// A console-wide default [`CodeHighlighter`] and the theme to use with it.
+/// See [`ConsoleCodeHighlighting`].
+#[derive(Clone)]
+pub struct CodeHighlighting {
+    pub highlighter: std::sync::Arc<dyn CodeHighlighter>,
+    /// One of `highlighter`'s themes; `None` is its default theme.
+    pub theme: Option<String>,
+}
+
+impl std::fmt::Debug for CodeHighlighting {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CodeHighlighting")
+            .field("default_theme", &self.highlighter.default_theme())
+            .field("theme", &self.theme)
+            .finish()
+    }
+}
+
+/// Attach/query a console's default code highlighter.
+///
+/// A [`Syntax`](crate::syntax::Syntax) without a highlighter of its own, and
+/// so Markdown code blocks, highlights with the console's when it renders;
+/// the console's theme applies when the `Syntax` names none. Without one,
+/// the default [`SyntectHighlighter`](crate::syntax::SyntectHighlighter) is
+/// used, as before: upstream has no such setting.
+pub trait ConsoleCodeHighlighting {
+    fn set_code_highlighting(&mut self, value: Option<CodeHighlighting>);
+    fn code_highlighting(&self) -> Option<&CodeHighlighting>;
+}
+
 /// Evidence for an optional output protocol; inference is not confirmation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Support {

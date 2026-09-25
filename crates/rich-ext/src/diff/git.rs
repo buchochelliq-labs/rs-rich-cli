@@ -799,7 +799,7 @@ impl PatchView {
         &self.patch
     }
 
-    fn blocks(&self, file: &FilePatch) -> Vec<Block> {
+    fn blocks(&self, file: &FilePatch, console: &Console) -> Vec<Block> {
         let language = (self.highlight).then(|| language_for_path(file.path()));
         let mut blocks = Vec::new();
         for hunk in &file.hunks {
@@ -813,7 +813,7 @@ impl PatchView {
                     .collect();
                 let mut code = lines.join("\n");
                 code.push('\n');
-                highlight_lines(&code, language.as_deref())
+                highlight_lines(&code, language.as_deref(), Some(console))
             };
             let (mut old, mut new) = (
                 side(LineKind::Removed).into_iter(),
@@ -1108,7 +1108,7 @@ impl Renderable for PatchView {
         };
         for file in &self.patch.files {
             rows.extend(self.file_header(console, file, width));
-            let blocks = self.blocks(file);
+            let blocks = self.blocks(file, console);
             rows.extend(render::render(console, &blocks, &opts, width));
             rows.push(Vec::new());
         }

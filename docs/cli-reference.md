@@ -84,6 +84,8 @@ Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by exten
 | --- | --- |
 | `--log-presentation <MODE>` | With --log, select log presentation. Default: `plain`. Config: `log_presentation`. Possible values: `plain`, `rich`. |
 | `--mermaid-backend <BACKEND>` | How Mermaid diagrams (`rich mermaid`, ```mermaid fences in Markdown) are drawn: text draws flowcharts as text, mmdc uses Mermaid's own CLI (a build with the mmdc feature; `rich mermaid` tries it first there), off leaves fences as code. Config: `mermaid_backend`. Possible values: `text`, `mmdc`, `off`. |
+| `--highlighter <NAME>` | The code highlighter for source, Markdown code, view and diff: syntect (the default), or lumis in a build with the lumis feature. Config: `highlighter`. |
+| `--code-theme <NAME>` | A theme of the chosen code highlighter, e.g. ansi_dark (`rich doctor --report json` lists them) Config: `code_theme`. |
 | `--loop <N>` | With --gif, repeat N times (default 1; 0 = forever) |
 | `--gif-mode <M>` | With --gif: ascii or blocks (half-block pixels). Blocks fall back to ASCII without color or when piped. Default: `ascii`. Possible values: `ascii`, `blocks`. |
 
@@ -579,6 +581,13 @@ rich view [OPTIONS] [RESOURCE]
 | --- | --- |
 | `--pager` | Page terminal output via MANPAGER, PAGER, then less/more.com. |
 
+#### Mode options
+
+| Option | Description |
+| --- | --- |
+| `--highlighter <NAME>` | The code highlighter for source, Markdown code, view and diff: syntect (the default), or lumis in a build with the lumis feature. |
+| `--code-theme <NAME>` | A theme of the chosen code highlighter, e.g. ansi_dark (`rich doctor --report json` lists them) |
+
 #### Layout
 
 | Option | Description |
@@ -803,7 +812,7 @@ rich config explain [OPTIONS] [KEY]
 
 | Argument | Description |
 | --- | --- |
-| `[KEY]` | Explain one setting instead of all of them. Possible values: `mode`, `format`, `width`, `panel`, `padding`, `log_presentation`, `mermaid_backend`, `height`, `image_fit`, `image_anchor`, `image_max_width`, `image_max_height`, `image_background`, `image_color`, `image_dither`, `image_color_distance`, `image_brightness`, `image_contrast`, `image_gamma`, `image_rotate`, `image_flip_horizontal`, `image_flip_vertical`, `image_grayscale`, `export_html`, `export_svg`, `pager`, `auto_pager`, `watch`, `watch_interval`, `watch_debounce`, `watch_poll`, `watch_exit_on_error`, `watch_cache`, `batch`, `batch_input_root`, `batch_preserve_dirs`, `batch_name_template`, `jobs`, `progress`, `continue_on_error`, `overwrite`, `collision`, `theme`, `theme_file`, `no_color`, `sanitize`. |
+| `[KEY]` | Explain one setting instead of all of them. Possible values: `mode`, `format`, `width`, `panel`, `padding`, `log_presentation`, `mermaid_backend`, `highlighter`, `code_theme`, `height`, `image_fit`, `image_anchor`, `image_max_width`, `image_max_height`, `image_background`, `image_color`, `image_dither`, `image_color_distance`, `image_brightness`, `image_contrast`, `image_gamma`, `image_rotate`, `image_flip_horizontal`, `image_flip_vertical`, `image_grayscale`, `export_html`, `export_svg`, `pager`, `auto_pager`, `watch`, `watch_interval`, `watch_debounce`, `watch_poll`, `watch_exit_on_error`, `watch_cache`, `batch`, `batch_input_root`, `batch_preserve_dirs`, `batch_name_template`, `jobs`, `progress`, `continue_on_error`, `overwrite`, `collision`, `theme`, `theme_file`, `no_color`, `sanitize`. |
 
 #### rich config reference
 
@@ -993,6 +1002,8 @@ Settings are read from these sources, lowest precedence first; a later source ov
 | `padding` | string | | | `--padding` | Wrap output in padding (1, 2, or 4 comma-separated ints) |
 | `log_presentation` | enum: `plain`, `rich` | `plain` | | `--log-presentation` | With --log, select log presentation |
 | `mermaid_backend` | enum: `text`, `mmdc`, `off` | | | `--mermaid-backend` | How Mermaid diagrams (`rich mermaid`, ```mermaid fences in Markdown) are drawn: text draws flowcharts as text, mmdc uses Mermaid's own CLI (a build with the mmdc feature; `rich mermaid` tries it first there), off leaves fences as code |
+| `highlighter` | string | | | `--highlighter` | The code highlighter for source, Markdown code, view and diff: syntect (the default), or lumis in a build with the lumis feature |
+| `code_theme` | string | | | `--code-theme` | A theme of the chosen code highlighter, e.g. ansi_dark (`rich doctor --report json` lists them) |
 | `height` | positive integer | | | `--height` | With --image, render this many rows instead of the backend's default |
 | `image_fit` | enum: `contain`, `cover`, `stretch` | | | `--image-fit` | With --image and --height: contain letterboxes, cover crops at --image-anchor, stretch fills ignoring aspect |
 | `image_anchor` | enum: `center`, `top`, `bottom`, `left`, `right`, `top-left`, `top-right`, `bottom-left`, `bottom-right` | `center` | | `--image-anchor` | Cover crop anchor |

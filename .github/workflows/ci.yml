@@ -218,8 +218,12 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
+      # The CLI's `lumis` feature pulls in rs-rich-lumis, so here the CLI is
+      # checked with every other feature, and with `lumis` on lumis's MSRV below.
       - name: Check the whole workspace on the declared MSRV
-        run: cargo check --workspace --all-targets --all-features --exclude rs-rich-lumis
+        run: |
+          cargo check --workspace --all-targets --all-features --exclude rs-rich-lumis --exclude rs-rich-cli
+          cargo check -p rs-rich-cli --all-targets --features "fetch art mermaid mmdc syntax-cache onig json-escape-safe"
 
       # rs-rich-lumis declares its own minimum, lumis's (newer than the
       # workspace's), and is checked on exactly that.
@@ -235,8 +239,8 @@ jobs:
         with:
           toolchain: ${{ steps.lumis-msrv.outputs.version }}
 
-      - name: Check rs-rich-lumis on its declared MSRV
-        run: cargo +${{ steps.lumis-msrv.outputs.version }} check -p rs-rich-lumis --all-targets --all-features
+      - name: Check rs-rich-lumis, and the CLI with every feature, on its declared MSRV
+        run: cargo +${{ steps.lumis-msrv.outputs.version }} check -p rs-rich-lumis -p rs-rich-cli --all-targets --all-features
 
   parity:
     name: golden parity vs upstream rich

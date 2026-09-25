@@ -290,6 +290,9 @@ Format: what differs · why · how to remove it (if temporary).
   `Syntax::highlighter` / `Markdown::highlighter` accept any other engine. With
   the default, output is byte-identical to 0.0.11. Core validates an engine's
   spans against the source, so an engine can change colours but never the text.
+  A console can also carry a default engine and theme
+  (`protocol::ConsoleCodeHighlighting`), used by any `Syntax` without its own;
+  a console without one highlights exactly as before.
 - **Upstream's ANSI themes.** `ansi_dark` and `ansi_light` use upstream's
   `ANSI_DARK`/`ANSI_LIGHT` styles and the terminal's 16 colours, with no
   background. Pygments token types become TextMate scopes:

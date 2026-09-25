@@ -107,6 +107,41 @@ every dependent moves with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
   first version is uploaded by hand after core 0.0.8 and before ext 0.0.10
   (BRANCHING, "Registry authentication").
 
+### Choosing the code highlighter (0.0.12 workstream 1: #525)
+
+- **Core: a console-wide default.** `protocol::CodeHighlighting` (an engine and
+  an optional theme) and `ConsoleCodeHighlighting`, implemented by `Console`.
+  - A `Syntax` without a highlighter of its own uses the console's when it
+    renders. Markdown code blocks do too. The console's theme applies unless
+    the `Syntax` names one.
+  - `Syntax::highlight_for(console)` is `highlight()` with the console's
+    default.
+  - A console without a default highlights exactly as before.
+- **Ext.**
+  - `ExtensionRegistry::set_default_code_highlighter(name, theme)` chooses a
+    registered engine and theme. `install()` puts it on the console, and
+    `code_highlighting()` returns it.
+  - An unknown name or theme is a `HighlighterChoiceError` that lists the
+    choices.
+  - `source_view` and the text and patch diff views highlight with the
+    console's default.
+  - `RenderTarget::with_code_highlighting` passes one to a target's consoles.
+- **CLI.**
+  - `--highlighter NAME` and `--code-theme NAME`, with the `highlighter` and
+    `code_theme` config keys. A working-directory `rich.toml` may set them:
+    they are a plain choice among compiled-in engines.
+  - `syntect` is always available. `lumis` needs the new off-by-default
+    `lumis` feature (and Rust 1.91).
+  - An unknown highlighter or theme is a usage error listing the choices, and
+    says when lumis needs the feature.
+  - They apply to `rich FILE`, `--syntax`, `rich view`, `rich diff`, Markdown
+    and batch workers.
+  - `rich doctor` reports the compiled-in highlighters with their themes and
+    the active one and its theme, in its text and `--json` output.
+  - With neither option, nothing changes.
+  - Upstream's `--theme` (a syntax theme) is this CLI's config-theme option,
+    so the code theme is `--code-theme`.
+
 ### The lumis highlighter (0.0.12 workstream 1: #524)
 
 - **New crate `rs-rich-lumis` 0.0.1** (`rich_lumis`): a `CodeHighlighter` over
