@@ -11,7 +11,7 @@ use rich::segment::Segment;
 use rich::{CodeHighlighter, Console, FenceRenderer, Highlighter, Renderable, Text, Theme};
 use rich_plugin_api::{
     Capability, Plugin, PluginError, PluginMetadata, PluginRegistrar, SourceRenderer,
-    PLUGIN_API_VERSION,
+    TextTransform, PLUGIN_API_VERSION,
 };
 
 struct Shout;
@@ -72,6 +72,22 @@ impl FenceRenderer for Stars {
     }
 }
 
+/// Keeps the lines that contain "keep".
+struct KeepLines;
+impl TextTransform for KeepLines {
+    fn transform(&self, text: Text) -> Result<Text, PluginError> {
+        let lines: Vec<Text> = text
+            .split("\n", false, false)
+            .into_iter()
+            .filter(|line| line.plain().contains("keep"))
+            .collect();
+        if lines.is_empty() {
+            return Err(PluginError::Other("no line to keep".into()));
+        }
+        Ok(Text::new("\n").join(&lines))
+    }
+}
+
 struct Everything;
 impl Plugin for Everything {
     fn metadata(&self) -> PluginMetadata {
@@ -85,6 +101,7 @@ impl Plugin for Everything {
         registrar.box_style("round", ROUNDED);
         registrar.renderer("upper", Arc::new(Upper));
         registrar.fence_renderer("stars", Arc::new(Stars));
+        registrar.transform("keep", Arc::new(KeepLines));
         Ok(())
     }
 }
@@ -94,6 +111,7 @@ impl Plugin for Everything {
 struct Recorder {
     capabilities: Vec<Capability>,
     renderers: Vec<Arc<dyn SourceRenderer>>,
+    transforms: Vec<Arc<dyn TextTransform>>,
 }
 
 impl PluginRegistrar for Recorder {
@@ -119,6 +137,10 @@ impl PluginRegistrar for Recorder {
         self.capabilities
             .push(Capability::FenceRenderer(language.into()));
     }
+    fn transform(&mut self, name: &str, transform: Arc<dyn TextTransform>) {
+        self.capabilities.push(Capability::Transform(name.into()));
+        self.transforms.push(transform);
+    }
 }
 
 #[test]
@@ -138,10 +160,16 @@ fn a_plugin_registers_every_capability_through_public_items() {
             Capability::BoxStyle("round".into()),
             Capability::Renderer("upper".into()),
             Capability::FenceRenderer("stars".into()),
+            Capability::Transform("keep".into()),
         ]
     );
     let console = Console::builder().width(20).color_system(None).build();
     let rendered = recorder.renderers[0].render("hi").unwrap();
     assert_eq!(console.render_to_string(rendered.as_ref()).trim_end(), "HI");
     assert!(recorder.renderers[0].render("").is_err());
+    let kept = recorder.transforms[0]
+        .transform(Text::new("keep a\ndrop b\nkeep c"))
+        .unwrap();
+    assert_eq!(kept.plain(), "keep a\nkeep c");
+    assert!(recorder.transforms[0].transform(Text::new("x")).is_err());
 }

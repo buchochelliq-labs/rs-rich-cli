@@ -23,6 +23,7 @@ pub mod engine;
 pub mod git;
 mod render;
 mod source;
+pub mod transform;
 mod view;
 
 #[cfg(feature = "testing")]

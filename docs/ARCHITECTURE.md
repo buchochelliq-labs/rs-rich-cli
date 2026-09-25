@@ -34,7 +34,8 @@ tracks this checkout; registry badges show published versions.
   renderables, and the internal plugin registry. Independent SemVer. Talks to core
   only through public APIs and the extension traits.
 - **`crates/rich-plugin-api`** — the plugin contract: `Plugin`,
-  `PluginMetadata`, `PluginRegistrar` and `PLUGIN_API_VERSION`. Depends on
+  `PluginMetadata`, `PluginRegistrar`, the plugin-facing traits
+  (`SourceRenderer`, `TextTransform`) and `PLUGIN_API_VERSION`. Depends on
   `rich` only, so a plugin never needs `rich-ext`; `rich-ext`'s
   `ExtensionRegistry` is the host that loads plugins. Independent SemVer. See
   [PLUGINS](PLUGINS.md).

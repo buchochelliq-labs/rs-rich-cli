@@ -36,7 +36,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use rich::r#box::Box as BoxStyle;
-use rich::{CodeHighlighter, FenceRenderer, Highlighter, Renderable, Theme};
+use rich::{CodeHighlighter, FenceRenderer, Highlighter, Renderable, Text, Theme};
 
 /// The version of this contract. A host accepts a plugin only if the plugin's
 /// [`PluginMetadata::api_version`] equals the host's.
@@ -88,6 +88,24 @@ pub trait SourceRenderer: Send + Sync {
     fn render(&self, source: &str) -> Result<Box<dyn Renderable + Send + Sync>, PluginError>;
 }
 
+/// Rewrites a [`Text`]: keeps some lines, styles matches, masks secrets.
+/// Registered under a name with [`PluginRegistrar::transform`]; a host chains
+/// named transforms into a pipeline.
+///
+/// The text comes from the input being rendered, so treat it as untrusted.
+/// Change styles freely; text a transform adds must not carry terminal control
+/// sequences.
+pub trait TextTransform: Send + Sync {
+    /// Transform `text`. Errors should say what was wrong with the input.
+    fn transform(&self, text: Text) -> Result<Text, PluginError>;
+}
+
+impl<T: TextTransform + ?Sized> TextTransform for Arc<T> {
+    fn transform(&self, text: Text) -> Result<Text, PluginError> {
+        (**self).transform(text)
+    }
+}
+
 /// What a plugin can add. [`Plugin::register`] receives one of these.
 ///
 /// Names are checked by the host when `register` returns: they must be
@@ -112,6 +130,9 @@ pub trait PluginRegistrar {
     /// A renderer for Markdown fences whose language is `language` (for
     /// example `"mermaid"`), used in place of highlighting them as code.
     fn fence_renderer(&mut self, language: &str, renderer: Arc<dyn FenceRenderer>);
+
+    /// A named text transform.
+    fn transform(&mut self, name: &str, transform: Arc<dyn TextTransform>);
 }
 
 /// Something that extends `rich`.
@@ -135,6 +156,7 @@ pub enum Capability {
     BoxStyle(String),
     Renderer(String),
     FenceRenderer(String),
+    Transform(String),
 }
 
 impl fmt::Display for Capability {
@@ -146,6 +168,7 @@ impl fmt::Display for Capability {
             Capability::BoxStyle(name) => write!(f, "box style {name:?}"),
             Capability::Renderer(name) => write!(f, "renderer {name:?}"),
             Capability::FenceRenderer(language) => write!(f, "fence renderer {language:?}"),
+            Capability::Transform(name) => write!(f, "transform {name:?}"),
         }
     }
 }

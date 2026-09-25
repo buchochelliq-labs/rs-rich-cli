@@ -107,6 +107,39 @@ every dependent moves with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
   first version is uploaded by hand after core 0.0.8 and before ext 0.0.10
   (BRANCHING, "Registry authentication").
 
+### Composable transforms (0.0.12 workstream 4: #216)
+
+- **`rich_ext::transform`.** `Transform<T>` rewrites a value; `Pipeline<T>`
+  runs named stages in order and reports which one failed (`PipelineError`).
+  `from_fn` makes a stage from a closure, and a pipeline is itself a stage.
+  - Text: `KeepLines` (lines matching a regular expression, or not) and
+    `HighlightMatches`.
+  - Data (`rich_ext::data::transform`, `jsonpath` feature): a `Document`
+    (tree, label, highlighted paths) with `Redact`, `Select`, `Filter` and
+    `Highlight`. `Explorer::highlight(path, style)` draws highlighted lines.
+  - Tables (`table::transform`): `Sort` and `Group`. Patches
+    (`diff::transform`): `KeepFiles`.
+- **Plugins can contribute text transforms.** The plugin API gains
+  `TextTransform`, `PluginRegistrar::transform(name, transform)` and
+  `Capability::Transform`. `ExtensionRegistry` hosts them: `transform(name)`,
+  `transform_names()`, `register_transform` and `text_pipeline(names)`.
+  `rich doctor` lists them with each plugin's capabilities. The plugin API is
+  unpublished, so `PLUGIN_API_VERSION` stays 1.
+- **CLI: `--filter` and `--highlight`.** With `--inspect` they take a JSONPath:
+  `--filter` keeps what it selects and the containers above it, and
+  `--highlight` shows those tree lines in reverse video. For text, `--print`
+  and `--syntax` they take a regular expression, matched per line.
+  - One fixed order, whatever order the flags come in: `--redact`, `--select`,
+    `--filter`, `--highlight` for `--inspect`; `--filter`, `--highlight` for
+    text. It is written down in [docs/cli.md](docs/cli.md#filter-and-highlight)
+    and pinned by a test.
+  - `--redact` and `--select` now run as stages of that pipeline. Their output
+    is unchanged.
+  - Other modes refuse both flags, and `--compare`, `--find`, `--flatten` and
+    `--table` refuse the combinations they cannot show.
+- **Guide: "Transforms"** ([docs/guide/ext/transforms.md](docs/guide/ext/transforms.md)),
+  from the compiled `guide_transforms` example, including a plugin transform.
+
 ### Highlighter conformance kit, guide and benchmarks (0.0.12 workstream 1: #526)
 
 - **`rich_ext::testing::conformance`** (the `testing` feature).

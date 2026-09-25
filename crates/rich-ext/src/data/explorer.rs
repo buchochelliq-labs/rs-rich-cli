@@ -1,7 +1,7 @@
 //! A width-aware tree (or table) over a [`Node`], with folding and limits.
 
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use rich::cells::{cell_len, char_cell_width};
 use rich::measure::Measurement;
@@ -54,6 +54,7 @@ pub struct Explorer<'a> {
     show_paths: bool,
     show_types: bool,
     folded: HashSet<Path>,
+    highlighted: HashMap<Path, Style>,
     root_label: Option<String>,
     view: View,
 }
@@ -92,6 +93,7 @@ impl<'a> Explorer<'a> {
             show_paths: false,
             show_types: false,
             folded: HashSet::new(),
+            highlighted: HashMap::new(),
             root_label: None,
             view: View::Tree,
         }
@@ -132,6 +134,13 @@ impl<'a> Explorer<'a> {
     /// Fold the container at `path`.
     pub fn fold(mut self, path: Path) -> Self {
         self.folded.insert(path);
+        self
+    }
+
+    /// Style the tree line of the node at `path`, such as the selection of a
+    /// `data::transform::Highlight`. The table view ignores it.
+    pub fn highlight(mut self, path: Path, style: Style) -> Self {
+        self.highlighted.insert(path, style);
         self
     }
 
@@ -268,6 +277,10 @@ impl<'a> Explorer<'a> {
         let text = text.append_text(&badges).append_text(&extras);
         let mut text = text;
         text.truncate(available, Some(Overflow::Ellipsis), false);
+        if let Some(style) = self.highlighted.get(path) {
+            let end = text.plain().len();
+            text.stylize(style.clone(), 0, end);
+        }
         (text, minimum)
     }
 

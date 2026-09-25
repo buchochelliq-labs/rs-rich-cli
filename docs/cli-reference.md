@@ -117,6 +117,8 @@ Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by exten
 | Option | Description |
 | --- | --- |
 | `--select <EXPR>` | Show only what a JSONPath expression selects, e.g. `$.servers[*].name`. |
+| `--filter <PATTERN>` | Keep only what matches: with --inspect, the values a JSONPath selects and the containers above them; for text, --print and --syntax, the lines a regular expression matches. |
+| `--highlight <PATTERN>` | Highlight what matches, in reverse video: with --inspect, the tree lines a JSONPath selects; for text, --print and --syntax, the matches of a regular expression. |
 | `--find <TEXT>` | Search keys and values (case-insensitive), highlighting matches. |
 | `--flatten` | Show `path = value` rows instead of a tree. |
 | `--table` | Show records, or a path/value table, instead of a tree. |
@@ -514,6 +516,8 @@ rich inspect [OPTIONS] [RESOURCE]
 | Option | Description |
 | --- | --- |
 | `--select <EXPR>` | Show only what a JSONPath expression selects, e.g. `$.servers[*].name`. |
+| `--filter <PATTERN>` | Keep only what matches: with --inspect, the values a JSONPath selects and the containers above them; for text, --print and --syntax, the lines a regular expression matches. |
+| `--highlight <PATTERN>` | Highlight what matches, in reverse video: with --inspect, the tree lines a JSONPath selects; for text, --print and --syntax, the matches of a regular expression. |
 | `--find <TEXT>` | Search keys and values (case-insensitive), highlighting matches. |
 | `--flatten` | Show `path = value` rows instead of a tree. |
 | `--table` | Show records, or a path/value table, instead of a tree. |

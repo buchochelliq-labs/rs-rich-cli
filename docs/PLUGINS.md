@@ -73,6 +73,7 @@ adds capabilities through a `PluginRegistrar`:
 | `box_style(name, box)` | a named table/panel box style |
 | `renderer(name, renderer)` | a `SourceRenderer` that turns source text into a renderable |
 | `fence_renderer(language, renderer)` | a `FenceRenderer` for Markdown fences in that language |
+| `transform(name, transform)` | a `TextTransform`, chained by name into a text pipeline (0.0.12; see [Transforms](guide/ext/transforms.md)) |
 
 ```rust
 use rich_ext::plugin::{Plugin, PluginError, PluginMetadata, PluginRegistrar};
@@ -113,8 +114,10 @@ was.
 `ExtensionRegistry::with_defaults()` adds the built-in `rich-ext` plugin, which
 provides the number highlighter and the `syntect` code highlighter. Query what
 is registered with `plugins()`, `code_highlighter(name)`, `theme(name)`,
-`box_style(name)`, `renderer(name)`, `fence_renderer(language)` and
-`provided_by(capability)`. `fences()` combines every registered fence renderer
+`box_style(name)`, `renderer(name)`, `fence_renderer(language)`,
+`transform(name)`, `transform_names()` and `provided_by(capability)`.
+`text_pipeline(names)` chains registered text transforms, in the order given,
+into a `rich_ext::transform::Pipeline`. `fences()` combines every registered fence renderer
 into one for `Markdown::fence_renderer`, routed by language.
 
 **A default code highlighter.** `ExtensionRegistry::set_default_code_highlighter(name,

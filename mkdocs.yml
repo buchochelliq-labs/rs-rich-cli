@@ -104,6 +104,7 @@ nav:
           - Badges, size bars and redaction: guide/ext/badges-and-redaction.md
           - Macros and derive: guide/ext/macros.md
           - Structured data: guide/ext/structured-data.md
+          - Transforms: guide/ext/transforms.md
           - CLI authoring: guide/ext/cli-authoring.md
           - Diffs and test reports: guide/ext/diffs-and-test-reports.md
           - QA tooling: guide/ext/qa.md

@@ -98,6 +98,8 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
         "inspect" => &[
             "format",
             "select",
+            "filter",
+            "highlight",
             "find",
             "flatten",
             "table",
@@ -591,6 +593,22 @@ fn inspect_options() -> Vec<ArgSpec> {
             "EXPR",
             INSPECT,
             "Show only what a JSONPath expression selects, e.g. `$.servers[*].name`",
+        ),
+        option(
+            "filter",
+            "PATTERN",
+            INSPECT,
+            "Keep only what matches: with --inspect, the values a JSONPath selects and the \
+             containers above them; for text, --print and --syntax, the lines a regular \
+             expression matches",
+        ),
+        option(
+            "highlight",
+            "PATTERN",
+            INSPECT,
+            "Highlight what matches, in reverse video: with --inspect, the tree lines a \
+             JSONPath selects; for text, --print and --syntax, the matches of a regular \
+             expression",
         ),
         option(
             "find",

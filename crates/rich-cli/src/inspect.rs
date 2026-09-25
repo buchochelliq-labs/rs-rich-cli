@@ -5,11 +5,13 @@
 //! line is untouched. Without `--format`, piped input still renders as plain
 //! text exactly as upstream's does; detection is something a user asks for.
 use rich::measure::Measurement;
-use rich::{Console, ConsoleOptions, Renderable, Segment};
+use rich::{Console, ConsoleOptions, Renderable, Segment, Style, Text};
+use rich_ext::data::transform::{Document, Filter, Highlight, Redact, Select};
 use rich_ext::data::{
     self, DiffView, Explorer, FlatView, Format, Node, Redaction, SearchQuery, SearchResults,
-    Selectors, Value, View,
+    Selectors, View,
 };
+use rich_ext::transform::{HighlightMatches, KeepLines, Pipeline, PipelineError};
 use std::borrow::Cow;
 
 /// `--format`'s value: a named format, or `auto` to detect one.
@@ -45,7 +47,13 @@ pub(crate) struct DataOptions {
     show_paths: bool,
     redact: bool,
     compare: Option<String>,
+    filter: Option<String>,
+    highlight: Option<String>,
 }
+
+/// The style `--highlight` gives what it matches: reverse video reads on any
+/// palette.
+const HIGHLIGHT_STYLE: &str = "reverse";
 
 fn positive(flag: &str, value: Option<&String>) -> Result<usize, String> {
     value
@@ -79,6 +87,13 @@ impl DataOptions {
             }
             "--compare" => {
                 self.compare = Some(rest.next().ok_or("--compare requires a path")?.clone());
+            }
+            "--filter" => {
+                self.filter = Some(rest.next().ok_or("--filter requires a pattern")?.clone());
+            }
+            "--highlight" => {
+                let pattern = rest.next().ok_or("--highlight requires a pattern")?;
+                self.highlight = Some(pattern.clone());
             }
             "--max-depth" => self.max_depth = Some(positive(arg, rest.next())?),
             "--max-length" => self.max_length = Some(positive(arg, rest.next())?),
@@ -114,6 +129,69 @@ impl DataOptions {
         .find_map(|(flag, given)| given.then_some(flag))
     }
 
+    /// The first transform option given (`--filter`, `--highlight`). These
+    /// apply to plain text, `--print`, `--syntax` and `--inspect`.
+    pub(crate) fn transform_option(&self) -> Option<&'static str> {
+        [
+            ("--filter", self.filter.is_some()),
+            ("--highlight", self.highlight.is_some()),
+        ]
+        .into_iter()
+        .find_map(|(flag, given)| given.then_some(flag))
+    }
+
+    /// Check `--filter` and `--highlight` before any input is read: JSONPath
+    /// with `--inspect`, a regular expression otherwise.
+    pub(crate) fn check_transforms(&self, inspect: bool) -> Result<(), String> {
+        if inspect {
+            self.document_pipeline().map(drop)
+        } else {
+            self.text_pipeline().map(drop)
+        }
+    }
+
+    /// `--inspect`'s transforms, in their documented order: `--redact`,
+    /// `--select`, `--filter`, `--highlight`. `--compare` applies only
+    /// `--redact`, to both documents.
+    pub(crate) fn document_pipeline(&self) -> Result<Pipeline<Document>, String> {
+        let mut pipeline = Pipeline::new();
+        if self.redact {
+            pipeline = pipeline.then("--redact", Redact(Redaction::secrets()));
+        }
+        if let Some(expression) = &self.select {
+            let select = Select::new(expression)
+                .map_err(|err| format!("invalid --select expression: {err}"))?;
+            pipeline = pipeline.then("--select", select);
+        }
+        if let Some(expression) = &self.filter {
+            let filter = Filter::new(expression)
+                .map_err(|err| format!("invalid --filter expression: {err}"))?;
+            pipeline = pipeline.then("--filter", filter);
+        }
+        if let Some(expression) = &self.highlight {
+            let highlight = Highlight::new(expression, highlight_style())
+                .map_err(|err| format!("invalid --highlight expression: {err}"))?;
+            pipeline = pipeline.then("--highlight", highlight);
+        }
+        Ok(pipeline)
+    }
+
+    /// The transforms for plain text, `--print` and `--syntax`, in their
+    /// documented order: `--filter`, then `--highlight`.
+    pub(crate) fn text_pipeline(&self) -> Result<Pipeline<Text>, String> {
+        let mut pipeline = Pipeline::new();
+        if let Some(pattern) = &self.filter {
+            let keep = KeepLines::new(pattern).map_err(|err| format!("--filter: {err}"))?;
+            pipeline = pipeline.then("--filter", keep);
+        }
+        if let Some(pattern) = &self.highlight {
+            let highlight = HighlightMatches::new(pattern, highlight_style())
+                .map_err(|err| format!("--highlight: {err}"))?;
+            pipeline = pipeline.then("--highlight", highlight);
+        }
+        Ok(pipeline)
+    }
+
     /// Views that replace one another; more than one is ambiguous.
     pub(crate) fn validate(&self) -> Result<(), String> {
         let views: Vec<_> = [
@@ -128,8 +206,28 @@ impl DataOptions {
         if views.len() > 1 {
             return Err(format!("{} cannot be combined", views.join(" and ")));
         }
+        // `--compare` shows a diff, not a tree; the other views do not draw
+        // tree lines to highlight.
+        if let Some(view) = views.first() {
+            let refused = [
+                ("--filter", self.filter.is_some() && *view == "--compare"),
+                ("--highlight", self.highlight.is_some()),
+            ];
+            if let Some((flag, _)) = refused.into_iter().find(|(_, refused)| *refused) {
+                return Err(format!("{flag} cannot be combined with {view}"));
+            }
+        }
         Ok(())
     }
+}
+
+fn highlight_style() -> Style {
+    Style::parse(HIGHLIGHT_STYLE).expect("a valid style")
+}
+
+/// A failed transform, worded as the flag that failed.
+pub(crate) fn transform_failed(error: PipelineError) -> String {
+    format!("{} failed: {}", error.stage, error.error)
 }
 
 /// Where `--format` sends input that would otherwise render as plain text.
@@ -226,11 +324,7 @@ pub(crate) fn build(
     read: impl FnOnce(&str) -> Result<String, String>,
 ) -> Result<Box<dyn Renderable>, String> {
     let format = options.format.unwrap_or(InputFormat::Auto);
-    let (format, mut node) = parse_document(format, content, resource)?;
-    let redaction = options.redact.then(Redaction::secrets);
-    if let Some(redaction) = &redaction {
-        node = node.redacted(redaction);
-    }
+    let (format, node) = parse_document(format, content, resource)?;
 
     if let Some(other) = &options.compare {
         let text = read(other)?;
@@ -239,48 +333,45 @@ pub(crate) fn build(
         let other_format = Format::from_file_name(name_hint(Some(other)).unwrap_or(other))
             .map(InputFormat::Named)
             .unwrap_or(InputFormat::Named(format));
-        let (_, mut other_node) = parse_document(other_format, &text, Some(other))?;
-        if let Some(redaction) = &redaction {
-            other_node = other_node.redacted(redaction);
-        }
-        return Ok(Box::new(DiffView::new(&node, &other_node)));
+        let (_, other_node) = parse_document(other_format, &text, Some(other))?;
+        // Only `--redact` applies; `validate` rejects the other transforms.
+        let pipeline = options.document_pipeline()?;
+        let [node, other_node] = [node, other_node].map(|node| {
+            pipeline
+                .apply(Document::new(node))
+                .map(|document| document.node)
+                .map_err(transform_failed)
+        });
+        return Ok(Box::new(DiffView::new(&node?, &other_node?)));
     }
 
-    let mut label = name_hint(resource).unwrap_or("<stdin>").to_string();
-    if let Some(expression) = &options.select {
-        let selector = Selectors::default()
-            .compile("jsonpath", expression)
-            .map_err(|err| format!("invalid --select expression: {err}"))?;
-        let hits: Vec<_> = selector
-            .select(&node)
-            .map_err(|err| format!("--select failed: {err}"))?
-            .into_iter()
-            .map(|(path, hit)| (path.to_string(), hit.clone()))
-            .collect();
-        // One hit is explored as itself; several become a map keyed by path.
-        node = match <[_; 1]>::try_from(hits) {
-            Ok([(path, hit)]) => {
-                label = if path.is_empty() { "$".into() } else { path };
-                hit
-            }
-            Err(hits) => Node::new(Value::Map(hits)),
-        };
-    }
+    let label = name_hint(resource).unwrap_or("<stdin>");
+    let document = options
+        .document_pipeline()?
+        .apply(Document::new(node).label(label))
+        .map_err(transform_failed)?;
 
     if let Some(text) = &options.find {
         let query = SearchQuery::text(text.as_str()).case_insensitive(true);
-        return Ok(Box::new(Found { node, query }));
+        return Ok(Box::new(Found {
+            node: document.node,
+            query,
+        }));
     }
     if options.flatten {
-        return Ok(Box::new(FlatView::new(node)));
+        return Ok(Box::new(FlatView::new(document.node)));
     }
-    let untouched = options.select.is_none() && !options.table;
+    let untouched =
+        options.select.is_none() && options.transform_option().is_none() && !options.table;
     if untouched && matches!(format, Format::Ini | Format::Dotenv) && options.max_depth.is_none() {
-        return Ok(Box::new(data::ConfigFileView::new(node)));
+        return Ok(Box::new(data::ConfigFileView::new(document.node)));
     }
-    let mut explorer = Explorer::new(Cow::Owned(node))
-        .root_label(label)
+    let mut explorer = Explorer::new(Cow::Owned(document.node))
+        .root_label(document.label.unwrap_or_default())
         .show_paths(options.show_paths);
+    for (path, style) in document.highlights {
+        explorer = explorer.highlight(path, style);
+    }
     if options.table {
         explorer = explorer.view(View::Table);
     }
@@ -309,6 +400,53 @@ mod tests {
             assert!(options.parse_option(arg, &mut iter)?, "{arg} not consumed");
         }
         Ok(options)
+    }
+
+    /// The pipeline order is fixed and documented (docs/cli.md, "Transforms"),
+    /// whatever order the flags are given in.
+    #[test]
+    fn transforms_run_in_the_documented_order() {
+        let options = parsed(&[
+            "--highlight",
+            "$.a",
+            "--filter",
+            "$.a",
+            "--redact",
+            "--select",
+            "$",
+        ])
+        .unwrap();
+        assert_eq!(
+            options.document_pipeline().unwrap().names(),
+            ["--redact", "--select", "--filter", "--highlight"]
+        );
+        let text = parsed(&["--highlight", "x", "--filter", "y"]).unwrap();
+        assert_eq!(
+            text.text_pipeline().unwrap().names(),
+            ["--filter", "--highlight"]
+        );
+        assert!(DataOptions::default()
+            .document_pipeline()
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn highlight_styles_the_selected_tree_line() {
+        let options = parsed(&["--highlight", "$.b"]).unwrap();
+        let view = build(&options, r#"{"a": 1, "b": 2}"#, Some("x.json"), |_| {
+            Err("no".into())
+        })
+        .unwrap();
+        let out = Console::builder()
+            .width(40)
+            .force_terminal(true)
+            .color_system(Some(rich::ColorSystem::Standard))
+            .build()
+            .render_to_string(view.as_ref());
+        let lines: Vec<&str> = out.lines().collect();
+        assert!(!lines[1].contains("\x1b[7m"), "{out:?}");
+        assert!(lines[2].contains("\x1b[7m"), "{out:?}");
     }
 
     fn render(options: &DataOptions, content: &str, resource: Option<&str>) -> String {

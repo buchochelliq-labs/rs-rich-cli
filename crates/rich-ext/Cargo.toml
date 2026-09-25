@@ -145,6 +145,11 @@ name = "guide_qa"
 required-features = ["testing"]
 
 [[example]]
+name = "guide_transforms"
+required-features = ["jsonpath"]
+test = true
+
+[[example]]
 name = "guide_highlighters"
 required-features = ["testing"]
 # Its adapter's conformance test runs with `cargo test`.
