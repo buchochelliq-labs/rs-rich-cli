@@ -1,6 +1,6 @@
 # Architecture
 
-A seven-crate Cargo workspace with a strict, one-directional dependency rule.
+An eight-crate Cargo workspace with a strict, one-directional dependency rule.
 Each crate versions independently. The [manifest-version table](index.md#versions-in-this-checkout)
 tracks this checkout; registry badges show published versions.
 
@@ -43,6 +43,11 @@ tracks this checkout; registry badges show published versions.
   feature. Depends on `rich`, `rich-plugin-api` and (for `mmdc`) `rich-art`,
   never on `rich-ext`. The CLI registers it for `rich mermaid` and Markdown
   fences. Independent SemVer.
+- **`crates/rich-lumis`** — the lumis (tree-sitter) syntax highlighter as a
+  `CodeHighlighter`, with lumis's Neovim themes and upstream's ANSI themes, and
+  a plugin that registers it as `"lumis"`. Its own crate because lumis links
+  tree-sitter's C runtime and grammars; it declares its own minimum Rust
+  (lumis's). Depends on `rich` and `rich-plugin-api` only. Independent SemVer.
 - **`crates/rich-macros`** — procedural macros (`richf!`, `style!`,
   `theme_key!`, `markup!`, `#[derive(Rich)]`) that check markup and styles at
   compile time. Depends on `rich` only (to parse markup and styles while

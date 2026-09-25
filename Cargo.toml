@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/rich", "crates/rich-plugin-api", "crates/rich-macros", "crates/rich-ext", "crates/rich-cli", "crates/rich-art", "crates/rich-mermaid"]
+members = ["crates/rich", "crates/rich-plugin-api", "crates/rich-macros", "crates/rich-ext", "crates/rich-cli", "crates/rich-art", "crates/rich-mermaid", "crates/rich-lumis"]
 
 # Shared metadata. `version` is intentionally NOT inherited: each crate owns its
 # SemVer. A `vX.Y.Z` tag selects the coordinated workspace; a
@@ -27,6 +27,7 @@ rich-macros = { package = "rs-rich-macros", path = "crates/rich-macros", version
 rich-ext = { package = "rs-rich-ext", path = "crates/rich-ext", version = "0.0.10" }
 rich-art = { package = "rs-rich-art", path = "crates/rich-art", version = "0.0.10" }
 rich-mermaid = { package = "rs-rich-mermaid", path = "crates/rich-mermaid", version = "0.0.1" }
+rich-lumis = { package = "rs-rich-lumis", path = "crates/rich-lumis", version = "0.0.1" }
 # Cargo's default caret requirement treats 0.0.x specially: `version = "0.0.2"`
 # means >=0.0.2,<0.0.3, not >=0.0.2,<0.1.0. Therefore any internal crate bump
 # must also update every direct dependent's workspace requirement.

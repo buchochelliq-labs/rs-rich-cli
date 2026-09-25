@@ -142,6 +142,9 @@ jobs:
             args: ""
           - crate: rs-rich-mermaid
             args: "--all-features"
+          # Every lumis language (its default); the bundles only select fewer.
+          - crate: rs-rich-lumis
+            args: ""
           # The CLI must still build without network or image decoders.
           - crate: rs-rich-cli
             args: "--no-default-features"
@@ -216,7 +219,24 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Check the whole workspace on the declared MSRV
-        run: cargo check --workspace --all-targets --all-features
+        run: cargo check --workspace --all-targets --all-features --exclude rs-rich-lumis
+
+      # rs-rich-lumis declares its own minimum, lumis's (newer than the
+      # workspace's), and is checked on exactly that.
+      - name: Read rust-version from rs-rich-lumis
+        id: lumis-msrv
+        run: |
+          version="$(grep -m1 '^rust-version' crates/rich-lumis/Cargo.toml | cut -d'"' -f2)"
+          echo "Declared rs-rich-lumis MSRV: $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install the rs-rich-lumis toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.lumis-msrv.outputs.version }}
+
+      - name: Check rs-rich-lumis on its declared MSRV
+        run: cargo +${{ steps.lumis-msrv.outputs.version }} check -p rs-rich-lumis --all-targets --all-features
 
   parity:
     name: golden parity vs upstream rich
