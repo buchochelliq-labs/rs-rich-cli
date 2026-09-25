@@ -25,6 +25,8 @@ fn guided_demo_shows_suite_without_writing_working_directory() {
         "JSON Lines",
         "Notebook",
         "Watch updates",
+        "Code themes",
+        "Filter and highlight",
         "Tour complete",
     ] {
         assert!(text.contains(section), "missing {section}");
@@ -36,6 +38,7 @@ fn guided_demo_shows_suite_without_writing_working_directory() {
         "Half-block",
         "ASCII",
         "Crop anchors",
+        "Native image size",
         "Image diff",
         "GIF",
     ] {
@@ -43,6 +46,8 @@ fn guided_demo_shows_suite_without_writing_working_directory() {
     }
     #[cfg(not(feature = "art"))]
     assert!(text.contains("art feature is disabled"));
+    #[cfg(feature = "mermaid")]
+    assert!(text.contains("Mermaid flowcharts"), "missing Mermaid");
     let profile = text
         .split("$ rich --config demo.toml --profile preview first.json")
         .nth(1)
