@@ -13,7 +13,7 @@ use rich::protocol::Renderable;
 use rich::segment::Segment as CoreSegment;
 use rich::Text as CoreText;
 
-use crate::renderable::{self, AsRenderable, PyRenderable};
+use crate::renderable::{self, AsRenderable};
 use crate::segment::Segment;
 use crate::text::Text;
 
@@ -292,53 +292,75 @@ pub(crate) fn render_core(
         .collect())
 }
 
-/// Rich's `Group`: children rendered one after another.
-struct Sequence(Vec<Arc<dyn Renderable + Send + Sync>>);
+/// Rich's `Group`: children rendered one after another, each with the
+/// height reset (a protocol object, as upstream's is).
+#[pyclass(name = "_Group", module = "rs_rich.live", frozen)]
+pub(crate) struct Group {
+    renderables: Vec<Py<PyAny>>,
+}
 
-impl Renderable for Sequence {
-    fn rich_render(&self, console: &CoreConsole, options: &CoreOptions) -> Vec<CoreSegment> {
-        let mut segments = Vec::new();
-        for child in &self.0 {
-            let rendered = child.rich_render(console, options);
-            if rendered.is_empty() {
-                continue;
-            }
-            if !segments.is_empty() {
-                segments.push(CoreSegment::line());
-            }
-            segments.extend(rendered);
-        }
-        segments
+#[pymethods]
+impl Group {
+    #[getter]
+    fn renderables<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        PyList::new(py, self.renderables.iter().map(|r| r.clone_ref(py)))
     }
 
-    fn measure(&self, console: &CoreConsole, options: &CoreOptions) -> CoreMeasurement {
-        let mut minimum = 0;
-        let mut maximum = 0;
-        for child in &self.0 {
-            let measured = CoreMeasurement::get(console, options, child.as_ref());
-            minimum = minimum.max(measured.minimum);
-            maximum = maximum.max(measured.maximum);
+    fn __rich_console__<'py>(
+        &self,
+        py: Python<'py>,
+        _console: &Bound<'py, PyAny>,
+        _options: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyList>> {
+        self.renderables(py)
+    }
+
+    fn __rich_measure__(
+        &self,
+        console: &Bound<'_, PyAny>,
+        options: &Bound<'_, PyAny>,
+    ) -> PyResult<crate::protocol::Measurement> {
+        let py = console.py();
+        let (mut minimum, mut maximum) = (0usize, 0usize);
+        for child in &self.renderables {
+            let kwargs = pyo3::types::PyDict::new(py);
+            kwargs.set_item("options", options)?;
+            let measured = console.call_method("measure", (child.bind(py),), Some(&kwargs))?;
+            let (min, max): (usize, usize) =
+                (measured.get_item(0)?.extract()?, measured.get_item(1)?.extract()?);
+            minimum = minimum.max(min);
+            maximum = maximum.max(max);
         }
-        CoreMeasurement::new(minimum, maximum)
+        Ok(crate::protocol::Measurement::from_core(CoreMeasurement::new(
+            minimum, maximum,
+        )))
+    }
+
+    fn __traverse__(&self, visit: pyo3::PyVisit<'_>) -> Result<(), pyo3::PyTraverseError> {
+        for renderable in &self.renderables {
+            visit.call(renderable)?;
+        }
+        Ok(())
     }
 }
 
-/// `Group(*children)`; one child stands for itself.
+/// `Group(*children)`.
 pub(crate) fn group(py: Python<'_>, children: Vec<Bound<'_, PyAny>>) -> PyResult<Py<PyAny>> {
-    if children.len() == 1 {
-        return Ok(children.into_iter().next().expect("one child").unbind());
-    }
-    let mut shared = Vec::new();
-    for child in children {
-        if !renderable::is_renderable(&child)? {
+    for child in &children {
+        if !renderable::is_renderable(child)? {
             return Err(crate::errors::NotRenderableError::new_err(format!(
                 "Unable to render {}; A str, Segment or object with __rich_console__ method is required",
                 child.repr()?
             )));
         }
-        shared.push(PyRenderable::shared(child.unbind(), None));
     }
-    core_renderable(py, Arc::new(Sequence(shared)))
+    Ok(Py::new(
+        py,
+        Group {
+            renderables: children.into_iter().map(Bound::unbind).collect(),
+        },
+    )?
+    .into_any())
 }
 
 /// `str(value)` as a Rust string.
@@ -379,5 +401,6 @@ impl Arg {
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Renderables>()?;
     m.add_class::<Control>()?;
+    m.add_class::<Group>()?;
     renderable::add_renderable_class::<CoreRenderable>(m)
 }

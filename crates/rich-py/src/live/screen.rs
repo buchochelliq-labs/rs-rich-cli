@@ -38,6 +38,7 @@ impl Screen {
 
     /// `Screen(renderable)`.
     pub(crate) fn wrap(py: Python<'_>, renderable: Py<PyAny>) -> PyResult<Py<Screen>> {
+        let renderable = util::group(py, vec![renderable.into_bound(py)])?;
         Py::new(
             py,
             Screen {
@@ -69,12 +70,7 @@ impl Screen {
         style: Option<Py<PyAny>>,
         application_mode: bool,
     ) -> PyResult<Screen> {
-        let children: Vec<_> = renderables.iter().collect();
-        let renderable = if children.is_empty() {
-            PyString::new(py, "").into_any().unbind()
-        } else {
-            util::group(py, children)?
-        };
+        let renderable = util::group(py, renderables.iter().collect())?;
         Ok(Screen {
             state: Mutex::new(ScreenState {
                 renderable,
@@ -217,7 +213,16 @@ impl ScreenContext {
         style: Option<Py<PyAny>>,
     ) -> PyResult<ScreenContext> {
         let style = style.unwrap_or_else(|| PyString::new(py, "").into_any().unbind());
-        let screen = Screen::wrap(py, PyString::new(py, "").into_any().unbind())?;
+        let screen = Py::new(
+            py,
+            Screen {
+                state: Mutex::new(ScreenState {
+                    renderable: util::group(py, Vec::new())?,
+                    style: None,
+                    application_mode: false,
+                }),
+            },
+        )?;
         screen.get().set_style_value(Some(style));
         Ok(ScreenContext {
             console,
@@ -251,9 +256,10 @@ impl ScreenContext {
         style: Option<Py<PyAny>>,
     ) -> PyResult<()> {
         let screen = self.screen.get();
-        if !renderables.is_empty() {
-            let children: Vec<_> = renderables.iter().collect();
-            screen.set_renderable(util::group(py, children)?);
+        if renderables.len() == 1 {
+            screen.set_renderable(renderables.get_item(0)?.unbind());
+        } else if !renderables.is_empty() {
+            screen.set_renderable(util::group(py, renderables.iter().collect())?);
         }
         if let Some(style) = style.filter(|s| !s.is_none(py)) {
             screen.set_style_value(Some(style));
@@ -452,6 +458,12 @@ impl PagerContext {
         if exc_type.is_none_or(|t| t.is_none()) {
             let content = strip_codes(&content, self.styles, self.links);
             self.pager.bind(py).call_method1("show", (content,))?;
+        } else if !content.is_empty() {
+            // Upstream leaves the output in the console's buffer, which is
+            // then written as usual.
+            let file = self.console.bind(py).getattr("file")?;
+            file.call_method1("write", (content,))?;
+            file.call_method0("flush")?;
         }
         Ok(())
     }

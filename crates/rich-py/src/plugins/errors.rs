@@ -53,16 +53,17 @@ fn kind(error: &CorePluginError) -> &'static str {
 pub(crate) fn plugin_error(py: Python<'_>, error: &CorePluginError) -> PyErr {
     let raised = PluginError::new_err(error.to_string());
     let value = raised.value(py);
-    let set = |name: &str, item: Py<PyAny>| {
-        let _ = value.setattr(name, item);
+    // Setting an attribute on a fresh exception cannot fail in practice;
+    // an error here would only lose a detail, never the exception.
+    let set = |name: &str, item: &dyn Fn() -> PyResult<Py<PyAny>>| {
+        if let Ok(item) = item() {
+            let _ = value.setattr(name, item);
+        }
     };
-    let none = || py.None();
-    let s = |text: &str| {
-        text.into_pyobject(py)
-            .map(|v| v.into_any().unbind())
-            .unwrap_or_else(|_| py.None())
-    };
-    set("kind", s(kind(error)));
+    let text =
+        |text: &str| -> PyResult<Py<PyAny>> { Ok(text.into_pyobject(py)?.into_any().unbind()) };
+    let number = |n: u32| -> PyResult<Py<PyAny>> { Ok(n.into_pyobject(py)?.into_any().unbind()) };
+    set("kind", &|| text(kind(error)));
     for field in [
         "plugin",
         "name",
@@ -71,8 +72,9 @@ pub(crate) fn plugin_error(py: Python<'_>, error: &CorePluginError) -> PyErr {
         "built_for",
         "host",
         "message",
+        "stage",
     ] {
-        set(field, none());
+        set(field, &|| Ok(py.None()));
     }
     match error {
         CorePluginError::IncompatibleApi {
@@ -80,42 +82,31 @@ pub(crate) fn plugin_error(py: Python<'_>, error: &CorePluginError) -> PyErr {
             built_for,
             host,
         } => {
-            set("plugin", s(plugin));
-            set(
-                "built_for",
-                built_for
-                    .into_pyobject(py)
-                    .map(|v| v.into_any().unbind())
-                    .unwrap_or_else(|_| none()),
-            );
-            set(
-                "host",
-                host.into_pyobject(py)
-                    .map(|v| v.into_any().unbind())
-                    .unwrap_or_else(|_| none()),
-            );
+            set("plugin", &|| text(plugin));
+            set("built_for", &|| number(*built_for));
+            set("host", &|| number(*host));
         }
-        CorePluginError::DuplicatePlugin { id } => set("plugin", s(id)),
+        CorePluginError::DuplicatePlugin { id } => set("plugin", &|| text(id)),
         CorePluginError::Conflict {
             capability,
             existing,
             plugin,
         } => {
-            set("plugin", s(plugin));
-            set("existing", s(existing));
-            if let Ok(capability) = Py::new(py, super::types::Capability::from_core(capability)) {
-                set("capability", capability.into_any());
-            }
+            set("plugin", &|| text(plugin));
+            set("existing", &|| text(existing));
+            set("capability", &|| {
+                Ok(Py::new(py, super::types::Capability::from_core(capability))?.into_any())
+            });
         }
         CorePluginError::InvalidName { plugin, name } => {
-            set("plugin", s(plugin));
-            set("name", s(name));
+            set("plugin", &|| text(plugin));
+            set("name", &|| text(name));
         }
         CorePluginError::Failed { plugin, message } => {
-            set("plugin", s(plugin));
-            set("message", s(message));
+            set("plugin", &|| text(plugin));
+            set("message", &|| text(message));
         }
-        CorePluginError::Other(message) => set("message", s(message)),
+        CorePluginError::Other(message) => set("message", &|| text(message)),
         _ => {}
     }
     if let Some(cause) = take_stashed() {

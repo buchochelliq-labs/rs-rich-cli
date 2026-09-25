@@ -14,6 +14,7 @@ mod common;
 mod data;
 mod diagnostic;
 mod diff;
+mod inspect;
 mod status;
 mod tables;
 mod terminal;
@@ -32,5 +33,6 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     status::register(m)?;
     widgets::register(m)?;
     tables::register(m)?;
+    inspect::register(m)?;
     Ok(())
 }

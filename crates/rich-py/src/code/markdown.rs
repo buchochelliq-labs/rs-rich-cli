@@ -1,8 +1,10 @@
 //! `rich.markdown`: `Markdown`, rendered by core's `Markdown`.
 //!
-//! The port's own addition is `highlighter=`: the code highlighter (by
-//! name, from the `rich-ext` registry) for code blocks and highlighted
-//! inline code.
+//! The port's own additions: `highlighter=`, the code highlighter for code
+//! blocks and highlighted inline code (a name from the `rich-ext` registry,
+//! or a plugin code highlighter), and `fences=`, renderers that draw fenced
+//! blocks of their languages (`MermaidFences`, or a plugin fence renderer)
+//! instead of highlighting them.
 
 use std::sync::Arc;
 
@@ -10,12 +12,12 @@ use pyo3::prelude::*;
 
 use rich::console::{Console as CoreConsole, ConsoleOptions as CoreOptions};
 use rich::measure::Measurement as CoreMeasurement;
-use rich::protocol::{CodeHighlighter, Renderable};
+use rich::protocol::{CodeHighlighter, FenceRenderer, Renderable};
 use rich::segment::Segment as CoreSegment;
 use rich::style::StyleType;
 use rich::Justify;
 
-use super::syntax::code_highlighter;
+use super::syntax::code_highlighter_value;
 use crate::convert;
 use crate::renderable::{self, AsRenderable};
 use crate::style::style_type;
@@ -32,6 +34,7 @@ struct Spec {
     inline_code_lexer: Option<String>,
     inline_code_theme: Option<String>,
     highlighter: Option<Arc<dyn CodeHighlighter>>,
+    fences: Vec<Arc<dyn FenceRenderer>>,
 }
 
 impl Spec {
@@ -56,6 +59,9 @@ impl Spec {
         if let Some(highlighter) = &self.highlighter {
             markdown = markdown.highlighter(highlighter.clone());
         }
+        for fence in &self.fences {
+            markdown = markdown.fence_renderer(fence.clone());
+        }
         markdown
     }
 }
@@ -79,8 +85,17 @@ pub(crate) struct Markdown {
     #[pyo3(get)]
     justify: Option<String>,
     style: Py<PyAny>,
-    #[pyo3(get)]
-    highlighter: Option<String>,
+    highlighter: Option<Py<PyAny>>,
+    fences: Vec<Py<PyAny>>,
+}
+
+/// A `fences=` item as a core fence renderer: `MermaidFences` natively,
+/// anything else through the plugin API's adapter.
+fn fence_renderer(value: &Bound<'_, PyAny>) -> PyResult<Arc<dyn FenceRenderer>> {
+    if let Ok(mermaid) = value.extract::<PyRef<'_, crate::art::mermaid::MermaidFences>>() {
+        return Ok(mermaid.fence_renderer());
+    }
+    crate::plugins::fence_renderer_arg(value)
 }
 
 impl AsRenderable for Markdown {
@@ -94,7 +109,7 @@ impl Markdown {
     #[new]
     #[pyo3(signature = (
         markup, code_theme="monokai".to_string(), justify=None, style=None, hyperlinks=true,
-        inline_code_lexer=None, inline_code_theme=None, *, highlighter=None
+        inline_code_lexer=None, inline_code_theme=None, *, highlighter=None, fences=None
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -106,8 +121,10 @@ impl Markdown {
         hyperlinks: bool,
         inline_code_lexer: Option<String>,
         inline_code_theme: Option<String>,
-        highlighter: Option<String>,
+        highlighter: Option<Py<PyAny>>,
+        fences: Option<Vec<Py<PyAny>>>,
     ) -> PyResult<Self> {
+        let fences = fences.unwrap_or_default();
         let style = style.unwrap_or_else(|| {
             "none"
                 .into_pyobject(py)
@@ -125,13 +142,18 @@ impl Markdown {
             style: style_type(Some(style.bind(py)))?,
             hyperlinks,
             inline_code_lexer,
-            highlighter: code_highlighter(highlighter.as_deref())?,
+            highlighter: code_highlighter_value(highlighter.as_ref().map(|h| h.bind(py)))?,
+            fences: fences
+                .iter()
+                .map(|fence| fence_renderer(fence.bind(py)))
+                .collect::<PyResult<_>>()?,
         };
         Ok(Markdown {
             spec,
             justify,
             style,
             highlighter,
+            fences,
         })
     }
 
@@ -160,8 +182,28 @@ impl Markdown {
         self.spec.inline_code_theme.as_deref()
     }
 
+    /// The code highlighter given (a name or a plugin highlighter). Not in
+    /// Rich.
+    #[getter]
+    fn highlighter(&self, py: Python<'_>) -> Option<Py<PyAny>> {
+        self.highlighter.as_ref().map(|h| h.clone_ref(py))
+    }
+
+    /// The fence renderers given. Not in Rich.
+    #[getter]
+    fn fences(&self, py: Python<'_>) -> Vec<Py<PyAny>> {
+        self.fences.iter().map(|f| f.clone_ref(py)).collect()
+    }
+
     fn __traverse__(&self, visit: pyo3::PyVisit<'_>) -> Result<(), pyo3::PyTraverseError> {
-        visit.call(&self.style)
+        visit.call(&self.style)?;
+        if let Some(highlighter) = &self.highlighter {
+            visit.call(highlighter)?;
+        }
+        for fence in &self.fences {
+            visit.call(fence)?;
+        }
+        Ok(())
     }
 }
 

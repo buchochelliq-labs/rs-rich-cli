@@ -74,6 +74,21 @@ pub(crate) fn code_highlighter(name: Option<&str>) -> PyResult<Option<Arc<dyn Co
     })
 }
 
+/// A `highlighter=` argument: `None` (the console's default), a name, or a
+/// plugin code highlighter (a `rs_rich.plugins` handle or a Python object
+/// with `highlight`, `default_theme` and `themes`).
+pub(crate) fn code_highlighter_value(
+    value: Option<&Bound<'_, PyAny>>,
+) -> PyResult<Option<Arc<dyn CodeHighlighter>>> {
+    match value.filter(|v| !v.is_none()) {
+        None => Ok(None),
+        Some(value) => match value.cast::<PyString>() {
+            Ok(name) => code_highlighter(Some(name.to_cow()?.as_ref())),
+            Err(_) => crate::plugins::code_highlighter_arg(value).map(Some),
+        },
+    }
+}
+
 /// The names of the code highlighters this build has (`syntect`, and
 /// `lumis` in a lumis build). Not in Rich.
 #[pyfunction]
@@ -778,7 +793,7 @@ impl Renderable for Render {
 #[pyclass(name = "Syntax", module = "rs_rich.syntax")]
 pub(crate) struct Syntax {
     pub(crate) spec: Spec,
-    highlighter_name: Option<String>,
+    highlighter_arg: Option<Py<PyAny>>,
     background_name: Option<String>,
 }
 
@@ -842,7 +857,7 @@ impl Syntax {
         background_color: Option<String>,
         indent_guides: bool,
         padding: &Bound<'_, PyAny>,
-        highlighter: Option<String>,
+        highlighter: Option<Py<PyAny>>,
     ) -> PyResult<Syntax> {
         let mut spec = Spec::new(code, lexer_name(lexer)?);
         spec.theme = theme_name(theme)?;
@@ -857,10 +872,11 @@ impl Syntax {
         spec.background_color = color(background_color.as_deref())?;
         spec.indent_guides = indent_guides;
         spec.padding = convert::padding(padding)?;
-        spec.highlighter = code_highlighter(highlighter.as_deref())?;
+        spec.highlighter =
+            code_highlighter_value(highlighter.as_ref().map(|h| h.bind(lexer.py())))?;
         Ok(Syntax {
             spec,
-            highlighter_name: highlighter,
+            highlighter_arg: highlighter,
             background_name: background_color,
         })
     }
@@ -908,7 +924,7 @@ impl Syntax {
         background_color: Option<String>,
         indent_guides: bool,
         padding: Option<&Bound<'_, PyAny>>,
-        highlighter: Option<String>,
+        highlighter: Option<Py<PyAny>>,
     ) -> PyResult<Self> {
         let zero = 0i32.into_pyobject(py)?.into_any();
         Syntax::build(
@@ -957,7 +973,7 @@ impl Syntax {
         background_color: Option<String>,
         indent_guides: bool,
         padding: Option<&Bound<'_, PyAny>>,
-        highlighter: Option<String>,
+        highlighter: Option<Py<PyAny>>,
     ) -> PyResult<Self> {
         let py = cls.py();
         let path_str: String = py
@@ -1166,8 +1182,8 @@ impl Syntax {
     /// The code highlighter's name (`None`: the console's default, else
     /// syntect). Not in Rich.
     #[getter]
-    fn highlighter(&self) -> Option<&str> {
-        self.highlighter_name.as_deref()
+    fn highlighter(&self, py: Python<'_>) -> Option<Py<PyAny>> {
+        self.highlighter_arg.as_ref().map(|h| h.clone_ref(py))
     }
 
     fn __rich_measure__(
