@@ -128,6 +128,7 @@ nav:
   - Python bindings:
       - python/index.md
       - Console: python/console.md
+      - The render protocol: python/protocol.md
       - Text: python/text.md
       - Style: python/style.md
       - Table: python/table.md

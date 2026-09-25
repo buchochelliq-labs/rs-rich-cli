@@ -82,8 +82,11 @@ def test_children_can_be_text_tables_and_panels():
     assert "t" in render(Panel(inner)) and " k " in render(Panel.fit(table))
 
 
-def test_an_unsupported_child_fails_when_printed():
-    with pytest.raises(NotImplementedError, match="cannot render list"):
+def test_a_child_that_is_not_renderable_fails_when_printed():
+    # As in Rich: a panel's child must be a str or a renderable.
+    from rs_rich.errors import NotRenderableError
+
+    with pytest.raises(NotRenderableError, match="Unable to render"):
         render(Panel([1, 2]))
 
 
@@ -102,7 +105,7 @@ def test_deeper_nesting_is_a_recursion_error():
     panel = "x"
     for _ in range(101):
         panel = Panel(panel)
-    with pytest.raises(RecursionError, match="at most 100 nested panels"):
+    with pytest.raises(RecursionError, match="at most 100 nested"):
         render(panel)
 
 

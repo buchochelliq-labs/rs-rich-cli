@@ -1,5 +1,19 @@
-"""``rich.console``: the ``Console``."""
+"""``rich.console``: the ``Console`` and the render protocol's types."""
 
-from ._native import Console
+from ._native import (
+    Capture,
+    CaptureError,
+    Console,
+    ConsoleDimensions,
+    ConsoleOptions,
+    ThemeContext,
+)
 
-__all__ = ["Console"]
+__all__ = [
+    "Capture",
+    "CaptureError",
+    "Console",
+    "ConsoleDimensions",
+    "ConsoleOptions",
+    "ThemeContext",
+]

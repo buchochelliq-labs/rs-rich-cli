@@ -27,37 +27,29 @@ All rendering happens in Rust. The Python package only maps Rich's classes
 and arguments onto the Rust ones, so output matches Rich 15.0.0 byte for
 byte on the supported surface.
 
-**This is a first slice (0.0.1).** Anything not listed below is not
-implemented yet, and raises `NotImplementedError` or `TypeError` rather than
-rendering something different.
+**Not everything is bound yet.** Anything not listed below raises
+`NotImplementedError` or `TypeError` rather than rendering something
+different.
 
 ## Supported
 
 | Module | Supported |
 |---|---|
-| `rs_rich` | `print(*objects, sep=" ")`, `get_console()` |
-| `rs_rich.console` | `Console(file=, width=, height=, color_system=, force_terminal=, no_color=, record=, highlight=, emoji=, safe_box=)`; `print(*objects, sep=" ", justify=None)`, `rule(title, characters=, style=)`, `export_text(clear=, styles=)`; `width`, `height`, `is_terminal`, `color_system` |
+| `rs_rich` | `print`, `get_console`, `print_json`, `reconfigure` |
+| `rs_rich.console` | `Console` with Rich's constructor; `print` (every argument), `log`, `out`, `rule`, `line`, `input`, `print_json`, `capture`, `measure`, `render`, `render_lines`, `render_str`, `get_style`, themes, `export_text`/`export_html`/`export_svg` and `save_*`; `ConsoleOptions` |
+| Your own classes | `__rich__`, `__rich_console__`, `__rich_measure__`, anywhere a renderable goes |
+| `rs_rich.segment`, `rs_rich.measure` | `Segment`, `Measurement` |
 | `rs_rich.text` | `Text(text, style, justify=, overflow=, no_wrap=)`, `Text.from_markup`, `append`, `stylize`, `plain`, `len()` |
 | `rs_rich.style` | `Style(color=, bgcolor=, bold=, dim=, italic=, underline=, blink=, reverse=, conceal=, strike=, link=)`, `Style.parse`, `+`, `==` |
-| `rs_rich.table` | `Table(*headers, title=, caption=, box=, show_header=, show_lines=, show_edge=, expand=, border_style=)`; `add_column(header, style=, header_style=, justify=, overflow=, width=, min_width=, max_width=, ratio=, no_wrap=)`, `add_row(*cells)` with `str` or `Text` cells, `row_count` |
+| `rs_rich.theme`, `rs_rich.terminal_theme` | `Theme`, `TerminalTheme` and Rich's palettes |
+| `rs_rich.table` | `Table(*headers, title=, caption=, box=, show_header=, show_lines=, show_edge=, expand=, border_style=)`; `add_column(...)`, `add_row(*renderables)`, `row_count` |
 | `rs_rich.panel` | `Panel(renderable, box, title=, title_align=, subtitle=, subtitle_align=, expand=, border_style=, width=, padding=)`, `Panel.fit` |
 | `rs_rich.box` | Rich's box constants |
 | `rs_rich.markup` | `escape` |
-| `rs_rich.errors` | `ConsoleError`, `MarkupError`, `StyleSyntaxError` |
+| `rs_rich.errors` | Rich's exceptions |
 
-`Console.print` takes `str` (console markup), numbers, `None`, `Text`,
-`Table` and `Panel`. A `Panel` holds any of those renderables.
-
-## Known differences
-
-- `Console.print` supports `end="\n"` only, `justify=` for strings only, and no `style=` argument.
-- Consecutive `str` arguments are joined with `sep` and then read as one
-  piece of markup, so a tag may span arguments. Rich reads each separately.
-- Table cells are `str` or `Text`; renderables inside cells come later.
-- `Console(width=None)` writing to a file that is not a terminal is
-  `COLUMNS` columns wide, else 80, as in Rich. On a terminal the width comes
-  from the process's terminal.
-- Hyperlinks carry no `id=`; Rich's ids are random.
+The other Rich modules exist and are being filled in. See the documentation's
+Python section for the known differences.
 
 ## Versions
 

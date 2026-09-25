@@ -45,9 +45,17 @@ The modules have Rich's names, so imports translate one for one:
 | `rich.table` | `rs_rich.table` | [Table](table.md) |
 | `rich.panel` | `rs_rich.panel` | [Panel](panel.md) |
 | `rich.box`, `rich.markup`, `rich.errors` | `rs_rich.box`, `rs_rich.markup`, `rs_rich.errors` | [Boxes, markup and errors](box-markup-errors.md) |
-| `rich.print`, `rich.get_console` | `rs_rich.print`, `rs_rich.get_console` | [Console](console.md#the-global-console) |
+| `rich.theme`, `rich.terminal_theme` | `rs_rich.theme`, `rs_rich.terminal_theme` | [Console: themes](console.md#themes) |
+| `rich.segment`, `rich.measure`, `__rich__`, `__rich_console__`, `__rich_measure__` | `rs_rich.segment`, `rs_rich.measure`, the same methods | [The render protocol](protocol.md) |
+| `rich.print`, `rich.get_console`, `rich.print_json` | `rs_rich.print`, `rs_rich.get_console`, `rs_rich.print_json` | [Console](console.md#the-global-console) |
 
-Version 0.0.1 is a first slice (#197). Anything outside it raises
+Your own classes render as they do with Rich, through `__rich__`,
+`__rich_console__` and `__rich_measure__`, in tables and panels too.
+
+The other Rich modules (`rs_rich.rule`, `rs_rich.progress`,
+`rs_rich.markdown`, ...) exist and are filled in module by module; so are
+`rs_rich.ext`, `rs_rich.art`, `rs_rich.mermaid` and `rs_rich.plugins`, which
+expose the port's own crates. Anything not implemented yet raises
 `NotImplementedError` or `TypeError` rather than rendering something
 different from Rich. [Compatibility](compatibility.md) lists what is covered,
 the known differences, and how the byte comparison with Rich 15.0.0 works.
@@ -66,6 +74,10 @@ checkers see the signatures documented here.
 - **Objects are specifications.** A `Table` or `Panel` stores what it was
   given and becomes a core object only when printed, so a table can still gain
   rows after it has been put in a panel.
+- **Your objects render in place.** When core reaches one of your objects
+  (in a table cell, say), it calls back into Python for its `__rich_console__`
+  or `__rich_measure__`, with the GIL held and no lock taken, and an exception
+  raised there comes out of `print`.
 
 ## Wheels and releases
 

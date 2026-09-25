@@ -99,8 +99,10 @@ class TestPrint:
     def test_an_empty_print_is_a_blank_line(self):
         assert render() == "\n"
 
-    def test_renderables_print_on_their_own_lines(self):
-        assert render("before", Text("text"), "after") == "before\ntext\nafter\n"
+    def test_text_joins_strings_and_renderables_print_on_their_own_lines(self):
+        # As Rich's `_collect_renderables`: a Text joins the strings around it.
+        assert render("before", Text("text"), "after") == "before text after\n"
+        assert render("before", Panel.fit("p"), "after") == "before\n╭───╮\n│ p │\n╰───╯\nafter\n"
 
     def test_long_strings_wrap_at_the_width(self):
         assert render("one two three four", width=9) == "one two \nthree \nfour\n"
@@ -118,17 +120,9 @@ class TestPrint:
             render("[/bold]")
         assert issubclass(MarkupError, ConsoleError) and not issubclass(MarkupError, ValueError)
 
-    @pytest.mark.parametrize(
-        "args, kwargs, message",
-        [
-            (({"a": 1},), {}, "cannot render dict"),
-            (("x",), {"end": ""}, 'end="\\\\n" only'),
-            ((Panel("x"),), {"justify": "center"}, "justifies str objects only"),
-        ],
-    )
-    def test_unsupported_input_raises_instead_of_rendering_differently(self, args, kwargs, message):
-        with pytest.raises(NotImplementedError, match=message):
-            render(*args, **kwargs)
+    def test_containers_need_pretty_printing_which_is_not_implemented_yet(self):
+        with pytest.raises(NotImplementedError, match="cannot render dict"):
+            render({"a": 1})
 
     def test_an_invalid_justify_is_a_value_error(self):
         with pytest.raises(ValueError, match="invalid justify"):
@@ -283,3 +277,219 @@ class TestGarbageCollection:
         del holder
         gc.collect()
         assert alive() is None
+
+
+class TestFullConsole:
+    def test_capture(self):
+        from rs_rich.console import CaptureError
+
+        console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
+        with console.capture() as capture:
+            with pytest.raises(CaptureError, match="not available"):
+                capture.get()
+            console.print("[bold]x[/]")
+            console.rule(characters="-")
+        assert capture.get() == "\x1b[1mx\x1b[0m\n\x1b[92m" + "-" * 80 + "\x1b[0m\n"
+        assert console.file.getvalue() == ""
+
+    def test_captures_nest_and_share_one_buffer_as_in_rich(self):
+        console = Console(file=io.StringIO())
+        console.begin_capture()
+        console.print("outer")
+        console.begin_capture()
+        console.print("inner")
+        assert console.end_capture() == "outer\ninner\n"
+        console.print("after")
+        assert console.end_capture() == "after\n"
+        assert console.file.getvalue() == ""
+
+    def test_capture_only_holds_this_threads_output(self):
+        console = Console(file=io.StringIO())
+        with console.capture() as capture:
+            assert in_thread(lambda: console.print("worker")) is None
+            console.print("main")
+        assert capture.get() == "main\n"
+        assert console.file.getvalue() == "worker\n"
+
+    def test_with_console_holds_output_until_the_block_ends(self):
+        flushes = []
+
+        class Sink(io.StringIO):
+            def flush(self):
+                flushes.append(self.getvalue())
+
+        console = Console(file=Sink(), record=True)
+        with console:
+            console.print("one")
+            console.print("two")
+            assert console.file.getvalue() == ""
+        assert console.file.getvalue() == "one\ntwo\n"
+        assert flushes == ["one\ntwo\n"]
+        assert console.export_text() == "one\ntwo\n"
+
+    def test_quiet_prints_and_records_nothing(self):
+        console = Console(file=io.StringIO(), quiet=True, record=True)
+        console.print("x")
+        assert console.file.getvalue() == "" and console.export_text() == ""
+        console.quiet = False
+        console.print("y")
+        assert console.file.getvalue() == "y\n"
+
+    def test_stderr(self, capsys):
+        console = Console(stderr=True, width=20)
+        console.print("to stderr")
+        assert capsys.readouterr().err == "to stderr\n"
+        assert console.stderr is True
+
+    def test_file_width_height_and_size_can_be_set(self):
+        console = Console(file=io.StringIO(), width=20)
+        other = io.StringIO()
+        console.file = other
+        console.width = 10
+        console.print("one two three")
+        assert other.getvalue() == "one two \nthree\n"
+        console.size = (30, 5)
+        assert (console.width, console.height) == (30, 5)
+        assert tuple(console.size) == (30, 5) and console.size.width == 30
+        with pytest.raises(ValueError, match="at most 65536"):
+            console.width = 2**17
+
+    def test_encoding_is_the_files(self):
+        class Latin(io.StringIO):
+            encoding = "Latin-1"
+
+        assert Console(file=Latin()).encoding == "latin-1"
+        assert Console(file=io.StringIO()).encoding == "utf-8"
+        assert Console(file=Latin()).options.ascii_only is True
+
+    def test_control_codes_reach_terminals_only(self):
+        terminal = Console(file=io.StringIO(), force_terminal=True)
+        terminal.clear()
+        terminal.bell()
+        assert terminal.show_cursor(False) is True
+        assert terminal.set_alt_screen(True) is True and terminal.is_alt_screen
+        assert terminal.file.getvalue() == "\x1b[2J\x1b[H\x07\x1b[?25l\x1b[?1049h\x1b[H"
+        plain = Console(file=io.StringIO())
+        plain.clear()
+        assert plain.show_cursor() is False and plain.set_alt_screen() is False
+        assert plain.file.getvalue() == ""
+
+    def test_themes(self):
+        from rs_rich.errors import MissingStyle
+        from rs_rich.theme import Theme, ThemeStackError
+
+        console = Console(file=io.StringIO(), theme=Theme({"accent": "bold"}))
+        assert str(console.get_style("accent")) == "bold"
+        console.push_theme(Theme({"accent": "red"}))
+        assert str(console.get_style("accent")) == "red"
+        console.pop_theme()
+        with pytest.raises(ThemeStackError, match="Unable to pop base theme"):
+            console.pop_theme()
+        with pytest.raises(MissingStyle, match="Failed to get style 'nope'"):
+            console.get_style("nope")
+        assert str(console.get_style("nope", default="italic")) == "italic"
+        style = Style(bold=True)
+        assert console.get_style(style) == style
+        assert Theme({"x": "red"}, inherit=False).styles == {"x": Style.parse("red")}
+        assert "[styles]" in Theme({"x": "red"}, inherit=False).config
+
+    def test_input(self, monkeypatch):
+        out = io.StringIO()
+        console = Console(file=out)
+        monkeypatch.setattr("sys.stdin", io.StringIO("typed\n"))
+        assert console.input("[b]prompt:[/] ") == "typed"
+        assert out.getvalue() == "prompt: "
+        monkeypatch.setattr("getpass.getpass", lambda prompt, stream=None: "secret")
+        assert console.input(password=True) == "secret"
+        assert console.input(stream=io.StringIO("line\n")) == "line\n"
+
+    def test_log_locals_and_non_text_messages_are_not_implemented_yet(self):
+        console = Console(file=io.StringIO())
+        with pytest.raises(NotImplementedError, match="locals"):
+            console.log("x", log_locals=True)
+        with pytest.raises(NotImplementedError, match="Text message"):
+            console.log(Panel("x"))
+
+    def test_print_json_refuses_what_core_cannot_render(self):
+        console = Console(file=io.StringIO())
+        with pytest.raises(NotImplementedError, match="indent=2"):
+            console.print_json("[1]", indent=4)
+        with pytest.raises(NotImplementedError, match="ensure_ascii"):
+            console.print_json("[1]", ensure_ascii=True)
+        with pytest.raises(TypeError, match="json must be str"):
+            console.print_json(1)
+
+    def test_exports_need_record_and_a_default_svg_id(self, tmp_path):
+        console = Console(file=io.StringIO())
+        for export in (console.export_html, console.export_svg, console.export_text):
+            with pytest.raises(RuntimeError, match="record=True"):
+                export()
+        recording = Console(file=io.StringIO(), record=True)
+        recording.print("x")
+        svg = recording.export_svg(clear=False)
+        assert svg == recording.export_svg()  # a stable id by default
+        with pytest.raises(NotImplementedError, match="code_format"):
+            recording.export_html(code_format="{code}")
+
+    def test_unsupported_constructor_options_are_refused(self):
+        with pytest.raises(NotImplementedError, match="tab_size"):
+            Console(tab_size=4)
+        with pytest.raises(NotImplementedError, match="emoji_variant"):
+            Console(emoji_variant="text")
+        with pytest.raises(NotImplementedError, match="Jupyter"):
+            Console(force_jupyter=True)
+
+    def test_methods_other_areas_provide_raise_until_they_do(self):
+        console = Console(file=io.StringIO())
+        for method in (console.status, console.pager, console.screen, console.print_exception):
+            with pytest.raises(NotImplementedError):
+                method()
+
+    def test_console_style_applies_to_everything(self):
+        out = io.StringIO()
+        Console(file=out, style="bold", force_terminal=True, color_system="truecolor").print("x")
+        assert out.getvalue() == "\x1b[1mx\x1b[0m\n"
+
+
+class TestProtocolTypes:
+    def test_console_options(self):
+        from rs_rich.console import ConsoleOptions
+
+        options = Console(file=io.StringIO(), width=50, height=10).options
+        assert isinstance(options, ConsoleOptions)
+        assert (options.min_width, options.max_width, options.max_height) == (1, 50, 10)
+        assert (options.justify, options.overflow, options.no_wrap, options.height) == (None, None, None, None)
+        updated = options.update(width=-3, justify="right", overflow="crop", highlight=False)
+        assert (updated.min_width, updated.max_width, updated.justify, updated.highlight) == (0, 0, "right", False)
+        assert options.max_width == 50  # a copy
+        assert options.update_height(4).height == 4 and options.update_height(4).reset_height().height is None
+        assert options.update_dimensions(7, 3).max_width == 7
+        with pytest.raises(ValueError, match="invalid justify"):
+            options.update(justify="middle")
+        with pytest.raises(TypeError, match="unexpected keyword"):
+            options.update(colour="red")
+
+    def test_measurement(self):
+        from rs_rich.measure import Measurement
+
+        measurement = Measurement(3, 8)
+        assert tuple(measurement) == (3, 8) and measurement == (3, 8)
+        assert measurement.span == 5
+        assert Measurement(9, 2).normalize() == (2, 2)
+        assert measurement.with_maximum(5) == (3, 5)
+        assert measurement.with_minimum(4) == (4, 8)
+        assert measurement.clamp(4, 6) == (4, 6)
+        assert repr(measurement) == "Measurement(minimum=3, maximum=8)"
+        console = Console(file=io.StringIO())
+        assert Measurement.get(console, console.options, "abc") == (3, 3)
+
+    def test_segment(self):
+        from rs_rich.segment import Segment
+
+        segment = Segment("hi", Style(bold=True))
+        text, style, control = segment
+        assert (text, str(style), control) == ("hi", "bold", None)
+        assert segment.cell_length == 2 and bool(segment) and not segment.is_control
+        assert Segment.line() == Segment("\n") and Segment.line().text == "\n"
+        assert Segment("x", control=[(1,)]).cell_length == 0
+        assert segment == ("hi", Style(bold=True), None)

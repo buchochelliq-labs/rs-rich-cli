@@ -87,9 +87,17 @@ def test_too_many_cells():
         Table("a").add_row("1", "2")
 
 
-def test_renderable_cells_are_not_supported_yet():
-    with pytest.raises(NotImplementedError, match="str or Text"):
-        Table("a").add_row(Panel("x"))
+def test_renderable_cells():
+    table = Table("a", box=None, show_header=False)
+    table.add_row(Panel.fit("x"))
+    assert render(table) == " ╭───╮ \n │ x │ \n ╰───╯ \n"
+
+
+def test_a_cell_that_is_not_renderable_is_refused():
+    from rs_rich.errors import NotRenderableError
+
+    with pytest.raises(NotRenderableError, match="unable to render list"):
+        Table("a").add_row([1])
 
 
 def test_rows_added_after_use_are_printed():

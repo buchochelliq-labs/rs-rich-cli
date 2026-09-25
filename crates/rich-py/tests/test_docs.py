@@ -57,7 +57,7 @@ PAGES = sorted(DOCS.glob("*.md"))
 
 def test_the_pages_exist():
     names = {page.name for page in PAGES}
-    assert {"index.md", "console.md", "text.md", "style.md", "table.md", "panel.md"} <= names
+    assert {"index.md", "console.md", "text.md", "style.md", "table.md", "panel.md", "protocol.md"} <= names
 
 
 @pytest.mark.parametrize("page", PAGES, ids=lambda p: p.name)

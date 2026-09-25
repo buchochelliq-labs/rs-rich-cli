@@ -17,7 +17,7 @@ Panel(renderable, box=ROUNDED, *, title=None, title_align="center",
 
 | Argument | Meaning |
 |---|---|
-| `renderable` | A `str` (markup), [`Text`](text.md), [`Table`](table.md) or another `Panel`. Other objects raise `NotImplementedError` when the panel is printed. |
+| `renderable` | Any renderable: a `str` (markup), [`Text`](text.md), [`Table`](table.md), another `Panel`, or [your own class](protocol.md). Anything else raises `NotRenderableError` when the panel is printed. |
 | `box` | A [box constant](box-markup-errors.md#boxes). The default is `box.ROUNDED`, and `None` is a `ValueError`. |
 | `title`, `subtitle` | Markup drawn in the top and bottom borders. |
 | `title_align`, `subtitle_align` | `"left"`, `"center"` or `"right"`; anything else is a `ValueError`. |
@@ -29,8 +29,8 @@ Panel(renderable, box=ROUNDED, *, title=None, title_align="center",
 A `str` inside a panel is markup but is not highlighted, as in Rich, where a
 panel renders its content with `highlight=False`.
 
-Panels nest up to 100 deep. Printing a deeper chain raises `RecursionError`,
-as Rich does a little past that depth:
+Panels (and other renderables) nest up to 100 deep. Printing a deeper chain
+raises `RecursionError`, as Rich does a little past that depth:
 
 ```python
 from rs_rich.console import Console
@@ -46,7 +46,7 @@ except RecursionError as error:
 ```
 
 ```text
-maximum recursion depth exceeded: rs_rich renders at most 100 nested panels
+maximum recursion depth exceeded: rs_rich renders at most 100 nested renderables
 ```
 
 ```python

@@ -99,9 +99,11 @@ add_row(*cells)
 ```
 
 This adds a row. Each cell is a `str` (markup), a [`Text`](text.md) (used as
-is, never parsed), or `None` (empty). Fewer cells than columns leaves the
-rest empty, and more raises `ValueError`. Other renderables in cells come in
-a later version and raise `NotImplementedError` for now.
+is, never parsed), `None` (empty), or any other renderable: a
+[`Panel`](panel.md), another table, or [your own class](protocol.md), sized
+by its `__rich_measure__`. Fewer cells than columns leaves the rest empty,
+and more raises `ValueError`; a cell that is not renderable raises
+`NotRenderableError`.
 
 `row_count` is the number of rows added.
 

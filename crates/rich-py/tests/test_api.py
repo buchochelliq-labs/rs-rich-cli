@@ -79,16 +79,21 @@ def test_errors():
         Panel("x", box="rounded")
 
 
-def test_unsupported_input_is_refused_not_rendered_differently():
+def test_what_is_not_implemented_yet_is_refused_not_rendered_differently():
     console = Console(file=io.StringIO())
-    with pytest.raises(NotImplementedError, match="first slice"):
+    # Rich pretty-prints containers; that comes with rs_rich.pretty.
+    with pytest.raises(NotImplementedError, match="pretty printing"):
         console.print({"a": 1})
-    with pytest.raises(NotImplementedError):
-        console.print("x", end="")
-    with pytest.raises(NotImplementedError):
-        Table("a").add_row(Panel("nested"))
-    with pytest.raises(NotImplementedError, match="justifies str"):
-        console.print(Panel("x"), justify="center")
+    with pytest.raises(NotImplementedError, match="tab_size=8"):
+        Console(tab_size=4)
+
+
+def test_renderables_nest_anywhere():
+    table = Table("a")
+    table.add_row(Panel("nested"))
+    out = io.StringIO()
+    Console(file=out, width=20).print(table, Panel("x"), justify="center")
+    assert "nested" in out.getvalue()
 
 
 def test_text_uses_python_character_offsets():
