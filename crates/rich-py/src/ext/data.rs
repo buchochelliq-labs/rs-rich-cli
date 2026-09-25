@@ -126,7 +126,8 @@ fn python_node(value: &Bound<'_, PyAny>) -> PyResult<Node> {
         // An embedded node brings its own depth: wrapping one again and
         // again would otherwise nest without bound (and overflow the stack
         // cloning or dropping it).
-        let depth = node_depth(&node.inner) + renderable::nesting_depth();
+        // This level (already entered) is where the node's root lands.
+        let depth = node_depth(&node.inner) + renderable::nesting_depth() - 1;
         if depth > MAX_DOCUMENT_DEPTH {
             return Err(PyRecursionError::new_err(format!(
                 "maximum recursion depth exceeded: a document nests at most \
