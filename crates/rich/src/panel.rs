@@ -13,7 +13,7 @@ use crate::padding::join_rows;
 use crate::protocol::Renderable;
 use crate::r#box::{Box as BoxSet, ROUNDED};
 use crate::segment::Segment;
-use crate::style::Style;
+use crate::style::{Style, StyleType};
 use crate::text::{Text, DEFAULT_TAB_SIZE};
 
 /// A bordered box around a renderable. Mirrors `rich.panel.Panel`.
@@ -25,10 +25,11 @@ pub struct Panel {
     subtitle: Option<String>,
     subtitle_align: HorizontalAlign,
     padding: (usize, usize, usize, usize),
-    border_style: Style,
-    style: Style,
+    border_style: StyleType,
+    style: StyleType,
     expand: bool,
     width: Option<usize>,
+    height: Option<usize>,
     highlight: bool,
 }
 
@@ -43,10 +44,11 @@ impl Panel {
             subtitle: None,
             subtitle_align: HorizontalAlign::Center,
             padding: (0, 1, 0, 1),
-            border_style: Style::new(),
-            style: Style::new(),
+            border_style: StyleType::Style(Style::new()),
+            style: StyleType::Style(Style::new()),
             expand: true,
             width: None,
+            height: None,
             highlight: false,
         }
     }
@@ -115,24 +117,42 @@ impl Panel {
         self
     }
 
-    /// Set the border style.
-    pub fn border_style(mut self, style: Style) -> Self {
-        self.border_style = style;
+    /// Set the border style: a [`Style`], or a theme name / definition.
+    /// It is combined over [`style`](Self::style).
+    pub fn border_style(mut self, style: impl Into<StyleType>) -> Self {
+        self.border_style = style.into();
+        self
+    }
+
+    /// The style of the whole panel, border and contents (upstream `style`,
+    /// default none): the background under the padded child, and beneath the
+    /// border style.
+    pub fn style(mut self, style: impl Into<StyleType>) -> Self {
+        self.style = style.into();
+        self
+    }
+
+    /// A fixed height for the whole panel, borders included (upstream
+    /// `height`); else the options' height, else the content's.
+    pub fn height(mut self, height: usize) -> Self {
+        self.height = Some(height);
         self
     }
 
     /// Build a top/bottom border. Port of `Panel._title`, `_subtitle` and
     /// `align_text`: markup is styled before its visible cell width is measured.
+    #[allow(clippy::too_many_arguments)]
     fn border_line(
         &self,
         console: &Console,
+        border: &Style,
         inner_width: usize,
         corners: (char, char, char),
         label: Option<&String>,
         align: HorizontalAlign,
     ) -> Vec<Segment> {
         let (left_corner, fill_char, right_corner) = corners;
-        let border_style = Some(self.border_style.clone());
+        let border_style = Some(border.clone());
         let Some(label) = label.filter(|label| !label.is_empty() && inner_width > 2) else {
             return vec![Segment::new(
                 format!(
@@ -144,7 +164,7 @@ impl Panel {
         };
 
         let mut label = label_text(label);
-        label.set_base_style(self.border_style.clone());
+        label.set_base_style(border.clone());
         let label_width = inner_width - 2;
         label.truncate(label_width, None, false);
 
@@ -154,14 +174,11 @@ impl Panel {
             HorizontalAlign::Left => (0, fill),
             HorizontalAlign::Right => (fill, 0),
         };
-        let mut text = Text::styled(
-            fill_char.to_string().repeat(left),
-            self.border_style.clone(),
-        )
-        .append_text(&label);
+        let mut text =
+            Text::styled(fill_char.to_string().repeat(left), border.clone()).append_text(&label);
         text.append(
             &fill_char.to_string().repeat(right),
-            Some(self.border_style.clone().into()),
+            Some(border.clone().into()),
         );
         let mut segments = vec![Segment::new(
             format!("{left_corner}{fill_char}"),
@@ -236,6 +253,12 @@ impl Renderable for Panel {
             Some(width) => width.min(options.max_width),
             None => options.max_width,
         };
+        // `style = console.get_style(self.style)`,
+        // `border_style = style + console.get_style(self.border_style)`.
+        let style = console.get_style(&self.style).unwrap_or_default();
+        let border_style = style.combine(&console.get_style(&self.border_style).unwrap_or_default());
+        // `child_height = self.height or options.height or None`.
+        let height = self.height.or(options.height).filter(|&height| height > 0);
         // Upstream renders nothing at all in no width, not two empty borders.
         if width == 0 {
             return Vec::new();
@@ -277,17 +300,13 @@ impl Renderable for Panel {
         // space left by the two borders and the top/bottom padding rows, so the
         // panel expands to exactly `height` rows. Port of `Panel`'s
         // `child_height = height - 2` (padding here lives outside the child).
-        child_options.height = options.height.map(|h| h.saturating_sub(2 + pt + pb));
+        child_options.height = height.map(|h| h.saturating_sub(2 + pt + pb));
         // Upstream: `console.render_lines(renderable, child_options, style=style)`.
-        let child_lines = console.render_lines_styled(
-            self.child.as_ref(),
-            &child_options,
-            Some(&self.style),
-            true,
-        );
+        let child_lines =
+            console.render_lines_styled(self.child.as_ref(), &child_options, Some(&style), true);
 
-        let border = Some(self.border_style.clone());
-        let inner_style = Some(self.style.clone());
+        let border = Some(border_style.clone());
+        let inner_style = Some(style.clone());
         let left_border = || Segment::new(box_set.mid_left.to_string(), border.clone());
         let right_border = || Segment::new(box_set.mid_right.to_string(), border.clone());
         let blank_inner = || Segment::new(" ".repeat(inner_width), inner_style.clone());
@@ -297,6 +316,7 @@ impl Renderable for Panel {
         // Top border (with title if present).
         rows.push(self.border_line(
             console,
+            &border_style,
             inner_width,
             (box_set.top_left, box_set.top, box_set.top_right),
             self.title.as_ref(),
@@ -325,7 +345,7 @@ impl Renderable for Panel {
         for _ in 0..pb {
             inner_rows.push(vec![blank_inner()]);
         }
-        if let Some(height) = options.height {
+        if let Some(height) = height {
             let height = height.saturating_sub(2);
             inner_rows.truncate(height);
             while inner_rows.len() < height {
@@ -346,6 +366,7 @@ impl Renderable for Panel {
         // Bottom border (with subtitle if present).
         rows.push(self.border_line(
             console,
+            &border_style,
             inner_width,
             (box_set.bottom_left, box_set.bottom, box_set.bottom_right),
             self.subtitle.as_ref(),
