@@ -1,0 +1,168 @@
+/* Image-diff viewer. Paired with assets/imgdiff.js. */
+
+.imgdiff {
+  --imgdiff-pos: 50%;
+  --imgdiff-opacity: 0.5;
+  margin: 1.2rem 0;
+}
+
+/* Before enhancement (and if JS never runs) the figure just shows both images
+   stacked, so the page is still useful. */
+.imgdiff:not(.imgdiff--ready) img {
+  max-width: 48%;
+  margin-right: 2%;
+  border-radius: 6px;
+}
+
+.imgdiff__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.6rem;
+}
+
+.imgdiff__tab {
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  padding: 0.32rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  background: transparent;
+  color: var(--md-default-fg-color--light);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.imgdiff__tab:hover {
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-accent-fg-color);
+}
+
+.imgdiff__tab.is-active {
+  background: var(--md-accent-fg-color);
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-accent-bg-color);
+}
+
+.imgdiff__stage {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  /* Checkerboard shows through anything transparent, and gives the black
+     artwork an edge so it does not float on a dark page background. */
+  background:
+    repeating-conic-gradient(var(--md-default-fg-color--lightest) 0% 25%, transparent 0% 50%)
+    50% / 18px 18px;
+  line-height: 0;
+  touch-action: none;
+  user-select: none;
+}
+
+.imgdiff__layer {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Every layer after the first is stacked on top of it. */
+.imgdiff__layer:not(.is-before) {
+  position: absolute;
+  inset: 0;
+}
+
+.imgdiff__handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--imgdiff-pos);
+  width: 2px;
+  margin-left: -1px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  display: none;
+}
+
+.imgdiff__grip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+}
+
+.imgdiff__tag {
+  position: absolute;
+  bottom: 0.5rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  line-height: 1.5;
+  pointer-events: none;
+}
+.imgdiff__tag--a { left: 0.5rem; }
+.imgdiff__tag--b { right: 0.5rem; }
+
+.imgdiff__range {
+  display: block;
+  width: 100%;
+  margin: 0.6rem 0 0;
+}
+
+.imgdiff__note {
+  margin: 0.45rem 0 0;
+  font-size: 0.72rem;
+  color: var(--md-default-fg-color--light);
+}
+
+/* ---- Modes ------------------------------------------------------------- */
+
+/* Default: hide every generated layer; each mode re-reveals what it needs. */
+.imgdiff--ready .is-generated { opacity: 0; }
+
+/* Slider — clip the "after" layer at the handle. */
+.imgdiff[data-mode="slider"] .is-after {
+  clip-path: inset(0 0 0 var(--imgdiff-pos));
+}
+.imgdiff[data-mode="slider"] .imgdiff__handle { display: block; }
+
+/* Onion — cross-fade instead of clipping. */
+.imgdiff[data-mode="onion"] .is-after { opacity: var(--imgdiff-opacity); }
+
+/* Blink — JS toggles the class on a timer. */
+.imgdiff[data-mode="blink"] .is-after { opacity: 0; transition: opacity 90ms linear; }
+.imgdiff[data-mode="blink"].is-blink-after .is-after { opacity: 1; }
+
+/* Side by side — lay the two out as a grid instead of a stack. */
+.imgdiff[data-mode="side"] .imgdiff__stage { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.imgdiff[data-mode="side"] .is-after { position: static; }
+.imgdiff[data-mode="side"] .imgdiff__handle { display: none; }
+.imgdiff[data-mode="side"] .imgdiff__tag--b { right: 0.5rem; }
+
+/* Generated views sit on top of everything. */
+.imgdiff[data-mode="difference"] .is-difference,
+.imgdiff[data-mode="heatmap"] .is-heatmap,
+.imgdiff[data-mode="highlight"] .is-highlight { opacity: 1; }
+
+.imgdiff[data-mode="difference"] .imgdiff__tag,
+.imgdiff[data-mode="heatmap"] .imgdiff__tag,
+.imgdiff[data-mode="highlight"] .imgdiff__tag { display: none; }
+
+/* Respect the OS setting: an automatic flicker is exactly what this asks to
+   stop. The mode still exists, it just holds on "after". */
+@media (prefers-reduced-motion: reduce) {
+  .imgdiff[data-mode="blink"] .is-after { opacity: 1; transition: none; }
+}
+
+@media screen and (max-width: 44em) {
+  .imgdiff[data-mode="side"] .imgdiff__stage { grid-template-columns: 1fr; }
+}
