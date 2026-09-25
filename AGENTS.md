@@ -24,6 +24,7 @@ The dependency graph is one-directional and must stay that way:
 ```
 rich-cli ──▶ rich-ext ──▶ rich
                  │          ▲   (core: no deps on ext/cli/macros, no knowledge of them)
+                 ├──▶ rich-plugin-api ──▶ rich   (the plugin contract; plugins depend on it, not on ext)
                  └──▶ rich-macros   (proc-macros; optional, behind ext's `macros` feature)
 ```
 
@@ -44,6 +45,7 @@ possible, and keep the boundary free of core back-dependencies.
 | `rs-rich`      | independent SemVer | whenever we ship anything              |
 | `rs-rich-cli`  | independent SemVer | whenever we ship anything              |
 | `rs-rich-ext`  | independent SemVer | whenever we ship anything              |
+| `rs-rich-plugin-api` | independent SemVer | whenever we ship anything        |
 | `rs-rich-macros` | independent SemVer | whenever we ship anything            |
 | `rs-rich-art`  | independent SemVer | whenever we ship anything              |
 

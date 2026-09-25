@@ -42,7 +42,8 @@ than unsupported.
     [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) ·
     [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) ·
     [`rs-rich-art`](https://crates.io/crates/rs-rich-art) ·
-    [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) — follow the links for current published versions.
+    [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) ·
+    `rs-rich-plugin-api` (new in 0.0.12) — follow the links for current published versions.
     API documentation is on [docs.rs](https://docs.rs/rs-rich).
 
 ## Check the install worked

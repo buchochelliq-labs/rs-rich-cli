@@ -71,8 +71,9 @@ class StagedCargoTests(unittest.TestCase):
             root = Path(directory)
             target = root / "target"
             (root / "Cargo.toml").write_text(
-                '[workspace]\nresolver="2"\nmembers=["core","macros","ext","art","cli"]\n')
-            for folder, name in [("core", "rs-rich"), ("macros", "rs-rich-macros"),
+                '[workspace]\nresolver="2"\nmembers=["core","plugin-api","macros","ext","art","cli"]\n')
+            for folder, name in [("core", "rs-rich"), ("plugin-api", "rs-rich-plugin-api"),
+                                 ("macros", "rs-rich-macros"),
                                  ("ext", "rs-rich-ext"), ("art", "rs-rich-art"),
                                  ("cli", "rs-rich-cli")]:
                 crate = root / folder
@@ -125,8 +126,9 @@ class StagedCargoTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="restage-regression-") as directory:
             root = Path(directory)
             (root / "Cargo.toml").write_text(
-                '[workspace]\nresolver="2"\nmembers=["core","macros","ext","art","cli"]\n')
+                '[workspace]\nresolver="2"\nmembers=["core","plugin-api","macros","ext","art","cli"]\n')
             for folder, name, dependency in [("core", "rs-rich", None),
+                                             ("plugin-api", "rs-rich-plugin-api", None),
                                              ("macros", "rs-rich-macros", None),
                                              ("ext", "rs-rich-ext", ("rs-rich", "core")),
                                              ("art", "rs-rich-art", None),

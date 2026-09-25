@@ -138,7 +138,7 @@ There are two separate decisions here:
    crate does not, by policy alone, require an unrelated crate's version to
    change.
 2. **The tag explicitly selects what ships.** A `vX.Y.Z` tag retains the
-   coordinated workspace meaning: all five manifests and their internal
+   coordinated workspace meaning: all six manifests and their internal
    requirements must agree at `X.Y.Z`. A `<crate>-vX.Y.Z` tag selects only that
    crate, whose manifest must match the tag. Unselected crates keep their own
    versions and are neither published nor verified as if they had changed.
@@ -147,6 +147,7 @@ There are two separate decisions here:
 |---|---|
 | `v0.0.3` | Every crate at `0.0.3` (all four at the time; `rs-rich-macros` joined at 0.0.11) |
 | `rs-rich-v0.0.3` | Only `rs-rich` at `0.0.3` |
+| `rs-rich-plugin-api-v0.0.1` | Only `rs-rich-plugin-api` at `0.0.1` |
 | `rs-rich-macros-v0.0.1` | Only `rs-rich-macros` at `0.0.1` |
 | `rs-rich-ext-v0.0.3` | Only `rs-rich-ext` at `0.0.3` |
 | `rs-rich-cli-v0.0.3` | Only `rs-rich-cli` at `0.0.3` |
@@ -178,9 +179,9 @@ the caret requirement `^0.0.2`. Cargo permits versions `>=0.0.2,<0.0.3`: for a
 dependency can use the local package while developing, but its version must
 still satisfy that requirement, and the requirement is what consumers see in
 the published package. Thus bumping `rs-rich` from `0.0.2` to `0.0.3` requires
-updating the requirements used by its direct dependents (`rs-rich-macros`,
-`rs-rich-ext`, `rs-rich-art`, and `rs-rich-cli`); bumping `rs-rich-macros`
-requires updating `rs-rich-ext`; bumping `rs-rich-ext` or `rs-rich-art`
+updating the requirements used by its direct dependents (`rs-rich-plugin-api`,
+`rs-rich-macros`, `rs-rich-ext`, `rs-rich-art`, and `rs-rich-cli`); bumping
+`rs-rich-plugin-api` or `rs-rich-macros` requires updating `rs-rich-ext`; bumping `rs-rich-ext` or `rs-rich-art`
 requires updating `rs-rich-cli`. Cargo does **not** force unrelated crates to
 share a version. Our coordinated-tag policy does.
 
@@ -339,7 +340,7 @@ GitHub OIDC token (`id-token: write` on the `publish` job only) for a short-live
 crates.io token, which only the upload step receives. A failed exchange stops
 the job before any crate is uploaded; `verify_only` runs never request a token.
 
-Each of the five crates needs a Trusted Publishing entry on crates.io
+Each crate needs a Trusted Publishing entry on crates.io
 (crate → Settings → Trusted Publishing) with repository
 `buchochelliq-labs/rs-rich-cli`, workflow `release.yml` and environment
 `crates-io`. A crate set to "trusted publishing only" rejects token uploads
@@ -357,8 +358,10 @@ later versions from the workflow.
 tag run would have failed the token exchange, so 0.0.1 was published by hand on
 2026-09-24, after `rs-rich` 0.0.7 was on crates.io (it depends on the core) and
 before tagging `rs-rich-ext` 0.0.9, whose optional `macros` dependency must
-resolve on crates.io for its own upload. The next new crate (planned:
-`rs-rich-lumis`, #524) follows the same steps. From the tagged commit on
+resolve on crates.io for its own upload. 0.0.12 adds `rs-rich-plugin-api`
+0.0.1, which follows the same steps: publish it by hand after `rs-rich` 0.0.8
+and before tagging `rs-rich-ext` 0.0.10, which depends on it unconditionally.
+The planned `rs-rich-lumis` (#524) comes after it. From the tagged commit on
 `main`:
 
 ```bash

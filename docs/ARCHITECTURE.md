@@ -1,6 +1,6 @@
 # Architecture
 
-A five-crate Cargo workspace with a strict, one-directional dependency rule.
+A six-crate Cargo workspace with a strict, one-directional dependency rule.
 Each crate versions independently. The [manifest-version table](index.md#versions-in-this-checkout)
 tracks this checkout; registry badges show published versions.
 
@@ -10,7 +10,10 @@ tracks this checkout; registry badges show published versions.
 │ (bin:rich) │     │ (our code) │     │  mirrors upstream `rich`  │
 │rs-rich-cli │     │rs-rich-ext │     │  rs-rich (crates.io name) │
 └────────────┘     └────────────┘     └───────────────────────────┘
-      │                  │ macros feature          ▲    ▲
+      │                  │                         ▲    ▲
+      │                  ├──────▶ rich-plugin-api ─┤    │
+      │                  │  rs-rich-plugin-api     │    │
+      │                  │ macros feature          │    │
       │                  ▼                         │    │
       │            ┌──────────────┐                │    │
       │            │ rich-macros  │ ───────────────┘    │
@@ -30,6 +33,11 @@ tracks this checkout; registry badges show published versions.
 - **`crates/rich-ext`** — everything that is *ours*: extra highlighters,
   renderables, and the internal plugin registry. Independent SemVer. Talks to core
   only through public APIs and the extension traits.
+- **`crates/rich-plugin-api`** — the plugin contract: `Plugin`,
+  `PluginMetadata`, `PluginRegistrar` and `PLUGIN_API_VERSION`. Depends on
+  `rich` only, so a plugin never needs `rich-ext`; `rich-ext`'s
+  `ExtensionRegistry` is the host that loads plugins. Independent SemVer. See
+  [PLUGINS](PLUGINS.md).
 - **`crates/rich-macros`** — procedural macros (`richf!`, `style!`,
   `theme_key!`, `markup!`, `#[derive(Rich)]`) that check markup and styles at
   compile time. Depends on `rich` only (to parse markup and styles while

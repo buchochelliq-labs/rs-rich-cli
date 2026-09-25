@@ -9,9 +9,10 @@ in **[AGENTS.md](AGENTS.md)** — please read it first. The short version:
   `crates/rich-art`), never in core. Documented `rs-rich-cli` binary-boundary
   conveniences may live in `crates/rich-cli` when they only compose public APIs.
 - The dependency arrow is one-way: `rich-cli → rich-ext → rich` and
-  `rich-cli → rich-art → rich`, with `rich-ext → rich-macros` behind ext's
-  optional `macros` feature. Core depends on none of them.
-- Each of the five crates (`rs-rich`, `rs-rich-macros`, `rs-rich-ext`,
+  `rich-cli → rich-art → rich`, with `rich-ext → rich-plugin-api → rich` and
+  `rich-ext → rich-macros` behind ext's optional `macros` feature. Core depends
+  on none of them.
+- Each crate (`rs-rich`, `rs-rich-plugin-api`, `rs-rich-macros`, `rs-rich-ext`,
   `rs-rich-art`, `rs-rich-cli`) has its **own independent SemVer**, bumped
   whenever that crate ships. Which upstream release we track lives in
   `UPSTREAM.toml`, not in a version number — see AGENTS.md → Versioning.
