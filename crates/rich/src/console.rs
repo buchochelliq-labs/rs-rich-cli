@@ -199,6 +199,16 @@ pub struct RenderStrOptions<'a> {
     pub highlighter: Option<&'a dyn Highlighter>,
 }
 
+/// Per-thread capture buffer stacks (innermost capture last).
+type CaptureStacks = std::collections::HashMap<std::thread::ThreadId, Vec<Vec<Segment>>>;
+
+/// The calling thread's innermost capture buffer, if it is capturing.
+fn current_capture(captures: &mut CaptureStacks) -> Option<&mut Vec<Segment>> {
+    captures
+        .get_mut(&std::thread::current().id())
+        .and_then(|stack| stack.last_mut())
+}
+
 /// The high-level interface for rendering to a terminal. Mirrors
 /// `rich.console.Console`.
 pub struct Console {
@@ -232,12 +242,13 @@ pub struct Console {
     emoji_variant: Option<crate::emoji::EmojiVariant>,
     /// Upstream's `Console(tab_size=…)`: the tab stop width `Text` expands to.
     tab_size: usize,
-    /// While capturing, print paths append their segments here instead of
-    /// writing to stdout. Mirrors `Console._record_buffer` under `capture()`.
-    /// A mutex (upstream guards it with `_record_buffer_lock`) so the console
-    /// is `Sync`.
-    record_buffer: std::sync::Mutex<Vec<Segment>>,
-    capturing: std::sync::atomic::AtomicBool,
+    /// While a thread is capturing, its print paths append their segments to
+    /// the innermost buffer of its stack here instead of writing to stdout.
+    /// Mirrors upstream's `ConsoleThreadLocals.buffer`: capture state is per
+    /// thread, so a thread printing while another captures is not swallowed
+    /// by that capture, and concurrent captures never mix. Each nested
+    /// capture on a thread pushes a buffer and pops it when it ends.
+    captures: std::sync::Mutex<CaptureStacks>,
     /// Upstream's `Console._is_alt_screen`: set by
     /// [`set_alt_screen`](Console::set_alt_screen).
     is_alt_screen: std::sync::atomic::AtomicBool,
@@ -283,11 +294,10 @@ impl Renderable for ScreenUpdate {
     fn rich_render(&self, _console: &Console, _options: &ConsoleOptions) -> Vec<Segment> {
         let mut segments = Vec::new();
         for (offset, line) in self.lines.iter().enumerate() {
-            let to = crate::control::Control::move_to(
-                u32::try_from(self.x).unwrap_or(u32::MAX),
-                u32::try_from(self.y + offset).unwrap_or(u32::MAX),
-            );
-            segments.push(Segment::control(to.as_str()));
+            // `Control.move_to(x, y + offset)`, widened so huge coordinates
+            // are written in full (upstream's ints are unbounded).
+            let to = crate::control::move_to_code(self.x as u128, self.y as u128 + offset as u128);
+            segments.push(Segment::control(to));
             segments.extend(line.iter().cloned());
         }
         segments
@@ -319,8 +329,7 @@ impl Clone for Console {
             markup: self.markup,
             emoji_variant: self.emoji_variant,
             tab_size: self.tab_size,
-            record_buffer: std::sync::Mutex::new(Vec::new()),
-            capturing: std::sync::atomic::AtomicBool::new(false),
+            captures: std::sync::Mutex::new(CaptureStacks::new()),
             is_alt_screen: std::sync::atomic::AtomicBool::new(false),
         }
     }
@@ -614,10 +623,10 @@ impl Console {
             options.max_width = measurement.maximum.min(options.max_width).max(1);
         }
         let segments = match align {
-            Some(align) if options.max_width >= 1 => {
-                crate::align::Align::render_child(renderable, align, self, &options)
-            }
-            _ => renderable.rich_render(self, &options),
+            // `Console.render` yields nothing when there is no width.
+            _ if options.max_width < 1 => Vec::new(),
+            Some(align) => crate::align::Align::render_child(renderable, align, self, &options),
+            None => renderable.rich_render(self, &options),
         };
         // `Console.print(crop=True)`: the final backstop against a line running
         // off the side of the terminal. Renderables that fit are untouched; this
@@ -668,14 +677,17 @@ impl Console {
         if segments.is_empty() {
             return;
         }
-        if self.capturing.load(std::sync::atomic::Ordering::SeqCst) {
-            let mut buffer = self.lock_record_buffer();
-            buffer.extend(segments);
-            if newline {
-                buffer.push(Segment::line());
+        let segments = {
+            let mut captures = self.lock_captures();
+            if let Some(buffer) = current_capture(&mut captures) {
+                buffer.extend(segments);
+                if newline {
+                    buffer.push(Segment::line());
+                }
+                return;
             }
-            return;
-        }
+            segments
+        };
         let mut output = self.segments_to_string(&segments);
         if newline {
             output.push('\n');
@@ -736,6 +748,9 @@ impl Console {
         style: Option<&Style>,
         pad: bool,
     ) -> Vec<Vec<Segment>> {
+        // Upstream pads with the `style` argument as given (default `None`),
+        // so the pad segments carry no style unless one was passed.
+        let pad_style = style.cloned();
         let style = style.filter(|style| !style.is_null());
         // Upstream `Console.render` yields nothing when `max_width < 1`, so a
         // renderable squeezed to zero width contributes no lines (#449).
@@ -759,7 +774,6 @@ impl Console {
         {
             lines.push(Vec::new());
         }
-        let pad_style = Some(style.cloned().unwrap_or_default());
         if pad {
             for line in &mut lines {
                 *line = Segment::adjust_line_length(line, options.max_width, pad_style.clone());
@@ -838,9 +852,9 @@ impl Console {
         let text = control.as_str();
         // Upstream buffers control codes with everything else, so a capture
         // records them.
-        if self.capturing.load(std::sync::atomic::Ordering::SeqCst) {
+        if let Some(buffer) = current_capture(&mut self.lock_captures()) {
             if !text.is_empty() {
-                self.lock_record_buffer().push(Segment::control(text));
+                buffer.push(Segment::control(text));
             }
             return;
         }
@@ -1112,21 +1126,48 @@ impl Console {
         self.record(f)
     }
 
-    /// Run `f` with output recorded to a fresh buffer, returning the captured
-    /// segments and restoring the previous capture state (so captures nest).
+    /// Run `f` with this thread's output recorded to a fresh buffer, returning
+    /// the captured segments. Captures nest (each pushes its own buffer), are
+    /// per thread (upstream's `ConsoleThreadLocals`), and end even if `f`
+    /// panics (upstream's `Capture.__exit__` always runs).
     fn record(&self, f: impl FnOnce(&Console)) -> Vec<Segment> {
-        use std::sync::atomic::Ordering;
-        let previous = std::mem::take(&mut *self.lock_record_buffer());
-        let was_capturing = self.capturing.swap(true, Ordering::SeqCst);
+        /// Pops this thread's capture buffer on drop, so an unwinding `f`
+        /// does not leave the console capturing.
+        struct CaptureGuard<'a>(&'a Console);
+        impl CaptureGuard<'_> {
+            fn pop(&self) -> Vec<Segment> {
+                let id = std::thread::current().id();
+                let mut captures = self.0.lock_captures();
+                let Some(stack) = captures.get_mut(&id) else {
+                    return Vec::new();
+                };
+                let captured = stack.pop().unwrap_or_default();
+                if stack.is_empty() {
+                    captures.remove(&id);
+                }
+                captured
+            }
+        }
+        impl Drop for CaptureGuard<'_> {
+            fn drop(&mut self) {
+                self.pop();
+            }
+        }
+        self.lock_captures()
+            .entry(std::thread::current().id())
+            .or_default()
+            .push(Vec::new());
+        let guard = CaptureGuard(self);
         f(self);
-        let captured = std::mem::replace(&mut *self.lock_record_buffer(), previous);
-        self.capturing.store(was_capturing, Ordering::SeqCst);
+        let captured = guard.pop();
+        std::mem::forget(guard);
         captured
     }
 
-    /// The capture buffer, recovering it if a panicking print poisoned it.
-    fn lock_record_buffer(&self) -> std::sync::MutexGuard<'_, Vec<Segment>> {
-        self.record_buffer
+    /// The per-thread capture stacks, recovering them if a panicking print
+    /// poisoned the lock.
+    fn lock_captures(&self) -> std::sync::MutexGuard<'_, CaptureStacks> {
+        self.captures
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
@@ -1746,8 +1787,7 @@ impl ConsoleBuilder {
             emoji_variant: self.emoji_variant,
             // `tab_size: int = 8`.
             tab_size: self.tab_size.unwrap_or(crate::text::DEFAULT_TAB_SIZE),
-            record_buffer: std::sync::Mutex::new(Vec::new()),
-            capturing: std::sync::atomic::AtomicBool::new(false),
+            captures: std::sync::Mutex::new(CaptureStacks::new()),
             is_alt_screen: std::sync::atomic::AtomicBool::new(false),
         }
     }
@@ -2138,6 +2178,24 @@ mod tests {
         let expected =
             include_str!("../tests/golden/export_html_classes.html").replace("\r\n", "\n");
         assert_eq!(html, expected);
+    }
+
+    /// Upstream's `render_lines` pads with its `style` argument as given
+    /// (default `None`), so the pad segments carry no style.
+    #[test]
+    fn render_lines_pads_with_the_given_style() {
+        let console = test_console();
+        let options = console.options().update_width(5).update_height(2);
+        let lines = console.render_lines(&Text::new("hi"), &options, true);
+        assert_eq!(lines.len(), 2);
+        let width_pad = lines[0].last().unwrap();
+        assert_eq!((width_pad.text.as_str(), &width_pad.style), ("   ", &None));
+        assert_eq!(lines[1], vec![Segment::new("     ", None)]);
+
+        let red = Style::parse("red").unwrap();
+        let lines = console.render_lines_styled(&Text::new("hi"), &options, Some(&red), true);
+        assert_eq!(lines[0].last().unwrap().style, Some(red.clone()));
+        assert_eq!(lines[1], vec![Segment::new("     ", Some(red))]);
     }
 
     #[test]

@@ -512,7 +512,7 @@ pub(crate) fn to_renderable(
     Err(not_renderable(&cast)?)
 }
 
-fn not_renderable(value: &Bound<'_, PyAny>) -> PyResult<PyErr> {
+pub(crate) fn not_renderable(value: &Bound<'_, PyAny>) -> PyResult<PyErr> {
     Ok(NotRenderableError::new_err(format!(
         "Unable to render {}; A str, Segment or object with __rich_console__ method is required",
         value.repr()?

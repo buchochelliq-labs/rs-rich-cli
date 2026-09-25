@@ -60,7 +60,9 @@ The port's own crates:
 | `repr(box.ROUNDED)` is `box.ROUNDED` | Rich prints `Box(...)` with the box's characters. Boxes compare and render the same. |
 | `Console(width=...)` and a table column's `width`, `min_width` and `max_width` are at most 65536, and a column's `ratio` at most 4294967295; larger values raise `ValueError` | Rich accepts them, then runs out of memory or takes minutes to print. The Rust port would abort, overflow or take as long, so the binding refuses them up front. |
 | A `Panel`'s padding is at most 65536 on each side; more raises `ValueError` | Rich renders any padding, slowly; up to the limit output is Rich's. |
+| A console's `height`, `ConsoleOptions` heights (and widths) and `tab_size` are at most 65536, and `Console.line` writes at most 16777216 lines; larger values raise `MemoryError` | Rich tries to allocate them and usually raises `MemoryError` too. |
 | Renderables nest at most 100 deep; deeper raises `RecursionError` | Rich also raises `RecursionError`, at a depth that depends on Python's recursion limit. |
+| A render hook's item from `log`, or from `print` with `justify`, prints only on the thread that collected it; on another thread it raises `RuntimeError` | Every other item prints on any thread, as with Rich. |
 | A `print` from inside the same console's `file.write` raises `RuntimeError` | Rich recurses until it hits Python's recursion limit. |
 | The command is `rich-rs`, not `rich` | `rich` is installed by rich-cli. |
 

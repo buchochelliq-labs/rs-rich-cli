@@ -78,28 +78,75 @@ pub const CONSOLE_SVG_FORMAT: &str = r#"<svg class="rich-terminal" viewBox="0 0 
 "#;
 
 /// Python `format(v, "g")`: 6 significant figures, trailing zeros (and a
-/// trailing `.`) stripped. Used for the coordinates inside SVG tags.
+/// trailing `.`) stripped, scientific below `1e-4` or from `1e6`. Used for
+/// the coordinates inside SVG tags.
 fn fmt_g(v: f64) -> String {
     if v == 0.0 {
-        return "0".to_string();
+        return if v.is_sign_negative() { "-0" } else { "0" }.to_string();
     }
-    let exp = v.abs().log10().floor() as i32;
-    let decimals = (5 - exp).max(0) as usize;
-    let mut s = format!("{v:.decimals$}");
-    if s.contains('.') {
-        s = s.trim_end_matches('0').trim_end_matches('.').to_string();
+    if !v.is_finite() {
+        return py_non_finite(v);
     }
-    s
+    // The exponent after rounding to 6 significant figures.
+    let sci = format!("{v:.5e}");
+    let (mantissa, exp) = split_exp(&sci);
+    if (-4..6).contains(&exp) {
+        let decimals = (5 - exp) as usize;
+        strip_fraction_zeros(format!("{v:.decimals$}"))
+    } else {
+        py_exponent(&strip_fraction_zeros(mantissa.to_string()), exp)
+    }
 }
 
 /// Python `str(float)`: the shortest round-tripping form, keeping a `.0` for
-/// integer-valued floats. Used for the template's float placeholders.
+/// integer-valued floats, scientific below `1e-4` or from `1e16`. Used for
+/// the template's float placeholders.
 fn fmt_str(v: f64) -> String {
+    if !v.is_finite() {
+        return py_non_finite(v);
+    }
+    let sci = format!("{v:e}");
+    let (mantissa, exp) = split_exp(&sci);
+    if v != 0.0 && !(-4..16).contains(&exp) {
+        return py_exponent(mantissa, exp);
+    }
     let s = format!("{v}");
-    if s.contains('.') || s.contains('e') {
+    if s.contains('.') {
         s
     } else {
         format!("{s}.0")
+    }
+}
+
+/// `inf`, `-inf` or `nan`, as Python formats them.
+fn py_non_finite(v: f64) -> String {
+    if v.is_nan() {
+        "nan".to_string()
+    } else if v > 0.0 {
+        "inf".to_string()
+    } else {
+        "-inf".to_string()
+    }
+}
+
+/// Split Rust's `1.5e-7` form into its mantissa and exponent.
+fn split_exp(sci: &str) -> (&str, i32) {
+    let (mantissa, exp) = sci.split_once('e').unwrap_or((sci, "0"));
+    (mantissa, exp.parse().unwrap_or(0))
+}
+
+/// Python's exponent suffix: signed, at least two digits (`1.5e-07`).
+fn py_exponent(mantissa: &str, exp: i32) -> String {
+    let sign = if exp < 0 { '-' } else { '+' };
+    format!("{mantissa}e{sign}{:02}", exp.abs())
+}
+
+/// Drop trailing fractional zeros and a trailing `.`.
+fn strip_fraction_zeros(s: String) -> String {
+    if s.contains('.') {
+        s.trim_end_matches('0').trim_end_matches('.').to_string()
+    } else {
+        s
     }
 }
 
@@ -215,6 +262,20 @@ pub fn export_svg_with(
     let margin_width = MARGIN + MARGIN;
     let margin_height = MARGIN + MARGIN;
 
+    // Upstream's `ceil(width * char_width + padding_width)` raises for a
+    // non-finite result (`OverflowError` for infinity, `ValueError` for NaN).
+    let terminal_width_float = (width as f64 * char_width + padding_width as f64).ceil();
+    if terminal_width_float.is_nan() {
+        return Err(crate::export::ExportFormatError(
+            "cannot convert float NaN to integer".to_string(),
+        ));
+    }
+    if terminal_width_float.is_infinite() {
+        return Err(crate::export::ExportFormatError(
+            "cannot convert float infinity to integer".to_string(),
+        ));
+    }
+
     let filtered: Vec<Segment> = segments.iter().filter(|s| !s.control).cloned().collect();
 
     let mut classes: Vec<(String, usize)> = Vec::new();
@@ -295,7 +356,10 @@ pub fn export_svg_with(
     let backgrounds = text_backgrounds.concat();
     let matrix = text_group.concat();
 
-    let terminal_width_local = (width as f64 * char_width + padding_width as f64).ceil() as i64;
+    // Python's unbounded `int` from `ceil`, so a huge (finite) aspect ratio
+    // prints exactly rather than saturating.
+    let terminal_width_local = py_int_plus(terminal_width_float, 0);
+    let terminal_width_half = py_int_plus((terminal_width_float / 2.0).floor(), 0);
     let terminal_height_local = (last_y as f64 + 1.0) * line_height + padding_height as f64;
 
     let mut chrome = format!(
@@ -310,7 +374,7 @@ pub fn export_svg_with(
         chrome.push_str(&format!(
             r#"<text class="{unique_id}-title" fill="{fg}" text-anchor="middle" x="{x}" y="{y}">{title}</text>"#,
             fg = theme.foreground.hex(),
-            x = terminal_width_local / 2,
+            x = terminal_width_half,
             y = MARGIN + CHAR_HEIGHT as i64 + 6,
             title = escape_text(title),
         ));
@@ -332,7 +396,10 @@ pub fn export_svg_with(
                 "terminal_height",
                 &fmt_str((last_y as f64 + 1.0) * line_height - 1.0),
             ),
-            ("width", &int(terminal_width_local + margin_width)),
+            (
+                "width",
+                &py_int_plus(terminal_width_float, margin_width as i64),
+            ),
             (
                 "height",
                 &fmt_str(terminal_height_local + margin_height as f64),
@@ -346,6 +413,36 @@ pub fn export_svg_with(
             ("lines", &lines_str),
         ],
     )
+}
+
+/// `int(value) + add` as Python prints it, for an integral finite `value`
+/// of any magnitude: exact past `i64`, where a cast would saturate.
+fn py_int_plus(value: f64, add: i64) -> String {
+    if value.abs() < 1e36 {
+        return (value as i128 + i128::from(add)).to_string();
+    }
+    // `{:.0}` prints the float's exact integer value; apply the small `add`
+    // to its decimal magnitude (it cannot flip the sign at this size).
+    let text = format!("{:.0}", value.abs());
+    let mut digits: Vec<u8> = text.bytes().map(|b| b - b'0').collect();
+    let (negative, mut carry) = (value < 0.0, i128::from(add));
+    if negative {
+        carry = -carry;
+    }
+    for digit in digits.iter_mut().rev() {
+        if carry == 0 {
+            break;
+        }
+        let sum = i128::from(*digit) + carry;
+        *digit = sum.rem_euclid(10) as u8;
+        carry = sum.div_euclid(10);
+    }
+    let magnitude: String = digits.iter().map(|d| char::from(b'0' + d)).collect();
+    if negative {
+        format!("-{magnitude}")
+    } else {
+        magnitude
+    }
 }
 
 #[cfg(test)]

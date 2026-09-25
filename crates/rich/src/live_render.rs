@@ -131,7 +131,12 @@ impl Renderable for LiveRender {
             match self.vertical_overflow {
                 VerticalOverflow::Crop => lines.truncate(screen_height),
                 VerticalOverflow::Ellipsis => {
-                    lines.truncate(screen_height.saturating_sub(1));
+                    // `lines[: height - 1]`: at height 0 that is Python's
+                    // `lines[:-1]`, every line but the last.
+                    let keep = screen_height
+                        .checked_sub(1)
+                        .unwrap_or_else(|| lines.len() - 1);
+                    lines.truncate(keep);
                     let overflow_text = Text::styled("...", "live.ellipsis")
                         .overflow(Overflow::Crop)
                         .justify(Justify::Center);

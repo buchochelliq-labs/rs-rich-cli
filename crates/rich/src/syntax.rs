@@ -470,9 +470,9 @@ impl Syntax {
         let (line_start, line_end) = line_range.unwrap_or((None, None));
         // `_line_start = line_start - 1 if line_start else 0`; below zero no
         // line is skipped.
-        let skip = line_start
-            .filter(|&start| start != 0)
-            .map_or(0, |start| usize::try_from(start - 1).unwrap_or(0));
+        let skip = line_start.filter(|&start| start != 0).map_or(0, |start| {
+            usize::try_from(start.saturating_sub(1)).unwrap_or(0)
+        });
         let sources: Vec<&str> = code.split('\n').collect();
         let last = sources.len().saturating_sub(1);
         for (index, (source, line)) in sources.iter().zip(&highlighted.lines).enumerate() {
@@ -537,19 +537,23 @@ impl Syntax {
         // start. An index Python would raise `IndexError` for is skipped.
         let count = offsets.len() as i64;
         let offset_at = |index: i64| -> Option<i64> {
-            let index = if index < 0 { count + index } else { index };
+            let index = if index < 0 {
+                count.saturating_add(index)
+            } else {
+                index
+            };
             usize::try_from(index)
                 .ok()
                 .and_then(|index| offsets.get(index))
                 .map(|&offset| offset as i64)
         };
         let index_for = |(line_number, column): SyntaxPosition| -> Option<i64> {
-            if line_number > count || count < line_number + 1 {
+            if line_number > count || count < line_number.saturating_add(1) {
                 return None;
             }
-            let line_index = line_number - 1;
-            let line_length = offset_at(line_index + 1)? - offset_at(line_index)? - 1;
-            Some(offset_at(line_index)? + column.min(line_length))
+            let line_index = line_number.saturating_sub(1);
+            let line_length = offset_at(line_index.saturating_add(1))? - offset_at(line_index)? - 1;
+            Some(offset_at(line_index)?.saturating_add(column.min(line_length)))
         };
         let length = chars as i64;
         let byte = |char_index: usize| {
@@ -564,8 +568,16 @@ impl Syntax {
             };
             // `Text.stylize`: negative offsets count from the end, and an
             // empty or out-of-range span is dropped.
-            let start = if start < 0 { length + start } else { start };
-            let end = if end < 0 { length + end } else { end };
+            let start = if start < 0 {
+                length.saturating_add(start)
+            } else {
+                start
+            };
+            let end = if end < 0 {
+                length.saturating_add(end)
+            } else {
+                end
+            };
             if start >= length || end <= start {
                 continue;
             }
@@ -618,7 +630,8 @@ impl Syntax {
         if !self.line_numbers {
             return 0;
         }
-        let last = self.start_line + self.code.matches('\n').count() as i64;
+        // Python ints are unbounded: widen so `i64::MAX` does not overflow.
+        let last = i128::from(self.start_line) + self.code.matches('\n').count() as i128;
         last.to_string().len() + NUMBERS_COLUMN_DEFAULT_PADDING
     }
 
@@ -785,9 +798,9 @@ impl Syntax {
 
         let (start_line, end_line) = self.line_range.unwrap_or((None, None));
         // `line_offset = max(0, start_line - 1)` when `start_line` is truthy.
-        let line_offset = start_line
-            .filter(|&start| start != 0)
-            .map_or(0, |start| usize::try_from(start - 1).unwrap_or(0));
+        let line_offset = start_line.filter(|&start| start != 0).map_or(0, |start| {
+            usize::try_from(start.saturating_sub(1)).unwrap_or(0)
+        });
         let mut lines = text.split("\n", false, ends_on_nl);
         if self.line_range.is_some() {
             if line_offset > lines.len() {
@@ -819,7 +832,9 @@ impl Syntax {
         let line_pointer = if options.legacy_windows { "> " } else { "❱ " };
         let mut out: Vec<Vec<Segment>> = Vec::new();
         for (index, line) in lines.iter().enumerate() {
-            let line_no = self.start_line + (line_offset + index) as i64;
+            // Widened, as Python ints are unbounded (`start_line` may be
+            // `i64::MAX`).
+            let line_no = i128::from(self.start_line) + (line_offset + index) as i128;
             let wrapped_lines: Vec<Vec<Segment>> = if self.word_wrap {
                 if code_width == 0 {
                     Vec::new()
@@ -871,7 +886,9 @@ impl Syntax {
                             line_no,
                             width = numbers_column_width.saturating_sub(2)
                         );
-                        if self.highlight_lines.contains(&line_no) {
+                        if i64::try_from(line_no)
+                            .is_ok_and(|line_no| self.highlight_lines.contains(&line_no))
+                        {
                             row.push(Segment::new(
                                 line_pointer,
                                 Some(Style::parse("red").unwrap_or_default()),

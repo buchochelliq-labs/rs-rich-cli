@@ -123,6 +123,12 @@ impl JsonOptions {
     }
 }
 
+/// A Python `str` as generalized UTF-8 (WTF-8): UTF-8, except that a lone
+/// surrogate from a `\uD800`-style escape (which Python's `json` accepts)
+/// is kept as its three-byte encoding, as `surrogatepass` writes it. Byte
+/// order is still code point order, so `sort_keys` sorts as Python does.
+type PyStr = Vec<u8>;
+
 /// A parsed JSON value.
 ///
 /// Scalars keep the form they will be printed in: numbers are stored already
@@ -137,9 +143,9 @@ enum Node {
     /// rich's `JSONHighlighter` has no rule that matches them, so they print
     /// unstyled.
     NonFinite(&'static str),
-    Str(String),
+    Str(PyStr),
     Array(Vec<Node>),
-    Object(Vec<(String, Node)>),
+    Object(Vec<(PyStr, Node)>),
 }
 
 impl Drop for Node {
@@ -349,14 +355,7 @@ fn dumps(value: &Node, options: &JsonOptions) -> Dumped {
             None => Cow::Borrowed(""),
         }
     };
-    let quote_string = |string: &str| -> String {
-        let quoted = quote(string);
-        if options.ensure_ascii {
-            ascii_escape(&quoted)
-        } else {
-            quoted
-        }
-    };
+    let quote_string = |string: &[u8]| -> String { quote_py(string, options.ensure_ascii) };
 
     /// One entry of the serializer's work list, consumed newest-first.
     enum Task<'a> {
@@ -367,7 +366,7 @@ fn dumps(value: &Node, options: &JsonOptions) -> Dumped {
         /// Write a closing brace.
         Close(&'static str),
         /// Write an object key and its `": "`.
-        Key(&'a str),
+        Key(&'a [u8]),
     }
 
     let mut dumped = Dumped {
@@ -427,7 +426,7 @@ fn dumps(value: &Node, options: &JsonOptions) -> Dumped {
                     dumped.styled("}", "json.brace");
                     continue;
                 }
-                let mut order: Vec<&(String, Node)> = entries.iter().collect();
+                let mut order: Vec<&(PyStr, Node)> = entries.iter().collect();
                 if options.sort_keys {
                     // `sorted(dct.items())`: keys are unique, so this is by key,
                     // in code point order (which UTF-8 byte order preserves).
@@ -702,6 +701,113 @@ fn escape_safe_lines(segments: &[Segment], width: usize, crop: bool) -> Vec<Segm
 }
 
 /// Serialize a string as a JSON string literal (quoted + escaped).
+/// `json.dumps` of a [`PyStr`]. A lone surrogate is `\udXXX` under
+/// `ensure_ascii`; otherwise Python emits the surrogate itself, which a Rust
+/// string cannot hold, so it becomes U+FFFD (see docs/DIVERGENCES.md).
+fn quote_py(string: &[u8], ensure_ascii: bool) -> String {
+    let escape = |run: &str| -> String {
+        let quoted = quote(run);
+        if ensure_ascii {
+            ascii_escape(&quoted)
+        } else {
+            quoted
+        }
+    };
+    if let Ok(run) = std::str::from_utf8(string) {
+        return escape(run);
+    }
+    let mut out = String::from("\"");
+    let mut rest = string;
+    while !rest.is_empty() {
+        let valid = match std::str::from_utf8(rest) {
+            Ok(_) => rest.len(),
+            Err(error) => error.valid_up_to(),
+        };
+        let (run, tail) = rest.split_at(valid);
+        let quoted = escape(std::str::from_utf8(run).unwrap_or_default());
+        out.push_str(&quoted[1..quoted.len() - 1]);
+        rest = tail;
+        if let [0xED, b1 @ 0xA0..=0xBF, b2, tail @ ..] = rest {
+            let unit = 0xD000 | (u32::from(b1 & 0x3F) << 6) | u32::from(b2 & 0x3F);
+            if ensure_ascii {
+                out.push_str(&format!("\\u{unit:04x}"));
+            } else {
+                out.push(char::REPLACEMENT_CHARACTER);
+            }
+            rest = tail;
+        } else if !rest.is_empty() {
+            // Unreachable for parser output; never loop forever.
+            out.push(char::REPLACEMENT_CHARACTER);
+            rest = &rest[1..];
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// Decode a JSON string token as Python's `json` does, keeping unpaired
+/// `\uD800`-`\uDFFF` escapes as surrogates in the result. `None` when the
+/// token is invalid for another reason (the caller reports `serde_json`'s
+/// error for it).
+fn decode_with_surrogates(token: &str) -> Option<PyStr> {
+    let inner = token.strip_prefix('"')?.strip_suffix('"')?;
+    let mut out = Vec::with_capacity(inner.len());
+    let mut chars = inner.chars().peekable();
+    let hex4 = |chars: &mut std::iter::Peekable<std::str::Chars<'_>>| -> Option<u32> {
+        let mut value = 0;
+        for _ in 0..4 {
+            value = value * 16 + chars.next()?.to_digit(16)?;
+        }
+        Some(value)
+    };
+    while let Some(c) = chars.next() {
+        if c < ' ' {
+            return None;
+        }
+        if c != '\\' {
+            let mut buf = [0u8; 4];
+            out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+            continue;
+        }
+        let decoded = match chars.next()? {
+            '"' => '"',
+            '\\' => '\\',
+            '/' => '/',
+            'b' => '\u{8}',
+            'f' => '\u{c}',
+            'n' => '\n',
+            'r' => '\r',
+            't' => '\t',
+            'u' => {
+                let mut unit = hex4(&mut chars)?;
+                if (0xD800..0xDC00).contains(&unit) {
+                    let mut lookahead = chars.clone();
+                    if lookahead.next() == Some('\\') && lookahead.next() == Some('u') {
+                        if let Some(low @ 0xDC00..=0xDFFF) = hex4(&mut lookahead) {
+                            unit = 0x10000 + ((unit - 0xD800) << 10) + (low - 0xDC00);
+                            chars = lookahead;
+                        }
+                    }
+                }
+                match char::from_u32(unit) {
+                    Some(c) => c,
+                    None => {
+                        // A lone surrogate: its generalized UTF-8 encoding.
+                        out.push(0xE0 | (unit >> 12) as u8);
+                        out.push(0x80 | ((unit >> 6) & 0x3F) as u8);
+                        out.push(0x80 | (unit & 0x3F) as u8);
+                        continue;
+                    }
+                }
+            }
+            _ => return None,
+        };
+        let mut buf = [0u8; 4];
+        out.extend_from_slice(decoded.encode_utf8(&mut buf).as_bytes());
+    }
+    Some(out)
+}
+
 fn quote(string: &str) -> String {
     serde_json::to_string(string).unwrap_or_else(|_| format!("{string:?}"))
 }
@@ -710,13 +816,13 @@ fn quote(string: &str) -> String {
 enum Frame {
     Array(Vec<Node>),
     Object {
-        entries: Vec<(String, Node)>,
+        entries: Vec<(PyStr, Node)>,
         /// Key -> position in `entries`, so a repeated key overwrites in place
         /// (`{"a": 1, "a": 2}` is one entry) without an O(n^2) rescan. Dropped
         /// with the frame, so only the objects on the current path pay for it.
-        seen: HashMap<String, usize>,
+        seen: HashMap<PyStr, usize>,
         /// The key whose value is currently being parsed.
-        key: String,
+        key: PyStr,
     },
 }
 
@@ -847,7 +953,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse `"key" :`, leaving the parser on the value.
-    fn parse_key(&mut self) -> Result<String> {
+    fn parse_key(&mut self) -> Result<PyStr> {
         self.skip_whitespace();
         if self.peek() != Some(b'"') {
             return Err(self.error("key must be a string"));
@@ -899,7 +1005,7 @@ impl<'a> Parser<'a> {
 
     /// Read a string token and decode it with `serde_json`, so escapes, lone
     /// surrogates and raw control characters behave exactly as before.
-    fn parse_string(&mut self) -> Result<String> {
+    fn parse_string(&mut self) -> Result<PyStr> {
         let start = self.pos;
         let mut end = self.pos + 1;
         loop {
@@ -929,8 +1035,14 @@ impl<'a> Parser<'a> {
                 Some(_) => end += 1,
             }
         }
-        let decoded: String = serde_json::from_str(&self.src[start..end])
-            .map_err(|error| self.error_at(start, &describe(&error)))?;
+        let token = &self.src[start..end];
+        let decoded = match serde_json::from_str::<String>(token) {
+            Ok(decoded) => decoded.into_bytes(),
+            // `serde_json` refuses lone surrogates, which Python's `json`
+            // accepts; anything else it refuses stays an error.
+            Err(error) => decode_with_surrogates(token)
+                .ok_or_else(|| self.error_at(start, &describe(&error)))?,
+        };
         self.pos = end;
         Ok(decoded)
     }
@@ -1502,7 +1614,6 @@ mod tests {
             r#""\q""#,
             r#""é""#,
             r#""😀""#,
-            r#""\ud800""#,
             "\"raw\nnewline\"",
             r#""café ❤""#,
             "\"\u{e9}\\\"",

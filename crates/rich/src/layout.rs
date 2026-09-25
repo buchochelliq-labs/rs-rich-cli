@@ -76,16 +76,16 @@ impl Splitter {
             Splitter::Row => ratio_resolve(width, &edges)
                 .into_iter()
                 .map(|child_width| {
-                    let region = Region::new(x + offset, y, child_width, height);
-                    offset += child_width;
+                    let region = Region::new(x.saturating_add(offset), y, child_width, height);
+                    offset = offset.saturating_add(child_width);
                     region
                 })
                 .collect(),
             Splitter::Column => ratio_resolve(height, &edges)
                 .into_iter()
                 .map(|child_height| {
-                    let region = Region::new(x, y + offset, width, child_height);
-                    offset += child_height;
+                    let region = Region::new(x, y.saturating_add(offset), width, child_height);
+                    offset = offset.saturating_add(child_height);
                     region
                 })
                 .collect(),

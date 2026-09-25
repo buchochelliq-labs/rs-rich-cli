@@ -103,6 +103,17 @@ impl ConsoleOptions {
     }
 
     pub(crate) fn to_core(&self) -> PyResult<CoreOptions> {
+        use crate::limits::{check_size, MAX_CONSOLE_HEIGHT, MAX_CONSOLE_WIDTH};
+        for (what, value, limit) in [
+            ("min_width", self.min_width, MAX_CONSOLE_WIDTH),
+            ("max_width", self.max_width, MAX_CONSOLE_WIDTH),
+            ("width", self.size.0, MAX_CONSOLE_WIDTH),
+            ("height", self.height.unwrap_or(0), MAX_CONSOLE_HEIGHT),
+            ("max_height", self.max_height, MAX_CONSOLE_HEIGHT),
+            ("console height", self.size.1, MAX_CONSOLE_HEIGHT),
+        ] {
+            check_size(what, value, limit)?;
+        }
         Ok(CoreOptions {
             min_width: self.min_width,
             max_width: self.max_width,

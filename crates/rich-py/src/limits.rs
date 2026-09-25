@@ -28,3 +28,24 @@ pub(crate) const MAX_PADDING: usize = MAX_CONSOLE_WIDTH;
 /// depth (it renders 100 nested panels and fails before 150). Enforced by
 /// [`crate::renderable::Nesting`].
 pub(crate) const MAX_NESTING: usize = 100;
+
+/// The tallest console, or options `height`, accepted: core pads renders to
+/// their height, so an absurd height aborts the process on allocation.
+pub(crate) const MAX_CONSOLE_HEIGHT: usize = 1 << 16;
+
+/// The largest `tab_size` accepted: the widest console.
+pub(crate) const MAX_TAB_SIZE: usize = MAX_CONSOLE_WIDTH;
+
+/// The most blank lines `Console.line` writes at once.
+pub(crate) const MAX_NEWLINES: usize = 1 << 24;
+
+/// Refuse a size past `limit` as Rich's allocation of it would fail: with
+/// `MemoryError`, instead of aborting the process in core.
+pub(crate) fn check_size(what: &str, value: usize, limit: usize) -> pyo3::PyResult<usize> {
+    if value > limit {
+        return Err(pyo3::exceptions::PyMemoryError::new_err(format!(
+            "{what} must be at most {limit}, got {value}"
+        )));
+    }
+    Ok(value)
+}

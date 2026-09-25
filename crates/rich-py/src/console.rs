@@ -20,9 +20,9 @@
 //! interleave, and a print from inside `file.write` raises instead of
 //! waiting for itself.
 
-use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::time::Duration;
 
 use pyo3::exceptions::{
     PyIndexError, PyKeyError, PyNotImplementedError, PyRuntimeError, PyTypeError, PyValueError,
@@ -38,7 +38,7 @@ use rich::log_render::LogRender;
 use rich::protocol::{Highlighter, Renderable};
 use rich::segment::Segment as CoreSegment;
 use rich::theme::Theme as CoreTheme;
-use rich::{Control, Overflow, Rule, Style as CoreStyle, StyleType, Text as CoreText};
+use rich::{Control, Overflow, Style as CoreStyle, StyleType, Text as CoreText};
 
 use crate::convert;
 use crate::errors::{CaptureError, MissingStyle, NoAltScreen, ThemeStackError};
@@ -47,7 +47,9 @@ use crate::errors::{CaptureError, MissingStyle, NoAltScreen, ThemeStackError};
 fn no_alt_screen() -> PyErr {
     NoAltScreen::new_err("Alt screen must be enabled to call update_screen")
 }
-use crate::limits::MAX_CONSOLE_WIDTH;
+use crate::limits::{
+    check_size, MAX_CONSOLE_HEIGHT, MAX_CONSOLE_WIDTH, MAX_NEWLINES, MAX_TAB_SIZE,
+};
 use crate::protocol::{self, ConsoleOptions, Measurement, OptionsBase};
 use crate::renderable::{self, Ambient, PyRenderable};
 use crate::segment;
@@ -258,12 +260,19 @@ fn target<'py>(
     file: Option<&Py<PyAny>>,
     stderr: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
-    match file {
-        Some(file) => Ok(file.bind(py).clone()),
+    let file = match file {
+        Some(file) => file.bind(py).clone(),
         None => py
             .import("sys")?
-            .getattr(if stderr { "stderr" } else { "stdout" }),
+            .getattr(if stderr { "stderr" } else { "stdout" })?,
+    };
+    // As Rich's `Console.file`: write past a `Live`'s `FileProxy`, and to
+    // nowhere when there is no file (`sys.stdout` is `None` under pythonw).
+    let file = file.getattr_opt("rich_proxied_file")?.unwrap_or(file);
+    if file.is_none() {
+        return py.import("rs_rich._null_file")?.getattr("NULL_FILE");
     }
+    Ok(file)
 }
 
 /// Something `print` renders, after Rich's `_collect_renderables`.
@@ -279,6 +288,11 @@ enum Item {
     /// A core renderable whose last line is not ended, as Rich prints a
     /// renderable that yields one segment (`Emoji`): no newline follows it.
     Inline(Box<dyn Renderable>),
+    /// One of the bindings' classes, converted when it renders (`Inline`
+    /// if it ends inline, else `Core`).
+    Native { object: Py<PyAny>, inline: bool },
+    /// A container or dataclass, pretty printed when it renders.
+    Pretty { object: Py<PyAny>, highlight: bool },
 }
 
 /// Joined text and its `end`, as one core renderable for `Align`: Rich's joined `Text` renders its `end` after the last line,
@@ -333,14 +347,41 @@ impl Renderable for ThreadBound {
 }
 
 impl Item {
-    fn into_box(self) -> Box<dyn Renderable> {
-        match self {
-            Item::Core(renderable) => renderable,
+    /// Whether the item holds only thread-safe data (no core renderable),
+    /// so a render hook's list can hand it to any thread.
+    fn is_portable(&self) -> bool {
+        !matches!(self, Item::Core(_) | Item::Inline(_))
+    }
+
+    /// Convert a `Native` or `Pretty` item into the core item it renders as.
+    fn resolve(&self, py: Python<'_>) -> PyResult<Option<Item>> {
+        Ok(match self {
+            Item::Native { object, inline } => {
+                let renderable = renderable::to_renderable(object.bind(py), None)?;
+                Some(if *inline {
+                    Item::Inline(renderable)
+                } else {
+                    Item::Core(renderable)
+                })
+            }
+            Item::Pretty { object, highlight } => Some(Item::Core(
+                crate::code::pretty_for_print(object.bind(py), *highlight)?,
+            )),
+            _ => None,
+        })
+    }
+
+    fn into_box(self, py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
+        if let Some(item) = self.resolve(py)? {
+            return item.into_box(py);
+        }
+        Ok(match self {
+            Item::Core(renderable) | Item::Inline(renderable) => renderable,
             Item::Joined { text, end } => Box::new(TextWithEnd { text, end }),
             Item::Object(object) => Box::new(PyRenderable::new(object)),
             Item::Raw(segments) => Box::new(RawSegments(segments)),
-            Item::Inline(renderable) => renderable,
-        }
+            Item::Native { .. } | Item::Pretty { .. } => unreachable!("resolved above"),
+        })
     }
 
     /// Render in upstream's convention (lines end with a newline).
@@ -352,6 +393,9 @@ impl Item {
     ) -> PyResult<Vec<CoreSegment>> {
         if options.max_width < 1 {
             return Ok(Vec::new());
+        }
+        if let Some(item) = self.resolve(py)? {
+            return item.render(py, console, options);
         }
         match self {
             Item::Core(renderable) => {
@@ -384,24 +428,128 @@ impl Item {
                 renderable::check_pending()?;
                 Ok(segments)
             }
+            Item::Native { .. } | Item::Pretty { .. } => unreachable!("resolved above"),
         }
     }
 }
 
 /// An [`Item`] a render hook sees: Rich passes hooks the renderables a
 /// print collected, and prints the list they return.
-#[pyclass(name = "_PrintItem", module = "rs_rich.console", unsendable)]
+#[pyclass(name = "_PrintItem", module = "rs_rich.console", frozen)]
 pub(crate) struct PrintItem {
-    item: Rc<Item>,
+    item: Arc<Shared>,
+}
+
+/// An item shared between a hook's list and the print that collected it.
+/// Portable items (Python objects, text, segments) go anywhere; an item
+/// holding a core renderable, which need not be thread-safe, is used only
+/// on the thread that collected it, and dropped there.
+struct Shared {
+    home: std::thread::ThreadId,
+    item: Option<Item>,
+}
+
+// SAFETY: `get` hands out a non-portable item only on its home thread, and
+// `Drop` sends one dropped elsewhere back to its home thread (`ORPHANS`).
+// Portable items hold only `Send + Sync` data (`Py`, core `Text`, segments).
+unsafe impl Send for Shared {}
+// SAFETY: as for `Send`.
+unsafe impl Sync for Shared {}
+
+/// Non-portable items dropped away from home, freed by their home thread's
+/// next print.
+struct Orphan {
+    home: std::thread::ThreadId,
+    _item: Item,
+}
+// SAFETY: an orphan's item is only moved here, never used, and is dropped
+// by `drain_orphans` on its home thread.
+unsafe impl Send for Orphan {}
+
+static ORPHANS: Mutex<Vec<Orphan>> = Mutex::new(Vec::new());
+
+/// Drop the orphaned items that belong to this thread.
+fn drain_orphans() {
+    let me = std::thread::current().id();
+    let mine: Vec<Orphan> = {
+        let mut orphans = lock(&ORPHANS);
+        if orphans.is_empty() {
+            return;
+        }
+        let (mine, others) = std::mem::take(&mut *orphans)
+            .into_iter()
+            .partition(|orphan| orphan.home == me);
+        *orphans = others;
+        mine
+    };
+    // Dropped with no lock held: an item can hold Python objects.
+    drop(mine);
+}
+
+impl Shared {
+    fn new(item: Item) -> Arc<Shared> {
+        Arc::new(Shared {
+            home: std::thread::current().id(),
+            item: Some(item),
+        })
+    }
+
+    fn get(&self) -> PyResult<&Item> {
+        let item = self.item.as_ref().expect("taken only on drop");
+        if item.is_portable() || std::thread::current().id() == self.home {
+            Ok(item)
+        } else {
+            Err(PyRuntimeError::new_err(
+                "this renderable was collected by a print on another thread and can only be \
+                 rendered on that thread",
+            ))
+        }
+    }
+}
+
+impl Drop for Shared {
+    fn drop(&mut self) {
+        if let Some(item) = self.item.take() {
+            if !item.is_portable() && std::thread::current().id() != self.home {
+                lock(&ORPHANS).push(Orphan {
+                    home: self.home,
+                    _item: item,
+                });
+            }
+        }
+    }
 }
 
 /// An item as a core renderable (what the hook's list holds when printed
 /// or put in a container).
-struct ItemRef(Rc<Item>);
+struct ItemRef(Arc<Shared>);
+
+impl ItemRef {
+    /// The item, or `None` after reporting why it cannot render here.
+    fn item(&self) -> Option<&Item> {
+        match self.0.get() {
+            Ok(item) => Some(item),
+            Err(error) => {
+                Python::attach(|py| renderable::report_error(py, error));
+                None
+            }
+        }
+    }
+}
 
 impl Renderable for ItemRef {
     fn rich_render(&self, console: &CoreConsole, options: &CoreOptions) -> Vec<CoreSegment> {
-        match &*self.0 {
+        let Some(item) = self.item() else {
+            return Vec::new();
+        };
+        let resolved = match Python::attach(|py| item.resolve(py)) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                Python::attach(|py| renderable::report_error(py, error));
+                return Vec::new();
+            }
+        };
+        match resolved.as_ref().unwrap_or(item) {
             Item::Core(renderable) | Item::Inline(renderable) => {
                 renderable.rich_render(console, options)
             }
@@ -416,11 +564,22 @@ impl Renderable for ItemRef {
                 PyRenderable::new(object.clone_ref(py)).rich_render(console, options)
             }),
             Item::Raw(segments) => renderable::unterminated(segments.clone()),
+            Item::Native { .. } | Item::Pretty { .. } => unreachable!("resolved above"),
         }
     }
 
     fn measure(&self, console: &CoreConsole, options: &CoreOptions) -> rich::measure::Measurement {
-        match &*self.0 {
+        let Some(item) = self.item() else {
+            return rich::measure::Measurement::new(0, options.max_width);
+        };
+        let resolved = match Python::attach(|py| item.resolve(py)) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                Python::attach(|py| renderable::report_error(py, error));
+                return rich::measure::Measurement::new(0, options.max_width);
+            }
+        };
+        match resolved.as_ref().unwrap_or(item) {
             Item::Core(renderable) | Item::Inline(renderable) => {
                 renderable.measure(console, options)
             }
@@ -429,13 +588,15 @@ impl Renderable for ItemRef {
                 PyRenderable::new(object.clone_ref(py)).measure(console, options)
             }),
             Item::Raw(_) => rich::measure::Measurement::new(0, options.max_width),
+            Item::Native { .. } | Item::Pretty { .. } => unreachable!("resolved above"),
         }
     }
 }
 
 impl renderable::AsRenderable for PrintItem {
     fn to_renderable(&self, _py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
-        Ok(Box::new(ItemRef(Rc::clone(&self.item))))
+        self.item.get()?;
+        Ok(Box::new(ItemRef(Arc::clone(&self.item))))
     }
 }
 
@@ -447,15 +608,16 @@ fn apply_hooks(
     hooks: &[Py<PyAny>],
     items: Vec<Item>,
     switches: &Switches,
-) -> PyResult<Vec<Rc<Item>>> {
-    let mut items: Vec<Rc<Item>> = items.into_iter().map(Rc::new).collect();
+) -> PyResult<Vec<Arc<Shared>>> {
+    drain_orphans();
+    let mut items: Vec<Arc<Shared>> = items.into_iter().map(Shared::new).collect();
     for hook in hooks {
         let list = PyList::empty(py);
         for item in &items {
             list.append(Bound::new(
                 py,
                 PrintItem {
-                    item: Rc::clone(item),
+                    item: Arc::clone(item),
                 },
             )?)?;
         }
@@ -464,8 +626,17 @@ fn apply_hooks(
         for object in returned.try_iter()? {
             let object = object?;
             if let Ok(item) = object.cast::<PrintItem>() {
-                next.push(Rc::clone(&item.borrow().item));
+                next.push(Arc::clone(&item.get().item));
             } else {
+                // Rich renders what a hook returns as it is: a string, or
+                // an object with `__rich_console__` (after `__rich__`).
+                let cast = renderable::rich_cast(&object)?;
+                let renders = cast.is_instance_of::<PyString>()
+                    || renderable::is_registered(&cast)
+                    || (!cast.is_instance_of::<PyType>() && cast.hasattr("__rich_console__")?);
+                if !renders {
+                    return Err(renderable::not_renderable(&cast)?);
+                }
                 let collected = collect(
                     std::slice::from_ref(&object),
                     " ",
@@ -474,7 +645,7 @@ fn apply_hooks(
                     switches,
                     false,
                 )?;
-                next.extend(collected.into_iter().map(Rc::new));
+                next.extend(collected.into_iter().map(Shared::new));
             }
         }
         items = next;
@@ -579,24 +750,33 @@ fn collect(
         Some("right") if align => Some(HorizontalAlign::Right),
         _ => None,
     };
-    let aligned = |item: Item| match alignment {
-        None => item,
-        Some(HorizontalAlign::Left) => Item::Core(Box::new(Align::left(item.into_box()))),
-        Some(HorizontalAlign::Center) => Item::Core(Box::new(Align::center(item.into_box()))),
-        Some(HorizontalAlign::Right) => Item::Core(Box::new(Align::right(item.into_box()))),
+    let aligned = |item: Item| -> PyResult<Item> {
+        Python::attach(|py| {
+            Ok(match alignment {
+                None => item,
+                Some(HorizontalAlign::Left) => Item::Core(Box::new(Align::left(item.into_box(py)?))),
+                Some(HorizontalAlign::Center) => {
+                    Item::Core(Box::new(Align::center(item.into_box(py)?)))
+                }
+                Some(HorizontalAlign::Right) => {
+                    Item::Core(Box::new(Align::right(item.into_box(py)?)))
+                }
+            })
+        })
     };
     let text_justify = convert::justify(justify)?;
     let mut items = Vec::new();
     let mut texts: Vec<CoreText> = Vec::new();
-    let flush = |texts: &mut Vec<CoreText>, items: &mut Vec<Item>| {
+    let flush = |texts: &mut Vec<CoreText>, items: &mut Vec<Item>| -> PyResult<()> {
         if !texts.is_empty() {
             let separator = CoreText::new(sep).justify(text_justify);
             items.push(aligned(Item::Joined {
                 text: separator.join(texts),
                 end: end.to_string(),
-            }));
+            })?);
             texts.clear();
         }
+        Ok(())
     };
     for object in objects {
         let object = renderable::rich_cast(object)?;
@@ -618,20 +798,29 @@ fn collect(
         } else if let Ok(text) = object.extract::<PyRef<'_, Text>>() {
             texts.push(text.inner.clone());
         } else if renderable::ends_inline(&object) {
-            flush(&mut texts, &mut items);
-            let item = Item::Inline(renderable::to_renderable(&object, None)?);
-            items.push(aligned(item));
+            flush(&mut texts, &mut items)?;
+            let item = Item::Native {
+                object: object.unbind(),
+                inline: true,
+            };
+            items.push(aligned(item)?);
         } else if renderable::is_registered(&object) {
-            flush(&mut texts, &mut items);
-            let item = Item::Core(renderable::to_renderable(&object, None)?);
-            items.push(aligned(item));
+            flush(&mut texts, &mut items)?;
+            let item = Item::Native {
+                object: object.unbind(),
+                inline: false,
+            };
+            items.push(aligned(item)?);
         } else if !object.is_instance_of::<PyType>() && object.hasattr("__rich_console__")? {
-            flush(&mut texts, &mut items);
-            items.push(aligned(Item::Object(object.unbind())));
+            flush(&mut texts, &mut items)?;
+            items.push(aligned(Item::Object(object.unbind()))?);
         } else if renderable::is_expandable(&object)? {
-            flush(&mut texts, &mut items);
-            let item = Item::Core(crate::code::pretty_for_print(&object, switches.highlight)?);
-            items.push(aligned(item));
+            flush(&mut texts, &mut items)?;
+            let item = Item::Pretty {
+                object: object.unbind(),
+                highlight: switches.highlight,
+            };
+            items.push(aligned(item)?);
         } else {
             let mut text = CoreText::new(object.str()?.to_cow()?.as_ref());
             if switches.highlight {
@@ -645,7 +834,7 @@ fn collect(
             texts.push(text);
         }
     }
-    flush(&mut texts, &mut items);
+    flush(&mut texts, &mut items)?;
     Ok(items)
 }
 
@@ -664,12 +853,15 @@ impl Console {
                 .cloned()
                 .unwrap_or_else(CoreTheme::default_theme),
             file: state.file.as_ref().map(|file| file.clone_ref(py)),
-            extensions: crate::plugins::installed(py, self),
+            extensions: None,
             highlighter: state.highlighter.as_ref().map(|h| h.clone_ref(py)),
             hooks: state.render_hooks.iter().map(|h| h.clone_ref(py)).collect(),
             ascii_only: false,
         };
         drop(state);
+        // The plugin table can drop the last reference to another console,
+        // which runs Python code: it is read with no lock held.
+        snapshot.extensions = crate::plugins::installed(py, self);
         // The file's encoding is read with no lock held (it is Python code).
         snapshot.ascii_only = snapshot
             .encoding(py)
@@ -694,15 +886,19 @@ impl Console {
                     return Ok(Printing { console: self });
                 }
             }
-            // The writing thread needs the GIL to finish its write.
+            // The writing thread needs the GIL to finish its write. The wait
+            // wakes regularly so Ctrl-C is seen while it lasts.
             py.detach(|| {
                 let printer = lock(&self.printer);
                 drop(
                     self.printed
-                        .wait_while(printer, |printer| *printer != 0)
+                        .wait_timeout_while(printer, Duration::from_millis(50), |printer| {
+                            *printer != 0
+                        })
                         .unwrap_or_else(|poisoned| poisoned.into_inner()),
                 );
             });
+            py.check_signals()?;
         }
     }
 
@@ -755,6 +951,9 @@ impl Console {
         objects: &[Bound<'_, PyAny>],
         args: PrintArgs<'_>,
     ) -> PyResult<()> {
+        // A print reached again from the objects it prints (`__rich__`,
+        // `__str__`, a hook) raises `RecursionError` rather than overflowing.
+        let _nesting = renderable::Nesting::enter()?;
         let py = slf.py();
         let this = slf.get();
         let snapshot = this.snapshot(py);
@@ -824,7 +1023,7 @@ impl Console {
                 .transpose()?;
             let mut segments = Vec::new();
             for item in &items {
-                let mut rendered = item.render(py, &core, &options)?;
+                let mut rendered = item.get()?.render(py, &core, &options)?;
                 if let Some(console_style) = &console_style {
                     rendered = CoreSegment::apply_style(&rendered, console_style);
                 }
@@ -1086,10 +1285,12 @@ impl Console {
         };
         builder = builder.width(width);
         let height = match height {
-            Some(height) => height,
+            Some(height) => check_size("height", height, MAX_CONSOLE_HEIGHT)?,
             None => env_size("LINES")?
+                .filter(|h| *h <= MAX_CONSOLE_HEIGHT)
                 .or(terminal_height.filter(|h: &usize| *h > 0))
-                .unwrap_or(25),
+                .unwrap_or(25)
+                .min(MAX_CONSOLE_HEIGHT),
         };
         builder = builder.height(height);
         let detected = builder.build();
@@ -1106,7 +1307,7 @@ impl Console {
             safe_box,
             legacy_windows: legacy_windows.unwrap_or(false),
             soft_wrap,
-            tab_size,
+            tab_size: check_size("tab_size", tab_size, MAX_TAB_SIZE)?,
             quiet,
             stderr,
             record,
@@ -1222,9 +1423,13 @@ impl Console {
                     .unwrap_or(false)
             }
         };
-        let mut state = self.state();
-        state.file = file;
-        state.settings.is_terminal = is_terminal;
+        let old = {
+            let mut state = self.state();
+            state.settings.is_terminal = is_terminal;
+            std::mem::replace(&mut state.file, file)
+        };
+        // Dropping the old file can run Python code: no lock is held.
+        drop(old);
         Ok(())
     }
 
@@ -1245,20 +1450,25 @@ impl Console {
     }
 
     #[setter]
-    fn set_height(&self, height: usize) {
-        self.state().settings.height = height;
+    fn set_height(&self, height: usize) -> PyResult<()> {
+        self.state().settings.height = check_size("height", height, MAX_CONSOLE_HEIGHT)?;
+        Ok(())
     }
 
     /// `ConsoleDimensions(width, height)`.
     #[getter]
     fn size(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let settings = &self.state().settings;
-        protocol::dimensions(py, (settings.width, settings.height))
+        let size = {
+            let settings = &self.state().settings;
+            (settings.width, settings.height)
+        };
+        protocol::dimensions(py, size)
     }
 
     #[setter]
     fn set_size(&self, size: (usize, usize)) -> PyResult<()> {
         let width = check_width(size.0)?;
+        check_size("height", size.1, MAX_CONSOLE_HEIGHT)?;
         let mut state = self.state();
         state.settings.width = width;
         state.settings.height = size.1;
@@ -1362,8 +1572,9 @@ impl Console {
     /// The clock animations read: the one given, else `time.monotonic`.
     #[getter(get_time)]
     fn get_time<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        match &self.state().get_time {
-            Some(clock) => Ok(clock.bind(py).clone()),
+        let clock = self.state().get_time.as_ref().map(|c| c.clone_ref(py));
+        match clock {
+            Some(clock) => Ok(clock.into_bound(py)),
             None => py.import("time")?.getattr("monotonic"),
         }
     }
@@ -1372,8 +1583,9 @@ impl Console {
     /// `datetime.now`.
     #[getter(get_datetime)]
     fn get_datetime<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        match &self.state().get_datetime {
-            Some(clock) => Ok(clock.bind(py).clone()),
+        let clock = self.state().get_datetime.as_ref().map(|c| c.clone_ref(py));
+        match clock {
+            Some(clock) => Ok(clock.into_bound(py)),
             None => py.import("datetime")?.getattr("datetime")?.getattr("now"),
         }
     }
@@ -1382,8 +1594,9 @@ impl Console {
     /// unless one was given).
     #[getter]
     fn highlighter(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        match &self.state().highlighter {
-            Some(highlighter) => Ok(highlighter.clone_ref(py)),
+        let highlighter = self.state().highlighter.as_ref().map(|h| h.clone_ref(py));
+        match highlighter {
+            Some(highlighter) => Ok(highlighter),
             None => Ok(py
                 .import("rs_rich.highlighter")?
                 .getattr("ReprHighlighter")?
@@ -1394,7 +1607,10 @@ impl Console {
 
     #[setter]
     fn set_highlighter(&self, py: Python<'_>, highlighter: Option<Py<PyAny>>) {
-        self.state().highlighter = highlighter.filter(|h| !h.is_none(py));
+        let highlighter = highlighter.filter(|h| !h.is_none(py));
+        let old = std::mem::replace(&mut self.state().highlighter, highlighter);
+        // Dropping the old highlighter can run Python code: no lock is held.
+        drop(old);
     }
 
     /// The running `Live` displays, outermost first (Rich's `_live_stack`).
@@ -1481,13 +1697,18 @@ impl Console {
         emoji: Option<bool>,
         markup: Option<bool>,
         highlight: Option<bool>,
-        width: Option<usize>,
-        height: Option<usize>,
+        width: Option<isize>,
+        height: Option<isize>,
         crop: bool,
         soft_wrap: Option<bool>,
         new_line_start: bool,
     ) -> PyResult<()> {
         let objects: Vec<_> = objects.iter().collect();
+        // Rich takes any int: a width under 1 prints nothing.
+        let width = width.map(|width| width.max(0) as usize);
+        let height = height
+            .map(|height| check_size("height", height.max(0) as usize, MAX_CONSOLE_HEIGHT))
+            .transpose()?;
         let args = PrintArgs {
             sep,
             end,
@@ -1557,6 +1778,9 @@ impl Console {
         log_locals: bool,
         _stack_offset: usize,
     ) -> PyResult<()> {
+        // A print reached again from the objects it prints (`__rich__`,
+        // `__str__`, a hook) raises `RecursionError` rather than overflowing.
+        let _nesting = renderable::Nesting::enter()?;
         let py = slf.py();
         let this = slf.get();
         let snapshot = this.snapshot(py);
@@ -1697,9 +1921,9 @@ impl Console {
                         // Upstream wraps each renderable in `Styled`.
                         let renderable: Box<dyn Renderable> = match (item, &style) {
                             (item, Some(style)) => {
-                                Box::new(rich::styled::Styled::new(item.into_box(), style.clone()))
+                                Box::new(rich::styled::Styled::new(item.into_box(py)?, style.clone()))
                             }
-                            (item, None) => item.into_box(),
+                            (item, None) => item.into_box(py)?,
                         };
                         message.push(Arc::new(ThreadBound(renderable)));
                     }
@@ -1729,40 +1953,42 @@ impl Console {
             )?;
             let mut segments = Vec::new();
             for item in &items {
-                segments.extend(item.render(py, &core, &core.options())?);
+                segments.extend(item.get()?.render(py, &core, &core.options())?);
             }
             Ok(CoreSegment::crop_lines(&segments, core.width()))
         })?;
         this.emit(py, &snapshot, segments)
     }
 
-    /// Draw a horizontal rule, with an optional (markup) title.
-    #[pyo3(signature = (title="", *, characters="─", style=None, align="center"))]
+    /// Draw a horizontal rule, with an optional (markup) title: Rich's
+    /// `self.print(Rule(title, characters=..., style=..., align=...))`.
+    #[pyo3(signature = (title=None, *, characters="─", style=None, align="center"))]
     fn rule(
         slf: &Bound<'_, Self>,
-        title: &str,
+        title: Option<Bound<'_, PyAny>>,
         characters: &str,
-        style: Option<&Bound<'_, PyAny>>,
+        style: Option<Bound<'_, PyAny>>,
         align: &str,
     ) -> PyResult<()> {
         let py = slf.py();
-        let mut rule = if title.is_empty() {
-            Rule::line()
-        } else {
-            Rule::new(title)
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("characters", characters)?;
+        kwargs.set_item("align", align)?;
+        if let Some(style) = style {
+            kwargs.set_item("style", style)?;
         }
-        .characters(characters)
-        .align(convert::align(align)?);
-        if let Some(style) = style_type(style)? {
-            let core = slf.get().snapshot(py).default_core();
-            rule = rule.style(resolve_style(&core, &style)?);
-        }
-        Console::print_item(slf, Item::Core(Box::new(rule)), PrintArgs::default())
+        let title = title.unwrap_or_else(|| PyString::new(py, "").into_any());
+        let rule = py
+            .import("rs_rich.rule")?
+            .getattr("Rule")?
+            .call((title,), Some(&kwargs))?;
+        Console::print_objects(slf, &[rule], PrintArgs::default())
     }
 
     /// Write `count` blank lines.
     #[pyo3(signature = (count=1))]
     fn line(slf: &Bound<'_, Self>, count: usize) -> PyResult<()> {
+        let count = check_size("count", count, MAX_NEWLINES)?;
         let newlines = vec![CoreSegment::new("\n".repeat(count), None)];
         Console::print_item(slf, Item::Raw(newlines), PrintArgs::default())
     }
@@ -2405,6 +2631,7 @@ impl Console {
 
     /// Print one item with `print`'s console style, soft wrap and crop.
     fn print_item(slf: &Bound<'_, Console>, item: Item, args: PrintArgs<'_>) -> PyResult<()> {
+        let _nesting = renderable::Nesting::enter()?;
         let py = slf.py();
         let this = slf.get();
         let snapshot = this.snapshot(py);
@@ -2437,7 +2664,7 @@ impl Console {
                 .transpose()?;
             let mut segments = Vec::new();
             for item in &items {
-                let mut rendered = item.render(py, &core, &options)?;
+                let mut rendered = item.get()?.render(py, &core, &options)?;
                 if let Some(style) = &console_style {
                     rendered = CoreSegment::apply_style(&rendered, style);
                 }

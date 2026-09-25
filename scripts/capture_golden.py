@@ -36,6 +36,7 @@ from rich.constrain import Constrain
 from rich.control import Control
 from rich.json import JSON
 from rich.layout import Layout
+from rich.live_render import LiveRender
 from rich.markdown import Markdown
 from rich.measure import Measurement
 from rich.padding import Padding
@@ -2932,6 +2933,7 @@ def main() -> None:
     capture_core_gaps()
     capture_upstream_features()
     capture_api_gaps()
+    capture_audit_edges()
 
 
 # --- core gaps (bindings foundation) ------------------------------------------
@@ -3763,6 +3765,110 @@ def capture_api_gaps() -> None:
         lines.append(f"{name}\t{json.dumps(build(), ensure_ascii=False)}")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(API_GAP_CASES)} API gap cases to {path}")
+
+
+# --- audit edges (second core audit) -------------------------------------------
+# One fixture, `audit_edges.tsv`: `name<TAB>json(output)`, built with the same
+# `_cg_*` consoles. Edge values upstream defines: Layout `size=0` (flexible),
+# Syntax line numbers past 64 bits, LiveRender's ellipsis at height 0, a
+# zero-width Panel, lone surrogates in JSON under `ensure_ascii`, and extreme
+# SVG `font_aspect_ratio`s. `tests/golden_audit_edges.rs` has a Rust builder
+# per name.
+
+_I64_MAX = 2**63 - 1
+_I64_MIN = -(2**63)
+
+
+def _ae_layout(split: str) -> str:
+    layout = Layout()
+    children = [
+        Layout(Text("a"), size=0),
+        Layout(Text("b")),
+        Layout(Text("c"), size=0),
+    ]
+    getattr(layout, split)(*children)
+    return _cg_print(_cg_console(10, height=4), layout)
+
+
+def _ae_syntax_extremes() -> str:
+    options = [
+        {"line_numbers": True, "start_line": _I64_MAX},
+        {"line_numbers": True, "start_line": _I64_MAX, "highlight_lines": {_I64_MAX}},
+        {"line_numbers": True, "start_line": _I64_MIN},
+        {"line_numbers": True, "line_range": (_I64_MIN, None)},
+        {"line_numbers": True, "line_range": (None, _I64_MAX)},
+        {"line_numbers": True, "line_range": (_I64_MAX, None)},
+        {"line_range": (_I64_MIN, _I64_MIN)},
+        {"line_range": (2, _I64_MIN), "word_wrap": True},
+    ]
+    out = [_cg_print(_cg_console(30), _ag_syntax(**option)) for option in options]
+    syntax = _ag_syntax(line_numbers=True)
+    # A line far before the first raises `IndexError` upstream (the port
+    # skips the range), and a column far before the start never finishes
+    # rendering upstream, so only positions past the end are extreme.
+    syntax.stylize_range("reverse", (1, 2), (2, _I64_MAX))
+    syntax.stylize_range("bold", (2, _I64_MAX), (3, _I64_MAX))
+    syntax.stylize_range("underline", (_I64_MAX, 0), (_I64_MAX, 1))
+    out.append(_cg_print(_cg_console(30), syntax))
+    return "".join(out)
+
+
+def _ae_live(overflow: str) -> str:
+    live = LiveRender(Text("1\n2\n3\n4"), vertical_overflow=overflow)
+    return _cg_print(_cg_console(10, height=0), Panel(live))
+
+
+def _ae_svg(ratio: float) -> str:
+    console = _cg_console(20, record=True, file=io.StringIO())
+    console.print("[red]hi[/] [b]x[/]")
+    try:
+        return console.export_svg(title="t", unique_id="U", font_aspect_ratio=ratio)
+    except (OverflowError, ValueError) as error:
+        return f"<{type(error).__name__}>"
+
+
+AUDIT_EDGE_CASES = [
+    ("layout_size_zero_row", lambda: _ae_layout("split_row")),
+    ("layout_size_zero_column", lambda: _ae_layout("split_column")),
+    ("syntax_extreme_lines", _ae_syntax_extremes),
+    ("live_ellipsis_h0", lambda: _ae_live("ellipsis")),
+    ("live_crop_h0", lambda: _ae_live("crop")),
+    ("live_visible_h0", lambda: _ae_live("visible")),
+    ("panel_width0", lambda: _ag_print_all(
+        _cg_console(10),
+        Panel("a", width=0),
+        Panel.fit("a", width=0),
+        Panel("a", width=0, title="T", subtitle="S"),
+        Panel("a", width=1),
+        Panel("a", width=2, border_style="red"),
+    )),
+    ("json_lone_surrogate_ascii", lambda: _cg_print(
+        _cg_console(40),
+        JSON(
+            '["\\ud800", "\\udc00x\\ud83d\\ude00", "\\ud800\\u0041\\udbff",'
+            ' {"\\ue000": 1, "\\ud800": 2, "\\ud7ff": 3}]',
+            ensure_ascii=True,
+            sort_keys=True,
+        ),
+    )),
+    ("svg_font_aspect_ratio", lambda: "".join(
+        _ae_svg(ratio) + "\n" for ratio in [1e300, 1e20, -1.0, 1e-7, 0.0, 2.5]
+    )),
+    ("svg_font_aspect_ratio_errors", lambda: "".join(
+        _ae_svg(ratio) for ratio in [1e308, float("inf"), float("-inf"), float("nan")]
+    )),
+]
+
+
+def capture_audit_edges() -> None:
+    path = golden_dir() / "audit_edges.tsv"
+    lines = [
+        "# name\tjson(expected output) — see AUDIT_EDGE_CASES in scripts/capture_golden.py"
+    ]
+    for name, build in AUDIT_EDGE_CASES:
+        lines.append(f"{name}\t{json.dumps(build(), ensure_ascii=False)}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(AUDIT_EDGE_CASES)} audit edge cases to {path}")
 
 
 if __name__ == "__main__":

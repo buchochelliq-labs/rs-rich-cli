@@ -436,21 +436,12 @@ Format: what differs · why · how to remove it (if temporary).
   cutoff cannot be reproduced exactly.
 - **Remove:** not removable exactly; the constant can be tuned.
 
-### 27. A `Text`'s trailing blank line is lost inside containers
-- **Differs:** `Padding(Text("a\n"))`, `Panel(Text("a\n\n"))` and other
-  containers drop the text's final empty line, which upstream keeps. The port's
-  segment streams *separate* lines rather than end them, so `Segment::split_lines`
-  cannot tell a trailing empty line from a terminator. Printed at the top level
-  the text is unaffected.
-- **Why kept:** `Segment::split_lines` now keeps a final empty line that a
-  renderable marks with an empty segment (`Syntax` does), and having
-  `Text::render_joined_wrapped_tabs` emit that marker fixes containers to
-  upstream's bytes — but rich-cli's `--syntax --filter/--highlight` path adds a
-  bottom pad to compensate (`crates/rich-cli/src/lib.rs`, "`Syntax` also draws
-  the empty line after a final newline"), and two CLI tests
-  (`highlighter_config`, `transforms`) would then see the line twice.
-- **Remove:** emit the marker from `Text` and delete the CLI's `bottom` pad in
-  the same change.
+### 27. ~~A `Text`'s trailing blank line is lost inside containers~~ (resolved)
+- **Resolved:** `Text` marks a final empty line with an empty segment, which
+  `Segment::split_lines` keeps, so `Padding(Text("a\n"))`, `Panel(Text("a\n\n"))`,
+  `Table` cells, `Tree` labels and `Align` keep the blank line as upstream does
+  (the rich-cli `--syntax` bottom pad that compensated for it was removed in the
+  same change).
 
 ### 28. `AnsiDecoder::decode` splits lines like rich 12
 - **Differs:** `decode` splits with `str::lines` (Python's `splitlines` for
@@ -468,6 +459,30 @@ Format: what differs · why · how to remove it (if temporary).
   upstream ends without one), still end the line. Inside containers both match
   upstream.
 - **Why:** the port's `Renderable` output separates lines and has no `end`.
+
+### 30. A lone surrogate in `Json` prints as U+FFFD without `ensure_ascii`
+- **Differs:** Python's `json` accepts an unpaired `\uD800`-`\uDFFF` escape,
+  and `json.dumps(ensure_ascii=False)` puts the surrogate itself in the
+  output. A Rust `String` cannot hold one, so the port prints U+FFFD in its
+  place. With `ensure_ascii` (re-escaped as `\ud800`) and for `sort_keys`
+  ordering and repeated-key detection the port is exact: strings are kept as
+  generalized UTF-8 until they are printed (golden `json_lone_surrogate_ascii`
+  in `audit_edges.tsv`).
+- **Why:** the rendered output is a Rust string; upstream's own output cannot
+  be written to a UTF-8 terminal either (`UnicodeEncodeError`).
+- **Remove:** not removable without non-UTF-8 output.
+
+### 31. Unknown style names in renderable options resolve to no style
+- **Differs:** upstream's `Console.get_style` raises `MissingStyle` for a name
+  that is neither in the theme nor parseable, so `Table(row_styles=["nope"])`,
+  `Panel(border_style="nope")` and the like fail at render time. Core's
+  renderables resolve every such option with `Theme::get_style_or_null` /
+  `console.get_style(..).unwrap_or_default()`, consistently: the unknown name
+  applies no style and the rest renders. (Style *strings* in markup and
+  `Text` spans are already silent upstream.)
+- **Why:** `Renderable::rich_render` has no error channel; `Style::parse` and
+  `Console::get_style` return errors for callers that want to validate first.
+- **Remove:** would need a fallible render path through every container.
 
 ## Feature-flagged divergences
 

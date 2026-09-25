@@ -54,11 +54,23 @@ impl ControlType {
             ControlType::CursorDown(n) => format!("\x1b[{n}B"),
             ControlType::CursorForward(n) => format!("\x1b[{n}C"),
             ControlType::CursorBackward(n) => format!("\x1b[{n}D"),
-            ControlType::CursorMoveToColumn(x) => format!("\x1b[{}G", x + 1),
-            ControlType::CursorMoveTo(x, y) => format!("\x1b[{};{}H", y + 1, x + 1),
+            // Widened: `u32::MAX + 1` is written as upstream's unbounded
+            // Python int would be, not overflowed.
+            ControlType::CursorMoveToColumn(x) => format!("\x1b[{}G", u64::from(x) + 1),
+            ControlType::CursorMoveTo(x, y) => move_to_code(u128::from(x), u128::from(y)),
             ControlType::EraseInLine(n) => format!("\x1b[{n}K"),
         }
     }
+}
+
+/// `CURSOR_MOVE_TO`'s escape for a zero-based `(x, y)` of any size (the
+/// sequence is one-based). [`Console::update_screen_lines`] positions rows
+/// with it, so `usize` coordinates are written in full, as upstream writes
+/// its unbounded ints.
+///
+/// [`Console::update_screen_lines`]: crate::console::Console::update_screen_lines
+pub(crate) fn move_to_code(x: u128, y: u128) -> String {
+    format!("\x1b[{};{}H", y + 1, x + 1)
 }
 
 /// A renderable that inserts terminal control codes.

@@ -318,10 +318,9 @@ impl Renderable for Panel {
             style.combine(&console.get_style(&self.border_style).unwrap_or_default());
         // `child_height = self.height or options.height or None`.
         let height = self.height.or(options.height).filter(|&height| height > 0);
-        // Upstream renders nothing at all in no width, not two empty borders.
-        if width == 0 {
-            return Vec::new();
-        }
+        // A zero `width` still draws the two-cell empty box upstream (its
+        // `width - 2` is negative); a zero-width console renders nothing
+        // before any renderable is asked (`Console.render`).
         // Fall back to a terminal-safe box on legacy Windows / non-UTF-8.
         let box_set = self.box_set.substitute(
             console.legacy_windows(),
