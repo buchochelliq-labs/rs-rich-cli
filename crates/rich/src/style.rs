@@ -171,7 +171,11 @@ impl Meta {
     /// Set `key` (`meta[key] = value`).
     pub fn insert(&mut self, key: impl Into<String>, value: MetaValue) {
         let key = key.into();
-        match self.entries.iter_mut().find(|(existing, _)| *existing == key) {
+        match self
+            .entries
+            .iter_mut()
+            .find(|(existing, _)| *existing == key)
+        {
             Some((_, slot)) => *slot = value,
             None => self.entries.push((key, value)),
         }
@@ -194,7 +198,9 @@ impl Meta {
 
     /// The entries in insertion order.
     pub fn iter(&self) -> impl Iterator<Item = (&str, &MetaValue)> {
-        self.entries.iter().map(|(key, value)| (key.as_str(), value))
+        self.entries
+            .iter()
+            .map(|(key, value)| (key.as_str(), value))
     }
 
     pub fn len(&self) -> usize {
@@ -302,18 +308,19 @@ impl Style {
         self.attrs.get(index).copied().flatten()
     }
 
-    /// True when nothing at all is set (renders as a no-op). Metadata counts,
-    /// as upstream's `_null` includes `_meta`.
+    /// True when nothing at all is set (renders as a no-op). Non-empty
+    /// metadata counts, as upstream's `_null` includes `meta`.
     pub fn is_null(&self) -> bool {
         self.color.is_none()
             && self.bgcolor.is_none()
             && self.link.is_none()
-            && self.meta.is_none()
+            && self.meta.as_ref().is_none_or(Meta::is_empty)
             && self.attrs.iter().all(Option::is_none)
     }
 
-    /// Attach metadata. Port of `Style(meta=…)`: even an empty map makes the
-    /// style non-null, as upstream's marshal-encoded `{}` is truthy.
+    /// Attach metadata. Port of `Style(meta=…)`. An empty map leaves the style
+    /// null, but it still differs from one with no metadata at all (upstream
+    /// hashes the marshal-encoded `{}`).
     pub fn with_meta(mut self, meta: Meta) -> Self {
         self.meta = Some(meta);
         self
@@ -330,18 +337,11 @@ impl Style {
         self.meta.as_ref()
     }
 
-    /// A style carrying only `meta`. Port of `Style.from_meta`: an empty map
-    /// gives a null style (`style._null = not meta`).
-    ///
-    /// Upstream's empty-meta style is null yet unequal to `Style()`; here it
-    /// is simply `Style::new()`. Upstream also gives it a random `link_id`,
-    /// which this port does not model (see DIVERGENCES #20).
+    /// A style carrying only `meta`. Port of `Style.from_meta` (null when
+    /// `meta` is empty). Upstream also gives it a random `link_id`, which
+    /// this port does not model (see DIVERGENCES #20).
     pub fn from_meta(meta: Meta) -> Style {
-        if meta.is_empty() {
-            Style::new()
-        } else {
-            Style::new().with_meta(meta)
-        }
+        Style::new().with_meta(meta)
     }
 
     /// A style with event-handler metadata. Port of `Style.on`: each handler
@@ -640,6 +640,57 @@ impl Style {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Expectations captured from real rich 15.0.0.
+    #[test]
+    fn meta_matches_upstream() {
+        let meta = |entries: &[(&str, MetaValue)]| -> Meta { entries.iter().cloned().collect() };
+        let a = Style::parse("bold")
+            .unwrap()
+            .with_meta(meta(&[("x", MetaValue::Int(1)), ("y", MetaValue::Int(2))]));
+        let b = Style::new().with_meta(meta(&[("y", MetaValue::Int(3)), ("z", MetaValue::Int(4))]));
+        // `{'x': 1, 'y': 3, 'z': 4}`
+        assert_eq!(
+            a.combine(&b).meta(),
+            meta(&[
+                ("x", MetaValue::Int(1)),
+                ("y", MetaValue::Int(3)),
+                ("z", MetaValue::Int(4))
+            ])
+        );
+        assert!(Style::new().with_meta(Meta::new()).is_null());
+        assert!(Style::from_meta(Meta::new()).is_null());
+        let ab = meta(&[("a", MetaValue::Int(1)), ("b", MetaValue::Int(2))]);
+        let ba = meta(&[("b", MetaValue::Int(2)), ("a", MetaValue::Int(1))]);
+        assert_ne!(Style::new().with_meta(ab), Style::new().with_meta(ba));
+        assert_ne!(
+            Style::new().with_meta(meta(&[("a", MetaValue::Bool(true))])),
+            Style::new().with_meta(meta(&[("a", MetaValue::Int(1))]))
+        );
+        assert_eq!(
+            Style::on(
+                Some(meta(&[("k", MetaValue::Int(1))])),
+                &[("click", MetaValue::Str("go".into()))]
+            )
+            .meta(),
+            meta(&[
+                ("k", MetaValue::Int(1)),
+                ("@click", MetaValue::Str("go".into()))
+            ])
+        );
+        let rich = Style::parse("bold link x")
+            .unwrap()
+            .with_meta(meta(&[("a", MetaValue::Int(1))]));
+        assert_eq!(rich.definition(), "bold link x");
+        assert_eq!(rich.clear_meta_and_links(), Style::parse("bold").unwrap());
+        // Meta never renders.
+        assert_eq!(
+            rich.ansi_codes(ColorSystem::Truecolor),
+            Style::parse("bold")
+                .unwrap()
+                .ansi_codes(ColorSystem::Truecolor)
+        );
+    }
 
     /// `normalize` round-trips a parseable definition through `definition()` and
     /// merely trims+lowercases one that isn't. Every expectation here was taken

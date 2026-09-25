@@ -260,7 +260,14 @@ impl Renderable for Panel {
                 .saturating_sub(2)
                 .min(inner_width.max(title.cell_len() + 2));
         }
-        let (pt, pr, pb, pl) = self.padding;
+        // Upstream renders the padded child through `Console.render`, which
+        // yields nothing at all in no width: with no inner width there is no
+        // padding either, only the (height-padded) empty rows.
+        let (pt, pr, pb, pl) = if inner_width == 0 {
+            (0, 0, 0, 0)
+        } else {
+            self.padding
+        };
         let child_width = inner_width.saturating_sub(pl).saturating_sub(pr);
 
         let mut child_options = options.update_width(child_width);
@@ -296,14 +303,16 @@ impl Renderable for Panel {
             self.title_align,
         ));
 
-        // Top padding rows.
+        // The padded child as upstream's `Padding` yields it: blank rows,
+        // then each line between the side padding. `Console.render_lines`
+        // then fits every row to the inner width and, under a height, the
+        // row count to `height - 2`.
+        let mut inner_rows: Vec<Vec<Segment>> = Vec::new();
         for _ in 0..pt {
-            rows.push(vec![left_border(), blank_inner(), right_border()]);
+            inner_rows.push(vec![blank_inner()]);
         }
-
-        // Content rows: border + left pad + content + right pad + border.
         for line in child_lines {
-            let mut row = vec![left_border()];
+            let mut row = Vec::new();
             if pl > 0 {
                 row.push(Segment::new(" ".repeat(pl), inner_style.clone()));
             }
@@ -311,13 +320,27 @@ impl Renderable for Panel {
             if pr > 0 {
                 row.push(Segment::new(" ".repeat(pr), inner_style.clone()));
             }
-            row.push(right_border());
-            rows.push(row);
+            inner_rows.push(row);
         }
-
-        // Bottom padding rows.
         for _ in 0..pb {
-            rows.push(vec![left_border(), blank_inner(), right_border()]);
+            inner_rows.push(vec![blank_inner()]);
+        }
+        if let Some(height) = options.height {
+            let height = height.saturating_sub(2);
+            inner_rows.truncate(height);
+            while inner_rows.len() < height {
+                inner_rows.push(vec![blank_inner()]);
+            }
+        }
+        for row in inner_rows {
+            let mut line = vec![left_border()];
+            line.extend(Segment::adjust_line_length(
+                &row,
+                inner_width,
+                inner_style.clone(),
+            ));
+            line.push(right_border());
+            rows.push(line);
         }
 
         // Bottom border (with subtitle if present).

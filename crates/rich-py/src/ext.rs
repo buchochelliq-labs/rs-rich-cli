@@ -17,6 +17,7 @@ mod diagnostic;
 mod diff;
 mod inspect;
 mod layout;
+mod qa;
 mod registry;
 mod status;
 mod tables;
@@ -40,5 +41,6 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     layout::register(m)?;
     registry::register(m)?;
     cli_doc::register(m)?;
+    qa::register(m)?;
     Ok(())
 }

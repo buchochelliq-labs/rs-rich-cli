@@ -46,7 +46,7 @@ names!(detector, detector_name, Detector, "detector", {
 )]
 #[derive(Clone)]
 pub(crate) struct Badge {
-    inner: CoreBadge,
+    pub(crate) inner: CoreBadge,
 }
 
 fn configure(
@@ -149,7 +149,7 @@ impl Badge {
 /// between badges.
 #[pyclass(name = "Badges", module = "rs_rich.ext.badge", frozen)]
 pub(crate) struct Badges {
-    inner: CoreBadges,
+    pub(crate) inner: CoreBadges,
 }
 
 impl AsRenderable for Badges {

@@ -366,8 +366,7 @@ fn strip_codes(content: &str, styles: bool, links: bool) -> String {
             let body = &tail[2..];
             let end = body
                 .char_indices()
-                .find(|(_, c)| ('\x40'..='\x7e').contains(c))
-                .map(|(i, c)| (i, c));
+                .find(|(_, c)| ('\x40'..='\x7e').contains(c));
             if let Some((i, 'm')) = end {
                 rest = &body[i + 1..];
                 continue;

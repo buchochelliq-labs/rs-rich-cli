@@ -403,6 +403,21 @@ fn build(name: &str) -> String {
                 .border_style(Style::parse("red").unwrap()),
         ),
         "rule_title_svg" => svg_of(22, &Rule::new("Title")),
+        "panel_narrow_heights" => {
+            let mut out = String::new();
+            for width in [2, 3, 4, 5] {
+                for padding in [(0, 1, 0, 1), (1, 1, 1, 1)] {
+                    for height in [None, Some(5)] {
+                        let console = console(width);
+                        let mut options = console.options();
+                        options.height = height;
+                        let panel = panel(Text::new("hi")).padding(padding);
+                        out.push_str(&console.capture(|c| c.print_with(&panel, &options)));
+                    }
+                }
+            }
+            out
+        }
         other => panic!("no Rust builder for core gap case {other:?}"),
     }
 }
@@ -427,7 +442,7 @@ fn core_gaps_parity() {
         checked += 1;
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
-    assert_eq!(checked, 44, "expected every core gap case to run");
+    assert_eq!(checked, 45, "expected every core gap case to run");
 }
 
 /// `Renderables` renders nothing for no children and measures `(1, 1)`, as

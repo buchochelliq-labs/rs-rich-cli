@@ -526,8 +526,11 @@ pub(crate) struct ProgressColumn {
     table_column: Mutex<Option<Py<PyAny>>>,
     /// Upstream's text columns default to `Column(no_wrap=True)`.
     no_wrap: Mutex<bool>,
-    cache: Mutex<HashMap<i64, (Py<PyAny>, Py<PyAny>)>>,
+    cache: Mutex<HashMap<i64, Cached>>,
 }
+
+/// A column's last render for a task: `(timestamp, renderable)`.
+type Cached = (Py<PyAny>, Py<PyAny>);
 
 impl ProgressColumn {
     fn blank() -> ProgressColumn {

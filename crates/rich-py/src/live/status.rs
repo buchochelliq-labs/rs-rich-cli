@@ -19,7 +19,6 @@ use rich::{Spinner as CoreSpinner, StyleType, Table as CoreTable, Text as CoreTe
 use super::live_display::Live;
 use super::util;
 use crate::console::Console;
-use crate::errors::MarkupError;
 use crate::renderable::{self, AsRenderable, PyRenderable};
 use crate::style::style_type;
 
@@ -40,9 +39,9 @@ pub(crate) struct StatusSpinner {
 fn spinner_text(py: Python<'_>, text: Option<Bound<'_, PyAny>>) -> PyResult<Option<Py<PyAny>>> {
     Ok(match text {
         Some(text) if util::is_str(&text) => {
+            // `Text.from_markup(text)`: emoji codes and markup.
             let markup = util::to_str(&text)?;
-            let parsed =
-                CoreText::from_markup(&markup).map_err(|e| MarkupError::new_err(e.to_string()))?;
+            let parsed = renderable::render_str(&markup, true, true, false)?;
             Some(util::new_text(py, parsed)?)
         }
         Some(text) if !text.is_none() => Some(text.unbind()),

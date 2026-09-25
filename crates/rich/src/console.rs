@@ -1324,9 +1324,6 @@ impl Renderable for Text {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         // Empty Text still represents a printable blank line; an empty
         // generator such as Markdown does not. Preserve that distinction.
-        if self.is_empty() {
-            return vec![Segment::new("", None)];
-        }
         // Wrap to the available width; the effective justify is this text's own
         // justify, falling back to the console options' justify.
         let justify = if self.get_justify() != Justify::Default {
@@ -1334,6 +1331,11 @@ impl Renderable for Text {
         } else {
             options.justify
         };
+        // A justified empty line is still padded to the width (upstream's
+        // `truncate(width, pad=True)`), so only an unjustified one is bare.
+        if self.is_empty() && matches!(justify, Justify::Default | Justify::Full) {
+            return vec![Segment::new("", None)];
+        }
         // Same precedence for overflow and no_wrap: the text's own setting wins,
         // then the options', then upstream's default. Mirrors the `self.x or
         // options.x or DEFAULT` chain in `Text.__rich_console__`.

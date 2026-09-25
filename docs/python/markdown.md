@@ -92,6 +92,9 @@ Console(width=40).print(Markdown(diagram, fences=[MermaidFences()]))
 ```
 
 ```text
+┌───────┐  ┌───────┐
+│ Write ├─►│ Print │
+└───────┘  └───────┘
 ```
 
 ## Differences from Rich

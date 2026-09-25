@@ -1852,6 +1852,33 @@ mod tests {
         );
     }
 
+    /// `Text.apply_meta` / `Text.on`, as rich 15.0.0 records them.
+    #[test]
+    fn apply_meta_and_on_add_meta_spans() {
+        use crate::style::{Meta, MetaValue};
+        let mut text = Text::new("hello");
+        text.apply_meta([("a", MetaValue::Int(1))].into_iter().collect(), 1, Some(3));
+        text.on(None, &[("click", MetaValue::Str("x".into()))]);
+        text.apply_meta(Meta::new(), 0, None);
+        let spans = text.spans();
+        assert_eq!(spans.len(), 2);
+        assert_eq!((spans[0].start, spans[0].end), (1, 3));
+        let meta = |span: &Span| match &span.style {
+            StyleType::Style(style) => style.meta(),
+            StyleType::Name(_) => Meta::new(),
+        };
+        assert_eq!(
+            meta(&spans[0]),
+            [("a", MetaValue::Int(1))].into_iter().collect()
+        );
+        assert_eq!(
+            meta(&spans[1]),
+            [("@click", MetaValue::Str("x".into()))]
+                .into_iter()
+                .collect()
+        );
+    }
+
     #[test]
     fn append_creates_spans() {
         let mut text = Text::new("");

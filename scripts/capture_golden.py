@@ -3089,6 +3089,13 @@ CORE_GAP_CASES = [
     ("panel_title_svg", lambda: _cg_svg_of(22, Panel("hi", title="Title", subtitle="[b]S[/]"))),
     ("panel_title_styled_border_svg", lambda: _cg_svg_of(22, Panel("hi", title="Title", border_style="red"))),
     ("rule_title_svg", lambda: _cg_svg_of(22, Rule("Title"))),
+    # 15. Panel at (almost) no inner width, with and without a height
+    ("panel_narrow_heights", lambda: "".join(
+        _cg_print(_cg_console(width), Panel(Text("hi"), padding=padding), height=height)
+        for width in (2, 3, 4, 5)
+        for padding in ((0, 1), (1, 1))
+        for height in (None, 5)
+    )),
 ]
 
 

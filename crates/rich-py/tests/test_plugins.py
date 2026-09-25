@@ -732,6 +732,105 @@ def test_fence_renderer_objects_get_console_and_options():
 
 
 # ---------------------------------------------------------------------------
+# Plugins inside core renderables: Syntax(highlighter=...), Markdown(fences=...)
+
+
+def _syntax():
+    module = pytest.importorskip("rs_rich.syntax")
+    if not hasattr(module, "Syntax"):
+        pytest.skip("rs_rich.syntax.Syntax is not built")
+    return module.Syntax
+
+
+def _markdown():
+    module = pytest.importorskip("rs_rich.markdown")
+    if not hasattr(module, "Markdown"):
+        pytest.skip("rs_rich.markdown.Markdown is not built")
+    return module.Markdown
+
+
+def test_a_python_code_highlighter_renders_in_syntax_as_the_rust_one():
+    Syntax = _syntax()
+    # A Python engine, directly and through a registry handle, styles what
+    # the Rust `Bold` styles through core's `Syntax` (`BOLD_SYNTAX`; Rich's
+    # `Syntax` does not pad a background-less block to the width).
+    registry = p.ExtensionRegistry()
+    registry.register_code_highlighter("bold", Bold())
+    expected = "\n".join(line.rstrip(" ") for line in RUST_BOLD_SYNTAX.split("\n"))
+    for engine in (Bold(), registry.code_highlighter("bold")):
+        c = console(width=20, color=True)
+        c.print(Syntax("x = 1\ny = 2", "python", highlighter=engine))
+        assert output(c) == expected
+    # A Python engine returning syntect's spans prints exactly what syntect
+    # does, background and theme included.
+    syntect = p.ExtensionRegistry.with_defaults().code_highlighter("syntect")
+
+    class Delegating(p.CodeHighlighter):
+        def highlight(self, code, language=None, theme=None):
+            return syntect.highlight(code, language, theme)
+
+        def default_theme(self):
+            return syntect.default_theme()
+
+        def themes(self):
+            return syntect.themes()
+
+    code = 'fn main() {\n    let s = "é 日本 🦀"; // ünïcode\n}\n'
+    for theme in (None, "ansi_dark"):
+        rust, python = console(width=40, color=True), console(width=40, color=True)
+        rust.print(Syntax(code, "rust", theme=theme, line_numbers=True, highlighter="syntect"))
+        python.print(Syntax(code, "rust", theme=theme, line_numbers=True, highlighter=Delegating()))
+        assert output(python) == output(rust)
+
+
+def test_a_code_highlighter_that_raises_fails_the_print():
+    Syntax = _syntax()
+
+    class Broken(Bold):
+        def highlight(self, code, language=None, theme=None):
+            raise LookupError("engine bug")
+
+    with pytest.raises(LookupError, match="engine bug"):
+        console().print(Syntax("x = 1", "python", highlighter=Broken()))
+
+
+def test_fence_renderers_render_in_markdown():
+    Markdown = _markdown()
+    registry = p.ExtensionRegistry()
+    registry.add_plugin(p.MermaidPlugin())
+    registry.add_plugin(Everything())
+    document = "# Title\n\n```mermaid\n" + MERMAID_SOURCE + "\n```\n\n```shout\nquiet\n```\n"
+    c = console()
+    c.print(Markdown(document, fences=[registry.fences()]))
+    text = output(c)
+    assert RUST_MERMAID.rstrip("\n") in text
+    assert "QUIET" in text and "quiet" not in text
+    # A Python fence renderer that wraps the Rust one draws the same page.
+    mermaid = registry.renderer("mermaid")
+    wrapped = console()
+    wrapped.print(
+        Markdown(
+            document,
+            fences=[
+                lambda language, code: mermaid.render(code) if language == "mermaid" else None,
+                registry.fence_renderer("shout"),
+            ],
+        )
+    )
+    assert output(wrapped) == text
+
+
+def test_a_fence_renderer_that_raises_fails_the_print():
+    Markdown = _markdown()
+
+    def broken(language, code):
+        raise LookupError("fence bug")
+
+    with pytest.raises(LookupError, match="fence bug"):
+        console().print(Markdown("```x\ny\n```\n", fences=[broken]))
+
+
+# ---------------------------------------------------------------------------
 # install(console)
 
 

@@ -201,6 +201,11 @@ missing lines are unstyled, and styles lose links. Any other exception the
 engine raises is a `HighlightError` (with the exception as its `__cause__`);
 when it is raised while printing, the print raises it.
 
+A code highlighter (yours, or a registry's handle) can be given to
+`Syntax(..., highlighter=engine)` and `Markdown(..., highlighter=engine)`, and
+fence renderers (`registry.fences()`, or your own) to
+`Markdown(..., fences=[...])`.
+
 `set_default_code_highlighter(name, theme=None)` makes one the default for
 consoles the registry is installed onto (an unknown name or theme raises
 `HighlighterChoiceError`).

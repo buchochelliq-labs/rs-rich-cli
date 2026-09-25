@@ -752,9 +752,10 @@ impl Live {
             let state = this.st();
             (state.started, state.transient)
         };
-        if util::flag(&console, "is_terminal")? && !util::flag(&console, "is_dumb_terminal")? {
-            Live::print_frame(slf)?;
-        } else if !started && !transient {
+        let terminal =
+            util::flag(&console, "is_terminal")? && !util::flag(&console, "is_dumb_terminal")?;
+        // A file or dumb terminal sees only the final frame.
+        if terminal || (!started && !transient) {
             Live::print_frame(slf)?;
         }
         Ok(())

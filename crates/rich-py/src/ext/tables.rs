@@ -421,7 +421,7 @@ fn frame_args(
 #[pyclass(name = "TableData", module = "rs_rich.ext.table", skip_from_py_object)]
 #[derive(Clone)]
 pub(crate) struct TableData {
-    inner: CoreData,
+    pub(crate) inner: CoreData,
 }
 
 impl AsRenderable for TableData {
@@ -596,7 +596,7 @@ impl Group {
 /// `"all"`, `("head", n)` or `("tail", n)`. Keys are any hashable values.
 #[pyclass(name = "StreamingTable", module = "rs_rich.ext.table")]
 pub(crate) struct StreamingTable {
-    inner: Arc<Mutex<CoreStream<u64>>>,
+    pub(crate) inner: Arc<Mutex<CoreStream<u64>>>,
     ids: Py<PyDict>,
     keys: HashMap<u64, Py<PyAny>>,
     next: u64,

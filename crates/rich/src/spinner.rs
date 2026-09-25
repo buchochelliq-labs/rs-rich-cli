@@ -46,6 +46,18 @@ fn markup(text: &str) -> Text {
     Text::from_markup(text).unwrap_or_else(|_| Text::new(text))
 }
 
+/// Every built-in spinner name, in upstream's `rich._spinners.SPINNERS`
+/// order. Look each up with [`spinner_frames`].
+pub fn spinner_names() -> &'static [&'static str] {
+    crate::spinner_data::SPINNER_NAMES
+}
+
+/// A built-in spinner's `(interval in milliseconds, frames)`, or `None` for
+/// an unknown name. Port of a `SPINNERS[name]` lookup (`interval`, `frames`).
+pub fn spinner_frames(name: &str) -> Option<(f64, &'static [&'static str])> {
+    crate::spinner_data::spinner_data(name)
+}
+
 impl Spinner {
     /// Look up a built-in spinner by name (falls back to `dots`).
     pub fn new(name: &str) -> Self {
@@ -155,6 +167,15 @@ impl Renderable for Spinner {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn spinner_table_is_public_in_upstream_order() {
+        let names = spinner_names();
+        assert_eq!(names.len(), 73);
+        assert_eq!(names[0], "dots");
+        assert!(names.iter().all(|name| spinner_frames(name).is_some()));
+        assert!(spinner_frames("nope").is_none());
+    }
     use crate::color::ColorSystem;
 
     /// The frame at `time` of a spinner whose first render was at 0.
