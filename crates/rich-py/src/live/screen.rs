@@ -150,7 +150,8 @@ impl Screen {
         let kwargs = PyDict::new(py);
         kwargs.set_item("style", style.as_ref())?;
         kwargs.set_item("pad", true)?;
-        let lines = console.call_method("render_lines", (renderable, render_options), Some(&kwargs))?;
+        let lines =
+            console.call_method("render_lines", (renderable, render_options), Some(&kwargs))?;
         let core_style = match &style {
             Some(style) => Some(style.extract::<PyRef<'_, Style>>()?.inner.clone()),
             None => None,
@@ -162,7 +163,10 @@ impl Screen {
             .map(|line| CoreSegment::adjust_line_length(&line, width, core_style.clone()))
             .collect();
         while lines.len() < height {
-            lines.push(vec![CoreSegment::new(" ".repeat(width), core_style.clone())]);
+            lines.push(vec![CoreSegment::new(
+                " ".repeat(width),
+                core_style.clone(),
+            )]);
         }
         let new_line = if application_mode {
             CoreSegment::new("\n\r", None)
@@ -266,7 +270,9 @@ impl ScreenContext {
         let py = slf.py();
         let this = slf.get();
         let console = this.console.bind(py);
-        let changed = console.call_method1("set_alt_screen", (true,))?.is_truthy()?;
+        let changed = console
+            .call_method1("set_alt_screen", (true,))?
+            .is_truthy()?;
         *this.changed.lock().unwrap_or_else(|p| p.into_inner()) = changed;
         if changed && this.hide_cursor {
             console.call_method1("show_cursor", (false,))?;
@@ -329,7 +335,10 @@ impl SystemPager {
     }
 
     fn _pager(&self, py: Python<'_>, content: &str) -> PyResult<Py<PyAny>> {
-        Ok(py.import("pydoc")?.call_method1("pager", (content,))?.unbind())
+        Ok(py
+            .import("pydoc")?
+            .call_method1("pager", (content,))?
+            .unbind())
     }
 
     fn show(slf: &Bound<'_, Self>, content: &str) -> PyResult<()> {

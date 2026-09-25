@@ -1200,11 +1200,914 @@ class Spinner:
 
 # --- area: code (Markdown, Syntax, JSON, Pretty, inspect, Traceback, highlighters) ---
 
+class Highlighter:
+    """Base class: calling one highlights a copy of a ``str`` or ``Text``."""
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+    def __call__(self, text: Union[str, "Text"]) -> "Text": ...
+    def highlight(self, text: "Text") -> None: ...
+
+class NullHighlighter(Highlighter): ...
+
+class RegexHighlighter(Highlighter):
+    highlights: List[str]
+    base_style: str
+
+class ReprHighlighter(RegexHighlighter): ...
+
+class JSONHighlighter(RegexHighlighter):
+    JSON_STR: str
+    JSON_WHITESPACE: Any
+
+class ISO8601Highlighter(RegexHighlighter): ...
+
+class Node:
+    key_repr: str
+    value_repr: str
+    open_brace: str
+    close_brace: str
+    empty: str
+    last: bool
+    is_tuple: bool
+    is_namedtuple: bool
+    children: Optional[List["Node"]]
+    key_separator: str
+    separator: str
+    def __init__(
+        self,
+        key_repr: str = "",
+        value_repr: str = "",
+        open_brace: str = "",
+        close_brace: str = "",
+        empty: str = "",
+        last: bool = False,
+        is_tuple: bool = False,
+        is_namedtuple: bool = False,
+        children: Optional[List["Node"]] = None,
+        key_separator: str = ": ",
+        separator: str = ", ",
+    ) -> None: ...
+    def iter_tokens(self) -> Iterator[str]: ...
+    def check_length(self, start_length: int, max_length: int) -> bool: ...
+    def render(self, max_width: int = 80, indent_size: int = 4, expand_all: bool = False) -> str: ...
+
+class Pretty:
+    indent_size: int
+    justify: Optional[JustifyMethod]
+    overflow: Optional[OverflowMethod]
+    no_wrap: Optional[bool]
+    indent_guides: bool
+    max_length: Optional[int]
+    max_string: Optional[int]
+    max_depth: Optional[int]
+    expand_all: bool
+    margin: int
+    insert_line: bool
+    def __init__(
+        self,
+        _object: Any,
+        highlighter: Optional[Callable[[Union[str, "Text"]], "Text"]] = None,
+        *,
+        indent_size: int = 4,
+        justify: Optional[JustifyMethod] = None,
+        overflow: Optional[OverflowMethod] = None,
+        no_wrap: Optional[bool] = False,
+        indent_guides: bool = False,
+        max_length: Optional[int] = None,
+        max_string: Optional[int] = None,
+        max_depth: Optional[int] = None,
+        expand_all: bool = False,
+        margin: int = 0,
+        insert_line: bool = False,
+    ) -> None: ...
+    @property
+    def _object(self) -> Any: ...
+    @property
+    def highlighter(self) -> Callable[[Union[str, "Text"]], "Text"]: ...
+
+def traverse(
+    _object: Any,
+    max_length: Optional[int] = None,
+    max_string: Optional[int] = None,
+    max_depth: Optional[int] = None,
+) -> Node: ...
+def pretty_repr(
+    _object: Any,
+    *,
+    max_width: int = 80,
+    indent_size: int = 4,
+    max_length: Optional[int] = None,
+    max_string: Optional[int] = None,
+    max_depth: Optional[int] = None,
+    expand_all: bool = False,
+) -> str: ...
+def pprint(
+    _object: Any,
+    *,
+    console: Optional["Console"] = None,
+    indent_guides: bool = True,
+    max_length: Optional[int] = None,
+    max_string: Optional[int] = None,
+    max_depth: Optional[int] = None,
+    expand_all: bool = False,
+) -> None: ...
+def pretty_install(
+    console: Optional["Console"] = None,
+    overflow: OverflowMethod = "ignore",
+    crop: bool = False,
+    indent_guides: bool = False,
+    max_length: Optional[int] = None,
+    max_string: Optional[int] = None,
+    max_depth: Optional[int] = None,
+    expand_all: bool = False,
+) -> None:
+    """``rich.pretty.install`` (re-exported as ``rs_rich.pretty.install``)."""
+
+class JSON:
+    def __init__(
+        self,
+        json: str,
+        indent: Union[None, int, str] = 2,
+        highlight: bool = True,
+        skip_keys: bool = False,
+        ensure_ascii: bool = False,
+        check_circular: bool = True,
+        allow_nan: bool = True,
+        default: Optional[Callable[[Any], Any]] = None,
+        sort_keys: bool = False,
+    ) -> None: ...
+    @classmethod
+    def from_data(
+        cls,
+        data: Any,
+        indent: Union[None, int, str] = 2,
+        highlight: bool = True,
+        skip_keys: bool = False,
+        ensure_ascii: bool = False,
+        check_circular: bool = True,
+        allow_nan: bool = True,
+        default: Optional[Callable[[Any], Any]] = None,
+        sort_keys: bool = False,
+    ) -> "JSON": ...
+    @property
+    def text(self) -> "Text": ...
+    def __rich__(self) -> "Text": ...
+
+class Markdown:
+    def __init__(
+        self,
+        markup: str,
+        code_theme: str = "monokai",
+        justify: Optional[JustifyMethod] = None,
+        style: StyleType = "none",
+        hyperlinks: bool = True,
+        inline_code_lexer: Optional[str] = None,
+        inline_code_theme: Optional[str] = None,
+        *,
+        highlighter: Optional[str] = None,
+    ) -> None: ...
+    @property
+    def markup(self) -> str: ...
+    @property
+    def code_theme(self) -> str: ...
+    @property
+    def justify(self) -> Optional[JustifyMethod]: ...
+    @property
+    def style(self) -> StyleType: ...
+    @property
+    def hyperlinks(self) -> bool: ...
+    @property
+    def inline_code_lexer(self) -> Optional[str]: ...
+    @property
+    def inline_code_theme(self) -> Optional[str]: ...
+    @property
+    def highlighter(self) -> Optional[str]: ...
+
+class Syntax:
+    code: str
+    dedent: bool
+    line_numbers: bool
+    start_line: int
+    line_range: Optional[Tuple[Optional[int], Optional[int]]]
+    highlight_lines: set
+    code_width: Optional[int]
+    tab_size: int
+    word_wrap: bool
+    indent_guides: bool
+    padding: Tuple[int, int, int, int]
+    def __init__(
+        self,
+        code: str,
+        lexer: str,
+        *,
+        theme: Optional[str] = "monokai",
+        dedent: bool = False,
+        line_numbers: bool = False,
+        start_line: int = 1,
+        line_range: Optional[Tuple[Optional[int], Optional[int]]] = None,
+        highlight_lines: Optional[set] = None,
+        code_width: Optional[int] = None,
+        tab_size: int = 4,
+        word_wrap: bool = False,
+        background_color: Optional[str] = None,
+        indent_guides: bool = False,
+        padding: PaddingDimensions = 0,
+        highlighter: Optional[str] = None,
+    ) -> None: ...
+    @classmethod
+    def from_path(
+        cls,
+        path: str,
+        encoding: str = "utf-8",
+        lexer: Optional[str] = None,
+        theme: Optional[str] = "monokai",
+        dedent: bool = False,
+        line_numbers: bool = False,
+        line_range: Optional[Tuple[int, int]] = None,
+        start_line: int = 1,
+        highlight_lines: Optional[set] = None,
+        code_width: Optional[int] = None,
+        tab_size: int = 4,
+        word_wrap: bool = False,
+        background_color: Optional[str] = None,
+        indent_guides: bool = False,
+        padding: PaddingDimensions = 0,
+        highlighter: Optional[str] = None,
+    ) -> "Syntax": ...
+    @classmethod
+    def guess_lexer(cls, path: str, code: Optional[str] = None) -> str: ...
+    @classmethod
+    def get_theme(cls, name: str) -> str: ...
+    def highlight(
+        self, code: str, line_range: Optional[Tuple[Optional[int], Optional[int]]] = None
+    ) -> "Text": ...
+    def stylize_range(
+        self,
+        style: StyleType,
+        start: Tuple[int, int],
+        end: Tuple[int, int],
+        style_before: bool = False,
+    ) -> None: ...
+    @property
+    def lexer(self) -> str: ...
+    @property
+    def theme(self) -> Optional[str]: ...
+    @property
+    def background_color(self) -> Optional[str]: ...
+    @property
+    def highlighter(self) -> Optional[str]: ...
+    def __rich_measure__(self, console: "Console", options: "ConsoleOptions") -> "Measurement": ...
+
+def code_highlighters() -> List[str]:
+    """The code highlighters this build has (``syntect``; ``lumis`` in a lumis build)."""
+
+def code_themes(highlighter: Optional[str] = None) -> List[str]:
+    """The theme names a code highlighter accepts (default: ``syntect``)."""
+
+class Inspect:
+    def __init__(
+        self,
+        obj: Any,
+        *,
+        title: Optional[Union[str, "Text"]] = None,
+        help: bool = False,
+        methods: bool = False,
+        docs: bool = True,
+        private: bool = False,
+        dunder: bool = False,
+        sort: bool = True,
+        all: bool = True,
+        value: bool = True,
+    ) -> None: ...
+    @property
+    def obj(self) -> Any: ...
+
+def inspect(
+    obj: Any,
+    *,
+    console: Optional["Console"] = None,
+    title: Optional[Union[str, "Text"]] = None,
+    help: bool = False,
+    methods: bool = False,
+    docs: bool = True,
+    private: bool = False,
+    dunder: bool = False,
+    sort: bool = True,
+    all: bool = False,
+    value: bool = True,
+) -> None: ...
+
+class Frame:
+    filename: str
+    lineno: int
+    name: str
+    line: str
+    locals: Optional[Dict[str, Node]]
+    last_instruction: Optional[Tuple[Tuple[int, int], Tuple[int, int]]]
+    def __init__(
+        self,
+        filename: str,
+        lineno: int,
+        name: str,
+        line: str = "",
+        locals: Optional[Dict[str, Node]] = None,
+        last_instruction: Optional[Tuple[Tuple[int, int], Tuple[int, int]]] = None,
+    ) -> None: ...
+
+class Stack:
+    exc_type: str
+    exc_value: str
+    syntax_error: Any
+    is_cause: bool
+    frames: List[Frame]
+    notes: List[str]
+    is_group: bool
+    exceptions: List["Trace"]
+    def __init__(
+        self,
+        exc_type: str,
+        exc_value: str,
+        syntax_error: Any = None,
+        is_cause: bool = False,
+        frames: Optional[List[Frame]] = None,
+        notes: List[str] = ...,
+        is_group: bool = False,
+        exceptions: Optional[List["Trace"]] = None,
+    ) -> None: ...
+
+class Trace:
+    stacks: List[Stack]
+    def __init__(self, stacks: List[Stack]) -> None: ...
+
+class Traceback:
+    trace: Trace
+    def __init__(
+        self,
+        trace: Optional[Trace] = None,
+        *,
+        width: Optional[int] = 100,
+        code_width: Optional[int] = 88,
+        extra_lines: int = 3,
+        theme: Optional[str] = None,
+        word_wrap: bool = False,
+        show_locals: bool = False,
+        locals_max_length: Optional[int] = 10,
+        locals_max_string: Optional[int] = 80,
+        locals_max_depth: Optional[int] = None,
+        locals_hide_dunder: bool = True,
+        locals_hide_sunder: bool = False,
+        locals_overlow: Optional[OverflowMethod] = None,
+        indent_guides: bool = True,
+        suppress: Iterable[Any] = (),
+        max_frames: int = 100,
+    ) -> None: ...
+    @classmethod
+    def from_exception(
+        cls,
+        exc_type: Any,
+        exc_value: BaseException,
+        traceback: Any,
+        *,
+        width: Optional[int] = 100,
+        code_width: Optional[int] = 88,
+        extra_lines: int = 3,
+        theme: Optional[str] = None,
+        word_wrap: bool = False,
+        show_locals: bool = False,
+        locals_max_length: Optional[int] = 10,
+        locals_max_string: Optional[int] = 80,
+        locals_max_depth: Optional[int] = None,
+        locals_hide_dunder: bool = True,
+        locals_hide_sunder: bool = False,
+        locals_overflow: Optional[OverflowMethod] = None,
+        indent_guides: bool = True,
+        suppress: Iterable[Any] = (),
+        max_frames: int = 100,
+    ) -> "Traceback": ...
+    @classmethod
+    def extract(
+        cls,
+        exc_type: Any,
+        exc_value: BaseException,
+        traceback: Any,
+        *,
+        show_locals: bool = False,
+        locals_max_length: Optional[int] = 10,
+        locals_max_string: Optional[int] = 80,
+        locals_max_depth: Optional[int] = None,
+        locals_hide_dunder: bool = True,
+        locals_hide_sunder: bool = False,
+        _visited_exceptions: Any = None,
+    ) -> Trace: ...
+    @property
+    def width(self) -> Optional[int]: ...
+    @property
+    def code_width(self) -> Optional[int]: ...
+    @property
+    def extra_lines(self) -> int: ...
+    @property
+    def theme(self) -> str: ...
+    @property
+    def word_wrap(self) -> bool: ...
+    @property
+    def show_locals(self) -> bool: ...
+    @property
+    def indent_guides(self) -> bool: ...
+    @property
+    def locals_hide_dunder(self) -> bool: ...
+    @property
+    def locals_hide_sunder(self) -> bool: ...
+    @property
+    def suppress(self) -> List[str]: ...
+    @property
+    def max_frames(self) -> int: ...
+
+def traceback_install(
+    *,
+    console: Optional["Console"] = None,
+    width: Optional[int] = 100,
+    code_width: Optional[int] = 88,
+    extra_lines: int = 3,
+    theme: Optional[str] = None,
+    word_wrap: bool = False,
+    show_locals: bool = False,
+    locals_max_length: int = 10,
+    locals_max_string: int = 80,
+    locals_max_depth: Optional[int] = None,
+    locals_hide_dunder: bool = True,
+    locals_hide_sunder: Optional[bool] = None,
+    locals_overflow: Optional[OverflowMethod] = None,
+    indent_guides: bool = True,
+    suppress: Iterable[Any] = (),
+    max_frames: int = 100,
+) -> Callable[..., Any]:
+    """``rich.traceback.install`` (re-exported as ``rs_rich.traceback.install``)."""
+
 # --- area: live (Live, Progress, Status, Screen, Pager, prompts, logging) ---
 
 # --- area: ext (rich-ext) ---
 
 # --- area: art (rich-art, Mermaid) ---
+
+# ``rs_rich.art``: an image argument is a path (``str`` / ``os.PathLike``),
+# encoded bytes (``bytes``, ``bytearray``, ``memoryview``), an ``ArtImage``,
+# or a Pillow image (any object with ``mode``, ``size``, ``convert`` and
+# ``tobytes``).
+
+class ArtError(Exception):
+    """The base of the art errors."""
+
+class ImageArtError(ArtError):
+    """An image cannot be rendered as asked; ``kind`` says why."""
+    kind: str
+
+class ImageDecodeError(ArtError):
+    """Image bytes could not be decoded."""
+
+class FigletFontError(ArtError):
+    """A FIGfont could not be parsed."""
+
+class ImageDiffError(ArtError):
+    """Two images cannot be compared; ``kind`` says why."""
+    kind: str
+
+class ArtImage:
+    def __init__(self, source: Any) -> None: ...
+    @staticmethod
+    def open(path: Any) -> "ArtImage": ...
+    @staticmethod
+    def from_bytes(data: Union[bytes, bytearray, memoryview]) -> "ArtImage": ...
+    @staticmethod
+    def from_pil(image: Any) -> "ArtImage": ...
+    @staticmethod
+    def frombytes(
+        mode: Literal["RGBA", "RGB", "LA", "L"],
+        size: Tuple[int, int],
+        data: Union[bytes, bytearray, memoryview],
+    ) -> "ArtImage": ...
+    @property
+    def width(self) -> int: ...
+    @property
+    def height(self) -> int: ...
+    @property
+    def size(self) -> Tuple[int, int]: ...
+    @property
+    def mode(self) -> str: ...
+    def tobytes(self) -> bytes: ...
+    def to_rgba(self) -> bytes: ...
+    def to_png(self) -> bytes: ...
+    def save(self, path: Any) -> None: ...
+    def to_pil(self) -> Any: ...
+
+class ImageOptions:
+    def __init__(
+        self,
+        mode: str = "auto",
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        color: bool = False,
+    ) -> None: ...
+    @property
+    def mode(self) -> str: ...
+    @property
+    def width(self) -> Optional[int]: ...
+    @property
+    def height(self) -> Optional[int]: ...
+    @property
+    def color(self) -> bool: ...
+
+class RenderCapabilities:
+    color: bool
+    sixel_supported: bool
+    def __init__(self, color: bool = False, sixel_supported: bool = False) -> None: ...
+    @staticmethod
+    def from_console(console: "Console") -> "RenderCapabilities": ...
+
+class ImageArt:
+    def __init__(
+        self,
+        image: Any,
+        *,
+        mode: Literal["auto", "ascii", "blocks", "braille", "quadrants", "sixel"] = "auto",
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        fit: Optional[Literal["contain", "cover", "stretch", "native"]] = None,
+        anchor: str = "center",
+        background: Union[None, str, Tuple[int, int, int]] = None,
+        color: bool = False,
+        color_mode: Literal["truecolor", "ansi256", "ansi16", "grayscale"] = "truecolor",
+        dither: Optional[Literal["none", "floyd-steinberg", "bayer4x4", "atkinson"]] = None,
+        color_distance: Literal["rgb", "oklab"] = "rgb",
+        rotate: int = 0,
+        flip_horizontal: bool = False,
+        flip_vertical: bool = False,
+        grayscale: bool = False,
+        brightness: float = 1.0,
+        contrast: float = 1.0,
+        gamma: float = 1.0,
+        max_width: Optional[int] = None,
+        max_height: Optional[int] = None,
+        options: Optional[ImageOptions] = None,
+    ) -> None: ...
+    def resolve_mode(self, capabilities: RenderCapabilities) -> str: ...
+    def native_grid(self, mode: str, available: int) -> Tuple[int, int]: ...
+    @property
+    def image(self) -> ArtImage: ...
+    @property
+    def options(self) -> ImageOptions: ...
+    @property
+    def mode(self) -> str: ...
+    @property
+    def width(self) -> Optional[int]: ...
+    @property
+    def height(self) -> Optional[int]: ...
+    @property
+    def color(self) -> bool: ...
+    @property
+    def fit(self) -> Optional[str]: ...
+    @property
+    def anchor(self) -> str: ...
+    @property
+    def background(self) -> Union[None, str, Tuple[int, int, int]]: ...
+    @property
+    def color_mode(self) -> str: ...
+    @property
+    def dither(self) -> Optional[str]: ...
+    @property
+    def color_distance(self) -> str: ...
+    @property
+    def rotate(self) -> int: ...
+    @property
+    def flip_horizontal(self) -> bool: ...
+    @property
+    def flip_vertical(self) -> bool: ...
+    @property
+    def grayscale(self) -> bool: ...
+    @property
+    def brightness(self) -> float: ...
+    @property
+    def contrast(self) -> float: ...
+    @property
+    def gamma(self) -> float: ...
+    @property
+    def max_width(self) -> Optional[int]: ...
+    @property
+    def max_height(self) -> Optional[int]: ...
+
+class AsciiArt:
+    def __init__(
+        self,
+        image: Any,
+        *,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        ramp: Optional[str] = None,
+        invert: bool = False,
+        color: bool = False,
+        normalize: bool = True,
+    ) -> None: ...
+    def columns(self, available: int) -> int: ...
+    def to_text(self, width: int) -> str: ...
+
+class BlockArt:
+    def __init__(self, image: Any, *, width: Optional[int] = None, height: Optional[int] = None) -> None: ...
+
+class BrailleArt:
+    def __init__(self, image: Any, *, width: Optional[int] = None, height: Optional[int] = None) -> None: ...
+    def to_text(self, width: int) -> str: ...
+
+class QuadrantArt:
+    def __init__(self, image: Any, *, width: Optional[int] = None, height: Optional[int] = None) -> None: ...
+
+class SixelArt:
+    def __init__(
+        self,
+        image: Any,
+        *,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        cell_px: Optional[Tuple[int, int]] = None,
+        max_colors: int = 256,
+    ) -> None: ...
+    def encode(self, available: int) -> Optional[str]: ...
+
+DEFAULT_RAMP: str
+SIXEL_DEFAULT_CELL_PX: Tuple[int, int]
+SIXEL_MAX_PIXELS: int
+
+def sixel_is_probably_supported() -> bool: ...
+
+class FigletFont:
+    def __init__(self, source: Optional[str] = None) -> None: ...
+    @staticmethod
+    def parse(source: str) -> "FigletFont": ...
+    @staticmethod
+    def standard() -> "FigletFont": ...
+    @staticmethod
+    def from_path(path: Any) -> "FigletFont": ...
+    @property
+    def height(self) -> int: ...
+    @property
+    def hard_blank(self) -> str: ...
+
+class Figlet:
+    def __init__(
+        self,
+        text: str,
+        *,
+        font: Optional[FigletFont] = None,
+        justify: Literal["left", "center", "right"] = "left",
+        style: Optional[StyleType] = None,
+        width: Optional[int] = None,
+    ) -> None: ...
+    def to_text(self, width: Optional[int] = None) -> str: ...
+    @property
+    def text(self) -> str: ...
+    @property
+    def font(self) -> FigletFont: ...
+    @property
+    def justify(self) -> str: ...
+    @property
+    def width(self) -> Optional[int]: ...
+
+def figlet_render(
+    text: str,
+    font: Optional[FigletFont] = None,
+    width: int = 80,
+    justify: Literal["left", "center", "right"] = "left",
+) -> str: ...
+
+STANDARD_FONT: str
+
+class GifFrame:
+    @property
+    def index(self) -> int: ...
+
+class AnimatedArt:
+    MAX_DECODED_BYTES: int
+    def __init__(
+        self,
+        source: Any,
+        *,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        ramp: Optional[str] = None,
+        invert: bool = False,
+        color: bool = False,
+        blocks: bool = False,
+        color_mode: Literal["truecolor", "ansi256", "ansi16", "grayscale"] = "truecolor",
+        dither: Optional[Literal["none", "floyd-steinberg", "bayer4x4", "atkinson"]] = None,
+        color_distance: Literal["rgb", "oklab"] = "rgb",
+        repeat: Union[None, int, Literal["once", "forever"]] = None,
+        max_fps: Optional[float] = None,
+    ) -> None: ...
+    @property
+    def frame_count(self) -> int: ...
+    def __len__(self) -> int: ...
+    @property
+    def duration(self) -> float: ...
+    @property
+    def repeat(self) -> Union[int, Literal["forever"]]: ...
+    @property
+    def color(self) -> bool: ...
+    @property
+    def blocks(self) -> bool: ...
+    @property
+    def color_mode(self) -> str: ...
+    @property
+    def dither(self) -> Optional[str]: ...
+    @property
+    def color_distance(self) -> str: ...
+    def frame_delay(self, index: int) -> Optional[float]: ...
+    def frame(self, index: int) -> Optional[AsciiArt]: ...
+    def render_frame(self, index: int) -> Optional[GifFrame]: ...
+    def frames(self) -> List[Tuple[GifFrame, float]]: ...
+    def play(self, console: Optional["Console"] = None) -> None: ...
+
+class Stage:
+    gap: int
+    until: Optional[float]
+    def __init__(self, *arts: AnimatedArt, gap: int = 2, until: Optional[float] = None) -> None: ...
+    def add(self, art: AnimatedArt) -> "Stage": ...
+    def __len__(self) -> int: ...
+    def play(self, console: Optional["Console"] = None) -> None: ...
+
+def show_cursor_sequence() -> str: ...
+
+class DiffSettings:
+    blur: float
+    threshold: float
+    open_kernel: int
+    min_region: int
+    top: int
+    def __init__(
+        self,
+        *,
+        blur: Optional[float] = None,
+        threshold: Optional[float] = None,
+        open_kernel: Optional[int] = None,
+        min_region: Optional[int] = None,
+        top: Optional[int] = None,
+    ) -> None: ...
+
+class DiffRegion:
+    x: int
+    y: int
+    width: int
+    height: int
+    area_px: int
+    share_of_change: float
+    mean_delta_e: float
+
+class DiffReport:
+    @property
+    def width(self) -> int: ...
+    @property
+    def height(self) -> int: ...
+    @property
+    def changed_fraction(self) -> float: ...
+    @property
+    def naive_changed_fraction(self) -> float: ...
+    @property
+    def mean_delta_e(self) -> float: ...
+    @property
+    def max_delta_e(self) -> float: ...
+    @property
+    def regions(self) -> List[DiffRegion]: ...
+    @property
+    def delta_e(self) -> List[float]: ...
+    def heatmap(self) -> ArtImage: ...
+    def highlight(self, after: Any) -> ArtImage: ...
+
+def image_diff(
+    before: Any,
+    after: Any,
+    settings: Optional[DiffSettings] = None,
+    *,
+    blur: Optional[float] = None,
+    threshold: Optional[float] = None,
+    open_kernel: Optional[int] = None,
+    min_region: Optional[int] = None,
+    top: Optional[int] = None,
+) -> DiffReport: ...
+
+# ``rs_rich.mermaid``
+
+class MermaidError(Exception):
+    """The base of the Mermaid errors."""
+
+class MermaidParseError(MermaidError):
+    """Not a flowchart the text renderer draws; ``kind`` is ``"empty"``,
+    ``"unsupported"``, ``"too_large"`` or ``"syntax"`` (with ``line``)."""
+    kind: str
+    line: Optional[int]
+
+class MermaidLayoutError(MermaidError):
+    """A flowchart too large to lay out as text."""
+    kind: str
+
+class MmdcError(MermaidError):
+    """Mermaid's CLI produced no image; ``kind`` says why."""
+    kind: str
+
+class MmdcOptions:
+    def __init__(
+        self,
+        *,
+        program: str = "mmdc",
+        timeout: float = 20.0,
+        max_input: int = 65536,
+        max_output: int = 16777216,
+        puppeteer_config: Optional[str] = None,
+        background: str = "white",
+    ) -> None: ...
+    @property
+    def program(self) -> str: ...
+    @property
+    def timeout(self) -> float: ...
+    @property
+    def max_input(self) -> int: ...
+    @property
+    def max_output(self) -> int: ...
+    @property
+    def puppeteer_config(self) -> Optional[str]: ...
+    @property
+    def background(self) -> str: ...
+
+class Mermaid:
+    def __init__(
+        self,
+        source: str,
+        *,
+        backend: Literal["text", "mmdc"] = "text",
+        ascii: Optional[bool] = None,
+        mmdc: Optional[MmdcOptions] = None,
+    ) -> None: ...
+    @property
+    def source(self) -> str: ...
+    @property
+    def backend(self) -> str: ...
+    @property
+    def ascii(self) -> Optional[bool]: ...
+    @property
+    def mmdc(self) -> Optional[MmdcOptions]: ...
+
+class MermaidFences:
+    def __init__(
+        self,
+        *,
+        backend: Literal["text", "mmdc"] = "text",
+        ascii: Optional[bool] = None,
+        mmdc: Optional[MmdcOptions] = None,
+    ) -> None: ...
+    def accepts(self, language: str) -> bool: ...
+    def render_fence(
+        self, language: str, code: str, console: Any = None, options: Any = None
+    ) -> Optional[Mermaid]: ...
+    @property
+    def backend(self) -> str: ...
+    @property
+    def ascii(self) -> Optional[bool]: ...
+    @property
+    def mmdc(self) -> Optional[MmdcOptions]: ...
+
+class FlowchartNode:
+    id: str
+    label: str
+    shape: str
+
+class FlowchartEdge:
+    source: int
+    target: int
+    label: Optional[str]
+    stroke: str
+    start: Optional[str]
+    end: Optional[str]
+    length: int
+
+class Flowchart:
+    @property
+    def direction(self) -> Literal["TD", "BT", "LR", "RL"]: ...
+    @property
+    def nodes(self) -> List[FlowchartNode]: ...
+    @property
+    def edges(self) -> List[FlowchartEdge]: ...
+    @property
+    def notes(self) -> List[str]: ...
+
+class MermaidDiagram:
+    lines: List[str]
+    width: int
+
+def parse_flowchart(source: str) -> Flowchart: ...
+def draw_flowchart(chart: Union[str, Flowchart], ascii: bool = False) -> MermaidDiagram: ...
+def mermaid_clean_label(text: str) -> str: ...
+def mmdc_render_png(source: str, options: Optional[MmdcOptions] = None) -> bytes: ...
+
+MERMAID_HAS_MMDC: bool
+MERMAID_MAX_SOURCE: int
+MERMAID_MAX_NODES: int
+MERMAID_MAX_EDGES: int
+MERMAID_MAX_LINK_LENGTH: int
 
 # --- area: plugins (plugin API) ---
 

@@ -57,9 +57,21 @@ pub(crate) fn plugin_error(py: Python<'_>, error: &CorePluginError) -> PyErr {
         let _ = value.setattr(name, item);
     };
     let none = || py.None();
-    let s = |text: &str| text.into_pyobject(py).map(|v| v.into_any().unbind()).unwrap_or_else(|_| py.None());
+    let s = |text: &str| {
+        text.into_pyobject(py)
+            .map(|v| v.into_any().unbind())
+            .unwrap_or_else(|_| py.None())
+    };
     set("kind", s(kind(error)));
-    for field in ["plugin", "name", "existing", "capability", "built_for", "host", "message"] {
+    for field in [
+        "plugin",
+        "name",
+        "existing",
+        "capability",
+        "built_for",
+        "host",
+        "message",
+    ] {
         set(field, none());
     }
     match error {
@@ -69,8 +81,19 @@ pub(crate) fn plugin_error(py: Python<'_>, error: &CorePluginError) -> PyErr {
             host,
         } => {
             set("plugin", s(plugin));
-            set("built_for", built_for.into_pyobject(py).map(|v| v.into_any().unbind()).unwrap_or_else(|_| none()));
-            set("host", host.into_pyobject(py).map(|v| v.into_any().unbind()).unwrap_or_else(|_| none()));
+            set(
+                "built_for",
+                built_for
+                    .into_pyobject(py)
+                    .map(|v| v.into_any().unbind())
+                    .unwrap_or_else(|_| none()),
+            );
+            set(
+                "host",
+                host.into_pyobject(py)
+                    .map(|v| v.into_any().unbind())
+                    .unwrap_or_else(|_| none()),
+            );
         }
         CorePluginError::DuplicatePlugin { id } => set("plugin", s(id)),
         CorePluginError::Conflict {
@@ -120,7 +143,11 @@ pub(crate) fn describe(py: Python<'_>, error: &PyErr) -> String {
         .name()
         .map(|n| n.to_string())
         .unwrap_or_else(|_| "Exception".to_string());
-    let message = error.value(py).str().map(|s| s.to_string()).unwrap_or_default();
+    let message = error
+        .value(py)
+        .str()
+        .map(|s| s.to_string())
+        .unwrap_or_default();
     if message.is_empty() {
         name
     } else {
@@ -249,7 +276,10 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("PluginError", py.get_type::<PluginError>())?;
     m.add("HighlightError", py.get_type::<HighlightError>())?;
     m.add("UnknownThemeError", py.get_type::<UnknownThemeError>())?;
-    m.add("HighlighterChoiceError", py.get_type::<HighlighterChoiceError>())?;
+    m.add(
+        "HighlighterChoiceError",
+        py.get_type::<HighlighterChoiceError>(),
+    )?;
     renderable::register_renderable::<DeferredError>(py);
     Ok(())
 }

@@ -39,7 +39,9 @@ struct Stack {
 static STACKS: Mutex<Vec<Stack>> = Mutex::new(Vec::new());
 
 fn stacks() -> MutexGuard<'static, Vec<Stack>> {
-    STACKS.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    STACKS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn key(console: &Bound<'_, PyAny>) -> usize {
@@ -104,7 +106,9 @@ static WORKERS: Mutex<Vec<(u64, Worker)>> = Mutex::new(Vec::new());
 static NEXT_WORKER: AtomicU64 = AtomicU64::new(1);
 
 fn workers() -> MutexGuard<'static, Vec<(u64, Worker)>> {
-    WORKERS.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    WORKERS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// Start a daemon thread running `body` every `interval` seconds until its
@@ -238,10 +242,6 @@ impl Live {
         self.st().started
     }
 
-    pub(crate) fn auto_refresh_now(&self) -> bool {
-        self.st().auto_refresh
-    }
-
     /// The renderable, or `""` (Rich's `renderable or ""`).
     fn own_renderable<'py>(slf: &Bound<'py, Live>) -> PyResult<Bound<'py, PyAny>> {
         let py = slf.py();
@@ -332,8 +332,11 @@ impl Live {
             None => current.clone(),
         };
         let sys = py.import("sys")?;
-        let default_stream =
-            sys.getattr(if util::flag(&console, "stderr")? { "stderr" } else { "stdout" })?;
+        let default_stream = sys.getattr(if util::flag(&console, "stderr")? {
+            "stderr"
+        } else {
+            "stdout"
+        })?;
         let original = if current.is(&default_stream) {
             None
         } else {
@@ -404,11 +407,16 @@ impl Live {
             let mut state = slf.get().st();
             (state.restore_stdout.take(), state.restore_stderr.take())
         };
-        if let Some(stdout) = stdout {
-            sys.setattr("stdout", stdout)?;
-        }
-        if let Some(stderr) = stderr {
-            sys.setattr("stderr", stderr)?;
+        // Upstream's proxy is an `io.TextIOBase`: dropping it closes it,
+        // which flushes a partial line through the console.
+        for (name, restore) in [("stdout", stdout), ("stderr", stderr)] {
+            if let Some(restore) = restore {
+                let proxy = sys.getattr(name)?;
+                sys.setattr(name, restore)?;
+                if proxy.is_instance_of::<FileProxy>() {
+                    proxy.call_method0("flush")?;
+                }
+            }
         }
         Ok(())
     }
@@ -579,8 +587,8 @@ impl Live {
 
     /// What the display shows: its renderable, all of the stacked displays'
     /// when it is the outermost, in a `Screen` on the alternate screen.
-    #[getter]
-    fn renderable(slf: &Bound<'_, Self>) -> PyResult<Py<PyAny>> {
+    #[getter(renderable)]
+    fn shown_renderable(slf: &Bound<'_, Self>) -> PyResult<Py<PyAny>> {
         let py = slf.py();
         let console = slf.get().console_of(py);
         let stack = live_stack(py, &console);
@@ -618,7 +626,9 @@ impl Live {
             return Ok(());
         }
         if this.st().screen {
-            let changed = console.call_method1("set_alt_screen", (true,))?.is_truthy()?;
+            let changed = console
+                .call_method1("set_alt_screen", (true,))?
+                .is_truthy()?;
             this.st().alt_screen = changed;
         }
         console.call_method1("show_cursor", (false,))?;

@@ -145,12 +145,8 @@ impl StatusSpinner {
 
 impl AsRenderable for StatusSpinner {
     fn to_renderable(&self, py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
-        let time: f64 = renderable::ambient()?
-            .console
-            .bind(py)
-            .getattr("get_time")?
-            .call0()?
-            .extract()?;
+        let console = renderable::ambient()?.console.clone_ref(py);
+        let time: f64 = util::console_clock(console.bind(py))?.call0()?.extract()?;
         self.render_at(py, time)
     }
 }
@@ -289,6 +285,11 @@ impl Status {
     }
 
     #[getter]
+    fn _live(&self, py: Python<'_>) -> Py<Live> {
+        self.live.clone_ref(py)
+    }
+
+    #[getter]
     fn status(&self, py: Python<'_>) -> Py<PyAny> {
         self.st().status.clone_ref(py)
     }
@@ -346,9 +347,12 @@ impl Status {
                 .call_method("update", (new,), Some(&kwargs))?;
         } else {
             let spinner = self.st().spinner.clone_ref(py);
-            spinner
-                .get()
-                .update_with(py, Some(status.bind(py).clone()), Some(style.bind(py)), Some(speed))?;
+            spinner.get().update_with(
+                py,
+                Some(status.bind(py).clone()),
+                Some(style.bind(py)),
+                Some(speed),
+            )?;
         }
         Ok(())
     }

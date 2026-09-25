@@ -289,10 +289,7 @@ impl Stage {
     }
 
     /// Add an animation to the right of the others (`Stage::with`).
-    fn add<'py>(
-        mut slf: PyRefMut<'py, Self>,
-        art: PyRef<'_, AnimatedArt>,
-    ) -> PyRefMut<'py, Self> {
+    fn add<'py>(mut slf: PyRefMut<'py, Self>, art: PyRef<'_, AnimatedArt>) -> PyRefMut<'py, Self> {
         slf.items.push(Arc::clone(&art.inner));
         slf
     }

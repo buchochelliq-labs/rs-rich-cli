@@ -20,41 +20,42 @@ const MARGIN: i64 = 1;
 const PADDING_TOP: i64 = 40;
 const PADDING_SIDE: i64 = 8;
 
-/// The SVG document template. Port of `console.CONSOLE_SVG_FORMAT` with single
-/// literal braces (placeholders are substituted via `replace`, not `format!`).
-const CONSOLE_SVG_FORMAT: &str = r#"<svg class="rich-terminal" viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg">
+/// The SVG document template. Port of `_export_format.CONSOLE_SVG_FORMAT`,
+/// verbatim: a Python format string, so literal braces are doubled. Pass it
+/// (or your own, as upstream's `code_format=`) to [`export_svg_with`].
+pub const CONSOLE_SVG_FORMAT: &str = r#"<svg class="rich-terminal" viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg">
     <!-- Generated with Rich https://www.textualize.io -->
     <style>
 
-    @font-face {
+    @font-face {{
         font-family: "Fira Code";
         src: local("FiraCode-Regular"),
                 url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
                 url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
         font-style: normal;
         font-weight: 400;
-    }
-    @font-face {
+    }}
+    @font-face {{
         font-family: "Fira Code";
         src: local("FiraCode-Bold"),
                 url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
                 url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
         font-style: bold;
         font-weight: 700;
-    }
+    }}
 
-    .{unique_id}-matrix {
+    .{unique_id}-matrix {{
         font-family: Fira Code, monospace;
         font-size: {char_height}px;
         line-height: {line_height}px;
         font-variant-east-asian: full-width;
-    }
+    }}
 
-    .{unique_id}-title {
+    .{unique_id}-title {{
         font-size: 18px;
         font-weight: bold;
         font-family: arial;
-    }
+    }}
 
     {styles}
     </style>
@@ -178,7 +179,36 @@ pub fn export_svg(
     unique_id: &str,
     width: usize,
 ) -> String {
-    let char_width = CHAR_HEIGHT * FONT_ASPECT_RATIO;
+    export_svg_with(
+        segments,
+        theme,
+        title,
+        unique_id,
+        width,
+        CONSOLE_SVG_FORMAT,
+        FONT_ASPECT_RATIO,
+    )
+    .expect("the built-in template is valid")
+}
+
+/// [`export_svg`] with upstream's `code_format` and `font_aspect_ratio`
+/// arguments. `code_format` is a Python format string (literal braces
+/// doubled) with the fields `{unique_id}`, `{char_width}`, `{char_height}`,
+/// `{line_height}`, `{terminal_width}`, `{terminal_height}`, `{width}`,
+/// `{height}`, `{terminal_x}`, `{terminal_y}`, `{styles}`, `{chrome}`,
+/// `{backgrounds}`, `{matrix}` and `{lines}`; `font_aspect_ratio` (upstream's
+/// default 0.61) sets the character cell width.
+#[allow(clippy::too_many_arguments)]
+pub fn export_svg_with(
+    segments: &[Segment],
+    theme: &TerminalTheme,
+    title: &str,
+    unique_id: &str,
+    width: usize,
+    code_format: &str,
+    font_aspect_ratio: f64,
+) -> Result<String, crate::export::ExportFormatError> {
+    let char_width = CHAR_HEIGHT * font_aspect_ratio;
     let line_height = CHAR_HEIGHT * 1.22;
     let padding_width = PADDING_SIDE + PADDING_SIDE;
     let padding_height = PADDING_TOP + PADDING_SIDE;
@@ -289,33 +319,33 @@ pub fn export_svg(
         "\n            <g transform=\"translate(26,22)\">\n            <circle cx=\"0\" cy=\"0\" r=\"7\" fill=\"#ff5f57\"/>\n            <circle cx=\"22\" cy=\"0\" r=\"7\" fill=\"#febc2e\"/>\n            <circle cx=\"44\" cy=\"0\" r=\"7\" fill=\"#28c840\"/>\n            </g>\n        ",
     );
 
-    CONSOLE_SVG_FORMAT
-        .replace("{unique_id}", unique_id)
-        .replace("{char_height}", &(CHAR_HEIGHT as i64).to_string())
-        .replace("{line_height}", &fmt_str(line_height))
-        .replace(
-            "{terminal_width}",
-            &fmt_str(char_width * width as f64 - 1.0),
-        )
-        .replace(
-            "{terminal_height}",
-            &fmt_str((last_y as f64 + 1.0) * line_height - 1.0),
-        )
-        .replace(
-            "{width}",
-            &(terminal_width_local + margin_width).to_string(),
-        )
-        .replace(
-            "{height}",
-            &fmt_str(terminal_height_local + margin_height as f64),
-        )
-        .replace("{terminal_x}", &(MARGIN + PADDING_SIDE).to_string())
-        .replace("{terminal_y}", &(MARGIN + PADDING_TOP).to_string())
-        .replace("{styles}", &styles)
-        .replace("{chrome}", &chrome)
-        .replace("{backgrounds}", &backgrounds)
-        .replace("{matrix}", &matrix)
-        .replace("{lines}", &lines_str)
+    let int = |value: i64| value.to_string();
+    crate::export::format_template(
+        code_format,
+        &[
+            ("unique_id", unique_id),
+            ("char_width", &fmt_str(char_width)),
+            ("char_height", &int(CHAR_HEIGHT as i64)),
+            ("line_height", &fmt_str(line_height)),
+            ("terminal_width", &fmt_str(char_width * width as f64 - 1.0)),
+            (
+                "terminal_height",
+                &fmt_str((last_y as f64 + 1.0) * line_height - 1.0),
+            ),
+            ("width", &int(terminal_width_local + margin_width)),
+            (
+                "height",
+                &fmt_str(terminal_height_local + margin_height as f64),
+            ),
+            ("terminal_x", &int(MARGIN + PADDING_SIDE)),
+            ("terminal_y", &int(MARGIN + PADDING_TOP)),
+            ("styles", &styles),
+            ("chrome", &chrome),
+            ("backgrounds", &backgrounds),
+            ("matrix", &matrix),
+            ("lines", &lines_str),
+        ],
+    )
 }
 
 #[cfg(test)]

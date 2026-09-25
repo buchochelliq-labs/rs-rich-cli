@@ -1,7 +1,45 @@
-"""``rich.progress``: ``Progress``, its columns, ``track``, ``wrap_file`` and ``open``.
+"""``rich.progress``: ``Progress``, its columns, ``track``, ``wrap_file`` and ``open``."""
 
-Placeholder, filled by the live area: re-export the classes from
-``._native`` here and list them in ``__all__``.
-"""
+from ._native import (
+    BarColumn,
+    DownloadColumn,
+    FileSizeColumn,
+    MofNCompleteColumn,
+    Progress,
+    ProgressColumn,
+    RenderableColumn,
+    SpinnerColumn,
+    Task,
+    TaskID,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+    TotalFileSizeColumn,
+    TransferSpeedColumn,
+    open,
+    track,
+    wrap_file,
+)
 
-__all__: list = []
+__all__ = [
+    "BarColumn",
+    "DownloadColumn",
+    "FileSizeColumn",
+    "MofNCompleteColumn",
+    "Progress",
+    "ProgressColumn",
+    "RenderableColumn",
+    "SpinnerColumn",
+    "Task",
+    "TaskID",
+    "TaskProgressColumn",
+    "TextColumn",
+    "TimeElapsedColumn",
+    "TimeRemainingColumn",
+    "TotalFileSizeColumn",
+    "TransferSpeedColumn",
+    "open",
+    "track",
+    "wrap_file",
+]

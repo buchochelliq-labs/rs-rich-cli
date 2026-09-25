@@ -80,7 +80,6 @@ pub(crate) const NAMES: &[&str] = &[
     "aesthetic",
 ];
 
-
 /// `(interval_ms, frames)` for a built-in spinner, or `None` if unknown.
 pub(crate) fn spinner_data(name: &str) -> Option<(f64, &'static [&'static str])> {
     Some(match name {

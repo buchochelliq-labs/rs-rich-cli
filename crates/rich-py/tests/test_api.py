@@ -109,5 +109,5 @@ def test_text_uses_python_character_offsets():
 def test_style_repr_and_equality():
     assert str(Style(bold=True, color="red")) == "bold red"
     assert Style(bold=True) + Style(italic=True) == Style.parse("bold italic")
-    assert repr(Style()) == 'Style.parse("none")'
+    assert repr(Style()) == "Style()"
     assert rs_rich.__version__ == "0.0.1"

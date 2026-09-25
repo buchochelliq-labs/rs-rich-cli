@@ -77,7 +77,11 @@ impl Lines {
         self.lines.len()
     }
 
-    fn __getitem__<'py>(&self, py: Python<'py>, index: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    fn __getitem__<'py>(
+        &self,
+        py: Python<'py>,
+        index: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         if index.cast::<PySlice>().is_ok() {
             let list = PyList::new(py, self.lines.iter().map(|line| line.bind(py)))?;
             return list.as_any().get_item(index);

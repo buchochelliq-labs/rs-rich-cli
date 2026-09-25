@@ -209,6 +209,11 @@ Format: what differs · why · how to remove it (if temporary).
   namespaces the CSS classes / element ids within one document.
 - **Remove:** add an `adler32`-of-`repr` default id only if a caller needs the
   exact auto-generated ids (rare); the explicit-id form already round-trips.
+- Links (`<a href>`), `code_format` (both exports, as Python format strings via
+  `export::format_template`) and SVG `font_aspect_ratio` are ported
+  (`export::export_html_with`, `svg::export_svg_with`, golden `core_gaps.tsv`).
+  A `code_format` using conversions or format specs (`{code!r}`, `{width:>5}`)
+  is refused with `ExportFormatError` rather than formatted.
 
 ### 16. `Progress` — columns, task model, pulse and live display done
 - **Resolved (0.0.10, core 0.0.6):** the time, rate and spinner columns and the

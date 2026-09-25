@@ -1,7 +1,5 @@
-"""``rich.live``: ``Live``.
+"""``rich.live``: ``Live``."""
 
-Placeholder, filled by the live area: re-export the classes from
-``._native`` here and list them in ``__all__``.
-"""
+from ._native import Live
 
-__all__: list = []
+__all__ = ["Live"]

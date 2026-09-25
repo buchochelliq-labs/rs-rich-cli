@@ -24,18 +24,19 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `cells.py`, `_cell_widths.py`         | `cells.rs`               | 🟢 | ✅ 0 / 127,754 codepoints |
 | `segment.py`                          | `segment.rs`             | 🟡 | — |
 | `markup.py`                           | `markup.rs`              | 🟡 | ✅ |
-| `text.py` (+ justify, overflow)       | `text.rs`                | 🟡 | ✅ |
+| `text.py` (+ justify, overflow, `tab_size`) | `text.rs`          | 🟡 | ✅ (+ `core_gaps.tsv`: tab stops, justify-padding runs) |
 | `_wrap.py`                            | `wrap.rs`                | 🟢 | ✅ 0 / 30,680 wrap cases |
 | `theme.py`, `themes.py`, `default_styles.py` | `theme.rs` | 🟢 | ✅ (theme stack and theme files since core 0.0.6) |
 | `terminal_theme.py` | `terminal_theme.rs` | 🟡 | ✅ |
-| `console.py` (+ `ConsoleOptions`, `render_lines`) | `console.rs`  | 🟡 | ✅ (+ `no_color.tsv`: colour removal, exports) |
+| `console.py` (+ `ConsoleOptions`, `render_lines`, `render`, `render_str`) | `console.rs`  | 🟡 | ✅ (+ `no_color.tsv`: colour removal, exports; `core_gaps.tsv`: `render`, `render_str` keywords, `tab_size`, `emoji_variant`, `markup`) |
 | `protocol.py`, `abc.py`, `_extension.py` | `protocol.rs`         | 🟡 | — |
 | `measure.py` (+ `Renderable::measure`, fit, `Measurement.get`) | `measure.rs`       | 🟡 | ✅ `Syntax`/`JSON` measurement golden (`measure.tsv`); container `__rich_measure__` (`measure_renderables.tsv`) |
 | `errors.py`                           | `errors.rs`              | 🟡 | — |
-| `control.py`                          | `control.rs`             | 🟢 | ✅ |
+| `control.py`                          | `control.rs`             | 🟢 | ✅ (`alt_screen` homes the cursor; `title`) |
 | `ansi.py`                             | `ansi.rs`                | 🟡 | ✅ |
 | `highlighter.py` (Regex/Repr/ISO8601) | `highlighter.rs`         | 🟡 | ✅ |
-| `scope.py`, `region.py`, `containers.py` | (tbd)                 | ⬜ | — |
+| `containers.py` (`Renderables`)       | `containers.rs`          | 🟡 | ✅ via `LogRender` (`core_gaps.tsv`) |
+| `scope.py`, `region.py`                | (tbd)                    | ⬜ | — |
 
 ## Widgets & layout
 
@@ -72,11 +73,11 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 |-------------------|-----------|:------:|-------|
 | `syntax.py` | `syntax.rs` | 🟡 | functional via `syntect` (non-parity, DIVERGENCES #18); `__rich_measure__` is parity-tested; not upstream: `Syntax::highlighter`, `Syntax::highlight_for` and a console-wide default engine (`ConsoleCodeHighlighting`), unused by default; adapters are checked by `rich_ext::testing::conformance` |
 | `markdown.py` | `markdown.rs` | 🟡 | paragraphs/headings/inline/lists/quotes/code/links (both `hyperlinks` modes) + images (including table-cell hoisting and adjacency) + **GFM tables** via `pulldown-cmark`, with inline styling inside cells (golden `markdown_table_inline`); constructor options `justify`/`style` (golden `markdown_options`), `code_theme`/`inline_code_lexer`/`inline_code_theme` (syntect); not upstream: `Markdown::highlighter` and `Markdown::fence_renderer` extension points, unused by default |
-| `json.py` | `json.rs` | 🟡 | ✅ default layout, arbitrary integers, Python float `repr` and overflowing exponents; optional escape-safe layout is off by default (DIVERGENCES §22) |
+| `json.py` | `json.rs` | 🟡 | ✅ default layout, arbitrary integers, Python float `repr` and overflowing exponents; `JsonOptions` (`indent`, `sort_keys`, `ensure_ascii`, `allow_nan`, `highlight`) and print `justify`/`overflow`/`no_wrap` (`core_gaps.tsv`); optional escape-safe layout is off by default (DIVERGENCES §22) |
 | `pretty.py` | `pretty.rs` | 🟡 | Rust-native (`Debug` + repr highlight, #19) |
 | `repr.py`, `_inspect.py` | resp. | ⬜ | need Rust reflection — see #19 |
 | `traceback.py` | `traceback.rs` | 🟡 | Rust-native (error `source()` chain, #19) |
-| `_log_render.py` | `log_render.rs` | 🟡 | ✅ `log_render.tsv`; takes a pre-formatted time (DIVERGENCES §19) |
+| `_log_render.py` | `log_render.rs` | 🟡 | ✅ `log_render.tsv`, renderable messages (`render_renderables`) in `core_gaps.tsv`; takes a pre-formatted time (DIVERGENCES §19) |
 | `logging.py` (log::Log handler) | `rich-ext` `log_handler.rs` | 🟡 | `RichHandler` over the `log`/`tracing` adapters; UTC default time, no rich tracebacks (DIVERGENCES §19) |
 
 ## Utilities & platform
@@ -93,7 +94,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `jupyter.py`, `file_proxy.py`, `diagnose.py`, `_fileno.py`, `_null_file.py` | resp. | ⬜ |
 | `_ratio.py` (`ratio_resolve`) | `ratio.rs` | 🟡 | ✅ |
 | `_loop.py`, `_pick.py`, `_stack.py`, `_timer.py` | internal helpers | ⬜ |
-| `_export_format.py`, `Console.export_html` | `export.rs` | 🟡 | ✅ |
+| `_export_format.py`, `Console.export_html` | `export.rs` | 🟡 | ✅ (links, `code_format`, SVG `font_aspect_ratio` in `core_gaps.tsv`) |
 
 ## `rich-cli` (tool — tracks upstream 1.8.1, see UPSTREAM.toml)
 

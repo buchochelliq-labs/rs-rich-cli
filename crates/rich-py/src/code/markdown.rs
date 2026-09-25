@@ -108,7 +108,12 @@ impl Markdown {
         inline_code_theme: Option<String>,
         highlighter: Option<String>,
     ) -> PyResult<Self> {
-        let style = style.unwrap_or_else(|| "none".into_pyobject(py).map(|s| s.into_any().unbind()).expect("str"));
+        let style = style.unwrap_or_else(|| {
+            "none"
+                .into_pyobject(py)
+                .map(|s| s.into_any().unbind())
+                .expect("str")
+        });
         let spec = Spec {
             markup,
             inline_code_theme: inline_code_theme.or_else(|| Some(code_theme.clone())),

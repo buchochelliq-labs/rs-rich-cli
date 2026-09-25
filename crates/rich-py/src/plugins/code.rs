@@ -30,7 +30,12 @@ use crate::style::{resolved_style, Style};
 // The data: spans, lines and the whole result
 
 /// One styled run of a line: characters `start..end` (Python indices).
-#[pyclass(name = "HighlightSpan", module = "rs_rich.plugins", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "HighlightSpan",
+    module = "rs_rich.plugins",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct HighlightSpan {
     start: usize,
@@ -85,7 +90,12 @@ impl HighlightSpan {
 }
 
 /// The spans of one line, and the style of the line break after it.
-#[pyclass(name = "HighlightedLine", module = "rs_rich.plugins", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "HighlightedLine",
+    module = "rs_rich.plugins",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone, Default)]
 pub(crate) struct HighlightedLine {
     spans: Vec<HighlightSpan>,
@@ -96,7 +106,10 @@ pub(crate) struct HighlightedLine {
 impl HighlightedLine {
     #[new]
     #[pyo3(signature = (spans=None, newline_style=None))]
-    fn new(spans: Option<&Bound<'_, PyAny>>, newline_style: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
+    fn new(
+        spans: Option<&Bound<'_, PyAny>>,
+        newline_style: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Self> {
         let mut line = HighlightedLine {
             spans: Vec::new(),
             newline_style: resolved_style(newline_style)?,
@@ -120,13 +133,16 @@ impl HighlightedLine {
     }
 
     fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
-        other.extract::<PyRef<'_, HighlightedLine>>().is_ok_and(|o| {
-            o.newline_style == self.newline_style
-                && o.spans.len() == self.spans.len()
-                && o.spans.iter().zip(&self.spans).all(|(a, b)| {
-                    a.start == b.start && a.end == b.end && a.style == b.style
-                })
-        })
+        other
+            .extract::<PyRef<'_, HighlightedLine>>()
+            .is_ok_and(|o| {
+                o.newline_style == self.newline_style
+                    && o.spans.len() == self.spans.len()
+                    && o.spans
+                        .iter()
+                        .zip(&self.spans)
+                        .all(|(a, b)| a.start == b.start && a.end == b.end && a.style == b.style)
+            })
     }
 
     fn __repr__(&self) -> String {
@@ -138,7 +154,12 @@ impl HighlightedLine {
 /// What a code highlighter returns: one line per element of
 /// `code.split("\n")`, the theme's background colour (if it has one) and
 /// the style for text no span covers.
-#[pyclass(name = "HighlightedCode", module = "rs_rich.plugins", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "HighlightedCode",
+    module = "rs_rich.plugins",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone, Default)]
 pub(crate) struct HighlightedCode {
     lines: Vec<HighlightedLine>,
@@ -198,9 +219,10 @@ impl HighlightedCode {
             && other.lines.iter().zip(&self.lines).all(|(a, b)| {
                 a.newline_style == b.newline_style
                     && a.spans.len() == b.spans.len()
-                    && a.spans.iter().zip(&b.spans).all(|(x, y)| {
-                        x.start == y.start && x.end == y.end && x.style == y.style
-                    })
+                    && a.spans
+                        .iter()
+                        .zip(&b.spans)
+                        .all(|(x, y)| x.start == y.start && x.end == y.end && x.style == y.style)
             }))
     }
 
@@ -303,7 +325,10 @@ fn to_core(code: &str, highlighted: HighlightedCode) -> CoreCode {
                     .into_iter()
                     .map(|span| {
                         // A range past the line becomes one validation drops.
-                        let range = match (byte_offset(source, span.start), byte_offset(source, span.end)) {
+                        let range = match (
+                            byte_offset(source, span.start),
+                            byte_offset(source, span.end),
+                        ) {
                             (Some(start), Some(end)) => start..end,
                             _ => usize::MAX..usize::MAX,
                         };
@@ -361,7 +386,9 @@ fn from_core(code: &str, highlighted: &CoreCode) -> HighlightedCode {
 /// inside their line and on character boundaries; no hyperlinks.
 pub(crate) fn validate(code: &str, mut highlighted: CoreCode) -> CoreCode {
     let sources: Vec<&str> = code.split('\n').collect();
-    highlighted.lines.resize_with(sources.len(), CoreLine::default);
+    highlighted
+        .lines
+        .resize_with(sources.len(), CoreLine::default);
     for (line, source) in highlighted.lines.iter_mut().zip(&sources) {
         let mut end = 0usize;
         line.spans.retain(|span| {
@@ -395,7 +422,13 @@ pub(crate) fn validate(code: &str, mut highlighted: CoreCode) -> CoreCode {
 /// `HighlightedCode`), `default_theme()` and `themes()` name the themes, and
 /// `languages()` and `language_for_path(path)` are optional. The instances
 /// `ExtensionRegistry.code_highlighter(name)` returns wrap a Rust engine.
-#[pyclass(name = "CodeHighlighter", module = "rs_rich.plugins", subclass, frozen, skip_from_py_object)]
+#[pyclass(
+    name = "CodeHighlighter",
+    module = "rs_rich.plugins",
+    subclass,
+    frozen,
+    skip_from_py_object
+)]
 pub(crate) struct CodeHighlighter {
     pub(crate) inner: Option<Arc<dyn CoreCodeHighlighter>>,
 }
@@ -464,7 +497,10 @@ impl CodeHighlighter {
     fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
         let this = slf.get();
         Ok(match &this.inner {
-            Some(engine) => format!("<CodeHighlighter default_theme={:?}>", engine.default_theme()),
+            Some(engine) => format!(
+                "<CodeHighlighter default_theme={:?}>",
+                engine.default_theme()
+            ),
             None => format!("<{} (Python)>", slf.get_type().name()?),
         })
     }
@@ -572,13 +608,18 @@ impl CoreCodeHighlighter for PyCodeHighlighter {
 /// A `CodeHighlighter` argument as Rust's: a handle's own engine, or any
 /// Python object with `highlight`, `default_theme` and `themes` behind the
 /// adapter. For other areas too (`Syntax(highlighter=...)`).
-pub(crate) fn code_highlighter_arg(value: &Bound<'_, PyAny>) -> PyResult<Arc<dyn CoreCodeHighlighter>> {
+pub(crate) fn code_highlighter_arg(
+    value: &Bound<'_, PyAny>,
+) -> PyResult<Arc<dyn CoreCodeHighlighter>> {
     if let Ok(handle) = value.extract::<PyRef<'_, CodeHighlighter>>() {
         if let Some(inner) = &handle.inner {
             return Ok(inner.clone());
         }
     }
-    if !value.getattr_opt("highlight")?.is_some_and(|m| m.is_callable()) {
+    if !value
+        .getattr_opt("highlight")?
+        .is_some_and(|m| m.is_callable())
+    {
         return Err(PyTypeError::new_err(format!(
             "a code highlighter needs highlight(code, language, theme), default_theme() and \
              themes(); got {}",

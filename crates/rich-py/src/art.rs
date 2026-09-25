@@ -49,11 +49,7 @@ impl<T: Renderable + Send + Sync> Renderable for Shared<T> {
         self.0.rich_render(console, options)
     }
 
-    fn measure(
-        &self,
-        console: &CoreConsole,
-        options: &CoreOptions,
-    ) -> rich::measure::Measurement {
+    fn measure(&self, console: &CoreConsole, options: &CoreOptions) -> rich::measure::Measurement {
         self.0.measure(console, options)
     }
 }
@@ -123,7 +119,9 @@ pub(crate) fn path_arg(value: &Bound<'_, PyAny>) -> PyResult<Option<std::path::P
         if fspath.is_instance_of::<PyString>() {
             return Ok(Some(fspath.extract()?));
         }
-        return Err(PyTypeError::new_err("bytes paths are not supported; pass a str path"));
+        return Err(PyTypeError::new_err(
+            "bytes paths are not supported; pass a str path",
+        ));
     }
     Ok(None)
 }
@@ -189,14 +187,23 @@ pub(crate) fn repr_opt(value: Option<&str>) -> String {
 /// outside a print (playing a GIF, reading capabilities). Mirrors the
 /// console a print renders with.
 pub(crate) fn core_console(console: &Bound<'_, PyAny>) -> PyResult<CoreConsole> {
-    let color_system = match console.getattr("color_system")?.extract::<Option<String>>()? {
+    let color_system = match console
+        .getattr("color_system")?
+        .extract::<Option<String>>()?
+    {
         None => None,
         Some(name) => Some(match name.as_str() {
             "standard" => ColorSystem::Standard,
             "256" => ColorSystem::EightBit,
             "truecolor" => ColorSystem::Truecolor,
             "windows" => ColorSystem::Windows,
-            other => return Err(bad_choice("color system", other, "a Console's color system")),
+            other => {
+                return Err(bad_choice(
+                    "color system",
+                    other,
+                    "a Console's color system",
+                ))
+            }
         }),
     };
     Ok(CoreConsole::builder()

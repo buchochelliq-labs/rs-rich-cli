@@ -12,8 +12,8 @@ use pyo3::types::{PyDict, PyType};
 
 use rich::protocol::Renderable;
 use rich_ext::diff::git::{
-    parse_unified, Annotation as CoreAnnotation, FilePatch as CoreFilePatch, FileStatus,
-    LineKind, LinkProvider, Patch as CorePatch, PatchView as CorePatchView,
+    parse_unified, Annotation as CoreAnnotation, FilePatch as CoreFilePatch, FileStatus, LineKind,
+    LinkProvider, Patch as CorePatch, PatchView as CorePatchView,
     TemplateLinks as CoreTemplateLinks,
 };
 use rich_ext::diff::test_report::{
@@ -140,7 +140,12 @@ fn diff_chars(old: &str, new: &str) -> Vec<(&'static str, Range, Range)> {
 fn tokenize(text: &str) -> Vec<Range> {
     core::tokenize(text)
         .into_iter()
-        .map(|r| (common::char_index(text, r.start), common::char_index(text, r.end)))
+        .map(|r| {
+            (
+                common::char_index(text, r.start),
+                common::char_index(text, r.end),
+            )
+        })
         .collect()
 }
 
@@ -492,7 +497,12 @@ impl FilePatch {
     /// `kind` one of `context`, `added`, `removed`.
     #[allow(clippy::type_complexity)]
     #[getter]
-    fn hunks(&self) -> Vec<(String, Vec<(&'static str, String, Option<usize>, Option<usize>)>)> {
+    fn hunks(
+        &self,
+    ) -> Vec<(
+        String,
+        Vec<(&'static str, String, Option<usize>, Option<usize>)>,
+    )> {
         self.inner
             .hunks
             .iter()
@@ -525,7 +535,12 @@ impl FilePatch {
 }
 
 /// A parsed `git diff`: `parse_patch(text)`.
-#[pyclass(name = "Patch", module = "rs_rich.ext.diff", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "Patch",
+    module = "rs_rich.ext.diff",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct Patch {
     inner: CorePatch,
@@ -609,11 +624,11 @@ impl TemplateLinks {
     }
 
     fn file_url(&self, path: &str) -> Option<String> {
-        self.inner.file_url(path)
+        LinkProvider::file_url(&self.inner, path)
     }
 
     fn line_url(&self, path: &str, line: usize) -> Option<String> {
-        self.inner.line_url(path, line)
+        LinkProvider::line_url(&self.inner, path, line)
     }
 }
 
@@ -758,9 +773,13 @@ pub(crate) struct TestCase {
 
 #[pymethods]
 impl TestCase {
+    /// Not a pytest test class.
+    #[classattr]
+    const __test__: bool = false;
+
     #[new]
     #[pyo3(signature = (
-        name, classname="", status="passed", *, duration=None, message=None, details=None,
+        name, classname=String::new(), status="passed", *, duration=None, message=None, details=None,
         stdout=None, stderr=None, expected=None, actual=None
     ))]
     #[allow(clippy::too_many_arguments)]
@@ -826,7 +845,7 @@ impl TestCase {
     fn actual(&self) -> Option<String> {
         self.inner.actual.clone()
     }
-    /// `classname::name` (or the name alone).
+    /// `classname.name` (or the name alone).
     #[getter]
     fn full_name(&self) -> String {
         self.inner.full_name()
@@ -836,7 +855,11 @@ impl TestCase {
         self.inner.is_failure()
     }
     fn __repr__(&self) -> String {
-        format!("<TestCase {} {}>", self.inner.full_name(), status_name(self.inner.status))
+        format!(
+            "<TestCase {} {}>",
+            self.inner.full_name(),
+            status_name(self.inner.status)
+        )
     }
 }
 
@@ -859,6 +882,10 @@ fn totals_dict(totals: reports::Totals) -> BTreeMap<&'static str, usize> {
 
 #[pymethods]
 impl TestSuite {
+    /// Not a pytest test class.
+    #[classattr]
+    const __test__: bool = false;
+
     #[new]
     #[pyo3(signature = (name, cases=None, *, duration=None))]
     fn new(
@@ -919,9 +946,16 @@ fn parse_error(error: reports::TestParseError) -> PyErr {
 
 #[pymethods]
 impl TestRun {
+    /// Not a pytest test class.
+    #[classattr]
+    const __test__: bool = false;
+
     #[new]
     #[pyo3(signature = (suites=None, *, duration=None))]
-    fn new(suites: Option<&Bound<'_, PyAny>>, duration: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
+    fn new(
+        suites: Option<&Bound<'_, PyAny>>,
+        duration: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Self> {
         let mut run = CoreRun {
             duration: common::opt_seconds(duration)?,
             ..CoreRun::default()
@@ -995,6 +1029,10 @@ impl AsRenderable for TestReport {
 
 #[pymethods]
 impl TestReport {
+    /// Not a pytest test class.
+    #[classattr]
+    const __test__: bool = false;
+
     #[new]
     #[pyo3(signature = (run, *, show_passed=false, show_output=true, diff_context=3))]
     fn new(

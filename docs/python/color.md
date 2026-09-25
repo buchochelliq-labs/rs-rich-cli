@@ -36,6 +36,12 @@ print(repr(Color.parse("red").get_truecolor()))
 ```
 
 ```text
+Color('#ff8800', ColorType.TRUECOLOR, triplet=ColorTriplet(red=255, green=136, blue=0))
+ColorSystem.TRUECOLOR ('38', '2', '255', '136', '0')
+Color('#ff8800', ColorType.EIGHT_BIT, number=208)
+Color('#ff8800', ColorType.STANDARD, number=9)
+Color('#ff8800', ColorType.WINDOWS, number=3)
+ColorTriplet(red=128, green=0, blue=0)
 ```
 
 ## ColorTriplet, ColorSystem and ColorType
@@ -54,6 +60,8 @@ print(parse_rgb_hex("102030"), blend_rgb((0, 0, 0), (255, 255, 255)))
 ```
 
 ```text
+#ff8800 rgb(255,136,0) (1.0, 0.5333333333333333, 0.0)
+ColorTriplet(red=16, green=32, blue=48) ColorTriplet(red=127, green=127, blue=127)
 ```
 
 A `Color` prints as a sample, as in Rich:
@@ -66,4 +74,5 @@ Console(width=40).print(Color.parse("magenta"))
 ```
 
 ```text
+<color 'magenta' (standard)⬤ >
 ```

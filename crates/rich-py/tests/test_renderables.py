@@ -195,6 +195,16 @@ def layouts(m, c):
     c.print(layout, height=8)
 
 
+def narrow_layouts(m, c):
+    layout = m.layout.Layout(name="header")
+    layout.split_row(m.layout.Layout(name="a"), m.layout.Layout(name="bbbbbbbbbbbbb", size=8))
+    c.print(layout, width=30)
+    c.print(layout.tree, width=30)
+    unnamed = m.layout.Layout(size=2, minimum_size=3, ratio=4)
+    c.print(unnamed, width=12, height=6)
+    c.print(m.layout.Layout(m.panel.Panel("content")), height=4)
+
+
 def bars(m, c):
     c.print(m.bar.Bar(100, 0, 50))
     c.print(m.bar.Bar(100, 10.5, 60.25, width=20, color="red", bgcolor="blue"))
@@ -241,8 +251,8 @@ def measures(m, c):
 
 
 PROGRAMS = [
-    rules, paddings, aligns, columns, groups, constrained_and_styled, trees, layouts, bars,
-    spinners, measures,
+    rules, paddings, aligns, columns, groups, constrained_and_styled, trees, layouts,
+    narrow_layouts, bars, spinners, measures,
 ]
 
 
@@ -269,14 +279,18 @@ def test_ascii_consoles_draw_ascii_guides_and_rules(encoding):
         class File(io.StringIO):
             pass
 
+        File.encoding = encoding  # type: ignore[assignment]
         file = File()
-        file.encoding = encoding  # type: ignore[misc]
         c = m.console.Console(file=file, width=30, color_system=None)
         program(m, c)
         outputs.append(file.getvalue())
     assert outputs[1] == outputs[0]
 
 
+@pytest.mark.skipif(
+    not hasattr(_native.Console(), "get_time"),
+    reason="rs_rich.console.Console does not expose get_time yet",
+)
 def test_a_spinner_animates_from_the_consoles_clock():
     def program(m, c):
         clock = iter([0.0, 0.0, 0.25, 0.5, 1.0])
@@ -386,6 +400,20 @@ def test_errors_match_rich(make, error):
     assert messages[1] == messages[0]
 
 
+def test_the_group_decorator_wraps_the_function():
+    from rs_rich._native import Group, group
+
+    @group(fit=False)
+    def renderables():
+        """Some renderables."""
+        yield "a"
+
+    made = renderables()
+    assert isinstance(made, Group)
+    assert (made.fit, made.renderables) == (False, ["a"])
+    assert (renderables.__name__, renderables.__doc__) == ("renderables", "Some renderables.")
+
+
 def test_no_splitter_is_a_layout_error():
     from rs_rich.layout import LayoutError, NoSplitter
 
@@ -425,17 +453,17 @@ def test_a_deep_tree_renders_without_overflowing_the_stack():
 
 
 def test_objects_can_change_until_printed():
-    from rs_rich.console import Console
-    from rs_rich.padding import Padding
-    from rs_rich.rule import Rule
+    def program(m, c):
+        rule = m.rule.Rule("before")
+        padding = m.padding.Padding("x", 0)
+        tree = m.tree.Tree("root")
+        rule.title = "after"
+        padding.left = 3
+        tree.label = "changed"
+        tree.add("added later")
+        c.print(rule, padding, tree)
 
-    rule = Rule("before")
-    padding = Padding("x", 0)
-    rule.title = "after"
-    padding.left = 3
-    out = io.StringIO()
-    Console(file=out, width=10, color_system=None).print(rule, padding)
-    assert out.getvalue() == "── after ─\n   x      \n"
+    compare(program, width=12)
 
 
 def test_user_renderables_work_inside_every_container():

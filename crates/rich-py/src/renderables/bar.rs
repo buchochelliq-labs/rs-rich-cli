@@ -29,7 +29,10 @@ struct BarRender {
 
 impl Renderable for BarRender {
     fn rich_render(&self, _console: &CoreConsole, options: &CoreOptions) -> Vec<CoreSegment> {
-        let width = self.width.unwrap_or(options.max_width).min(options.max_width);
+        let width = self
+            .width
+            .unwrap_or(options.max_width)
+            .min(options.max_width);
         let style = Some(self.style.clone());
         if self.begin >= self.end {
             return vec![CoreSegment::new(" ".repeat(width), style)];
@@ -38,11 +41,11 @@ impl Renderable for BarRender {
         let prefix_complete = eighths(self.begin).max(0) as usize;
         let body_complete = eighths(self.end).max(0) as usize;
         let mut prefix = " ".repeat(prefix_complete / 8);
-        if prefix_complete % 8 != 0 {
+        if !prefix_complete.is_multiple_of(8) {
             prefix.push_str(BEGIN_BLOCK_ELEMENTS[prefix_complete % 8]);
         }
         let mut body = FULL_BLOCK.repeat(body_complete / 8);
-        if body_complete % 8 != 0 {
+        if !body_complete.is_multiple_of(8) {
             body.push_str(END_BLOCK_ELEMENTS[body_complete % 8]);
         }
         let body_len = body.chars().count();
@@ -117,7 +120,11 @@ impl Bar {
         } else {
             begin.clone()
         };
-        let end = if size.lt(end)? { size.clone() } else { end.clone() };
+        let end = if size.lt(end)? {
+            size.clone()
+        } else {
+            end.clone()
+        };
         let default = PyString::new(py, "default").into_any();
         let style = CoreStyle::new()
             .with_color(self::color(color.unwrap_or(&default))?)

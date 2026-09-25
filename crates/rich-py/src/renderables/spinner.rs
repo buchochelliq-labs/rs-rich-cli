@@ -51,7 +51,7 @@ fn grid(frame: CoreText, text: Py<PyAny>) -> CoreTable {
     table.add_column("");
     table.add_row_cells(vec![
         Cell::Text(frame),
-        Cell::Renderable(PyRenderable::shared(text, None)),
+        Cell::Renderable(PyRenderable::shared(text, Some(false))),
     ]);
     table
 }
@@ -72,7 +72,9 @@ struct State {
 type Shared = Arc<Mutex<State>>;
 
 fn lock(state: &Shared) -> MutexGuard<'_, State> {
-    state.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    state
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// `Text.from_markup(text) if isinstance(text, str) else text`.
@@ -139,12 +141,24 @@ struct SpinnerRender {
 }
 
 impl SpinnerRender {
-    fn at(&self, py: Python<'_>, time: Option<f64>) -> PyResult<Box<dyn Renderable>> {
+    fn at(
+        &self,
+        py: Python<'_>,
+        console: &CoreConsole,
+        time: Option<f64>,
+    ) -> PyResult<Box<dyn Renderable>> {
         let time = match time {
             Some(time) => time,
+            // `console.get_time()`, from the Python console when there is one.
             None => {
-                let ambient = renderable::ambient()?;
-                ambient.console.bind(py).call_method0("get_time")?.extract()?
+                let clock = match renderable::ambient() {
+                    Ok(ambient) => ambient.console.bind(py).getattr_opt("get_time")?,
+                    Err(_) => None,
+                };
+                match clock {
+                    Some(clock) => clock.call0()?.extract()?,
+                    None => console.get_time(),
+                }
             }
         };
         Ok(frame(py, &self.state, time)?.renderable())
@@ -153,7 +167,7 @@ impl SpinnerRender {
 
 impl Renderable for SpinnerRender {
     fn rich_render(&self, console: &CoreConsole, options: &CoreOptions) -> Vec<CoreSegment> {
-        Python::attach(|py| match self.at(py, None) {
+        Python::attach(|py| match self.at(py, console, None) {
             Ok(frame) => frame.rich_render(console, options),
             Err(error) => {
                 error.write_unraisable(py, None);
@@ -163,7 +177,7 @@ impl Renderable for SpinnerRender {
     }
 
     fn measure(&self, console: &CoreConsole, options: &CoreOptions) -> CoreMeasurement {
-        Python::attach(|py| match self.at(py, Some(0.0)) {
+        Python::attach(|py| match self.at(py, console, Some(0.0)) {
             Ok(frame) => CoreMeasurement::get(console, options, frame.as_ref()),
             Err(error) => {
                 error.write_unraisable(py, None);
@@ -255,16 +269,18 @@ impl Spinner {
             }
             _ => None,
         };
-        let mut state = lock(&self.state);
-        if let Some(text) = text {
-            state.text = text;
-        }
-        if let Some(style) = style {
-            state.style = Some(style);
-        }
-        if let Some(speed) = speed.filter(|speed| *speed != 0.0) {
-            state.update_speed = speed;
-        }
+        // The replaced objects are dropped after the lock is released: a
+        // drop can run Python code, which may come back to this spinner.
+        let _replaced = {
+            let mut state = lock(&self.state);
+            if let Some(speed) = speed.filter(|speed| *speed != 0.0) {
+                state.update_speed = speed;
+            }
+            (
+                text.map(|text| std::mem::replace(&mut state.text, text)),
+                style.map(|style| state.style.replace(style)),
+            )
+        };
         Ok(())
     }
 
@@ -275,7 +291,7 @@ impl Spinner {
 
     #[setter]
     fn set_text(&self, text: Py<PyAny>) {
-        lock(&self.state).text = text;
+        let _replaced = std::mem::replace(&mut lock(&self.state).text, text);
     }
 
     #[getter]
@@ -310,7 +326,10 @@ impl Spinner {
 
     #[getter]
     fn style(&self, py: Python<'_>) -> Option<Py<PyAny>> {
-        lock(&self.state).style.as_ref().map(|style| style.clone_ref(py))
+        lock(&self.state)
+            .style
+            .as_ref()
+            .map(|style| style.clone_ref(py))
     }
 
     #[setter]
@@ -319,7 +338,7 @@ impl Spinner {
         if let Some(style) = &style {
             style_type(Some(style.bind(py)))?;
         }
-        lock(&self.state).style = style;
+        let _replaced = std::mem::replace(&mut lock(&self.state).style, style);
         Ok(())
     }
 
@@ -354,7 +373,10 @@ impl Spinner {
     }
 
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
-        let state = lock(&self.state);
+        // A spinner being updated is skipped rather than waited for.
+        let Ok(state) = self.state.try_lock() else {
+            return Ok(());
+        };
         visit.call(&state.text)?;
         if let Some(style) = &state.style {
             visit.call(style)?;

@@ -31,7 +31,7 @@ use crate::renderable::{self, AsRenderable};
 use crate::style::{py_style_type, Style};
 
 pub(crate) use lines::Lines;
-use ops::{byte_at, boundaries, char_len, char_spans, CharSpan};
+use ops::{boundaries, byte_at, char_len, char_spans, CharSpan};
 
 /// `rich.text.Text`: a string with styled spans.
 #[pyclass(name = "Text", module = "rs_rich.text", dict, skip_from_py_object)]
@@ -98,7 +98,11 @@ fn overflow_arg(value: Option<&str>) -> PyResult<Option<rich::Overflow>> {
 }
 
 /// A new Python `Text` with `end`.
-pub(crate) fn new_text<'py>(py: Python<'py>, inner: CoreText, end: &str) -> PyResult<Bound<'py, Text>> {
+pub(crate) fn new_text<'py>(
+    py: Python<'py>,
+    inner: CoreText,
+    end: &str,
+) -> PyResult<Bound<'py, Text>> {
     let text = Bound::new(py, Text { inner })?;
     if end != "\n" {
         instance_dict(&text)?.set_item(END_KEY, end)?;
@@ -137,7 +141,10 @@ fn tab_size_arg(value: Option<i64>) -> PyResult<Option<usize>> {
 
 /// The `Text` in `value` (a `Text`, or any object that is not one).
 fn as_text(value: &Bound<'_, PyAny>) -> Option<CoreText> {
-    value.cast::<Text>().ok().map(|text| text.borrow().inner.clone())
+    value
+        .cast::<Text>()
+        .ok()
+        .map(|text| text.borrow().inner.clone())
 }
 
 /// Rich's `Text.markup`: console markup that renders this text.
@@ -148,8 +155,16 @@ fn markup_of(text: &CoreText) -> String {
     let length = plain.chars().count();
     let mut events: Vec<(usize, bool, StyleType)> = Vec::with_capacity(spans.len() * 2 + 2);
     events.push((0, false, base.clone()));
-    events.extend(spans.iter().map(|(start, _, style)| (*start, false, style.clone())));
-    events.extend(spans.iter().map(|(_, end, style)| (*end, true, style.clone())));
+    events.extend(
+        spans
+            .iter()
+            .map(|(start, _, style)| (*start, false, style.clone())),
+    );
+    events.extend(
+        spans
+            .iter()
+            .map(|(_, end, style)| (*end, true, style.clone())),
+    );
     events.push((length, true, base.clone()));
     events.sort_by_key(|(offset, closing, _)| (*offset, *closing));
     let bounds = boundaries(plain);
@@ -473,7 +488,12 @@ impl Text {
     /// Style characters `start..end` (negative from the end); offsets past
     /// the text are clamped.
     #[pyo3(signature = (style, start=Index(0), end=None))]
-    fn stylize(&mut self, style: &Bound<'_, PyAny>, start: Index, end: Option<Index>) -> PyResult<()> {
+    fn stylize(
+        &mut self,
+        style: &Bound<'_, PyAny>,
+        start: Index,
+        end: Option<Index>,
+    ) -> PyResult<()> {
         if !style.is_truthy()? {
             return Ok(());
         }
@@ -495,7 +515,12 @@ impl Text {
         }
         let mut first = self.inner.blank_copy();
         first.append(self.inner.plain(), None);
-        ops::stylize(&mut first, span_style(style)?, start.0, end.map(|end| end.0));
+        ops::stylize(
+            &mut first,
+            span_style(style)?,
+            start.0,
+            end.map(|end| end.0),
+        );
         let mut spans = char_spans(&first);
         spans.extend(char_spans(&self.inner));
         let plain = self.inner.plain().to_string();
@@ -505,7 +530,12 @@ impl Text {
 
     /// Meta data on spans needs a core `Style` with meta, which core lacks.
     #[pyo3(signature = (meta, start=Index(0), end=None))]
-    fn apply_meta(&self, meta: &Bound<'_, PyAny>, start: Index, end: Option<Index>) -> PyResult<()> {
+    fn apply_meta(
+        &self,
+        meta: &Bound<'_, PyAny>,
+        start: Index,
+        end: Option<Index>,
+    ) -> PyResult<()> {
         let _ = (meta, start, end);
         Err(meta_unsupported())
     }
@@ -566,7 +596,10 @@ impl Text {
         let style = style.filter(|s| s.is_truthy().unwrap_or(false));
         let mut spans: Vec<CharSpan> = Vec::new();
         let mut matches = 0;
-        for found in pattern.call_method1("finditer", (plain.as_str(),))?.try_iter()? {
+        for found in pattern
+            .call_method1("finditer", (plain.as_str(),))?
+            .try_iter()?
+        {
             let found = found?;
             if let Some(style) = style {
                 let (start, end): (usize, usize) = found.call_method0("span")?.extract()?;
@@ -668,11 +701,7 @@ impl Text {
     /// The text as `Segment`s (no wrapping), styles resolved by `console`,
     /// then `end` if it is not empty.
     #[pyo3(signature = (console, end=""))]
-    fn render<'py>(
-        &self,
-        console: &Bound<'py, PyAny>,
-        end: &str,
-    ) -> PyResult<Bound<'py, PyList>> {
+    fn render<'py>(&self, console: &Bound<'py, PyAny>, end: &str) -> PyResult<Bound<'py, PyList>> {
         let py = console.py();
         let plain = self.inner.plain();
         let mut segments: Vec<rich::segment::Segment> = Vec::new();
@@ -696,7 +725,12 @@ impl Text {
                 style_map.push(get_style(&span.style)?);
             }
             let mut events: Vec<(usize, bool, usize)> = vec![(0, false, 0)];
-            events.extend(spans.iter().enumerate().map(|(i, s)| (s.start, false, i + 1)));
+            events.extend(
+                spans
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| (s.start, false, i + 1)),
+            );
             events.extend(spans.iter().enumerate().map(|(i, s)| (s.end, true, i + 1)));
             events.push((plain.len(), true, 0));
             events.sort_by_key(|(offset, leaving, _)| (*offset, *leaving));
@@ -881,9 +915,6 @@ impl Text {
                 Some(style) if style.is_truthy()? => Some(span_style(&style)?),
                 _ => None,
             };
-            if content.is_empty() {
-                continue;
-            }
             slf.inner.append(&content, style);
         }
         Ok(slf)
@@ -891,7 +922,8 @@ impl Text {
 
     /// Add another text's spans (at the same offsets) to this one.
     fn copy_styles(&mut self, text: &Bound<'_, PyAny>) -> PyResult<()> {
-        let other = as_text(text).ok_or_else(|| PyTypeError::new_err("copy_styles takes a Text"))?;
+        let other =
+            as_text(text).ok_or_else(|| PyTypeError::new_err("copy_styles takes a Text"))?;
         self.push_spans(&char_spans(&other));
         Ok(())
     }
@@ -1007,7 +1039,11 @@ impl Text {
                 blank_lines += 1;
                 continue;
             }
-            let new_indent = format!("{}{}", indent_line.repeat(indent / size), " ".repeat(indent % size));
+            let new_indent = format!(
+                "{}{}",
+                indent_line.repeat(indent / size),
+                " ".repeat(indent % size)
+            );
             let indent_chars = new_indent.chars().count();
             let tail: String = plain.chars().skip(indent_chars).collect();
             ops::set_plain(&mut line, &format!("{new_indent}{tail}"));
@@ -1043,7 +1079,9 @@ impl Text {
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let plain = PyString::new(py, self.inner.plain()).repr()?;
         let spans = self.get_spans(py)?.repr()?;
-        let style = py_base_style(py, self.inner.base_style())?.bind(py).repr()?;
+        let style = py_base_style(py, self.inner.base_style())?
+            .bind(py)
+            .repr()?;
         Ok(format!("<text {plain} {spans} {style}>"))
     }
 
@@ -1060,8 +1098,12 @@ impl Text {
     fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> Py<PyAny> {
         match as_text(other) {
             Some(other) => {
-                let equal = self.inner.plain() == other.plain() && self.inner.spans() == other.spans();
-                pyo3::types::PyBool::new(py, equal).to_owned().into_any().unbind()
+                let equal =
+                    self.inner.plain() == other.plain() && self.inner.spans() == other.spans();
+                pyo3::types::PyBool::new(py, equal)
+                    .to_owned()
+                    .into_any()
+                    .unbind()
             }
             None => py.NotImplemented(),
         }
@@ -1078,17 +1120,25 @@ impl Text {
     }
 
     /// One character (with the styles over it) or a slice (step 1 only).
-    fn __getitem__<'py>(slf: &Bound<'py, Self>, index: &Bound<'py, PyAny>) -> PyResult<Bound<'py, Text>> {
+    fn __getitem__<'py>(
+        slf: &Bound<'py, Self>,
+        index: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, Text>> {
         let py = slf.py();
         let inner = slf.borrow().inner.clone();
         let length = char_len(&inner) as isize;
         if let Ok(slice) = index.cast::<PySlice>() {
             let indices = slice.indices(length)?;
             if indices.step != 1 {
-                return Err(PyTypeError::new_err("slices with step!=1 are not supported"));
+                return Err(PyTypeError::new_err(
+                    "slices with step!=1 are not supported",
+                ));
             }
             let lines = ops::divide(&inner, &[indices.start, indices.stop]);
-            let line = lines.into_iter().nth(1).unwrap_or_else(|| inner.blank_copy());
+            let line = lines
+                .into_iter()
+                .nth(1)
+                .unwrap_or_else(|| inner.blank_copy());
             return new_text(py, line, "\n");
         }
         let offset = index.extract::<isize>()?;
@@ -1096,7 +1146,12 @@ impl Text {
         if position < 0 || position >= length {
             return Err(PyIndexError::new_err("string index out of range"));
         }
-        let character: String = inner.plain().chars().nth(position as usize).into_iter().collect();
+        let character: String = inner
+            .plain()
+            .chars()
+            .nth(position as usize)
+            .into_iter()
+            .collect();
         let spans: Vec<CharSpan> = char_spans(&inner)
             .into_iter()
             .filter(|(start, end, _)| (*end as isize) > offset && offset >= *start as isize)
@@ -1112,8 +1167,11 @@ impl Text {
     fn push_spans(&mut self, spans: &[CharSpan]) {
         let bounds = boundaries(self.inner.plain());
         for (start, end, style) in spans {
-            self.inner
-                .stylize(style.clone(), byte_at(&bounds, *start), byte_at(&bounds, *end));
+            self.inner.stylize(
+                style.clone(),
+                byte_at(&bounds, *start),
+                byte_at(&bounds, *end),
+            );
         }
     }
 }

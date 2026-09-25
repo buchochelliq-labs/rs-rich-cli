@@ -1,7 +1,21 @@
-"""``rich.prompt``: ``Prompt``, ``Confirm``, ``IntPrompt`` and ``FloatPrompt``.
+"""``rich.prompt``: ``Prompt``, ``Confirm``, ``IntPrompt`` and ``FloatPrompt``."""
 
-Placeholder, filled by the live area: re-export the classes from
-``._native`` here and list them in ``__all__``.
-"""
+from ._native import (
+    Confirm,
+    FloatPrompt,
+    IntPrompt,
+    InvalidResponse,
+    Prompt,
+    PromptBase,
+    PromptError,
+)
 
-__all__: list = []
+__all__ = [
+    "Confirm",
+    "FloatPrompt",
+    "IntPrompt",
+    "InvalidResponse",
+    "Prompt",
+    "PromptBase",
+    "PromptError",
+]

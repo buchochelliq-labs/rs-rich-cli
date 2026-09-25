@@ -76,7 +76,12 @@ fn data_error(py: Python<'_>, error: &CoreDataError, source: Option<(&str, &str)
 
 /// A node of a parsed document: a value (scalar, sequence or map) and where
 /// it came from (position, YAML anchor or alias, comment, XML kind).
-#[pyclass(name = "DataNode", module = "rs_rich.ext.data", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "DataNode",
+    module = "rs_rich.ext.data",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct DataNode {
     pub(crate) inner: Node,
@@ -374,9 +379,8 @@ fn parse_data(
 ) -> PyResult<DataNode> {
     let format = match format {
         Some(format) => self::format(format)?,
-        None => Format::detect(content, name).ok_or_else(|| {
-            DataError::new_err("cannot detect the format; pass format=")
-        })?,
+        None => Format::detect(content, name)
+            .ok_or_else(|| DataError::new_err("cannot detect the format; pass format="))?,
     };
     core::parse(format, content)
         .map(wrap)
@@ -683,7 +687,12 @@ fn unflatten(leaves: &Bound<'_, PyAny>) -> PyResult<DataNode> {
 
 /// `SearchQuery(*, key=None, path=None, value=None, text=None,
 /// case_insensitive=False)`: criteria that must all match.
-#[pyclass(name = "SearchQuery", module = "rs_rich.ext.data", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "SearchQuery",
+    module = "rs_rich.ext.data",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct SearchQuery {
     inner: CoreQuery,
@@ -768,7 +777,10 @@ pub(crate) struct SearchMatch {
 #[pymethods]
 impl SearchMatch {
     fn __repr__(&self) -> String {
-        format!("SearchMatch(path={:?}, matched_on={:?})", self.path, self.matched_on)
+        format!(
+            "SearchMatch(path={:?}, matched_on={:?})",
+            self.path, self.matched_on
+        )
     }
 }
 
@@ -986,7 +998,12 @@ impl DataDiffView {
 /// `Redaction(patterns=(), *, secrets=False, mask="********")`: masks
 /// string and number leaves whose key matches a pattern (substring, or a
 /// glob with `*`/`?`; case-insensitive, `-` and `_` alike).
-#[pyclass(name = "Redaction", module = "rs_rich.ext.data", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "Redaction",
+    module = "rs_rich.ext.data",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct Redaction {
     pub(crate) inner: CoreRedaction,
@@ -996,7 +1013,11 @@ pub(crate) struct Redaction {
 impl Redaction {
     #[new]
     #[pyo3(signature = (patterns=None, *, secrets=false, mask=None))]
-    fn new(patterns: Option<&Bound<'_, PyAny>>, secrets: bool, mask: Option<String>) -> PyResult<Self> {
+    fn new(
+        patterns: Option<&Bound<'_, PyAny>>,
+        secrets: bool,
+        mask: Option<String>,
+    ) -> PyResult<Self> {
         let mut inner = if secrets {
             CoreRedaction::secrets()
         } else {
@@ -1075,8 +1096,7 @@ pub(crate) struct DataJson {
 
 impl AsRenderable for DataJson {
     fn to_renderable(&self, _py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
-        let json = rich::Json::new(&self.text)
-            .map_err(|e| DataError::new_err(e.to_string()))?;
+        let json = rich::Json::new(&self.text).map_err(|e| DataError::new_err(e.to_string()))?;
         Ok(Box::new(json))
     }
 }
@@ -1331,7 +1351,10 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Redact>()?;
     m.add(
         "DATA_FORMATS",
-        Format::ALL.iter().map(|f| format_name(*f)).collect::<Vec<_>>(),
+        Format::ALL
+            .iter()
+            .map(|f| format_name(*f))
+            .collect::<Vec<_>>(),
     )?;
     m.add("SECRET_KEYS", core::SECRET_KEYS.to_vec())?;
     Ok(())

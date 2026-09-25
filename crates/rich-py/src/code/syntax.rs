@@ -68,7 +68,7 @@ pub(crate) fn code_highlighter(name: Option<&str>) -> PyResult<Option<Arc<dyn Co
             ""
         };
         PyValueError::new_err(format!(
-            "unknown code highlighter {name:?}{hint}; expected one of {}",
+            "unknown code highlighter '{name}'{hint}; expected one of {}",
             registry.code_highlighter_names().join(", ")
         ))
     })
@@ -214,7 +214,10 @@ impl Spec {
     }
 
     /// The theme's background (`None`: transparent) and default foreground.
-    fn theme_colors(&self, console: Option<&CoreConsole>) -> (Option<CoreColor>, Option<CoreColor>) {
+    fn theme_colors(
+        &self,
+        console: Option<&CoreConsole>,
+    ) -> (Option<CoreColor>, Option<CoreColor>) {
         let (engine, theme) = self.engine(console);
         let language = Some(self.lexer.as_str()).filter(|l| !l.is_empty());
         match engine.highlight("", language, &theme) {
@@ -533,7 +536,11 @@ impl Spec {
 
         let mut render_options = options.update_width(code_width);
         render_options.height = None;
-        let pointer = if console.legacy_windows() { "> " } else { "❱ " };
+        let pointer = if console.legacy_windows() {
+            "> "
+        } else {
+            "❱ "
+        };
         let (background_style, number_style, highlight_number_style) = self.number_styles(console);
         let pad_style = Some(background_style.clone()).filter(|s| !s.is_null());
         let mut output = Vec::new();
@@ -548,7 +555,12 @@ impl Spec {
                 } else {
                     Justify::Left
                 };
-                console.render_lines_styled(line, &wrap_options, Some(&background_style), !transparent)
+                console.render_lines_styled(
+                    line,
+                    &wrap_options,
+                    Some(&background_style),
+                    !transparent,
+                )
             } else {
                 let segments: Vec<CoreSegment> = line
                     .render(console.theme(), &CoreStyle::new())
@@ -584,7 +596,10 @@ impl Spec {
                                 pointer,
                                 Some(CoreStyle::parse("red").expect("valid style")),
                             ));
-                            row.push(CoreSegment::new(column, Some(highlight_number_style.clone())));
+                            row.push(CoreSegment::new(
+                                column,
+                                Some(highlight_number_style.clone()),
+                            ));
                         } else {
                             row.push(CoreSegment::new("  ", Some(highlight_number_style.clone())));
                             row.push(CoreSegment::new(column, Some(number_style.clone())));
@@ -692,7 +707,15 @@ fn python_splitlines(text: &str) -> Vec<&str> {
     while let Some((i, c)) = chars.next() {
         if matches!(
             c,
-            '\n' | '\r' | '\x0b' | '\x0c' | '\x1c' | '\x1d' | '\x1e' | '\u{85}' | '\u{2028}' | '\u{2029}'
+            '\n' | '\r'
+                | '\x0b'
+                | '\x0c'
+                | '\x1c'
+                | '\x1d'
+                | '\x1e'
+                | '\u{85}'
+                | '\u{2028}'
+                | '\u{2029}'
         ) {
             lines.push(&text[start..i]);
             start = i + c.len_utf8();

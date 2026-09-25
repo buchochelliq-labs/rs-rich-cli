@@ -13,9 +13,10 @@
 //! | `json` | `rich.json` |
 //! | `markdown` | `rich.markdown` |
 //! | `syntax` | `rich.syntax` (and the code-highlighter choice) |
+//! | `inspect` | `rich._inspect` and `rich.inspect` |
+//! | `traceback` | `rich.traceback` and `Console.print_exception` |
 //! | `layout` | small renderables the others compose with |
 
-use pyo3::exceptions::PyNotImplementedError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 
@@ -24,11 +25,13 @@ use rich::protocol::Renderable;
 use crate::console::Console;
 
 mod highlighter;
+mod inspect;
 mod json;
 mod layout;
 mod markdown;
 mod pretty;
 mod syntax;
+mod traceback;
 
 /// What `Console.print` renders for a container, dataclass or other
 /// object Rich pretty-prints (`rich.pretty.Pretty(obj, highlighter=...)`).
@@ -42,13 +45,11 @@ pub(crate) fn pretty_for_print(
 
 /// `Console.print_exception(...)`, with Rich's arguments.
 pub(crate) fn console_print_exception(
-    _console: &Bound<'_, Console>,
-    _args: &Bound<'_, PyTuple>,
-    _kwargs: Option<&Bound<'_, PyDict>>,
+    console: &Bound<'_, Console>,
+    args: &Bound<'_, PyTuple>,
+    kwargs: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<Py<PyAny>> {
-    Err(PyNotImplementedError::new_err(
-        "rs_rich cannot print exceptions yet: Traceback is not implemented",
-    ))
+    traceback::print_exception(console, args, kwargs)
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -57,5 +58,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     json::register(m)?;
     markdown::register(m)?;
     syntax::register(m)?;
+    inspect::register(m)?;
+    traceback::register(m)?;
     Ok(())
 }

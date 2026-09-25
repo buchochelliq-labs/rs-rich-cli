@@ -10,8 +10,8 @@
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
 
-use rich_ext::transform::{HighlightMatches as CoreHighlight, KeepLines as CoreKeepLines};
 use rich_ext::transform::TextTransform;
+use rich_ext::transform::{HighlightMatches as CoreHighlight, KeepLines as CoreKeepLines};
 
 use super::common::{self, PipelineError, TransformError};
 use crate::text::Text;

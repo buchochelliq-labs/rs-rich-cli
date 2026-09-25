@@ -132,7 +132,8 @@ impl Renderable for TreeRender {
             let skip = if self.hide_root { 2 } else { 1 };
             let mut prefix: Vec<CoreSegment> = levels.iter().skip(skip).cloned().collect();
             let prefix_width: usize = prefix.iter().map(CoreSegment::cell_length).sum();
-            let mut label_options = options.update_width(options.max_width.saturating_sub(prefix_width));
+            let mut label_options =
+                options.update_width(options.max_width.saturating_sub(prefix_width));
             label_options.height = None;
             let label = StyledRender {
                 child: LabelRef(node.label.as_ref()),
@@ -160,7 +161,10 @@ impl Renderable for TreeRender {
                     if node.children.len() == 1 { END } else { FORK },
                     guide_style,
                 ));
-                let pushed = styles.last().expect("a style").combine(&get_style(console, &node.style));
+                let pushed = styles
+                    .last()
+                    .expect("a style")
+                    .combine(&get_style(console, &node.style));
                 styles.push(pushed);
                 let pushed = guide_styles
                     .last()
@@ -285,7 +289,10 @@ impl Tree {
     #[classattr]
     #[pyo3(name = "TREE_GUIDES")]
     fn tree_guides() -> Vec<(&'static str, &'static str, &'static str, &'static str)> {
-        TREE_GUIDES.iter().map(|[a, b, c, d]| (*a, *b, *c, *d)).collect()
+        TREE_GUIDES
+            .iter()
+            .map(|[a, b, c, d]| (*a, *b, *c, *d))
+            .collect()
     }
 
     #[new]

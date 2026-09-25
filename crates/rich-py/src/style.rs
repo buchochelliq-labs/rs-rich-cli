@@ -121,11 +121,10 @@ impl Style {
 }
 
 fn dump_meta(meta: &Bound<'_, PyAny>) -> PyResult<Vec<u8>> {
-    Ok(meta
-        .py()
+    meta.py()
         .import("marshal")?
         .call_method1("dumps", (meta,))?
-        .extract()?)
+        .extract()
 }
 
 /// A core style error as `StyleSyntaxError`, without core's prefix.
@@ -139,7 +138,64 @@ fn syntax_error(error: RichError) -> PyErr {
 }
 
 pub(crate) fn parse_style(definition: &str) -> PyResult<CoreStyle> {
-    CoreStyle::parse(definition).map_err(syntax_error)
+    CoreStyle::parse(definition).map_err(|error| match parse_error_message(definition) {
+        Some(message) => StyleSyntaxError::new_err(message),
+        None => syntax_error(error),
+    })
+}
+
+/// The message Rich's `Style.parse` raises for `definition`, found by
+/// scanning it as Rich does.
+fn parse_error_message(definition: &str) -> Option<String> {
+    let color_error = |word: &str| crate::color::parse(word).err().map(|e| e.to_string());
+    let mut words = definition.split_whitespace();
+    while let Some(original) = words.next() {
+        let word = original.to_lowercase();
+        match word.as_str() {
+            "on" => {
+                let Some(word) = words.next() else {
+                    return Some("color expected after 'on'".into());
+                };
+                if let Some(error) = color_error(word) {
+                    let error = error.trim_start_matches("ColorParseError: ");
+                    return Some(format!(
+                        "unable to parse {} as background color; {error}",
+                        python_repr(word)
+                    ));
+                }
+            }
+            "not" => {
+                let word = words.next().unwrap_or("");
+                let known = ATTRIBUTES.contains(&word)
+                    || ["b", "d", "i", "u", "r", "c", "s", "uu", "o"].contains(&word);
+                if !known {
+                    return Some(format!(
+                        "expected style attribute after 'not', found {}",
+                        python_repr(word)
+                    ));
+                }
+            }
+            "link" => {
+                if words.next().is_none() {
+                    return Some("URL expected after 'link'".into());
+                }
+            }
+            _ => {
+                let known = ATTRIBUTES.contains(&word.as_str())
+                    || ["b", "d", "i", "u", "r", "c", "s", "uu", "o"].contains(&word.as_str());
+                if !known {
+                    if let Some(error) = color_error(&word) {
+                        let error = error.trim_start_matches("ColorParseError: ");
+                        return Some(format!(
+                            "unable to parse {} as color; {error}",
+                            python_repr(&word)
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 /// A core style with the given attribute values (`None` leaves one unset).
@@ -227,7 +283,10 @@ impl Style {
         bgcolor: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Style> {
         let color = color.filter(|c| !c.is_none()).map(core_color).transpose()?;
-        let bgcolor = bgcolor.filter(|c| !c.is_none()).map(core_color).transpose()?;
+        let bgcolor = bgcolor
+            .filter(|c| !c.is_none())
+            .map(core_color)
+            .transpose()?;
         Ok(Style::from_core(CoreStyle::from_color(color, bgcolor)))
     }
 
@@ -443,15 +502,16 @@ impl Style {
     /// A copy with a different link.
     #[pyo3(signature = (link=None))]
     fn update_link(&self, link: Option<String>) -> Style {
-        let inner = self
-            .inner
-            .update_link(link.filter(|link| !link.is_empty()));
+        let inner = self.inner.update_link(link.filter(|link| !link.is_empty()));
         Style::with_meta(inner, self.meta.clone(), self.meta_truthy)
     }
 
     /// The CSS for this style under `theme` (default: the default theme).
     #[pyo3(signature = (theme=None))]
-    fn get_html_style(&self, theme: Option<PyRef<'_, crate::terminal_theme::TerminalTheme>>) -> String {
+    fn get_html_style(
+        &self,
+        theme: Option<PyRef<'_, crate::terminal_theme::TerminalTheme>>,
+    ) -> String {
         match theme {
             Some(theme) => self.inner.get_html_style(&theme.inner),
             None => self
@@ -480,7 +540,22 @@ impl Style {
         if text.is_empty() {
             return Ok(String::new());
         }
-        let codes = self.inner.ansi_codes(system);
+        let codes = if system == rich::ColorSystem::Windows {
+            // Core reads Windows as standard colours; Rich has its own palette.
+            let mut codes: Vec<String> = Vec::new();
+            let attributes = self.inner.without_color().ansi_codes(system);
+            if !attributes.is_empty() {
+                codes.push(attributes);
+            }
+            for (color, foreground) in [(self.inner.color(), true), (self.inner.bgcolor(), false)] {
+                if let Some(color) = color {
+                    codes.extend(crate::color::downgrade(color, system).ansi_codes(foreground));
+                }
+            }
+            codes.join(";")
+        } else {
+            self.inner.ansi_codes(system)
+        };
         let rendered = if codes.is_empty() {
             text.to_string()
         } else {
@@ -524,7 +599,10 @@ impl Style {
             Ok(other) => {
                 let other = other.get();
                 let equal = self.inner == other.inner && self.meta == other.meta;
-                pyo3::types::PyBool::new(py, equal).to_owned().into_any().unbind()
+                pyo3::types::PyBool::new(py, equal)
+                    .to_owned()
+                    .into_any()
+                    .unbind()
             }
             Err(_) => py.NotImplemented(),
         }
@@ -535,7 +613,10 @@ impl Style {
             Ok(other) => {
                 let other = other.get();
                 let equal = self.inner == other.inner && self.meta == other.meta;
-                pyo3::types::PyBool::new(py, !equal).to_owned().into_any().unbind()
+                pyo3::types::PyBool::new(py, !equal)
+                    .to_owned()
+                    .into_any()
+                    .unbind()
             }
             Err(_) => py.NotImplemented(),
         }
@@ -611,7 +692,10 @@ impl StyleStack {
     /// The style at the top of the stack.
     #[getter]
     fn current(&self) -> Style {
-        self.stack.last().cloned().unwrap_or_else(|| Style::from_core(CoreStyle::new()))
+        self.stack
+            .last()
+            .cloned()
+            .unwrap_or_else(|| Style::from_core(CoreStyle::new()))
     }
 
     /// Push `style`, combined with the current style.
@@ -624,9 +708,10 @@ impl StyleStack {
     /// Pop the top style and return the new current style.
     fn pop(&mut self) -> PyResult<Style> {
         self.stack.pop();
-        self.stack.last().cloned().ok_or_else(|| {
-            pyo3::exceptions::PyIndexError::new_err("list index out of range")
-        })
+        self.stack
+            .last()
+            .cloned()
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("list index out of range"))
     }
 }
 

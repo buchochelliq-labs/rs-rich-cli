@@ -1,7 +1,5 @@
-"""``rich.screen``: ``Screen``.
+"""``rich.screen``: ``Screen``."""
 
-Placeholder, filled by the live area: re-export the classes from
-``._native`` here and list them in ``__all__``.
-"""
+from ._native import Screen
 
-__all__: list = []
+__all__ = ["Screen"]

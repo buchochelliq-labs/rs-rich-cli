@@ -854,8 +854,9 @@ impl Text {
         if self.plain.contains('\t') {
             let mut expanded = self.clone();
             expanded.expand_tabs(tab_size);
-            return expanded
-                .render_lines_wrapped_tabs(theme, base_style, width, justify, overflow, no_wrap, tab_size);
+            return expanded.render_lines_wrapped_tabs(
+                theme, base_style, width, justify, overflow, no_wrap, tab_size,
+            );
         }
 
         // Resolve every span's style once, up front, into a vector parallel to

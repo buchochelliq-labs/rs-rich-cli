@@ -2925,6 +2925,196 @@ def main() -> None:
     )
     print("wrote export fixtures (html inline, html classes, svg)")
 
+    capture_core_gaps()
+
+
+# --- core gaps (bindings foundation) ------------------------------------------
+# One fixture, `core_gaps.tsv`: `name<TAB>json(output)`. Each case is a function
+# returning the exact string upstream produces; `tests/golden_core_gaps.rs` has
+# a Rust builder per name. Every console is truecolor, and its colour system is
+# the only one used in the process for these cases (see the colour-isolation
+# note on `_capture_colors_isolated`).
+
+
+def _cg_console(width: int = 40, **overrides) -> Console:
+    options = dict(
+        force_terminal=True,
+        color_system="truecolor",
+        width=width,
+        highlight=False,
+        safe_box=False,
+        legacy_windows=False,
+        no_color=False,
+    )
+    options.update(overrides)
+    return Console(**options)
+
+
+def _cg_print(console: Console, *objects, **kwargs) -> str:
+    with console.capture() as capture:
+        console.print(*objects, **kwargs)
+    return capture.get()
+
+
+def _cg_render(console: Console, renderable, width: int) -> str:
+    """`Console.render` at an explicit width, as a terminal string."""
+    segments = list(console.render(renderable, console.options.update_width(width)))
+    return console._render_buffer(segments)
+
+
+def _cg_render_str(content: str, width: int = 20, console_options=None, **kwargs) -> str:
+    console = _cg_console(width, **(console_options or {}))
+    try:
+        text = console.render_str(content, **kwargs)
+    except MarkupError:
+        return "<ERROR>"
+    return _cg_print(console, Panel(text))
+
+
+def _cg_json(source: str, width: int = 40, print_options=None, **options) -> str:
+    try:
+        renderable = JSON(source, **options)
+    except ValueError:
+        return "<ERROR>"
+    return _cg_print(_cg_console(width), renderable, **(print_options or {}))
+
+
+def _cg_log(width: int, renderables_factory) -> str:
+    from rich._log_render import LogRender
+
+    console = _cg_console(width)
+    render = LogRender(show_level=True)
+    out = []
+    for time, renderables in renderables_factory():
+        table = render(
+            console,
+            renderables,
+            time_format=lambda _, t=time: Text(t),
+            level=Text.styled("INFO".ljust(8), "logging.level.info"),
+            path="app.py",
+            line_no=7,
+        )
+        out.append(_cg_print(console, table))
+    return "".join(out)
+
+
+def _cg_log_records():
+    table = Table("a", "b")
+    table.add_row("1", "2")
+    return [
+        ("[t1]", [Text("plain message")]),
+        ("[t1]", [Text("before the panel"), Panel("boxed", expand=False)]),
+        ("[t2]", [table, Text.from_markup("[bold]after[/] the table")]),
+    ]
+
+
+def _cg_record(width: int, markup: str) -> Console:
+    console = _cg_console(width, record=True)
+    console.print(markup)
+    return console
+
+
+_CG_EXPORT_MARKUP = "[link=https://example.com/a?b=1&c=2]hi[/link] [blink]b[/] [bold red]r[/] <&>"
+_CG_SVG_FORMAT = "{unique_id}|{char_width}|{char_height}|{line_height}|{terminal_width}|{terminal_height}|{width}|{height}|{terminal_x}|{terminal_y}|{{lit}}\n{styles}\n{matrix}\n{backgrounds}\n{lines}\n{chrome}"
+
+
+def _cg_justify_panels() -> str:
+    console = _cg_console(16)
+    out = []
+    for justify in ["left", "center", "right", "full"]:
+        out.append(_cg_print(console, Panel(Text("abc", style="red", justify=justify))))
+        out.append(_cg_print(console, Panel(Text.from_markup("x[red]abc[/]", style="bold", justify=justify))))
+        out.append(_cg_print(console, Panel(Text.from_markup("[red]abc[/] de", justify=justify))))
+    table = Table()
+    table.add_column("hhhhhhh")
+    table.add_row(Text.from_markup("[red]a[/][red]b[/]"))
+    table.add_row(Text("c", style="green", justify="center"))
+    out.append(_cg_print(console, table))
+    return "".join(out)
+
+
+CORE_GAP_CASES = [
+    # 1. Console.render
+    ("render_panel_width20", lambda: _cg_render(_cg_console(), Panel(Text("hello"), title="T"), 20)),
+    ("render_zero_width", lambda: _cg_render(_cg_console(), Text("hello"), 0)),
+    # 2. ConsoleOptions.highlight, set by containers for their children
+    ("options_highlight_panel_default", lambda: _cg_print(_cg_console(30, highlight=True), Panel("x 123 True"))),
+    ("options_highlight_panel_on", lambda: _cg_print(_cg_console(30), Panel("x 123 True", highlight=True))),
+    ("options_highlight_tree_on", lambda: _cg_print(_cg_console(30), Tree("x 123", highlight=True))),
+    # 3. Console.render_str keywords
+    ("render_str_markup_off", lambda: _cg_render_str("[b]x[/] 1", markup=False)),
+    ("render_str_highlight_drops_style", lambda: _cg_render_str("abc 12", style="red", justify="center", highlight=True)),
+    ("render_str_style_justify", lambda: _cg_render_str("[b]abc[/]", style="red", justify="right", highlight=False)),
+    ("render_str_emoji_off", lambda: _cg_render_str(":rocket: x", emoji=False)),
+    ("render_str_console_markup_off", lambda: _cg_render_str("[b]x[/] :rocket:", console_options={"markup": False})),
+    ("render_str_bad_markup", lambda: _cg_render_str("x [/b]")),
+    # 5. tab_size
+    ("tab_console_4", lambda: _cg_print(_cg_console(20, tab_size=4), Text("a\tbc\td"))),
+    ("tab_text_2", lambda: _cg_print(_cg_console(20), Text("a\tb", tab_size=2))),
+    ("tab_markup_console_3", lambda: _cg_print(_cg_console(20, tab_size=3), "x\ty")),
+    ("tab_table_cell_console_4", lambda: _cg_print(_cg_console(20, tab_size=4), _cg_tab_table())),
+    # 6. emoji_variant
+    ("emoji_variant_text", lambda: _cg_print(_cg_console(20, emoji_variant="text"), ":rocket: hi")),
+    ("emoji_variant_markup", lambda: _cg_print(_cg_console(20, emoji_variant="text"), ":rocket: [b]hi[/]")),
+    ("emoji_variant_explicit", lambda: _cg_print(_cg_console(20, emoji_variant="emoji"), ":rocket-text: :rocket:")),
+    # 7. LogRender over renderables
+    ("log_renderables", lambda: _cg_log(50, _cg_log_records)),
+    # 8. JSON options
+    ("json_indent_4", lambda: _cg_json(JSON_SAMPLE, indent=4)),
+    ("json_indent_none", lambda: _cg_json(JSON_SAMPLE, 80, indent=None)),
+    ("json_indent_none_wrapped", lambda: _cg_json(JSON_SAMPLE, 30, indent=None)),
+    ("json_indent_zero", lambda: _cg_json('{"a": [1, {"b": []}]}', indent=0)),
+    ("json_indent_tab", lambda: _cg_json('{"a": [1, 2]}', indent="\t")),
+    ("json_sort_keys", lambda: _cg_json('{"b": 1, "a": {"d": 2, "c": 3}, "B": 4}', sort_keys=True)),
+    ("json_ensure_ascii", lambda: _cg_json('{"café": "❤ \U0001f600 \u007f"}', ensure_ascii=True)),
+    ("json_no_highlight", lambda: _cg_json(JSON_SAMPLE, highlight=False)),
+    ("json_trailing_backslash", lambda: _cg_json('{"k": "a\\\\", "b": 1}')),
+    ("json_allow_nan_off", lambda: _cg_json("[NaN]", allow_nan=False)),
+    ("json_print_no_wrap_ellipsis", lambda: _cg_json(JSON_SAMPLE, 16, print_options={"no_wrap": True, "overflow": "ellipsis"})),
+    ("json_print_crop", lambda: _cg_json(JSON_SAMPLE, 16, print_options={"overflow": "crop"})),
+    ("json_print_center", lambda: _cg_json('{"a": 1}', 20, print_options={"justify": "center"})),
+    ("json_nested_panel", lambda: _cg_print(_cg_console(16), Panel(JSON(JSON_SAMPLE)))),
+    # 9. HTML / SVG export options
+    ("export_html_inline_links", lambda: _cg_record(40, _CG_EXPORT_MARKUP).export_html(inline_styles=True, clear=False)),
+    ("export_html_classes_links", lambda: _cg_record(40, _CG_EXPORT_MARKUP).export_html(clear=False)),
+    ("export_html_code_format", lambda: _cg_record(40, _CG_EXPORT_MARKUP).export_html(clear=False, code_format="<{foreground}|{background}>{stylesheet}<pre>{code}</pre>{{x}}")),
+    ("export_svg_aspect", lambda: _cg_record(12, "[bold red]Hi[/] ok\n[on blue]x[/]").export_svg(title="T", unique_id="u", clear=False, font_aspect_ratio=0.5)),
+    ("export_svg_code_format", lambda: _cg_record(12, "[bold red]Hi[/] ok\n[on blue]x[/]").export_svg(title="T", unique_id="u", clear=False, code_format=_CG_SVG_FORMAT)),
+    # 10. Control codes
+    ("control_alt_screen", lambda: str(Control.alt_screen(True)) + "|" + str(Control.alt_screen(False))),
+    ("control_title", lambda: str(Control.title("my title"))),
+    # 11. justify padding joins the text's last run
+    ("justify_padding_runs", _cg_justify_panels),
+    # 12. Panel title segmentation, visible in SVG export
+    ("panel_title_svg", lambda: _cg_svg_of(22, Panel("hi", title="Title", subtitle="[b]S[/]"))),
+    ("panel_title_styled_border_svg", lambda: _cg_svg_of(22, Panel("hi", title="Title", border_style="red"))),
+    ("rule_title_svg", lambda: _cg_svg_of(22, Rule("Title"))),
+]
+
+
+def _cg_tab_table() -> Table:
+    table = Table()
+    table.add_column("h")
+    table.add_row(Text("a\tb"))
+    return table
+
+
+def _cg_svg_of(width: int, renderable) -> str:
+    console = _cg_console(width, record=True)
+    console.print(renderable)
+    return console.export_svg(title="S", unique_id="p", clear=False)
+
+
+def capture_core_gaps() -> None:
+    path = golden_dir() / "core_gaps.tsv"
+    lines = [
+        "# name\tjson(expected output) — see CORE_GAP_CASES in scripts/capture_golden.py"
+    ]
+    for name, build in CORE_GAP_CASES:
+        lines.append(f"{name}\t{json.dumps(build(), ensure_ascii=False)}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(CORE_GAP_CASES)} core gap cases to {path}")
+
 
 if __name__ == "__main__":
     main()

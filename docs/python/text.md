@@ -143,6 +143,9 @@ print(text.markup)
 ```
 
 ```text
+<text 'plain bold red' [Span(6, 10, 'bold'), Span(10, 14, 'red')] 'italic'>
+<text 'bold text' [Span(0, 4, Style(bold=True))] ''>
+[italic]plain [bold]bold[red][/bold] red[/red][/italic]
 ```
 
 ## Spans and styles
@@ -177,6 +180,9 @@ print(text.markup)
 ```
 
 ```text
+2
+[Span(0, 3, 'repr.word'), Span(4, 7, 'repr.number'), Span(8, 11, 'repr.word'), Span(12, 14, 'repr.number'), Span(8, 11, 'bold')]
+[repr.word]foo[/repr.word] [repr.number]123[/repr.number] [repr.word][bold]bar[/repr.word][/bold] [repr.number]45[/repr.number]
 ```
 
 ## Editing
@@ -204,6 +210,12 @@ print(code.with_indent_guides().plain)
 ```
 
 ```text
+<text 'World' [Span(0, 5, 'bold')] ''>
+··Hello World··
+if x:
+│   if y:
+│   │   z()
+
 ```
 
 ## Lines: split, divide, wrap and fit
@@ -232,6 +244,10 @@ print(Text(", ").join(Text(word) for word in ["a", "b", "c"]))
 ```
 
 ```text
+'The quick  brown'
+'fox  jumps  over'
+'the lazy dog'
+a, b, c
 ```
 
 ## Markup and emoji
@@ -256,6 +272,10 @@ except NoEmoji as error:
 ```
 
 ```text
+<text 'hi 😃' [Span(0, 2, 'bold')] ''>
+[link=https://example.com]
+Launch 🚀 <emoji 'rocket'>
+No emoji called 'no_such_emoji'
 ```
 
 ## Differences from Rich

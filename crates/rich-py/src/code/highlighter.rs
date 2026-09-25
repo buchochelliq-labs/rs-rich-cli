@@ -242,7 +242,7 @@ const REPR_HIGHLIGHTS: &[&str] = &[
         r"(?P<number_complex>(?<!\w)(?:\-?[0-9]+\.?[0-9]*(?:e[-+]?\d+?)?)(?:[-+](?:[0-9]+\.?[0-9]*(?:e[-+]?\d+)?))?j)|",
         r"(?P<number>(?<!\w)\-?[0-9]+\.?[0-9]*(e[-+]?\d+?)?\b|0x[0-9a-fA-F]*)|",
         r"(?P<path>\B(/[-\w._+]+)*\/)(?P<filename>[-\w._+]*)?|",
-        r#"(?<![\\\w])(?P<str>b?'''.*?(?<!\\)'''|b?'.*?(?<!\\)'|b?""".*?(?<!\\)"""|b?".*?(?<!\\)")|"#,
+        r#"(?<![\\\w])(?P<str>b?'''.*?(?<!\\)'''|b?'.*?(?<!\\)'|b?\"\"\".*?(?<!\\)\"\"\"|b?\".*?(?<!\\)\")|"#,
         r"(?P<url>(file|https|http|ws|wss)://[-0-9a-zA-Z$_+!`(),.?/;:&=%#~@]*)",
     ),
 ];
@@ -275,7 +275,7 @@ impl ReprHighlighter {
     }
 }
 
-const JSON_STR: &str = r#"(?<![\\\w])(?P<str>b?".*?(?<!\\)")"#;
+const JSON_STR: &str = r#"(?<![\\\w])(?P<str>b?\".*?(?<!\\)\")"#;
 
 /// `rich.highlighter.JSONHighlighter`: highlights JSON, keys included.
 #[pyclass(name = "JSONHighlighter", module = "rs_rich.highlighter", extends = RegexHighlighter, subclass)]
@@ -452,14 +452,6 @@ impl Highlight {
         matches!(self, Highlight::Python(_))
     }
 
-    pub(crate) fn clone_ref(&self, py: Python<'_>) -> Highlight {
-        match self {
-            Highlight::Repr => Highlight::Repr,
-            Highlight::Null => Highlight::Null,
-            Highlight::Python(object) => Highlight::Python(object.clone_ref(py)),
-        }
-    }
-
     /// Highlight `text` (Rich's `highlighter(text)`).
     pub(crate) fn apply(&self, py: Python<'_>, mut text: CoreText) -> PyResult<CoreText> {
         match self {
@@ -480,11 +472,6 @@ impl Highlight {
                 Ok(result.inner.clone())
             }
         }
-    }
-
-    /// Highlight a `str`.
-    pub(crate) fn apply_str(&self, py: Python<'_>, text: &str) -> PyResult<CoreText> {
-        self.apply(py, CoreText::new(text))
     }
 }
 

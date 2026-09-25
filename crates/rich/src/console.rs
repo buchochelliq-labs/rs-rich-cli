@@ -465,9 +465,10 @@ impl Console {
     /// The highlighter must be `Send` so a [`Console`](Console) can move to a
     /// background thread (e.g. an auto-refreshing [`Live`](crate::live::Live)).
     pub fn add_highlighter(&mut self, highlighter: Box<dyn Highlighter + Send>) {
-        self.highlighters.push(std::sync::Arc::new(LockedHighlighter(
-            std::sync::Mutex::new(highlighter),
-        )));
+        self.highlighters
+            .push(std::sync::Arc::new(LockedHighlighter(
+                std::sync::Mutex::new(highlighter),
+            )));
     }
 
     /// The default render options for this console (full width, no height).
@@ -567,6 +568,9 @@ impl Console {
     /// Unlike the print path ([`render_segments_with`](Self::render_segments_with))
     /// the renderable is rendered as-is: no `Text.join`, no fitting and no
     /// crop. Container renderables use this for their children.
+    ///
+    /// As everywhere in this port, lines are *separated* by newline segments:
+    /// the final line has no trailing `"\n"` where upstream's has one.
     pub fn render(
         &self,
         renderable: &dyn Renderable,
@@ -904,6 +908,48 @@ impl Console {
     ) -> String {
         let segments = self.record(f);
         crate::svg::export_svg(&segments, theme, title, unique_id, self.width())
+    }
+
+    /// Capture output printed inside `f` and export it as HTML with every
+    /// option of upstream's `Console.export_html`: `code_format` (default
+    /// [`CONSOLE_HTML_FORMAT`](crate::export::CONSOLE_HTML_FORMAT)) and
+    /// `inline_styles`. See [`export::export_html_with`](crate::export::export_html_with).
+    pub fn export_html_with(
+        &self,
+        theme: &crate::terminal_theme::TerminalTheme,
+        code_format: Option<&str>,
+        inline_styles: bool,
+        f: impl FnOnce(&Console),
+    ) -> Result<String, crate::export::ExportFormatError> {
+        let segments = self.record(f);
+        crate::export::export_html_with(&segments, theme, code_format, inline_styles)
+    }
+
+    /// Capture output printed inside `f` and export it as SVG with every
+    /// option of upstream's `Console.export_svg`: `code_format` (default
+    /// [`CONSOLE_SVG_FORMAT`](crate::svg::CONSOLE_SVG_FORMAT)) and
+    /// `font_aspect_ratio` (upstream default 0.61). See
+    /// [`svg::export_svg_with`](crate::svg::export_svg_with).
+    #[allow(clippy::too_many_arguments)]
+    pub fn export_svg_with(
+        &self,
+        theme: &crate::terminal_theme::TerminalTheme,
+        title: &str,
+        unique_id: &str,
+        code_format: Option<&str>,
+        font_aspect_ratio: f64,
+        f: impl FnOnce(&Console),
+    ) -> Result<String, crate::export::ExportFormatError> {
+        let segments = self.record(f);
+        crate::svg::export_svg_with(
+            &segments,
+            theme,
+            title,
+            unique_id,
+            self.width(),
+            code_format.unwrap_or(crate::svg::CONSOLE_SVG_FORMAT),
+            font_aspect_ratio,
+        )
     }
 
     /// Record everything `f` prints and hand back the raw segments, without

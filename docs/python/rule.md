@@ -103,9 +103,9 @@ console.print(Align.right("[i]right[/]", vertical="bottom", height=2))
 ```
 
 ```text
-       ╭─────────╮      
-       │ centred │      
-       ╰─────────╯      
+      ╭─────────╮       
+      │ centred │       
+      ╰─────────╯       
                         
                    right
 ```
@@ -175,7 +175,7 @@ print(len(SPINNERS), SPINNERS["dots"]["interval"])
 
 ```text
 ['- loading', '\\ loading', '| loading']
-89 80
+73 80
 ```
 
 Unlike Rich, `render` returns a private grid renderable rather than a `Table`

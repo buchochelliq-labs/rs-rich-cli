@@ -78,8 +78,11 @@ fn order(item_count: usize, column_count: usize, column_first: bool) -> Vec<Opti
     } else {
         sequence.extend((0..item_count).map(Some));
     }
-    if item_count % column_count != 0 {
-        sequence.extend(std::iter::repeat_n(None, column_count - item_count % column_count));
+    if !item_count.is_multiple_of(column_count) {
+        sequence.extend(std::iter::repeat_n(
+            None,
+            column_count - item_count % column_count,
+        ));
     }
     sequence
 }
@@ -220,9 +223,13 @@ impl AsRenderable for Columns {
             } else if let Ok(text) = item.extract::<PyRef<'_, Text>>() {
                 items.push(Item::Shared(Arc::new(text.inner.clone())));
             } else {
-                // Checked now, so a non-renderable raises from `print`.
-                renderable::to_renderable(&item, None)?;
-                items.push(Item::Shared(PyRenderable::shared(item.unbind(), None)));
+                // Checked now, so a non-renderable raises from `print`. The
+                // grid renders its cells with `highlight=False`.
+                renderable::to_renderable(&item, Some(false))?;
+                items.push(Item::Shared(PyRenderable::shared(
+                    item.unbind(),
+                    Some(false),
+                )));
             }
         }
         let title = match &self.title {

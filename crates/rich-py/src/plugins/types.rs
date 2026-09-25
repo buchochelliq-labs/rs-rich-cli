@@ -14,7 +14,12 @@ use rich_plugin_api::{
 /// Who a plugin is: `PluginMetadata(id, name, version, description=None)`.
 /// `api_version` is the plugin API it was built against (the host refuses
 /// any other).
-#[pyclass(name = "PluginMetadata", module = "rs_rich.plugins", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "PluginMetadata",
+    module = "rs_rich.plugins",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct PluginMetadata {
     pub(crate) inner: CoreMetadata,
@@ -106,7 +111,12 @@ const KINDS: &[&str] = &[
 /// One thing a plugin registered: `Capability(kind, name=None)`, where
 /// `kind` is `"highlighter"` (unnamed), `"code_highlighter"`, `"theme"`,
 /// `"box_style"`, `"renderer"`, `"fence_renderer"` or `"transform"`.
-#[pyclass(name = "Capability", module = "rs_rich.plugins", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "Capability",
+    module = "rs_rich.plugins",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct Capability {
     pub(crate) inner: CoreCapability,
@@ -233,7 +243,10 @@ impl RegisteredPlugin {
 
     #[getter]
     fn capabilities(&self) -> Vec<Capability> {
-        self.capabilities.iter().map(Capability::from_core).collect()
+        self.capabilities
+            .iter()
+            .map(Capability::from_core)
+            .collect()
     }
 
     fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {

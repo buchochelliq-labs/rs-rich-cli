@@ -13,11 +13,11 @@ use crate::text::Text;
 
 /// `rich.json.JSON`: pretty-printed, highlighted JSON.
 #[pyclass(name = "JSON", module = "rs_rich.json")]
-pub(crate) struct JSON {
+pub(crate) struct Json {
     text: CoreText,
 }
 
-impl AsRenderable for JSON {
+impl AsRenderable for Json {
     fn to_renderable(&self, _py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
         Ok(Box::new(self.text.clone()))
     }
@@ -82,7 +82,7 @@ fn encode(
 }
 
 #[pymethods]
-impl JSON {
+impl Json {
     #[new]
     #[pyo3(signature = (
         json, indent=Indent::Two, highlight=true,
@@ -103,7 +103,7 @@ impl JSON {
     ) -> PyResult<Self> {
         let data_py = json.py();
         let data = data_py.import("json")?.call_method1("loads", (json,))?;
-        Ok(JSON {
+        Ok(Json {
             text: encode(
                 &data,
                 &indent.object(data_py)?,
@@ -118,7 +118,7 @@ impl JSON {
         })
     }
 
-    /// Encode any JSON-able `data`.
+    /// Encode any Json-able `data`.
     #[classmethod]
     #[pyo3(signature = (
         data, indent=Indent::Two, highlight=true,
@@ -139,7 +139,7 @@ impl JSON {
         sort_keys: bool,
     ) -> PyResult<Self> {
         let data_py = data.py();
-        Ok(JSON {
+        Ok(Json {
             text: encode(
                 data,
                 &indent.object(data_py)?,
@@ -166,5 +166,5 @@ impl JSON {
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    renderable::add_renderable_class::<JSON>(m)
+    renderable::add_renderable_class::<Json>(m)
 }

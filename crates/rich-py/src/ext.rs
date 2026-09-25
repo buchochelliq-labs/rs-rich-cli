@@ -13,12 +13,24 @@ use pyo3::prelude::*;
 mod common;
 mod data;
 mod diagnostic;
+mod diff;
+mod status;
+mod tables;
+mod terminal;
 mod transform;
+mod widgets;
+mod workflow;
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     common::register(m)?;
     diagnostic::register(m)?;
     data::register(m)?;
     transform::register(m)?;
+    diff::register(m)?;
+    terminal::register(m)?;
+    workflow::register(m)?;
+    status::register(m)?;
+    widgets::register(m)?;
+    tables::register(m)?;
     Ok(())
 }

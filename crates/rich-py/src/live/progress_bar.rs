@@ -275,11 +275,17 @@ impl ProgressBar {
         let segments = util::render_core(console, options, Arc::new(bar))?;
         PyList::new(
             py,
-            segments.iter().map(|segment| Segment::from_core(py, segment)),
+            segments
+                .iter()
+                .map(|segment| Segment::from_core(py, segment)),
         )
     }
 
-    fn __rich_measure__(&self, _console: &Bound<'_, PyAny>, options: &Bound<'_, PyAny>) -> PyResult<Measurement> {
+    fn __rich_measure__(
+        &self,
+        _console: &Bound<'_, PyAny>,
+        options: &Bound<'_, PyAny>,
+    ) -> PyResult<Measurement> {
         let max_width: usize = options.getattr("max_width")?.extract()?;
         let width = self.st().width;
         Ok(Measurement::from_core(match width {

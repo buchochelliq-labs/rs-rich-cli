@@ -1,7 +1,5 @@
-"""``rich.pager``: ``Pager`` and ``SystemPager``.
+"""``rich.pager``: ``Pager`` and ``SystemPager``."""
 
-Placeholder, filled by the live area: re-export the classes from
-``._native`` here and list them in ``__all__``.
-"""
+from ._native import Pager, SystemPager
 
-__all__: list = []
+__all__ = ["Pager", "SystemPager"]

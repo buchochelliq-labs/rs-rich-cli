@@ -443,6 +443,17 @@ def test_pipelines_chain_python_and_rust_transforms():
         registry.text_pipeline(["upper", "nope"])
 
 
+def test_rich_ext_transforms_register_as_python_callables():
+    transform = pytest.importorskip("rs_rich.ext.transform")
+    if not hasattr(transform, "KeepLines"):
+        pytest.skip("rs_rich.ext.transform.KeepLines is not built")
+    registry = p.ExtensionRegistry()
+    registry.register_transform("errors", transform.KeepLines("error"))
+    registry.register_transform("upper", upper)
+    kept = registry.text_pipeline(["errors", "upper"]).apply(Text("ok\nerror: x\nfine"))
+    assert kept.plain == transform.KeepLines("error")(Text("ok\nerror: x\nfine")).plain.upper()
+
+
 def test_a_failing_stage_names_itself_and_keeps_the_python_exception():
     registry = p.ExtensionRegistry()
     registry.register_transform("upper", upper)

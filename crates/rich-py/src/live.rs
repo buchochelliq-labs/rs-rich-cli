@@ -55,12 +55,8 @@ pub(crate) fn glue_module(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     GLUE.get_or_try_init(py, || {
         let code = CString::new(include_str!("live/glue.py"))
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-        let module = PyModule::from_code(
-            py,
-            &code,
-            c"rs_rich/_live_glue.py",
-            c"rs_rich._live_glue",
-        )?;
+        let module =
+            PyModule::from_code(py, &code, c"rs_rich/_live_glue.py", c"rs_rich._live_glue")?;
         Ok::<_, PyErr>(module.unbind())
     })
     .map(|module| module.bind(py).clone().into_any())

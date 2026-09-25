@@ -137,7 +137,11 @@ struct Settings {
 }
 
 impl Settings {
-    fn new(backend: &str, ascii: Option<bool>, mmdc: Option<PyRef<'_, MmdcOptions>>) -> PyResult<Self> {
+    fn new(
+        backend: &str,
+        ascii: Option<bool>,
+        mmdc: Option<PyRef<'_, MmdcOptions>>,
+    ) -> PyResult<Self> {
         Ok(Settings {
             backend: self::backend(backend)?,
             ascii,
@@ -254,7 +258,11 @@ impl MermaidFences {
 impl MermaidFences {
     #[new]
     #[pyo3(signature = (*, backend="text", ascii=None, mmdc=None))]
-    fn new(backend: &str, ascii: Option<bool>, mmdc: Option<PyRef<'_, MmdcOptions>>) -> PyResult<Self> {
+    fn new(
+        backend: &str,
+        ascii: Option<bool>,
+        mmdc: Option<PyRef<'_, MmdcOptions>>,
+    ) -> PyResult<Self> {
         Ok(MermaidFences {
             settings: Settings::new(backend, ascii, mmdc)?,
         })
@@ -485,11 +493,7 @@ impl MermaidDiagram {
     }
 
     fn __repr__(&self) -> String {
-        format!(
-            "<MermaidDiagram {}x{}>",
-            self.width,
-            self.lines.len()
-        )
+        format!("<MermaidDiagram {}x{}>", self.width, self.lines.len())
     }
 }
 
@@ -528,13 +532,19 @@ fn parse_flowchart(py: Python<'_>, source: &str) -> PyResult<Flowchart> {
 /// is too large to draw.
 #[pyfunction]
 #[pyo3(signature = (chart, ascii=false))]
-fn draw_flowchart(py: Python<'_>, chart: &Bound<'_, PyAny>, ascii: bool) -> PyResult<MermaidDiagram> {
+fn draw_flowchart(
+    py: Python<'_>,
+    chart: &Bound<'_, PyAny>,
+    ascii: bool,
+) -> PyResult<MermaidDiagram> {
     let chart = if let Ok(source) = chart.cast::<PyString>() {
         parse(py, source.to_cow()?.as_ref())?
     } else if let Ok(chart) = chart.cast::<Flowchart>() {
         chart.get().inner.clone()
     } else {
-        return Err(PyTypeError::new_err("expected a Flowchart or Mermaid source"));
+        return Err(PyTypeError::new_err(
+            "expected a Flowchart or Mermaid source",
+        ));
     };
     let diagram = py
         .detach(move || rich_mermaid::draw(&chart, ascii))
@@ -614,6 +624,9 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("MERMAID_MAX_SOURCE", rich_mermaid::flowchart::MAX_SOURCE)?;
     m.add("MERMAID_MAX_NODES", rich_mermaid::flowchart::MAX_NODES)?;
     m.add("MERMAID_MAX_EDGES", rich_mermaid::flowchart::MAX_EDGES)?;
-    m.add("MERMAID_MAX_LINK_LENGTH", rich_mermaid::flowchart::MAX_LINK_LENGTH)?;
+    m.add(
+        "MERMAID_MAX_LINK_LENGTH",
+        rich_mermaid::flowchart::MAX_LINK_LENGTH,
+    )?;
     Ok(())
 }

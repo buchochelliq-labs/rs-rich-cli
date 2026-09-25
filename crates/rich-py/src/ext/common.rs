@@ -34,6 +34,7 @@ create_exception!(_native, LiveCoordinatorError, ExtError);
 create_exception!(_native, RedactPatternError, ExtError);
 create_exception!(_native, PluginRegistryError, ExtError);
 create_exception!(_native, EncodingError, ExtError);
+create_exception!(_native, TransferCancelled, ExtError);
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
@@ -46,10 +47,14 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("PatchParseError", py.get_type::<PatchParseError>())?;
     m.add("TestParseError", py.get_type::<TestParseError>())?;
     m.add("ConstraintError", py.get_type::<ConstraintError>())?;
-    m.add("LiveCoordinatorError", py.get_type::<LiveCoordinatorError>())?;
+    m.add(
+        "LiveCoordinatorError",
+        py.get_type::<LiveCoordinatorError>(),
+    )?;
     m.add("RedactPatternError", py.get_type::<RedactPatternError>())?;
     m.add("PluginRegistryError", py.get_type::<PluginRegistryError>())?;
     m.add("EncodingError", py.get_type::<EncodingError>())?;
+    m.add("TransferCancelled", py.get_type::<TransferCancelled>())?;
     Ok(())
 }
 
@@ -154,6 +159,17 @@ pub(crate) fn markup_arg(value: &Bound<'_, PyAny>) -> PyResult<CoreText> {
     text_arg(value)
 }
 
+/// A value a Python callback returned for a cell: a `Text`, or a `str`
+/// read as markup (anything else is its `str`).
+pub(crate) fn markup_or_text(value: &Bound<'_, PyAny>) -> PyResult<CoreText> {
+    if let Ok(text) = value.extract::<PyRef<'_, Text>>() {
+        return Ok(text.inner.clone());
+    }
+    let string = value.str()?;
+    CoreText::from_markup(string.to_cow()?.as_ref())
+        .map_err(|e| crate::errors::MarkupError::new_err(e.to_string()))
+}
+
 /// A core `Text` as a Python `Text`.
 pub(crate) fn py_text(py: Python<'_>, text: CoreText) -> PyResult<Py<Text>> {
     Py::new(py, Text { inner: text })
@@ -216,7 +232,10 @@ pub(crate) fn event_value(value: &Bound<'_, PyAny>) -> PyResult<rich_ext::event:
 }
 
 /// A Python value for a `rich_ext::event::Value`.
-pub(crate) fn event_value_to_py(py: Python<'_>, value: &rich_ext::event::Value) -> PyResult<Py<PyAny>> {
+pub(crate) fn event_value_to_py(
+    py: Python<'_>,
+    value: &rich_ext::event::Value,
+) -> PyResult<Py<PyAny>> {
     use rich_ext::event::Value;
     Ok(match value {
         Value::Null => py.None(),
@@ -346,10 +365,16 @@ pub(crate) fn render_python(
 ) -> PyResult<Vec<CoreSegment>> {
     let py = value.py();
     let options = console.options();
-    scoped(py, console.width(), options.height.unwrap_or(25), false, || {
-        let renderable = renderable::to_renderable(value, None)?;
-        Ok(renderable.rich_render(console, &options))
-    })
+    scoped(
+        py,
+        console.width(),
+        options.height.unwrap_or(25),
+        false,
+        || {
+            let renderable = renderable::to_renderable(value, None)?;
+            Ok(renderable.rich_render(console, &options))
+        },
+    )
 }
 
 /// Render a Python renderable to a string with a core console.
@@ -365,4 +390,18 @@ pub(crate) fn render_python_to_string(
 /// Python each time (`Send + Sync`).
 pub(crate) fn child(value: &Bound<'_, PyAny>) -> PyResult<Box<dyn Renderable>> {
     renderable::to_renderable(value, None)
+}
+
+/// A boxed renderable as a renderable, for `rich-ext` wrappers generic over
+/// `R: Renderable` (`Degrade`, `Redacted`, `Overflowing`).
+pub(crate) struct Boxed(pub(crate) Box<dyn Renderable>);
+
+impl Renderable for Boxed {
+    fn rich_render(&self, console: &CoreConsole, options: &CoreOptions) -> Vec<CoreSegment> {
+        self.0.rich_render(console, options)
+    }
+
+    fn measure(&self, console: &CoreConsole, options: &CoreOptions) -> CoreMeasurement {
+        self.0.measure(console, options)
+    }
 }

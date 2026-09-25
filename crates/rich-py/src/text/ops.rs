@@ -299,6 +299,7 @@ pub(crate) fn justify_lines(
         }
         "full" => {
             let count = lines.len();
+            #[allow(clippy::needless_range_loop)] // `lines[index]` is replaced below
             for index in 0..count.saturating_sub(1) {
                 let line = &lines[index];
                 let words = split(line, " ", false, false);

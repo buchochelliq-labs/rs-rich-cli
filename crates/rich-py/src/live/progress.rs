@@ -18,7 +18,7 @@ use pyo3::types::{PyCFunction, PyDict, PyList, PyString, PyTuple, PyType};
 use pyo3::{PyTraverseError, PyVisit};
 
 use rich::table::{Cell, ColumnOptions};
-use rich::{Spinner as CoreSpinner, StyleType, Table as CoreTable, Text as CoreText};
+use rich::{Spinner as CoreSpinner, Table as CoreTable, Text as CoreText};
 
 use super::live_display::Live;
 use super::progress_bar::ProgressBar;
@@ -99,10 +99,6 @@ macro_rules! task_field {
 impl Task {
     fn st(&self) -> MutexGuard<'_, TaskState> {
         lock(&self.state)
-    }
-
-    fn id_value(&self, py: Python<'_>) -> PyResult<i64> {
-        task_field!(self, py, id).extract()
     }
 
     fn now<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
@@ -257,7 +253,10 @@ impl Task {
                 get_time: _get_time,
                 finished_time: finished_time.unwrap_or_else(|| py.None()),
                 visible: visible.unwrap_or_else(|| {
-                    pyo3::types::PyBool::new(py, true).to_owned().into_any().unbind()
+                    pyo3::types::PyBool::new(py, true)
+                        .to_owned()
+                        .into_any()
+                        .unbind()
                 }),
                 fields: match fields {
                     Some(fields) => fields,
@@ -516,7 +515,13 @@ fn default_column(py: Python<'_>, no_wrap: bool) -> PyResult<Py<PyAny>> {
 /// `rich.progress.ProgressColumn`: the base of a column. Subclass it and
 /// implement `render(task)`; set `max_refresh` to reuse a render for that
 /// many seconds while the task has completed nothing.
-#[pyclass(name = "ProgressColumn", module = "rs_rich.progress", subclass, dict, frozen)]
+#[pyclass(
+    name = "ProgressColumn",
+    module = "rs_rich.progress",
+    subclass,
+    dict,
+    frozen
+)]
 pub(crate) struct ProgressColumn {
     table_column: Mutex<Option<Py<PyAny>>>,
     /// Upstream's text columns default to `Column(no_wrap=True)`.
@@ -624,7 +629,11 @@ fn base_init() -> PyClassInitializer<ProgressColumn> {
 }
 
 /// Set the base part of a column from a subclass's `__init__`.
-fn init_base(slf: &Bound<'_, PyAny>, table_column: Option<Py<PyAny>>, no_wrap: bool) -> PyResult<()> {
+fn init_base(
+    slf: &Bound<'_, PyAny>,
+    table_column: Option<Py<PyAny>>,
+    no_wrap: bool,
+) -> PyResult<()> {
     let base = slf.cast::<ProgressColumn>()?;
     base.get().init(slf.py(), table_column, no_wrap);
     Ok(())
@@ -763,7 +772,11 @@ fn format_text(
         text.set_base_style(style);
     }
     let justify = slf.getattr("justify")?;
-    let justify: Option<String> = if justify.is_none() { None } else { Some(justify.extract()?) };
+    let justify: Option<String> = if justify.is_none() {
+        None
+    } else {
+        Some(justify.extract()?)
+    };
     text.set_justify(convert::justify(justify.as_deref())?);
     let text = util::new_text(py, text)?;
     let highlighter = slf.getattr("highlighter")?;
@@ -1300,8 +1313,14 @@ impl TaskProgressColumn {
         let total_none = task.getattr("total")?.is_none();
         if total_none && slf.getattr("show_speed")?.is_truthy()? {
             let speed = finished_speed_or_speed(task)?;
-            let speed: Option<f64> = if speed.is_none() { None } else { Some(speed.extract()?) };
-            return slf.call_method1("render_speed", (speed,)).map(Bound::unbind);
+            let speed: Option<f64> = if speed.is_none() {
+                None
+            } else {
+                Some(speed.extract()?)
+            };
+            return slf
+                .call_method1("render_speed", (speed,))
+                .map(Bound::unbind);
         }
         let text_format = if total_none {
             slf.getattr("text_format_no_percentage")?
@@ -1390,6 +1409,8 @@ struct ProgressState {
     tasks: Vec<(i64, Py<Task>)>,
     task_index: i64,
     live: Option<Py<Live>>,
+    /// The console, until the live display (which holds it) exists.
+    console: Py<PyAny>,
     get_time: Option<Py<PyAny>>,
     lock: Py<PyAny>,
 }
@@ -1421,11 +1442,22 @@ impl Progress {
     fn live_obj<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, Live>> {
         self.with(|state| state.live.as_ref().map(|live| live.clone_ref(py)))?
             .map(|live| live.into_bound(py))
-            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Progress has no live display"))
+            .ok_or_else(|| {
+                pyo3::exceptions::PyRuntimeError::new_err("Progress has no live display")
+            })
     }
 
     fn console_obj<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        Ok(self.live_obj(py)?.get().console_of(py))
+        let (live, console) = self.with(|state| {
+            (
+                state.live.as_ref().map(|live| live.clone_ref(py)),
+                state.console.clone_ref(py),
+            )
+        })?;
+        Ok(match live {
+            Some(live) => live.get().console_of(py),
+            None => console.into_bound(py),
+        })
     }
 
     fn now<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1488,7 +1520,9 @@ impl Progress {
         } else {
             columns.clone().into_any().unbind()
         };
+        let console = util::console_or_global(py, console)?;
         *lock(&slf.get().state) = Some(ProgressState {
+            console: console.clone().unbind(),
             columns,
             speed_estimate_period,
             disable,
@@ -1499,7 +1533,6 @@ impl Progress {
             get_time: None,
             lock: util::rlock(py)?,
         });
-        let console = util::console_or_global(py, console)?;
         let kwargs = PyDict::new(py);
         kwargs.set_item("console", &console)?;
         kwargs.set_item("auto_refresh", auto_refresh)?;
@@ -1515,7 +1548,7 @@ impl Progress {
             .unbind();
         let get_time = match get_time.filter(|g| !g.is_none(py)) {
             Some(get_time) => get_time,
-            None => console.getattr("get_time")?.unbind(),
+            None => util::console_clock(&console)?.unbind(),
         };
         slf.get().with(|state| {
             state.live = Some(live);
@@ -1584,13 +1617,18 @@ impl Progress {
         self.live_obj(py)
     }
 
-    #[getter]
-    fn get_time(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        self.with(|state| state.get_time.as_ref().map_or_else(|| py.None(), |g| g.clone_ref(py)))
+    #[getter(get_time)]
+    fn time_source(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.with(|state| {
+            state
+                .get_time
+                .as_ref()
+                .map_or_else(|| py.None(), |g| g.clone_ref(py))
+        })
     }
 
-    #[setter]
-    fn set_get_time(&self, value: Py<PyAny>) -> PyResult<()> {
+    #[setter(get_time)]
+    fn set_time_source(&self, value: Py<PyAny>) -> PyResult<()> {
         self.with(|state| state.get_time = Some(value))
     }
 
@@ -1675,7 +1713,7 @@ impl Progress {
 
     /// Track progress over `sequence`, yielding its values.
     #[pyo3(signature = (
-        sequence, total=None, completed=None, task_id=None, description="Working...",
+        sequence, total=None, completed=None, task_id=None, description=None,
         update_period=0.1
     ))]
     fn track(
@@ -1684,10 +1722,11 @@ impl Progress {
         total: Option<Py<PyAny>>,
         completed: Option<Py<PyAny>>,
         task_id: Option<Py<PyAny>>,
-        description: Py<PyAny>,
+        description: Option<Py<PyAny>>,
         update_period: f64,
     ) -> PyResult<Track> {
         let py = slf.py();
+        let description = described(py, description, "Working...");
         Ok(Track::new(
             slf.clone().into_any().unbind(),
             sequence,
@@ -1701,15 +1740,16 @@ impl Progress {
     }
 
     /// Track reading from a binary file.
-    #[pyo3(signature = (file, total=None, *, task_id=None, description="Reading..."))]
+    #[pyo3(signature = (file, total=None, *, task_id=None, description=None))]
     fn wrap_file(
         slf: &Bound<'_, Self>,
         file: Py<PyAny>,
         total: Option<Py<PyAny>>,
         task_id: Option<Py<PyAny>>,
-        description: Py<PyAny>,
+        description: Option<Py<PyAny>>,
     ) -> PyResult<Py<PyAny>> {
         let py = slf.py();
+        let description = described(py, description, "Reading...");
         let total = total.filter(|t| !t.is_none(py));
         let task_id = task_id.filter(|t| !t.is_none(py));
         let total_bytes = match (&total, &task_id) {
@@ -1737,7 +1777,7 @@ impl Progress {
     /// Open a file for reading, tracking the progress.
     #[pyo3(signature = (
         file, mode="r", buffering=-1, encoding=None, errors=None, newline=None, *, total=None,
-        task_id=None, description="Reading..."
+        task_id=None, description=None
     ))]
     #[allow(clippy::too_many_arguments)]
     fn open(
@@ -1750,14 +1790,18 @@ impl Progress {
         newline: Option<Py<PyAny>>,
         total: Option<Py<PyAny>>,
         task_id: Option<Py<PyAny>>,
-        description: Py<PyAny>,
+        description: Option<Py<PyAny>>,
     ) -> PyResult<Py<PyAny>> {
         let py = slf.py();
+        let description = described(py, description, "Reading...");
         let mut sorted: Vec<char> = mode.chars().collect();
         sorted.sort_unstable();
         let normalized: String = sorted.into_iter().collect();
         if !matches!(normalized.as_str(), "br" | "rt" | "r") {
-            return Err(PyValueError::new_err(format!("invalid mode {}", PyString::new(py, mode).repr()?)));
+            return Err(PyValueError::new_err(format!(
+                "invalid mode {}",
+                PyString::new(py, mode).repr()?
+            )));
         }
         let line_buffering = buffering == 1;
         let mut buffering = buffering;
@@ -1788,7 +1832,10 @@ impl Progress {
         let task_id = add_or_update(slf, task_id.filter(|t| !t.is_none(py)), description, total)?;
         let kwargs = PyDict::new(py);
         kwargs.set_item("buffering", buffering)?;
-        let handle = py.import("io")?.getattr("open")?.call((file, "rb"), Some(&kwargs))?;
+        let handle = py
+            .import("io")?
+            .getattr("open")?
+            .call((file, "rb"), Some(&kwargs))?;
         let reader_kwargs = PyDict::new(py);
         reader_kwargs.set_item("close_handle", true)?;
         let reader = glue(py)?
@@ -1975,7 +2022,9 @@ impl Progress {
             true,
         )?;
         let total = task.total(py).into_bound(py);
-        if !total.is_none() && task.completed(py).into_bound(py).ge(&total)? && !task.is_finished(py)
+        if !total.is_none()
+            && task.completed(py).into_bound(py).ge(&total)?
+            && !task.is_finished(py)
         {
             let elapsed = task.elapsed_value(py)?.unbind();
             let speed = task.speed_value(py)?.unbind();
@@ -2014,7 +2063,10 @@ impl Progress {
         let py = slf.py();
         let tasks = slf.getattr("tasks")?;
         let table = slf.call_method1("make_tasks_table", (tasks,))?;
-        PyList::new(py, [table])?.into_any().try_iter().map(Bound::into_any)
+        PyList::new(py, [table])?
+            .into_any()
+            .try_iter()
+            .map(Bound::into_any)
     }
 
     /// The grid of `tasks`: one row per visible task, one column per column.
@@ -2097,7 +2149,10 @@ impl Progress {
                     completed: completed.unwrap_or_else(|| int(py, 0)),
                     get_time: slf.getattr("get_time")?.unbind(),
                     finished_time: py.None(),
-                    visible: pyo3::types::PyBool::new(py, visible).to_owned().into_any().unbind(),
+                    visible: pyo3::types::PyBool::new(py, visible)
+                        .to_owned()
+                        .into_any()
+                        .unbind(),
                     fields,
                     start_time: py.None(),
                     stop_time: py.None(),
@@ -2137,6 +2192,7 @@ impl Progress {
         if let Ok(state) = self.state.try_lock() {
             if let Some(state) = state.as_ref() {
                 visit.call(&state.columns)?;
+                visit.call(&state.console)?;
                 visit.call(&state.lock)?;
                 for (_, task) in &state.tasks {
                     visit.call(task)?;
@@ -2182,6 +2238,11 @@ fn add_or_update(
             Ok(task_id)
         }
     }
+}
+
+/// A `description=` argument, with its default.
+fn described(py: Python<'_>, description: Option<Py<PyAny>>, default: &str) -> Py<PyAny> {
+    description.unwrap_or_else(|| PyString::new(py, default).into_any().unbind())
 }
 
 /// The live area's Python glue module (`_Reader`, `_ReadContext`, ...).
@@ -2342,10 +2403,18 @@ impl Track {
                 let task_id = task_id.bind(py);
                 let mut last = 0i64;
                 loop {
-                    if event.bind(py).call_method1("wait", (period,))?.is_truthy()? {
+                    if event
+                        .bind(py)
+                        .call_method1("wait", (period,))?
+                        .is_truthy()?
+                    {
                         break;
                     }
-                    if !progress.getattr("live")?.getattr("is_started")?.is_truthy()? {
+                    if !progress
+                        .getattr("live")?
+                        .getattr("is_started")?
+                        .is_truthy()?
+                    {
                         break;
                     }
                     let completed = counter.load(Ordering::SeqCst);
@@ -2476,9 +2545,14 @@ impl Track {
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
         if let Ok(state) = self.state.try_lock() {
             visit.call(&state.progress)?;
-            for object in [&state.sequence, &state.iterator, &state.total, &state.task_id]
-                .into_iter()
-                .flatten()
+            for object in [
+                &state.sequence,
+                &state.iterator,
+                &state.total,
+                &state.task_id,
+            ]
+            .into_iter()
+            .flatten()
             {
                 visit.call(object)?;
             }
@@ -2510,7 +2584,9 @@ impl Sentinel {
     fn get(py: Python<'_>) -> PyResult<&Bound<'_, PyAny>> {
         static SENTINEL: pyo3::sync::PyOnceLock<Py<PyAny>> = pyo3::sync::PyOnceLock::new();
         SENTINEL
-            .get_or_try_init(py, || Ok::<_, PyErr>(py.import("builtins")?.getattr("object")?.call0()?.unbind()))
+            .get_or_try_init(py, || {
+                Ok::<_, PyErr>(py.import("builtins")?.getattr("object")?.call0()?.unbind())
+            })
             .map(|sentinel| sentinel.bind(py))
     }
 }
@@ -2569,7 +2645,11 @@ fn helper_progress<'py>(
     kwargs.set_item("get_time", get_time)?;
     kwargs.set_item(
         "refresh_per_second",
-        if refresh_per_second == 0.0 { 10.0 } else { refresh_per_second },
+        if refresh_per_second == 0.0 {
+            10.0
+        } else {
+            refresh_per_second
+        },
     )?;
     kwargs.set_item("disable", disable)?;
     py.get_type::<Progress>()
@@ -2579,7 +2659,7 @@ fn helper_progress<'py>(
 /// `rich.progress.track`: iterate over `sequence` with a progress display.
 #[pyfunction]
 #[pyo3(signature = (
-    sequence, description="Working...", total=None, completed=None, auto_refresh=true,
+    sequence, description=None, total=None, completed=None, auto_refresh=true,
     console=None, transient=false, get_time=None, refresh_per_second=10.0, style=None,
     complete_style=None, finished_style=None, pulse_style=None, update_period=0.1,
     disable=false, show_speed=true
@@ -2588,7 +2668,7 @@ fn helper_progress<'py>(
 fn track(
     py: Python<'_>,
     sequence: Py<PyAny>,
-    description: Bound<'_, PyAny>,
+    description: Option<Py<PyAny>>,
     total: Option<Py<PyAny>>,
     completed: Option<Py<PyAny>>,
     auto_refresh: bool,
@@ -2604,15 +2684,18 @@ fn track(
     disable: bool,
     show_speed: bool,
 ) -> PyResult<Track> {
+    let description = described(py, description, "Working...").into_bound(py);
     let task_progress = {
         let kwargs = PyDict::new(py);
         kwargs.set_item("show_speed", show_speed)?;
-        py.get_type::<TaskProgressColumn>().call((), Some(&kwargs))?
+        py.get_type::<TaskProgressColumn>()
+            .call((), Some(&kwargs))?
     };
     let remaining = {
         let kwargs = PyDict::new(py);
         kwargs.set_item("elapsed_when_finished", true)?;
-        py.get_type::<TimeRemainingColumn>().call((), Some(&kwargs))?
+        py.get_type::<TimeRemainingColumn>()
+            .call((), Some(&kwargs))?
     };
     let columns = helper_columns(
         py,
@@ -2648,7 +2731,7 @@ fn track(
 /// `rich.progress.wrap_file`: read bytes from a file while tracking progress.
 #[pyfunction]
 #[pyo3(signature = (
-    file, total, *, description="Reading...", auto_refresh=true, console=None,
+    file, total, *, description=None, auto_refresh=true, console=None,
     transient=false, get_time=None, refresh_per_second=10.0, style=None, complete_style=None,
     finished_style=None, pulse_style=None, disable=false
 ))]
@@ -2657,7 +2740,7 @@ fn wrap_file(
     py: Python<'_>,
     file: Py<PyAny>,
     total: Py<PyAny>,
-    description: Bound<'_, PyAny>,
+    description: Option<Py<PyAny>>,
     auto_refresh: bool,
     console: Option<Bound<'_, PyAny>>,
     transient: bool,
@@ -2669,6 +2752,7 @@ fn wrap_file(
     pulse_style: Option<Py<PyAny>>,
     disable: bool,
 ) -> PyResult<Py<PyAny>> {
+    let description = described(py, description, "Reading...").into_bound(py);
     let tail = vec![
         py.get_type::<DownloadColumn>().call0()?,
         py.get_type::<TimeRemainingColumn>().call0()?,
@@ -2706,7 +2790,7 @@ fn wrap_file(
 #[pyfunction]
 #[pyo3(signature = (
     file, mode="r", buffering=-1, encoding=None, errors=None, newline=None, *, total=None,
-    description="Reading...", auto_refresh=true, console=None, transient=false, get_time=None,
+    description=None, auto_refresh=true, console=None, transient=false, get_time=None,
     refresh_per_second=10.0, style=None, complete_style=None, finished_style=None,
     pulse_style=None, disable=false
 ))]
@@ -2720,7 +2804,7 @@ fn open(
     errors: Option<Py<PyAny>>,
     newline: Option<Py<PyAny>>,
     total: Option<Py<PyAny>>,
-    description: Bound<'_, PyAny>,
+    description: Option<Py<PyAny>>,
     auto_refresh: bool,
     console: Option<Bound<'_, PyAny>>,
     transient: bool,
@@ -2732,6 +2816,7 @@ fn open(
     pulse_style: Option<Py<PyAny>>,
     disable: bool,
 ) -> PyResult<Py<PyAny>> {
+    let description = described(py, description, "Reading...").into_bound(py);
     let tail = vec![
         py.get_type::<DownloadColumn>().call0()?,
         py.get_type::<TimeRemainingColumn>().call0()?,

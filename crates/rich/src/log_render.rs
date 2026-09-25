@@ -16,11 +16,11 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 use crate::console::{Console, ConsoleOptions, Overflow};
+use crate::containers::Renderables;
 use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::style::{Style, StyleType};
-use crate::containers::Renderables;
 use crate::table::{Cell, Table};
 use crate::text::Text;
 

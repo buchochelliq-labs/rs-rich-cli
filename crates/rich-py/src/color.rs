@@ -221,12 +221,10 @@ Tag.__module__ = "rs_rich.markup"
 
 /// The classes [`TYPES`] defines, cached at registration.
 struct Types {
-    color_system: Py<PyType>,
     color_type: Py<PyType>,
     triplet: Py<PyType>,
     color: Py<PyType>,
     span: Py<PyType>,
-    tag: Py<PyType>,
 }
 
 static TYPES_CELL: PyOnceLock<Types> = PyOnceLock::new();
@@ -240,16 +238,6 @@ fn types(py: Python<'_>) -> &'static Types {
 /// `rich.text.Span`.
 pub(crate) fn span_class(py: Python<'_>) -> Bound<'_, PyType> {
     types(py).span.bind(py).clone()
-}
-
-/// `rich.markup.Tag`.
-pub(crate) fn tag_class(py: Python<'_>) -> Bound<'_, PyType> {
-    types(py).tag.bind(py).clone()
-}
-
-/// `rich.color.ColorSystem`.
-pub(crate) fn color_system_class(py: Python<'_>) -> Bound<'_, PyType> {
-    types(py).color_system.bind(py).clone()
 }
 
 // ---------------------------------------------------------------------------
@@ -329,10 +317,10 @@ pub(crate) fn core_color(value: &Bound<'_, PyAny>) -> PyResult<CoreColor> {
     if let Ok(name) = value.extract::<String>() {
         return parse(&name);
     }
-    let (name, kind, number, triplet): (String, i64, Option<u8>, Option<(u8, u8, u8)>) =
-        value.extract().map_err(|_| {
-            pyo3::exceptions::PyTypeError::new_err("a color must be a str or a Color")
-        })?;
+    type Fields = (String, i64, Option<u8>, Option<(u8, u8, u8)>);
+    let (name, kind, number, triplet): Fields = value
+        .extract()
+        .map_err(|_| pyo3::exceptions::PyTypeError::new_err("a color must be a str or a Color"))?;
     Ok(CoreColor {
         name,
         kind: kind_from_number(kind)?,
@@ -492,6 +480,56 @@ fn _color_truecolor<'py>(
     }
 }
 
+/// Rich's `Color.downgrade`, which core matches except for the Windows
+/// palette and a few same-system cases.
+pub(crate) fn downgrade(core: &CoreColor, system: CoreSystem) -> CoreColor {
+    let system_number = match system {
+        CoreSystem::Standard => 1,
+        CoreSystem::EightBit => 2,
+        CoreSystem::Truecolor => 3,
+        CoreSystem::Windows => 4,
+    };
+    // Rich compares the `ColorType` with the `ColorSystem` as ints.
+    if core.kind == Kind::Default || kind_number(core.kind) == system_number {
+        return core.clone();
+    }
+    let native = match core.kind {
+        Kind::Default | Kind::Standard => 1,
+        other => kind_number(other),
+    };
+    match system {
+        CoreSystem::EightBit if native == 3 => core.downgrade(CoreSystem::EightBit),
+        CoreSystem::Standard if native == 3 || native == 2 => core.downgrade(CoreSystem::Standard),
+        // A Windows colour reads its number in the 8-bit palette, as Rich does.
+        CoreSystem::Standard if native == 4 => {
+            let mut eight_bit = CoreColor::from_ansi(core.number.unwrap_or(0));
+            eight_bit.kind = Kind::EightBit;
+            let mut downgraded = eight_bit.downgrade(CoreSystem::Standard);
+            downgraded.name = core.name.clone();
+            downgraded
+        }
+        CoreSystem::Windows => {
+            let number = core.number.unwrap_or(0);
+            let windows = |number: u8| CoreColor {
+                name: core.name.clone(),
+                kind: Kind::Windows,
+                number: Some(number),
+                triplet: None,
+            };
+            if native != 3 && number < 16 {
+                return windows(number);
+            }
+            let triplet = core.get_truecolor().unwrap_or(ColorTriplet::new(0, 0, 0));
+            windows(match_windows(
+                triplet.red as i64,
+                triplet.green as i64,
+                triplet.blue as i64,
+            ))
+        }
+        _ => core.clone(),
+    }
+}
+
 #[pyfunction]
 fn _color_downgrade<'py>(
     py: Python<'py>,
@@ -499,55 +537,10 @@ fn _color_downgrade<'py>(
     system: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let core = core_color(color)?;
-    let system_number: i64 = system.extract()?;
-    // Rich compares the `ColorType` with the `ColorSystem` as ints.
-    if core.kind == Kind::Default || i64::from(kind_number(core.kind)) == system_number {
+    let downgraded = downgrade(&core, core_system(system)?);
+    if downgraded == core {
         return Ok(color.clone());
     }
-    let native = match core.kind {
-        Kind::Default | Kind::Standard => 1,
-        other => kind_number(other) as i64,
-    };
-    let downgraded = match core_system(system)? {
-        CoreSystem::EightBit if native == 3 => core.downgrade(CoreSystem::EightBit),
-        CoreSystem::Standard if native == 3 || native == 2 => core.downgrade(CoreSystem::Standard),
-        // A Windows colour reads its number in the 8-bit palette, as Rich does.
-        CoreSystem::Standard if native == 4 => {
-            let mut downgraded = CoreColor::from_ansi(core.number.unwrap_or(0));
-            if downgraded.kind == Kind::Standard {
-                downgraded.kind = Kind::EightBit;
-            }
-            let mut downgraded = downgraded.downgrade(CoreSystem::Standard);
-            downgraded.name = core.name.clone();
-            downgraded
-        }
-        CoreSystem::Windows if native == 3 || native == 2 => {
-            let number = core.number.unwrap_or(0);
-            if native == 2 && number < 16 {
-                CoreColor {
-                    name: core.name.clone(),
-                    kind: Kind::Windows,
-                    number: Some(number),
-                    triplet: None,
-                }
-            } else {
-                let triplet = core
-                    .get_truecolor()
-                    .unwrap_or(ColorTriplet::new(0, 0, 0));
-                CoreColor {
-                    name: core.name.clone(),
-                    kind: Kind::Windows,
-                    number: Some(match_windows(
-                        triplet.red as i64,
-                        triplet.green as i64,
-                        triplet.blue as i64,
-                    )),
-                    triplet: None,
-                }
-            }
-        }
-        _ => return Ok(color.clone()),
-    };
     py_color(py, &downgraded)
 }
 
@@ -612,13 +605,13 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add(name, &value)?;
         Ok(value.cast_into::<PyType>()?.unbind())
     };
+    class("ColorSystem")?;
+    class("Tag")?;
     let defined = Types {
-        color_system: class("ColorSystem")?,
         color_type: class("ColorType")?,
         triplet: class("ColorTriplet")?,
         color: class("Color")?,
         span: class("Span")?,
-        tag: class("Tag")?,
     };
     let _ = TYPES_CELL.set(py, defined);
     emoji::register(m)?;

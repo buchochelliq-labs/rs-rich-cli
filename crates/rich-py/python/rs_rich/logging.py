@@ -1,7 +1,5 @@
-"""``rich.logging``: ``RichHandler``.
+"""``rich.logging``: ``RichHandler``."""
 
-Placeholder, filled by the live area: re-export the classes from
-``._native`` here and list them in ``__all__``.
-"""
+from ._native import RichHandler
 
-__all__: list = []
+__all__ = ["RichHandler"]

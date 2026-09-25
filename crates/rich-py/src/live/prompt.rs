@@ -54,8 +54,7 @@ impl PromptBase {
         let prompt = match prompt {
             None => util::new_text(py, CoreText::styled("", "prompt"))?,
             Some(prompt) if util::is_str(&prompt) => {
-                let mut text =
-                    renderable::render_str(&util::to_str(&prompt)?, true, true, false)?;
+                let mut text = renderable::render_str(&util::to_str(&prompt)?, true, true, false)?;
                 text.set_base_style("prompt");
                 util::new_text(py, text)?
             }
@@ -155,7 +154,10 @@ impl PromptBase {
                 .map(|choice| choice.and_then(|c| util::to_str(&c)))
                 .collect::<PyResult<_>>()?;
             text.append(" ", None);
-            text.append(&format!("[{}]", names.join("/")), Some("prompt.choices".into()));
+            text.append(
+                &format!("[{}]", names.join("/")),
+                Some("prompt.choices".into()),
+            );
         }
         let accepted = PyTuple::new(
             py,

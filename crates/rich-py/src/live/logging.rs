@@ -18,7 +18,7 @@ use rich::{Overflow, ReprHighlighter, Style as CoreStyle, Table as CoreTable, Te
 use super::progress::cell;
 use super::util;
 use crate::errors::MarkupError;
-use crate::renderable::{self, PyRenderable};
+use crate::renderable::PyRenderable;
 use crate::style::Style;
 use crate::text::Text;
 
@@ -97,7 +97,10 @@ impl LogRender {
             ..ColumnOptions::default()
         };
         if self.show_time {
-            table.add_column_with(CoreText::new(""), column(console_style(console, "log.time")?));
+            table.add_column_with(
+                CoreText::new(""),
+                column(console_style(console, "log.time")?),
+            );
         }
         if self.show_level {
             table.add_column_with(
@@ -118,14 +121,17 @@ impl LogRender {
         );
         let path = path.filter(|path| self.show_path && !path.is_empty());
         if path.is_some() {
-            table.add_column_with(CoreText::new(""), column(console_style(console, "log.path")?));
+            table.add_column_with(
+                CoreText::new(""),
+                column(console_style(console, "log.path")?),
+            );
         }
 
         let mut row = Vec::new();
         if self.show_time {
             let log_time = match log_time.filter(|t| !t.is_none()) {
                 Some(time) => time,
-                None => console.getattr("get_datetime")?.call0()?,
+                None => util::console_datetime(console)?.call0()?,
             };
             let time_format = match time_format.filter(|f| f.is_truthy().unwrap_or(false)) {
                 Some(format) => format,
@@ -143,9 +149,9 @@ impl LogRender {
                 )?)
             };
             let mut last = self.last_time.lock().unwrap_or_else(|p| p.into_inner());
-            let repeated = last
-                .as_ref()
-                .is_some_and(|last| last.plain() == display.plain() && last.spans() == display.spans());
+            let repeated = last.as_ref().is_some_and(|last| {
+                last.plain() == display.plain() && last.spans() == display.spans()
+            });
             if repeated && self.omit_repeated_times {
                 row.push(Cell::Text(CoreText::new(
                     " ".repeat(display.plain().chars().count()),
@@ -281,7 +287,11 @@ fn _rich_handler_render_message(
                 .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
         } else {
             let kwargs = PyDict::new(py);
-            message_text.call_method("highlight_words", (keywords, "logging.keyword"), Some(&kwargs))?;
+            message_text.call_method(
+                "highlight_words",
+                (keywords, "logging.keyword"),
+                Some(&kwargs),
+            )?;
         }
     }
     Ok(message_text.unbind())
@@ -341,6 +351,5 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(pyo3::wrap_pyfunction!(_rich_handler_level_text, m)?)?;
     m.add_function(pyo3::wrap_pyfunction!(_rich_handler_render_message, m)?)?;
     m.add_function(pyo3::wrap_pyfunction!(_rich_handler_render, m)?)?;
-    let _ = renderable::is_renderable;
     Ok(())
 }

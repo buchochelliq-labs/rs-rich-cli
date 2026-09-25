@@ -298,7 +298,8 @@ fn helpers(py: Python<'_>) -> PyResult<&Helpers> {
             py.import("dataclasses")?.getattr("__file__")?.unbind(),
             py.import("reprlib")?.getattr("__file__")?.unbind(),
         ];
-        let dummy = collections.call_method1("namedtuple", ("_dummy_namedtuple", PyList::empty(py)))?;
+        let dummy =
+            collections.call_method1("namedtuple", ("_dummy_namedtuple", PyList::empty(py)))?;
         let namedtuple_file = py
             .import("inspect")?
             .call_method1("getfile", (dummy.getattr("__repr__")?,))?
@@ -333,6 +334,14 @@ fn is_namedtuple(object: &Bound<'_, PyAny>) -> bool {
     };
     object.is_instance_of::<PyTuple>() && fields.is_instance_of::<PyTuple>()
 }
+
+/// One attrs field: its name, its value (or the error getting it), and
+/// its own repr function.
+type AttrItem<'py> = (
+    String,
+    Result<Bound<'py, PyAny>, PyErr>,
+    Option<Bound<'py, PyAny>>,
+);
 
 struct Walker<'a, 'py> {
     py: Python<'py>,
@@ -425,9 +434,8 @@ impl<'py> Walker<'_, 'py> {
         let fake_attributes = object
             .hasattr("awehoi234_wdfjwljet234_234wdfoijsdfmmnxpi492")
             .unwrap_or(false);
-        let class_name = || -> PyResult<String> {
-            Ok(object.getattr("__class__")?.getattr("__name__")?.extract()?)
-        };
+        let class_name =
+            || -> PyResult<String> { object.getattr("__class__")?.getattr("__name__")?.extract() };
 
         let mut rich_repr_result = None;
         if !fake_attributes {
@@ -457,11 +465,8 @@ impl<'py> Walker<'_, 'py> {
                 if let Ok(tuple) = arg.cast::<PyTuple>() {
                     match tuple.len() {
                         3 => {
-                            let (key, child, default) = (
-                                tuple.get_item(0)?,
-                                tuple.get_item(1)?,
-                                tuple.get_item(2)?,
-                            );
+                            let (key, child, default) =
+                                (tuple.get_item(0)?, tuple.get_item(1)?, tuple.get_item(2)?);
                             if default.eq(&child)? {
                                 continue;
                             }
@@ -527,7 +532,12 @@ impl<'py> Walker<'_, 'py> {
             node
         } else if self.is_attr_object(object) && !fake_attributes {
             self.visited.insert(id);
-            let attr = self.helpers.attr.as_ref().expect("attrs is installed").bind(py);
+            let attr = self
+                .helpers
+                .attr
+                .as_ref()
+                .expect("attrs is installed")
+                .bind(py);
             let fields = attr.call_method1("fields", (object.get_type(),))?;
             let node = if fields.len()? == 0 {
                 Node {
@@ -540,8 +550,7 @@ impl<'py> Walker<'_, 'py> {
                 Node::value(format!("{}(...)", class_name()?))
             } else {
                 // `iter_attrs`.
-                let mut items: Vec<(String, Result<Bound<'py, PyAny>, PyErr>, Option<Bound<'py, PyAny>>)> =
-                    Vec::new();
+                let mut items: Vec<AttrItem<'py>> = Vec::new();
                 for field in fields.try_iter()? {
                     let field = field?;
                     let repr = field.getattr("repr")?;
@@ -560,9 +569,12 @@ impl<'py> Walker<'_, 'py> {
                 let last_index = items.len().saturating_sub(1);
                 let mut children = Vec::with_capacity(items.len());
                 for (index, (name, value, callable)) in items.into_iter().enumerate() {
-                    let value = value.unwrap_or_else(|error| error.into_value(py).into_bound(py).into_any());
+                    let value = value
+                        .unwrap_or_else(|error| error.into_value(py).into_bound(py).into_any());
                     let mut child_node = match callable {
-                        Some(callable) => Node::value(callable.call1((&value,))?.str()?.to_string()),
+                        Some(callable) => {
+                            Node::value(callable.call1((&value,))?.str()?.to_string())
+                        }
                         None => self.walk(&value, false, depth + 1)?,
                     };
                     child_node.last = index == last_index;
@@ -684,7 +696,8 @@ impl<'py> Walker<'_, 'py> {
                         if max_length.is_some_and(|max| index >= max) {
                             break;
                         }
-                        let (key, child): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
+                        let (key, child): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
+                            item?.extract()?;
                         let mut child_node = self.walk(&child, false, depth + 1)?;
                         child_node.key_repr = self.to_repr(&key)?;
                         child_node.last = index as isize == last_item_index;
@@ -816,7 +829,11 @@ pub(crate) fn from_ansi(content: &str, style: &str) -> CoreText {
 }
 
 /// `Text.with_indent_guides(indent_size, style=style)`.
-pub(crate) fn with_indent_guides(text: &CoreText, indent_size: usize, style: StyleType) -> CoreText {
+pub(crate) fn with_indent_guides(
+    text: &CoreText,
+    indent_size: usize,
+    style: StyleType,
+) -> CoreText {
     let indent_size = indent_size.max(1);
     let mut text = text.clone();
     text.expand_tabs(8);
@@ -919,18 +936,52 @@ impl Layout {
     }
 
     fn measure(&self, options: &CoreOptions) -> CoreMeasurement {
-        let pretty = self
-            .node
-            .render(options.max_width as isize, self.indent_size, self.expand_all);
+        let pretty = self.node.render(
+            options.max_width as isize,
+            self.indent_size,
+            self.expand_all,
+        );
         let width = pretty.lines().map(cell_len).max().unwrap_or(0);
         CoreMeasurement::new(width, width)
     }
+}
+
+impl Layout {
+    /// `Pretty(obj)`'s defaults, for a traversed `node`.
+    pub(crate) fn new(node: Node, type_repr: String) -> Layout {
+        Layout {
+            node,
+            type_repr,
+            indent_size: 4,
+            justify: rich::Justify::Default,
+            overflow: None,
+            no_wrap: Some(false),
+            indent_guides: false,
+            expand_all: false,
+            margin: 0,
+            insert_line: false,
+        }
+    }
+}
+
+/// A `Pretty` with the repr highlighter, shareable as a table cell. `map`
+/// renames the highlighter's styles (see `layout::restyle`).
+pub(crate) fn shared_repr(
+    layout: Layout,
+    map: &'static [(&'static str, &'static str)],
+) -> std::sync::Arc<dyn Renderable + Send + Sync> {
+    std::sync::Arc::new(NativePretty {
+        layout,
+        highlight: Highlight::Repr,
+        map,
+    })
 }
 
 /// A `Pretty` whose highlighter is Rust's: rendering never calls Python.
 struct NativePretty {
     layout: Layout,
     highlight: Highlight,
+    map: &'static [(&'static str, &'static str)],
 }
 
 impl Renderable for NativePretty {
@@ -940,9 +991,12 @@ impl Renderable for NativePretty {
             self.layout
                 .text(py, &self.highlight, options, console.ascii_only())
         });
-        let Ok((blank, text)) = rendered else {
+        let Ok((blank, mut text)) = rendered else {
             return Vec::new();
         };
+        if !self.map.is_empty() {
+            text = super::layout::restyle(&text, self.map);
+        }
         let mut segments = Vec::new();
         if blank {
             segments.push(CoreSegment::line());
@@ -1006,7 +1060,11 @@ pub(crate) fn renderable_for(
         let object = Py::new(py, PrettyLayout { layout, highlight })?;
         Ok(Box::new(PyRenderable::new(object.into_any())))
     } else {
-        Ok(Box::new(NativePretty { layout, highlight }))
+        Ok(Box::new(NativePretty {
+            layout,
+            highlight,
+            map: &[],
+        }))
     }
 }
 
@@ -1062,7 +1120,11 @@ impl AsRenderable for Pretty {
             type_repr: type_repr(object)?,
             indent_size: self.indent_size,
             justify: convert::justify(self.justify.as_deref())?,
-            overflow: self.overflow.as_deref().map(convert::overflow).transpose()?,
+            overflow: self
+                .overflow
+                .as_deref()
+                .map(convert::overflow)
+                .transpose()?,
             no_wrap: self.no_wrap,
             indent_guides: self.indent_guides,
             expand_all: self.expand_all,
@@ -1288,7 +1350,9 @@ impl PyNode {
     }
 
     fn iter_tokens<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        PyList::new(py, self.inner.token_list())?.try_iter().map(Bound::into_any)
+        PyList::new(py, self.inner.token_list())?
+            .try_iter()
+            .map(Bound::into_any)
     }
 
     fn check_length(&self, start_length: isize, max_length: isize) -> bool {
@@ -1516,7 +1580,10 @@ fn pretty_install(
 
 /// What `Console.print` renders for an expandable object:
 /// `Pretty(obj, highlighter=...)` with the repr or the null highlighter.
-pub(crate) fn for_print(value: &Bound<'_, PyAny>, highlight: bool) -> PyResult<Box<dyn Renderable>> {
+pub(crate) fn for_print(
+    value: &Bound<'_, PyAny>,
+    highlight: bool,
+) -> PyResult<Box<dyn Renderable>> {
     let py = value.py();
     let layout = Layout {
         node: traverse(value, Limits::default())?,

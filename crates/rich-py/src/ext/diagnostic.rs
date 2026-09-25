@@ -9,7 +9,7 @@ use std::collections::HashSet;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyTuple, PyType};
+use pyo3::types::{PyDict, PyTuple, PyType};
 
 use rich::console::{Console as CoreConsole, ConsoleOptions as CoreOptions};
 use rich::measure::Measurement as CoreMeasurement;
@@ -17,8 +17,8 @@ use rich::protocol::{Highlighter, Renderable};
 use rich::segment::Segment as CoreSegment;
 use rich_ext::dashboard::DiagnosticsDashboard as CoreDashboard;
 use rich_ext::diagnostic::{
-    Diagnostic as CoreDiagnostic, Level, Location as CoreLocation,
-    SourceSnippet as CoreSnippet, Suggestion as CoreSuggestion,
+    Diagnostic as CoreDiagnostic, Level, Location as CoreLocation, SourceSnippet as CoreSnippet,
+    Suggestion as CoreSuggestion,
 };
 use rich_ext::event::{
     EventContext, EventView, Message, Severity, SourceLocation, SpanContext, SpanEvent,
@@ -103,14 +103,23 @@ fn language_name(language: &Language) -> String {
 
 /// `Hyperlinker`: OSC 8 links for URLs, paths (`path:line:col`) and issue
 /// references (`#123`), with editor URL templates.
-#[pyclass(name = "Hyperlinker", module = "rs_rich.ext.hyperlink", skip_from_py_object)]
+#[pyclass(
+    name = "Hyperlinker",
+    module = "rs_rich.ext.hyperlink",
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct Hyperlinker {
     pub(crate) inner: CoreHyperlinker,
 }
 
 /// A link [`Hyperlinker.find`] found: character offsets and the URL.
-#[pyclass(name = "FoundLink", module = "rs_rich.ext.hyperlink", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "FoundLink",
+    module = "rs_rich.ext.hyperlink",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct Link {
     #[pyo3(get)]
@@ -124,7 +133,10 @@ pub(crate) struct Link {
 #[pymethods]
 impl Link {
     fn __repr__(&self) -> String {
-        format!("FoundLink(start={}, end={}, url={:?})", self.start, self.end, self.url)
+        format!(
+            "FoundLink(start={}, end={}, url={:?})",
+            self.start, self.end, self.url
+        )
     }
 
     fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
@@ -134,7 +146,9 @@ impl Link {
     }
 }
 
-pub(crate) fn hyperlinker_arg(value: Option<&Bound<'_, PyAny>>) -> PyResult<Option<CoreHyperlinker>> {
+pub(crate) fn hyperlinker_arg(
+    value: Option<&Bound<'_, PyAny>>,
+) -> PyResult<Option<CoreHyperlinker>> {
     let Some(value) = value.filter(|v| !v.is_none()) else {
         return Ok(None);
     };
@@ -145,7 +159,9 @@ pub(crate) fn hyperlinker_arg(value: Option<&Bound<'_, PyAny>>) -> PyResult<Opti
             CoreHyperlinker::disabled()
         }));
     }
-    Ok(Some(value.extract::<PyRef<'_, Hyperlinker>>()?.inner.clone()))
+    Ok(Some(
+        value.extract::<PyRef<'_, Hyperlinker>>()?.inner.clone(),
+    ))
 }
 
 #[pymethods]
@@ -271,7 +287,12 @@ impl NumberHighlighter {
 // Locations, snippets and suggestions
 
 /// `Location(path, line=None, column=None)`: `path:line:column`.
-#[pyclass(name = "Location", module = "rs_rich.ext.diagnostic", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "Location",
+    module = "rs_rich.ext.diagnostic",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct Location {
     pub(crate) inner: CoreLocation,
@@ -348,7 +369,11 @@ fn span_error(error: rich_ext::diagnostic::DiagnosticError) -> PyErr {
 
 /// `SourceSnippet(name, source, start, end, *, context_lines=1, label=None)`:
 /// quoted source with `^^^` under characters `start..end`.
-#[pyclass(name = "SourceSnippet", module = "rs_rich.ext.diagnostic", skip_from_py_object)]
+#[pyclass(
+    name = "SourceSnippet",
+    module = "rs_rich.ext.diagnostic",
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct SourceSnippet {
     inner: CoreSnippet,
@@ -398,7 +423,11 @@ impl SourceSnippet {
         label: &str,
     ) -> PyResult<PyRefMut<'py, Self>> {
         let span = common::byte_range(&slf.source, start, end);
-        slf.inner = slf.inner.clone().secondary(span, label).map_err(span_error)?;
+        slf.inner = slf
+            .inner
+            .clone()
+            .secondary(span, label)
+            .map_err(span_error)?;
         Ok(slf)
     }
 
@@ -418,7 +447,12 @@ impl SourceSnippet {
 
 /// `Suggestion(message)`, or `Suggestion.replace(message, source, start,
 /// end, replacement)` to show the edited line.
-#[pyclass(name = "Suggestion", module = "rs_rich.ext.diagnostic", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "Suggestion",
+    module = "rs_rich.ext.diagnostic",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct Suggestion {
     inner: CoreSuggestion,
@@ -459,7 +493,11 @@ impl Suggestion {
 // Stack traces
 
 /// One stack frame.
-#[pyclass(name = "TraceFrame", module = "rs_rich.ext.stacktrace", skip_from_py_object)]
+#[pyclass(
+    name = "TraceFrame",
+    module = "rs_rich.ext.stacktrace",
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct Frame {
     inner: CoreFrame,
@@ -544,7 +582,11 @@ fn frame_arg(value: &Bound<'_, PyAny>) -> PyResult<CoreFrame> {
 
 /// A normalised stack trace from Rust, Python, Java or JavaScript; renders
 /// with its causes first and library frames collapsed.
-#[pyclass(name = "StackTrace", module = "rs_rich.ext.stacktrace", skip_from_py_object)]
+#[pyclass(
+    name = "StackTrace",
+    module = "rs_rich.ext.stacktrace",
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct StackTrace {
     pub(crate) inner: CoreTrace,
@@ -663,7 +705,10 @@ impl StackTrace {
         }
         inner.cause = cause.map(|cause| Box::new(cause.inner.clone()));
         inner.cause_kind = self::cause_kind(cause_kind)?;
-        inner.location = location.filter(|v| !v.is_none()).map(frame_arg).transpose()?;
+        inner.location = location
+            .filter(|v| !v.is_none())
+            .map(frame_arg)
+            .transpose()?;
         inner.omitted_causes = omitted_causes;
         Ok(StackTrace {
             inner,
@@ -697,7 +742,11 @@ impl StackTrace {
         let lines = py
             .import("traceback")?
             .getattr("format_exception")?
-            .call1((exception.get_type(), exception, exception.getattr("__traceback__")?))?;
+            .call1((
+                exception.get_type(),
+                exception,
+                exception.getattr("__traceback__")?,
+            ))?;
         let text: String = PyTuple::new(py, [""])?
             .get_item(0)?
             .call_method1("join", (lines,))?
@@ -794,7 +843,10 @@ fn common_linker(value: Option<&Bound<'_, PyAny>>) -> PyResult<Option<CoreHyperl
 /// `parse_stacktrace(text)`: `StackTrace.parse`.
 #[pyfunction]
 #[pyo3(signature = (text, *, parsers=None))]
-fn parse_stacktrace(text: &str, parsers: Option<&Bound<'_, PyAny>>) -> PyResult<Option<StackTrace>> {
+fn parse_stacktrace(
+    text: &str,
+    parsers: Option<&Bound<'_, PyAny>>,
+) -> PyResult<Option<StackTrace>> {
     StackTrace::parse(text, parsers)
 }
 
@@ -804,7 +856,11 @@ fn parse_stacktrace(text: &str, parsers: Option<&Bound<'_, PyAny>>) -> PyResult<
 /// `Diagnostic(message, *, level=None, code=None, ...)`: a compiler-style
 /// error, `error[E0308]: mismatched types`, with location, causes, snippets,
 /// notes, help, suggestions and a stack trace.
-#[pyclass(name = "Diagnostic", module = "rs_rich.ext.diagnostic", skip_from_py_object)]
+#[pyclass(
+    name = "Diagnostic",
+    module = "rs_rich.ext.diagnostic",
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct Diagnostic {
     pub(crate) inner: CoreDiagnostic,
@@ -1259,7 +1315,6 @@ fn with_level(
     Ok(cls.call((message,), Some(&kwargs))?.unbind())
 }
 
-
 /// `DiagnosticsDashboard(diagnostics=(), *, min_level=None, top_codes=5,
 /// hyperlinker=None)`: counts by level, the most frequent codes, then every
 /// diagnostic grouped by file.
@@ -1359,7 +1414,11 @@ impl DiagnosticsDashboard {
 
 /// `StructuredEvent(message, *, fields=None, ...)`: a typed log record that
 /// renders compact (`message key=value`) or expanded.
-#[pyclass(name = "StructuredEvent", module = "rs_rich.ext.event", skip_from_py_object)]
+#[pyclass(
+    name = "StructuredEvent",
+    module = "rs_rich.ext.event",
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct StructuredEvent {
     pub(crate) inner: CoreEvent,

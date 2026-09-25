@@ -65,9 +65,7 @@ impl Renderable for Stack {
         match self.measure {
             Measure::Fill => return CoreMeasurement::new(options.max_width, options.max_width),
             Measure::Fit if self.children.is_empty() => return CoreMeasurement::new(0, 0),
-            Measure::Renderables if self.children.is_empty() => {
-                return CoreMeasurement::new(1, 1)
-            }
+            Measure::Renderables if self.children.is_empty() => return CoreMeasurement::new(1, 1),
             _ => {}
         }
         let mut minimum = 0;
@@ -93,7 +91,11 @@ impl AsRenderable for Group {
     fn to_renderable(&self, py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
         Ok(Box::new(Stack::from_list(
             self.renderables.bind(py),
-            if self.fit { Measure::Fit } else { Measure::Fill },
+            if self.fit {
+                Measure::Fit
+            } else {
+                Measure::Fill
+            },
         )?))
     }
 }
@@ -120,30 +122,51 @@ impl Group {
     }
 }
 
+/// Python glue for `group`: `functools.wraps` needs a Python function to
+/// copy the decorated function's name and docstring onto.
+const GROUP_GLUE: &std::ffi::CStr = c"
+import functools
+
+def decorate(method, make_group):
+    @functools.wraps(method)
+    def _replace(*args, **kwargs):
+        return make_group(method(*args, **kwargs))
+
+    return _replace
+";
+
 /// `rich.console.group(fit=True)`: a decorator that turns a function
 /// returning renderables into one returning a `Group` of them.
 #[pyfunction]
 #[pyo3(signature = (fit=true))]
 fn group(py: Python<'_>, fit: bool) -> PyResult<Bound<'_, PyCFunction>> {
+    static GLUE: pyo3::sync::PyOnceLock<Py<PyAny>> = pyo3::sync::PyOnceLock::new();
+    let decorate = GLUE
+        .get_or_try_init(py, || {
+            let module =
+                PyModule::from_code(py, GROUP_GLUE, c"rs_rich/console.py", c"rs_rich._group")?;
+            Ok::<_, PyErr>(module.getattr("decorate")?.unbind())
+        })?
+        .clone_ref(py);
     PyCFunction::new_closure(
         py,
         Some(c"decorator"),
         None,
-        move |args: &Bound<'_, PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>| -> PyResult<Py<PyAny>> {
+        move |args: &Bound<'_, PyTuple>,
+              _kwargs: Option<&Bound<'_, PyDict>>|
+              -> PyResult<Py<PyAny>> {
             let py = args.py();
-            let method = args.get_item(0)?.unbind();
-            let wrapped = method.clone_ref(py);
-            let replace = PyCFunction::new_closure(
+            let method = args.get_item(0)?;
+            let make_group = PyCFunction::new_closure(
                 py,
-                Some(c"_replace"),
+                Some(c"make_group"),
                 None,
                 move |args: &Bound<'_, PyTuple>,
-                      kwargs: Option<&Bound<'_, PyDict>>|
+                      _kwargs: Option<&Bound<'_, PyDict>>|
                       -> PyResult<Py<Group>> {
                     let py = args.py();
-                    let renderables = method.bind(py).call(args, kwargs)?;
                     let list = PyList::empty(py);
-                    for item in renderables.try_iter()? {
+                    for item in args.get_item(0)?.try_iter()? {
                         list.append(item?)?;
                     }
                     Py::new(
@@ -155,8 +178,7 @@ fn group(py: Python<'_>, fit: bool) -> PyResult<Bound<'_, PyCFunction>> {
                     )
                 },
             )?;
-            let wraps = py.import("functools")?.getattr("wraps")?;
-            Ok(wraps.call1((wrapped,))?.call1((replace,))?.unbind())
+            Ok(decorate.bind(py).call1((method, make_group))?.unbind())
         },
     )
 }
@@ -170,7 +192,10 @@ pub(crate) struct Renderables {
 
 impl AsRenderable for Renderables {
     fn to_renderable(&self, py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
-        Ok(Box::new(Stack::from_list(self.renderables.bind(py), Measure::Renderables)?))
+        Ok(Box::new(Stack::from_list(
+            self.renderables.bind(py),
+            Measure::Renderables,
+        )?))
     }
 }
 

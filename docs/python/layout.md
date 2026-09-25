@@ -35,9 +35,9 @@ console.print(Columns(words, equal=True, column_first=True))
 ```text
 alpha beta gamma delta epsilon
 zeta  eta  theta              
-alpha   delta   eta    
-beta    epsilon theta  
-gamma   zeta           
+alpha delta   eta  
+beta  epsilon theta
+gamma zeta         
 ```
 
 ## Group
@@ -105,7 +105,7 @@ sub-layout and `update(renderable)` sets its content; a layout with no content
 shows a placeholder with its name and size, as in Rich.
 
 ```python
-console = Console(width=40, height=6)
+console = Console(width=40, height=10)
 layout = Layout()
 layout.split_column(Layout(name="header", size=3), Layout(name="body"))
 layout["body"].split_row(Layout(name="left"), Layout(name="right", ratio=2))
@@ -118,9 +118,13 @@ console.print(layout)
 ╭──────────────────────────────────────╮
 │ header                               │
 ╰──────────────────────────────────────╯
-left side    ╭─── 'right' (27 x 3) ───╮
-             │ Layout(name='right',   │
-             ╰────────────────────────╯
+left side    ╭─── 'right' (27 x 7) ────╮
+             │    Layout(              │
+             │        name='right',    │
+             │        ratio=2          │
+             │    )                    │
+             │                         │
+             ╰─────────────────────────╯
 ```
 
 A layout's height is the console's (or the `height=` given to `print`).

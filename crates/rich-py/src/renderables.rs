@@ -183,7 +183,10 @@ pub(crate) fn text_markup(text: &CoreText) -> String {
             spans.push((span.start, span.end.min(plain.len()), name));
         }
     }
-    let mut cuts: Vec<usize> = spans.iter().flat_map(|(start, end, _)| [*start, *end]).collect();
+    let mut cuts: Vec<usize> = spans
+        .iter()
+        .flat_map(|(start, end, _)| [*start, *end])
+        .collect();
     cuts.push(0);
     cuts.push(plain.len());
     cuts.sort_unstable();

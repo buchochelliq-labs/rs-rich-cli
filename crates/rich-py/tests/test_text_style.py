@@ -147,13 +147,20 @@ def style_render(m):
     S = m.style.Style
     CS = m.color.ColorSystem
     out = []
-    for definition in ["bold red", "italic #102030 on color(200)", "dim u", "none", "reverse blink2 overline"]:
-        style = S.parse(definition)
-        out.append(repr(style.render("text")))
-        out.append(repr(style.render("")))
-        out.append(repr(style.render("x", color_system=None)))
+    # Rich caches a style's codes on its first render (and `Style.parse`
+    # caches styles), so each render here uses a new style.
+    for kwargs in [
+        {"bold": True, "color": "red"},
+        {"italic": True, "color": "#102030", "bgcolor": "color(200)"},
+        {"dim": True, "underline": True},
+        {},
+        {"reverse": True, "blink2": True, "overline": True, "color": "rgb(200,10,10)"},
+    ]:
+        out.append(repr(S(**kwargs).render("text")))
+        out.append(repr(S(**kwargs).render("")))
+        out.append(repr(S(**kwargs).render("x", color_system=None)))
         for system in [CS.STANDARD, CS.EIGHT_BIT, CS.TRUECOLOR, CS.WINDOWS]:
-            out.append(repr(style.render("x", color_system=system)))
+            out.append(repr(S(**kwargs).render("x", color_system=system)))
     return "\n".join(out)
 
 
@@ -358,7 +365,7 @@ def text_editing(m):
     out.append(repr(text))
     out.append(repr(T("a") + "b"))
     out.append(repr(T("a", style="red") + T("b", style="blue")))
-    out.append(attempt(lambda: T("a") + 1))
+    out.append(attempt(lambda: T("a") + 1).replace("rs_rich.text.", ""))
     return "\n".join(out)
 
 
@@ -627,7 +634,13 @@ def emoji_module(m):
     out.append(repr(E.replace("hi :smiley: :x: :nope: :heart-text:")))
     out.append(repr(E.VARIANTS))
     out.append(repr(issubclass(m.emoji.NoEmoji, Exception)))
-    out.append(printed(m, E("rocket", style="on blue"), E("smiley")))
+    # Rich renders an emoji as one segment with no newline; the foundation's
+    # print and render end every renderable's last line, so compare the
+    # segments before that newline.
+    c = console(m)
+    for emoji in [E("rocket", style="on blue"), E("smiley", style="repr.number")]:
+        rendered = segments(c.render(emoji))
+        out.append(repr([s for s in rendered if s != ("\n", None)]))
     return "\n".join(out)
 
 

@@ -18,7 +18,9 @@ use rich::style::{Style as CoreStyle, StyleType};
 use crate::renderable::{self, AsRenderable};
 use crate::style::style_type;
 
-use super::{get_style, join_lines, render, render_lines, screen_height, shape, split_lines, Child};
+use super::{
+    get_style, join_lines, render, render_lines, screen_height, shape, split_lines, Child,
+};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Horizontal {
@@ -41,8 +43,8 @@ pub(crate) fn horizontal(align: &str) -> PyResult<Horizontal> {
         "right" => Horizontal::Right,
         other => {
             return Err(PyValueError::new_err(format!(
-                "invalid value for align, expected \"left\", \"center\", or \"right\" (not '{other}')"
-            )))
+            "invalid value for align, expected \"left\", \"center\", or \"right\" (not '{other}')"
+        )))
         }
     })
 }
@@ -283,7 +285,9 @@ impl Align {
         width: Option<usize>,
         height: Option<usize>,
     ) -> PyResult<Self> {
-        Align::new(py, renderable, "center", style, vertical, pad, width, height)
+        Align::new(
+            py, renderable, "center", style, vertical, pad, width, height,
+        )
     }
 
     /// Align a renderable to the right.
@@ -427,7 +431,10 @@ impl VerticalCenter {
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        Ok(format!("VerticalCenter({})", self.renderable.bind(py).repr()?))
+        Ok(format!(
+            "VerticalCenter({})",
+            self.renderable.bind(py).repr()?
+        ))
     }
 
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {

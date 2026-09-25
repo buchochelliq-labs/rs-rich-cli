@@ -45,6 +45,7 @@ print(repr(Style(bold=True, color="red")))
 bold red
 not italic on #102030
 none
+Style(color=Color('red', ColorType.STANDARD, number=1), bold=True)
 ```
 
 ## Parsing
@@ -148,6 +149,10 @@ print(repr(Style.combine([Style(bold=True), Style(color="red"), Style(bold=False
 ```
 
 ```text
+True None Color('#ff8800', ColorType.TRUECOLOR, triplet=ColorTriplet(red=255, green=136, blue=0))
+'\x1b[1;91;44mhot\x1b[0m'
+color: #ff8800; text-decoration-color: #ff8800; background-color: #000080; font-weight: bold
+Style(color=Color('red', ColorType.STANDARD, number=1), bold=False)
 ```
 
 ## StyleStack
@@ -186,4 +191,7 @@ print(stack.get("warning"), "/", stack.get("info"))
 ```
 
 ```text
+[styles]
+warning = bold red
+bold red / dim cyan
 ```

@@ -3,7 +3,7 @@
 Everything the port adds on top of Rich: diagnostics and stack traces,
 structured data, diffs and test reports, transforms, workflow renderables,
 terminal capabilities, inspectors and the extension registry. Each Rust
-module is a submodule here (``diagnostic``, ``stacktrace``, ``dashboard``, ``hyperlink``, ``highlighter``, ``event``, ``log_handler``, ``data``, ``transform``);
+module is a submodule here (``diagnostic``, ``stacktrace``, ``dashboard``, ``hyperlink``, ``highlighter``, ``event``, ``log_handler``, ``data``, ``transform``, ``diff``);
 this package re-exports all of them.
 """
 
@@ -60,8 +60,33 @@ from .._native import (
     HighlightMatches,
     TransformError,
     PipelineError,
+    diff_sequences,
+    diff_lines,
+    diff_words,
+    diff_chars,
+    tokenize,
+    hunk_header,
+    group_hunks,
+    Hunk,
+    TextDiff,
+    DiffView,
+    SourceDiff,
+    FilePatch,
+    Patch,
+    parse_patch,
+    Annotation,
+    TemplateLinks,
+    PatchView,
+    KeepFiles,
+    TestCase,
+    TestSuite,
+    TestRun,
+    TestReport,
+    PatchParseError,
+    TestParseError,
+    DIFF_STYLES,
 )
-from . import diagnostic, stacktrace, dashboard, hyperlink, highlighter, event, log_handler, data, transform  # noqa: E402,F401
+from . import diagnostic, stacktrace, dashboard, hyperlink, highlighter, event, log_handler, data, transform, diff  # noqa: E402,F401
 
 __all__ = [
     "Diagnostic",
@@ -116,4 +141,29 @@ __all__ = [
     "HighlightMatches",
     "TransformError",
     "PipelineError",
+    "diff_sequences",
+    "diff_lines",
+    "diff_words",
+    "diff_chars",
+    "tokenize",
+    "hunk_header",
+    "group_hunks",
+    "Hunk",
+    "TextDiff",
+    "DiffView",
+    "SourceDiff",
+    "FilePatch",
+    "Patch",
+    "parse_patch",
+    "Annotation",
+    "TemplateLinks",
+    "PatchView",
+    "KeepFiles",
+    "TestCase",
+    "TestSuite",
+    "TestRun",
+    "TestReport",
+    "PatchParseError",
+    "TestParseError",
+    "DIFF_STYLES",
 ]

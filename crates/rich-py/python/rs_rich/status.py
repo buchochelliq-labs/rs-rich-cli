@@ -1,7 +1,5 @@
-"""``rich.status``: ``Status``.
+"""``rich.status``: ``Status``."""
 
-Placeholder, filled by the live area: re-export the classes from
-``._native`` here and list them in ``__all__``.
-"""
+from ._native import Status
 
-__all__: list = []
+__all__ = ["Status"]

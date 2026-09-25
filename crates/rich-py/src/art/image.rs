@@ -58,9 +58,8 @@ fn from_pillow(value: &Bound<'_, PyAny>) -> PyResult<DynamicImage> {
     };
     let (width, height): (u32, u32) = rgba.getattr("size")?.extract()?;
     let data = rgba.call_method0("tobytes")?;
-    let data = buffer_bytes(&data)?.ok_or_else(|| {
-        PyTypeError::new_err("the image's tobytes() did not return bytes")
-    })?;
+    let data = buffer_bytes(&data)?
+        .ok_or_else(|| PyTypeError::new_err("the image's tobytes() did not return bytes"))?;
     let raster = img::RgbaImage::from_raw(width, height, data).ok_or_else(|| {
         PyValueError::new_err("the image's tobytes() does not match its size in RGBA")
     })?;
@@ -237,10 +236,7 @@ impl ArtImage {
     /// A Pillow image with the same pixels (needs Pillow installed).
     fn to_pil<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let pil = py.import("PIL.Image")?;
-        pil.call_method1(
-            "frombytes",
-            ("RGBA", self.size(), self.to_rgba(py)),
-        )
+        pil.call_method1("frombytes", ("RGBA", self.size(), self.to_rgba(py)))
     }
 
     fn __repr__(&self) -> String {
@@ -318,7 +314,11 @@ const ANCHORS: [(&str, ImageAnchor); 9] = [
 
 fn image_anchor(name: &str) -> PyResult<ImageAnchor> {
     let key = normalized(name);
-    let key = if key == "centre" { "center".into() } else { key };
+    let key = if key == "centre" {
+        "center".into()
+    } else {
+        key
+    };
     ANCHORS
         .iter()
         .find(|(n, _)| *n == key)
@@ -449,9 +449,9 @@ fn background(value: Option<&Bound<'_, PyAny>>) -> PyResult<Option<ImageBackgrou
                         repr_str(&name)
                     ))
                 })?;
-                let triplet = color.get_truecolor().ok_or_else(|| {
-                    bad_choice("background", &name, "a colour with an RGB value")
-                })?;
+                let triplet = color
+                    .get_truecolor()
+                    .ok_or_else(|| bad_choice("background", &name, "a colour with an RGB value"))?;
                 ImageBackground::Color([triplet.red, triplet.green, triplet.blue])
             }
         }));
@@ -471,9 +471,7 @@ fn background_object(py: Python<'_>, value: Option<ImageBackground>) -> PyResult
         Some(ImageBackground::Checkerboard) => {
             "checkerboard".into_pyobject(py)?.into_any().unbind()
         }
-        Some(ImageBackground::Color([r, g, b])) => {
-            PyTuple::new(py, [r, g, b])?.into_any().unbind()
-        }
+        Some(ImageBackground::Color([r, g, b])) => PyTuple::new(py, [r, g, b])?.into_any().unbind(),
     })
 }
 
@@ -957,7 +955,11 @@ impl AsRenderable for BlockArt {
 impl BlockArt {
     #[new]
     #[pyo3(signature = (image, *, width=None, height=None))]
-    fn new(image: &Bound<'_, PyAny>, width: Option<usize>, height: Option<usize>) -> PyResult<Self> {
+    fn new(
+        image: &Bound<'_, PyAny>,
+        width: Option<usize>,
+        height: Option<usize>,
+    ) -> PyResult<Self> {
         let mut art = rich_art::BlockArt::new(owned_image(image)?);
         if let Some(width) = width {
             art = art.width(width);
@@ -987,7 +989,11 @@ impl AsRenderable for BrailleArt {
 impl BrailleArt {
     #[new]
     #[pyo3(signature = (image, *, width=None, height=None))]
-    fn new(image: &Bound<'_, PyAny>, width: Option<usize>, height: Option<usize>) -> PyResult<Self> {
+    fn new(
+        image: &Bound<'_, PyAny>,
+        width: Option<usize>,
+        height: Option<usize>,
+    ) -> PyResult<Self> {
         let mut art = rich_art::BrailleArt::new(owned_image(image)?);
         if let Some(width) = width {
             art = art.width(width);
@@ -1023,7 +1029,11 @@ impl AsRenderable for QuadrantArt {
 impl QuadrantArt {
     #[new]
     #[pyo3(signature = (image, *, width=None, height=None))]
-    fn new(image: &Bound<'_, PyAny>, width: Option<usize>, height: Option<usize>) -> PyResult<Self> {
+    fn new(
+        image: &Bound<'_, PyAny>,
+        width: Option<usize>,
+        height: Option<usize>,
+    ) -> PyResult<Self> {
         let mut art = rich_art::QuadrantArt::new(owned_image(image)?);
         if let Some(width) = width {
             art = art.width(width);

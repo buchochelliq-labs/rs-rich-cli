@@ -13,8 +13,8 @@ use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError, PyTypeError, PyVal
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 
-use rich::r#box::Box as BoxStyle;
 use rich::protocol::{CodeHighlighter as CoreCodeHighlighter, FenceRenderer as CoreFenceRenderer};
+use rich::r#box::Box as BoxStyle;
 use rich::Theme as CoreTheme;
 use rich_plugin_api::{
     HighlighterFactory, Plugin as CorePlugin, PluginError as CorePluginError,
@@ -73,7 +73,8 @@ impl CoreRegistrar for Collect<'_> {
         self.0.push(Registration::BoxStyle(name.to_string(), style));
     }
     fn renderer(&mut self, name: &str, renderer: Arc<dyn CoreSourceRenderer>) {
-        self.0.push(Registration::Renderer(name.to_string(), renderer));
+        self.0
+            .push(Registration::Renderer(name.to_string(), renderer));
     }
     fn fence_renderer(&mut self, language: &str, renderer: Arc<dyn CoreFenceRenderer>) {
         self.0
@@ -142,7 +143,9 @@ impl PluginRegistrar {
     /// (`rs_rich.highlighter.Highlighter` and friends), or a class of them,
     /// instantiated once per console it is installed onto.
     fn highlighter(&self, highlighter: &Bound<'_, PyAny>) -> PyResult<()> {
-        self.push(Registration::Highlighter(highlighter_factory_arg(highlighter)?))
+        self.push(Registration::Highlighter(highlighter_factory_arg(
+            highlighter,
+        )?))
     }
 
     /// A syntax-highlighting engine, selectable by `name`: a
@@ -287,6 +290,8 @@ impl MermaidPlugin {
                 )))
             }
         };
+        // With the `mmdc` feature the options have one more field.
+        #[allow(clippy::needless_update)]
         let options = rich_mermaid::MermaidOptions {
             backend,
             ascii,
@@ -339,10 +344,15 @@ impl PyPlugin {
         };
         let metadata = metadata
             .extract::<PyRef<'_, PluginMetadata>>()
-            .map_err(|_| PyTypeError::new_err("a plugin's metadata() must return a PluginMetadata"))?
+            .map_err(|_| {
+                PyTypeError::new_err("a plugin's metadata() must return a PluginMetadata")
+            })?
             .inner
             .clone();
-        if !object.getattr_opt("register")?.is_some_and(|m| m.is_callable()) {
+        if !object
+            .getattr_opt("register")?
+            .is_some_and(|m| m.is_callable())
+        {
             return Err(PyTypeError::new_err("a plugin needs register(registrar)"));
         }
         Ok(PyPlugin {

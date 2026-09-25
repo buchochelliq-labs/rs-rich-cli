@@ -33,6 +33,43 @@ pub(crate) fn console_or_global<'py>(
     }
 }
 
+/// `console.get_time`: the console's clock (`time.monotonic` by default).
+pub(crate) fn console_clock<'py>(console: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    console_attr(console, "get_time", "time", ("time", "monotonic"))
+}
+
+/// `console.get_datetime`: what log rows are stamped with.
+pub(crate) fn console_datetime<'py>(console: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    console_attr(
+        console,
+        "get_datetime",
+        "datetime",
+        ("datetime", "datetime"),
+    )
+}
+
+/// A console attribute Rich names `get_*`; the bindings' getter may be
+/// published without the prefix.
+fn console_attr<'py>(
+    console: &Bound<'py, PyAny>,
+    name: &str,
+    fallback: &str,
+    default: (&str, &str),
+) -> PyResult<Bound<'py, PyAny>> {
+    if let Some(value) = console.getattr_opt(name)? {
+        return Ok(value);
+    }
+    if let Some(value) = console.getattr_opt(fallback)?.filter(|v| v.is_callable()) {
+        return Ok(value);
+    }
+    let module = console.py().import(default.0)?;
+    let value = module.getattr(default.1)?;
+    if default.0 == "datetime" {
+        return value.getattr("now");
+    }
+    Ok(value)
+}
+
 /// A Python `Text` holding a core text.
 pub(crate) fn new_text(py: Python<'_>, inner: CoreText) -> PyResult<Py<PyAny>> {
     Ok(Py::new(py, Text { inner })?.into_any())
@@ -76,7 +113,10 @@ pub(crate) fn core_segments(value: &Bound<'_, PyAny>) -> PyResult<Vec<CoreSegmen
         let segment = item.extract::<PyRef<'_, Segment>>().map_err(|_| {
             PyTypeError::new_err(format!(
                 "expected a Segment, got {}",
-                item.get_type().name().map(|n| n.to_string()).unwrap_or_default()
+                item.get_type()
+                    .name()
+                    .map(|n| n.to_string())
+                    .unwrap_or_default()
             ))
         })?;
         segments.push(segment.to_core());

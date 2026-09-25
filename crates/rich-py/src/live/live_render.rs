@@ -188,7 +188,9 @@ impl LiveRender {
         };
         let style = style.bind(py);
         let kwargs = PyDict::new(py);
-        let empty = style.cast::<PyString>().is_ok_and(|s| s.to_cow().is_ok_and(|s| s.is_empty()));
+        let empty = style
+            .cast::<PyString>()
+            .is_ok_and(|s| s.to_cow().is_ok_and(|s| s.is_empty()));
         if !style.is_none() && !empty {
             kwargs.set_item("style", console.call_method1("get_style", (style,))?)?;
         }

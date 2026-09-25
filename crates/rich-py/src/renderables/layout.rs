@@ -36,7 +36,12 @@ use super::constrain::StyledRender;
 use super::{screen_height, text_markup};
 
 create_exception!(_native, LayoutError, PyException, "Layout related error.");
-create_exception!(_native, NoSplitter, LayoutError, "Requested splitter does not exist.");
+create_exception!(
+    _native,
+    NoSplitter,
+    LayoutError,
+    "Requested splitter does not exist."
+);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Split {
@@ -92,6 +97,9 @@ fn layout_render_type(py: Python<'_>) -> PyResult<&Bound<'_, PyType>> {
 }
 
 type Region = (usize, usize, usize, usize);
+
+/// A leaf, its region and its rendered lines.
+type Rendered<'py> = (Py<Layout>, Region, Bound<'py, PyAny>);
 
 // ---------------------------------------------------------------------------
 // Splitters
@@ -462,7 +470,8 @@ impl Layout {
         height: usize,
     ) -> PyResult<Vec<(Py<Layout>, Region)>> {
         let py = slf.py();
-        let mut stack: Vec<(Py<Layout>, Region)> = vec![(slf.clone().unbind(), (0, 0, width, height))];
+        let mut stack: Vec<(Py<Layout>, Region)> =
+            vec![(slf.clone().unbind(), (0, 0, width, height))];
         let mut regions: Vec<(Py<Layout>, Region)> = Vec::new();
         let mut guard = 0usize;
         while let Some((layout, region)) = stack.pop() {
@@ -511,7 +520,7 @@ impl Layout {
         slf: &Bound<'py, Layout>,
         console: &Bound<'py, PyAny>,
         options: &Bound<'py, PyAny>,
-    ) -> PyResult<Vec<(Py<Layout>, Region, Bound<'py, PyAny>)>> {
+    ) -> PyResult<Vec<Rendered<'py>>> {
         let py = slf.py();
         let width: usize = options.getattr("max_width")?.extract()?;
         let height: Option<usize> = options.getattr("height")?.extract()?;
@@ -682,14 +691,14 @@ impl Layout {
                 },
             )
         };
-        let guide = |layout: &Bound<'_, Layout>| {
-            format!("layout.tree.{}", layout.borrow().splitter.name())
-        };
+        let guide =
+            |layout: &Bound<'_, Layout>| format!("layout.tree.{}", layout.borrow().splitter.name());
         let kwargs = PyDict::new(py);
         kwargs.set_item("guide_style", guide(slf))?;
         kwargs.set_item("highlight", true)?;
         let tree = tree_type.call((summary(slf)?,), Some(&kwargs))?;
-        let mut pending: Vec<(Bound<'_, PyAny>, Py<Layout>)> = vec![(tree.clone(), slf.clone().unbind())];
+        let mut pending: Vec<(Bound<'_, PyAny>, Py<Layout>)> =
+            vec![(tree.clone(), slf.clone().unbind())];
         let mut seen = 0usize;
         while let Some((node, layout)) = pending.pop() {
             seen += 1;

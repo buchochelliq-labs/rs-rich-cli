@@ -95,7 +95,10 @@ pub(crate) fn highlighter_factory_arg(value: &Bound<'_, PyAny>) -> PyResult<High
             })
         }));
     }
-    if !value.getattr_opt("highlight")?.is_some_and(|m| m.is_callable()) {
+    if !value
+        .getattr_opt("highlight")?
+        .is_some_and(|m| m.is_callable())
+    {
         return Err(PyTypeError::new_err(format!(
             "a highlighter needs a highlight(text) method; got {}",
             value.repr()?
@@ -136,7 +139,11 @@ impl CoreTextTransform for PyTextTransform {
                 let returned = returned.extract::<PyRef<'_, Text>>().map_err(|_| {
                     PyTypeError::new_err(format!(
                         "a transform must return a Text (or None), not {}",
-                        returned.get_type().name().map(|n| n.to_string()).unwrap_or_default()
+                        returned
+                            .get_type()
+                            .name()
+                            .map(|n| n.to_string())
+                            .unwrap_or_default()
                     ))
                 })?;
                 Ok(returned.inner.clone())
@@ -156,7 +163,9 @@ pub(crate) fn transform_arg(value: &Bound<'_, PyAny>) -> PyResult<Arc<dyn CoreTe
     if let Ok(pipeline) = value.extract::<PyRef<'_, TextPipeline>>() {
         return Ok(Arc::new(PipelineTransform(pipeline.inner.clone())));
     }
-    let has_method = value.getattr_opt("transform")?.is_some_and(|m| m.is_callable());
+    let has_method = value
+        .getattr_opt("transform")?
+        .is_some_and(|m| m.is_callable());
     if !has_method && !value.is_callable() {
         return Err(PyTypeError::new_err(format!(
             "a transform must be callable or have a transform(text) method; got {}",
@@ -183,7 +192,13 @@ impl CoreTextTransform for PipelineTransform {
 /// (calling the object does the same). Subclass it and override
 /// `transform` for a Python one; `ExtensionRegistry.transform(name)`
 /// returns ones wrapping a registered transform.
-#[pyclass(name = "TextTransform", module = "rs_rich.plugins", subclass, frozen, skip_from_py_object)]
+#[pyclass(
+    name = "TextTransform",
+    module = "rs_rich.plugins",
+    subclass,
+    frozen,
+    skip_from_py_object
+)]
 pub(crate) struct TextTransform {
     pub(crate) inner: Option<Arc<dyn CoreTextTransform>>,
 }
@@ -196,7 +211,11 @@ impl TextTransform {
         TextTransform { inner: None }
     }
 
-    fn transform<'py>(&self, py: Python<'py>, text: PyRef<'py, Text>) -> PyResult<Bound<'py, Text>> {
+    fn transform<'py>(
+        &self,
+        py: Python<'py>,
+        text: PyRef<'py, Text>,
+    ) -> PyResult<Bound<'py, Text>> {
         let Some(inner) = self.inner.clone() else {
             return Err(PyNotImplementedError::new_err(
                 "a TextTransform subclass must implement transform(text)",
@@ -210,7 +229,10 @@ impl TextTransform {
         }
     }
 
-    fn __call__<'py>(slf: &Bound<'py, Self>, text: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    fn __call__<'py>(
+        slf: &Bound<'py, Self>,
+        text: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         slf.call_method1("transform", (text,))
     }
 }
@@ -285,7 +307,9 @@ impl CoreSourceRenderer for PySourceRenderer {
                 Ok(returned.unbind())
             })();
             match result {
-                Ok(object) => Ok(Box::new(PyRenderable::new(object)) as Box<dyn Renderable + Send + Sync>),
+                Ok(object) => {
+                    Ok(Box::new(PyRenderable::new(object)) as Box<dyn Renderable + Send + Sync>)
+                }
                 Err(error) => Err(CorePluginError::Other(callback_failed(py, error))),
             }
         })
@@ -299,7 +323,9 @@ pub(crate) fn renderer_arg(value: &Bound<'_, PyAny>) -> PyResult<Arc<dyn CoreSou
             return Ok(inner.clone());
         }
     }
-    let has_method = value.getattr_opt("render")?.is_some_and(|m| m.is_callable());
+    let has_method = value
+        .getattr_opt("render")?
+        .is_some_and(|m| m.is_callable());
     if !has_method && !value.is_callable() {
         return Err(PyTypeError::new_err(format!(
             "a renderer must be callable or have a render(source) method; got {}",
@@ -314,7 +340,13 @@ pub(crate) fn renderer_arg(value: &Bound<'_, PyAny>) -> PyResult<Arc<dyn CoreSou
 /// Turns source text into a renderable: `render(source)`. Subclass it and
 /// override `render` for a Python one; `ExtensionRegistry.renderer(name)`
 /// returns ones wrapping a registered renderer (Mermaid's, say).
-#[pyclass(name = "SourceRenderer", module = "rs_rich.plugins", subclass, frozen, skip_from_py_object)]
+#[pyclass(
+    name = "SourceRenderer",
+    module = "rs_rich.plugins",
+    subclass,
+    frozen,
+    skip_from_py_object
+)]
 pub(crate) struct SourceRenderer {
     pub(crate) inner: Option<Arc<dyn CoreSourceRenderer>>,
 }
@@ -414,7 +446,11 @@ impl CoreFenceRenderer for PyFenceRenderer {
                 if let Ok(items) = returned.cast::<pyo3::types::PyList>() {
                     let segments: Option<Vec<CoreSegment>> = items
                         .iter()
-                        .map(|item| item.extract::<PyRef<'_, Segment>>().ok().map(|s| s.to_core()))
+                        .map(|item| {
+                            item.extract::<PyRef<'_, Segment>>()
+                                .ok()
+                                .map(|s| s.to_core())
+                        })
                         .collect();
                     if let Some(segments) = segments {
                         return Ok(Some(renderable::unterminated(segments)));
@@ -438,7 +474,9 @@ pub(crate) fn fence_renderer_arg(value: &Bound<'_, PyAny>) -> PyResult<Arc<dyn C
             return Ok(inner.clone());
         }
     }
-    let has_method = value.getattr_opt("render_fence")?.is_some_and(|m| m.is_callable());
+    let has_method = value
+        .getattr_opt("render_fence")?
+        .is_some_and(|m| m.is_callable());
     if !has_method && !value.is_callable() {
         return Err(PyTypeError::new_err(format!(
             "a fence renderer must be callable as f(language, code) or have \
@@ -457,7 +495,13 @@ pub(crate) fn fence_renderer_arg(value: &Bound<'_, PyAny>) -> PyResult<Arc<dyn C
 /// `None` to decline. Subclass it and override `render_fence` for a Python
 /// one; `ExtensionRegistry.fences()` and `fence_renderer(language)` return
 /// ones wrapping registered renderers.
-#[pyclass(name = "FenceRenderer", module = "rs_rich.plugins", subclass, frozen, skip_from_py_object)]
+#[pyclass(
+    name = "FenceRenderer",
+    module = "rs_rich.plugins",
+    subclass,
+    frozen,
+    skip_from_py_object
+)]
 pub(crate) struct FenceRenderer {
     pub(crate) inner: Option<Arc<dyn CoreFenceRenderer>>,
 }
@@ -497,7 +541,8 @@ impl FenceRenderer {
             },
         )?;
         let segments = errors::direct(|| console.call_method1("render", (fence, options)))?;
-        let segments = pyo3::types::PyList::new(py, segments.try_iter()?.collect::<PyResult<Vec<_>>>()?)?;
+        let segments =
+            pyo3::types::PyList::new(py, segments.try_iter()?.collect::<PyResult<Vec<_>>>()?)?;
         if declined.load(Ordering::SeqCst) {
             return Ok(None);
         }

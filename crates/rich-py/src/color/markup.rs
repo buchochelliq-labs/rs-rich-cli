@@ -17,11 +17,7 @@ pub(crate) fn markup_error(error: RichError) -> PyErr {
 /// `rich.markup.render(markup, emoji=..., emoji_variant=...)` without the
 /// base style: console markup to a core `Text`. Emoji codes are replaced
 /// before the markup is parsed, as `Console.render_str` does.
-pub(crate) fn render(
-    markup: &str,
-    emoji: bool,
-    emoji_variant: Option<&str>,
-) -> PyResult<CoreText> {
+pub(crate) fn render(markup: &str, emoji: bool, emoji_variant: Option<&str>) -> PyResult<CoreText> {
     let content = if emoji {
         super::emoji_replace(markup, emoji_variant)?
     } else {

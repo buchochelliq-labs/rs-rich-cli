@@ -2,12 +2,12 @@
 
 Rich has no image art, so each case in ``CASES`` is compared with what the
 Rust crate itself renders for the same input: ``EXPECTED`` was produced by a
-small Rust program (``target/rich-py/art-oracle``, see the report of the
-0.0.12 art workstream) that reads these cases as JSON and renders them with
-``rs-rich-art``. Short outputs are kept verbatim; long ones (Sixel included)
-as their SHA-256 and length, so every byte is still compared. Images are
-generated from a formula both sides share, so no binary fixture is needed;
-the GIFs are the crate's own example assets.
+small Rust program (a scratch crate, ``target/rich-py/art-oracle``) that
+reads these cases as JSON and renders them with ``rs-rich-art``. Short
+outputs are kept verbatim; long ones (Sixel included) as their SHA-256 and
+length, so every byte is still compared. Images are generated from a formula
+both sides share, so no binary fixture is needed; the GIFs are the crate's
+own example assets.
 """
 
 from __future__ import annotations
