@@ -544,6 +544,16 @@ impl Console {
         let joined;
         let renderable = match renderable.printed_text() {
             Some(text) => {
+                // `print(justify="left"|"center"|"right")` wraps the joined
+                // text in `Align`, which renders a zero-width text (such as an
+                // empty one) at no width at all: nothing is printed.
+                if matches!(
+                    options.justify,
+                    Justify::Left | Justify::Center | Justify::Right
+                ) && text.measurement().1 == 0
+                {
+                    return Vec::new();
+                }
                 joined = text;
                 &joined as &dyn Renderable
             }
@@ -1328,8 +1338,12 @@ impl Renderable for String {
 
 /// `render_str` for a `str` renderable under `options`.
 trait OptionsText {
-    fn options_text(&self, console: &Console, options: &ConsoleOptions, highlight: Option<bool>)
-        -> Text;
+    fn options_text(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        highlight: Option<bool>,
+    ) -> Text;
 }
 
 impl OptionsText for String {

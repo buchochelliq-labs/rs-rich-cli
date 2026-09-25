@@ -7,6 +7,8 @@ from ._native import (
     ConsoleDimensions,
     ConsoleOptions,
     Group,
+    PagerContext,
+    ScreenContext,
     ThemeContext,
     group,
 )
@@ -18,6 +20,8 @@ __all__ = [
     "ConsoleDimensions",
     "ConsoleOptions",
     "Group",
+    "PagerContext",
+    "ScreenContext",
     "ThemeContext",
     "group",
 ]

@@ -136,6 +136,8 @@ pub(crate) struct LayoutNode {
     content: NodeContent,
     width: Size,
     height: Size,
+    content_width: bool,
+    content_height: bool,
     align: (Alignment, Alignment),
     overflow: OverflowPolicy,
 }
@@ -194,6 +196,12 @@ impl LayoutNode {
             Size::Content => node.content_height(),
             Size::Constraint(c) => node.height(c),
         };
+        if self.content_width {
+            node = node.content_width();
+        }
+        if self.content_height {
+            node = node.content_height();
+        }
         Ok(node
             .align(self.align.0, self.align.1)
             .overflow(self.overflow))
@@ -218,11 +226,14 @@ fn align_arg(value: Option<(String, String)>) -> PyResult<(Alignment, Alignment)
 #[pymethods]
 impl LayoutNode {
     #[new]
-    #[pyo3(signature = (renderable, *, width=None, height=None, align=None, overflow="fold"))]
+    #[pyo3(signature = (renderable, *, width=None, height=None, content_width=false, content_height=false, align=None, overflow="fold"))]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         renderable: Py<PyAny>,
         width: Option<&Bound<'_, PyAny>>,
         height: Option<&Bound<'_, PyAny>>,
+        content_width: bool,
+        content_height: bool,
         align: Option<(String, String)>,
         overflow: &str,
     ) -> PyResult<Self> {
@@ -230,6 +241,8 @@ impl LayoutNode {
             content: NodeContent::Leaf(renderable),
             width: size_arg(width)?,
             height: size_arg(height)?,
+            content_width,
+            content_height,
             align: align_arg(align)?,
             overflow: overflow_policy(overflow)?,
         })
@@ -237,12 +250,15 @@ impl LayoutNode {
 
     /// Children side by side (`horizontal`) or stacked (`vertical`).
     #[staticmethod]
-    #[pyo3(signature = (axis, children, *, width=None, height=None, align=None, overflow="fold"))]
+    #[pyo3(signature = (axis, children, *, width=None, height=None, content_width=false, content_height=false, align=None, overflow="fold"))]
+    #[allow(clippy::too_many_arguments)]
     fn split(
         axis: &str,
         children: &Bound<'_, PyAny>,
         width: Option<&Bound<'_, PyAny>>,
         height: Option<&Bound<'_, PyAny>>,
+        content_width: bool,
+        content_height: bool,
         align: Option<(String, String)>,
         overflow: &str,
     ) -> PyResult<Self> {
@@ -255,7 +271,7 @@ impl LayoutNode {
                     Ok(node) => Ok(node),
                     Err(_) => Py::new(
                         py,
-                        LayoutNode::new(child.unbind(), None, None, None, "fold")?,
+                        LayoutNode::new(child.unbind(), None, None, false, false, None, "fold")?,
                     ),
                 }
             })
@@ -264,6 +280,8 @@ impl LayoutNode {
             content: NodeContent::Split(self::axis(axis)?, children),
             width: size_arg(width)?,
             height: size_arg(height)?,
+            content_width,
+            content_height,
             align: align_arg(align)?,
             overflow: overflow_policy(overflow)?,
         })

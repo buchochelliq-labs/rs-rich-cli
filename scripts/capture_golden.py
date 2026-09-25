@@ -3108,6 +3108,13 @@ CORE_GAP_CASES = [
          for justify in ("left", "center", "right", "full", "default")]
         + [_cg_print(_cg_console(10), Text("", style="on red"), justify="left")]
     )),
+    # Padding expand / indent / height, Bar colours
+    ("padding_options", lambda: "".join([
+        _cg_print(_cg_console(20), Padding("hi", (0, 2), expand=False, style="on blue")),
+        _cg_print(_cg_console(20), Padding.indent(Text("x"), 3)),
+        _cg_print(_cg_console(20), Padding(Text("a"), (1, 1), style="on blue"), height=5),
+    ])),
+    ("bar_colours", lambda: _cg_print(_cg_console(20), HBar(10, 2, 6, color="red", bgcolor="blue", width=10))),
     # 15. Panel at (almost) no inner width, with and without a height
     ("panel_narrow_heights", lambda: "".join(
         _cg_print(_cg_console(width), Panel(Text("hi"), padding=padding), height=height)

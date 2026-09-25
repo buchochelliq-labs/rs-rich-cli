@@ -134,9 +134,7 @@ impl Renderable for Align {
         let (left_pad, right_pad) = match self.align {
             HorizontalAlign::Left => (0, if self.pad { excess } else { 0 }),
             HorizontalAlign::Right => (excess, 0),
-            HorizontalAlign::Center => {
-                (excess / 2, if self.pad { excess - excess / 2 } else { 0 })
-            }
+            HorizontalAlign::Center => (excess / 2, if self.pad { excess - excess / 2 } else { 0 }),
         };
 
         let mut rows: Vec<Vec<Segment>> = Vec::with_capacity(lines.len());

@@ -1363,8 +1363,9 @@ fn justify_line(
     // covers the character at that edge, so upstream's run there is the base
     // style alone and the padding extends it.
     let content_chars: usize = content.iter().map(|s| s.text.chars().count()).sum();
+    // With no content at all, the two pads of a centred line are one run.
     let join_left = content_chars > 0 && !covered(0);
-    let join_right = content_chars > 0 && !covered(content_chars - 1);
+    let join_right = content_chars == 0 || !covered(content_chars - 1);
 
     let mut out = Vec::with_capacity(content.len() + 2);
     match justify {

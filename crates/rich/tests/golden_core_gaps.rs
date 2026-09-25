@@ -13,9 +13,9 @@ use rich::log_render::LogRender;
 use rich::measure::Measurement;
 use rich::terminal_theme::{DEFAULT_TERMINAL_THEME, SVG_EXPORT_THEME};
 use rich::{
-    Align, HorizontalAlign, VerticalAlign, VerticalCenter,
-    Cell, ColorSystem, Console, ConsoleOptions, Json, Justify, Overflow, Panel, RenderStrOptions,
-    Renderable, Rule, Segment, Style, Table, Text, Tree,
+    Align, Cell, ColorSystem, Console, ConsoleOptions, HorizontalAlign, Json, Justify, Overflow,
+    Padding, Panel, RenderStrOptions, Renderable, Rule, Segment, Style, Table, Text, Tree,
+    VerticalAlign, VerticalCenter,
 };
 
 const JSON_SAMPLE: &str =
@@ -223,9 +223,10 @@ fn build(name: &str) -> String {
             &builder(30).highlight(true).build(),
             &panel("x 123 True".to_string()),
         ),
-        "options_highlight_panel_on" => {
-            print(&console(30), &panel("x 123 True".to_string()).highlight(true))
-        }
+        "options_highlight_panel_on" => print(
+            &console(30),
+            &panel("x 123 True".to_string()).highlight(true),
+        ),
         "options_highlight_tree_on" => print(
             &console(30),
             &Tree::new(Cell::Renderable(Arc::new("x 123".to_string()))).highlight(true),
@@ -406,8 +407,12 @@ fn build(name: &str) -> String {
             let text = || Box::new(Text::new("hi")) as Box<dyn Renderable>;
             let blue = || Style::parse("on blue").unwrap();
             let aligns = [
-                Align::center(text()).vertical(VerticalAlign::Top).style(blue()),
-                Align::center(text()).vertical(VerticalAlign::Middle).style(blue()),
+                Align::center(text())
+                    .vertical(VerticalAlign::Top)
+                    .style(blue()),
+                Align::center(text())
+                    .vertical(VerticalAlign::Middle)
+                    .style(blue()),
                 Align::right(text()).vertical(VerticalAlign::Bottom),
                 Align::new(text(), HorizontalAlign::Left)
                     .vertical(VerticalAlign::Middle)
@@ -458,13 +463,45 @@ fn build(name: &str) -> String {
                 Justify::Full,
                 Justify::Default,
             ] {
-                out.push_str(&print(&console, &panel(Text::styled("", red()).justify(justify))));
+                out.push_str(&print(
+                    &console,
+                    &panel(Text::styled("", red()).justify(justify)),
+                ));
             }
             let mut options = console.options();
             options.justify = Justify::Left;
             out.push_str(&console.capture(|c| c.print_with(&Text::styled("", red()), &options)));
             out
         }
+        "padding_options" => {
+            let console = console(20);
+            let blue = || Style::parse("on blue").unwrap();
+            let mut options = console.options();
+            options.height = Some(5);
+            [
+                print(
+                    &console,
+                    &Padding::new(Box::new(Text::new("hi")), (0, 2, 0, 2))
+                        .expand(false)
+                        .style(blue()),
+                ),
+                print(&console, &Padding::indent(Box::new(Text::new("x")), 3)),
+                console.capture(|c| {
+                    c.print_with(
+                        &Padding::new(Box::new(Text::new("a")), (1, 1, 1, 1)).style(blue()),
+                        &options,
+                    )
+                }),
+            ]
+            .concat()
+        }
+        "bar_colours" => print(
+            &console(20),
+            &rich::Bar::new(10.0, 2.0, 6.0)
+                .color(rich::Color::parse("red").unwrap())
+                .bgcolor(rich::Color::parse("blue").unwrap())
+                .width(10),
+        ),
         other => panic!("no Rust builder for core gap case {other:?}"),
     }
 }
@@ -489,7 +526,7 @@ fn core_gaps_parity() {
         checked += 1;
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
-    assert_eq!(checked, 49, "expected every core gap case to run");
+    assert_eq!(checked, 51, "expected every core gap case to run");
 }
 
 /// `Renderables` renders nothing for no children and measures `(1, 1)`, as

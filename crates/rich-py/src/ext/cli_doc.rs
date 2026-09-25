@@ -759,6 +759,35 @@ impl ConfigReference {
         Ok(ConfigReference { inner })
     }
 
+    /// The reference a command's `config_key`/`env` arguments imply, plus
+    /// a description, sources and more entries.
+    #[classmethod]
+    #[pyo3(signature = (spec, *, description=None, sources=None, entries=None))]
+    fn from_spec(
+        _cls: &Bound<'_, PyType>,
+        spec: PyRef<'_, CommandSpec>,
+        description: Option<String>,
+        sources: Option<&Bound<'_, PyAny>>,
+        entries: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Self> {
+        let mut inner = CoreReference::from_spec(&spec.inner);
+        if let Some(text) = description {
+            inner = inner.description(text);
+        }
+        if let Some(sources) = sources {
+            for source in sources.try_iter()? {
+                let (name, location, description): (String, String, String) = source?.extract()?;
+                inner = inner.source(name, location, description);
+            }
+        }
+        if let Some(entries) = entries {
+            for entry in entries.try_iter()? {
+                inner = inner.entry(entry?.extract::<PyRef<'_, ConfigEntry>>()?.inner.clone());
+            }
+        }
+        Ok(ConfigReference { inner })
+    }
+
     /// The reference as Markdown.
     fn to_markdown(&self) -> String {
         self.inner.to_markdown()
