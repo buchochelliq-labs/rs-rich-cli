@@ -9,8 +9,10 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use rich::console::ConsoleOptions;
 use rich::r#box::Box as BoxStyle;
-use rich::{CodeHighlighter, Console, Highlighter, SyntectHighlighter, Theme};
+use rich::segment::Segment;
+use rich::{CodeHighlighter, Console, FenceRenderer, Highlighter, SyntectHighlighter, Theme};
 use rich_plugin_api::{
     is_valid_name, Capability, HighlighterFactory, Plugin, PluginError, PluginMetadata,
     PluginRegistrar, SourceRenderer, PLUGIN_API_VERSION,
@@ -39,6 +41,7 @@ pub struct ExtensionRegistry {
     themes: BTreeMap<String, (String, Theme)>,
     box_styles: BTreeMap<String, (String, BoxStyle)>,
     renderers: BTreeMap<String, (String, Arc<dyn SourceRenderer>)>,
+    fence_renderers: BTreeMap<String, (String, Arc<dyn FenceRenderer>)>,
     plugins: Vec<RegisteredPlugin>,
 }
 
@@ -141,6 +144,9 @@ impl ExtensionRegistry {
         for (name, value) in staged.renderers {
             self.renderers.insert(name, (id.clone(), value));
         }
+        for (language, value) in staged.fence_renderers {
+            self.fence_renderers.insert(language, (id.clone(), value));
+        }
         self.plugins.push(RegisteredPlugin {
             metadata,
             capabilities: staged.capabilities,
@@ -155,6 +161,7 @@ impl ExtensionRegistry {
             Capability::Theme(name) => self.themes.get(name).map(|e| &e.0),
             Capability::BoxStyle(name) => self.box_styles.get(name).map(|e| &e.0),
             Capability::Renderer(name) => self.renderers.get(name).map(|e| &e.0),
+            Capability::FenceRenderer(language) => self.fence_renderers.get(language).map(|e| &e.0),
             _ => None,
         }
         .map(String::as_str)
@@ -190,6 +197,26 @@ impl ExtensionRegistry {
         self.renderers.get(name).map(|e| e.1.clone())
     }
 
+    /// The fence renderer registered for `language`.
+    pub fn fence_renderer(&self, language: &str) -> Option<Arc<dyn FenceRenderer>> {
+        self.fence_renderers.get(language).map(|e| e.1.clone())
+    }
+
+    /// One [`FenceRenderer`] that routes each fence to the renderer registered
+    /// for its language, for [`rich::markdown::Markdown::fence_renderer`]. `None` when no
+    /// plugin registered one, so a caller can leave Markdown untouched.
+    pub fn fences(&self) -> Option<Arc<dyn FenceRenderer>> {
+        if self.fence_renderers.is_empty() {
+            return None;
+        }
+        let routes = self
+            .fence_renderers
+            .iter()
+            .map(|(language, (_, renderer))| (language.clone(), renderer.clone()))
+            .collect();
+        Some(Arc::new(FenceRoutes(routes)))
+    }
+
     /// The plugin id that provided a capability, or `"(direct)"` for
     /// highlighters registered without a plugin.
     pub fn provided_by(&self, capability: &Capability) -> Option<&str> {
@@ -217,6 +244,24 @@ struct Staged {
     themes: Vec<(String, Theme)>,
     box_styles: Vec<(String, BoxStyle)>,
     renderers: Vec<(String, Arc<dyn SourceRenderer>)>,
+    fence_renderers: Vec<(String, Arc<dyn FenceRenderer>)>,
+}
+
+/// Routes fences by language; see [`ExtensionRegistry::fences`].
+struct FenceRoutes(BTreeMap<String, Arc<dyn FenceRenderer>>);
+
+impl FenceRenderer for FenceRoutes {
+    fn render_fence(
+        &self,
+        language: &str,
+        code: &str,
+        console: &Console,
+        options: &ConsoleOptions,
+    ) -> Option<Vec<Segment>> {
+        self.0
+            .get(language)?
+            .render_fence(language, code, console, options)
+    }
 }
 
 impl Staged {
@@ -258,6 +303,13 @@ impl PluginRegistrar for Staged {
         self.capabilities
             .push(Capability::Renderer(name.to_string()));
         self.renderers.push((name.to_string(), renderer));
+    }
+
+    fn fence_renderer(&mut self, language: &str, renderer: Arc<dyn FenceRenderer>) {
+        self.check(language);
+        self.capabilities
+            .push(Capability::FenceRenderer(language.to_string()));
+        self.fence_renderers.push((language.to_string(), renderer));
     }
 }
 
@@ -360,6 +412,59 @@ mod tests {
             .collect();
         assert_eq!(ids, ["a", "b"]);
         assert!(registry.theme("dark").is_some() && registry.theme("light").is_some());
+    }
+
+    /// Fences reach Markdown through `fences()`, routed by language, and two
+    /// plugins cannot claim the same language.
+    #[test]
+    fn fence_renderers_route_by_language_and_conflict_by_language() {
+        struct Tag(&'static str);
+        impl FenceRenderer for Tag {
+            fn render_fence(
+                &self,
+                _language: &str,
+                _code: &str,
+                _console: &Console,
+                _options: &ConsoleOptions,
+            ) -> Option<Vec<Segment>> {
+                Some(vec![Segment::new(self.0, None), Segment::line()])
+            }
+        }
+        struct Fences(&'static str, &'static str);
+        impl Plugin for Fences {
+            fn metadata(&self) -> PluginMetadata {
+                PluginMetadata::new(self.0, self.0, "0.0.0")
+            }
+            fn register(&self, registrar: &mut dyn PluginRegistrar) -> Result<(), PluginError> {
+                registrar.fence_renderer(self.1, Arc::new(Tag(self.1)));
+                Ok(())
+            }
+        }
+
+        let mut registry = ExtensionRegistry::with_defaults();
+        assert!(registry.fences().is_none());
+        registry.add_plugin(&Fences("diagrams", "mermaid")).unwrap();
+        registry.add_plugin(&Fences("charts", "vega")).unwrap();
+        let conflict = registry
+            .add_plugin(&Fences("other", "mermaid"))
+            .unwrap_err();
+        assert!(
+            matches!(conflict, PluginError::Conflict { .. }),
+            "{conflict}"
+        );
+        assert_eq!(
+            registry.provided_by(&Capability::FenceRenderer("mermaid".into())),
+            Some("diagrams")
+        );
+
+        let md = rich::markdown::Markdown::new(
+            "```mermaid\nx\n```\n\n```vega\ny\n```\n\n```rust\nz\n```",
+        )
+        .fence_renderer(registry.fences().unwrap());
+        let console = Console::builder().width(30).color_system(None).build();
+        let out = console.render_to_string(&md);
+        assert!(out.contains("mermaid") && out.contains("vega"), "{out}");
+        assert!(out.contains('z'), "the rust fence is still code: {out}");
     }
 
     #[test]

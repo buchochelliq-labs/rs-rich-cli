@@ -111,6 +111,8 @@ enum Mode {
     Env,
     /// `capture -- CMD…`: run a command and show or export its output.
     Capture,
+    /// `mermaid`: draw a Mermaid diagram (not upstream; see `rs-rich-mermaid`).
+    Mermaid,
 }
 
 impl Mode {
@@ -238,6 +240,11 @@ const MODE_SPECS: &[ModeSpec] = &[
         mode: Mode::Capture,
         primary: "capture",
         aliases: &["capture"],
+    },
+    ModeSpec {
+        mode: Mode::Mermaid,
+        primary: "mermaid",
+        aliases: &["mermaid", "mmd"],
     },
 ];
 
@@ -398,6 +405,9 @@ struct Cli {
     #[cfg_attr(not(feature = "art"), allow(dead_code))]
     image_gamma: Option<f32>,
     log_presentation: String,
+    /// `--mermaid-backend`: how Mermaid diagrams are drawn; `None` when not
+    /// given (see [`MermaidBackend`]).
+    mermaid_backend: Option<MermaidBackend>,
     theme_styles: std::collections::BTreeMap<String, Style>,
     /// `--theme-file PATH`: styles from an upstream `[styles]` theme file,
     /// layered under config themes and `--theme-style`.
@@ -472,6 +482,63 @@ struct Cli {
     viewers: viewers::ViewerOptions,
 }
 
+/// `--mermaid-backend`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MermaidBackend {
+    /// Flowcharts as text; other diagrams as source. The default for fences.
+    Text,
+    /// Mermaid's own CLI first (the `mmdc` feature). The default for
+    /// `rich mermaid` in a build that has it.
+    Mmdc,
+    /// Markdown fences stay code blocks, as upstream renders them.
+    Off,
+}
+
+impl MermaidBackend {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "text" => Ok(Self::Text),
+            "off" => Ok(Self::Off),
+            "mmdc" if cfg!(feature = "mmdc") => Ok(Self::Mmdc),
+            "mmdc" => Err(
+                "--mermaid-backend mmdc needs a build with the mmdc feature \
+                 (cargo install rs-rich-cli --features mmdc)"
+                    .into(),
+            ),
+            other => Err(format!(
+                "unknown Mermaid backend {other:?} (text, mmdc, off)"
+            )),
+        }
+    }
+}
+
+/// Mermaid options for a backend.
+#[cfg(feature = "mermaid")]
+fn mermaid_options(backend: MermaidBackend) -> rich_mermaid::MermaidOptions {
+    rich_mermaid::MermaidOptions {
+        backend: match backend {
+            MermaidBackend::Mmdc => rich_mermaid::Backend::Mmdc,
+            MermaidBackend::Text | MermaidBackend::Off => rich_mermaid::Backend::Text,
+        },
+        ..rich_mermaid::MermaidOptions::default()
+    }
+}
+
+/// The CLI's plugin registry: the built-ins, and Mermaid where compiled in.
+fn plugin_registry(mermaid: MermaidBackend) -> rich_ext::ExtensionRegistry {
+    #[cfg_attr(not(feature = "mermaid"), allow(unused_mut))]
+    let mut registry = rich_ext::ExtensionRegistry::with_defaults();
+    #[cfg(feature = "mermaid")]
+    if mermaid != MermaidBackend::Off {
+        registry
+            .add_plugin(&rich_mermaid::MermaidPlugin::new(mermaid_options(mermaid)))
+            .expect("the Mermaid plugin registers cleanly");
+    }
+    #[cfg(not(feature = "mermaid"))]
+    let _ = mermaid;
+    registry
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CollisionPolicy {
     Error,
@@ -530,6 +597,7 @@ const VALUE_OPTIONS: &[&str] = &[
     "--batch-input-root",
     "--batch-name-template",
     "--log-presentation",
+    "--mermaid-backend",
     "-w",
     "--width",
     "-o",
@@ -1137,6 +1205,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut image_contrast = None;
     let mut image_gamma = None;
     let mut log_presentation = String::from("plain");
+    let mut mermaid_backend = None;
     let mut theme_styles = std::collections::BTreeMap::new();
     let mut theme_file_styles = std::collections::BTreeMap::new();
     let mut height = None;
@@ -1241,6 +1310,12 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--log" => set_mode(&mut mode, Mode::Log)?,
             "--inspect" => set_mode(&mut mode, Mode::Inspect)?,
             "--ansi-explain" => set_mode(&mut mode, Mode::AnsiExplain)?,
+            "--mermaid-backend" => {
+                let value = iter
+                    .next()
+                    .ok_or("--mermaid-backend requires text, mmdc or off")?;
+                mermaid_backend = Some(MermaidBackend::parse(value)?);
+            }
             "--log-presentation" => {
                 let value = iter
                     .next()
@@ -2006,6 +2081,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         image_contrast,
         image_gamma,
         log_presentation,
+        mermaid_backend,
         theme_styles,
         theme_file_styles,
         height,
@@ -2443,6 +2519,7 @@ fn detect_mode(resource: Option<&str>) -> Mode {
         Some("csv") | Some("tsv") => Mode::Csv,
         Some("ipynb") => Mode::Ipynb,
         Some("gif") => Mode::Gif,
+        Some("mmd") | Some("mermaid") if cfg!(feature = "mermaid") => Mode::Mermaid,
         // Anything the table above does not divert is source code, and upstream
         // highlights it: `rich main.rs` is syntax-highlighted with no flag at
         // all. We printed it raw instead, so `rich hello.py` produced no
@@ -3256,6 +3333,13 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             ExitCode::from(code)
         });
     }
+    if mode == Mode::Mermaid && !cfg!(feature = "mermaid") {
+        return fail(
+            &cli,
+            ExitClass::Usage,
+            "this build has no Mermaid support (the mermaid feature)",
+        );
+    }
     if mode == Mode::Env {
         let view = viewers::env(&cli.viewers, &cli.resources);
         let fit = view.measure(&console, &console.options()).maximum;
@@ -3440,7 +3524,32 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     let (renderable, fit): (Box<dyn Renderable>, Option<usize>) = match mode {
         // `Markdown` defines no `__rich_measure__`, so upstream measures it as
         // the whole available width and a panel around it never shrinks.
-        Mode::Markdown => (Box::new(build_markdown(&content, cli.hyperlinks)), None),
+        Mode::Markdown => {
+            let mut markdown = build_markdown(&content, cli.hyperlinks);
+            // ```mermaid fences draw as diagrams unless `--mermaid-backend off`.
+            if let Some(fences) =
+                plugin_registry(cli.mermaid_backend.unwrap_or(MermaidBackend::Text)).fences()
+            {
+                markdown = markdown.fence_renderer(fences);
+            }
+            (Box::new(markdown), None)
+        }
+        #[cfg(feature = "mermaid")]
+        Mode::Mermaid => {
+            // The command itself asks for a diagram, so it may use mmdc.
+            let default = if cfg!(feature = "mmdc") {
+                MermaidBackend::Mmdc
+            } else {
+                MermaidBackend::Text
+            };
+            let backend = match cli.mermaid_backend.unwrap_or(default) {
+                MermaidBackend::Off => MermaidBackend::Text,
+                chosen => chosen,
+            };
+            let diagram =
+                rich_mermaid::Mermaid::new(content.clone()).options(mermaid_options(backend));
+            (Box::new(diagram), None)
+        }
         Mode::Json => {
             // `rich.json.JSON` sets `text.no_wrap = True`, and every decorator
             // upstream can wrap the document in — `Padding`, `Panel`, `Styled`,

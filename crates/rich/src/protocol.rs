@@ -215,6 +215,31 @@ pub trait CodeHighlighter: Send + Sync {
     }
 }
 
+/// Renders fenced Markdown code blocks of particular languages (for example
+/// ```` ```mermaid ````) in place of the usual highlighted code.
+///
+/// Upstream always renders a fence through `Syntax`, and so does
+/// [`Markdown`](crate::markdown::Markdown) unless a renderer is added with
+/// [`Markdown::fence_renderer`](crate::markdown::Markdown::fence_renderer).
+/// Markdown asks each renderer in turn; the first to return `Some` wins, and if
+/// none does the block is highlighted as code as before.
+///
+/// The fence body comes from the document, so treat it as untrusted: whatever
+/// text of it an implementation echoes must not carry terminal control
+/// sequences.
+pub trait FenceRenderer: Send + Sync {
+    /// Render the body of a fence whose info string starts with `language`, or
+    /// return `None` to decline. The returned segments fit `options.max_width`
+    /// and separate lines with `\n` segments, like [`Renderable::rich_render`].
+    fn render_fence(
+        &self,
+        language: &str,
+        code: &str,
+        console: &Console,
+        options: &ConsoleOptions,
+    ) -> Option<Vec<Segment>>;
+}
+
 /// Evidence for an optional output protocol; inference is not confirmation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Support {

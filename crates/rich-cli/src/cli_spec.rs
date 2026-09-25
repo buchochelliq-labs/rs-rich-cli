@@ -84,6 +84,7 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
             "width",
         ],
         "unicode" => &["limit", "width"],
+        "mermaid" => &["mermaid-backend", "width"],
         "env" => &["show-secrets", "width"],
         "capture" => &["cast", "redact", "redact-pattern", "sanitize", "width"],
         "inspect" => &[
@@ -384,6 +385,16 @@ fn mode_options() -> Vec<ArgSpec> {
         .choices(["plain", "rich"])
         .default_value("plain")
         .config_key("log_presentation"),
+        option(
+            "mermaid-backend",
+            "BACKEND",
+            MODE_OPTIONS,
+            "How Mermaid diagrams (`rich mermaid`, ```mermaid fences in Markdown) are drawn: text \
+             draws flowcharts as text, mmdc uses Mermaid's own CLI (a build with the mmdc \
+             feature; `rich mermaid` tries it first there), off leaves fences as code",
+        )
+        .choices(["text", "mmdc", "off"])
+        .config_key("mermaid_backend"),
         option(
             "loop",
             "N",
@@ -1137,6 +1148,12 @@ pub(crate) fn spec() -> CommandSpec {
             &[][..],
             "Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE \
              records it, --redact masks secrets), then exit with the command's status",
+        ),
+        (
+            "mermaid",
+            &["mmd"][..],
+            "Draw a Mermaid diagram: flowcharts as text, every type through mmdc where built in \
+             (.mmd and .mermaid files are detected)",
         ),
     ] {
         spec = spec.subcommand(mode_command(name, aliases, about));

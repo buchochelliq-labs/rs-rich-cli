@@ -24,6 +24,9 @@ struct Configuration {
     /// Set when a working-directory `rich.toml` asked for `sanitize = false`,
     /// which was ignored (see `load`).
     ignored_sanitize: bool,
+    /// Set when a working-directory `rich.toml` asked for
+    /// `mermaid_backend = "mmdc"`, which was ignored (see `load`).
+    ignored_mmdc: bool,
     /// The `export_*` keys a working-directory `rich.toml` set, which were
     /// ignored (see `load`).
     ignored_export: Vec<&'static str>,
@@ -199,6 +202,7 @@ const VALUE_KEYS: &[&str] = &[
     "log_presentation",
     "format",
     "theme_file",
+    "mermaid_backend",
 ];
 
 pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
@@ -248,6 +252,9 @@ pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
             "log_presentation" => value
                 .as_str()
                 .is_some_and(|v| matches!(v, "plain" | "rich")),
+            "mermaid_backend" => value
+                .as_str()
+                .is_some_and(|v| matches!(v, "text" | "mmdc" | "off")),
             "format" => value
                 .as_str()
                 .is_some_and(|v| crate::inspect::InputFormat::parse(v).is_ok()),
@@ -407,6 +414,7 @@ fn decode_configuration(text: &str, selected: Option<&str>) -> Result<Configurat
         ignored_color: false,
         ignored_theme_file: false,
         ignored_sanitize: false,
+        ignored_mmdc: false,
         ignored_export: Vec::new(),
     })
 }
@@ -474,9 +482,10 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
     // For the same reason it may not name a file for every command to read
     // (`theme_file`: a FIFO hangs every run) or to write (`export_html`,
     // `export_svg`: any path the user can write), nor turn off the sanitizing
-    // `rich view` and `rich diff` do by default.
+    // `rich view` and `rich diff` do by default, nor start a browser for every
+    // Markdown document (`mermaid_backend = "mmdc"`).
     if untrusted {
-        let (mut theme_file, mut sanitize) = (false, false);
+        let (mut theme_file, mut sanitize, mut mmdc) = (false, false, false);
         let mut export = Vec::new();
         for table in std::iter::once(&mut settings.settings)
             .chain(std::iter::once(&mut settings.base))
@@ -487,6 +496,10 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
                 table.remove("sanitize");
                 sanitize = true;
             }
+            if table.get("mermaid_backend").and_then(Value::as_str) == Some("mmdc") {
+                table.remove("mermaid_backend");
+                mmdc = true;
+            }
             for key in EXPORT_KEYS {
                 if table.remove(*key).is_some() && !export.contains(key) {
                     export.push(*key);
@@ -496,6 +509,7 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
         export.sort_unstable();
         settings.ignored_theme_file = theme_file;
         settings.ignored_sanitize = sanitize;
+        settings.ignored_mmdc = mmdc;
         settings.ignored_export = export;
     }
     // A theme file named in a config file is relative to that file, so the
@@ -716,6 +730,9 @@ pub(crate) fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<St
             eprintln!("rich: warning: {}", untrusted_export(key));
         }
     }
+    if configuration.ignored_mmdc && !json_report && !explicit.contains("mermaid_backend") {
+        eprintln!("rich: warning: {UNTRUSTED_MMDC}");
+    }
     let mut result = Vec::new();
     for (name, style) in theme_styles {
         result.extend(["--theme-style".into(), format!("{name}={style}")]);
@@ -864,6 +881,7 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
             ignored_color: configuration.ignored_color,
             ignored_theme_file: configuration.ignored_theme_file,
             ignored_sanitize: configuration.ignored_sanitize,
+            ignored_mmdc: configuration.ignored_mmdc,
             ignored_export: &configuration.ignored_export,
         };
         return Ok(Some(explain(&layers, key)));
@@ -898,6 +916,8 @@ struct Layers<'a> {
     ignored_theme_file: bool,
     /// The working-directory config's `sanitize = false` was ignored.
     ignored_sanitize: bool,
+    /// The working-directory config's `mermaid_backend = "mmdc"` was ignored.
+    ignored_mmdc: bool,
     /// The working-directory config's `export_*` keys that were ignored.
     ignored_export: &'a [&'static str],
 }
@@ -986,6 +1006,7 @@ fn explain(layers: &Layers, key: Option<&str>) -> String {
             UNTRUSTED_THEME_FILE,
         ),
         (layers.ignored_sanitize, "sanitize", UNTRUSTED_SANITIZE),
+        (layers.ignored_mmdc, "mermaid_backend", UNTRUSTED_MMDC),
     ] {
         if ignored && key.is_none_or(|key| key == name) {
             if !output.ends_with('\n') {
@@ -1028,6 +1049,13 @@ fn untrusted_export(key: &str) -> String {
 const UNTRUSTED_SANITIZE: &str =
     "sanitize = false in ./rich.toml is ignored: a project's config may not let input control \
      the terminal; pass --no-sanitize, or set it in ~/.config/rich/config.toml";
+
+/// Why a working-directory `rich.toml`'s `mermaid_backend = "mmdc"` has no
+/// effect.
+const UNTRUSTED_MMDC: &str =
+    "mermaid_backend = \"mmdc\" in ./rich.toml is ignored: a project's config may not start a \
+     browser; pass --mermaid-backend mmdc, or set it in ~/.config/rich/config.toml or a file \
+     given with --config";
 
 /// Every key `validate_value` accepts.
 #[cfg(test)]

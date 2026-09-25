@@ -4,9 +4,11 @@
 
 use std::sync::Arc;
 
+use rich::console::ConsoleOptions;
 use rich::protocol::{HighlightError, HighlightedCode};
 use rich::r#box::ROUNDED;
-use rich::{CodeHighlighter, Console, Highlighter, Renderable, Text, Theme};
+use rich::segment::Segment;
+use rich::{CodeHighlighter, Console, FenceRenderer, Highlighter, Renderable, Text, Theme};
 use rich_plugin_api::{
     Capability, Plugin, PluginError, PluginMetadata, PluginRegistrar, SourceRenderer,
     PLUGIN_API_VERSION,
@@ -54,6 +56,22 @@ impl SourceRenderer for Upper {
     }
 }
 
+struct Stars;
+impl FenceRenderer for Stars {
+    fn render_fence(
+        &self,
+        _language: &str,
+        code: &str,
+        _console: &Console,
+        _options: &ConsoleOptions,
+    ) -> Option<Vec<Segment>> {
+        Some(vec![
+            Segment::new("*".repeat(code.len()), None),
+            Segment::line(),
+        ])
+    }
+}
+
 struct Everything;
 impl Plugin for Everything {
     fn metadata(&self) -> PluginMetadata {
@@ -66,6 +84,7 @@ impl Plugin for Everything {
         registrar.theme("calm", Theme::new());
         registrar.box_style("round", ROUNDED);
         registrar.renderer("upper", Arc::new(Upper));
+        registrar.fence_renderer("stars", Arc::new(Stars));
         Ok(())
     }
 }
@@ -96,6 +115,10 @@ impl PluginRegistrar for Recorder {
         self.capabilities.push(Capability::Renderer(name.into()));
         self.renderers.push(renderer);
     }
+    fn fence_renderer(&mut self, language: &str, _renderer: Arc<dyn FenceRenderer>) {
+        self.capabilities
+            .push(Capability::FenceRenderer(language.into()));
+    }
 }
 
 #[test]
@@ -114,6 +137,7 @@ fn a_plugin_registers_every_capability_through_public_items() {
             Capability::Theme("calm".into()),
             Capability::BoxStyle("round".into()),
             Capability::Renderer("upper".into()),
+            Capability::FenceRenderer("stars".into()),
         ]
     );
     let console = Console::builder().width(20).color_system(None).build();

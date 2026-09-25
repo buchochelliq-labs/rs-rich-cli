@@ -26,6 +26,7 @@ rich-cli ──▶ rich-ext ──▶ rich
                  │          ▲   (core: no deps on ext/cli/macros, no knowledge of them)
                  ├──▶ rich-plugin-api ──▶ rich   (the plugin contract; plugins depend on it, not on ext)
                  └──▶ rich-macros   (proc-macros; optional, behind ext's `macros` feature)
+rich-cli ──▶ rich-mermaid ──▶ rich-plugin-api      (a plugin crate; optional rich-art for `mmdc`)
 ```
 
 If a change would make `crates/rich` diverge from upstream `rich`, it is almost
@@ -46,6 +47,7 @@ possible, and keep the boundary free of core back-dependencies.
 | `rs-rich-cli`  | independent SemVer | whenever we ship anything              |
 | `rs-rich-ext`  | independent SemVer | whenever we ship anything              |
 | `rs-rich-plugin-api` | independent SemVer | whenever we ship anything        |
+| `rs-rich-mermaid` | independent SemVer | whenever we ship anything           |
 | `rs-rich-macros` | independent SemVer | whenever we ship anything            |
 | `rs-rich-art`  | independent SemVer | whenever we ship anything              |
 

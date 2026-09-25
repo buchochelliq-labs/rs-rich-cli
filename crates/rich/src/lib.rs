@@ -106,8 +106,8 @@ pub use crate::progress::{
 };
 pub use crate::progress_bar::ProgressBar;
 pub use crate::protocol::{
-    CodeHighlighter, HighlightError, HighlightSpan, HighlightedCode, HighlightedLine, Highlighter,
-    LineRenderable, Renderable,
+    CodeHighlighter, FenceRenderer, HighlightError, HighlightSpan, HighlightedCode,
+    HighlightedLine, Highlighter, LineRenderable, Renderable,
 };
 pub use crate::rule::Rule;
 pub use crate::screen::Screen;

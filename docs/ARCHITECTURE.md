@@ -1,6 +1,6 @@
 # Architecture
 
-A six-crate Cargo workspace with a strict, one-directional dependency rule.
+A seven-crate Cargo workspace with a strict, one-directional dependency rule.
 Each crate versions independently. The [manifest-version table](index.md#versions-in-this-checkout)
 tracks this checkout; registry badges show published versions.
 
@@ -38,6 +38,11 @@ tracks this checkout; registry badges show published versions.
   `rich` only, so a plugin never needs `rich-ext`; `rich-ext`'s
   `ExtensionRegistry` is the host that loads plugins. Independent SemVer. See
   [PLUGINS](PLUGINS.md).
+- **`crates/rich-mermaid`** — Mermaid diagrams as a plugin: flowcharts drawn
+  as text, every diagram type through Mermaid's CLI (`mmdc`) behind its `mmdc`
+  feature. Depends on `rich`, `rich-plugin-api` and (for `mmdc`) `rich-art`,
+  never on `rich-ext`. The CLI registers it for `rich mermaid` and Markdown
+  fences. Independent SemVer.
 - **`crates/rich-macros`** — procedural macros (`richf!`, `style!`,
   `theme_key!`, `markup!`, `#[derive(Rich)]`) that check markup and styles at
   compile time. Depends on `rich` only (to parse markup and styles while

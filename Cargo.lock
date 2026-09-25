@@ -972,6 +972,7 @@ dependencies = [
  "rs-rich",
  "rs-rich-art",
  "rs-rich-ext",
+ "rs-rich-mermaid",
  "same-file",
  "serde_json",
  "tempfile",
@@ -1011,6 +1012,16 @@ dependencies = [
  "quote",
  "rs-rich",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "rs-rich-mermaid"
+version = "0.0.1"
+dependencies = [
+ "rs-rich",
+ "rs-rich-art",
+ "rs-rich-ext",
+ "rs-rich-plugin-api",
 ]
 
 [[package]]

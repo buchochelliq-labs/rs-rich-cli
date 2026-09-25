@@ -36,7 +36,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use rich::r#box::Box as BoxStyle;
-use rich::{CodeHighlighter, Highlighter, Renderable, Theme};
+use rich::{CodeHighlighter, FenceRenderer, Highlighter, Renderable, Theme};
 
 /// The version of this contract. A host accepts a plugin only if the plugin's
 /// [`PluginMetadata::api_version`] equals the host's.
@@ -108,6 +108,10 @@ pub trait PluginRegistrar {
 
     /// A named source renderer.
     fn renderer(&mut self, name: &str, renderer: Arc<dyn SourceRenderer>);
+
+    /// A renderer for Markdown fences whose language is `language` (for
+    /// example `"mermaid"`), used in place of highlighting them as code.
+    fn fence_renderer(&mut self, language: &str, renderer: Arc<dyn FenceRenderer>);
 }
 
 /// Something that extends `rich`.
@@ -130,6 +134,7 @@ pub enum Capability {
     Theme(String),
     BoxStyle(String),
     Renderer(String),
+    FenceRenderer(String),
 }
 
 impl fmt::Display for Capability {
@@ -140,6 +145,7 @@ impl fmt::Display for Capability {
             Capability::Theme(name) => write!(f, "theme {name:?}"),
             Capability::BoxStyle(name) => write!(f, "box style {name:?}"),
             Capability::Renderer(name) => write!(f, "renderer {name:?}"),
+            Capability::FenceRenderer(language) => write!(f, "fence renderer {language:?}"),
         }
     }
 }
