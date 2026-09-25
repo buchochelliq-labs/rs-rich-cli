@@ -398,6 +398,23 @@ def test_refusals_match_the_rust_host():
     assert snapshot(registry) == before
 
 
+def test_a_registry_works_from_other_threads():
+    import threading
+
+    registry = p.ExtensionRegistry.with_defaults()
+    results = []
+
+    def work():
+        registry.add_plugin(Everything("threaded"))
+        results.append(registry.transform("upper")(Text("x")).plain)
+
+    thread = threading.Thread(target=work)
+    thread.start()
+    thread.join()
+    assert results == ["X"]
+    assert registry.plugins()[-1].metadata.id == "threaded"
+
+
 def test_the_registrar_closes_when_register_returns():
     kept = []
     p.ExtensionRegistry().add_plugin(Registers("keep", kept.append))

@@ -6,7 +6,9 @@ from ._native import (
     Console,
     ConsoleDimensions,
     ConsoleOptions,
+    Group,
     ThemeContext,
+    group,
 )
 
 __all__ = [
@@ -15,5 +17,7 @@ __all__ = [
     "Console",
     "ConsoleDimensions",
     "ConsoleOptions",
+    "Group",
     "ThemeContext",
+    "group",
 ]

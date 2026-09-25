@@ -1363,7 +1363,8 @@ class Markdown:
         inline_code_lexer: Optional[str] = None,
         inline_code_theme: Optional[str] = None,
         *,
-        highlighter: Optional[str] = None,
+        highlighter: Optional[Union[str, "CodeHighlighter", Any]] = None,
+        fences: Optional[List[Union["MermaidFences", "FenceRenderer", Any]]] = None,
     ) -> None: ...
     @property
     def markup(self) -> str: ...
@@ -1380,7 +1381,9 @@ class Markdown:
     @property
     def inline_code_theme(self) -> Optional[str]: ...
     @property
-    def highlighter(self) -> Optional[str]: ...
+    def highlighter(self) -> Optional[Union[str, "CodeHighlighter", Any]]: ...
+    @property
+    def fences(self) -> List[Any]: ...
 
 class Syntax:
     code: str
@@ -1411,7 +1414,7 @@ class Syntax:
         background_color: Optional[str] = None,
         indent_guides: bool = False,
         padding: PaddingDimensions = 0,
-        highlighter: Optional[str] = None,
+        highlighter: Optional[Union[str, "CodeHighlighter", Any]] = None,
     ) -> None: ...
     @classmethod
     def from_path(
@@ -1431,7 +1434,7 @@ class Syntax:
         background_color: Optional[str] = None,
         indent_guides: bool = False,
         padding: PaddingDimensions = 0,
-        highlighter: Optional[str] = None,
+        highlighter: Optional[Union[str, "CodeHighlighter", Any]] = None,
     ) -> "Syntax": ...
     @classmethod
     def guess_lexer(cls, path: str, code: Optional[str] = None) -> str: ...
@@ -1454,7 +1457,7 @@ class Syntax:
     @property
     def background_color(self) -> Optional[str]: ...
     @property
-    def highlighter(self) -> Optional[str]: ...
+    def highlighter(self) -> Optional[Union[str, "CodeHighlighter", Any]]: ...
     def __rich_measure__(self, console: "Console", options: "ConsoleOptions") -> "Measurement": ...
 
 def code_highlighters() -> List[str]:
@@ -1643,6 +1646,569 @@ def traceback_install(
     """``rich.traceback.install`` (re-exported as ``rs_rich.traceback.install``)."""
 
 # --- area: live (Live, Progress, Status, Screen, Pager, prompts, logging) ---
+
+import logging as _logging
+
+GetTimeCallable = Callable[[], float]
+VerticalOverflowMethod = Literal["crop", "ellipsis", "visible"]
+
+class Live:
+    def __init__(
+        self,
+        renderable: Optional[RenderableType] = None,
+        *,
+        console: Optional["Console"] = None,
+        screen: bool = False,
+        auto_refresh: bool = True,
+        refresh_per_second: float = 4,
+        transient: bool = False,
+        redirect_stdout: bool = True,
+        redirect_stderr: bool = True,
+        vertical_overflow: VerticalOverflowMethod = "ellipsis",
+        get_renderable: Optional[Callable[[], RenderableType]] = None,
+    ) -> None: ...
+    console: "Console"
+    auto_refresh: bool
+    transient: bool
+    refresh_per_second: float
+    vertical_overflow: VerticalOverflowMethod
+    @property
+    def is_started(self) -> bool: ...
+    @property
+    def renderable(self) -> RenderableType: ...
+    @property
+    def ipy_widget(self) -> None: ...
+    def get_renderable(self) -> RenderableType: ...
+    def start(self, refresh: bool = False) -> None: ...
+    def stop(self) -> None: ...
+    def update(self, renderable: RenderableType, *, refresh: bool = False) -> None: ...
+    def refresh(self) -> None: ...
+    def process_renderables(self, renderables: List[Any]) -> List[Any]: ...
+    def __enter__(self) -> "Live": ...
+    def __exit__(self, *args: Any) -> None: ...
+
+class LiveRender:
+    def __init__(
+        self,
+        renderable: RenderableType,
+        style: StyleType = "",
+        vertical_overflow: VerticalOverflowMethod = "ellipsis",
+    ) -> None: ...
+    renderable: RenderableType
+    style: StyleType
+    vertical_overflow: VerticalOverflowMethod
+    @property
+    def last_render_height(self) -> int: ...
+    def set_renderable(self, renderable: RenderableType) -> None: ...
+    def position_cursor(self) -> Any: ...
+    def restore_cursor(self) -> Any: ...
+    def __rich_console__(self, console: "Console", options: "ConsoleOptions") -> List["Segment"]: ...
+
+class ProgressBar:
+    def __init__(
+        self,
+        total: Optional[float] = 100.0,
+        completed: float = 0,
+        width: Optional[int] = None,
+        pulse: bool = False,
+        style: StyleType = "bar.back",
+        complete_style: StyleType = "bar.complete",
+        finished_style: StyleType = "bar.finished",
+        pulse_style: StyleType = "bar.pulse",
+        animation_time: Optional[float] = None,
+    ) -> None: ...
+    total: Optional[float]
+    completed: float
+    width: Optional[int]
+    pulse: bool
+    style: StyleType
+    complete_style: StyleType
+    finished_style: StyleType
+    pulse_style: StyleType
+    animation_time: Optional[float]
+    @property
+    def percentage_completed(self) -> Optional[float]: ...
+    def update(self, completed: float, total: Optional[float] = None) -> None: ...
+    def __rich_console__(self, console: "Console", options: "ConsoleOptions") -> List["Segment"]: ...
+    def __rich_measure__(self, console: "Console", options: "ConsoleOptions") -> "Measurement": ...
+
+class TaskID(int): ...
+
+class Task:
+    def __init__(
+        self,
+        id: int,
+        description: str,
+        total: Optional[float],
+        completed: float,
+        _get_time: GetTimeCallable,
+        finished_time: Optional[float] = None,
+        visible: bool = True,
+        fields: Optional[Dict[str, Any]] = None,
+        finished_speed: Optional[float] = None,
+        _lock: Any = None,
+    ) -> None: ...
+    id: int
+    description: str
+    total: Optional[float]
+    completed: float
+    finished_time: Optional[float]
+    visible: bool
+    fields: Dict[str, Any]
+    start_time: Optional[float]
+    stop_time: Optional[float]
+    finished_speed: Optional[float]
+    def get_time(self) -> float: ...
+    @property
+    def started(self) -> bool: ...
+    @property
+    def remaining(self) -> Optional[float]: ...
+    @property
+    def elapsed(self) -> Optional[float]: ...
+    @property
+    def finished(self) -> bool: ...
+    @property
+    def percentage(self) -> float: ...
+    @property
+    def speed(self) -> Optional[float]: ...
+    @property
+    def time_remaining(self) -> Optional[float]: ...
+
+class ProgressColumn:
+    max_refresh: Optional[float]
+    def __init__(self, table_column: Optional[Any] = None) -> None: ...
+    def get_table_column(self) -> Any: ...
+    def __call__(self, task: Task) -> RenderableType: ...
+    def render(self, task: Task) -> RenderableType: ...
+
+class RenderableColumn(ProgressColumn):
+    renderable: RenderableType
+    def __init__(self, renderable: RenderableType = "", *, table_column: Optional[Any] = None) -> None: ...
+
+class SpinnerColumn(ProgressColumn):
+    finished_text: "Text"
+    def __init__(
+        self,
+        spinner_name: str = "dots",
+        style: Optional[StyleType] = "progress.spinner",
+        speed: float = 1.0,
+        finished_text: Union[str, "Text"] = " ",
+        table_column: Optional[Any] = None,
+    ) -> None: ...
+    def set_spinner(
+        self, spinner_name: str, spinner_style: Optional[StyleType] = "progress.spinner", speed: float = 1.0
+    ) -> None: ...
+
+class TextColumn(ProgressColumn):
+    text_format: str
+    style: StyleType
+    justify: JustifyMethod
+    markup: bool
+    highlighter: Optional[Any]
+    def __init__(
+        self,
+        text_format: str,
+        style: StyleType = "none",
+        justify: JustifyMethod = "left",
+        markup: bool = True,
+        highlighter: Optional[Any] = None,
+        table_column: Optional[Any] = None,
+    ) -> None: ...
+
+class BarColumn(ProgressColumn):
+    bar_width: Optional[int]
+    style: StyleType
+    complete_style: StyleType
+    finished_style: StyleType
+    pulse_style: StyleType
+    def __init__(
+        self,
+        bar_width: Optional[int] = 40,
+        style: StyleType = "bar.back",
+        complete_style: StyleType = "bar.complete",
+        finished_style: StyleType = "bar.finished",
+        pulse_style: StyleType = "bar.pulse",
+        table_column: Optional[Any] = None,
+    ) -> None: ...
+
+class TimeElapsedColumn(ProgressColumn): ...
+
+class TaskProgressColumn(TextColumn):
+    text_format_no_percentage: str
+    show_speed: bool
+    def __init__(
+        self,
+        text_format: str = "[progress.percentage]{task.percentage:>3.0f}%",
+        text_format_no_percentage: str = "",
+        style: StyleType = "none",
+        justify: JustifyMethod = "left",
+        markup: bool = True,
+        highlighter: Optional[Any] = None,
+        table_column: Optional[Any] = None,
+        show_speed: bool = False,
+    ) -> None: ...
+    @classmethod
+    def render_speed(cls, speed: Optional[float]) -> "Text": ...
+
+class TimeRemainingColumn(ProgressColumn):
+    compact: bool
+    elapsed_when_finished: bool
+    def __init__(
+        self, compact: bool = False, elapsed_when_finished: bool = False, table_column: Optional[Any] = None
+    ) -> None: ...
+
+class FileSizeColumn(ProgressColumn): ...
+class TotalFileSizeColumn(ProgressColumn): ...
+class TransferSpeedColumn(ProgressColumn): ...
+
+class MofNCompleteColumn(ProgressColumn):
+    separator: str
+    def __init__(self, separator: str = "/", table_column: Optional[Any] = None) -> None: ...
+
+class DownloadColumn(ProgressColumn):
+    binary_units: bool
+    def __init__(self, binary_units: bool = False, table_column: Optional[Any] = None) -> None: ...
+
+class Progress:
+    def __init__(
+        self,
+        *columns: Union[str, ProgressColumn],
+        console: Optional["Console"] = None,
+        auto_refresh: bool = True,
+        refresh_per_second: float = 10,
+        speed_estimate_period: float = 30.0,
+        transient: bool = False,
+        redirect_stdout: bool = True,
+        redirect_stderr: bool = True,
+        get_time: Optional[GetTimeCallable] = None,
+        disable: bool = False,
+        expand: bool = False,
+    ) -> None: ...
+    columns: Tuple[Union[str, ProgressColumn], ...]
+    speed_estimate_period: float
+    disable: bool
+    expand: bool
+    get_time: GetTimeCallable
+    @property
+    def live(self) -> Live: ...
+    @property
+    def console(self) -> "Console": ...
+    @property
+    def print(self) -> Callable[..., None]: ...
+    @property
+    def log(self) -> Callable[..., None]: ...
+    @property
+    def tasks(self) -> List[Task]: ...
+    @property
+    def task_ids(self) -> List[int]: ...
+    @property
+    def finished(self) -> bool: ...
+    @classmethod
+    def get_default_columns(cls) -> Tuple[ProgressColumn, ...]: ...
+    def start(self) -> None: ...
+    def stop(self) -> None: ...
+    def __enter__(self) -> "Progress": ...
+    def __exit__(self, *args: Any) -> None: ...
+    def track(
+        self,
+        sequence: Iterable[Any],
+        total: Optional[float] = None,
+        completed: int = 0,
+        task_id: Optional[int] = None,
+        description: str = "Working...",
+        update_period: float = 0.1,
+    ) -> Iterator[Any]: ...
+    def wrap_file(
+        self, file: Any, total: Optional[int] = None, *, task_id: Optional[int] = None, description: str = "Reading..."
+    ) -> Any: ...
+    def open(
+        self,
+        file: Any,
+        mode: str = "r",
+        buffering: int = -1,
+        encoding: Optional[str] = None,
+        errors: Optional[str] = None,
+        newline: Optional[str] = None,
+        *,
+        total: Optional[int] = None,
+        task_id: Optional[int] = None,
+        description: str = "Reading...",
+    ) -> Any: ...
+    def start_task(self, task_id: int) -> None: ...
+    def stop_task(self, task_id: int) -> None: ...
+    def update(
+        self,
+        task_id: int,
+        *,
+        total: Optional[float] = None,
+        completed: Optional[float] = None,
+        advance: Optional[float] = None,
+        description: Optional[str] = None,
+        visible: Optional[bool] = None,
+        refresh: bool = False,
+        **fields: Any,
+    ) -> None: ...
+    def reset(
+        self,
+        task_id: int,
+        *,
+        start: bool = True,
+        total: Optional[float] = None,
+        completed: int = 0,
+        visible: Optional[bool] = None,
+        description: Optional[str] = None,
+        **fields: Any,
+    ) -> None: ...
+    def advance(self, task_id: int, advance: float = 1) -> None: ...
+    def refresh(self) -> None: ...
+    def get_renderable(self) -> RenderableType: ...
+    def get_renderables(self) -> Iterable[RenderableType]: ...
+    def make_tasks_table(self, tasks: Iterable[Task]) -> RenderableType: ...
+    def __rich__(self) -> RenderableType: ...
+    def add_task(
+        self,
+        description: str,
+        start: bool = True,
+        total: Optional[float] = 100.0,
+        completed: int = 0,
+        visible: bool = True,
+        **fields: Any,
+    ) -> int: ...
+    def remove_task(self, task_id: int) -> None: ...
+
+def track(
+    sequence: Iterable[Any],
+    description: str = "Working...",
+    total: Optional[float] = None,
+    completed: int = 0,
+    auto_refresh: bool = True,
+    console: Optional["Console"] = None,
+    transient: bool = False,
+    get_time: Optional[GetTimeCallable] = None,
+    refresh_per_second: float = 10,
+    style: StyleType = "bar.back",
+    complete_style: StyleType = "bar.complete",
+    finished_style: StyleType = "bar.finished",
+    pulse_style: StyleType = "bar.pulse",
+    update_period: float = 0.1,
+    disable: bool = False,
+    show_speed: bool = True,
+) -> Iterator[Any]: ...
+def wrap_file(
+    file: Any,
+    total: int,
+    *,
+    description: str = "Reading...",
+    auto_refresh: bool = True,
+    console: Optional["Console"] = None,
+    transient: bool = False,
+    get_time: Optional[GetTimeCallable] = None,
+    refresh_per_second: float = 10,
+    style: StyleType = "bar.back",
+    complete_style: StyleType = "bar.complete",
+    finished_style: StyleType = "bar.finished",
+    pulse_style: StyleType = "bar.pulse",
+    disable: bool = False,
+) -> Any: ...
+def open(
+    file: Any,
+    mode: str = "r",
+    buffering: int = -1,
+    encoding: Optional[str] = None,
+    errors: Optional[str] = None,
+    newline: Optional[str] = None,
+    *,
+    total: Optional[int] = None,
+    description: str = "Reading...",
+    auto_refresh: bool = True,
+    console: Optional["Console"] = None,
+    transient: bool = False,
+    get_time: Optional[GetTimeCallable] = None,
+    refresh_per_second: float = 10,
+    style: StyleType = "bar.back",
+    complete_style: StyleType = "bar.complete",
+    finished_style: StyleType = "bar.finished",
+    pulse_style: StyleType = "bar.pulse",
+    disable: bool = False,
+) -> Any: ...
+
+class Status:
+    def __init__(
+        self,
+        status: RenderableType,
+        *,
+        console: Optional["Console"] = None,
+        spinner: str = "dots",
+        spinner_style: StyleType = "status.spinner",
+        speed: float = 1.0,
+        refresh_per_second: float = 12.5,
+    ) -> None: ...
+    @property
+    def renderable(self) -> Any: ...
+    @property
+    def console(self) -> "Console": ...
+    @property
+    def status(self) -> RenderableType: ...
+    @property
+    def spinner_style(self) -> StyleType: ...
+    @property
+    def speed(self) -> float: ...
+    def update(
+        self,
+        status: Optional[RenderableType] = None,
+        *,
+        spinner: Optional[str] = None,
+        spinner_style: Optional[StyleType] = None,
+        speed: Optional[float] = None,
+    ) -> None: ...
+    def start(self) -> None: ...
+    def stop(self) -> None: ...
+    def __rich__(self) -> Any: ...
+    def __enter__(self) -> "Status": ...
+    def __exit__(self, *args: Any) -> None: ...
+
+class Screen:
+    def __init__(
+        self, *renderables: RenderableType, style: Optional[StyleType] = None, application_mode: bool = False
+    ) -> None: ...
+    renderable: RenderableType
+    style: Optional[StyleType]
+    application_mode: bool
+    def __rich_console__(self, console: "Console", options: "ConsoleOptions") -> List["Segment"]: ...
+
+class ScreenContext:
+    def __init__(self, console: "Console", hide_cursor: bool, style: StyleType = "") -> None: ...
+    @property
+    def console(self) -> "Console": ...
+    @property
+    def hide_cursor(self) -> bool: ...
+    @property
+    def screen(self) -> Screen: ...
+    def update(self, *renderables: RenderableType, style: Optional[StyleType] = None) -> None: ...
+    def __enter__(self) -> "ScreenContext": ...
+    def __exit__(self, *args: Any) -> None: ...
+
+class Pager:
+    def show(self, content: str) -> None: ...
+
+class SystemPager(Pager):
+    def _pager(self, content: str) -> Any: ...
+
+class PagerContext:
+    def __init__(
+        self, console: "Console", pager: Optional[Pager] = None, styles: bool = False, links: bool = False
+    ) -> None: ...
+    @property
+    def pager(self) -> Pager: ...
+    @property
+    def styles(self) -> bool: ...
+    @property
+    def links(self) -> bool: ...
+    def __enter__(self) -> "PagerContext": ...
+    def __exit__(self, *args: Any) -> None: ...
+
+class PromptError(Exception): ...
+
+class InvalidResponse(PromptError):
+    message: Any
+    def __init__(self, message: Any) -> None: ...
+    def __rich__(self) -> Any: ...
+
+class PromptBase:
+    response_type: type
+    validate_error_message: str
+    illegal_choice_message: str
+    prompt_suffix: str
+    choices: Optional[List[str]]
+    console: "Console"
+    prompt: "Text"
+    password: bool
+    case_sensitive: bool
+    show_default: bool
+    show_choices: bool
+    def __init__(
+        self,
+        prompt: Union[str, "Text"] = "",
+        *,
+        console: Optional["Console"] = None,
+        password: bool = False,
+        choices: Optional[List[str]] = None,
+        case_sensitive: bool = True,
+        show_default: bool = True,
+        show_choices: bool = True,
+    ) -> None: ...
+    @classmethod
+    def ask(
+        cls,
+        prompt: Union[str, "Text"] = "",
+        *,
+        console: Optional["Console"] = None,
+        password: bool = False,
+        choices: Optional[List[str]] = None,
+        case_sensitive: bool = True,
+        show_default: bool = True,
+        show_choices: bool = True,
+        default: Any = ...,
+        stream: Optional[IO[str]] = None,
+    ) -> Any: ...
+    def render_default(self, default: Any) -> "Text": ...
+    def make_prompt(self, default: Any) -> "Text": ...
+    @classmethod
+    def get_input(
+        cls, console: "Console", prompt: Union[str, "Text"], password: bool, stream: Optional[IO[str]] = None
+    ) -> str: ...
+    def check_choice(self, value: str) -> bool: ...
+    def process_response(self, value: str) -> Any: ...
+    def on_validate_error(self, value: str, error: InvalidResponse) -> None: ...
+    def pre_prompt(self) -> None: ...
+    def __call__(self, *, default: Any = ..., stream: Optional[IO[str]] = None) -> Any: ...
+
+class Prompt(PromptBase): ...
+class IntPrompt(PromptBase): ...
+class FloatPrompt(PromptBase): ...
+
+class Confirm(PromptBase):
+    def process_response(self, value: str) -> bool: ...
+
+class RichHandler(_logging.Handler):
+    KEYWORDS: Optional[List[str]]
+    HIGHLIGHTER_CLASS: Optional[type]
+    console: "Console"
+    highlighter: Any
+    markup: bool
+    enable_link_path: bool
+    rich_tracebacks: bool
+    keywords: Optional[List[str]]
+    def __init__(
+        self,
+        level: Union[int, str] = ...,
+        console: Optional["Console"] = None,
+        *,
+        show_time: bool = True,
+        omit_repeated_times: bool = True,
+        show_level: bool = True,
+        show_path: bool = True,
+        enable_link_path: bool = True,
+        highlighter: Any = None,
+        markup: bool = False,
+        rich_tracebacks: bool = False,
+        tracebacks_width: Optional[int] = None,
+        tracebacks_code_width: Optional[int] = 88,
+        tracebacks_extra_lines: int = 3,
+        tracebacks_theme: Optional[str] = None,
+        tracebacks_word_wrap: bool = True,
+        tracebacks_show_locals: bool = False,
+        tracebacks_suppress: Iterable[Any] = (),
+        tracebacks_max_frames: int = 100,
+        locals_max_length: int = 10,
+        locals_max_string: int = 80,
+        log_time_format: Union[str, Callable[[Any], "Text"]] = "[%x %X]",
+        keywords: Optional[List[str]] = None,
+    ) -> None: ...
+    def get_level_text(self, record: _logging.LogRecord) -> "Text": ...
+    def emit(self, record: _logging.LogRecord) -> None: ...
+    def render_message(self, record: _logging.LogRecord, message: str) -> Any: ...
+    def render(self, *, record: _logging.LogRecord, traceback: Any, message_renderable: Any) -> Any: ...
 
 # --- area: ext (rich-ext) ---
 

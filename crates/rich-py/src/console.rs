@@ -1171,7 +1171,7 @@ impl Console {
     }
 
     /// The clock animations read: the one given, else `time.monotonic`.
-    #[getter]
+    #[getter(get_time)]
     fn get_time<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         match &self.state().get_time {
             Some(clock) => Ok(clock.bind(py).clone()),
@@ -1181,7 +1181,7 @@ impl Console {
 
     /// What `log` stamps records with: the callable given, else
     /// `datetime.now`.
-    #[getter]
+    #[getter(get_datetime)]
     fn get_datetime<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         match &self.state().get_datetime {
             Some(clock) => Ok(clock.bind(py).clone()),

@@ -606,6 +606,7 @@ def test_an_exception_inside_stops_the_display_and_restores_the_streams():
     assert within_timeout(run).endswith("\x1b[?25h")
 
 
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
 def test_a_failing_render_on_the_thread_still_lets_stop_finish():
     from rs_rich.console import Console
     from rs_rich.live import Live

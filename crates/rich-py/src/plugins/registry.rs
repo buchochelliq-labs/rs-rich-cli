@@ -198,12 +198,41 @@ fn add_installed(py: Python<'_>, console: &Bound<'_, Console>, added: Installed)
 // ---------------------------------------------------------------------------
 // The registry
 
+/// rich-ext's registry, shareable across threads.
+///
+/// `rich_ext::ExtensionRegistry` is not `Send` only because it boxes its
+/// highlighter factories as `Box<dyn Fn() -> ...>` without `Send`. Every
+/// factory in this one is `Send + Sync`: plugins register through [`Tee`],
+/// which hands the host a closure over an `Arc<HighlighterFactory>`
+/// (`HighlighterFactory` is `Send + Sync`), and `register_highlighter` does
+/// the same; the registry itself only wraps each in another such closure.
+/// Everything else it holds is `Send + Sync` by its trait bounds.
+struct Host(CoreRegistry);
+
+// SAFETY: see above; nothing non-`Send`/`Sync` is ever put in the registry.
+unsafe impl Send for Host {}
+// SAFETY: as above; shared access only calls the factories and reads.
+unsafe impl Sync for Host {}
+
+impl std::ops::Deref for Host {
+    type Target = CoreRegistry;
+    fn deref(&self) -> &CoreRegistry {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for Host {
+    fn deref_mut(&mut self) -> &mut CoreRegistry {
+        &mut self.0
+    }
+}
+
 /// A collection of extensions to install onto a `Console`: plugins add
 /// highlighters, code highlighters, themes, box styles, renderers, fence
 /// renderers and transforms. Adding a plugin is all-or-nothing.
-#[pyclass(name = "ExtensionRegistry", module = "rs_rich.plugins", unsendable)]
+#[pyclass(name = "ExtensionRegistry", module = "rs_rich.plugins")]
 pub(crate) struct ExtensionRegistry {
-    inner: CoreRegistry,
+    inner: Host,
     /// Every highlighter factory, in registration order.
     factories: Vec<Arc<HighlighterFactory>>,
 }
@@ -253,7 +282,7 @@ impl ExtensionRegistry {
     #[new]
     fn new() -> Self {
         ExtensionRegistry {
-            inner: CoreRegistry::new(),
+            inner: Host(CoreRegistry::new()),
             factories: Vec::new(),
         }
     }

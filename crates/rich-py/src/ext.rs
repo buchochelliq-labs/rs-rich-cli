@@ -10,11 +10,14 @@
 
 use pyo3::prelude::*;
 
+mod cli_doc;
 mod common;
 mod data;
 mod diagnostic;
 mod diff;
 mod inspect;
+mod layout;
+mod registry;
 mod status;
 mod tables;
 mod terminal;
@@ -34,5 +37,8 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     widgets::register(m)?;
     tables::register(m)?;
     inspect::register(m)?;
+    layout::register(m)?;
+    registry::register(m)?;
+    cli_doc::register(m)?;
     Ok(())
 }

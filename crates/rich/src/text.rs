@@ -680,6 +680,26 @@ impl Text {
         self.spans.push(Span { start, end, style });
     }
 
+    /// Apply metadata to the byte range `start..end` (the rest of the text
+    /// when `end` is `None`). Port of `Text.apply_meta`: a span of
+    /// `Style.from_meta(meta)`, which an empty map (a null style) skips.
+    pub fn apply_meta(&mut self, meta: crate::style::Meta, start: usize, end: Option<usize>) {
+        let end = end.unwrap_or(self.plain.len());
+        self.stylize(Style::from_meta(meta), start, end);
+    }
+
+    /// Apply event-handler metadata to the whole text. Port of `Text.on`:
+    /// handlers are stored as `"@name"` keys over `meta`.
+    pub fn on(
+        &mut self,
+        meta: Option<crate::style::Meta>,
+        handlers: &[(&str, crate::style::MetaValue)],
+    ) -> &mut Self {
+        let len = self.plain.len();
+        self.stylize(Style::on(meta, handlers), 0, len);
+        self
+    }
+
     /// Append a raw span, as upstream's `text.spans.append(span)` does: no
     /// clamping and no falsy-style check.
     ///

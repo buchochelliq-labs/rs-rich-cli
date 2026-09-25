@@ -326,14 +326,16 @@ impl Group {
             let kwargs = pyo3::types::PyDict::new(py);
             kwargs.set_item("options", options)?;
             let measured = console.call_method("measure", (child.bind(py),), Some(&kwargs))?;
-            let (min, max): (usize, usize) =
-                (measured.get_item(0)?.extract()?, measured.get_item(1)?.extract()?);
+            let (min, max): (usize, usize) = (
+                measured.get_item(0)?.extract()?,
+                measured.get_item(1)?.extract()?,
+            );
             minimum = minimum.max(min);
             maximum = maximum.max(max);
         }
-        Ok(crate::protocol::Measurement::from_core(CoreMeasurement::new(
-            minimum, maximum,
-        )))
+        Ok(crate::protocol::Measurement::from_core(
+            CoreMeasurement::new(minimum, maximum),
+        ))
     }
 
     fn __traverse__(&self, visit: pyo3::PyVisit<'_>) -> Result<(), pyo3::PyTraverseError> {

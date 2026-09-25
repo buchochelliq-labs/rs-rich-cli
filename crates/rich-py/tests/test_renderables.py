@@ -24,10 +24,13 @@ MODULES = [
 def modules(package: str) -> SimpleNamespace:
     loaded = {name: importlib.import_module(f"{package}.{name}") for name in MODULES}
     namespace = SimpleNamespace(**loaded)
-    # `rs_rich.console` re-exports `Group` and `group` once the foundation
-    # adds them; until then they come from `_native`.
-    namespace.Group = getattr(loaded["console"], "Group", None) or _native.Group
+    # `rich.console.Group` and `group`. Until `rs_rich.console` re-exports
+    # them, take this area's `Group` from what its `group` decorator makes
+    # (`_native.Group` may name another area's class meanwhile).
     namespace.group = getattr(loaded["console"], "group", None) or _native.group
+    namespace.Group = getattr(loaded["console"], "Group", None) or type(
+        namespace.group()(tuple)()
+    )
     return namespace
 
 
@@ -401,7 +404,8 @@ def test_errors_match_rich(make, error):
 
 
 def test_the_group_decorator_wraps_the_function():
-    from rs_rich._native import Group, group
+    group = modules("rs_rich").group
+    Group = modules("rs_rich").Group
 
     @group(fit=False)
     def renderables():

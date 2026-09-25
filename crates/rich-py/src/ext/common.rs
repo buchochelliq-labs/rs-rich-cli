@@ -32,7 +32,6 @@ create_exception!(_native, TestParseError, ExtError);
 create_exception!(_native, ConstraintError, ExtError);
 create_exception!(_native, LiveCoordinatorError, ExtError);
 create_exception!(_native, RedactPatternError, ExtError);
-create_exception!(_native, PluginRegistryError, ExtError);
 create_exception!(_native, EncodingError, ExtError);
 create_exception!(_native, TransferCancelled, ExtError);
 
@@ -52,7 +51,6 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         py.get_type::<LiveCoordinatorError>(),
     )?;
     m.add("RedactPatternError", py.get_type::<RedactPatternError>())?;
-    m.add("PluginRegistryError", py.get_type::<PluginRegistryError>())?;
     m.add("EncodingError", py.get_type::<EncodingError>())?;
     m.add("TransferCancelled", py.get_type::<TransferCancelled>())?;
     Ok(())

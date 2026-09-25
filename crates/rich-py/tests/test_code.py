@@ -512,3 +512,66 @@ def test_inspect_class_and_repr():
         Inspect(textwrap, methods=False, dunder=False, private=False, all=False, docs=False)
     )
     assert out.getvalue().startswith("╭─ <module 'textwrap'")
+
+
+# Rust's own output for this document: core `Markdown` with rich-mermaid's
+# `MermaidFences` (default options) as its fence renderer, 60 cells wide, no
+# colour (a small Rust program over the two crates; Rich has no fences).
+MERMAID_DOCUMENT = "# Flow\n\n```mermaid\nflowchart LR\n    A[Start] --> B{Check}\n    B --> C[Done]\n```\n\nAfter.\n"
+MERMAID_EXPECTED = (
+    "                            Flow                            \n"
+    "\n"
+    "┌───────┐  ╱───────╲  ┌──────┐\n"
+    "│ Start ├─►< Check >─►│ Done │\n"
+    "└───────┘  ╲───────╱  └──────┘\n"
+    "\n"
+    "After.                                                      \n"
+)
+
+
+def test_markdown_fences_draw_mermaid_as_rust_does():
+    from rs_rich.markdown import Markdown
+    from rs_rich.mermaid import MermaidFences
+
+    c = console(modules("rs_rich"), False)
+    c.print(Markdown(MERMAID_DOCUMENT, fences=[MermaidFences()]))
+    assert c.file.getvalue() == MERMAID_EXPECTED
+    plain = console(modules("rs_rich"), False)
+    plain.print(Markdown(MERMAID_DOCUMENT))
+    assert "flowchart LR" in plain.file.getvalue()
+
+
+def test_markdown_fences_take_python_renderers():
+    from rs_rich.markdown import Markdown
+
+    def shout(language, code):
+        return code.upper() if language == "shout" else None
+
+    c = console(modules("rs_rich"), False, width=20)
+    document = Markdown("```shout\nhello\n```\n\n```python\nx\n```", fences=[shout])
+    c.print(document)
+    assert c.file.getvalue().startswith("HELLO")
+    assert document.fences == [shout]
+    with pytest.raises(TypeError, match="fence renderer"):
+        Markdown("x", fences=[42])
+
+
+def test_a_python_code_highlighter_object():
+    from rs_rich.syntax import Syntax
+
+    class Upper:
+        def highlight(self, code, language, theme):
+            return []  # no spans: plain text
+
+        def default_theme(self):
+            return "plain"
+
+        def themes(self):
+            return ["plain"]
+
+    engine = Upper()
+    syntax = Syntax("x = 1", "python", highlighter=engine)
+    assert syntax.highlighter is engine
+    c = console(modules("rs_rich"), False, width=10)
+    c.print(syntax)
+    assert c.file.getvalue() == "x = 1\n"

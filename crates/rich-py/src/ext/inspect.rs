@@ -16,8 +16,7 @@ use rich::protocol::Renderable;
 use rich::segment::Segment as CoreSegment;
 use rich_ext::derive::{self as derive, Field as CoreField, Presentation, RichRecord};
 use rich_ext::env_inspect::{
-    self as env, EnvView as CoreEnvView, PathKind, PathView as CorePathView,
-    OS_PATH_SEPARATOR,
+    self as env, EnvView as CoreEnvView, PathKind, PathView as CorePathView, OS_PATH_SEPARATOR,
 };
 use rich_ext::hex::{self, ByteClass, HexView as CoreHexView};
 use rich_ext::source_view::SourceView as CoreSourceView;
@@ -179,7 +178,11 @@ fn byte_class(byte: u8) -> &'static str {
 // Unicode
 
 /// One grapheme cluster (or an invalid byte run).
-#[pyclass(name = "GraphemeCluster", module = "rs_rich.ext.unicode_inspect", frozen)]
+#[pyclass(
+    name = "GraphemeCluster",
+    module = "rs_rich.ext.unicode_inspect",
+    frozen
+)]
 pub(crate) struct GraphemeCluster {
     inner: unicode::Cluster,
 }
@@ -232,7 +235,11 @@ impl GraphemeCluster {
         self.inner.display(ascii)
     }
     fn __repr__(&self) -> String {
-        format!("<GraphemeCluster {} {}>", self.inner.code_points(), self.inner.kind)
+        format!(
+            "<GraphemeCluster {} {}>",
+            self.inner.code_points(),
+            self.inner.kind
+        )
     }
 }
 
@@ -523,7 +530,12 @@ fn is_path_like(name: &str, value: &str, separator: Option<&str>) -> PyResult<bo
 /// `RecordField(label, value, *, style=None, justify="left",
 /// highlight=True)`: one labelled value of a `Record` (`value` is shown as
 /// its `str`, highlighted like a repr).
-#[pyclass(name = "RecordField", module = "rs_rich.ext.derive", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "RecordField",
+    module = "rs_rich.ext.derive",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct RecordField {
     inner: CoreField,
@@ -625,7 +637,9 @@ impl Record {
     fn new(fields: &Bound<'_, PyAny>, title: Option<String>, presentation: &str) -> PyResult<Self> {
         let fields = if let Ok(map) = fields.cast::<pyo3::types::PyDict>() {
             map.iter()
-                .map(|(k, v)| Ok(RecordField::new(k.str()?.to_string(), &v, None, "left", true)?.inner))
+                .map(|(k, v)| {
+                    Ok(RecordField::new(k.str()?.to_string(), &v, None, "left", true)?.inner)
+                })
                 .collect::<PyResult<Vec<_>>>()?
         } else {
             fields
@@ -656,7 +670,10 @@ impl Record {
         let py = obj.py();
         let dataclasses = py.import("dataclasses")?;
         let mut fields = Vec::new();
-        if dataclasses.call_method1("is_dataclass", (obj,))?.is_truthy()? {
+        if dataclasses
+            .call_method1("is_dataclass", (obj,))?
+            .is_truthy()?
+        {
             for field in dataclasses.call_method1("fields", (obj,))?.try_iter()? {
                 let name: String = field?.getattr("name")?.extract()?;
                 let value = obj.getattr(name.as_str())?.repr()?;

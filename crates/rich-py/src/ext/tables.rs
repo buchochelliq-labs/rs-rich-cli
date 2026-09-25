@@ -533,8 +533,8 @@ fn data_arg(value: &Bound<'_, PyAny>) -> PyResult<CoreData> {
     Ok(value.extract::<PyRef<'_, TableData>>()?.inner.clone())
 }
 
-/// `Sort(keys)`: a transform setting a `TableData`'s sort.
-#[pyclass(name = "Sort", module = "rs_rich.ext.table", frozen)]
+/// `TableSort(keys)` (`Sort` in `rs_rich.ext.table`): a transform setting a `TableData`'s sort.
+#[pyclass(name = "TableSort", module = "rs_rich.ext.table", frozen)]
 pub(crate) struct Sort {
     keys: Vec<CoreKey>,
 }
@@ -560,8 +560,8 @@ impl Sort {
     }
 }
 
-/// `Group(group_by)`: a transform setting a `TableData`'s grouping.
-#[pyclass(name = "Group", module = "rs_rich.ext.table", frozen)]
+/// `TableGroup(group_by)` (`Group` in `rs_rich.ext.table`): a transform setting a `TableData`'s grouping.
+#[pyclass(name = "TableGroup", module = "rs_rich.ext.table", frozen)]
 pub(crate) struct Group {
     group: CoreGroupBy,
 }

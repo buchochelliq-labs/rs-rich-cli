@@ -53,7 +53,7 @@ child; without it, as the whole width. The `group` decorator turns a function
 that yields renderables into one that returns a `Group`.
 
 ```python
-from rs_rich._native import Group, group
+from rs_rich.console import Group, group
 
 console = Console(width=30)
 console.print(Panel.fit(Group("first", Panel("second"))))
@@ -81,8 +81,7 @@ console.print(Panel.fit(lines()))
 ╰─────╯
 ```
 
-`Group` and `group` are importable from `rs_rich._native` until
-`rs_rich.console` re-exports them. `rich.containers.Renderables` (a list that
+`rich.containers.Renderables` (a list that
 renders its items in turn) is `rs_rich.containers.Renderables`, and
 `rich.containers.Lines` is `rs_rich.containers.Lines` (see [Text](text.md)).
 `rich.measure.measure_renderables(console, options, renderables)` is
