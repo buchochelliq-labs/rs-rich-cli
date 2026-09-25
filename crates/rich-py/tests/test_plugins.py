@@ -772,6 +772,9 @@ def test_a_python_code_highlighter_renders_in_syntax_as_the_rust_one():
         def themes(self):
             return syntect.themes()
 
+        def token_style(self, theme, token):
+            return syntect.token_style(theme, token)
+
     code = 'fn main() {\n    let s = "é 日本 🦀"; // ünïcode\n}\n'
     for theme in (None, "ansi_dark"):
         rust, python = console(width=40, color=True), console(width=40, color=True)

@@ -57,7 +57,7 @@ below has runnable examples whose output is checked by the tests.
 | `rich.tree` | `rs_rich.tree` | [Tree](tree.md) |
 | `rich.markdown` | `rs_rich.markdown` | [Markdown](markdown.md) |
 | `rich.syntax` | `rs_rich.syntax` | [Syntax](syntax.md) |
-| `rich.pretty`, `rich.json`, `rich.highlighter`, `rich.inspect` | the same under `rs_rich` | [Pretty, JSON, inspect and highlighters](pretty.md) |
+| `rich.pretty`, `rich.json`, `rich.highlighter` (and `rich.inspect`) | the same under `rs_rich` | [Pretty, JSON, inspect and highlighters](pretty.md) |
 | `rich.traceback` | `rs_rich.traceback` | [Traceback](traceback.md) |
 | `rich.live`, `rich.live_render`, `rich.status`, `rich.screen`, `rich.pager` | the same under `rs_rich` | [Live, status, screen and pager](live.md) |
 | `rich.progress`, `rich.progress_bar` | `rs_rich.progress`, `rs_rich.progress_bar` | [Progress](progress.md) |

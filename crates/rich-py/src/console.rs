@@ -175,6 +175,8 @@ pub(crate) struct Snapshot {
     extensions: Option<std::sync::Arc<crate::plugins::Installed>>,
     highlighter: Option<Py<PyAny>>,
     hooks: Vec<Py<PyAny>>,
+    /// Rich's `options.ascii_only`: the file's encoding is not UTF.
+    ascii_only: bool,
 }
 
 impl Snapshot {
@@ -194,6 +196,7 @@ impl Snapshot {
             .legacy_windows(s.legacy_windows)
             .tab_size(s.tab_size)
             .emoji_variant(s.emoji_variant)
+            .ascii_only(self.ascii_only)
             .theme(self.theme.clone())
             .build();
         if let Some(extensions) = &self.extensions {
@@ -648,7 +651,7 @@ impl Console {
 
     pub(crate) fn snapshot(&self, py: Python<'_>) -> Snapshot {
         let state = self.state();
-        Snapshot {
+        let mut snapshot = Snapshot {
             settings: state.settings.clone(),
             theme: state
                 .themes
@@ -659,7 +662,14 @@ impl Console {
             extensions: crate::plugins::installed(py, self),
             highlighter: state.highlighter.as_ref().map(|h| h.clone_ref(py)),
             hooks: state.render_hooks.iter().map(|h| h.clone_ref(py)).collect(),
-        }
+            ascii_only: false,
+        };
+        drop(state);
+        // The file's encoding is read with no lock held (it is Python code).
+        snapshot.ascii_only = snapshot
+            .encoding(py)
+            .is_ok_and(|encoding| !encoding.starts_with("utf"));
+        snapshot
     }
 
     /// Start writing: wait (without the GIL) for another thread's write to

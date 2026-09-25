@@ -22,7 +22,7 @@ use rich::measure::Measurement as CoreMeasurement;
 use rich::protocol::Renderable;
 use rich::segment::Segment as CoreSegment;
 use rich::style::StyleType;
-use rich::{AnsiDecoder, Text as CoreText};
+use rich::Text as CoreText;
 
 use super::highlighter::Highlight;
 use crate::convert;
@@ -820,64 +820,18 @@ pub(crate) fn traverse(object: &Bound<'_, PyAny>, limits: Limits) -> PyResult<No
 // ---------------------------------------------------------------------------
 // Text helpers upstream keeps on `Text`
 
-/// `Text.from_ansi(s, style=style)`: decode escape codes, one line at a time,
-/// and join the lines with a `"\n"` in the base style.
+/// `Text.from_ansi(s, style=style)`: core's.
 pub(crate) fn from_ansi(content: &str, style: &str) -> CoreText {
-    let lines = AnsiDecoder::new().decode(content);
-    let joiner = CoreText::styled("\n", StyleType::Name(style.to_string()));
-    joiner.join(&lines)
+    CoreText::from_ansi(content, StyleType::Name(style.to_string()))
 }
 
-/// `Text.with_indent_guides(indent_size, style=style)`.
+/// `Text.with_indent_guides(indent_size, style=style)`: core's.
 pub(crate) fn with_indent_guides(
     text: &CoreText,
     indent_size: usize,
     style: StyleType,
 ) -> CoreText {
-    let indent_size = indent_size.max(1);
-    let mut text = text.clone();
-    text.expand_tabs(8);
-    let indent_line = format!("│{}", " ".repeat(indent_size - 1));
-    let styled = |plain: &str| CoreText::styled(plain, style.clone());
-    let mut new_lines: Vec<CoreText> = Vec::new();
-    let mut blank_lines = 0;
-    for line in text.split("\n", false, true) {
-        let plain = line.plain();
-        let indent = plain.len() - plain.trim_start_matches(' ').len();
-        if indent == plain.len() {
-            blank_lines += 1;
-            continue;
-        }
-        let (full, remaining) = (indent / indent_size, indent % indent_size);
-        let new_indent = format!("{}{}", indent_line.repeat(full), " ".repeat(remaining));
-        // Same characters, more bytes: shift the spans past the indent.
-        let offsets = super::highlighter::char_offsets(&new_indent);
-        let shift = new_indent.len() - indent;
-        let remap = |offset: usize| {
-            if offset <= indent {
-                offsets[offset]
-            } else {
-                offset + shift
-            }
-        };
-        let mut replaced = line.blank_copy();
-        replaced.append(&format!("{new_indent}{}", &plain[indent..]), None);
-        for span in line.spans() {
-            replaced.stylize(span.style.clone(), remap(span.start), remap(span.end));
-        }
-        replaced.stylize(style.clone(), 0, new_indent.len());
-        for _ in 0..blank_lines {
-            new_lines.push(styled(&new_indent));
-        }
-        blank_lines = 0;
-        new_lines.push(replaced);
-    }
-    for _ in 0..blank_lines {
-        new_lines.push(styled(""));
-    }
-    let mut joiner = text.blank_copy();
-    joiner.append("\n", None);
-    joiner.join(&new_lines)
+    text.with_indent_guides(Some(indent_size.max(1)), "│", style)
 }
 
 // ---------------------------------------------------------------------------

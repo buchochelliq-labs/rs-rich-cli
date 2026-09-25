@@ -163,6 +163,10 @@ returns one list of `(start, end, style)` spans per line of
 `code.split("\n")` (offsets are character indices in the line; a
 `HighlightedCode` works too), `default_theme()` and `themes()` name the
 themes, and a theme it does not have raises `UnknownThemeError(theme)`.
+`languages()`, `language_for_path(path)` and `token_style(theme, token)` are
+optional; `Syntax` colours its line numbers and indent guides with
+`token_style(theme, "Text")` and `"Comment"` (a `Style`, a style string, or
+`None` for nothing), as Rich asks its Pygments theme.
 
 ```python
 from rs_rich.plugins import CodeHighlighter, UnknownThemeError

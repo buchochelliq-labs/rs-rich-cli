@@ -494,6 +494,13 @@ impl CodeHighlighter {
         Ok(errors::direct(|| engine.language_for_path(&path)))
     }
 
+    /// `theme`'s style for a Pygments token type (`"Text"`, `"Comment"`), as
+    /// `Syntax` colours its line numbers and indent guides, or `None`.
+    fn token_style(&self, theme: &str, token: &str) -> PyResult<Option<crate::style::Style>> {
+        let engine = self.engine()?.clone();
+        Ok(errors::direct(|| engine.token_style(theme, token)).map(crate::style::Style::from_core))
+    }
+
     fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
         let this = slf.get();
         Ok(match &this.inner {
@@ -585,6 +592,27 @@ impl CoreCodeHighlighter for PyCodeHighlighter {
 
     fn languages(&self) -> Vec<String> {
         self.strings("languages")
+    }
+
+    fn token_style(&self, theme: &str, token: &str) -> Option<rich::Style> {
+        Python::attach(|py| {
+            let object = self.object.bind(py);
+            let result = match object.getattr_opt("token_style") {
+                Ok(Some(method)) => method.call1((theme, token)).and_then(|value| {
+                    if value.is_none() {
+                        Ok(None)
+                    } else {
+                        crate::style::resolved_style(Some(&value))
+                    }
+                }),
+                Ok(None) => Ok(None),
+                Err(error) => Err(error),
+            };
+            result.unwrap_or_else(|error| {
+                callback_failed(py, error);
+                None
+            })
+        })
     }
 
     fn language_for_path(&self, path: &Path) -> Option<String> {

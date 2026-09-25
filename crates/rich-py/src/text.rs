@@ -291,13 +291,12 @@ impl Text {
         tab_size: Option<i64>,
     ) -> PyResult<Py<Text>> {
         let py = cls.py();
-        let mut joiner = CoreText::styled("\n", base_style(style)?);
-        joiner.set_justify(convert::justify(justify)?);
-        joiner.set_overflow(overflow_arg(overflow)?);
-        joiner.set_no_wrap(no_wrap);
-        let lines = rich::AnsiDecoder::new().decode(text);
-        joiner.set_tab_size(tab_size_arg(tab_size)?);
-        Ok(new_text(py, joiner.join(&lines), end)?.unbind())
+        let mut inner = CoreText::from_ansi(text, base_style(style)?);
+        inner.set_justify(convert::justify(justify)?);
+        inner.set_overflow(overflow_arg(overflow)?);
+        inner.set_no_wrap(no_wrap);
+        inner.set_tab_size(tab_size_arg(tab_size)?);
+        Ok(new_text(py, inner, end)?.unbind())
     }
 
     /// A `Text` with `style` applied to the whole string as a span.
@@ -1039,43 +1038,12 @@ impl Text {
                 "integer division or modulo by zero",
             ));
         }
-        let size = size as usize;
-        let text = Text::copy(slf)?;
-        Text::expand_tabs(&text, None)?;
-        let text_inner = text.borrow().inner.clone();
-        let indent_line = format!("{character}{}", " ".repeat(size - 1));
-        let mut new_lines: Vec<CoreText> = Vec::new();
-        let mut blank_lines = 0;
-        for mut line in ops::split(&text_inner, "\n", false, true) {
-            let plain = line.plain().to_string();
-            let indent = plain.chars().take_while(|c| *c == ' ').count();
-            let rest = &plain[indent..];
-            if rest.is_empty() {
-                blank_lines += 1;
-                continue;
-            }
-            let new_indent = format!(
-                "{}{}",
-                indent_line.repeat(indent / size),
-                " ".repeat(indent % size)
-            );
-            let indent_chars = new_indent.chars().count();
-            let tail: String = plain.chars().skip(indent_chars).collect();
-            ops::set_plain(&mut line, &format!("{new_indent}{tail}"));
-            ops::stylize(&mut line, style.clone(), 0, Some(indent_chars as isize));
-            for _ in 0..blank_lines {
-                new_lines.push(CoreText::styled(new_indent.clone(), style.clone()));
-            }
-            blank_lines = 0;
-            new_lines.push(line);
-        }
-        for _ in 0..blank_lines {
-            new_lines.push(CoreText::styled("", style.clone()));
-        }
-        let mut separator = text_inner.blank_copy();
-        separator.append("\n", None);
+        let inner = slf
+            .borrow()
+            .inner
+            .with_indent_guides(Some(size as usize), character, style);
         let _ = py;
-        like(slf, separator.join(&new_lines))
+        like(slf, inner)
     }
 
     fn __len__(&self) -> usize {

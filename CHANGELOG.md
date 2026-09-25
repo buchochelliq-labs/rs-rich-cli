@@ -274,6 +274,11 @@ Rust crates); 850+ tests and every documentation example run in CI.
   returns the exit code. `rs-rich-cli` gains a library target (`run`,
   `run_embedded`); `--batch` workers and `--watch` restart through the host's
   command. In the `lumis` build the command line has the lumis highlighter too.
+- **Rendered by core.** `Rule`, `Tree`, `Columns`, `Syntax` (all but negative
+  line numbers and ranges), `Text.from_ansi`/`with_indent_guides` and the
+  spinner table now render through core's, replacing the bindings' ports;
+  output is unchanged against Rich. Code highlighters gain an optional
+  `token_style(theme, token)` for line numbers and indent guides.
 - **Core, additively, for the bindings.** Style meta data, a public spinner
   table (`spinner_names`, `spinner_frames`), `Console` `Clone + Sync`,
   `render_str_with`, `Json::with_options`, `export_*_with`,

@@ -137,6 +137,8 @@ pub(crate) struct Spec {
     pub(crate) tab_size: usize,
     pub(crate) word_wrap: bool,
     pub(crate) background_color: Option<CoreColor>,
+    /// `background_color` as given, for core's `Syntax`.
+    pub(crate) background_name: Option<String>,
     pub(crate) indent_guides: bool,
     pub(crate) padding: (usize, usize, usize, usize),
     pub(crate) highlighter: Option<Arc<dyn CodeHighlighter>>,
@@ -158,6 +160,7 @@ impl Spec {
             tab_size: 4,
             word_wrap: false,
             background_color: None,
+            background_name: None,
             indent_guides: false,
             padding: (0, 0, 0, 0),
             highlighter: None,
@@ -746,7 +749,60 @@ fn python_splitlines(text: &str) -> Vec<&str> {
     lines
 }
 
-/// A `Syntax` rendered by the port of upstream's layout.
+impl Spec {
+    /// Core's `Syntax` with every option, when they fit its types (no
+    /// negative line numbers, ranges or positions; those take the port).
+    fn full_core(&self) -> Option<rich::Syntax> {
+        let mut code = self.code.clone();
+        if self.dedent {
+            let (_, dedented) = Python::attach(|py| self.process_code(py)).ok()?;
+            code = if self.code.ends_with('\n') {
+                dedented
+            } else {
+                dedented.trim_end_matches('\n').to_string()
+            };
+        }
+        let unsigned = |value: isize| usize::try_from(value).ok();
+        let mut syntax = self
+            .core(&code)
+            .line_numbers(self.line_numbers)
+            .start_line(unsigned(self.start_line)?)
+            .indent_guides(self.indent_guides)
+            .padding_sides(self.padding)
+            .highlight_lines(
+                self.highlight_lines
+                    .iter()
+                    .filter_map(|line| unsigned(*line))
+                    .collect::<Vec<_>>(),
+            );
+        if let Some((start, end)) = self.line_range {
+            let start = match start {
+                Some(start) => Some(unsigned(start)?),
+                None => None,
+            };
+            let end = match end {
+                Some(end) => Some(unsigned(end)?),
+                None => None,
+            };
+            syntax = syntax.line_range(start, end);
+        }
+        if let Some(width) = self.code_width {
+            syntax = syntax.code_width(width);
+        }
+        if let Some(name) = &self.background_name {
+            syntax = syntax.background_color(name.clone());
+        }
+        for range in &self.ranges {
+            let start = (unsigned(range.start.0)?, unsigned(range.start.1)?);
+            let end = (unsigned(range.end.0)?, unsigned(range.end.1)?);
+            syntax.stylize_range(range.style.clone(), start, end, range.before);
+        }
+        Some(syntax)
+    }
+}
+
+/// A `Syntax`: core's, or the port of upstream's layout where core cannot
+/// take its options.
 pub(crate) struct Render {
     pub(crate) spec: Spec,
 }
@@ -754,6 +810,9 @@ pub(crate) struct Render {
 impl Renderable for Render {
     fn rich_render(&self, console: &CoreConsole, options: &CoreOptions) -> Vec<CoreSegment> {
         let spec = &self.spec;
+        if let Some(syntax) = spec.full_core() {
+            return syntax.rich_render(console, options);
+        }
         // Core pads every line, as upstream does only for a theme with a
         // background; a transparent theme (`ansi_dark`) takes the port below.
         if spec.is_plain() && spec.base_style(Some(console)).bgcolor().is_some() {
@@ -870,6 +929,7 @@ impl Syntax {
         spec.tab_size = tab_size;
         spec.word_wrap = word_wrap;
         spec.background_color = color(background_color.as_deref())?;
+        spec.background_name = background_color.clone();
         spec.indent_guides = indent_guides;
         spec.padding = convert::padding(padding)?;
         spec.highlighter =

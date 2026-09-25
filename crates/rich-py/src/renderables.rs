@@ -143,14 +143,6 @@ pub(crate) fn get_style(console: &CoreConsole, style: &StyleType) -> CoreStyle {
     console.get_style(style).unwrap_or_default()
 }
 
-/// `options.ascii_only`: the output encoding is not a UTF one.
-pub(crate) fn ascii_only(console: &CoreConsole) -> bool {
-    match renderable::ambient() {
-        Ok(ambient) => !ambient.base.encoding.starts_with("utf"),
-        Err(_) => console.ascii_only(),
-    }
-}
-
 /// `options.size.height`: the console's height.
 pub(crate) fn screen_height(console: &CoreConsole) -> usize {
     match renderable::ambient() {
