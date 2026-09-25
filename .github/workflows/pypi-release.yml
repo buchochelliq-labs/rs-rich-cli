@@ -1,0 +1,109 @@
+# Publish the Python bindings (`rs-rich` on PyPI) from a `python-vX.Y.Z` tag.
+#
+# PyPI Trusted Publishing only: no token secret exists. PyPI's publisher for
+# `rs-rich` expects exactly this repository, this file name
+# (`pypi-release.yml`) and the `pypi` environment, so none of them may change.
+# Like crates.io, an upload is permanent: the gate re-checks the tag first.
+# `python-v…` never matches `release.yml`'s crate tags, and vice versa.
+name: pypi-release
+
+on:
+  push:
+    tags: ["python-v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pypi-release
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: verify the tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: The tag names the package's version, on main
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("crates/rich-py/pyproject.toml","rb"))["project"]["version"])')"
+          test "${tag}" = "python-v${version}" || { echo "tag ${tag} does not match pyproject version ${version}"; exit 1; }
+          git merge-base --is-ancestor "${GITHUB_SHA}" origin/main || { echo "${tag} is not on main"; exit 1; }
+
+  wheels:
+    name: wheel (${{ matrix.name }})
+    needs: gate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - { name: linux-x86_64, os: ubuntu-latest, target: x86_64 }
+          - { name: linux-aarch64, os: ubuntu-24.04-arm, target: aarch64 }
+          - { name: macos-arm64, os: macos-14, target: aarch64 }
+          - { name: macos-x86_64, os: macos-15-intel, target: x86_64 }
+          - { name: windows-x86_64, os: windows-latest, target: x64 }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: auto
+          args: --release --out dist --manifest-path crates/rich-py/Cargo.toml
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.9"
+      - name: Install and import on Python 3.9
+        shell: bash
+        run: python crates/rich-py/tests/smoke.py dist
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install and import on Python 3.13
+        shell: bash
+        run: python crates/rich-py/tests/smoke.py dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.name }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  sdist:
+    name: sdist
+    needs: gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist --manifest-path crates/rich-py/Cargo.toml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: publish to PyPI
+    needs: [wheels, sdist]
+    runs-on: ubuntu-latest
+    environment: pypi          # PyPI's trusted publisher is bound to this environment
+    permissions:
+      id-token: write          # Trusted Publishing: exchange the OIDC token for an upload token
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: ls -l dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist

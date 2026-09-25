@@ -49,6 +49,12 @@ tracks this checkout; registry badges show published versions.
   a plugin that registers it as `"lumis"`. Its own crate because lumis links
   tree-sitter's C runtime and grammars; it declares its own minimum Rust
   (lumis's). Depends on `rich` and `rich-plugin-api` only. Independent SemVer.
+- **`crates/rich-py`** — the Python bindings (`rs-rich` on PyPI, `import
+  rs_rich`), built with PyO3 and maturin. Rich's Python API over core `rich`
+  only: the compiled module converts arguments and writes output, and core
+  renders. Outside the Cargo workspace (it needs a Python interpreter to
+  build), with its own CI (`python.yml`) and release (`pypi-release.yml`).
+  Never published to crates.io; see [Python bindings](python.md).
 - **`crates/rich-macros`** — procedural macros (`richf!`, `style!`,
   `theme_key!`, `markup!`, `#[derive(Rich)]`) that check markup and styles at
   compile time. Depends on `rich` only (to parse markup and styles while

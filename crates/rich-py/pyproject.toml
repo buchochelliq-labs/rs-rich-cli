@@ -1,0 +1,27 @@
+[build-system]
+requires = ["maturin>=1.8,<2"]
+build-backend = "maturin"
+
+[project]
+name = "rs-rich"
+version = "0.0.1"
+description = "Rich-compatible terminal rendering, backed by the rs-rich Rust port"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Terminals",
+]
+
+[project.urls]
+Repository = "https://github.com/buchochelliq-labs/rs-rich-cli"
+Documentation = "https://buchochelliq-labs.github.io/rs-rich-cli/python/"
+
+[tool.maturin]
+python-source = "python"
+module-name = "rs_rich._native"
+features = ["extension-module"]

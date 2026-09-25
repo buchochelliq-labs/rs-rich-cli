@@ -1,0 +1,31 @@
+# Python bindings for rs-rich (PyPI `rs-rich`, `import rs_rich`). Built with
+# maturin into a wheel; never published to crates.io.
+#
+# Outside the Cargo workspace (see the root `exclude`): PyO3's build script
+# needs a Python interpreter, which the workspace's jobs should not. Built and
+# tested by `.github/workflows/python.yml`.
+[package]
+name = "rs-rich-py"
+version = "0.0.1"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/buchochelliq-labs/rs-rich-cli"
+description = "Python bindings for rs-rich (the rs-rich wheel on PyPI)"
+publish = false
+rust-version = "1.90"
+
+[lib]
+name = "rs_rich_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+rich = { package = "rs-rich", path = "../rich" }
+# One abi3 wheel per platform covers CPython 3.9 and later.
+pyo3 = { version = "0.29", features = ["abi3-py39"] }
+
+[features]
+# maturin turns this on for wheels; plain `cargo check` leaves it off.
+extension-module = ["pyo3/extension-module"]
+
+# Its own workspace root, so the repository's workspace never builds it.
+[workspace]
