@@ -162,6 +162,7 @@ pub(crate) struct Snapshot {
     settings: Settings,
     theme: CoreTheme,
     file: Option<Py<PyAny>>,
+    extensions: Option<std::sync::Arc<crate::plugins::Installed>>,
 }
 
 impl Snapshot {
@@ -169,7 +170,7 @@ impl Snapshot {
     /// the print's own (its arguments, else the console's).
     fn core(&self, emoji: bool, highlight: bool) -> CoreConsole {
         let s = &self.settings;
-        CoreConsole::builder()
+        let mut console = CoreConsole::builder()
             .force_terminal(s.is_terminal)
             .color_system(s.color_system)
             .width(s.width)
@@ -180,7 +181,11 @@ impl Snapshot {
             .safe_box(s.safe_box)
             .legacy_windows(s.legacy_windows)
             .theme(self.theme.clone())
-            .build()
+            .build();
+        if let Some(extensions) = &self.extensions {
+            extensions.apply(&mut console);
+        }
+        console
     }
 
     fn default_core(&self) -> CoreConsole {
@@ -422,6 +427,7 @@ struct Switches {
     emoji: bool,
     markup: bool,
     highlight: bool,
+    extensions: Option<std::sync::Arc<crate::plugins::Installed>>,
 }
 
 /// Rich's `_collect_renderables`: strings and `Text`s (and anything printed
@@ -463,11 +469,17 @@ fn collect(
     for object in objects {
         let object = renderable::rich_cast(object)?;
         if let Ok(string) = object.cast::<PyString>() {
-            texts.push(renderable::render_str(
+            let extra = switches
+                .extensions
+                .as_ref()
+                .map(|extensions| extensions.highlighters())
+                .unwrap_or_default();
+            texts.push(renderable::render_str_with(
                 string.to_cow()?.as_ref(),
                 switches.emoji,
                 switches.markup,
                 switches.highlight,
+                &extra,
             )?);
         } else if let Ok(text) = object.extract::<PyRef<'_, Text>>() {
             texts.push(text.inner.clone());
@@ -509,6 +521,7 @@ impl Console {
                 .cloned()
                 .unwrap_or_else(CoreTheme::default_theme),
             file: state.file.as_ref().map(|file| file.clone_ref(py)),
+            extensions: crate::plugins::installed(py, self),
         }
     }
 
@@ -598,6 +611,7 @@ impl Console {
             emoji: args.emoji.unwrap_or(settings.emoji),
             markup: args.markup.unwrap_or(settings.markup),
             highlight: args.highlight.unwrap_or(settings.highlight),
+            extensions: snapshot.extensions.clone(),
         };
         let (mut no_wrap, mut overflow, mut crop) = (args.no_wrap, args.overflow, args.crop);
         if args.soft_wrap.unwrap_or(settings.soft_wrap) {
@@ -1307,6 +1321,7 @@ impl Console {
             emoji: emoji.unwrap_or(settings.emoji),
             markup: markup.unwrap_or(settings.markup),
             highlight: highlight.unwrap_or(settings.highlight),
+            extensions: snapshot.extensions.clone(),
         };
         let style = style_type(style)?;
         let text_justify = convert::justify(justify)?;

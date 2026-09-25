@@ -46,6 +46,13 @@ pub trait Renderable {
     fn printed_text(&self) -> Option<Text> {
         None
     }
+
+    /// The vertical alignment a `Table` cell holding this renderable uses in
+    /// place of its column's. Upstream reads `getattr(renderable, "vertical",
+    /// None)`; [`Align`](crate::align::Align) sets it.
+    fn vertical(&self) -> Option<crate::align::VerticalAlign> {
+        None
+    }
 }
 
 /// Optional line-streaming extension point for renderables.

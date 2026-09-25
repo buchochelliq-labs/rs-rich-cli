@@ -24,7 +24,11 @@ use crate::text::Text;
 /// dropped (`semantic_text`).
 #[pyfunction]
 #[pyo3(signature = (renderable, width=80))]
-fn accessible_text(py: Python<'_>, renderable: &Bound<'_, PyAny>, width: usize) -> PyResult<String> {
+fn accessible_text(
+    py: Python<'_>,
+    renderable: &Bound<'_, PyAny>,
+    width: usize,
+) -> PyResult<String> {
     if let Ok(text) = renderable.cast::<PyString>() {
         return Ok(text.to_cow()?.as_ref().accessible_text(width));
     }

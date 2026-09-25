@@ -21,7 +21,7 @@ crate-type = ["cdylib"]
 [dependencies]
 rich = { package = "rs-rich", path = "../rich" }
 # Everything the Rust crates expose is exposed to Python (0.0.12 workstream 8).
-rich-ext = { package = "rs-rich-ext", path = "../rich-ext", features = ["data", "yaml", "toml", "xml", "jsonpath", "test-report", "serde"] }
+rich-ext = { package = "rs-rich-ext", path = "../rich-ext", features = ["data", "yaml", "toml", "xml", "jsonpath", "test-report", "serde", "testing"] }
 rich-art = { package = "rs-rich-art", path = "../rich-art", features = ["image", "gif", "sixel"] }
 rich-mermaid = { package = "rs-rich-mermaid", path = "../rich-mermaid" }
 rich-plugin-api = { package = "rs-rich-plugin-api", path = "../rich-plugin-api" }

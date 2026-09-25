@@ -219,6 +219,12 @@ fn has_pending() -> bool {
     PENDING.with(|pending| pending.borrow().is_some())
 }
 
+/// Report an error raised while rendering, from any area: the enclosing
+/// [`scope`] raises it from the print (the first one wins).
+pub(crate) fn report_error(py: Python<'_>, error: PyErr) {
+    set_pending(py, error);
+}
+
 /// Keep `error` for the enclosing scope (the first one wins). Outside any
 /// scope there is nobody to return it to, so it is reported as unraisable.
 fn set_pending(py: Python<'_>, error: PyErr) {
@@ -357,6 +363,18 @@ pub(crate) fn render_str(
     markup: bool,
     highlight: bool,
 ) -> PyResult<CoreText> {
+    render_str_with(content, emoji, markup, highlight, &[])
+}
+
+/// [`render_str`] with a console's installed extension highlighters, which
+/// run before `ReprHighlighter`, as core's `Console::decorate_with_repr` does.
+pub(crate) fn render_str_with(
+    content: &str,
+    emoji: bool,
+    markup: bool,
+    highlight: bool,
+    extra: &[Box<dyn rich::Highlighter + Send>],
+) -> PyResult<CoreText> {
     let content = if emoji {
         rich::emoji::replace(content)
     } else {
@@ -371,6 +389,9 @@ pub(crate) fn render_str(
         return Ok(text);
     }
     let mut highlighted = CoreText::new(text.plain());
+    for highlighter in extra {
+        highlighter.highlight(&mut highlighted);
+    }
     rich::ReprHighlighter::new().highlight(&mut highlighted);
     for span in text.spans() {
         highlighted.stylize(span.style.clone(), span.start, span.end);

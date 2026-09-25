@@ -82,7 +82,7 @@ pub mod tree;
 pub mod wrap;
 
 // A small, curated prelude mirroring the most-used names from `rich`'s top level.
-pub use crate::align::{Align, HorizontalAlign};
+pub use crate::align::{Align, HorizontalAlign, VerticalAlign, VerticalCenter};
 pub use crate::ansi::AnsiDecoder;
 pub use crate::bar::Bar;
 pub use crate::color::{Color, ColorSystem, ColorTriplet};

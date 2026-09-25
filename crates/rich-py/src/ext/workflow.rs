@@ -213,6 +213,27 @@ impl Renderable for TreeView {
     }
 }
 
+/// A snapshot of a `TaskTree` with view options: `TaskTree.view(...)`.
+#[pyclass(name = "TaskTreeView", module = "rs_rich.ext.workflow", frozen)]
+pub(crate) struct TaskTreeView {
+    view: std::sync::Mutex<Option<TreeView>>,
+}
+
+impl AsRenderable for TaskTreeView {
+    fn to_renderable(&self, _py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
+        let view = self.view.lock().unwrap_or_else(|e| e.into_inner());
+        let view = view.as_ref().expect("a view holds its tree");
+        Ok(Box::new(TreeView {
+            tree: view.tree.clone(),
+            collapse_finished: view.collapse_finished,
+            show_durations: view.show_durations,
+            symbols: view.symbols,
+            animate: view.animate,
+            policy: view.policy.clone(),
+        }))
+    }
+}
+
 impl AsRenderable for TaskTree {
     fn to_renderable(&self, _py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
         Ok(Box::new(TreeView {
@@ -264,6 +285,35 @@ impl TaskTree {
     #[getter]
     fn title(&self) -> Option<String> {
         self.inner.get_title().map(str::to_string)
+    }
+
+    /// The tree as it is now, with view options (defaults: the tree's).
+    #[pyo3(signature = (*, collapse_finished=None, show_durations=None, symbols=None, animate=None, policy=None))]
+    fn view(
+        &self,
+        collapse_finished: Option<bool>,
+        show_durations: Option<bool>,
+        symbols: Option<&str>,
+        animate: Option<bool>,
+        policy: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<TaskTreeView> {
+        let view = TreeView {
+            tree: self.inner.clone(),
+            collapse_finished: collapse_finished.unwrap_or(self.collapse_finished),
+            show_durations: show_durations.unwrap_or(self.show_durations),
+            symbols: match symbols {
+                Some(symbols) => symbol_set(symbols)?,
+                None => self.symbols,
+            },
+            animate: animate.unwrap_or(self.animate),
+            policy: match policy_arg(policy)? {
+                Some(policy) => Some(policy),
+                None => self.policy.clone(),
+            },
+        };
+        Ok(TaskTreeView {
+            view: std::sync::Mutex::new(Some(view)),
+        })
     }
 
     /// Add a pending task under `parent` (a task id) or at the top level.
@@ -414,11 +464,29 @@ impl TaskTree {
         counts_dict(self.inner.counts())
     }
 
-    /// A `CompletionSummary` of the tree.
-    fn summary(&self) -> CompletionSummary {
-        CompletionSummary {
-            inner: CoreSummary::from(&self.inner),
+    /// A `CompletionSummary` of the tree (its title, leaf counts, the
+    /// tasks that did not succeed), with optional next steps.
+    #[pyo3(signature = (*, next_steps=None, show_all_items=false, symbols=None, policy=None))]
+    fn summary(
+        &self,
+        next_steps: Option<&Bound<'_, PyAny>>,
+        show_all_items: bool,
+        symbols: Option<&str>,
+        policy: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<CompletionSummary> {
+        let mut inner = CoreSummary::from(&self.inner).show_all_items(show_all_items);
+        if let Some(steps) = next_steps {
+            for step in common::strings(steps)? {
+                inner = inner.next_step(step);
+            }
         }
+        if let Some(symbols) = symbols {
+            inner = inner.symbols(symbol_set(symbols)?);
+        }
+        if let Some(policy) = policy_arg(policy)? {
+            inner = inner.policy(&policy);
+        }
+        Ok(CompletionSummary { inner })
     }
 
     fn __len__(&self) -> usize {
@@ -932,6 +1000,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<CancelToken>()?;
     m.add_class::<ManualClock>()?;
     renderable::add_renderable_class::<TaskTree>(m)?;
+    renderable::add_renderable_class::<TaskTreeView>(m)?;
     m.add_class::<SummaryItem>()?;
     renderable::add_renderable_class::<CompletionSummary>(m)?;
     renderable::add_renderable_class::<CommandRecord>(m)?;

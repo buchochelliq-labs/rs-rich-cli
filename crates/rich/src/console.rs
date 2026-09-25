@@ -1308,6 +1308,58 @@ fn segments_to_plain(segments: &[Segment]) -> String {
         .collect()
 }
 
+/// A string renders as upstream's `Console.render` renders a `str`: through
+/// [`Console::render_str`] with the options' `highlight` and `markup`
+/// (`None` taking the console's defaults), then as that `Text`. Malformed
+/// markup falls back to the literal text, as `render_str` does.
+impl Renderable for String {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        self.options_text(console, options, options.highlight)
+            .rich_render(console, options)
+    }
+
+    /// `Measurement.get` of a `str`: `render_str(markup=options.markup,
+    /// highlight=False)`, then the text's measurement.
+    fn measure(&self, console: &Console, options: &ConsoleOptions) -> crate::measure::Measurement {
+        let text = self.options_text(console, options, Some(false));
+        crate::measure::Measurement::get(console, options, &text)
+    }
+}
+
+/// `render_str` for a `str` renderable under `options`.
+trait OptionsText {
+    fn options_text(&self, console: &Console, options: &ConsoleOptions, highlight: Option<bool>)
+        -> Text;
+}
+
+impl OptionsText for String {
+    fn options_text(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        highlight: Option<bool>,
+    ) -> Text {
+        let render_options = RenderStrOptions {
+            highlight,
+            markup: options.markup,
+            ..Default::default()
+        };
+        console
+            .render_str_with(self, &render_options)
+            .unwrap_or_else(|_| {
+                console
+                    .render_str_with(
+                        self,
+                        &RenderStrOptions {
+                            markup: Some(false),
+                            ..render_options
+                        },
+                    )
+                    .unwrap_or_else(|_| Text::new(self.as_str()))
+            })
+    }
+}
+
 impl Renderable for Text {
     fn printed_text(&self) -> Option<Text> {
         // `Text("").join([self])`: the text and its spans survive; justify,

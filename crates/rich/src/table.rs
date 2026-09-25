@@ -29,6 +29,8 @@ use crate::text::{Text, DEFAULT_TAB_SIZE};
 /// A single column definition. Mirrors the used subset of `rich.table.Column`.
 struct Column {
     header: Cell,
+    /// Vertical alignment of body cells (port of `Column.vertical`).
+    vertical: crate::align::VerticalAlign,
     /// Highlight `str` cells (port of `Column.highlight`); `None` takes the
     /// table's `highlight`, as `add_column(highlight=None)` does.
     highlight: Option<bool>,
@@ -391,6 +393,7 @@ impl Table {
         self.columns.push(Column {
             header: Cell::Text(header),
             highlight: None,
+            vertical: crate::align::VerticalAlign::Top,
             justify,
             width: None,
             style: Style::new(),
@@ -411,6 +414,7 @@ impl Table {
         self.columns.push(Column {
             header: Cell::Text(header),
             highlight: None,
+            vertical: crate::align::VerticalAlign::Top,
             justify: options.justify,
             width: options.width,
             style: options.style,
@@ -422,6 +426,17 @@ impl Table {
             no_wrap: options.no_wrap,
             overflow: options.overflow,
         });
+        self
+    }
+
+    /// Set the vertical alignment of the most-recently-added column's body
+    /// cells (upstream `Column.vertical`, default top). A cell whose
+    /// renderable has its own [`vertical`](crate::protocol::Renderable::vertical)
+    /// uses that instead. Chain after `add_column`.
+    pub fn column_vertical(&mut self, vertical: crate::align::VerticalAlign) -> &mut Self {
+        if let Some(column) = self.columns.last_mut() {
+            column.vertical = vertical;
+        }
         self
     }
 
@@ -1003,6 +1018,21 @@ impl Table {
         // unstyled blank.
         let row_height = cell_lines.iter().map(Vec::len).max().unwrap_or(0);
         for (index, lines) in cell_lines.iter_mut().enumerate() {
+            // `getattr(renderable, "vertical", None) or column.vertical`; a
+            // header row aligns to the bottom whatever the cell says.
+            let vertical = if is_header {
+                crate::align::VerticalAlign::Bottom
+            } else {
+                match cells.get(index) {
+                    Some(Cell::Renderable(renderable)) => renderable.vertical(),
+                    _ => None,
+                }
+                .unwrap_or_else(|| {
+                    self.columns
+                        .get(index)
+                        .map_or(crate::align::VerticalAlign::Top, |c| c.vertical)
+                })
+            };
             let (cpl, cpr) = paddings[index];
             let blank = " ".repeat(cpl + content_widths[index] + cpr);
             let filler = vec![Segment::new(
@@ -1010,11 +1040,13 @@ impl Table {
                 Some(self.cell_style(index, is_header)),
             )];
             let missing = row_height.saturating_sub(lines.len());
-            if is_header {
-                lines.splice(0..0, std::iter::repeat_n(filler, missing));
-            } else {
-                lines.extend(std::iter::repeat_n(filler, missing));
-            }
+            let top = match vertical {
+                crate::align::VerticalAlign::Top => 0,
+                crate::align::VerticalAlign::Middle => missing / 2,
+                crate::align::VerticalAlign::Bottom => missing,
+            };
+            lines.splice(0..0, std::iter::repeat_n(filler.clone(), top));
+            lines.extend(std::iter::repeat_n(filler, missing - top));
             while lines.len() < height {
                 lines.push(vec![Segment::new(blank.clone(), None)]);
             }

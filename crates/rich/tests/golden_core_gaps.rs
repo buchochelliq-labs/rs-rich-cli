@@ -38,30 +38,6 @@ fn console(width: usize) -> Console {
     builder(width).build()
 }
 
-/// A `str` renderable as upstream's `Console.render` treats one: converted by
-/// `render_str` with the options' `highlight` and `markup`.
-struct Str(&'static str);
-
-impl Renderable for Str {
-    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        let text = console
-            .render_str_with(
-                self.0,
-                &RenderStrOptions {
-                    highlight: options.highlight,
-                    markup: options.markup,
-                    ..Default::default()
-                },
-            )
-            .expect("valid markup");
-        text.rich_render(console, options)
-    }
-
-    fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
-        Measurement::get(console, options, &console.render_str(self.0, Some(false)))
-    }
-}
-
 /// A `Send + Sync` wrapper for a container built on demand (see `Built` in
 /// `golden.rs`).
 struct Built(fn() -> Box<dyn Renderable>);
@@ -240,14 +216,14 @@ fn build(name: &str) -> String {
         }
         "options_highlight_panel_default" => print(
             &builder(30).highlight(true).build(),
-            &panel(Str("x 123 True")),
+            &panel("x 123 True".to_string()),
         ),
         "options_highlight_panel_on" => {
-            print(&console(30), &panel(Str("x 123 True")).highlight(true))
+            print(&console(30), &panel("x 123 True".to_string()).highlight(true))
         }
         "options_highlight_tree_on" => print(
             &console(30),
-            &Tree::new(Cell::Renderable(Arc::new(Str("x 123")))).highlight(true),
+            &Tree::new(Cell::Renderable(Arc::new("x 123".to_string()))).highlight(true),
         ),
         "render_str_markup_off" => render_str_case(
             "[b]x[/] 1",
