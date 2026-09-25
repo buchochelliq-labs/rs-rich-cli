@@ -316,6 +316,31 @@ Output was byte-identical for all 558 source, docs and data files in the
 repository. The binary grows from 15.3 MB to 15.6 MB. See
 [Divergences #26](DIVERGENCES.md).
 
+## 0.0.12 code highlighters
+
+Best of three full `rich --no-config --no-pager FILE` runs in a 100-column PTY
+with truecolor, on the same three review files as the `onig` section. Release
+builds of the same 0.0.12 source: the default build, `--features onig`, and
+`--features lumis` run with `--highlighter lumis`. Local (Linux, x86-64), not
+CI.
+
+| File | Lines | syntect | syntect + `onig` | lumis |
+|---|---|---|---|---|
+| `crates/rich/src/text.rs` | 1,784 | 0.42 s | 0.17 s | 0.22 s |
+| `scripts/capture_golden.py` | 2,916 | 0.73 s | 0.38 s | 0.23 s |
+| `docs/cli.md` | 1,294 | 0.15 s | 0.06 s | 0.23 s |
+
+lumis pays a fixed cost the first time it meets each language: a one-line Rust
+file takes 0.12 s and a one-line Python file 0.07 s, against 0.05 s and 0.03 s
+for syntect and syntect with `onig`. After that it scales best: ten copies of
+`capture_golden.py` (29,160 lines) took 1.87 s with lumis and 3.66 s with
+`onig`. `docs/cli.md` is Markdown whose code blocks span several languages, so
+it pays that first-use cost several times.
+
+With the `lumis` feature the CLI binary grows from 15.7 MB to 169 MB (every
+lumis language); the syntect path in that build is unchanged (0.40 s, 0.73 s and
+0.15 s). See the [code highlighters guide](guide/ext/code-highlighters.md).
+
 ## Downstream render snapshots
 
 Enable `rs-rich-ext`'s optional `testing` feature and use

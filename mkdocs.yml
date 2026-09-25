@@ -94,6 +94,7 @@ nav:
       - Extensions (rs-rich-ext):
           - guide/ext/index.md
           - Extensions, highlighters and links: guide/ext/extensions.md
+          - Code highlighters: guide/ext/code-highlighters.md
           - Diagnostics and stack traces: guide/ext/diagnostics.md
           - Logging: guide/ext/logging.md
           - Live regions, layouts and targets: guide/ext/live-and-layout.md

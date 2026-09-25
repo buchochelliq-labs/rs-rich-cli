@@ -292,7 +292,9 @@ Format: what differs · why · how to remove it (if temporary).
   spans against the source, so an engine can change colours but never the text.
   A console can also carry a default engine and theme
   (`protocol::ConsoleCodeHighlighting`), used by any `Syntax` without its own;
-  a console without one highlights exactly as before.
+  a console without one highlights exactly as before. Adapters (the shipped
+  syntect and lumis ones, and any user's) are held to one contract by the
+  conformance kit in `rich_ext::testing::conformance`.
 - **Upstream's ANSI themes.** `ansi_dark` and `ansi_light` use upstream's
   `ANSI_DARK`/`ANSI_LIGHT` styles and the terminal's 16 colours, with no
   background. Pygments token types become TextMate scopes:
@@ -450,6 +452,8 @@ dependency on extensions. See [encoding policy](troubleshooting.md#text-encoding
   source and rendered output still allocate memory. Results are workload-specific;
   varied source may see no gain. Grammars, themes and live highlight-state updates
   remain unchanged. Differential tests and native export comparisons verify output.
+- **Adapters:** the cache belongs to the syntect adapter only; another
+  `CodeHighlighter` (such as lumis) is unaffected by the feature.
 - **Enable:** `cargo build -p rs-rich-cli --release --features syntax-cache`.
   See [benchmarks](benchmarks.md#004-repeated-source-syntax-results).
 
@@ -464,6 +468,8 @@ dependency on extensions. See [encoding policy](troubleshooting.md#text-encoding
 - **Why:** highlighting is 2–4× faster. At 0.0.11, a full `rich` run on a
   1,784-line Rust file dropped from 0.43 s to 0.16 s, and on a 2,916-line Python
   file from 0.76 s to 0.36 s. The binary grows by about 330 KB.
+- **Adapters:** `onig` changes the syntect adapter only. The
+  [0.0.12 benchmarks](benchmarks.md#0012-code-highlighters) compare it with lumis.
 - **Output:** the two engines agree on the grammars syntect ships. Rendering
   all 558 source, docs and data files in this repository through both builds
   gave byte-identical output. A grammar regex that only one engine accepts

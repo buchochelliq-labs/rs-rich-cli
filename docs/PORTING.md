@@ -70,7 +70,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 
 | upstream `rich/…` | rust file | status | notes |
 |-------------------|-----------|:------:|-------|
-| `syntax.py` | `syntax.rs` | 🟡 | functional via `syntect` (non-parity, DIVERGENCES #18); `__rich_measure__` is parity-tested; not upstream: `Syntax::highlighter`, `Syntax::highlight_for` and a console-wide default engine (`ConsoleCodeHighlighting`), unused by default |
+| `syntax.py` | `syntax.rs` | 🟡 | functional via `syntect` (non-parity, DIVERGENCES #18); `__rich_measure__` is parity-tested; not upstream: `Syntax::highlighter`, `Syntax::highlight_for` and a console-wide default engine (`ConsoleCodeHighlighting`), unused by default; adapters are checked by `rich_ext::testing::conformance` |
 | `markdown.py` | `markdown.rs` | 🟡 | paragraphs/headings/inline/lists/quotes/code/links (both `hyperlinks` modes) + images (including table-cell hoisting and adjacency) + **GFM tables** via `pulldown-cmark`, with inline styling inside cells (golden `markdown_table_inline`); constructor options `justify`/`style` (golden `markdown_options`), `code_theme`/`inline_code_lexer`/`inline_code_theme` (syntect); not upstream: `Markdown::highlighter` and `Markdown::fence_renderer` extension points, unused by default |
 | `json.py` | `json.rs` | 🟡 | ✅ default layout, arbitrary integers, Python float `repr` and overflowing exponents; optional escape-safe layout is off by default (DIVERGENCES §22) |
 | `pretty.py` | `pretty.rs` | 🟡 | Rust-native (`Debug` + repr highlight, #19) |
