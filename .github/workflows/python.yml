@@ -9,6 +9,7 @@ on:
     paths:
       - "crates/rich/**"
       - "crates/rich-py/**"
+      - "docs/python/**"
       - ".github/workflows/python.yml"
       - ".github/workflows/pypi-release.yml"
   push:
@@ -16,6 +17,7 @@ on:
     paths:
       - "crates/rich/**"
       - "crates/rich-py/**"
+      - "docs/python/**"
       - ".github/workflows/python.yml"
       - ".github/workflows/pypi-release.yml"
 
