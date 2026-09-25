@@ -127,6 +127,7 @@ nav:
   - CLI reference: cli-reference.md
   - Python bindings:
       - python/index.md
+      - Getting started: python/getting-started.md
       - Core API:
           - Console: python/console.md
           - The render protocol: python/protocol.md

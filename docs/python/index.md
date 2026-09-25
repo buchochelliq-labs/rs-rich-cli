@@ -31,7 +31,9 @@ Console(width=50).print(table)
 ```
 
 The package is `rs-rich` and it imports as `rs_rich`. It never claims the
-`rich` namespace, so both can be installed side by side.
+`rich` namespace, so both can be installed side by side. New here? Start with
+[Getting started](getting-started.md): installing, a first program, and moving
+a Rich program over.
 
 ## The API
 
