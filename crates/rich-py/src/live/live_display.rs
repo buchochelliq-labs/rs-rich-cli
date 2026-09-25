@@ -42,17 +42,42 @@ fn live_stack(console: &Bound<'_, PyAny>) -> PyResult<Vec<Py<PyAny>>> {
 
 /// A running refresh thread: the `threading.Thread` and its `done` event.
 pub(crate) struct Worker {
-    pub(crate) thread: Py<PyAny>,
-    pub(crate) done: Py<PyAny>,
+    id: u64,
+    thread: Py<PyAny>,
+    done: Py<PyAny>,
 }
 
-static WORKERS: Mutex<Vec<(u64, Worker)>> = Mutex::new(Vec::new());
+static WORKERS: Mutex<Vec<Worker>> = Mutex::new(Vec::new());
 static NEXT_WORKER: AtomicU64 = AtomicU64::new(1);
 
-fn workers() -> MutexGuard<'static, Vec<(u64, Worker)>> {
+fn workers() -> MutexGuard<'static, Vec<Worker>> {
     WORKERS
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Start `target` on a daemon thread stopped by setting `done`, and record
+/// it in the exit registry. Returns its id there.
+pub(crate) fn start_worker(
+    py: Python<'_>,
+    target: Bound<'_, PyCFunction>,
+    done: &Py<PyAny>,
+) -> PyResult<u64> {
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("target", target)?;
+    kwargs.set_item("daemon", true)?;
+    let thread = py
+        .import("threading")?
+        .getattr("Thread")?
+        .call((), Some(&kwargs))?;
+    thread.call_method0("start")?;
+    let id = NEXT_WORKER.fetch_add(1, Ordering::Relaxed);
+    workers().push(Worker {
+        id,
+        thread: thread.unbind(),
+        done: done.clone_ref(py),
+    });
+    Ok(id)
 }
 
 /// Start a daemon thread running `body` every `interval` seconds until its
@@ -61,8 +86,7 @@ pub(crate) fn spawn_worker<F>(py: Python<'_>, interval: f64, body: F) -> PyResul
 where
     F: Fn(Python<'_>, &Bound<'_, PyAny>) -> PyResult<()> + Send + Sync + 'static,
 {
-    let threading = py.import("threading")?;
-    let done = threading.call_method0("Event")?.unbind();
+    let done = py.import("threading")?.call_method0("Event")?.unbind();
     let event = done.clone_ref(py);
     let target = PyCFunction::new_closure(
         py,
@@ -79,51 +103,65 @@ where
             }
         },
     )?;
-    let kwargs = PyDict::new(py);
-    kwargs.set_item("target", target)?;
-    kwargs.set_item("daemon", true)?;
-    let thread = threading.getattr("Thread")?.call((), Some(&kwargs))?;
-    thread.call_method0("start")?;
-    let id = NEXT_WORKER.fetch_add(1, Ordering::Relaxed);
-    workers().push((
-        id,
-        Worker {
-            thread: thread.unbind(),
-            done: done.clone_ref(py),
-        },
-    ));
+    let id = start_worker(py, target, &done)?;
     Ok((id, done))
 }
 
-/// Tell a worker to stop (it finishes its current step on its own).
-pub(crate) fn stop_worker(py: Python<'_>, id: u64) -> PyResult<()> {
+/// Tell a worker to stop, taking it out of the exit registry.
+pub(crate) fn signal_worker(py: Python<'_>, id: u64) -> PyResult<Option<Worker>> {
     let worker = {
         let mut workers = workers();
         workers
             .iter()
-            .position(|(worker_id, _)| *worker_id == id)
-            .map(|index| workers.remove(index).1)
+            .position(|worker| worker.id == id)
+            .map(|index| workers.remove(index))
     };
-    if let Some(worker) = worker {
+    if let Some(worker) = &worker {
         worker.done.bind(py).call_method0("set")?;
     }
+    Ok(worker)
+}
+
+/// Wait for a signalled worker to finish. Unlike upstream's threads, ours
+/// run Rust frames, which must not still be running when the interpreter
+/// finalizes (it unwinds them and aborts). A worker cannot join itself; it
+/// goes back to the registry for the exit hook instead.
+pub(crate) fn join_worker(py: Python<'_>, worker: Worker) -> PyResult<()> {
+    let thread = worker.thread.bind(py);
+    let current = py.import("threading")?.call_method0("current_thread")?;
+    if current.is(thread) {
+        workers().push(worker);
+        return Ok(());
+    }
+    // `Thread.join` releases the GIL while it waits.
+    thread.call_method0("join")?;
     Ok(())
+}
+
+/// Tell a worker to stop, and wait for it.
+pub(crate) fn stop_worker(py: Python<'_>, id: u64) -> PyResult<()> {
+    match signal_worker(py, id)? {
+        Some(worker) => join_worker(py, worker),
+        None => Ok(()),
+    }
+}
+
+/// Keep a signalled worker that cannot be joined now for the exit hook.
+fn defer_worker(worker: Worker) {
+    workers().push(worker);
 }
 
 /// At interpreter exit: stop every refresh thread still running.
 #[pyfunction]
 fn _stop_live_threads(py: Python<'_>) -> PyResult<()> {
-    let running: Vec<Worker> = workers().drain(..).map(|(_, worker)| worker).collect();
+    let running: Vec<Worker> = workers().drain(..).collect();
     for worker in &running {
         worker.done.bind(py).call_method0("set")?;
     }
+    let current = py.import("threading")?.call_method0("current_thread")?;
     for worker in &running {
         let thread = worker.thread.bind(py);
-        let is_current = py
-            .import("threading")?
-            .call_method0("current_thread")?
-            .is(thread);
-        if !is_current {
+        if !current.is(thread) {
             thread.call_method1("join", (1.0,))?;
         }
     }
@@ -331,6 +369,62 @@ impl Live {
         })?;
         slf.get().st().refresh_thread = Some((id, done));
         Ok(())
+    }
+
+    /// `stop` under the display's lock; the signalled refresh thread is left
+    /// in `worker` for the caller to join.
+    fn stop_held(slf: &Bound<'_, Live>, worker: &mut Option<Worker>) -> PyResult<()> {
+        let py = slf.py();
+        let this = slf.get();
+        {
+            let mut state = this.st();
+            if !state.started {
+                return Ok(());
+            }
+            state.started = false;
+        }
+        let console = this.console_of(py);
+        console.call_method0("clear_live")?;
+        let (nested, transient) = {
+            let state = this.st();
+            (state.nested, state.transient)
+        };
+        if nested {
+            if !transient {
+                let renderable = slf.getattr("renderable")?;
+                console.call_method1("print", (renderable,))?;
+            }
+            return Ok(());
+        }
+        let thread = this.st().refresh_thread.take();
+        if let Some((id, _)) = thread {
+            *worker = signal_worker(py, id)?;
+        }
+        let alt_screen = {
+            let mut state = this.st();
+            state.vertical_overflow = "visible".to_string();
+            state.alt_screen
+        };
+        let refreshed = if alt_screen {
+            Ok(())
+        } else {
+            slf.call_method0("refresh").map(|_| ())
+        };
+        // Upstream's `finally:` block.
+        Live::disable_redirect_io(slf)?;
+        Live::remove_hook(slf)?;
+        let live_render = this.live_render.bind(py).get();
+        if !alt_screen && util::flag(&console, "is_terminal")? && live_render.height() > 0 {
+            console.call_method0("line")?;
+        }
+        console.call_method1("show_cursor", (true,))?;
+        if alt_screen {
+            console.call_method1("set_alt_screen", (false,))?;
+        }
+        if transient && !alt_screen {
+            util::control(&console, &live_render.restore_codes())?;
+        }
+        refreshed
     }
 }
 
@@ -545,56 +639,22 @@ impl Live {
     fn stop(slf: &Bound<'_, Self>) -> PyResult<()> {
         let py = slf.py();
         let this = slf.get();
-        let _held = hold(this.lock.bind(py))?;
-        {
-            let mut state = this.st();
-            if !state.started {
-                return Ok(());
+        let mut worker = None;
+        let result = {
+            let _held = hold(this.lock.bind(py))?;
+            Live::stop_held(slf, &mut worker)
+        };
+        // Wait for the refresh thread outside the lock, which it takes to
+        // refresh; a caller still holding it must leave that to the exit hook.
+        if let Some(worker) = worker {
+            let lock = this.lock.bind(py);
+            if lock.call_method0("_is_owned")?.is_truthy()? {
+                defer_worker(worker);
+            } else {
+                join_worker(py, worker)?;
             }
-            state.started = false;
         }
-        let console = this.console_of(py);
-        console.call_method0("clear_live")?;
-        let (nested, transient) = {
-            let state = this.st();
-            (state.nested, state.transient)
-        };
-        if nested {
-            if !transient {
-                let renderable = slf.getattr("renderable")?;
-                console.call_method1("print", (renderable,))?;
-            }
-            return Ok(());
-        }
-        let thread = this.st().refresh_thread.take();
-        if let Some((id, _)) = thread {
-            stop_worker(py, id)?;
-        }
-        let alt_screen = {
-            let mut state = this.st();
-            state.vertical_overflow = "visible".to_string();
-            state.alt_screen
-        };
-        let refreshed = if alt_screen {
-            Ok(())
-        } else {
-            slf.call_method0("refresh").map(|_| ())
-        };
-        // Upstream's `finally:` block.
-        Live::disable_redirect_io(slf)?;
-        Live::remove_hook(slf)?;
-        let live_render = this.live_render.bind(py).get();
-        if !alt_screen && util::flag(&console, "is_terminal")? && live_render.height() > 0 {
-            console.call_method0("line")?;
-        }
-        console.call_method1("show_cursor", (true,))?;
-        if alt_screen {
-            console.call_method1("set_alt_screen", (false,))?;
-        }
-        if transient && !alt_screen {
-            util::control(&console, &live_render.restore_codes())?;
-        }
-        refreshed
+        result
     }
 
     fn __enter__(slf: Bound<'_, Self>) -> PyResult<Bound<'_, Self>> {

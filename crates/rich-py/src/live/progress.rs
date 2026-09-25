@@ -20,7 +20,7 @@ use pyo3::{PyTraverseError, PyVisit};
 use rich::table::{Cell, ColumnOptions};
 use rich::{Spinner as CoreSpinner, Table as CoreTable, Text as CoreText};
 
-use super::live_display::Live;
+use super::live_display::{self, Live};
 use super::progress_bar::ProgressBar;
 use super::util::{self, hold, Arg};
 use crate::convert;
@@ -2280,7 +2280,8 @@ struct TrackState {
     yielded: bool,
     finished: bool,
     auto: bool,
-    thread: Option<(Py<PyAny>, Py<PyAny>)>,
+    /// The update thread's id in the exit registry.
+    thread: Option<u64>,
     counter: Arc<AtomicI64>,
 }
 
@@ -2395,9 +2396,8 @@ impl Track {
         py: Python<'_>,
         progress: &Bound<'_, PyAny>,
         task_id: &Py<PyAny>,
-    ) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
-        let threading = py.import("threading")?;
-        let done = threading.call_method0("Event")?.unbind();
+    ) -> PyResult<u64> {
+        let done = py.import("threading")?.call_method0("Event")?.unbind();
         let (counter, period) = {
             let state = self.st();
             (state.counter.clone(), state.update_period)
@@ -2442,12 +2442,7 @@ impl Track {
                 Ok(())
             },
         )?;
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("target", target)?;
-        kwargs.set_item("daemon", true)?;
-        let thread = threading.getattr("Thread")?.call((), Some(&kwargs))?;
-        thread.call_method0("start")?;
-        Ok((thread.unbind(), done))
+        live_display::start_worker(py, target, &done)
     }
 
     /// Leave the loop: stop the update thread (which sets the final count),
@@ -2467,9 +2462,8 @@ impl Track {
             )
         };
         let mut result = Ok(());
-        if let Some((thread, done)) = thread {
-            done.bind(py).call_method0("set")?;
-            result = thread.bind(py).call_method0("join").map(|_| ());
+        if let Some(id) = thread {
+            result = live_display::stop_worker(py, id);
         }
         if owned && started {
             let stopped = progress.bind(py).call_method0("stop").map(|_| ());

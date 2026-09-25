@@ -396,10 +396,7 @@ pub fn export_svg_with(
                 "terminal_height",
                 &fmt_str((last_y as f64 + 1.0) * line_height - 1.0),
             ),
-            (
-                "width",
-                &py_int_plus(terminal_width_float, margin_width as i64),
-            ),
+            ("width", &py_int_plus(terminal_width_float, margin_width)),
             (
                 "height",
                 &fmt_str(terminal_height_local + margin_height as f64),
