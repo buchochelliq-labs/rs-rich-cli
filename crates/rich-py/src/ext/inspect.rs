@@ -85,7 +85,8 @@ fn bytes_arg(value: &Bound<'_, PyAny>) -> PyResult<Vec<u8>> {
     value.extract::<Vec<u8>>()
 }
 
-/// A search needle: `bytes`, or text with `\xNN` escapes (`hex` syntax).
+/// A search needle: `bytes`, or the `rich hex --find` syntax: hex digits
+/// (`"de ad be ef"`, `"0xDEAD"`) or quoted text (`'"PNG"'`, with `\xNN`).
 fn needle(value: &Bound<'_, PyAny>) -> PyResult<Vec<u8>> {
     if let Ok(bytes) = value.cast::<PyBytes>() {
         return Ok(bytes.as_bytes().to_vec());

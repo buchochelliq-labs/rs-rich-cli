@@ -56,6 +56,15 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** make the strict form the default, renaming the lenient one to
   `*_lossy`.
 
+### 3a. `Style.meta` is a typed map, not marshal bytes
+- **Differs:** upstream stores `meta` as `marshal.dumps(dict)`; `Style` here
+  holds a `Meta` (string keys, `MetaValue` scalars and lists) kept in insertion
+  order, which gives the same equality (`{a, b}` ≠ `{b, a}`, `True` ≠ `1`),
+  combination (`{**a, **b}`) and truthiness. Non-marshal-able Python values have
+  no representation; `Style.from_meta`'s random `link_id` is not modelled (#20);
+  markup `[@handler]` tags do not produce meta.
+- **Why:** Rust has no marshal; the map round-trips what the bindings need.
+
 ### 3. Byte offsets in `Text` spans
 - **Differs:** upstream `Text` uses code-point offsets for spans; our `Text` uses
   byte offsets internally.

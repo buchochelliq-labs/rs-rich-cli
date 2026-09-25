@@ -20,7 +20,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | upstream `rich/…`                     | rust `crates/rich/src/…` | status | parity |
 |---------------------------------------|--------------------------|:------:|:------:|
 | `color.py`, `color_triplet.py`, `_palettes.py`, `palette.py` | `color.rs` | 🟡 | ✅ truecolor + 8-bit + standard |
-| `style.py`                            | `style.rs`               | 🟡 | ✅ |
+| `style.py`                            | `style.rs`               | 🟡 | ✅ (+ `meta`: an insertion-ordered `Meta` map instead of marshal bytes) |
 | `cells.py`, `_cell_widths.py`         | `cells.rs`               | 🟢 | ✅ 0 / 127,754 codepoints |
 | `segment.py`                          | `segment.rs`             | 🟡 | — |
 | `markup.py`                           | `markup.rs`              | 🟡 | ✅ |
@@ -44,9 +44,9 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 |-------------------|-----------|:------:|:------:|
 | `box.py` (all boxes, `substitute`, `get_plain_headed_box`) | `box.rs` | 🟢 | ✅ |
 | `rule.py` | `rule.rs` | 🟡 | ✅ |
-| `padding.py` | `padding.rs` | 🟡 | ✅ |
+| `padding.py` | `padding.rs` | 🟡 | ✅ (+ `expand`, `indent`, height in `core_gaps.tsv`) |
 | `panel.py` | `panel.rs` | 🟡 | ✅ |
-| `align.py` | `align.rs` | 🟡 | ✅ |
+| `align.py` | `align.rs` | 🟡 | ✅ (+ `vertical`, `style`, `pad`, `width`, `height`, `VerticalCenter`, table-cell `vertical` in `core_gaps.tsv`) |
 | `constrain.py` | `constrain.rs` | 🟡 | ✅ |
 | `table.py` | `table.rs` | 🟡 | ✅ (renderable cells via `Cell`, `ColumnOptions`, markup `str` cells, `__rich_measure__`) |
 | `columns.py` | `columns.rs` | 🟡 | ✅ (markup/`Text`/renderable items) |
@@ -55,14 +55,14 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `styled.py` | `styled.rs` | 🟢 | ✅ |
 | `screen.py` | `screen.rs` | 🟡 | — |
 | `progress_bar.py` | `progress_bar.rs` | 🟢 | ✅ `bar_*`, `progress_three`, `progress_bar.tsv` (pulse, ASCII, no-colour) |
-| `bar.py` | `bar.rs` | 🟡 | ✅ |
+| `bar.py` | `bar.rs` | 🟡 | ✅ (+ `color`/`bgcolor` in `core_gaps.tsv`) |
 
 ## Live & progress
 
 | upstream `rich/…` | rust file | status | parity |
 |-------------------|-----------|:------:|--------|
 | `progress.py` | `progress.rs` + `pyformat.rs` | 🟡 | ✅ `progress_time.tsv` step programs (columns incl. `TextColumn`/`RenderableColumn`, fields, pulse, task API, clock, expand, table-column options, `bar_width=None`), `progress_live.tsv` (live stream, transient, disable, non-terminal) |
-| `spinner.py`, `_spinners.py` (full table) | `spinner.rs` | 🟡 | ✅ `live_status.tsv` (start at first render, `update`, markup text, console clock, measure) |
+| `spinner.py`, `_spinners.py` (full table; public via `spinner_names`/`spinner_frames`) | `spinner.rs` | 🟡 | ✅ `live_status.tsv` (start at first render, `update`, markup text, console clock, measure) |
 | `status.py` | `status.rs` | 🟡 | ✅ `live_status.tsv` (frames, `update`, console clock) |
 | `live_render.py` | `live_render.rs` | 🟡 | ✅ `live_status.tsv` (`position_cursor`/`restore_cursor`, style, wrap) |
 | `live.py` | `live.rs` | 🟡 | ✅ `progress_live.tsv` (start/refresh/stop stream); auto-refresh timing by unit tests |
