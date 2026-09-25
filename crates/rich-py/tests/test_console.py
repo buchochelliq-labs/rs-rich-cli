@@ -120,9 +120,8 @@ class TestPrint:
             render("[/bold]")
         assert issubclass(MarkupError, ConsoleError) and not issubclass(MarkupError, ValueError)
 
-    def test_containers_need_pretty_printing_which_is_not_implemented_yet(self):
-        with pytest.raises(NotImplementedError, match="cannot render dict"):
-            render({"a": 1})
+    def test_containers_print_pretty(self):
+        assert render({"a": 1}) == "{'a': 1}\n"
 
     def test_an_invalid_justify_is_a_value_error(self):
         with pytest.raises(ValueError, match="invalid justify"):
@@ -403,19 +402,15 @@ class TestFullConsole:
         assert console.input(password=True) == "secret"
         assert console.input(stream=io.StringIO("line\n")) == "line\n"
 
-    def test_log_locals_and_non_text_messages_are_not_implemented_yet(self):
-        console = Console(file=io.StringIO())
-        with pytest.raises(NotImplementedError, match="locals"):
-            console.log("x", log_locals=True)
-        with pytest.raises(NotImplementedError, match="Text message"):
-            console.log(Panel("x"))
+    def test_log_takes_any_renderable_and_locals(self):
+        # Compared with Rich in test_integration.py.
+        out = io.StringIO()
+        console = Console(file=out, width=60, log_time=False, log_path=False)
+        console.log(Panel("x"), log_locals=True)
+        assert "╭" in out.getvalue() and "locals" in out.getvalue()
 
-    def test_print_json_refuses_what_core_cannot_render(self):
+    def test_print_json_needs_a_str_or_data(self):
         console = Console(file=io.StringIO())
-        with pytest.raises(NotImplementedError, match="indent=2"):
-            console.print_json("[1]", indent=4)
-        with pytest.raises(NotImplementedError, match="ensure_ascii"):
-            console.print_json("[1]", ensure_ascii=True)
         with pytest.raises(TypeError, match="json must be str"):
             console.print_json(1)
 
@@ -428,22 +423,19 @@ class TestFullConsole:
         recording.print("x")
         svg = recording.export_svg(clear=False)
         assert svg == recording.export_svg()  # a stable id by default
-        with pytest.raises(NotImplementedError, match="code_format"):
-            recording.export_html(code_format="{code}")
+        assert recording.export_html(code_format="<{code}>", clear=False).startswith("<")
 
     def test_unsupported_constructor_options_are_refused(self):
-        with pytest.raises(NotImplementedError, match="tab_size"):
-            Console(tab_size=4)
-        with pytest.raises(NotImplementedError, match="emoji_variant"):
-            Console(emoji_variant="text")
         with pytest.raises(NotImplementedError, match="Jupyter"):
             Console(force_jupyter=True)
+        # Rich ignores an unknown emoji variant rather than refusing it.
+        Console(emoji_variant="sideways")
+        assert Console(tab_size=4).tab_size == 4
 
-    def test_methods_other_areas_provide_raise_until_they_do(self):
-        console = Console(file=io.StringIO())
-        for method in (console.status, console.pager, console.screen, console.print_exception):
-            with pytest.raises(NotImplementedError):
-                method()
+    def test_print_exception_outside_an_except_block_is_a_value_error(self):
+        # As Rich's `Traceback()` with no exception being handled.
+        with pytest.raises(ValueError, match="except"):
+            Console(file=io.StringIO()).print_exception()
 
     def test_console_style_applies_to_everything(self):
         out = io.StringIO()

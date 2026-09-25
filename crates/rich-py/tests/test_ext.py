@@ -65,7 +65,3 @@ def test_registry_is_the_plugin_host():
     assert registry.NumberHighlighter is _native.NumberHighlighter
 
 
-@pytest.mark.parametrize("name", testing.__all__)
-def test_testing_feature_is_not_built(name):
-    with pytest.raises(NotImplementedError, match="testing"):
-        getattr(testing, name)()

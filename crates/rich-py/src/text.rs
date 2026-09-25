@@ -4,22 +4,19 @@
 //!
 //! A `Text` wraps a core text, which holds the plain string, spans, base
 //! style, justify, overflow, no-wrap and tab size; core renders it. Rich's
-//! `end` has no place in a core text, so it lives in the instance
-//! `__dict__` (the class is declared with `dict`), which keeps
-//! `Text { inner }` the whole Rust value other modules build.
+//! `end` has no place in a core text, so it is a field beside it; other
+//! modules build a `Text` with [`Text::from_core`].
 //!
 //! Offsets are Python character offsets, as in Rich; core spans hold byte
 //! offsets, and `ops` converts. Styles on spans are core `StyleType`s: a
 //! `str` stays a name (resolved by the console's theme when printed) and a
-//! `Style` is kept resolved. A `Style`'s meta data does not survive in a
-//! span (core has none), so `apply_meta` and `on` raise `NotImplementedError`.
+//! `Style` is kept resolved, with its meta data (core's `Meta`), so
+//! `apply_meta`, `on` and `assemble(meta=)` work as in Rich.
 
 mod lines;
 pub(crate) mod ops;
 
-use pyo3::exceptions::{
-    PyAssertionError, PyIndexError, PyNotImplementedError, PyTypeError, PyValueError,
-};
+use pyo3::exceptions::{PyAssertionError, PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PySlice, PyString, PyTuple, PyType};
 
@@ -34,13 +31,23 @@ pub(crate) use lines::Lines;
 use ops::{boundaries, byte_at, char_len, char_spans, CharSpan};
 
 /// `rich.text.Text`: a string with styled spans.
-#[pyclass(name = "Text", module = "rs_rich.text", dict, skip_from_py_object)]
+#[pyclass(name = "Text", module = "rs_rich.text", skip_from_py_object)]
 #[derive(Clone)]
 pub(crate) struct Text {
     pub(crate) inner: CoreText,
+    /// What ends the text when it renders (Rich's `end`, default `"\n"`).
+    pub(crate) end: String,
 }
 
-const END_KEY: &str = "_rs_rich_end";
+impl Text {
+    /// A `Text` holding a core text, ending with `"\n"`.
+    pub(crate) fn from_core(inner: CoreText) -> Text {
+        Text {
+            inner,
+            end: "\n".to_string(),
+        }
+    }
+}
 
 /// A base `style=` argument: `""`/`None` is no style, a `str` a name (or
 /// definition), a `Style` itself.
@@ -103,23 +110,18 @@ pub(crate) fn new_text<'py>(
     inner: CoreText,
     end: &str,
 ) -> PyResult<Bound<'py, Text>> {
-    let text = Bound::new(py, Text { inner })?;
-    if end != "\n" {
-        instance_dict(&text)?.set_item(END_KEY, end)?;
-    }
-    Ok(text)
-}
-
-fn instance_dict<'py>(text: &Bound<'py, Text>) -> PyResult<Bound<'py, PyDict>> {
-    Ok(text.getattr("__dict__")?.cast_into::<PyDict>()?)
+    Bound::new(
+        py,
+        Text {
+            inner,
+            end: end.to_string(),
+        },
+    )
 }
 
 /// The `end` of a Python `Text`.
 fn end_of(text: &Bound<'_, Text>) -> PyResult<String> {
-    match instance_dict(text)?.get_item(END_KEY)? {
-        Some(end) => end.extract(),
-        None => Ok("\n".to_string()),
-    }
+    Ok(text.borrow().end.clone())
 }
 
 /// A new `Text` carrying `like`'s `end`.
@@ -356,9 +358,9 @@ impl Text {
                 Text::append(text.borrow_mut(), &tuple.get_item(0)?, style.as_ref())?;
             }
         }
-        if let Some(meta) = meta {
+        if let Some(meta) = meta.filter(|m| !m.is_none()) {
             if meta.is_truthy()? {
-                return Err(meta_unsupported());
+                Text::apply_meta(&text, meta, Index(0), None)?;
             }
         }
         Ok(text)
@@ -439,13 +441,13 @@ impl Text {
 
     /// What ends the text when it renders (default `"\n"`).
     #[getter]
-    fn get_end(slf: &Bound<'_, Self>) -> PyResult<String> {
-        end_of(slf)
+    fn get_end(&self) -> String {
+        self.end.clone()
     }
 
     #[setter(end)]
-    fn set_end(slf: &Bound<'_, Self>, end: &str) -> PyResult<()> {
-        instance_dict(slf)?.set_item(END_KEY, end)
+    fn set_end(&mut self, end: String) {
+        self.end = end;
     }
 
     /// Spaces per tab, or `None` for the console's.
@@ -528,27 +530,40 @@ impl Text {
         Ok(())
     }
 
-    /// Meta data on spans needs a core `Style` with meta, which core lacks.
+    /// Apply meta data to a range: a span of `Style.from_meta(meta)`.
     #[pyo3(signature = (meta, start=Index(0), end=None))]
     fn apply_meta(
-        &self,
+        slf: &Bound<'_, Self>,
         meta: &Bound<'_, PyAny>,
         start: Index,
         end: Option<Index>,
     ) -> PyResult<()> {
-        let _ = (meta, start, end);
-        Err(meta_unsupported())
+        let style = meta_style(meta)?;
+        slf.call_method1("stylize", (style, start.0, end.map(|end| end.0)))?;
+        Ok(())
     }
 
-    /// Event handlers are Textual's meta data, which core spans cannot hold.
+    /// Apply event handlers (Textual's meta data, as `@name` keys) to the
+    /// whole text. Returns the text.
     #[pyo3(signature = (meta=None, **handlers))]
-    fn on(
-        &self,
-        meta: Option<&Bound<'_, PyAny>>,
-        handlers: Option<&Bound<'_, PyDict>>,
-    ) -> PyResult<()> {
-        let _ = (meta, handlers);
-        Err(meta_unsupported())
+    fn on<'py>(
+        slf: &Bound<'py, Self>,
+        meta: Option<&Bound<'py, PyAny>>,
+        handlers: Option<&Bound<'py, PyDict>>,
+    ) -> PyResult<Bound<'py, Self>> {
+        let py = slf.py();
+        let merged = match meta.filter(|m| !m.is_none()) {
+            Some(meta) => meta.cast::<PyDict>()?.clone(),
+            None => PyDict::new(py),
+        };
+        if let Some(handlers) = handlers {
+            for (key, value) in handlers.iter() {
+                merged.set_item(format!("@{key}"), value)?;
+            }
+        }
+        let style = meta_style(merged.as_any())?;
+        slf.call_method1("stylize", (style,))?;
+        Ok(slf.clone())
     }
 
     fn remove_suffix(&mut self, suffix: &str) {
@@ -1176,11 +1191,11 @@ impl Text {
     }
 }
 
-fn meta_unsupported() -> PyErr {
-    PyNotImplementedError::new_err(
-        "rs_rich cannot attach meta data to Text spans: core rich's spans carry a Style \
-         without meta (Textual's event handlers), so it would be dropped",
-    )
+/// `Style.from_meta(meta)`, checked to be meta data a span can carry.
+fn meta_style<'py>(meta: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    crate::style::core_meta(meta)?;
+    let py = meta.py();
+    py.get_type::<Style>().call_method1("from_meta", (meta,))
 }
 
 /// Rich's `Text.detect_indentation`.

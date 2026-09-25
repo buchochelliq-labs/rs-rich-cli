@@ -54,5 +54,14 @@ except PipelineError as error:
 check: empty input | check | empty input
 ```
 
-The plugin registry (`ExtensionRegistry.register_transform`) builds
-pipelines from registered stages by name; see the plugin guide.
+## `Pipeline` or `TextPipeline`?
+
+Both exist because Rust has both, and they answer different questions.
+`Pipeline` (this page, `rich_ext::transform`) is built in code from stage
+objects: any value, not only `Text`, with `TransformError` and
+`PipelineError` naming the stage. `TextPipeline` (from
+`ExtensionRegistry.text_pipeline(names)`, `rich_plugin_api`) is assembled
+from transforms *registered by name* by plugins, works on `Text` only, and
+fails with `PluginError(kind="pipeline")`. A `KeepLines` or
+`HighlightMatches` stage can be registered as a plugin transform, so the
+same stages serve both; see [Using what is registered](../plugins.md#using-what-is-registered).

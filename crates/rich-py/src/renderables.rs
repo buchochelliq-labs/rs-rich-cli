@@ -37,8 +37,9 @@ mod containers;
 mod layout;
 mod padding;
 mod rule;
+
+pub(crate) use rule::ends_inline as rule_ends_inline;
 mod spinner;
-mod spinner_data;
 mod tree;
 
 /// A renderer's child: a boxed core renderable, or a shared one (a `Table`

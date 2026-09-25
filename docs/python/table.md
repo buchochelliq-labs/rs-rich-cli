@@ -10,8 +10,14 @@ A `Table` lays out rows and columns of text. It corresponds to
 ## Constructor
 
 ```text
-Table(*headers, title=None, caption=None, box=HEAVY_HEAD, show_header=True,
-      show_lines=False, show_edge=True, expand=False, border_style=None)
+Table(*headers, title=None, caption=None, width=None, min_width=None,
+      box=HEAVY_HEAD, safe_box=None, padding=(0, 1), collapse_padding=False,
+      pad_edge=True, expand=False, show_header=True, show_footer=False,
+      show_edge=True, show_lines=False, leading=0, style="none",
+      row_styles=None, header_style="table.header", footer_style="table.footer",
+      border_style=None, title_style=None, caption_style=None,
+      title_justify="center", caption_justify="center", highlight=False)
+Table.grid(*headers, padding=0, collapse_padding=True, pad_edge=False, expand=False)
 ```
 
 | Argument | Meaning |
@@ -24,6 +30,20 @@ Table(*headers, title=None, caption=None, box=HEAVY_HEAD, show_header=True,
 | `show_edge` | Draw the outer border. |
 | `expand` | Fill the available width. |
 | `border_style` | A style for the borders. |
+| `padding` | Space around each cell: `n`, `(vertical, horizontal)` or `(top, right, bottom, left)`. |
+| `collapse_padding`, `pad_edge` | Merge neighbouring cells' padding; pad the outer edge. |
+| `style` | A style under the whole table (the borders take it too). |
+| `highlight` | Highlight the cells' strings, as the console highlights printed ones. |
+| `safe_box` | Accepted; it only matters on legacy Windows consoles. |
+
+`Table.grid()` is a table with no borders and no header, for laying things
+out in columns.
+
+Rich's `width`, `min_width`, `show_footer` (and footers), `leading`,
+`row_styles`, a `header_style`, `title_style` or `caption_style` of your own,
+a `title_justify` or `caption_justify` other than `"center"`, row styles
+(`add_row(style=...)`) and sections (`end_section`, `add_section()`) raise
+`NotImplementedError`: core's table has no such options yet.
 
 ```python
 from rs_rich.console import Console
@@ -48,7 +68,8 @@ Console(width=40).print(table)
 ## add_column
 
 ```text
-add_column(header="", *, style=None, header_style=None, justify="left",
+add_column(header="", footer="", *, header_style=None, highlight=None,
+           footer_style=None, style=None, justify="left", vertical="top",
            overflow="ellipsis", width=None, min_width=None, max_width=None,
            ratio=None, no_wrap=False)
 ```
@@ -59,6 +80,8 @@ add_column(header="", *, style=None, header_style=None, justify="left",
 | `style` | A style for the column's cells. |
 | `header_style` | A style for the whole header cell. |
 | `justify` | `"left"`, `"center"`, `"right"`, `"full"` or `"default"`. |
+| `vertical` | `"top"`, `"middle"` or `"bottom"`: where a short cell sits in a tall row. |
+| `highlight` | Highlight this column's strings (`None`: the table's `highlight`). |
 | `overflow` | `"fold"`, `"crop"`, `"ellipsis"` or `"ignore"`. |
 | `width`, `min_width`, `max_width` | A fixed width, or bounds, in cells. |
 | `ratio` | This column's share of the free width when the table expands. |
@@ -95,7 +118,7 @@ Console(width=32).print(table)
 ## add_row
 
 ```text
-add_row(*cells)
+add_row(*cells, style=None, end_section=False)
 ```
 
 This adds a row. Each cell is a `str` (markup), a [`Text`](text.md) (used as

@@ -193,6 +193,70 @@ pub enum ProgressColumn {
     /// A column with explicit table-column options (upstream's `table_column=`
     /// argument). See [`ProgressColumn::with_table_column`].
     WithTableColumn(Box<ProgressColumn>, ColumnOptions),
+    /// A user-defined column: upstream's subclass of `ProgressColumn`. See
+    /// [`CustomProgressColumn`] and [`ProgressColumn::custom`].
+    Custom(CustomColumn),
+}
+
+/// A user-defined progress column. Port of subclassing upstream's abstract
+/// `ProgressColumn`: implement [`render`](Self::render), and optionally the
+/// table column and `max_refresh`.
+pub trait CustomProgressColumn: Send + Sync {
+    /// The cell for `task`. Port of `ProgressColumn.render`.
+    fn render(&self, task: &Task) -> Cell;
+
+    /// The grid column this column occupies. Port of `get_table_column`
+    /// (upstream's default `Column()`).
+    fn table_column(&self) -> ColumnOptions {
+        ColumnOptions::default()
+    }
+
+    /// Reuse a render younger than this many seconds (upstream
+    /// `max_refresh`, default `None`: render every time). As upstream, the
+    /// cache is only consulted while the task has completed nothing.
+    fn max_refresh(&self) -> Option<f64> {
+        None
+    }
+}
+
+/// A [`CustomProgressColumn`] with upstream's `ProgressColumn.__call__`
+/// render cache.
+pub struct CustomColumn {
+    column: Arc<dyn CustomProgressColumn>,
+    cache: RefCell<HashMap<TaskId, (f64, Cell)>>,
+}
+
+impl CustomColumn {
+    /// Wrap a user-defined column.
+    pub fn new(column: Arc<dyn CustomProgressColumn>) -> Self {
+        CustomColumn {
+            column,
+            cache: RefCell::new(HashMap::new()),
+        }
+    }
+
+    /// The wrapped column.
+    pub fn column(&self) -> &Arc<dyn CustomProgressColumn> {
+        &self.column
+    }
+
+    /// Port of `ProgressColumn.__call__`.
+    fn call(&self, task: &Task) -> Cell {
+        let now = task.now();
+        let max_refresh = self.column.max_refresh();
+        if let Some(max_refresh) = max_refresh {
+            if task.completed == 0.0 {
+                if let Some((timestamp, cell)) = self.cache.borrow().get(&task.id) {
+                    if timestamp + max_refresh > now {
+                        return cell.clone();
+                    }
+                }
+            }
+        }
+        let cell = self.column.render(task);
+        self.cache.borrow_mut().insert(task.id, (now, cell.clone()));
+        cell
+    }
 }
 
 /// A progress bar column's width and styles. Port of `BarColumn`'s arguments.
@@ -283,6 +347,11 @@ impl ProgressColumn {
         ProgressColumn::Spinner(SpinnerColumn::new("dots", " "))
     }
 
+    /// A user-defined column (upstream's `ProgressColumn` subclass).
+    pub fn custom(column: impl CustomProgressColumn + 'static) -> Self {
+        ProgressColumn::Custom(CustomColumn::new(Arc::new(column)))
+    }
+
     /// This column with explicit table-column options, as upstream's
     /// `table_column=Column(...)` argument sets them: width, ratio, justify,
     /// wrapping and style of the grid column.
@@ -296,9 +365,10 @@ impl ProgressColumn {
 
     /// Port of `get_table_column()`: text columns default to
     /// `Column(no_wrap=True)`, the rest to `Column()`.
-    fn table_column(&self) -> ColumnOptions {
+    pub fn table_column(&self) -> ColumnOptions {
         match self {
             ProgressColumn::WithTableColumn(_, options) => options.clone(),
+            ProgressColumn::Custom(column) => column.column.table_column(),
             ProgressColumn::Description
             | ProgressColumn::Text(..)
             | ProgressColumn::TextFormat(_)
@@ -311,10 +381,13 @@ impl ProgressColumn {
         }
     }
 
-    /// The grid cell for `task`: the column's `__call__(task)`.
-    fn table_cell(&self, task: &Task) -> Cell {
+    /// The grid cell for `task`: the column's `__call__(task)`. Stateful
+    /// columns (spinners, the remaining-time and custom caches) advance as
+    /// upstream's do, so call it once per task per refresh.
+    pub fn table_cell(&self, task: &Task) -> Cell {
         match self {
             ProgressColumn::WithTableColumn(inner, _) => inner.table_cell(task),
+            ProgressColumn::Custom(column) => column.call(task),
             ProgressColumn::Bar => Cell::Renderable(Arc::new(BarColumn::default().render(task))),
             ProgressColumn::BarWith(column) => Cell::Renderable(Arc::new(column.render(task))),
             ProgressColumn::Renderable(renderable) => Cell::Renderable(renderable.clone()),
@@ -341,6 +414,7 @@ impl ProgressColumn {
             ProgressColumn::Bar
             | ProgressColumn::BarWith(_)
             | ProgressColumn::Renderable(_)
+            | ProgressColumn::Custom(_)
             | ProgressColumn::WithTableColumn(..) => {
                 unreachable!("bar, renderable and wrapped columns have no text cell")
             }
@@ -565,6 +639,11 @@ impl Task {
     }
     fn now(&self) -> f64 {
         (self.get_time)()
+    }
+
+    /// The current time by the progress's clock. Port of `Task.get_time`.
+    pub fn get_time(&self) -> f64 {
+        self.now()
     }
 
     /// This task's id.

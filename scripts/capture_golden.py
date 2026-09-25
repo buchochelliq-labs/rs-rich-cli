@@ -516,6 +516,9 @@ RENDERABLE_CASES = [
     ("panel_empty_title", 12, Panel("x", title="", subtitle="")),
     ("panel_tiny_title", 4, Panel("x", title="[bold red]T[/]", subtitle="[green]S[/]")),
     ("panel_plain", 20, Panel("hello")),
+    # A Text's blank last line survives inside containers.
+    ("padding_text_trailing_blank", 12, Padding(Text("a\n"), (0, 1))),
+    ("panel_text_trailing_blanks", 12, Panel(Text("a\n\n"))),
     ("panel_title", 20, Panel("hello", title="T")),
     ("panel_title_left", 20, Panel("x", title="T", title_align="left", box=box.SQUARE)),
     ("panel_title_right", 20, Panel("x", title="T", title_align="right", box=box.SQUARE)),
@@ -3206,6 +3209,132 @@ def _uf_prints(console: Console, objects) -> str:
     return capture.get()
 
 
+def _uf_layout() -> Layout:
+    layout = Layout(name="root")
+    layout.split_column(Layout(Text("head", style="on blue"), name="header", size=1), Layout(name="body"))
+    layout["body"].split_row(
+        Layout(Text("L"), name="left"),
+        Layout(name="hidden", visible=False),
+        Layout(Panel("side"), ratio=2, minimum_size=3),
+    )
+    layout["body"].add_split(Layout(name="extra", size=6))
+    return layout
+
+
+def _uf_layout_map() -> str:
+    layout = _uf_layout()
+    _cg_print(_cg_console(40, height=8), layout)
+    return ";".join(
+        f"{child.name}|{r.region.x},{r.region.y},{r.region.width},{r.region.height}|{len(r.render)}"
+        for child, r in layout.map.items()
+    )
+
+
+def _uf_layout_update() -> str:
+    layout = _uf_layout()
+    layout["left"].update(Text("updated"))
+    out = _cg_print(_cg_console(40, height=6), layout)
+    layout["body"].unsplit()
+    return out + _cg_print(_cg_console(40, height=6), layout)
+
+
+_UF_INDENTED = Text.from_markup(
+    "def f():\n    [red]if x:[/]\n        return 1\n\n      odd\n    [b]done[/]\n", style="green"
+)
+
+
+def _uf_stylize_before() -> Text:
+    text = Text("hello world")
+    text.stylize("red", 0, 3)
+    text.stylize_before("bold on blue", 1, 7)
+    text.stylize_before("italic", 5, 20)
+    return text
+
+
+def _uf_live_render(overflow: str, style: str, content: str = "1\n2\n3\n4\n5\n6") -> str:
+    from rich.live_render import LiveRender
+
+    live = LiveRender(Text(content), style=style, vertical_overflow=overflow)
+    out = _cg_print(_cg_console(12, height=4), live)
+    return out + "|" + str(live.position_cursor()) + "|"
+
+
+def _uf_progress_custom() -> str:
+    from rich.progress import ProgressColumn
+    from rich.table import Column
+
+    class Stars(ProgressColumn):
+        def render(self, task):
+            return Text("*" * int(task.percentage // 20), style="yellow")
+
+    class Counter(ProgressColumn):
+        max_refresh = 10.0
+
+        def __init__(self):
+            super().__init__(table_column=Column(width=4, justify="right"))
+            self.calls = 0
+
+        def render(self, task):
+            self.calls += 1
+            return Panel.fit(str(self.calls)) if task.description == "p" else Text(str(self.calls))
+
+    now = [100.0]
+    progress = Progress(
+        Stars(), TextColumn("{task.description}"), Counter(), BarColumn(bar_width=6), get_time=lambda: now[0]
+    )
+    progress.add_task("a", total=100, completed=40)
+    progress.add_task("b", total=100)
+    progress.add_task("p", total=100, completed=100)
+    console = _cg_console(40)
+    out = _cg_print(console, progress.make_tasks_table(progress.tasks))
+    now[0] += 1
+    out += _cg_print(console, progress.make_tasks_table(progress.tasks))
+    now[0] += 20
+    return out + _cg_print(console, progress.make_tasks_table(progress.tasks))
+
+
+_UF_CODE = "def f(x):\n    if x:\n        return 'a very long line of code'\n\n    return x\n"
+
+_UF_SYNTAX_OPTIONS = [
+    {},
+    {"line_numbers": True},
+    {"line_numbers": True, "start_line": 9, "highlight_lines": {10, 12}},
+    {"line_numbers": True, "line_range": (2, 3)},
+    {"line_range": (4, None)},
+    {"line_range": (None, 2), "word_wrap": True},
+    {"code_width": 12},
+    {"word_wrap": True},
+    {"word_wrap": True, "line_numbers": True, "code_width": 14},
+    {"indent_guides": True},
+    {"indent_guides": True, "line_numbers": True},
+    {"padding": (1, 2)},
+    {"padding": (0, 1, 2, 3), "line_numbers": True},
+    {"background_color": "red"},
+    {"background_color": "red", "line_numbers": True, "highlight_lines": {2}},
+    {"background_color": "red", "word_wrap": True, "code_width": 20},
+    {"tab_size": 2, "indent_guides": True},
+]
+
+
+def _uf_syntax(code: str = _UF_CODE, **options) -> Syntax:
+    return Syntax(code, "text", theme="ansi_dark", **options)
+
+
+def _uf_syntax_ranges() -> Syntax:
+    syntax = _uf_syntax(line_numbers=True)
+    syntax.stylize_range("reverse", (1, 4), (2, 6))
+    syntax.stylize_range("on blue", (3, 0), (3, 99), style_before=True)
+    syntax.stylize_range("bold", (4, 0), (9, 0))
+    syntax.stylize_range("underline", (5, 2), (5, 5))
+    return syntax
+
+
+def _uf_strip_ansi(text: str) -> str:
+    import re
+
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
 def _uf_small_table() -> Table:
     table = Table("a", "bb")
     table.add_row("1", "22")
@@ -3279,6 +3408,69 @@ UPSTREAM_FEATURE_CASES = [
         _cg_print(_cg_console(14), Rule(Text("a\tb\n[c]", style="red"), align=align))
         for align in ("left", "center", "right")
     )),
+    # 4. Layout
+    ("layout_placeholder", lambda: "".join([
+        _cg_print(_cg_console(30, height=7), Layout(name="root", size=3, ratio=2, minimum_size=4)),
+        _cg_print(_cg_console(20, height=5), Layout()),
+        _cg_print(_cg_console(40, height=4), Layout(name="it's")),
+    ])),
+    ("layout_split", lambda: _cg_print(_cg_console(40, height=8), _uf_layout())),
+    ("layout_tree", lambda: _cg_print(_cg_console(50), _uf_layout().tree)),
+    ("layout_map", _uf_layout_map),
+    ("layout_update_unsplit", _uf_layout_update),
+    # 6. Text
+    ("text_indent_guides", lambda: "".join(
+        _cg_print(_cg_console(30), text)
+        for text in (
+            _UF_INDENTED.with_indent_guides(),
+            _UF_INDENTED.with_indent_guides(2, character="|", style="red"),
+            _UF_INDENTED.with_indent_guides(3),
+            Text("a\n\tb\n\n", style="on blue").with_indent_guides(4),
+            Text("x\n  ", style="italic").with_indent_guides(),
+        )
+    ) + "|" + str(_UF_INDENTED.detect_indentation()) + "," + str(Text("a\n   b\n     c").detect_indentation())),
+    ("text_from_ansi", lambda: "".join(
+        _cg_print(_cg_console(20), text)
+        for text in (
+            Text.from_ansi("\x1b[1mbold\x1b[0m plain\nnext \x1b[31mred", style="on blue"),
+            Text.from_ansi("a\tb", style="italic"),
+            Text.from_ansi("x\r\ny\n"),
+        )
+    )),
+    ("text_stylize_before", lambda: _cg_print(_cg_console(20), _uf_stylize_before())),
+    # 9. LiveRender vertical_overflow
+    ("live_render_vertical_overflow", lambda: "".join(
+        _uf_live_render(overflow, style) for overflow in ("crop", "ellipsis", "visible") for style in ("", "on blue")
+    ) + _uf_live_render("ellipsis", "", "1\n2\n3\n4")),
+    # 10. Progress: a user-defined ProgressColumn
+    ("progress_custom_column", _uf_progress_custom),
+    # 5. Syntax (DIVERGENCES #18: colours come from syntect, so these use the
+    # plain-text lexer with upstream's `ansi_dark` theme, which the port
+    # reproduces, or compare the plain text of a background theme)
+    ("syntax_ansi_options", lambda: "".join(
+        _cg_print(_cg_console(30), _uf_syntax(**options))
+        for options in _UF_SYNTAX_OPTIONS
+    )),
+    ("syntax_ansi_ranges", lambda: _cg_print(_cg_console(30), _uf_syntax_ranges())),
+    ("syntax_measure", lambda: "".join(
+        _cg_print(_cg_console(40), Panel.fit(_uf_syntax(**options)))
+        for options in ({}, {"line_numbers": True}, {"code_width": 8}, {"padding": (0, 2)}, {"line_numbers": True, "code_width": 6, "padding": 1})
+    )),
+    ("syntax_plain_background_theme", lambda: _uf_strip_ansi("".join(
+        _cg_print(_cg_console(30), Syntax(_UF_CODE, "python", theme="monokai", **options))
+        for options in _UF_SYNTAX_OPTIONS
+    ))),
+    # 7. Panel style / height
+    ("panel_style", lambda: "".join([
+        _cg_print(_cg_console(16), Panel("hi", style="on blue")),
+        _cg_print(_cg_console(16), Panel("hi\nthere", style="red on blue", border_style="bold", title="[i]T[/]", subtitle="s")),
+        _cg_print(_cg_console(16), Panel(Text("x", style="green"), style="on blue", padding=(1, 2))),
+        _cg_print(_cg_console(16), Panel("h", height=5, style="on red")),
+        _cg_print(_cg_console(16), Panel("h", height=2)),
+        _cg_print(_cg_console(16), Panel("a\nb\nc\nd", height=4)),
+        _cg_print(_cg_console(16), Panel("h", style="repr.number")),
+        _cg_print(_cg_console(16), Panel.fit("h", style="on blue", border_style="red")),
+    ])),
     # 11. print(justify=…) wraps a non-Text renderable in Align
     ("print_justify_renderables", lambda: "".join(
         _cg_print(_cg_console(20), renderable, justify=justify)

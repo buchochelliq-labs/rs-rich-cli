@@ -1,4 +1,6 @@
-"""``rs_rich.ext.testing``: render snapshots and rendered-diff assertions (``rich_ext::testing``; needs the ``testing`` feature).
+"""``rs_rich.ext.testing``: render snapshots and rendered-diff assertions (``rich_ext::testing`` and ``rich_ext::diff::assert``).
+
+Failed assertions raise ``AssertionError`` with the diff rich-ext renders.
 
 No Rich counterpart: this is the port's own ``rs-rich-ext`` crate.
 """

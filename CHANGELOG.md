@@ -199,8 +199,8 @@ reproduced by a test that failed first.
 
   A Rich program moves over by changing its imports.
 - **All rendering is Rust.** The Python modules only re-export the compiled
-  module's classes. Anything outside the slice raises instead of rendering
-  differently.
+  module's classes. Anything outside the slice raised instead of rendering
+  differently; workstream 8 (below) fills in the rest.
 - **Byte-compared with Python rich 15.0.0.** The tests cover markup and
   highlighting, `Text`, styles, the README table, table options, panels,
   rules, justification and `export_text`, in truecolor and plain. Links match
@@ -227,6 +227,64 @@ reproduced by a test that failed first.
 - Core parity fix: a table with `show_header=False` draws head-styled boxes
   plain, like upstream's `Box.get_plain_headed_box` (for example `HEAVY_HEAD` as
   `SQUARE`). The fix has new `table_headless_*` goldens.
+
+### Python bindings: full parity (0.0.12 workstream 8)
+
+`rs_rich` now covers all of Rich 15.0.0's API and exposes every Rust crate.
+Output is byte-compared with Rich (and, for the port's own crates, with the
+Rust crates); 850+ tests and every documentation example run in CI.
+
+- **Console.** `Console(highlighter=...)`, `tab_size` and `emoji_variant`;
+  `log` of any renderable and `log_locals=True`; every `print_json` option;
+  `export_html`/`export_svg` with `code_format` and `font_aspect_ratio`;
+  `set_window_title`; containers, dataclasses and `__rich_repr__` objects
+  pretty-print; an `Emoji` (and a titled `Rule(end="")`) leaves its line open.
+- **Render hooks.** `push_render_hook`/`pop_render_hook`, `set_live`/
+  `clear_live`: `Live`, `Status` and `Progress` redraw through the console
+  instead of wrapping its file, so recorded output includes redrawn frames.
+- **Text, Style and colour.** `Text` complete (`end` is a real field; meta
+  data on spans: `apply_meta`, `on`, `assemble(meta=)`); `Style` complete
+  (meta, `render`, `get_html_style`, `StyleStack`); `rs_rich.color`;
+  `Theme.from_file`/`read`/`ThemeStack`; `markup.render`/`Tag`; `Emoji`;
+  Rich's error messages and reprs (`Segment` included).
+- **Renderables.** `Rule`, `Padding`, `Align`, `VerticalCenter`, `Constrain`,
+  `Styled`; `Columns`; `Group`/`group`, `Renderables`, `measure_renderables`;
+  `Tree` (no stack overflow on deep trees); `Layout` with splitters and
+  regions; `Bar`; `Spinner` and `SPINNERS` (core's table; an unknown name is a
+  `KeyError`). `Table` gains `Table.grid`, padding, `collapse_padding`,
+  `pad_edge`, `style`, `highlight` and per-column `vertical`/`highlight`, and a
+  cell's own `vertical` (`Align`) is honoured; `Panel` gains `style`, `height`,
+  `highlight`, `safe_box` and `Text` titles.
+- **Code and data.** `Markdown` and `Syntax` with every option, a code
+  highlighter by name or plugin, and `Markdown(fences=)`; `Pretty`, `pprint`,
+  `install`, `JSON`, `inspect`, subclassable highlighters; `Traceback`,
+  `print_exception` and `install`.
+- **Live and interactive.** `Live`, `LiveRender`, `Status`, `Screen`,
+  `Pager`; `Progress` with every column, `track`, `wrap_file` and `open`;
+  prompts; `RichHandler`.
+- **The port's crates.** `rs_rich.ext` (38 modules, including `testing` and
+  `qa`: snapshots, assertions with rendered diffs, stress, lint, explain,
+  profile, fuzz, matrix, screenshots, benchmarks); `rs_rich.art` (images with
+  every option, Pillow optional, byte-identical Sixel, FIGlet, GIFs, image
+  diffs); `rs_rich.mermaid` (parse, draw, fences, `mmdc` in `mmdc` builds);
+  `rs_rich.plugins` (Python classes as all seven capability kinds, checked by
+  the Rust host; `ExtensionRegistry.install(console)`).
+- **The command line.** The wheel ships the `rich` command as
+  `python -m rs_rich` and the `rich-rs` script; `rs_rich.cli.main(argv)`
+  returns the exit code. `rs-rich-cli` gains a library target (`run`,
+  `run_embedded`); `--batch` workers and `--watch` restart through the host's
+  command. In the `lumis` build the command line has the lumis highlighter too.
+- **Core, additively, for the bindings.** Style meta data, a public spinner
+  table (`spinner_names`, `spinner_frames`), `Console` `Clone + Sync`,
+  `render_str_with`, `Json::with_options`, `export_*_with`,
+  `set_window_title`, console `tab_size` and `emoji_variant`.
+- **Known differences** are listed in
+  [Compatibility](docs/python/compatibility.md): Pygments versus syntect
+  colours, a few `Table` options core lacks, no Jupyter output.
+- **Docs and CI.** A page per module under `docs/python/` (and `ext/`), each
+  example run by `test_docs.py`; the Rust oracle for the art and Mermaid tests
+  lives in `crates/rich-py/oracles`; `python.yml` builds the `rich` binary for
+  the CLI comparison, installs Pillow, and lints the `mmdc` build.
 
 ### Native image sizing (0.0.12 workstream 6: #519)
 

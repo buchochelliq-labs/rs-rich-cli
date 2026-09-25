@@ -21,6 +21,8 @@ pub struct Panel {
     child: Box<dyn Renderable>,
     box_set: BoxSet,
     title: Option<String>,
+    /// A literal title (upstream `Panel(title=Text(…))`), in place of `title`.
+    title_value: Option<Text>,
     title_align: HorizontalAlign,
     subtitle: Option<String>,
     subtitle_align: HorizontalAlign,
@@ -40,6 +42,7 @@ impl Panel {
             child,
             box_set: ROUNDED,
             title: None,
+            title_value: None,
             title_align: HorizontalAlign::Center,
             subtitle: None,
             subtitle_align: HorizontalAlign::Center,
@@ -76,6 +79,13 @@ impl Panel {
     /// Set a title (drawn into the top border, centered by default).
     pub fn title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
+        self
+    }
+
+    /// Set a literal [`Text`] title (upstream `Panel(title=Text(…))`): no
+    /// markup is parsed. Replaces a [`title`](Self::title).
+    pub fn title_as_text(mut self, title: Text) -> Self {
+        self.title_value = Some(title);
         self
     }
 
@@ -148,12 +158,12 @@ impl Panel {
         border: &Style,
         inner_width: usize,
         corners: (char, char, char),
-        label: Option<&String>,
+        label: Option<Text>,
         align: HorizontalAlign,
     ) -> Vec<Segment> {
         let (left_corner, fill_char, right_corner) = corners;
         let border_style = Some(border.clone());
-        let Some(label) = label.filter(|label| !label.is_empty() && inner_width > 2) else {
+        let Some(mut label) = label.filter(|_| inner_width > 2) else {
             return vec![Segment::new(
                 format!(
                     "{left_corner}{}{right_corner}",
@@ -163,8 +173,16 @@ impl Panel {
             )];
         };
 
-        let mut label = label_text(label);
-        label.set_base_style(border.clone());
+        // `title_text.stylize_before(border_style)`, then `align_text`'s
+        // `text.stylize(text.style)` for a title with its own base style.
+        if label.base_style().is_null_style() {
+            label.set_base_style(border.clone());
+        } else {
+            let own = console.get_style(label.base_style()).unwrap_or_default();
+            let len = label.plain().len();
+            label.stylize_before(border.clone(), 0, len);
+            label.stylize(own, 0, len);
+        }
         let label_width = inner_width - 2;
         label.truncate(label_width, None, false);
 
@@ -199,6 +217,12 @@ impl Panel {
 fn label_text(label: &str) -> Text {
     let expanded = crate::emoji::replace(label);
     let parsed = Text::from_markup(&expanded).unwrap_or_else(|_| Text::new(expanded));
+    label_from_text(&parsed)
+}
+
+/// `Panel._title` for a `Text` title: a copy with newlines flattened, tabs
+/// expanded and a space either side.
+fn label_from_text(parsed: &Text) -> Text {
     let mut text = parsed.blank_copy();
     text.append(&parsed.plain().replace('\n', " "), None);
     for span in parsed.spans() {
@@ -212,6 +236,9 @@ fn label_text(label: &str) -> Text {
 impl Panel {
     /// The title as `Panel._title` builds it, when there is one.
     fn title_text(&self) -> Option<Text> {
+        if let Some(title) = &self.title_value {
+            return (!title.plain().is_empty()).then(|| label_from_text(title));
+        }
         self.title
             .as_deref()
             .filter(|title| !title.is_empty())
@@ -256,7 +283,8 @@ impl Renderable for Panel {
         // `style = console.get_style(self.style)`,
         // `border_style = style + console.get_style(self.border_style)`.
         let style = console.get_style(&self.style).unwrap_or_default();
-        let border_style = style.combine(&console.get_style(&self.border_style).unwrap_or_default());
+        let border_style =
+            style.combine(&console.get_style(&self.border_style).unwrap_or_default());
         // `child_height = self.height or options.height or None`.
         let height = self.height.or(options.height).filter(|&height| height > 0);
         // Upstream renders nothing at all in no width, not two empty borders.
@@ -319,7 +347,7 @@ impl Renderable for Panel {
             &border_style,
             inner_width,
             (box_set.top_left, box_set.top, box_set.top_right),
-            self.title.as_ref(),
+            self.title_text(),
             self.title_align,
         ));
 
@@ -364,14 +392,19 @@ impl Renderable for Panel {
         }
 
         // Bottom border (with subtitle if present).
-        rows.push(self.border_line(
-            console,
-            &border_style,
-            inner_width,
-            (box_set.bottom_left, box_set.bottom, box_set.bottom_right),
-            self.subtitle.as_ref(),
-            self.subtitle_align,
-        ));
+        rows.push(
+            self.border_line(
+                console,
+                &border_style,
+                inner_width,
+                (box_set.bottom_left, box_set.bottom, box_set.bottom_right),
+                self.subtitle
+                    .as_deref()
+                    .filter(|subtitle| !subtitle.is_empty())
+                    .map(label_text),
+                self.subtitle_align,
+            ),
+        );
 
         join_rows(rows)
     }

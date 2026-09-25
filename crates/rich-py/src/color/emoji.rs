@@ -100,10 +100,12 @@ impl AsRenderable for Emoji {
 impl Emoji {
     #[classattr]
     #[allow(non_snake_case)]
-    fn VARIANTS() -> std::collections::HashMap<&'static str, &'static str> {
-        [("text", "\u{fe0e}"), ("emoji", "\u{fe0f}")]
-            .into_iter()
-            .collect()
+    fn VARIANTS(py: Python<'_>) -> PyResult<Bound<'_, pyo3::types::PyDict>> {
+        // A dict in Rich's order (a `HashMap` would come out in any order).
+        let variants = pyo3::types::PyDict::new(py);
+        variants.set_item("text", "\u{fe0e}")?;
+        variants.set_item("emoji", "\u{fe0f}")?;
+        Ok(variants)
     }
 
     #[new]

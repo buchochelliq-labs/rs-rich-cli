@@ -63,6 +63,13 @@ impl StatusSpinner {
         style: Option<&Bound<'_, PyAny>>,
         speed: f64,
     ) -> PyResult<Py<StatusSpinner>> {
+        // Rich's `Spinner(name)` raises `KeyError` for an unknown name.
+        if rich::spinner::spinner_frames(name).is_none() {
+            return Err(pyo3::exceptions::PyKeyError::new_err(format!(
+                "no spinner called {}",
+                pyo3::types::PyString::new(py, name).repr()?
+            )));
+        }
         Py::new(
             py,
             StatusSpinner {

@@ -3,14 +3,11 @@
 //!
 //! # The render hook
 //!
-//! Upstream's `Live` pushes itself as a console render hook, so every print
-//! made while it runs is written as "move the cursor over the display, the
-//! print, the display again". The bindings' `Console` renders in Rust and
-//! has no hooks; the display instead wraps the console's file in a
-//! [`LiveFile`] while it runs, which does the same to each write: output
-//! from another print arrives there already rendered, and the display is
-//! rendered (captured, never recorded) after it. The display's own frames
-//! pass straight through.
+//! As upstream's, a `Live` pushes itself as a console render hook
+//! (`Console.push_render_hook`), so every print made while it runs prints
+//! "move the cursor over the display, the print, the display again"
+//! (`process_renderables`), and is recorded like any print. The display's
+//! own frames are a print of an empty `Control` through the same hook.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard};
@@ -26,71 +23,18 @@ use rich::{AnsiDecoder, Text as CoreText};
 
 use super::live_render::LiveRender;
 use super::screen::Screen;
-use super::util::{self, hold, Control, Item, Renderables};
+use super::util::{self, hold, Control, Item};
 
 // ---------------------------------------------------------------------------
 // The console's live stack (Rich's `Console._live_stack`)
 
-struct Stack {
-    console: usize,
-    lives: Vec<Py<Live>>,
-}
-
-static STACKS: Mutex<Vec<Stack>> = Mutex::new(Vec::new());
-
-fn stacks() -> MutexGuard<'static, Vec<Stack>> {
-    STACKS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
-fn key(console: &Bound<'_, PyAny>) -> usize {
-    console.as_ptr() as usize
-}
-
-/// `Console.set_live`: push `live`; `True` when it is the only one.
-fn set_live(console: &Bound<'_, PyAny>, live: &Bound<'_, Live>) -> bool {
-    let key = key(console);
-    let mut stacks = stacks();
-    match stacks.iter_mut().find(|stack| stack.console == key) {
-        Some(stack) => {
-            stack.lives.push(live.clone().unbind());
-            stack.lives.len() == 1
-        }
-        None => {
-            stacks.push(Stack {
-                console: key,
-                lives: vec![live.clone().unbind()],
-            });
-            true
-        }
-    }
-}
-
-/// `Console.clear_live`: pop the top live.
-fn clear_live(console: &Bound<'_, PyAny>) {
-    let key = key(console);
-    let removed = {
-        let mut stacks = stacks();
-        let mut removed = None;
-        if let Some(index) = stacks.iter().position(|stack| stack.console == key) {
-            removed = stacks[index].lives.pop();
-            if stacks[index].lives.is_empty() {
-                stacks.remove(index);
-            }
-        }
-        removed
-    };
-    drop(removed);
-}
-
-fn live_stack(py: Python<'_>, console: &Bound<'_, PyAny>) -> Vec<Py<Live>> {
-    let key = key(console);
-    stacks()
-        .iter()
-        .find(|stack| stack.console == key)
-        .map(|stack| stack.lives.iter().map(|live| live.clone_ref(py)).collect())
-        .unwrap_or_default()
+/// The console's running displays, outermost first.
+fn live_stack(console: &Bound<'_, PyAny>) -> PyResult<Vec<Py<PyAny>>> {
+    console
+        .getattr("_live_stack")?
+        .try_iter()?
+        .map(|live| live.map(Bound::unbind))
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -189,13 +133,6 @@ fn _stop_live_threads(py: Python<'_>) -> PyResult<()> {
 // ---------------------------------------------------------------------------
 // Live
 
-struct Hook {
-    /// The `LiveFile` wrapping the console's file.
-    proxy: Py<LiveFile>,
-    /// What the console's `file` was: `None` when it followed `sys.stdout`.
-    original: Option<Py<PyAny>>,
-}
-
 struct LiveState {
     renderable: Option<Py<PyAny>>,
     console: Py<PyAny>,
@@ -213,9 +150,8 @@ struct LiveState {
     vertical_overflow: String,
     get_renderable: Option<Py<PyAny>>,
     nested: bool,
-    /// Between upstream's `push_render_hook` and `pop_render_hook`.
+    /// Between `push_render_hook` and `pop_render_hook`.
     hooked: bool,
-    hook: Option<Hook>,
     ipy_widget: Option<Py<PyAny>>,
 }
 
@@ -297,23 +233,21 @@ impl Live {
         Ok(items)
     }
 
-    /// `console.print(Control())` with the display's hook applied.
+    /// `with console: console.print(Control())`: the hook adds the display.
     fn print_frame(slf: &Bound<'_, Live>) -> PyResult<()> {
         let py = slf.py();
-        let this = slf.get();
-        let (console, hooked) = {
-            let state = this.st();
-            (state.console.clone_ref(py), state.hooked)
-        };
-        let items = if hooked {
-            Live::process(slf, Vec::new())?
-        } else {
-            Vec::new()
-        };
-        let frame = Py::new(py, Renderables::new(items))?;
-        let proxy = this.st().hook.as_ref().map(|hook| hook.proxy.clone_ref(py));
-        let _through = proxy.as_ref().map(|proxy| proxy.get().pass_through());
-        console.bind(py).call_method1("print", (frame,))?;
+        let console = slf.get().console_of(py);
+        let control = Py::new(
+            py,
+            Control {
+                codes: String::new(),
+            },
+        )?;
+        console.call_method0("__enter__")?;
+        let printed = console.call_method1("print", (control,));
+        let exited = console.call_method1("__exit__", (py.None(), py.None(), py.None()));
+        printed?;
+        exited?;
         Ok(())
     }
 
@@ -321,53 +255,15 @@ impl Live {
         let py = slf.py();
         slf.get().st().hooked = true;
         let console = slf.get().console_of(py);
-        // Only an interactive console redraws around other prints.
-        if !util::flag(&console, "is_interactive")? {
-            return Ok(());
-        }
-        let current = console.getattr("file")?;
-        // A file already redirected by a live display writes to its target.
-        let target = match current.getattr_opt("rich_proxied_file")? {
-            Some(file) => file,
-            None => current.clone(),
-        };
-        let sys = py.import("sys")?;
-        let default_stream = sys.getattr(if util::flag(&console, "stderr")? {
-            "stderr"
-        } else {
-            "stdout"
-        })?;
-        let original = if current.is(&default_stream) {
-            None
-        } else {
-            Some(current.unbind())
-        };
-        let proxy = Py::new(
-            py,
-            LiveFile {
-                live: slf.clone().unbind(),
-                file: target.unbind(),
-                passing: Mutex::new(Vec::new()),
-            },
-        )?;
-        console.setattr("file", proxy.clone_ref(py))?;
-        slf.get().st().hook = Some(Hook { proxy, original });
+        console.call_method1("push_render_hook", (slf,))?;
         Ok(())
     }
 
     fn remove_hook(slf: &Bound<'_, Live>) -> PyResult<()> {
         let py = slf.py();
-        let hook = {
-            let mut state = slf.get().st();
-            state.hooked = false;
-            state.hook.take()
-        };
-        if let Some(hook) = hook {
-            let console = slf.get().console_of(py);
-            // Only undo our own wrapping: the program may have set a file since.
-            if console.getattr("file")?.is(hook.proxy.bind(py)) {
-                console.setattr("file", hook.original)?;
-            }
+        let hooked = std::mem::replace(&mut slf.get().st().hooked, false);
+        if hooked {
+            slf.get().console_of(py).call_method0("pop_render_hook")?;
         }
         Ok(())
     }
@@ -498,7 +394,6 @@ impl Live {
                 get_renderable,
                 nested: false,
                 hooked: false,
-                hook: None,
                 ipy_widget: None,
             }),
             lock: util::rlock(py)?,
@@ -591,7 +486,7 @@ impl Live {
     fn shown_renderable(slf: &Bound<'_, Self>) -> PyResult<Py<PyAny>> {
         let py = slf.py();
         let console = slf.get().console_of(py);
-        let stack = live_stack(py, &console);
+        let stack = live_stack(&console)?;
         let renderable = if stack.first().is_some_and(|first| first.bind(py).is(slf)) {
             let mut children = Vec::new();
             for live in &stack {
@@ -621,7 +516,7 @@ impl Live {
             state.started = true;
         }
         let console = this.console_of(py);
-        if !set_live(&console, slf) {
+        if !console.call_method1("set_live", (slf,))?.is_truthy()? {
             this.st().nested = true;
             return Ok(());
         }
@@ -659,7 +554,7 @@ impl Live {
             state.started = false;
         }
         let console = this.console_of(py);
-        clear_live(&console);
+        console.call_method0("clear_live")?;
         let (nested, transient) = {
             let state = this.st();
             (state.nested, state.transient)
@@ -742,7 +637,7 @@ impl Live {
         this.live_render.bind(py).get().set(renderable.unbind());
         let console = this.console_of(py);
         if this.st().nested {
-            let stack = live_stack(py, &console);
+            let stack = live_stack(&console)?;
             if let Some(first) = stack.first() {
                 first.bind(py).call_method0("refresh")?;
             }
@@ -810,124 +705,7 @@ impl Live {
 }
 
 // ---------------------------------------------------------------------------
-// The console's file while a display runs
-
-/// Wraps the console's file while a `Live` runs: see the module docs.
-#[pyclass(name = "_LiveFile", module = "rs_rich.live", frozen)]
-pub(crate) struct LiveFile {
-    live: Py<Live>,
-    file: Py<PyAny>,
-    /// Threads whose writes pass straight through (the display's own).
-    passing: Mutex<Vec<std::thread::ThreadId>>,
-}
-
-/// Lets this thread's writes through until dropped.
-pub(crate) struct PassThrough<'a> {
-    file: &'a LiveFile,
-}
-
-impl Drop for PassThrough<'_> {
-    fn drop(&mut self) {
-        let me = std::thread::current().id();
-        let mut passing = self
-            .file
-            .passing
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if let Some(index) = passing.iter().position(|id| *id == me) {
-            passing.remove(index);
-        }
-    }
-}
-
-impl LiveFile {
-    fn pass_through(&self) -> PassThrough<'_> {
-        self.passing
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .push(std::thread::current().id());
-        PassThrough { file: self }
-    }
-
-    fn passes(&self) -> bool {
-        let me = std::thread::current().id();
-        self.passing
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .contains(&me)
-    }
-}
-
-#[pymethods]
-impl LiveFile {
-    fn write(&self, py: Python<'_>, text: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        let file = self.file.bind(py);
-        let live = self.live.bind(py);
-        let hooked = live.get().st().hooked;
-        if self.passes() || !hooked {
-            return Ok(file.call_method1("write", (text,))?.unbind());
-        }
-        let console = live.get().console_of(py);
-        let items = Live::process(live, vec![Item::Segments(Vec::new())])?;
-        if items.len() == 1 {
-            return Ok(file.call_method1("write", (text,))?.unbind());
-        }
-        // Render the reset and the display the way this print would have.
-        let mut before = String::new();
-        let mut after = String::new();
-        let mut seen_text = false;
-        for item in items {
-            match item {
-                Item::Segments(segments) if segments.is_empty() => seen_text = true,
-                Item::Segments(segments) => {
-                    let codes: String = segments.iter().map(|s| s.text.as_str()).collect();
-                    if seen_text {
-                        after.push_str(&codes);
-                    } else {
-                        before.push_str(&codes);
-                    }
-                }
-                Item::Object(object) => {
-                    console.call_method0("begin_capture")?;
-                    let printed = console.call_method1("print", (object,));
-                    let captured: String = console.call_method0("end_capture")?.extract()?;
-                    printed?;
-                    after.push_str(&captured);
-                }
-            }
-        }
-        let text: String = text.extract()?;
-        let output = format!("{before}{text}{after}");
-        Ok(file.call_method1("write", (output,))?.unbind())
-    }
-
-    fn flush(&self, py: Python<'_>) -> PyResult<()> {
-        self.file.bind(py).call_method0("flush")?;
-        Ok(())
-    }
-
-    fn isatty(&self, py: Python<'_>) -> PyResult<bool> {
-        self.file.bind(py).call_method0("isatty")?.is_truthy()
-    }
-
-    fn fileno(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        Ok(self.file.bind(py).call_method0("fileno")?.unbind())
-    }
-
-    #[getter]
-    fn rich_proxied_file(&self, py: Python<'_>) -> Py<PyAny> {
-        self.file.clone_ref(py)
-    }
-
-    fn __getattr__(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
-        Ok(self.file.bind(py).getattr(name)?.unbind())
-    }
-
-    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
-        visit.call(&self.live)?;
-        visit.call(&self.file)
-    }
-}
+// Standard streams while a display runs
 
 /// `rich.file_proxy.FileProxy`: `sys.stdout` / `sys.stderr` while a display
 /// runs; each complete line is printed through the console, above it.
@@ -1040,7 +818,6 @@ impl FileProxy {
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
     m.add_class::<Live>()?;
-    m.add_class::<LiveFile>()?;
     m.add_class::<FileProxy>()?;
     let stop = pyo3::wrap_pyfunction!(_stop_live_threads, m)?;
     m.add_function(stop.clone())?;

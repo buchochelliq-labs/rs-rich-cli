@@ -11,23 +11,27 @@ corresponds to `rich.panel.Panel`.
 
 ```text
 Panel(renderable, box=ROUNDED, *, title=None, title_align="center",
-      subtitle=None, subtitle_align="center", expand=True, border_style=None,
-      width=None, padding=None)
+      subtitle=None, subtitle_align="center", safe_box=None, expand=True,
+      style="none", border_style="none", width=None, height=None,
+      padding=(0, 1), highlight=False)
 ```
 
 | Argument | Meaning |
 |---|---|
 | `renderable` | Any renderable: a `str` (markup), [`Text`](text.md), [`Table`](table.md), another `Panel`, or [your own class](protocol.md). Anything else raises `NotRenderableError` when the panel is printed. |
 | `box` | A [box constant](box-markup-errors.md#boxes). The default is `box.ROUNDED`, and `None` is a `ValueError`. |
-| `title`, `subtitle` | Markup drawn in the top and bottom borders. |
+| `title`, `subtitle` | Markup drawn in the top and bottom borders. A `title` may also be a [`Text`](text.md); a `Text` subtitle raises `NotImplementedError` (core's panel takes a markup subtitle). |
 | `title_align`, `subtitle_align` | `"left"`, `"center"` or `"right"`; anything else is a `ValueError`. |
 | `expand` | Fill the available width. `False` fits the content; see [`Panel.fit`](#fit). |
+| `style` | A style for the whole panel, content included. |
 | `border_style` | A style for the border. |
-| `width` | A fixed width in cells. |
+| `width`, `height` | A fixed width or height in cells. |
+| `highlight` | Highlight a `str` child, as the console highlights printed strings. |
+| `safe_box` | Accepted; it only matters on legacy Windows consoles. |
 | `padding` | Space inside the border: `n`, `(vertical, horizontal)` or `(top, right, bottom, left)`. The default is `(0, 1)`. Other shapes, and any side above 65536, raise `ValueError`. |
 
-A `str` inside a panel is markup but is not highlighted, as in Rich, where a
-panel renders its content with `highlight=False`.
+A `str` inside a panel is markup but is not highlighted unless
+`highlight=True`, as in Rich.
 
 Panels (and other renderables) nest up to 100 deep. Printing a deeper chain
 raises `RecursionError`, as Rich does a little past that depth:
@@ -67,8 +71,9 @@ console.print(Panel("Hello, [bold]World[/]!", title="Greeting", subtitle="rs_ric
 
 ```text
 Panel.fit(renderable, box=ROUNDED, *, title=None, title_align="center",
-          subtitle=None, subtitle_align="center", border_style=None,
-          width=None, padding=None)
+          subtitle=None, subtitle_align="center", safe_box=None, style="none",
+          border_style="none", width=None, height=None, padding=(0, 1),
+          highlight=False)
 ```
 
 This is a panel that fits its content instead of filling the width: the

@@ -161,7 +161,7 @@ pub(crate) fn markup_or_text(value: &Bound<'_, PyAny>) -> PyResult<CoreText> {
 
 /// A core `Text` as a Python `Text`.
 pub(crate) fn py_text(py: Python<'_>, text: CoreText) -> PyResult<Py<Text>> {
-    Py::new(py, Text { inner: text })
+    Py::new(py, Text::from_core(text))
 }
 
 /// A list of strings from any iterable of `str` (a lone `str` is one item).
@@ -312,6 +312,8 @@ pub(crate) fn scoped<T>(
         emoji: true,
         markup: true,
         highlight: true,
+        highlighter: None,
+        emoji_variant: None,
     };
     renderable::scope(ambient, f)
 }

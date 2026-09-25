@@ -176,12 +176,5 @@ with console.pager(Collect()):
 
 ## Differences from Rich
 
-- The render hook: Rich's `Live` hooks into the console's print pipeline;
-  the bindings' console has no hooks, so a running display wraps the
-  console's `file` instead (`console.file` returns a wrapper that passes
-  every attribute through, and is restored when the display stops). Output
-  is the same, with two exceptions: while a display runs on a terminal, the
-  redrawn display after another print is not recorded (`record=True`), and
-  prints held back by `with console:` are redrawn around once, together.
 - `Status.renderable` is not an `rs_rich.spinner.Spinner` (see above).
 - Jupyter is not supported.

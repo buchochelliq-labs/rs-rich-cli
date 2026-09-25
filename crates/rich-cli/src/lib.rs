@@ -3845,10 +3845,10 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 rich::style::StyleType::Style(style) => style.clone(),
                 rich::style::StyleType::Name(_) => rich::Style::new(),
             };
-            // `Syntax` also draws the empty line after a final newline.
-            let bottom = usize::from(text.plain().ends_with('\n'));
+            // The text's own final empty line (after a trailing newline) is
+            // drawn by `Padding`, as `Syntax` draws it.
             let padded =
-                rich::padding::Padding::new(Box::new(text), (0, 0, bottom, 0)).style(background);
+                rich::padding::Padding::new(Box::new(text), (0, 0, 0, 0)).style(background);
             (Box::new(padded), Some(fit))
         }
         Mode::Syntax => {

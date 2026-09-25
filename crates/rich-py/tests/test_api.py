@@ -79,13 +79,16 @@ def test_errors():
         Panel("x", box="rounded")
 
 
-def test_what_is_not_implemented_yet_is_refused_not_rendered_differently():
-    console = Console(file=io.StringIO())
-    # Rich pretty-prints containers; that comes with rs_rich.pretty.
-    with pytest.raises(NotImplementedError, match="pretty printing"):
-        console.print({"a": 1})
-    with pytest.raises(NotImplementedError, match="tab_size=8"):
-        Console(tab_size=4)
+def test_what_rs_rich_cannot_do_is_refused_not_rendered_differently():
+    # Jupyter output is the only Console option the port has no renderer for.
+    with pytest.raises(NotImplementedError, match="Jupyter"):
+        Console(force_jupyter=True)
+
+
+def test_containers_print_pretty_as_in_rich():
+    out = io.StringIO()
+    Console(file=out, width=40).print({"a": [1, 2]}, [None])
+    assert out.getvalue() == "{'a': [1, 2]}\n[None]\n"
 
 
 def test_renderables_nest_anywhere():

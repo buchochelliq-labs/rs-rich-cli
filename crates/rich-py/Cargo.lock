@@ -1441,6 +1441,8 @@ dependencies = [
  "rs-rich-lumis",
  "rs-rich-mermaid",
  "rs-rich-plugin-api",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

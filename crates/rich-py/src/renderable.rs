@@ -125,6 +125,14 @@ pub(crate) fn add_renderable_class<T: AsRenderable>(m: &Bound<'_, PyModule>) -> 
     Ok(())
 }
 
+/// Whether a registered renderable leaves its last line open, as Rich's
+/// `Emoji` (one segment) and a `Rule` with an `end` that is not a newline do:
+/// nothing ends the line after it when it is printed or rendered.
+pub(crate) fn ends_inline(value: &Bound<'_, PyAny>) -> bool {
+    value.is_instance_of::<crate::color::emoji::Emoji>()
+        || crate::renderables::rule_ends_inline(value)
+}
+
 /// The converter for a registered class's instance (or a subclass's).
 fn lookup(value: &Bound<'_, PyAny>) -> Option<Converter> {
     let registry = REGISTRY
@@ -162,6 +170,11 @@ pub(crate) struct Ambient {
     pub(crate) emoji: bool,
     pub(crate) markup: bool,
     pub(crate) highlight: bool,
+    /// The console's `highlighter` (`None`: Rich's `ReprHighlighter`, with
+    /// any installed extension highlighters, which core applies).
+    pub(crate) highlighter: Option<Py<PyAny>>,
+    /// The console's default emoji variant.
+    pub(crate) emoji_variant: Option<rich::emoji::EmojiVariant>,
 }
 
 thread_local! {
@@ -363,22 +376,31 @@ pub(crate) fn render_str(
     markup: bool,
     highlight: bool,
 ) -> PyResult<CoreText> {
-    render_str_with(content, emoji, markup, highlight, &[])
+    render_str_with(content, emoji, markup, highlight, &[], None, None)
 }
 
 /// [`render_str`] with a console's installed extension highlighters, which
-/// run before `ReprHighlighter`, as core's `Console::decorate_with_repr` does.
+/// run before `ReprHighlighter`, as core's `Console::decorate_with_repr` does,
+/// its `highlighter` (`None`: `ReprHighlighter`), which replaces
+/// `ReprHighlighter` as `Console(highlighter=...)` does in Rich, and its
+/// default emoji variant (which, as upstream's `markup.render`, applies only
+/// to markup without tags).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn render_str_with(
     content: &str,
     emoji: bool,
     markup: bool,
     highlight: bool,
     extra: &[Box<dyn rich::Highlighter + Send>],
+    highlighter: Option<&Bound<'_, PyAny>>,
+    variant: Option<rich::emoji::EmojiVariant>,
 ) -> PyResult<CoreText> {
-    let content = if emoji {
+    let content = if !emoji {
+        content.to_string()
+    } else if markup && content.contains('[') {
         rich::emoji::replace(content)
     } else {
-        content.to_string()
+        rich::emoji::replace_with_variant(content, variant)
     };
     let text = if markup {
         CoreText::from_markup(&content).map_err(|e| MarkupError::new_err(e.to_string()))?
@@ -392,7 +414,10 @@ pub(crate) fn render_str_with(
     for highlighter in extra {
         highlighter.highlight(&mut highlighted);
     }
-    rich::ReprHighlighter::new().highlight(&mut highlighted);
+    match highlighter {
+        Some(highlighter) => highlighted = crate::code::highlight_with(highlighter, highlighted)?,
+        None => rich::ReprHighlighter::new().highlight(&mut highlighted),
+    }
     for span in text.spans() {
         highlighted.stylize(span.style.clone(), span.start, span.end);
     }
@@ -408,17 +433,45 @@ struct MarkupStr {
     highlight: Option<bool>,
 }
 
+impl MarkupStr {
+    /// The text: core's `render_str`, or, under a console with its own
+    /// `highlighter`, the markup highlighted by it.
+    fn text(&self, console: &CoreConsole) -> CoreText {
+        let custom = Python::attach(|py| {
+            let ambient = AMBIENT.with(|stack| stack.borrow().last().cloned())?;
+            let highlighter = ambient.highlighter.as_ref()?;
+            let highlight = self
+                .highlight
+                .or(ambient.base.highlight)
+                .unwrap_or_else(|| console.highlight());
+            let result = render_str_with(
+                &self.markup,
+                console.emoji(),
+                ambient.base.markup.unwrap_or(ambient.markup),
+                highlight,
+                &[],
+                Some(highlighter.bind(py)),
+                ambient.emoji_variant,
+            );
+            match result {
+                Ok(text) => Some(text),
+                Err(error) => {
+                    set_pending(py, error);
+                    Some(CoreText::new(""))
+                }
+            }
+        });
+        custom.unwrap_or_else(|| console.render_str(&self.markup, self.highlight))
+    }
+}
+
 impl Renderable for MarkupStr {
     fn rich_render(&self, console: &CoreConsole, options: &CoreOptions) -> Vec<CoreSegment> {
-        console
-            .render_str(&self.markup, self.highlight)
-            .rich_render(console, options)
+        self.text(console).rich_render(console, options)
     }
 
     fn measure(&self, console: &CoreConsole, options: &CoreOptions) -> CoreMeasurement {
-        console
-            .render_str(&self.markup, self.highlight)
-            .measure(console, options)
+        self.text(console).measure(console, options)
     }
 }
 
@@ -518,6 +571,16 @@ pub(crate) fn render_object(
         let renderable = convert(&value)?;
         let segments = renderable.rich_render(console, options);
         check_pending()?;
+        if ends_inline(&value) {
+            let mut segments = segments;
+            while segments
+                .last()
+                .is_some_and(|last| last.text.is_empty() && !last.control)
+            {
+                segments.pop();
+            }
+            return Ok(segments);
+        }
         return Ok(terminated(segments));
     }
     if !value.is_instance_of::<PyType>() {
@@ -547,11 +610,14 @@ pub(crate) fn render_object(
     }
     if let Ok(string) = value.cast::<PyString>() {
         let ambient = ambient()?;
-        let text = render_str(
+        let text = render_str_with(
             string.to_cow()?.as_ref(),
             ambient.emoji,
             ambient.base.markup.unwrap_or(ambient.markup),
             ambient.base.highlight.unwrap_or(ambient.highlight),
+            &[],
+            ambient.highlighter.as_ref().map(|h| h.bind(py)),
+            ambient.emoji_variant,
         )?;
         return Ok(terminated(text.rich_render(console, options)));
     }
@@ -655,6 +721,8 @@ impl PyRenderable {
             emoji: outer.emoji,
             markup: outer.markup,
             highlight: outer.highlight,
+            highlighter: outer.highlighter.as_ref().map(|h| h.clone_ref(py)),
+            emoji_variant: outer.emoji_variant,
         };
         struct Pop;
         impl Drop for Pop {
@@ -682,6 +750,21 @@ impl Renderable for PyRenderable {
                     set_pending(py, error);
                     Vec::new()
                 }
+            }
+        })
+    }
+
+    /// Upstream's `getattr(renderable, "vertical", None)`: a table cell
+    /// holding an `Align(vertical=...)` (or any object with a `vertical`)
+    /// aligns by it.
+    fn vertical(&self) -> Option<rich::align::VerticalAlign> {
+        Python::attach(|py| {
+            let value = self.object.bind(py).getattr_opt("vertical").ok()??;
+            match value.extract::<String>().ok()?.as_str() {
+                "top" => Some(rich::align::VerticalAlign::Top),
+                "middle" => Some(rich::align::VerticalAlign::Middle),
+                "bottom" => Some(rich::align::VerticalAlign::Bottom),
+                _ => None,
             }
         })
     }

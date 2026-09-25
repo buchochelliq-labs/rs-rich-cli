@@ -148,12 +148,12 @@ Format: what differs · why · how to remove it (if temporary).
   #20. Covered by round-trip unit tests (a golden isn't possible precisely because
   upstream's `id=` is random).
 
-### 11. `Layout` — empty-leaf placeholder
-- **Differs:** an empty `Layout` leaf renders as blank space, not upstream's
-  interactive `_Placeholder` panel (which shows the layout name/size).
-- **Why:** the split/sizing/tiling core is the valuable part; the placeholder is
-  a debugging aid.
-- **Remove:** add a placeholder renderable under the Layout issue (#7).
+### 11. ~~`Layout` — empty-leaf placeholder~~ (resolved)
+- **Resolved:** an empty leaf renders upstream's `_Placeholder` panel (name,
+  size and highlighted repr), byte-parity in `upstream_features.tsv`, along with
+  `name`/`visible`, `split`/`add_split`/`unsplit`, lookup by name, `tree` and
+  `map`. `map` keys leaves by name and child-index path (Rust has no object
+  identity to key by). `refresh_screen` is not ported.
 - **Resolved:** height-aware leaves — `Panel` now consumes `options.height` and
   expands to fill its region (byte-parity), via `Console::render_lines`'s height
   handling. Other containers can adopt the same pattern as needed.
@@ -292,8 +292,16 @@ Format: what differs · why · how to remove it (if temporary).
   the token colors are **not byte-identical** to Python rich — this is the one
   renderable whose output is functional rather than golden-tested. The default
   theme is `base16-ocean.dark` (a syntect built-in), not rich's `ansi_dark`/
-  `monokai`. Line numbers, the `Syntax.from_path` loader, word-wrap/`line_range`,
-  and background-highlight ranges are not yet ported.
+  `monokai`. The `Syntax.from_path` loader and `dedent` are not yet ported.
+- **Upstream layout (0.0.x).** `line_numbers`, `start_line`, `line_range`,
+  `highlight_lines`, `code_width`, `background_color`, `indent_guides`,
+  `stylize_range`, 4-sided padding and unpadded lines for transparent themes
+  follow upstream's `_get_syntax`, golden-tested with the plain-text lexer and
+  `ansi_dark`. `CodeHighlighter::token_style` supplies the theme's `Text` and
+  `Comment` styles for line numbers and guides. The default case follows
+  upstream too: a long line is cropped at the width, and under
+  `overflow="ignore"` rows are padded in `background_style` (the theme
+  background stays on the code), as upstream does.
 - **Why:** Rust has no Pygments; `syntect` is the standard Rust equivalent
   (mirrors how `cells` delegates East-Asian-width to `unicode-width`). Byte-parity
   is impossible across highlighter engines.
@@ -422,6 +430,39 @@ Format: what differs · why · how to remove it (if temporary).
   depth) cost quadratic memory until the process was killed; a machine-dependent
   cutoff cannot be reproduced exactly.
 - **Remove:** not removable exactly; the constant can be tuned.
+
+### 27. A `Text`'s trailing blank line is lost inside containers
+- **Differs:** `Padding(Text("a\n"))`, `Panel(Text("a\n\n"))` and other
+  containers drop the text's final empty line, which upstream keeps. The port's
+  segment streams *separate* lines rather than end them, so `Segment::split_lines`
+  cannot tell a trailing empty line from a terminator. Printed at the top level
+  the text is unaffected.
+- **Why kept:** `Segment::split_lines` now keeps a final empty line that a
+  renderable marks with an empty segment (`Syntax` does), and having
+  `Text::render_joined_wrapped_tabs` emit that marker fixes containers to
+  upstream's bytes — but rich-cli's `--syntax --filter/--highlight` path adds a
+  bottom pad to compensate (`crates/rich-cli/src/lib.rs`, "`Syntax` also draws
+  the empty line after a final newline"), and two CLI tests
+  (`highlighter_config`, `transforms`) would then see the line twice.
+- **Remove:** emit the marker from `Text` and delete the CLI's `bottom` pad in
+  the same change.
+
+### 28. `AnsiDecoder::decode` splits lines like rich 12
+- **Differs:** `decode` splits with `str::lines` (Python's `splitlines` for
+  `\n`/`\r\n`), as rich 12.6 did; rich 15.0.0 splits after each `\n`, keeps a
+  `\r` before it (which then resets the line) and yields a final empty line
+  for text ending in a newline. `AnsiDecoder::decode_split_newlines` is the 15.0
+  behaviour, which `Text::from_ansi` uses.
+- **Why kept:** rich-cli's notebook rendering relies on the old split
+  (`notebook_group_uses_upstream_cell_spacing_and_output_execution_count`).
+- **Remove:** switch `decode` to the 15.0 split with that CLI path.
+
+### 29. Renderables cannot end without a newline when printed
+- **Differs:** `Console::print` always ends the output line, so `Rule(end=…)`
+  with an `end` that has no trailing newline, and a printed `LiveRender` (which
+  upstream ends without one), still end the line. Inside containers both match
+  upstream.
+- **Why:** the port's `Renderable` output separates lines and has no `end`.
 
 ## Feature-flagged divergences
 

@@ -116,17 +116,24 @@ impl Segment {
     ///
     /// Port of `Segment.split_lines`. Newline characters are consumed (not kept
     /// in the output); a trailing newline yields a final empty line only if
-    /// there was content after the last break.
+    /// there was content after the last break — or an explicit empty segment,
+    /// which is how a renderable whose last line is empty says so (the
+    /// port's streams separate lines rather than end them).
     pub fn split_lines(segments: &[Segment]) -> Vec<Vec<Segment>> {
         let mut lines: Vec<Vec<Segment>> = Vec::new();
         let mut current: Vec<Segment> = Vec::new();
+        // An empty segment right after a break: the final line is empty.
+        let mut empty_last_line = false;
         for segment in segments {
             if segment.control || !segment.text.contains('\n') {
                 if !segment.text.is_empty() {
                     current.push(segment.clone());
+                } else if !segment.control && current.is_empty() && !lines.is_empty() {
+                    empty_last_line = true;
                 }
                 continue;
             }
+            empty_last_line = false;
             let mut parts = segment.text.split('\n').peekable();
             while let Some(part) = parts.next() {
                 if !part.is_empty() {
@@ -138,7 +145,7 @@ impl Segment {
                 }
             }
         }
-        if !current.is_empty() {
+        if !current.is_empty() || empty_last_line {
             lines.push(current);
         }
         lines

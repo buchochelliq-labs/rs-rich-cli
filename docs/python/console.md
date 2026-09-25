@@ -17,8 +17,8 @@ Console(*, color_system="auto", force_terminal=None, force_jupyter=None,
         file=None, quiet=False, width=None, height=None, style=None,
         no_color=None, tab_size=8, record=False, markup=True, emoji=True,
         emoji_variant=None, highlight=True, log_time=True, log_path=True,
-        log_time_format="[%X]", legacy_windows=None, safe_box=True,
-        get_datetime=None, get_time=None)
+        log_time_format="[%X]", highlighter=None, legacy_windows=None,
+        safe_box=True, get_datetime=None, get_time=None)
 ```
 
 Every argument is keyword-only.
@@ -34,6 +34,9 @@ Every argument is keyword-only.
 | `no_color` | `None` | Drop colours but keep bold, italic and the other attributes. `None` follows the `NO_COLOR` environment variable. |
 | `record` | `False` | Keep everything printed, for [`export_text`, `export_html` and `export_svg`](#recording-and-export). |
 | `markup`, `emoji`, `highlight` | `True` | Read console markup, replace `:emoji_codes:`, and highlight numbers, strings, `True`/`False`/`None`, URLs and other patterns in printed strings. |
+| `highlighter` | `None` | What highlights printed strings: any [highlighter](pretty.md#highlighters) (a `RegexHighlighter` subclass, `NullHighlighter`, or a callable taking and returning a `Text`). `None` is Rich's `ReprHighlighter`. Also the `highlighter` property (settable). |
+| `tab_size` | `8` | Spaces per tab for printed text. |
+| `emoji_variant` | `None` | `"emoji"` or `"text"`: the variant `:emoji:` codes get by default (on markup without tags, as in Rich). |
 | `soft_wrap` | `False` | The default for `print(soft_wrap=...)`. |
 | `style` | `None` | A style applied under everything printed. |
 | `theme` | `None` | A [`Theme`](#themes) of named styles. `None`: Rich's default theme. |
@@ -43,7 +46,7 @@ Every argument is keyword-only.
 | `get_datetime`, `get_time` | `None` | The clocks `log` and animations read (`datetime.now`, `time.monotonic`). |
 | `safe_box` | `True` | Avoid box characters that legacy Windows consoles cannot draw. |
 | `legacy_windows` | `None` | Legacy Windows mode; `None` is `False`. |
-| `tab_size`, `emoji_variant`, `force_jupyter` | | Only the defaults: another `tab_size` or an `emoji_variant` raises `NotImplementedError` (core has neither), and so does `force_jupyter=True`. |
+| `force_jupyter` | `None` | `True` raises `NotImplementedError`: there is no Jupyter output. |
 
 ```python
 import io
@@ -96,8 +99,10 @@ This prints objects as Rich does:
   `end`.
 - Any other renderable ([`Table`](table.md), [`Panel`](panel.md), or your own
   class, see [The render protocol](protocol.md)) prints on its own lines.
-- Containers, dataclasses and other objects Rich pretty-prints raise
-  `NotImplementedError` until `rs_rich.pretty` exists.
+- Containers, dataclasses, `__rich_repr__` objects and the others Rich
+  pretty-prints print with [`Pretty`](pretty.md), as in Rich.
+- An [`Emoji`](text.md) prints as one segment with no newline after it, so
+  consecutive emoji share a line, as in Rich.
 
 ```python
 from rs_rich.console import Console
@@ -223,11 +228,9 @@ log(*objects, sep=" ", end="\n", style=None, justify=None, emoji=None,
 This prints the objects like `print`, with the time on the left and the
 calling file and line on the right, as Rich's `Console.log` does. A time
 equal to the previous record's is left blank. The path links to the file
-(OSC 8), without Rich's random link id.
-
-The message must be text (strings, `Text`, numbers): core's log layout takes
-a `Text`, so another renderable, or `log_locals=True`, raises
-`NotImplementedError`.
+(OSC 8), without Rich's random link id. The objects may be any renderables
+(a table, a panel, a dict pretty-printed); `log_locals=True` adds a panel of
+the caller's local variables, as Rich's `render_scope` draws it.
 
 ```python
 import datetime
@@ -278,9 +281,8 @@ print_json(json=None, *, data=None, indent=2, highlight=True, skip_keys=False,
 ```
 
 This pretty-prints a JSON string, or `data` encoded as JSON, in Rich's
-colours, without wrapping. Core formats with an indent of 2 and always
-highlights, so another `indent`, `highlight=False` or `ensure_ascii=True`
-raises `NotImplementedError`.
+colours, without wrapping. The options are `json.dumps`'s (`indent=None` is
+one line) and `highlight=False` prints it plain, as in Rich.
 
 ```python
 from rs_rich.console import Console
@@ -355,8 +357,11 @@ With `record=True` the console keeps everything it writes:
 | `save_text(path, ...)`, `save_html(path, ...)`, `save_svg(path, ...)` | Write the same to a file (UTF-8). |
 
 Each export clears the record unless `clear=False`, and raises
-`RuntimeError` on a console without `record=True`. A custom `code_format`
-or `font_aspect_ratio` raises `NotImplementedError`.
+`RuntimeError` on a console without `record=True`. `code_format` is a
+template with Rich's fields (`{code}`, `{stylesheet}`, `{foreground}`,
+`{background}` for HTML; `{chrome}`, `{lines}`, `{styles}` and the others for
+SVG); a field it does not know is a `KeyError`, as `str.format` raises.
+Everything printed is recorded, including a `Live` display's redrawn frames.
 
 ```python
 import io
@@ -417,8 +422,44 @@ Measurement(minimum=5, maximum=11)
 `set_alt_screen(enable=True)` write control codes, on a terminal only;
 `show_cursor` and `set_alt_screen` return whether they did.
 
-`status`, `pager`, `screen` and `print_exception` exist but raise
-`NotImplementedError` until the live and traceback modules land.
+`set_window_title(title)` sets the terminal's title (on a terminal only, and
+returns whether it did).
+
+`status`, `pager` and `screen` are the [live display](live.md) context
+managers, and `print_exception` prints the exception being handled as a
+[`Traceback`](traceback.md) (a `ValueError` outside an `except` block).
+
+## Render hooks and live displays
+
+`push_render_hook(hook)` makes every later print pass its renderables through
+`hook.process_renderables(renderables)` and print the list that returns;
+`pop_render_hook()` removes the hook pushed last. This is how a
+[`Live`](live.md) display redraws itself below whatever else is printed.
+`set_live(live)` (which returns whether it is the only display),
+`clear_live()` and `_live_stack` keep track of the running displays, as in
+Rich.
+
+```python
+from rs_rich.console import Console
+from rs_rich.panel import Panel
+
+class Boxed:
+    def process_renderables(self, renderables):
+        return [Panel.fit(renderable) for renderable in renderables]
+
+console = Console(width=30)
+console.push_render_hook(Boxed())
+console.print("hooked")
+console.pop_render_hook()
+console.print("plain")
+```
+
+```text
+╭────────╮
+│ hooked │
+╰────────╯
+plain
+```
 
 ## The global console
 

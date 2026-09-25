@@ -29,6 +29,8 @@ panel_title_wide_truncate	6	╭─ \x1b[31m \x1b[0m─╮\n│ x  │\n╰──
 panel_empty_title	12	╭──────────╮\n│ x        │\n╰──────────╯\n
 panel_tiny_title	4	╭──╮\n╰──╯\n
 panel_plain	20	╭──────────────────╮\n│ hello            │\n╰──────────────────╯\n
+padding_text_trailing_blank	12	 a          \n            \n
+panel_text_trailing_blanks	12	╭──────────╮\n│ a        │\n│          │\n│          │\n╰──────────╯\n
 panel_title	20	╭─────── T ────────╮\n│ hello            │\n╰──────────────────╯\n
 panel_title_left	20	┌─ T ──────────────┐\n│ x                │\n└──────────────────┘\n
 panel_title_right	20	┌────────────── T ─┐\n│ x                │\n└──────────────────┘\n

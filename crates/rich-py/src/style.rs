@@ -3,11 +3,12 @@
 //!
 //! Owner: the text/style area (with `text.rs`, `theme.rs` and `color.rs`).
 //!
-//! A `Style` wraps a core style. Core styles carry no `meta`, so the Python
-//! object keeps it beside them (as Rich does, `marshal`-encoded): it takes
-//! part in equality, hashing and `repr`, and is lost when the style reaches
-//! core (a span of a `Text`, a table column), where Rich only uses it for
-//! Textual's mouse handlers anyway.
+//! A `Style` wraps a core style. The Python object keeps its `meta` as Rich
+//! does, `marshal`-encoded, for equality, hashing and `repr`; the core style
+//! carries the same meta (core's `Meta`) whenever its values are ones core
+//! holds (`None`, `bool`, `int`, `float`, `str`, and lists or tuples of
+//! them), so it survives in a `Text`'s spans. Other values stay on the
+//! Python object only.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -15,6 +16,7 @@ use pyo3::exceptions::{PyStopIteration, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyTuple, PyType};
 
+use rich::style::{Meta as CoreMeta, MetaValue};
 use rich::{RichError, Style as CoreStyle, StyleType};
 
 use crate::color::{core_color, core_system, py_color, python_repr};
@@ -41,8 +43,6 @@ const ATTRIBUTES: [&str; 13] = [
 #[pyclass(name = "Style", module = "rs_rich.style", frozen, skip_from_py_object)]
 #[derive(Clone)]
 pub(crate) struct Style {
-    /// Core's definition, or empty for a null style.
-    pub(crate) definition: String,
     pub(crate) inner: CoreStyle,
     /// `marshal.dumps(meta)`, as Rich keeps it.
     meta: Option<Vec<u8>>,
@@ -60,21 +60,33 @@ fn next_link_id() -> String {
 impl Style {
     /// Wrap a core style; its definition is core's normalised one.
     pub(crate) fn from_core(inner: CoreStyle) -> Style {
-        Style::with_meta(inner, None, false)
+        let meta = inner.meta_ref().and_then(|meta| {
+            Python::attach(|py| {
+                let dict = meta_to_py(py, meta).ok()?;
+                Some((dump_meta(dict.as_any()).ok()?, !meta.is_empty()))
+            })
+        });
+        match meta {
+            Some((bytes, truthy)) => Style::with_meta(inner, Some(bytes), truthy),
+            None => Style::with_meta(inner, None, false),
+        }
     }
 
     fn with_meta(inner: CoreStyle, meta: Option<Vec<u8>>, meta_truthy: bool) -> Style {
+        // The core style carries the meta too, when core can hold it.
+        let inner = match &meta {
+            Some(bytes) => match Python::attach(|py| core_meta_from_bytes(py, bytes)) {
+                Ok(core) => inner.with_meta(core),
+                Err(_) => inner,
+            },
+            None => inner,
+        };
         let link_id = if inner.link().is_some() || meta.is_some() {
             next_link_id()
         } else {
             String::new()
         };
         Style {
-            definition: if inner.is_null() {
-                String::new()
-            } else {
-                inner.definition()
-            },
             inner,
             meta,
             meta_truthy,
@@ -118,6 +130,81 @@ impl Style {
         };
         Ok(Style::with_meta(inner, meta, meta_truthy))
     }
+}
+
+/// A Python meta value as core's, if core can hold it.
+fn meta_value(value: &Bound<'_, PyAny>) -> PyResult<MetaValue> {
+    use pyo3::types::{PyBool, PyFloat, PyInt, PyList, PyString};
+    if value.is_none() {
+        Ok(MetaValue::None)
+    } else if let Ok(flag) = value.cast::<PyBool>() {
+        Ok(MetaValue::Bool(flag.is_true()))
+    } else if value.is_exact_instance_of::<PyInt>() {
+        Ok(MetaValue::Int(value.extract()?))
+    } else if value.is_exact_instance_of::<PyFloat>() {
+        Ok(MetaValue::Float(value.extract()?))
+    } else if value.is_exact_instance_of::<PyString>() {
+        Ok(MetaValue::Str(value.extract()?))
+    } else if value.is_exact_instance_of::<PyList>() || value.is_exact_instance_of::<PyTuple>() {
+        value
+            .try_iter()?
+            .map(|item| meta_value(&item?))
+            .collect::<PyResult<Vec<_>>>()
+            .map(MetaValue::List)
+    } else {
+        Err(PyTypeError::new_err(format!(
+            "rs_rich keeps meta values of type None, bool, int, float, str, list and tuple \
+             in rendered styles, not {}",
+            value.get_type().name()?
+        )))
+    }
+}
+
+/// A Python meta dict as core's `Meta` (a `TypeError` for values core
+/// cannot hold, or keys that are not `str`).
+pub(crate) fn core_meta(meta: &Bound<'_, PyAny>) -> PyResult<CoreMeta> {
+    let dict = meta.cast::<PyDict>()?;
+    let mut core = CoreMeta::new();
+    for (key, value) in dict.iter() {
+        let key: String = key
+            .extract()
+            .map_err(|_| PyTypeError::new_err("rs_rich keeps meta data with str keys only"))?;
+        core.insert(key, meta_value(&value)?);
+    }
+    Ok(core)
+}
+
+fn core_meta_from_bytes(py: Python<'_>, bytes: &[u8]) -> PyResult<CoreMeta> {
+    let meta = py
+        .import("marshal")?
+        .call_method1("loads", (PyBytes::new(py, bytes),))?;
+    core_meta(&meta)
+}
+
+fn meta_value_to_py(py: Python<'_>, value: &MetaValue) -> PyResult<Py<PyAny>> {
+    Ok(match value {
+        MetaValue::None => py.None(),
+        MetaValue::Bool(flag) => flag.into_pyobject(py)?.to_owned().into_any().unbind(),
+        MetaValue::Int(number) => number.into_pyobject(py)?.into_any().unbind(),
+        MetaValue::Float(number) => number.into_pyobject(py)?.into_any().unbind(),
+        MetaValue::Str(text) => text.into_pyobject(py)?.into_any().unbind(),
+        MetaValue::List(items) => {
+            let list = pyo3::types::PyList::empty(py);
+            for item in items {
+                list.append(meta_value_to_py(py, item)?)?;
+            }
+            list.into_any().unbind()
+        }
+    })
+}
+
+/// Core's `Meta` as a Python dict.
+fn meta_to_py<'py>(py: Python<'py>, meta: &CoreMeta) -> PyResult<Bound<'py, PyDict>> {
+    let dict = PyDict::new(py);
+    for (key, value) in meta.iter() {
+        dict.set_item(key, meta_value_to_py(py, value)?)?;
+    }
+    Ok(dict)
 }
 
 fn dump_meta(meta: &Bound<'_, PyAny>) -> PyResult<Vec<u8>> {
@@ -481,7 +568,14 @@ impl Style {
         if self.is_null() {
             return Style::from_core(CoreStyle::new());
         }
-        Style::from_core(self.inner.without_color())
+        // Rich's copy keeps the link but not the meta data.
+        let link = self.inner.link().map(str::to_string);
+        Style::from_core(
+            self.inner
+                .without_color()
+                .clear_meta_and_links()
+                .update_link(link),
+        )
     }
 
     fn copy(&self) -> Style {
@@ -496,7 +590,7 @@ impl Style {
         if self.is_null() {
             return Style::from_core(CoreStyle::new());
         }
-        Style::from_core(self.inner.update_link(None))
+        Style::from_core(self.inner.clear_meta_and_links())
     }
 
     /// A copy with a different link.

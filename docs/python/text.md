@@ -281,9 +281,9 @@ No emoji called 'no_such_emoji'
 ## Differences from Rich
 
 - `text.spans` returns a new list; assign `text.spans` to change the spans.
-- Spans cannot hold meta data: `apply_meta`, `on` and `assemble(meta=...)`
-  raise `NotImplementedError`. Core spans hold a `Style` without meta
-  (Textual's event handlers), so the data would be lost.
+- Meta data on spans (`apply_meta`, `on`, `assemble(meta=...)`) may hold
+  `None`, `bool`, `int`, `float`, `str`, and lists or tuples of them (core's
+  meta values); anything else is a `TypeError`. A tuple reads back as a list.
 - A zero-width span is dropped by the methods that rebuild the spans
   (`spans =`, `plain =`, `stylize_before`, `extend_style`); Rich keeps it.
   It styles nothing either way.

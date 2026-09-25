@@ -21,8 +21,8 @@ use rich_art::{
 };
 
 use super::{
-    bad_choice, buffer_bytes, core_console, fail_render, kinded, normalized, path_arg, read_file,
-    repr_str, ImageArtError, ImageDecodeError, Shared,
+    bad_choice, buffer_bytes, core_console, kinded, normalized, path_arg, read_file, repr_str,
+    ImageArtError, ImageDecodeError, Shared,
 };
 use crate::renderable::{self, AsRenderable};
 
@@ -621,8 +621,10 @@ impl Renderable for StrictImage {
         match self.0.render(console, options) {
             Ok(segments) => segments,
             Err(error) => {
-                let error = Python::attach(|py| image_art_error(py, &error));
-                fail_render(error, console, options);
+                Python::attach(|py| {
+                    let error = image_art_error(py, &error);
+                    crate::renderable::report_error(py, error);
+                });
                 Vec::new()
             }
         }

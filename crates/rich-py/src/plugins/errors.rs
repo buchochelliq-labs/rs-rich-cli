@@ -18,17 +18,15 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::Mutex;
 
 use pyo3::create_exception;
-use pyo3::exceptions::{PyException, PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyException, PyValueError};
 use pyo3::prelude::*;
 
-use rich::console::Console as CoreConsole;
-use rich::protocol::{HighlightError as CoreHighlightError, Renderable};
+use rich::protocol::HighlightError as CoreHighlightError;
 use rich_plugin_api::{Capability, PluginError as CorePluginError};
 
-use crate::renderable::{self, Ambient, AsRenderable, PyRenderable};
+use crate::renderable::{self, Ambient};
 
 create_exception!(_native, PluginError, PyException);
 create_exception!(_native, HighlightError, PyException);
@@ -207,45 +205,9 @@ pub(crate) fn callback_failed(py: Python<'_>, error: PyErr) -> String {
             }
         });
     } else {
-        defer(py, error);
+        crate::renderable::report_error(py, error);
     }
     message
-}
-
-/// A pyclass whose conversion to a renderable raises the error it holds.
-/// Rendering one inside the current scope is how an error reaches that
-/// scope's pending slot through the bridge's public API.
-#[pyclass(module = "rs_rich.plugins", frozen)]
-pub(crate) struct DeferredError {
-    error: Mutex<Option<PyErr>>,
-}
-
-impl AsRenderable for DeferredError {
-    fn to_renderable(&self, _py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
-        let error = self
-            .error
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .take();
-        Err(error.unwrap_or_else(|| PyRuntimeError::new_err("plugin error already reported")))
-    }
-}
-
-/// Hand `error` to the enclosing render scope (the first error wins); with
-/// none, it is reported as unraisable, as a render error outside a console
-/// is.
-pub(crate) fn defer(py: Python<'_>, error: PyErr) {
-    let Ok(holder) = Py::new(
-        py,
-        DeferredError {
-            error: Mutex::new(Some(error)),
-        },
-    ) else {
-        return;
-    };
-    let console = CoreConsole::builder().width(1).build();
-    let options = console.options();
-    let _ = PyRenderable::new(holder.into_any()).rich_render(&console, &options);
 }
 
 /// The Python class for a capability kind, for error messages.
@@ -271,6 +233,5 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         "HighlighterChoiceError",
         py.get_type::<HighlighterChoiceError>(),
     )?;
-    renderable::register_renderable::<DeferredError>(py);
     Ok(())
 }

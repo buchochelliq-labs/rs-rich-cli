@@ -430,6 +430,30 @@ impl CodeHighlighter for SyntectHighlighter {
         DEFAULT_THEME
     }
 
+    /// Upstream's `ANSI_DARK`/`ANSI_LIGHT` entry for the token; for a syntect
+    /// theme, its foreground (`Text`) or its `comment` scope style.
+    fn token_style(&self, theme: &str, token: &str) -> Option<Style> {
+        match (resolve_theme(theme).ok()?, token) {
+            (Resolved::Ansi { .. }, "Comment") => Some(Style::parse("dim").expect("valid style")),
+            (Resolved::Ansi { .. }, _) => None,
+            (Resolved::Syntect(theme), "Text") => theme
+                .settings
+                .foreground
+                .map(|color| Style::new().with_color(to_color(color))),
+            (Resolved::Syntect(theme), "Comment") => {
+                let scope = syntect::parsing::Scope::new("comment").ok()?;
+                let style =
+                    syntect::highlighting::Highlighter::new(theme).style_for_stack(&[scope]);
+                Some(
+                    to_style(style)
+                        .without_color()
+                        .combine(&Style::new().with_color(to_color(style.foreground))),
+                )
+            }
+            _ => None,
+        }
+    }
+
     fn themes(&self) -> Vec<String> {
         let mut names: Vec<String> = theme_set().themes.keys().cloned().collect();
         names.extend(["ansi_dark".to_string(), "ansi_light".to_string()]);

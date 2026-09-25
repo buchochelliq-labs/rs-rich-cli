@@ -47,9 +47,8 @@ console.print(Rule("left", align="left", characters="="))
 left =========================
 ```
 
-A rule's `end` is written after it inside containers. At the top level
-`Console.print` always ends the line, so `end=""` does not join the next
-output onto it as it does in Rich.
+A titled rule's `end` is written after it, as in Rich: with `end=""` the next
+output joins its line. A rule without a title always ends its line.
 
 ## Padding
 

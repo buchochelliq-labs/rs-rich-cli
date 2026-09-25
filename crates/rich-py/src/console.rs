@@ -20,10 +20,13 @@
 //! interleave, and a print from inside `file.write` raises instead of
 //! waiting for itself.
 
+use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Condvar, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
-use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError, PyTypeError, PyValueError};
+use pyo3::exceptions::{
+    PyIndexError, PyKeyError, PyNotImplementedError, PyRuntimeError, PyTypeError, PyValueError,
+};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyString, PyTuple, PyType};
 use pyo3::{PyTraverseError, PyVisit};
@@ -35,7 +38,7 @@ use rich::log_render::LogRender;
 use rich::protocol::{Highlighter, Renderable};
 use rich::segment::Segment as CoreSegment;
 use rich::theme::Theme as CoreTheme;
-use rich::{Control, Json, Overflow, Rule, Style as CoreStyle, StyleType, Text as CoreText};
+use rich::{Control, Overflow, Rule, Style as CoreStyle, StyleType, Text as CoreText};
 
 use crate::convert;
 use crate::errors::{CaptureError, MissingStyle, ThemeStackError};
@@ -70,6 +73,7 @@ struct Settings {
     force_interactive: Option<bool>,
     style: Option<StyleType>,
     log_time: bool,
+    emoji_variant: Option<rich::emoji::EmojiVariant>,
 }
 
 /// Output held back by `with console:`, `capture()` or `begin_capture()`
@@ -92,6 +96,12 @@ struct ConsoleState {
     get_time: Option<Py<PyAny>>,
     log_time_format: Option<Py<PyAny>>,
     is_alt_screen: bool,
+    /// `Console(highlighter=...)`; `None` is Rich's `ReprHighlighter`.
+    highlighter: Option<Py<PyAny>>,
+    /// Rich's `_render_hooks`: objects with `process_renderables`.
+    render_hooks: Vec<Py<PyAny>>,
+    /// Rich's `_live_stack`: the running `Live` displays.
+    live_stack: Vec<Py<PyAny>>,
 }
 
 /// `rich.console.Console`: renders through core `rich` and writes the result
@@ -163,6 +173,8 @@ pub(crate) struct Snapshot {
     theme: CoreTheme,
     file: Option<Py<PyAny>>,
     extensions: Option<std::sync::Arc<crate::plugins::Installed>>,
+    highlighter: Option<Py<PyAny>>,
+    hooks: Vec<Py<PyAny>>,
 }
 
 impl Snapshot {
@@ -180,6 +192,8 @@ impl Snapshot {
             .highlight(highlight)
             .safe_box(s.safe_box)
             .legacy_windows(s.legacy_windows)
+            .tab_size(s.tab_size)
+            .emoji_variant(s.emoji_variant)
             .theme(self.theme.clone())
             .build();
         if let Some(extensions) = &self.extensions {
@@ -218,12 +232,15 @@ impl Snapshot {
     }
 
     fn ambient(&self, console: &Bound<'_, Console>, base: OptionsBase) -> Ambient {
+        let py = console.py();
         Ambient {
             console: console.clone().into_any().unbind(),
             base,
             emoji: self.settings.emoji,
             markup: self.settings.markup,
             highlight: self.settings.highlight,
+            highlighter: self.highlighter.as_ref().map(|h| h.clone_ref(py)),
+            emoji_variant: self.settings.emoji_variant,
         }
     }
 }
@@ -251,25 +268,9 @@ enum Item {
     Object(Py<PyAny>),
     /// Segments ready to print (`NewLine`).
     Raw(Vec<CoreSegment>),
-}
-
-/// `print_json`'s document: upstream prints `JSON.__rich__()`, a `Text`,
-/// with `soft_wrap=True`, so no line wraps or is cropped. Core's `Json`
-/// ignores `no_wrap` and `overflow` in the options, so it renders at the
-/// width of its longest line.
-struct SoftWrapped(Json);
-
-impl Renderable for SoftWrapped {
-    fn rich_render(&self, console: &CoreConsole, options: &CoreOptions) -> Vec<CoreSegment> {
-        let widest = self.0.measure(console, options).maximum;
-        let mut options = options.clone();
-        options.max_width = options.max_width.max(widest);
-        self.0.rich_render(console, &options)
-    }
-
-    fn measure(&self, console: &CoreConsole, options: &CoreOptions) -> rich::measure::Measurement {
-        self.0.measure(console, options)
-    }
+    /// A core renderable whose last line is not ended, as Rich prints a
+    /// renderable that yields one segment (`Emoji`): no newline follows it.
+    Inline(Box<dyn Renderable>),
 }
 
 /// Joined text and its `end`, as one core renderable for `Align`: Rich's joined `Text` renders its `end` after the last line,
@@ -302,6 +303,27 @@ impl Renderable for RawSegments {
     }
 }
 
+/// A renderable in `Console.log`'s message cell. Core's log table takes
+/// `Send + Sync` cells; this one is built, rendered and dropped by one call
+/// on one thread, holding the GIL, and never leaves it.
+struct ThreadBound(Box<dyn Renderable>);
+
+// SAFETY: see above: the table owning a `ThreadBound` is local to
+// `Console.log` and is never moved to or shared with another thread.
+unsafe impl Send for ThreadBound {}
+// SAFETY: as for `Send`.
+unsafe impl Sync for ThreadBound {}
+
+impl Renderable for ThreadBound {
+    fn rich_render(&self, console: &CoreConsole, options: &CoreOptions) -> Vec<CoreSegment> {
+        self.0.rich_render(console, options)
+    }
+
+    fn measure(&self, console: &CoreConsole, options: &CoreOptions) -> rich::measure::Measurement {
+        self.0.measure(console, options)
+    }
+}
+
 impl Item {
     fn into_box(self) -> Box<dyn Renderable> {
         match self {
@@ -309,6 +331,7 @@ impl Item {
             Item::Joined { text, end } => Box::new(TextWithEnd { text, end }),
             Item::Object(object) => Box::new(PyRenderable::new(object)),
             Item::Raw(segments) => Box::new(RawSegments(segments)),
+            Item::Inline(renderable) => renderable,
         }
     }
 
@@ -348,8 +371,107 @@ impl Item {
                 options,
             )?)),
             Item::Raw(segments) => Ok(segments.clone()),
+            Item::Inline(renderable) => {
+                let segments = renderable.rich_render(console, options);
+                renderable::check_pending()?;
+                Ok(segments)
+            }
         }
     }
+}
+
+/// An [`Item`] a render hook sees: Rich passes hooks the renderables a
+/// print collected, and prints the list they return.
+#[pyclass(name = "_PrintItem", module = "rs_rich.console", unsendable)]
+pub(crate) struct PrintItem {
+    item: Rc<Item>,
+}
+
+/// An item as a core renderable (what the hook's list holds when printed
+/// or put in a container).
+struct ItemRef(Rc<Item>);
+
+impl Renderable for ItemRef {
+    fn rich_render(&self, console: &CoreConsole, options: &CoreOptions) -> Vec<CoreSegment> {
+        match &*self.0 {
+            Item::Core(renderable) | Item::Inline(renderable) => {
+                renderable.rich_render(console, options)
+            }
+            Item::Joined { text, end } => {
+                let mut segments = text.rich_render(console, options);
+                if !end.is_empty() {
+                    segments.push(CoreSegment::new(end.clone(), None));
+                }
+                renderable::unterminated(segments)
+            }
+            Item::Object(object) => Python::attach(|py| {
+                PyRenderable::new(object.clone_ref(py)).rich_render(console, options)
+            }),
+            Item::Raw(segments) => renderable::unterminated(segments.clone()),
+        }
+    }
+
+    fn measure(&self, console: &CoreConsole, options: &CoreOptions) -> rich::measure::Measurement {
+        match &*self.0 {
+            Item::Core(renderable) | Item::Inline(renderable) => {
+                renderable.measure(console, options)
+            }
+            Item::Joined { text, .. } => text.measure(console, options),
+            Item::Object(object) => Python::attach(|py| {
+                PyRenderable::new(object.clone_ref(py)).measure(console, options)
+            }),
+            Item::Raw(_) => rich::measure::Measurement::new(0, options.max_width),
+        }
+    }
+}
+
+impl renderable::AsRenderable for PrintItem {
+    fn to_renderable(&self, _py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
+        Ok(Box::new(ItemRef(Rc::clone(&self.item))))
+    }
+}
+
+/// Rich's `for hook in self._render_hooks: renderables =
+/// hook.process_renderables(renderables)`. What a hook adds is collected
+/// as `print` collects its objects.
+fn apply_hooks(
+    py: Python<'_>,
+    hooks: &[Py<PyAny>],
+    items: Vec<Item>,
+    switches: &Switches,
+) -> PyResult<Vec<Rc<Item>>> {
+    let mut items: Vec<Rc<Item>> = items.into_iter().map(Rc::new).collect();
+    for hook in hooks {
+        let list = PyList::empty(py);
+        for item in &items {
+            list.append(Bound::new(
+                py,
+                PrintItem {
+                    item: Rc::clone(item),
+                },
+            )?)?;
+        }
+        let returned = hook.bind(py).call_method1("process_renderables", (list,))?;
+        let mut next = Vec::new();
+        for object in returned.try_iter()? {
+            let object = object?;
+            if let Ok(item) = object.cast::<PrintItem>() {
+                next.push(Rc::clone(&item.borrow().item));
+            } else {
+                let collected = collect(
+                    std::slice::from_ref(&object),
+                    " ",
+                    "\n",
+                    None,
+                    switches,
+                    false,
+                )?;
+                next.extend(collected.into_iter().map(Rc::new));
+            }
+        }
+        items = next;
+    }
+    Ok(items)
 }
 
 /// How many lines Python's `str.splitlines` finds in the segments' text.
@@ -428,6 +550,8 @@ struct Switches {
     markup: bool,
     highlight: bool,
     extensions: Option<std::sync::Arc<crate::plugins::Installed>>,
+    highlighter: Option<Py<PyAny>>,
+    emoji_variant: Option<rich::emoji::EmojiVariant>,
 }
 
 /// Rich's `_collect_renderables`: strings and `Text`s (and anything printed
@@ -480,9 +604,15 @@ fn collect(
                 switches.markup,
                 switches.highlight,
                 &extra,
+                switches.highlighter.as_ref().map(|h| h.bind(object.py())),
+                switches.emoji_variant,
             )?);
         } else if let Ok(text) = object.extract::<PyRef<'_, Text>>() {
             texts.push(text.inner.clone());
+        } else if renderable::ends_inline(&object) {
+            flush(&mut texts, &mut items);
+            let item = Item::Inline(renderable::to_renderable(&object, None)?);
+            items.push(aligned(item));
         } else if renderable::is_registered(&object) {
             flush(&mut texts, &mut items);
             let item = Item::Core(renderable::to_renderable(&object, None)?);
@@ -497,7 +627,12 @@ fn collect(
         } else {
             let mut text = CoreText::new(object.str()?.to_cow()?.as_ref());
             if switches.highlight {
-                rich::ReprHighlighter::new().highlight(&mut text);
+                match &switches.highlighter {
+                    Some(highlighter) => {
+                        text = crate::code::highlight_with(highlighter.bind(object.py()), text)?
+                    }
+                    None => rich::ReprHighlighter::new().highlight(&mut text),
+                }
             }
             texts.push(text);
         }
@@ -522,6 +657,8 @@ impl Console {
                 .unwrap_or_else(CoreTheme::default_theme),
             file: state.file.as_ref().map(|file| file.clone_ref(py)),
             extensions: crate::plugins::installed(py, self),
+            highlighter: state.highlighter.as_ref().map(|h| h.clone_ref(py)),
+            hooks: state.render_hooks.iter().map(|h| h.clone_ref(py)).collect(),
         }
     }
 
@@ -612,6 +749,8 @@ impl Console {
             markup: args.markup.unwrap_or(settings.markup),
             highlight: args.highlight.unwrap_or(settings.highlight),
             extensions: snapshot.extensions.clone(),
+            highlighter: snapshot.highlighter.as_ref().map(|h| h.clone_ref(py)),
+            emoji_variant: snapshot.settings.emoji_variant,
         };
         let (mut no_wrap, mut overflow, mut crop) = (args.no_wrap, args.overflow, args.crop);
         if args.soft_wrap.unwrap_or(settings.soft_wrap) {
@@ -645,6 +784,7 @@ impl Console {
                     true,
                 )?
             };
+            let items = apply_hooks(py, &snapshot.hooks, items, &switches)?;
             // `Console(style=...)`: Rich wraps each renderable in `Styled`,
             // which styles what it renders; applied to the segments here.
             let console_style = settings
@@ -774,6 +914,20 @@ impl Console {
     }
 }
 
+/// `print_json`'s `indent`: `None`, an `int` or a `str`; 2 when not given.
+enum JsonIndent {
+    Two,
+    Value(Py<PyAny>),
+}
+
+impl<'a, 'py> FromPyObject<'a, 'py> for JsonIndent {
+    type Error = PyErr;
+
+    fn extract(value: pyo3::Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
+        Ok(JsonIndent::Value(value.to_owned().unbind()))
+    }
+}
+
 /// Resolve a style name against the console's theme (Rich's `get_style`).
 fn resolve_style(console: &CoreConsole, style: &StyleType) -> PyResult<CoreStyle> {
     console.get_style(style).map_err(|error| {
@@ -801,8 +955,8 @@ impl Console {
         force_interactive=None, soft_wrap=false, theme=None, stderr=false, file=None,
         quiet=false, width=None, height=None, style=None, no_color=None, tab_size=8,
         record=false, markup=true, emoji=true, emoji_variant=None, highlight=true,
-        log_time=true, log_path=true, log_time_format=None, legacy_windows=None,
-        safe_box=true, get_datetime=None, get_time=None
+        log_time=true, log_path=true, log_time_format=None, highlighter=None,
+        legacy_windows=None, safe_box=true, get_datetime=None, get_time=None
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -829,6 +983,7 @@ impl Console {
         log_time: bool,
         log_path: bool,
         log_time_format: Option<Py<PyAny>>,
+        highlighter: Option<Py<PyAny>>,
         legacy_windows: Option<bool>,
         safe_box: bool,
         get_datetime: Option<Py<PyAny>>,
@@ -842,16 +997,11 @@ impl Console {
                 "rs_rich does not render for Jupyter (force_jupyter=True)",
             ));
         }
-        if emoji_variant.is_some() {
-            return Err(PyNotImplementedError::new_err(
-                "rs_rich does not support emoji_variant yet: core has no default emoji variant",
-            ));
-        }
-        if tab_size != 8 {
-            return Err(PyNotImplementedError::new_err(
-                "rs_rich renders with tab_size=8 only: core has no console tab size",
-            ));
-        }
+        // Rich looks the variant up when it replaces codes, and an unknown
+        // one adds nothing.
+        let emoji_variant = emoji_variant
+            .as_deref()
+            .and_then(rich::emoji::EmojiVariant::parse);
         // Upstream asks the file, not the process's stdout, whether it is a
         // terminal; `force_terminal` overrides it.
         let is_terminal = match force_terminal {
@@ -948,6 +1098,7 @@ impl Console {
             force_interactive,
             style: style_type(style)?,
             log_time,
+            emoji_variant,
         };
         Ok(Console {
             state: Mutex::new(ConsoleState {
@@ -963,6 +1114,9 @@ impl Console {
                 get_time,
                 log_time_format,
                 is_alt_screen: false,
+                highlighter: highlighter.filter(|h| !h.is_none(py)),
+                render_hooks: Vec::new(),
+                live_stack: Vec::new(),
             }),
             printer: Mutex::new(0),
             printed: Condvar::new(),
@@ -978,9 +1132,12 @@ impl Console {
                 &state.get_datetime,
                 &state.get_time,
                 &state.log_time_format,
+                &state.highlighter,
             ]
             .into_iter()
             .flatten()
+            .chain(state.render_hooks.iter())
+            .chain(state.live_stack.iter())
             {
                 visit.call(object)?;
             }
@@ -994,6 +1151,9 @@ impl Console {
         state.get_datetime = None;
         state.get_time = None;
         state.log_time_format = None;
+        state.highlighter = None;
+        state.render_hooks.clear();
+        state.live_stack.clear();
     }
 
     fn __repr__(&self) -> String {
@@ -1203,6 +1363,80 @@ impl Console {
         }
     }
 
+    /// The highlighter printed strings go through (Rich's `ReprHighlighter`
+    /// unless one was given).
+    #[getter]
+    fn highlighter(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        match &self.state().highlighter {
+            Some(highlighter) => Ok(highlighter.clone_ref(py)),
+            None => Ok(py
+                .import("rs_rich.highlighter")?
+                .getattr("ReprHighlighter")?
+                .call0()?
+                .unbind()),
+        }
+    }
+
+    #[setter]
+    fn set_highlighter(&self, py: Python<'_>, highlighter: Option<Py<PyAny>>) {
+        self.state().highlighter = highlighter.filter(|h| !h.is_none(py));
+    }
+
+    /// The running `Live` displays, outermost first (Rich's `_live_stack`).
+    #[getter]
+    fn _live_stack<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let lives: Vec<Py<PyAny>> = self
+            .state()
+            .live_stack
+            .iter()
+            .map(|live| live.clone_ref(py))
+            .collect();
+        PyList::new(py, lives)
+    }
+
+    /// Push a `Live` display; `True` when it is the only one (Rich's
+    /// `set_live`).
+    fn set_live(&self, live: Py<PyAny>) -> bool {
+        let mut state = self.state();
+        state.live_stack.push(live);
+        state.live_stack.len() == 1
+    }
+
+    /// Pop the top `Live` display.
+    fn clear_live(&self) -> PyResult<()> {
+        let removed = self.state().live_stack.pop();
+        match removed {
+            Some(_) => Ok(()),
+            None => Err(PyIndexError::new_err("pop from empty list")),
+        }
+    }
+
+    /// Add a render hook: an object whose `process_renderables(renderables)`
+    /// returns what each print prints instead (a `Live` display is one).
+    fn push_render_hook(&self, hook: Py<PyAny>) {
+        self.state().render_hooks.push(hook);
+    }
+
+    /// Remove the render hook added last.
+    fn pop_render_hook(&self) -> PyResult<()> {
+        let removed = self.state().render_hooks.pop();
+        match removed {
+            Some(_) => Ok(()),
+            None => Err(PyIndexError::new_err("pop from empty list")),
+        }
+    }
+
+    /// Set the terminal window title; `False` when not a terminal.
+    fn set_window_title(&self, py: Python<'_>, title: &str) -> PyResult<bool> {
+        if !self.state().settings.is_terminal {
+            return Ok(false);
+        }
+        let snapshot = self.snapshot(py);
+        let segment = CoreSegment::control(format!("\x1b]0;{title}\x07"));
+        self.emit(py, &snapshot, vec![segment])?;
+        Ok(true)
+    }
+
     /// The default render options.
     #[getter]
     fn options(&self, py: Python<'_>) -> PyResult<ConsoleOptions> {
@@ -1309,11 +1543,6 @@ impl Console {
         _stack_offset: usize,
     ) -> PyResult<()> {
         let py = slf.py();
-        if log_locals {
-            return Err(PyNotImplementedError::new_err(
-                "rs_rich cannot log locals yet: that needs Pretty (the code area)",
-            ));
-        }
         let this = slf.get();
         let snapshot = this.snapshot(py);
         let settings = &snapshot.settings;
@@ -1322,6 +1551,8 @@ impl Console {
             markup: markup.unwrap_or(settings.markup),
             highlight: highlight.unwrap_or(settings.highlight),
             extensions: snapshot.extensions.clone(),
+            highlighter: snapshot.highlighter.as_ref().map(|h| h.clone_ref(py)),
+            emoji_variant: snapshot.settings.emoji_variant,
         };
         let style = style_type(style)?;
         let text_justify = convert::justify(justify)?;
@@ -1385,37 +1616,106 @@ impl Console {
         } else {
             None
         };
+        // Rich's `_caller_frame_info` locals, without dunder names.
+        let locals = if log_locals {
+            let scope = PyDict::new(py);
+            let frame_locals = frame.getattr("f_locals")?;
+            for key in frame_locals.try_iter()? {
+                let key = key?;
+                let name: String = key.str()?.extract()?;
+                if !name.starts_with("__") {
+                    scope.set_item(&key, frame_locals.get_item(&key)?)?;
+                }
+            }
+            Some(scope)
+        } else {
+            None
+        };
         let core = snapshot.core(switches.emoji, switches.highlight);
         let ambient = snapshot.ambient(slf, snapshot.base(py)?);
         let segments = renderable::scope(ambient, || {
             let objects: Vec<_> = objects.iter().collect();
-            let items = collect(&objects, sep, end, None, &switches, false)?;
-            let mut message =
-                match items.as_slice() {
-                    [] => CoreText::new(""),
-                    [Item::Joined { text, .. }] => text.clone(),
-                    _ => return Err(PyNotImplementedError::new_err(
-                        "rs_rich logs strings and Text only: core's LogRender takes a Text message",
-                    )),
-                };
-            message.set_justify(text_justify);
-            if let Some(style) = &style {
-                message.set_base_style(resolve_style(&core, style)?);
-            }
-            let table = {
-                let state = this.state();
-                state.log_render.render(
-                    &core,
-                    message,
-                    time,
-                    CoreText::new(""),
-                    Some(&path),
-                    Some(line_no),
-                    link_path.as_deref(),
-                )
+            // A line of text goes to core's `LogRender` as a `Text`, justified;
+            // anything else is upstream's list of renderables, where `justify`
+            // aligns each with `Align`.
+            let simple = style.is_none()
+                && locals.is_none()
+                && objects
+                    .iter()
+                    .all(|o| o.is_instance_of::<PyString>() || o.cast::<Text>().is_ok());
+            let items = if simple {
+                collect(&objects, sep, end, None, &switches, false)?
+            } else {
+                collect(&objects, sep, end, justify, &switches, true)?
             };
-            let item = Item::Core(Box::new(table));
-            let segments = item.render(py, &core, &core.options())?;
+            let style = style
+                .as_ref()
+                .map(|style| resolve_style(&core, style))
+                .transpose()?;
+            let table = match (items.as_slice(), &locals) {
+                // One line of text: core's `LogRender` with a `Text` message.
+                ([] | [Item::Joined { .. }], None) if simple => {
+                    let mut message = match items.into_iter().next() {
+                        Some(Item::Joined { text, .. }) => text,
+                        _ => CoreText::new(""),
+                    };
+                    message.set_justify(text_justify);
+                    let state = this.state();
+                    state.log_render.render(
+                        &core,
+                        message,
+                        time,
+                        CoreText::new(""),
+                        Some(&path),
+                        Some(line_no),
+                        link_path.as_deref(),
+                    )
+                }
+                // Anything else: upstream's `Renderables` message cell.
+                _ => {
+                    let mut message: Vec<Arc<dyn Renderable + Send + Sync>> = Vec::new();
+                    for item in items {
+                        let item = match item {
+                            Item::Joined { text, .. } => Item::Core(Box::new(text)),
+                            item => item,
+                        };
+                        // Upstream wraps each renderable in `Styled`.
+                        let renderable: Box<dyn Renderable> = match (item, &style) {
+                            (item, Some(style)) => {
+                                Box::new(rich::styled::Styled::new(item.into_box(), style.clone()))
+                            }
+                            (item, None) => item.into_box(),
+                        };
+                        message.push(Arc::new(ThreadBound(renderable)));
+                    }
+                    if let Some(scope) = &locals {
+                        message.push(crate::code::render_scope(
+                            scope,
+                            Some("[i]locals".to_string()),
+                        )?);
+                    }
+                    let state = this.state();
+                    state.log_render.render_renderables(
+                        &core,
+                        message,
+                        time,
+                        CoreText::new(""),
+                        Some(&path),
+                        Some(line_no),
+                        link_path.as_deref(),
+                    )
+                }
+            };
+            let items = apply_hooks(
+                py,
+                &snapshot.hooks,
+                vec![Item::Core(Box::new(table))],
+                &switches,
+            )?;
+            let mut segments = Vec::new();
+            for item in &items {
+                segments.extend(item.render(py, &core, &core.options())?);
+            }
             Ok(CoreSegment::crop_lines(&segments, core.width()))
         })?;
         this.emit(py, &snapshot, segments)
@@ -1538,7 +1838,7 @@ impl Console {
     /// Pretty-print JSON (a string, or `data` to encode), as
     /// `rich.console.Console.print_json`.
     #[pyo3(signature = (
-        json=None, *, data=None, indent=None, highlight=true, skip_keys=false,
+        json=None, *, data=None, indent=JsonIndent::Two, highlight=true, skip_keys=false,
         ensure_ascii=false, check_circular=true, allow_nan=true, default=None, sort_keys=false
     ))]
     #[allow(clippy::too_many_arguments)]
@@ -1546,7 +1846,7 @@ impl Console {
         slf: &Bound<'_, Self>,
         json: Option<&Bound<'_, PyAny>>,
         data: Option<&Bound<'_, PyAny>>,
-        indent: Option<&Bound<'_, PyAny>>,
+        indent: JsonIndent,
         highlight: bool,
         skip_keys: bool,
         ensure_ascii: bool,
@@ -1556,20 +1856,6 @@ impl Console {
         sort_keys: bool,
     ) -> PyResult<()> {
         let py = slf.py();
-        // Core renders with `json.dumps(indent=2)` and Rich's colours only.
-        if let Some(indent) = indent {
-            if indent.extract::<i64>().ok() != Some(2) {
-                return Err(PyNotImplementedError::new_err(
-                    "rs_rich prints JSON with indent=2 only: core's Json has no indent option",
-                ));
-            }
-        }
-        if !highlight || ensure_ascii {
-            return Err(PyNotImplementedError::new_err(
-                "rs_rich prints JSON with highlight=True and ensure_ascii=False only",
-            ));
-        }
-        let module = py.import("json")?;
         let data = match json {
             None => data.map_or_else(|| py.None().into_bound(py), |d| d.clone()),
             Some(json) => {
@@ -1579,24 +1865,32 @@ impl Console {
                         json.repr()?
                     )));
                 }
-                module.call_method1("loads", (json,))?
+                py.import("json")?.call_method1("loads", (json,))?
             }
         };
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("indent", 2)?;
-        kwargs.set_item("skipkeys", skip_keys)?;
-        kwargs.set_item("ensure_ascii", false)?;
-        kwargs.set_item("check_circular", check_circular)?;
-        kwargs.set_item("allow_nan", allow_nan)?;
-        kwargs.set_item("default", default)?;
-        kwargs.set_item("sort_keys", sort_keys)?;
-        let text: String = module
-            .call_method("dumps", (data,), Some(&kwargs))?
-            .extract()?;
-        let renderable = Json::new(&text).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let indent = match indent {
+            JsonIndent::Two => 2i64.into_pyobject(py)?.into_any(),
+            JsonIndent::Value(value) => value.into_bound(py),
+        };
+        let text = crate::code::json_text(
+            &data,
+            &indent,
+            highlight,
+            skip_keys,
+            ensure_ascii,
+            check_circular,
+            allow_nan,
+            default,
+            sort_keys,
+        )?;
+        // Upstream prints `JSON(...)`, whose `__rich__` is this `Text`.
+        let item = Item::Joined {
+            text,
+            end: "\n".to_string(),
+        };
         Console::print_item(
             slf,
-            Item::Core(Box::new(SoftWrapped(renderable))),
+            item,
             PrintArgs {
                 soft_wrap: Some(true),
                 ..PrintArgs::default()
@@ -1681,6 +1975,7 @@ impl Console {
     #[allow(clippy::too_many_arguments)]
     fn render_str(
         &self,
+        py: Python<'_>,
         text: &str,
         style: Option<&Bound<'_, PyAny>>,
         justify: Option<&str>,
@@ -1689,24 +1984,39 @@ impl Console {
         markup: Option<bool>,
         highlight: Option<bool>,
     ) -> PyResult<Text> {
-        let settings = self.state().settings.clone();
+        let (settings, highlighter) = {
+            let state = self.state();
+            (
+                state.settings.clone(),
+                state.highlighter.as_ref().map(|h| h.clone_ref(py)),
+            )
+        };
         let emoji = emoji.unwrap_or(settings.emoji);
         let markup = markup.unwrap_or(settings.markup);
         let highlight = highlight.unwrap_or(settings.highlight);
+        let render = |highlight: bool| {
+            renderable::render_str_with(
+                text,
+                emoji,
+                markup,
+                highlight,
+                &[],
+                highlighter.as_ref().map(|h| h.bind(py)),
+                settings.emoji_variant,
+            )
+        };
         if highlight {
             // As in Rich, highlighting builds a new Text: style, justify and
             // overflow do not survive it.
-            return Ok(Text {
-                inner: renderable::render_str(text, emoji, markup, true)?,
-            });
+            return Ok(Text::from_core(render(true)?));
         }
-        let mut inner = renderable::render_str(text, emoji, markup, false)?;
+        let mut inner = render(false)?;
         if let Some(style) = style_type(style)? {
             inner.set_base_style(style);
         }
         inner.set_justify(convert::justify(justify)?);
         inner.set_overflow(overflow.map(convert::overflow).transpose()?);
-        Ok(Text { inner })
+        Ok(Text::from_core(inner))
     }
 
     /// A style by theme name or definition (a `Style` passes through).
@@ -1850,18 +2160,10 @@ impl Console {
         code_format: Option<&str>,
         inline_styles: bool,
     ) -> PyResult<String> {
-        if code_format.is_some() {
-            return Err(PyNotImplementedError::new_err(
-                "rs_rich exports HTML with Rich's default code_format only",
-            ));
-        }
         let theme = terminal_theme(theme, rich::terminal_theme::DEFAULT_TERMINAL_THEME);
         let segments = self.recorded(clear)?;
-        Ok(if inline_styles {
-            rich::export::export_html_inline(&segments, &theme)
-        } else {
-            rich::export::export_html_classes(&segments, &theme)
-        })
+        rich::export::export_html_with(&segments, &theme, code_format, inline_styles)
+            .map_err(|error| PyKeyError::new_err(error.to_string()))
     }
 
     #[pyo3(signature = (path, *, theme=None, clear=true, code_format=None, inline_styles=false))]
@@ -1894,11 +2196,6 @@ impl Console {
         font_aspect_ratio: f64,
         unique_id: Option<String>,
     ) -> PyResult<String> {
-        if code_format.is_some() || (font_aspect_ratio - 0.61).abs() > f64::EPSILON {
-            return Err(PyNotImplementedError::new_err(
-                "rs_rich exports SVG with Rich's default code_format and font_aspect_ratio only",
-            ));
-        }
         let theme = terminal_theme(theme, rich::terminal_theme::SVG_EXPORT_THEME);
         let width = self.state().settings.width;
         let segments = self.recorded(clear)?;
@@ -1922,9 +2219,16 @@ impl Console {
                 format!("terminal-{checksum}")
             }
         };
-        Ok(rich::svg::export_svg(
-            &segments, &theme, title, &unique_id, width,
-        ))
+        rich::svg::export_svg_with(
+            &segments,
+            &theme,
+            title,
+            &unique_id,
+            width,
+            code_format.unwrap_or(rich::svg::CONSOLE_SVG_FORMAT),
+            font_aspect_ratio,
+        )
+        .map_err(|error| PyKeyError::new_err(error.to_string()))
     }
 
     #[pyo3(signature = (
@@ -2023,13 +2327,31 @@ impl Console {
             crop = false;
         }
         let ambient = snapshot.ambient(slf, snapshot.base(py)?);
+        let switches = Switches {
+            emoji: settings.emoji,
+            markup: settings.markup,
+            highlight: settings.highlight,
+            extensions: snapshot.extensions.clone(),
+            highlighter: snapshot.highlighter.as_ref().map(|h| h.clone_ref(py)),
+            emoji_variant: snapshot.settings.emoji_variant,
+        };
         let segments = renderable::scope(ambient, || {
+            let items = apply_hooks(py, &snapshot.hooks, vec![item], &switches)?;
             let mut options = core.options();
             options.overflow = overflow;
             options.no_wrap = no_wrap;
-            let mut segments = item.render(py, &core, &options)?;
-            if let Some(style) = &settings.style {
-                segments = CoreSegment::apply_style(&segments, &resolve_style(&core, style)?);
+            let console_style = settings
+                .style
+                .as_ref()
+                .map(|style| resolve_style(&core, style))
+                .transpose()?;
+            let mut segments = Vec::new();
+            for item in &items {
+                let mut rendered = item.render(py, &core, &options)?;
+                if let Some(style) = &console_style {
+                    rendered = CoreSegment::apply_style(&rendered, style);
+                }
+                segments.extend(rendered);
             }
             Ok(if crop {
                 CoreSegment::crop_lines(&segments, core.width())
@@ -2106,6 +2428,7 @@ impl ThemeContext {
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    renderable::add_renderable_class::<PrintItem>(m)?;
     m.add_class::<Console>()?;
     m.add_class::<Capture>()?;
     m.add_class::<ThemeContext>()?;

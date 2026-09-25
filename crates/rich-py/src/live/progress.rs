@@ -682,6 +682,15 @@ pub(crate) struct SpinnerColumn {
 }
 
 fn make_spinner(name: &str, style: Option<&Bound<'_, PyAny>>, speed: f64) -> PyResult<CoreSpinner> {
+    // Rich's `Spinner(name)` raises `KeyError` for an unknown name.
+    if rich::spinner::spinner_frames(name).is_none() {
+        return Err(pyo3::exceptions::PyKeyError::new_err(format!(
+            "no spinner called {}",
+            Python::attach(|py| pyo3::types::PyString::new(py, name)
+                .repr()
+                .map(|r| r.to_string()))?
+        )));
+    }
     let mut spinner = CoreSpinner::new(name).speed(speed);
     if let Some(style) = style_type(style)? {
         spinner = spinner.style(style);

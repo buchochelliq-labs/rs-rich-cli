@@ -33,6 +33,8 @@ mod pretty;
 mod syntax;
 mod traceback;
 
+pub(crate) use syntax::code_highlighter_value;
+
 /// What `Console.print` renders for a container, dataclass or other
 /// object Rich pretty-prints (`rich.pretty.Pretty(obj, highlighter=...)`).
 /// `highlight` is the print's effective highlight setting.
@@ -52,10 +54,8 @@ pub(crate) fn console_print_exception(
     traceback::print_exception(console, args, kwargs)
 }
 
-/// For `Console(highlighter=...)` (not wired yet: `console.rs` has no
-/// `highlighter` argument): highlight printed text with a Python highlighter
-/// object, calling no Python code for the built-in ones.
-#[allow(dead_code)]
+/// For `Console(highlighter=...)`: highlight printed text with a Python
+/// highlighter object, calling no Python code for the built-in ones.
 pub(crate) fn highlight_with(
     highlighter: &Bound<'_, PyAny>,
     text: rich::Text,
@@ -63,20 +63,18 @@ pub(crate) fn highlight_with(
     highlighter::Highlight::from_arg(Some(highlighter))?.apply(highlighter.py(), text)
 }
 
-/// For `Console.log(log_locals=True)` (not wired yet): upstream's
+/// For `Console.log(log_locals=True)`: upstream's
 /// `render_scope(locals, title="[i]locals")`.
-#[allow(dead_code)]
 pub(crate) fn render_scope(
     scope: &Bound<'_, PyDict>,
     title: Option<String>,
-) -> PyResult<Box<dyn Renderable>> {
-    let panel = traceback::render_scope(scope, title, false, pretty::Limits::default(), None)?;
-    Ok(Box::new(layout::Shared(panel)))
+) -> PyResult<std::sync::Arc<dyn Renderable + Send + Sync>> {
+    traceback::render_scope(scope, title, false, pretty::Limits::default(), None)
 }
 
-/// For `Console.print_json` with all of Rich's options (not wired yet):
-/// `JSON.from_data(data, indent=..., highlight=..., ...)`'s text.
-#[allow(dead_code, clippy::too_many_arguments)]
+/// For `Console.print_json`: `JSON.from_data(data, indent=..., highlight=...,
+/// ...)`'s text.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn json_text(
     data: &Bound<'_, PyAny>,
     indent: &Bound<'_, PyAny>,

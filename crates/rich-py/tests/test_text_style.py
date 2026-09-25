@@ -623,6 +623,26 @@ def markup_module(m):
     return "\n".join(out)
 
 
+def text_meta(m):
+    T, S = m.text.Text, m.style.Style
+    out = []
+    t = T("hello world")
+    t.apply_meta({"a": 1, "b": [1, "x"], "c": None, "d": 1.5, "e": True}, 2, 5)
+    t.apply_meta({}, 0, 3)
+    meta = {"x": 1}
+    returned = t.on(meta, click="app.bell")
+    out.append(repr((returned is t, meta)))
+    out.append(repr([(s.start, s.end, s.style.meta) for s in t.spans]))
+    a = T.assemble("a", ("b", "bold"), meta={"k": "v"})
+    out.append(repr([(s.start, s.end, str(s.style), getattr(s.style, "meta", None)) for s in a.spans]))
+    out.append(repr(S(bold=True, meta={"q": 2}).without_color.meta))
+    out.append(repr(str(S(bold=True, meta={"q": 2}, link="x").clear_meta_and_links())))
+    c = console(m)
+    c.print(t, a)
+    out.append(repr(c.file.getvalue()))
+    return "\n".join(out)
+
+
 def emoji_module(m):
     E = m.emoji.Emoji
     out = []
@@ -634,17 +654,19 @@ def emoji_module(m):
     out.append(repr(E.replace("hi :smiley: :x: :nope: :heart-text:")))
     out.append(repr(E.VARIANTS))
     out.append(repr(issubclass(m.emoji.NoEmoji, Exception)))
-    # Rich renders an emoji as one segment with no newline; the foundation's
-    # print and render end every renderable's last line, so compare the
-    # segments before that newline.
+    # Rich renders an emoji as one segment with no newline, so consecutive
+    # prints share a line.
     c = console(m)
     for emoji in [E("rocket", style="on blue"), E("smiley", style="repr.number")]:
-        rendered = segments(c.render(emoji))
-        out.append(repr([s for s in rendered if s != ("\n", None)]))
+        out.append(repr(segments(c.render(emoji))))
+        c.print(emoji)
+    c.print(E("heart"), "after", "end")
+    out.append(repr(c.file.getvalue()))
     return "\n".join(out)
 
 
 PROGRAMS = [
+    text_meta,
     style_construction,
     style_parsing,
     style_arithmetic,
@@ -689,14 +711,12 @@ def test_style_render_link_differs_only_in_its_id():
     assert style.link_id
 
 
-def test_meta_on_text_spans_is_not_implemented():
+def test_meta_values_core_cannot_hold_are_refused_on_spans():
     text = RS.text.Text("click")
-    with pytest.raises(NotImplementedError):
-        text.apply_meta({"a": 1})
-    with pytest.raises(NotImplementedError):
-        text.on(click="x")
-    with pytest.raises(NotImplementedError):
-        RS.text.Text.assemble("x", meta={"a": 1})
+    with pytest.raises(TypeError, match="meta values"):
+        text.apply_meta({"a": {"nested": 1}})
+    # A Style keeps any marshal-able meta; only a span needs core's kinds.
+    assert RS.style.Style(meta={"a": {"nested": 1}}).meta == {"a": {"nested": 1}}
 
 
 def test_theme_read(tmp_path):

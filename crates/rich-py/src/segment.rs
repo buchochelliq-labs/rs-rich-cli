@@ -151,19 +151,30 @@ impl Segment {
         }
     }
 
+    /// Rich's `rich_repr`: `Segment('x')`, `Segment('x', Style(...))`, and
+    /// the style and control codes for a control segment.
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        let style = match self.style_object() {
-            Some(style) => format!("Style.parse({:?})", style.definition),
-            None => "None".into(),
+        let mut parts = vec![pyo3::types::PyString::new(py, &self.text)
+            .repr()?
+            .to_string()];
+        let style = |py: Python<'_>| -> PyResult<String> {
+            match self.style_object() {
+                Some(style) => Ok(Py::new(py, style)?.bind(py).repr()?.to_string()),
+                None => Ok("None".into()),
+            }
         };
-        let control = match &self.control {
-            Some(control) => control.bind(py).repr()?.to_string(),
-            None => "None".into(),
-        };
-        Ok(format!(
-            "Segment(text={}, style={style}, control={control})",
-            pyo3::types::PyString::new(py, &self.text).repr()?
-        ))
+        match &self.control {
+            None => {
+                if self.style.is_some() {
+                    parts.push(style(py)?);
+                }
+            }
+            Some(control) => {
+                parts.push(style(py)?);
+                parts.push(control.bind(py).repr()?.to_string());
+            }
+        }
+        Ok(format!("Segment({})", parts.join(", ")))
     }
 
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {

@@ -220,6 +220,14 @@ pub trait CodeHighlighter: Send + Sync {
     fn language_for_path(&self, _path: &std::path::Path) -> Option<String> {
         None
     }
+
+    /// `theme`'s style for a Pygments token type — `"Text"` or `"Comment"` —
+    /// as upstream's `SyntaxTheme.get_style_for_token`. `Syntax` colours its
+    /// line numbers and indent guides with it; `None` (the default) means the
+    /// theme sets nothing for the token.
+    fn token_style(&self, _theme: &str, _token: &str) -> Option<crate::style::Style> {
+        None
+    }
 }
 
 /// Renders fenced Markdown code blocks of particular languages (for example

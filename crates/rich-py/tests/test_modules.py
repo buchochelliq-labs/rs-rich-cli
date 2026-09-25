@@ -57,8 +57,10 @@ def test_the_stubs_describe_exactly_the_compiled_module():
         "RichCast",
         "ConsoleRenderable",
     }
+    # Stubbed for every build, compiled only into some (the lumis wheel).
+    optional = {"LumisPlugin"}
     runtime = {name for name in dir(_native) if not name.startswith("_")} | {"__version__"}
-    assert stubbed - aliases == runtime
+    assert stubbed - aliases - optional == runtime - optional
 
 
 # Every module an area fills in later exists now, so areas never create
@@ -89,11 +91,13 @@ def test_the_stub_file_has_a_section_per_area():
         assert any(line.startswith(f"# --- area: {area} ") for line in sections), area
 
 
-def test_python_dash_m_is_reserved_for_the_cli():
+def test_python_dash_m_is_the_cli():
     import rs_rich.__main__ as main
+    import rs_rich.cli
 
-    with pytest.raises(NotImplementedError):
-        main.main()
+    # Importing it runs nothing; `python -m rs_rich` runs `rs_rich.cli.main`
+    # (see test_cli.py for the command itself).
+    assert main.main is rs_rich.cli.main
 
 
 def test_box_constants():

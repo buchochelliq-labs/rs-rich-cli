@@ -2,7 +2,7 @@
 
 Rich has no Mermaid support, so each case in ``CASES`` is compared with what
 the Rust crate renders for the same source: ``EXPECTED`` was produced by the
-same Rust oracle as ``test_art.py`` (``target/rich-py/art-oracle``), reading
+same Rust oracle as ``test_art.py`` (``crates/rich-py/oracles/art-oracle``), reading
 these cases as JSON.
 """
 
@@ -529,12 +529,12 @@ EXPECTED: dict = {'clean_label': {'out': 'a\nb &amp; c &lt;d&gt;\ne'},
                                    '\x1b[48;2;43;48;59m                                                            '
                                    '\x1b[0m\n'
                                    '\x1b[48;2;43;48;59m '
-                                   '\x1b[0m\x1b[38;2;192;197;206;48;2;43;48;59msequenceDiagram\x1b[0m\x1b[48;2;43;48;59m                                            '
-                                   '\x1b[0m\n'
+                                   '\x1b[0m\x1b[38;2;192;197;206;48;2;43;48;59msequenceDiagram\x1b[0m\x1b[48;2;43;48;59m                                           '
+                                   '\x1b[0m\x1b[48;2;43;48;59m \x1b[0m\n'
                                    '\x1b[48;2;43;48;59m \x1b[0m\x1b[38;2;192;197;206;48;2;43;48;59m  '
                                    'Alice->>Bob: '
-                                   'Hi\x1b[0m\x1b[48;2;43;48;59m                                          '
-                                   '\x1b[0m\n'
+                                   'Hi\x1b[0m\x1b[48;2;43;48;59m                                         '
+                                   '\x1b[0m\x1b[48;2;43;48;59m \x1b[0m\n'
                                    '\x1b[48;2;43;48;59m                                                            '
                                    '\x1b[0m\n'},
  'render_shapes': {'out': '    ┌───────┐\n'

@@ -35,30 +35,52 @@ The package is `rs-rich` and it imports as `rs_rich`. It never claims the
 
 ## The API
 
-The modules have Rich's names, so imports translate one for one:
+The package covers all of Rich 15.0.0's API, plus the port's own crates. The
+modules have Rich's names, so imports translate one for one, and every page
+below has runnable examples whose output is checked by the tests.
+
+### Rich's modules
 
 | Rich | rs_rich | Reference |
 |---|---|---|
-| `rich.console` | `rs_rich.console` | [Console](console.md) |
-| `rich.text` | `rs_rich.text` | [Text](text.md) |
-| `rich.style` | `rs_rich.style` | [Style](style.md) |
+| `rich.print`, `rich.get_console`, `rich.reconfigure`, `rich.print_json`, `rich.inspect` | the same names on `rs_rich` | [Console](console.md#the-global-console) |
+| `rich.console` (`Console`, `ConsoleOptions`, `Capture`, `Group`, `group`, ...) | `rs_rich.console` | [Console](console.md) |
+| `rich.segment`, `rich.measure`, `__rich__`, `__rich_console__`, `__rich_measure__` | `rs_rich.segment`, `rs_rich.measure`, the same methods | [The render protocol](protocol.md) |
+| `rich.text` (`Text`, `Span`, `Lines`), `rich.emoji` | `rs_rich.text`, `rs_rich.emoji` | [Text](text.md) |
+| `rich.style`, `rich.theme` | `rs_rich.style`, `rs_rich.theme` | [Style](style.md) |
+| `rich.color` | `rs_rich.color` | [Color](color.md) |
+| `rich.box`, `rich.markup`, `rich.errors`, `rich.terminal_theme` | `rs_rich.box`, `rs_rich.markup`, `rs_rich.errors`, `rs_rich.terminal_theme` | [Boxes, markup and errors](box-markup-errors.md) |
 | `rich.table` | `rs_rich.table` | [Table](table.md) |
 | `rich.panel` | `rs_rich.panel` | [Panel](panel.md) |
-| `rich.box`, `rich.markup`, `rich.errors` | `rs_rich.box`, `rs_rich.markup`, `rs_rich.errors` | [Boxes, markup and errors](box-markup-errors.md) |
-| `rich.theme`, `rich.terminal_theme` | `rs_rich.theme`, `rs_rich.terminal_theme` | [Console: themes](console.md#themes) |
-| `rich.segment`, `rich.measure`, `__rich__`, `__rich_console__`, `__rich_measure__` | `rs_rich.segment`, `rs_rich.measure`, the same methods | [The render protocol](protocol.md) |
-| `rich.print`, `rich.get_console`, `rich.print_json` | `rs_rich.print`, `rs_rich.get_console`, `rs_rich.print_json` | [Console](console.md#the-global-console) |
+| `rich.rule`, `rich.padding`, `rich.align`, `rich.constrain`, `rich.styled`, `rich.bar`, `rich.spinner` | the same under `rs_rich` | [Rules, padding, alignment and bars](rule.md) |
+| `rich.columns`, `rich.containers`, `rich.layout` | the same under `rs_rich` | [Layout, columns and groups](layout.md) |
+| `rich.tree` | `rs_rich.tree` | [Tree](tree.md) |
+| `rich.markdown` | `rs_rich.markdown` | [Markdown](markdown.md) |
+| `rich.syntax` | `rs_rich.syntax` | [Syntax](syntax.md) |
+| `rich.pretty`, `rich.json`, `rich.highlighter`, `rich.inspect` | the same under `rs_rich` | [Pretty, JSON, inspect and highlighters](pretty.md) |
+| `rich.traceback` | `rs_rich.traceback` | [Traceback](traceback.md) |
+| `rich.live`, `rich.live_render`, `rich.status`, `rich.screen`, `rich.pager` | the same under `rs_rich` | [Live, status, screen and pager](live.md) |
+| `rich.progress`, `rich.progress_bar` | `rs_rich.progress`, `rs_rich.progress_bar` | [Progress](progress.md) |
+| `rich.prompt` | `rs_rich.prompt` | [Prompts](prompt.md) |
+| `rich.logging` | `rs_rich.logging` | [Logging](logging.md) |
 
 Your own classes render as they do with Rich, through `__rich__`,
-`__rich_console__` and `__rich_measure__`, in tables and panels too.
+`__rich_console__` and `__rich_measure__`, anywhere a renderable goes.
 
-The other Rich modules (`rs_rich.rule`, `rs_rich.progress`,
-`rs_rich.markdown`, ...) exist and are filled in module by module; so are
-`rs_rich.ext`, `rs_rich.art`, `rs_rich.mermaid` and `rs_rich.plugins`, which
-expose the port's own crates. Anything not implemented yet raises
-`NotImplementedError` or `TypeError` rather than rendering something
-different from Rich. [Compatibility](compatibility.md) lists what is covered,
-the known differences, and how the byte comparison with Rich 15.0.0 works.
+### The port's own crates
+
+| Crate | rs_rich | Reference |
+|---|---|---|
+| `rs-rich-ext` (38 modules: diagnostics, data, diffs, workflows, tables, terminals, testing and QA, ...) | `rs_rich.ext`, `rs_rich.ext.<module>` | [Extensions](ext/index.md) |
+| `rs-rich-art` (images, FIGlet, GIFs, image diffs) | `rs_rich.art` | [Art](art.md) |
+| `rs-rich-mermaid` | `rs_rich.mermaid` | [Mermaid](mermaid.md) |
+| `rs-rich-plugin-api` and the extension registry | `rs_rich.plugins` | [Plugins](plugins.md) |
+| `rs-rich-cli` (the `rich` command) | `python -m rs_rich`, the `rich-rs` script, `rs_rich.cli.main` | [The command line](cli.md) |
+
+The little Rich has that the port cannot do (Jupyter output) raises
+`NotImplementedError` rather than rendering something different from Rich.
+[Compatibility](compatibility.md) lists what is covered, the known
+differences, and how the byte comparison with Rich 15.0.0 works.
 
 Every class ships with type stubs (`rs_rich/_native.pyi`), so editors and type
 checkers see the signatures documented here.
@@ -83,7 +105,9 @@ checkers see the signatures documented here.
 
 - **Wheels.** One abi3 wheel per platform covers CPython 3.9 and later: Linux
   (x86-64 and arm64, manylinux), macOS (arm64 and x86-64) and Windows
-  (x86-64). The `python` workflow builds each wheel on every change to core or
+  (x86-64). The `lumis` (tree-sitter) code highlighter is a separate, larger
+  build (`--features lumis`); Mermaid's `mmdc` backend needs `--features mmdc`
+  and Mermaid's own CLI. The `python` workflow builds each wheel on every change to core or
   the bindings, then installs it and renders with it on Python 3.9 and 3.13.
 - **Releases.** A `python-vX.Y.Z` tag on `main` runs `pypi-release.yml`. It
   checks the tag against `pyproject.toml`'s version, builds the wheels and the
@@ -105,5 +129,8 @@ maturin develop
 pytest tests
 ```
 
-The tests need Rich 15.0.0 only for the byte comparison. Install it in its own
-virtualenv, never alongside `rich-cli` (see `AGENTS.md`).
+The tests need Rich 15.0.0 only for the byte comparison (and Pillow, if
+installed, for the art tests that take Pillow images). Install it in its own
+virtualenv, never alongside `rich-cli` (see `AGENTS.md`). `tests/test_cli.py`
+compares `python -m rs_rich` with the `rich` binary: it builds it with cargo,
+or uses `RS_RICH_CLI_BIN`.

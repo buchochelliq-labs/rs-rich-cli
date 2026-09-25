@@ -2,7 +2,7 @@
 //!
 //! Owner: the foundation.
 
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyNotImplementedError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyString;
 use pyo3::{PyTraverseError, PyVisit};
@@ -16,20 +16,44 @@ use crate::boxes::BoxArg;
 use crate::convert;
 use crate::renderable::{self, AsRenderable};
 use crate::style::resolved_style;
+use crate::text::Text;
+
+/// A panel title: console markup, or a `Text`.
+#[derive(Clone)]
+enum Title {
+    Markup(String),
+    Text(rich::Text),
+}
+
+fn title_arg(value: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Title>> {
+    let Some(value) = value.filter(|v| !v.is_none()) else {
+        return Ok(None);
+    };
+    if let Ok(text) = value.extract::<PyRef<'_, Text>>() {
+        return Ok(Some(Title::Text(text.inner.clone())));
+    }
+    match value.extract::<String>() {
+        Ok(markup) => Ok(Some(Title::Markup(markup))),
+        Err(_) => Err(PyTypeError::new_err("a title must be a str or a Text")),
+    }
+}
 
 /// `rich.panel.Panel`: a border around any renderable.
 #[pyclass(name = "Panel", module = "rs_rich.panel")]
 pub(crate) struct Panel {
     renderable: Option<Py<PyAny>>,
     box_set: CoreBox,
-    title: Option<String>,
+    title: Option<Title>,
     title_align: HorizontalAlign,
     subtitle: Option<String>,
     subtitle_align: HorizontalAlign,
     expand: bool,
+    style: Option<CoreStyle>,
     border_style: Option<CoreStyle>,
     width: Option<usize>,
+    height: Option<usize>,
     padding: (usize, usize, usize, usize),
+    highlight: bool,
 }
 
 impl AsRenderable for Panel {
@@ -39,15 +63,26 @@ impl AsRenderable for Panel {
             Some(child) => child.bind(py).clone(),
             None => PyString::new(py, "").into_any(),
         };
-        // Upstream renders a panel's child with `highlight=False`.
-        let mut panel = CorePanel::new(renderable::to_renderable(&child, Some(false))?)
+        // Upstream renders a panel's child with the panel's `highlight`.
+        let mut panel = CorePanel::new(renderable::to_renderable(&child, Some(self.highlight))?)
             .box_set(self.box_set)
             .expand(self.expand)
             .title_align(self.title_align)
             .subtitle_align(self.subtitle_align)
             .padding(self.padding);
-        if let Some(title) = &self.title {
-            panel = panel.title(title.clone());
+        match &self.title {
+            Some(Title::Markup(title)) => panel = panel.title(title.clone()),
+            Some(Title::Text(title)) => panel = panel.title_as_text(title.clone()),
+            None => {}
+        }
+        if let Some(style) = &self.style {
+            panel = panel.style(style.clone());
+        }
+        if let Some(height) = self.height {
+            panel = panel.height(height);
+        }
+        if self.highlight {
+            panel = panel.highlight(true);
         }
         if let Some(subtitle) = &self.subtitle {
             panel = panel.subtitle(subtitle.clone());
@@ -67,37 +102,53 @@ impl Panel {
     #[new]
     #[pyo3(signature = (
         renderable, r#box=BoxArg::Default, *, title=None, title_align="center", subtitle=None,
-        subtitle_align="center", expand=true, border_style=None, width=None, padding=None
+        subtitle_align="center", safe_box=None, expand=true, style=None, border_style=None,
+        width=None, height=None, padding=None, highlight=false
     ))]
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, unused_variables)]
     fn new(
         renderable: Py<PyAny>,
         r#box: BoxArg,
-        title: Option<String>,
+        title: Option<&Bound<'_, PyAny>>,
         title_align: &str,
-        subtitle: Option<String>,
+        subtitle: Option<&Bound<'_, PyAny>>,
         subtitle_align: &str,
+        safe_box: Option<bool>,
         expand: bool,
+        style: Option<&Bound<'_, PyAny>>,
         border_style: Option<&Bound<'_, PyAny>>,
         width: Option<usize>,
+        height: Option<usize>,
         padding: Option<&Bound<'_, PyAny>>,
+        highlight: bool,
     ) -> PyResult<Self> {
+        let subtitle =
+            match title_arg(subtitle)? {
+                None => None,
+                Some(Title::Markup(markup)) => Some(markup),
+                Some(Title::Text(_)) => return Err(PyNotImplementedError::new_err(
+                    "rs_rich's Panel takes a str subtitle only: core's Panel has no Text subtitle",
+                )),
+            };
         Ok(Panel {
             renderable: Some(renderable),
             box_set: r#box
                 .or(rich::r#box::ROUNDED)
                 .ok_or_else(|| PyValueError::new_err("a Panel needs a box"))?,
-            title,
+            title: title_arg(title)?,
             title_align: convert::align(title_align)?,
             subtitle,
             subtitle_align: convert::align(subtitle_align)?,
             expand,
+            style: resolved_style(style)?,
             border_style: resolved_style(border_style)?,
             width,
+            height,
             padding: match padding {
                 Some(value) => convert::padding(value)?,
                 None => (0, 1, 0, 1),
             },
+            highlight,
         })
     }
 
@@ -118,20 +169,25 @@ impl Panel {
     #[classmethod]
     #[pyo3(signature = (
         renderable, r#box=BoxArg::Default, *, title=None, title_align="center", subtitle=None,
-        subtitle_align="center", border_style=None, width=None, padding=None
+        subtitle_align="center", safe_box=None, style=None, border_style=None, width=None,
+        height=None, padding=None, highlight=false
     ))]
     #[allow(clippy::too_many_arguments)]
     fn fit(
         _cls: &Bound<'_, pyo3::types::PyType>,
         renderable: Py<PyAny>,
         r#box: BoxArg,
-        title: Option<String>,
+        title: Option<&Bound<'_, PyAny>>,
         title_align: &str,
-        subtitle: Option<String>,
+        subtitle: Option<&Bound<'_, PyAny>>,
         subtitle_align: &str,
+        safe_box: Option<bool>,
+        style: Option<&Bound<'_, PyAny>>,
         border_style: Option<&Bound<'_, PyAny>>,
         width: Option<usize>,
+        height: Option<usize>,
         padding: Option<&Bound<'_, PyAny>>,
+        highlight: bool,
     ) -> PyResult<Self> {
         Panel::new(
             renderable,
@@ -140,10 +196,14 @@ impl Panel {
             title_align,
             subtitle,
             subtitle_align,
+            safe_box,
             false,
+            style,
             border_style,
             width,
+            height,
             padding,
+            highlight,
         )
     }
 }

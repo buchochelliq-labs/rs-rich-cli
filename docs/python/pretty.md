@@ -197,7 +197,19 @@ print(repr(out.getvalue()))
 'Send to \x1b[1;35mada@example.com\x1b[0m today\n'
 ```
 
-`Console(highlighter=...)` is not available yet: the console highlights
-printed strings with `ReprHighlighter` (or not at all, with
-`highlight=False`). Use a highlighter directly, as above, or pass one to
-`Pretty`.
+`Console(highlighter=...)` makes a highlighter the console's: it then
+highlights every printed string (and the strings in tables, panels and other
+containers), in place of `ReprHighlighter`.
+
+```python
+out = io.StringIO()
+console = Console(file=out, force_terminal=True, color_system="standard",
+                  theme=Theme({"example.email": "bold magenta"}),
+                  highlighter=EmailHighlighter())
+console.print("Mail ada@example.com about 42 things")
+print(repr(out.getvalue()))
+```
+
+```text
+'Mail \x1b[1;35mada@example.com\x1b[0m about 42 things\n'
+```

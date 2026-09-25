@@ -72,7 +72,7 @@ fn console_attr<'py>(
 
 /// A Python `Text` holding a core text.
 pub(crate) fn new_text(py: Python<'_>, inner: CoreText) -> PyResult<Py<PyAny>> {
-    Ok(Py::new(py, Text { inner })?.into_any())
+    Ok(Py::new(py, Text::from_core(inner))?.into_any())
 }
 
 /// The core text of a Python `Text`, if it is one.

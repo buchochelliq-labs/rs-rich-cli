@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use crate::console::Console;
 use crate::control::Control;
-use crate::live_render::LiveRender;
+use crate::live_render::{LiveRender, VerticalOverflow};
 use crate::protocol::Renderable;
 
 /// An in-place updating display over a renderable. Mirrors `rich.live.Live`
@@ -52,6 +52,14 @@ impl<W: Write> Live<W> {
     /// frame is drawn, then erased and the cursor put back where it started.
     pub fn transient(mut self, transient: bool) -> Self {
         self.transient = transient;
+        self
+    }
+
+    /// What to do with a frame taller than the screen (upstream
+    /// `vertical_overflow`, default [`VerticalOverflow::Ellipsis`]). The final
+    /// frame drawn by [`stop`](Self::stop) is always shown in full.
+    pub fn vertical_overflow(mut self, vertical_overflow: VerticalOverflow) -> Self {
+        self.live_render.set_vertical_overflow(vertical_overflow);
         self
     }
 
@@ -91,6 +99,9 @@ impl<W: Write> Live<W> {
         if !self.started {
             return;
         }
+        // "allow it to fully render on the last even if overflow".
+        self.live_render
+            .set_vertical_overflow(VerticalOverflow::Visible);
         if !self.console.is_terminal() {
             // Upstream prints the final result for files, with no newline,
             // only when it is not transient.

@@ -15,7 +15,7 @@
 //! | [`mermaid`] | `Mermaid`, `MermaidFences`, `MermaidPlugin`, `MmdcOptions`, `Flowchart`, ... |
 
 use std::io::Write;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
@@ -26,8 +26,6 @@ use rich::color::ColorSystem;
 use rich::console::{Console as CoreConsole, ConsoleOptions as CoreOptions};
 use rich::protocol::Renderable;
 use rich::segment::Segment as CoreSegment;
-
-use crate::renderable::PyRenderable;
 
 mod diff;
 mod figlet;
@@ -52,41 +50,6 @@ impl<T: Renderable + Send + Sync> Renderable for Shared<T> {
     fn measure(&self, console: &CoreConsole, options: &CoreOptions) -> rich::measure::Measurement {
         self.0.measure(console, options)
     }
-}
-
-/// Raises its exception when rendered: how a core render that failed
-/// reports a Python exception to the print that ran it (through the
-/// foundation's `PyRenderable`, which keeps the first error of a render).
-#[pyclass(module = "rs_rich.art")]
-struct RenderFailure {
-    error: Mutex<Option<PyErr>>,
-}
-
-#[pymethods]
-impl RenderFailure {
-    fn __rich_console__(&self, _console: Py<PyAny>, _options: Py<PyAny>) -> PyResult<()> {
-        let error = self
-            .error
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .take();
-        Err(error.unwrap_or_else(|| ArtError::new_err("render failed")))
-    }
-}
-
-/// Report `error` from inside a core render: the enclosing print raises it.
-pub(crate) fn fail_render(error: PyErr, console: &CoreConsole, options: &CoreOptions) {
-    Python::attach(|py| {
-        let failure = RenderFailure {
-            error: Mutex::new(Some(error)),
-        };
-        match Py::new(py, failure) {
-            Ok(object) => {
-                PyRenderable::new(object.into_any()).rich_render(console, options);
-            }
-            Err(error) => error.write_unraisable(py, None),
-        }
-    });
 }
 
 /// An exception with a machine-readable `kind` attribute.

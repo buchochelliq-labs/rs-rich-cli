@@ -290,10 +290,6 @@ def test_ascii_consoles_draw_ascii_guides_and_rules(encoding):
     assert outputs[1] == outputs[0]
 
 
-@pytest.mark.skipif(
-    not hasattr(_native.Console(), "get_time"),
-    reason="rs_rich.console.Console does not expose get_time yet",
-)
 def test_a_spinner_animates_from_the_consoles_clock():
     def program(m, c):
         clock = iter([0.0, 0.0, 0.25, 0.5, 1.0])

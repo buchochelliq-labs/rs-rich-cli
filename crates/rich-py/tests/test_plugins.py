@@ -461,9 +461,8 @@ def test_pipelines_chain_python_and_rust_transforms():
 
 
 def test_rich_ext_transforms_register_as_python_callables():
-    transform = pytest.importorskip("rs_rich.ext.transform")
-    if not hasattr(transform, "KeepLines"):
-        pytest.skip("rs_rich.ext.transform.KeepLines is not built")
+    from rs_rich.ext import transform
+
     registry = p.ExtensionRegistry()
     registry.register_transform("errors", transform.KeepLines("error"))
     registry.register_transform("upper", upper)
@@ -736,17 +735,15 @@ def test_fence_renderer_objects_get_console_and_options():
 
 
 def _syntax():
-    module = pytest.importorskip("rs_rich.syntax")
-    if not hasattr(module, "Syntax"):
-        pytest.skip("rs_rich.syntax.Syntax is not built")
-    return module.Syntax
+    from rs_rich.syntax import Syntax
+
+    return Syntax
 
 
 def _markdown():
-    module = pytest.importorskip("rs_rich.markdown")
-    if not hasattr(module, "Markdown"):
-        pytest.skip("rs_rich.markdown.Markdown is not built")
-    return module.Markdown
+    from rs_rich.markdown import Markdown
+
+    return Markdown
 
 
 def test_a_python_code_highlighter_renders_in_syntax_as_the_rust_one():
@@ -834,26 +831,8 @@ def test_a_fence_renderer_that_raises_fails_the_print():
 # install(console)
 
 
-def _console_applies_installed() -> bool:
-    registry = p.ExtensionRegistry()
-    registry.register_highlighter(Shouty())
-    c = console(width=20, color=True)
-    registry.install(c)
-    c.print("abc")
-    return output(c) == "\x1b[1mabc\x1b[0m\n"
-
-
-needs_console_hook = pytest.mark.skipif(
-    not _console_applies_installed(),
-    reason="Console does not apply installed extensions yet (see plugins::installed)",
-)
-
-
-@needs_console_hook
 def test_install_makes_a_python_code_highlighter_the_consoles_default():
-    Syntax = pytest.importorskip("rs_rich.syntax").__dict__.get("Syntax")
-    if Syntax is None:
-        pytest.skip("rs_rich.syntax.Syntax is not built")
+    Syntax = _syntax()
 
     registry = p.ExtensionRegistry.with_defaults()
     registry.add_plugin(Demo())
@@ -861,10 +840,11 @@ def test_install_makes_a_python_code_highlighter_the_consoles_default():
     c = console(width=20, color=True)
     registry.install(c)
     c.print(Syntax("x = 1\ny = 2", "python"))
-    assert output(c) == RUST_BOLD_SYNTAX
+    # The bold highlighter's theme has no background, so, as in Rich, the
+    # lines are not padded (Rust's core `Syntax` pads them).
+    assert output(c) == "\n".join(line.rstrip(" ") for line in RUST_BOLD_SYNTAX.split("\n"))
 
 
-@needs_console_hook
 def test_install_adds_highlighters_as_rust_does():
     # rich-ext's NumberHighlighter (from `with_defaults`), as the Rust
     # reference console prints "abc 12" (`NUMBERS`).
@@ -895,7 +875,6 @@ def test_install_adds_highlighters_as_rust_does():
     assert output(plain) == "x\n"
 
 
-@needs_console_hook
 def test_a_python_highlighter_that_raises_fails_the_print():
     class Broken:
         def highlight(self, text):

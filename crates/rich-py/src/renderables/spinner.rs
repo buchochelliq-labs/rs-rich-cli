@@ -1,9 +1,9 @@
 //! `rich.spinner.Spinner` and the `SPINNERS` table. Port of upstream
 //! `rich/spinner.py`.
 //!
-//! Core's `Spinner` takes only markup text and keeps its table private, so
-//! the animation is ported here over the vendored table
-//! (`spinner_data.rs`). A spinner renders the frame for its console's
+//! Core's `Spinner` takes only markup text, so the animation is ported here
+//! over core's spinner table (`rich::spinner::spinner_frames`, in upstream's
+//! `SPINNERS` order from `spinner_names`). A spinner renders the frame for its console's
 //! `get_time()`, read from the Python console so `Console(get_time=...)`
 //! drives it as in Rich.
 
@@ -26,7 +26,7 @@ use crate::renderable::{self, AsRenderable, PyRenderable};
 use crate::style::style_type;
 use crate::text::Text;
 
-use super::spinner_data::{spinner_data, NAMES};
+use rich::spinner::{spinner_frames as spinner_data, spinner_names};
 
 /// What `Spinner.render(time)` returns: the frame, or the frame beside the
 /// spinner's renderable text.
@@ -83,7 +83,7 @@ fn text_arg(text: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         Ok(markup) => {
             let inner = CoreText::from_markup(markup.to_cow()?.as_ref())
                 .map_err(|e| MarkupError::new_err(e.to_string()))?;
-            Ok(Py::new(text.py(), Text { inner })?.into_any())
+            Ok(Py::new(text.py(), Text::from_core(inner))?.into_any())
         }
         Err(_) => Ok(text.clone().unbind()),
     }
@@ -244,7 +244,7 @@ impl Spinner {
     /// renderable grid when the text is another renderable.
     fn render(&self, py: Python<'_>, time: f64) -> PyResult<Py<PyAny>> {
         Ok(match frame(py, &self.state, time)? {
-            Frame::Text(inner) => Py::new(py, Text { inner })?.into_any(),
+            Frame::Text(inner) => Py::new(py, Text::from_core(inner))?.into_any(),
             Frame::Grid(frame, text) => Py::new(py, SpinnerGrid { frame, text })?.into_any(),
         })
     }
@@ -402,7 +402,7 @@ impl AsRenderable for SpinnerGrid {
 /// `rich._spinners.SPINNERS`: `{name: {"interval": ms, "frames": [...]}}`.
 fn spinners(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let table = PyDict::new(py);
-    for name in NAMES {
+    for name in spinner_names() {
         let (interval, frames) = spinner_data(name).expect("every name has data");
         let entry = PyDict::new(py);
         if interval.fract() == 0.0 {

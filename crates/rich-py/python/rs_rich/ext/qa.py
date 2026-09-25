@@ -1,9 +1,13 @@
-"""``rs_rich.ext.qa``: screenshots, stress, lint, explain, profile, fuzz, matrix and benchmarks (``rich_ext::qa``; needs the ``testing`` feature).
+"""``rs_rich.ext.qa``: screenshots, stress, lint, explain, profile, fuzz, matrix and benchmarks (``rich_ext::qa``).
+
+Each tool returns a ``QaReport`` (``data``, ``ok``; printing it shows the Rust report),
+except ``screenshot``, which returns the shots.
 
 No Rich counterpart: this is the port's own ``rs-rich-ext`` crate.
 """
 
 from .._native import (
+    QaReport,
     qa_screenshot,
     qa_stress,
     qa_lint,
@@ -25,6 +29,7 @@ matrix = qa_matrix
 bench = qa_bench
 
 __all__ = [
+    "QaReport",
     "qa_screenshot",
     "qa_stress",
     "qa_lint",

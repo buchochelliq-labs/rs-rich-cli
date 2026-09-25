@@ -6,9 +6,12 @@
 use std::sync::Arc;
 
 use rich::measure::Measurement;
+use rich::progress::{BarColumn, CustomProgressColumn, Progress, ProgressColumn, Task, TextColumn};
+use rich::table::ColumnOptions;
 use rich::{
-    Cell, ColorSystem, Columns, Console, ConsoleOptions, HorizontalAlign, Justify, Panel,
-    Renderable, Rule, Segment, Style, Table, Text, Theme, Tree, VerticalAlign,
+    Cell, ColorSystem, Columns, Console, ConsoleOptions, HorizontalAlign, Justify, Layout,
+    LiveRender, Panel, Renderable, Rule, Segment, Style, Syntax, Table, Text, Theme, Tree,
+    VerticalAlign, VerticalOverflow,
 };
 
 /// Upstream's `Console(force_terminal=True, color_system="truecolor",
@@ -99,6 +102,160 @@ fn uf_tree_collapsed() -> Tree {
     closed.add("hidden");
     tree.add("open").add("shown");
     tree
+}
+
+fn uf_layout() -> Layout {
+    let mut layout = Layout::new().name("root");
+    layout.split_column(vec![
+        Layout::with_renderable(Box::new(Text::styled("head", style("on blue"))))
+            .name("header")
+            .size(1),
+        Layout::new().name("body"),
+    ]);
+    layout["body"].split_row(vec![
+        Layout::with_renderable(Box::new(Text::new("L"))).name("left"),
+        Layout::new().name("hidden").visible(false),
+        Layout::with_renderable(Box::new(Panel::new(Box::new(Text::new("side")))))
+            .ratio(2)
+            .minimum_size(3),
+    ]);
+    layout["body"].add_split(vec![Layout::new().name("extra").size(6)]);
+    layout
+}
+
+fn uf_indented() -> Text {
+    let mut text = Text::from_markup(
+        "def f():\n    [red]if x:[/]\n        return 1\n\n      odd\n    [b]done[/]\n",
+    )
+    .unwrap();
+    text.set_base_style(style("green"));
+    text
+}
+
+fn live_render(overflow: VerticalOverflow, live_style: &str, content: &str) -> String {
+    let mut live = LiveRender::new(Box::new(Text::new(content))).vertical_overflow(overflow);
+    if !live_style.is_empty() {
+        live = live.style(style(live_style));
+    }
+    let out = print(&builder(12).height(4).build(), &live);
+    // Upstream's `LiveRender` yields no newline after its last line, so a
+    // print of it ends there; the port's printer always ends the line.
+    let out = out.strip_suffix('\n').unwrap_or(&out);
+    format!("{out}|{}|", live.position_cursor().as_str())
+}
+
+struct Stars;
+
+impl CustomProgressColumn for Stars {
+    fn render(&self, task: &Task) -> Cell {
+        let count = (task.percentage() / 20.0).floor() as usize;
+        Text::styled("*".repeat(count), style("yellow")).into()
+    }
+}
+
+struct Counter(std::sync::atomic::AtomicUsize);
+
+impl CustomProgressColumn for Counter {
+    fn render(&self, task: &Task) -> Cell {
+        let calls = self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        if task.description() == "p" {
+            Cell::Renderable(Arc::new(Built(|| {
+                // `Panel.fit(str(calls))`: squeezed into the 4-cell column
+                // it shows only its borders, so the count never appears.
+                Box::new(Panel::fit(Box::new(Text::new("3"))))
+            })))
+        } else {
+            Text::new(calls.to_string()).into()
+        }
+    }
+
+    fn table_column(&self) -> ColumnOptions {
+        ColumnOptions {
+            width: Some(4),
+            justify: Justify::Right,
+            ..ColumnOptions::default()
+        }
+    }
+
+    fn max_refresh(&self) -> Option<f64> {
+        Some(10.0)
+    }
+}
+
+fn progress_custom_column() -> String {
+    let now = Arc::new(std::sync::Mutex::new(100.0));
+    let clock = now.clone();
+    let mut progress = Progress::new()
+        .clock(move || *clock.lock().unwrap())
+        .columns(vec![
+            ProgressColumn::custom(Stars),
+            ProgressColumn::TextFormat(TextColumn::new("{task.description}")),
+            ProgressColumn::custom(Counter(std::sync::atomic::AtomicUsize::new(0))),
+            ProgressColumn::BarWith(BarColumn::new().bar_width(Some(6))),
+        ]);
+    progress.add_task("a", 100.0, 40.0);
+    progress.add_task("b", 100.0, 0.0);
+    progress.add_task("p", 100.0, 100.0);
+    let console = console(40);
+    let mut out = print(&console, &progress.make_tasks_table());
+    *now.lock().unwrap() += 1.0;
+    out.push_str(&print(&console, &progress.make_tasks_table()));
+    *now.lock().unwrap() += 20.0;
+    out + &print(&console, &progress.make_tasks_table())
+}
+
+const UF_CODE: &str =
+    "def f(x):\n    if x:\n        return 'a very long line of code'\n\n    return x\n";
+
+fn uf_syntax() -> Syntax {
+    Syntax::new(UF_CODE, "text").theme("ansi_dark")
+}
+
+/// `_UF_SYNTAX_OPTIONS`, in order.
+fn syntax_options() -> Vec<fn(Syntax) -> Syntax> {
+    vec![
+        |s| s,
+        |s| s.line_numbers(true),
+        |s| s.line_numbers(true).start_line(9).highlight_lines([10, 12]),
+        |s| s.line_numbers(true).line_range(Some(2), Some(3)),
+        |s| s.line_range(Some(4), None),
+        |s| s.line_range(None, Some(2)).word_wrap(true),
+        |s| s.code_width(12),
+        |s| s.word_wrap(true),
+        |s| s.word_wrap(true).line_numbers(true).code_width(14),
+        |s| s.indent_guides(true),
+        |s| s.indent_guides(true).line_numbers(true),
+        |s| s.padding_sides((1, 2, 1, 2)),
+        |s| s.padding_sides((0, 1, 2, 3)).line_numbers(true),
+        |s| s.background_color("red"),
+        |s| {
+            s.background_color("red")
+                .line_numbers(true)
+                .highlight_lines([2])
+        },
+        |s| s.background_color("red").word_wrap(true).code_width(20),
+        |s| s.tab_size(2).indent_guides(true),
+    ]
+}
+
+/// Drop SGR sequences, as `_uf_strip_ansi` does.
+fn strip_ansi(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\x1b' && chars.peek() == Some(&'[') {
+            chars.next();
+            while let Some(&next) = chars.peek() {
+                chars.next();
+                if next == 'm' {
+                    break;
+                }
+            }
+            continue;
+        }
+        out.push(ch);
+    }
+    out
 }
 
 fn small_table() -> Table {
@@ -232,6 +389,163 @@ fn build(name: &str) -> String {
             )
         })
         .collect(),
+        "panel_style" => {
+            let console = console(16);
+            let text = |s: &str| Box::new(Text::new(s)) as Box<dyn Renderable>;
+            [
+                Panel::new(text("hi")).style("on blue"),
+                Panel::new(text("hi\nthere"))
+                    .style("red on blue")
+                    .border_style("bold")
+                    .title("[i]T[/]")
+                    .subtitle("s"),
+                Panel::new(Box::new(Text::styled("x", style("green"))))
+                    .style("on blue")
+                    .padding((1, 2, 1, 2)),
+                Panel::new(text("h")).height(5).style("on red"),
+                Panel::new(text("h")).height(2),
+                Panel::new(text("a\nb\nc\nd")).height(4),
+                Panel::new(text("h")).style("repr.number"),
+                Panel::fit(text("h")).style("on blue").border_style("red"),
+            ]
+            .iter()
+            .map(|panel| print(&console, panel))
+            .collect()
+        }
+        "layout_placeholder" => [
+            print(
+                &builder(30).height(7).build(),
+                &Layout::new().name("root").size(3).ratio(2).minimum_size(4),
+            ),
+            print(&builder(20).height(5).build(), &Layout::new()),
+            print(&builder(40).height(4).build(), &Layout::new().name("it's")),
+        ]
+        .concat(),
+        "layout_split" => print(&builder(40).height(8).build(), &uf_layout()),
+        "layout_tree" => print(&console(50), &uf_layout().tree()),
+        "layout_map" => {
+            let layout = uf_layout();
+            print(&builder(40).height(8).build(), &layout);
+            layout
+                .map()
+                .iter()
+                .map(|leaf| {
+                    let name = leaf.name.as_deref().unwrap_or("None");
+                    let r = leaf.region;
+                    format!(
+                        "{name}|{},{},{},{}|{}",
+                        r.x,
+                        r.y,
+                        r.width,
+                        r.height,
+                        leaf.render.len()
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(";")
+        }
+        "layout_update_unsplit" => {
+            let mut layout = uf_layout();
+            layout["left"].update(Box::new(Text::new("updated")));
+            let console = builder(40).height(6).build();
+            let out = print(&console, &layout);
+            layout["body"].unsplit();
+            out + &print(&console, &layout)
+        }
+        "text_indent_guides" => {
+            let console = console(30);
+            let indented = uf_indented();
+            let texts = [
+                indented.with_indent_guides(None, "│", "dim green"),
+                indented.with_indent_guides(Some(2), "|", "red"),
+                indented.with_indent_guides(Some(3), "│", "dim green"),
+                Text::styled("a\n\tb\n\n", style("on blue")).with_indent_guides(
+                    Some(4),
+                    "│",
+                    "dim green",
+                ),
+                Text::styled("x\n  ", style("italic")).with_indent_guides(None, "│", "dim green"),
+            ];
+            let out: String = texts.iter().map(|text| print(&console, text)).collect();
+            format!(
+                "{out}|{},{}",
+                indented.detect_indentation(),
+                Text::new("a\n   b\n     c").detect_indentation()
+            )
+        }
+        "text_from_ansi" => {
+            let console = console(20);
+            [
+                Text::from_ansi(
+                    "\x1b[1mbold\x1b[0m plain\nnext \x1b[31mred",
+                    style("on blue"),
+                ),
+                Text::from_ansi("a\tb", style("italic")),
+                Text::from_ansi("x\r\ny\n", Style::new()),
+            ]
+            .iter()
+            .map(|text| print(&console, text))
+            .collect()
+        }
+        "text_stylize_before" => {
+            let mut text = Text::new("hello world");
+            text.stylize(style("red"), 0, 3);
+            text.stylize_before(style("bold on blue"), 1, 7);
+            text.stylize_before(style("italic"), 5, 20);
+            print(&console(20), &text)
+        }
+        "live_render_vertical_overflow" => {
+            let mut out = String::new();
+            for overflow in [
+                VerticalOverflow::Crop,
+                VerticalOverflow::Ellipsis,
+                VerticalOverflow::Visible,
+            ] {
+                for live_style in ["", "on blue"] {
+                    out.push_str(&live_render(overflow, live_style, "1\n2\n3\n4\n5\n6"));
+                }
+            }
+            out + &live_render(VerticalOverflow::Ellipsis, "", "1\n2\n3\n4")
+        }
+        "progress_custom_column" => progress_custom_column(),
+        "syntax_ansi_options" => {
+            let console = console(30);
+            syntax_options()
+                .into_iter()
+                .map(|configure| print(&console, &configure(uf_syntax())))
+                .collect()
+        }
+        "syntax_ansi_ranges" => {
+            let mut syntax = uf_syntax().line_numbers(true);
+            syntax
+                .stylize_range(style("reverse"), (1, 4), (2, 6), false)
+                .stylize_range(style("on blue"), (3, 0), (3, 99), true)
+                .stylize_range(style("bold"), (4, 0), (9, 0), false)
+                .stylize_range(style("underline"), (5, 2), (5, 5), false);
+            print(&console(30), &syntax)
+        }
+        "syntax_measure" => {
+            let console = console(40);
+            let configs: [fn(Syntax) -> Syntax; 5] = [
+                |s| s,
+                |s| s.line_numbers(true),
+                |s| s.code_width(8),
+                |s| s.padding_sides((0, 2, 0, 2)),
+                |s| s.line_numbers(true).code_width(6).padding(1),
+            ];
+            configs
+                .iter()
+                .map(|configure| print(&console, &Panel::fit(Box::new(configure(uf_syntax())))))
+                .collect()
+        }
+        "syntax_plain_background_theme" => {
+            let console = console(30);
+            let out: String = syntax_options()
+                .into_iter()
+                .map(|configure| print(&console, &configure(Syntax::new(UF_CODE, "python"))))
+                .collect();
+            strip_ansi(&out)
+        }
         "print_justify_renderables" => {
             let console = console(20);
             let mut out = String::new();
@@ -263,6 +577,7 @@ fn build(name: &str) -> String {
 fn upstream_features_parity() {
     let data = include_str!("golden/upstream_features.tsv");
     let mut failures = Vec::new();
+    let mut checked = 0;
     for raw in data.lines() {
         if raw.trim().is_empty() || raw.starts_with('#') {
             continue;
@@ -271,10 +586,26 @@ fn upstream_features_parity() {
         let expected: String = serde_json::from_str(expected).expect("json string");
         let got = build(name);
         if got != expected {
+            // Show the neighbourhood of the first difference.
+            let at = expected
+                .char_indices()
+                .zip(got.chars())
+                .find(|((_, a), b)| a != b)
+                .map_or(expected.len().min(got.len()), |((at, _), _)| at);
+            let from = expected.floor_char_boundary(at.saturating_sub(120));
+            let near = |text: &str| {
+                let start = text.floor_char_boundary(from.min(text.len()));
+                let end = text.floor_char_boundary((at + 120).min(text.len()));
+                text[start..end].to_string()
+            };
             failures.push(format!(
-                "{name}:\n  expected {expected:?}\n  got      {got:?}"
+                "{name} (first difference at byte {at}):\n  expected …{:?}…\n  got      …{:?}…",
+                near(&expected),
+                near(&got)
             ));
         }
+        checked += 1;
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+    assert_eq!(checked, 31, "expected every upstream feature case to run");
 }

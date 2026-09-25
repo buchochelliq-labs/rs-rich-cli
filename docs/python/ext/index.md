@@ -39,6 +39,7 @@ Each Rust module `rich_ext::<name>` is `rs_rich.ext.<name>`, and
 | [Inspectors](inspectors.md) | `source_view`, `hex`, `unicode_inspect`, `env_inspect` |
 | [Layout and live output](layout.md) | `layout`, `live` |
 | [CLI authoring](cli-authoring.md) | `cli_doc` |
+| [Testing and QA](testing.md) | `testing`, `qa` |
 
 The extension registry (`ExtensionRegistry`, `install_defaults`) is the plugin
 host, documented with the plugin API; `rs_rich.ext.registry` re-exports it.
@@ -73,4 +74,3 @@ host, documented with the plugin API; `rs_rich.ext.registry` re-exports it.
 | `data::from_serialize` and the serde helpers | `DataNode.from_python` takes Python values directly |
 | `TraceParser`, `SelectorBackend`, `Degradable`, `LinkProvider`, `FsProbe` as traits | Generic plumbing: parsers, probes and link providers are accepted as Python objects where it matters (`StackTrace.parse(parsers=...)`, `PathView(probe=...)`) |
 | `transfer_columns()` | Progress columns for Rust's `Progress`; use `Transfer.task_fields()` with `rs_rich.progress` |
-| `testing`, `qa`, `diff::assert` | Behind `rs-rich-ext`'s `testing` feature, which the wheel does not build: the functions in `rs_rich.ext.testing` and `rs_rich.ext.qa` raise `NotImplementedError` |

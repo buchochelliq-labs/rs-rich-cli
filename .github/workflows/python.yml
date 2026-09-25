@@ -10,6 +10,12 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "crates/rich/**"
+      - "crates/rich-ext/**"
+      - "crates/rich-art/**"
+      - "crates/rich-mermaid/**"
+      - "crates/rich-plugin-api/**"
+      - "crates/rich-cli/**"
+      - "crates/rich-lumis/**"
       - "crates/rich-py/**"
       - "docs/python/**"
       - ".github/workflows/python.yml"
@@ -20,6 +26,12 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "crates/rich/**"
+      - "crates/rich-ext/**"
+      - "crates/rich-art/**"
+      - "crates/rich-mermaid/**"
+      - "crates/rich-plugin-api/**"
+      - "crates/rich-cli/**"
+      - "crates/rich-lumis/**"
       - "crates/rich-py/**"
       - "docs/python/**"
       - ".github/workflows/python.yml"
@@ -45,6 +57,7 @@ jobs:
           workspaces: crates/rich-py
       - run: cargo fmt --manifest-path crates/rich-py/Cargo.toml --check
       - run: cargo clippy --manifest-path crates/rich-py/Cargo.toml --all-targets -- -D warnings
+      - run: cargo clippy --manifest-path crates/rich-py/Cargo.toml --all-targets --features mmdc -- -D warnings
 
   compat:
     name: compatibility with rich 15.0.0 (Python ${{ matrix.python }})
@@ -61,9 +74,16 @@ jobs:
           python-version: ${{ matrix.python }}
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: crates/rich-py
+          workspaces: |
+            crates/rich-py
+            .
+      # test_cli.py compares `python -m rs_rich` with the `rich` binary.
+      - name: Build the rich binary
+        run: |
+          cargo build -p rs-rich-cli --bin rich
+          echo "RS_RICH_CLI_BIN=$PWD/target/debug/rich" >> "$GITHUB_ENV"
       - name: Install the bindings and the reference
-        run: python -m pip install ./crates/rich-py "rich==15.0.0" pytest
+        run: python -m pip install ./crates/rich-py "rich==15.0.0" pytest pillow
       - name: Compatibility and API tests
         run: python -m pytest -q crates/rich-py/tests
 

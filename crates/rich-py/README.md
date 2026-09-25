@@ -25,31 +25,26 @@ console.print(table)
 
 All rendering happens in Rust. The Python package only maps Rich's classes
 and arguments onto the Rust ones, so output matches Rich 15.0.0 byte for
-byte on the supported surface.
+byte (the documentation's Python section lists the few known differences).
+What the port cannot do (Jupyter output, a handful of `Table` options) raises
+`NotImplementedError` rather than rendering something different.
 
-**Not everything is bound yet.** Anything not listed below raises
-`NotImplementedError` or `TypeError` rather than rendering something
-different.
+## What is in it
 
-## Supported
-
-| Module | Supported |
+| | Modules |
 |---|---|
-| `rs_rich` | `print`, `get_console`, `print_json`, `reconfigure` |
-| `rs_rich.console` | `Console` with Rich's constructor; `print` (every argument), `log`, `out`, `rule`, `line`, `input`, `print_json`, `capture`, `measure`, `render`, `render_lines`, `render_str`, `get_style`, themes, `export_text`/`export_html`/`export_svg` and `save_*`; `ConsoleOptions` |
-| Your own classes | `__rich__`, `__rich_console__`, `__rich_measure__`, anywhere a renderable goes |
-| `rs_rich.segment`, `rs_rich.measure` | `Segment`, `Measurement` |
-| `rs_rich.text` | `Text(text, style, justify=, overflow=, no_wrap=)`, `Text.from_markup`, `append`, `stylize`, `plain`, `len()` |
-| `rs_rich.style` | `Style(color=, bgcolor=, bold=, dim=, italic=, underline=, blink=, reverse=, conceal=, strike=, link=)`, `Style.parse`, `+`, `==` |
-| `rs_rich.theme`, `rs_rich.terminal_theme` | `Theme`, `TerminalTheme` and Rich's palettes |
-| `rs_rich.table` | `Table(*headers, title=, caption=, box=, show_header=, show_lines=, show_edge=, expand=, border_style=)`; `add_column(...)`, `add_row(*renderables)`, `row_count` |
-| `rs_rich.panel` | `Panel(renderable, box, title=, title_align=, subtitle=, subtitle_align=, expand=, border_style=, width=, padding=)`, `Panel.fit` |
-| `rs_rich.box` | Rich's box constants |
-| `rs_rich.markup` | `escape` |
-| `rs_rich.errors` | Rich's exceptions |
+| All of Rich's API | `rs_rich` (`print`, `print_json`, `inspect`, ...), `console`, `text`, `style`, `color`, `theme`, `markup`, `emoji`, `segment`, `measure`, `box`, `errors`, `terminal_theme`, `table`, `panel`, `rule`, `padding`, `align`, `constrain`, `styled`, `bar`, `spinner`, `columns`, `containers`, `layout`, `tree`, `markdown`, `syntax`, `pretty`, `json`, `highlighter`, `traceback`, `live`, `live_render`, `status`, `screen`, `pager`, `progress`, `progress_bar`, `prompt`, `logging` |
+| rs-rich's extensions | `rs_rich.ext` and its 38 submodules: diagnostics, structured data, diffs and test reports, transforms, workflows, tables and badges, terminal capabilities, inspectors, live layouts, CLI docs, testing and QA |
+| Images and diagrams | `rs_rich.art` (images, Sixel, FIGlet, GIFs, image diffs; Pillow images when Pillow is installed), `rs_rich.mermaid` |
+| Plugins | `rs_rich.plugins`: write highlighters, code highlighters, themes, boxes, renderers, fence renderers and transforms in Python, checked by the Rust plugin host |
+| The command line | `python -m rs_rich` and the `rich-rs` script: rs-rich's `rich` command |
 
-The other Rich modules exist and are being filled in. See the documentation's
-Python section for the known differences.
+Your own classes render through `__rich__`, `__rich_console__` and
+`__rich_measure__`, anywhere a renderable goes.
+
+The `lumis` (tree-sitter) code highlighter is a separate build
+(`maturin build --features lumis`), and Mermaid's `mmdc` backend needs
+`--features mmdc` and Mermaid's own CLI.
 
 ## Versions
 

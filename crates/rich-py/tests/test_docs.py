@@ -1,4 +1,4 @@
-"""Every example in docs/python/ runs, and prints what the page says.
+"""Every example in docs/python/ (and its subfolders) runs, and prints what the page says.
 
 A ```python block is run; the ```text block that directly follows it (with only
 blank lines between) is its expected standard output. Blocks on a page share
@@ -52,21 +52,26 @@ def run(code: str, namespace: dict) -> str:
     return out.getvalue()
 
 
-PAGES = sorted(DOCS.glob("*.md"))
+PAGES = sorted(DOCS.rglob("*.md"))
+
+
+def name(page: Path) -> str:
+    return page.relative_to(DOCS).as_posix()
 
 
 def test_the_pages_exist():
-    names = {page.name for page in PAGES}
+    names = {name(page) for page in PAGES}
     assert {"index.md", "console.md", "text.md", "style.md", "table.md", "panel.md", "protocol.md"} <= names
+    assert {"ext/index.md", "ext/diagnostics.md", "ext/data.md", "ext/diffs.md", "ext/layout.md"} <= names
 
 
-@pytest.mark.parametrize("page", PAGES, ids=lambda p: p.name)
+@pytest.mark.parametrize("page", PAGES, ids=name)
 def test_examples_print_what_the_page_shows(page):
     namespace: dict = {}
     for number, (code, expected, _) in enumerate(examples(page.read_text(encoding="utf-8")), 1):
         actual = run(code, namespace)
         if expected is not None:
-            assert actual == expected, f"{page.name}, example {number}"
+            assert actual == expected, f"{name(page)}, example {number}"
 
 
 def update() -> None:
@@ -82,12 +87,12 @@ def update() -> None:
             markdown = markdown[:start] + actual + markdown[end:]
         if edits:
             page.write_text(markdown, encoding="utf-8")
-            print(f"updated {len(edits)} output(s) in {page.name}")
+            print(f"updated {len(edits)} output(s) in {name(page)}")
 
 
 if __name__ == "__main__":
     if sys.argv[1:] != ["--update"]:
         sys.exit(__doc__)
-    for name in ("COLUMNS", "NO_COLOR", "FORCE_COLOR", "COLORTERM"):
-        os.environ.pop(name, None)
+    for variable in ("COLUMNS", "NO_COLOR", "FORCE_COLOR", "COLORTERM"):
+        os.environ.pop(variable, None)
     update()

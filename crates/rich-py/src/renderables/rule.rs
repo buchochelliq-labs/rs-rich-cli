@@ -144,8 +144,16 @@ impl Renderable for RuleRender {
         let text = self.build(console, options.max_width);
         let mut segments = text.rich_render(console, options);
         // The rule `Text`'s `end`, in core's convention (the last newline is
-        // implied).
-        segments.push(CoreSegment::new(self.end.clone(), None));
+        // implied). Upstream's rule without a title ends with a newline.
+        let titled = match &self.title {
+            Some(Title::Markup(markup)) => !markup.is_empty(),
+            Some(Title::Text(text)) => !text.plain().is_empty(),
+            None => false,
+        };
+        let end = if titled { &self.end } else { "\n" };
+        if !end.is_empty() {
+            segments.push(CoreSegment::new(end, None));
+        }
         renderable::unterminated(segments)
     }
 
@@ -296,4 +304,15 @@ impl Rule {
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     renderable::add_renderable_class::<Rule>(m)
+}
+
+/// Whether `value` is a titled `Rule` whose `end` does not end its line
+/// (Rich then prints nothing after it: `Rule("x", end="")` shares its line
+/// with what follows). Rich's rule without a title ignores `end`.
+pub(crate) fn ends_inline(value: &Bound<'_, PyAny>) -> bool {
+    let Ok(rule) = value.cast::<Rule>() else {
+        return false;
+    };
+    let rule = rule.borrow();
+    !rule.end.ends_with('\n') && rule.title.bind(value.py()).is_truthy().unwrap_or(false)
 }

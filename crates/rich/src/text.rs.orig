@@ -1138,9 +1138,6 @@ impl Text {
         let mut segments = Vec::new();
         let last = lines.len().saturating_sub(1);
         for (index, line) in lines.into_iter().enumerate() {
-            if index == last && index > 0 && line.is_empty() {
-                segments.push(Segment::new("", None));
-            }
             segments.extend(line);
             if index != last {
                 segments.push(Segment::line());

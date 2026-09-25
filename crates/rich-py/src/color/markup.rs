@@ -42,7 +42,7 @@ fn render_markup(
 ) -> PyResult<crate::text::Text> {
     let mut inner = render(markup, emoji, emoji_variant)?;
     inner.set_base_style(crate::text::base_style(style)?);
-    Ok(crate::text::Text { inner })
+    Ok(crate::text::Text::from_core(inner))
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

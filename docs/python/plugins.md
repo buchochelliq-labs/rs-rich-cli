@@ -116,8 +116,10 @@ duplicate_plugin - a plugin with id "shout" is already registered
 ## Using what is registered
 
 `text_pipeline(names)` chains transforms in order; a failing stage raises
-`PluginError` with `kind == "pipeline"` and the stage in `stage`. A renderer's
-result is a renderable:
+`PluginError` with `kind == "pipeline"` and the stage in `stage`. (To chain
+stages in code, without registering them, use `rs_rich.ext.transform.Pipeline`;
+[Transforms](ext/transforms.md#pipeline-or-textpipeline) compares the two.)
+A renderer's result is a renderable:
 
 ```python
 print(registry.text_pipeline(["upper"]).apply(Text("quiet please")))
