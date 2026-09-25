@@ -146,14 +146,14 @@ fn checkerboard(image: &RgbaImage, square: (u32, u32)) -> RgbImage {
 }
 
 /// The most cells any character backend ([`AsciiArt`], [`BlockArt`],
-/// [`QuadrantArt`], [`BrailleArt`]) renders: 2^20, about 1024×1024. At up to
+/// [`QuadrantArt`], [`BrailleArt`]) renders: 2^18 (262 144), e.g. 512×512. At up to
 /// eight sampled pixels per cell the resampled raster stays well inside
 /// [`sixel::MAX_PIXELS`](crate::sixel::MAX_PIXELS)'s 16 megapixels.
 ///
 /// A derived size is bounded before any resampling: a tiny, very tall image
 /// would otherwise ask for millions of rows. Its columns are narrowed to keep
 /// the aspect ratio (to one column at least) rather than failing.
-pub const MAX_CELLS: usize = 1 << 20;
+pub const MAX_CELLS: usize = 1 << 18;
 
 /// Check an explicit `width` × `height` request against [`MAX_CELLS`]; a
 /// missing side counts as one cell. Strict entry points (such as
@@ -1763,5 +1763,131 @@ mod tests {
         assert!(!message.contains("redirect"), "{message}");
         assert!(message.contains("RICH_SIXEL=1"), "{message}");
         assert!(message.contains("RICH_GRAPHICS=sixel"), "{message}");
+    }
+
+    /// A 1-pixel-wide, very tall grey image: the shape whose derived row
+    /// count used to be unbounded.
+    fn tall(height: u32) -> DynamicImage {
+        DynamicImage::ImageLuma8(image::GrayImage::new(1, height))
+    }
+
+    fn lines(segments: &[Segment]) -> usize {
+        segments.iter().filter(|s| s.text == "\n").count() + 1
+    }
+
+    #[test]
+    fn bound_grid_keeps_derived_grids_inside_the_budget() {
+        // In budget: unchanged.
+        assert_eq!(bound_grid(80, 40, true, None), (80, 40));
+        // A row cap narrows the columns to keep the aspect.
+        assert_eq!(bound_grid(80, 40, true, Some(10)), (20, 10));
+        // 80 x 4 000 000 derived rows: shrunk together, never below a column.
+        let (columns, rows) = bound_grid(80, 4_000_000, true, None);
+        assert!(columns >= 1 && columns * rows <= MAX_CELLS, "{columns}x{rows}");
+        assert!(rows > 50_000, "the aspect is kept: {columns}x{rows}");
+        let (columns, rows) = bound_grid(80, usize::MAX, true, None);
+        assert_eq!(columns, 1);
+        assert!(rows <= MAX_CELLS);
+        // Exact rows are kept; only the columns narrow.
+        assert_eq!(bound_grid(4096, 1024, false, Some(1)), (256, 1024));
+        assert_eq!(bound_grid(80, usize::MAX, false, None), (1, MAX_CELLS));
+        assert_eq!(bound_grid(usize::MAX, 1, true, None), (MAX_CELLS, 1));
+    }
+
+    #[test]
+    fn check_cell_budget_rejects_only_oversized_explicit_requests() {
+        assert_eq!(check_cell_budget(None, None), Ok(()));
+        assert_eq!(check_cell_budget(Some(512), Some(512)), Ok(()));
+        assert_eq!(check_cell_budget(Some(MAX_CELLS), None), Ok(()));
+        assert_eq!(
+            check_cell_budget(Some(513), Some(512)),
+            Err(ImageArtError::TooLarge)
+        );
+        assert_eq!(
+            check_cell_budget(None, Some(MAX_CELLS + 1)),
+            Err(ImageArtError::TooLarge)
+        );
+        assert_eq!(
+            check_cell_budget(Some(usize::MAX), Some(usize::MAX)),
+            Err(ImageArtError::TooLarge)
+        );
+    }
+
+    #[test]
+    fn huge_derived_grids_are_bounded_before_resampling() {
+        // 1 x 20 000 000 at 80 columns asked for 800 million ASCII rows.
+        let image = std::sync::Arc::new(tall(20_000_000));
+        let (columns, rows) = AsciiArt::from_shared(image.clone()).grid(80);
+        assert!(columns >= 1 && columns * rows <= MAX_CELLS, "{columns}x{rows}");
+        let (columns, rows) = BlockArt::from_shared(image.clone()).grid(80);
+        assert!(columns >= 1 && columns * rows <= MAX_CELLS, "{columns}x{rows}");
+        let (columns, rows) = AsciiArt::from_shared(image).height(usize::MAX).grid(80);
+        assert_eq!((columns, rows), (1, MAX_CELLS));
+    }
+
+    #[test]
+    fn a_tiny_tall_image_renders_a_bounded_number_of_rows_in_every_backend() {
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(80)
+            .build();
+        let options = console.options();
+        let image = std::sync::Arc::new(tall(100_000));
+        let backends: Vec<(&str, Box<dyn Renderable>)> = vec![
+            ("ascii", Box::new(AsciiArt::from_shared(image.clone()))),
+            ("blocks", Box::new(BlockArt::from_shared(image.clone()))),
+            ("braille", Box::new(BrailleArt::from_shared(image.clone()))),
+            ("quadrants", Box::new(QuadrantArt::from_shared(image.clone()))),
+            ("image", Box::new(ImageArt::from_shared(image.clone()))),
+        ];
+        for (name, art) in backends {
+            let segments = art.rich_render(&console, &options);
+            let cells: usize = segments
+                .iter()
+                .filter(|s| s.text != "\n")
+                .map(|s| s.text.chars().count())
+                .sum();
+            assert!(cells <= MAX_CELLS, "{name}: {cells} cells");
+            assert!(lines(&segments) > 1, "{name}: still drawn");
+        }
+    }
+
+    #[test]
+    fn a_console_height_caps_derived_rows() {
+        let console = Console::builder().width(80).build();
+        let mut options = console.options();
+        options.height = Some(5);
+        let image = std::sync::Arc::new(solid(10, 100, [200, 200, 200]));
+        let backends: Vec<(&str, Box<dyn Renderable>)> = vec![
+            ("ascii", Box::new(AsciiArt::from_shared(image.clone()))),
+            ("blocks", Box::new(BlockArt::from_shared(image.clone()))),
+            ("braille", Box::new(BrailleArt::from_shared(image.clone()))),
+            ("quadrants", Box::new(QuadrantArt::from_shared(image.clone()))),
+        ];
+        for (name, art) in backends {
+            assert_eq!(lines(&art.rich_render(&console, &options)), 5, "{name}");
+        }
+        // An explicit ASCII height is an exact request and wins.
+        let exact = AsciiArt::from_shared(image).height(7);
+        assert_eq!(lines(&exact.rich_render(&console, &options)), 7);
+    }
+
+    #[test]
+    fn explicit_sizes_over_the_cell_budget_are_an_error() {
+        let console = console(false);
+        let options = console.options();
+        let art = ImageArt::new(solid(4, 4, [0, 0, 0])).width(2048).height(1024);
+        assert_eq!(art.render(&console, &options), Err(ImageArtError::TooLarge));
+        let art = ImageArt::new(solid(4, 4, [0, 0, 0])).height(MAX_CELLS + 1);
+        assert_eq!(art.render(&console, &options), Err(ImageArtError::TooLarge));
+        // A cap brings it back in range, and a derived size never fails.
+        let art = ImageArt::new(solid(4, 4, [0, 0, 0]))
+            .width(2048)
+            .height(1024)
+            .max_height(4);
+        assert!(art.render(&console, &options).is_ok());
+        let art = ImageArt::new(tall(100_000)).mode(ImageMode::Ascii).width(80);
+        assert!(art.render(&console, &options).is_ok());
     }
 }

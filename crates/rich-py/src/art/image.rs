@@ -475,6 +475,12 @@ fn background_object(py: Python<'_>, value: Option<ImageBackground>) -> PyResult
     })
 }
 
+/// Raise `ImageArtError(kind="too_large")` for an explicit size over
+/// `rich_art::MAX_CELLS`; derived sizes are narrowed to fit instead.
+fn check_cells(py: Python<'_>, width: Option<usize>, height: Option<usize>) -> PyResult<()> {
+    rich_art::check_cell_budget(width, height).map_err(|error| image_art_error(py, &error))
+}
+
 /// Map a render error to `ImageArtError`, with its `kind`.
 pub(crate) fn image_art_error(py: Python<'_>, error: &rich_art::ImageArtError) -> PyErr {
     use rich_art::ImageArtError as E;
@@ -487,6 +493,7 @@ pub(crate) fn image_art_error(py: Python<'_>, error: &rich_art::ImageArtError) -
         E::InvalidFitDimensions => "invalid_fit_dimensions",
         E::UnsupportedColorOptions => "unsupported_color_options",
         E::InvalidAdjustment => "invalid_adjustment",
+        E::TooLarge => "too_large",
     };
     kinded::<ImageArtError>(py, error.to_string(), kind)
 }
@@ -707,6 +714,15 @@ impl ImageArt {
         if (tuned && !reduced) || (reduced && options.mode == ImageMode::Braille) {
             return Err(image_art_error(py, &E::UnsupportedColorOptions));
         }
+        if fit.is_none() {
+            let capped =
+                |v: Option<usize>, cap: Option<usize>| v.map(|v| v.min(cap.unwrap_or(usize::MAX)));
+            rich_art::check_cell_budget(
+                capped(options.width, max_width),
+                capped(options.height, max_height),
+            )
+            .map_err(|error| image_art_error(py, &error))?;
+        }
         let sized = |v: Option<usize>| v.is_some_and(|v| v > 0);
         if matches!(
             fit,
@@ -912,6 +928,7 @@ impl AsciiArt {
         color: bool,
         normalize: bool,
     ) -> PyResult<Self> {
+        check_cells(image.py(), width, height)?;
         let mut art = rich_art::AsciiArt::new(owned_image(image)?)
             .invert(invert)
             .color(color)
@@ -962,6 +979,7 @@ impl BlockArt {
         width: Option<usize>,
         height: Option<usize>,
     ) -> PyResult<Self> {
+        check_cells(image.py(), width, height)?;
         let mut art = rich_art::BlockArt::new(owned_image(image)?);
         if let Some(width) = width {
             art = art.width(width);
@@ -996,6 +1014,7 @@ impl BrailleArt {
         width: Option<usize>,
         height: Option<usize>,
     ) -> PyResult<Self> {
+        check_cells(image.py(), width, height)?;
         let mut art = rich_art::BrailleArt::new(owned_image(image)?);
         if let Some(width) = width {
             art = art.width(width);
@@ -1036,6 +1055,7 @@ impl QuadrantArt {
         width: Option<usize>,
         height: Option<usize>,
     ) -> PyResult<Self> {
+        check_cells(image.py(), width, height)?;
         let mut art = rich_art::QuadrantArt::new(owned_image(image)?);
         if let Some(width) = width {
             art = art.width(width);

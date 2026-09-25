@@ -155,8 +155,7 @@ pub(crate) fn markup_or_text(value: &Bound<'_, PyAny>) -> PyResult<CoreText> {
         return Ok(text.inner.clone());
     }
     let string = value.str()?;
-    CoreText::from_markup(string.to_cow()?.as_ref())
-        .map_err(crate::color::markup::markup_error)
+    CoreText::from_markup(string.to_cow()?.as_ref()).map_err(crate::color::markup::markup_error)
 }
 
 /// A core `Text` as a Python `Text`.

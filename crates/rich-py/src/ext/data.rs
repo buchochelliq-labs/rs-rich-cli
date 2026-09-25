@@ -8,7 +8,7 @@
 use std::borrow::Cow;
 use std::str::FromStr;
 
-use pyo3::exceptions::{PyIndexError, PyKeyError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyKeyError, PyRecursionError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple, PyType};
 
@@ -97,12 +97,42 @@ pub(crate) fn node_arg(value: &Bound<'_, PyAny>) -> PyResult<Node> {
     python_node(value)
 }
 
+/// The deepest a document may nest: the limit the parsers enforce
+/// (`rich_ext::data`'s `MAX_DEPTH`).
+const MAX_DOCUMENT_DEPTH: usize = 512;
+
+/// How many levels `node` nests (a scalar is one), counted without
+/// recursion.
+fn node_depth(node: &Node) -> usize {
+    let mut deepest = 0;
+    let mut stack = vec![(node, 1usize)];
+    while let Some((node, depth)) = stack.pop() {
+        deepest = deepest.max(depth);
+        match &node.value {
+            Value::Seq(items) => stack.extend(items.iter().map(|n| (n, depth + 1))),
+            Value::Map(entries) => stack.extend(entries.iter().map(|(_, n)| (n, depth + 1))),
+            _ => {}
+        }
+    }
+    deepest
+}
+
 /// A Python value as a document node: `None`, `bool`, `int`, `float`, `str`,
 /// `dict` (keys as `str`), and `list`/`tuple` (or any other iterable but a
 /// string); dates and anything else become their `str`.
 fn python_node(value: &Bound<'_, PyAny>) -> PyResult<Node> {
     let _nesting = Nesting::enter()?;
     if let Ok(node) = value.extract::<PyRef<'_, DataNode>>() {
+        // An embedded node brings its own depth: wrapping one again and
+        // again would otherwise nest without bound (and overflow the stack
+        // cloning or dropping it).
+        let depth = node_depth(&node.inner) + renderable::nesting_depth();
+        if depth > MAX_DOCUMENT_DEPTH {
+            return Err(PyRecursionError::new_err(format!(
+                "maximum recursion depth exceeded: a document nests at most \
+                 {MAX_DOCUMENT_DEPTH} levels"
+            )));
+        }
         return Ok(node.inner.clone());
     }
     let node = if value.is_none() {

@@ -364,9 +364,10 @@ impl Item {
                     Item::Core(renderable)
                 })
             }
-            Item::Pretty { object, highlight } => Some(Item::Core(
-                crate::code::pretty_for_print(object.bind(py), *highlight)?,
-            )),
+            Item::Pretty { object, highlight } => Some(Item::Core(crate::code::pretty_for_print(
+                object.bind(py),
+                *highlight,
+            )?)),
             _ => None,
         })
     }
@@ -754,7 +755,9 @@ fn collect(
         Python::attach(|py| {
             Ok(match alignment {
                 None => item,
-                Some(HorizontalAlign::Left) => Item::Core(Box::new(Align::left(item.into_box(py)?))),
+                Some(HorizontalAlign::Left) => {
+                    Item::Core(Box::new(Align::left(item.into_box(py)?)))
+                }
                 Some(HorizontalAlign::Center) => {
                     Item::Core(Box::new(Align::center(item.into_box(py)?)))
                 }
@@ -1920,9 +1923,10 @@ impl Console {
                         };
                         // Upstream wraps each renderable in `Styled`.
                         let renderable: Box<dyn Renderable> = match (item, &style) {
-                            (item, Some(style)) => {
-                                Box::new(rich::styled::Styled::new(item.into_box(py)?, style.clone()))
-                            }
+                            (item, Some(style)) => Box::new(rich::styled::Styled::new(
+                                item.into_box(py)?,
+                                style.clone(),
+                            )),
                             (item, None) => item.into_box(py)?,
                         };
                         message.push(Arc::new(ThreadBound(renderable)));

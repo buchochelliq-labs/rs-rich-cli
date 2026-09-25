@@ -280,6 +280,11 @@ impl Nesting {
     }
 }
 
+/// How many levels of [`Nesting`] this thread is inside now.
+pub(crate) fn nesting_depth() -> usize {
+    DEPTH.with(Cell::get)
+}
+
 impl Drop for Nesting {
     fn drop(&mut self) {
         DEPTH.with(|depth| depth.set(depth.get().saturating_sub(1)));
