@@ -18,7 +18,7 @@ from urllib.request import Request, urlopen
 
 
 CRATES = ("rs-rich", "rs-rich-plugin-api", "rs-rich-macros", "rs-rich-ext", "rs-rich-cli", "rs-rich-art",
-          "rs-rich-mermaid")
+          "rs-rich-mermaid", "rs-rich-lumis")
 NUMBER = r"(?:0|[1-9][0-9]*)"
 PRERELEASE = rf"(?:{NUMBER}|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
 VERSION = rf"{NUMBER}\.{NUMBER}\.{NUMBER}(?:-{PRERELEASE}(?:\.{PRERELEASE})*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
@@ -65,7 +65,7 @@ def select(tag, metadata, root):
     # requirement with its OWN crate, not the version of the release tag.
     requirements = root["workspace"]["dependencies"]
     for name in ("rs-rich", "rs-rich-plugin-api", "rs-rich-macros", "rs-rich-ext", "rs-rich-art",
-                 "rs-rich-mermaid"):
+                 "rs-rich-mermaid", "rs-rich-lumis"):
         key = name.removeprefix("rs-")
         dependency = requirements.get(key, {})
         expected = packages[name]["version"]

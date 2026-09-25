@@ -19,9 +19,10 @@ Every crate owns its independent SemVer. Choose a tag form explicitly:
 | `<crate>-vX.Y.Z` | Only that package; its manifest must match X.Y.Z |
 
 Supported packages: `rs-rich`, `rs-rich-plugin-api`, `rs-rich-macros`, `rs-rich-ext`,
-`rs-rich-cli`, `rs-rich-art`, `rs-rich-mermaid`. Publish `rs-rich-plugin-api` and
+`rs-rich-cli`, `rs-rich-art`, `rs-rich-mermaid`, `rs-rich-lumis`. Publish `rs-rich-plugin-api` and
 `rs-rich-macros` after `rs-rich` and before `rs-rich-ext`, which depends on both;
-publish `rs-rich-mermaid` after `rs-rich-art` and before `rs-rich-cli`.
+publish `rs-rich-mermaid` after `rs-rich-art`, and `rs-rich-lumis` after
+`rs-rich-plugin-api`, both before `rs-rich-cli`.
 Both forms accept prereleases such as `-rc.1`. Manual workflow dispatch takes
 an existing tag, never a branch name.
 
@@ -151,7 +152,7 @@ either by hand from the tagged commit (`cargo publish -p <crate> --locked`), or
 through the workflow with a token secret added for that one run. Ask the
 maintainer which. Then add the crate's Trusted Publishing entry. See
 `docs/BRANCHING.md`, "Registry authentication". `rs-rich-macros` 0.0.1 was the
-first case; `rs-rich-plugin-api` 0.0.1 and `rs-rich-mermaid` 0.0.1 are next.
+first case; `rs-rich-plugin-api`, `rs-rich-mermaid` and `rs-rich-lumis` 0.0.1 are next.
 
 ## 4. Observe publication and verification
 

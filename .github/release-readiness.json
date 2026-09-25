@@ -1,5 +1,5 @@
 {
-  "versionPattern": "\\b(?:rs-rich(?:-plugin-api|-macros|-mermaid|-ext|-cli|-art)?-)?v?\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?\\b",
+  "versionPattern": "\\b(?:rs-rich(?:-plugin-api|-macros|-mermaid|-lumis|-ext|-cli|-art)?-)?v?\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?\\b",
   "releaseFiles": [
     "CHANGELOG.md",
     "Cargo.lock",

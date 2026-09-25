@@ -8,7 +8,7 @@ name: release
 
 on:
   push:
-    tags: ["v*", "rs-rich-v*", "rs-rich-plugin-api-v*", "rs-rich-macros-v*", "rs-rich-ext-v*", "rs-rich-cli-v*", "rs-rich-art-v*", "rs-rich-mermaid-v*"]
+    tags: ["v*", "rs-rich-v*", "rs-rich-plugin-api-v*", "rs-rich-macros-v*", "rs-rich-ext-v*", "rs-rich-cli-v*", "rs-rich-art-v*", "rs-rich-mermaid-v*", "rs-rich-lumis-v*"]
   workflow_dispatch:
     inputs:
       tag:

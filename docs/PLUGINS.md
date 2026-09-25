@@ -117,6 +117,10 @@ is registered with `plugins()`, `code_highlighter(name)`, `theme(name)`,
 `provided_by(capability)`. `fences()` combines every registered fence renderer
 into one for `Markdown::fence_renderer`, routed by language.
 
+`rs-rich-lumis` (`LumisPlugin`) registers the code highlighter `"lumis"`:
+tree-sitter grammars with lumis's Neovim themes, and `ansi_dark`/`ansi_light`
+mapped from tree-sitter capture names to upstream's Pygments token styles.
+
 The first plugin built this way is `rs-rich-mermaid` (`MermaidPlugin`): a
 `mermaid` fence renderer and source renderer, with flowcharts drawn as text and
 every diagram type through `mmdc` behind its `mmdc` feature.

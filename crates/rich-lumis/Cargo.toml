@@ -1,0 +1,49 @@
+# crates/rich-lumis — the lumis syntax highlighter for the `rich` Rust port.
+#
+# A `CodeHighlighter` adapter over lumis (tree-sitter grammars and Neovim
+# themes), and a plugin that registers it. Its own crate because lumis links
+# tree-sitter's C runtime and its grammars: only builds that ask for it pay for
+# that, and two tree-sitter runtimes never meet in one binary. Independent
+# SemVer from 0.0.1. See AGENTS.md → Versioning and docs/PLUGINS.md.
+[package]
+name = "rs-rich-lumis"
+version = "0.0.1"
+description = "The lumis (tree-sitter) syntax highlighter for the `rich` Rust port, with Neovim themes and ANSI themes"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+# lumis itself needs 1.91; the rest of the workspace keeps its own minimum.
+rust-version = "1.91"
+readme = "README.md"
+documentation = "https://docs.rs/rs-rich-lumis"
+keywords = ["terminal", "syntax-highlighting", "tree-sitter", "rich"]
+categories = ["command-line-interface", "text-processing"]
+include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
+
+[lib]
+name = "rich_lumis"
+
+[lints]
+workspace = true
+
+[features]
+# Every language lumis ships, as lumis does by default. Pick a bundle instead
+# (with `default-features = false`) for a much smaller build, or enable
+# single `lumis/lang-*` features by depending on lumis yourself.
+default = ["all-languages"]
+all-languages = ["lumis/all-languages"]
+bundle-web = ["lumis/lang-bundle-web"]
+bundle-web-extra = ["lumis/lang-bundle-web-extra"]
+bundle-system = ["lumis/lang-bundle-system"]
+bundle-backend = ["lumis/lang-bundle-backend"]
+
+[dependencies]
+rich.workspace = true
+rich-plugin-api.workspace = true
+lumis = { version = "0.15", default-features = false }
+
+[dev-dependencies]
+# Path only: stripped when packaging, so publishing never waits on ext.
+rich-ext = { package = "rs-rich-ext", path = "../rich-ext" }

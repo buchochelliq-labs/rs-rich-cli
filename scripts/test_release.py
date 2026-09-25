@@ -12,7 +12,7 @@ import release
 
 
 NAMES = ("rs-rich", "rs-rich-plugin-api", "rs-rich-macros", "rs-rich-ext", "rs-rich-cli", "rs-rich-art",
-         "rs-rich-mermaid")
+         "rs-rich-mermaid", "rs-rich-lumis")
 
 
 def workspace():
@@ -177,7 +177,7 @@ class PublicationTests(unittest.TestCase):
     @patch("release.registry_status", return_value=200)
     def test_library_verification_builds_exact_registry_dependency(self, status):
         for name in ("rs-rich", "rs-rich-plugin-api", "rs-rich-macros", "rs-rich-ext", "rs-rich-art",
-                     "rs-rich-mermaid"):
+                     "rs-rich-mermaid", "rs-rich-lumis"):
             def check_consumer(command, **kwargs):
                 self.assertEqual(command, ["cargo", "check"])
                 consumer = Path(kwargs["cwd"])

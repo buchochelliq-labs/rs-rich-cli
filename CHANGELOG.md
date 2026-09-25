@@ -58,7 +58,8 @@ Entries below record subsequent releases and development.
 ## [Unreleased]
 
 Cohort versions for 0.0.12 (not published): core 0.0.8, plugin API 0.0.1
-(new), macros 0.0.2, ext 0.0.10, art 0.0.10, Mermaid 0.0.1 (new), CLI 0.0.12. Core changes below, so
+(new), macros 0.0.2, ext 0.0.10, art 0.0.10, Mermaid 0.0.1 (new), lumis 0.0.1
+(new), CLI 0.0.12. Core changes below, so
 every dependent moves with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
 
 ### Pluggable code highlighters, core (0.0.12 workstream 1: #522, #523)
@@ -105,6 +106,31 @@ every dependent moves with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
   release readiness, and the release scripts and tests know the new crate. Its
   first version is uploaded by hand after core 0.0.8 and before ext 0.0.10
   (BRANCHING, "Registry authentication").
+
+### The lumis highlighter (0.0.12 workstream 1: #524)
+
+- **New crate `rs-rich-lumis` 0.0.1** (`rich_lumis`): a `CodeHighlighter` over
+  [lumis](https://lumis.sh), with tree-sitter grammars and Neovim themes.
+  - Use it with `Syntax::highlighter` or `Markdown::highlighter`, or register
+    `LumisPlugin` to choose it by the name `"lumis"`.
+  - **Themes** are lumis's own names (more than 250). The default is
+    `monokai`, upstream rich's default. Themed code gets the theme's background
+    and foreground.
+  - **`ansi_dark`/`ansi_light`** use upstream rich's ANSI tables, mapped from
+    tree-sitter capture names (`keyword.operator`, `function.builtin`, …) to
+    Pygments token types, as the syntect adapter does.
+  - **Languages:** all of lumis's (116) by default. The `bundle-web`,
+    `bundle-web-extra`, `bundle-system` and `bundle-backend` features give a much
+    smaller build (the web bundle's binary is 9 MB against 156 MB).
+  - An unknown language highlights as plain text. An unknown theme is
+    reported, and `Syntax` falls back to the default theme.
+- **Its own crate and minimum Rust.** lumis links tree-sitter's C runtime, so
+  only builds that ask for it pay for that. It needs Rust 1.91 (lumis's
+  minimum). The workspace stays at 1.90, and CI checks this crate on 1.91
+  separately.
+- **Release tooling and CI.** `rs-rich-lumis-v*` tags, the feature matrix,
+  release readiness, and the release scripts and tests. The first upload is
+  manual, after the plugin API and before CLI 0.0.12 (BRANCHING).
 
 ### Markdown fences and Mermaid diagrams (0.0.12 workstream 3: #222)
 
