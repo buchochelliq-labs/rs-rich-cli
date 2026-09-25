@@ -1,0 +1,19 @@
+# The render-tree spike's prototype (#226). Not a workspace member, never
+# published, not built by CI: it exists to measure a design, and the note in
+# ../../render-tree.md records what it found. Run it with
+#
+#     cd docs/design/render-tree/prototype && cargo run --release
+#
+# (from this directory, so .cargo/config.toml keeps the build out of docs/).
+[package]
+name = "render-tree-prototype"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+rich = { package = "rs-rich", path = "../../../../crates/rich" }
+
+# Its own workspace, so the repository's workspace neither builds nor
+# publishes it.
+[workspace]
