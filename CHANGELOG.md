@@ -107,6 +107,20 @@ every dependent moves with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
   first version is uploaded by hand after core 0.0.8 and before ext 0.0.10
   (BRANCHING, "Registry authentication").
 
+### Render tree spike (0.0.12 workstream 5: #226)
+
+- **Design note, no code change:**
+  [docs/design/render-tree.md](docs/design/render-tree.md). It covers what an
+  intermediate frame would give export, snapshots, accessibility and live
+  repaint, and a migration that leaves core alone.
+- **Measurements** come from a standalone prototype
+  (`docs/design/render-tree/prototype`, not a workspace member). Rows of
+  styled runs with interned styles retain 2–7× less heap than `Vec<Segment>`,
+  encode no slower, and reproduce today's bytes exactly. A per-grapheme cell
+  grid costs more than segments on text-heavy output.
+- **Recommendation:** styled-run frames in `rich-ext`, proposed as milestone
+  0.0.13 "Frames".
+
 ### Composable transforms (0.0.12 workstream 4: #216)
 
 - **`rich_ext::transform`.** `Transform<T>` rewrites a value; `Pipeline<T>`

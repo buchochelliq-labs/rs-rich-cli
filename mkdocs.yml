@@ -160,3 +160,4 @@ nav:
       - Branching and releases: BRANCHING.md
       - Architecture: ARCHITECTURE.md
       - Extending: PLUGINS.md
+      - "Design: render tree (#226)": design/render-tree.md
