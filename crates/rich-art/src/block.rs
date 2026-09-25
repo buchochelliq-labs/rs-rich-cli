@@ -130,7 +130,11 @@ impl BlockArt {
 
     /// The rendered rows as `(upper, lower)` colour pairs. A half is `None`
     /// only when transparency is kept and that pixel is under half opacity.
-    fn cells(&self, available: usize, max_rows: Option<usize>) -> Vec<Vec<(Option<Color>, Option<Color>)>> {
+    fn cells(
+        &self,
+        available: usize,
+        max_rows: Option<usize>,
+    ) -> Vec<Vec<(Option<Color>, Option<Color>)>> {
         let (columns, rows) = self.grid_within(available, max_rows);
         let mut scaled = self
             .image

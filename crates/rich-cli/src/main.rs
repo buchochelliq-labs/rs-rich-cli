@@ -6,7 +6,7 @@
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    // `args()` (not `args_os()`): a non-Unicode argument stops the binary
-    // exactly as it always has.
-    rich_cli::run(std::env::args().skip(1).map(Into::into).collect())
+    // `args_os()`: `args()` panics on an argument that is not valid Unicode,
+    // and such an argument may well name a file (`rich $'\xff.txt'`).
+    rich_cli::run(std::env::args_os().skip(1).collect())
 }

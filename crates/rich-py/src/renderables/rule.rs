@@ -53,8 +53,8 @@ impl AsRenderable for Rule {
         let rule = if let Ok(text) = title.extract::<PyRef<'_, Text>>() {
             CoreRule::with_title_text(text.inner.clone())
         } else if let Ok(markup) = title.cast::<PyString>() {
-            let markup = markup.to_cow()?.into_owned();
-            CoreText::from_markup(&markup).map_err(crate::color::markup::markup_error)?;
+            // `console.render_str(self.title)`, with the print's `markup`.
+            let markup = renderable::render_str_markup(markup.to_cow()?.into_owned())?;
             if markup.is_empty() {
                 CoreRule::line()
             } else {

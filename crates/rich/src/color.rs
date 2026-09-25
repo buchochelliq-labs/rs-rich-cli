@@ -218,9 +218,9 @@ impl Color {
         match self.kind {
             ColorType::Default => None,
             ColorType::Truecolor => self.triplet,
-            ColorType::Standard | ColorType::Windows => {
-                self.number.map(|n| ANSI_BASE_PALETTE[n as usize])
-            }
+            ColorType::Standard => self.number.map(|n| ANSI_BASE_PALETTE[n as usize]),
+            // Upstream resolves a Windows color through `WINDOWS_PALETTE`.
+            ColorType::Windows => self.number.map(|n| WINDOWS_PALETTE[(n & 15) as usize]),
             ColorType::EightBit => self.number.map(eight_bit_triplet),
         }
     }
@@ -259,48 +259,75 @@ impl Color {
 
     /// Return a version of this color representable in `system`.
     ///
-    /// Port of the reducing half of `Color.downgrade`: colors are only ever
-    /// converted *down* to a smaller system, never up.
+    /// Port of `Color.downgrade`: colors are only ever converted *down* to a
+    /// smaller system, never up, and a Windows console matches against the
+    /// Windows 10 console palette ([`WINDOWS_PALETTE`]), not the standard one.
     pub fn downgrade(&self, system: ColorSystem) -> Color {
-        if self.kind == ColorType::Default {
+        let same_system = matches!(
+            (self.kind, system),
+            (ColorType::Standard, ColorSystem::Standard)
+                | (ColorType::EightBit, ColorSystem::EightBit)
+                | (ColorType::Truecolor, ColorSystem::Truecolor)
+                | (ColorType::Windows, ColorSystem::Windows)
+        );
+        if self.kind == ColorType::Default || same_system {
             return self.clone();
         }
-        let target_rank = match system {
-            ColorSystem::Standard | ColorSystem::Windows => 0,
-            ColorSystem::EightBit => 1,
-            ColorSystem::Truecolor => 2,
+        let is_truecolor = self.kind == ColorType::Truecolor;
+        // Upstream's non-truecolor branches assume an 8-bit color and index
+        // `EIGHT_BIT_PALETTE` with the number, whatever the actual type.
+        let source_triplet = || {
+            if is_truecolor {
+                self.triplet
+            } else {
+                self.number.map(eight_bit_triplet)
+            }
         };
-        let self_rank = match self.kind {
-            ColorType::Standard | ColorType::Windows => 0,
-            ColorType::EightBit => 1,
-            ColorType::Truecolor => 2,
-            ColorType::Default => return self.clone(),
-        };
-        if self_rank <= target_rank {
-            // Already representable; keep as-is (Windows/Standard are equivalent
-            // for our SGR purposes in this slice).
-            return self.clone();
-        }
-        let triplet = match self.get_truecolor() {
-            Some(t) => t,
-            None => return self.clone(),
-        };
-        match target_rank {
-            1 => Color {
-                name: self.name.clone(),
-                kind: ColorType::EightBit,
-                number: Some(truecolor_to_eight_bit(triplet)),
-                triplet: None,
-            },
-            _ => {
-                let number = match_color(&STANDARD_PALETTE, triplet);
+        match system {
+            ColorSystem::EightBit if is_truecolor => {
+                let Some(triplet) = self.triplet else {
+                    return self.clone();
+                };
                 Color {
                     name: self.name.clone(),
-                    kind: ColorType::Standard,
-                    number: Some(number),
+                    kind: ColorType::EightBit,
+                    number: Some(truecolor_to_eight_bit(triplet)),
                     triplet: None,
                 }
             }
+            ColorSystem::Standard => {
+                let Some(triplet) = source_triplet() else {
+                    return self.clone();
+                };
+                Color {
+                    name: self.name.clone(),
+                    kind: ColorType::Standard,
+                    number: Some(match_color(&STANDARD_PALETTE, triplet)),
+                    triplet: None,
+                }
+            }
+            ColorSystem::Windows => {
+                if !is_truecolor {
+                    if let Some(number) = self.number.filter(|&number| number < 16) {
+                        return Color {
+                            name: self.name.clone(),
+                            kind: ColorType::Windows,
+                            number: Some(number),
+                            triplet: None,
+                        };
+                    }
+                }
+                let Some(triplet) = source_triplet() else {
+                    return self.clone();
+                };
+                Color {
+                    name: self.name.clone(),
+                    kind: ColorType::Windows,
+                    number: Some(match_color(&WINDOWS_PALETTE, triplet)),
+                    triplet: None,
+                }
+            }
+            _ => self.clone(),
         }
     }
 }
@@ -376,6 +403,28 @@ pub const STANDARD_PALETTE: [ColorTriplet; 16] = [
     ColorTriplet::new(255, 85, 255),
     ColorTriplet::new(85, 255, 255),
     ColorTriplet::new(255, 255, 255),
+];
+
+/// The Windows 10 console palette a truecolor or 8-bit color is matched
+/// against on a `windows` color system. Port of upstream's
+/// `rich._palettes.WINDOWS_PALETTE`.
+pub const WINDOWS_PALETTE: [ColorTriplet; 16] = [
+    ColorTriplet::new(12, 12, 12),
+    ColorTriplet::new(197, 15, 31),
+    ColorTriplet::new(19, 161, 14),
+    ColorTriplet::new(193, 156, 0),
+    ColorTriplet::new(0, 55, 218),
+    ColorTriplet::new(136, 23, 152),
+    ColorTriplet::new(58, 150, 221),
+    ColorTriplet::new(204, 204, 204),
+    ColorTriplet::new(118, 118, 118),
+    ColorTriplet::new(231, 72, 86),
+    ColorTriplet::new(22, 198, 12),
+    ColorTriplet::new(249, 241, 165),
+    ColorTriplet::new(59, 120, 255),
+    ColorTriplet::new(180, 0, 158),
+    ColorTriplet::new(97, 214, 214),
+    ColorTriplet::new(242, 242, 242),
 ];
 
 /// The full 256-color palette, generated deterministically (16 system colors +

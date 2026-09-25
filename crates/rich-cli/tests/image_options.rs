@@ -772,3 +772,37 @@ fn native_fit_renders_the_images_own_size_from_the_cli_and_config() {
     ]);
     assert_eq!(out.status.code(), Some(2));
 }
+
+/// A 1-pixel-wide, very tall image asked for millions of rows (and aborted
+/// on allocation at 1x20000000); the derived grid is now bounded by
+/// `rich_art::MAX_CELLS`, and an explicit size over it is an input error.
+#[cfg(feature = "art")]
+#[test]
+fn a_tiny_tall_image_renders_a_bounded_grid() {
+    let dir = tempfile::tempdir().unwrap();
+    let png = dir.path().join("tall.png");
+    rich_art::image::GrayImage::new(1, 2_000_000)
+        .save(&png)
+        .unwrap();
+    let png = png.to_str().unwrap();
+    let out = run(&["--image", png, "--image-mode", "ascii"]);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let lines = out.stdout.split(|b| *b == b'\n').count();
+    assert!(
+        lines > 1 && lines <= rich_art::MAX_CELLS + 1,
+        "{lines} lines"
+    );
+
+    let out = run(&["--image", png, "--width", "2000", "--height", "2000"]);
+    assert_eq!(out.status.code(), Some(3));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("cells"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}

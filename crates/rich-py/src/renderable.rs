@@ -429,12 +429,53 @@ pub(crate) fn render_str_with(
     Ok(highlighted)
 }
 
+/// Whether a `str` rendering now is console markup: the print's `markup=`,
+/// else the console's (Rich's `options.markup`, then `console._markup`).
+/// Outside a render, it is.
+pub(crate) fn markup_enabled() -> bool {
+    AMBIENT
+        .with(|stack| stack.borrow().last().cloned())
+        .is_none_or(|ambient| ambient.base.markup.unwrap_or(ambient.markup))
+}
+
+/// A `str` that core will render as markup (a `Table` cell, a `Rule` or
+/// `Table` title, a `Columns` item) where Rich calls `Console.render_str`:
+/// with markup on, it is checked now, so bad markup raises `MarkupError` from
+/// the print as in Rich; with markup off, it is escaped, so core renders it
+/// literally. Call while converting for a render (inside a [`scope`]).
+pub(crate) fn render_str_markup(markup: String) -> PyResult<String> {
+    if markup_enabled() {
+        if markup.contains('[') {
+            CoreText::from_markup(&markup).map_err(crate::color::markup::markup_error)?;
+        }
+        return Ok(markup);
+    }
+    Ok(literal_markup(&markup))
+}
+
+/// Markup that parses back to exactly `text`, with no styles.
+pub(crate) fn literal_markup(text: &str) -> String {
+    if !text.contains('[') {
+        return text.to_string();
+    }
+    let mut escaped = rich::markup::escape(text);
+    // `escape` doubles a trailing backslash (so appended markup is not
+    // escaped by it); the parser keeps backslashes not before a tag, so the
+    // extra one would print.
+    if text.ends_with('\\') && !text.ends_with("\\\\") && escaped.ends_with("\\\\") {
+        escaped.pop();
+    }
+    escaped
+}
+
 /// A `str` child of a container: markup, emoji and highlighting apply when
 /// it renders, as upstream's `Console.render_str` does for `str` children.
 /// `highlight` overrides the console's, as a container's options do upstream
-/// (`Panel` renders its child with `highlight=False`).
+/// (`Panel` renders its child with `highlight=False`). `markup` is whether
+/// the string is markup (the print's or console's `markup`, when converted).
 struct MarkupStr {
-    markup: String,
+    source: String,
+    markup: bool,
     highlight: Option<bool>,
 }
 
@@ -450,9 +491,9 @@ impl MarkupStr {
                 .or(ambient.base.highlight)
                 .unwrap_or_else(|| console.highlight());
             let result = render_str_with(
-                &self.markup,
+                &self.source,
                 console.emoji(),
-                ambient.base.markup.unwrap_or(ambient.markup),
+                self.markup,
                 highlight,
                 &[],
                 Some(highlighter.bind(py)),
@@ -466,7 +507,20 @@ impl MarkupStr {
                 }
             }
         });
-        custom.unwrap_or_else(|| console.render_str(&self.markup, self.highlight))
+        if let Some(text) = custom {
+            return text;
+        }
+        if self.markup {
+            return console.render_str(&self.source, self.highlight);
+        }
+        let options = rich::console::RenderStrOptions {
+            markup: Some(false),
+            highlight: self.highlight,
+            ..Default::default()
+        };
+        console
+            .render_str_with(&self.source, &options)
+            .unwrap_or_else(|_| CoreText::new(self.source.clone()))
     }
 }
 
@@ -494,10 +548,18 @@ pub(crate) fn to_renderable(
     highlight: Option<bool>,
 ) -> PyResult<Box<dyn Renderable>> {
     if let Ok(string) = value.cast::<PyString>() {
-        let markup = string.to_cow()?.into_owned();
-        // Rich raises on bad markup; core's lenient path would print it.
-        CoreText::from_markup(&markup).map_err(crate::color::markup::markup_error)?;
-        return Ok(Box::new(MarkupStr { markup, highlight }));
+        let source = string.to_cow()?.into_owned();
+        // Rich raises on bad markup when it renders (with markup on); core's
+        // lenient path would print it.
+        let markup = markup_enabled();
+        if markup && source.contains('[') {
+            CoreText::from_markup(&source).map_err(crate::color::markup::markup_error)?;
+        }
+        return Ok(Box::new(MarkupStr {
+            source,
+            markup,
+            highlight,
+        }));
     }
     let cast = rich_cast(value)?;
     if let Some(convert) = lookup(&cast) {

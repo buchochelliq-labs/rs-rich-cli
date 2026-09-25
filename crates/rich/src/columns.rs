@@ -230,8 +230,15 @@ impl Renderable for Columns {
         let column_count = match self.width {
             Some(width) => {
                 // Upstream divides by zero columns only to fail later; a
-                // single column is the nearest working layout.
-                let column_count = (options.max_width / (width + width_padding)).max(1);
+                // single column is the nearest working layout. A zero width
+                // with no horizontal padding is `ZeroDivisionError` upstream
+                // (the divisor itself is zero); core renders nothing rather
+                // than panic (docs/DIVERGENCES.md).
+                let Some(column_count) = options.max_width.checked_div(width + width_padding)
+                else {
+                    return Vec::new();
+                };
+                let column_count = column_count.max(1);
                 for _ in 0..column_count {
                     table.add_column("").column_width(width);
                 }

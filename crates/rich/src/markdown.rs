@@ -18,7 +18,7 @@ use pulldown_cmark::{
 };
 
 use crate::cells::cell_len;
-use crate::console::{Console, ConsoleOptions, Justify};
+use crate::console::{Console, ConsoleOptions, Justify, Overflow};
 use crate::markdown_url::{normalize_link, normalize_link_text, validate_link};
 use crate::protocol::{CodeHighlighter, FenceRenderer, Renderable};
 use crate::r#box::SIMPLE;
@@ -1555,6 +1555,33 @@ fn pad_lines(lines: &mut [Vec<Segment>], width: usize) {
 ///
 /// Recursive, because a list item and a quote are containers: whatever they
 /// hold is rendered by this same function at a reduced width and then prefixed.
+/// Render a block's `Text` as `Text.__rich_console__` would: its own justify,
+/// overflow and no-wrap win, then the inherited options', then the defaults.
+/// A paragraph in a narrow table cell therefore truncates with the cell's
+/// `ellipsis` rather than folding.
+fn render_text(
+    text: &Text,
+    console: &Console,
+    options: &ConsoleOptions,
+    width: usize,
+) -> Vec<Vec<Segment>> {
+    let justify = match text.get_justify() {
+        Justify::Default => options.justify,
+        justify => justify,
+    };
+    text.render_lines_wrapped_tabs(
+        console.theme(),
+        console.base_style(),
+        Some(width),
+        justify,
+        text.get_overflow()
+            .or(options.overflow)
+            .unwrap_or(Overflow::Fold),
+        text.get_no_wrap().or(options.no_wrap).unwrap_or(false),
+        text.console_tab_size(console),
+    )
+}
+
 fn render_blocks(
     blocks: &[Block],
     console: &Console,
@@ -1563,7 +1590,6 @@ fn render_blocks(
     top_level: bool,
     root: Option<&Style>,
 ) -> Vec<Vec<Segment>> {
-    let base = console.base_style();
     let mut lines: Vec<Vec<Segment>> = Vec::new();
     // Set by an image whose marker must stay on the same row as the block that
     // follows it (see [`Block::Image`]).
@@ -1628,15 +1654,13 @@ fn render_blocks(
         }
         let start = lines.len();
         match block {
-            Block::Text(text) => {
-                lines.extend(text.render_lines(console.theme(), base, Some(width)))
-            }
+            Block::Text(text) => lines.extend(render_text(text, console, options, width)),
             Block::Image {
                 text, joins_next, ..
             } => {
-                // No justify of its own, so the marker is wrapped but never
-                // padded — upstream assembles a bare `Text` for it.
-                lines.extend(text.render_lines(console.theme(), base, Some(width)));
+                // No justify of its own — upstream assembles a bare `Text` for
+                // it — so the marker takes the options' justify.
+                lines.extend(render_text(text, console, options, width));
                 join_previous = *joins_next;
             }
             Block::List { items } => {

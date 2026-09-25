@@ -4,6 +4,7 @@
 //! `Columns` (width, padding, `column_first`, `right_to_left`, `align`,
 //! `title`, `expand`, `equal`).
 
+use pyo3::exceptions::PyZeroDivisionError;
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyString, PyTuple};
 use pyo3::{PyTraverseError, PyVisit};
@@ -45,8 +46,8 @@ impl AsRenderable for Columns {
         let mut cells = Vec::new();
         for item in self.renderables.bind(py).iter() {
             if let Ok(markup) = item.cast::<PyString>() {
-                let markup = markup.to_cow()?.into_owned();
-                CoreText::from_markup(&markup).map_err(crate::color::markup::markup_error)?;
+                // `console.render_str(renderable)`, with the print's `markup`.
+                let markup = renderable::render_str_markup(markup.to_cow()?.into_owned())?;
                 cells.push(Cell::Markup(markup));
             } else if let Ok(text) = item.extract::<PyRef<'_, Text>>() {
                 cells.push(Cell::Text(text.inner.clone()));
@@ -60,8 +61,14 @@ impl AsRenderable for Columns {
                 )));
             }
         }
+        let padding = unpack(self.padding.bind(py))?;
+        // Rich divides the width by `width + max(left, right)` padding.
+        let step = match self.width {
+            Some(width) if !cells.is_empty() => Some(width.saturating_add(padding.1.max(padding.3))),
+            _ => None,
+        };
         let mut columns = CoreColumns::from_cells(cells)
-            .padding(unpack(self.padding.bind(py))?)
+            .padding(padding)
             .expand(self.expand)
             .equal(self.equal)
             .column_first(self.column_first)
@@ -84,12 +91,16 @@ impl AsRenderable for Columns {
                 title.str()?.to_cow()?.into_owned()
             });
         }
-        Ok(Box::new(Unmeasured(columns)))
+        Ok(Box::new(Unmeasured { columns, step }))
     }
 }
 
 /// Upstream's `Columns` has no `__rich_measure__`: it takes any width.
-struct Unmeasured(CoreColumns);
+/// `step` is a fixed column's width with its padding, when there is one.
+struct Unmeasured {
+    columns: CoreColumns,
+    step: Option<usize>,
+}
 
 impl Renderable for Unmeasured {
     fn rich_render(
@@ -97,7 +108,22 @@ impl Renderable for Unmeasured {
         console: &rich::console::Console,
         options: &rich::console::ConsoleOptions,
     ) -> Vec<rich::segment::Segment> {
-        self.0.rich_render(console, options)
+        // Rich's `max_width // (width + padding)` columns, then `item_count %
+        // column_count`: no room for one column divides by zero.
+        if let Some(step) = self.step {
+            let message = match step {
+                0 => Some("integer division or modulo by zero"),
+                step if options.max_width / step == 0 => Some("integer modulo by zero"),
+                _ => None,
+            };
+            if let Some(message) = message {
+                Python::attach(|py| {
+                    renderable::report_error(py, PyZeroDivisionError::new_err(message))
+                });
+                return Vec::new();
+            }
+        }
+        self.columns.rich_render(console, options)
     }
 
     fn measure(

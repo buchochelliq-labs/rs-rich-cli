@@ -165,20 +165,25 @@ fn vertical(value: &str) -> PyResult<rich::align::VerticalAlign> {
 }
 
 impl CellSpec {
-    fn to_cell(&self, py: Python<'_>, highlight: bool) -> Cell {
-        match self {
-            CellSpec::Markup(markup) => Cell::Markup(markup.clone()),
+    /// The core cell, for a render: a `str` goes through Rich's
+    /// `render_str` then, so it is checked (or taken literally) by the
+    /// print's `markup`.
+    fn to_cell(&self, py: Python<'_>, highlight: bool) -> PyResult<Cell> {
+        Ok(match self {
+            CellSpec::Markup(markup) => {
+                Cell::Markup(renderable::render_str_markup(markup.clone())?)
+            }
             CellSpec::Text(text) => Cell::Text(text.clone()),
             // Rich renders cells with the table's `highlight`.
             CellSpec::Object(object) => {
                 Cell::Renderable(PyRenderable::shared(object.clone_ref(py), Some(highlight)))
             }
-        }
+        })
     }
 }
 
 impl Table {
-    fn build(&self, py: Python<'_>) -> CoreTable {
+    fn build(&self, py: Python<'_>) -> PyResult<CoreTable> {
         let mut table = CoreTable::new();
         table = match self.box_set {
             Some(box_set) => table.box_set(box_set),
@@ -221,18 +226,22 @@ impl Table {
             table = table.border_style(style.clone());
         }
         match &self.title {
-            Some(Annotation::Markup(title)) => table = table.title(title.clone()),
+            Some(Annotation::Markup(title)) => {
+                table = table.title(renderable::render_str_markup(title.clone())?)
+            }
             Some(Annotation::Text(title)) => table = table.title_text(title.clone()),
             None => {}
         }
         match &self.caption {
-            Some(Annotation::Markup(caption)) => table = table.caption(caption.clone()),
+            Some(Annotation::Markup(caption)) => {
+                table = table.caption(renderable::render_str_markup(caption.clone())?)
+            }
             Some(Annotation::Text(caption)) => table = table.caption_text(caption.clone()),
             None => {}
         }
         for column in &self.columns {
-            table.add_column_cell(column.header.to_cell(py, self.highlight), column.justify);
-            table.column_footer(column.footer.to_cell(py, self.highlight));
+            table.add_column_cell(column.header.to_cell(py, self.highlight)?, column.justify);
+            table.column_footer(column.footer.to_cell(py, self.highlight)?);
             if let Some(style) = &column.footer_style {
                 table.column_footer_fill(style.clone());
             }
@@ -269,16 +278,16 @@ impl Table {
                 .cells
                 .iter()
                 .map(|cell| cell.to_cell(py, self.highlight))
-                .collect();
+                .collect::<PyResult<Vec<_>>>()?;
             table.add_row_with(cells, row.style.clone(), row.end_section);
         }
-        table
+        Ok(table)
     }
 }
 
 impl AsRenderable for Table {
     fn to_renderable(&self, py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
-        Ok(Box::new(self.build(py)))
+        Ok(Box::new(self.build(py)?))
     }
 }
 

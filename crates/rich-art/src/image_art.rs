@@ -160,7 +160,10 @@ pub const MAX_CELLS: usize = 1 << 18;
 /// [`ImageArt::render`]) report [`ImageArtError::TooLarge`] from this; the
 /// infallible renderables clamp to the budget instead.
 pub fn check_cell_budget(width: Option<usize>, height: Option<usize>) -> Result<(), ImageArtError> {
-    let cells = width.unwrap_or(1).max(1).checked_mul(height.unwrap_or(1).max(1));
+    let cells = width
+        .unwrap_or(1)
+        .max(1)
+        .checked_mul(height.unwrap_or(1).max(1));
     match cells {
         Some(cells) if cells <= MAX_CELLS => Ok(()),
         _ => Err(ImageArtError::TooLarge),
@@ -1783,7 +1786,10 @@ mod tests {
         assert_eq!(bound_grid(80, 40, true, Some(10)), (20, 10));
         // 80 x 4 000 000 derived rows: shrunk together, never below a column.
         let (columns, rows) = bound_grid(80, 4_000_000, true, None);
-        assert!(columns >= 1 && columns * rows <= MAX_CELLS, "{columns}x{rows}");
+        assert!(
+            columns >= 1 && columns * rows <= MAX_CELLS,
+            "{columns}x{rows}"
+        );
         assert!(rows > 50_000, "the aspect is kept: {columns}x{rows}");
         let (columns, rows) = bound_grid(80, usize::MAX, true, None);
         assert_eq!(columns, 1);
@@ -1818,9 +1824,15 @@ mod tests {
         // 1 x 20 000 000 at 80 columns asked for 800 million ASCII rows.
         let image = std::sync::Arc::new(tall(20_000_000));
         let (columns, rows) = AsciiArt::from_shared(image.clone()).grid(80);
-        assert!(columns >= 1 && columns * rows <= MAX_CELLS, "{columns}x{rows}");
+        assert!(
+            columns >= 1 && columns * rows <= MAX_CELLS,
+            "{columns}x{rows}"
+        );
         let (columns, rows) = BlockArt::from_shared(image.clone()).grid(80);
-        assert!(columns >= 1 && columns * rows <= MAX_CELLS, "{columns}x{rows}");
+        assert!(
+            columns >= 1 && columns * rows <= MAX_CELLS,
+            "{columns}x{rows}"
+        );
         let (columns, rows) = AsciiArt::from_shared(image).height(usize::MAX).grid(80);
         assert_eq!((columns, rows), (1, MAX_CELLS));
     }
@@ -1838,7 +1850,10 @@ mod tests {
             ("ascii", Box::new(AsciiArt::from_shared(image.clone()))),
             ("blocks", Box::new(BlockArt::from_shared(image.clone()))),
             ("braille", Box::new(BrailleArt::from_shared(image.clone()))),
-            ("quadrants", Box::new(QuadrantArt::from_shared(image.clone()))),
+            (
+                "quadrants",
+                Box::new(QuadrantArt::from_shared(image.clone())),
+            ),
             ("image", Box::new(ImageArt::from_shared(image.clone()))),
         ];
         for (name, art) in backends {
@@ -1863,7 +1878,10 @@ mod tests {
             ("ascii", Box::new(AsciiArt::from_shared(image.clone()))),
             ("blocks", Box::new(BlockArt::from_shared(image.clone()))),
             ("braille", Box::new(BrailleArt::from_shared(image.clone()))),
-            ("quadrants", Box::new(QuadrantArt::from_shared(image.clone()))),
+            (
+                "quadrants",
+                Box::new(QuadrantArt::from_shared(image.clone())),
+            ),
         ];
         for (name, art) in backends {
             assert_eq!(lines(&art.rich_render(&console, &options)), 5, "{name}");
@@ -1877,7 +1895,9 @@ mod tests {
     fn explicit_sizes_over_the_cell_budget_are_an_error() {
         let console = console(false);
         let options = console.options();
-        let art = ImageArt::new(solid(4, 4, [0, 0, 0])).width(2048).height(1024);
+        let art = ImageArt::new(solid(4, 4, [0, 0, 0]))
+            .width(2048)
+            .height(1024);
         assert_eq!(art.render(&console, &options), Err(ImageArtError::TooLarge));
         let art = ImageArt::new(solid(4, 4, [0, 0, 0])).height(MAX_CELLS + 1);
         assert_eq!(art.render(&console, &options), Err(ImageArtError::TooLarge));
@@ -1887,7 +1907,9 @@ mod tests {
             .height(1024)
             .max_height(4);
         assert!(art.render(&console, &options).is_ok());
-        let art = ImageArt::new(tall(100_000)).mode(ImageMode::Ascii).width(80);
+        let art = ImageArt::new(tall(100_000))
+            .mode(ImageMode::Ascii)
+            .width(80);
         assert!(art.render(&console, &options).is_ok());
     }
 }

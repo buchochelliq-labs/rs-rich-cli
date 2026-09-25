@@ -241,8 +241,9 @@ pub(crate) fn ansi_color_number(name: &str) -> Option<u8> {
         "gray89" => 254,
         "grey93" => 255,
         "gray93" => 255,
-        // Common aliases upstream also accepts.
-        "grey" | "gray" => 8,
+        // Bare "grey"/"gray" are deliberately absent: upstream's
+        // `ANSI_COLOR_NAMES` has no such entry and `Color.parse("grey")`
+        // raises `ColorParseError`.
         _ => return None,
     };
     Some(number)

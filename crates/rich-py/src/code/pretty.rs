@@ -74,38 +74,60 @@ impl Node {
     }
 
     /// `Node.iter_tokens`, as a visitor that stops when `f` returns false.
-    /// Returns false when stopped.
+    /// Returns false when stopped. Iterative, so a deep tree cannot
+    /// overflow the native stack.
     fn tokens<'a>(&'a self, f: &mut dyn FnMut(&'a str) -> bool) -> bool {
-        if !self.key_repr.is_empty() && !(f(&self.key_repr) && f(&self.key_separator)) {
-            return false;
+        enum Step<'a> {
+            Node(&'a Node),
+            Token(&'a str),
         }
-        if !self.value_repr.is_empty() {
-            return f(&self.value_repr);
-        }
-        let Some(children) = &self.children else {
-            return true;
-        };
-        if children.is_empty() {
-            return f(&self.empty);
-        }
-        if !f(&self.open_brace) {
-            return false;
-        }
-        if self.is_tuple && !self.is_namedtuple && children.len() == 1 {
-            if !(children[0].tokens(f) && f(",")) {
+        let mut stack = vec![Step::Node(self)];
+        while let Some(step) = stack.pop() {
+            let node = match step {
+                Step::Token(token) => {
+                    if !f(token) {
+                        return false;
+                    }
+                    continue;
+                }
+                Step::Node(node) => node,
+            };
+            if !node.key_repr.is_empty() && !(f(&node.key_repr) && f(&node.key_separator)) {
                 return false;
             }
-        } else {
-            for child in children {
-                if !child.tokens(f) {
+            if !node.value_repr.is_empty() {
+                if !f(&node.value_repr) {
                     return false;
                 }
-                if !child.last && !f(&self.separator) {
+                continue;
+            }
+            let Some(children) = &node.children else {
+                continue;
+            };
+            if children.is_empty() {
+                if !f(&node.empty) {
                     return false;
+                }
+                continue;
+            }
+            if !f(&node.open_brace) {
+                return false;
+            }
+            // Pushed in reverse: children and separators, then the brace.
+            stack.push(Step::Token(&node.close_brace));
+            if node.is_tuple && !node.is_namedtuple && children.len() == 1 {
+                stack.push(Step::Token(","));
+                stack.push(Step::Node(&children[0]));
+            } else {
+                for child in children.iter().rev() {
+                    if !child.last {
+                        stack.push(Step::Token(&node.separator));
+                    }
+                    stack.push(Step::Node(child));
                 }
             }
         }
-        f(&self.close_brace)
+        true
     }
 
     pub(crate) fn token_list(&self) -> Vec<String> {
@@ -348,7 +370,36 @@ struct Walker<'a, 'py> {
     limits: Limits,
     helpers: &'a Helpers,
     visited: HashSet<usize>,
+    /// The depth at which upstream's recursive walk runs out of Python
+    /// frames: the node there is a `<repr-error ...>` (see [`traverse_with`]).
+    repr_error_depth: usize,
+    /// Whether the walk is on the caller's stack, and so moves to a thread
+    /// of its own past [`HOP_LEVELS`] (see [`Walker::walk_on_new_stack`]).
+    on_caller_stack: bool,
 }
+
+/// How deep the walk goes on the caller's native stack, of unknown size,
+/// before it continues on a thread with a stack of [`HOP_STACK_SIZE`]: the
+/// walk recurses (as upstream's does, in Python), and a deep enough object
+/// would otherwise overflow the stack and kill the interpreter.
+const HOP_LEVELS: usize = 48;
+
+/// The stack of the thread a deep walk continues on: room for the rest of
+/// [`MAX_PRETTY_DEPTH`] levels, and the Python code (`__repr__`, ABC
+/// checks) each runs. Only what is used is ever committed.
+const HOP_STACK_SIZE: usize = 256 << 20;
+
+/// The deepest node the walk builds, whatever the recursion limit: past it
+/// the node is a `<repr-error ...>`, as upstream's is when it runs out of
+/// frames (with the default recursion limit, a little under 1000 levels).
+/// Laying out and dropping a tree recurses in places, so this keeps it well
+/// inside a small native stack.
+const MAX_PRETTY_DEPTH: usize = 3000;
+
+/// The node upstream builds where its recursive walk exceeds the recursion
+/// limit: `repr(obj)` raises `RecursionError`, which `to_repr` reports.
+const RECURSION_REPR_ERROR: &str =
+    "<repr-error 'maximum recursion depth exceeded while getting the repr of an object'>";
 
 impl<'py> Walker<'_, 'py> {
     /// `to_repr`: the repr, with long strings cut at `max_string`, and a
@@ -415,6 +466,52 @@ impl<'py> Walker<'_, 'py> {
         })
     }
 
+    /// Walk `object` (at `depth`) on a new thread with a big stack, with
+    /// the GIL handed over to it, and come back with the node. The walk's
+    /// state moves there and back.
+    fn walk_on_new_stack(
+        &mut self,
+        object: &Bound<'py, PyAny>,
+        root: bool,
+        depth: usize,
+    ) -> PyResult<Node> {
+        let object = object.clone().unbind();
+        let visited = std::mem::take(&mut self.visited);
+        let limits = self.limits;
+        let repr_error_depth = self.repr_error_depth;
+        let spawned = self.py.detach(move || {
+            let thread = std::thread::Builder::new()
+                .name("rs_rich-pretty".to_string())
+                .stack_size(HOP_STACK_SIZE)
+                .spawn(move || {
+                    Python::attach(|py| {
+                        let mut walker = Walker {
+                            py,
+                            limits,
+                            helpers: helpers(py)?,
+                            visited,
+                            repr_error_depth,
+                            on_caller_stack: false,
+                        };
+                        let node = walker.walk(object.bind(py), root, depth);
+                        Ok::<_, PyErr>((node, walker.visited))
+                    })
+                });
+            thread.map(|thread| thread.join())
+        });
+        match spawned {
+            Ok(Ok(result)) => {
+                let (node, visited) = result?;
+                self.visited = visited;
+                node
+            }
+            Ok(Err(panic)) => std::panic::resume_unwind(panic),
+            Err(_) => Err(pyo3::exceptions::PyRecursionError::new_err(
+                "maximum recursion depth exceeded while pretty printing",
+            )),
+        }
+    }
+
     /// Mark `children` so the last one knows it is last (upstream's
     /// `loop_last`).
     fn keyed(&mut self, key: String, child: &Bound<'py, PyAny>, depth: usize) -> PyResult<Node> {
@@ -429,6 +526,14 @@ impl<'py> Walker<'_, 'py> {
         let id = object.as_ptr() as usize;
         if self.visited.contains(&id) {
             return Ok(Node::value("..."));
+        }
+        if depth >= self.repr_error_depth {
+            let mut node = Node::value(RECURSION_REPR_ERROR);
+            node.last = root;
+            return Ok(node);
+        }
+        if self.on_caller_stack && depth >= HOP_LEVELS && !is_atom(object) {
+            return self.walk_on_new_stack(object, root, depth);
         }
         let reached_max_depth = self.limits.max_depth.is_some_and(|max| depth >= max);
         let fake_attributes = object
@@ -803,18 +908,67 @@ fn braces(
     })
 }
 
-/// `rich.pretty.traverse`.
+/// Python frames between a caller and upstream's `_traverse(obj, depth=0)`
+/// when upstream renders an object (`Console.print`, `Pretty`): the walk
+/// runs out of frames this much sooner than the recursion limit.
+const RENDER_FRAMES: usize = 12;
+
+/// `rich.pretty.traverse`, as upstream's is called to render an object.
 pub(crate) fn traverse(object: &Bound<'_, PyAny>, limits: Limits) -> PyResult<Node> {
+    traverse_with(object, limits, RENDER_FRAMES)
+}
+
+/// `rich.pretty.traverse`. Upstream's walk recurses in Python, so at the
+/// recursion limit (less the `frames` its callers and the walk itself take)
+/// the node is a `<repr-error ...>` instead; the walk here stops at the same
+/// depth, and at [`MAX_PRETTY_DEPTH`] at the latest.
+pub(crate) fn traverse_with(
+    object: &Bound<'_, PyAny>,
+    limits: Limits,
+    frames: usize,
+) -> PyResult<Node> {
     let py = object.py();
     let helpers = helpers(py)?;
+    let limit: usize = py
+        .import("sys")?
+        .call_method0("getrecursionlimit")?
+        .extract()?;
+    let used = python_frames(py)? + frames;
     let mut walker = Walker {
         py,
         limits,
         helpers,
         visited: HashSet::new(),
+        repr_error_depth: limit.saturating_sub(used).min(MAX_PRETTY_DEPTH),
+        on_caller_stack: true,
     };
     let _nesting = renderable::Nesting::enter()?;
     walker.walk(object, true, 0)
+}
+
+/// Whether `object` is a value the walk never goes into (it has no
+/// children), so walking it needs no stack of its own.
+fn is_atom(object: &Bound<'_, PyAny>) -> bool {
+    object.is_none()
+        || object.is_exact_instance_of::<PyString>()
+        || object.is_exact_instance_of::<pyo3::types::PyInt>()
+        || object.is_exact_instance_of::<pyo3::types::PyFloat>()
+        || object.is_exact_instance_of::<pyo3::types::PyBool>()
+        || object.is_exact_instance_of::<PyBytes>()
+}
+
+/// How many Python frames are on this thread's stack now.
+fn python_frames(py: Python<'_>) -> PyResult<usize> {
+    let mut frame = py.import("sys")?.call_method1("_getframe", (0,));
+    let mut count = 0;
+    while let Ok(current) = frame {
+        if current.is_none() {
+            break;
+        }
+        count += 1;
+        frame = current.getattr("f_back");
+    }
+    Ok(count)
 }
 
 // ---------------------------------------------------------------------------
@@ -1355,6 +1509,10 @@ fn py_bool(value: bool) -> &'static str {
     }
 }
 
+/// Python frames upstream's `traverse` takes before `_traverse(obj, depth=0)`
+/// runs out of them (`pretty_repr` takes one more).
+const TRAVERSE_FRAMES: usize = 7;
+
 /// `rich.pretty.traverse(_object, max_length=None, max_string=None, max_depth=None)`.
 #[pyfunction(name = "traverse")]
 #[pyo3(signature = (_object, max_length=None, max_string=None, max_depth=None))]
@@ -1365,13 +1523,14 @@ fn traverse_py(
     max_depth: Option<usize>,
 ) -> PyResult<PyNode> {
     Ok(PyNode {
-        inner: traverse(
+        inner: traverse_with(
             _object,
             Limits {
                 max_length,
                 max_string,
                 max_depth,
             },
+            TRAVERSE_FRAMES,
         )?,
     })
 }
@@ -1393,13 +1552,14 @@ fn pretty_repr(
 ) -> PyResult<String> {
     let node = match _object.extract::<PyRef<'_, PyNode>>() {
         Ok(node) => node.inner.clone(),
-        Err(_) => traverse(
+        Err(_) => traverse_with(
             _object,
             Limits {
                 max_length,
                 max_string,
                 max_depth,
             },
+            TRAVERSE_FRAMES + 1,
         )?,
     };
     Ok(node.render(max_width, indent_size, expand_all))

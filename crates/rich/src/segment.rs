@@ -314,38 +314,61 @@ impl Segment {
     /// thing standing between an [`Overflow::Ignore`](crate::console::Overflow)
     /// text and a line that runs off the side of the terminal.
     ///
-    /// Control segments occupy no cells and are always kept, so cursor moves and
-    /// hyperlink codes survive a crop.
+    /// As upstream, any non-control segment containing `\n` is split there —
+    /// a print `end` such as `"!!\n"` arrives as one segment, and cropping it
+    /// whole would lose its newline — and each newline is re-emitted as a bare
+    /// [`Segment::line`]. A line is cropped only when it is wider than `width`;
+    /// then everything past the edge goes, zero-width characters and control
+    /// segments included (`adjust_line_length`).
     pub fn crop_lines(segments: &[Segment], width: usize) -> Vec<Segment> {
         let mut result: Vec<Segment> = Vec::with_capacity(segments.len());
-        let mut used = 0usize;
+        let mut line: Vec<Segment> = Vec::new();
         for segment in segments {
-            if segment.control {
-                result.push(segment.clone());
-                continue;
+            if !segment.control && segment.text.contains('\n') {
+                let mut pieces = segment.text.split('\n').peekable();
+                while let Some(piece) = pieces.next() {
+                    if !piece.is_empty() {
+                        line.push(Segment::new(piece, segment.style.clone()));
+                    }
+                    if pieces.peek().is_some() {
+                        result.extend(Segment::crop_line(&line, width));
+                        result.push(Segment::line());
+                        line.clear();
+                    }
+                }
+            } else {
+                line.push(segment.clone());
             }
-            if segment.text == "\n" {
-                used = 0;
-                result.push(segment.clone());
-                continue;
-            }
-            let length = segment.cell_length();
-            if used + length <= width {
-                used += length;
-                result.push(segment.clone());
-            } else if used < width {
-                // Straddles the crop: keep the part that fits. A wide character
-                // across the boundary is dropped and the gap padded, as
-                // `set_cell_size` does everywhere else.
-                result.push(Segment::new(
-                    crate::cells::set_cell_size(&segment.text, width - used),
-                    segment.style.clone(),
-                ));
-                used = width;
-            }
-            // Anything else is wholly past the crop, so it is dropped.
+        }
+        if !line.is_empty() {
+            result.extend(Segment::crop_line(&line, width));
         }
         result
+    }
+
+    /// The crop half of `Segment.adjust_line_length`: a line no wider than
+    /// `length` is returned whole; a wider one keeps segments while they end
+    /// strictly inside `length` (control segments always), cuts the first one
+    /// that reaches the edge with `set_cell_size`, and drops the rest.
+    fn crop_line(line: &[Segment], length: usize) -> Vec<Segment> {
+        let line_length: usize = line.iter().map(Segment::cell_length).sum();
+        if line_length <= length {
+            return line.to_vec();
+        }
+        let mut new_line: Vec<Segment> = Vec::new();
+        let mut used = 0usize;
+        for segment in line {
+            let segment_length = segment.cell_length();
+            if used + segment_length < length || segment.control {
+                new_line.push(segment.clone());
+                used += segment_length;
+            } else {
+                let cropped = crate::cells::set_cell_size(&segment.text, length - used);
+                new_line.push(Segment::new(cropped, segment.style.clone()));
+                break;
+            }
+        }
+        new_line
     }
 
     /// Pad (with a styled space run) or crop a single line to exactly `length`
@@ -356,28 +379,12 @@ impl Segment {
         style: Option<Style>,
     ) -> Vec<Segment> {
         let line_length: usize = line.iter().map(Segment::cell_length).sum();
-        if line_length == length {
-            line.to_vec()
-        } else if line_length < length {
+        if line_length < length {
             let mut new_line = line.to_vec();
             new_line.push(Segment::new(" ".repeat(length - line_length), style));
             new_line
         } else {
-            // Crop from the left, honoring cell widths.
-            let mut new_line: Vec<Segment> = Vec::new();
-            let mut remaining = length;
-            for segment in line {
-                let seg_len = segment.cell_length();
-                if seg_len <= remaining {
-                    new_line.push(segment.clone());
-                    remaining -= seg_len;
-                } else {
-                    let cropped = crate::cells::set_cell_size(&segment.text, remaining);
-                    new_line.push(Segment::new(cropped, segment.style.clone()));
-                    break;
-                }
-            }
-            new_line
+            Segment::crop_line(line, length)
         }
     }
 }

@@ -637,16 +637,57 @@ fn build_markdown(source: &str, hyperlinks: bool) -> Markdown {
 /// (`--batch`, `--watch`, the demo) install a process-wide Ctrl-C handler, and
 /// a few error paths end the process.
 ///
-/// Arguments that are not valid Unicode are converted lossily.
+/// Arguments that are not valid Unicode are parsed by their lossy spelling,
+/// but a file named by one is opened by its original bytes (see
+/// [`fs_path`]), as upstream's click does through `surrogateescape`.
 pub fn run(args: Vec<std::ffi::OsString>) -> ExitCode {
-    let args: Vec<String> = args
+    dispatch(remember_raw_args(args))
+}
+
+/// Arguments that were not valid Unicode, by their lossy spelling; `None`
+/// when two different arguments share one spelling (which then cannot say
+/// which it was).
+static RAW_ARGS: std::sync::Mutex<Vec<(String, Option<std::ffi::OsString>)>> =
+    std::sync::Mutex::new(Vec::new());
+
+/// The arguments as `String`s for the parser, keeping the originals of any
+/// that are not valid Unicode for [`fs_path`].
+fn remember_raw_args(args: Vec<std::ffi::OsString>) -> Vec<String> {
+    let mut raw: Vec<(String, Option<std::ffi::OsString>)> = Vec::new();
+    let args = args
         .into_iter()
-        .map(|arg| {
-            arg.into_string()
-                .unwrap_or_else(|arg| arg.to_string_lossy().into_owned())
+        .map(|arg| match arg.into_string() {
+            Ok(arg) => arg,
+            Err(arg) => {
+                let lossy = arg.to_string_lossy().into_owned();
+                match raw.iter_mut().find(|(spelling, _)| *spelling == lossy) {
+                    Some((_, original)) if original.as_ref() != Some(&arg) => *original = None,
+                    Some(_) => {}
+                    None => raw.push((lossy.clone(), Some(arg))),
+                }
+                lossy
+            }
         })
         .collect();
-    dispatch(args)
+    if let Ok(mut slot) = RAW_ARGS.lock() {
+        *slot = raw;
+    }
+    args
+}
+
+/// The file system path an argument names: the original bytes when it was
+/// not valid Unicode (so `rich $'\xff.txt'` opens that file, not
+/// `\u{fffd}.txt`), else the argument itself.
+pub(crate) fn fs_path(arg: &str) -> std::path::PathBuf {
+    RAW_ARGS
+        .lock()
+        .ok()
+        .and_then(|raw| {
+            raw.iter()
+                .find(|(spelling, _)| spelling == arg)
+                .and_then(|(_, original)| original.clone())
+        })
+        .map_or_else(|| std::path::PathBuf::from(arg), std::path::PathBuf::from)
 }
 
 /// [`run`] for a host process that is not the `rich` executable: `program` is
@@ -2312,11 +2353,11 @@ fn read_window(cli: &Cli, offset: u64, max: u64) -> Result<(Vec<u8>, bool), Stri
     let take = max.saturating_add(1);
     let mut bytes = Vec::new();
     match resource.filter(|r| *r != "-") {
-        Some(path) if std::path::Path::new(path).is_dir() => {
+        Some(path) if fs_path(path).is_dir() => {
             return Err(format!("cannot read {path}: it is a directory"));
         }
         Some(path) => {
-            let mut file = std::fs::File::open(path).map_err(error)?;
+            let mut file = std::fs::File::open(fs_path(path)).map_err(error)?;
             // A pipe or FIFO cannot seek: skip by reading instead.
             if offset > 0 && file.seek(SeekFrom::Start(offset)).is_err() {
                 std::io::copy(&mut (&mut file).take(offset), &mut std::io::sink())
@@ -2384,7 +2425,7 @@ fn read_resource_limited(
 ) -> std::io::Result<String> {
     let content = match resource {
         Some(path) if path != "-" => {
-            let file = std::path::Path::new(path);
+            let file = &fs_path(path);
             // A directory reaches the reader as "Access is denied" on Windows,
             // which sends the reader hunting for a permissions problem.
             if file.is_dir() {
@@ -3088,13 +3129,13 @@ fn watch_fingerprint(resource: &str, cache_url: bool, encoding: Option<Encoding>
         let _ = (cache_url, encoding);
         return "url".to_string();
     }
-    match std::fs::metadata(resource) {
+    match std::fs::metadata(fs_path(resource)) {
         Ok(metadata) if metadata.is_file() => {
             use std::hash::Hasher;
             // Atomic saves and in-place writes may preserve both size and
             // mtime. Read regular files each poll using a fixed-size buffer,
             // so detection is portable and memory does not grow with input.
-            let mut file = match std::fs::File::open(resource) {
+            let mut file = match std::fs::File::open(fs_path(resource)) {
                 Ok(file) => file,
                 Err(error) => return format!("file-error:{error}"),
             };
@@ -3970,7 +4011,7 @@ fn run_json_lines(cli: &Cli, console: &Console, log_mode: bool) -> ExitCode {
 
     let mut input: Box<dyn BufRead> = match cli.resource.as_deref() {
         Some(path) if path != "-" => {
-            let file = std::path::Path::new(path);
+            let file = &fs_path(path);
             if file.is_dir() {
                 return fail(
                     cli,
@@ -5204,10 +5245,10 @@ fn run_text_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
 /// `rich --diff a.png somedir` still reported "Access is denied".
 #[cfg(feature = "art")]
 fn open_image_path(path: &str) -> Result<rich_art::image::DynamicImage, String> {
-    if std::path::Path::new(path).is_dir() {
+    if fs_path(path).is_dir() {
         return Err(format!("cannot read {path}: is a directory, not a file"));
     }
-    match rich_art::image::open(path) {
+    match rich_art::image::open(fs_path(path)) {
         Ok(image) => Ok(image),
         Err(err) => {
             use rich_art::image::error::{ImageFormatHint, UnsupportedErrorKind};

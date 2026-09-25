@@ -61,6 +61,15 @@ pub(crate) struct Panel {
 
 impl AsRenderable for Panel {
     fn to_renderable(&self, py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
+        // Rich parses a `str` title with `Text.from_markup`, whatever the
+        // console's `markup`, and raises on bad markup.
+        for title in [&self.title, &self.subtitle] {
+            if let Some(Title::Markup(markup)) = title {
+                if markup.contains('[') {
+                    rich::Text::from_markup(markup).map_err(crate::color::markup::markup_error)?;
+                }
+            }
+        }
         // `__clear__` (garbage collection) is the only thing that empties it.
         let child = match &self.renderable {
             Some(child) => child.bind(py).clone(),

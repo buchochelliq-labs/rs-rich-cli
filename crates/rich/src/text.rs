@@ -1006,11 +1006,19 @@ impl Text {
         // Upstream folds `overflow == "ignore"` into no_wrap before splitting.
         let no_wrap = no_wrap || overflow == Overflow::Ignore;
         let groups = self.wrapped_ranges(width, overflow, no_wrap);
+        // Which spans touch which visual line, found once by binary search as
+        // upstream's `divide` does. Scanning every span for every line (and
+        // every cut within it) made printing a long highlighted repr quadratic.
+        let line_spans = self.spans_by_line(&groups);
+        let mut line_spans = line_spans.iter();
         let Some(width) = width else {
             return groups
                 .into_iter()
                 .flatten()
-                .map(|(start, end)| self.line_segments(&resolved, start, end, &effective_base))
+                .map(|(start, end)| {
+                    let ids = line_spans.next().map(Vec::as_slice).unwrap_or(&[]);
+                    self.line_segments(&resolved, start, end, &effective_base, ids)
+                })
                 .collect();
         };
 
@@ -1019,9 +1027,16 @@ impl Text {
         // does — the paragraph boundary is what full justification treats as
         // ragged, so the groups cannot be flattened first.
         for group in groups {
+            let group_spans: Vec<&[usize]> = group
+                .iter()
+                .map(|_| line_spans.next().map(Vec::as_slice).unwrap_or(&[]))
+                .collect();
             let mut new_lines: Vec<Vec<Segment>> = group
                 .iter()
-                .map(|&(start, end)| self.line_segments(&resolved, start, end, &effective_base))
+                .zip(&group_spans)
+                .map(|(&(start, end), ids)| {
+                    self.line_segments(&resolved, start, end, &effective_base, ids)
+                })
                 .collect();
 
             // `overflow == "ignore"` is a hard stop upstream: the line is
@@ -1062,7 +1077,7 @@ impl Text {
                         overflow,
                         &effective_base,
                         index == last,
-                        &|char_index| self.covered_at(start, end, char_index),
+                        &|char_index| self.covered_at(start, end, char_index, group_spans[index]),
                     );
                 }
             }
@@ -1078,14 +1093,49 @@ impl Text {
     /// `[start, end)` — i.e. whether upstream's `Text.render` has a span
     /// boundary at that character's edge of the line. Justify padding joins
     /// the neighbouring run only where it does not.
-    fn covered_at(&self, start: usize, end: usize, char_index: usize) -> bool {
+    ///
+    /// `ids` are the spans touching that line (see [`spans_by_line`](Self::spans_by_line)).
+    fn covered_at(&self, start: usize, end: usize, char_index: usize, ids: &[usize]) -> bool {
         let Some((offset, _)) = self.plain[start..end].char_indices().nth(char_index) else {
             return false;
         };
         let position = start + offset;
-        self.spans
-            .iter()
-            .any(|span| span.start <= position && position < span.end)
+        ids.iter().any(|&id| {
+            let span = &self.spans[id];
+            span.start <= position && position < span.end
+        })
+    }
+
+    /// For each visual line of `groups` (flattened, in order), the indices of
+    /// the spans that overlap it, in span order. Lines are ordered and
+    /// disjoint, so each span binary-searches its first and last line, as
+    /// upstream's `Text.divide` does; the cost is the number of (span, line)
+    /// pairs that actually overlap rather than spans × lines.
+    fn spans_by_line(&self, groups: &[Vec<(usize, usize)>]) -> Vec<Vec<usize>> {
+        let lines: Vec<(usize, usize)> = groups.iter().flatten().copied().collect();
+        let mut by_line: Vec<Vec<usize>> = vec![Vec::new(); lines.len()];
+        // Upstream only divides a text that has a newline or a wrap cut, and
+        // `divide` drops spans that come out empty. An undivided text keeps
+        // its empty spans, whose start/end events still split the run
+        // (`[b]a[i][/i]b[/b]` renders `a` and `b` as two segments).
+        let undivided = lines.len() == 1;
+        for (id, span) in self.spans.iter().enumerate() {
+            if span.start >= span.end {
+                if undivided && span.start == span.end {
+                    by_line[0].push(id);
+                }
+                continue;
+            }
+            let first = lines.partition_point(|&(_, end)| end <= span.start);
+            let last = lines.partition_point(|&(start, _)| start < span.end);
+            for index in first..last.max(first) {
+                let (start, end) = lines[index];
+                if span.start.max(start) < span.end.min(end) {
+                    by_line[index].push(id);
+                }
+            }
+        }
+        by_line
     }
 
     /// As [`render_lines_wrapped`](Self::render_lines_wrapped), flattened into a
@@ -1224,13 +1274,16 @@ impl Text {
     }
 
     /// Combine `effective_base` with every span covering `[start, end)`,
-    /// producing non-overlapping segments for that byte range.
+    /// producing non-overlapping segments for that byte range. Port of the
+    /// sweep in upstream's `Text.render`: span start/end events are sorted
+    /// once and walked with a stack of active spans.
     ///
-    /// `resolved` is the per-render style map, index-parallel to `self.spans`.
-    /// Spans are folded in vector order, and spans that resolved to nothing are
-    /// **not** skipped — they still contribute a boundary. Upstream behaves the
-    /// same way, and the highlighter fixtures depend on it: an ISO-8601 date
-    /// emits separate segments per sub-field even where the field styles are
+    /// `resolved` is the per-render style map, index-parallel to `self.spans`;
+    /// `ids` are the spans overlapping this line, in span order. Active spans
+    /// are combined in span order (upstream's `sorted(stack)`), and spans that
+    /// resolved to nothing are **not** skipped — they still contribute a
+    /// boundary. The highlighter fixtures depend on it: an ISO-8601 date emits
+    /// separate segments per sub-field even where the field styles are
     /// identical.
     fn line_segments(
         &self,
@@ -1238,37 +1291,56 @@ impl Text {
         start: usize,
         end: usize,
         effective_base: &Style,
+        ids: &[usize],
     ) -> Vec<Segment> {
         if start >= end {
             return Vec::new();
         }
-        let mut points: Vec<usize> = vec![start, end];
-        for span in &self.spans {
-            let span_start = span.start.clamp(start, end);
-            let span_end = span.end.clamp(start, end);
-            points.push(span_start);
-            points.push(span_end);
+        // (offset, leaving, span id); entering sorts before leaving.
+        let mut events: Vec<(usize, bool, usize)> = Vec::with_capacity(ids.len() * 2 + 1);
+        for &id in ids {
+            let span = &self.spans[id];
+            let (span_start, span_end) = (span.start.max(start), span.end.min(end));
+            // An empty span (kept only on an undivided line) is a boundary.
+            let empty = span.start == span.end && start < span.start && span.end < end;
+            if span_start < span_end || empty {
+                events.push((span_start, false, id));
+                events.push((span_end, true, id));
+            }
         }
-        points.sort_unstable();
-        points.dedup();
+        events.sort_unstable();
 
         let mut segments = Vec::new();
-        for window in points.windows(2) {
-            let (a, b) = (window[0], window[1]);
-            if a >= b {
-                continue;
-            }
-            let slice = &self.plain[a..b];
-            if slice.is_empty() {
-                continue;
-            }
-            let mut style = effective_base.clone();
-            for (span, span_style) in self.spans.iter().zip(resolved) {
-                if span.start <= a && span.end >= b {
-                    style = style.combine(span_style);
+        let mut stack: Vec<usize> = Vec::new();
+        let mut offset = start;
+        let mut events = events.into_iter().peekable();
+        loop {
+            // Apply every event at `offset`.
+            while let Some(&(position, leaving, id)) = events.peek() {
+                if position > offset {
+                    break;
+                }
+                events.next();
+                match stack.binary_search(&id) {
+                    Ok(index) if leaving => {
+                        stack.remove(index);
+                    }
+                    Err(index) if !leaving => stack.insert(index, id),
+                    _ => {}
                 }
             }
-            segments.push(Segment::new(slice, Some(style)));
+            let next = events
+                .peek()
+                .map_or(end, |&(position, _, _)| position.min(end));
+            if next <= offset {
+                break;
+            }
+            let mut style = effective_base.clone();
+            for &id in &stack {
+                style = style.combine(&resolved[id]);
+            }
+            segments.push(Segment::new(&self.plain[offset..next], Some(style)));
+            offset = next;
         }
         segments
     }

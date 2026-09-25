@@ -190,11 +190,7 @@ impl AsciiArt {
     }
 
     /// Render to rows of `(char, colour)` pairs.
-    fn cells(
-        &self,
-        available: usize,
-        max_rows: Option<usize>,
-    ) -> Vec<Vec<(char, Option<Color>)>> {
+    fn cells(&self, available: usize, max_rows: Option<usize>) -> Vec<Vec<(char, Option<Color>)>> {
         let (columns, rows) = self.grid_within(available, max_rows);
         // Finish sampling before colour processing and glyph selection.
         let mut scaled = self

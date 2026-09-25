@@ -860,3 +860,30 @@ fn sixel_on_an_unrecognised_terminal_says_how_to_force_it() {
         "{transcript}"
     );
 }
+
+/// A file named by an argument that is not valid Unicode is opened by its
+/// bytes, as upstream's click does, instead of panicking (`args()`) or
+/// looking for the lossy `\u{fffd}.txt`.
+#[cfg(unix)]
+#[test]
+fn a_non_utf8_path_argument_opens_the_file() {
+    use std::os::unix::ffi::OsStrExt;
+    let dir = tempfile::tempdir().unwrap();
+    let name = std::ffi::OsStr::from_bytes(b"\xff.txt");
+    std::fs::write(dir.path().join(name), "hello-from-latin1-name\n").unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_rich"))
+        .arg("--no-config")
+        .arg(name)
+        .current_dir(dir.path())
+        .env_remove("NO_COLOR")
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!stderr.contains("panicked"), "{stderr}");
+    assert_eq!(out.status.code(), Some(0), "{stderr}");
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("hello-from-latin1-name"),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+}
