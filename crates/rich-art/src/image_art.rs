@@ -68,6 +68,16 @@ pub enum ImageFit {
     Cover,
     /// Fill the rectangle exactly, ignoring the aspect ratio.
     Stretch,
+    /// Render at the image's own size: its pixels mapped to cells at the
+    /// backend's density (see [`ImageArt::native_grid`]), rounded up to whole
+    /// cells. Each pixel lands on one sub-cell pixel, unscaled, and the rest
+    /// of the last cell takes the background. Needs no rectangle; the console
+    /// width, `width`/`height` and [`ImageArt::max_width`]/
+    /// [`ImageArt::max_height`] only ever shrink it, as a [`Contain`] fit
+    /// into the capped grid. Never enlarges a small image to fill the width.
+    ///
+    /// [`Contain`]: ImageFit::Contain
+    Native,
 }
 
 /// Which part of the image to retain when using [`ImageFit::Cover`].
@@ -373,7 +383,8 @@ impl ImageArt {
         self
     }
 
-    /// Fit into an explicit width and height, assuming cells are twice as
+    /// Fit into an explicit width and height (or, with [`ImageFit::Native`],
+    /// size to the image itself), assuming cells are twice as
     /// tall as they are wide. Width is clamped to the console's available
     /// width. Invalid dimensions are reported by [`Self::render`]. The
     /// output and cover intermediate rasters are limited to 16 megapixels
@@ -571,21 +582,40 @@ impl ImageArt {
             );
             (Arc::new(image), background)
         };
-        if self.fit.is_none() && self.background.is_none() {
+        // Native sizing is a rectangle of its own: the image's own pixels in
+        // whole cells, placed unscaled; or, when a cap shrinks it, a contain
+        // fit into the capped grid.
+        let native = self.fit == Some(ImageFit::Native);
+        let (native_grid, native_capped) = if native {
+            let own = self.native_cells(mode);
+            let grid = self.native_grid(mode, available);
+            (Some(grid), grid != own)
+        } else {
+            (None, false)
+        };
+        let fit = match self.fit {
+            Some(ImageFit::Native) if native_capped => Some(ImageFit::Contain),
+            Some(ImageFit::Native) => None,
+            other => other,
+        };
+        if fit.is_none() && self.background.is_none() && !native {
             return Ok(image);
         }
-        let target = if self.fit.is_some() {
-            let columns = self
-                .options
-                .width
-                .ok_or(ImageArtError::InvalidFitDimensions)?
-                .min(available)
-                .min(self.max_width.unwrap_or(usize::MAX));
-            let rows = self
-                .options
-                .height
-                .ok_or(ImageArtError::InvalidFitDimensions)?
-                .min(self.max_height.unwrap_or(usize::MAX));
+        let target = if fit.is_some() || native {
+            let (columns, rows) = match native_grid {
+                Some(grid) => grid,
+                None => (
+                    self.options
+                        .width
+                        .ok_or(ImageArtError::InvalidFitDimensions)?
+                        .min(available)
+                        .min(self.max_width.unwrap_or(usize::MAX)),
+                    self.options
+                        .height
+                        .ok_or(ImageArtError::InvalidFitDimensions)?
+                        .min(self.max_height.unwrap_or(usize::MAX)),
+                ),
+            };
             let (sx, sy) = cell_pixels(mode);
             let width = columns.checked_mul(sx).and_then(|v| u32::try_from(v).ok());
             let height = rows.checked_mul(sy).and_then(|v| u32::try_from(v).ok());
@@ -629,7 +659,22 @@ impl ImageArt {
             }
             return Ok(Arc::new(source));
         };
-        let result = match self.fit.expect("target is present only with fit") {
+        let Some(fit) = fit else {
+            // Native at the image's own size: every pixel lands on exactly one
+            // sub-cell pixel; the last partial cell takes the background.
+            let result = if keep_alpha {
+                let mut canvas = RgbaImage::from_pixel(width, height, Rgba([0, 0, 0, 0]));
+                image::imageops::replace(&mut canvas, &source.to_rgba8(), 0, 0);
+                DynamicImage::ImageRgba8(canvas)
+            } else {
+                let mut canvas = RgbImage::from_pixel(width, height, Rgb(background));
+                image::imageops::replace(&mut canvas, &source.to_rgb8(), 0, 0);
+                DynamicImage::ImageRgb8(canvas)
+            };
+            return Ok(Arc::new(self.checkered(result, mode)));
+        };
+        let result = match fit {
+            ImageFit::Native => unreachable!("native sizing resolves to a fit or a canvas"),
             ImageFit::Stretch => source.resize_exact(width, height, FilterType::Triangle),
             ImageFit::Contain if keep_alpha => {
                 let fitted = source
@@ -698,13 +743,17 @@ impl ImageArt {
                     .crop_imm(x, y, width, height)
             }
         };
-        if checkered {
-            // Two cells wide by one tall: square on screen.
-            let (sx, sy) = cell_pixels(mode);
-            let flat = checkerboard(&result.to_rgba8(), (2 * sx as u32, sy as u32));
-            return Ok(Arc::new(DynamicImage::ImageRgb8(flat)));
+        Ok(Arc::new(self.checkered(result, mode)))
+    }
+
+    /// Under a checkerboard background, flatten a fitted raster onto squares
+    /// two cells wide by one tall: square on screen.
+    fn checkered(&self, result: DynamicImage, mode: ImageMode) -> DynamicImage {
+        if self.background != Some(ImageBackground::Checkerboard) {
+            return result;
         }
-        Ok(Arc::new(result))
+        let (sx, sy) = cell_pixels(mode);
+        DynamicImage::ImageRgb8(checkerboard(&result.to_rgba8(), (2 * sx as u32, sy as u32)))
     }
 
     /// Render with an explicit, already-resolved mode (no `Auto` handling).
@@ -723,13 +772,19 @@ impl ImageArt {
             return Err(ImageArtError::InvalidAdjustment);
         }
         let image = self.prepare_image(mode, options.max_width)?;
-        let width = self.options.width.unwrap_or(options.max_width);
-        let width = if self.fit.is_some() {
-            width.min(options.max_width)
+        let native = self.fit == Some(ImageFit::Native);
+        let (width, rows) = if native {
+            let (columns, rows) = self.native_grid(mode, options.max_width);
+            (columns, Some(rows))
         } else {
-            width
+            let width = self.options.width.unwrap_or(options.max_width);
+            let width = if self.fit.is_some() {
+                width.min(options.max_width)
+            } else {
+                width
+            };
+            (width.min(self.max_width.unwrap_or(usize::MAX)), self.rows())
         };
-        let width = width.min(self.max_width.unwrap_or(usize::MAX));
         match mode {
             ImageMode::Auto => {
                 // `render` always resolves Auto before dispatching here, but
@@ -747,6 +802,7 @@ impl ImageArt {
                     .color(self.options.color)
                     .color_processing(self.color_mode, self.dither, self.color_distance);
                 match (self.options.height, self.max_height) {
+                    _ if native => art = art.height(rows.expect("native sets rows")),
                     (Some(_), _) => art = art.height(self.rows().expect("height is set")),
                     // ASCII's height is an exact row count, not a cap, so an
                     // unfitted max height narrows the width to keep the aspect.
@@ -767,7 +823,7 @@ impl ImageArt {
                     .width(width)
                     .keep_transparency(self.keeps_transparency())
                     .color_processing(self.color_mode, self.dither, self.color_distance);
-                if let Some(height) = self.rows() {
+                if let Some(height) = rows {
                     art = art.height(height);
                 }
                 Ok(art.rich_render(console, options))
@@ -777,7 +833,7 @@ impl ImageArt {
                     .width(width)
                     .keep_transparency(self.keeps_transparency())
                     .color_processing(self.color_mode, self.dither, self.color_distance);
-                if let Some(height) = self.rows() {
+                if let Some(height) = rows {
                     art = art.height(height);
                 }
                 Ok(art.rich_render(console, options))
@@ -786,12 +842,12 @@ impl ImageArt {
                 let mut art = BrailleArt::from_shared(Arc::clone(&image))
                     .width(width)
                     .keep_transparency(self.keeps_transparency());
-                if let Some(height) = self.rows() {
+                if let Some(height) = rows {
                     art = art.height(height);
                 }
                 Ok(art.rich_render(console, options))
             }
-            ImageMode::Sixel => self.render_sixel(image, width, console, options),
+            ImageMode::Sixel => self.render_sixel(image, width, rows, console, options),
         }
     }
 
@@ -800,6 +856,7 @@ impl ImageArt {
         &self,
         image: Arc<DynamicImage>,
         width: usize,
+        rows: Option<usize>,
         console: &Console,
         _options: &ConsoleOptions,
     ) -> Result<Vec<Segment>, ImageArtError> {
@@ -812,7 +869,7 @@ impl ImageArt {
             .width(width)
             .keep_transparency(self.keeps_transparency())
             .color_processing(self.color_mode, self.dither, self.color_distance);
-        if let Some(height) = self.rows() {
+        if let Some(height) = rows {
             art = art.height(height);
         }
         if art.checked_pixel_size(width).is_none() {
@@ -831,6 +888,7 @@ impl ImageArt {
         &self,
         _image: Arc<DynamicImage>,
         _width: usize,
+        _rows: Option<usize>,
         _console: &Console,
         _options: &ConsoleOptions,
     ) -> Result<Vec<Segment>, ImageArtError> {
@@ -838,6 +896,58 @@ impl ImageArt {
             mode: ImageMode::Sixel,
             feature: "sixel",
         })
+    }
+}
+
+impl ImageArt {
+    /// The cell grid [`ImageFit::Native`] renders `mode` at: the image's
+    /// pixels at the backend's density, rounded up to whole cells. ASCII and
+    /// half-blocks take 1×2 pixels per cell, quadrants and Braille 2×4, and
+    /// Sixel 8×16 (its assumed cell size). Every mode keeps the image's
+    /// aspect ratio on a cell twice as tall as it is wide.
+    ///
+    /// The grid is then capped, keeping the aspect ratio, by `available`
+    /// columns, by `width`/`height` when set, and by
+    /// [`max_width`](Self::max_width)/[`max_height`](Self::max_height). It is
+    /// at least one cell each way.
+    ///
+    /// `mode` should be a resolved backend; [`ImageMode::Auto`] counts as
+    /// half-blocks. A quarter-turn [`Rotation`](crate::Rotation) swaps the
+    /// image's width and height first.
+    pub fn native_grid(&self, mode: ImageMode, available: usize) -> (usize, usize) {
+        let (columns, rows) = self.native_cells(mode);
+        let max_columns = available
+            .min(self.options.width.unwrap_or(usize::MAX))
+            .min(self.max_width.unwrap_or(usize::MAX))
+            .max(1);
+        let max_rows = self
+            .options
+            .height
+            .unwrap_or(usize::MAX)
+            .min(self.max_height.unwrap_or(usize::MAX))
+            .max(1);
+        if columns <= max_columns && rows <= max_rows {
+            return (columns, rows);
+        }
+        let scale = (max_columns as f64 / columns as f64).min(max_rows as f64 / rows as f64);
+        let shrink =
+            |cells: usize, cap: usize| ((cells as f64 * scale).round() as usize).clamp(1, cap);
+        (shrink(columns, max_columns), shrink(rows, max_rows))
+    }
+
+    /// The uncapped native grid: the image's pixels (after a quarter-turn)
+    /// in whole cells.
+    fn native_cells(&self, mode: ImageMode) -> (usize, usize) {
+        let (w, h) = self.image.dimensions();
+        let (w, h) = match self.transforms.rotation {
+            crate::Rotation::Clockwise90 | crate::Rotation::Clockwise270 => (h, w),
+            _ => (w, h),
+        };
+        let (sx, sy) = cell_pixels(mode);
+        (
+            (w as usize).div_ceil(sx).max(1),
+            (h as usize).div_ceil(sy).max(1),
+        )
     }
 }
 
@@ -1098,6 +1208,168 @@ mod tests {
             .to_rgb8()
             .pixels()
             .all(|p| p.0 == [20, 40, 60]));
+    }
+
+    /// Columns and lines of a text-mode render.
+    fn rendered_grid(art: &ImageArt, width: usize) -> (usize, usize) {
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(width)
+            .build();
+        let text: String = art
+            .render(&console, &console.options())
+            .unwrap()
+            .iter()
+            .filter(|s| !s.control)
+            .map(|s| s.text.clone())
+            .collect();
+        let lines: Vec<&str> = text.lines().collect();
+        let columns = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0);
+        (columns, lines.len())
+    }
+
+    const TEXT_MODES: [ImageMode; 4] = [
+        ImageMode::Ascii,
+        ImageMode::Blocks,
+        ImageMode::Quadrants,
+        ImageMode::Braille,
+    ];
+
+    #[test]
+    fn native_renders_the_images_own_pixels_per_mode() {
+        // (image size, [ascii, blocks, quadrants, braille, sixel] grids)
+        let cases = [
+            ((8, 8), [(8, 4), (8, 4), (4, 2), (4, 2), (1, 1)]),
+            // Odd sizes round up to whole cells.
+            ((7, 5), [(7, 3), (7, 3), (4, 2), (4, 2), (1, 1)]),
+            ((1, 1), [(1, 1), (1, 1), (1, 1), (1, 1), (1, 1)]),
+            ((17, 33), [(17, 17), (17, 17), (9, 9), (9, 9), (3, 3)]),
+        ];
+        for ((w, h), grids) in cases {
+            let modes = [
+                ImageMode::Ascii,
+                ImageMode::Blocks,
+                ImageMode::Quadrants,
+                ImageMode::Braille,
+                ImageMode::Sixel,
+            ];
+            for (mode, grid) in modes.into_iter().zip(grids) {
+                let art = ImageArt::new(solid(w, h, [200, 50, 50]))
+                    .mode(mode)
+                    .fit(ImageFit::Native);
+                assert_eq!(art.native_grid(mode, 100), grid, "{w}x{h} {mode:?}");
+                if mode != ImageMode::Sixel {
+                    assert_eq!(rendered_grid(&art, 100), grid, "{w}x{h} {mode:?} rendered");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn native_never_enlarges_but_the_default_fills_the_width() {
+        let tiny = || ImageArt::new(solid(8, 8, [0, 0, 255])).mode(ImageMode::Blocks);
+        assert_eq!(rendered_grid(&tiny(), 100), (100, 50));
+        assert_eq!(rendered_grid(&tiny().fit(ImageFit::Native), 100), (8, 4));
+    }
+
+    #[test]
+    fn native_is_capped_by_the_console_and_max_sizes_keeping_the_aspect() {
+        let wide = || {
+            ImageArt::new(solid(80, 40, [0, 200, 0]))
+                .mode(ImageMode::Blocks)
+                .fit(ImageFit::Native)
+        };
+        // Own size: 80×20 cells.
+        assert_eq!(rendered_grid(&wide(), 100), (80, 20));
+        // The console width halves it.
+        assert_eq!(rendered_grid(&wide(), 40), (40, 10));
+        assert_eq!(rendered_grid(&wide().max_width(20), 100), (20, 5));
+        assert_eq!(rendered_grid(&wide().max_height(5), 100), (20, 5));
+        // `width`/`height` cap too; the tighter cap wins.
+        assert_eq!(
+            rendered_grid(&wide().width(60).max_height(10), 100),
+            (40, 10)
+        );
+        for mode in TEXT_MODES {
+            let art = ImageArt::new(solid(80, 40, [0, 200, 0]))
+                .mode(mode)
+                .fit(ImageFit::Native)
+                .max_width(10);
+            let (columns, rows) = rendered_grid(&art, 100);
+            assert_eq!(columns, 10, "{mode:?}");
+            assert_eq!((columns, rows), art.native_grid(mode, 100), "{mode:?}");
+        }
+    }
+
+    #[test]
+    fn native_maps_pixels_one_to_one_and_pads_the_last_cell() {
+        // A 3×3 image under quadrants (2×4 pixels a cell): 2×1 cells, the
+        // last pixel column and row padded with the background.
+        let mut source = RgbImage::from_pixel(3, 3, Rgb([0, 0, 0]));
+        source.put_pixel(1, 1, Rgb([255, 255, 255]));
+        let art = ImageArt::new(DynamicImage::ImageRgb8(source))
+            .mode(ImageMode::Quadrants)
+            .fit(ImageFit::Native)
+            .background([9, 9, 9]);
+        let raster = art
+            .prepare_image(ImageMode::Quadrants, 100)
+            .unwrap()
+            .to_rgb8();
+        assert_eq!(raster.dimensions(), (4, 4));
+        assert_eq!(raster.get_pixel(1, 1).0, [255, 255, 255]);
+        assert_eq!(raster.get_pixel(0, 0).0, [0, 0, 0]);
+        assert_eq!(raster.get_pixel(3, 0).0, [9, 9, 9]);
+        assert_eq!(raster.get_pixel(0, 3).0, [9, 9, 9]);
+    }
+
+    #[test]
+    fn native_follows_a_quarter_turn() {
+        let art = ImageArt::new(solid(8, 2, [1, 2, 3]))
+            .mode(ImageMode::Blocks)
+            .fit(ImageFit::Native)
+            .transforms(crate::ImageTransforms {
+                rotation: crate::Rotation::Clockwise90,
+                ..Default::default()
+            });
+        assert_eq!(art.native_grid(ImageMode::Blocks, 100), (2, 4));
+        assert_eq!(rendered_grid(&art, 100), (2, 4));
+    }
+
+    #[test]
+    fn native_combines_with_alpha_backgrounds() {
+        let mut source = image::RgbaImage::from_pixel(3, 3, image::Rgba([0, 0, 0, 0]));
+        source.put_pixel(0, 0, image::Rgba([255, 0, 0, 255]));
+        let image = DynamicImage::ImageRgba8(source);
+        // Terminal default: padding and transparent pixels stay transparent.
+        let art = ImageArt::new(image.clone())
+            .mode(ImageMode::Blocks)
+            .fit(ImageFit::Native)
+            .background_mode(ImageBackground::TerminalDefault);
+        let raster = art
+            .prepare_image(ImageMode::Blocks, 100)
+            .unwrap()
+            .to_rgba8();
+        assert_eq!(raster.dimensions(), (3, 4));
+        assert_eq!(raster.get_pixel(0, 0).0, [255, 0, 0, 255]);
+        assert_eq!(raster.get_pixel(2, 3).0[3], 0);
+        assert_eq!(rendered_grid(&art, 100), (3, 2));
+        // A colour composites transparency and fills the padding.
+        let art = ImageArt::new(image.clone())
+            .mode(ImageMode::Blocks)
+            .fit(ImageFit::Native)
+            .background([0, 0, 255]);
+        let raster = art.prepare_image(ImageMode::Blocks, 100).unwrap().to_rgb8();
+        assert_eq!(raster.get_pixel(1, 1).0, [0, 0, 255]);
+        assert_eq!(raster.get_pixel(2, 3).0, [0, 0, 255]);
+        // A checkerboard covers the whole grid.
+        let art = ImageArt::new(image)
+            .mode(ImageMode::Blocks)
+            .fit(ImageFit::Native)
+            .background_mode(ImageBackground::Checkerboard);
+        let raster = art.prepare_image(ImageMode::Blocks, 100).unwrap().to_rgb8();
+        assert_eq!(raster.dimensions(), (3, 4));
+        assert_eq!(rendered_grid(&art, 100), (3, 2));
     }
 
     #[test]

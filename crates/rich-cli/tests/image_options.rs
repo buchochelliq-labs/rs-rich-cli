@@ -23,7 +23,7 @@ fn image_options_reject_invalid_values_and_other_modes() {
     for (args, message) in [
         (
             vec!["image", "missing.png", "--image-fit", "squash"],
-            "contain, cover or stretch",
+            "contain, cover, stretch or native",
         ),
         (
             vec!["image", "missing.png", "--image-background", "purple"],
@@ -689,4 +689,86 @@ fn quadrant_diff_heatmaps_render_in_exports() {
             .any(|c| matches!(c, '▘' | '▀' | '▌' | '▛' | '▚' | '▜' | '▙' | '█')),
         "no quadrant glyphs in the export"
     );
+}
+
+#[cfg(feature = "art")]
+#[test]
+fn native_fit_renders_the_images_own_size_from_the_cli_and_config() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("icon.png");
+    rich_art::image::RgbImage::from_fn(8, 8, |x, y| {
+        rich_art::image::Rgb([x as u8 * 30, y as u8 * 30, 90])
+    })
+    .save(&source)
+    .unwrap();
+    let path = source.to_str().unwrap();
+    let grid = |out: &std::process::Output| {
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let text = String::from_utf8(out.stdout.clone()).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        (
+            lines.iter().map(|l| l.chars().count()).max().unwrap_or(0),
+            lines.len(),
+        )
+    };
+
+    // Without native an 8×8 icon fills the 80-column width; with it, 8×4.
+    let filled = run(&["image", path, "--image-mode", "blocks"]);
+    assert_eq!(grid(&filled), (80, 40));
+    let native = run(&[
+        "image",
+        path,
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "native",
+    ]);
+    assert_eq!(grid(&native), (8, 4));
+    // No --height needed; caps still apply.
+    let capped = run(&[
+        "image",
+        path,
+        "--image-mode",
+        "blocks",
+        "--image-fit",
+        "native",
+        "--image-max-width",
+        "4",
+    ]);
+    assert_eq!(grid(&capped), (4, 2));
+    let braille = run(&[
+        "image",
+        path,
+        "--image-mode",
+        "braille",
+        "--image-fit",
+        "native",
+    ]);
+    assert_eq!(grid(&braille), (4, 2));
+
+    let config = temp.path().join("config.toml");
+    std::fs::write(&config, "[defaults]\nimage_fit = 'native'\n").unwrap();
+    let configured = Command::new(env!("CARGO_BIN_EXE_rich"))
+        .args(["--config", config.to_str().unwrap(), "image", path])
+        .args(["--image-mode", "blocks"])
+        .env_remove("NO_COLOR")
+        .env("COLUMNS", "80")
+        .output()
+        .unwrap();
+    assert_eq!(configured.stdout, native.stdout);
+
+    // Anchors still need cover.
+    let out = run(&[
+        "image",
+        path,
+        "--image-fit",
+        "native",
+        "--image-anchor",
+        "top",
+    ]);
+    assert_eq!(out.status.code(), Some(2));
 }

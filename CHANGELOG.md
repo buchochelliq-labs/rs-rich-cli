@@ -107,6 +107,22 @@ every dependent moves with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
   first version is uploaded by hand after core 0.0.8 and before ext 0.0.10
   (BRANCHING, "Registry authentication").
 
+### Native image sizing (0.0.12 workstream 6: #519)
+
+- **`rich_art::ImageFit::Native`** renders an image at its own pixel size in
+  whole cells. The density is per backend: 1×2 pixels a cell for ASCII and
+  half-blocks, 2×4 for quadrants and Braille, and 8×16 for Sixel. Pixels
+  land unscaled, and the last partial cell takes the background.
+  - The console width, `width`/`height` and `max_width`/`max_height` only
+    shrink it, keeping the aspect ratio. It is never enlarged to fill the width.
+  - `ImageArt::native_grid(mode, available)` reports the grid.
+  - Adding the variant is a breaking change for exhaustive `match`es on
+    `ImageFit` (rs-rich-art is 0.0.x).
+- **CLI: `--image-fit native`**, and `image_fit = "native"` in `rich.toml`.
+  Unlike the other fits, it needs no `--height`.
+- The art guide has a "Native size" section with a rendered example.
+  `docs/cli.md` and the CLI reference are updated too.
+
 ### Render tree spike (0.0.12 workstream 5: #226)
 
 - **Design note, no code change:**
