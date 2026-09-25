@@ -1,4 +1,6 @@
 //! Deterministic snapshots for downstream render regression tests.
+pub mod conformance;
+
 use crate::target::RenderTarget;
 use rich::protocol::RenderEnvironment;
 use rich::{Renderable, Segment};

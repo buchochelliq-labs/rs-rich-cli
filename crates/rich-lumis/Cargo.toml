@@ -46,4 +46,4 @@ lumis = { version = "0.15", default-features = false }
 
 [dev-dependencies]
 # Path only: stripped when packaging, so publishing never waits on ext.
-rich-ext = { package = "rs-rich-ext", path = "../rich-ext" }
+rich-ext = { package = "rs-rich-ext", path = "../rich-ext", features = ["testing"] }

@@ -107,6 +107,38 @@ every dependent moves with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
   first version is uploaded by hand after core 0.0.8 and before ext 0.0.10
   (BRANCHING, "Registry authentication").
 
+### Highlighter conformance kit, guide and benchmarks (0.0.12 workstream 1: #526)
+
+- **`rich_ext::testing::conformance`** (the `testing` feature).
+  `conformance::check(highlighter)` runs one contract against any
+  `CodeHighlighter`, and reports every failure with the input that caused it:
+  - listed themes highlight, and an unknown theme is `UnknownTheme`;
+  - line counts match `split('\n')` for empty input, a missing final newline,
+    CRLF, tabs and multi-byte text;
+  - spans are sorted, disjoint, in range and on character boundaries;
+  - an unknown language renders as no language;
+  - rendered output has no control characters beyond styling;
+  - 10,000 lines cost at most 40× what 1,000 lines do (a relative budget, not
+    a wall-clock one).
+  `check_with(…, Options { all_themes, scaling })` tunes it.
+  - syntect passes it with every theme, and lumis passes it in its own tests.
+  - Eight deliberately broken adapters are each rejected by the check they
+    break.
+- **`ExtensionRegistry::register_code_highlighter(name, engine)`** registers an
+  engine without a plugin, with the same name and conflict rules.
+- **Guide: "Code highlighters"**
+  ([docs/guide/ext/code-highlighters.md](docs/guide/ext/code-highlighters.md)):
+  choosing between syntect and lumis (the trade-offs, and the tree-sitter
+  linking caveat), a keyword-only adapter in about 40 lines that passes the
+  kit, and the ANSI themes. The example (`guide_highlighters`) is compiled, and
+  its conformance test runs with `cargo test`.
+- **Benchmarks:** syntect, syntect with `onig`, and lumis on the review files
+  ([docs/benchmarks.md](docs/benchmarks.md#0012-code-highlighters)).
+  - lumis has a fixed cost per language (0.07–0.12 s), then scales best: 1.87 s
+    for 29,160 lines of Python, against 3.66 s with `onig`.
+  - The CLI binary with the `lumis` feature is 169 MB, against 15.7 MB without
+    it.
+
 ### Choosing the code highlighter (0.0.12 workstream 1: #525)
 
 - **Core: a console-wide default.** `protocol::CodeHighlighting` (an engine and

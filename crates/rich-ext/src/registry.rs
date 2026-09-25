@@ -108,6 +108,33 @@ impl ExtensionRegistry {
         self
     }
 
+    /// Register a code highlighter directly, without a plugin, under `name`
+    /// (lowercase letters, digits, `-`, `_` and `.`). Refused when the name is
+    /// invalid or already taken.
+    pub fn register_code_highlighter(
+        &mut self,
+        name: &str,
+        highlighter: Arc<dyn CodeHighlighter>,
+    ) -> Result<(), PluginError> {
+        if !is_valid_name(name) {
+            return Err(PluginError::InvalidName {
+                plugin: DIRECT.to_string(),
+                name: name.to_string(),
+            });
+        }
+        let capability = Capability::CodeHighlighter(name.to_string());
+        if let Some(existing) = self.provider(&capability) {
+            return Err(PluginError::Conflict {
+                capability,
+                existing: existing.to_string(),
+                plugin: DIRECT.to_string(),
+            });
+        }
+        self.code_highlighters
+            .insert(name.to_string(), (DIRECT.to_string(), highlighter));
+        Ok(())
+    }
+
     /// Add a plugin and everything it registers.
     ///
     /// Refused, with nothing kept, when the plugin was built for another
@@ -589,6 +616,27 @@ mod tests {
         let out = console.render_to_string(&rich::Syntax::new("def f(): pass", "python"));
         assert!(out.contains("\x1b[94mdef"), "{out:?}");
         assert!(!out.contains("38;2;"), "{out:?}");
+    }
+
+    #[test]
+    fn code_highlighters_register_directly() {
+        let mut registry = ExtensionRegistry::with_defaults();
+        registry
+            .register_code_highlighter("mine", SyntectHighlighter::shared())
+            .unwrap();
+        assert_eq!(registry.code_highlighter_names(), ["mine", "syntect"]);
+        assert_eq!(
+            registry.provided_by(&Capability::CodeHighlighter("mine".into())),
+            Some("(direct)")
+        );
+        assert!(matches!(
+            registry.register_code_highlighter("syntect", SyntectHighlighter::shared()),
+            Err(PluginError::Conflict { .. })
+        ));
+        assert!(matches!(
+            registry.register_code_highlighter("Bad Name", SyntectHighlighter::shared()),
+            Err(PluginError::InvalidName { .. })
+        ));
     }
 
     #[test]

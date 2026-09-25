@@ -235,3 +235,10 @@ fn markdown_code_blocks_and_the_plugin_host() {
             .unwrap()
     );
 }
+
+/// The same conformance kit every adapter runs (#526).
+#[test]
+fn lumis_passes_the_conformance_kit() {
+    rich_ext::testing::conformance::check(LumisHighlighter::shared())
+        .unwrap_or_else(|error| panic!("{error}"));
+}

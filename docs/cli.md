@@ -73,6 +73,13 @@ rich markdown CHANGELOG
 rich syntax --width 100 script
 ```
 
+Code is highlighted by syntect. `--code-theme NAME` picks one of its themes
+(`ansi_dark` and `ansi_light` use the terminal's own colours), and a build with
+the `lumis` feature adds `--highlighter lumis` with lumis's themes. Both are
+also config keys (`code_theme`, `highlighter`), which a project's `rich.toml`
+may set. `rich doctor` lists the highlighters and themes available. See the
+[code highlighters guide](guide/ext/code-highlighters.md).
+
 Read from standard input with `-` (including `-p -` for markup):
 
 ```bash
