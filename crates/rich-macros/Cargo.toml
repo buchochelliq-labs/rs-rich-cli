@@ -6,7 +6,7 @@
 # 0.0.1, like every crate here; see AGENTS.md → Versioning.
 [package]
 name = "rs-rich-macros"
-version = "0.0.1"
+version = "0.0.2"
 description = "Compile-time checked markup and derive macros for the `rich` Rust port"
 edition.workspace = true
 license.workspace = true

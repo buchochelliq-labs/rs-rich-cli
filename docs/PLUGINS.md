@@ -24,6 +24,7 @@ Defined in [`crates/rich/src/protocol.rs`](https://github.com/buchochelliq-labs/
 | `Renderable`   | `__rich_console__` protocol | make a custom type printable by `Console` |
 | `LineRenderable` | incremental consumption of rendering generators | stream styled lines without collecting the full rendered output; implemented by `Table` |
 | `Highlighter`  | `Highlighter` ABC          | add style spans to `Text` (numbers, URLs, syntax, …) |
+| `CodeHighlighter` | Pygments behind `Syntax` | the syntax-highlighting engine for `Syntax` and Markdown code; `SyntectHighlighter` is the default, and `Syntax::highlighter` / `Markdown::highlighter` take any other (0.0.12) |
 
 More seams (custom `Box` sets, spinners, themes) are added here as the
 corresponding modules are ported — always as a trait the core calls, never as an

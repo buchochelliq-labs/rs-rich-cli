@@ -11,6 +11,8 @@
 //! its inline strong/emphasis/code/link/strike runs, as upstream's
 //! `TableDataElement` builds it).
 
+use std::sync::Arc;
+
 use pulldown_cmark::{
     Alignment, CodeBlockKind, CowStr, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd,
 };
@@ -18,7 +20,7 @@ use pulldown_cmark::{
 use crate::cells::cell_len;
 use crate::console::{Console, ConsoleOptions, Justify};
 use crate::markdown_url::{normalize_link, normalize_link_text, validate_link};
-use crate::protocol::Renderable;
+use crate::protocol::{CodeHighlighter, Renderable};
 use crate::r#box::SIMPLE;
 use crate::segment::Segment;
 use crate::style::Style;
@@ -89,6 +91,8 @@ enum Block {
         code: String,
         /// `Markdown(code_theme=…)`; `None` keeps the `Syntax` default.
         theme: Option<String>,
+        /// [`Markdown::highlighter`]; `None` keeps the `Syntax` default.
+        highlighter: Option<Arc<dyn CodeHighlighter>>,
     },
     /// A thematic break (horizontal rule).
     Rule,
@@ -177,6 +181,8 @@ struct MarkdownOptions {
     inline_code_lexer: Option<String>,
     /// `inline_code_theme`, defaulting to `code_theme`.
     inline_code_theme: Option<String>,
+    /// The engine for code blocks and highlighted inline code.
+    highlighter: Option<Arc<dyn CodeHighlighter>>,
 }
 
 impl Markdown {
@@ -234,7 +240,8 @@ impl Markdown {
     }
 
     /// The theme for code blocks. Port of `Markdown(code_theme=…)`. Names are
-    /// `syntect` theme names, not Pygments styles (see DIVERGENCES #18).
+    /// the highlighter's own: with the default, `syntect` theme names plus
+    /// upstream's `ansi_dark` and `ansi_light` (see DIVERGENCES #18).
     pub fn code_theme(mut self, theme: impl Into<String>) -> Self {
         self.options.code_theme = Some(theme.into());
         self.reparse()
@@ -251,6 +258,15 @@ impl Markdown {
     /// `Markdown(inline_code_theme=…)`, defaulting to the code theme.
     pub fn inline_code_theme(mut self, theme: impl Into<String>) -> Self {
         self.options.inline_code_theme = Some(theme.into());
+        self.reparse()
+    }
+
+    /// Highlight code blocks, and inline code when an
+    /// [`inline_code_lexer`](Self::inline_code_lexer) is set, with `highlighter`
+    /// instead of the default [`SyntectHighlighter`](crate::syntax::SyntectHighlighter).
+    /// Theme names are then the highlighter's own.
+    pub fn highlighter(mut self, highlighter: Arc<dyn CodeHighlighter>) -> Self {
+        self.options.highlighter = Some(highlighter);
         self.reparse()
     }
 
@@ -1140,6 +1156,7 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                         language,
                         code: source,
                         theme: md.code_theme.clone(),
+                        highlighter: md.highlighter.clone(),
                     });
                 }
             }
@@ -1389,6 +1406,9 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                         let mut syntax = Syntax::new(text.to_string(), lexer.as_str());
                         if let Some(theme) = theme {
                             syntax = syntax.theme(theme.as_str());
+                        }
+                        if let Some(highlighter) = &md.highlighter {
+                            syntax = syntax.highlighter(highlighter.clone());
                         }
                         let mut highlighted = syntax.highlight();
                         highlighted.rstrip();
@@ -1680,6 +1700,7 @@ fn render_blocks(
                 language,
                 code,
                 theme,
+                highlighter,
             } => {
                 // Render the code block via the Syntax renderable (functional,
                 // not byte-parity — see DIVERGENCES). Split its segment stream
@@ -1694,6 +1715,9 @@ fn render_blocks(
                     .padding(1);
                 if let Some(theme) = theme {
                     syntax = syntax.theme(theme.as_str());
+                }
+                if let Some(highlighter) = highlighter {
+                    syntax = syntax.highlighter(highlighter.clone());
                 }
                 let inner = options.update_width(width);
                 let segments = syntax.rich_render(console, &inner);
@@ -1789,6 +1813,62 @@ mod tests {
             default,
             render_with(&Markdown::new(source).code_theme("no-such-theme"))
         );
+    }
+
+    /// `Markdown::highlighter` reaches fenced code blocks and, with an inline
+    /// lexer, inline code: here every highlighted byte is underlined.
+    #[test]
+    fn a_custom_highlighter_reaches_code_blocks_and_inline_code() {
+        use crate::protocol::{
+            CodeHighlighter, HighlightError, HighlightSpan, HighlightedCode, HighlightedLine,
+        };
+        struct Underline;
+        impl CodeHighlighter for Underline {
+            fn highlight(
+                &self,
+                code: &str,
+                _language: Option<&str>,
+                _theme: &str,
+            ) -> Result<HighlightedCode, HighlightError> {
+                let underline = Style::parse("underline").unwrap();
+                let lines = code
+                    .split('\n')
+                    .map(|line| HighlightedLine {
+                        spans: (!line.is_empty())
+                            .then(|| HighlightSpan {
+                                range: 0..line.len(),
+                                style: underline.clone(),
+                            })
+                            .into_iter()
+                            .collect(),
+                        newline_style: None,
+                    })
+                    .collect();
+                Ok(HighlightedCode {
+                    lines,
+                    ..Default::default()
+                })
+            }
+            fn default_theme(&self) -> &str {
+                "underline"
+            }
+            fn themes(&self) -> Vec<String> {
+                vec!["underline".into()]
+            }
+            fn languages(&self) -> Vec<String> {
+                Vec::new()
+            }
+        }
+        let block = render_with(
+            &Markdown::new("```rust\nfn main() {}\n```").highlighter(Arc::new(Underline)),
+        );
+        assert!(block.contains("\x1b[4mfn main() {}"), "{block:?}");
+        let inline = render_with(
+            &Markdown::new("Call `go()` now.")
+                .inline_code_lexer("rust")
+                .highlighter(Arc::new(Underline)),
+        );
+        assert!(inline.contains("\x1b[4mgo()"), "{inline:?}");
     }
 
     #[test]

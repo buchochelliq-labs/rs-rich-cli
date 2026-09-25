@@ -7,7 +7,7 @@
 # AGENTS.md → Versioning.
 [package]
 name = "rs-rich-ext"
-version = "0.0.9"
+version = "0.0.10"
 description = "Extensions for the `rich` Rust port: diagnostics, structured data, clap and tracing integration, diffs, workflow renderables and a plugin registry"
 edition.workspace = true
 license.workspace = true

@@ -105,7 +105,10 @@ pub use crate::progress::{
     TaskId, TaskUpdate, TextColumn, TimeRemainingColumn, Track, TrackStdout,
 };
 pub use crate::progress_bar::ProgressBar;
-pub use crate::protocol::{Highlighter, LineRenderable, Renderable};
+pub use crate::protocol::{
+    CodeHighlighter, HighlightError, HighlightSpan, HighlightedCode, HighlightedLine, Highlighter,
+    LineRenderable, Renderable,
+};
 pub use crate::rule::Rule;
 pub use crate::screen::Screen;
 pub use crate::segment::Segment;
@@ -113,7 +116,7 @@ pub use crate::spinner::Spinner;
 pub use crate::status::Status;
 pub use crate::style::{Style, StyleType};
 pub use crate::styled::Styled;
-pub use crate::syntax::Syntax;
+pub use crate::syntax::{Syntax, SyntectHighlighter};
 pub use crate::table::{Cell, ColumnOptions, Table};
 pub use crate::terminal_theme::{
     TerminalTheme, DEFAULT_TERMINAL_THEME, DIMMED_MONOKAI, MONOKAI, NIGHT_OWLISH, SVG_EXPORT_THEME,

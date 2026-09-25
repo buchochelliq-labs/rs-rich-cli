@@ -67,7 +67,7 @@ impl<'theme, 'code> CachedHighlighter<'theme, 'code> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{syntax_set, theme_set, DEFAULT_THEME};
+    use super::super::syntect_adapter::{syntax_set, theme_set, DEFAULT_THEME};
     use super::*;
     use syntect::util::LinesWithEndings;
     #[test]

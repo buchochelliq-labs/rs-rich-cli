@@ -12,7 +12,7 @@ Looking for how to *do* something rather than what a flag is called? Start at
 
 ## rich
 
-rich 0.0.11 — Rust port of the rich-cli terminal toolbox
+rich 0.0.12 — Rust port of the rich-cli terminal toolbox
 
 RESOURCE is a file path, an http(s) URL, or `-` for stdin. Everything after a bare `--` is a RESOURCE, however much it looks like an option. Input modes with no RESOURCE read stdin until EOF; `-p -` reads markup from stdin too. Terminal stdin shows an input hint. Repeated scalar options use their last value.
 
