@@ -368,6 +368,11 @@ impl Renderable for Tree {
         let mut segments = Vec::new();
         let last = lines.len().saturating_sub(1);
         for (index, line) in lines.into_iter().enumerate() {
+            // Upstream ends every row with a newline, so an empty last row
+            // (`Tree("")`) is still a row; mark it with an empty segment.
+            if index == last && line.is_empty() {
+                segments.push(Segment::new("", None));
+            }
             segments.extend(line);
             if index != last {
                 segments.push(Segment::line());

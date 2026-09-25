@@ -1205,8 +1205,7 @@ impl Console {
             // `Console(markup=False)`: the string is taken literally.
             return Ok(self.decorate(Text::new(self.expand_emoji_plain(content))));
         }
-        let expanded = self.expand_emoji(content);
-        let markup = Text::from_markup(&expanded)?;
+        let markup = self.parse_markup(content, self.emoji)?;
 
         // The highlighter runs on the *markup-stripped* text and its spans go on
         // first; the markup spans are appended afterwards. Spans combine in
@@ -1240,8 +1239,8 @@ impl Console {
         let markup = if !self.markup {
             Text::new(self.expand_emoji_plain(content))
         } else if content.contains('[') {
-            let expanded = self.expand_emoji(content);
-            Text::from_markup(&expanded).unwrap_or_else(|_| Text::new(expanded))
+            self.parse_markup(content, self.emoji)
+                .unwrap_or_else(|_| Text::new(self.expand_emoji(content)))
         } else if content.contains(':') {
             Text::new(self.expand_emoji(content))
         } else {
@@ -1297,6 +1296,25 @@ impl Console {
         crate::emoji::replace_with_variant(content, variant)
     }
 
+    /// Port of `markup.render(content, emoji=emoji, emoji_variant=…)`: a
+    /// string with no `[` is only emoji-replaced (with the console's default
+    /// variant); otherwise emoji codes are replaced chunk by chunk between the
+    /// tags, so error positions refer to the original string.
+    fn parse_markup(&self, content: &str, emoji: bool) -> crate::errors::Result<Text> {
+        if !content.contains('[') {
+            return Ok(Text::new(if emoji {
+                crate::emoji::replace_with_variant(content, self.emoji_variant)
+            } else {
+                content.to_string()
+            }));
+        }
+        if emoji {
+            crate::markup::render_emoji(content)
+        } else {
+            crate::markup::render(content)
+        }
+    }
+
     /// Expand `:emoji:` shortcodes in a string that is not markup, with the
     /// console's default variant (upstream's `markup=False` branch of
     /// `render_str`).
@@ -1326,14 +1344,7 @@ impl Console {
         let highlight = options.highlight.unwrap_or(self.highlight);
 
         let mut rich_text = if markup {
-            let expanded = if !emoji {
-                content.to_string()
-            } else if content.contains('[') {
-                crate::emoji::replace(content)
-            } else {
-                crate::emoji::replace_with_variant(content, self.emoji_variant)
-            };
-            Text::from_markup(&expanded)?
+            self.parse_markup(content, emoji)?
         } else if emoji {
             Text::new(crate::emoji::replace_with_variant(
                 content,
@@ -1563,11 +1574,7 @@ impl Renderable for Text {
         // generator such as Markdown does not. Preserve that distinction.
         // Wrap to the available width; the effective justify is this text's own
         // justify, falling back to the console options' justify.
-        let justify = if self.get_justify() != Justify::Default {
-            self.get_justify()
-        } else {
-            options.justify
-        };
+        let justify = self.get_justify_option().unwrap_or(options.justify);
         // A justified empty line is still padded to the width (upstream's
         // `truncate(width, pad=True)`), so only an unjustified one is bare.
         if self.is_empty() && matches!(justify, Justify::Default | Justify::Full) {

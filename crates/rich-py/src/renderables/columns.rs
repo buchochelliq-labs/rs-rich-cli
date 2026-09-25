@@ -12,7 +12,7 @@ use pyo3::{PyTraverseError, PyVisit};
 use rich::align::HorizontalAlign;
 use rich::protocol::Renderable;
 use rich::table::Cell;
-use rich::{Columns as CoreColumns, Text as CoreText};
+use rich::Columns as CoreColumns;
 
 use crate::renderable::{self, AsRenderable, PyRenderable};
 use crate::text::Text;
@@ -64,7 +64,9 @@ impl AsRenderable for Columns {
         let padding = unpack(self.padding.bind(py))?;
         // Rich divides the width by `width + max(left, right)` padding.
         let step = match self.width {
-            Some(width) if !cells.is_empty() => Some(width.saturating_add(padding.1.max(padding.3))),
+            Some(width) if !cells.is_empty() => {
+                Some(width.saturating_add(padding.1.max(padding.3)))
+            }
             _ => None,
         };
         let mut columns = CoreColumns::from_cells(cells)

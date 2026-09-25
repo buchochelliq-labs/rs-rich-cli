@@ -730,6 +730,130 @@ fn reject_invalid_links<'a>(
     out
 }
 
+/// Turn a GFM table that markdown-it would not accept back into a paragraph.
+///
+/// pulldown-cmark's delimiter row is laxer than markdown-it's (`table.py`):
+/// it takes a cell of a lone `:` (`a|b` over `-|:`), where markdown-it wants
+/// every cell to match `^:?-+:?$`, no empty cell between two others, and as
+/// many cells as the header row. A rejected table is re-parsed as ordinary
+/// text (tables off), with its offsets moved back into `source`.
+///
+/// Only top-level tables are re-parsed: inside a list or quote the source
+/// range carries the container's markers, which a standalone parse would
+/// read as new containers.
+fn reject_invalid_tables<'a>(
+    source: &'a str,
+    events: impl Iterator<Item = (Event<'a>, std::ops::Range<usize>)>,
+) -> Vec<(Event<'a>, std::ops::Range<usize>)> {
+    let mut out = Vec::new();
+    let mut depth = 0usize;
+    let mut skipping = false;
+    for (event, range) in events {
+        if skipping {
+            if matches!(event, Event::End(TagEnd::Table)) {
+                skipping = false;
+            }
+            continue;
+        }
+        match &event {
+            Event::Start(Tag::BlockQuote(_) | Tag::List(_) | Tag::FootnoteDefinition(_)) => {
+                depth += 1
+            }
+            Event::End(TagEnd::BlockQuote(_) | TagEnd::List(_) | TagEnd::FootnoteDefinition) => {
+                depth = depth.saturating_sub(1)
+            }
+            Event::Start(Tag::Table(_)) if depth == 0 => {
+                let table = &source[range.clone()];
+                let mut lines = table.split('\n');
+                let header = lines.next().unwrap_or("");
+                let delimiter = lines.next().unwrap_or("");
+                if !markdown_it_table_start(header, delimiter) {
+                    let offset = range.start;
+                    out.extend(
+                        Parser::new_ext(table, Options::empty())
+                            .into_offset_iter()
+                            .map(|(event, inner)| {
+                                (event, inner.start + offset..inner.end + offset)
+                            }),
+                    );
+                    skipping = true;
+                    continue;
+                }
+            }
+            _ => {}
+        }
+        out.push((event, range));
+    }
+    out
+}
+
+/// markdown-it's test for a table start (`rules_block/table.py`): the
+/// delimiter row's characters, each of its cells, and the header's cell count.
+fn markdown_it_table_start(header: &str, delimiter: &str) -> bool {
+    let is_space = |c: char| c == ' ' || c == '\t';
+    let is_delimiter_char = |c: char| matches!(c, '|' | '-' | ':');
+    let delimiter = delimiter
+        .trim_end_matches('\r')
+        .trim_start_matches(is_space);
+    let mut chars = delimiter.chars();
+    let (Some(first), Some(second)) = (chars.next(), chars.next()) else {
+        return false;
+    };
+    if !is_delimiter_char(first)
+        || !(is_delimiter_char(second) || is_space(second))
+        || (first == '-' && is_space(second))
+        || !chars.all(|c| is_delimiter_char(c) || is_space(c))
+    {
+        return false;
+    }
+    let columns: Vec<&str> = delimiter.split('|').collect();
+    let mut aligns = 0usize;
+    for (index, column) in columns.iter().enumerate() {
+        let cell = column.trim_matches(crate::text::is_python_space);
+        if cell.is_empty() {
+            if index == 0 || index == columns.len() - 1 {
+                continue;
+            }
+            return false;
+        }
+        let dashes = cell.trim_start_matches(':');
+        let dashes = dashes.strip_suffix(':').unwrap_or(dashes);
+        let leading = cell.len() - cell.trim_start_matches(':').len();
+        if leading > 1 || dashes.is_empty() || !dashes.bytes().all(|b| b == b'-') {
+            return false;
+        }
+        aligns += 1;
+    }
+    let header = header
+        .trim_end_matches('\r')
+        .trim_matches(crate::text::is_python_space);
+    if !header.contains('|') {
+        return false;
+    }
+    // `escapedSplit`: a `\|` stays in its cell.
+    let mut cells: Vec<String> = vec![String::new()];
+    let mut escaped = false;
+    for c in header.chars() {
+        if c == '|' && !escaped {
+            cells.push(String::new());
+        } else {
+            let cell = cells.last_mut().expect("a cell");
+            if c == '|' {
+                cell.pop();
+            }
+            cell.push(c);
+        }
+        escaped = c == '\\';
+    }
+    if cells.first().is_some_and(String::is_empty) {
+        cells.remove(0);
+    }
+    if cells.last().is_some_and(String::is_empty) {
+        cells.pop();
+    }
+    !cells.is_empty() && cells.len() == aligns
+}
+
 /// Pair tilde runs the way upstream's markdown-it does (its `strikethrough`
 /// tokenize + `balance_pairs` + postProcess), over pulldown-cmark events parsed
 /// *without* strikethrough.
@@ -778,17 +902,25 @@ fn pair_strikethrough<'a>(
             Event::Text(text) if !in_code && !in_autolink && **text == source[range.clone()] => {
                 // Merge with a directly preceding literal so a run split across
                 // two text events is scanned as one.
-                let mut start = range.start;
+                let bytes = source.as_bytes();
+                let mut literal_from = range.start;
+                let mut at = range.start;
                 if let Some(Piece::Literal(previous)) = pieces.last() {
                     if previous.end == range.start {
-                        start = previous.start;
+                        literal_from = previous.start;
+                        // The previous literal holds no run of two or more
+                        // tildes (those became pieces), so only a run at its
+                        // very end can continue into this event. Rescanning
+                        // the whole literal made `[` * 20000 — one text
+                        // event per bracket — quadratic.
+                        at = previous.end;
+                        while at > previous.start && bytes[at - 1] == b'~' {
+                            at -= 1;
+                        }
                         pieces.pop();
                     }
                 }
                 let end = range.end;
-                let bytes = source.as_bytes();
-                let mut at = start;
-                let mut literal_from = start;
                 while at < end {
                     if bytes[at] != b'~' {
                         at += 1;
@@ -990,7 +1122,8 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
     // range is the `~~` delimiter.
     let options = Options::ENABLE_TABLES;
     let events = Parser::new_ext(source, options).into_offset_iter();
-    let events = reject_invalid_links(source, events);
+    let events = reject_invalid_tables(source, events);
+    let events = reject_invalid_links(source, events.into_iter());
     for (event, range) in pair_strikethrough(source, events.into_iter()) {
         // Everything between an image's brackets is its alt text, and upstream
         // takes that from the *raw* markdown (`token.content`) rather than from
@@ -1565,10 +1698,7 @@ fn render_text(
     options: &ConsoleOptions,
     width: usize,
 ) -> Vec<Vec<Segment>> {
-    let justify = match text.get_justify() {
-        Justify::Default => options.justify,
-        justify => justify,
-    };
+    let justify = text.get_justify_option().unwrap_or(options.justify);
     text.render_lines_wrapped_tabs(
         console.theme(),
         console.base_style(),

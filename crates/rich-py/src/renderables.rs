@@ -39,6 +39,12 @@ mod padding;
 mod rule;
 
 pub(crate) use rule::ends_inline as rule_ends_inline;
+
+/// The child whose segments end a `Styled`, `Constrain` or `Group` (its last
+/// renderable): upstream's yield them as they are, open last line included.
+pub(crate) fn end_child<'py>(value: &Bound<'py, PyAny>) -> Option<Bound<'py, PyAny>> {
+    constrain::end_child(value).or_else(|| containers::end_child(value))
+}
 mod spinner;
 mod tree;
 

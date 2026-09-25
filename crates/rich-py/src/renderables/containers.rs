@@ -23,6 +23,9 @@ use super::render;
 pub(crate) struct Stack {
     pub(crate) children: Vec<Box<dyn Renderable>>,
     pub(crate) measure: Measure,
+    /// Which children leave their last line open (see
+    /// [`renderable::ends_inline`]): the next one continues it.
+    pub(crate) inline: Vec<bool>,
 }
 
 /// How a [`Stack`] measures.
@@ -42,7 +45,15 @@ impl Stack {
             .iter()
             .map(|child| renderable::to_renderable(&child, None))
             .collect::<PyResult<_>>()?;
-        Ok(Stack { children, measure })
+        let inline = list
+            .iter()
+            .map(|child| renderable::ends_inline(&child))
+            .collect();
+        Ok(Stack {
+            children,
+            measure,
+            inline,
+        })
     }
 }
 
@@ -51,12 +62,13 @@ impl Renderable for Stack {
         let mut child_options = options.clone();
         child_options.height = None;
         let mut segments = Vec::new();
-        for child in &self.children {
-            segments.extend(renderable::terminated(render(
-                console,
-                child.as_ref(),
-                &child_options,
-            )));
+        for (index, child) in self.children.iter().enumerate() {
+            let rendered = render(console, child.as_ref(), &child_options);
+            if self.inline.get(index).copied().unwrap_or(false) {
+                segments.extend(rendered);
+            } else {
+                segments.extend(renderable::terminated(rendered));
+            }
         }
         renderable::unterminated(segments)
     }
@@ -120,6 +132,14 @@ impl Group {
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
         visit.call(&self.renderables)
     }
+}
+
+/// The last renderable of a `Group` (or `Renderables`).
+pub(crate) fn end_child<'py>(value: &Bound<'py, PyAny>) -> Option<Bound<'py, PyAny>> {
+    let group = value.cast::<Group>().ok()?;
+    let list = group.borrow().renderables.bind(value.py()).clone();
+    let last = list.len().checked_sub(1)?;
+    list.get_item(last).ok()
 }
 
 /// Python glue for `group`: `functools.wraps` needs a Python function to

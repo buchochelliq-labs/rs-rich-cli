@@ -126,11 +126,50 @@ pub(crate) fn add_renderable_class<T: AsRenderable>(m: &Bound<'_, PyModule>) -> 
 }
 
 /// Whether a registered renderable leaves its last line open, as Rich's
-/// `Emoji` (one segment) and a `Rule` with an `end` that is not a newline do:
-/// nothing ends the line after it when it is printed or rendered.
+/// `Emoji` (one segment), and a `Rule` or `Text` with an `end` that is not a
+/// newline do: nothing ends the line after it when it is printed or
+/// rendered. `Styled`, `Constrain` and `Group` pass on their (last) child's
+/// open line, as upstream's yield its segments as they are.
 pub(crate) fn ends_inline(value: &Bound<'_, PyAny>) -> bool {
-    value.is_instance_of::<crate::color::emoji::Emoji>()
-        || crate::renderables::rule_ends_inline(value)
+    let mut value = value.clone();
+    // A `Group` can hold itself: give up at the nesting limit.
+    for _ in 0..MAX_NESTING {
+        if value.is_instance_of::<crate::color::emoji::Emoji>()
+            || crate::renderables::rule_ends_inline(&value)
+        {
+            return true;
+        }
+        if let Ok(text) = value.cast::<crate::text::Text>() {
+            return !text.borrow().end.ends_with('\n');
+        }
+        match crate::renderables::end_child(&value) {
+            Some(child) => value = child,
+            None => return false,
+        }
+    }
+    false
+}
+
+/// A `Text` with its `end`, as Rich renders one (`Text.render(end=...)`),
+/// in core's convention: a newline that ends `end` is the line end, and an
+/// `end` without one leaves the last line open.
+pub(crate) struct TextWithEnd {
+    pub(crate) text: CoreText,
+    pub(crate) end: String,
+}
+
+impl Renderable for TextWithEnd {
+    fn rich_render(&self, console: &CoreConsole, options: &CoreOptions) -> Vec<CoreSegment> {
+        let mut segments = self.text.rich_render(console, options);
+        if !self.end.is_empty() {
+            segments.push(CoreSegment::new(self.end.clone(), None));
+        }
+        unterminated(segments)
+    }
+
+    fn measure(&self, console: &CoreConsole, options: &CoreOptions) -> CoreMeasurement {
+        self.text.measure(console, options)
+    }
 }
 
 /// The converter for a registered class's instance (or a subclass's).
@@ -400,6 +439,7 @@ pub(crate) fn render_str_with(
     highlighter: Option<&Bound<'_, PyAny>>,
     variant: Option<rich::emoji::EmojiVariant>,
 ) -> PyResult<CoreText> {
+    let original = content;
     let content = if !emoji {
         content.to_string()
     } else if markup && content.contains('[') {
@@ -408,7 +448,8 @@ pub(crate) fn render_str_with(
         rich::emoji::replace_with_variant(content, variant)
     };
     let text = if markup {
-        CoreText::from_markup(&content).map_err(crate::color::markup::markup_error)?
+        CoreText::from_markup(&content)
+            .map_err(|error| crate::color::markup::markup_error_in(original, error))?
     } else {
         CoreText::new(content)
     };

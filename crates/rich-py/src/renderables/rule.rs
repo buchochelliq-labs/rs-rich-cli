@@ -12,7 +12,7 @@ use rich::align::HorizontalAlign;
 use rich::cells::cell_len;
 use rich::protocol::Renderable;
 use rich::style::StyleType;
-use rich::{Rule as CoreRule, Text as CoreText};
+use rich::Rule as CoreRule;
 
 use crate::renderable::{self, AsRenderable};
 use crate::style::style_type;

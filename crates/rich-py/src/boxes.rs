@@ -47,6 +47,15 @@ const BOXES: &[(&str, CoreBox)] = {
     ]
 };
 
+/// A core box as Python's `rs_rich.box` constant (a new `Box` for one that
+/// is not a constant).
+pub(crate) fn to_py(py: Python<'_>, inner: CoreBox) -> PyResult<Py<PyAny>> {
+    if let Some((name, _)) = BOXES.iter().find(|(_, known)| *known == inner) {
+        return Ok(py.import("rs_rich.box")?.getattr(*name)?.unbind());
+    }
+    Ok(Py::new(py, PyBox { name: "Box", inner })?.into_any())
+}
+
 /// A `box=` argument: not given, an explicit `None` (no box), or a box.
 /// PyO3 maps both a missing argument and `None` to `Option::None`, so this
 /// type tells them apart.

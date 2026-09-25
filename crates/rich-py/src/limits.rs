@@ -36,6 +36,12 @@ pub(crate) const MAX_CONSOLE_HEIGHT: usize = 1 << 16;
 /// The largest `tab_size` accepted: the widest console.
 pub(crate) const MAX_TAB_SIZE: usize = MAX_CONSOLE_WIDTH;
 
+/// The longest `Text` the bindings build by padding (`pad`, `set_length`,
+/// `extend_style`, `align`, `fit`, `truncate(pad=True)`, ...): 256 Mi
+/// characters. Core aborts the process when such an allocation fails;
+/// Rich raises `MemoryError`.
+pub(crate) const MAX_TEXT_LENGTH: usize = 1 << 28;
+
 /// The most blank lines `Console.line` writes at once.
 pub(crate) const MAX_NEWLINES: usize = 1 << 24;
 
@@ -48,4 +54,16 @@ pub(crate) fn check_size(what: &str, value: usize, limit: usize) -> pyo3::PyResu
         )));
     }
     Ok(value)
+}
+
+/// Refuse a size Rich would build a string or list of: past `isize::MAX`
+/// (a Python `int` past `sys.maxsize` saturates to it here) with Rich's
+/// `OverflowError`, past `limit` with its `MemoryError` ([`check_size`]).
+pub(crate) fn check_alloc(what: &str, value: usize, limit: usize) -> pyo3::PyResult<usize> {
+    if value >= isize::MAX as usize {
+        return Err(pyo3::exceptions::PyOverflowError::new_err(
+            "cannot fit 'int' into an index-sized integer",
+        ));
+    }
+    check_size(what, value, limit)
 }

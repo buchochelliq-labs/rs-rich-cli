@@ -563,6 +563,23 @@ fn match_color(palette: &[ColorTriplet], color: ColorTriplet) -> u8 {
 mod tests {
     use super::*;
 
+    /// A Windows console matches against `WINDOWS_PALETTE`: `#808080` is
+    /// bright black (90), not the standard palette's white (37); an 8-bit
+    /// color under 16 keeps its number.
+    #[test]
+    fn windows_downgrade_uses_the_windows_palette() {
+        let grey = Color::parse("#808080")
+            .unwrap()
+            .downgrade(ColorSystem::Windows);
+        assert_eq!((grey.kind, grey.number), (ColorType::Windows, Some(8)));
+        let low = Color::parse("color(9)")
+            .unwrap()
+            .downgrade(ColorSystem::Windows);
+        assert_eq!((low.kind, low.number), (ColorType::Windows, Some(9)));
+        assert!(Color::parse("grey").is_err());
+        assert!(Color::parse("gray").is_err());
+    }
+
     #[test]
     fn parses_standard_name() {
         let c = Color::parse("red").unwrap();

@@ -16,9 +16,9 @@ use rich::{Table as CoreTable, Text as CoreText};
 use crate::boxes::BoxArg;
 use crate::convert;
 use crate::errors::NotRenderableError;
-use crate::limits::{MAX_COLUMN_RATIO, MAX_COLUMN_WIDTH};
+use crate::limits::{check_size, MAX_COLUMN_RATIO, MAX_COLUMN_WIDTH, MAX_CONSOLE_HEIGHT};
 use crate::renderable::{self, AsRenderable, PyRenderable};
-use crate::style::{resolved_style, style_type};
+use crate::style::{py_style_type, resolved_style, style_type};
 use crate::text::Text;
 
 struct ColumnSpec {
@@ -71,6 +71,68 @@ fn annotation(value: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Annotation>> 
             "a title or caption must be a str or a Text",
         )),
     }
+}
+
+/// A title or caption as Rich holds it: the `str` or a copy of the `Text`.
+fn annotation_value(py: Python<'_>, value: Option<&Annotation>) -> PyResult<Option<Py<PyAny>>> {
+    Ok(match value {
+        None => None,
+        Some(Annotation::Markup(markup)) => Some(PyString::new(py, markup).into_any().unbind()),
+        Some(Annotation::Text(text)) => {
+            Some(Py::new(py, Text::from_core(text.clone()))?.into_any())
+        }
+    })
+}
+
+/// A style attribute's value: `None`, a `str` or a `Style`.
+fn style_value(py: Python<'_>, value: Option<&StyleType>) -> PyResult<Option<Py<PyAny>>> {
+    value.map(|style| py_style_type(py, style)).transpose()
+}
+
+/// A `style=` / `border_style=` argument, checked now as before (a name
+/// must parse as a style definition); resolved when the table prints.
+fn checked_style(value: Option<&Bound<'_, PyAny>>) -> PyResult<Option<StyleType>> {
+    resolved_style(value)?;
+    style_type(value)
+}
+
+/// A checked style, resolved.
+fn resolve(value: &Option<StyleType>) -> PyResult<Option<CoreStyle>> {
+    Ok(match value {
+        Some(StyleType::Style(style)) => Some(style.clone()),
+        Some(StyleType::Name(name)) => Some(crate::style::parse_style(name)?),
+        None => None,
+    })
+}
+
+/// `row_styles=`: any iterable of styles.
+fn row_styles_arg(value: Option<&Bound<'_, PyAny>>) -> PyResult<Vec<StyleType>> {
+    match value.filter(|v| !v.is_none()) {
+        None => Ok(Vec::new()),
+        Some(styles) => styles
+            .try_iter()?
+            .map(|style| {
+                let style = style?;
+                Ok(style_type(Some(&style))?.unwrap_or_default())
+            })
+            .collect(),
+    }
+}
+
+/// A table `width` / `min_width`: at most the widest console.
+fn check_width(name: &str, value: Option<usize>) -> PyResult<Option<usize>> {
+    if let Some(value) = value.filter(|value| *value > MAX_COLUMN_WIDTH) {
+        return Err(PyValueError::new_err(format!(
+            "{name} must be at most {MAX_COLUMN_WIDTH}, got {value}"
+        )));
+    }
+    Ok(value)
+}
+
+/// `leading`: blank lines between rows, each as wide as the table. Rich
+/// builds them all, so a huge value is its `MemoryError`.
+fn check_leading(value: usize) -> PyResult<usize> {
+    check_size("leading", value, MAX_CONSOLE_HEIGHT)
 }
 
 /// A cell, header or footer: `str` (console markup), `Text`, `None` (empty)
@@ -130,6 +192,7 @@ pub(crate) struct Table {
     caption: Option<Annotation>,
     width: Option<usize>,
     min_width: Option<usize>,
+    #[pyo3(get, set)]
     show_footer: bool,
     leading: usize,
     row_styles: Vec<StyleType>,
@@ -139,17 +202,25 @@ pub(crate) struct Table {
     caption_style: Option<StyleType>,
     title_justify: Justify,
     caption_justify: Justify,
+    #[pyo3(get, set)]
     safe_box: Option<bool>,
     box_set: Option<CoreBox>,
+    #[pyo3(get, set)]
     show_header: bool,
+    #[pyo3(get, set)]
     show_lines: bool,
+    #[pyo3(get, set)]
     show_edge: bool,
+    #[pyo3(get, set)]
     expand: bool,
-    border_style: Option<CoreStyle>,
+    border_style: Option<StyleType>,
     padding: (usize, usize, usize, usize),
+    #[pyo3(get, set)]
     collapse_padding: bool,
+    #[pyo3(get, set)]
     pad_edge: bool,
-    style: Option<CoreStyle>,
+    style: Option<StyleType>,
+    #[pyo3(get, set)]
     highlight: bool,
 }
 
@@ -219,11 +290,11 @@ impl Table {
         if let Some(style) = &self.caption_style {
             table = table.caption_style(style.clone());
         }
-        if let Some(style) = &self.style {
-            table = table.style(style.clone());
+        if let Some(style) = resolve(&self.style)? {
+            table = table.style(style);
         }
-        if let Some(style) = &self.border_style {
-            table = table.border_style(style.clone());
+        if let Some(style) = resolve(&self.border_style)? {
+            table = table.border_style(style);
         }
         match &self.title {
             Some(Annotation::Markup(title)) => {
@@ -332,23 +403,10 @@ impl Table {
         caption_justify: &str,
         highlight: bool,
     ) -> PyResult<Self> {
-        for (name, value) in [("width", width), ("min_width", min_width)] {
-            if let Some(value) = value.filter(|value| *value > MAX_COLUMN_WIDTH) {
-                return Err(PyValueError::new_err(format!(
-                    "{name} must be at most {MAX_COLUMN_WIDTH}, got {value}"
-                )));
-            }
-        }
-        let row_styles = match row_styles.filter(|v| !v.is_none()) {
-            None => Vec::new(),
-            Some(styles) => styles
-                .try_iter()?
-                .map(|style| {
-                    let style = style?;
-                    Ok(style_type(Some(&style))?.unwrap_or_default())
-                })
-                .collect::<PyResult<Vec<_>>>()?,
-        };
+        check_width("width", width)?;
+        check_width("min_width", min_width)?;
+        check_leading(leading)?;
+        let row_styles = row_styles_arg(row_styles)?;
         let mut table = Table {
             columns: Vec::new(),
             rows: Vec::new(),
@@ -371,14 +429,14 @@ impl Table {
             show_lines,
             show_edge,
             expand,
-            border_style: resolved_style(border_style)?,
+            border_style: checked_style(border_style)?,
             padding: match padding {
                 Some(value) if !value.is_none() => convert::padding(value)?,
                 _ => (0, 1, 0, 1),
             },
             collapse_padding,
             pad_edge,
-            style: resolved_style(style)?,
+            style: checked_style(style)?,
             highlight,
         };
         for header in headers.iter() {
@@ -538,6 +596,191 @@ impl Table {
     #[getter]
     fn row_count(&self) -> usize {
         self.rows.len()
+    }
+
+    // Rich's attributes. The table is a specification converted when it
+    // prints, so each setter only updates the specification.
+
+    #[getter]
+    fn title(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+        annotation_value(py, self.title.as_ref())
+    }
+
+    #[setter]
+    fn set_title(&mut self, value: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+        self.title = annotation(value)?;
+        Ok(())
+    }
+
+    #[getter]
+    fn caption(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+        annotation_value(py, self.caption.as_ref())
+    }
+
+    #[setter]
+    fn set_caption(&mut self, value: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+        self.caption = annotation(value)?;
+        Ok(())
+    }
+
+    #[getter]
+    fn width(&self) -> Option<usize> {
+        self.width
+    }
+
+    #[setter]
+    fn set_width(&mut self, value: Option<usize>) -> PyResult<()> {
+        self.width = check_width("width", value)?;
+        Ok(())
+    }
+
+    #[getter]
+    fn min_width(&self) -> Option<usize> {
+        self.min_width
+    }
+
+    #[setter]
+    fn set_min_width(&mut self, value: Option<usize>) -> PyResult<()> {
+        self.min_width = check_width("min_width", value)?;
+        Ok(())
+    }
+
+    #[getter(r#box)]
+    fn get_box(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+        self.box_set.map(|b| crate::boxes::to_py(py, b)).transpose()
+    }
+
+    #[setter(r#box)]
+    fn set_box(&mut self, value: BoxArg) {
+        self.box_set = value.or(rich::r#box::HEAVY_HEAD);
+    }
+
+    #[getter]
+    fn padding(&self) -> (usize, usize, usize, usize) {
+        self.padding
+    }
+
+    #[setter]
+    fn set_padding(&mut self, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        self.padding = convert::padding(value)?;
+        Ok(())
+    }
+
+    #[getter]
+    fn leading(&self) -> usize {
+        self.leading
+    }
+
+    #[setter]
+    fn set_leading(&mut self, value: usize) -> PyResult<()> {
+        self.leading = check_leading(value)?;
+        Ok(())
+    }
+
+    #[getter]
+    fn style(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        // Rich's default is `"none"`.
+        match &self.style {
+            Some(style) => py_style_type(py, style),
+            None => Ok(PyString::new(py, "none").into_any().unbind()),
+        }
+    }
+
+    #[setter]
+    fn set_style(&mut self, value: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+        self.style = checked_style(value)?;
+        Ok(())
+    }
+
+    #[getter]
+    fn border_style(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+        style_value(py, self.border_style.as_ref())
+    }
+
+    #[setter]
+    fn set_border_style(&mut self, value: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+        self.border_style = checked_style(value)?;
+        Ok(())
+    }
+
+    #[getter]
+    fn row_styles(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
+        self.row_styles
+            .iter()
+            .map(|style| py_style_type(py, style))
+            .collect()
+    }
+
+    #[setter]
+    fn set_row_styles(&mut self, value: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+        self.row_styles = row_styles_arg(value)?;
+        Ok(())
+    }
+
+    #[getter]
+    fn header_style(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        py_style_type(py, &self.header_style)
+    }
+
+    #[setter]
+    fn set_header_style(&mut self, value: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+        self.header_style = style_type(value)?.unwrap_or_else(|| StyleType::Name(String::new()));
+        Ok(())
+    }
+
+    #[getter]
+    fn footer_style(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        py_style_type(py, &self.footer_style)
+    }
+
+    #[setter]
+    fn set_footer_style(&mut self, value: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+        self.footer_style = style_type(value)?.unwrap_or_else(|| StyleType::Name(String::new()));
+        Ok(())
+    }
+
+    #[getter]
+    fn title_style(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+        style_value(py, self.title_style.as_ref())
+    }
+
+    #[setter]
+    fn set_title_style(&mut self, value: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+        self.title_style = style_type(value)?;
+        Ok(())
+    }
+
+    #[getter]
+    fn caption_style(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+        style_value(py, self.caption_style.as_ref())
+    }
+
+    #[setter]
+    fn set_caption_style(&mut self, value: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+        self.caption_style = style_type(value)?;
+        Ok(())
+    }
+
+    #[getter]
+    fn title_justify(&self) -> &'static str {
+        convert::justify_name(self.title_justify).unwrap_or("default")
+    }
+
+    #[setter]
+    fn set_title_justify(&mut self, value: &str) -> PyResult<()> {
+        self.title_justify = convert::justify(Some(value))?;
+        Ok(())
+    }
+
+    #[getter]
+    fn caption_justify(&self) -> &'static str {
+        convert::justify_name(self.caption_justify).unwrap_or("default")
+    }
+
+    #[setter]
+    fn set_caption_justify(&mut self, value: &str) -> PyResult<()> {
+        self.caption_justify = convert::justify(Some(value))?;
+        Ok(())
     }
 
     // A cell can refer back to the table (`holder.table = table`).

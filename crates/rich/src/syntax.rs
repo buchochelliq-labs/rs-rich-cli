@@ -34,6 +34,7 @@ use crate::protocol::{
 };
 use crate::segment::Segment;
 use crate::style::{Style, StyleType};
+use crate::text::python_splitlines;
 use crate::text::Text;
 
 /// Upstream's `Syntax(tab_size=4)`.
@@ -591,39 +592,6 @@ impl Syntax {
     }
 }
 
-/// Port of Python's `str.splitlines()`: every Unicode line boundary ends a
-/// line, `\r\n` counts once, and a trailing boundary adds no empty line.
-fn python_splitlines(text: &str) -> Vec<&str> {
-    let mut lines = Vec::new();
-    let mut start = 0;
-    let mut chars = text.char_indices().peekable();
-    while let Some((i, c)) = chars.next() {
-        if matches!(
-            c,
-            '\n' | '\r'
-                | '\x0b'
-                | '\x0c'
-                | '\x1c'
-                | '\x1d'
-                | '\x1e'
-                | '\u{85}'
-                | '\u{2028}'
-                | '\u{2029}'
-        ) {
-            lines.push(&text[start..i]);
-            start = i + c.len_utf8();
-            if c == '\r' && chars.peek().map(|&(_, n)| n) == Some('\n') {
-                chars.next();
-                start += 1;
-            }
-        }
-    }
-    if start < text.len() {
-        lines.push(&text[start..]);
-    }
-    lines
-}
-
 impl Syntax {
     /// Upstream's `_numbers_column_width`.
     fn numbers_column_width(&self) -> usize {
@@ -949,7 +917,8 @@ fn join_lines(lines: Vec<Vec<Segment>>) -> Vec<Segment> {
     let mut segments = Vec::new();
     let last = lines.len().saturating_sub(1);
     for (index, line) in lines.into_iter().enumerate() {
-        if index == last && index > 0 && line.is_empty() {
+        // Even when it is the only line: `Syntax("")` prints a blank line.
+        if index == last && line.is_empty() {
             segments.push(Segment::new("", None));
         }
         segments.extend(line);

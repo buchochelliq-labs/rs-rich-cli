@@ -156,6 +156,12 @@ Console(width=40).print(table)
 A table is built when it is printed, so rows added after it was put in a
 panel still appear.
 
+Every constructor argument is also an attribute you can read and set, as in
+Rich (`table.show_header = False`, `table.title = "..."`, `table.box = None`,
+`table.padding = 0`, ...): they take effect when the table next prints.
+`padding` reads back as `(top, right, bottom, left)`. Rich's `columns` and
+`rows` lists are not attributes; use `add_column` and `add_row`.
+
 Footers, sections, row styles and a fixed width:
 
 ```python

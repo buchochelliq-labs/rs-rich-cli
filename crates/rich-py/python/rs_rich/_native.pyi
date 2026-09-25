@@ -247,6 +247,31 @@ class Table:
     def add_section(self) -> None: ...
     @property
     def row_count(self) -> int: ...
+    title: Optional[Union[str, Text]]
+    caption: Optional[Union[str, Text]]
+    width: Optional[int]
+    min_width: Optional[int]
+    box: Optional[Box]
+    safe_box: Optional[bool]
+    padding: Tuple[int, int, int, int]
+    collapse_padding: bool
+    pad_edge: bool
+    expand: bool
+    show_header: bool
+    show_footer: bool
+    show_edge: bool
+    show_lines: bool
+    leading: int
+    style: StyleType
+    row_styles: List[StyleType]
+    header_style: StyleType
+    footer_style: StyleType
+    border_style: Optional[StyleType]
+    title_style: Optional[StyleType]
+    caption_style: Optional[StyleType]
+    title_justify: JustifyMethod
+    caption_justify: JustifyMethod
+    highlight: bool
 
 class Panel:
     def __init__(
@@ -285,6 +310,20 @@ class Panel:
         padding: Optional[PaddingDimensions] = None,
         highlight: bool = False,
     ) -> "Panel": ...
+    renderable: RenderableType
+    box: Box
+    title: Optional[Union[str, Text]]
+    title_align: AlignMethod
+    subtitle: Optional[Union[str, Text]]
+    subtitle_align: AlignMethod
+    safe_box: Optional[bool]
+    expand: bool
+    style: StyleType
+    border_style: StyleType
+    width: Optional[int]
+    height: Optional[int]
+    padding: PaddingDimensions
+    highlight: bool
 
 # --- area: foundation (terminal themes) ---
 

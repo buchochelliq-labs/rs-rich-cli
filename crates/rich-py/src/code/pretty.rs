@@ -42,9 +42,60 @@ pub(crate) struct Node {
     pub(crate) last: bool,
     pub(crate) is_tuple: bool,
     pub(crate) is_namedtuple: bool,
-    pub(crate) children: Option<Vec<Node>>,
+    pub(crate) children: Children,
     pub(crate) key_separator: String,
     pub(crate) separator: String,
+}
+
+/// A node's children (`None` for an atom). Cloned and dropped without
+/// recursion, so a deep tree cannot overflow the native stack.
+#[derive(Debug, Default)]
+pub(crate) struct Children(pub(crate) Option<Vec<Node>>);
+
+impl Clone for Children {
+    fn clone(&self) -> Self {
+        Children(
+            self.0
+                .as_ref()
+                .map(|children| children.iter().map(Node::deep_clone).collect()),
+        )
+    }
+}
+
+impl From<Option<Vec<Node>>> for Children {
+    fn from(children: Option<Vec<Node>>) -> Self {
+        Children(children)
+    }
+}
+
+impl std::ops::Deref for Children {
+    type Target = Option<Vec<Node>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for Children {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Drop for Children {
+    fn drop(&mut self) {
+        let Some(children) = self.0.take() else {
+            return;
+        };
+        // Each node's children move onto this list before the node drops,
+        // so no drop goes deeper than one level.
+        let mut pending = children;
+        while let Some(mut node) = pending.pop() {
+            if let Some(grandchildren) = node.children.0.take() {
+                pending.extend(grandchildren);
+            }
+        }
+    }
 }
 
 impl Default for Node {
@@ -58,7 +109,7 @@ impl Default for Node {
             last: false,
             is_tuple: false,
             is_namedtuple: false,
-            children: None,
+            children: Children(None),
             key_separator: ": ".to_string(),
             separator: ", ".to_string(),
         }
@@ -66,6 +117,80 @@ impl Default for Node {
 }
 
 impl Node {
+    /// The node without its children.
+    fn shallow_clone(&self) -> Node {
+        Node {
+            key_repr: self.key_repr.clone(),
+            value_repr: self.value_repr.clone(),
+            open_brace: self.open_brace.clone(),
+            close_brace: self.close_brace.clone(),
+            empty: self.empty.clone(),
+            last: self.last,
+            is_tuple: self.is_tuple,
+            is_namedtuple: self.is_namedtuple,
+            children: Children(None),
+            key_separator: self.key_separator.clone(),
+            separator: self.separator.clone(),
+        }
+    }
+
+    /// A copy of the whole tree, built without recursion.
+    fn deep_clone(&self) -> Node {
+        enum Step<'a> {
+            Enter(&'a Node),
+            Exit(&'a Node, usize),
+        }
+        let mut stack = vec![Step::Enter(self)];
+        let mut built: Vec<Node> = Vec::new();
+        while let Some(step) = stack.pop() {
+            match step {
+                Step::Enter(node) => match node.children.as_ref() {
+                    None => built.push(node.shallow_clone()),
+                    Some(children) => {
+                        stack.push(Step::Exit(node, children.len()));
+                        stack.extend(children.iter().rev().map(Step::Enter));
+                    }
+                },
+                Step::Exit(node, count) => {
+                    let children = built.split_off(built.len() - count);
+                    let mut copy = node.shallow_clone();
+                    copy.children = Children(Some(children));
+                    built.push(copy);
+                }
+            }
+        }
+        built.pop().expect("the root is built last")
+    }
+
+    /// Whether two trees are equal (`Node.__eq__`), compared without
+    /// recursion.
+    fn same(&self, other: &Node) -> bool {
+        let mut pairs = vec![(self, other)];
+        while let Some((a, b)) = pairs.pop() {
+            let fields_equal = a.key_repr == b.key_repr
+                && a.value_repr == b.value_repr
+                && a.open_brace == b.open_brace
+                && a.close_brace == b.close_brace
+                && a.empty == b.empty
+                && a.last == b.last
+                && a.is_tuple == b.is_tuple
+                && a.is_namedtuple == b.is_namedtuple
+                && a.key_separator == b.key_separator
+                && a.separator == b.separator;
+            if !fields_equal {
+                return false;
+            }
+            match (a.children.as_ref(), b.children.as_ref()) {
+                (None, None) => {}
+                (Some(left), Some(right)) if left.len() == right.len() => {
+                    pairs.extend(left.iter().zip(right));
+                }
+                _ => return false,
+            }
+        }
+        true
+    }
+
     fn value(value_repr: impl Into<String>) -> Node {
         Node {
             value_repr: value_repr.into(),
@@ -101,7 +226,7 @@ impl Node {
                 }
                 continue;
             }
-            let Some(children) = &node.children else {
+            let Some(children) = node.children.as_ref() else {
                 continue;
             };
             if children.is_empty() {
@@ -157,6 +282,23 @@ impl Node {
             true
         });
         repr
+    }
+
+    /// Refuse an `indent_size` Rich would run out of memory indenting with
+    /// (a line expands to `" " * indent_size` more per level).
+    pub(crate) fn check_indent(&self, indent_size: usize) -> PyResult<()> {
+        if self
+            .children
+            .as_ref()
+            .is_some_and(|children| !children.is_empty())
+        {
+            crate::limits::check_alloc(
+                "indent_size",
+                indent_size,
+                crate::limits::MAX_CONSOLE_WIDTH,
+            )?;
+        }
+        Ok(())
     }
 
     /// `Node.render`: the repr, expanded onto new lines to fit `max_width`.
@@ -372,22 +514,131 @@ struct Walker<'a, 'py> {
     visited: HashSet<usize>,
     /// The depth at which upstream's recursive walk runs out of Python
     /// frames: the node there is a `<repr-error ...>` (see [`traverse_with`]).
-    repr_error_depth: usize,
+    /// Found when the walk first gets deep ([`Walker::repr_error_depth`]).
+    repr_error_depth: Option<usize>,
+    /// The Python frames upstream's callers take above its walk.
+    frames: usize,
     /// Whether the walk is on the caller's stack, and so moves to a thread
-    /// of its own past [`HOP_LEVELS`] (see [`Walker::walk_on_new_stack`]).
+    /// of its own past [`STACK_BUDGET`] (see [`Walker::walk_on_new_stack`]).
     on_caller_stack: bool,
+    /// Where the walk started on the caller's stack.
+    stack_base: usize,
+    /// The thread with a big stack the walk continues on, once started.
+    worker: Option<Worker>,
 }
 
-/// How deep the walk goes on the caller's native stack, of unknown size,
+/// A part of a walk for the [`Worker`]: walk `object`, with the state so far.
+struct Job {
+    object: Py<PyAny>,
+    root: bool,
+    depth: usize,
+    visited: HashSet<usize>,
+}
+
+/// A [`Job`] done: its node, and the state after it.
+struct Reply {
+    node: PyResult<Node>,
+    visited: HashSet<usize>,
+}
+
+/// A thread with a stack of [`HOP_STACK_SIZE`] that walks the parts of an
+/// object too deep for the caller's stack. It lives as long as the walk,
+/// and runs only while the caller waits for it (the GIL passes between
+/// them), so the walk still runs one step at a time, in order.
+struct Worker {
+    jobs: Option<std::sync::mpsc::Sender<Job>>,
+    replies: std::sync::mpsc::Receiver<Reply>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Worker {
+    fn spawn(limits: Limits, repr_error_depth: usize) -> std::io::Result<Worker> {
+        let (jobs, job_queue) = std::sync::mpsc::channel::<Job>();
+        let (reply_queue, replies) = std::sync::mpsc::channel::<Reply>();
+        let thread = std::thread::Builder::new()
+            .name("rs_rich-pretty".to_string())
+            .stack_size(HOP_STACK_SIZE)
+            .spawn(move || {
+                for job in job_queue {
+                    let reply = Python::attach(|py| {
+                        let Job {
+                            object,
+                            root,
+                            depth,
+                            visited,
+                        } = job;
+                        let helpers = match helpers(py) {
+                            Ok(helpers) => helpers,
+                            Err(error) => {
+                                return Reply {
+                                    node: Err(error),
+                                    visited,
+                                }
+                            }
+                        };
+                        let mut walker = Walker {
+                            py,
+                            limits,
+                            helpers,
+                            visited,
+                            repr_error_depth: Some(repr_error_depth),
+                            frames: 0,
+                            on_caller_stack: false,
+                            stack_base: 0,
+                            worker: None,
+                        };
+                        let node = walker.walk(object.bind(py), root, depth);
+                        Reply {
+                            node,
+                            visited: std::mem::take(&mut walker.visited),
+                        }
+                    });
+                    if reply_queue.send(reply).is_err() {
+                        break;
+                    }
+                }
+            })?;
+        Ok(Worker {
+            jobs: Some(jobs),
+            replies,
+            thread: Some(thread),
+        })
+    }
+
+    /// Hand `job` to the thread and wait for it (without the GIL).
+    fn run(&self, job: Job) -> Option<Reply> {
+        self.jobs.as_ref()?.send(job).ok()?;
+        self.replies.recv().ok()
+    }
+}
+
+impl Drop for Worker {
+    fn drop(&mut self) {
+        // Closing the queue ends the thread, which holds nothing by now.
+        self.jobs = None;
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+/// How much of the caller's native stack, of unknown size, the walk uses
 /// before it continues on a thread with a stack of [`HOP_STACK_SIZE`]: the
 /// walk recurses (as upstream's does, in Python), and a deep enough object
 /// would otherwise overflow the stack and kill the interpreter.
-const HOP_LEVELS: usize = 48;
+const STACK_BUDGET: usize = 192 << 10;
 
 /// The stack of the thread a deep walk continues on: room for the rest of
 /// [`MAX_PRETTY_DEPTH`] levels, and the Python code (`__repr__`, ABC
 /// checks) each runs. Only what is used is ever committed.
 const HOP_STACK_SIZE: usize = 256 << 20;
+
+/// An address on the current native stack, to measure how much is used.
+#[inline(never)]
+fn stack_position() -> usize {
+    let marker = 0u8;
+    std::hint::black_box(std::ptr::addr_of!(marker)) as usize
+}
 
 /// The deepest node the walk builds, whatever the recursion limit: past it
 /// the node is a `<repr-error ...>`, as upstream's is when it runs out of
@@ -395,6 +646,10 @@ const HOP_STACK_SIZE: usize = 256 << 20;
 /// Laying out and dropping a tree recurses in places, so this keeps it well
 /// inside a small native stack.
 const MAX_PRETTY_DEPTH: usize = 3000;
+
+/// How deep a walk goes before it looks for the depth upstream's walk
+/// would run out of frames at: well short of any recursion limit in use.
+const SHALLOW_DEPTH: usize = 50;
 
 /// The node upstream builds where its recursive walk exceeds the recursion
 /// limit: `repr(obj)` raises `RecursionError`, which `to_repr` reports.
@@ -466,50 +721,66 @@ impl<'py> Walker<'_, 'py> {
         })
     }
 
-    /// Walk `object` (at `depth`) on a new thread with a big stack, with
-    /// the GIL handed over to it, and come back with the node. The walk's
-    /// state moves there and back.
+    /// The depth at which upstream's walk, called where this one was, runs
+    /// out of Python frames: at most [`MAX_PRETTY_DEPTH`]. Found (on the
+    /// caller's thread) the first time the walk needs it, which only a deep
+    /// object does.
+    fn repr_error_depth(&mut self) -> PyResult<usize> {
+        if let Some(depth) = self.repr_error_depth {
+            return Ok(depth);
+        }
+        let left = python_frames_left(self.py)?;
+        // `probe` and `down(0)` take two frames; `frames` are upstream's.
+        let depth = (left + 2).saturating_sub(self.frames).min(MAX_PRETTY_DEPTH);
+        self.repr_error_depth = Some(depth);
+        Ok(depth)
+    }
+
+    /// Walk `object` (at `depth`) on the walk's own thread, which has a big
+    /// stack, with the GIL handed over to it, and come back with the node.
+    /// The thread starts the first time it is needed and serves the rest of
+    /// the walk; the walk's state moves there and back.
     fn walk_on_new_stack(
         &mut self,
         object: &Bound<'py, PyAny>,
         root: bool,
         depth: usize,
     ) -> PyResult<Node> {
-        let object = object.clone().unbind();
-        let visited = std::mem::take(&mut self.visited);
-        let limits = self.limits;
-        let repr_error_depth = self.repr_error_depth;
-        let spawned = self.py.detach(move || {
-            let thread = std::thread::Builder::new()
-                .name("rs_rich-pretty".to_string())
-                .stack_size(HOP_STACK_SIZE)
-                .spawn(move || {
-                    Python::attach(|py| {
-                        let mut walker = Walker {
-                            py,
-                            limits,
-                            helpers: helpers(py)?,
-                            visited,
-                            repr_error_depth,
-                            on_caller_stack: false,
-                        };
-                        let node = walker.walk(object.bind(py), root, depth);
-                        Ok::<_, PyErr>((node, walker.visited))
-                    })
-                });
-            thread.map(|thread| thread.join())
+        let worker = match self.worker.take() {
+            Some(worker) => worker,
+            // Found here: the thread's Python stack is not the caller's.
+            None => Worker::spawn(self.limits, self.repr_error_depth()?).map_err(|_| {
+                pyo3::exceptions::PyRecursionError::new_err(
+                    "maximum recursion depth exceeded while pretty printing",
+                )
+            })?,
+        };
+        let job = Job {
+            object: object.clone().unbind(),
+            root,
+            depth,
+            visited: std::mem::take(&mut self.visited),
+        };
+        let (worker, reply) = self.py.detach(move || {
+            let reply = worker.run(job);
+            (worker, reply)
         });
-        match spawned {
-            Ok(Ok(result)) => {
-                let (node, visited) = result?;
-                self.visited = visited;
-                node
-            }
-            Ok(Err(panic)) => std::panic::resume_unwind(panic),
-            Err(_) => Err(pyo3::exceptions::PyRecursionError::new_err(
-                "maximum recursion depth exceeded while pretty printing",
-            )),
-        }
+        let mut worker = worker;
+        let reply = match reply {
+            Some(reply) => reply,
+            // The thread is gone: it panicked (carry the panic on).
+            None => match worker.thread.take().map(|thread| thread.join()) {
+                Some(Err(panic)) => std::panic::resume_unwind(panic),
+                _ => {
+                    return Err(pyo3::exceptions::PyRuntimeError::new_err(
+                        "the pretty printer's thread stopped",
+                    ))
+                }
+            },
+        };
+        self.worker = Some(worker);
+        self.visited = reply.visited;
+        reply.node
     }
 
     /// Mark `children` so the last one knows it is last (upstream's
@@ -527,12 +798,15 @@ impl<'py> Walker<'_, 'py> {
         if self.visited.contains(&id) {
             return Ok(Node::value("..."));
         }
-        if depth >= self.repr_error_depth {
+        if depth >= SHALLOW_DEPTH && depth >= self.repr_error_depth()? {
             let mut node = Node::value(RECURSION_REPR_ERROR);
             node.last = root;
             return Ok(node);
         }
-        if self.on_caller_stack && depth >= HOP_LEVELS && !is_atom(object) {
+        if self.on_caller_stack
+            && !is_atom(object)
+            && stack_position().abs_diff(self.stack_base) > STACK_BUDGET
+        {
             return self.walk_on_new_stack(object, root, depth);
         }
         let reached_max_depth = self.limits.max_depth.is_some_and(|max| depth >= max);
@@ -593,7 +867,7 @@ impl<'py> Walker<'_, 'py> {
                     } else {
                         format!("{class_name}()")
                     },
-                    children: Some(Vec::new()),
+                    children: Some(Vec::new()).into(),
                     last: root,
                     ..Node::default()
                 }
@@ -618,7 +892,7 @@ impl<'py> Walker<'_, 'py> {
                     Node {
                         open_brace: format!("<{class_name} "),
                         close_brace: ">".to_string(),
-                        children: Some(children),
+                        children: Some(children).into(),
                         last: root,
                         separator: " ".to_string(),
                         ..Node::default()
@@ -627,7 +901,7 @@ impl<'py> Walker<'_, 'py> {
                     Node {
                         open_brace: format!("{class_name}("),
                         close_brace: ")".to_string(),
-                        children: Some(children),
+                        children: Some(children).into(),
                         last: root,
                         ..Node::default()
                     }
@@ -647,7 +921,7 @@ impl<'py> Walker<'_, 'py> {
             let node = if fields.len()? == 0 {
                 Node {
                     value_repr: format!("{}()", class_name()?),
-                    children: Some(Vec::new()),
+                    children: Some(Vec::new()).into(),
                     last: root,
                     ..Node::default()
                 }
@@ -690,7 +964,7 @@ impl<'py> Walker<'_, 'py> {
                 Node {
                     open_brace: format!("{}(", class_name()?),
                     close_brace: ")".to_string(),
-                    children: Some(children),
+                    children: Some(children).into(),
                     last: root,
                     ..Node::default()
                 }
@@ -733,7 +1007,7 @@ impl<'py> Walker<'_, 'py> {
                 Node {
                     open_brace: format!("{class_name}("),
                     close_brace: ")".to_string(),
-                    children: Some(children),
+                    children: Some(children).into(),
                     last: root,
                     empty: format!("{class_name}()"),
                     ..Node::default()
@@ -762,7 +1036,7 @@ impl<'py> Walker<'_, 'py> {
                 Node {
                     open_brace: format!("{class_name}("),
                     close_brace: ")".to_string(),
-                    children: Some(children),
+                    children: Some(children).into(),
                     empty: format!("{class_name}()"),
                     ..Node::default()
                 }
@@ -830,14 +1104,14 @@ impl<'py> Walker<'_, 'py> {
                 Node {
                     open_brace,
                     close_brace,
-                    children: Some(children),
+                    children: Some(children).into(),
                     last: root,
                     ..Node::default()
                 }
             } else {
                 Node {
                     empty,
-                    children: Some(Vec::new()),
+                    children: Some(Vec::new()).into(),
                     last: root,
                     ..Node::default()
                 }
@@ -929,18 +1203,16 @@ pub(crate) fn traverse_with(
 ) -> PyResult<Node> {
     let py = object.py();
     let helpers = helpers(py)?;
-    let limit: usize = py
-        .import("sys")?
-        .call_method0("getrecursionlimit")?
-        .extract()?;
-    let used = python_frames(py)? + frames;
     let mut walker = Walker {
         py,
         limits,
         helpers,
         visited: HashSet::new(),
-        repr_error_depth: limit.saturating_sub(used).min(MAX_PRETTY_DEPTH),
+        repr_error_depth: None,
+        frames,
         on_caller_stack: true,
+        stack_base: stack_position(),
+        worker: None,
     };
     let _nesting = renderable::Nesting::enter()?;
     walker.walk(object, true, 0)
@@ -957,18 +1229,21 @@ fn is_atom(object: &Bound<'_, PyAny>) -> bool {
         || object.is_exact_instance_of::<PyBytes>()
 }
 
-/// How many Python frames are on this thread's stack now.
-fn python_frames(py: Python<'_>) -> PyResult<usize> {
-    let mut frame = py.import("sys")?.call_method1("_getframe", (0,));
-    let mut count = 0;
-    while let Ok(current) = frame {
-        if current.is_none() {
-            break;
-        }
-        count += 1;
-        frame = current.getattr("f_back");
-    }
-    Ok(count)
+/// How many more nested Python calls fit on this thread before
+/// `RecursionError`: what is left of the recursion limit here, counted as
+/// Python counts it (C calls on the stack can count too).
+fn python_frames_left(py: Python<'_>) -> PyResult<usize> {
+    static PROBE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+    let probe = PROBE.get_or_try_init(py, || {
+        let module = PyModule::from_code(
+            py,
+            c"def probe():\n    def down(n):\n        try:\n            return down(n + 1)\n        except RecursionError:\n            return n\n    return down(0)\n",
+            c"rs_rich_pretty_probe.py",
+            c"rs_rich_pretty_probe",
+        )?;
+        Ok::<_, PyErr>(module.getattr("probe")?.unbind())
+    })?;
+    probe.bind(py).call0()?.extract()
 }
 
 // ---------------------------------------------------------------------------
@@ -1223,8 +1498,10 @@ pub(crate) fn type_repr(object: &Bound<'_, PyAny>) -> PyResult<String> {
 impl AsRenderable for Pretty {
     fn to_renderable(&self, py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
         let object = self.object.bind(py);
+        let node = traverse(object, self.limits())?;
+        node.check_indent(self.indent_size)?;
         let layout = Layout {
-            node: traverse(object, self.limits())?,
+            node,
             type_repr: type_repr(object)?,
             indent_size: self.indent_size,
             justify: convert::justify(self.justify.as_deref())?,
@@ -1352,7 +1629,9 @@ impl PyNode {
                 last,
                 is_tuple,
                 is_namedtuple,
-                children: children.map(|c| c.iter().map(|n| n.inner.clone()).collect()),
+                children: children
+                    .map(|c| c.iter().map(|n| n.inner.clone()).collect())
+                    .into(),
                 key_separator,
                 separator,
             },
@@ -1454,7 +1733,9 @@ impl PyNode {
     }
     #[setter]
     fn set_children(&mut self, value: Option<Vec<PyRef<'_, PyNode>>>) {
-        self.inner.children = value.map(|c| c.iter().map(|n| n.inner.clone()).collect());
+        self.inner.children = value
+            .map(|c| c.iter().map(|n| n.inner.clone()).collect())
+            .into();
     }
 
     fn iter_tokens<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
@@ -1468,8 +1749,9 @@ impl PyNode {
     }
 
     #[pyo3(signature = (max_width=80, indent_size=4, expand_all=false))]
-    fn render(&self, max_width: isize, indent_size: usize, expand_all: bool) -> String {
-        self.inner.render(max_width, indent_size, expand_all)
+    fn render(&self, max_width: isize, indent_size: usize, expand_all: bool) -> PyResult<String> {
+        self.inner.check_indent(indent_size)?;
+        Ok(self.inner.render(max_width, indent_size, expand_all))
     }
 
     fn __str__(&self) -> String {
@@ -1497,7 +1779,7 @@ impl PyNode {
     fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
         other
             .extract::<PyRef<'_, PyNode>>()
-            .is_ok_and(|other| format!("{:?}", other.inner) == format!("{:?}", self.inner))
+            .is_ok_and(|other| other.inner.same(&self.inner))
     }
 }
 
@@ -1562,6 +1844,7 @@ fn pretty_repr(
             TRAVERSE_FRAMES + 1,
         )?,
     };
+    node.check_indent(indent_size)?;
     Ok(node.render(max_width, indent_size, expand_all))
 }
 

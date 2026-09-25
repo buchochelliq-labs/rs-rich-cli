@@ -116,13 +116,43 @@ pub(crate) fn stylize(text: &mut CoreText, style: StyleType, start: isize, end: 
     if start >= length || end <= start {
         return;
     }
-    let bounds = boundaries(text.plain());
     let end = end.min(length);
-    text.stylize(
-        style,
-        byte_at(&bounds, start as usize),
-        byte_at(&bounds, end as usize),
-    );
+    let plain = text.plain();
+    let (start, end) = if length as usize == plain.len() {
+        // All ASCII: characters are bytes.
+        (start as usize, end as usize)
+    } else {
+        byte_range(plain, start as usize, end as usize)
+    };
+    text.stylize(style, start, end);
+}
+
+/// Texts at least this long (in bytes) keep their character boundaries in
+/// [`BOUNDARIES`] between calls.
+const CACHED_BOUNDARIES: usize = 256;
+
+thread_local! {
+    /// The last long non-ASCII text a character range was looked up in, and
+    /// its boundaries: styling a text piece by piece (`stylize` in a loop)
+    /// then finds them in time proportional to the text once, not per call.
+    /// Keyed by the text itself, so no mutation can make it stale.
+    static BOUNDARIES: std::cell::RefCell<(String, Vec<usize>)> =
+        const { std::cell::RefCell::new((String::new(), Vec::new())) };
+}
+
+/// The byte range of characters `start..end` (both within the text).
+pub(crate) fn byte_range(plain: &str, start: usize, end: usize) -> (usize, usize) {
+    if plain.len() < CACHED_BOUNDARIES {
+        let bounds = boundaries(plain);
+        return (byte_at(&bounds, start), byte_at(&bounds, end));
+    }
+    BOUNDARIES.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if cache.0 != plain {
+            *cache = (plain.to_string(), boundaries(plain));
+        }
+        (byte_at(&cache.1, start), byte_at(&cache.1, end))
+    })
 }
 
 /// Rich's `Text.right_crop`: drop the last `amount` characters.

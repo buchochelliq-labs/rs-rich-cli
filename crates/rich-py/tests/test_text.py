@@ -139,3 +139,41 @@ class TestStylize:
     def test_offsets_must_be_integers(self):
         with pytest.raises(TypeError):
             Text("abc").stylize("bold", "1")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("call", [
+    lambda t: t.pad(2**40),
+    lambda t: t.pad_right(2**40),
+    lambda t: t.extend_style(2**40),
+    lambda t: t.set_length(2**63),
+    lambda t: t.fit(2**40),
+    lambda t: t.align("left", 2**40),
+    lambda t: t.truncate(2**40, pad=True),
+    lambda t: t.expand_tabs(2**40),
+])
+def test_huge_sizes_raise_memory_error_instead_of_aborting(call):
+    with pytest.raises(MemoryError):
+        call(Text("a\tb"))
+
+
+def test_a_huge_pad_past_maxsize_is_an_overflow_error():
+    with pytest.raises(OverflowError):
+        Text("a").pad(2**63)
+
+
+def test_stylize_keeps_character_offsets_in_non_ascii_text():
+    text = Text("aé" * 200)
+    text.stylize("bold", 1, 3)
+    text.stylize("red", -2)
+    assert [(s.start, s.end) for s in text.spans] == [(1, 3), (398, 400)]
+
+
+def test_end_is_kept_inside_containers():
+    from rs_rich.console import Group
+    from rs_rich.constrain import Constrain
+    from rs_rich.styled import Styled
+
+    assert render(Group(Text("ab", end=""), "cd")) == "abcd\n"
+    assert render(Group(Text("ab", end="!\n"), "cd")) == "ab!\ncd\n"
+    assert render(Group(Styled(Text("ab", end=""), "bold"), "cd")) == "abcd\n"
+    assert render(Group(Constrain(Text("ab", end="!"), 10), "cd")) == "ab!cd\n"

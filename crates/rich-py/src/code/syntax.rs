@@ -26,6 +26,7 @@ use rich::Text as CoreText;
 
 use super::highlighter::new_text;
 use crate::convert;
+use crate::limits::{check_alloc, MAX_CONSOLE_WIDTH, MAX_TAB_SIZE};
 use crate::renderable::{self, AsRenderable};
 use crate::style::style_type;
 use crate::text::Text;
@@ -239,7 +240,8 @@ impl Spec {
         let padding = left + right;
         let numbers = self.numbers_column_width();
         if let Some(code_width) = self.code_width {
-            return CoreMeasurement::new(numbers, code_width + numbers + padding + 1);
+            let width = code_width.saturating_add(numbers + padding + 1);
+            return CoreMeasurement::new(numbers, width);
         }
         let widest = python_splitlines(&self.code)
             .into_iter()
@@ -450,6 +452,14 @@ impl Syntax {
 
 impl AsRenderable for Syntax {
     fn to_renderable(&self, _py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
+        // Rich renders the code at `code_width` and expands tabs to
+        // `tab_size`: a huge one is its `MemoryError`.
+        if let Some(code_width) = self.spec.code_width {
+            check_alloc("code_width", code_width, MAX_CONSOLE_WIDTH)?;
+        }
+        if self.spec.code.contains('\t') {
+            check_alloc("tab_size", self.spec.tab_size, MAX_TAB_SIZE)?;
+        }
         Ok(Box::new(Render {
             spec: self.spec.clone(),
         }))

@@ -410,6 +410,34 @@ mod tests {
         assert_eq!(texts, vec!["hello", "\n", "hi", "\n", "\x1b[2A", "abcde"]);
     }
 
+    /// A print `end` such as `"!!\n"` arrives as one segment; it is split
+    /// at the newline before cropping, so the newline survives
+    /// (`print("xy", end="!!\n")` at width 3 is `"xy!\n"`).
+    #[test]
+    fn crop_lines_keeps_a_newline_inside_a_segment() {
+        let segments = vec![Segment::new("xy", None), Segment::new("!!\n", None)];
+        let cropped = Segment::crop_lines(&segments, 3);
+        let texts: Vec<&str> = cropped.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(texts, vec!["xy", "!", "\n"]);
+    }
+
+    /// Past the crop edge everything goes, zero-width characters included,
+    /// as upstream's `adjust_line_length` breaks at the edge.
+    #[test]
+    fn crop_lines_drops_zero_width_characters_past_the_edge() {
+        let segments = vec![
+            Segment::new("abc", None),
+            Segment::new("\u{200b}", None),
+            Segment::new("d", None),
+        ];
+        let cropped = Segment::crop_lines(&segments, 3);
+        let texts: Vec<&str> = cropped.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(texts, vec!["abc"]);
+        // A line that fits is left whole, trailing zero-width included.
+        let fits = Segment::crop_lines(&segments[..2], 3);
+        assert_eq!(fits.len(), 2);
+    }
+
     /// A wide character straddling the crop is dropped whole and its cell padded,
     /// so the line still occupies exactly the requested width.
     #[test]

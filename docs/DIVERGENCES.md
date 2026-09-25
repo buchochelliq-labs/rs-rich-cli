@@ -484,6 +484,24 @@ Format: what differs · why · how to remove it (if temporary).
   `Console::get_style` return errors for callers that want to validate first.
 - **Remove:** would need a fallible render path through every container.
 
+### 32. `Columns(width=0)` with no horizontal padding renders nothing
+- **Differs:** upstream computes `max_width // (width + padding)` and raises
+  `ZeroDivisionError` when both are zero. Core's `Columns` returns no output
+  for that case instead of panicking (the Python binding raises
+  `ZeroDivisionError` itself before calling core).
+- **Why:** `Renderable::rich_render` has no error channel (see §31).
+- **Remove:** would need a fallible render path.
+
+### 33. An invalid GFM delimiter row inside a list or quote stays a table
+- **Differs:** pulldown-cmark accepts delimiter rows markdown-it rejects (a
+  cell of a lone `:`, an empty cell between two others, a cell count that
+  differs from the header's). At the top level such a "table" is re-parsed as
+  the paragraph markdown-it prints (golden `gfm_invalid_delimiter_row`);
+  nested in a list item or block quote it still renders as a table.
+- **Why:** the re-parse works on the table's source range, which inside a
+  container still carries the container's markers.
+- **Remove:** strip the container prefixes from each line before re-parsing.
+
 ## Feature-flagged divergences
 
 ### 22. Escape-safe JSON presentation (`json-escape-safe`)

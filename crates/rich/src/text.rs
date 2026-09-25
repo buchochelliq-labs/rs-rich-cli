@@ -50,8 +50,11 @@ pub struct Text {
     spans: Vec<Span>,
     /// A base style applied to the whole text. May be an unresolved name.
     style: StyleType,
-    /// How lines are justified within the render width.
-    justify: Justify,
+    /// How lines are justified within the render width. `None` defers to
+    /// the console options (upstream's `justify=None`); `Some(Default)` is an
+    /// explicit `justify="default"`, which a container's justify does not
+    /// override.
+    justify: Option<Justify>,
     /// What to do with lines wider than the render width. `None` defers to the
     /// console options, then to [`Overflow::Fold`].
     overflow: Option<Overflow>,
@@ -82,7 +85,7 @@ impl Text {
             plain: Text::strip_control_codes(&plain.into()),
             spans: Vec::new(),
             style: StyleType::default(),
-            justify: Justify::Default,
+            justify: None,
             overflow: None,
             no_wrap: None,
             tab_size: None,
@@ -99,7 +102,7 @@ impl Text {
             plain: Text::strip_control_codes(&plain.into()),
             spans: Vec::new(),
             style: style.into(),
-            justify: Justify::Default,
+            justify: None,
             overflow: None,
             no_wrap: None,
             tab_size: None,
@@ -108,17 +111,36 @@ impl Text {
 
     /// Set how lines are justified within the render width (builder form).
     pub fn justify(mut self, justify: Justify) -> Self {
-        self.justify = justify;
+        self.set_justify(justify);
         self
     }
 
     /// Set how lines are justified within the render width.
+    ///
+    /// [`Justify::Default`] means *unset* here (upstream's `justify=None`),
+    /// deferring to the console options; use
+    /// [`set_justify_option`](Self::set_justify_option) for an explicit
+    /// `justify="default"`.
     pub fn set_justify(&mut self, justify: Justify) {
+        self.justify = (justify != Justify::Default).then_some(justify);
+    }
+
+    /// This text's own justify method ([`Justify::Default`] when unset).
+    pub fn get_justify(&self) -> Justify {
+        self.justify.unwrap_or_default()
+    }
+
+    /// Set this text's justify, distinguishing an explicit
+    /// `Some(Justify::Default)` (upstream's `justify="default"`, which a
+    /// table column's or the print call's justify does not override) from
+    /// `None` (upstream's `justify=None`, which defers to them).
+    pub fn set_justify_option(&mut self, justify: Option<Justify>) {
         self.justify = justify;
     }
 
-    /// This text's own justify method.
-    pub fn get_justify(&self) -> Justify {
+    /// This text's own justify, `None` when unset. See
+    /// [`set_justify_option`](Self::set_justify_option).
+    pub fn get_justify_option(&self) -> Option<Justify> {
         self.justify
     }
 
@@ -400,24 +422,29 @@ impl Text {
 
     /// Remove trailing whitespace. Port of `Text.rstrip`.
     pub fn rstrip(&mut self) {
-        let plain = self.plain.trim_end().to_string();
+        // Python's `str.rstrip()` whitespace, which includes U+001C..U+001F.
+        let plain = self.plain.trim_end_matches(is_python_space).to_string();
         self.set_plain(plain);
     }
 
     /// Remove *only as much* trailing whitespace as it takes to get down to
-    /// `size` cells, leaving the rest. Port of `Text.rstrip_end`.
+    /// `size` characters, leaving the rest. Port of `Text.rstrip_end`.
     ///
     /// This is what lets a wrapped line keep the space that ended it while a
-    /// line that overshot the width gives its padding back.
+    /// line that overshot the width gives its padding back. As upstream, the
+    /// length is `len(self)` — characters, not cells.
     pub fn rstrip_end(&mut self, size: usize) {
-        let length = self.cell_len();
+        let length = self.plain.chars().count();
         if length <= size {
             return;
         }
         let excess = length - size;
-        let whitespace = self.plain.len() - self.plain.trim_end().len();
+        let trimmed = self.plain.trim_end_matches(is_python_space);
+        let whitespace = self.plain[trimmed.len()..].chars().count();
         if whitespace > 0 {
-            self.right_crop(whitespace.min(excess));
+            let keep = length - whitespace.min(excess);
+            let bytes = self.plain.len() - char_to_byte(&self.plain, keep);
+            self.right_crop(bytes);
         }
     }
 
@@ -839,7 +866,7 @@ impl Text {
     /// Drop this text's own `justify`, `overflow` and `no_wrap`, so they defer to
     /// the console options as upstream's `Text.join` result does.
     pub(crate) fn clear_layout_options(&mut self) {
-        self.justify = Justify::Default;
+        self.justify = None;
         self.overflow = None;
         self.no_wrap = None;
         self.tab_size = None;
@@ -903,7 +930,7 @@ impl Text {
         base_style: &Style,
         width: Option<usize>,
     ) -> Vec<Vec<Segment>> {
-        self.render_lines_justified(theme, base_style, width, self.justify)
+        self.render_lines_justified(theme, base_style, width, self.get_justify())
     }
 
     /// Like [`render_lines`](Self::render_lines) but with an explicit `justify`
@@ -1188,7 +1215,10 @@ impl Text {
         let mut segments = Vec::new();
         let last = lines.len().saturating_sub(1);
         for (index, line) in lines.into_iter().enumerate() {
-            if index == last && index > 0 && line.is_empty() {
+            // A final empty line (a trailing newline, or an empty text left
+            // unpadded, as with `overflow="ignore"`) is still a line upstream:
+            // `Text.render` yields `Segment("")` before the `end`.
+            if index == last && line.is_empty() {
                 segments.push(Segment::new("", None));
             }
             segments.extend(line);
@@ -1638,7 +1668,7 @@ fn line_cell_len(line: &[Segment]) -> usize {
 fn trailing_whitespace(line: &[Segment]) -> usize {
     let mut count = 0usize;
     for segment in line.iter().rev() {
-        let trimmed = segment.text.trim_end();
+        let trimmed = segment.text.trim_end_matches(is_python_space);
         count += segment.text[trimmed.len()..].chars().count();
         if !trimmed.is_empty() {
             break;
@@ -1690,13 +1720,60 @@ fn rstrip_end_line(line: &mut Vec<Segment>, size: usize) {
 
 /// `Text.__rich_measure__` on a plain string: `(widest word, widest line)`.
 pub(crate) fn measure_plain(plain: &str) -> (usize, usize) {
-    let max_line = plain.split('\n').map(cell_len).max().unwrap_or(0);
+    // `text.splitlines()` and `text.split()`: Python's line boundaries
+    // (U+2028, U+0085, …) and whitespace (including U+001C..U+001F), not
+    // just `\n` and Rust's `White_Space`.
+    let max_line = python_splitlines(plain)
+        .into_iter()
+        .map(cell_len)
+        .max()
+        .unwrap_or(0);
     let min_word = plain
-        .split_whitespace()
+        .split(is_python_space)
+        .filter(|word| !word.is_empty())
         .map(cell_len)
         .max()
         .unwrap_or(max_line);
     (min_word, max_line)
+}
+
+/// Python's `str.isspace()`: Rust's `White_Space` plus the four ASCII
+/// information separators U+001C..=U+001F.
+pub(crate) fn is_python_space(c: char) -> bool {
+    c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
+}
+
+/// Port of Python's `str.splitlines()`: every Unicode line boundary ends a
+/// line, `\r\n` counts once, and a trailing boundary adds no empty line.
+pub(crate) fn python_splitlines(text: &str) -> Vec<&str> {
+    let mut lines = Vec::new();
+    let mut start = 0;
+    let mut chars = text.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        if matches!(
+            c,
+            '\n' | '\r'
+                | '\x0b'
+                | '\x0c'
+                | '\x1c'
+                | '\x1d'
+                | '\x1e'
+                | '\u{85}'
+                | '\u{2028}'
+                | '\u{2029}'
+        ) {
+            lines.push(&text[start..i]);
+            start = i + c.len_utf8();
+            if c == '\r' && chars.peek().map(|&(_, n)| n) == Some('\n') {
+                chars.next();
+                start += 1;
+            }
+        }
+    }
+    if start < text.len() {
+        lines.push(&text[start..]);
+    }
+    lines
 }
 
 #[cfg(test)]

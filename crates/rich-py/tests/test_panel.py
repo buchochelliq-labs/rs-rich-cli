@@ -159,3 +159,31 @@ def test_a_cycle_through_the_child_is_collected():
     del holder
     gc.collect()
     assert alive() is None
+
+
+def test_attributes_can_be_read_and_set_as_in_rich():
+    panel = Panel("body")
+    panel.title = "t"
+    panel.subtitle = "s"
+    panel.expand = False
+    assert (panel.title, panel.subtitle, panel.padding, panel.style) == ("t", "s", (0, 1), "none")
+    assert render(panel, width=30) == "╭─ t ──╮\n│ body │\n╰─ s ──╯\n"
+
+
+def test_a_huge_height_is_a_memory_error_not_an_exhausted_machine():
+    with pytest.raises(MemoryError):
+        render(Panel("x", height=2**40))
+
+
+def test_bad_markup_in_a_title_raises():
+    from rs_rich.errors import MarkupError
+
+    for panel in [Panel("x", title="[/]"), Panel("x", subtitle="[/]")]:
+        with pytest.raises(MarkupError):
+            render(panel)
+
+
+def test_markup_off_applies_to_the_body_but_not_the_title():
+    # Rich parses a title with `Text.from_markup` whatever `markup` says.
+    out = render(Panel("[/] [b]x", title="[b]t[/b]"), width=20, markup=False)
+    assert out.splitlines()[:2] == ["╭─────── t ────────╮", "│ [/] [b]x         │"]

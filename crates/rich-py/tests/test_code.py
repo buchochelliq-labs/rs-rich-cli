@@ -610,3 +610,29 @@ def test_a_python_code_highlighter_object():
     c = console(modules("rs_rich"), False, width=10)
     c.print(syntax)
     assert c.file.getvalue() == "x = 1\n"
+
+
+def test_deep_nesting_pretty_prints_as_rich_does_instead_of_crashing():
+    # The walk recurses: past a few hundred levels it once overflowed the
+    # native stack. Rich prints a list this deep, with a repr-error where its
+    # recursive walk runs out of Python frames; so does rs_rich, at about the
+    # same depth (it counts the caller's frames; C calls on the stack can
+    # count in Python's limit too, so the depth can differ by a level or two).
+    import rich.pretty
+    from rs_rich.pretty import pretty_repr, traverse
+
+    deep = []
+    inner = deep
+    for _ in range(1500):
+        inner.append([])
+        inner = inner[0]
+    for pretty in [rich.pretty.pretty_repr, pretty_repr]:
+        text = pretty(deep)
+        assert "<repr-error 'maximum recursion depth exceeded" in text
+    depth = pretty_repr(deep).count("[")
+    assert abs(depth - rich.pretty.pretty_repr(deep).count("[")) <= 3
+    node = traverse(deep)
+    assert node == traverse(deep) and node.children[0].children is not None
+    c = console(modules("rs_rich"), False, width=80)
+    c.print(deep[0][0][0][0][0][0][0][0][0][0])
+    assert c.file.getvalue().startswith("[\n    [\n")

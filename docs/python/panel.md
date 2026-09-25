@@ -33,6 +33,17 @@ Panel(renderable, box=ROUNDED, *, title=None, title_align="center",
 A `str` inside a panel is markup but is not highlighted unless
 `highlight=True`, as in Rich.
 
+Every constructor argument is also an attribute you can read and set, as in
+Rich (`panel.title = "..."`, `panel.border_style = "red"`,
+`panel.expand = False`, ...): the change shows the next time the panel
+prints. A `width` above 65536 or a `height` above 65536 raises `MemoryError`
+when the panel prints (Rich runs out of memory building that many cells or
+lines).
+
+A `str` title or subtitle is always markup (Rich's `Text.from_markup`, even
+under `Console(markup=False)`), and bad markup in one raises `MarkupError`
+when the panel prints.
+
 Panels (and other renderables) nest up to 100 deep. Printing a deeper chain
 raises `RecursionError`, as Rich does a little past that depth:
 

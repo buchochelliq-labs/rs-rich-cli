@@ -147,3 +147,38 @@ def test_usable_from_another_thread():
     error = in_thread(lambda: table.add_row("1"))
     assert error is None, repr(error)
     assert render(table) == " a \n 1 \n"
+
+
+def test_attributes_can_be_read_and_set_as_in_rich():
+    table = Table("a")
+    table.show_header = False
+    table.title = "T"
+    table.box = box.ASCII
+    table.padding = 0
+    table.add_row("x")
+    assert (table.show_header, table.title, table.padding, table.style) == (
+        False,
+        "T",
+        (0, 0, 0, 0),
+        "none",
+    )
+    assert render(table, width=30) == " T \n+-+\n|x|\n+-+\n"
+
+
+@pytest.mark.parametrize("build", [
+    lambda: Table("[/]"),
+    lambda: Table("a", title="[/]"),
+    lambda: Table("a", caption="[/x]"),
+])
+def test_bad_markup_raises_when_the_table_prints(build):
+    from rs_rich.errors import MarkupError
+
+    table = build()  # as in Rich, not when it is built
+    with pytest.raises(MarkupError):
+        render(table)
+
+
+def test_markup_off_leaves_headers_and_titles_literal():
+    table = Table("[b]h\\", title="[i]t")
+    expected = "  [i]t   \n┏━━━━━━━┓\n┃ [b]h\\ ┃\n┡━━━━━━━┩\n└───────┘\n"
+    assert render(table, width=30, markup=False) == expected

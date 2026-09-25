@@ -15,6 +15,7 @@ use rich::protocol::Renderable;
 use rich::segment::Segment as CoreSegment;
 use rich::style::{Style as CoreStyle, StyleType};
 
+use crate::limits::{check_alloc, MAX_CONSOLE_HEIGHT, MAX_CONSOLE_WIDTH};
 use crate::renderable::{self, AsRenderable};
 use crate::style::style_type;
 
@@ -209,6 +210,13 @@ pub(crate) struct Align {
 
 impl AsRenderable for Align {
     fn to_renderable(&self, py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
+        // Rich pads to `width` and `height` with blank cells and lines.
+        if let Some(width) = self.width {
+            check_alloc("width", width, MAX_CONSOLE_WIDTH)?;
+        }
+        if let Some(height) = self.height {
+            check_alloc("height", height, MAX_CONSOLE_HEIGHT)?;
+        }
         let child = renderable::to_renderable(self.renderable.bind(py), None)?;
         Ok(Box::new(AlignRender {
             child,

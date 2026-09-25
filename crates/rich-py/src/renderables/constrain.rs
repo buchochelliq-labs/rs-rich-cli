@@ -142,6 +142,18 @@ impl Styled {
     }
 }
 
+/// The child of a `Styled` or `Constrain`.
+pub(crate) fn end_child<'py>(value: &Bound<'py, PyAny>) -> Option<Bound<'py, PyAny>> {
+    let py = value.py();
+    if let Ok(styled) = value.cast::<Styled>() {
+        return Some(styled.borrow().renderable.bind(py).clone());
+    }
+    if let Ok(constrain) = value.cast::<Constrain>() {
+        return Some(constrain.borrow().renderable.bind(py).clone());
+    }
+    None
+}
+
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     renderable::add_renderable_class::<Constrain>(m)?;
     renderable::add_renderable_class::<Styled>(m)

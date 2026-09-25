@@ -532,3 +532,26 @@ def test_module_paths():
     assert rs_rich.layout.Layout is _native.Layout
     assert rs_rich.measure.measure_renderables is _native.measure_renderables
     assert rs_rich.spinner.SPINNERS is _native.SPINNERS
+
+
+def test_columns_with_no_room_for_a_column_divide_by_zero_as_in_rich():
+    for options in [dict(width=0, padding=0), dict(width=100)]:
+        for package in ["rich", "rs_rich"]:
+            m = modules(package)
+            with pytest.raises(ZeroDivisionError):
+                make_console(m, False, width=40).print(m.columns.Columns(["a"], **options))
+
+
+def test_spinner_text_expands_emoji_codes():
+    compare(lambda m, c: c.print(m.spinner.Spinner("arc", ":smile: [b]x[/b]").render(0)))
+
+
+def test_markup_off_reaches_strings_inside_renderables():
+    def program(m, c):
+        table = m.table.Table("[b]h[/b]")
+        table.add_row("[link=https://example.com]click[/link]")
+        c.print(m.panel.Panel("[b]x[/b]"), table, m.rule.Rule("[i]t[/i]"),
+                m.columns.Columns(["[b]c[/b]"]), m.Group("[b]g[/b]"))
+        c.print(m.padding.Padding("[/] unbalanced", 1), m.align.Align("[b]y", "right"))
+
+    compare(program, markup=False)

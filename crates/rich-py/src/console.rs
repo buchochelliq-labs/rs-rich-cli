@@ -51,7 +51,7 @@ use crate::limits::{
     check_size, MAX_CONSOLE_HEIGHT, MAX_CONSOLE_WIDTH, MAX_NEWLINES, MAX_TAB_SIZE,
 };
 use crate::protocol::{self, ConsoleOptions, Measurement, OptionsBase};
-use crate::renderable::{self, Ambient, PyRenderable};
+use crate::renderable::{self, Ambient, PyRenderable, TextWithEnd};
 use crate::segment;
 use crate::style::{style_type, Style};
 use crate::terminal_theme::TerminalTheme;
@@ -293,27 +293,6 @@ enum Item {
     Native { object: Py<PyAny>, inline: bool },
     /// A container or dataclass, pretty printed when it renders.
     Pretty { object: Py<PyAny>, highlight: bool },
-}
-
-/// Joined text and its `end`, as one core renderable for `Align`: Rich's joined `Text` renders its `end` after the last line,
-/// inside whatever wraps it.
-struct TextWithEnd {
-    text: CoreText,
-    end: String,
-}
-
-impl Renderable for TextWithEnd {
-    fn rich_render(&self, console: &CoreConsole, options: &CoreOptions) -> Vec<CoreSegment> {
-        let mut segments = self.text.rich_render(console, options);
-        if !self.end.is_empty() {
-            segments.push(CoreSegment::new(self.end.clone(), None));
-        }
-        renderable::unterminated(segments)
-    }
-
-    fn measure(&self, console: &CoreConsole, options: &CoreOptions) -> rich::measure::Measurement {
-        self.text.measure(console, options)
-    }
 }
 
 /// Raw segments as a core renderable, for `Align`.

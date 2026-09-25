@@ -19,12 +19,12 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 
 | upstream `rich/…`                     | rust `crates/rich/src/…` | status | parity |
 |---------------------------------------|--------------------------|:------:|:------:|
-| `color.py`, `color_triplet.py`, `_palettes.py`, `palette.py` | `color.rs` | 🟡 | ✅ truecolor + 8-bit + standard |
+| `color.py`, `color_triplet.py`, `_palettes.py`, `palette.py` | `color.rs` | 🟡 | ✅ truecolor + 8-bit + standard; `windows` downgrade through `WINDOWS_PALETTE` and bare `grey`/`gray` rejected (`audit2.tsv`) |
 | `style.py`                            | `style.rs`               | 🟡 | ✅ (+ `meta`: an insertion-ordered `Meta` map instead of marshal bytes) |
 | `cells.py`, `_cell_widths.py`         | `cells.rs`               | 🟢 | ✅ 0 / 127,754 codepoints |
-| `segment.py`                          | `segment.rs`             | 🟡 | — |
-| `markup.py`                           | `markup.rs`              | 🟡 | ✅ |
-| `text.py` (+ justify, overflow, `tab_size`) | `text.rs`          | 🟡 | ✅ (+ `core_gaps.tsv`: tab stops, justify-padding runs; `upstream_features.tsv`: `with_indent_guides`, `detect_indentation`, `from_ansi(style=…)`, `stylize_before`) |
+| `segment.py`                          | `segment.rs`             | 🟡 | `split_and_crop_lines`/`adjust_line_length` crop (newline inside a segment, zero-width past the edge: `audit2.tsv` + unit tests) |
+| `markup.py`                           | `markup.rs`              | 🟡 | ✅ (error positions in characters of the original string, per-chunk emoji: `audit2.tsv`) |
+| `text.py` (+ justify, overflow, `tab_size`) | `text.rs`          | 🟡 | ✅ (+ `core_gaps.tsv`: tab stops, justify-padding runs; `upstream_features.tsv`: `with_indent_guides`, `detect_indentation`, `from_ansi(style=…)`, `stylize_before`; `audit2.tsv`: span sweep over many lines, empty spans, explicit `justify="default"`, `splitlines`/`isspace` measurement) |
 | `_wrap.py`                            | `wrap.rs`                | 🟢 | ✅ 0 / 30,680 wrap cases |
 | `theme.py`, `themes.py`, `default_styles.py` | `theme.rs` | 🟢 | ✅ (theme stack and theme files since core 0.0.6) |
 | `terminal_theme.py` | `terminal_theme.rs` | 🟡 | ✅ |
@@ -73,7 +73,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | upstream `rich/…` | rust file | status | notes |
 |-------------------|-----------|:------:|-------|
 | `syntax.py` | `syntax.rs` | 🟡 | functional via `syntect` (non-parity, DIVERGENCES #18); `__rich_measure__` is parity-tested; `line_numbers`, `start_line`, `line_range`, `highlight_lines`, `code_width`, `background_color`, `indent_guides`, `stylize_range`, 4-sided padding and unpadded transparent themes are golden-tested with `ansi_dark` (`upstream_features.tsv`; signed line numbers, ranges and positions and `highlight(code, line_range)` in `api_gaps.tsv`; line numbers past 64 bits in `audit_edges.tsv`); `dedent`/`from_path` not ported; not upstream: `Syntax::highlighter`, `Syntax::highlight_for` and a console-wide default engine (`ConsoleCodeHighlighting`), unused by default; adapters are checked by `rich_ext::testing::conformance` |
-| `markdown.py` | `markdown.rs` | 🟡 | paragraphs/headings/inline/lists/quotes/code/links (both `hyperlinks` modes) + images (including table-cell hoisting and adjacency) + **GFM tables** via `pulldown-cmark`, with inline styling inside cells (golden `markdown_table_inline`); constructor options `justify`/`style` (golden `markdown_options`), `code_theme`/`inline_code_lexer`/`inline_code_theme` (syntect); not upstream: `Markdown::highlighter` and `Markdown::fence_renderer` extension points, unused by default |
+| `markdown.py` | `markdown.rs` | 🟡 | paragraphs/headings/inline/lists/quotes/code/links (both `hyperlinks` modes) + images (including table-cell hoisting and adjacency) + **GFM tables** via `pulldown-cmark`, with inline styling inside cells (golden `markdown_table_inline`); constructor options `justify`/`style` (golden `markdown_options`), inherited `overflow`/`no_wrap`/`justify` and markdown-it's delimiter-row rules (`audit2.tsv`), `code_theme`/`inline_code_lexer`/`inline_code_theme` (syntect); not upstream: `Markdown::highlighter` and `Markdown::fence_renderer` extension points, unused by default |
 | `json.py` | `json.rs` | 🟡 | ✅ default layout, arbitrary integers, Python float `repr` and overflowing exponents; `JsonOptions` (`indent`, `sort_keys`, `ensure_ascii`, `allow_nan`, `highlight`) and print `justify`/`overflow`/`no_wrap` (`core_gaps.tsv`); lone surrogate escapes under `ensure_ascii` (`audit_edges.tsv`; without it see DIVERGENCES §30); optional escape-safe layout is off by default (DIVERGENCES §22) |
 | `pretty.py` | `pretty.rs` | 🟡 | Rust-native (`Debug` + repr highlight, #19) |
 | `repr.py`, `_inspect.py` | resp. | ⬜ | need Rust reflection — see #19 |

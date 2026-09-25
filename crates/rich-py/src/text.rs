@@ -24,6 +24,7 @@ use rich::protocol::Renderable;
 use rich::{StyleType, Text as CoreText};
 
 use crate::convert::{self, Index};
+use crate::limits::{check_alloc, check_size, MAX_TAB_SIZE, MAX_TEXT_LENGTH};
 use crate::renderable::{self, AsRenderable};
 use crate::style::{py_style_type, Style};
 
@@ -130,11 +131,24 @@ fn like<'py>(like: &Bound<'py, Text>, inner: CoreText) -> PyResult<Bound<'py, Te
     new_text(like.py(), inner, &end)
 }
 
-/// A tab size argument: `None`, or a positive `int`.
+/// A size a `Text` method pads to or by: Rich builds a string that long, so
+/// a huge one is Rich's `MemoryError` (or `OverflowError` past `sys.maxsize`).
+fn text_size(what: &str, value: usize) -> PyResult<usize> {
+    check_alloc(what, value, MAX_TEXT_LENGTH)
+}
+
+/// A length a `Text` method pads *to*: Rich pads by the difference, which
+/// is below `sys.maxsize`, so a huge one is only ever its `MemoryError`.
+fn pad_size(what: &str, value: usize) -> PyResult<usize> {
+    check_size(what, value, MAX_TEXT_LENGTH)
+}
+
+/// A tab size argument: `None`, or a positive `int` (at most the widest
+/// console: tabs expand to it when the text renders).
 fn tab_size_arg(value: Option<i64>) -> PyResult<Option<usize>> {
     match value {
         None => Ok(None),
-        Some(size) if size > 0 => Ok(Some(size as usize)),
+        Some(size) if size > 0 => Ok(Some(check_alloc("tab_size", size as usize, MAX_TAB_SIZE)?)),
         Some(size) => Err(PyValueError::new_err(format!(
             "tab_size must be a positive int or None, got {size}"
         ))),
@@ -197,7 +211,14 @@ fn markup_of(text: &CoreText) -> String {
 
 impl AsRenderable for Text {
     fn to_renderable(&self, _py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
-        Ok(Box::new(self.inner.clone()))
+        if self.end == "\n" {
+            return Ok(Box::new(self.inner.clone()));
+        }
+        // Rich yields `end` after the text, inside a container too.
+        Ok(Box::new(crate::renderable::TextWithEnd {
+            text: self.inner.clone(),
+            end: self.end.clone(),
+        }))
     }
 }
 
@@ -587,8 +608,10 @@ impl Text {
     }
 
     /// Append spaces in the style of the spans that reach the end.
-    fn extend_style(&mut self, spaces: Index) {
-        ops::extend_style(&mut self.inner, count(spaces));
+    fn extend_style(&mut self, spaces: Index) -> PyResult<()> {
+        let spaces = text_size("spaces", count(spaces))?;
+        ops::extend_style(&mut self.inner, spaces);
+        Ok(())
     }
 
     /// Style the matches of a regular expression (Python's `re`), and each
@@ -688,8 +711,10 @@ impl Text {
     }
 
     /// Pad with spaces or crop to `new_length` characters.
-    fn set_length(&mut self, new_length: Index) {
-        ops::set_length(&mut self.inner, count(new_length));
+    fn set_length(&mut self, new_length: Index) -> PyResult<()> {
+        let new_length = pad_size("new_length", count(new_length))?;
+        ops::set_length(&mut self.inner, new_length);
+        Ok(())
     }
 
     /// Render through the console, as `Console.render(text, options)`.
@@ -798,15 +823,16 @@ impl Text {
             Some(size) => size.0,
             None => slf.borrow().inner.get_tab_size().unwrap_or(8) as isize,
         };
-        if tab_size <= 0 {
-            if slf.borrow().inner.plain().contains('\t') {
-                return Err(pyo3::exceptions::PyZeroDivisionError::new_err(
-                    "integer modulo by zero",
-                ));
-            }
+        if !slf.borrow().inner.plain().contains('\t') {
             return Ok(());
         }
-        slf.borrow_mut().inner.expand_tabs(tab_size as usize);
+        if tab_size <= 0 {
+            return Err(pyo3::exceptions::PyZeroDivisionError::new_err(
+                "integer modulo by zero",
+            ));
+        }
+        let tab_size = check_alloc("tab_size", tab_size as usize, MAX_TAB_SIZE)?;
+        slf.borrow_mut().inner.expand_tabs(tab_size);
         Ok(())
     }
 
@@ -814,28 +840,35 @@ impl Text {
     #[pyo3(signature = (max_width, *, overflow=None, pad=false))]
     fn truncate(&mut self, max_width: Index, overflow: Option<&str>, pad: bool) -> PyResult<()> {
         let overflow = overflow_arg(overflow)?;
-        self.inner.truncate(count(max_width), overflow, pad);
+        let max_width = count(max_width);
+        if pad {
+            pad_size("max_width", max_width)?;
+        }
+        self.inner.truncate(max_width, overflow, pad);
         Ok(())
     }
 
     #[pyo3(signature = (count, character=" "))]
     fn pad(&mut self, count: Index, character: &str) -> PyResult<()> {
         let character = pad_character(character)?;
-        self.inner.pad(self::count(count), character);
+        let count = text_size("count", self::count(count))?;
+        self.inner.pad(count, character);
         Ok(())
     }
 
     #[pyo3(signature = (count, character=" "))]
     fn pad_left(&mut self, count: Index, character: &str) -> PyResult<()> {
         let character = pad_character(character)?;
-        self.inner.pad_left(self::count(count), character);
+        let count = text_size("count", self::count(count))?;
+        self.inner.pad_left(count, character);
         Ok(())
     }
 
     #[pyo3(signature = (count, character=" "))]
     fn pad_right(&mut self, count: Index, character: &str) -> PyResult<()> {
         let character = pad_character(character)?;
-        self.inner.pad_right(self::count(count), character);
+        let count = text_size("count", self::count(count))?;
+        self.inner.pad_right(count, character);
         Ok(())
     }
 
@@ -843,7 +876,7 @@ impl Text {
     #[pyo3(signature = (align, width, character=" "))]
     fn align(&mut self, align: &str, width: Index, character: &str) -> PyResult<()> {
         let character = pad_character(character)?;
-        let width = count(width);
+        let width = pad_size("width", count(width))?;
         self.inner.truncate(width, None, false);
         let excess = width.saturating_sub(self.inner.cell_len());
         if excess > 0 {
@@ -1003,7 +1036,7 @@ impl Text {
 
     /// Split into lines, each padded or cropped to `width` characters.
     fn fit(&self, py: Python<'_>, width: Index) -> PyResult<Lines> {
-        let width = count(width);
+        let width = pad_size("width", count(width))?;
         let mut lines = ops::split(&self.inner, "\n", false, false);
         for line in &mut lines {
             ops::set_length(line, width);
@@ -1038,6 +1071,8 @@ impl Text {
                 "integer division or modulo by zero",
             ));
         }
+        // Rich builds an indent guide `indent_size` wide.
+        check_alloc("indent_size", size as usize, MAX_TEXT_LENGTH)?;
         let inner = slf
             .borrow()
             .inner

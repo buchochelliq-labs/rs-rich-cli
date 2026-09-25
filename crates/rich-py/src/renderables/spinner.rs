@@ -80,8 +80,8 @@ fn lock(state: &Shared) -> MutexGuard<'_, State> {
 fn text_arg(text: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     match text.cast::<PyString>() {
         Ok(markup) => {
-            let inner = CoreText::from_markup(markup.to_cow()?.as_ref())
-                .map_err(crate::color::markup::markup_error)?;
+            // `Text.from_markup`: emoji codes too.
+            let inner = crate::color::markup::render(markup.to_cow()?.as_ref(), true, None)?;
             Ok(Py::new(text.py(), Text::from_core(inner))?.into_any())
         }
         Err(_) => Ok(text.clone().unbind()),

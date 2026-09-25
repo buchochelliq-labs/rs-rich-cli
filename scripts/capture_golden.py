@@ -2934,6 +2934,7 @@ def main() -> None:
     capture_upstream_features()
     capture_api_gaps()
     capture_audit_edges()
+    capture_audit2()
 
 
 # --- core gaps (bindings foundation) ------------------------------------------
@@ -3869,6 +3870,135 @@ def capture_audit_edges() -> None:
         lines.append(f"{name}\t{json.dumps(build(), ensure_ascii=False)}")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(AUDIT_EDGE_CASES)} audit edge cases to {path}")
+
+
+# --- audit 2 (renderables audit, core side) -----------------------------------
+# One fixture, `audit2.tsv`: `name<TAB>json(output)`, built with the `_cg_*`
+# consoles. Crop of zero-width characters, Markdown inheriting overflow and
+# justify, the Windows palette, blank lines of empty renderables, U+2028 in
+# measurement, an explicit `justify="default"`, GFM delimiter rows, markup
+# error positions, bare `grey`, and span rendering over many lines.
+# `tests/golden_audit2.rs` has a Rust builder per name.
+
+from rich.color import Color as _A2Color, ColorParseError as _A2ColorParseError
+from rich.console import Group as _A2Group
+from rich.text import Span as _A2Span
+
+
+def _a2_crop_zero_width() -> str:
+    table = Table(show_header=False, box=None, padding=0, width=19)
+    table.add_column()
+    table.add_column()
+    table.add_row("", "\u200b[dim]r[/dim]")
+    return _cg_print(_cg_console(10), table)
+
+
+def _a2_markdown_overflow() -> str:
+    console = _cg_console(12)
+    table = Table("h")
+    table.add_row(Markdown("supercalifragilistic word"))
+    out = _cg_print(console, table)
+    out += _cg_print(console, Markdown("hello"), overflow="crop", width=3)
+    out += _cg_print(console, Markdown("hello world"), no_wrap=True, overflow="ellipsis", width=8)
+    out += _cg_print(console, Markdown("![alt](x)", hyperlinks=False), justify="right", width=12)
+    out += _cg_print(console, Markdown("![alt](x)", hyperlinks=False), justify="center", width=12)
+    return out
+
+
+def _a2_windows_palette() -> str:
+    console = _cg_console(20, color_system="windows")
+    return _cg_print(
+        console,
+        "[#808080 on #82c9b0]x[/] [color(100)]y[/] [color(9) on color(200)]z[/] [red on bright_black]w",
+    )
+
+
+def _a2_empty_blank_lines() -> str:
+    return _cg_print(
+        _cg_console(10),
+        Tree(""),
+        Syntax("", "python", theme="ansi_dark"),
+        _A2Group(Text("", justify="left", overflow="ignore"), "x"),
+    )
+
+
+def _a2_unicode_line_separators() -> str:
+    console = _cg_console(12)
+    return "".join(
+        _cg_print(console, Panel(f"a{separator}o", expand=False))
+        for separator in ["\u2028", "\u2029", "\x1c", "\x85", "\r"]
+    )
+
+
+def _a2_default_justify_column() -> str:
+    table = Table()
+    table.add_column("h", justify="right", width=6)
+    table.add_row(Text("x", justify="default"))
+    table.add_row(Text("y"))
+    return _cg_print(_cg_console(20), table)
+
+
+def _a2_markup_error_position() -> str:
+    out = []
+    for source in ["é中[/i]", ":smile: [/i]", "中[/]", ":smile:[b]:smile:[/i]"]:
+        try:
+            _cg_console(40).render_str(source)
+            out.append("ok\n")
+        except MarkupError as error:
+            out.append(f"{error}\n")
+    return "".join(out)
+
+
+def _a2_grey() -> str:
+    out = _cg_print(_cg_console(20), "[grey]x[/] [on gray]y [gray50]z")
+    try:
+        _A2Color.parse("grey")
+    except _A2ColorParseError as error:
+        out += f"{error}\n"
+    return out
+
+
+def _a2_many_spans() -> str:
+    console = _cg_console(30, highlight=True)
+    items = ", ".join(str(n) for n in range(60))
+    out = _cg_print(console, f"[{items}]\n{{'a': 1, 'b': [True, None]}}")
+    for spans in [
+        [_A2Span(1, 1, "bold"), _A2Span(0, 4, "red")],
+        [_A2Span(0, 5, "red"), _A2Span(2, 2, "bold"), _A2Span(3, 5, "blue")],
+    ]:
+        out += _cg_print(console, Text("ab cd", spans=spans))
+        out += _cg_print(console, Text("ab\ncd", spans=spans))
+    return out
+
+
+AUDIT2_CASES = [
+    ("crop_zero_width_past_edge", _a2_crop_zero_width),
+    ("markdown_inherits_overflow", _a2_markdown_overflow),
+    ("windows_palette", _a2_windows_palette),
+    ("empty_blank_lines", _a2_empty_blank_lines),
+    ("unicode_line_separators", _a2_unicode_line_separators),
+    ("default_justify_column", _a2_default_justify_column),
+    ("panel_width0_empty", lambda: _cg_print(_cg_console(5), Panel("", width=0))),
+    ("gfm_invalid_delimiter_row", lambda: "".join(
+        _cg_print(_cg_console(10), Markdown(source))
+        for source in ["a||\n-|:", "a|b\n-|:", "a|b\n-|-:", "a|b\n:|-"]
+    )),
+    ("markup_error_position", _a2_markup_error_position),
+    ("grey_is_not_a_colour", _a2_grey),
+    ("brackets_and_tildes", lambda: _cg_print(
+        _cg_console(30), Markdown("[[~~x~~]] a~[~b ~~[c]~~ [~~~d~~~]")
+    )),
+    ("many_spans", _a2_many_spans),
+]
+
+
+def capture_audit2() -> None:
+    path = golden_dir() / "audit2.tsv"
+    lines = ["# name\tjson(expected output) — see AUDIT2_CASES in scripts/capture_golden.py"]
+    for name, build in AUDIT2_CASES:
+        lines.append(f"{name}\t{json.dumps(build(), ensure_ascii=False)}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(AUDIT2_CASES)} audit 2 cases to {path}")
 
 
 if __name__ == "__main__":

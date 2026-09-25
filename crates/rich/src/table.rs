@@ -1239,10 +1239,9 @@ impl Table {
             // `no_wrap` and `overflow="ellipsis"` as options, which the text's own
             // settings override: wrap, then justify (which strips a right- or
             // center-justified line before measuring it), then truncate.
-            let justify = match text.get_justify() {
-                Justify::Default => column.map(|c| c.justify).unwrap_or(Justify::Left),
-                own => own,
-            };
+            let justify = text
+                .get_justify_option()
+                .unwrap_or_else(|| column.map(|c| c.justify).unwrap_or(Justify::Left));
             let overflow = text
                 .get_overflow()
                 .unwrap_or_else(|| column.map_or(Overflow::Ellipsis, |c| c.overflow));
@@ -1651,10 +1650,7 @@ fn render_annotation(
     if width == 0 {
         return Vec::new();
     }
-    let justify = match text.get_justify() {
-        Justify::Default => justify,
-        own => own,
-    };
+    let justify = text.get_justify_option().unwrap_or(justify);
     let overflow = text
         .get_overflow()
         .or(options.overflow)
