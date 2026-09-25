@@ -220,6 +220,7 @@ thread_local! {
     static AMBIENT: RefCell<Vec<Rc<Ambient>>> = const { RefCell::new(Vec::new()) };
     static PENDING: RefCell<Option<PyErr>> = const { RefCell::new(None) };
     static DEPTH: Cell<usize> = const { Cell::new(0) };
+    static PRINT_DEPTH: Cell<usize> = const { Cell::new(0) };
 }
 
 /// Pops the scope's ambient and restores the outer scope's pending error,
@@ -327,6 +328,33 @@ pub(crate) fn nesting_depth() -> usize {
 impl Drop for Nesting {
     fn drop(&mut self) {
         DEPTH.with(|depth| depth.set(depth.get().saturating_sub(1)));
+    }
+}
+
+/// One print (or log) running on this thread; dropping it leaves it. A
+/// print reached again from what it prints (`__str__`, a highlighter, a
+/// hook) counts here, apart from render nesting, so re-entrant prints raise
+/// `RecursionError` before they overflow the native stack.
+pub(crate) struct PrintNesting(());
+
+impl PrintNesting {
+    pub(crate) fn enter() -> PyResult<PrintNesting> {
+        PRINT_DEPTH.with(|depth| {
+            if depth.get() >= MAX_NESTING {
+                return Err(PyRecursionError::new_err(format!(
+                    "maximum recursion depth exceeded: rs_rich runs at most {MAX_NESTING} \
+                     nested prints"
+                )));
+            }
+            depth.set(depth.get() + 1);
+            Ok(PrintNesting(()))
+        })
+    }
+}
+
+impl Drop for PrintNesting {
+    fn drop(&mut self) {
+        PRINT_DEPTH.with(|depth| depth.set(depth.get().saturating_sub(1)));
     }
 }
 
@@ -439,17 +467,17 @@ pub(crate) fn render_str_with(
     highlighter: Option<&Bound<'_, PyAny>>,
     variant: Option<rich::emoji::EmojiVariant>,
 ) -> PyResult<CoreText> {
-    let original = content;
-    let content = if !emoji {
-        content.to_string()
-    } else if markup && content.contains('[') {
-        rich::emoji::replace(content)
-    } else {
-        rich::emoji::replace_with_variant(content, variant)
-    };
-    let text = if markup {
-        CoreText::from_markup(&content)
-            .map_err(|error| crate::color::markup::markup_error_in(original, error))?
+    let text = if markup && content.contains('[') {
+        // Emoji codes are replaced between the tags, as upstream's
+        // `markup.render` does, so an error's position is in `content`.
+        let parsed = if emoji {
+            rich::markup::render_emoji(content)
+        } else {
+            CoreText::from_markup(content)
+        };
+        parsed.map_err(crate::color::markup::markup_error)?
+    } else if emoji {
+        CoreText::new(rich::emoji::replace_with_variant(content, variant))
     } else {
         CoreText::new(content)
     };

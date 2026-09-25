@@ -730,8 +730,9 @@ impl<'py> Walker<'_, 'py> {
             return Ok(depth);
         }
         let left = python_frames_left(self.py)?;
-        // `probe` and `down(0)` take two frames; `frames` are upstream's.
-        let depth = (left + 2).saturating_sub(self.frames).min(MAX_PRETTY_DEPTH);
+        // `probe` and `down(0)` take two frames, and the failing call one;
+        // `frames` are upstream's.
+        let depth = (left + 3).saturating_sub(self.frames).min(MAX_PRETTY_DEPTH);
         self.repr_error_depth = Some(depth);
         Ok(depth)
     }

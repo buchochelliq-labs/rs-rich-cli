@@ -16,7 +16,7 @@ use rich::{Table as CoreTable, Text as CoreText};
 use crate::boxes::BoxArg;
 use crate::convert;
 use crate::errors::NotRenderableError;
-use crate::limits::{check_size, MAX_COLUMN_RATIO, MAX_COLUMN_WIDTH, MAX_CONSOLE_HEIGHT};
+use crate::limits::{check_alloc, MAX_COLUMN_RATIO, MAX_COLUMN_WIDTH, MAX_CONSOLE_HEIGHT};
 use crate::renderable::{self, AsRenderable, PyRenderable};
 use crate::style::{py_style_type, resolved_style, style_type};
 use crate::text::Text;
@@ -130,9 +130,13 @@ fn check_width(name: &str, value: Option<usize>) -> PyResult<Option<usize>> {
 }
 
 /// `leading`: blank lines between rows, each as wide as the table. Rich
-/// builds them all, so a huge value is its `MemoryError`.
-fn check_leading(value: usize) -> PyResult<usize> {
-    check_size("leading", value, MAX_CONSOLE_HEIGHT)
+/// builds them all when it prints, so a huge value (with rows for it to
+/// separate) is its `MemoryError`.
+fn check_leading(value: usize, rows: usize) -> PyResult<usize> {
+    if rows < 2 {
+        return Ok(value);
+    }
+    check_alloc("leading", value, MAX_CONSOLE_HEIGHT)
 }
 
 /// A cell, header or footer: `str` (console markup), `Text`, `None` (empty)
@@ -277,7 +281,7 @@ impl Table {
             .width(self.width)
             .min_width(self.min_width)
             .show_footer(self.show_footer)
-            .leading(self.leading)
+            .leading(check_leading(self.leading, self.rows.len())?)
             .row_styles(self.row_styles.clone())
             .header_style(self.header_style.clone())
             .footer_style(self.footer_style.clone())
@@ -405,7 +409,6 @@ impl Table {
     ) -> PyResult<Self> {
         check_width("width", width)?;
         check_width("min_width", min_width)?;
-        check_leading(leading)?;
         let row_styles = row_styles_arg(row_styles)?;
         let mut table = Table {
             columns: Vec::new(),
@@ -672,9 +675,8 @@ impl Table {
     }
 
     #[setter]
-    fn set_leading(&mut self, value: usize) -> PyResult<()> {
-        self.leading = check_leading(value)?;
-        Ok(())
+    fn set_leading(&mut self, value: usize) {
+        self.leading = value;
     }
 
     #[getter]

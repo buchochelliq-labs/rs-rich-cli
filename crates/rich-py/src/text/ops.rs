@@ -79,7 +79,7 @@ pub(crate) fn rebuild(like: &CoreText, plain: &str, spans: &[CharSpan]) -> CoreT
 /// Give `to` `from`'s base style, justify, overflow, no-wrap and tab size.
 pub(crate) fn copy_settings(from: &CoreText, to: &mut CoreText) {
     to.set_base_style(from.base_style().clone());
-    to.set_justify(from.get_justify());
+    to.set_justify_option(from.get_justify_option());
     to.set_overflow(from.get_overflow());
     to.set_no_wrap(from.get_no_wrap());
     to.set_tab_size(from.get_tab_size());
@@ -216,7 +216,7 @@ pub(crate) fn extend_style(text: &mut CoreText, spaces: usize) {
     let mut spans = char_spans(text);
     for span in &mut spans {
         if span.1 >= length {
-            span.1 += spaces;
+            span.1 = span.1.saturating_add(spaces);
         }
     }
     let plain = format!("{}{}", text.plain(), " ".repeat(spaces));
@@ -378,7 +378,7 @@ pub(crate) fn wrap(
     tab_size: usize,
     no_wrap: Option<bool>,
 ) -> PyResult<Vec<CoreText>> {
-    let own_justify = crate::convert::justify_name(text.get_justify());
+    let own_justify = crate::convert::justify_option_name(text.get_justify_option());
     let wrap_justify = justify.or(own_justify).unwrap_or("default");
     let wrap_overflow = overflow.or(text.get_overflow()).unwrap_or(Overflow::Fold);
     let ignore = overflow == Some(Overflow::Ignore);

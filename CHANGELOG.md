@@ -62,6 +62,86 @@ Cohort versions for 0.0.12 (not published): core 0.0.8, plugin API 0.0.1
 (new), CLI 0.0.12. Core changes below, so
 every dependent moves with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
 
+### Release test: second audit round (Python package and new core)
+
+Four more audits covered the Python package end to end (console and threads,
+live displays, renderables by differential fuzzing against Rich 15.0.0, and
+the ext/art/plugin/CLI surface). Every finding has a regression test:
+`crates/rich-py/tests/test_robustness_*.py`, `crates/rich/tests/robustness_audit.rs`
+and the goldens `audit_edges.tsv` (10 cases) and `audit2.tsv` (12 cases),
+captured from rich 15.0.0.
+
+Core (`rs-rich`):
+- Text renders by one sweep over span events, as upstream: printing
+  `list(range(20000))` is linear (it took minutes). Output is unchanged.
+- `Segment::crop_lines` ports `split_and_crop_lines`: a newline inside a
+  segment (a print `end` like `"!!\n"`) survives the crop, and zero-width
+  characters past the edge are dropped.
+- Markdown paragraphs and images inherit overflow, no-wrap and justify; an
+  invalid GFM delimiter row is a paragraph; text with many brackets parses in
+  linear time.
+- `Console::capture` is per thread, as upstream, and ends when the captured
+  code panics.
+- Layout `size=0` is flexible; `ratio_resolve` uses exact integer arithmetic
+  (no dropped rows); huge sizes and screen coordinates no longer overflow.
+- Syntax accepts any `i64` line numbers and ranges without panicking.
+- Colour downgrade to `windows` uses the Windows palette; bare `grey`/`gray`
+  are not colour names.
+- `Tree("")`, `Syntax("")` and an unpadded empty `Text` print their blank line;
+  measuring splits on Python's line and word separators (U+2028 and friends).
+- Markup error positions count characters of the original string; the console
+  replaces emoji codes only between tags (`markup::render_emoji`).
+- New `Text::set_justify_option`/`get_justify_option`: an explicit
+  `justify="default"` is not overridden by a table column.
+- `render_lines` pads with no style; `Panel.width(0)` draws Rich's empty box;
+  SVG export rejects a non-finite `font_aspect_ratio` and formats numbers as
+  Python does; Json accepts lone surrogates (DIVERGENCES §30); `Columns` with
+  zero width and padding renders nothing instead of panicking (§32).
+
+Ext, art and CLI:
+- rs-rich-art: image backends cap their grid at `MAX_CELLS` (262,144 cells)
+  before resampling, and derived rows respect a fixed `options.height`: a tiny,
+  very tall image no longer hangs or aborts. **Breaking:** new
+  `ImageArtError::TooLarge` (and `check_cell_budget`) for an explicit size over
+  the budget (CLI exit 3).
+- rs-rich-ext: `CancelToken` shares its ancestors, so deep task trees build in
+  linear time; `TaskTree` state, elapsed time and rendering no longer recurse (a
+  10,000-deep tree renders).
+- rs-rich-cli: arguments that are not valid Unicode no longer panic; files named
+  by them open by their original bytes, as upstream rich-cli.
+
+Python package (`rs-rich` on PyPI):
+- No lock is held while Python code runs (getters, replacing `file` or
+  `highlighter`, the plugin table), so a `__del__` that prints cannot deadlock.
+- A print re-entered from what it prints (`__str__`, a highlighter, a fence, a
+  hook) raises `RecursionError` instead of crashing; deeply nested objects
+  pretty-print as in Rich, with Rich's `<repr-error ...>` where the recursion
+  limit runs out.
+- Leaving a `Live`, `Progress`, `track` or status just before the interpreter
+  exits no longer crashes it: refresh threads are joined.
+- Render hook items print on any thread (those from `log` or a justified
+  `print` on the collecting thread only); Ctrl-C works while waiting for
+  another thread's print; output under a `Live` goes past its file proxy, and a
+  console with no file writes to a null file, as Rich.
+- `markup=False` applies to strings inside every container; bad markup raises
+  `MarkupError` when printed (Table cells and titles, Panel titles included),
+  with Rich's message and position.
+- Huge sizes (console height and `tab_size`, `ConsoleOptions`, `Text.pad` and
+  friends, `Syntax`, `Panel`/`Align` height, `Table(leading=)`, ...) raise
+  `MemoryError`/`OverflowError` instead of aborting or eating all memory.
+- Progress columns handle integers past 2**63 and huge floats as Rich;
+  `Task.percentage` clamps -0 and NaN to 0; `RichHandler` builds its path link
+  as Rich (no link for a path Rich cannot parse).
+- `Table` and `Panel` expose Rich's attributes (`table.show_header = False`).
+- `Console.rule` takes a `Text` title and rejects empty `characters`; a hook
+  returning a non-renderable raises `NotRenderableError`; `print(width=-1)`
+  prints nothing; `Text.end` is kept inside `Group`, `Styled` and `Constrain`;
+  `Spinner` text expands emoji; `Columns(width=0, padding=0)` raises
+  `ZeroDivisionError`.
+- `Text.stylize`, `tokenize`, the diffs and the `find` helpers no longer do
+  work proportional to the text length per call; `DataNode.from_python` caps
+  embedded nodes at 512 levels.
+
 ### Release test: fixes from five independent audits
 
 Five audits covered the whole 0.0.12 delta: core, the plugin API and ext host,

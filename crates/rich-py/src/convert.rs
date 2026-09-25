@@ -29,6 +29,17 @@ pub(crate) fn justify(value: Option<&str>) -> PyResult<Justify> {
     })
 }
 
+/// A `Text`'s `justify=`: `None` leaves it unset (deferring to a table
+/// column or the print), while `"default"` is set, and not overridden.
+pub(crate) fn justify_option(value: Option<&str>) -> PyResult<Option<Justify>> {
+    value.map(|value| justify(Some(value))).transpose()
+}
+
+/// The name of a `Text`'s own justify (`None` when unset).
+pub(crate) fn justify_option_name(value: Option<Justify>) -> Option<&'static str> {
+    value.map(|value| justify_name(value).unwrap_or("default"))
+}
+
 /// The name Rich uses for a core justify (`None` for the default).
 pub(crate) fn justify_name(value: Justify) -> Option<&'static str> {
     match value {

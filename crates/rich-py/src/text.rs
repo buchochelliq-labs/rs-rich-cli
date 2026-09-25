@@ -259,7 +259,7 @@ impl Text {
     ) -> PyResult<Py<Text>> {
         let mut inner = CoreText::styled(text, base_style(style)?);
         inner.set_tab_size(tab_size_arg(tab_size)?);
-        inner.set_justify(convert::justify(justify)?);
+        inner.set_justify_option(convert::justify_option(justify)?);
         inner.set_overflow(overflow_arg(overflow)?);
         inner.set_no_wrap(no_wrap);
         if let Some(spans) = spans.filter(|s| !s.is_none()) {
@@ -289,7 +289,7 @@ impl Text {
     ) -> PyResult<Py<Text>> {
         let mut inner = crate::color::markup::render(text, emoji, emoji_variant)?;
         inner.set_base_style(base_style(style)?);
-        inner.set_justify(convert::justify(justify)?);
+        inner.set_justify_option(convert::justify_option(justify)?);
         inner.set_overflow(overflow_arg(overflow)?);
         Ok(new_text(cls.py(), inner, end)?.unbind())
     }
@@ -313,7 +313,7 @@ impl Text {
     ) -> PyResult<Py<Text>> {
         let py = cls.py();
         let mut inner = CoreText::from_ansi(text, base_style(style)?);
-        inner.set_justify(convert::justify(justify)?);
+        inner.set_justify_option(convert::justify_option(justify)?);
         inner.set_overflow(overflow_arg(overflow)?);
         inner.set_no_wrap(no_wrap);
         inner.set_tab_size(tab_size_arg(tab_size)?);
@@ -331,7 +331,7 @@ impl Text {
         overflow: Option<&str>,
     ) -> PyResult<Py<Text>> {
         let mut inner = CoreText::new(text);
-        inner.set_justify(convert::justify(justify)?);
+        inner.set_justify_option(convert::justify_option(justify)?);
         inner.set_overflow(overflow_arg(overflow)?);
         if let Some(style) = style.filter(|s| s.is_truthy().unwrap_or(false)) {
             ops::stylize(&mut inner, span_style(style)?, 0, None);
@@ -360,7 +360,7 @@ impl Text {
         let py = cls.py();
 
         let mut inner = CoreText::styled("", base_style(style)?);
-        inner.set_justify(convert::justify(justify)?);
+        inner.set_justify_option(convert::justify_option(justify)?);
         inner.set_overflow(overflow_arg(overflow)?);
         inner.set_no_wrap(no_wrap);
         inner.set_tab_size(tab_size_arg(tab_size)?);
@@ -429,12 +429,13 @@ impl Text {
 
     #[getter]
     fn get_justify(&self) -> Option<&'static str> {
-        convert::justify_name(self.inner.get_justify())
+        convert::justify_option_name(self.inner.get_justify_option())
     }
 
     #[setter(justify)]
     fn set_justify(&mut self, justify: Option<&str>) -> PyResult<()> {
-        self.inner.set_justify(convert::justify(justify)?);
+        self.inner
+            .set_justify_option(convert::justify_option(justify)?);
         Ok(())
     }
 
@@ -1022,13 +1023,17 @@ impl Text {
         tab_size: Index,
         no_wrap: Option<bool>,
     ) -> PyResult<Lines> {
+        let tab_size = count(tab_size).max(1);
+        if self.inner.plain().contains('\t') {
+            check_alloc("tab_size", tab_size, MAX_TAB_SIZE)?;
+        }
         let lines = ops::wrap(
             console,
             &self.inner,
             count(width),
             ops::justify_arg(justify)?,
             overflow_arg(overflow)?,
-            count(tab_size).max(1),
+            tab_size,
             no_wrap,
         )?;
         Lines::from_core(py, lines)

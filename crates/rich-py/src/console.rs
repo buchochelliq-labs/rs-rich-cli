@@ -935,7 +935,7 @@ impl Console {
     ) -> PyResult<()> {
         // A print reached again from the objects it prints (`__rich__`,
         // `__str__`, a hook) raises `RecursionError` rather than overflowing.
-        let _nesting = renderable::Nesting::enter()?;
+        let _nesting = renderable::PrintNesting::enter()?;
         let py = slf.py();
         let this = slf.get();
         let snapshot = this.snapshot(py);
@@ -1762,7 +1762,7 @@ impl Console {
     ) -> PyResult<()> {
         // A print reached again from the objects it prints (`__rich__`,
         // `__str__`, a hook) raises `RecursionError` rather than overflowing.
-        let _nesting = renderable::Nesting::enter()?;
+        let _nesting = renderable::PrintNesting::enter()?;
         let py = slf.py();
         let this = slf.get();
         let snapshot = this.snapshot(py);
@@ -2313,7 +2313,7 @@ impl Console {
         if let Some(style) = style_type(style)? {
             inner.set_base_style(style);
         }
-        inner.set_justify(convert::justify(justify)?);
+        inner.set_justify_option(convert::justify_option(justify)?);
         inner.set_overflow(overflow.map(convert::overflow).transpose()?);
         Ok(Text::from_core(inner))
     }
@@ -2614,7 +2614,7 @@ impl Console {
 
     /// Print one item with `print`'s console style, soft wrap and crop.
     fn print_item(slf: &Bound<'_, Console>, item: Item, args: PrintArgs<'_>) -> PyResult<()> {
-        let _nesting = renderable::Nesting::enter()?;
+        let _nesting = renderable::PrintNesting::enter()?;
         let py = slf.py();
         let this = slf.get();
         let snapshot = this.snapshot(py);

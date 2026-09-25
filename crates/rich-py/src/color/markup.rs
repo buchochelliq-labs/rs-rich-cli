@@ -14,30 +14,28 @@ pub(crate) fn markup_error(error: RichError) -> PyErr {
     }
 }
 
-/// The error for markup that failed to parse after its emoji codes were
-/// replaced: reported as Rich does, at its position in `original` (Rich
-/// replaces emoji between the tags, after parsing them).
-pub(crate) fn markup_error_in(original: &str, error: RichError) -> PyErr {
-    match CoreText::from_markup(original) {
-        Err(error) => markup_error(error),
-        Ok(_) => markup_error(error),
-    }
-}
-
 /// `rich.markup.render(markup, emoji=..., emoji_variant=...)` without the
 /// base style: console markup to a core `Text`. Emoji codes are replaced
-/// before the markup is parsed, as `Console.render_str` does.
+/// in the text between the tags (with the variant only when there are no
+/// tags), as upstream's is, so a `MarkupError` position is in `markup`.
 pub(crate) fn render(markup: &str, emoji: bool, emoji_variant: Option<&str>) -> PyResult<CoreText> {
-    let content = if emoji {
-        super::emoji_replace(markup, emoji_variant)?
-    } else {
-        super::emoji::variant(emoji_variant)?;
-        markup.to_string()
-    };
     if !markup.contains('[') {
+        let content = if emoji {
+            super::emoji_replace(markup, emoji_variant)?
+        } else {
+            super::emoji::variant(emoji_variant)?;
+            markup.to_string()
+        };
         return Ok(CoreText::new(content));
     }
-    CoreText::from_markup(&content).map_err(|error| markup_error_in(markup, error))
+    super::emoji::variant(emoji_variant)?;
+    // Between tags upstream replaces emoji codes without the variant.
+    let parsed = if emoji {
+        rich::markup::render_emoji(markup)
+    } else {
+        CoreText::from_markup(markup)
+    };
+    parsed.map_err(markup_error)
 }
 
 /// `rich.markup.render(markup, style="", emoji=True, emoji_variant=None)`:
