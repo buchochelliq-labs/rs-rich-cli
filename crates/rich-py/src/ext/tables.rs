@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use pyo3::exceptions::{PyKeyError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyKeyError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString};
 
@@ -590,6 +590,9 @@ impl Group {
 // ---------------------------------------------------------------------------
 // StreamingTable
 
+/// A row of a `StreamingTable` with its key.
+type KeyedRow = (Py<PyAny>, Vec<Py<PyAny>>);
+
 /// `StreamingTable(columns, *, window="all", capacity=None, sort=None,
 /// title=None, ...)`: rows by key, upserted as data arrives; renders only
 /// rows that changed, and keeps the newest `capacity` rows. `window` is
@@ -778,7 +781,7 @@ impl StreamingTable {
     }
 
     /// `(key, values)` in insertion order.
-    fn rows(&self, py: Python<'_>) -> PyResult<Vec<(Py<PyAny>, Vec<Py<PyAny>>)>> {
+    fn rows(&self, py: Python<'_>) -> PyResult<Vec<KeyedRow>> {
         self.table()
             .rows()
             .map(|(id, values)| {

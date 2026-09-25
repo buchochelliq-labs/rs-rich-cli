@@ -2926,6 +2926,7 @@ def main() -> None:
     print("wrote export fixtures (html inline, html classes, svg)")
 
     capture_core_gaps()
+    capture_upstream_features()
 
 
 # --- core gaps (bindings foundation) ------------------------------------------
@@ -3157,6 +3158,145 @@ def capture_core_gaps() -> None:
         lines.append(f"{name}\t{json.dumps(build(), ensure_ascii=False)}")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(CORE_GAP_CASES)} core gap cases to {path}")
+
+
+
+# --- upstream features (bindings parity) --------------------------------------
+# One fixture, `upstream_features.tsv`: `name<TAB>json(output)`, built like
+# `core_gaps.tsv` (same `_cg_*` consoles). These are upstream options the Python
+# bindings needed from core; `tests/golden_upstream_features.rs` has a Rust
+# builder per name.
+
+
+def _uf_render_with(console: Console, renderable, **attributes) -> str:
+    """`Console.render` with `ConsoleOptions` attributes overridden."""
+    options = console.options.copy()
+    for name, value in attributes.items():
+        setattr(options, name, value)
+    return console._render_buffer(list(console.render(renderable, options)))
+
+
+def _uf_tree(**root_options) -> Tree:
+    tree = Tree("root", **root_options)
+    a = tree.add("child [b]A[/]")
+    a.add("leaf A1")
+    a.add(Text("leaf A2\nsecond line"))
+    tree.add("child B").add("leaf B1")
+    return tree
+
+
+def _uf_tree_styles() -> Tree:
+    tree = Tree("root", style="on blue", guide_style="red")
+    bold = tree.add("bold guides", guide_style="bold green")
+    bold.add("x")
+    bold.add("y").add("z")
+    double = tree.add("double guides", guide_style="underline2", style="italic")
+    double.add("p")
+    double.add("q")
+    return tree
+
+
+_UF_WORDS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven"]
+
+
+def _uf_prints(console: Console, objects) -> str:
+    with console.capture() as capture:
+        for renderable in objects:
+            console.print(renderable)
+    return capture.get()
+
+
+def _uf_small_table() -> Table:
+    table = Table("a", "bb")
+    table.add_row("1", "22")
+    return table
+
+
+def _uf_tree_highlight() -> Tree:
+    tree = Tree("x 123", highlight=True, style="bold")
+    tree.add("y 45 True")
+    tree.add(Text("z 6"))
+    return tree
+
+
+def _uf_tree_collapsed() -> Tree:
+    tree = Tree("root")
+    closed = tree.add("closed", expanded=False)
+    closed.add("hidden")
+    tree.add("open").add("shown")
+    return tree
+
+
+UPSTREAM_FEATURE_CASES = [
+    # 1. Tree
+    ("tree_default", lambda: _cg_print(_cg_console(30), _uf_tree())),
+    ("tree_styles", lambda: _cg_print(_cg_console(30), _uf_tree_styles())),
+    ("tree_hide_root", lambda: _cg_print(_cg_console(30), _uf_tree(hide_root=True))),
+    ("tree_collapsed", lambda: _cg_print(_cg_console(30), _uf_tree_collapsed())),
+    ("tree_ascii", lambda: _uf_render_with(_cg_console(30), _uf_tree_styles(), encoding="ascii")),
+    ("tree_highlight", lambda: _cg_print(_cg_console(30), _uf_tree_highlight())),
+    ("tree_narrow", lambda: _cg_print(_cg_console(9), _uf_tree_styles())),
+    ("tree_justify", lambda: _cg_print(_cg_console(20), _uf_tree(), justify="right")),
+    ("tree_measure", lambda: _cg_print(_cg_console(40), Panel(_uf_tree_collapsed(), expand=False))),
+    # 2. Columns
+    ("columns_options", lambda: "".join(
+        _cg_print(_cg_console(30), Columns(_UF_WORDS, **options))
+        for options in (
+            {},
+            {"padding": (0, 2)},
+            {"padding": (1, 1, 0, 3)},
+            {"width": 6},
+            {"width": 6, "padding": (0, 1, 0, 0)},
+            {"column_first": True},
+            {"column_first": True, "equal": True},
+            {"right_to_left": True},
+            {"right_to_left": True, "column_first": True, "expand": True},
+            {"align": "right", "equal": True},
+            {"align": "center", "expand": True},
+            {"title": "[b]Words[/]"},
+            {"title": "T", "expand": True, "align": "left"},
+        )
+    )),
+    ("columns_renderables", lambda: _cg_print(_cg_console(30), Columns(
+        [Panel("a"), Text("bb", style="red"), "[i]ccc[/]", Panel.fit("dddd")],
+        align="center", equal=True, column_first=True,
+    ))),
+    # 3. Rule
+    ("rule_end", lambda: _uf_prints(_cg_console(12), [
+        Rule("t", end="\n\n"), "y", Rule(end="\n\n"), "z", Rule("t", end="\n"), Rule("t", end="!\n"),
+    ])),
+    ("rule_ascii", lambda: "".join(
+        _uf_render_with(_cg_console(12), rule, encoding="ascii")
+        for rule in (Rule("t"), Rule(), Rule("t", characters="="), Rule("t", align="left"), Rule("t", align="right"))
+    )),
+    ("rule_style", lambda: "".join([
+        _cg_print(_cg_console(12), Rule("t", style="bold red")),
+        _cg_print(_cg_console(12), Rule("t", style="rule.text")),
+        _cg_print(_cg_console(12, theme=RichTheme({"rule.line": "blue", "rule.text": "italic"})), Rule("t")),
+        _cg_print(_cg_console(12, theme=RichTheme({"rule.line": "blue"})), Rule()),
+    ])),
+    ("rule_text_title", lambda: "".join(
+        _cg_print(_cg_console(14), Rule(Text("a\tb\n[c]", style="red"), align=align))
+        for align in ("left", "center", "right")
+    )),
+    # 11. print(justify=…) wraps a non-Text renderable in Align
+    ("print_justify_renderables", lambda: "".join(
+        _cg_print(_cg_console(20), renderable, justify=justify)
+        for justify in ("left", "center", "right", "full", "default")
+        for renderable in (Panel.fit("hi"), _uf_small_table(), Panel("wide"))
+    )),
+]
+
+
+def capture_upstream_features() -> None:
+    path = golden_dir() / "upstream_features.tsv"
+    lines = [
+        "# name\tjson(expected output) — see UPSTREAM_FEATURE_CASES in scripts/capture_golden.py"
+    ]
+    for name, build in UPSTREAM_FEATURE_CASES:
+        lines.append(f"{name}\t{json.dumps(build(), ensure_ascii=False)}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(UPSTREAM_FEATURE_CASES)} upstream feature cases to {path}")
 
 
 if __name__ == "__main__":

@@ -278,17 +278,37 @@ fn wrap_rows(text: &Text, theme: &Theme, width: usize) -> Vec<Vec<Segment>> {
     for pair in cuts.windows(2) {
         let (start, end) = (pair[0], pair[1]);
         let mut line = Vec::new();
+        // Each segment's byte offset in `plain`, parallel to `line`.
+        let mut offsets = Vec::new();
         while piece < pieces.len() && pieces[piece].1 <= end {
             let (a, b, style) = &pieces[piece];
             if *a >= start {
                 line.push(Segment::new(&plain[*a..*b], Some(style.clone())));
+                offsets.push(*a);
             }
             piece += 1;
         }
         rstrip_end(&mut line, width);
         let excess = width.saturating_sub(line.iter().map(Segment::cell_length).sum());
         if excess > 0 {
-            line.push(Segment::new(" ".repeat(excess), Some(base.clone())));
+            let padding = Segment::new(" ".repeat(excess), Some(base.clone()));
+            // Core's justify padding joins the line's last run when no span
+            // covers its last character (upstream pads the plain string).
+            let last_char = line.last().and_then(|last| {
+                let offset = offsets[line.len() - 1];
+                last.text.char_indices().last().map(|(at, _)| offset + at)
+            });
+            let join = last_char.is_none_or(|position| {
+                !spans
+                    .iter()
+                    .any(|span| span.start <= position && position < span.end)
+            });
+            match line.last_mut() {
+                Some(last) if join && last.style == padding.style => {
+                    last.text.push_str(&padding.text);
+                }
+                _ => line.push(padding),
+            }
         }
         rows.push(fold_to(line, width));
     }

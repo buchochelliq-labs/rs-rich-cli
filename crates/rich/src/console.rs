@@ -542,7 +542,8 @@ impl Console {
     ) -> Vec<Segment> {
         let mut options = options.clone();
         let joined;
-        let renderable = match renderable.printed_text() {
+        let joined_text = renderable.printed_text();
+        let renderable = match joined_text.clone() {
             Some(text) => {
                 // `print(justify="left"|"center"|"right")` wraps the joined
                 // text in `Align`, which renders a zero-width text (such as an
@@ -559,11 +560,24 @@ impl Console {
             }
             None => renderable,
         };
+        // `print(justify="left"|"center"|"right")` wraps every other
+        // renderable in `Align(renderable, justify)` (`_collect_renderables`).
+        let align = match options.justify {
+            Justify::Left if joined_text.is_none() => Some(crate::align::HorizontalAlign::Left),
+            Justify::Center if joined_text.is_none() => Some(crate::align::HorizontalAlign::Center),
+            Justify::Right if joined_text.is_none() => Some(crate::align::HorizontalAlign::Right),
+            _ => None,
+        };
         if options.justify == Justify::Default && renderable.fit_to_measurement() {
             let measurement = renderable.measure(self, &options);
             options.max_width = measurement.maximum.min(options.max_width).max(1);
         }
-        let segments = renderable.rich_render(self, &options);
+        let segments = match align {
+            Some(align) if options.max_width >= 1 => {
+                crate::align::Align::render_child(renderable, align, self, &options)
+            }
+            _ => renderable.rich_render(self, &options),
+        };
         // `Console.print(crop=True)`: the final backstop against a line running
         // off the side of the terminal. Renderables that fit are untouched; this
         // is what gives `Overflow::Ignore` its "wrap nothing, but still don't

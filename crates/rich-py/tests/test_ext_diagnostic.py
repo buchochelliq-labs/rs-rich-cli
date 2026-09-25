@@ -202,9 +202,9 @@ def test_dashboard():
     dashboard.push(Diagnostic.warning("unused import", code="W1", location=at("src/lib.rs", 1, 5)))
     dashboard.push(Diagnostic("see the migration guide", level="note"))
     check("dashboard", dashboard, 70)
-    assert dict(dashboard.counts()) == {"error": 1, "warning": 2, "note": 1}
+    assert list(dashboard.counts().items()) == [("error", 1), ("warning", 2), ("note", 1)]
     dashboard.min_level = "warning"
-    assert dict(dashboard.counts()) == {"error": 1, "warning": 2}
+    assert dashboard.counts() == {"error": 1, "warning": 2}
 
 
 def test_hyperlinker():
@@ -254,3 +254,28 @@ def test_event_handler():
     )
     check("log_handler/event", handler.render(event), 80)
     assert EventHandler.level_text("error").plain == "ERROR   "
+
+
+def test_event_handler_blanks_repeated_times_and_draws_spans():
+    handler = EventHandler(time="[09:30:00]")
+    first = handler.render(StructuredEvent("first"))
+    second = handler.render(StructuredEvent("second", severity="error"))
+    assert render(first, width=40) == EXPECTED["log_handler/repeat-1"]
+    assert render(second, width=40) == EXPECTED["log_handler/repeat-2"]
+    tree = EventHandler(span_view="tree", show_time=False, show_path=False)
+    opened = StructuredEvent("request", fields={"id": 7}, span_event="open")
+    inner = StructuredEvent("[b]step[/b] done", markup=True, spans=["request"])
+    closed = StructuredEvent("request", span_event="close", elapsed=1.2)
+    assert render(tree.render(opened), width=50) == EXPECTED["log_handler/tree-open"]
+    assert render(tree.render(inner), width=50) == EXPECTED["log_handler/tree-inner"]
+    assert render(tree.render(closed), width=50) == EXPECTED["log_handler/tree-close"]
+
+
+def test_event_handler_emits_to_a_console():
+    import io
+
+    from rs_rich.console import Console
+
+    out = io.StringIO()
+    EventHandler(time="[09:30:00]").emit(Console(file=out, width=40), StructuredEvent("first"))
+    assert out.getvalue() == EXPECTED["log_handler/repeat-1"]

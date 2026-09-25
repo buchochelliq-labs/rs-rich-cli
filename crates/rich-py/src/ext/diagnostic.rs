@@ -1394,14 +1394,14 @@ impl DiagnosticsDashboard {
         Ok(())
     }
 
-    /// Diagnostics shown per level (`{"error": 2, ...}`); ones without a
-    /// level count as errors.
-    fn counts(&self) -> Vec<(&'static str, usize)> {
-        self.build()
-            .counts()
-            .into_iter()
-            .map(|(level, count)| (level_name(level), count))
-            .collect()
+    /// Diagnostics shown per level, most serious first (`{"error": 2,
+    /// ...}`); ones without a level count as errors.
+    fn counts<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let counts = PyDict::new(py);
+        for (level, count) in self.build().counts() {
+            counts.set_item(level_name(level), count)?;
+        }
+        Ok(counts)
     }
 
     fn __len__(&self) -> usize {
@@ -1486,14 +1486,11 @@ impl StructuredEvent {
         if let Some(hidden) = hide_fields {
             event = event.hide_fields(common::strings(hidden)?);
         }
-        let source = match path {
-            Some(path) => Some(SourceLocation {
-                path,
-                line: line.unwrap_or(0),
-                column,
-            }),
-            None => None,
-        };
+        let source = path.map(|path| SourceLocation {
+            path,
+            line: line.unwrap_or(0),
+            column,
+        });
         event = event
             .view(self::view(view)?)
             .overflow(overflow_policy(overflow)?)

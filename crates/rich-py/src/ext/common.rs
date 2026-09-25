@@ -148,15 +148,6 @@ pub(crate) fn text_arg(value: &Bound<'_, PyAny>) -> PyResult<CoreText> {
     )))
 }
 
-/// A `str` or `Text` argument as a core `Text`, a `str` read as markup.
-pub(crate) fn markup_arg(value: &Bound<'_, PyAny>) -> PyResult<CoreText> {
-    if let Ok(string) = value.cast::<PyString>() {
-        return CoreText::from_markup(string.to_cow()?.as_ref())
-            .map_err(|e| crate::errors::MarkupError::new_err(e.to_string()));
-    }
-    text_arg(value)
-}
-
 /// A value a Python callback returned for a cell: a `Text`, or a `str`
 /// read as markup (anything else is its `str`).
 pub(crate) fn markup_or_text(value: &Bound<'_, PyAny>) -> PyResult<CoreText> {
@@ -278,36 +269,6 @@ pub(crate) fn pairs<'py>(value: &Bound<'py, PyAny>) -> PyResult<Vec<(String, Bou
 // ---------------------------------------------------------------------------
 // Rendering
 
-/// A core renderable that renders by calling `render` on a pyclass it
-/// borrows each time: for `rich-ext` values that are not `Clone` (task
-/// trees, streaming tables) and so cannot be copied into the renderable.
-pub(crate) struct Borrowing<T: pyo3::PyClass + Sync> {
-    pub(crate) object: Py<T>,
-    pub(crate) render: fn(&T, &CoreConsole, &CoreOptions) -> Vec<CoreSegment>,
-    pub(crate) measure: Option<fn(&T, &CoreConsole, &CoreOptions) -> CoreMeasurement>,
-}
-
-impl<T: pyo3::PyClass<Frozen = pyo3::pyclass::boolean_struct::False> + Sync> Renderable
-    for Borrowing<T>
-{
-    fn rich_render(&self, console: &CoreConsole, options: &CoreOptions) -> Vec<CoreSegment> {
-        Python::attach(|py| match self.object.bind(py).try_borrow() {
-            Ok(object) => (self.render)(&object, console, options),
-            Err(_) => Vec::new(),
-        })
-    }
-
-    fn measure(&self, console: &CoreConsole, options: &CoreOptions) -> CoreMeasurement {
-        let Some(measure) = self.measure else {
-            return CoreMeasurement::new(options.max_width, options.max_width);
-        };
-        Python::attach(|py| match self.object.bind(py).try_borrow() {
-            Ok(object) => measure(&object, console, options),
-            Err(_) => CoreMeasurement::new(0, 0),
-        })
-    }
-}
-
 /// A core console of `width` columns for tools that render on their own
 /// (reports, captures). Colour only when `color` is set.
 pub(crate) fn plain_console(width: usize, color: bool) -> CoreConsole {
@@ -353,41 +314,6 @@ pub(crate) fn scoped<T>(
         highlight: true,
     };
     renderable::scope(ambient, f)
-}
-
-/// Render a Python renderable (anything `print` accepts) with a core
-/// console, to segments without the final newline.
-pub(crate) fn render_python(
-    value: &Bound<'_, PyAny>,
-    console: &CoreConsole,
-) -> PyResult<Vec<CoreSegment>> {
-    let py = value.py();
-    let options = console.options();
-    scoped(
-        py,
-        console.width(),
-        options.height.unwrap_or(25),
-        false,
-        || {
-            let renderable = renderable::to_renderable(value, None)?;
-            Ok(renderable.rich_render(console, &options))
-        },
-    )
-}
-
-/// Render a Python renderable to a string with a core console.
-pub(crate) fn render_python_to_string(
-    value: &Bound<'_, PyAny>,
-    console: &CoreConsole,
-) -> PyResult<String> {
-    let segments = render_python(value, console)?;
-    Ok(console.segments_to_string(&segments))
-}
-
-/// A Python object that core may keep: rendered by calling back into
-/// Python each time (`Send + Sync`).
-pub(crate) fn child(value: &Bound<'_, PyAny>) -> PyResult<Box<dyn Renderable>> {
-    renderable::to_renderable(value, None)
 }
 
 /// A boxed renderable as a renderable, for `rich-ext` wrappers generic over

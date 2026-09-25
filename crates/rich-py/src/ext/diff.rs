@@ -775,6 +775,7 @@ pub(crate) struct TestCase {
 impl TestCase {
     /// Not a pytest test class.
     #[classattr]
+    #[allow(non_upper_case_globals)]
     const __test__: bool = false;
 
     #[new]
@@ -884,6 +885,7 @@ fn totals_dict(totals: reports::Totals) -> BTreeMap<&'static str, usize> {
 impl TestSuite {
     /// Not a pytest test class.
     #[classattr]
+    #[allow(non_upper_case_globals)]
     const __test__: bool = false;
 
     #[new]
@@ -948,6 +950,7 @@ fn parse_error(error: reports::TestParseError) -> PyErr {
 impl TestRun {
     /// Not a pytest test class.
     #[classattr]
+    #[allow(non_upper_case_globals)]
     const __test__: bool = false;
 
     #[new]
@@ -1031,6 +1034,7 @@ impl AsRenderable for TestReport {
 impl TestReport {
     /// Not a pytest test class.
     #[classattr]
+    #[allow(non_upper_case_globals)]
     const __test__: bool = false;
 
     #[new]

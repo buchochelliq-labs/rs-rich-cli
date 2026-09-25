@@ -105,19 +105,67 @@ impl Align {
     }
 }
 
-impl Renderable for Align {
-    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+impl Align {
+    /// `Align.__rich_console__` over a borrowed child: what
+    /// [`Console::print_with`] wraps a non-`Text` renderable in for
+    /// `justify="left"|"center"|"right"` (upstream's `_collect_renderables`).
+    pub fn render_child(
+        child: &dyn Renderable,
+        align: HorizontalAlign,
+        console: &Console,
+        options: &ConsoleOptions,
+    ) -> Vec<Segment> {
+        AlignSpec {
+            align,
+            style: None,
+            vertical: None,
+            pad: true,
+            width: None,
+            height: None,
+        }
+        .render(child, console, options)
+    }
+
+    fn spec(&self) -> AlignSpec {
+        AlignSpec {
+            align: self.align,
+            style: self.style.clone(),
+            vertical: self.vertical,
+            pad: self.pad,
+            width: self.width,
+            height: self.height,
+        }
+    }
+}
+
+/// Every `Align` option but the child.
+struct AlignSpec {
+    align: HorizontalAlign,
+    style: Option<Style>,
+    vertical: Option<VerticalAlign>,
+    pad: bool,
+    width: Option<usize>,
+    height: Option<usize>,
+}
+
+impl AlignSpec {
+    fn render(
+        &self,
+        child: &dyn Renderable,
+        console: &Console,
+        options: &ConsoleOptions,
+    ) -> Vec<Segment> {
         // Upstream measures the child, renders it through `Constrain` at that
         // width, and squares the lines off with `Segment.set_shape`, so the
         // rendered *block* is aligned as a whole (#443).
-        let measured = Measurement::get(console, options, self.child.as_ref()).maximum;
+        let measured = Measurement::get(console, options, child).maximum;
         let block_width = match self.width {
             Some(width) => measured.min(width),
             None => measured,
         };
         let mut child_options = options.update_width(block_width.min(options.max_width));
         child_options.height = None;
-        let lines = console.render_lines(self.child.as_ref(), &child_options, false);
+        let lines = console.render_lines(child, &child_options, false);
         let width = lines
             .iter()
             .map(|line| line.iter().map(Segment::cell_length).sum::<usize>())
@@ -189,6 +237,12 @@ impl Renderable for Align {
             Some(style) => Segment::apply_style(&segments, style),
             None => segments,
         }
+    }
+}
+
+impl Renderable for Align {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        self.spec().render(self.child.as_ref(), console, options)
     }
 
     /// Port of `Align.__rich_measure__`: the child's measurement.

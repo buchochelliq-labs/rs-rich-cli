@@ -62,7 +62,7 @@ def test_overflowing():
     for policy in ("fold", "crop", "ellipsis", "wrap"):
         check(f"layout/overflow-{policy}", layout.Overflowing(Text.from_markup(f"[bold]{code}[/]"), policy), 40)
     lines = layout.fit_segments([Segment("hello ", Style(bold=True)), Segment("wide world")], 7)
-    shown = "\n".join("".join(f"{s.text}[{s.style or ''}]" for s in line) for line in lines)
+    shown = "\n".join("".join(f"{s.text}[{'' if s.style is None else s.style}]" for s in line) for line in lines)
     assert shown == EXPECTED["layout/fit"]
 
 
