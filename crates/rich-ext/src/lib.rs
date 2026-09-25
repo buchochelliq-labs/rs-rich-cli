@@ -24,6 +24,7 @@
 //! - Inspectors: [`source_view`], [`hex`], [`unicode_inspect`],
 //!   [`env_inspect`].
 //! - Layout and live output: [`layout`], [`live`].
+//! - Pipelines: [`transform`], and `data::transform` (`jsonpath` feature).
 //!
 //! The user guide (<https://buchochelliq-labs.github.io/rs-rich-cli/guide/ext/>)
 //! covers each module with compiled examples.
@@ -61,6 +62,7 @@ pub mod source_view;
 pub mod table;
 pub mod target;
 pub mod theme;
+pub mod transform;
 pub mod unicode_inspect;
 pub mod workflow;
 

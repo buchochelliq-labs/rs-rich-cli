@@ -46,6 +46,7 @@ pub mod data;
 pub mod group;
 pub mod sort;
 pub mod stream;
+pub mod transform;
 
 use std::fmt;
 use std::sync::Arc;

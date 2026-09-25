@@ -706,6 +706,8 @@ const VALUE_OPTIONS: &[&str] = &[
     "--collision",
     "--format",
     "--select",
+    "--filter",
+    "--highlight",
     "--find",
     "--max-depth",
     "--max-length",
@@ -1779,6 +1781,14 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         }
         return Err(format!("{flag} only has an effect with --inspect"));
     }
+    if let Some(flag) = data.transform_option() {
+        if !transforms_apply(mode) {
+            return Err(format!(
+                "{flag} only has an effect on text, --print, --syntax or --inspect"
+            ));
+        }
+        data.check_transforms(mode == Mode::Inspect)?;
+    }
     if let Some(flag) = tool_options.diff_option().filter(|_| mode != Mode::Diff) {
         return Err(format!("{flag} only has an effect with --diff"));
     }
@@ -2592,6 +2602,22 @@ fn mime_of(content_type: &str) -> String {
 }
 
 /// Resolve `Mode::Auto` to a concrete mode from the resource's file extension.
+/// Whether `--filter` and `--highlight` apply in `mode`: plain text,
+/// `--print`, `--syntax` and `--inspect`.
+fn transforms_apply(mode: Mode) -> bool {
+    matches!(
+        mode,
+        Mode::Auto | Mode::Print | Mode::Syntax | Mode::Inspect
+    )
+}
+
+fn transforms_misplaced(flag: &str, mode: Mode) -> String {
+    format!(
+        "{flag} only has an effect on text, --print, --syntax or --inspect, not {}",
+        mode_name(mode)
+    )
+}
+
 fn detect_mode(resource: Option<&str>) -> Mode {
     match resource.and_then(resource_ext).as_deref() {
         Some("md") | Some("markdown") => Mode::Markdown,
@@ -3149,6 +3175,13 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         Mode::Auto => detect_mode(cli.resource.as_deref()),
         other => other,
     };
+    if let Some(flag) = cli
+        .data
+        .transform_option()
+        .filter(|_| !transforms_apply(mode))
+    {
+        return fail(&cli, ExitClass::Usage, transforms_misplaced(flag, mode));
+    }
 
     // `view` decides what to show from the resource itself: an existing
     // renderer, a numbered source view, or a hex dump of binary input. The
@@ -3600,6 +3633,15 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         })
         .unwrap_or_default();
 
+    // `--format` or a URL's Content-Type can still route away from text.
+    if let Some(flag) = cli
+        .data
+        .transform_option()
+        .filter(|_| !transforms_apply(mode))
+    {
+        return fail(&cli, ExitClass::Usage, transforms_misplaced(flag, mode));
+    }
+
     // Build the renderable, and the width a non-expanding `Panel`/`Padding`
     // would shrink around it — upstream's `Measurement.get(…).maximum`.
     let (renderable, fit): (Box<dyn Renderable>, Option<usize>) = match mode {
@@ -3726,6 +3768,20 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             let fit = measure_rendered(&console, &table);
             (Box::new(table), Some(fit))
         }
+        // `--filter` and `--highlight` work on the highlighted text.
+        Mode::Syntax if cli.data.transform_option().is_some() => {
+            let text = Syntax::new(content.as_str(), language.as_str()).highlight_for(&console);
+            let text = match cli
+                .data
+                .text_pipeline()
+                .and_then(|pipeline| pipeline.apply(text).map_err(inspect::transform_failed))
+            {
+                Ok(text) => text,
+                Err(err) => return fail(&cli, ExitClass::Data, err),
+            };
+            let fit = text.measurement().1;
+            (Box::new(text), Some(fit))
+        }
         Mode::Syntax => {
             // `Syntax.__rich_measure__`: the widest source line, plus padding and
             // a line-number column — neither of which this CLI turns on.
@@ -3779,12 +3835,21 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             let fit = view.measure(&console, &console.options()).maximum;
             (view, Some(fit))
         }
-        // Print + auto: parse markup (Print) or take plain text (auto).
+        // Print + auto: parse markup (Print) or take plain text (auto), then
+        // `--filter` and `--highlight`.
         _ => {
             let text = if mode == Mode::Print {
                 console.build_text(&content)
             } else {
                 Text::new(content.as_str())
+            };
+            let text = match cli
+                .data
+                .text_pipeline()
+                .and_then(|pipeline| pipeline.apply(text).map_err(inspect::transform_failed))
+            {
+                Ok(text) => text,
+                Err(err) => return fail(&cli, ExitClass::Data, err),
             };
             let fit = text.measurement().1;
             (Box::new(text), Some(fit))

@@ -306,6 +306,8 @@ files show as a key table with their comments. These options change the view:
 | Option | Effect |
 |---|---|
 | `--select EXPR` | Keep what a JSONPath expression selects, e.g. `$.servers[*].name` |
+| `--filter EXPR` | Keep what a JSONPath expression selects and the containers above it, so the tree keeps its shape (sequences are renumbered) |
+| `--highlight EXPR` | Show the lines a JSONPath expression selects in reverse video |
 | `--find TEXT` | List keys and values containing TEXT (any case), with context |
 | `--flatten` | One `path` / `value` row per value |
 | `--table` | Records as a table, or a path/value table |
@@ -315,6 +317,38 @@ files show as a key table with their comments. These options change the view:
 | `--compare PATH` | List what was added, removed or changed in PATH |
 
 A document that does not parse is reported as `file:line:column` and exits 4.
+
+### Filter and highlight
+
+`--filter` keeps only what matches, and `--highlight` shows matches in reverse
+video. With `--inspect` they take a JSONPath; for text, `--print` and
+`--syntax` (including files shown as syntax by their extension, such as `.log`)
+they take a regular expression, matched against each line.
+
+```bash
+rich app.log --filter 'WARN|ERROR' --highlight ERROR
+rich inspect deploy.yaml --filter '$..port' --highlight '$.servers[1]'
+```
+
+They run as a pipeline, always in this order, whatever order the flags are
+given in:
+
+| Input | Order |
+|---|---|
+| `--inspect` | parse, `--redact`, `--select`, `--filter`, `--highlight`, then the view (`--find`, `--flatten`, `--table` or the tree) |
+| text, `--print`, `--syntax` | read, `--sanitize`, markup or highlighting, `--filter`, `--highlight`, then panel, padding and export |
+
+So `--select` narrows first and `--filter`'s path is relative to the selection,
+and a redacted value can be selected but never shows. `--compare` applies only
+`--redact`; `--filter` and `--highlight` are refused with it, and
+`--highlight` is refused with `--find`, `--flatten` and `--table`, which draw
+no tree lines. Other modes, such as `--json` and `--markdown`, refuse both
+flags. With either flag, `--syntax` output is the highlighted text without the
+theme's background fill.
+
+Libraries get the same stages from `rich_ext::transform` and
+`rich_ext::data::transform`, and plugins can add text transforms: see
+[Transforms](guide/ext/transforms.md).
 
 ### Detect the format of piped input
 

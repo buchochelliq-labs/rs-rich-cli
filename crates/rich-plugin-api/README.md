@@ -10,7 +10,10 @@ A plugin is a type that implements [`Plugin`]: it describes itself with
 - code highlighters (`rich::CodeHighlighter`), selectable by name;
 - named themes and box styles;
 - named source renderers, which turn text (a diagram, a data file) into a
-  renderable.
+  renderable;
+- renderers for Markdown code fences of a given language;
+- named text transforms (`TextTransform`), which a host chains into a
+  pipeline.
 
 This crate depends only on `rs-rich`. A plugin never depends on `rs-rich-ext`,
 which is where plugins are hosted:

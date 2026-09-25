@@ -14,12 +14,14 @@ use rich::r#box::Box as BoxStyle;
 use rich::segment::Segment;
 use rich::{
     CodeHighlighter, CodeHighlighting, Console, ConsoleCodeHighlighting, FenceRenderer,
-    Highlighter, SyntectHighlighter, Theme,
+    Highlighter, SyntectHighlighter, Text, Theme,
 };
 use rich_plugin_api::{
     is_valid_name, Capability, HighlighterFactory, Plugin, PluginError, PluginMetadata,
-    PluginRegistrar, SourceRenderer, PLUGIN_API_VERSION,
+    PluginRegistrar, SourceRenderer, TextTransform, PLUGIN_API_VERSION,
 };
+
+use crate::transform::Pipeline;
 
 /// A factory that produces a fresh highlighter each time it installs. The
 /// highlighter is `Send` so the [`Console`] it installs onto stays `Send`.
@@ -45,6 +47,7 @@ pub struct ExtensionRegistry {
     box_styles: BTreeMap<String, (String, BoxStyle)>,
     renderers: BTreeMap<String, (String, Arc<dyn SourceRenderer>)>,
     fence_renderers: BTreeMap<String, (String, Arc<dyn FenceRenderer>)>,
+    transforms: BTreeMap<String, (String, Arc<dyn TextTransform>)>,
     plugins: Vec<RegisteredPlugin>,
     /// The code highlighter chosen as every console's default, and its theme.
     default_code_highlighter: Option<(String, Option<String>)>,
@@ -209,6 +212,9 @@ impl ExtensionRegistry {
         for (language, value) in staged.fence_renderers {
             self.fence_renderers.insert(language, (id.clone(), value));
         }
+        for (name, value) in staged.transforms {
+            self.transforms.insert(name, (id.clone(), value));
+        }
         self.plugins.push(RegisteredPlugin {
             metadata,
             capabilities: staged.capabilities,
@@ -224,6 +230,7 @@ impl ExtensionRegistry {
             Capability::BoxStyle(name) => self.box_styles.get(name).map(|e| &e.0),
             Capability::Renderer(name) => self.renderers.get(name).map(|e| &e.0),
             Capability::FenceRenderer(language) => self.fence_renderers.get(language).map(|e| &e.0),
+            Capability::Transform(name) => self.transforms.get(name).map(|e| &e.0),
             _ => None,
         }
         .map(String::as_str)
@@ -311,6 +318,56 @@ impl ExtensionRegistry {
         self.fence_renderers.get(language).map(|e| e.1.clone())
     }
 
+    /// A text transform by name.
+    pub fn transform(&self, name: &str) -> Option<Arc<dyn TextTransform>> {
+        self.transforms.get(name).map(|e| e.1.clone())
+    }
+
+    /// Every text transform name, sorted.
+    pub fn transform_names(&self) -> Vec<&str> {
+        self.transforms.keys().map(String::as_str).collect()
+    }
+
+    /// A pipeline of the named text transforms, in the order given. Fails on
+    /// the first name no plugin registered, with that name.
+    pub fn text_pipeline<'n>(
+        &self,
+        names: impl IntoIterator<Item = &'n str>,
+    ) -> Result<Pipeline<Text>, String> {
+        let mut pipeline = Pipeline::new();
+        for name in names {
+            let transform = self.transform(name).ok_or_else(|| name.to_string())?;
+            pipeline.push(name, Box::new(transform));
+        }
+        Ok(pipeline)
+    }
+
+    /// Register a text transform directly, without a plugin. Its provider is
+    /// reported as `"(direct)"`.
+    pub fn register_transform(
+        &mut self,
+        name: &str,
+        transform: Arc<dyn TextTransform>,
+    ) -> Result<(), PluginError> {
+        if !is_valid_name(name) {
+            return Err(PluginError::InvalidName {
+                plugin: DIRECT.to_string(),
+                name: name.to_string(),
+            });
+        }
+        let capability = Capability::Transform(name.to_string());
+        if let Some(existing) = self.provider(&capability) {
+            return Err(PluginError::Conflict {
+                capability,
+                existing: existing.to_string(),
+                plugin: DIRECT.to_string(),
+            });
+        }
+        self.transforms
+            .insert(name.to_string(), (DIRECT.to_string(), transform));
+        Ok(())
+    }
+
     /// One [`FenceRenderer`] that routes each fence to the renderer registered
     /// for its language, for [`rich::markdown::Markdown::fence_renderer`]. `None` when no
     /// plugin registered one, so a caller can leave Markdown untouched.
@@ -358,6 +415,7 @@ struct Staged {
     box_styles: Vec<(String, BoxStyle)>,
     renderers: Vec<(String, Arc<dyn SourceRenderer>)>,
     fence_renderers: Vec<(String, Arc<dyn FenceRenderer>)>,
+    transforms: Vec<(String, Arc<dyn TextTransform>)>,
 }
 
 /// Routes fences by language; see [`ExtensionRegistry::fences`].
@@ -423,6 +481,13 @@ impl PluginRegistrar for Staged {
         self.capabilities
             .push(Capability::FenceRenderer(language.to_string()));
         self.fence_renderers.push((language.to_string(), renderer));
+    }
+
+    fn transform(&mut self, name: &str, transform: Arc<dyn TextTransform>) {
+        self.check(name);
+        self.capabilities
+            .push(Capability::Transform(name.to_string()));
+        self.transforms.push((name.to_string(), transform));
     }
 }
 
@@ -636,6 +701,57 @@ mod tests {
         assert!(matches!(
             registry.register_code_highlighter("Bad Name", SyntectHighlighter::shared()),
             Err(PluginError::InvalidName { .. })
+        ));
+    }
+
+    #[test]
+    fn plugins_contribute_text_transforms() {
+        struct Shout;
+        impl TextTransform for Shout {
+            fn transform(&self, text: Text) -> Result<Text, PluginError> {
+                Ok(Text::new(text.plain().to_uppercase()))
+            }
+        }
+        struct Transforms;
+        impl Plugin for Transforms {
+            fn metadata(&self) -> PluginMetadata {
+                PluginMetadata::new("transforms", "Transforms", "1.0.0")
+            }
+            fn register(&self, registrar: &mut dyn PluginRegistrar) -> Result<(), PluginError> {
+                registrar.transform("shout", Arc::new(Shout));
+                Ok(())
+            }
+        }
+
+        let mut registry = ExtensionRegistry::new();
+        registry.add_plugin(&Transforms).unwrap();
+        registry
+            .register_transform(
+                "keep",
+                Arc::new(crate::transform::KeepLines::new("a").unwrap()),
+            )
+            .unwrap();
+        assert_eq!(registry.transform_names(), ["keep", "shout"]);
+        assert_eq!(
+            registry.plugins()[0].capabilities,
+            [Capability::Transform("shout".into())]
+        );
+        assert_eq!(
+            registry.provided_by(&Capability::Transform("keep".into())),
+            Some("(direct)")
+        );
+
+        let pipeline = registry.text_pipeline(["keep", "shout"]).unwrap();
+        assert_eq!(pipeline.names(), ["keep", "shout"]);
+        let text = pipeline.apply(Text::new("abc\nxyz\n")).unwrap();
+        assert_eq!(text.plain(), "ABC\n");
+        assert_eq!(
+            registry.text_pipeline(["shout", "nope"]).unwrap_err(),
+            "nope"
+        );
+        assert!(matches!(
+            registry.register_transform("shout", Arc::new(Shout)),
+            Err(PluginError::Conflict { .. })
         ));
     }
 

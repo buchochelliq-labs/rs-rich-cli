@@ -55,6 +55,8 @@ mod search;
 pub mod select;
 mod ser;
 mod table;
+#[cfg(feature = "jsonpath")]
+pub mod transform;
 
 #[cfg(feature = "toml")]
 mod toml_doc;
