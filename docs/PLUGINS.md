@@ -117,6 +117,14 @@ is registered with `plugins()`, `code_highlighter(name)`, `theme(name)`,
 `provided_by(capability)`. `fences()` combines every registered fence renderer
 into one for `Markdown::fence_renderer`, routed by language.
 
+**A default code highlighter.** `ExtensionRegistry::set_default_code_highlighter(name,
+theme)` chooses a registered code highlighter (and optionally one of its
+themes) for every console the registry is installed onto, through core's
+`ConsoleCodeHighlighting`. `Syntax`, Markdown code, `source_view` and the diff
+views without a highlighter of their own use it. An unknown name or theme is a
+`HighlighterChoiceError` listing the choices. The CLI exposes this as
+`--highlighter` and `--code-theme`.
+
 `rs-rich-lumis` (`LumisPlugin`) registers the code highlighter `"lumis"`:
 tree-sitter grammars with lumis's Neovim themes, and `ansi_dark`/`ansi_light`
 mapped from tree-sitter capture names to upstream's Pygments token styles.

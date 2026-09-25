@@ -136,14 +136,14 @@ impl SourceView {
         last.to_string().len() + 3
     }
 
-    fn highlighted_lines(&self) -> Vec<Text> {
+    fn highlighted_lines(&self, console: &Console) -> Vec<Text> {
         let lines = self.source_lines();
         let mut syntax =
             Syntax::new(self.code.clone(), self.language.clone()).tab_size(self.tab_size);
         if let Some(theme) = &self.theme {
             syntax = syntax.theme(theme.clone());
         }
-        let highlighted = syntax.highlight();
+        let highlighted = syntax.highlight_for(console);
         let mut texts = highlighted.split("\n", false, true);
         texts.truncate(lines.len());
         // Carriage returns of CRLF files are not content.
@@ -368,7 +368,7 @@ impl Renderable for SourceView {
     }
 
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        let texts = self.highlighted_lines();
+        let texts = self.highlighted_lines(console);
         let gutter = self.gutter_width(texts.len());
         let width = options.max_width.saturating_sub(gutter).max(1);
         let number_width = gutter.saturating_sub(3);

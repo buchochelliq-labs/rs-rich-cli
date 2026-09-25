@@ -1365,6 +1365,7 @@ dependencies = [
  "rs-rich",
  "rs-rich-art",
  "rs-rich-ext",
+ "rs-rich-lumis",
  "rs-rich-mermaid",
  "same-file",
  "serde_json",

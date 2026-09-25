@@ -45,6 +45,10 @@ mermaid = ["dep:rich-mermaid"]
 # The `mmdc` Mermaid backend (Mermaid's CLI: Node and headless Chromium,
 # installed separately). Off by default because it starts a browser.
 mmdc = ["mermaid", "art", "rich-mermaid/mmdc"]
+# The lumis (tree-sitter) code highlighter, chosen with `--highlighter lumis`.
+# Off by default: it compiles lumis's grammars (a much larger binary) and needs
+# Rust 1.91.
+lumis = ["dep:rich-lumis"]
 
 [dependencies]
 rich.workspace = true
@@ -54,6 +58,7 @@ serde_json.workspace = true
 ureq = { workspace = true, optional = true }
 rich-art = { workspace = true, optional = true, features = ["gif", "sixel"] }
 rich-mermaid = { workspace = true, optional = true }
+rich-lumis = { workspace = true, optional = true }
 
 toml = "1.1"
 tempfile = "3"

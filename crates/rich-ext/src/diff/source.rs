@@ -33,8 +33,13 @@ fn foreground_only(style: &Style) -> Style {
 
 /// Highlight `code` as `language` and split it into lines, one per
 /// `split_lines_inclusive` line. The whole side is highlighted at once so
-/// multi-line constructs (block comments, strings) colour correctly.
-pub(crate) fn highlight_lines(code: &str, language: Option<&str>) -> Vec<Text> {
+/// multi-line constructs (block comments, strings) colour correctly. With a
+/// `console`, its default code highlighter applies.
+pub(crate) fn highlight_lines(
+    code: &str,
+    language: Option<&str>,
+    console: Option<&Console>,
+) -> Vec<Text> {
     let count = split_lines_inclusive(code).len();
     let Some(language) = language else {
         return split_lines_inclusive(code)
@@ -42,7 +47,11 @@ pub(crate) fn highlight_lines(code: &str, language: Option<&str>) -> Vec<Text> {
             .map(|l| Text::new(super::engine::strip_eol(l)))
             .collect();
     };
-    let highlighted = Syntax::new(code, language).highlight();
+    let syntax = Syntax::new(code, language);
+    let highlighted = match console {
+        Some(console) => syntax.highlight_for(console),
+        None => syntax.highlight(),
+    };
     let mut plain = Text::new(highlighted.plain());
     for span in highlighted.spans() {
         if let StyleType::Style(style) = &span.style {
@@ -172,9 +181,19 @@ impl SourceDiff {
 
     /// The view this diff renders as.
     pub fn view(&self) -> DiffView {
+        self.view_with(None)
+    }
+
+    /// [`view`](Self::view), highlighting with `console`'s default code
+    /// highlighter. Rendering uses this.
+    pub fn view_for(&self, console: &Console) -> DiffView {
+        self.view_with(Some(console))
+    }
+
+    fn view_with(&self, console: Option<&Console>) -> DiffView {
         let language = self.resolved_language();
-        let old = highlight_lines(&self.old, language.as_deref());
-        let new = highlight_lines(&self.new, language.as_deref());
+        let old = highlight_lines(&self.old, language.as_deref(), console);
+        let new = highlight_lines(&self.new, language.as_deref(), console);
         let links: Option<LineLinks> = match (&self.linker, &self.old_path, &self.new_path) {
             (Some(linker), Some(old_path), Some(new_path)) => {
                 let (linker, old_path, new_path) =
@@ -213,9 +232,9 @@ impl SourceDiff {
 
 impl Renderable for SourceDiff {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        self.view().rich_render(console, options)
+        self.view_for(console).rich_render(console, options)
     }
     fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
-        self.view().measure(console, options)
+        self.view_for(console).measure(console, options)
     }
 }

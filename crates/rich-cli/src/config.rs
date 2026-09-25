@@ -203,6 +203,8 @@ const VALUE_KEYS: &[&str] = &[
     "format",
     "theme_file",
     "mermaid_backend",
+    "highlighter",
+    "code_theme",
 ];
 
 pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
@@ -255,6 +257,10 @@ pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
             "mermaid_backend" => value
                 .as_str()
                 .is_some_and(|v| matches!(v, "text" | "mmdc" | "off")),
+            // A choice among the engines compiled in, so a project's
+            // `rich.toml` may set it; the name is checked when rich runs, with
+            // the choices in the error.
+            "highlighter" | "code_theme" => value.as_str().is_some_and(|v| !v.is_empty()),
             "format" => value
                 .as_str()
                 .is_some_and(|v| crate::inspect::InputFormat::parse(v).is_ok()),

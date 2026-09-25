@@ -103,6 +103,8 @@ impl ConsoleOptions {
 /// `rich.console.Console`.
 pub struct Console {
     render_environment: Option<std::sync::Arc<dyn crate::protocol::RenderEnvironment>>,
+    /// The default code highlighter (see `ConsoleCodeHighlighting`).
+    code_highlighting: Option<crate::protocol::CodeHighlighting>,
     color_system: Option<ColorSystem>,
     width: usize,
     height: usize,
@@ -1100,6 +1102,7 @@ impl ConsoleBuilder {
         let height = self.height.unwrap_or_else(detect_height);
         Console {
             render_environment: None,
+            code_highlighting: None,
             color_system,
             width,
             height,
@@ -1217,6 +1220,15 @@ fn detect_height() -> usize {
         }
     }
     DEFAULT_HEIGHT
+}
+
+impl crate::protocol::ConsoleCodeHighlighting for Console {
+    fn set_code_highlighting(&mut self, value: Option<crate::protocol::CodeHighlighting>) {
+        self.code_highlighting = value;
+    }
+    fn code_highlighting(&self) -> Option<&crate::protocol::CodeHighlighting> {
+        self.code_highlighting.as_ref()
+    }
 }
 
 impl crate::protocol::ConsoleEnvironment for Console {

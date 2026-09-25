@@ -154,13 +154,26 @@ impl Syntax {
     /// Highlight the (already tab-expanded) `code`, falling back to the default
     /// theme for an unknown one and to plain text if the engine fails, then
     /// validate the result against the source (see [`CodeHighlighter`]).
-    fn highlighted(&self, code: &str) -> HighlightedCode {
+    ///
+    /// The engine is this `Syntax`'s own, else `console`'s default (whose theme
+    /// then applies unless this `Syntax` names one), else syntect.
+    fn highlighted(&self, code: &str, console: Option<&Console>) -> HighlightedCode {
+        use crate::protocol::ConsoleCodeHighlighting;
+        let default = match &self.highlighter {
+            Some(_) => None,
+            None => console.and_then(|console| console.code_highlighting()),
+        };
         let engine = self
             .highlighter
             .clone()
+            .or_else(|| default.map(|d| d.highlighter.clone()))
             .unwrap_or_else(SyntectHighlighter::shared);
         let language = self.language.as_deref();
-        let theme = self.theme.as_deref().unwrap_or(engine.default_theme());
+        let theme = self
+            .theme
+            .as_deref()
+            .or_else(|| default.and_then(|d| d.theme.as_deref()))
+            .unwrap_or(engine.default_theme());
         let result = match engine.highlight(code, language, theme) {
             Err(HighlightError::UnknownTheme(_)) => {
                 engine.highlight(code, language, engine.default_theme())
@@ -230,8 +243,19 @@ impl Syntax {
     /// every token carries its own style. Tabs are expanded first, as
     /// `_process_code` does. Used by `Markdown(inline_code_lexer=…)`.
     pub fn highlight(&self) -> crate::text::Text {
+        self.highlight_text(None)
+    }
+
+    /// [`highlight`](Self::highlight) with `console`'s default code
+    /// highlighter (see [`ConsoleCodeHighlighting`](crate::protocol::ConsoleCodeHighlighting))
+    /// when this `Syntax` has none of its own. Not in upstream.
+    pub fn highlight_for(&self, console: &Console) -> crate::text::Text {
+        self.highlight_text(Some(console))
+    }
+
+    fn highlight_text(&self, console: Option<&Console>) -> crate::text::Text {
         let code = expand_tabs(&self.code, self.tab_size);
-        let highlighted = self.highlighted(&code);
+        let highlighted = self.highlighted(&code, console);
         let mut text = crate::text::Text::new("");
         if let Some(background) = &highlighted.background {
             text.set_base_style(Style::new().with_bgcolor(background.clone()));
@@ -311,7 +335,7 @@ impl Renderable for Syntax {
         Measurement::new(0, self.padding * 2 + widest)
     }
 
-    fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         // The gutter eats into the space the code itself may occupy.
         let width = options.max_width;
         let code_width = width.saturating_sub(self.padding * 2);
@@ -319,7 +343,7 @@ impl Renderable for Syntax {
         // `Syntax._process_code`: the source is tab-expanded before it reaches
         // the highlighter, so no U+0009 ever survives into a segment.
         let code = expand_tabs(&self.code, self.tab_size);
-        let highlighted = self.highlighted(&code);
+        let highlighted = self.highlighted(&code, Some(console));
         let background = highlighted.background.clone();
 
         // Upstream splits the source with Python's `str.split("\n")`, which keeps
@@ -685,6 +709,108 @@ mod tests {
         fn languages(&self) -> Vec<String> {
             Vec::new()
         }
+    }
+
+    /// Styles every line by theme: `bold` (its default) or `underline`.
+    struct ByTheme;
+
+    impl CodeHighlighter for ByTheme {
+        fn highlight(
+            &self,
+            code: &str,
+            _language: Option<&str>,
+            theme: &str,
+        ) -> Result<HighlightedCode, HighlightError> {
+            let style = match theme {
+                "bold" | "underline" => Style::parse(theme).unwrap(),
+                other => return Err(HighlightError::UnknownTheme(other.into())),
+            };
+            let lines = code
+                .split('\n')
+                .map(|line| HighlightedLine {
+                    spans: (!line.is_empty())
+                        .then(|| HighlightSpan {
+                            range: 0..line.len(),
+                            style: style.clone(),
+                        })
+                        .into_iter()
+                        .collect(),
+                    newline_style: None,
+                })
+                .collect();
+            Ok(HighlightedCode {
+                lines,
+                ..Default::default()
+            })
+        }
+        fn default_theme(&self) -> &str {
+            "bold"
+        }
+        fn themes(&self) -> Vec<String> {
+            vec!["bold".into(), "underline".into()]
+        }
+        fn languages(&self) -> Vec<String> {
+            Vec::new()
+        }
+    }
+
+    /// The console's default highlighter and theme apply to a `Syntax` (and
+    /// to Markdown code) without its own; the `Syntax`'s own highlighter or
+    /// theme wins; with no default, output is unchanged.
+    #[test]
+    fn a_console_default_highlighter_applies_where_none_is_given() {
+        use crate::markdown::Markdown;
+        use crate::protocol::{CodeHighlighting, ConsoleCodeHighlighting};
+        let plain = || {
+            Console::builder()
+                .width(20)
+                .force_terminal(true)
+                .color_system(Some(crate::color::ColorSystem::Truecolor))
+                .build()
+        };
+        let with = |theme: Option<&str>| {
+            let mut console = plain();
+            console.set_code_highlighting(Some(CodeHighlighting {
+                highlighter: Arc::new(ByTheme),
+                theme: theme.map(str::to_string),
+            }));
+            console
+        };
+        let syntax = || Syntax::new("x = 1", "python");
+
+        assert!(with(None)
+            .render_to_string(&syntax())
+            .contains("\x1b[1mx = 1"));
+        assert!(with(Some("underline"))
+            .render_to_string(&syntax())
+            .contains("\x1b[4mx = 1"));
+        // The Syntax's own theme beats the console's.
+        assert!(with(Some("underline"))
+            .render_to_string(&syntax().theme("bold"))
+            .contains("\x1b[1mx = 1"));
+        // The Syntax's own highlighter beats the console's, and the console's
+        // theme (a name of another engine) does not follow it.
+        let own = with(Some("underline"))
+            .render_to_string(&syntax().highlighter(SyntectHighlighter::shared()));
+        assert_eq!(own, plain().render_to_string(&syntax()));
+        // Markdown code blocks follow the console.
+        let markdown = Markdown::new("```python\nx = 1\n```");
+        assert!(with(None)
+            .render_to_string(&markdown)
+            .contains("\x1b[1mx = 1"));
+        // `highlight_for` sees the console; `highlight` does not.
+        assert!(!syntax().highlight_for(&with(None)).spans().is_empty());
+        assert_eq!(
+            syntax().highlight_for(&plain()).spans(),
+            syntax().highlight().spans()
+        );
+        // With no default, nothing changes.
+        let mut cleared = with(None);
+        cleared.set_code_highlighting(None);
+        assert_eq!(
+            cleared.render_to_string(&syntax()),
+            plain().render_to_string(&syntax())
+        );
     }
 
     /// Always fails with an engine error.

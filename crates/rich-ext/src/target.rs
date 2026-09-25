@@ -1,5 +1,8 @@
 //! Explicit destinations for deterministic, nested rendering. No environment probes.
-use rich::protocol::{ConsoleEnvironment, RenderEnvironment, Support, TargetCapabilities};
+use rich::protocol::{
+    CodeHighlighting, ConsoleCodeHighlighting, ConsoleEnvironment, RenderEnvironment, Support,
+    TargetCapabilities,
+};
 use rich::{Console, Renderable, Segment, Theme};
 use std::sync::Arc;
 
@@ -20,6 +23,8 @@ pub struct RenderTarget {
     kind: TargetKind,
     capabilities: TargetCapabilities,
     theme: Theme,
+    /// The default code highlighter for this target's consoles.
+    code_highlighting: Option<CodeHighlighting>,
 }
 impl RenderTarget {
     pub fn new(kind: TargetKind, mut caps: TargetCapabilities, theme: Theme) -> Self {
@@ -38,7 +43,14 @@ impl RenderTarget {
             kind,
             capabilities: caps,
             theme,
+            code_highlighting: None,
         }
+    }
+    /// Give this target's consoles a default code highlighter (see
+    /// [`ConsoleCodeHighlighting`]).
+    pub fn with_code_highlighting(mut self, highlighting: Option<CodeHighlighting>) -> Self {
+        self.code_highlighting = highlighting;
+        self
     }
     pub fn kind(&self) -> TargetKind {
         self.kind
@@ -59,6 +71,7 @@ impl RenderTarget {
             .theme(self.theme.clone())
             .build();
         console.set_render_environment(Some(Arc::new(self.clone())));
+        console.set_code_highlighting(self.code_highlighting.clone());
         console
     }
     pub fn segments(&self, value: &dyn Renderable) -> Vec<Segment> {

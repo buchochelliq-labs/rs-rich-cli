@@ -12,7 +12,10 @@ use std::sync::Arc;
 use rich::console::ConsoleOptions;
 use rich::r#box::Box as BoxStyle;
 use rich::segment::Segment;
-use rich::{CodeHighlighter, Console, FenceRenderer, Highlighter, SyntectHighlighter, Theme};
+use rich::{
+    CodeHighlighter, CodeHighlighting, Console, ConsoleCodeHighlighting, FenceRenderer,
+    Highlighter, SyntectHighlighter, Theme,
+};
 use rich_plugin_api::{
     is_valid_name, Capability, HighlighterFactory, Plugin, PluginError, PluginMetadata,
     PluginRegistrar, SourceRenderer, PLUGIN_API_VERSION,
@@ -43,7 +46,39 @@ pub struct ExtensionRegistry {
     renderers: BTreeMap<String, (String, Arc<dyn SourceRenderer>)>,
     fence_renderers: BTreeMap<String, (String, Arc<dyn FenceRenderer>)>,
     plugins: Vec<RegisteredPlugin>,
+    /// The code highlighter chosen as every console's default, and its theme.
+    default_code_highlighter: Option<(String, Option<String>)>,
 }
+
+/// Why a code highlighter or theme could not be chosen.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum HighlighterChoiceError {
+    /// No registered code highlighter has this name.
+    UnknownHighlighter {
+        name: String,
+        available: Vec<String>,
+    },
+    /// The highlighter has no theme of this name.
+    UnknownTheme { highlighter: String, theme: String },
+}
+
+impl std::fmt::Display for HighlighterChoiceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HighlighterChoiceError::UnknownHighlighter { name, available } => write!(
+                f,
+                "unknown code highlighter {name:?}; available: {}",
+                available.join(", ")
+            ),
+            HighlighterChoiceError::UnknownTheme { highlighter, theme } => write!(
+                f,
+                "the {highlighter} code highlighter has no theme {theme:?}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for HighlighterChoiceError {}
 
 impl ExtensionRegistry {
     /// An empty registry.
@@ -197,6 +232,53 @@ impl ExtensionRegistry {
         self.renderers.get(name).map(|e| e.1.clone())
     }
 
+    /// Make the code highlighter `name` (and `theme`, one of its themes; `None`
+    /// is its default) the default for every console this registry is
+    /// installed onto: `Syntax`, Markdown code, source views and diffs without
+    /// a highlighter of their own use it.
+    pub fn set_default_code_highlighter(
+        &mut self,
+        name: &str,
+        theme: Option<&str>,
+    ) -> Result<(), HighlighterChoiceError> {
+        let highlighter = self.code_highlighter(name).ok_or_else(|| {
+            HighlighterChoiceError::UnknownHighlighter {
+                name: name.to_string(),
+                available: self
+                    .code_highlighter_names()
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect(),
+            }
+        })?;
+        if let Some(theme) = theme {
+            if !highlighter.themes().iter().any(|t| t == theme) {
+                return Err(HighlighterChoiceError::UnknownTheme {
+                    highlighter: name.to_string(),
+                    theme: theme.to_string(),
+                });
+            }
+        }
+        self.default_code_highlighter = Some((name.to_string(), theme.map(str::to_string)));
+        Ok(())
+    }
+
+    /// The default code highlighter's name, if one was chosen.
+    pub fn default_code_highlighter(&self) -> Option<&str> {
+        self.default_code_highlighter
+            .as_ref()
+            .map(|(name, _)| name.as_str())
+    }
+
+    /// The chosen default, ready for a console.
+    pub fn code_highlighting(&self) -> Option<CodeHighlighting> {
+        let (name, theme) = self.default_code_highlighter.as_ref()?;
+        Some(CodeHighlighting {
+            highlighter: self.code_highlighter(name)?,
+            theme: theme.clone(),
+        })
+    }
+
     /// The fence renderer registered for `language`.
     pub fn fence_renderer(&self, language: &str) -> Option<Arc<dyn FenceRenderer>> {
         self.fence_renderers.get(language).map(|e| e.1.clone())
@@ -226,10 +308,14 @@ impl ExtensionRegistry {
         }
     }
 
-    /// Install every registered highlighter onto `console`.
+    /// Install every registered highlighter onto `console`, and the default
+    /// code highlighter if one was chosen.
     pub fn install(&self, console: &mut Console) {
         for factory in &self.highlighters {
             console.add_highlighter(factory());
+        }
+        if let Some(highlighting) = self.code_highlighting() {
+            console.set_code_highlighting(Some(highlighting));
         }
     }
 }
@@ -465,6 +551,44 @@ mod tests {
         let out = console.render_to_string(&md);
         assert!(out.contains("mermaid") && out.contains("vega"), "{out}");
         assert!(out.contains('z'), "the rust fence is still code: {out}");
+    }
+
+    /// A chosen default reaches consoles on install; unknown names and themes
+    /// are refused with what is available.
+    #[test]
+    fn a_default_code_highlighter_is_chosen_by_name_and_installed() {
+        let mut registry = ExtensionRegistry::with_defaults();
+        assert!(registry.code_highlighting().is_none());
+        let error = registry
+            .set_default_code_highlighter("nope", None)
+            .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "unknown code highlighter \"nope\"; available: syntect"
+        );
+        assert!(matches!(
+            registry.set_default_code_highlighter("syntect", Some("no-theme")),
+            Err(HighlighterChoiceError::UnknownTheme { .. })
+        ));
+        registry
+            .set_default_code_highlighter("syntect", Some("ansi_dark"))
+            .unwrap();
+        assert_eq!(registry.default_code_highlighter(), Some("syntect"));
+
+        let mut console = Console::builder()
+            .width(30)
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .build();
+        registry.install(&mut console);
+        assert_eq!(
+            console.code_highlighting().and_then(|h| h.theme.as_deref()),
+            Some("ansi_dark")
+        );
+        // Code now renders in upstream's ANSI colours, with no RGB.
+        let out = console.render_to_string(&rich::Syntax::new("def f(): pass", "python"));
+        assert!(out.contains("\x1b[94mdef"), "{out:?}");
+        assert!(!out.contains("38;2;"), "{out:?}");
     }
 
     #[test]

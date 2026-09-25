@@ -74,7 +74,15 @@ fn mode_command(name: &str, aliases: &[&str], about: &str) -> CommandSpec {
 /// keys). Every other `rich` option still applies.
 fn command_options(name: &str) -> Vec<ArgSpec> {
     let names: &[&str] = match name {
-        "view" => &["search", "no-line-numbers", "sanitize", "pager", "width"],
+        "view" => &[
+            "search",
+            "no-line-numbers",
+            "sanitize",
+            "pager",
+            "highlighter",
+            "code-theme",
+            "width",
+        ],
         "hex" => &[
             "search",
             "offset",
@@ -395,6 +403,22 @@ fn mode_options() -> Vec<ArgSpec> {
         )
         .choices(["text", "mmdc", "off"])
         .config_key("mermaid_backend"),
+        option(
+            "highlighter",
+            "NAME",
+            MODE_OPTIONS,
+            "The code highlighter for source, Markdown code, view and diff: syntect (the \
+             default), or lumis in a build with the lumis feature",
+        )
+        .config_key("highlighter"),
+        option(
+            "code-theme",
+            "NAME",
+            MODE_OPTIONS,
+            "A theme of the chosen code highlighter, e.g. ansi_dark (`rich doctor --report json` \
+             lists them)",
+        )
+        .config_key("code_theme"),
         option(
             "loop",
             "N",
