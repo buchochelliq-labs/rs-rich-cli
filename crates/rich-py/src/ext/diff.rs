@@ -66,10 +66,11 @@ fn plain_op(op: &Op) -> (&'static str, Range, Range) {
 }
 
 fn text_ops(old: &str, new: &str, ops: Vec<Op>) -> Vec<(&'static str, Range, Range)> {
+    let (old, new) = (common::CharIndex::new(old), common::CharIndex::new(new));
     ops.iter()
         .map(|op| {
             op_tuple(op, |is_old, offset| {
-                common::char_index(if is_old { old } else { new }, offset)
+                if is_old { &old } else { &new }.get(offset)
             })
         })
         .collect()
@@ -138,14 +139,10 @@ fn diff_chars(old: &str, new: &str) -> Vec<(&'static str, Range, Range)> {
 /// `(start, end)` character offsets.
 #[pyfunction]
 fn tokenize(text: &str) -> Vec<Range> {
+    let index = common::CharIndex::new(text);
     core::tokenize(text)
         .into_iter()
-        .map(|r| {
-            (
-                common::char_index(text, r.start),
-                common::char_index(text, r.end),
-            )
-        })
+        .map(|r| (index.get(r.start), index.get(r.end)))
         .collect()
 }
 

@@ -220,12 +220,13 @@ impl Hyperlinker {
 
     /// Every link in `text`, with character offsets.
     fn find(&self, text: &str) -> Vec<Link> {
+        let index = common::CharIndex::new(text);
         self.inner
             .find(text)
             .into_iter()
             .map(|link| Link {
-                start: common::char_index(text, link.start),
-                end: common::char_index(text, link.end),
+                start: index.get(link.start),
+                end: index.get(link.end),
                 url: link.url,
             })
             .collect()

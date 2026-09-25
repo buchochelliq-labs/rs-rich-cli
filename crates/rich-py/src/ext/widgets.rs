@@ -495,12 +495,13 @@ impl Redactor {
 
     /// The secrets in one line, with character offsets.
     fn find(&self, line: &str) -> Vec<RedactMatch> {
+        let index = common::CharIndex::new(line);
         self.inner
             .find(line)
             .into_iter()
             .map(|m| RedactMatch {
-                start: common::char_index(line, m.start),
-                end: common::char_index(line, m.end),
+                start: index.get(m.start),
+                end: index.get(m.end),
                 kind: m.kind,
             })
             .collect()

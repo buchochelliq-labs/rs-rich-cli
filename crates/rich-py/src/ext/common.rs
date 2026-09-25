@@ -120,13 +120,39 @@ pub(crate) fn byte_offset(text: &str, index: isize) -> usize {
         .map_or(text.len(), |(offset, _)| offset)
 }
 
-/// The character index of byte offset `offset` in `text`.
+/// The character index of byte offset `offset` in `text` (clamped to the
+/// text, and rounded down to a character boundary). For many offsets into
+/// one text use [`CharIndex`], which does not rescan the prefix each time.
 pub(crate) fn char_index(text: &str, offset: usize) -> usize {
-    let mut offset = offset.min(text.len());
-    while !text.is_char_boundary(offset) {
-        offset -= 1;
+    CharIndex::new(text).get(offset)
+}
+
+/// Byte offsets to character indices for one text: the character starts
+/// are collected once (not at all for ASCII, where they coincide), so each
+/// lookup is a binary search rather than a rescan of the prefix.
+pub(crate) struct CharIndex<'a> {
+    text: &'a str,
+    /// The byte offset of every character, or `None` for ASCII text.
+    starts: Option<Vec<usize>>,
+}
+
+impl<'a> CharIndex<'a> {
+    pub(crate) fn new(text: &'a str) -> Self {
+        let starts = (!text.is_ascii()).then(|| text.char_indices().map(|(i, _)| i).collect());
+        CharIndex { text, starts }
     }
-    text[..offset].chars().count()
+
+    /// The character index of byte offset `offset`, as [`char_index`].
+    pub(crate) fn get(&self, offset: usize) -> usize {
+        let mut offset = offset.min(self.text.len());
+        while !self.text.is_char_boundary(offset) {
+            offset -= 1;
+        }
+        match &self.starts {
+            None => offset,
+            Some(starts) => starts.partition_point(|&start| start < offset),
+        }
+    }
 }
 
 /// Character offsets `start..end` (Python semantics) as a byte range.
