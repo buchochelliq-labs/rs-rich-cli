@@ -1516,9 +1516,9 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--image-fit" => {
                 let value = iter
                     .next()
-                    .ok_or("--image-fit requires contain, cover or stretch")?;
-                if !matches!(value.as_str(), "contain" | "cover" | "stretch") {
-                    return Err("--image-fit requires contain, cover or stretch".into());
+                    .ok_or("--image-fit requires contain, cover, stretch or native")?;
+                if !matches!(value.as_str(), "contain" | "cover" | "stretch" | "native") {
+                    return Err("--image-fit requires contain, cover, stretch or native".into());
                 }
                 image_fit = Some(value.clone());
             }
@@ -1904,7 +1904,8 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     if jobs > 1 && (!batch || (export_html.is_none() && export_svg.is_none())) {
         return Err("--jobs greater than 1 requires --batch with a file export".into());
     }
-    if image_fit.is_some() && height.is_none() {
+    // `native` sizes to the image itself; the others fill a rectangle.
+    if image_fit.as_deref().is_some_and(|fit| fit != "native") && height.is_none() {
         return Err("--image-fit requires --height to define the target rectangle".into());
     }
     // `--gif` animates in place and the demo writes its own console, so neither
@@ -5249,6 +5250,7 @@ fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
         art = art.fit(match fit {
             "cover" => rich_art::ImageFit::Cover,
             "stretch" => rich_art::ImageFit::Stretch,
+            "native" => rich_art::ImageFit::Native,
             _ => rich_art::ImageFit::Contain,
         });
     }

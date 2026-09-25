@@ -88,6 +88,34 @@ megapixels (including the intermediate image cover resizes to). Invalid sizes
 are reported by [`render`](#strict-rendering); `console.print` then draws
 nothing.
 
+## Native size
+
+`.fit(ImageFit::Native)` renders the image at its own size, in whole cells, and
+needs no `width` or `height`. Icons, logos and pixel art come out the size they
+are, where the default would enlarge them to fill the console.
+
+```rust
+--8<-- "crates/rich-art/examples/guide_images.rs:native"
+```
+
+![A 16×16 icon at native size in blocks, quadrants and Braille](../../media/guide/guide_images-native.svg)
+
+| Mode | Pixels per cell | A 16×16 image |
+|---|---|---|
+| Ascii, Blocks | 1 × 2 | 16 × 8 cells |
+| Quadrants, Braille | 2 × 4 | 8 × 4 cells |
+| Sixel | 8 × 16 (the assumed cell size) | 2 × 1 cells |
+
+Every mode keeps the aspect ratio on a cell twice as tall as it is wide. A size
+that is not a whole number of cells rounds up: each pixel lands on exactly one
+sub-cell pixel, unscaled, and the rest of the last cell takes the background
+(transparent with `ImageBackground::TerminalDefault`). A 1×1 image is one cell.
+
+The console width, `.width`/`.height` and `.max_width`/`.max_height` only ever
+shrink a native image. It then fits the capped grid as `Contain` does, keeping
+the aspect ratio. `ImageArt::native_grid(mode, available)` returns the grid a
+render will use.
+
 ## Transparency
 
 Without a background, transparent pixels read as black (in ASCII, as the

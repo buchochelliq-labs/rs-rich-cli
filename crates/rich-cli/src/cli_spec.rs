@@ -470,9 +470,11 @@ fn image_options() -> Vec<ArgSpec> {
             "M",
             IMAGE,
             "With --image and --height: contain letterboxes, cover crops at --image-anchor, \
-             stretch fills ignoring aspect",
+             stretch fills ignoring aspect. native needs no --height: it renders the image at \
+             its own pixel size (never enlarged), capped by --width, the terminal and \
+             --image-max-width/--image-max-height",
         )
-        .choices(["contain", "cover", "stretch"])
+        .choices(["contain", "cover", "stretch", "native"])
         .config_key("image_fit"),
         option("image-anchor", "A", IMAGE, "Cover crop anchor")
             .choices([

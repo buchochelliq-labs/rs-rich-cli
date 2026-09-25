@@ -554,6 +554,18 @@ terminal cells are twice as tall as they are wide. `stretch` fills the rectangle
 exactly and ignores the aspect ratio. Fitting requires `--height`; width defaults
 to the terminal width and is capped by available columns.
 
+`--image-fit native` renders the image at its own pixel size instead, and needs
+no `--height`. The image's pixels go 1 × 2 to a cell in `ascii` and `blocks`,
+2 × 4 in `quadrants` and `braille`, and 8 × 16 for Sixel, rounded up to whole
+cells, so a 16×16 icon is 16×8 cells as blocks. It is never enlarged to fill the
+terminal. `--width`, the terminal width, `--image-max-width` and
+`--image-max-height` only shrink it, keeping the aspect ratio. Set
+`image_fit = "native"` in [your config](#config-profiles) to make it the default.
+
+```bash
+rich image icon.png --image-mode blocks --image-fit native
+```
+
 `--image-max-width N` and `--image-max-height N` are upper bounds that never
 enlarge anything. Without fitting, the image keeps its aspect ratio and narrows
 to respect a height cap; with fitting, they clamp the target rectangle.

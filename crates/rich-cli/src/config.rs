@@ -281,7 +281,7 @@ pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
             "image_color_distance" => value.as_str().is_some_and(|v| matches!(v, "rgb" | "oklab")),
             "image_fit" => value
                 .as_str()
-                .is_some_and(|v| matches!(v, "contain" | "cover" | "stretch")),
+                .is_some_and(|v| matches!(v, "contain" | "cover" | "stretch" | "native")),
             "image_anchor" => value.as_str().is_some_and(|v| {
                 matches!(
                     v,

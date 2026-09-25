@@ -133,6 +133,59 @@ fn fit(console: &Console) {
     // --8<-- [end:fit]
 }
 
+/// A 16×16 pixel-art face, for native sizing.
+fn icon() -> DynamicImage {
+    const ROWS: [&str; 16] = [
+        "....XXXXXXXX....",
+        "..XXYYYYYYYYXX..",
+        ".XYYYYYYYYYYYYX.",
+        ".XYYYYYYYYYYYYX.",
+        "XYYYKKYYYYKKYYYX",
+        "XYYYKKYYYYKKYYYX",
+        "XYYYYYYYYYYYYYYX",
+        "XYYYYYYYYYYYYYYX",
+        "XYYKYYYYYYYYKYYX",
+        "XYYYKYYYYYYKYYYX",
+        "XYYYYKKKKKKYYYYX",
+        ".XYYYYYYYYYYYYX.",
+        ".XYYYYYYYYYYYYX.",
+        "..XXYYYYYYYYXX..",
+        "....XXXXXXXX....",
+        "................",
+    ];
+    DynamicImage::ImageRgba8(RgbaImage::from_fn(16, 16, |x, y| {
+        match ROWS[y as usize].as_bytes()[x as usize] {
+            b'X' => Rgba([60, 40, 10, 255]),
+            b'Y' => Rgba([250, 205, 40, 255]),
+            b'K' => Rgba([20, 20, 20, 255]),
+            _ => Rgba([0, 0, 0, 0]),
+        }
+    }))
+}
+
+fn native(console: &Console) {
+    // --8<-- [start:native]
+    // A 16×16 icon at its own size: one pixel per cell across in half-blocks,
+    // two in quadrants and Braille. Without `.fit(ImageFit::Native)` it would
+    // fill the whole width.
+    let art = |mode| {
+        ImageArt::new(icon())
+            .mode(mode)
+            .fit(ImageFit::Native)
+            .background_mode(rich_art::ImageBackground::TerminalDefault)
+    };
+    console.print(&grid(
+        vec![
+            ("Blocks: 16×8", art(ImageMode::Blocks)),
+            ("Quadrants: 8×4", art(ImageMode::Quadrants)),
+            ("Braille: 8×4", art(ImageMode::Braille)),
+        ],
+        3,
+        18,
+    ));
+    // --8<-- [end:native]
+}
+
 fn background(console: &Console) {
     // --8<-- [start:background]
     let art = || ImageArt::new(logo()).mode(ImageMode::Blocks).width(28);
@@ -350,6 +403,7 @@ const SHOTS: &[Shot] = &[
     ("quickstart", "ImageArt, Blocks", 52, quickstart),
     ("modes", "Image modes", 66, modes),
     ("fit", "Fit and anchor", 90, fit),
+    ("native", "Native size", 66, native),
     ("background", "Transparent background", 66, background),
     ("color-modes", "Colour modes", 66, color_modes),
     ("dither", "Dithering", 98, dither),

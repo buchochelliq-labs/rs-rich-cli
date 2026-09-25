@@ -95,7 +95,7 @@ Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by exten
 | --- | --- |
 | `--image-mode <M>` | With --diff/--image, how to draw the picture: sixel draws real pixels; blocks, quadrants, braille and ascii draw characters (--image rejects none: there would be nothing to draw) Default: `auto`. Possible values: `auto`, `sixel`, `blocks`, `quadrants`, `braille`, `ascii`, `none`. |
 | `--height <N>` | With --image, render this many rows instead of the backend's default. Config: `height`. |
-| `--image-fit <M>` | With --image and --height: contain letterboxes, cover crops at --image-anchor, stretch fills ignoring aspect. Config: `image_fit`. Possible values: `contain`, `cover`, `stretch`. |
+| `--image-fit <M>` | With --image and --height: contain letterboxes, cover crops at --image-anchor, stretch fills ignoring aspect. native needs no --height: it renders the image at its own pixel size (never enlarged), capped by --width, the terminal and --image-max-width/--image-max-height. Config: `image_fit`. Possible values: `contain`, `cover`, `stretch`, `native`. |
 | `--image-anchor <A>` | Cover crop anchor. Default: `center`. Config: `image_anchor`. Possible values: `center`, `top`, `bottom`, `left`, `right`, `top-left`, `top-right`, `bottom-left`, `bottom-right`. |
 | `--image-max-width <N>` | With --image, never exceed N columns (aspect kept) Config: `image_max_width`. |
 | `--image-max-height <N>` | With --image, never exceed N rows (aspect kept) Config: `image_max_height`. |
@@ -1009,7 +1009,7 @@ Settings are read from these sources, lowest precedence first; a later source ov
 | `highlighter` | string | | | `--highlighter` | The code highlighter for source, Markdown code, view and diff: syntect (the default), or lumis in a build with the lumis feature |
 | `code_theme` | string | | | `--code-theme` | A theme of the chosen code highlighter, e.g. ansi_dark (`rich doctor --report json` lists them) |
 | `height` | positive integer | | | `--height` | With --image, render this many rows instead of the backend's default |
-| `image_fit` | enum: `contain`, `cover`, `stretch` | | | `--image-fit` | With --image and --height: contain letterboxes, cover crops at --image-anchor, stretch fills ignoring aspect |
+| `image_fit` | enum: `contain`, `cover`, `stretch`, `native` | | | `--image-fit` | With --image and --height: contain letterboxes, cover crops at --image-anchor, stretch fills ignoring aspect. native needs no --height: it renders the image at its own pixel size (never enlarged), capped by --width, the terminal and --image-max-width/--image-max-height |
 | `image_anchor` | enum: `center`, `top`, `bottom`, `left`, `right`, `top-left`, `top-right`, `bottom-left`, `bottom-right` | `center` | | `--image-anchor` | Cover crop anchor |
 | `image_max_width` | positive integer | | | `--image-max-width` | With --image, never exceed N columns (aspect kept) |
 | `image_max_height` | positive integer | | | `--image-max-height` | With --image, never exceed N rows (aspect kept) |
