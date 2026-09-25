@@ -26,7 +26,7 @@ import sys
 import tomllib
 
 from rich import box
-from rich.align import Align
+from rich.align import Align, VerticalCenter
 from rich.ansi import AnsiDecoder
 from rich.bar import Bar as HBar
 from rich.columns import Columns
@@ -3089,6 +3089,25 @@ CORE_GAP_CASES = [
     ("panel_title_svg", lambda: _cg_svg_of(22, Panel("hi", title="Title", subtitle="[b]S[/]"))),
     ("panel_title_styled_border_svg", lambda: _cg_svg_of(22, Panel("hi", title="Title", border_style="red"))),
     ("rule_title_svg", lambda: _cg_svg_of(22, Rule("Title"))),
+    # 16. vertical alignment: Align, VerticalCenter, Table cells
+    ("align_vertical", lambda: "".join(
+        _cg_print(_cg_console(10), renderable, height=4)
+        for renderable in (
+            Align("hi", "center", vertical="top", style="on blue"),
+            Align("hi", "center", vertical="middle", style="on blue"),
+            Align("hi", "right", vertical="bottom"),
+            Align("hi", "left", vertical="middle", pad=False),
+            Align(Text("a b c d"), "center", width=3, vertical="middle", style="on red"),
+        )
+    )),
+    ("vertical_center", lambda: _cg_print(_cg_console(6), VerticalCenter(Text("x"), style="on red"), height=3)),
+    ("table_vertical", lambda: _cg_table_vertical()),
+    # 17. a justified empty Text still pads to the width
+    ("empty_text_justify", lambda: "".join(
+        [_cg_print(_cg_console(10), Panel(Text("", style="on red", justify=justify)))
+         for justify in ("left", "center", "right", "full", "default")]
+        + [_cg_print(_cg_console(10), Text("", style="on red"), justify="left")]
+    )),
     # 15. Panel at (almost) no inner width, with and without a height
     ("panel_narrow_heights", lambda: "".join(
         _cg_print(_cg_console(width), Panel(Text("hi"), padding=padding), height=height)
@@ -3097,6 +3116,16 @@ CORE_GAP_CASES = [
         for height in (None, 5)
     )),
 ]
+
+
+def _cg_table_vertical() -> str:
+    table = Table()
+    table.add_column("a", vertical="middle")
+    table.add_column("b")
+    table.add_column("c", vertical="bottom")
+    table.add_row("x", "1\n2\n3\n4", "z")
+    table.add_row(Align("y", vertical="bottom"), "1\n2\n3", Align("w", vertical="top"))
+    return _cg_print(_cg_console(30), table)
 
 
 def _cg_tab_table() -> Table:
