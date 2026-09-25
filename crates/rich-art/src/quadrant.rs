@@ -194,7 +194,8 @@ impl QuadrantArt {
 
     /// Columns and character rows: the same grid as `BlockArt`, since a cell
     /// is still two pixels tall; quadrants add the second pixel column.
-    pub(crate) fn grid(&self, available: usize) -> (usize, usize) {
+    /// Derived rows are also capped by `max_rows`, and the whole grid by [`MAX_CELLS`](crate::image_art::MAX_CELLS).
+    fn grid_within(&self, available: usize, max_rows: Option<usize>) -> (usize, usize) {
         let (iw, ih) = self.image.dimensions();
         if iw == 0 || ih == 0 {
             return (1, 1);
@@ -208,11 +209,11 @@ impl QuadrantArt {
                 rows = cap.max(1);
             }
         }
-        (columns, rows)
+        crate::image_art::bound_grid(columns, rows, true, max_rows)
     }
 
-    pub(crate) fn cells(&self, available: usize) -> Vec<Vec<QuadCell>> {
-        let (columns, rows) = self.grid(available);
+    pub(crate) fn cells(&self, available: usize, max_rows: Option<usize>) -> Vec<Vec<QuadCell>> {
+        let (columns, rows) = self.grid_within(available, max_rows);
         let mut scaled = self
             .image
             .resize_exact(
@@ -280,7 +281,7 @@ impl QuadrantArt {
 
 impl Renderable for QuadrantArt {
     fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        let rows = self.cells(options.max_width);
+        let rows = self.cells(options.max_width, options.height);
         let mut segments = Vec::new();
         let last = rows.len().saturating_sub(1);
         for (index, row) in rows.iter().enumerate() {

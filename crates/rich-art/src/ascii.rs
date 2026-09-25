@@ -149,6 +149,12 @@ impl AsciiArt {
 
     /// The output grid for a given available width.
     pub(crate) fn grid(&self, available: usize) -> (usize, usize) {
+        self.grid_within(available, None)
+    }
+
+    /// The output grid for a given available width, with derived rows capped
+    /// by `max_rows` and the whole grid by [`MAX_CELLS`](crate::image_art::MAX_CELLS).
+    pub(crate) fn grid_within(&self, available: usize, max_rows: Option<usize>) -> (usize, usize) {
         let (image_width, image_height) = self.image.dimensions();
         let columns = self.width.unwrap_or(available).max(1);
         let rows = self.height.unwrap_or_else(|| {
@@ -159,7 +165,7 @@ impl AsciiArt {
                 (image_height as f64 * columns as f64) / (image_width as f64 * CELL_ASPECT);
             (scaled.round() as usize).max(1)
         });
-        (columns, rows)
+        crate::image_art::bound_grid(columns, rows, self.height.is_none(), max_rows)
     }
 
     /// Rec. 601 luma, the same weighting `jp2a` uses to grey-scale a pixel.
@@ -184,8 +190,12 @@ impl AsciiArt {
     }
 
     /// Render to rows of `(char, colour)` pairs.
-    fn cells(&self, available: usize) -> Vec<Vec<(char, Option<Color>)>> {
-        let (columns, rows) = self.grid(available);
+    fn cells(
+        &self,
+        available: usize,
+        max_rows: Option<usize>,
+    ) -> Vec<Vec<(char, Option<Color>)>> {
+        let (columns, rows) = self.grid_within(available, max_rows);
         // Finish sampling before colour processing and glyph selection.
         let mut scaled = self
             .image
@@ -253,7 +263,7 @@ impl AsciiArt {
     /// The art as plain text, without going through a console.
     pub fn to_text(&self, width: usize) -> String {
         let mut out = String::new();
-        for (index, row) in self.cells(width).iter().enumerate() {
+        for (index, row) in self.cells(width, None).iter().enumerate() {
             if index > 0 {
                 out.push('\n');
             }
@@ -265,7 +275,7 @@ impl AsciiArt {
 
 impl Renderable for AsciiArt {
     fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        let rows = self.cells(options.max_width);
+        let rows = self.cells(options.max_width, options.height);
         let mut segments = Vec::new();
         let last = rows.len().saturating_sub(1);
         for (index, row) in rows.into_iter().enumerate() {

@@ -836,6 +836,16 @@ impl ImageArt {
         if !self.transforms.adjustments_valid() {
             return Err(ImageArtError::InvalidAdjustment);
         }
+        // Fits bound their raster themselves (`InvalidFitDimensions`); an
+        // unfitted explicit size must fit the backends' cell budget.
+        if self.fit.is_none() {
+            check_cell_budget(
+                self.options
+                    .width
+                    .map(|w| w.min(self.max_width.unwrap_or(usize::MAX))),
+                self.options.height.and(self.rows()),
+            )?;
+        }
         let image = self.prepare_image(mode, options.max_width)?;
         let native = self.fit == Some(ImageFit::Native);
         let (width, rows) = if native {

@@ -55,7 +55,9 @@ impl BrailleArt {
         self
     }
 
-    fn grid(&self, available: usize) -> (usize, usize) {
+    /// The grid for the available width, with derived rows also capped by `max_rows`, and the whole
+    /// of it by [`MAX_CELLS`](crate::image_art::MAX_CELLS).
+    fn grid_within(&self, available: usize, max_rows: Option<usize>) -> (usize, usize) {
         let (iw, ih) = self.image.dimensions();
         let mut columns = self.width.unwrap_or(available).max(1);
         let mut rows = ((ih as f64 * columns as f64) / (iw.max(1) as f64 * 2.0)).ceil() as usize;
@@ -67,11 +69,11 @@ impl BrailleArt {
                 rows = cap.max(1);
             }
         }
-        (columns, rows)
+        crate::image_art::bound_grid(columns, rows, true, max_rows)
     }
 
-    fn rows(&self, available: usize) -> Vec<String> {
-        let (columns, rows) = self.grid(available);
+    fn rows(&self, available: usize, max_rows: Option<usize>) -> Vec<String> {
+        let (columns, rows) = self.grid_within(available, max_rows);
         let mut scaled = self
             .image
             .resize_exact(
@@ -112,13 +114,13 @@ impl BrailleArt {
     }
 
     pub fn to_text(&self, width: usize) -> String {
-        self.rows(width).join("\n")
+        self.rows(width, None).join("\n")
     }
 }
 
 impl Renderable for BrailleArt {
     fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        let rows = self.rows(options.max_width);
+        let rows = self.rows(options.max_width, options.height);
         let mut out = Vec::new();
         for (index, row) in rows.into_iter().enumerate() {
             if index > 0 {
