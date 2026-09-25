@@ -11,7 +11,7 @@ something different.
 | `rich.print`, `rich.get_console` | yes |
 | `Console` | `file`, `width`, `height`, `color_system`, `force_terminal`, `no_color`, `record`, `highlight`, `emoji`, `safe_box`; `print`, `rule`, `export_text` |
 | `Text` | constructor, `from_markup`, `append`, `stylize`, `plain`, `len` |
-| `Style` | keyword constructor, `parse`, `+`, `==` |
+| `Style` | keyword constructor, `parse`, `+`, `==`, `hash` |
 | `Table` | the constructor options and `add_column` options listed in [Table](table.md), `add_row` with `str`/`Text` cells |
 | `Panel` | constructor and `Panel.fit` |
 | `rich.box` | every box constant |
@@ -29,6 +29,10 @@ something different.
 | Hyperlinks carry no `id=` | Rich tags each link with a random id. The Rust port leaves it out so output is reproducible ([Divergences #20](../DIVERGENCES.md)). |
 | `repr(box.ROUNDED)` is `box.ROUNDED` | Rich prints `Box(...)` with the box's characters. Boxes compare and render the same. |
 | On a terminal, `width=None` uses the process's terminal size | Rich asks the file's own descriptor. They differ only when `file` is a different terminal from standard output. |
+| `Console(width=...)` and a table column's `width`, `min_width` and `max_width` are at most 65536, and a column's `ratio` at most 4294967295; larger values raise `ValueError` | Rich accepts them, then runs out of memory or takes minutes to print. The Rust port would abort, overflow or take as long, so the binding refuses them up front. |
+| A `Panel`'s padding is at most 65536 on each side; more raises `ValueError` (in `Panel` and `Panel.fit`) | Rich renders any padding: `padding=10**6` prints about 160 MB in some 15 seconds, and a horizontal padding wider than the console squeezes the content out, which rs_rich matches. Up to the limit, output is Rich's. |
+| Panels nest at most 100 deep; deeper raises `RecursionError` | Rich also raises `RecursionError`, at a depth that depends on Python's recursion limit (between 100 and 150 by default). |
+| A `print` from inside the same console's `file.write` raises `RuntimeError` | Rich recurses until it hits Python's recursion limit. |
 
 ## How compatibility is tested
 

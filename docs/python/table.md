@@ -64,7 +64,10 @@ add_column(header="", *, style=None, header_style=None, justify="left",
 | `ratio` | This column's share of the free width when the table expands. |
 | `no_wrap` | Keep cells on one line. |
 
-An invalid `justify` or `overflow` raises `ValueError`.
+An invalid `justify` or `overflow` raises `ValueError`. So does a `width`,
+`min_width` or `max_width` above 65536 (the widest console), or a `ratio`
+above 4294967295 (2³² − 1). Rich accepts larger values, but no terminal is
+that wide.
 
 ```python
 from rs_rich import box

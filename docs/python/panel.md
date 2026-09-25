@@ -24,10 +24,30 @@ Panel(renderable, box=ROUNDED, *, title=None, title_align="center",
 | `expand` | Fill the available width. `False` fits the content; see [`Panel.fit`](#fit). |
 | `border_style` | A style for the border. |
 | `width` | A fixed width in cells. |
-| `padding` | Space inside the border: `n`, `(vertical, horizontal)` or `(top, right, bottom, left)`. The default is `(0, 1)`, and other shapes raise `ValueError`. |
+| `padding` | Space inside the border: `n`, `(vertical, horizontal)` or `(top, right, bottom, left)`. The default is `(0, 1)`. Other shapes, and any side above 65536, raise `ValueError`. |
 
 A `str` inside a panel is markup but is not highlighted, as in Rich, where a
 panel renders its content with `highlight=False`.
+
+Panels nest up to 100 deep. Printing a deeper chain raises `RecursionError`,
+as Rich does a little past that depth:
+
+```python
+from rs_rich.console import Console
+from rs_rich.panel import Panel
+
+nested = "x"
+for _ in range(101):
+    nested = Panel(nested)
+try:
+    Console(width=40).print(nested)
+except RecursionError as error:
+    print(error)
+```
+
+```text
+maximum recursion depth exceeded: rs_rich renders at most 100 nested panels
+```
 
 ```python
 from rs_rich.console import Console

@@ -79,8 +79,8 @@ bold and italic
 | `plain` | The string without styles. |
 | `len(text)` | The number of characters. |
 | `str(text)` | The same as `plain`. |
-| `append(text, style=None)` | Append a `str` (with an optional style) or another `Text` (keeping its spans; a `style` is then a `ValueError`). Returns the text itself, so calls chain. Anything else is a `TypeError`. |
-| `stylize(style, start=0, end=None)` | Apply a style to characters `start` up to `end`. Negative offsets count from the end, `end=None` means the end, and offsets out of range are clamped. |
+| `append(text, style=None)` | Append a `str` (with an optional style) or another `Text` (keeping its spans; a `style` is then a `ValueError`). A text can append itself: `t.append(t)`. Returns the text itself, so calls chain. Anything else is a `TypeError`. |
+| `stylize(style, start=0, end=None)` | Apply a style to characters `start` up to `end`. Negative offsets count from the end, `end=None` means the end, and offsets out of range are clamped, however large. |
 
 ```python
 import io

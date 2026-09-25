@@ -124,9 +124,11 @@ reproduced by a test that failed first.
   - `print` and `rule` flush the file, as Rich does.
   - Panels nested more than 100 deep raise `RecursionError` instead of
     crashing the interpreter.
-  - Sizes are limited: `Console(width=…)`, padding and column widths to
-    65536, and `ratio` to 4294967295. Larger values raise `ValueError`
-    instead of aborting.
+  - Sizes are limited. `Console(width=…)` and a column's `width`,
+    `min_width` and `max_width` go up to 65536, and `ratio` up to
+    4294967295. A `Panel`'s padding goes up to 65536 on each side, where Rich
+    has no limit. Larger values raise `ValueError` instead of aborting,
+    hanging or taking minutes to print.
   - `t.append(t)` works; `Text.stylize` clamps offsets of any size; `Style`
     is hashable; reference cycles through a panel's child or `Console.file`
     are collected.

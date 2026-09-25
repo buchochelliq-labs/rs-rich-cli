@@ -86,6 +86,12 @@ class TestAppend:
         with pytest.raises(ValueError, match="style must not be set"):
             Text("a").append(Text("b"), style="bold")
 
+    def test_a_text_can_append_itself(self):
+        # rich 15.0.0: "abab".
+        text = Text("ab")
+        assert text.append(text) is text
+        assert (text.plain, len(text)) == ("abab", 4)
+
     def test_only_str_or_text(self):
         with pytest.raises(TypeError, match="Only str or Text"):
             Text("a").append(1)
@@ -114,3 +120,22 @@ class TestStylize:
         text = Text("ab")
         text.stylize(Style(underline=True), 1)
         assert render(text, color=True) == "a\x1b[4mb\x1b[0m\n"
+
+    @pytest.mark.parametrize(
+        "start, end, expected",
+        [
+            # rich 15.0.0 takes any int and clamps what is past the text.
+            (0, 2**70, "\x1b[1mabc\x1b[0m\n"),
+            (-(2**70), 2**70, "\x1b[1mabc\x1b[0m\n"),
+            (1, -(2**70), "abc\n"),
+            (2**70, None, "abc\n"),
+        ],
+    )
+    def test_offsets_beyond_a_machine_integer_are_clamped(self, start, end, expected):
+        text = Text("abc")
+        text.stylize("bold", start, end)
+        assert render(text, color=True) == expected
+
+    def test_offsets_must_be_integers(self):
+        with pytest.raises(TypeError):
+            Text("abc").stylize("bold", "1")  # type: ignore[arg-type]

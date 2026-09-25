@@ -55,3 +55,10 @@ def test_bad_definitions(definition):
 def test_a_bad_colour_keyword_is_a_style_syntax_error():
     with pytest.raises(StyleSyntaxError):
         Style(color="no-such-colour")
+
+
+def test_styles_are_hashable_and_equal_styles_hash_alike():
+    # rich 15.0.0's Style is hashable, so it can key a dict or join a set.
+    assert {Style.parse("bold"): 1}[Style(bold=True)] == 1
+    assert hash(Style.parse("bold red")) == hash(Style(color="red", bold=True))
+    assert len({Style.parse("bold"), Style(bold=True), Style.parse("italic")}) == 2

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import threading
 
 import pytest
 
@@ -27,3 +28,19 @@ def render(*objects, width: int = 40, color: bool = False, **print_options) -> s
     )
     console.print(*objects, **print_options)
     return out.getvalue()
+
+
+def in_thread(fn):
+    """Run fn on a new thread; return what it raised (None if nothing)."""
+    raised = {}
+
+    def run():
+        try:
+            fn()
+        except BaseException as error:  # noqa: BLE001 - a Rust panic is a BaseException
+            raised["error"] = error
+
+    worker = threading.Thread(target=run)
+    worker.start()
+    worker.join()
+    return raised.get("error")

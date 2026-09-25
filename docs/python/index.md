@@ -75,7 +75,8 @@ checkers see the signatures documented here.
   the bindings, then installs it and renders with it on Python 3.9 and 3.13.
 - **Releases.** A `python-vX.Y.Z` tag on `main` runs `pypi-release.yml`. It
   checks the tag against `pyproject.toml`'s version, builds the wheels and the
-  sdist, and publishes them with PyPI Trusted Publishing from the `pypi`
+  sdist, runs the whole test suite (compatibility with Rich 15.0.0 included)
+  against the Linux x86-64 wheel, and only then publishes them with PyPI Trusted Publishing from the `pypi`
   environment, with no token secret. See
   [Branching and releases](../BRANCHING.md#python-package-pypi).
 - **Versions.** The package has its own version, starting at 0.0.1. It

@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import gc
 import io
+import threading
+import time
+import weakref
 
 import pytest
 
-from conftest import render
+from conftest import in_thread, render
 from rs_rich.console import Console
 from rs_rich.errors import ConsoleError, MarkupError
 from rs_rich.panel import Panel
@@ -41,6 +45,18 @@ class TestConstruction:
     def test_an_unknown_colour_system_is_a_value_error(self):
         with pytest.raises(ValueError, match="not a valid color system"):
             Console(color_system="16bit")
+
+    @pytest.mark.parametrize("width", [2**16 + 1, 2**40])
+    def test_a_width_past_65536_is_a_value_error(self, width):
+        # rich 15.0.0 accepts it and fails on allocation at print time; core
+        # would abort the process instead, so the binding refuses it up front.
+        with pytest.raises(ValueError, match="width must be at most 65536"):
+            Console(file=io.StringIO(), width=width)
+
+    def test_the_widest_console(self):
+        out = io.StringIO()
+        Console(file=out, width=2**16).rule()
+        assert out.getvalue() == "─" * 2**16 + "\n"
 
     def test_file_is_the_given_file_or_stdout(self, capsys):
         out = io.StringIO()
@@ -163,3 +179,107 @@ class TestExportText:
     def test_requires_record(self):
         with pytest.raises(RuntimeError, match="record=True"):
             Console(file=io.StringIO()).export_text()
+
+
+class TestFlush:
+    def test_every_print_and_rule_flushes_the_file(self):
+        flushed = []
+
+        class Sink(io.StringIO):
+            def flush(self):
+                flushed.append(self.getvalue())
+
+        console = Console(file=Sink(), width=10)
+        console.print("hi")
+        console.rule()
+        console.print()
+        # rich 15.0.0 flushes once after each call, after writing.
+        assert flushed == ["hi\n", "hi\n" + "─" * 10 + "\n", "hi\n" + "─" * 10 + "\n\n"]
+
+    def test_a_file_without_flush_is_an_attribute_error(self):
+        written = []
+
+        class WriteOnly:
+            def write(self, text):
+                written.append(text)
+
+        with pytest.raises(AttributeError, match="flush"):
+            Console(file=WriteOnly()).print("x")
+        assert written == ["x\n"]  # as in rich, the write happens first
+
+    def test_errors_from_flush_propagate(self):
+        class Broken(io.StringIO):
+            def flush(self):
+                raise OSError("disk full")
+
+        with pytest.raises(OSError, match="disk full"):
+            Console(file=Broken()).print("x")
+
+
+class TestThreads:
+    def test_print_from_another_thread(self):
+        console = Console(file=io.StringIO(), width=20)
+        console.print("main")
+        assert in_thread(lambda: console.print("worker")) is None
+        assert console.file.getvalue() == "main\nworker\n"
+
+    def test_the_global_print_from_another_thread(self, capsys):
+        import rs_rich
+
+        rs_rich.get_console()  # created on this thread, as on first use
+        assert in_thread(lambda: rs_rich.print("worker")) is None
+        assert capsys.readouterr().out == "worker\n"
+
+    def test_concurrent_prints_do_not_interleave(self):
+        class Slow(io.StringIO):
+            # Gives up the GIL mid-write, so other threads get to print.
+            def write(self, text):
+                for char in text:
+                    super().write(char)
+                    time.sleep(0)
+                return len(text)
+
+        console = Console(file=Slow(), width=20, record=True)
+
+        def work(n):
+            for i in range(20):
+                console.print(f"{n}-{i}", "end")
+
+        workers = [threading.Thread(target=work, args=(n,)) for n in range(4)]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join()
+        lines = console.file.getvalue().splitlines()
+        assert sorted(lines) == sorted(f"{n}-{i} end" for n in range(4) for i in range(20))
+        assert sorted(console.export_text().splitlines()) == sorted(lines)
+
+    def test_printing_from_inside_file_write_is_a_runtime_error(self):
+        class Echo(io.StringIO):
+            def write(self, text):
+                console.print("again")
+                return super().write(text)
+
+        console = Console(file=Echo())
+        with pytest.raises(RuntimeError, match="already printing"):
+            console.print("x")
+        # The console is free again afterwards.
+        console.file.write = io.StringIO().write
+        console.print("y")
+
+
+class TestGarbageCollection:
+    def test_a_cycle_through_the_file_is_collected(self):
+        class Holder:
+            def write(self, text):
+                return len(text)
+
+            def flush(self):
+                pass
+
+        holder = Holder()
+        holder.console = Console(file=holder, width=10)
+        alive = weakref.ref(holder)
+        del holder
+        gc.collect()
+        assert alive() is None

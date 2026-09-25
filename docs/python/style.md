@@ -78,6 +78,24 @@ print(combined == Style.parse("bold blue"))
 True
 ```
 
+## Hashing
+
+Styles are hashable, as in Rich. Equal styles hash alike, however they were
+written, so a style can key a `dict` or go in a `set`:
+
+```python
+from rs_rich.style import Style
+
+names = {Style.parse("bold red"): "alert"}
+print(names[Style(color="red", bold=True)])
+print(len({Style.parse("bold"), Style(bold=True)}))
+```
+
+```text
+alert
+1
+```
+
 ## Using styles
 
 ```python

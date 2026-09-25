@@ -7,10 +7,13 @@
 
 use pyo3::create_exception;
 use pyo3::exceptions::{
-    PyException, PyNotImplementedError, PyRuntimeError, PyTypeError, PyValueError,
+    PyException, PyNotImplementedError, PyRecursionError, PyRuntimeError, PyTypeError, PyValueError,
 };
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyFloat, PyInt, PyString, PyTuple};
+use pyo3::{PyTraverseError, PyVisit};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Condvar, Mutex, MutexGuard};
 
 use rich::align::HorizontalAlign;
 use rich::color::ColorSystem;
@@ -117,6 +120,15 @@ impl Style {
         self.inner == other.inner
     }
 
+    /// Hashable, as upstream's `Style` is: equal styles hash alike, because
+    /// both compare the parsed style, never the definition string.
+    fn __hash__(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        format!("{:?}", self.inner).hash(&mut hasher);
+        hasher.finish()
+    }
+
     fn __str__(&self) -> String {
         if self.definition.is_empty() {
             "none".into()
@@ -219,6 +231,24 @@ impl Text {
     }
 }
 
+/// A Python `int` index: one too large for an `isize` saturates, which is
+/// the same as clamping to the text (no text is that long).
+struct Index(isize);
+
+impl<'a, 'py> FromPyObject<'a, 'py> for Index {
+    type Error = PyErr;
+
+    fn extract(value: pyo3::Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
+        match value.extract::<isize>() {
+            Ok(index) => Ok(Index(index)),
+            Err(_) if value.is_instance_of::<PyInt>() => {
+                Ok(Index(if value.lt(0)? { isize::MIN } else { isize::MAX }))
+            }
+            Err(error) => Err(error),
+        }
+    }
+}
+
 #[pymethods]
 impl Text {
     #[new]
@@ -272,7 +302,18 @@ impl Text {
         text: &Bound<'py, PyAny>,
         style: Option<&Bound<'py, PyAny>>,
     ) -> PyResult<PyRefMut<'py, Self>> {
-        if let Ok(other) = text.extract::<PyRef<'_, Text>>() {
+        // `t.append(t)`: `t` is already borrowed mutably here, so it cannot
+        // be extracted again; append a copy of itself, as upstream does.
+        if text.as_ptr() == slf.as_ptr() {
+            if style_type(style)?.is_some() {
+                return Err(PyValueError::new_err(
+                    "style must not be set when appending a Text instance",
+                ));
+            }
+            let copy = slf.inner.clone();
+            let joined = slf.inner.clone().append_text(&copy);
+            slf.inner = joined;
+        } else if let Ok(other) = text.extract::<PyRef<'_, Text>>() {
             if style_type(style)?.is_some() {
                 return Err(PyValueError::new_err(
                     "style must not be set when appending a Text instance",
@@ -292,13 +333,15 @@ impl Text {
     }
 
     /// Style characters `start..end` (Python indices; negative from the end).
-    #[pyo3(signature = (style, start=0, end=None))]
+    /// Offsets are any Python `int`; ones past the text clamp to it.
+    #[pyo3(signature = (style, start=Index(0), end=None))]
     fn stylize(
         &mut self,
         style: &Bound<'_, PyAny>,
-        start: isize,
-        end: Option<isize>,
+        start: Index,
+        end: Option<Index>,
     ) -> PyResult<()> {
+        let (start, end) = (start.0, end.map(|end| end.0));
         let Some(style) = style_type(Some(style))? else {
             return Ok(());
         };
@@ -422,9 +465,20 @@ impl Renderable for MarkupStr {
     }
 }
 
+/// How many renderables deep a `Panel` may nest. Core renders recursively,
+/// so without a limit a deep enough chain overflows the native stack and
+/// kills the interpreter; upstream raises `RecursionError` a little past this
+/// depth (it renders 100 nested panels and fails before 150).
+const MAX_NESTING: usize = 100;
+
 /// Build the core renderable for a Python object. A `str` renders with
-/// `highlight` (`None`: the console's setting).
-fn renderable(value: &Bound<'_, PyAny>, highlight: Option<bool>) -> PyResult<Box<dyn Renderable>> {
+/// `highlight` (`None`: the console's setting). `depth` counts the panels
+/// around `value`.
+fn renderable(
+    value: &Bound<'_, PyAny>,
+    highlight: Option<bool>,
+    depth: usize,
+) -> PyResult<Box<dyn Renderable>> {
     if value.is_instance_of::<PyString>() {
         return Ok(Box::new(MarkupStr {
             markup: value.extract()?,
@@ -435,10 +489,15 @@ fn renderable(value: &Bound<'_, PyAny>, highlight: Option<bool>) -> PyResult<Box
         return Ok(Box::new(text.inner.clone()));
     }
     if let Ok(table) = value.extract::<PyRef<'_, Table>>() {
-        return Ok(Box::new(table.build(value.py())?));
+        return Ok(Box::new(table.build()?));
     }
     if let Ok(panel) = value.extract::<PyRef<'_, Panel>>() {
-        return Ok(Box::new(panel.build(value.py())?));
+        if depth >= MAX_NESTING {
+            return Err(PyRecursionError::new_err(format!(
+                "maximum recursion depth exceeded: rs_rich renders at most {MAX_NESTING} nested panels"
+            )));
+        }
+        return Ok(Box::new(panel.build(value.py(), depth + 1)?));
     }
     Err(PyNotImplementedError::new_err(format!(
         "rs_rich cannot render {} yet: this first slice supports str, Text, Table and Panel",
@@ -448,6 +507,15 @@ fn renderable(value: &Bound<'_, PyAny>, highlight: Option<bool>) -> PyResult<Box
 
 // ---------------------------------------------------------------------------
 // Table
+
+/// The largest column `width`, `min_width` or `max_width` accepted: the
+/// widest console. Core lays out a column at its minimum width even when
+/// that is far wider than the console, which takes minutes for a huge one.
+const MAX_COLUMN_WIDTH: usize = MAX_CONSOLE_WIDTH;
+
+/// The largest column `ratio` accepted. A ratio only divides free space, so
+/// it may be larger than any width, but core multiplies with it in `usize`.
+const MAX_COLUMN_RATIO: usize = u32::MAX as usize;
 
 struct ColumnSpec {
     header: String,
@@ -468,7 +536,7 @@ enum CellSpec {
 }
 
 /// `rich.table.Table`: columns and rows of `str` (markup) or `Text` cells.
-#[pyclass(name = "Table", module = "rs_rich.table", unsendable)]
+#[pyclass(name = "Table", module = "rs_rich.table")]
 struct Table {
     columns: Vec<ColumnSpec>,
     rows: Vec<Vec<CellSpec>>,
@@ -483,7 +551,7 @@ struct Table {
 }
 
 impl Table {
-    fn build(&self, _py: Python<'_>) -> PyResult<CoreTable> {
+    fn build(&self) -> PyResult<CoreTable> {
         let mut table = CoreTable::new();
         table = match self.box_set {
             Some(box_set) => table.box_set(box_set),
@@ -610,6 +678,20 @@ impl Table {
         ratio: Option<usize>,
         no_wrap: bool,
     ) -> PyResult<()> {
+        // Larger values than these make core overflow or take minutes, and
+        // no terminal is that wide anyway.
+        for (name, value, limit) in [
+            ("width", width, MAX_COLUMN_WIDTH),
+            ("min_width", min_width, MAX_COLUMN_WIDTH),
+            ("max_width", max_width, MAX_COLUMN_WIDTH),
+            ("ratio", ratio, MAX_COLUMN_RATIO),
+        ] {
+            if let Some(value) = value.filter(|value| *value > limit) {
+                return Err(PyValueError::new_err(format!(
+                    "{name} must be at most {limit}, got {value}"
+                )));
+            }
+        }
         self.columns.push(ColumnSpec {
             header: header.to_string(),
             justify: self::justify(Some(justify))?,
@@ -663,9 +745,9 @@ impl Table {
 // Panel
 
 /// `rich.panel.Panel`: a border around a `str`, `Text`, `Table` or `Panel`.
-#[pyclass(name = "Panel", module = "rs_rich.panel", unsendable)]
+#[pyclass(name = "Panel", module = "rs_rich.panel")]
 struct Panel {
-    renderable: Py<PyAny>,
+    renderable: Option<Py<PyAny>>,
     box_set: CoreBox,
     title: Option<String>,
     title_align: HorizontalAlign,
@@ -678,9 +760,14 @@ struct Panel {
 }
 
 impl Panel {
-    fn build(&self, py: Python<'_>) -> PyResult<CorePanel> {
+    fn build(&self, py: Python<'_>, depth: usize) -> PyResult<CorePanel> {
+        // `__clear__` (garbage collection) is the only thing that empties it.
+        let child = match &self.renderable {
+            Some(child) => child.bind(py).clone(),
+            None => PyString::new(py, "").into_any(),
+        };
         // Upstream renders a panel's child with `highlight=False`.
-        let mut panel = CorePanel::new(renderable(self.renderable.bind(py), Some(false))?)
+        let mut panel = CorePanel::new(renderable(&child, Some(false), depth)?)
             .box_set(self.box_set)
             .expand(self.expand)
             .title_align(self.title_align)
@@ -702,18 +789,34 @@ impl Panel {
     }
 }
 
-/// Rich's padding: 1, 2 or 4 integers.
+/// The largest padding accepted on any side: the widest console. Core
+/// builds every padding line, so a huge padding never finishes.
+const MAX_PADDING: usize = MAX_CONSOLE_WIDTH;
+
+/// Rich's padding: 1, 2 or 4 integers, each at most `MAX_PADDING`.
 fn padding(value: &Bound<'_, PyAny>) -> PyResult<(usize, usize, usize, usize)> {
-    if let Ok(all) = value.extract::<usize>() {
-        return Ok((all, all, all, all));
+    let sides = if let Ok(all) = value.extract::<Index>() {
+        [all.0; 4]
+    } else if let Ok((vertical, horizontal)) = value.extract::<(Index, Index)>() {
+        [vertical.0, horizontal.0, vertical.0, horizontal.0]
+    } else if let Ok((top, right, bottom, left)) = value.extract::<(Index, Index, Index, Index)>() {
+        [top.0, right.0, bottom.0, left.0]
+    } else {
+        return Err(PyValueError::new_err("padding must be 1, 2 or 4 integers"));
+    };
+    let mut result = [0usize; 4];
+    for (side, value) in result.iter_mut().zip(sides) {
+        *side = usize::try_from(value)
+            .ok()
+            .filter(|value| *value <= MAX_PADDING)
+            .ok_or_else(|| {
+                PyValueError::new_err(format!(
+                    "padding must be between 0 and {MAX_PADDING}, got {value}"
+                ))
+            })?;
     }
-    if let Ok((vertical, horizontal)) = value.extract::<(usize, usize)>() {
-        return Ok((vertical, horizontal, vertical, horizontal));
-    }
-    if let Ok(four) = value.extract::<(usize, usize, usize, usize)>() {
-        return Ok(four);
-    }
-    Err(PyValueError::new_err("padding must be 1, 2 or 4 integers"))
+    let [top, right, bottom, left] = result;
+    Ok((top, right, bottom, left))
 }
 
 #[pymethods]
@@ -737,7 +840,7 @@ impl Panel {
         padding: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
         Ok(Panel {
-            renderable,
+            renderable: Some(renderable),
             box_set: r#box
                 .or(rich::r#box::ROUNDED)
                 .ok_or_else(|| PyValueError::new_err("a Panel needs a box"))?,
@@ -753,6 +856,19 @@ impl Panel {
                 None => (0, 1, 0, 1),
             },
         })
+    }
+
+    // The child can refer back to the panel (`holder.ref = Panel(holder)`),
+    // so the garbage collector must see it to collect such a cycle.
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        if let Some(child) = &self.renderable {
+            visit.call(child)?;
+        }
+        Ok(())
+    }
+
+    fn __clear__(&mut self) {
+        self.renderable = None;
     }
 
     /// `Panel.fit(...)`: a panel that fits its content (`expand=False`).
@@ -792,14 +908,53 @@ impl Panel {
 // ---------------------------------------------------------------------------
 // Console
 
+/// The widest `Console(width=...)` accepted. Core allocates lines of the
+/// console's width, so an absurd width aborts the process on allocation;
+/// 65536 columns is far beyond any real terminal.
+const MAX_CONSOLE_WIDTH: usize = 1 << 16;
+
+/// What printing changes: the core console and the recorded output.
+struct ConsoleState {
+    console: CoreConsole,
+    recorded: Vec<Segment>,
+}
+
 /// `rich.console.Console`: renders through core `rich` and writes the result
 /// to `file` (default: `sys.stdout` at print time).
-#[pyclass(name = "Console", module = "rs_rich.console", unsendable)]
+///
+/// Usable from any thread. `state` is only ever locked around pure Rust work,
+/// never while Python code runs, so locking it cannot deadlock. `printing`
+/// names the thread in the middle of a `print` or `rule` (0: none), writes
+/// included, so concurrent prints do not interleave, and a print from inside
+/// `file.write` raises instead of waiting for itself.
+#[pyclass(name = "Console", module = "rs_rich.console")]
 struct Console {
-    console: CoreConsole,
+    state: Mutex<ConsoleState>,
+    printer: Mutex<u64>,
+    printed: Condvar,
     file: Option<Py<PyAny>>,
     record: bool,
-    recorded: Vec<Segment>,
+}
+
+/// A number for the current thread, never 0 (0 means "nobody").
+fn thread_number() -> u64 {
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    thread_local! {
+        static NUMBER: u64 = NEXT.fetch_add(1, Ordering::Relaxed);
+    }
+    NUMBER.with(|number| *number)
+}
+
+/// Held while a `print` or `rule` writes; frees the console when dropped.
+struct Printing<'a> {
+    console: &'a Console,
+}
+
+impl Drop for Printing<'_> {
+    fn drop(&mut self) {
+        *lock(&self.console.printer) = 0;
+        self.console.printed.notify_all();
+    }
 }
 
 fn color_system_name(system: Option<ColorSystem>) -> Option<&'static str> {
@@ -811,6 +966,14 @@ fn color_system_name(system: Option<ColorSystem>) -> Option<&'static str> {
     })
 }
 
+/// A lock whose holder panicked still guards consistent data here: every
+/// critical section is a single core call.
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 impl Console {
     fn target<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         match &self.file {
@@ -819,16 +982,71 @@ impl Console {
         }
     }
 
-    /// Render with core, record if asked, and write to the target file.
-    fn emit(&mut self, py: Python<'_>, render: impl FnOnce(&CoreConsole)) -> PyResult<()> {
-        let segments = self.console.record_output(render);
-        let output = self.console.segments_to_string(&segments);
-        if self.record {
-            self.recorded.extend(segments);
+    fn state(&self) -> MutexGuard<'_, ConsoleState> {
+        lock(&self.state)
+    }
+
+    /// Start printing: wait (without the GIL) for another thread's print to
+    /// finish, or fail if this thread is already printing on this console.
+    fn start_printing(&self, py: Python<'_>) -> PyResult<Printing<'_>> {
+        let me = thread_number();
+        loop {
+            {
+                let mut printer = lock(&self.printer);
+                if *printer == me {
+                    return Err(PyRuntimeError::new_err(
+                        "Console is already printing (print called from inside its own file.write)",
+                    ));
+                }
+                if *printer == 0 {
+                    *printer = me;
+                    return Ok(Printing { console: self });
+                }
+            }
+            // The printing thread needs the GIL to finish its write.
+            py.detach(|| {
+                let printer = lock(&self.printer);
+                drop(
+                    self.printed
+                        .wait_while(printer, |printer| *printer != 0)
+                        .unwrap_or_else(|poisoned| poisoned.into_inner()),
+                );
+            });
         }
-        self.target(py)?.call_method1("write", (output,))?;
+    }
+
+    /// Render with core, record if asked, then write to the target file and
+    /// flush it, as upstream does after every print. A render that fails
+    /// writes nothing. Call while printing.
+    fn emit(
+        &self,
+        py: Python<'_>,
+        render: impl FnOnce(&CoreConsole) -> PyResult<()>,
+    ) -> PyResult<()> {
+        let output = {
+            let mut state = self.state();
+            let mut result = Ok(());
+            let segments = state
+                .console
+                .record_output(|console| result = render(console));
+            result?;
+            let output = state.console.segments_to_string(&segments);
+            if self.record {
+                state.recorded.extend(segments);
+            }
+            output
+        };
+        let file = self.target(py)?;
+        file.call_method1("write", (output,))?;
+        file.call_method0("flush")?;
         Ok(())
     }
+}
+
+/// One thing `print` writes: strings joined into a line, or a renderable.
+enum Printable {
+    Line(String),
+    Renderable(Box<dyn Renderable>),
 }
 
 #[pymethods]
@@ -853,6 +1071,11 @@ impl Console {
         emoji: bool,
         safe_box: bool,
     ) -> PyResult<Self> {
+        if let Some(width) = width.filter(|width| *width > MAX_CONSOLE_WIDTH) {
+            return Err(PyValueError::new_err(format!(
+                "width must be at most {MAX_CONSOLE_WIDTH}, got {width}"
+            )));
+        }
         // Upstream asks the file, not the process's stdout, whether it is a
         // terminal; `force_terminal` overrides it.
         let target = match &file {
@@ -894,7 +1117,7 @@ impl Console {
                 std::env::var("COLUMNS")
                     .ok()
                     .and_then(|v| v.trim().parse().ok())
-                    .filter(|w: &usize| *w > 0)
+                    .filter(|w: &usize| *w > 0 && *w <= MAX_CONSOLE_WIDTH)
                     .unwrap_or(80)
             })
         });
@@ -905,11 +1128,27 @@ impl Console {
             builder = builder.height(height);
         }
         Ok(Console {
-            console: builder.build(),
+            state: Mutex::new(ConsoleState {
+                console: builder.build(),
+                recorded: Vec::new(),
+            }),
+            printer: Mutex::new(0),
+            printed: Condvar::new(),
             file,
             record,
-            recorded: Vec::new(),
         })
+    }
+
+    // `file` can refer back to the console (`file.console = console`).
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        if let Some(file) = &self.file {
+            visit.call(file)?;
+        }
+        Ok(())
+    }
+
+    fn __clear__(&mut self) {
+        self.file = None;
     }
 
     /// The file output goes to: the one given, else `sys.stdout`.
@@ -920,22 +1159,22 @@ impl Console {
 
     #[getter]
     fn width(&self) -> usize {
-        self.console.width()
+        self.state().console.width()
     }
 
     #[getter]
     fn height(&self) -> usize {
-        self.console.height()
+        self.state().console.height()
     }
 
     #[getter]
     fn is_terminal(&self) -> bool {
-        self.console.is_terminal()
+        self.state().console.is_terminal()
     }
 
     #[getter]
     fn color_system(&self) -> Option<&'static str> {
-        color_system_name(self.console.color_system())
+        color_system_name(self.state().console.color_system())
     }
 
     /// Print objects: `str` (console markup), `Text`, `Table` or `Panel`.
@@ -943,7 +1182,7 @@ impl Console {
     /// on its own lines.
     #[pyo3(signature = (*objects, sep=" ", end="\n", justify=None))]
     fn print(
-        &mut self,
+        &self,
         py: Python<'_>,
         objects: &Bound<'_, PyTuple>,
         sep: &str,
@@ -956,26 +1195,10 @@ impl Console {
             ));
         }
         let justify = self::justify(justify)?;
-        if objects.is_empty() {
-            return self.emit(py, |console| console.print_str(""));
-        }
+        // Convert everything first: that is the only Python code a print
+        // runs apart from `file.write` and `file.flush`.
+        let mut printables = Vec::new();
         let mut strings: Vec<String> = Vec::new();
-        let flush = |this: &mut Self, strings: &mut Vec<String>| -> PyResult<()> {
-            if strings.is_empty() {
-                return Ok(());
-            }
-            let content = strings.join(sep);
-            strings.clear();
-            let mut result = Ok(());
-            this.emit(py, |console| {
-                result = if justify == Justify::Default {
-                    console.try_print_str(&content)
-                } else {
-                    console.try_print_justified(&content, justify)
-                };
-            })?;
-            result.map_err(|e| MarkupError::new_err(e.to_string()))
-        };
         for object in objects.iter() {
             if object.is_instance_of::<PyString>() {
                 strings.push(object.extract()?);
@@ -995,17 +1218,39 @@ impl Console {
                     "rs_rich justifies str objects only in this first slice",
                 ));
             }
-            flush(self, &mut strings)?;
-            let renderable = renderable(&object, None)?;
-            self.emit(py, |console| console.print(renderable.as_ref()))?;
+            if !strings.is_empty() {
+                printables.push(Printable::Line(strings.join(sep)));
+                strings.clear();
+            }
+            printables.push(Printable::Renderable(renderable(&object, None, 0)?));
         }
-        flush(self, &mut strings)
+        if !strings.is_empty() || objects.is_empty() {
+            printables.push(Printable::Line(strings.join(sep)));
+        }
+        let _printing = self.start_printing(py)?;
+        for printable in printables {
+            match printable {
+                Printable::Line(content) => self.emit(py, |console| {
+                    if justify == Justify::Default {
+                        console.try_print_str(&content)
+                    } else {
+                        console.try_print_justified(&content, justify)
+                    }
+                    .map_err(|e| MarkupError::new_err(e.to_string()))
+                })?,
+                Printable::Renderable(renderable) => self.emit(py, |console| {
+                    console.print(renderable.as_ref());
+                    Ok(())
+                })?,
+            }
+        }
+        Ok(())
     }
 
     /// Draw a horizontal rule, with an optional (markup) title.
     #[pyo3(signature = (title="", *, characters="─", style=None))]
     fn rule(
-        &mut self,
+        &self,
         py: Python<'_>,
         title: &str,
         characters: &str,
@@ -1020,29 +1265,35 @@ impl Console {
         if let Some(style) = resolved_style(style)? {
             rule = rule.style(style);
         }
-        self.emit(py, |console| console.print(&rule))
+        let _printing = self.start_printing(py)?;
+        self.emit(py, |console| {
+            console.print(&rule);
+            Ok(())
+        })
     }
 
     /// The recorded output as plain text (or with ANSI styles), as
     /// `Console(record=True).export_text()`.
     #[pyo3(signature = (*, clear=true, styles=false))]
-    fn export_text(&mut self, clear: bool, styles: bool) -> PyResult<String> {
+    fn export_text(&self, clear: bool, styles: bool) -> PyResult<String> {
         if !self.record {
             return Err(PyRuntimeError::new_err(
                 "To export console contents set record=True in the constructor or instance",
             ));
         }
+        let mut state = self.state();
         let text = if styles {
-            self.console.segments_to_string(&self.recorded)
+            state.console.segments_to_string(&state.recorded)
         } else {
-            self.recorded
+            state
+                .recorded
                 .iter()
                 .filter(|segment| !segment.control)
                 .map(|segment| segment.text.as_str())
                 .collect()
         };
         if clear {
-            self.recorded.clear();
+            state.recorded.clear();
         }
         Ok(text)
     }

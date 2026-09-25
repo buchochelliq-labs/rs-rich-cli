@@ -20,7 +20,7 @@ Every argument is keyword-only.
 | Argument | Default | Meaning |
 |---|---|---|
 | `file` | `None` | A text file to write to. `None` means `sys.stdout`, looked up at each print, so redirecting `sys.stdout` later still works. |
-| `width` | `None` | Columns to render in. `None`: for a file that is not a terminal, `$COLUMNS` or 80, as in Rich; on a terminal, its width. |
+| `width` | `None` | Columns to render in, at most 65536; a larger width is a `ValueError`. `None`: for a file that is not a terminal, `$COLUMNS` (when it is at most 65536) or 80, as in Rich; on a terminal, its width. |
 | `height` | `None` | Rows. `None`: the terminal's height. |
 | `color_system` | `"auto"` | `"auto"` detects from the terminal. Otherwise `"standard"`, `"256"`, `"truecolor"`, `"windows"`, or `None` for no colour. Anything else is a `ValueError`. |
 | `force_terminal` | `None` | Treat `file` as a terminal (`True`) or not (`False`). `None` asks `file.isatty()`. A file that is not a terminal gets no colour unless `color_system` names one. |
@@ -122,8 +122,14 @@ print(repr(out.getvalue()))
 '\x1b[1mb\x1b[0m \x1b[31mr\x1b[0m\n'
 ```
 
+After writing, `print` calls `file.flush()`, as Rich does after every print,
+so output appears at once even on a buffered file. A `file` therefore needs
+a `flush` method as well as `write`: without one, `print` writes and then
+raises `AttributeError`, as in Rich. `rule` flushes too.
+
 **Errors:**
 - Markup that does not parse raises `rs_rich.errors.MarkupError`.
+- Errors raised by `file.write` or `file.flush` propagate.
 - Other objects (a `dict`, a `list`, your own class) raise
   `NotImplementedError`.
 - `end` other than `"\n"`, and `justify` with a non-string object, raise
@@ -200,4 +206,34 @@ print(rs_rich.get_console() is rs_rich.get_console())
 ```text
 from the global console 1
 True
+```
+
+## Threads
+
+A `Console`, and every other `rs_rich` object, can be used from any thread,
+including `rs_rich.print` from a worker thread. Each `print` or `rule` writes
+all its output before another thread's print on the same console starts, so
+lines from different threads never interleave. A thread waiting for its turn
+releases the GIL.
+
+A `print` to a console from inside that console's own `file.write` (or
+`flush`) raises `RuntimeError` ("Console is already printing") instead of
+waiting for itself.
+
+```python
+import io
+import threading
+from rs_rich.console import Console
+
+console = Console(file=io.StringIO(), width=20)
+workers = [threading.Thread(target=console.print, args=(f"worker {n}",)) for n in range(3)]
+for worker in workers:
+    worker.start()
+for worker in workers:
+    worker.join()
+print(sorted(console.file.getvalue().splitlines()))
+```
+
+```text
+['worker 0', 'worker 1', 'worker 2']
 ```
