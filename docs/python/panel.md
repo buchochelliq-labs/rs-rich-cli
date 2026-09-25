@@ -20,14 +20,14 @@ Panel(renderable, box=ROUNDED, *, title=None, title_align="center",
 |---|---|
 | `renderable` | Any renderable: a `str` (markup), [`Text`](text.md), [`Table`](table.md), another `Panel`, or [your own class](protocol.md). Anything else raises `NotRenderableError` when the panel is printed. |
 | `box` | A [box constant](box-markup-errors.md#boxes). The default is `box.ROUNDED`, and `None` is a `ValueError`. |
-| `title`, `subtitle` | Markup drawn in the top and bottom borders. A `title` may also be a [`Text`](text.md); a `Text` subtitle raises `NotImplementedError` (core's panel takes a markup subtitle). |
+| `title`, `subtitle` | Markup drawn in the top and bottom borders, or a [`Text`](text.md), drawn as it is. |
 | `title_align`, `subtitle_align` | `"left"`, `"center"` or `"right"`; anything else is a `ValueError`. |
 | `expand` | Fill the available width. `False` fits the content; see [`Panel.fit`](#fit). |
 | `style` | A style for the whole panel, content included. |
 | `border_style` | A style for the border. |
 | `width`, `height` | A fixed width or height in cells. |
 | `highlight` | Highlight a `str` child, as the console highlights printed strings. |
-| `safe_box` | Accepted; it only matters on legacy Windows consoles. |
+| `safe_box` | Replace boxes a legacy Windows console cannot draw (`None`: the console's setting). |
 | `padding` | Space inside the border: `n`, `(vertical, horizontal)` or `(top, right, bottom, left)`. The default is `(0, 1)`. Other shapes, and any side above 65536, raise `ValueError`. |
 
 A `str` inside a panel is markup but is not highlighted unless
@@ -65,6 +65,23 @@ console.print(Panel("Hello, [bold]World[/]!", title="Greeting", subtitle="rs_ric
 ╭───────── Greeting ─────────╮
 │ Hello, World!              │
 ╰───────── rs_rich ──────────╯
+```
+
+A `Text` title or subtitle keeps its own styles:
+
+```python
+from rs_rich.console import Console
+from rs_rich.panel import Panel
+from rs_rich.text import Text
+
+Console(width=30).print(Panel("body", title=Text("Title", style="bold"),
+                              subtitle=Text("page 1"), subtitle_align="right"))
+```
+
+```text
+╭────────── Title ───────────╮
+│ body                       │
+╰─────────────────── page 1 ─╯
 ```
 
 ## fit

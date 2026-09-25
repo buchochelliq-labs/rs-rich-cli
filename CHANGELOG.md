@@ -274,8 +274,8 @@ Rust crates); 850+ tests and every documentation example run in CI.
   returns the exit code. `rs-rich-cli` gains a library target (`run`,
   `run_embedded`); `--batch` workers and `--watch` restart through the host's
   command. In the `lumis` build the command line has the lumis highlighter too.
-- **Rendered by core.** `Rule`, `Tree`, `Columns`, `Syntax` (all but negative
-  line numbers and ranges), `Text.from_ansi`/`with_indent_guides` and the
+- **Rendered by core.** `Rule`, `Tree`, `Columns`, `Syntax` (every option,
+  and `Syntax.highlight`), `Text.from_ansi`/`with_indent_guides` and the
   spinner table now render through core's, replacing the bindings' ports;
   output is unchanged against Rich. Code highlighters gain an optional
   `token_style(theme, token)` for line numbers and indent guides.
@@ -283,13 +283,55 @@ Rust crates); 850+ tests and every documentation example run in CI.
   table (`spinner_names`, `spinner_frames`), `Console` `Clone + Sync`,
   `render_str_with`, `Json::with_options`, `export_*_with`,
   `set_window_title`, console `tab_size` and `emoji_variant`.
+- **The last API gaps.** `Table` takes every Rich option: `width`,
+  `min_width`, `show_footer` with column `footer`/`footer_style`, `leading`,
+  `row_styles`, `header_style`/`footer_style`/`title_style`/`caption_style`,
+  `title_justify`/`caption_justify`, `safe_box`, `Text` titles and captions,
+  headers and footers of any renderable, `add_row(style=, end_section=)` and
+  `add_section()`; a row with more cells than columns adds columns, as in
+  Rich. `Panel` takes a `Text` subtitle, and `safe_box` is honoured.
+  `Syntax` negative `start_line`, `line_range` and `stylize_range` positions
+  render through core. `Layout.refresh_screen`, `Console.update_screen` and
+  `update_screen_lines` redraw part of the alternate screen. None of these
+  raises `NotImplementedError` any more; each is byte-compared with Rich.
 - **Known differences** are listed in
   [Compatibility](docs/python/compatibility.md): Pygments versus syntect
-  colours, a few `Table` options core lacks, no Jupyter output.
+  colours, no Jupyter output.
 - **Docs and CI.** A page per module under `docs/python/` (and `ext/`), each
   example run by `test_docs.py`; the Rust oracle for the art and Mermaid tests
   lives in `crates/rich-py/oracles`; `python.yml` builds the `rich` binary for
   the CLI comparison, installs Pillow, and lints the `mmdc` build.
+
+### Core: the last Rich API gaps (0.0.12 workstream 8)
+
+Faithful ports of rich 15.0.0, each proved by goldens captured from real
+Rich (`API_GAP_CASES` in `scripts/capture_golden.py`, `golden/api_gaps.tsv`,
+`tests/golden_api_gaps.rs`).
+
+- **`Table`**: `width` (implies `expand`) and `min_width`, in rendering and
+  in `__rich_measure__`; `show_footer` with column `footer` and
+  `footer_style` (`column_footer`, `column_footer_fill`) and a table
+  `footer_style`; `leading` (the box's new `RowLevel::Mid` row, repeated on
+  one line as upstream does); alternating `row_styles`, per-row `style`
+  (whitespace dividers take its background) and sections (`add_row_with`,
+  `add_section`, `end_section`); `header_style` as a theme-resolved
+  `StyleType`; `title_style`, `caption_style`, `title_justify`,
+  `caption_justify`, `Text` titles and captions (`title_text`,
+  `caption_text`); `safe_box`; headers of any `Cell` (`add_column_cell`);
+  the first and last rows drawn take the box's head and foot glyphs; a row
+  with more cells than columns adds columns; `row_count`, `get_row_style`.
+- **`Panel`**: `subtitle_as_text` and `safe_box`.
+- **`Box::substitute`** keeps every ASCII box (`ASCII2`, `ASCII_DOUBLE_HEAD`,
+  `MARKDOWN`) on an ASCII-only console, as upstream's `ascii` flag does.
+- **`Syntax`**: `start_line`, `line_range`, `highlight_lines` and
+  `stylize_range` positions are signed (`i64`), with upstream's Python
+  semantics (a start of 0 or less is the first line, a negative end counts
+  back, negative positions index from the end); `highlight_range` ports
+  `Syntax.highlight(code, line_range)`.
+- **`Layout::refresh_screen`**, with `Console::set_alt_screen`,
+  `is_alt_screen`, `update_screen`, `update_screen_lines`, `ScreenUpdate` and
+  `RichError::NoAltScreen`. `Console::control` now records into a capture,
+  as upstream buffers control codes.
 
 ### Native image sizing (0.0.12 workstream 6: #519)
 

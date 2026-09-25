@@ -40,6 +40,7 @@ from rich.markdown import Markdown
 from rich.measure import Measurement
 from rich.padding import Padding
 from rich.panel import Panel
+from rich.region import Region
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 from rich.progress_bar import ProgressBar
 
@@ -2930,6 +2931,7 @@ def main() -> None:
 
     capture_core_gaps()
     capture_upstream_features()
+    capture_api_gaps()
 
 
 # --- core gaps (bindings foundation) ------------------------------------------
@@ -3489,6 +3491,278 @@ def capture_upstream_features() -> None:
         lines.append(f"{name}\t{json.dumps(build(), ensure_ascii=False)}")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(UPSTREAM_FEATURE_CASES)} upstream feature cases to {path}")
+
+
+
+# --- API gaps (the last Rich options core lacked) ------------------------------
+# One fixture, `api_gaps.tsv`: `name<TAB>json(output)`, built with the same
+# `_cg_*` consoles. Table's width / footers / leading / row styles / sections /
+# annotation styles, Panel's Text subtitle and safe_box, Syntax's signed
+# `start_line` and `line_range`, and `Layout.refresh_screen`;
+# `tests/golden_api_gaps.rs` has a Rust builder per name.
+
+
+class _AsciiFile(io.StringIO):
+    """A file whose encoding is ASCII, so the console is `ascii_only`."""
+
+    @property
+    def encoding(self) -> str:  # type: ignore[override]
+        return "ascii"
+
+
+def _ag_table(**options) -> Table:
+    table = Table(**options)
+    table.add_column("Name", "Total", footer_style="green")
+    table.add_column("Qty", "12", justify="right")
+    table.add_row("apple", "3")
+    table.add_row("banana split", "4")
+    table.add_row("cherry", "5")
+    return table
+
+
+def _ag_ratio_table(width: int) -> Table:
+    table = Table(width=width)
+    table.add_column("fixed")
+    table.add_column("one", ratio=1)
+    table.add_column("two", ratio=2)
+    table.add_row("a", "b", "c")
+    return table
+
+
+def _ag_sections() -> Table:
+    table = Table(title="Sections", show_footer=True)
+    table.add_column("a", "A")
+    table.add_column("b", "B")
+    table.add_row("1", "one", end_section=True)
+    table.add_row("2", "two", style="on blue")
+    table.add_section()
+    table.add_row("3", "three", style="bold")
+    table.add_row("4", "four")
+    return table
+
+
+def _ag_extra_cells() -> Table:
+    table = Table()
+    table.add_column("x")
+    table.add_row("1")
+    table.add_row("2", "extra", "more")
+    return table
+
+
+def _ag_annotations(**options) -> Table:
+    table = Table(title="The [b]title[/b]", caption="a caption", **options)
+    table.add_column("column one")
+    table.add_column("two")
+    table.add_row("x", "y")
+    return table
+
+
+def _ag_print_all(console: Console, *renderables) -> str:
+    return "".join(_cg_print(console, renderable) for renderable in renderables)
+
+
+def _ag_syntax(**options) -> Syntax:
+    return Syntax(_UF_CODE, "text", theme="ansi_dark", **options)
+
+
+_AG_SYNTAX_OPTIONS = [
+    {"line_numbers": True, "start_line": 0},
+    {"line_numbers": True, "start_line": -3, "highlight_lines": {-2, 0}},
+    {"line_numbers": True, "start_line": -12},
+    {"line_numbers": True, "line_range": (0, 2)},
+    {"line_numbers": True, "line_range": (-2, 3)},
+    {"line_numbers": True, "line_range": (2, -1)},
+    {"line_numbers": True, "line_range": (1, -2)},
+    {"line_numbers": True, "line_range": (None, -1)},
+    {"line_numbers": True, "line_range": (3, 0)},
+    {"line_numbers": True, "line_range": (None, None)},
+    {"line_numbers": True, "line_range": (4, 99)},
+    {"line_range": (2, -1)},
+    {"line_range": (-5, None), "word_wrap": True},
+    {"line_numbers": True, "start_line": -1, "line_range": (2, 4), "word_wrap": True},
+]
+
+
+def _ag_stylized() -> Syntax:
+    syntax = _ag_syntax(line_numbers=True)
+    syntax.stylize_range("bold", (-1, 2), (2, 3))
+    syntax.stylize_range("reverse", (2, -4), (3, 2))
+    syntax.stylize_range("underline", (0, 1), (1, 3))
+    syntax.stylize_range("italic", (-3, 0), (1, 1))
+    syntax.stylize_range("on blue", (4, -30), (5, -1), style_before=True)
+    return syntax
+
+
+def _ag_layout() -> Layout:
+    layout = Layout(name="root")
+    layout.split_row(
+        Layout(Panel("left"), name="a"),
+        Layout(name="right"),
+    )
+    layout["right"].split_column(Layout("top", name="b"), Layout("bottom", name="c"))
+    return layout
+
+
+def _ag_refresh_screen() -> str:
+    console = _cg_console(20, height=6, file=io.StringIO())
+    layout = _ag_layout()
+    out = []
+    with console.capture() as capture:
+        console.print(layout)
+        try:
+            layout.refresh_screen(console, "b")
+        except Exception as error:  # upstream raises NoAltScreen
+            out.append(f"<{type(error).__name__}>")
+    out.append(capture.get())
+    with console.capture() as capture:
+        console.set_alt_screen(True)
+        console.print(layout)
+        layout["b"].update(Text("changed", style="bold"))
+        layout.refresh_screen(console, "b")
+        layout["a"].update(Panel("new", title="t"))
+        layout.refresh_screen(console, "a")
+        try:
+            layout.refresh_screen(console, "right")
+        except KeyError:
+            out.append("<KeyError>")
+        console.update_screen(Text("region"), region=Region(3, 1, 6, 2))
+        console.set_alt_screen(False)
+    out.append(capture.get())
+    return "".join(out)
+
+
+API_GAP_CASES = [
+    # Table: width and min_width
+    ("table_width", lambda: _ag_print_all(
+        _cg_console(50),
+        _ag_table(width=30),
+        _ag_table(width=12),
+        _ag_table(width=45, show_edge=False),
+        _ag_table(width=10, box=None),
+    )),
+    ("table_width_ratio", lambda: _ag_print_all(_cg_console(50), _ag_ratio_table(40))),
+    ("table_min_width", lambda: _ag_print_all(
+        _cg_console(50),
+        _ag_table(min_width=40),
+        _ag_table(min_width=5),
+        _ag_table(min_width=80),
+        _ag_table(min_width=30, expand=True),
+    )),
+    ("table_width_measure", lambda: _ag_print_all(
+        _cg_console(50),
+        Panel.fit(_ag_table(width=28)),
+        Panel.fit(_ag_table(min_width=36)),
+        Columns([_ag_table(width=20), _ag_table(min_width=24)]),
+    )),
+    # Table: footers
+    ("table_footer", lambda: _ag_print_all(
+        _cg_console(40),
+        _ag_table(show_footer=True),
+        _ag_table(show_footer=True, show_edge=False),
+        _ag_table(show_footer=True, show_lines=True),
+        _ag_table(show_footer=True, box=None),
+        _ag_table(show_footer=True, show_header=False, box=box.SIMPLE),
+        _ag_table(show_footer=True, footer_style="italic red", box=box.DOUBLE_EDGE),
+        _ag_table(show_footer=True, footer_style=None, padding=(1, 1)),
+        _ag_table(show_footer=True, box=box.MINIMAL_DOUBLE_HEAD, pad_edge=False),
+    )),
+    # Table: leading and sections
+    ("table_leading", lambda: _ag_print_all(
+        _cg_console(40),
+        _ag_table(leading=1),
+        _ag_table(leading=2, width=18),
+        _ag_table(leading=1, show_footer=True, show_edge=False),
+        _ag_table(leading=1, box=box.SIMPLE),
+    )),
+    ("table_sections", lambda: _ag_print_all(_cg_console(40), _ag_sections())),
+    # Table: row styles
+    ("table_row_styles", lambda: _ag_print_all(
+        _cg_console(40),
+        _ag_table(row_styles=["", "on blue"]),
+        _ag_table(row_styles=["red", "green", "italic"], box=box.SIMPLE),
+        _ag_table(row_styles=["on red"], box=box.MINIMAL, show_footer=True),
+    )),
+    ("table_row_style_markup", lambda: _ag_print_all(
+        _cg_console(40, theme=RichTheme({"zebra": "on magenta"})),
+        _ag_table(row_styles=["zebra", "none"], header_style="zebra"),
+    )),
+    # Table: header / footer / title / caption styles and justification
+    ("table_header_style", lambda: _ag_print_all(
+        _cg_console(40),
+        _ag_table(header_style="magenta"),
+        _ag_table(header_style=None),
+        _ag_table(header_style="bold on blue", show_footer=True, footer_style="underline"),
+    )),
+    ("table_annotation_styles", lambda: _ag_print_all(
+        _cg_console(40),
+        _ag_annotations(title_style="bold red", caption_style="green"),
+        _ag_annotations(title_justify="left", caption_justify="right"),
+        _ag_annotations(title_justify="right", caption_justify="left"),
+        _ag_annotations(title_justify="full", caption_justify="full", width=16),
+        _ag_annotations(title_justify="default"),
+    )),
+    ("table_text_annotations", lambda: _ag_print_all(
+        _cg_console(40),
+        Table("a", "b", title=Text("Text title", style="blue"), caption=Text("right", justify="right"), title_style="red"),
+        Table("a", title=Text("t", justify="left"), title_justify="right", caption=Text("")),
+    )),
+    # Table: rows longer than the table add columns
+    ("table_extra_cells", lambda: _ag_print_all(_cg_console(40), _ag_extra_cells())),
+    # Table / Panel: safe_box on a legacy Windows console
+    ("safe_box", lambda: _ag_print_all(
+        _cg_console(30, legacy_windows=True, safe_box=True),
+        _ag_table(),
+        _ag_table(safe_box=False),
+        Panel("p"),
+        Panel("p", safe_box=False),
+    ) + _ag_print_all(
+        _cg_console(30, legacy_windows=True, safe_box=False),
+        _ag_table(safe_box=True),
+        Panel("p", safe_box=True),
+        Panel("p", box=box.HEAVY),
+    )),
+    # Box substitution keeps ASCII boxes on an ASCII-only console
+    ("ascii_boxes", lambda: _ag_print_all(
+        _cg_console(30, file=_AsciiFile()),
+        _ag_table(box=box.ASCII2),
+        _ag_table(box=box.ASCII_DOUBLE_HEAD),
+        _ag_table(box=box.MARKDOWN),
+        _ag_table(box=box.ROUNDED),
+        Panel("p", box=box.ASCII2),
+    )),
+    # Panel: Text subtitles
+    ("panel_text_subtitle", lambda: _ag_print_all(
+        _cg_console(30),
+        Panel("body", subtitle=Text("sub", style="bold red")),
+        Panel("body", subtitle=Text.assemble(("a", "green"), " b\nc"), subtitle_align="left", border_style="blue"),
+        Panel("body", title=Text("T", style="italic"), subtitle=Text("S"), title_align="right", subtitle_align="right"),
+        Panel.fit("body", subtitle=Text("a long subtitle here")),
+        Panel("body", subtitle=Text("")),
+    )),
+    # Syntax: signed start_line and line_range
+    ("syntax_signed_lines", lambda: "".join(
+        _cg_print(_cg_console(30), _ag_syntax(**options)) for options in _AG_SYNTAX_OPTIONS
+    )),
+    ("syntax_signed_stylize", lambda: _cg_print(_cg_console(30), _ag_stylized())),
+    ("syntax_highlight_range", lambda: "".join(
+        _cg_print(_cg_console(40), repr(_ag_syntax().highlight(_UF_CODE, line_range=line_range).plain), markup=False)
+        + _cg_print(_cg_console(40), _ag_syntax(background_color="red").highlight(_UF_CODE, line_range=line_range))
+        for line_range in [None, (-1, -2), (2, -1), (0, 0), (None, -1), (3, None)]
+    )),
+    # Layout.refresh_screen and Console.update_screen
+    ("layout_refresh_screen", _ag_refresh_screen),
+]
+
+
+def capture_api_gaps() -> None:
+    path = golden_dir() / "api_gaps.tsv"
+    lines = [
+        "# name\tjson(expected output) — see API_GAP_CASES in scripts/capture_golden.py"
+    ]
+    for name, build in API_GAP_CASES:
+        lines.append(f"{name}\t{json.dumps(build(), ensure_ascii=False)}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(API_GAP_CASES)} API gap cases to {path}")
 
 
 if __name__ == "__main__":

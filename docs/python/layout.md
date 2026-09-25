@@ -144,7 +144,13 @@ console.print(layout.tree)
     └── ⬍ Layout(name='right', ratio=2)
 ```
 
-`Layout.refresh_screen` raises `NotImplementedError`: the bindings' console
-cannot redraw part of the screen. Print the layout again, or show it in a
-`Live` display, instead. A custom `Splitter` subclass also raises
-`NotImplementedError`; the row and column splitters are supported.
+`layout.refresh_screen(console, name)` renders the leaf called `name` again,
+into the region it had when the layout was last printed, and writes it over
+that part of the alternate screen (`console.set_alt_screen(True)`, or a
+`Screen`), as Rich does. Outside the alternate screen it raises
+`NoAltScreen`, and a name that was not a leaf of the last render raises
+`KeyError`. `Console.update_screen(renderable, region=...)` and
+`Console.update_screen_lines(lines, x, y)` are there too.
+
+A custom `Splitter` subclass raises `NotImplementedError`; the row and column
+splitters are supported.

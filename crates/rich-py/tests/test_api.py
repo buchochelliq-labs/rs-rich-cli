@@ -72,9 +72,6 @@ def test_errors():
         Style.parse("bold not-a-colour")
     with pytest.raises(RuntimeError, match="record=True"):
         Console(file=io.StringIO()).export_text()
-    with pytest.raises(ValueError, match="too many values"):
-        table = Table("one")
-        table.add_row("a", "b")
     with pytest.raises(TypeError):
         Panel("x", box="rounded")
 

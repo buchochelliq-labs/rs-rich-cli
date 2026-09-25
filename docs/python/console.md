@@ -421,6 +421,10 @@ Measurement(minimum=5, maximum=11)
 `clear(home=True)`, `bell()`, `show_cursor(show=True)` and
 `set_alt_screen(enable=True)` write control codes, on a terminal only;
 `show_cursor` and `set_alt_screen` return whether they did.
+In the alternate screen, `update_screen(renderable, region=(x, y, width,
+height))` and `update_screen_lines(lines, x, y)` redraw part of it, as
+[`Layout.refresh_screen`](layout.md) does; outside it they raise
+`NoAltScreen`.
 
 `set_window_title(title)` sets the terminal's title (on a terminal only, and
 returns whether it did).

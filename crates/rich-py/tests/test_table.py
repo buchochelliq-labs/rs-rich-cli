@@ -82,9 +82,16 @@ def test_cells_are_markup_text_or_empty():
     assert table.row_count == 1
 
 
-def test_too_many_cells():
-    with pytest.raises(ValueError, match="too many values"):
-        Table("a").add_row("1", "2")
+def test_too_many_cells_add_columns():
+    table = Table("a")
+    table.add_row("1", "2")
+    assert render(table) == (
+        "┏━━━┳━━━┓\n"
+        "┃ a ┃   ┃\n"
+        "┡━━━╇━━━┩\n"
+        "│ 1 │ 2 │\n"
+        "└───┴───┘\n"
+    )
 
 
 def test_renderable_cells():

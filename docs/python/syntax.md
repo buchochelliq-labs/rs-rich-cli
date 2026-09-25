@@ -24,8 +24,8 @@ Syntax(code, lexer, *, theme="monokai", dedent=False, line_numbers=False,
 | `lexer` | A language name or file extension (`"python"`, `"rs"`). An unknown one is plain text. |
 | `theme` | A theme name of the code highlighter ([Themes](#themes)). |
 | `dedent` | Remove common leading whitespace first. |
-| `line_numbers`, `start_line` | Number the lines, starting at `start_line`. |
-| `line_range` | `(first, last)` lines to show (1-based; either may be `None`). |
+| `line_numbers`, `start_line` | Number the lines, starting at `start_line` (any integer, zero and negative included, as in Rich). |
+| `line_range` | `(first, last)` lines to show (1-based; either may be `None`). As in Rich, a first line of 0 or less is the first line, and a negative last line counts back from the end. |
 | `highlight_lines` | Line numbers to mark with `❱`. |
 | `code_width` | The code's width, excluding line numbers (default: all available). |
 | `tab_size` | Tab stops, in characters. |
@@ -57,6 +57,21 @@ console.print(Syntax(code, "python", line_range=(2, 3), indent_guides=True))
   5                                         
 │   if n < 2:                               
 │   │   return n                            
+```
+
+Line numbers and ranges take Rich's signed values: here the numbering starts
+at -1, and the range runs from the second line to one before the last.
+
+```python
+from rs_rich.console import Console
+from rs_rich.syntax import Syntax
+
+code = "x = 1\ny = 2\nz = 3\n"
+Console(width=30).print(Syntax(code, "python", line_numbers=True, start_line=-1, line_range=(2, -1)))
+```
+
+```text
+  0 y = 2                     
 ```
 
 ## Methods

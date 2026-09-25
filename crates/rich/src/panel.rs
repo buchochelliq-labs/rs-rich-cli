@@ -25,7 +25,11 @@ pub struct Panel {
     title_value: Option<Text>,
     title_align: HorizontalAlign,
     subtitle: Option<String>,
+    /// A literal subtitle (upstream `Panel(subtitle=Text(…))`).
+    subtitle_value: Option<Text>,
     subtitle_align: HorizontalAlign,
+    /// `None` takes the console's `safe_box` (upstream `safe_box`).
+    safe_box: Option<bool>,
     padding: (usize, usize, usize, usize),
     border_style: StyleType,
     style: StyleType,
@@ -45,7 +49,9 @@ impl Panel {
             title_value: None,
             title_align: HorizontalAlign::Center,
             subtitle: None,
+            subtitle_value: None,
             subtitle_align: HorizontalAlign::Center,
+            safe_box: None,
             padding: (0, 1, 0, 1),
             border_style: StyleType::Style(Style::new()),
             style: StyleType::Style(Style::new()),
@@ -98,6 +104,20 @@ impl Panel {
     /// Set a subtitle (drawn into the bottom border, centered by default).
     pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self {
         self.subtitle = Some(subtitle.into());
+        self
+    }
+
+    /// Set a literal [`Text`] subtitle (upstream `Panel(subtitle=Text(…))`):
+    /// no markup is parsed. Replaces a [`subtitle`](Self::subtitle).
+    pub fn subtitle_as_text(mut self, subtitle: Text) -> Self {
+        self.subtitle_value = Some(subtitle);
+        self
+    }
+
+    /// Whether to substitute boxes a legacy Windows console cannot draw
+    /// (upstream `safe_box`; `None`, the default, takes the console's).
+    pub fn safe_box(mut self, safe_box: Option<bool>) -> Self {
+        self.safe_box = safe_box;
         self
     }
 
@@ -245,6 +265,17 @@ impl Panel {
             .map(label_text)
     }
 
+    /// The subtitle as `Panel._subtitle` builds it, when there is one.
+    fn subtitle_text(&self) -> Option<Text> {
+        if let Some(subtitle) = &self.subtitle_value {
+            return (!subtitle.plain().is_empty()).then(|| label_from_text(subtitle));
+        }
+        self.subtitle
+            .as_deref()
+            .filter(|subtitle| !subtitle.is_empty())
+            .map(label_text)
+    }
+
     /// `Measurement.get` of the child wrapped in upstream's
     /// `Padding(renderable, padding)` (only when there is any padding).
     fn measure_padded_child(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
@@ -294,7 +325,7 @@ impl Renderable for Panel {
         // Fall back to a terminal-safe box on legacy Windows / non-UTF-8.
         let box_set = self.box_set.substitute(
             console.legacy_windows(),
-            console.safe_box(),
+            self.safe_box.unwrap_or_else(|| console.safe_box()),
             console.ascii_only(),
         );
         // The padded child fills `width - 2`, or, when not expanding, its
@@ -392,19 +423,14 @@ impl Renderable for Panel {
         }
 
         // Bottom border (with subtitle if present).
-        rows.push(
-            self.border_line(
-                console,
-                &border_style,
-                inner_width,
-                (box_set.bottom_left, box_set.bottom, box_set.bottom_right),
-                self.subtitle
-                    .as_deref()
-                    .filter(|subtitle| !subtitle.is_empty())
-                    .map(label_text),
-                self.subtitle_align,
-            ),
-        );
+        rows.push(self.border_line(
+            console,
+            &border_style,
+            inner_width,
+            (box_set.bottom_left, box_set.bottom, box_set.bottom_right),
+            self.subtitle_text(),
+            self.subtitle_align,
+        ));
 
         join_rows(rows)
     }

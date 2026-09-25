@@ -300,15 +300,68 @@ def test_table_and_panel_options():
     compare(tables_and_panels)
 
 
-def test_table_options_core_lacks_are_refused():
-    from rs_rich.table import Table
+def table_api(m):
+    box = importlib.import_module(f"{m.console.__name__.split('.')[0]}.box")
+    theme = importlib.import_module(f"{m.console.__name__.split('.')[0]}.theme")
+    c = make(m, width=44, theme=theme.Theme({"zebra": "on magenta"}))
 
-    for options in [{"width": 30}, {"show_footer": True}, {"leading": 1}, {"row_styles": ["dim"]},
-                    {"title_justify": "left"}, {"header_style": "red"}]:
-        with pytest.raises(NotImplementedError):
-            Table("a", **options)
-    table = Table("a")
-    with pytest.raises(NotImplementedError):
-        table.add_row("x", end_section=True)
-    with pytest.raises(NotImplementedError):
-        table.add_section()
+    def table(**options):
+        t = m.table.Table(**options)
+        t.add_column("Name", "Total", footer_style="green")
+        t.add_column("Qty", m.text.Text("12", style="bold"), justify="right")
+        t.add_row("apple", "3")
+        t.add_row("banana split", "4", style="italic")
+        t.add_row("cherry", "5", end_section=True)
+        t.add_row("date", "6")
+        return t
+
+    for options in [
+        {"width": 30},
+        {"width": 12},
+        {"min_width": 40},
+        {"min_width": 36, "expand": True},
+        {"show_footer": True},
+        {"show_footer": True, "show_edge": False, "box": box.SIMPLE},
+        {"show_footer": True, "footer_style": None, "header_style": None},
+        {"leading": 1},
+        {"leading": 1, "show_footer": True, "box": box.MINIMAL},
+        {"show_lines": True, "row_styles": ["", "on blue"]},
+        {"row_styles": ["zebra", "none"], "header_style": "zebra", "box": box.SIMPLE},
+        {"title": "The [b]title", "caption": "cap", "title_style": "red", "caption_style": "green"},
+        {"title": "left", "caption": "right", "title_justify": "left", "caption_justify": "right"},
+        {"title": m.text.Text("text", style="blue"), "caption": m.text.Text("c", justify="left")},
+        {"header_style": "magenta", "footer_style": "underline", "show_footer": True},
+        {"safe_box": False},
+    ]:
+        c.print(table(**options))
+    t = table()
+    t.add_section()
+    t.add_row("extra", "7", "cells", "grow")
+    c.print(t)
+    t = m.table.Table("h", show_footer=True)
+    t.add_column(m.text.Text("b", style="red"))
+    t.add_column(m.panel.Panel.fit("p"), m.panel.Panel.fit("f"))
+    t.add_row("1", "2", "3")
+    c.print(t)
+    legacy = make(m, width=30, legacy_windows=True, safe_box=True)
+    legacy.print(table(), table(safe_box=False))
+    legacy.print(m.panel.Panel("p"), m.panel.Panel("p", safe_box=False))
+    return [c.file.getvalue(), legacy.file.getvalue()]
+
+
+def test_table_options_match_rich():
+    compare(table_api)
+
+
+def panel_subtitles(m):
+    c = make(m, width=30)
+    c.print(m.panel.Panel("body", subtitle=m.text.Text("sub", style="bold red")))
+    c.print(m.panel.Panel("body", title=m.text.Text("T"), subtitle=m.text.Text("S\ns"),
+                          subtitle_align="left", border_style="blue"))
+    c.print(m.panel.Panel.fit("body", subtitle=m.text.Text("a long subtitle here"), subtitle_align="right"))
+    c.print(m.panel.Panel("body", subtitle=m.text.Text("")))
+    return c.file.getvalue()
+
+
+def test_panel_text_subtitles_match_rich():
+    compare(panel_subtitles)

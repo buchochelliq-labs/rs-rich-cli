@@ -2,7 +2,7 @@
 //!
 //! Owner: the foundation.
 
-use pyo3::exceptions::{PyNotImplementedError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyString;
 use pyo3::{PyTraverseError, PyVisit};
@@ -34,7 +34,9 @@ fn title_arg(value: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Title>> {
     }
     match value.extract::<String>() {
         Ok(markup) => Ok(Some(Title::Markup(markup))),
-        Err(_) => Err(PyTypeError::new_err("a title must be a str or a Text")),
+        Err(_) => Err(PyTypeError::new_err(
+            "a title or subtitle must be a str or a Text",
+        )),
     }
 }
 
@@ -45,8 +47,9 @@ pub(crate) struct Panel {
     box_set: CoreBox,
     title: Option<Title>,
     title_align: HorizontalAlign,
-    subtitle: Option<String>,
+    subtitle: Option<Title>,
     subtitle_align: HorizontalAlign,
+    safe_box: Option<bool>,
     expand: bool,
     style: Option<CoreStyle>,
     border_style: Option<CoreStyle>,
@@ -69,6 +72,7 @@ impl AsRenderable for Panel {
             .expand(self.expand)
             .title_align(self.title_align)
             .subtitle_align(self.subtitle_align)
+            .safe_box(self.safe_box)
             .padding(self.padding);
         match &self.title {
             Some(Title::Markup(title)) => panel = panel.title(title.clone()),
@@ -84,8 +88,10 @@ impl AsRenderable for Panel {
         if self.highlight {
             panel = panel.highlight(true);
         }
-        if let Some(subtitle) = &self.subtitle {
-            panel = panel.subtitle(subtitle.clone());
+        match &self.subtitle {
+            Some(Title::Markup(subtitle)) => panel = panel.subtitle(subtitle.clone()),
+            Some(Title::Text(subtitle)) => panel = panel.subtitle_as_text(subtitle.clone()),
+            None => {}
         }
         if let Some(style) = &self.border_style {
             panel = panel.border_style(style.clone());
@@ -105,7 +111,7 @@ impl Panel {
         subtitle_align="center", safe_box=None, expand=true, style=None, border_style=None,
         width=None, height=None, padding=None, highlight=false
     ))]
-    #[allow(clippy::too_many_arguments, unused_variables)]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         renderable: Py<PyAny>,
         r#box: BoxArg,
@@ -122,14 +128,6 @@ impl Panel {
         padding: Option<&Bound<'_, PyAny>>,
         highlight: bool,
     ) -> PyResult<Self> {
-        let subtitle =
-            match title_arg(subtitle)? {
-                None => None,
-                Some(Title::Markup(markup)) => Some(markup),
-                Some(Title::Text(_)) => return Err(PyNotImplementedError::new_err(
-                    "rs_rich's Panel takes a str subtitle only: core's Panel has no Text subtitle",
-                )),
-            };
         Ok(Panel {
             renderable: Some(renderable),
             box_set: r#box
@@ -137,8 +135,9 @@ impl Panel {
                 .ok_or_else(|| PyValueError::new_err("a Panel needs a box"))?,
             title: title_arg(title)?,
             title_align: convert::align(title_align)?,
-            subtitle,
+            subtitle: title_arg(subtitle)?,
             subtitle_align: convert::align(subtitle_align)?,
+            safe_box,
             expand,
             style: resolved_style(style)?,
             border_style: resolved_style(border_style)?,

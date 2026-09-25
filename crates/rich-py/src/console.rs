@@ -41,7 +41,12 @@ use rich::theme::Theme as CoreTheme;
 use rich::{Control, Overflow, Rule, Style as CoreStyle, StyleType, Text as CoreText};
 
 use crate::convert;
-use crate::errors::{CaptureError, MissingStyle, ThemeStackError};
+use crate::errors::{CaptureError, MissingStyle, NoAltScreen, ThemeStackError};
+
+/// Rich's `NoAltScreen` from `update_screen` / `update_screen_lines`.
+fn no_alt_screen() -> PyErr {
+    NoAltScreen::new_err("Alt screen must be enabled to call update_screen")
+}
 use crate::limits::MAX_CONSOLE_WIDTH;
 use crate::protocol::{self, ConsoleOptions, Measurement, OptionsBase};
 use crate::renderable::{self, Ambient, PyRenderable};
@@ -1808,6 +1813,81 @@ impl Console {
             self.state().is_alt_screen = enable;
         }
         Ok(changed)
+    }
+
+    /// Render `renderable` into `region` of the alternate screen (all of it
+    /// when `None`), as `Console.update_screen`.
+    #[pyo3(signature = (renderable, *, region=None, options=None))]
+    fn update_screen(
+        slf: &Bound<'_, Self>,
+        renderable: &Bound<'_, PyAny>,
+        region: Option<&Bound<'_, PyAny>>,
+        options: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<()> {
+        if !slf.get().state().is_alt_screen {
+            return Err(no_alt_screen());
+        }
+        let options = match options.filter(|o| !o.is_none()) {
+            Some(options) => options.clone(),
+            None => slf.getattr("options")?,
+        };
+        let (x, y, options) = match region.filter(|r| !r.is_none()) {
+            None => {
+                let width = options.getattr("max_width")?;
+                let height = options.getattr("height")?;
+                let height = if height.is_truthy()? {
+                    height
+                } else {
+                    slf.getattr("height")?
+                };
+                (
+                    0usize,
+                    0usize,
+                    options.call_method1("update_dimensions", (width, height))?,
+                )
+            }
+            Some(region) => {
+                let (x, y, width, height): (usize, usize, usize, usize) = region.extract()?;
+                (
+                    x,
+                    y,
+                    options.call_method1("update_dimensions", (width, height))?,
+                )
+            }
+        };
+        let kwargs = PyDict::new(slf.py());
+        kwargs.set_item("options", options)?;
+        let lines = slf.call_method("render_lines", (renderable,), Some(&kwargs))?;
+        Console::update_screen_lines(slf, &lines, x, y)
+    }
+
+    /// Write rendered lines at column `x`, row `y` of the alternate screen,
+    /// as `Console.update_screen_lines`.
+    #[pyo3(signature = (lines, x=0, y=0))]
+    fn update_screen_lines(
+        slf: &Bound<'_, Self>,
+        lines: &Bound<'_, PyAny>,
+        x: usize,
+        y: usize,
+    ) -> PyResult<()> {
+        let py = slf.py();
+        let this = slf.get();
+        if !this.state().is_alt_screen {
+            return Err(no_alt_screen());
+        }
+        let mut core_lines = Vec::new();
+        for line in lines.try_iter()? {
+            let mut core_line = Vec::new();
+            for segment in line?.try_iter()? {
+                core_line.push(segment?.cast::<segment::Segment>()?.get().to_core());
+            }
+            core_lines.push(core_line);
+        }
+        let update = rich::console::ScreenUpdate::new(core_lines, x, y);
+        let snapshot = this.snapshot(py);
+        let core = snapshot.default_core();
+        let segments = update.rich_render(&core, &core.options());
+        this.emit(py, &snapshot, segments)
     }
 
     /// Show `prompt` (markup) and read a line: `input()`, `getpass` with

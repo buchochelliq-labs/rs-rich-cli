@@ -184,9 +184,9 @@ MARKDOWN: Box
 class Table:
     def __init__(
         self,
-        *headers: str,
-        title: Optional[str] = None,
-        caption: Optional[str] = None,
+        *headers: RenderableType,
+        title: Optional[Union[str, Text]] = None,
+        caption: Optional[Union[str, Text]] = None,
         width: Optional[int] = None,
         min_width: Optional[int] = None,
         box: Optional[Box] = ...,
@@ -214,7 +214,7 @@ class Table:
     @classmethod
     def grid(
         cls,
-        *headers: str,
+        *headers: RenderableType,
         padding: Optional[PaddingDimensions] = None,
         collapse_padding: bool = True,
         pad_edge: bool = False,
@@ -222,8 +222,8 @@ class Table:
     ) -> "Table": ...
     def add_column(
         self,
-        header: str = "",
-        footer: str = "",
+        header: Optional[RenderableType] = None,
+        footer: Optional[RenderableType] = None,
         *,
         header_style: Optional[StyleType] = None,
         highlight: Optional[bool] = None,
@@ -256,7 +256,7 @@ class Panel:
         *,
         title: Optional[Union[str, Text]] = None,
         title_align: AlignMethod = "center",
-        subtitle: Optional[str] = None,
+        subtitle: Optional[Union[str, Text]] = None,
         subtitle_align: AlignMethod = "center",
         safe_box: Optional[bool] = None,
         expand: bool = True,
@@ -275,7 +275,7 @@ class Panel:
         *,
         title: Optional[Union[str, Text]] = None,
         title_align: AlignMethod = "center",
-        subtitle: Optional[str] = None,
+        subtitle: Optional[Union[str, Text]] = None,
         subtitle_align: AlignMethod = "center",
         safe_box: Optional[bool] = None,
         style: Optional[StyleType] = None,
@@ -441,6 +441,16 @@ class Console:
     def bell(self) -> None: ...
     def show_cursor(self, show: bool = True) -> bool: ...
     def set_alt_screen(self, enable: bool = True) -> bool: ...
+    def update_screen(
+        self,
+        renderable: RenderableType,
+        *,
+        region: Optional[Tuple[int, int, int, int]] = None,
+        options: Optional["ConsoleOptions"] = None,
+    ) -> None: ...
+    def update_screen_lines(
+        self, lines: List[List["Segment"]], x: int = 0, y: int = 0
+    ) -> None: ...
     def input(
         self,
         prompt: Union[str, "Text", None] = None,
@@ -1197,8 +1207,7 @@ class Layout:
     def split_column(self, *layouts: Union["Layout", RenderableType]) -> None: ...
     def unsplit(self) -> None: ...
     def update(self, renderable: RenderableType) -> None: ...
-    def refresh_screen(self, console: "Console", layout_name: str) -> None:
-        """Not supported: raises ``NotImplementedError``."""
+    def refresh_screen(self, console: "Console", layout_name: str) -> None: ...
     def render(self, console: "Console", options: "ConsoleOptions") -> Dict["Layout", LayoutRender]: ...
 
 class Bar:

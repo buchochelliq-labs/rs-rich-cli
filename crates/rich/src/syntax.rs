@@ -52,9 +52,9 @@ pub struct Syntax {
     /// `None` means [`SyntectHighlighter`].
     highlighter: Option<Arc<dyn CodeHighlighter>>,
     line_numbers: bool,
-    start_line: usize,
-    line_range: Option<(Option<usize>, Option<usize>)>,
-    highlight_lines: BTreeSet<usize>,
+    start_line: i64,
+    line_range: Option<(Option<i64>, Option<i64>)>,
+    highlight_lines: BTreeSet<i64>,
     code_width: Option<usize>,
     background_color: Option<String>,
     indent_guides: bool,
@@ -62,8 +62,9 @@ pub struct Syntax {
 }
 
 /// A `(line, column)` position in the code: 1-based line, 0-based column.
-/// Upstream's `SyntaxPosition`.
-pub type SyntaxPosition = (usize, usize);
+/// Upstream's `SyntaxPosition`: a 1-based line and a 0-based column. Both
+/// are signed, as upstream's are (see [`Syntax::stylize_range`]).
+pub type SyntaxPosition = (i64, i64);
 
 /// Upstream's `_SyntaxHighlightRange`.
 #[derive(Clone, Debug)]
@@ -191,22 +192,26 @@ impl Syntax {
         self
     }
 
-    /// The number of the first line (upstream `start_line`, default 1).
-    pub fn start_line(mut self, start_line: usize) -> Self {
+    /// The number of the first line (upstream `start_line`, default 1). Any
+    /// integer, as upstream's: zero and negative numbers are drawn as they are.
+    pub fn start_line(mut self, start_line: i64) -> Self {
         self.start_line = start_line;
         self
     }
 
     /// Render only lines `start..=end` (1-based; `None` leaves that end open).
-    /// Upstream `line_range`.
-    pub fn line_range(mut self, start: Option<usize>, end: Option<usize>) -> Self {
+    /// Upstream `line_range`, with its Python semantics: a start of 0 or less
+    /// is the first line, and a negative end counts back from the last line
+    /// (`lines[start - 1:end]`) after the highlighter has stopped at the first
+    /// line it reached.
+    pub fn line_range(mut self, start: Option<i64>, end: Option<i64>) -> Self {
         self.line_range = Some((start, end));
         self
     }
 
     /// Mark these line numbers with a pointer in the gutter (upstream
     /// `highlight_lines`; shown with `line_numbers`).
-    pub fn highlight_lines(mut self, lines: impl IntoIterator<Item = usize>) -> Self {
+    pub fn highlight_lines(mut self, lines: impl IntoIterator<Item = i64>) -> Self {
         self.highlight_lines = lines.into_iter().collect();
         self
     }
@@ -407,6 +412,40 @@ impl Syntax {
         code.replace("\r\n", "\n").replace('\r', "\n")
     }
 
+    /// Port of `Syntax.highlight(code, line_range)` over this `Syntax`'s
+    /// code: the highlighted `Text` in the base style (the theme's
+    /// background and `background_color`), with upstream's `justify`,
+    /// `tab_size` and `no_wrap`. With a `line_range`, lines before it are
+    /// left unstyled and lines after it dropped. `console` supplies a
+    /// default code highlighter, as in [`highlight_for`](Self::highlight_for).
+    pub fn highlight_range(
+        &self,
+        line_range: Option<(Option<i64>, Option<i64>)>,
+        console: Option<&Console>,
+    ) -> crate::text::Text {
+        let mut code = self.process_code();
+        if !code.ends_with('\n') {
+            code.push('\n');
+        }
+        let highlighted = self.highlighted(&code, console);
+        let base_style = highlighted
+            .background
+            .clone()
+            .map_or_else(Style::new, |bg| Style::new().with_bgcolor(bg))
+            .combine(&self.background_style());
+        let transparent = base_style.bgcolor().is_none();
+        let mut text = self.highlighted_text(&code, &highlighted, line_range);
+        text.set_base_style(base_style);
+        text.set_justify(if transparent {
+            Justify::Default
+        } else {
+            Justify::Left
+        });
+        text.set_tab_size(Some(self.tab_size));
+        text.set_no_wrap(Some(!self.word_wrap));
+        text
+    }
+
     fn highlight_text(&self, console: Option<&Console>) -> crate::text::Text {
         let code = self.process_code();
         let highlighted = self.highlighted(&code, console);
@@ -425,11 +464,15 @@ impl Syntax {
         &self,
         code: &str,
         highlighted: &HighlightedCode,
-        line_range: Option<(Option<usize>, Option<usize>)>,
+        line_range: Option<(Option<i64>, Option<i64>)>,
     ) -> Text {
         let mut text = Text::new("");
         let (line_start, line_end) = line_range.unwrap_or((None, None));
-        let skip = line_start.map_or(0, |start| start.saturating_sub(1));
+        // `_line_start = line_start - 1 if line_start else 0`; below zero no
+        // line is skipped.
+        let skip = line_start
+            .filter(|&start| start != 0)
+            .map_or(0, |start| usize::try_from(start - 1).unwrap_or(0));
         let sources: Vec<&str> = code.split('\n').collect();
         let last = sources.len().saturating_sub(1);
         for (index, (source, line)) in sources.iter().zip(&highlighted.lines).enumerate() {
@@ -457,7 +500,8 @@ impl Syntax {
                 text.append(piece.as_str(), style.map(Into::into));
             }
             // `if line_end and line_no >= line_end: break`.
-            if line_end.is_some_and(|end| end > 0 && index + 1 >= end && index >= skip) {
+            // A negative end is truthy and already passed.
+            if line_end.is_some_and(|end| end != 0 && (index as i64) + 1 >= end && index >= skip) {
                 break;
             }
         }
@@ -487,14 +531,27 @@ impl Syntax {
             }
         }
         offsets.push(chars + 1);
-        let index_for = |(line_number, column): SyntaxPosition| -> Option<usize> {
-            if line_number > offsets.len() || offsets.len() < line_number + 1 || line_number == 0 {
+        // Port of `_get_code_index_for_syntax_position`, with Python's
+        // negative list indexing: a line before the first counts back from
+        // the end of `offsets`, and a negative column back from the line's
+        // start. An index Python would raise `IndexError` for is skipped.
+        let count = offsets.len() as i64;
+        let offset_at = |index: i64| -> Option<i64> {
+            let index = if index < 0 { count + index } else { index };
+            usize::try_from(index)
+                .ok()
+                .and_then(|index| offsets.get(index))
+                .map(|&offset| offset as i64)
+        };
+        let index_for = |(line_number, column): SyntaxPosition| -> Option<i64> {
+            if line_number > count || count < line_number + 1 {
                 return None;
             }
             let line_index = line_number - 1;
-            let line_length = offsets[line_index + 1] - offsets[line_index] - 1;
-            Some(offsets[line_index] + column.min(line_length))
+            let line_length = offset_at(line_index + 1)? - offset_at(line_index)? - 1;
+            Some(offset_at(line_index)? + column.min(line_length))
         };
+        let length = chars as i64;
         let byte = |char_index: usize| {
             plain
                 .char_indices()
@@ -502,13 +559,21 @@ impl Syntax {
                 .map_or(plain.len(), |(at, _)| at)
         };
         for range in &self.stylized_ranges {
-            if let (Some(start), Some(end)) = (index_for(range.start), index_for(range.end)) {
-                let (start, end) = (byte(start), byte(end));
-                if range.style_before {
-                    text.stylize_before(range.style.clone(), start, end);
-                } else {
-                    text.stylize(range.style.clone(), start, end);
-                }
+            let (Some(start), Some(end)) = (index_for(range.start), index_for(range.end)) else {
+                continue;
+            };
+            // `Text.stylize`: negative offsets count from the end, and an
+            // empty or out-of-range span is dropped.
+            let start = if start < 0 { length + start } else { start };
+            let end = if end < 0 { length + end } else { end };
+            if start >= length || end <= start {
+                continue;
+            }
+            let (start, end) = (byte(start.max(0) as usize), byte(end.min(length) as usize));
+            if range.style_before {
+                text.stylize_before(range.style.clone(), start, end);
+            } else {
+                text.stylize(range.style.clone(), start, end);
             }
         }
     }
@@ -553,7 +618,7 @@ impl Syntax {
         if !self.line_numbers {
             return 0;
         }
-        let last = self.start_line + self.code.matches('\n').count();
+        let last = self.start_line + self.code.matches('\n').count() as i64;
         last.to_string().len() + NUMBERS_COLUMN_DEFAULT_PADDING
     }
 
@@ -719,13 +784,22 @@ impl Syntax {
         }
 
         let (start_line, end_line) = self.line_range.unwrap_or((None, None));
-        let line_offset = start_line.map_or(0, |start| start.saturating_sub(1));
+        // `line_offset = max(0, start_line - 1)` when `start_line` is truthy.
+        let line_offset = start_line
+            .filter(|&start| start != 0)
+            .map_or(0, |start| usize::try_from(start - 1).unwrap_or(0));
         let mut lines = text.split("\n", false, ends_on_nl);
         if self.line_range.is_some() {
             if line_offset > lines.len() {
                 return Vec::new();
             }
-            let end = end_line.map_or(lines.len(), |end| end.min(lines.len()));
+            // `lines[line_offset:end_line]`, with Python's slice bounds.
+            let len = lines.len() as i64;
+            let end = match end_line {
+                None => len,
+                Some(end) if end < 0 => (len + end).max(0),
+                Some(end) => end.min(len),
+            } as usize;
             lines = if end > line_offset {
                 lines[line_offset..end].to_vec()
             } else {
@@ -745,7 +819,7 @@ impl Syntax {
         let line_pointer = if options.legacy_windows { "> " } else { "❱ " };
         let mut out: Vec<Vec<Segment>> = Vec::new();
         for (index, line) in lines.iter().enumerate() {
-            let line_no = self.start_line + line_offset + index;
+            let line_no = self.start_line + (line_offset + index) as i64;
             let wrapped_lines: Vec<Vec<Segment>> = if self.word_wrap {
                 if code_width == 0 {
                     Vec::new()

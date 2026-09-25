@@ -238,6 +238,9 @@ pub struct Console {
     /// is `Sync`.
     record_buffer: std::sync::Mutex<Vec<Segment>>,
     capturing: std::sync::atomic::AtomicBool,
+    /// Upstream's `Console._is_alt_screen`: set by
+    /// [`set_alt_screen`](Console::set_alt_screen).
+    is_alt_screen: std::sync::atomic::AtomicBool,
 }
 
 /// A `Send`-only highlighter behind a lock, so it can be shared by a `Sync`
@@ -251,6 +254,43 @@ impl Highlighter for LockedHighlighter {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         highlighter.highlight(text);
+    }
+}
+
+/// `NoAltScreen("Alt screen must be enabled to call update_screen")`.
+fn no_alt_screen() -> crate::errors::RichError {
+    crate::errors::RichError::NoAltScreen(
+        "Alt screen must be enabled to call update_screen".to_string(),
+    )
+}
+
+/// Rendered lines placed at an offset on the screen: each line is preceded
+/// by a cursor move to its row. Port of `rich.console.ScreenUpdate`.
+pub struct ScreenUpdate {
+    lines: Vec<Vec<Segment>>,
+    x: usize,
+    y: usize,
+}
+
+impl ScreenUpdate {
+    /// `lines` drawn from column `x`, row `y`.
+    pub fn new(lines: Vec<Vec<Segment>>, x: usize, y: usize) -> Self {
+        ScreenUpdate { lines, x, y }
+    }
+}
+
+impl Renderable for ScreenUpdate {
+    fn rich_render(&self, _console: &Console, _options: &ConsoleOptions) -> Vec<Segment> {
+        let mut segments = Vec::new();
+        for (offset, line) in self.lines.iter().enumerate() {
+            let to = crate::control::Control::move_to(
+                u32::try_from(self.x).unwrap_or(u32::MAX),
+                u32::try_from(self.y + offset).unwrap_or(u32::MAX),
+            );
+            segments.push(Segment::control(to.as_str()));
+            segments.extend(line.iter().cloned());
+        }
+        segments
     }
 }
 
@@ -281,6 +321,7 @@ impl Clone for Console {
             tab_size: self.tab_size,
             record_buffer: std::sync::Mutex::new(Vec::new()),
             capturing: std::sync::atomic::AtomicBool::new(false),
+            is_alt_screen: std::sync::atomic::AtomicBool::new(false),
         }
     }
 }
@@ -795,11 +836,86 @@ impl Console {
             return;
         }
         let text = control.as_str();
+        // Upstream buffers control codes with everything else, so a capture
+        // records them.
+        if self.capturing.load(std::sync::atomic::Ordering::SeqCst) {
+            if !text.is_empty() {
+                self.lock_record_buffer().push(Segment::control(text));
+            }
+            return;
+        }
         if !text.is_empty() {
             let stdout = std::io::stdout();
             let mut lock = stdout.lock();
             let _ = write!(lock, "{text}");
         }
+    }
+
+    /// Whether the alternate screen is enabled. Port of
+    /// `Console.is_alt_screen`.
+    pub fn is_alt_screen(&self) -> bool {
+        self.is_alt_screen.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Enable or disable the alternate screen. Port of
+    /// `Console.set_alt_screen`: only a terminal (not a legacy Windows
+    /// console) switches, and the result says whether it did.
+    pub fn set_alt_screen(&self, enable: bool) -> bool {
+        if self.is_terminal && !self.legacy_windows {
+            self.control(&crate::control::Control::alt_screen(enable));
+            self.is_alt_screen
+                .store(enable, std::sync::atomic::Ordering::SeqCst);
+            return true;
+        }
+        false
+    }
+
+    /// Render `renderable` into `region` of the alternate screen (the whole
+    /// screen when `None`). Port of `Console.update_screen`.
+    pub fn update_screen(
+        &self,
+        renderable: &dyn Renderable,
+        region: Option<crate::region::Region>,
+        options: Option<&ConsoleOptions>,
+    ) -> crate::errors::Result<()> {
+        if !self.is_alt_screen() {
+            return Err(no_alt_screen());
+        }
+        let render_options = options.cloned().unwrap_or_else(|| self.options());
+        let (x, y, render_options) = match region {
+            None => {
+                let height = render_options
+                    .height
+                    .filter(|&height| height > 0)
+                    .unwrap_or(self.height);
+                let width = render_options.max_width;
+                (0, 0, render_options.update_dimensions(width, height))
+            }
+            Some(region) => (
+                region.x,
+                region.y,
+                render_options.update_dimensions(region.width, region.height),
+            ),
+        };
+        let lines = self.render_lines(renderable, &render_options, true);
+        self.update_screen_lines(&lines, x, y)
+    }
+
+    /// Write rendered `lines` to the alternate screen at column `x`, row `y`.
+    /// Port of `Console.update_screen_lines` (through [`ScreenUpdate`]).
+    pub fn update_screen_lines(
+        &self,
+        lines: &[Vec<Segment>],
+        x: usize,
+        y: usize,
+    ) -> crate::errors::Result<()> {
+        if !self.is_alt_screen() {
+            return Err(no_alt_screen());
+        }
+        let update = ScreenUpdate::new(lines.to_vec(), x, y);
+        let segments = self.render(&update, None);
+        self.emit_end(segments, false);
+        Ok(())
     }
 
     /// Show or hide the cursor. Port of `Console.show_cursor`.
@@ -1632,6 +1748,7 @@ impl ConsoleBuilder {
             tab_size: self.tab_size.unwrap_or(crate::text::DEFAULT_TAB_SIZE),
             record_buffer: std::sync::Mutex::new(Vec::new()),
             capturing: std::sync::atomic::AtomicBool::new(false),
+            is_alt_screen: std::sync::atomic::AtomicBool::new(false),
         }
     }
 }

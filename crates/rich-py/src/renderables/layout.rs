@@ -778,13 +778,35 @@ impl Layout {
         self.renderable = Some(renderable);
     }
 
-    /// Upstream redraws one sub-layout in place on the alternate screen;
-    /// the bindings' console cannot update screen lines.
-    fn refresh_screen(&self, _console: &Bound<'_, PyAny>, _layout_name: &str) -> PyResult<()> {
-        Err(PyNotImplementedError::new_err(
-            "Layout.refresh_screen is not supported by rs_rich: print the layout (or use Live) \
-             to redraw it",
-        ))
+    /// Render the layout named `layout_name` again, into the region it
+    /// had in the last render, and write it over that part of the
+    /// alternate screen. A layout that was not a leaf of the last render
+    /// raises `KeyError`, as Rich's does.
+    fn refresh_screen(
+        slf: &Bound<'_, Self>,
+        console: &Bound<'_, PyAny>,
+        layout_name: &str,
+    ) -> PyResult<()> {
+        let py = slf.py();
+        let layout = Layout::__getitem__(slf, layout_name)?.into_bound(py);
+        let render_map = slf.borrow().render_map.clone_ref(py).into_bound(py);
+        let Some(entry) = render_map.get_item(&layout)? else {
+            return Err(PyKeyError::new_err(layout.unbind()));
+        };
+        let region = entry.get_item(0)?;
+        let (x, y, width, height): Region = region.extract()?;
+        let options = console
+            .getattr("options")?
+            .call_method1("update_dimensions", (width, height))?;
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("options", options)?;
+        let lines = console.call_method("render_lines", (&layout,), Some(&kwargs))?;
+        render_map.set_item(
+            &layout,
+            layout_render_type(py)?.call1((region, lines.clone()))?,
+        )?;
+        console.call_method1("update_screen_lines", (lines, x, y))?;
+        Ok(())
     }
 
     /// `{layout: LayoutRender(region, lines)}` for each leaf.

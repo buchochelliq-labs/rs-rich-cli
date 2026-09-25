@@ -27,6 +27,9 @@ pub enum RichError {
     /// Python's `configparser` errors (`NoSectionError`, `DuplicateOptionError`,
     /// `ParsingError`, `InterpolationSyntaxError`) and `OSError` here.
     ThemeConfig(String),
+    /// A screen update without the alternate screen
+    /// (`rich.errors.NoAltScreen`).
+    NoAltScreen(String),
 }
 
 impl fmt::Display for RichError {
@@ -39,6 +42,7 @@ impl fmt::Display for RichError {
             RichError::Regex(msg) => write!(f, "regex error: {msg}"),
             RichError::ThemeStack(msg) => write!(f, "theme stack error: {msg}"),
             RichError::ThemeConfig(msg) => write!(f, "theme config error: {msg}"),
+            RichError::NoAltScreen(msg) => write!(f, "{msg}"),
         }
     }
 }

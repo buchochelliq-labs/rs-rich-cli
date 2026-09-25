@@ -570,9 +570,8 @@ impl Table {
         let theme = console.theme();
         let mut style = Style::new();
         if !self.row_styles.is_empty() {
-            style = style.combine(
-                &theme.get_style_or_null(&self.row_styles[index % self.row_styles.len()]),
-            );
+            style = style
+                .combine(&theme.get_style_or_null(&self.row_styles[index % self.row_styles.len()]));
         }
         if let Some(row_style) = self.rows.get(index).and_then(|row| row.style.as_ref()) {
             style = style.combine(&theme.get_style_or_null(row_style));
@@ -1490,7 +1489,10 @@ impl LineRenderable for Table {
                         }
                         _ => Style::new(),
                     };
-                    Segment::new(divider.text.clone(), Some(background.combine(&border_style)))
+                    Segment::new(
+                        divider.text.clone(),
+                        Some(background.combine(&border_style)),
+                    )
                 } else {
                     divider
                 };

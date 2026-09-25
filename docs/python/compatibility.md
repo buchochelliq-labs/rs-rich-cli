@@ -11,17 +11,17 @@ output is compared with the Rust crates'.
 | Rich | rs_rich |
 |---|---|
 | `rich.print`, `rich.get_console`, `rich.print_json`, `rich.reconfigure`, `rich.inspect` | yes (`reconfigure` replaces the global console object) |
-| `Console` | everything but Jupyter output: the constructor (with `highlighter`, `tab_size`, `emoji_variant`), `print`, `log` (any renderable, `log_locals`), `out`, `rule`, `line`, `input`, `print_json` (every option), `capture`, `with console:`, `measure`, `render`, `render_lines`, `render_str`, themes, the exports (with `code_format` and `font_aspect_ratio`), render hooks and the live stack, `status`, `pager`, `screen`, `print_exception`, `set_window_title`, terminal control ([Console](console.md)) |
+| `Console` | everything but Jupyter output: the constructor (with `highlighter`, `tab_size`, `emoji_variant`), `print`, `log` (any renderable, `log_locals`), `out`, `rule`, `line`, `input`, `print_json` (every option), `capture`, `with console:`, `measure`, `render`, `render_lines`, `render_str`, themes, the exports (with `code_format` and `font_aspect_ratio`), render hooks and the live stack, `status`, `pager`, `screen`, `update_screen`, `update_screen_lines`, `print_exception`, `set_window_title`, terminal control ([Console](console.md)) |
 | The render protocol | `__rich__`, `__rich_console__`, `__rich_measure__`; `ConsoleOptions`, `Measurement`, `Segment` ([The render protocol](protocol.md)) |
 | `Text` | the whole class, `Span`, `Lines`, meta data ([Text](text.md)) |
 | `Style`, `rich.theme` | the whole class, `StyleStack`; `Theme`, `from_file`, `read`, `config`, `ThemeStack` ([Style](style.md)) |
 | `rich.color` | `Color`, `ColorTriplet`, `ColorSystem`, `ColorType`, `ColorParseError`, `parse_rgb_hex`, `blend_rgb` ([Color](color.md)) |
 | `rich.markup`, `rich.emoji` | `escape`, `render`, `Tag`; `Emoji`, `NoEmoji` |
 | `rich.box`, `rich.errors`, `rich.terminal_theme` | every box, exception and palette |
-| `Table` | the constructor and `add_column` options core supports, `Table.grid`, rows of any renderable; see below for the rest ([Table](table.md)) |
+| `Table` | every constructor, `add_column` and `add_row` option (footers, `width`, `min_width`, `leading`, `row_styles`, sections, annotation styles and justification), `add_section`, `Table.grid`; headers, footers and cells of any renderable. Headers are strings or renderables, not `Column` objects ([Table](table.md)) |
 | `Panel` | every option, around any renderable ([Panel](panel.md)) |
 | `Rule`, `Padding`, `Align`, `VerticalCenter`, `Constrain`, `Styled`, `Bar`, `Spinner`, `SPINNERS` | yes ([Rules, padding, alignment and bars](rule.md)) |
-| `Columns`, `Group`, `group`, `Layout` (splitters, `Region`, `LayoutRender`), `containers.Renderables`, `measure_renderables` | yes, except `Layout.refresh_screen` ([Layout, columns and groups](layout.md)) |
+| `Columns`, `Group`, `group`, `Layout` (splitters, `Region`, `LayoutRender`, `refresh_screen`), `containers.Renderables`, `measure_renderables` | yes ([Layout, columns and groups](layout.md)) |
 | `Tree` | yes ([Tree](tree.md)) |
 | `Markdown` | yes, with `highlighter=` and `fences=` for the port's code highlighters ([Markdown](markdown.md)) |
 | `Syntax` | every option ([Syntax](syntax.md)); colours as below |
@@ -47,9 +47,8 @@ The port's own crates:
 | Difference | Why |
 |---|---|
 | Code colours (`Syntax`, and code in `Markdown` and `Traceback`) come from syntect, not Pygments: `monokai` is not a theme, and some token classes differ | The port highlights with syntect ([Divergences #18](../DIVERGENCES.md)); layout is Rich's byte for byte ([Syntax: colours](syntax.md#colours)). |
-| `Table`'s `width`, `min_width`, footers, `leading`, `row_styles`, table-level `header_style`/`title_style`/`caption_style`, `title_justify`/`caption_justify`, row styles and sections raise `NotImplementedError`; a `Panel` subtitle must be a `str` | Core's `Table` and `Panel` have no such options yet. |
 | `Console(force_jupyter=True)` raises `NotImplementedError` | There is no Jupyter output. |
-| `Layout.refresh_screen` raises `NotImplementedError` | It needs a live screen the bindings' layout does not hold. |
+| A `Syntax.stylize_range` position so far before the first line that Rich raises `IndexError` is ignored | Core applies ranges when it renders, where it cannot raise. |
 | `export_svg(unique_id=None)` gives a different (stable) id | Rich derives the default id from Python reprs. With an explicit `unique_id` the SVG is Rich's. |
 | Hyperlinks carry no `id=` | Rich tags each link with a random id. The Rust port leaves it out so output is reproducible ([Divergences #20](../DIVERGENCES.md)). |
 | `text.spans` returns a copy | Spans live in the core `Text`; assign `text.spans` to change them. |

@@ -441,6 +441,74 @@ impl Layout {
             .collect()
     }
 
+    /// Child indexes from this layout to the first layout named `name`, in
+    /// [`get`](Self::get)'s order.
+    fn path_of(&self, name: &str) -> Option<Vec<usize>> {
+        if self.name.as_deref() == Some(name) {
+            return Some(Vec::new());
+        }
+        self.children.iter().enumerate().find_map(|(index, child)| {
+            child.path_of(name).map(|mut path| {
+                path.insert(0, index);
+                path
+            })
+        })
+    }
+
+    /// Render the layout named `layout_name` again and write it over its
+    /// region of the alternate screen. Port of `Layout.refresh_screen`: the
+    /// layout must be a leaf of the last render (upstream raises `KeyError`
+    /// otherwise; here, `Ok(false)` and nothing is written), and the console
+    /// must be in the alternate screen ([`RichError::NoAltScreen`] otherwise).
+    ///
+    /// [`RichError::NoAltScreen`]: crate::errors::RichError::NoAltScreen
+    pub fn refresh_screen(
+        &self,
+        console: &Console,
+        layout_name: &str,
+    ) -> crate::errors::Result<bool> {
+        let Some(path) = self.path_of(layout_name) else {
+            return Ok(false);
+        };
+        let Some(layout) = self.at_path(&path) else {
+            return Ok(false);
+        };
+        // The region comes from the last render; the lock is released before
+        // rendering, since the leaf may be this layout itself.
+        let region = self
+            .render_map
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .iter()
+            .find(|entry| entry.path == path)
+            .map(|entry| entry.region);
+        let Some(Region {
+            x,
+            y,
+            width,
+            height,
+        }) = region
+        else {
+            return Ok(false);
+        };
+        let lines = console.render_lines(
+            layout,
+            &console.options().update_dimensions(width, height),
+            true,
+        );
+        if let Some(entry) = self
+            .render_map
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .iter_mut()
+            .find(|entry| entry.path == path)
+        {
+            entry.render = lines.clone();
+        }
+        console.update_screen_lines(&lines, x, y)?;
+        Ok(true)
+    }
+
     /// The leaves of the last render. Port of `Layout.map`.
     pub fn map(&self) -> Vec<LayoutRender> {
         self.render_map

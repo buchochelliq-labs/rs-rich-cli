@@ -89,7 +89,8 @@ pub use crate::bar::Bar;
 pub use crate::color::{Color, ColorSystem, ColorTriplet};
 pub use crate::columns::Columns;
 pub use crate::console::{
-    Console, ConsoleDimensions, ConsoleOptions, Justify, Overflow, RenderStrOptions, ThemeContext,
+    Console, ConsoleDimensions, ConsoleOptions, Justify, Overflow, RenderStrOptions, ScreenUpdate,
+    ThemeContext,
 };
 pub use crate::constrain::Constrain;
 pub use crate::control::{Control, ControlType};

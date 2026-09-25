@@ -3,14 +3,14 @@
 //! Owner: the foundation (the static-renderables area may extend it: `grid`,
 //! `Column`, more options).
 
-use pyo3::exceptions::{PyNotImplementedError, PyValueError};
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyString, PyTuple};
 use pyo3::{PyTraverseError, PyVisit};
 
 use rich::protocol::Renderable;
 use rich::r#box::Box as CoreBox;
-use rich::{Cell, Justify, Overflow, Style as CoreStyle};
+use rich::{Cell, Justify, Overflow, Style as CoreStyle, StyleType};
 use rich::{Table as CoreTable, Text as CoreText};
 
 use crate::boxes::BoxArg;
@@ -18,11 +18,13 @@ use crate::convert;
 use crate::errors::NotRenderableError;
 use crate::limits::{MAX_COLUMN_RATIO, MAX_COLUMN_WIDTH};
 use crate::renderable::{self, AsRenderable, PyRenderable};
-use crate::style::resolved_style;
+use crate::style::{resolved_style, style_type};
 use crate::text::Text;
 
 struct ColumnSpec {
-    header: String,
+    header: CellSpec,
+    footer: CellSpec,
+    footer_style: Option<CoreStyle>,
     justify: Justify,
     style: Option<CoreStyle>,
     header_style: Option<CoreStyle>,
@@ -43,13 +45,101 @@ enum CellSpec {
     Object(Py<PyAny>),
 }
 
+/// A row: its cells, and `add_row`'s `style` and `end_section`.
+struct RowSpec {
+    cells: Vec<CellSpec>,
+    style: Option<StyleType>,
+    end_section: bool,
+}
+
+/// A title or caption: console markup, or a `Text`.
+enum Annotation {
+    Markup(String),
+    Text(CoreText),
+}
+
+fn annotation(value: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Annotation>> {
+    let Some(value) = value.filter(|v| !v.is_none()) else {
+        return Ok(None);
+    };
+    if let Ok(text) = value.extract::<PyRef<'_, Text>>() {
+        return Ok(Some(Annotation::Text(text.inner.clone())));
+    }
+    match value.extract::<String>() {
+        Ok(markup) => Ok(Some(Annotation::Markup(markup))),
+        Err(_) => Err(PyTypeError::new_err(
+            "a title or caption must be a str or a Text",
+        )),
+    }
+}
+
+/// A cell, header or footer: `str` (console markup), `Text`, `None` (empty)
+/// or any other renderable.
+fn cell_spec(cell: &Bound<'_, PyAny>) -> PyResult<CellSpec> {
+    if let Ok(text) = cell.extract::<PyRef<'_, Text>>() {
+        Ok(CellSpec::Text(text.inner.clone()))
+    } else if cell.is_instance_of::<PyString>() {
+        Ok(CellSpec::Markup(cell.extract()?))
+    } else if cell.is_none() {
+        Ok(CellSpec::Markup(String::new()))
+    } else if renderable::is_renderable(cell)? {
+        Ok(CellSpec::Object(cell.clone().unbind()))
+    } else {
+        Err(NotRenderableError::new_err(format!(
+            "unable to render {}; a string or other renderable object is required",
+            cell.get_type().name()?
+        )))
+    }
+}
+
+/// A `header_style=` / `footer_style=` argument: not given (Rich's
+/// `"table.header"` / `"table.footer"`), or a style, where `None` means none
+/// at all (`header_style or ""`). PyO3 maps a missing argument and `None`
+/// alike, so this type tells them apart.
+enum RowStyleArg {
+    Default,
+    Style(StyleType),
+}
+
+impl<'a, 'py> FromPyObject<'a, 'py> for RowStyleArg {
+    type Error = PyErr;
+
+    fn extract(value: pyo3::Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
+        let value = value.to_owned();
+        Ok(RowStyleArg::Style(
+            style_type(Some(&value))?.unwrap_or_else(|| StyleType::Name(String::new())),
+        ))
+    }
+}
+
+impl RowStyleArg {
+    fn or(self, default: &str) -> StyleType {
+        match self {
+            RowStyleArg::Default => StyleType::Name(default.to_string()),
+            RowStyleArg::Style(style) => style,
+        }
+    }
+}
+
 /// `rich.table.Table`: columns and rows of renderables.
 #[pyclass(name = "Table", module = "rs_rich.table")]
 pub(crate) struct Table {
     columns: Vec<ColumnSpec>,
-    rows: Vec<Vec<CellSpec>>,
-    title: Option<String>,
-    caption: Option<String>,
+    rows: Vec<RowSpec>,
+    title: Option<Annotation>,
+    caption: Option<Annotation>,
+    width: Option<usize>,
+    min_width: Option<usize>,
+    show_footer: bool,
+    leading: usize,
+    row_styles: Vec<StyleType>,
+    header_style: StyleType,
+    footer_style: StyleType,
+    title_style: Option<StyleType>,
+    caption_style: Option<StyleType>,
+    title_justify: Justify,
+    caption_justify: Justify,
+    safe_box: Option<bool>,
     box_set: Option<CoreBox>,
     show_header: bool,
     show_lines: bool,
@@ -63,17 +153,6 @@ pub(crate) struct Table {
     highlight: bool,
 }
 
-/// Refuse a Rich option core's `Table` has no counterpart for, unless it
-/// has its default.
-fn unsupported(name: &str, is_default: bool) -> PyResult<()> {
-    if is_default {
-        return Ok(());
-    }
-    Err(PyNotImplementedError::new_err(format!(
-        "rs_rich's Table does not support {name} yet: core's Table has no such option"
-    )))
-}
-
 fn vertical(value: &str) -> PyResult<rich::align::VerticalAlign> {
     match value {
         "top" => Ok(rich::align::VerticalAlign::Top),
@@ -82,6 +161,19 @@ fn vertical(value: &str) -> PyResult<rich::align::VerticalAlign> {
         other => Err(PyValueError::new_err(format!(
             "invalid vertical {other:?}; expected top, middle or bottom"
         ))),
+    }
+}
+
+impl CellSpec {
+    fn to_cell(&self, py: Python<'_>, highlight: bool) -> Cell {
+        match self {
+            CellSpec::Markup(markup) => Cell::Markup(markup.clone()),
+            CellSpec::Text(text) => Cell::Text(text.clone()),
+            // Rich renders cells with the table's `highlight`.
+            CellSpec::Object(object) => {
+                Cell::Renderable(PyRenderable::shared(object.clone_ref(py), Some(highlight)))
+            }
+        }
     }
 }
 
@@ -105,21 +197,45 @@ impl Table {
             )
             .collapse_padding(self.collapse_padding)
             .pad_edge(self.pad_edge)
-            .highlight(self.highlight);
+            .highlight(self.highlight)
+            .width(self.width)
+            .min_width(self.min_width)
+            .show_footer(self.show_footer)
+            .leading(self.leading)
+            .row_styles(self.row_styles.clone())
+            .header_style(self.header_style.clone())
+            .footer_style(self.footer_style.clone())
+            .title_justify(self.title_justify)
+            .caption_justify(self.caption_justify)
+            .safe_box(self.safe_box);
+        if let Some(style) = &self.title_style {
+            table = table.title_style(style.clone());
+        }
+        if let Some(style) = &self.caption_style {
+            table = table.caption_style(style.clone());
+        }
         if let Some(style) = &self.style {
             table = table.style(style.clone());
         }
         if let Some(style) = &self.border_style {
             table = table.border_style(style.clone());
         }
-        if let Some(title) = &self.title {
-            table = table.title(title.clone());
+        match &self.title {
+            Some(Annotation::Markup(title)) => table = table.title(title.clone()),
+            Some(Annotation::Text(title)) => table = table.title_text(title.clone()),
+            None => {}
         }
-        if let Some(caption) = &self.caption {
-            table = table.caption(caption.clone());
+        match &self.caption {
+            Some(Annotation::Markup(caption)) => table = table.caption(caption.clone()),
+            Some(Annotation::Text(caption)) => table = table.caption_text(caption.clone()),
+            None => {}
         }
         for column in &self.columns {
-            table.add_column_justify(column.header.clone(), column.justify);
+            table.add_column_cell(column.header.to_cell(py, self.highlight), column.justify);
+            table.column_footer(column.footer.to_cell(py, self.highlight));
+            if let Some(style) = &column.footer_style {
+                table.column_footer_fill(style.clone());
+            }
             if let Some(style) = &column.style {
                 table.column_style(style.clone());
             }
@@ -150,20 +266,11 @@ impl Table {
         }
         for row in &self.rows {
             let cells = row
+                .cells
                 .iter()
-                .map(|cell| match cell {
-                    CellSpec::Markup(markup) => Cell::Markup(markup.clone()),
-                    CellSpec::Text(text) => Cell::Text(text.clone()),
-                    CellSpec::Object(object) => {
-                        // Rich renders cells with the table's `highlight`.
-                        Cell::Renderable(PyRenderable::shared(
-                            object.clone_ref(py),
-                            Some(self.highlight),
-                        ))
-                    }
-                })
+                .map(|cell| cell.to_cell(py, self.highlight))
                 .collect();
-            table.add_row_cells(cells);
+            table.add_row_with(cells, row.style.clone(), row.end_section);
         }
         table
     }
@@ -182,15 +289,16 @@ impl Table {
         *headers, title=None, caption=None, width=None, min_width=None, r#box=BoxArg::Default,
         safe_box=None, padding=None, collapse_padding=false, pad_edge=true, expand=false,
         show_header=true, show_footer=false, show_edge=true, show_lines=false, leading=0,
-        style=None, row_styles=None, header_style=None, footer_style=None, border_style=None,
+        style=None, row_styles=None, header_style=RowStyleArg::Default,
+        footer_style=RowStyleArg::Default, border_style=None,
         title_style=None, caption_style=None, title_justify="center", caption_justify="center",
         highlight=false
     ))]
-    #[allow(clippy::too_many_arguments, unused_variables)]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         headers: &Bound<'_, PyTuple>,
-        title: Option<String>,
-        caption: Option<String>,
+        title: Option<&Bound<'_, PyAny>>,
+        caption: Option<&Bound<'_, PyAny>>,
         width: Option<usize>,
         min_width: Option<usize>,
         r#box: BoxArg,
@@ -206,8 +314,8 @@ impl Table {
         leading: usize,
         style: Option<&Bound<'_, PyAny>>,
         row_styles: Option<&Bound<'_, PyAny>>,
-        header_style: Option<&Bound<'_, PyAny>>,
-        footer_style: Option<&Bound<'_, PyAny>>,
+        header_style: RowStyleArg,
+        footer_style: RowStyleArg,
         border_style: Option<&Bound<'_, PyAny>>,
         title_style: Option<&Bound<'_, PyAny>>,
         caption_style: Option<&Bound<'_, PyAny>>,
@@ -215,33 +323,40 @@ impl Table {
         caption_justify: &str,
         highlight: bool,
     ) -> PyResult<Self> {
-        let is_default_style = |value: Option<&Bound<'_, PyAny>>, default: &str| {
-            value.is_none_or(|v| v.is_none() || v.extract::<String>().is_ok_and(|s| s == default))
+        for (name, value) in [("width", width), ("min_width", min_width)] {
+            if let Some(value) = value.filter(|value| *value > MAX_COLUMN_WIDTH) {
+                return Err(PyValueError::new_err(format!(
+                    "{name} must be at most {MAX_COLUMN_WIDTH}, got {value}"
+                )));
+            }
+        }
+        let row_styles = match row_styles.filter(|v| !v.is_none()) {
+            None => Vec::new(),
+            Some(styles) => styles
+                .try_iter()?
+                .map(|style| {
+                    let style = style?;
+                    Ok(style_type(Some(&style))?.unwrap_or_default())
+                })
+                .collect::<PyResult<Vec<_>>>()?,
         };
-        unsupported("width", width.is_none())?;
-        unsupported("min_width", min_width.is_none())?;
-        unsupported("show_footer", !show_footer)?;
-        unsupported("leading", leading == 0)?;
-        unsupported(
-            "row_styles",
-            row_styles.is_none_or(|v| v.is_none() || !v.is_truthy().unwrap_or(true)),
-        )?;
-        unsupported(
-            "header_style",
-            is_default_style(header_style, "table.header"),
-        )?;
-        unsupported("title_style", is_default_style(title_style, "table.title"))?;
-        unsupported(
-            "caption_style",
-            is_default_style(caption_style, "table.caption"),
-        )?;
-        unsupported("title_justify", title_justify == "center")?;
-        unsupported("caption_justify", caption_justify == "center")?;
         let mut table = Table {
             columns: Vec::new(),
             rows: Vec::new(),
-            title,
-            caption,
+            title: annotation(title)?,
+            caption: annotation(caption)?,
+            width,
+            min_width,
+            show_footer,
+            leading,
+            row_styles,
+            header_style: header_style.or("table.header"),
+            footer_style: footer_style.or("table.footer"),
+            title_style: style_type(title_style)?,
+            caption_style: style_type(caption_style)?,
+            title_justify: convert::justify(Some(title_justify))?,
+            caption_justify: convert::justify(Some(caption_justify))?,
+            safe_box,
             box_set: r#box.or(rich::r#box::HEAVY_HEAD),
             show_header,
             show_lines,
@@ -258,7 +373,7 @@ impl Table {
             highlight,
         };
         for header in headers.iter() {
-            table.add_header(&header.extract::<String>()?)?;
+            table.add_header(&header)?;
         }
         Ok(table)
     }
@@ -280,6 +395,18 @@ impl Table {
             rows: Vec::new(),
             title: None,
             caption: None,
+            width: None,
+            min_width: None,
+            show_footer: false,
+            leading: 0,
+            row_styles: Vec::new(),
+            header_style: StyleType::Name("table.header".to_string()),
+            footer_style: StyleType::Name("table.footer".to_string()),
+            title_style: None,
+            caption_style: None,
+            title_justify: Justify::Center,
+            caption_justify: Justify::Center,
+            safe_box: None,
             box_set: None,
             show_header: false,
             show_lines: false,
@@ -296,22 +423,23 @@ impl Table {
             highlight: false,
         };
         for header in headers.iter() {
-            table.add_header(&header.extract::<String>()?)?;
+            table.add_header(&header)?;
         }
         Ok(table)
     }
 
-    /// Add a column. The header is console markup.
+    /// Add a column. A `str` header or footer is console markup; either
+    /// may be any renderable.
     #[pyo3(signature = (
-        header="", footer="", *, header_style=None, highlight=None, footer_style=None,
+        header=None, footer=None, *, header_style=None, highlight=None, footer_style=None,
         style=None, justify="left", vertical="top", overflow="ellipsis", width=None,
         min_width=None, max_width=None, ratio=None, no_wrap=false
     ))]
-    #[allow(clippy::too_many_arguments, unused_variables)]
+    #[allow(clippy::too_many_arguments)]
     fn add_column(
         &mut self,
-        header: &str,
-        footer: &str,
+        header: Option<&Bound<'_, PyAny>>,
+        footer: Option<&Bound<'_, PyAny>>,
         header_style: Option<&Bound<'_, PyAny>>,
         highlight: Option<bool>,
         footer_style: Option<&Bound<'_, PyAny>>,
@@ -325,7 +453,6 @@ impl Table {
         ratio: Option<usize>,
         no_wrap: bool,
     ) -> PyResult<()> {
-        unsupported("footer", footer.is_empty())?;
         // Larger values than these make core overflow or take minutes, and
         // no terminal is that wide anyway.
         for (name, value, limit) in [
@@ -340,8 +467,14 @@ impl Table {
                 )));
             }
         }
+        let spec = |value: Option<&Bound<'_, PyAny>>| match value {
+            Some(value) => cell_spec(value),
+            None => Ok(CellSpec::Markup(String::new())),
+        };
         self.columns.push(ColumnSpec {
-            header: header.to_string(),
+            header: spec(header)?,
+            footer: spec(footer)?,
+            footer_style: resolved_style(footer_style)?,
             justify: convert::justify(Some(justify))?,
             style: resolved_style(style)?,
             header_style: resolved_style(header_style)?,
@@ -366,39 +499,31 @@ impl Table {
         style: Option<&Bound<'_, PyAny>>,
         end_section: bool,
     ) -> PyResult<()> {
-        unsupported("a row style", style.is_none_or(|s| s.is_none()))?;
-        unsupported("sections", !end_section)?;
-        let mut row = Vec::new();
+        let mut cells = Vec::new();
         for cell in renderables.iter() {
-            if let Ok(text) = cell.extract::<PyRef<'_, Text>>() {
-                row.push(CellSpec::Text(text.inner.clone()));
-            } else if cell.is_instance_of::<PyString>() {
-                row.push(CellSpec::Markup(cell.extract()?));
-            } else if cell.is_none() {
-                row.push(CellSpec::Markup(String::new()));
-            } else if renderable::is_renderable(&cell)? {
-                row.push(CellSpec::Object(cell.unbind()));
-            } else {
-                return Err(NotRenderableError::new_err(format!(
-                    "unable to render {}; a string or other renderable object is required",
-                    cell.get_type().name()?
-                )));
+            cells.push(cell_spec(&cell)?);
+        }
+        // A row longer than the table adds columns, as Rich's does.
+        while self.columns.len() < cells.len() {
+            self.columns
+                .push(ColumnSpec::new(CellSpec::Markup(String::new())));
+            if let Some(column) = self.columns.last_mut() {
+                column.highlight = Some(self.highlight);
             }
         }
-        if row.len() > self.columns.len() {
-            return Err(PyValueError::new_err(format!(
-                "too many values in row ({} > {} columns)",
-                row.len(),
-                self.columns.len()
-            )));
-        }
-        self.rows.push(row);
+        self.rows.push(RowSpec {
+            cells,
+            style: style_type(style)?,
+            end_section,
+        });
         Ok(())
     }
 
-    /// Rich's `add_section()`: core's `Table` has no sections.
-    fn add_section(&self) -> PyResult<()> {
-        unsupported("sections", false)
+    /// `add_section()`: draw a line beneath the last row.
+    fn add_section(&mut self) {
+        if let Some(row) = self.rows.last_mut() {
+            row.end_section = true;
+        }
     }
 
     #[getter]
@@ -408,34 +533,59 @@ impl Table {
 
     // A cell can refer back to the table (`holder.table = table`).
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
-        for row in &self.rows {
-            for cell in row {
-                if let CellSpec::Object(object) = cell {
-                    visit.call(object)?;
-                }
+        let columns = self
+            .columns
+            .iter()
+            .flat_map(|column| [&column.header, &column.footer]);
+        for cell in self.rows.iter().flat_map(|row| &row.cells).chain(columns) {
+            if let CellSpec::Object(object) = cell {
+                visit.call(object)?;
             }
         }
         Ok(())
     }
 
     fn __clear__(&mut self) {
-        for row in &mut self.rows {
-            for cell in row.iter_mut() {
-                if matches!(cell, CellSpec::Object(_)) {
-                    *cell = CellSpec::Markup(String::new());
-                }
+        let columns = self
+            .columns
+            .iter_mut()
+            .flat_map(|column| [&mut column.header, &mut column.footer]);
+        let rows = self.rows.iter_mut().flat_map(|row| row.cells.iter_mut());
+        for cell in rows.chain(columns) {
+            if matches!(cell, CellSpec::Object(_)) {
+                *cell = CellSpec::Markup(String::new());
             }
+        }
+    }
+}
+
+impl ColumnSpec {
+    /// A column with every default.
+    fn new(header: CellSpec) -> Self {
+        ColumnSpec {
+            header,
+            footer: CellSpec::Markup(String::new()),
+            footer_style: None,
+            justify: Justify::Left,
+            style: None,
+            header_style: None,
+            overflow: Overflow::Ellipsis,
+            width: None,
+            min_width: None,
+            max_width: None,
+            ratio: None,
+            no_wrap: false,
+            vertical: rich::align::VerticalAlign::Top,
+            highlight: None,
         }
     }
 }
 
 impl Table {
     /// `add_column(header)` with every default.
-    fn add_header(&mut self, header: &str) -> PyResult<()> {
-        self.add_column(
-            header, "", None, None, None, None, "left", "top", "ellipsis", None, None, None, None,
-            false,
-        )
+    fn add_header(&mut self, header: &Bound<'_, PyAny>) -> PyResult<()> {
+        self.columns.push(ColumnSpec::new(cell_spec(header)?));
+        Ok(())
     }
 }
 

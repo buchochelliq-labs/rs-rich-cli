@@ -420,13 +420,49 @@ def test_no_splitter_is_a_layout_error():
     assert issubclass(NoSplitter, LayoutError)
 
 
-def test_refresh_screen_is_not_supported():
-    from rs_rich.console import Console
-    from rs_rich.layout import Layout
+def _refresh_screen(package: str) -> list:
+    console_module = importlib.import_module(f"{package}.console")
+    layout_module = importlib.import_module(f"{package}.layout")
+    panel_module = importlib.import_module(f"{package}.panel")
+    text_module = importlib.import_module(f"{package}.text")
+    Layout = layout_module.Layout
+    console = console_module.Console(
+        file=io.StringIO(), force_terminal=True, color_system="truecolor", width=20, height=6
+    )
+    layout = Layout(name="root")
+    layout.split_row(Layout(panel_module.Panel("left"), name="a"), Layout(name="right"))
+    layout["right"].split_column(Layout("top", name="b"), Layout("bottom", name="c"))
+    out = []
+    console.print(layout)
+    try:
+        layout.refresh_screen(console, "b")
+    except Exception as error:
+        out.append(type(error).__name__)
+    console.set_alt_screen(True)
+    console.print(layout)
+    layout["b"].update(text_module.Text("changed", style="bold"))
+    layout.refresh_screen(console, "b")
+    layout["a"].update(panel_module.Panel("new", title="t"))
+    layout.refresh_screen(console, "a")
+    try:
+        layout.refresh_screen(console, "right")
+    except KeyError as error:
+        out.append(error.args[0] is layout["right"])
+    console.update_screen(text_module.Text("region"), region=(3, 1, 6, 2))
+    console.update_screen_lines([[]], 1, 1)
+    console.set_alt_screen(False)
+    try:
+        console.update_screen_lines([], 0, 0)
+    except Exception as error:
+        out.append(type(error).__name__)
+    render = layout.map[layout["b"]]
+    out.append((tuple(render.region), len(render.render)))
+    out.append(console.file.getvalue())
+    return out
 
-    layout = Layout(name="x")
-    with pytest.raises(NotImplementedError, match="refresh_screen"):
-        layout.refresh_screen(Console(), "x")
+
+def test_refresh_screen_matches_rich():
+    assert _refresh_screen("rs_rich") == _refresh_screen("rich")
 
 
 def test_a_tree_that_contains_itself_is_refused():

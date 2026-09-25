@@ -92,8 +92,10 @@ Format: what differs · why · how to remove it (if temporary).
 ### 6. Box substitution is opt-in (no legacy-terminal auto-detection)
 - **Differs:** `Box.substitute` **is** ported — `Box::substitute` maps the fancy
   boxes (`ROUNDED`/`HEAVY`/`HEAVY_HEAD`) to `SQUARE` when `legacy_windows` is set,
-  and any non-ASCII box to `ASCII` when `ascii_only` is set; `Panel`/`Table`
-  apply it. The `legacy_windows`/`safe_box`/`ascii_only` console flags exist. What
+  and any box drawn with non-ASCII glyphs to `ASCII` when `ascii_only` is set
+  (the built-in boxes upstream flags `ascii=True` are exactly the all-ASCII
+  ones); `Panel`/`Table` apply it, with their own `safe_box` over the
+  console's. The `legacy_windows`/`safe_box`/`ascii_only` console flags exist. What
   differs: those flags default **off** and are not auto-detected from the runtime
   terminal (upstream auto-detects legacy Windows / a non-UTF-8 encoding), so the
   default build always emits the requested glyphs.
@@ -109,7 +111,10 @@ Format: what differs · why · how to remove it (if temporary).
   per-column **style**, **`no_wrap`** (crop to one line with ellipsis), **ellipsis
   overflow** (the table default), a **table-level style**, `pad_edge`/`show_edge`/
   `collapse_padding`, title, caption, and `show_lines` are all ported and
-  byte-parity. The only residual: a *wrapping* column squeezed to width 0 by a
+  byte-parity, as are (0.0.12) the table `width`/`min_width`, footers,
+  `leading`, `row_styles`, row styles and sections, the header/footer/title/
+  caption styles and justification, `Text` annotations and `safe_box`
+  (`golden/api_gaps.tsv`). The only residual: a *wrapping* column squeezed to width 0 by a
   greedy `no_wrap` neighbor still renders its cell padding (upstream drops it) — a
   rare over-constrained case.
 - **Why:** the width-0 padding edge only appears when a table is narrower than its

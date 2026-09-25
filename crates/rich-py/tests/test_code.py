@@ -351,6 +351,41 @@ def test_ansi_theme_colours_match_rich_where_the_tokens_do():
     assert actual == expected
 
 
+SIGNED_LINES = [
+    {"line_numbers": True, "start_line": 0},
+    {"line_numbers": True, "start_line": -3, "highlight_lines": {-2, 0}},
+    {"line_numbers": True, "start_line": -12},
+    {"line_numbers": True, "line_range": (0, 2)},
+    {"line_numbers": True, "line_range": (-2, 3)},
+    {"line_numbers": True, "line_range": (2, -1)},
+    {"line_numbers": True, "line_range": (None, -1)},
+    {"line_numbers": True, "line_range": (3, 0)},
+    {"line_numbers": True, "line_range": (None, None)},
+    {"line_range": (1, -2)},
+    {"line_range": (-5, None), "word_wrap": True},
+    {"line_numbers": True, "start_line": -1, "line_range": (2, 4), "word_wrap": True},
+    {"line_numbers": True, "start_line": -2, "padding": 1, "background_color": "red"},
+]
+
+
+def signed_line_numbers(m, c):
+    # Plain text in `ansi_dark`: its colours are Rich's in either engine.
+    for options in SIGNED_LINES:
+        c.print(m.syntax.Syntax(CODE, "text", theme="ansi_dark", **options))
+    styled = m.syntax.Syntax(CODE, "text", theme="ansi_dark", line_numbers=True)
+    styled.stylize_range("bold", (-1, 2), (2, 3))
+    styled.stylize_range("reverse", (2, -4), (3, 2))
+    c.print(styled)
+    for line_range in [(-1, -2), (2, -1), (0, 0), (None, -1), (3, None)]:
+        text = m.syntax.Syntax(CODE, "text", theme="ansi_dark").highlight(CODE, line_range=line_range)
+        c.print(repr(text.plain), text.no_wrap, text.tab_size, markup=False)
+
+
+def test_signed_line_numbers_and_ranges_match_rich():
+    expected, actual = outputs(signed_line_numbers, True, width=40)
+    assert actual == expected
+
+
 # --- API ---------------------------------------------------------------------
 
 

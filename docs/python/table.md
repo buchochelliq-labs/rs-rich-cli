@@ -23,7 +23,15 @@ Table.grid(*headers, padding=0, collapse_padding=True, pad_edge=False, expand=Fa
 | Argument | Meaning |
 |---|---|
 | `*headers` | Column headers, the same as calling `add_column(header)` for each. |
-| `title`, `caption` | Markup drawn centred above and below the table. |
+| `title`, `caption` | Drawn above and below the table: markup, or a [`Text`](text.md) (drawn as it is, in its own style and justification). |
+| `title_style`, `caption_style` | The style of a markup title or caption (default `table.title`, `table.caption`). |
+| `title_justify`, `caption_justify` | `"left"`, `"center"` (the default), `"right"`, `"full"` or `"default"`. |
+| `width` | The table's width, borders included; setting it expands the table to that width. |
+| `min_width` | The table's minimum width, borders included. |
+| `show_footer` | Draw a footer row from each column's `footer`. |
+| `leading` | Blank lines between rows (drawn with the box's side glyphs); it takes over from `show_lines`. |
+| `row_styles` | Styles that the rows cycle through, such as `["", "dim"]` for zebra stripes. |
+| `header_style`, `footer_style` | The header and footer rows' style (default `table.header`, `table.footer`); `None` is no style. |
 | `box` | A [box constant](box-markup-errors.md#boxes), or `None` for no borders. The default is `box.HEAVY_HEAD`. Without a header, head-styled boxes draw plain (`HEAVY_HEAD` as `SQUARE`), as in Rich. |
 | `show_header` | Draw the header row. |
 | `show_lines` | Draw a line between rows. |
@@ -34,16 +42,12 @@ Table.grid(*headers, padding=0, collapse_padding=True, pad_edge=False, expand=Fa
 | `collapse_padding`, `pad_edge` | Merge neighbouring cells' padding; pad the outer edge. |
 | `style` | A style under the whole table (the borders take it too). |
 | `highlight` | Highlight the cells' strings, as the console highlights printed ones. |
-| `safe_box` | Accepted; it only matters on legacy Windows consoles. |
+| `safe_box` | Replace boxes a legacy Windows console cannot draw (`None`: the console's setting). |
 
 `Table.grid()` is a table with no borders and no header, for laying things
 out in columns.
 
-Rich's `width`, `min_width`, `show_footer` (and footers), `leading`,
-`row_styles`, a `header_style`, `title_style` or `caption_style` of your own,
-a `title_justify` or `caption_justify` other than `"center"`, row styles
-(`add_row(style=...)`) and sections (`end_section`, `add_section()`) raise
-`NotImplementedError`: core's table has no such options yet.
+Every style argument takes a `Style`, a style definition or a theme name.
 
 ```python
 from rs_rich.console import Console
@@ -76,9 +80,9 @@ add_column(header="", footer="", *, header_style=None, highlight=None,
 
 | Argument | Meaning |
 |---|---|
-| `header` | The header, as markup. |
+| `header`, `footer` | The header and footer: markup, a [`Text`](text.md) or any renderable. The footer shows with `show_footer=True`. |
 | `style` | A style for the column's cells. |
-| `header_style` | A style for the whole header cell. |
+| `header_style`, `footer_style` | A style for the whole header or footer cell, over the table's. |
 | `justify` | `"left"`, `"center"`, `"right"`, `"full"` or `"default"`. |
 | `vertical` | `"top"`, `"middle"` or `"bottom"`: where a short cell sits in a tall row. |
 | `highlight` | Highlight this column's strings (`None`: the table's `highlight`). |
@@ -125,10 +129,12 @@ This adds a row. Each cell is a `str` (markup), a [`Text`](text.md) (used as
 is, never parsed), `None` (empty), or any other renderable: a
 [`Panel`](panel.md), another table, or [your own class](protocol.md), sized
 by its `__rich_measure__`. Fewer cells than columns leaves the rest empty,
-and more raises `ValueError`; a cell that is not renderable raises
-`NotRenderableError`.
+and more adds columns (with empty headers), as in Rich; a cell that is not
+renderable raises `NotRenderableError`.
 
-`row_count` is the number of rows added.
+`style` styles the whole row, over the column's style. `end_section=True`
+draws a line beneath the row, as does `add_section()` for the last row
+added. `row_count` is the number of rows added.
 
 ```python
 from rs_rich.console import Console
@@ -149,3 +155,57 @@ Console(width=40).print(table)
 
 A table is built when it is printed, so rows added after it was put in a
 panel still appear.
+
+Footers, sections, row styles and a fixed width:
+
+```python
+from rs_rich.console import Console
+from rs_rich.table import Table
+
+table = Table(title="Fruit", caption="per crate", caption_justify="right",
+              show_footer=True, row_styles=["", "dim"], width=30)
+table.add_column("Name", "Total")
+table.add_column("Qty", "12", justify="right")
+table.add_row("apple", "3")
+table.add_row("banana", "4", end_section=True)
+table.add_row("cherry", "5", style="bold")
+Console(width=40).print(table)
+```
+
+```text
+            Fruit             
+┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┓
+┃ Name            ┃      Qty ┃
+┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━┩
+│ apple           │        3 │
+│ banana          │        4 │
+├─────────────────┼──────────┤
+│ cherry          │        5 │
+├─────────────────┼──────────┤
+│ Total           │       12 │
+└─────────────────┴──────────┘
+                     per crate
+```
+
+`leading`, `min_width`, and a row with more cells than columns:
+
+```python
+from rs_rich import box
+from rs_rich.console import Console
+from rs_rich.table import Table
+
+table = Table("a", "b", box=box.SIMPLE, leading=1, min_width=20)
+table.add_row("1", "2")
+table.add_row("3", "4", "extra")
+Console(width=40).print(table)
+```
+
+```text
+                    
+  a    b            
+ ────────────────── 
+  1    2            
+                    
+  3    4    extra   
+                    
+```
