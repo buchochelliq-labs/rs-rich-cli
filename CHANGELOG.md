@@ -133,8 +133,19 @@ every dependent moves with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
     Publishing (the `pypi` environment).
 - The crate is outside the Cargo workspace, which is unchanged: its build
   needs a Python interpreter.
-- Documentation: the new [Python bindings](docs/python.md) page, and
-  `BRANCHING.md` (the Python release).
+- Documentation: a [Python API reference](docs/python/index.md), one page per
+  class (Console, Text, Style, Table, Panel, boxes/markup/errors, and
+  compatibility). `tests/test_docs.py` runs every example and checks its
+  printed output. `BRANCHING.md` covers the Python release.
+- Tests: a pytest suite per class (`tests/test_*.py`); its expected output was
+  checked against Rich 15.0.0. `test_compat.py` still compares whole programs
+  byte for byte. Type stubs (`_native.pyi`) cover every class, and a test
+  keeps them matched with the runtime names.
+- `MarkupError` and `StyleSyntaxError` derive from `ConsoleError`, as in Rich.
+  `Table.add_column(header_style=...)` now styles the whole header cell.
+- Core parity fix: a table with `show_header=False` draws head-styled boxes
+  plain, like upstream's `Box.get_plain_headed_box` (for example `HEAVY_HEAD` as
+  `SQUARE`). The fix has new `table_headless_*` goldens.
 
 ### Native image sizing (0.0.12 workstream 6: #519)
 

@@ -6,7 +6,9 @@
 //! still change until then, as they can in Python `rich`.
 
 use pyo3::create_exception;
-use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError, PyTypeError, PyValueError};
+use pyo3::exceptions::{
+    PyException, PyNotImplementedError, PyRuntimeError, PyTypeError, PyValueError,
+};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyFloat, PyInt, PyString, PyTuple};
 
@@ -19,8 +21,10 @@ use rich::r#box::Box as CoreBox;
 use rich::{Cell, Justify, Overflow, Panel as CorePanel, Rule, Segment, Style as CoreStyle};
 use rich::{StyleType, Table as CoreTable, Text as CoreText};
 
-create_exception!(_native, MarkupError, PyValueError);
-create_exception!(_native, StyleSyntaxError, PyValueError);
+// Rich's hierarchy: both derive from `ConsoleError(Exception)`.
+create_exception!(_native, ConsoleError, PyException);
+create_exception!(_native, MarkupError, ConsoleError);
+create_exception!(_native, StyleSyntaxError, ConsoleError);
 
 // ---------------------------------------------------------------------------
 // Style
@@ -504,8 +508,9 @@ impl Table {
             if let Some(style) = &column.style {
                 table.column_style(style.clone());
             }
+            // Rich's `header_style` styles the whole header cell.
             if let Some(style) = &column.header_style {
-                table.column_header_style(style.clone());
+                table.column_header_fill(style.clone());
             }
             table.column_overflow(column.overflow);
             if let Some(width) = column.width {
@@ -1063,6 +1068,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
             },
         )?;
     }
+    m.add("ConsoleError", m.py().get_type::<ConsoleError>())?;
     m.add("MarkupError", m.py().get_type::<MarkupError>())?;
     m.add("StyleSyntaxError", m.py().get_type::<StyleSyntaxError>())?;
     m.add("escape", pyo3::wrap_pyfunction!(escape, m)?)?;

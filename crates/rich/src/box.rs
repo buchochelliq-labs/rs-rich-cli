@@ -202,6 +202,18 @@ impl Box {
         result
     }
 
+    /// If this box draws its header border with special characters, the most
+    /// similar box that does not; otherwise the box itself. Port of
+    /// `Box.get_plain_headed_box`: a table without a header draws with it.
+    pub fn get_plain_headed_box(&self) -> Box {
+        match *self {
+            b if b == HEAVY_HEAD || b == SQUARE_DOUBLE_HEAD => SQUARE,
+            b if b == MINIMAL_DOUBLE_HEAD || b == MINIMAL_HEAVY_HEAD => MINIMAL,
+            b if b == ASCII_DOUBLE_HEAD => ASCII2,
+            other => other,
+        }
+    }
+
     /// The bottom border for the given column `widths`. Port of `Box.get_bottom`.
     /// `edge` controls whether the left/right corner glyphs are drawn.
     pub fn get_bottom(&self, widths: &[usize], edge: bool) -> String {
@@ -374,6 +386,16 @@ mod tests {
         assert_eq!(HEAVY_EDGE.top_left, '┏');
         assert_eq!(SQUARE_DOUBLE_HEAD.head_row_horizontal, '═');
         assert_eq!(ASCII2.head_row_cross, '+');
+    }
+
+    #[test]
+    fn plain_headed_boxes() {
+        assert_eq!(HEAVY_HEAD.get_plain_headed_box(), SQUARE);
+        assert_eq!(SQUARE_DOUBLE_HEAD.get_plain_headed_box(), SQUARE);
+        assert_eq!(MINIMAL_DOUBLE_HEAD.get_plain_headed_box(), MINIMAL);
+        assert_eq!(MINIMAL_HEAVY_HEAD.get_plain_headed_box(), MINIMAL);
+        assert_eq!(ASCII_DOUBLE_HEAD.get_plain_headed_box(), ASCII2);
+        assert_eq!(ROUNDED.get_plain_headed_box(), ROUNDED);
     }
 
     #[test]

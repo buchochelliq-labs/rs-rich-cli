@@ -43,7 +43,7 @@ rendering something different.
 | `rs_rich.panel` | `Panel(renderable, box, title=, title_align=, subtitle=, subtitle_align=, expand=, border_style=, width=, padding=)`, `Panel.fit` |
 | `rs_rich.box` | Rich's box constants |
 | `rs_rich.markup` | `escape` |
-| `rs_rich.errors` | `MarkupError`, `StyleSyntaxError` |
+| `rs_rich.errors` | `ConsoleError`, `MarkupError`, `StyleSyntaxError` |
 
 `Console.print` takes `str` (console markup), numbers, `None`, `Text`,
 `Table` and `Panel`. A `Panel` holds any of those renderables.

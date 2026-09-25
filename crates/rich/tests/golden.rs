@@ -8,7 +8,10 @@
 
 use rich::markdown::Markdown;
 use rich::measure::Measurement;
-use rich::r#box::{Box as BoxSet, DOUBLE_EDGE, HEAVY_HEAD, SIMPLE, SQUARE};
+use rich::r#box::{
+    Box as BoxSet, ASCII_DOUBLE_HEAD, DOUBLE_EDGE, HEAVY_HEAD, MINIMAL_HEAVY_HEAD, SIMPLE, SQUARE,
+    SQUARE_DOUBLE_HEAD,
+};
 use std::sync::Arc;
 
 use rich::segment::Segment;
@@ -217,6 +220,11 @@ fn sample_table(box_set: BoxSet) -> Table {
     table.add_row(&["Alice", "30"]);
     table.add_row(&["Bob", "7"]);
     table
+}
+
+/// `sample_table` without its header: drawn with the plain-headed box.
+fn headless_table(box_set: BoxSet) -> Table {
+    sample_table(box_set).show_header(false)
 }
 
 /// A table whose wide column must shrink and wrap to fit.
@@ -524,6 +532,10 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "table_default" => Box::new(sample_table(HEAVY_HEAD)),
         "table_simple" => Box::new(sample_table(SIMPLE)),
         "table_double_edge" => Box::new(sample_table(DOUBLE_EDGE)),
+        "table_headless_heavy_head" => Box::new(headless_table(HEAVY_HEAD)),
+        "table_headless_square_double_head" => Box::new(headless_table(SQUARE_DOUBLE_HEAD)),
+        "table_headless_minimal_heavy_head" => Box::new(headless_table(MINIMAL_HEAVY_HEAD)),
+        "table_headless_ascii_double_head" => Box::new(headless_table(ASCII_DOUBLE_HEAD)),
         "table_shrink" => Box::new(shrink_table()),
         "table_expand" => Box::new(expand_table()),
         "table_justify" => Box::new(justify_table()),

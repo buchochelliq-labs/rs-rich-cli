@@ -114,6 +114,20 @@ def table_options(m, c):
     c.print(boxed)
 
 
+def headless_tables_and_header_styles(m, c):
+    # Without a header, head-styled boxes draw plain (`get_plain_headed_box`).
+    for box in [m.box.HEAVY_HEAD, m.box.SQUARE_DOUBLE_HEAD, m.box.MINIMAL_HEAVY_HEAD, m.box.ASCII_DOUBLE_HEAD]:
+        table = m.table.Table("a", "b", box=box, show_header=False)
+        table.add_row("1", "2")
+        c.print(table)
+    # A column's header_style covers the whole header cell.
+    table = m.table.Table(box=m.box.SIMPLE)
+    table.add_column("styled", header_style="bold magenta on white", style="dim")
+    table.add_column("plain")
+    table.add_row("x", "y")
+    c.print(table)
+
+
 def panels(m, c):
     c.print(m.panel.Panel("Hello, [bold]World[/]! 42"))
     c.print(
@@ -149,6 +163,7 @@ PROGRAMS = [
     styles,
     star_wars_table,
     table_options,
+    headless_tables_and_header_styles,
     panels,
     rules,
     justified_prints,
