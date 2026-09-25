@@ -690,6 +690,12 @@ impl Text {
         }
     }
 
+    /// The whole-text base style, resolved or named. Port of the `Text.style`
+    /// attribute.
+    pub fn base_style(&self) -> &StyleType {
+        &self.style
+    }
+
     /// Set the whole-text base style, resolved or named.
     pub fn set_base_style(&mut self, style: impl Into<StyleType>) {
         self.style = style.into();

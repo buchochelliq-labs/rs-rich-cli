@@ -39,8 +39,22 @@ let markdown = Markdown::new("```mermaid\ngraph TD\n  A --> B\n```")
 `MermaidPlugin` registers the same fence renderer and a `mermaid` source
 renderer through [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api).
 
+## Limits
+
+The text renderer refuses (showing the source under a note) flowcharts over
+64 KiB, 500 nodes or 2000 edges, layouts needing more than 5000 points (nodes
+plus one per rank a long edge crosses), and drawings over 2 million cells. A
+link lengthened with extra dashes (`---->`) spans at most 10 ranks; longer
+runs are drawn at that length.
+
 ## `mmdc` safety
 
 `mmdc` starts a browser, so it only runs when asked for. The diagram goes
-through a file in a private temporary directory, never a shell; the process is
-stopped after a timeout (20 s by default); and sources over 64 KiB are refused.
+through a file in a private temporary directory, never a shell command line;
+the process is stopped after a timeout (20 s by default); sources over 64 KiB
+and images over 16 MiB (`MmdcOptions::max_output`) are refused, and at most
+4 KiB of its output is read for an error message. `mmdc` stays in the
+caller's process group, so Ctrl-C stops it too (Puppeteer then closes
+Chromium); on a timeout it gets SIGTERM, then SIGKILL two seconds later. On
+Unix a small `sh` watchdog removes the temporary directory even if the caller
+is killed first.

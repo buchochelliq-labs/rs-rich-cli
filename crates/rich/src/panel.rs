@@ -226,6 +226,10 @@ impl Renderable for Panel {
             Some(width) => width.min(options.max_width),
             None => options.max_width,
         };
+        // Upstream renders nothing at all in no width, not two empty borders.
+        if width == 0 {
+            return Vec::new();
+        }
         // Fall back to a terminal-safe box on legacy Windows / non-UTF-8.
         let box_set = self.box_set.substitute(
             console.legacy_windows(),
@@ -341,6 +345,34 @@ impl Renderable for Panel {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn tiny_widths_match_upstream() {
+        // Expected output captured from rich 15.0.0 (`Console.print`).
+        let render = |panel: Panel, width| {
+            let console = Console::builder().width(width).color_system(None).build();
+            let out = console.render_to_string(&panel);
+            if out.is_empty() {
+                out
+            } else {
+                out + "\n"
+            }
+        };
+        for width in [0, 1, 2] {
+            let expected = ["", "╭\n╰\n", "╭╮\n╰╯\n"][width];
+            assert_eq!(
+                render(Panel::new(Box::new(crate::text::Text::new("hi"))), width),
+                expected,
+                "width {width}"
+            );
+            assert_eq!(
+                render(Panel::fit(Box::new(crate::text::Text::new("hi"))), width),
+                expected,
+                "fit width {width}"
+            );
+        }
+    }
+
     use super::*;
     use crate::r#box::SQUARE;
     use crate::text::Text;

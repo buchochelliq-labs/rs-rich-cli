@@ -682,7 +682,7 @@ impl Table {
                 .columns
                 .iter()
                 .filter(|c| c.ratio.is_some())
-                .map(|c| c.ratio.unwrap() as i64)
+                .map(|c| i64::try_from(c.ratio.unwrap()).unwrap_or(i64::MAX))
                 .collect();
             if ratios.iter().any(|&r| r > 0) {
                 let fixed_widths: Vec<i64> = maximums
@@ -1295,7 +1295,7 @@ fn ratio_reduce(total: i64, ratios: &[i64], maximums: &[i64], values: &[i64]) ->
         .zip(maximums)
         .map(|(&r, &m)| if m != 0 { r } else { 0 })
         .collect();
-    let mut total_ratio: i64 = ratios.iter().sum();
+    let mut total_ratio: i128 = ratios.iter().map(|&r| i128::from(r)).sum();
     if total_ratio == 0 {
         return values.to_vec();
     }
@@ -1308,7 +1308,7 @@ fn ratio_reduce(total: i64, ratios: &[i64], maximums: &[i64], values: &[i64]) ->
             ));
             result.push(value - distributed);
             total_remaining -= distributed;
-            total_ratio -= ratio;
+            total_ratio -= i128::from(ratio);
         } else {
             result.push(value);
         }
@@ -1329,11 +1329,14 @@ fn ratio_distribute(total: i64, ratios: &[i64], minimums: Option<&[i64]>) -> Vec
             .collect(),
         None => ratios.to_vec(),
     };
-    let mut total_ratio: i64 = ratios.iter().sum();
-    let mut total_remaining = total;
+    // Python ints never overflow; `ratio * total_remaining` can exceed i64
+    // for a huge ratio, so the arithmetic runs in i128.
+    let mut total_ratio: i128 = ratios.iter().map(|&r| i128::from(r)).sum();
+    let mut total_remaining = i128::from(total);
     let mut result = Vec::with_capacity(ratios.len());
     for (index, &ratio) in ratios.iter().enumerate() {
-        let minimum = minimums.map_or(0, |m| m[index]);
+        let ratio = i128::from(ratio);
+        let minimum = i128::from(minimums.map_or(0, |m| m[index]));
         let distributed = if total_ratio > 0 {
             // ceil(ratio * total_remaining / total_ratio) for positive values,
             // then floored at `minimum`.
@@ -1343,7 +1346,11 @@ fn ratio_distribute(total: i64, ratios: &[i64], minimums: Option<&[i64]>) -> Vec
         } else {
             total_remaining
         };
-        result.push(distributed);
+        result.push(i64::try_from(distributed).unwrap_or(if distributed < 0 {
+            i64::MIN
+        } else {
+            i64::MAX
+        }));
         total_ratio -= ratio;
         total_remaining -= distributed;
     }
@@ -1390,6 +1397,25 @@ fn collapse_widths(mut widths: Vec<i64>, wrapable: &[bool], max_width: i64) -> V
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_huge_column_ratio_does_not_overflow() {
+        // Python ints never overflow. Expected output captured from rich 15.0.0
+        // (`ratio=2**64 - 1`; the collapsed widths come out narrow there too).
+        let console = crate::Console::builder()
+            .width(40)
+            .color_system(None)
+            .build();
+        let mut table = Table::new().expand(true);
+        table.add_column("a").column_ratio(usize::MAX);
+        table.add_column("b").column_ratio(1);
+        table.add_row(&["x", "y"]);
+        assert_eq!(
+            console.render_to_string(&table) + "\n",
+            "┏━━━┳━━━┓\n┃ a ┃ b ┃\n┡━━━╇━━━┩\n│ x │ y │\n└───┴───┘\n"
+        );
+    }
+
     use super::*;
     use crate::color::ColorSystem;
     use crate::r#box::SQUARE;

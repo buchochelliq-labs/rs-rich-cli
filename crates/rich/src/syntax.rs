@@ -253,8 +253,25 @@ impl Syntax {
         self.highlight_text(Some(console))
     }
 
+    /// `Syntax._process_code` plus Pygments' own preprocessing: tabs are
+    /// expanded, then `\r\n` and a lone `\r` become `\n` (Pygments' `Lexer`
+    /// does this for every lexer, the plain-text one included). Without it a
+    /// lone `\r` was stripped as a control code and joined two lines.
+    fn process_code(&self) -> String {
+        let mut code = expand_tabs(&self.code, self.tab_size);
+        if !code.contains('\r') {
+            return code;
+        }
+        // Upstream appends `\n` to code that lacks one and removes it after
+        // highlighting, so a trailing lone `\r` becomes that `\r\n` and goes.
+        if code.ends_with('\r') {
+            code.pop();
+        }
+        code.replace("\r\n", "\n").replace('\r', "\n")
+    }
+
     fn highlight_text(&self, console: Option<&Console>) -> crate::text::Text {
-        let code = expand_tabs(&self.code, self.tab_size);
+        let code = self.process_code();
         let highlighted = self.highlighted(&code, console);
         let mut text = crate::text::Text::new("");
         if let Some(background) = &highlighted.background {
@@ -342,7 +359,7 @@ impl Renderable for Syntax {
 
         // `Syntax._process_code`: the source is tab-expanded before it reaches
         // the highlighter, so no U+0009 ever survives into a segment.
-        let code = expand_tabs(&self.code, self.tab_size);
+        let code = self.process_code();
         let highlighted = self.highlighted(&code, Some(console));
         let background = highlighted.background.clone();
 
@@ -460,6 +477,35 @@ mod tests {
         let out = console.render_to_string(&syntax);
         assert!(!out.contains('\x1b'), "{out:?}");
         assert_eq!(cell_len(out.lines().next().unwrap()), 30, "{out:?}");
+    }
+
+    #[test]
+    fn a_lone_carriage_return_breaks_the_line_like_pygments() {
+        // Expected output captured from rich 15.0.0 (color_system=None) with
+        // `Console.print`; `render_to_string` leaves out its final newline.
+        let render = |renderable: &dyn Renderable, width| {
+            let console = Console::builder().width(width).color_system(None).build();
+            console.render_to_string(renderable) + "\n"
+        };
+        assert_eq!(
+            render(&Syntax::new("ab\rcd\r", "python"), 10),
+            "ab        \ncd        \n"
+        );
+        assert_eq!(
+            render(&Syntax::new("ab\r\ncd", "text"), 10),
+            "ab        \ncd        \n"
+        );
+        assert_eq!(
+            render(
+                &crate::panel::Panel::fit(Box::new(Syntax::new("ab\rcd", "python"))),
+                20
+            ),
+            "╭────╮\n│ ab │\n│ cd │\n╰────╯\n"
+        );
+        assert_eq!(
+            render(&crate::markdown::Markdown::new("```python\nab\rcd\n```"), 20),
+            "                    \n ab                 \n cd                 \n                    \n"
+        );
     }
 
     #[test]

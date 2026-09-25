@@ -105,8 +105,8 @@ was.
   refuses a plugin built for another version (`PluginError::IncompatibleApi`).
   At 0.0.x the contract still changes, and every breaking change bumps it.
 - **Names.** The plugin id and every capability name use lowercase letters,
-  digits, `-`, `_` and `.` (at most 64 bytes), so they are safe to print and to
-  use as CLI values.
+  digits, `-`, `_` and `.` (at most 64 bytes), and start with a letter or
+  digit, so they are safe to print and to use as CLI values.
 - **No silent overrides.** Two plugins may not register the same capability
   under the same name, and a plugin id may be added once (`Conflict`,
   `DuplicatePlugin`).

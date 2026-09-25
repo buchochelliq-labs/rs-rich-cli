@@ -162,7 +162,9 @@ fn a_project_config_cannot_choose_mmdc() {
 #[cfg(not(feature = "mmdc"))]
 #[test]
 fn the_users_own_config_may_choose_mmdc() {
-    // Trusted, so it is honoured, and this build reports that it lacks mmdc.
+    // Trusted, so it is honoured where it can be. This build lacks mmdc: it
+    // warns and draws the diagram as text rather than failing (a config may
+    // be shared from a machine with an mmdc build).
     let (_root, work, home) = setup();
     std::fs::write(
         home.join(".config/rich/config.toml"),
@@ -170,10 +172,11 @@ fn the_users_own_config_may_choose_mmdc() {
     )
     .unwrap();
     let out = run_in(&work, &home, &["doc.md"]);
-    assert_eq!(out.status.code(), Some(2));
+    assert!(out.status.success(), "{out:?}");
     assert!(
         String::from_utf8_lossy(&out.stderr).contains("needs a build with the mmdc feature"),
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
+    assert!(stdout(&out).contains(DRAWN));
 }

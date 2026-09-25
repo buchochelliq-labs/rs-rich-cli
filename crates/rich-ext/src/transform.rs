@@ -231,27 +231,35 @@ impl TextTransform for KeepLines {
 }
 
 /// Styles every match of a regular expression.
+///
+/// Only whole matches are styled: unlike [`Text::highlight_regex`], a named
+/// group is just a group here, never a style name. A match the regex engine
+/// cannot finish (its backtrack limit) is an error, as it is for [`KeepLines`].
 #[derive(Clone, Debug)]
 pub struct HighlightMatches {
-    pattern: String,
+    regex: fancy_regex::Regex,
     style: Style,
 }
 
 impl HighlightMatches {
     pub fn new(pattern: &str, style: Style) -> Result<Self, TransformError> {
-        fancy_regex::Regex::new(pattern)
+        let regex = fancy_regex::Regex::new(pattern)
             .map_err(|e| TransformError::new(format!("invalid pattern {pattern:?}: {e}")))?;
-        Ok(HighlightMatches {
-            pattern: pattern.to_string(),
-            style,
-        })
+        Ok(HighlightMatches { regex, style })
     }
 }
 
 impl TextTransform for HighlightMatches {
     fn transform(&self, mut text: Text) -> Result<Text, PluginError> {
-        text.highlight_regex(&self.pattern, Some(self.style.clone().into()), "")
-            .map_err(|e| PluginError::Other(e.to_string()))?;
+        let mut ranges = Vec::new();
+        for found in self.regex.find_iter(text.plain()) {
+            let found = found.map_err(|e| PluginError::Other(format!("highlight failed: {e}")))?;
+            ranges.push(found.range());
+        }
+        // `Text` spans are byte offsets, the same units the regex reports.
+        for range in ranges {
+            text.stylize(self.style.clone(), range.start, range.end);
+        }
         Ok(text)
     }
 }
@@ -299,6 +307,30 @@ mod tests {
             .unwrap();
         let ranges: Vec<_> = text.spans().iter().map(|s| (s.start, s.end)).collect();
         assert_eq!(ranges, [(1, 3), (5, 7)]);
+    }
+
+    #[test]
+    fn highlight_matches_styles_whole_matches_only() {
+        // A named group is not a style name here, unlike `highlight_regex`.
+        let text = HighlightMatches::new("(?P<blink>ERR)OR", Style::parse("reverse").unwrap())
+            .unwrap()
+            .transform(Text::new("an ERROR"))
+            .unwrap();
+        assert_eq!(text.spans().len(), 1);
+        assert_eq!((text.spans()[0].start, text.spans()[0].end), (3, 8));
+    }
+
+    #[test]
+    fn highlight_matches_reports_the_backtrack_limit_like_keep_lines() {
+        let input = || Text::new("a".repeat(30));
+        let pattern = r"^(a|a)*\1b";
+        assert!(KeepLines::new(pattern).unwrap().transform(input()).is_err());
+        assert!(
+            HighlightMatches::new(pattern, Style::parse("reverse").unwrap())
+                .unwrap()
+                .transform(input())
+                .is_err()
+        );
     }
 
     #[test]

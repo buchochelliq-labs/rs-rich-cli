@@ -7,6 +7,7 @@
 //! See docs/PLUGINS.md.
 
 use std::collections::BTreeMap;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 
 use rich::console::ConsoleOptions;
@@ -41,7 +42,8 @@ pub struct RegisteredPlugin {
 /// A collection of extensions to install onto a [`Console`].
 #[derive(Default)]
 pub struct ExtensionRegistry {
-    highlighters: Vec<LocalHighlighterFactory>,
+    /// Each factory with the plugin id that registered it, or [`DIRECT`].
+    highlighters: Vec<(String, LocalHighlighterFactory)>,
     code_highlighters: BTreeMap<String, (String, Arc<dyn CodeHighlighter>)>,
     themes: BTreeMap<String, (String, Theme)>,
     box_styles: BTreeMap<String, (String, BoxStyle)>,
@@ -107,7 +109,8 @@ impl ExtensionRegistry {
     where
         F: Fn() -> Box<dyn Highlighter + Send> + 'static,
     {
-        self.highlighters.push(Box::new(factory));
+        self.highlighters
+            .push((DIRECT.to_string(), Box::new(factory)));
         self
     }
 
@@ -145,7 +148,14 @@ impl ExtensionRegistry {
     /// it uses is invalid, it registers a capability another plugin already
     /// provides under the same name, or its own `register` fails.
     pub fn add_plugin(&mut self, plugin: &dyn Plugin) -> Result<(), PluginError> {
-        let metadata = plugin.metadata();
+        // A plugin that panics is refused like one that fails: a third-party
+        // bug must not take the host down.
+        let metadata = catch_unwind(AssertUnwindSafe(|| plugin.metadata())).map_err(|panic| {
+            PluginError::Failed {
+                plugin: "(unknown)".to_string(),
+                message: format!("metadata panicked: {}", panic_message(&*panic)),
+            }
+        })?;
         let id = metadata.id.clone();
         if !is_valid_name(&id) {
             return Err(PluginError::InvalidName {
@@ -165,12 +175,18 @@ impl ExtensionRegistry {
         }
 
         let mut staged = Staged::default();
-        plugin
-            .register(&mut staged)
-            .map_err(|error| PluginError::Failed {
+        match catch_unwind(AssertUnwindSafe(|| plugin.register(&mut staged))) {
+            Ok(result) => result.map_err(|error| PluginError::Failed {
                 plugin: id.clone(),
                 message: error.to_string(),
-            })?;
+            })?,
+            Err(panic) => {
+                return Err(PluginError::Failed {
+                    plugin: id,
+                    message: format!("register panicked: {}", panic_message(&*panic)),
+                })
+            }
+        }
         if let Some(name) = staged.invalid_names.into_iter().next() {
             return Err(PluginError::InvalidName { plugin: id, name });
         }
@@ -195,7 +211,8 @@ impl ExtensionRegistry {
         }
 
         for factory in staged.highlighters {
-            self.highlighters.push(Box::new(move || factory()));
+            self.highlighters
+                .push((id.clone(), Box::new(move || factory())));
         }
         for (name, value) in staged.code_highlighters {
             self.code_highlighters.insert(name, (id.clone(), value));
@@ -383,11 +400,12 @@ impl ExtensionRegistry {
         Some(Arc::new(FenceRoutes(routes)))
     }
 
-    /// The plugin id that provided a capability, or `"(direct)"` for
-    /// highlighters registered without a plugin.
+    /// The plugin id that provided a capability, or `"(direct)"` for one
+    /// registered without a plugin. Highlighters are unnamed, so for
+    /// [`Capability::Highlighter`] this is the first one registered.
     pub fn provided_by(&self, capability: &Capability) -> Option<&str> {
         match capability {
-            Capability::Highlighter => Some(DIRECT),
+            Capability::Highlighter => self.highlighters.first().map(|(id, _)| id.as_str()),
             other => self.provider(other),
         }
     }
@@ -395,7 +413,7 @@ impl ExtensionRegistry {
     /// Install every registered highlighter onto `console`, and the default
     /// code highlighter if one was chosen.
     pub fn install(&self, console: &mut Console) {
-        for factory in &self.highlighters {
+        for (_, factory) in &self.highlighters {
             console.add_highlighter(factory());
         }
         if let Some(highlighting) = self.code_highlighting() {
@@ -515,6 +533,17 @@ pub fn install_defaults(console: &mut Console) {
     ExtensionRegistry::with_defaults().install(console);
 }
 
+/// The text of a caught panic, for the error that refuses the plugin.
+fn panic_message(panic: &(dyn std::any::Any + Send)) -> String {
+    if let Some(message) = panic.downcast_ref::<&str>() {
+        (*message).to_string()
+    } else if let Some(message) = panic.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "a panic with no message".to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -567,6 +596,56 @@ mod tests {
             }
             Ok(())
         }
+    }
+
+    #[test]
+    fn a_panicking_plugin_is_refused_and_leaves_the_registry_unchanged() {
+        struct Panics {
+            in_metadata: bool,
+        }
+        impl Plugin for Panics {
+            fn metadata(&self) -> PluginMetadata {
+                if self.in_metadata {
+                    panic!("no metadata");
+                }
+                PluginMetadata::new("panics", "Panics", "0.0.0")
+            }
+            fn register(&self, registrar: &mut dyn PluginRegistrar) -> Result<(), PluginError> {
+                registrar.theme("half", Theme::new());
+                panic!("register blew up");
+            }
+        }
+        let mut registry = ExtensionRegistry::with_defaults();
+        for in_metadata in [false, true] {
+            let error = registry.add_plugin(&Panics { in_metadata }).unwrap_err();
+            assert!(matches!(error, PluginError::Failed { .. }), "{error:?}");
+            let expected = if in_metadata {
+                "no metadata"
+            } else {
+                "register blew up"
+            };
+            assert!(error.to_string().contains(expected), "{error}");
+        }
+        assert_eq!(registry.plugins().len(), 1);
+        assert_eq!(
+            registry.provided_by(&Capability::Theme("half".into())),
+            None
+        );
+    }
+
+    #[test]
+    fn provided_by_highlighter_names_who_registered_it() {
+        assert_eq!(
+            ExtensionRegistry::new().provided_by(&Capability::Highlighter),
+            None
+        );
+        assert_eq!(
+            ExtensionRegistry::with_defaults().provided_by(&Capability::Highlighter),
+            Some("rich-ext")
+        );
+        let mut direct = ExtensionRegistry::new();
+        direct.register_highlighter(|| Box::new(rich::highlighter::ReprHighlighter::new()));
+        assert_eq!(direct.provided_by(&Capability::Highlighter), Some(DIRECT));
     }
 
     fn plugin(id: &'static str, themes: &[&'static str]) -> Test {

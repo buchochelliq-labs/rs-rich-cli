@@ -62,6 +62,85 @@ Cohort versions for 0.0.12 (not published): core 0.0.8, plugin API 0.0.1
 (new), CLI 0.0.12. Core changes below, so
 every dependent moves with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
 
+### Release test: fixes from five independent audits
+
+Five audits covered the whole 0.0.12 delta: core, the plugin API and ext host,
+Mermaid, art and CLI flags, and the Python bindings. Every finding below was
+reproduced by a test that failed first.
+
+- **Core (parity).**
+  - `Syntax` turns a lone `\r` into a line break, as Pygments does for every
+    lexer. It used to join the two lines, and `Panel.fit` then cropped the
+    second one away. Markdown fences behave the same.
+  - A `Panel` in no width renders nothing, as upstream does, instead of two
+    empty lines.
+  - Table ratio arithmetic runs in `i128`, so a huge column `ratio` no longer
+    overflows. The output matches rich 15.0.0's.
+  - With a console-wide default code highlighter, inline code in Markdown
+    uses it too, not just code blocks.
+  - `Text::base_style()` exposes the base style (upstream's `Text.style`).
+- **Plugin API and host.**
+  - A plugin that panics in `metadata` or `register` is refused with
+    `PluginError::Failed`, and the registry is left unchanged. It used to take
+    the host down.
+  - Plugin and capability names must start with a letter or digit, so `-x`,
+    `--help`, `.` and `..` are refused. This narrows the contract before the
+    crate's first release.
+  - `provided_by(&Capability::Highlighter)` names the plugin that registered
+    the highlighter, `"(direct)"` for one registered without a plugin, and
+    `None` when there is none.
+- **Transforms.** `HighlightMatches` styles whole matches only: a named group
+  is no longer used as a style name (`(?P<blink>…)` added blink). It also
+  reports the regex engine's backtrack limit as an error, as `KeepLines` does.
+  The pattern is compiled once.
+- **lumis.** Pygments names that lumis lacks map to the language that
+  highlights them: `shell`, `sh`, `zsh`, `console`, `python3`, `golang`,
+  `patch`, `jsonc` and more. These used to come out as plain text.
+- **Mermaid.**
+  - A link's extra dashes count for at most 10 ranks (`MAX_LINK_LENGTH`).
+  - A flowchart whose layout needs more than 5,000 points is refused at once.
+    An input under 1 KiB used to take four minutes. Crossings are now counted
+    in O(E log V), with unchanged output.
+  - `mmdc` stays in the caller's process group, so Ctrl-C stops it and
+    Chromium. A timeout sends SIGTERM, then SIGKILL after 2 s. On Unix the
+    temporary directory is removed even if `rich` is killed.
+  - `MmdcOptions::max_output` (16 MiB) caps the image read into memory
+    (`MmdcError::OutputTooLarge`). Only the first 4 KiB of the log is read.
+- **CLI.**
+  - `rich doctor` reports an unknown configured highlighter or code theme
+    instead of failing. It is where the error message sends you.
+  - `rich config validate` rejects an unknown highlighter or code theme,
+    which every render would reject.
+  - `--filter` and `--highlight` keep `--syntax`'s full-width background rows,
+    so a pattern that matches nothing leaves the output byte-identical.
+  - `mermaid_backend = "mmdc"` in a user config, on a build without mmdc,
+    warns and draws Mermaid as text. It used to make every command exit 2.
+    On the command line it is still an error.
+- **Python bindings (`rs-rich` on PyPI).**
+  - `Console`, `Table` and `Panel` work from any thread, including
+    `rs_rich.print` from a worker thread. Concurrent prints to one console
+    don't interleave. Printing from inside the console's own `file.write`
+    raises `RuntimeError`.
+  - `print` and `rule` flush the file, as Rich does.
+  - Panels nested more than 100 deep raise `RecursionError` instead of
+    crashing the interpreter.
+  - Sizes are limited: `Console(width=…)`, padding and column widths to
+    65536, and `ratio` to 4294967295. Larger values raise `ValueError`
+    instead of aborting.
+  - `t.append(t)` works; `Text.stylize` clamps offsets of any size; `Style`
+    is hashable; reference cycles through a panel's child or `Console.file`
+    are collected.
+- **Workflows.**
+  - `python.yml` also runs when the root `Cargo.toml` or `Cargo.lock` changes.
+  - `pypi-release.yml` runs the whole test suite against the Linux wheel
+    before publishing.
+  - Third-party actions (`maturin-action`, `gh-action-pypi-publish`) are
+    pinned by commit SHA.
+- **Release material.** `rich --demo` has sections for Mermaid, code themes,
+  filter and highlight, and native image size. The CLI README covers the
+  0.0.12 flags and features. `make_cases.py --release 0.0.12` builds the
+  screenshot set.
+
 ### Pluggable code highlighters, core (0.0.12 workstream 1: #522, #523)
 
 - **`CodeHighlighter` (#522).** A new extension point in `rich::protocol`: an

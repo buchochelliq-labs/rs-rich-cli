@@ -3781,7 +3781,17 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 Err(err) => return fail(&cli, ExitClass::Data, err),
             };
             let fit = text.measurement().1;
-            (Box::new(text), Some(fit))
+            // Keep `Syntax`'s layout: every row filled to the width in the
+            // code background, so a transform changes only what it matches.
+            let background = match text.base_style() {
+                rich::style::StyleType::Style(style) => style.clone(),
+                rich::style::StyleType::Name(_) => rich::Style::new(),
+            };
+            // `Syntax` also draws the empty line after a final newline.
+            let bottom = usize::from(text.plain().ends_with('\n'));
+            let padded =
+                rich::padding::Padding::new(Box::new(text), (0, 0, bottom, 0)).style(background);
+            (Box::new(padded), Some(fit))
         }
         Mode::Syntax => {
             // `Syntax.__rich_measure__`: the widest source line, plus padding and

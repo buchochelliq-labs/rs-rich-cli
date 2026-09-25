@@ -1487,8 +1487,26 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
 
 impl Renderable for Markdown {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        // Inline code is highlighted while parsing, before any console is
+        // known. With a console-wide default highlighter and none of our own,
+        // parse again with it so inline code and code blocks share one engine
+        // and theme.
+        use crate::protocol::ConsoleCodeHighlighting;
+        let reparsed;
+        let blocks = match (&self.options.highlighter, console.code_highlighting()) {
+            (None, Some(default)) if self.options.inline_code_lexer.is_some() => {
+                let mut with_default = self.options.clone();
+                with_default.highlighter = Some(default.highlighter.clone());
+                if with_default.code_theme.is_none() {
+                    with_default.code_theme = default.theme.clone();
+                }
+                reparsed = parse(&self.source, &with_default);
+                &reparsed
+            }
+            _ => &self.blocks,
+        };
         let mut lines = render_blocks(
-            &self.blocks,
+            blocks,
             console,
             options,
             options.max_width,
@@ -1500,7 +1518,7 @@ impl Renderable for Markdown {
         // only observable when the rule is the document's last block: it adds one
         // extra blank line there (a mid-document rule merges with the normal block
         // separator). Match that.
-        if matches!(self.blocks.last(), Some(Block::Rule)) {
+        if matches!(blocks.last(), Some(Block::Rule)) {
             lines.push(Vec::new());
         }
 

@@ -761,6 +761,17 @@ pub(crate) fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<St
         {
             continue;
         }
+        // A config shared from an mmdc build must not break this one: fall
+        // back to the default text backend. On the command line it is an error.
+        if key == "mermaid_backend" && value.as_str() == Some("mmdc") && !cfg!(feature = "mmdc") {
+            if !json_report {
+                eprintln!(
+                    "rich: warning: config mermaid_backend = \"mmdc\" needs a build with the \
+                     mmdc feature; drawing Mermaid as text"
+                );
+            }
+            continue;
+        }
         if let (Some(file), Some(config)) =
             (value.as_str().filter(|_| key == "theme_file"), &source)
         {
@@ -893,6 +904,15 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
         return Ok(Some(explain(&layers, key)));
     }
     settings.extend(overrides);
+    // `validate_value` only checks these are names: whether the engine and
+    // theme exist depends on the build, so `validate` asks it, as every render
+    // will. `show` (and `doctor`, built on it) reports the choice instead.
+    if command == Some("validate") {
+        super::code_highlighting(
+            settings.get("highlighter").and_then(Value::as_str),
+            settings.get("code_theme").and_then(Value::as_str),
+        )?;
+    }
     let output = serde_json::json!({
         "valid": true,
         "source": source.map(|p| p.to_string_lossy().into_owned()),
