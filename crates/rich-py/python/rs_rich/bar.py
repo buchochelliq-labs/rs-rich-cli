@@ -1,7 +1,5 @@
-"""``rich.bar``: ``Bar``.
+"""``rich.bar``: ``Bar``, a solid block bar."""
 
-Placeholder, filled by the static-renderables area: re-export the classes from
-``._native`` here and list them in ``__all__``.
-"""
+from ._native import Bar
 
-__all__: list = []
+__all__ = ["Bar"]

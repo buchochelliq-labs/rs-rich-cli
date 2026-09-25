@@ -26,8 +26,8 @@ pub(crate) fn is_control_code(c: char) -> bool {
     matches!(c, '\u{7}' | '\u{8}' | '\u{b}' | '\u{c}' | '\r')
 }
 
-/// Cell width of a tab stop. Upstream's `Console.tab_size` default; a per-console
-/// override is not ported yet (see `docs/DIVERGENCES.md`).
+/// Cell width of a tab stop: upstream's `Console.tab_size` default, and the
+/// fallback when neither a text nor its console sets one (`tab_size or 8`).
 pub const DEFAULT_TAB_SIZE: usize = 8;
 
 /// A style applied to a byte range `[start, end)` of a [`Text`]'s plain string.
@@ -58,6 +58,9 @@ pub struct Text {
     /// Whether to skip wrapping. `None` defers to the console options, then to
     /// `false`.
     no_wrap: Option<bool>,
+    /// Tab stop width. `None` defers to the console's `tab_size` when
+    /// rendered, then to [`DEFAULT_TAB_SIZE`]. Upstream's `Text.tab_size`.
+    tab_size: Option<usize>,
 }
 
 impl Text {
@@ -82,6 +85,7 @@ impl Text {
             justify: Justify::Default,
             overflow: None,
             no_wrap: None,
+            tab_size: None,
         }
     }
 
@@ -98,6 +102,7 @@ impl Text {
             justify: Justify::Default,
             overflow: None,
             no_wrap: None,
+            tab_size: None,
         }
     }
 
@@ -149,6 +154,23 @@ impl Text {
     /// This text's own no-wrap setting, if it set one.
     pub fn get_no_wrap(&self) -> Option<bool> {
         self.no_wrap
+    }
+
+    /// Set the tab stop width (builder form). Port of `Text(tab_size=…)`.
+    pub fn tab_size(mut self, tab_size: usize) -> Self {
+        self.tab_size = Some(tab_size);
+        self
+    }
+
+    /// Set the tab stop width. Pass `None` to defer to the console's
+    /// `tab_size`. Upstream's `Text.tab_size` attribute.
+    pub fn set_tab_size(&mut self, tab_size: Option<usize>) {
+        self.tab_size = tab_size;
+    }
+
+    /// This text's own tab stop width, if it set one.
+    pub fn get_tab_size(&self) -> Option<usize> {
+        self.tab_size
     }
 
     /// Shorten this text to at most `max_width` cells, optionally padding it out
@@ -230,6 +252,7 @@ impl Text {
             justify: self.justify,
             overflow: self.overflow,
             no_wrap: self.no_wrap,
+            tab_size: self.tab_size,
         }
     }
 
@@ -607,7 +630,9 @@ impl Text {
         // displays as `PASSED`.
         self.plain.push_str(&Text::strip_control_codes(text));
         let end = self.plain.len();
-        if let Some(style) = style {
+        // `if style:` — a null style or an empty name adds no span, so it
+        // leaves no segment boundary behind either.
+        if let Some(style) = style.filter(|style| !is_falsy_style(style)) {
             self.spans.push(Span { start, end, style });
         }
     }
@@ -646,20 +671,34 @@ impl Text {
     /// A range that is empty or inverted is ignored, which is what gives us
     /// upstream's `end > start` skip for non-participating regex groups.
     pub fn stylize(&mut self, style: impl Into<StyleType>, start: usize, end: usize) {
+        let style = style.into();
         let end = end.min(self.plain.len());
-        if start >= end {
+        // `if style:` — a falsy style adds no span.
+        if start >= end || is_falsy_style(&style) {
             return;
         }
-        self.spans.push(Span {
-            start,
-            end,
-            style: style.into(),
-        });
+        self.spans.push(Span { start, end, style });
     }
 
-    /// Push a raw span (used by the markup parser).
-    pub(crate) fn push_span(&mut self, span: Span) {
+    /// Append a raw span, as upstream's `text.spans.append(span)` does: no
+    /// clamping and no falsy-style check.
+    ///
+    /// Offsets are **byte** offsets into [`plain`](Self::plain) and must fall
+    /// on `char` boundaries (upstream's are character offsets; convert first).
+    /// A span may extend past the end of the text, as upstream allows.
+    pub fn push_span(&mut self, span: Span) {
         self.spans.push(span);
+    }
+
+    /// The spans, mutably. Upstream's `Text.spans` is a public, mutable list;
+    /// the same byte-offset rules as [`push_span`](Self::push_span) apply.
+    pub fn spans_mut(&mut self) -> &mut Vec<Span> {
+        &mut self.spans
+    }
+
+    /// Replace every span. Port of the `Text.spans` setter.
+    pub fn set_spans(&mut self, spans: Vec<Span>) {
+        self.spans = spans;
     }
 
     /// Drop this text's own `justify`, `overflow` and `no_wrap`, so they defer to
@@ -668,6 +707,7 @@ impl Text {
         self.justify = Justify::Default;
         self.overflow = None;
         self.no_wrap = None;
+        self.tab_size = None;
     }
 
     /// Move the base style into a span over the whole text, ahead of the
@@ -757,6 +797,10 @@ impl Text {
     /// when `overflow` is [`Overflow::Fold`]), justified, and finally truncated
     /// to `width`. [`Overflow::Ignore`] skips wrapping and truncation both, so
     /// lines may come back wider than `width`.
+    ///
+    /// Tabs expand to this text's own [`tab_size`](Self::get_tab_size), else
+    /// [`DEFAULT_TAB_SIZE`]; [`render_lines_wrapped_tabs`](Self::render_lines_wrapped_tabs)
+    /// takes the width explicitly (upstream's `wrap(tab_size=…)`).
     pub fn render_lines_wrapped(
         &self,
         theme: &Theme,
@@ -766,15 +810,52 @@ impl Text {
         overflow: Overflow,
         no_wrap: bool,
     ) -> Vec<Vec<Segment>> {
+        self.render_lines_wrapped_tabs(
+            theme,
+            base_style,
+            width,
+            justify,
+            overflow,
+            no_wrap,
+            match self.tab_size {
+                None | Some(0) => DEFAULT_TAB_SIZE,
+                Some(tab_size) => tab_size,
+            },
+        )
+    }
+
+    /// The tab stop width `Text.__rich_console__` wraps with on `console`:
+    /// this text's own, else the console's, and `8` for zero
+    /// (`tab_size or 8`).
+    pub fn console_tab_size(&self, console: &crate::console::Console) -> usize {
+        match self.tab_size.unwrap_or_else(|| console.tab_size()) {
+            0 => DEFAULT_TAB_SIZE,
+            tab_size => tab_size,
+        }
+    }
+
+    /// [`render_lines_wrapped`](Self::render_lines_wrapped) with an explicit
+    /// tab stop width. Port of `Text.wrap(…, tab_size=…)`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_lines_wrapped_tabs(
+        &self,
+        theme: &Theme,
+        base_style: &Style,
+        width: Option<usize>,
+        justify: Justify,
+        overflow: Overflow,
+        no_wrap: bool,
+        tab_size: usize,
+    ) -> Vec<Vec<Segment>> {
         // Tabs are expanded before anything measures or wraps the text, as
         // upstream's `Text.wrap` does per line. Without this a tab occupies one
         // cell everywhere in the layout and then eight on the terminal, so every
         // width calculation downstream is wrong.
         if self.plain.contains('\t') {
             let mut expanded = self.clone();
-            expanded.expand_tabs(DEFAULT_TAB_SIZE);
+            expanded.expand_tabs(tab_size);
             return expanded
-                .render_lines_wrapped(theme, base_style, width, justify, overflow, no_wrap);
+                .render_lines_wrapped_tabs(theme, base_style, width, justify, overflow, no_wrap, tab_size);
         }
 
         // Resolve every span's style once, up front, into a vector parallel to
@@ -803,8 +884,8 @@ impl Text {
         // ragged, so the groups cannot be flattened first.
         for group in groups {
             let mut new_lines: Vec<Vec<Segment>> = group
-                .into_iter()
-                .map(|(start, end)| self.line_segments(&resolved, start, end, &effective_base))
+                .iter()
+                .map(|&(start, end)| self.line_segments(&resolved, start, end, &effective_base))
                 .collect();
 
             // `overflow == "ignore"` is a hard stop upstream: the line is
@@ -837,6 +918,7 @@ impl Text {
                 for (index, line) in new_lines.iter_mut().enumerate() {
                     // Full justification leaves the final line of the paragraph
                     // ragged, so it needs to know where it is in the group.
+                    let (start, end) = group[index];
                     *line = justify_line(
                         line,
                         width,
@@ -844,6 +926,7 @@ impl Text {
                         overflow,
                         &effective_base,
                         index == last,
+                        &|char_index| self.covered_at(start, end, char_index),
                     );
                 }
             }
@@ -853,6 +936,20 @@ impl Text {
             lines.append(&mut new_lines);
         }
         lines
+    }
+
+    /// Whether any span covers the `char_index`-th character of the line
+    /// `[start, end)` — i.e. whether upstream's `Text.render` has a span
+    /// boundary at that character's edge of the line. Justify padding joins
+    /// the neighbouring run only where it does not.
+    fn covered_at(&self, start: usize, end: usize, char_index: usize) -> bool {
+        let Some((offset, _)) = self.plain[start..end].char_indices().nth(char_index) else {
+            return false;
+        };
+        let position = start + offset;
+        self.spans
+            .iter()
+            .any(|span| span.start <= position && position < span.end)
     }
 
     /// As [`render_lines_wrapped`](Self::render_lines_wrapped), flattened into a
@@ -866,8 +963,42 @@ impl Text {
         overflow: Overflow,
         no_wrap: bool,
     ) -> Vec<Segment> {
-        let lines =
-            self.render_lines_wrapped(theme, base_style, Some(width), justify, overflow, no_wrap);
+        self.render_joined_wrapped_tabs(
+            theme,
+            base_style,
+            width,
+            justify,
+            overflow,
+            no_wrap,
+            match self.tab_size {
+                None | Some(0) => DEFAULT_TAB_SIZE,
+                Some(tab_size) => tab_size,
+            },
+        )
+    }
+
+    /// [`render_joined_wrapped`](Self::render_joined_wrapped) with an explicit
+    /// tab stop width (see [`console_tab_size`](Self::console_tab_size)).
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_joined_wrapped_tabs(
+        &self,
+        theme: &Theme,
+        base_style: &Style,
+        width: usize,
+        justify: Justify,
+        overflow: Overflow,
+        no_wrap: bool,
+        tab_size: usize,
+    ) -> Vec<Segment> {
+        let lines = self.render_lines_wrapped_tabs(
+            theme,
+            base_style,
+            Some(width),
+            justify,
+            overflow,
+            no_wrap,
+            tab_size,
+        );
         let mut segments = Vec::new();
         let last = lines.len().saturating_sub(1);
         for (index, line) in lines.into_iter().enumerate() {
@@ -1002,6 +1133,12 @@ impl Text {
         }
         segments
     }
+}
+
+/// Python truthiness of a style argument: a null `Style` and an empty style
+/// name are falsy, and upstream's `append`/`stylize` skip them.
+fn is_falsy_style(style: &StyleType) -> bool {
+    style.is_null_style() || matches!(style, StyleType::Name(name) if name.is_empty())
 }
 
 /// Byte offset of the `char_idx`-th char in `text` (clamped to `text.len()`).
@@ -1158,6 +1295,11 @@ fn full_justify(line: &[Segment], width: usize, style: &Style) -> Vec<Segment> {
 ///
 /// `is_last` marks the final line of the paragraph, which full justification
 /// leaves ragged rather than stretching.
+///
+/// `covered(i)` says whether a span covers the line's `i`-th character.
+/// Upstream pads the plain string, so its padding joins the adjacent run
+/// unless a span ends (or starts) at the text's edge; a separate segment
+/// would re-emit the style as a second SGR run.
 fn justify_line(
     line: &[Segment],
     width: usize,
@@ -1165,6 +1307,7 @@ fn justify_line(
     overflow: Overflow,
     style: &Style,
     is_last: bool,
+    covered: &dyn Fn(usize) -> bool,
 ) -> Vec<Segment> {
     // Full justification rewrites the interior gaps instead of padding an edge.
     if justify == Justify::Full {
@@ -1195,6 +1338,13 @@ fn justify_line(
         content = truncate_line(&content, width, overflow);
     }
 
+    // Whether padding may join the content's first / last run: no span
+    // covers the character at that edge, so upstream's run there is the base
+    // style alone and the padding extends it.
+    let content_chars: usize = content.iter().map(|s| s.text.chars().count()).sum();
+    let join_left = content_chars > 0 && !covered(0);
+    let join_right = content_chars > 0 && !covered(content_chars - 1);
+
     let mut out = Vec::with_capacity(content.len() + 2);
     match justify {
         Justify::Right => {
@@ -1203,7 +1353,7 @@ fn justify_line(
             if excess > 0 {
                 out.push(Segment::new(" ".repeat(excess), Some(style.clone())));
             }
-            out.append(&mut content);
+            append_joined(&mut out, content, join_left);
         }
         Justify::Center => {
             // `pad_left((width - cell_len) // 2)` and then `pad_right(width -
@@ -1213,10 +1363,14 @@ fn justify_line(
             if left > 0 {
                 out.push(Segment::new(" ".repeat(left), Some(style.clone())));
             }
-            out.append(&mut content);
+            append_joined(&mut out, content, join_left);
             let right = width.saturating_sub(line_cell_len(&out));
             if right > 0 {
-                out.push(Segment::new(" ".repeat(right), Some(style.clone())));
+                push_joined(
+                    &mut out,
+                    Segment::new(" ".repeat(right), Some(style.clone())),
+                    join_right,
+                );
             }
         }
         // Left, Default, and full justification's ragged last line pad right.
@@ -1227,11 +1381,36 @@ fn justify_line(
             let excess = width.saturating_sub(line_cell_len(&content));
             out.append(&mut content);
             if excess > 0 {
-                out.push(Segment::new(" ".repeat(excess), Some(style.clone())));
+                push_joined(
+                    &mut out,
+                    Segment::new(" ".repeat(excess), Some(style.clone())),
+                    join_right,
+                );
             }
         }
     }
     out
+}
+
+/// Append `segment`, extending the last segment instead when `join` allows it
+/// and the two share a style.
+fn push_joined(out: &mut Vec<Segment>, segment: Segment, join: bool) {
+    match out.last_mut() {
+        Some(last) if join && !last.control && last.style == segment.style => {
+            last.text.push_str(&segment.text);
+        }
+        _ => out.push(segment),
+    }
+}
+
+/// Append `content`, joining its first segment onto the last of `out` when
+/// `join` allows it and the two share a style.
+fn append_joined(out: &mut Vec<Segment>, content: Vec<Segment>, join: bool) {
+    let mut content = content.into_iter();
+    if let Some(first) = content.next() {
+        push_joined(out, first, join);
+    }
+    out.extend(content);
 }
 
 /// The cell width of a rendered line.

@@ -25,6 +25,8 @@ rich-ext = { package = "rs-rich-ext", path = "../rich-ext", features = ["data", 
 rich-art = { package = "rs-rich-art", path = "../rich-art", features = ["image", "gif", "sixel"] }
 rich-mermaid = { package = "rs-rich-mermaid", path = "../rich-mermaid" }
 rich-plugin-api = { package = "rs-rich-plugin-api", path = "../rich-plugin-api" }
+# The `rich` command line, run in-process by `python -m rs_rich` (default features, `fetch` included).
+rich-cli = { package = "rs-rich-cli", path = "../rich-cli" }
 # The tree-sitter highlighter: a separate, much larger wheel.
 rich-lumis = { package = "rs-rich-lumis", path = "../rich-lumis", optional = true }
 # One abi3 wheel per platform covers CPython 3.9 and later.
@@ -36,7 +38,7 @@ extension-module = ["pyo3/extension-module"]
 # Mermaid's `mmdc` backend (needs Mermaid's CLI installed separately).
 mmdc = ["rich-mermaid/mmdc"]
 # `lumis` as a code highlighter; built as its own wheel.
-lumis = ["dep:rich-lumis"]
+lumis = ["dep:rich-lumis", "rich-cli/lumis"]
 
 # Its own workspace root, so the repository's workspace never builds it.
 [workspace]

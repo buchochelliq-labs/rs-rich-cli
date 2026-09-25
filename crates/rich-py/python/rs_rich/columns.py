@@ -1,7 +1,5 @@
-"""``rich.columns``: ``Columns``.
+"""``rich.columns``: ``Columns``, renderables in neat columns."""
 
-Placeholder, filled by the static-renderables area: re-export the classes from
-``._native`` here and list them in ``__all__``.
-"""
+from ._native import Columns
 
-__all__: list = []
+__all__ = ["Columns"]

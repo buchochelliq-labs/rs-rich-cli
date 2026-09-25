@@ -1,7 +1,5 @@
-"""``rich.rule``: ``Rule``.
+"""``rich.rule``: ``Rule``, a horizontal line with an optional title."""
 
-Placeholder, filled by the static-renderables area: re-export the classes from
-``._native`` here and list them in ``__all__``.
-"""
+from ._native import Rule
 
-__all__: list = []
+__all__ = ["Rule"]

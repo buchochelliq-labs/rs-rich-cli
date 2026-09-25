@@ -1,13 +1,8 @@
-"""``python -m rs_rich``: the ``rich`` command line.
+"""``python -m rs_rich``: the ``rich`` command line (see :mod:`rs_rich.cli`)."""
 
-Placeholder, filled by the CLI area (it calls into ``_native``'s CLI entry
-point, from ``src/cli.rs``).
-"""
+import sys
 
-
-def main() -> None:
-    raise NotImplementedError("the rs_rich command line is not implemented yet")
-
+from rs_rich.cli import main
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

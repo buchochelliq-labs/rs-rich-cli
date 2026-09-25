@@ -1,7 +1,23 @@
-"""``rich.highlighter``: ``Highlighter``, ``ReprHighlighter`` and friends.
+"""``rich.highlighter``: ``Highlighter`` and the built-in highlighters.
 
-Placeholder, filled by the code area: re-export the classes from
-``._native`` here and list them in ``__all__``.
+Subclass ``Highlighter`` (override ``highlight(text)``) or ``RegexHighlighter``
+(set ``highlights`` and ``base_style``), as with Rich.
 """
 
-__all__: list = []
+from ._native import (
+    Highlighter,
+    ISO8601Highlighter,
+    JSONHighlighter,
+    NullHighlighter,
+    RegexHighlighter,
+    ReprHighlighter,
+)
+
+__all__ = [
+    "Highlighter",
+    "ISO8601Highlighter",
+    "JSONHighlighter",
+    "NullHighlighter",
+    "RegexHighlighter",
+    "ReprHighlighter",
+]

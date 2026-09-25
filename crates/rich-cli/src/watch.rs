@@ -8,7 +8,7 @@
 //! the original clear-and-home viewport repaint; several files share the
 //! terminal as one `rich_ext::live::LiveCoordinator` region each.
 //!
-//! URLs keep their polling-only loop in `main.rs` and never reach this module.
+//! URLs keep their polling-only loop in `lib.rs` and never reach this module.
 use super::{render_target, run_once, watch_fingerprint, Cli, ExitClass};
 use rich::protocol::{RenderEnvironment, TargetCapabilities};
 use rich::rule::Rule;

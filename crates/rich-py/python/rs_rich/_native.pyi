@@ -494,51 +494,336 @@ class Console:
 
 # --- area: text-style (Text, Style, Theme, Color, emoji) ---
 
+class ColorParseError(Exception):
+    """A colour that does not parse."""
+
+class ColorSystem(int):
+    STANDARD: "ColorSystem"
+    EIGHT_BIT: "ColorSystem"
+    TRUECOLOR: "ColorSystem"
+    WINDOWS: "ColorSystem"
+    @property
+    def name(self) -> str: ...
+    @property
+    def value(self) -> int: ...
+
+class ColorType(int):
+    DEFAULT: "ColorType"
+    STANDARD: "ColorType"
+    EIGHT_BIT: "ColorType"
+    TRUECOLOR: "ColorType"
+    WINDOWS: "ColorType"
+    @property
+    def name(self) -> str: ...
+    @property
+    def value(self) -> int: ...
+
+class ColorTriplet(NamedTuple):
+    red: int
+    green: int
+    blue: int
+    @property
+    def hex(self) -> str: ...
+    @property
+    def rgb(self) -> str: ...
+    @property
+    def normalized(self) -> Tuple[float, float, float]: ...
+
+class Color(NamedTuple):
+    name: str
+    type: ColorType
+    number: Optional[int] = None
+    triplet: Optional[ColorTriplet] = None
+    @property
+    def system(self) -> ColorSystem: ...
+    @property
+    def is_system_defined(self) -> bool: ...
+    @property
+    def is_default(self) -> bool: ...
+    def get_truecolor(self, theme: Optional[TerminalTheme] = None, foreground: bool = True) -> ColorTriplet: ...
+    @classmethod
+    def from_ansi(cls, number: int) -> "Color": ...
+    @classmethod
+    def from_triplet(cls, triplet: ColorTriplet) -> "Color": ...
+    @classmethod
+    def from_rgb(cls, red: float, green: float, blue: float) -> "Color": ...
+    @classmethod
+    def default(cls) -> "Color": ...
+    @classmethod
+    def parse(cls, color: str) -> "Color": ...
+    def get_ansi_codes(self, foreground: bool = True) -> Tuple[str, ...]: ...
+    def downgrade(self, system: ColorSystem) -> "Color": ...
+
+def parse_rgb_hex(hex_color: str) -> ColorTriplet: ...
+def blend_rgb(
+    color1: Tuple[int, int, int], color2: Tuple[int, int, int], cross_fade: float = 0.5
+) -> ColorTriplet: ...
+
 class Style:
     def __init__(
         self,
         *,
-        color: Optional[str] = None,
-        bgcolor: Optional[str] = None,
+        color: Optional[Union[Color, str]] = None,
+        bgcolor: Optional[Union[Color, str]] = None,
         bold: Optional[bool] = None,
         dim: Optional[bool] = None,
         italic: Optional[bool] = None,
         underline: Optional[bool] = None,
         blink: Optional[bool] = None,
+        blink2: Optional[bool] = None,
         reverse: Optional[bool] = None,
         conceal: Optional[bool] = None,
         strike: Optional[bool] = None,
+        underline2: Optional[bool] = None,
+        frame: Optional[bool] = None,
+        encircle: Optional[bool] = None,
+        overline: Optional[bool] = None,
         link: Optional[str] = None,
+        meta: Optional[Dict[str, Any]] = None,
     ) -> None: ...
-    @staticmethod
-    def parse(definition: str) -> "Style": ...
-    def __add__(self, other: "Style") -> "Style": ...
+    @classmethod
+    def null(cls) -> "Style": ...
+    @classmethod
+    def from_color(cls, color: Optional[Color] = None, bgcolor: Optional[Color] = None) -> "Style": ...
+    @classmethod
+    def from_meta(cls, meta: Optional[Dict[str, Any]]) -> "Style": ...
+    @classmethod
+    def on(cls, meta: Optional[Dict[str, Any]] = None, **handlers: Any) -> "Style": ...
+    @classmethod
+    def parse(cls, style_definition: str) -> "Style": ...
+    @classmethod
+    def normalize(cls, style: str) -> str: ...
+    @classmethod
+    def pick_first(cls, *values: Optional[StyleType]) -> StyleType: ...
+    @classmethod
+    def combine(cls, styles: Iterable["Style"]) -> "Style": ...
+    @classmethod
+    def chain(cls, *styles: "Style") -> "Style": ...
+    @property
+    def bold(self) -> Optional[bool]: ...
+    @property
+    def dim(self) -> Optional[bool]: ...
+    @property
+    def italic(self) -> Optional[bool]: ...
+    @property
+    def underline(self) -> Optional[bool]: ...
+    @property
+    def blink(self) -> Optional[bool]: ...
+    @property
+    def blink2(self) -> Optional[bool]: ...
+    @property
+    def reverse(self) -> Optional[bool]: ...
+    @property
+    def conceal(self) -> Optional[bool]: ...
+    @property
+    def strike(self) -> Optional[bool]: ...
+    @property
+    def underline2(self) -> Optional[bool]: ...
+    @property
+    def frame(self) -> Optional[bool]: ...
+    @property
+    def encircle(self) -> Optional[bool]: ...
+    @property
+    def overline(self) -> Optional[bool]: ...
+    @property
+    def color(self) -> Optional[Color]: ...
+    @property
+    def bgcolor(self) -> Optional[Color]: ...
+    @property
+    def link(self) -> Optional[str]: ...
+    @property
+    def link_id(self) -> str: ...
+    @property
+    def transparent_background(self) -> bool: ...
+    @property
+    def background_style(self) -> "Style": ...
+    @property
+    def meta(self) -> Dict[str, Any]: ...
+    @property
+    def without_color(self) -> "Style": ...
+    def copy(self) -> "Style": ...
+    def clear_meta_and_links(self) -> "Style": ...
+    def update_link(self, link: Optional[str] = None) -> "Style": ...
+    def get_html_style(self, theme: Optional[TerminalTheme] = None) -> str: ...
+    def render(
+        self,
+        text: str = "",
+        *,
+        color_system: Optional[ColorSystem] = ...,
+        legacy_windows: bool = False,
+    ) -> str: ...
+    def test(self, text: Optional[str] = None) -> None: ...
+    def __add__(self, style: Optional["Style"]) -> "Style": ...
     def __eq__(self, other: object) -> bool: ...
     def __hash__(self) -> int: ...
+    def __bool__(self) -> bool: ...
+
+class StyleStack:
+    def __init__(self, default_style: Style) -> None: ...
+    @property
+    def current(self) -> Style: ...
+    def push(self, style: Style) -> None: ...
+    def pop(self) -> Style: ...
+
+class Span(NamedTuple):
+    start: int
+    end: int
+    style: Union[str, Style]
+    def split(self, offset: int) -> Tuple["Span", Optional["Span"]]: ...
+    def move(self, offset: int) -> "Span": ...
+    def right_crop(self, offset: int) -> "Span": ...
+    def extend(self, cells: int) -> "Span": ...
+
+class Lines:
+    def __init__(self, lines: Iterable["Text"] = ()) -> None: ...
+    def __iter__(self) -> Iterator["Text"]: ...
+    def __getitem__(self, index: Any) -> Any: ...
+    def __setitem__(self, index: int, value: "Text") -> None: ...
+    def __len__(self) -> int: ...
+    def __rich_console__(self, console: Console, options: ConsoleOptions) -> List["Text"]: ...
+    def append(self, line: "Text") -> None: ...
+    def extend(self, lines: Iterable["Text"]) -> None: ...
+    def pop(self, index: int = -1) -> "Text": ...
+    def justify(
+        self,
+        console: Console,
+        width: int,
+        justify: JustifyMethod = "left",
+        overflow: OverflowMethod = "fold",
+    ) -> None: ...
 
 class Text:
+    plain: str
+    spans: List[Span]
+    style: Union[str, Style]
+    justify: Optional[JustifyMethod]
+    overflow: Optional[OverflowMethod]
+    no_wrap: Optional[bool]
+    end: str
+    tab_size: Optional[int]
     def __init__(
         self,
         text: str = "",
-        style: Optional[StyleType] = None,
+        style: Union[str, Style] = "",
         *,
         justify: Optional[JustifyMethod] = None,
         overflow: Optional[OverflowMethod] = None,
         no_wrap: Optional[bool] = None,
+        end: str = "\n",
+        tab_size: Optional[int] = None,
+        spans: Optional[List[Span]] = None,
     ) -> None: ...
     @classmethod
     def from_markup(
         cls,
         text: str,
         *,
-        style: Optional[StyleType] = None,
+        style: Union[str, Style] = "",
+        emoji: bool = True,
+        emoji_variant: Optional[Literal["emoji", "text"]] = None,
         justify: Optional[JustifyMethod] = None,
+        overflow: Optional[OverflowMethod] = None,
+        end: str = "\n",
+    ) -> "Text": ...
+    @classmethod
+    def from_ansi(
+        cls,
+        text: str,
+        *,
+        style: Union[str, Style] = "",
+        justify: Optional[JustifyMethod] = None,
+        overflow: Optional[OverflowMethod] = None,
+        no_wrap: Optional[bool] = None,
+        end: str = "\n",
+        tab_size: Optional[int] = 8,
+    ) -> "Text": ...
+    @classmethod
+    def styled(
+        cls,
+        text: str,
+        style: StyleType = "",
+        *,
+        justify: Optional[JustifyMethod] = None,
+        overflow: Optional[OverflowMethod] = None,
+    ) -> "Text": ...
+    @classmethod
+    def assemble(
+        cls,
+        *parts: Union[str, "Text", Tuple[str, StyleType]],
+        style: Union[str, Style] = "",
+        justify: Optional[JustifyMethod] = None,
+        overflow: Optional[OverflowMethod] = None,
+        no_wrap: Optional[bool] = None,
+        end: str = "\n",
+        tab_size: int = 8,
+        meta: Optional[Dict[str, Any]] = None,
     ) -> "Text": ...
     @property
-    def plain(self) -> str: ...
-    def append(self, text: Union[str, "Text"], style: Optional[StyleType] = None) -> "Text": ...
-    def stylize(self, style: StyleType, start: int = 0, end: Optional[int] = None) -> None: ...
+    def cell_len(self) -> int: ...
+    @property
+    def markup(self) -> str: ...
+    def blank_copy(self, plain: str = "") -> "Text": ...
+    def copy(self) -> "Text": ...
+    def stylize(self, style: Union[str, Style], start: int = 0, end: Optional[int] = None) -> None: ...
+    def stylize_before(self, style: Union[str, Style], start: int = 0, end: Optional[int] = None) -> None: ...
+    def apply_meta(self, meta: Dict[str, Any], start: int = 0, end: Optional[int] = None) -> None: ...
+    def on(self, meta: Optional[Dict[str, Any]] = None, **handlers: Any) -> "Text": ...
+    def remove_suffix(self, suffix: str) -> None: ...
+    def right_crop(self, amount: int = 1) -> None: ...
+    def get_style_at_offset(self, console: Console, offset: int) -> Style: ...
+    def extend_style(self, spaces: int) -> None: ...
+    def highlight_regex(
+        self,
+        re_highlight: Any,
+        style: Optional[Union[Callable[[str], Optional[StyleType]], StyleType]] = None,
+        *,
+        style_prefix: str = "",
+    ) -> int: ...
+    def highlight_words(
+        self, words: Iterable[str], style: Union[str, Style], *, case_sensitive: bool = True
+    ) -> int: ...
+    def rstrip(self) -> None: ...
+    def rstrip_end(self, size: int) -> None: ...
+    def set_length(self, new_length: int) -> None: ...
+    def __rich_console__(self, console: Console, options: ConsoleOptions) -> List[Segment]: ...
+    def __rich_measure__(self, console: Console, options: ConsoleOptions) -> Measurement: ...
+    def render(self, console: Console, end: str = "") -> List[Segment]: ...
+    def join(self, lines: Iterable["Text"]) -> "Text": ...
+    def expand_tabs(self, tab_size: Optional[int] = None) -> None: ...
+    def truncate(self, max_width: int, *, overflow: Optional[OverflowMethod] = None, pad: bool = False) -> None: ...
+    def pad(self, count: int, character: str = " ") -> None: ...
+    def pad_left(self, count: int, character: str = " ") -> None: ...
+    def pad_right(self, count: int, character: str = " ") -> None: ...
+    def align(self, align: AlignMethod, width: int, character: str = " ") -> None: ...
+    def append(self, text: Union["Text", str], style: Optional[Union[str, Style]] = None) -> "Text": ...
+    def append_text(self, text: "Text") -> "Text": ...
+    def append_tokens(self, tokens: Iterable[Tuple[str, Optional[StyleType]]]) -> "Text": ...
+    def copy_styles(self, text: "Text") -> None: ...
+    def split(
+        self, separator: str = "\n", *, include_separator: bool = False, allow_blank: bool = False
+    ) -> Lines: ...
+    def divide(self, offsets: Iterable[int]) -> Lines: ...
+    def wrap(
+        self,
+        console: Console,
+        width: int,
+        *,
+        justify: Optional[JustifyMethod] = None,
+        overflow: Optional[OverflowMethod] = None,
+        tab_size: int = 8,
+        no_wrap: Optional[bool] = None,
+    ) -> Lines: ...
+    def fit(self, width: int) -> Lines: ...
+    def detect_indentation(self) -> int: ...
+    def with_indent_guides(
+        self, indent_size: Optional[int] = None, *, character: str = "│", style: StyleType = "dim green"
+    ) -> "Text": ...
     def __len__(self) -> int: ...
+    def __bool__(self) -> bool: ...
+    def __add__(self, other: Any) -> "Text": ...
+    def __eq__(self, other: object) -> bool: ...
+    def __contains__(self, other: object) -> bool: ...
+    def __getitem__(self, slice: Union[int, slice]) -> "Text": ...
 
 class Theme:
     def __init__(self, styles: Optional[Dict[str, StyleType]] = None, inherit: bool = True) -> None: ...
@@ -546,8 +831,372 @@ class Theme:
     def styles(self) -> Dict[str, Style]: ...
     @property
     def config(self) -> str: ...
+    @classmethod
+    def from_file(cls, config_file: IO[str], source: Optional[str] = None, inherit: bool = True) -> "Theme": ...
+    @classmethod
+    def read(cls, path: str, inherit: bool = True, encoding: Optional[str] = None) -> "Theme": ...
+
+class ThemeStack:
+    def __init__(self, theme: Theme) -> None: ...
+    def get(self, name: str, default: Optional[Style] = None) -> Optional[Style]: ...
+    def push_theme(self, theme: Theme, inherit: bool = True) -> None: ...
+    def pop_theme(self) -> None: ...
+
+class NoEmoji(Exception):
+    """No emoji by that name."""
+
+class Emoji:
+    VARIANTS: Dict[str, str]
+    name: str
+    style: StyleType
+    variant: Optional[Literal["emoji", "text"]]
+    def __init__(
+        self, name: str, style: StyleType = "none", variant: Optional[Literal["emoji", "text"]] = None
+    ) -> None: ...
+    @classmethod
+    def replace(cls, text: str) -> str: ...
+
+class Tag(NamedTuple):
+    name: str
+    parameters: Optional[str]
+    @property
+    def markup(self) -> str: ...
+
+def render_markup(
+    markup: str,
+    style: Union[str, Style] = "",
+    emoji: bool = True,
+    emoji_variant: Optional[Literal["emoji", "text"]] = None,
+) -> Text:
+    """``rich.markup.render`` (``rs_rich.markup.render``): console markup to a ``Text``."""
 
 # --- area: renderables (Rule, Padding, Align, Columns, Group, Constrain, Tree, Layout, Bar, Spinner, Styled) ---
+
+class Rule:
+    """``rich.rule.Rule``: a horizontal line, optionally with a title."""
+
+    title: Union[str, "Text"]
+    characters: str
+    style: StyleType
+    end: str
+    align: AlignMethod
+    def __init__(
+        self,
+        title: Union[str, "Text"] = "",
+        *,
+        characters: str = "─",
+        style: StyleType = "rule.line",
+        end: str = "\n",
+        align: AlignMethod = "center",
+    ) -> None: ...
+
+class Padding:
+    """``rich.padding.Padding``: space around a renderable."""
+
+    renderable: RenderableType
+    top: int
+    right: int
+    bottom: int
+    left: int
+    style: StyleType
+    expand: bool
+    def __init__(
+        self,
+        renderable: RenderableType,
+        pad: PaddingDimensions = (0, 0, 0, 0),
+        *,
+        style: StyleType = "none",
+        expand: bool = True,
+    ) -> None: ...
+    @classmethod
+    def indent(cls, renderable: RenderableType, level: int) -> "Padding": ...
+    @staticmethod
+    def unpack(pad: PaddingDimensions) -> Tuple[int, int, int, int]: ...
+
+class Align:
+    """``rich.align.Align``: align a renderable horizontally (and vertically)."""
+
+    renderable: RenderableType
+    align: AlignMethod
+    style: Optional[StyleType]
+    vertical: Optional[Literal["top", "middle", "bottom"]]
+    pad: bool
+    width: Optional[int]
+    height: Optional[int]
+    def __init__(
+        self,
+        renderable: RenderableType,
+        align: AlignMethod = "left",
+        style: Optional[StyleType] = None,
+        *,
+        vertical: Optional[Literal["top", "middle", "bottom"]] = None,
+        pad: bool = True,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+    ) -> None: ...
+    @classmethod
+    def left(
+        cls,
+        renderable: RenderableType,
+        style: Optional[StyleType] = None,
+        *,
+        vertical: Optional[Literal["top", "middle", "bottom"]] = None,
+        pad: bool = True,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+    ) -> "Align": ...
+    @classmethod
+    def center(
+        cls,
+        renderable: RenderableType,
+        style: Optional[StyleType] = None,
+        *,
+        vertical: Optional[Literal["top", "middle", "bottom"]] = None,
+        pad: bool = True,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+    ) -> "Align": ...
+    @classmethod
+    def right(
+        cls,
+        renderable: RenderableType,
+        style: Optional[StyleType] = None,
+        *,
+        vertical: Optional[Literal["top", "middle", "bottom"]] = None,
+        pad: bool = True,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+    ) -> "Align": ...
+
+class VerticalCenter:
+    """``rich.align.VerticalCenter``: center a renderable vertically."""
+
+    renderable: RenderableType
+    style: Optional[StyleType]
+    def __init__(self, renderable: RenderableType, style: Optional[StyleType] = None) -> None: ...
+
+class Columns:
+    """``rich.columns.Columns``: renderables in neat columns."""
+
+    renderables: List[RenderableType]
+    width: Optional[int]
+    padding: PaddingDimensions
+    expand: bool
+    equal: bool
+    column_first: bool
+    right_to_left: bool
+    align: Optional[AlignMethod]
+    title: Optional[Union[str, "Text"]]
+    def __init__(
+        self,
+        renderables: Optional[Iterable[RenderableType]] = None,
+        padding: PaddingDimensions = (0, 1),
+        *,
+        width: Optional[int] = None,
+        expand: bool = False,
+        equal: bool = False,
+        column_first: bool = False,
+        right_to_left: bool = False,
+        align: Optional[AlignMethod] = None,
+        title: Optional[Union[str, "Text"]] = None,
+    ) -> None: ...
+    def add_renderable(self, renderable: RenderableType) -> None: ...
+
+class Group:
+    """``rich.console.Group``: several renderables, one after another."""
+
+    fit: bool
+    def __init__(self, *renderables: RenderableType, fit: bool = True) -> None: ...
+    @property
+    def renderables(self) -> List[RenderableType]: ...
+
+def group(fit: bool = True) -> Callable[[Callable[..., Iterable[RenderableType]]], Callable[..., Group]]:
+    """``rich.console.group``: make a function returning renderables return a ``Group``."""
+
+class Renderables:
+    """``rich.containers.Renderables``: a list of renderables that renders them in turn."""
+
+    def __init__(self, renderables: Optional[Iterable[RenderableType]] = None) -> None: ...
+    def append(self, renderable: RenderableType) -> None: ...
+    def __iter__(self) -> Iterator[RenderableType]: ...
+
+def measure_renderables(
+    console: "Console", options: "ConsoleOptions", renderables: Iterable[RenderableType]
+) -> "Measurement":
+    """``rich.measure.measure_renderables``: the widest minimum and maximum."""
+
+class Constrain:
+    """``rich.constrain.Constrain``: render within at most ``width`` cells."""
+
+    renderable: RenderableType
+    width: Optional[int]
+    def __init__(self, renderable: RenderableType, width: Optional[int] = 80) -> None: ...
+
+class Styled:
+    """``rich.styled.Styled``: apply a style across a whole renderable."""
+
+    renderable: RenderableType
+    style: StyleType
+    def __init__(self, renderable: RenderableType, style: StyleType) -> None: ...
+
+class Tree:
+    """``rich.tree.Tree``: a renderable tree structure."""
+
+    ASCII_GUIDES: Tuple[str, str, str, str]
+    TREE_GUIDES: List[Tuple[str, str, str, str]]
+    label: RenderableType
+    style: StyleType
+    guide_style: StyleType
+    children: List["Tree"]
+    expanded: bool
+    highlight: bool
+    hide_root: bool
+    def __init__(
+        self,
+        label: RenderableType,
+        *,
+        style: StyleType = "tree",
+        guide_style: StyleType = "tree.line",
+        expanded: bool = True,
+        highlight: bool = False,
+        hide_root: bool = False,
+    ) -> None: ...
+    def add(
+        self,
+        label: RenderableType,
+        *,
+        style: Optional[StyleType] = None,
+        guide_style: Optional[StyleType] = None,
+        expanded: bool = True,
+        highlight: Optional[bool] = False,
+    ) -> "Tree": ...
+
+class LayoutError(Exception):
+    """``rich.layout.LayoutError``: a layout related error."""
+
+class NoSplitter(LayoutError):
+    """``rich.layout.NoSplitter``: the requested splitter does not exist."""
+
+class Region(NamedTuple):
+    """``rich.region.Region``: a rectangle of the screen."""
+
+    x: int
+    y: int
+    width: int
+    height: int
+
+class LayoutRender(NamedTuple):
+    """``rich.layout.LayoutRender``: one leaf's region and rendered lines."""
+
+    region: Region
+    render: List[List["Segment"]]
+
+class Splitter:
+    """``rich.layout.Splitter``: divides a region among child layouts."""
+
+    name: str
+
+class RowSplitter(Splitter):
+    """``rich.layout.RowSplitter``: children side by side."""
+
+    def get_tree_icon(self) -> str: ...
+    def divide(self, children: Iterable["Layout"], region: Region) -> List[Tuple["Layout", Region]]: ...
+
+class ColumnSplitter(Splitter):
+    """``rich.layout.ColumnSplitter``: children stacked."""
+
+    def get_tree_icon(self) -> str: ...
+    def divide(self, children: Iterable["Layout"], region: Region) -> List[Tuple["Layout", Region]]: ...
+
+class Layout:
+    """``rich.layout.Layout``: divide a fixed height into rows or columns."""
+
+    splitters: Dict[str, type]
+    size: Optional[int]
+    minimum_size: int
+    ratio: int
+    name: Optional[str]
+    visible: bool
+    splitter: Splitter
+    def __init__(
+        self,
+        renderable: Optional[RenderableType] = None,
+        *,
+        name: Optional[str] = None,
+        size: Optional[int] = None,
+        minimum_size: int = 1,
+        ratio: int = 1,
+        visible: bool = True,
+    ) -> None: ...
+    @property
+    def renderable(self) -> RenderableType: ...
+    @property
+    def children(self) -> List["Layout"]: ...
+    @property
+    def map(self) -> Dict["Layout", LayoutRender]: ...
+    @property
+    def tree(self) -> Tree: ...
+    def get(self, name: str) -> Optional["Layout"]: ...
+    def __getitem__(self, name: str) -> "Layout": ...
+    def split(self, *layouts: Union["Layout", RenderableType], splitter: Union[Splitter, str] = "column") -> None: ...
+    def add_split(self, *layouts: Union["Layout", RenderableType]) -> None: ...
+    def split_row(self, *layouts: Union["Layout", RenderableType]) -> None: ...
+    def split_column(self, *layouts: Union["Layout", RenderableType]) -> None: ...
+    def unsplit(self) -> None: ...
+    def update(self, renderable: RenderableType) -> None: ...
+    def refresh_screen(self, console: "Console", layout_name: str) -> None:
+        """Not supported: raises ``NotImplementedError``."""
+    def render(self, console: "Console", options: "ConsoleOptions") -> Dict["Layout", LayoutRender]: ...
+
+class Bar:
+    """``rich.bar.Bar``: a solid block bar."""
+
+    size: float
+    begin: float
+    end: float
+    width: Optional[int]
+    @property
+    def style(self) -> "Style": ...
+    def __init__(
+        self,
+        size: float,
+        begin: float,
+        end: float,
+        *,
+        width: Optional[int] = None,
+        color: Union["Color", str] = "default",
+        bgcolor: Union["Color", str] = "default",
+    ) -> None: ...
+
+SPINNERS: Dict[str, Dict[str, Any]]
+
+class Spinner:
+    """``rich.spinner.Spinner``: an animation frame for a point in time."""
+
+    name: str
+    text: RenderableType
+    frames: List[str]
+    interval: float
+    start_time: Optional[float]
+    style: Optional[StyleType]
+    speed: float
+    frame_no_offset: float
+    def __init__(
+        self,
+        name: str,
+        text: RenderableType = "",
+        *,
+        style: Optional[StyleType] = None,
+        speed: float = 1.0,
+    ) -> None: ...
+    def render(self, time: float) -> RenderableType: ...
+    def update(
+        self,
+        *,
+        text: RenderableType = "",
+        style: Optional[StyleType] = None,
+        speed: Optional[float] = None,
+    ) -> None: ...
 
 # --- area: code (Markdown, Syntax, JSON, Pretty, inspect, Traceback, highlighters) ---
 
@@ -559,4 +1208,199 @@ class Theme:
 
 # --- area: plugins (plugin API) ---
 
+PLUGIN_API_VERSION: int
+
+def is_valid_name(name: str) -> bool: ...
+
+class PluginError(Exception):
+    """A plugin was refused, or a plugin callback failed. ``kind`` is one of
+    ``incompatible_api``, ``duplicate_plugin``, ``conflict``, ``invalid_name``,
+    ``failed``, ``other`` or ``pipeline``; the other attributes are ``None``
+    where the kind has no such field."""
+    kind: str
+    plugin: Optional[str]
+    name: Optional[str]
+    existing: Optional[str]
+    capability: Optional["Capability"]
+    built_for: Optional[int]
+    host: Optional[int]
+    message: Optional[str]
+    stage: Optional[str]
+
+class HighlightError(Exception):
+    """A code highlighter failed."""
+
+class UnknownThemeError(HighlightError):
+    """A code highlighter has no theme of this name (``args[0]``)."""
+
+class HighlighterChoiceError(ValueError):
+    """``set_default_code_highlighter`` named an unknown highlighter or theme."""
+    name: str
+    available: Optional[List[str]]
+    theme: Optional[str]
+
+class PluginMetadata:
+    def __init__(
+        self,
+        id: str,
+        name: str,
+        version: str,
+        description: Optional[str] = None,
+        *,
+        api_version: int = ...,
+    ) -> None: ...
+    @property
+    def id(self) -> str: ...
+    @property
+    def name(self) -> str: ...
+    @property
+    def version(self) -> str: ...
+    @property
+    def api_version(self) -> int: ...
+    @property
+    def description(self) -> Optional[str]: ...
+    def __hash__(self) -> int: ...
+
+class Capability:
+    KINDS: List[str]
+    def __init__(
+        self,
+        kind: Literal[
+            "highlighter", "code_highlighter", "theme", "box_style", "renderer", "fence_renderer", "transform"
+        ],
+        name: Optional[str] = None,
+    ) -> None: ...
+    @property
+    def kind(self) -> str: ...
+    @property
+    def name(self) -> Optional[str]: ...
+    def __lt__(self, other: "Capability") -> bool: ...
+    def __hash__(self) -> int: ...
+
+class RegisteredPlugin:
+    @property
+    def metadata(self) -> PluginMetadata: ...
+    @property
+    def capabilities(self) -> List[Capability]: ...
+
+class HighlightSpan:
+    def __init__(self, start: int, end: int, style: StyleType) -> None: ...
+    @property
+    def start(self) -> int: ...
+    @property
+    def end(self) -> int: ...
+    @property
+    def style(self) -> "Style": ...
+
+SpanLike = Union[HighlightSpan, Tuple[int, int, StyleType]]
+
+class HighlightedLine:
+    def __init__(self, spans: Optional[Iterable[SpanLike]] = None, newline_style: Optional[StyleType] = None) -> None: ...
+    @property
+    def spans(self) -> List[HighlightSpan]: ...
+    @property
+    def newline_style(self) -> Optional["Style"]: ...
+
+class HighlightedCode:
+    def __init__(
+        self,
+        lines: Optional[Iterable[Union[HighlightedLine, Iterable[SpanLike]]]] = None,
+        background: Optional[str] = None,
+        default_style: Optional[StyleType] = None,
+    ) -> None: ...
+    @property
+    def lines(self) -> List[HighlightedLine]: ...
+    @property
+    def background(self) -> Optional[str]: ...
+    @property
+    def default_style(self) -> "Style": ...
+    def __len__(self) -> int: ...
+
+class CodeHighlighter:
+    """Subclass to write a syntax-highlighting engine in Python."""
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+    def highlight(
+        self, code: str, language: Optional[str] = None, theme: Optional[str] = None
+    ) -> Union[HighlightedCode, Iterable[Union[HighlightedLine, Iterable[SpanLike]]]]: ...
+    def default_theme(self) -> str: ...
+    def themes(self) -> List[str]: ...
+    def languages(self) -> List[str]: ...
+    def language_for_path(self, path: Any) -> Optional[str]: ...
+
+class TextTransform:
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+    def transform(self, text: "Text") -> "Text": ...
+    def __call__(self, text: "Text") -> "Text": ...
+
+class TextPipeline:
+    def names(self) -> List[str]: ...
+    def __len__(self) -> int: ...
+    def apply(self, text: "Text") -> "Text": ...
+    def __call__(self, text: "Text") -> "Text": ...
+
+class Rendered:
+    """A renderable a ``SourceRenderer`` returned."""
+
+class SourceRenderer:
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+    def render(self, source: str) -> Any: ...
+    def __call__(self, source: str) -> Any: ...
+
+class FenceRenderer:
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+    def render_fence(
+        self, language: str, code: str, console: "Console", options: Optional["ConsoleOptions"] = None
+    ) -> Optional[List["Segment"]]: ...
+
+class PluginRegistrar:
+    def highlighter(self, highlighter: Any) -> None: ...
+    def code_highlighter(self, name: str, highlighter: Any) -> None: ...
+    def theme(self, name: str, theme: "Theme") -> None: ...
+    def box_style(self, name: str, box: "Box") -> None: ...
+    def renderer(self, name: str, renderer: Union[Callable[[str], Any], Any]) -> None: ...
+    def fence_renderer(self, language: str, renderer: Union[Callable[[str, str], Any], Any]) -> None: ...
+    def transform(self, name: str, transform: Union[Callable[["Text"], Optional["Text"]], Any]) -> None: ...
+
+class Plugin:
+    """Subclass and implement ``metadata()`` and ``register(registrar)``."""
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+    def metadata(self) -> PluginMetadata: ...
+    def register(self, registrar: PluginRegistrar) -> None: ...
+
+class BuiltinPlugin(Plugin):
+    def __init__(self) -> None: ...
+
+class MermaidPlugin(Plugin):
+    def __init__(self, *, ascii: Optional[bool] = None, backend: Literal["text", "mmdc"] = "text") -> None: ...
+
+class ExtensionRegistry:
+    def __init__(self) -> None: ...
+    @staticmethod
+    def with_defaults() -> "ExtensionRegistry": ...
+    def add_plugin(self, plugin: Any) -> None: ...
+    def register_highlighter(self, highlighter: Any) -> None: ...
+    def register_code_highlighter(self, name: str, highlighter: Any) -> None: ...
+    def register_transform(self, name: str, transform: Any) -> None: ...
+    def plugins(self) -> List[RegisteredPlugin]: ...
+    def provided_by(self, capability: Capability) -> Optional[str]: ...
+    def code_highlighter_names(self) -> List[str]: ...
+    def code_highlighter(self, name: str) -> Optional[CodeHighlighter]: ...
+    def set_default_code_highlighter(self, name: str, theme: Optional[str] = None) -> None: ...
+    def default_code_highlighter(self) -> Optional[str]: ...
+    def theme(self, name: str) -> Optional["Theme"]: ...
+    def box_style(self, name: str) -> Optional["Box"]: ...
+    def renderer(self, name: str) -> Optional[SourceRenderer]: ...
+    def fence_renderer(self, language: str) -> Optional[FenceRenderer]: ...
+    def fences(self) -> Optional[FenceRenderer]: ...
+    def transform(self, name: str) -> Optional[TextTransform]: ...
+    def transform_names(self) -> List[str]: ...
+    def text_pipeline(self, names: Iterable[str]) -> TextPipeline: ...
+    def install(self, console: "Console") -> None: ...
+
+def install_defaults(console: "Console") -> None: ...
+
 # --- area: cli (the rich command line) ---
+
+def cli_main(program: list[str], argv: list[str]) -> int:
+    """Run the ``rich`` command line in-process (GIL released); return its exit status."""
+    ...

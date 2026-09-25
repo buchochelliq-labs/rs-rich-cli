@@ -1,7 +1,9 @@
 """``rich.markdown``: ``Markdown``.
 
-Placeholder, filled by the code area: re-export the classes from
-``._native`` here and list them in ``__all__``.
+``Markdown(..., highlighter="lumis")`` picks the code highlighter for code
+blocks by name (see ``rs_rich.syntax.code_highlighters()``); not in Rich.
 """
 
-__all__: list = []
+from ._native import Markdown
+
+__all__ = ["Markdown"]

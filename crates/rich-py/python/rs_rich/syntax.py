@@ -1,7 +1,13 @@
-"""``rich.syntax``: ``Syntax``.
+"""``rich.syntax``: ``Syntax``, plus the port's code-highlighter choice.
 
-Placeholder, filled by the code area: re-export the classes from
-``._native`` here and list them in ``__all__``.
+``Syntax(..., highlighter="syntect")`` (or ``"lumis"`` in a lumis build)
+picks the engine by name; ``code_highlighters()`` lists the names and
+``code_themes(name)`` an engine's themes. Rich highlights with Pygments, so
+token colours differ from Rich's (see docs/python/syntax.md).
 """
 
-__all__: list = []
+from ._native import Syntax, code_highlighters, code_themes
+
+DEFAULT_THEME = "monokai"
+
+__all__ = ["Syntax", "code_highlighters", "code_themes"]

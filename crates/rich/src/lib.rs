@@ -34,6 +34,7 @@ pub mod color;
 mod color_names;
 pub mod columns;
 pub mod console;
+pub mod containers;
 pub mod constrain;
 pub mod control;
 pub mod emoji;
@@ -86,9 +87,12 @@ pub use crate::ansi::AnsiDecoder;
 pub use crate::bar::Bar;
 pub use crate::color::{Color, ColorSystem, ColorTriplet};
 pub use crate::columns::Columns;
-pub use crate::console::{Console, ConsoleOptions, Justify, Overflow, ThemeContext};
+pub use crate::console::{
+    Console, ConsoleDimensions, ConsoleOptions, Justify, Overflow, RenderStrOptions, ThemeContext,
+};
 pub use crate::constrain::Constrain;
 pub use crate::control::{Control, ControlType};
+pub use crate::emoji::EmojiVariant;
 pub use crate::errors::{Result, RichError};
 pub use crate::highlighter::{ISO8601Highlighter, RegexHighlighter, ReprHighlighter};
 pub use crate::json::Json;

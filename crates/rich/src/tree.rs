@@ -73,12 +73,23 @@ impl Tree {
         let mut label_lines = if let Cell::Renderable(renderable) = &self.label {
             let mut label_options = options.update_width(available);
             label_options.height = None;
+            label_options.highlight = Some(highlight);
             console.render_lines(renderable.as_ref(), &label_options, false)
         } else {
-            self.label
+            let text = self
+                .label
                 .to_text(console, Some(highlight))
-                .unwrap_or_default()
-                .render_lines(console.theme(), &Style::new(), Some(available))
+                .unwrap_or_default();
+            let tab_size = text.console_tab_size(console);
+            text.render_lines_wrapped_tabs(
+                console.theme(),
+                &Style::new(),
+                Some(available),
+                text.get_justify(),
+                text.get_overflow().unwrap_or_default(),
+                text.get_no_wrap().unwrap_or(false),
+                tab_size,
+            )
         };
         if label_lines.is_empty() {
             label_lines.push(Vec::new());

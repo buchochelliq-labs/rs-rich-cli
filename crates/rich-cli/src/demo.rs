@@ -129,7 +129,7 @@ fn command(
     full.extend(args);
     let cli = parse(&full).map_err(std::io::Error::other)?;
     if let Some(cli) = cli {
-        if run(cli) != ExitCode::SUCCESS {
+        if run_cli(cli) != ExitCode::SUCCESS {
             return Err(std::io::Error::other(format!("example failed: {label}")));
         }
     }
@@ -496,7 +496,7 @@ fn watch(
     // Run beside the files and pass bare names, so the region headers read
     // `first.json` rather than a temporary path.
     let (first_path, second_path) = (Path::new(first), Path::new(second));
-    let mut cmd = std::process::Command::new(std::env::current_exe()?);
+    let mut cmd = super::self_command()?;
     if let Some(directory) = first_path.parent() {
         cmd.current_dir(directory);
     }

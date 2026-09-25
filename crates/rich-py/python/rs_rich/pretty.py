@@ -1,7 +1,10 @@
-"""``rich.pretty``: ``Pretty``, ``pprint`` and ``install``.
+"""``rich.pretty``: ``Pretty``, ``Node``, ``traverse``, ``pretty_repr``,
+``pprint`` and ``install``.
 
-Placeholder, filled by the code area: re-export the classes from
-``._native`` here and list them in ``__all__``.
+``install`` is ``_native.pretty_install`` (``rich.traceback`` has an
+``install`` too, so the compiled module names them apart).
 """
 
-__all__: list = []
+from ._native import Node, Pretty, pprint, pretty_install as install, pretty_repr, traverse
+
+__all__ = ["Node", "Pretty", "pprint", "pretty_repr", "traverse"]

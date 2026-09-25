@@ -1,7 +1,9 @@
-"""``rich.emoji``: ``Emoji``.
+"""``rich.emoji``: ``Emoji`` and ``NoEmoji``."""
 
-Placeholder, filled by the text/style area: re-export the classes from
-``._native`` here and list them in ``__all__``.
-"""
+from typing import Literal
 
-__all__: list = []
+from ._native import Emoji, NoEmoji
+
+EmojiVariant = Literal["emoji", "text"]
+
+__all__ = ["Emoji", "NoEmoji"]

@@ -1,7 +1,5 @@
-"""``rich.tree``: ``Tree``.
+"""``rich.tree``: ``Tree``, a renderable tree structure."""
 
-Placeholder, filled by the static-renderables area: re-export the classes from
-``._native`` here and list them in ``__all__``.
-"""
+from ._native import Tree
 
-__all__: list = []
+__all__ = ["Tree"]

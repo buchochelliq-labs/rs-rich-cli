@@ -1361,7 +1361,7 @@ mod tests {
     //! Heuristic for "what the parser recognises": every string literal that
     //! is exactly an option spelling (`"--name"` or `"-x"`) inside the parser
     //! functions — `parse_inner`, `VALUE_OPTIONS`, `mode_flag_alias` in
-    //! `main.rs`, `arguments` and `boolean_flags` in `config.rs`, `options`
+    //! `lib.rs`, `arguments` and `boolean_flags` in `config.rs`, `options`
     //! in `demo.rs`, and the extension options in `rich_ext::cli`. Error
     //! messages and table labels such as `"--diff/--image"` never match a
     //! whole literal, so no exclusions are needed. The spec side is every
@@ -1370,7 +1370,7 @@ mod tests {
     use crate::config::{config_args, ConfigRoots};
     use std::collections::BTreeSet;
 
-    const MAIN: &str = include_str!("main.rs");
+    const MAIN: &str = include_str!("lib.rs");
     const CONFIG: &str = include_str!("config.rs");
     const DEMO: &str = include_str!("demo.rs");
     const INSPECT: &str = include_str!("inspect.rs");

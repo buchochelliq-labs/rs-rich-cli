@@ -1,7 +1,5 @@
-"""``rich.padding``: ``Padding``.
+"""``rich.padding``: ``Padding``, space around a renderable."""
 
-Placeholder, filled by the static-renderables area: re-export the classes from
-``._native`` here and list them in ``__all__``.
-"""
+from ._native import Padding
 
-__all__: list = []
+__all__ = ["Padding"]

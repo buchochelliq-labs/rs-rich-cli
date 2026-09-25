@@ -1,7 +1,5 @@
-"""``rich.spinner``: ``Spinner``.
+"""``rich.spinner``: ``Spinner`` and the ``SPINNERS`` table."""
 
-Placeholder, filled by the static-renderables area: re-export the classes from
-``._native`` here and list them in ``__all__``.
-"""
+from ._native import SPINNERS, Spinner
 
-__all__: list = []
+__all__ = ["SPINNERS", "Spinner"]

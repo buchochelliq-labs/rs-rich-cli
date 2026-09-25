@@ -1,7 +1,5 @@
-"""``rich.constrain``: ``Constrain``.
+"""``rich.constrain``: ``Constrain``, a renderable within a maximum width."""
 
-Placeholder, filled by the static-renderables area: re-export the classes from
-``._native`` here and list them in ``__all__``.
-"""
+from ._native import Constrain
 
-__all__: list = []
+__all__ = ["Constrain"]

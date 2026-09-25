@@ -4,9 +4,16 @@
 //! `rs_rich.syntax`, `rs_rich.json`, `rs_rich.pretty`, `rs_rich.traceback`,
 //! `rs_rich.highlighter`).
 //!
-//! Owner: the code area. Placeholder: the two hooks below are what
-//! `console.rs` calls; replace their bodies, keep their signatures. Add
-//! classes in [`register`] (submodules under `code/` are fine).
+//! Owner: the code area. `console.rs` calls the two hooks below.
+//!
+//! | Submodule | Rich module |
+//! |---|---|
+//! | `highlighter` | `rich.highlighter` |
+//! | `pretty` | `rich.pretty` |
+//! | `json` | `rich.json` |
+//! | `markdown` | `rich.markdown` |
+//! | `syntax` | `rich.syntax` (and the code-highlighter choice) |
+//! | `layout` | small renderables the others compose with |
 
 use pyo3::exceptions::PyNotImplementedError;
 use pyo3::prelude::*;
@@ -16,17 +23,21 @@ use rich::protocol::Renderable;
 
 use crate::console::Console;
 
+mod highlighter;
+mod json;
+mod layout;
+mod markdown;
+mod pretty;
+mod syntax;
+
 /// What `Console.print` renders for a container, dataclass or other
 /// object Rich pretty-prints (`rich.pretty.Pretty(obj, highlighter=...)`).
 /// `highlight` is the print's effective highlight setting.
 pub(crate) fn pretty_for_print(
     value: &Bound<'_, PyAny>,
-    _highlight: bool,
+    highlight: bool,
 ) -> PyResult<Box<dyn Renderable>> {
-    Err(PyNotImplementedError::new_err(format!(
-        "rs_rich cannot render {} yet: pretty printing (rs_rich.pretty) is not implemented",
-        value.get_type().name()?
-    )))
+    pretty::for_print(value, highlight)
 }
 
 /// `Console.print_exception(...)`, with Rich's arguments.
@@ -40,6 +51,11 @@ pub(crate) fn console_print_exception(
     ))
 }
 
-pub(crate) fn register(_m: &Bound<'_, PyModule>) -> PyResult<()> {
+pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    highlighter::register(m)?;
+    pretty::register(m)?;
+    json::register(m)?;
+    markdown::register(m)?;
+    syntax::register(m)?;
     Ok(())
 }

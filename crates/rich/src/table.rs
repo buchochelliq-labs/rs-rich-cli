@@ -911,6 +911,8 @@ impl Table {
                     // at the content width, with the column's justify,
                     // no_wrap and overflow as options.
                     let mut cell_options = options.update_width(*width);
+                    cell_options.highlight =
+                        Some(column.and_then(|c| c.highlight).unwrap_or(self.highlight));
                     cell_options.justify = column.map_or(Justify::Left, |c| c.justify);
                     cell_options.no_wrap = Some(column.is_some_and(|c| c.no_wrap));
                     cell_options.overflow = Some(column.map_or(Overflow::Ellipsis, |c| c.overflow));
@@ -965,22 +967,24 @@ impl Table {
             // The text renders on its own and the cell style is applied to the
             // result (`render_lines(..., style=...)`), so a span keeps its own
             // segment even where it matches the cell style: `[b]Name` under a
-            // bold header is `Name` + padding, as upstream prints it. Only
-            // equal *unstyled-cell* runs merge, which rejoins the justify
-            // padding that `Text.pad_right` would have appended to the plain.
+            // bold header is `Name` + padding, as upstream prints it. The
+            // justify padding joins the text's last run only where no span
+            // ends there, as `Text.pad_right` on the plain string does.
+            let tab_size = text.console_tab_size(console);
             let mut lines: Vec<Vec<Segment>> = if *width == 0 {
                 Vec::new()
             } else {
-                text.render_lines_wrapped(
+                text.render_lines_wrapped_tabs(
                     console.theme(),
                     &Style::new(),
                     Some(*width),
                     justify,
                     overflow,
                     no_wrap,
+                    tab_size,
                 )
                 .iter()
-                .map(|line| Segment::apply_style(&Segment::simplify(line), &style))
+                .map(|line| Segment::apply_style(line, &style))
                 .collect()
             };
             if lines.is_empty() && *width > 0 {

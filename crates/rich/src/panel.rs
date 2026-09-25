@@ -29,6 +29,7 @@ pub struct Panel {
     style: Style,
     expand: bool,
     width: Option<usize>,
+    highlight: bool,
 }
 
 impl Panel {
@@ -46,6 +47,7 @@ impl Panel {
             style: Style::new(),
             expand: true,
             width: None,
+            highlight: false,
         }
     }
 
@@ -102,6 +104,14 @@ impl Panel {
     /// Set the inner padding `(top, right, bottom, left)`.
     pub fn padding(mut self, padding: (usize, usize, usize, usize)) -> Self {
         self.padding = padding;
+        self
+    }
+
+    /// Highlight strings rendered inside the panel (upstream
+    /// `Panel(highlight=…)`, default off). Passed to the child as
+    /// [`ConsoleOptions::highlight`].
+    pub fn highlight(mut self, highlight: bool) -> Self {
+        self.highlight = highlight;
         self
     }
 
@@ -254,6 +264,8 @@ impl Renderable for Panel {
         let child_width = inner_width.saturating_sub(pl).saturating_sub(pr);
 
         let mut child_options = options.update_width(child_width);
+        // `options.update(width=…, height=…, highlight=self.highlight)`.
+        child_options.highlight = Some(self.highlight);
         // When a height is imposed (e.g. as a Layout leaf), the child fills the
         // space left by the two borders and the top/bottom padding rows, so the
         // panel expands to exactly `height` rows. Port of `Panel`'s

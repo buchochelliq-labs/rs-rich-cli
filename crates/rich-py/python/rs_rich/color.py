@@ -1,7 +1,21 @@
-"""``rich.color``: ``Color``, ``ColorTriplet`` and ``ColorSystem``.
+"""``rich.color``: ``Color``, ``ColorTriplet``, ``ColorSystem`` and ``ColorType``."""
 
-Placeholder, filled by the text/style area: re-export the classes from
-``._native`` here and list them in ``__all__``.
-"""
+from ._native import (
+    Color,
+    ColorParseError,
+    ColorSystem,
+    ColorTriplet,
+    ColorType,
+    blend_rgb,
+    parse_rgb_hex,
+)
 
-__all__: list = []
+__all__ = [
+    "Color",
+    "ColorParseError",
+    "ColorSystem",
+    "ColorTriplet",
+    "ColorType",
+    "blend_rgb",
+    "parse_rgb_hex",
+]

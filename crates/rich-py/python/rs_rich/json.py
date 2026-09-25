@@ -1,7 +1,5 @@
-"""``rich.json``: ``JSON``.
+"""``rich.json``: ``JSON``."""
 
-Placeholder, filled by the code area: re-export the classes from
-``._native`` here and list them in ``__all__``.
-"""
+from ._native import JSON
 
-__all__: list = []
+__all__ = ["JSON"]

@@ -114,6 +114,16 @@ impl ConsoleOptions {
                 .map(convert::overflow)
                 .transpose()?,
             no_wrap: self.no_wrap,
+            highlight: self.highlight,
+            markup: self.markup,
+            max_height: self.max_height,
+            encoding: self.encoding.clone(),
+            is_terminal: self.is_terminal,
+            legacy_windows: self.legacy_windows,
+            size: rich::console::ConsoleDimensions {
+                width: self.size.0,
+                height: self.size.1,
+            },
         })
     }
 

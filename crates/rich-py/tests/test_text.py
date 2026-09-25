@@ -13,7 +13,7 @@ from rs_rich.text import Text
 
 def test_plain_len_str_and_repr():
     text = Text("héllo")
-    assert (text.plain, len(text), str(text), repr(text)) == ("héllo", 5, "héllo", "<text \"héllo\">")
+    assert (text.plain, len(text), str(text), repr(text)) == ("héllo", 5, "héllo", "<text 'héllo' [] ''>")
 
 
 def test_a_style_applies_to_the_whole_text():
