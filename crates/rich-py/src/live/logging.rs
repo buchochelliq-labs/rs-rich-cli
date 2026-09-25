@@ -13,7 +13,9 @@ use pyo3::{PyTraverseError, PyVisit};
 
 use rich::protocol::Highlighter;
 use rich::table::{Cell, ColumnOptions};
-use rich::{Overflow, ReprHighlighter, Style as CoreStyle, Table as CoreTable, Text as CoreText};
+use rich::{
+    Overflow, ReprHighlighter, Style as CoreStyle, StyleType, Table as CoreTable, Text as CoreText,
+};
 
 use super::progress::cell;
 use super::util;
@@ -176,21 +178,23 @@ impl LogRender {
             }
         });
         if let Some(path) = &path {
-            let link = |target: String| CoreStyle::new().with_link(target);
+            // Upstream's style string `f"link file://{link_path}"`, resolved at
+            // render: a path with whitespace parses as more style words (or
+            // fails to, leaving the text unstyled), exactly as upstream.
+            let link = |target: String| StyleType::Name(format!("link {target}"));
+            let link_path = link_path
+                .as_deref()
+                .filter(|link_path| !link_path.is_empty());
             let mut path_text = CoreText::new("");
             path_text.append(
                 path,
-                link_path
-                    .as_ref()
-                    .map(|link_path| link(format!("file://{link_path}")).into()),
+                link_path.map(|link_path| link(format!("file://{link_path}"))),
             );
             if let Some(line_no) = line_no.filter(|line| *line != 0) {
                 path_text.append(":", None);
                 path_text.append(
                     &line_no.to_string(),
-                    link_path
-                        .as_ref()
-                        .map(|link_path| link(format!("file://{link_path}#{line_no}")).into()),
+                    link_path.map(|link_path| link(format!("file://{link_path}#{line_no}"))),
                 );
             }
             row.push(Cell::Text(path_text));
@@ -261,8 +265,8 @@ fn _rich_handler_render_message(
         .call1((record, "markup", handler.getattr("markup")?))?
         .is_truthy()?;
     let text = if use_markup {
-        CoreText::from_markup(&rich::emoji::replace(message))
-            .map_err(|e| MarkupError::new_err(e.to_string()))?
+        // `Text.from_markup(message)`
+        crate::color::markup::render(message, true, None)?
     } else {
         CoreText::new(message)
     };

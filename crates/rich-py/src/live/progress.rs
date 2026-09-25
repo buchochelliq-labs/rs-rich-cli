@@ -54,14 +54,70 @@ fn text_obj(py: Python<'_>, plain: &str, style: &str) -> PyResult<Py<PyAny>> {
     util::new_text(py, CoreText::styled(plain, style))
 }
 
-/// Python's `int(value)`.
-fn py_int(value: &Bound<'_, PyAny>) -> PyResult<i64> {
+/// Python's `int(value)`, unbounded as Rich's arithmetic on it.
+fn py_int<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     value
         .py()
         .import("builtins")?
         .getattr("int")?
-        .call1((value,))?
+        .call1((value,))
+}
+
+/// Python's `format(value, spec)`.
+fn format_obj(value: &Bound<'_, PyAny>, spec: &str) -> PyResult<String> {
+    value
+        .py()
+        .import("builtins")?
+        .getattr("format")?
+        .call1((value, spec))?
         .extract()
+}
+
+/// `rich.filesize.decimal(size)`, on a Python `int` of any size.
+fn filesize_decimal(size: &Bound<'_, PyAny>) -> PyResult<String> {
+    const SUFFIXES: [&str; 8] = ["kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+    let py = size.py();
+    if size.eq(1)? {
+        return Ok("1 byte".to_string());
+    }
+    if size.lt(1000)? {
+        return Ok(format!("{} bytes", format_obj(size, ",")?));
+    }
+    let base = 1000i64.into_pyobject(py)?.into_any();
+    let mut unit = base.clone();
+    let mut suffix = SUFFIXES[0];
+    for candidate in SUFFIXES {
+        unit = unit.mul(&base)?;
+        suffix = candidate;
+        if size.lt(&unit)? {
+            break;
+        }
+    }
+    let value = base.mul(size)?.div(&unit)?;
+    Ok(format!("{} {suffix}", format_obj(&value, ",.1f")?))
+}
+
+/// `rich.filesize.pick_unit_and_suffix(size, suffixes, base)`, on a Python
+/// `int` of any size.
+fn pick_unit_and_suffix<'py>(
+    size: &Bound<'py, PyAny>,
+    suffixes: &[&'static str],
+    base: i64,
+) -> PyResult<(Bound<'py, PyAny>, &'static str)> {
+    let py = size.py();
+    let base = base.into_pyobject(py)?.into_any();
+    let mut unit = 1i64.into_pyobject(py)?.into_any();
+    let mut suffix = suffixes[0];
+    for (index, candidate) in suffixes.iter().enumerate() {
+        if index > 0 {
+            unit = unit.mul(&base)?;
+        }
+        suffix = candidate;
+        if size.lt(unit.mul(&base)?)? {
+            break;
+        }
+    }
+    Ok((unit, suffix))
 }
 
 // ---------------------------------------------------------------------------
@@ -454,7 +510,15 @@ impl Task {
             return Ok(0.0);
         }
         let percentage: f64 = completed.div(total)?.mul(100.0)?.extract()?;
-        Ok(percentage.clamp(0.0, 100.0))
+        // `min(100.0, max(0.0, percentage))`: Python's min and max keep their
+        // first argument unless the other compares strictly past it, so -0.0
+        // and NaN become 0.0 (`f64::clamp` keeps both).
+        let percentage = if percentage > 0.0 { percentage } else { 0.0 };
+        Ok(if percentage < 100.0 {
+            percentage
+        } else {
+            100.0
+        })
     }
 
     #[getter]
@@ -923,18 +987,6 @@ impl BarColumn {
     }
 }
 
-/// `str(timedelta(seconds=n))` for `n >= 0`.
-fn timedelta(total_seconds: i64) -> String {
-    let days = total_seconds / 86_400;
-    let rest = total_seconds % 86_400;
-    let clock = format!("{}:{:02}:{:02}", rest / 3600, rest % 3600 / 60, rest % 60);
-    match days {
-        0 => clock,
-        1 => format!("1 day, {clock}"),
-        days => format!("{days} days, {clock}"),
-    }
-}
-
 macro_rules! simple_column {
     ($rust:ident, $name:literal, $doc:literal) => {
         #[doc = $doc]
@@ -999,7 +1051,20 @@ impl TimeElapsedColumn {
         if elapsed.is_none() {
             return text_obj(py, "-:--:--", "progress.elapsed");
         }
-        text_obj(py, &timedelta(py_int(&elapsed)?.max(0)), "progress.elapsed")
+        // `str(timedelta(seconds=max(0, int(elapsed))))`
+        let seconds = py_int(&elapsed)?;
+        let seconds = if seconds.lt(0)? {
+            0i64.into_pyobject(py)?.into_any()
+        } else {
+            seconds
+        };
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("seconds", seconds)?;
+        let delta = py
+            .import("datetime")?
+            .getattr("timedelta")?
+            .call((), Some(&kwargs))?;
+        text_obj(py, &delta.str()?.to_cow()?, "progress.elapsed")
     }
 }
 
@@ -1020,7 +1085,7 @@ impl FileSizeColumn {
     }
 
     fn render(slf: &Bound<'_, Self>, task: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        let size = rich::filesize::decimal_signed(py_int(&task.getattr("completed")?)?);
+        let size = filesize_decimal(&py_int(&task.getattr("completed")?)?)?;
         text_obj(slf.py(), &size, "progress.filesize")
     }
 }
@@ -1046,7 +1111,7 @@ impl TotalFileSizeColumn {
         let size = if total.is_none() {
             String::new()
         } else {
-            rich::filesize::decimal_signed(py_int(&total)?)
+            filesize_decimal(&py_int(&total)?)?
         };
         text_obj(slf.py(), &size, "progress.filesize.total")
     }
@@ -1073,7 +1138,7 @@ impl TransferSpeedColumn {
         if speed.is_none() {
             return text_obj(slf.py(), "?", "progress.data.speed");
         }
-        let size = rich::filesize::decimal_signed(py_int(&speed)?);
+        let size = filesize_decimal(&py_int(&speed)?)?;
         text_obj(slf.py(), &format!("{size}/s"), "progress.data.speed")
     }
 }
@@ -1109,24 +1174,17 @@ impl MofNCompleteColumn {
         let total = if total.is_none() {
             "?".to_string()
         } else {
-            py_int(&total)?.to_string()
+            py_int(&total)?.str()?.to_cow()?.into_owned()
         };
         let width = total.chars().count();
+        let completed = format_obj(&completed, &format!("{width}d"))?;
         let separator = util::to_str(&slf.getattr("separator")?)?;
         text_obj(
             slf.py(),
-            &format!("{completed:>width$}{separator}{total}"),
+            &format!("{completed}{separator}{total}"),
             "progress.download",
         )
     }
-}
-
-/// Python's `format(value, spec)`.
-fn py_format(py: Python<'_>, value: f64, spec: &str) -> PyResult<String> {
-    py.import("builtins")?
-        .getattr("format")?
-        .call1((value, spec))?
-        .extract()
 }
 
 /// `rich.progress.DownloadColumn(binary_units=False, table_column=None)`.
@@ -1167,16 +1225,16 @@ impl DownloadColumn {
         } else {
             Some(py_int(&total)?)
         };
-        let base_size = total.unwrap_or(completed);
+        let base_size = total.as_ref().unwrap_or(&completed);
         let (unit, suffix) = if slf.getattr("binary_units")?.is_truthy()? {
-            rich::filesize::pick_unit_and_suffix_signed(base_size, BINARY, 1024)
+            pick_unit_and_suffix(base_size, BINARY, 1024)?
         } else {
-            rich::filesize::pick_unit_and_suffix_signed(base_size, DECIMAL, 1000)
+            pick_unit_and_suffix(base_size, DECIMAL, 1000)?
         };
-        let spec = if unit == 1 { ",.0f" } else { ",.1f" };
-        let completed_str = py_format(py, completed as f64 / unit as f64, spec)?;
+        let spec = if unit.eq(1)? { ",.0f" } else { ",.1f" };
+        let completed_str = format_obj(&completed.div(&unit)?, spec)?;
         let total_str = match total {
-            Some(total) => py_format(py, total as f64 / unit as f64, spec)?,
+            Some(total) => format_obj(&total.div(&unit)?, spec)?,
             None => "?".to_string(),
         };
         text_obj(
@@ -1236,13 +1294,17 @@ impl TimeRemainingColumn {
         if task_time.is_none() {
             return text_obj(py, if compact { "--:--" } else { "-:--:--" }, style);
         }
-        let whole = py_int(&task_time)?;
-        let (minutes, seconds) = (whole.div_euclid(60), whole.rem_euclid(60));
-        let (hours, minutes) = (minutes.div_euclid(60), minutes.rem_euclid(60));
-        let formatted = if compact && hours == 0 {
-            format!("{minutes:02}:{seconds:02}")
+        let (minutes, seconds) = py_int(&task_time)?
+            .divmod(60)?
+            .extract::<(Bound<'_, PyAny>, Bound<'_, PyAny>)>()?;
+        let (hours, minutes) = minutes
+            .divmod(60)?
+            .extract::<(Bound<'_, PyAny>, Bound<'_, PyAny>)>()?;
+        let (minutes, seconds) = (format_obj(&minutes, "02d")?, format_obj(&seconds, "02d")?);
+        let formatted = if compact && !hours.is_truthy()? {
+            format!("{minutes}:{seconds}")
         } else {
-            format!("{hours}:{minutes:02}:{seconds:02}")
+            format!("{}:{minutes}:{seconds}", hours.str()?)
         };
         text_obj(py, &formatted, style)
     }
@@ -1308,15 +1370,16 @@ impl TaskProgressColumn {
         let Some(speed) = speed else {
             return text_obj(py, "", "progress.percentage");
         };
-        let (unit, suffix) = rich::filesize::pick_unit_and_suffix_signed(
-            speed as i64,
+        let speed = speed.into_pyobject(py)?.into_any();
+        let (unit, suffix) = pick_unit_and_suffix(
+            &py_int(&speed)?,
             &["", "×10³", "×10⁶", "×10⁹", "×10¹²"],
             1000,
-        );
-        let data_speed = speed / unit as f64;
+        )?;
+        let data_speed = speed.div(&unit)?;
         text_obj(
             py,
-            &format!("{}{suffix} it/s", py_format(py, data_speed, ".1f")?),
+            &format!("{}{suffix} it/s", format_obj(&data_speed, ".1f")?),
             "progress.percentage",
         )
     }

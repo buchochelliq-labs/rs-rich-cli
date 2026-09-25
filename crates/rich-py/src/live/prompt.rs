@@ -54,7 +54,8 @@ impl PromptBase {
         let prompt = match prompt {
             None => util::new_text(py, CoreText::styled("", "prompt"))?,
             Some(prompt) if util::is_str(&prompt) => {
-                let mut text = renderable::render_str(&util::to_str(&prompt)?, true, true, false)?;
+                // `Text.from_markup(prompt, style="prompt")`
+                let mut text = crate::color::markup::render(&util::to_str(&prompt)?, true, None)?;
                 text.set_base_style("prompt");
                 util::new_text(py, text)?
             }
