@@ -605,64 +605,83 @@ impl Renderable for Constrained {
     }
 }
 
+/// Upstream's `rich.scope.render_scope(scope, title=title, sort_keys=True,
+/// indent_guides=..., max_length=..., max_string=..., max_depth=...,
+/// overflow=...)`: a fitted panel of names and pretty-printed values (a
+/// value may already be a `Node`).
+pub(crate) fn render_scope(
+    scope: &Bound<'_, PyDict>,
+    title: Option<String>,
+    indent_guides: bool,
+    limits: Limits,
+    overflow: Option<rich::Overflow>,
+) -> PyResult<SharedChild> {
+    let mut items: Vec<(String, Bound<'_, PyAny>)> = scope
+        .iter()
+        .map(|(key, value)| Ok((key.extract::<String>()?, value)))
+        .collect::<PyResult<_>>()?;
+    items.sort_by_cached_key(|(key, _)| (!key.starts_with("__"), key.to_lowercase()));
+    let mut table = Table::grid().padding(0, 1, 0, 1).expand(false);
+    table.add_column_with(
+        CoreText::new(""),
+        ColumnOptions {
+            justify: Justify::Right,
+            ..ColumnOptions::default()
+        },
+    );
+    table.add_column_with(CoreText::new(""), ColumnOptions::default());
+    for (key, value) in items {
+        let mut key_text = CoreText::new("");
+        key_text.append(
+            &key,
+            named(if key.starts_with("__") {
+                "scope.key.special"
+            } else {
+                "scope.key"
+            }),
+        );
+        key_text.append(" =", named("scope.equals"));
+        let node = match value.extract::<PyRef<'_, PyNode>>() {
+            Ok(node) => node.inner.clone(),
+            Err(_) => traverse(&value, limits)?,
+        };
+        let mut layout = Layout::new(node, super::pretty::type_repr(&value)?);
+        layout.indent_guides = indent_guides;
+        layout.overflow = overflow;
+        table.add_row_cells(vec![
+            Cell::Text(key_text),
+            Cell::Renderable(shared_repr(layout, &[])),
+        ]);
+    }
+    Ok(Arc::new(NamedPanel {
+        child: Arc::new(table),
+        border_style: StyleType::Name("scope.border".to_string()),
+        title,
+        expand: false,
+        width: None,
+        padding: (0, 1, 0, 1),
+    }))
+}
+
 impl View {
     /// Upstream's `render_scope(frame.locals, title="locals", ...)`.
     fn render_locals(&self, locals: &Bound<'_, PyDict>) -> PyResult<Option<SharedChild>> {
         if locals.is_empty() {
             return Ok(None);
         }
-        let mut items: Vec<(String, Bound<'_, PyAny>)> = locals
-            .iter()
-            .map(|(key, value)| Ok((key.extract::<String>()?, value)))
-            .collect::<PyResult<_>>()?;
-        items.sort_by_cached_key(|(key, _)| (!key.starts_with("__"), key.to_lowercase()));
-        let mut table = Table::grid().padding(0, 1, 0, 1).expand(false);
-        table.add_column_with(
-            CoreText::new(""),
-            ColumnOptions {
-                justify: Justify::Right,
-                ..ColumnOptions::default()
-            },
-        );
-        table.add_column_with(CoreText::new(""), ColumnOptions::default());
-        for (key, value) in items {
-            let mut key_text = CoreText::new("");
-            key_text.append(
-                &key,
-                named(if key.starts_with("__") {
-                    "scope.key.special"
-                } else {
-                    "scope.key"
-                }),
-            );
-            key_text.append(" =", named("scope.equals"));
-            let node = match value.extract::<PyRef<'_, PyNode>>() {
-                Ok(node) => node.inner.clone(),
-                Err(_) => traverse(
-                    &value,
-                    Limits {
-                        max_length: self.locals_max_length,
-                        max_string: self.locals_max_string,
-                        max_depth: self.locals_max_depth,
-                    },
-                )?,
-            };
-            let mut layout = Layout::new(node, super::pretty::type_repr(&value)?);
-            layout.indent_guides = self.indent_guides;
-            layout.overflow = self.locals_overflow;
-            table.add_row_cells(vec![
-                Cell::Text(key_text),
-                Cell::Renderable(shared_repr(layout, &[])),
-            ]);
-        }
-        Ok(Some(Arc::new(NamedPanel {
-            child: Arc::new(table),
-            border_style: StyleType::Name("scope.border".to_string()),
-            title: Some("locals".to_string()),
-            expand: false,
-            width: None,
-            padding: (0, 1, 0, 1),
-        })))
+        let limits = Limits {
+            max_length: self.locals_max_length,
+            max_string: self.locals_max_string,
+            max_depth: self.locals_max_depth,
+        };
+        render_scope(
+            locals,
+            Some("locals".to_string()),
+            self.indent_guides,
+            limits,
+            self.locals_overflow,
+        )
+        .map(Some)
     }
 
     /// Upstream's `_render_stack`: the frames of one exception.

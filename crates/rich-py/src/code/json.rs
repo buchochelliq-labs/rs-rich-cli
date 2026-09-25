@@ -48,7 +48,7 @@ impl Indent {
 
 /// `json.dumps` with upstream's arguments, then the highlighter.
 #[allow(clippy::too_many_arguments)]
-fn encode(
+pub(crate) fn encode(
     data: &Bound<'_, PyAny>,
     indent: &Bound<'_, PyAny>,
     highlight: bool,

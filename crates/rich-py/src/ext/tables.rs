@@ -80,7 +80,12 @@ fn rows_to_py(py: Python<'_>, rows: &[Vec<Value>]) -> PyResult<Vec<Vec<Py<PyAny>
 /// min_width=None, max_width=None, ratio=None, no_wrap=False,
 /// overflow="ellipsis", format=None)`: a column of a `TableData` or
 /// `StreamingTable`. `format(value)` returns the cell (`str` or `Text`).
-#[pyclass(name = "DataColumn", module = "rs_rich.ext.table", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "DataColumn",
+    module = "rs_rich.ext.table",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct DataColumn {
     inner: CoreColumn,
@@ -160,7 +165,12 @@ fn columns(value: &Bound<'_, PyAny>) -> PyResult<Vec<CoreColumn>> {
 
 /// `SortKey(column, *, descending=False, lexical=False)`: natural order
 /// (numbers by value, `file10` after `file9`) unless `lexical`.
-#[pyclass(name = "SortKey", module = "rs_rich.ext.table", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "SortKey",
+    module = "rs_rich.ext.table",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct SortKey {
     inner: CoreKey,
@@ -221,7 +231,12 @@ fn sort_keys(value: &Bound<'_, PyAny>) -> PyResult<Vec<CoreKey>> {
 /// `Aggregate(kind, column)`: `count`, `sum`, `min`, `max` or `mean` of a
 /// column, or `Aggregate.custom(column, function)` with
 /// `function(values) -> value`.
-#[pyclass(name = "Aggregate", module = "rs_rich.ext.table", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "Aggregate",
+    module = "rs_rich.ext.table",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct Aggregate {
     inner: CoreAggregate,
@@ -290,7 +305,12 @@ fn aggregates(value: &Bound<'_, PyAny>) -> PyResult<Vec<CoreAggregate>> {
 
 /// `GroupBy(column, *, aggregates=(), label="subtotal")`: rows grouped by a
 /// column's value, each group with a subtotal row.
-#[pyclass(name = "GroupBy", module = "rs_rich.ext.table", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "GroupBy",
+    module = "rs_rich.ext.table",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub(crate) struct GroupBy {
     inner: CoreGroupBy,
@@ -300,7 +320,11 @@ pub(crate) struct GroupBy {
 impl GroupBy {
     #[new]
     #[pyo3(signature = (column, *, aggregates=None, label=None))]
-    fn new(column: usize, aggregates: Option<&Bound<'_, PyAny>>, label: Option<String>) -> PyResult<Self> {
+    fn new(
+        column: usize,
+        aggregates: Option<&Bound<'_, PyAny>>,
+        label: Option<String>,
+    ) -> PyResult<Self> {
         let mut inner = CoreGroupBy::new(column);
         if let Some(items) = aggregates {
             for aggregate in self::aggregates(items)? {
@@ -449,14 +473,20 @@ impl TableData {
     }
 
     /// Add a row (missing cells are empty). Returns the table.
-    fn push<'py>(mut slf: PyRefMut<'py, Self>, values: &Bound<'py, PyAny>) -> PyResult<PyRefMut<'py, Self>> {
+    fn push<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        values: &Bound<'py, PyAny>,
+    ) -> PyResult<PyRefMut<'py, Self>> {
         let values = row(values)?;
         slf.inner.push(values);
         Ok(slf)
     }
 
     /// Add rows. Returns the table.
-    fn extend<'py>(mut slf: PyRefMut<'py, Self>, rows: &Bound<'py, PyAny>) -> PyResult<PyRefMut<'py, Self>> {
+    fn extend<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        rows: &Bound<'py, PyAny>,
+    ) -> PyResult<PyRefMut<'py, Self>> {
         for r in rows.try_iter()? {
             let values = row(&r?)?;
             slf.inner.push(values);
@@ -465,7 +495,10 @@ impl TableData {
     }
 
     /// Replace the sort keys (`SortKey`s or column numbers).
-    fn sort_by<'py>(mut slf: PyRefMut<'py, Self>, keys: &Bound<'py, PyAny>) -> PyResult<PyRefMut<'py, Self>> {
+    fn sort_by<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        keys: &Bound<'py, PyAny>,
+    ) -> PyResult<PyRefMut<'py, Self>> {
         let keys = sort_keys(keys)?;
         slf.inner.set_sort(keys);
         Ok(slf)
@@ -659,7 +692,12 @@ impl StreamingTable {
     }
 
     /// Insert or replace the row for `key`; `True` if anything changed.
-    fn upsert(&mut self, py: Python<'_>, key: &Bound<'_, PyAny>, values: &Bound<'_, PyAny>) -> PyResult<bool> {
+    fn upsert(
+        &mut self,
+        py: Python<'_>,
+        key: &Bound<'_, PyAny>,
+        values: &Bound<'_, PyAny>,
+    ) -> PyResult<bool> {
         let values = row(values)?;
         let id = match self.id(py, key)? {
             Some(id) => id,
@@ -677,7 +715,13 @@ impl StreamingTable {
     }
 
     /// Set one cell of `key`'s row; `False` when there is no such row.
-    fn update_cell(&mut self, py: Python<'_>, key: &Bound<'_, PyAny>, column: usize, v: &Bound<'_, PyAny>) -> PyResult<bool> {
+    fn update_cell(
+        &mut self,
+        py: Python<'_>,
+        key: &Bound<'_, PyAny>,
+        column: usize,
+        v: &Bound<'_, PyAny>,
+    ) -> PyResult<bool> {
         let Some(id) = self.id(py, key)? else {
             return Ok(false);
         };
@@ -685,7 +729,11 @@ impl StreamingTable {
     }
 
     /// Remove `key`'s row; returns its values, or `None`.
-    fn remove(&mut self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<Option<Vec<Py<PyAny>>>> {
+    fn remove(
+        &mut self,
+        py: Python<'_>,
+        key: &Bound<'_, PyAny>,
+    ) -> PyResult<Option<Vec<Py<PyAny>>>> {
         let Some(id) = self.id(py, key)? else {
             return Ok(None);
         };
@@ -715,7 +763,9 @@ impl StreamingTable {
     }
 
     fn __contains__(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<bool> {
-        Ok(self.id(py, key)?.is_some_and(|id| self.table().contains_key(&id)))
+        Ok(self
+            .id(py, key)?
+            .is_some_and(|id| self.table().contains_key(&id)))
     }
 
     fn __len__(&self) -> usize {
