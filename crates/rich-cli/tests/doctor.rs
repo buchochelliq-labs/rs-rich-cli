@@ -50,6 +50,24 @@ fn doctor_lists_registered_plugins() {
         capabilities.contains(&"code highlighter \"syntect\""),
         "{capabilities:?}"
     );
+    // The Mermaid plugin, where it is built in, registers like any other.
+    let mermaid = report["plugins"]["registered"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|plugin| plugin["id"] == "mermaid");
+    assert_eq!(mermaid.is_some(), cfg!(feature = "mermaid"), "{report}");
+    if let Some(mermaid) = mermaid {
+        assert_eq!(
+            mermaid["capabilities"][0], "fence renderer \"mermaid\"",
+            "{mermaid}"
+        );
+    }
+    assert_eq!(
+        report["features"]["mermaid"],
+        cfg!(feature = "mermaid"),
+        "{report}"
+    );
 
     let text = Command::new(env!("CARGO_BIN_EXE_rich"))
         .args(["doctor", "--no-config"])

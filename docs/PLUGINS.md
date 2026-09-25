@@ -24,6 +24,7 @@ Defined in [`crates/rich/src/protocol.rs`](https://github.com/buchochelliq-labs/
 | `Renderable`   | `__rich_console__` protocol | make a custom type printable by `Console` |
 | `LineRenderable` | incremental consumption of rendering generators | stream styled lines without collecting the full rendered output; implemented by `Table` |
 | `Highlighter`  | `Highlighter` ABC          | add style spans to `Text` (numbers, URLs, syntax, …) |
+| `FenceRenderer` | none (upstream always highlights a fence) | draw ```` ```lang ```` fences in `Markdown` instead of highlighting them, via `Markdown::fence_renderer`; with none added, Markdown is unchanged (0.0.12) |
 | `CodeHighlighter` | Pygments behind `Syntax` | the syntax-highlighting engine for `Syntax` and Markdown code; `SyntectHighlighter` is the default, and `Syntax::highlighter` / `Markdown::highlighter` take any other (0.0.12) |
 
 More seams (custom `Box` sets, spinners, themes) are added here as the
@@ -71,6 +72,7 @@ adds capabilities through a `PluginRegistrar`:
 | `theme(name, theme)` | a named `Theme` |
 | `box_style(name, box)` | a named table/panel box style |
 | `renderer(name, renderer)` | a `SourceRenderer` that turns source text into a renderable |
+| `fence_renderer(language, renderer)` | a `FenceRenderer` for Markdown fences in that language |
 
 ```rust
 use rich_ext::plugin::{Plugin, PluginError, PluginMetadata, PluginRegistrar};
@@ -111,7 +113,13 @@ was.
 `ExtensionRegistry::with_defaults()` adds the built-in `rich-ext` plugin, which
 provides the number highlighter and the `syntect` code highlighter. Query what
 is registered with `plugins()`, `code_highlighter(name)`, `theme(name)`,
-`box_style(name)`, `renderer(name)` and `provided_by(capability)`.
+`box_style(name)`, `renderer(name)`, `fence_renderer(language)` and
+`provided_by(capability)`. `fences()` combines every registered fence renderer
+into one for `Markdown::fence_renderer`, routed by language.
+
+The first plugin built this way is `rs-rich-mermaid` (`MermaidPlugin`): a
+`mermaid` fence renderer and source renderer, with flowcharts drawn as text and
+every diagram type through `mmdc` behind its `mmdc` feature.
 `rich doctor` lists the registered plugins and the API version (and includes
 them in `--json`).
 

@@ -20,7 +20,7 @@ use pulldown_cmark::{
 use crate::cells::cell_len;
 use crate::console::{Console, ConsoleOptions, Justify};
 use crate::markdown_url::{normalize_link, normalize_link_text, validate_link};
-use crate::protocol::{CodeHighlighter, Renderable};
+use crate::protocol::{CodeHighlighter, FenceRenderer, Renderable};
 use crate::r#box::SIMPLE;
 use crate::segment::Segment;
 use crate::style::Style;
@@ -93,6 +93,9 @@ enum Block {
         theme: Option<String>,
         /// [`Markdown::highlighter`]; `None` keeps the `Syntax` default.
         highlighter: Option<Arc<dyn CodeHighlighter>>,
+        /// [`Markdown::fence_renderer`]s, asked before `Syntax` for a fenced
+        /// block with a language. Empty unless the caller added one.
+        fences: Vec<Arc<dyn FenceRenderer>>,
     },
     /// A thematic break (horizontal rule).
     Rule,
@@ -183,6 +186,8 @@ struct MarkdownOptions {
     inline_code_theme: Option<String>,
     /// The engine for code blocks and highlighted inline code.
     highlighter: Option<Arc<dyn CodeHighlighter>>,
+    /// Renderers for fenced blocks, in the order they were added.
+    fences: Vec<Arc<dyn FenceRenderer>>,
 }
 
 impl Markdown {
@@ -267,6 +272,15 @@ impl Markdown {
     /// Theme names are then the highlighter's own.
     pub fn highlighter(mut self, highlighter: Arc<dyn CodeHighlighter>) -> Self {
         self.options.highlighter = Some(highlighter);
+        self.reparse()
+    }
+
+    /// Let `renderer` draw fenced code blocks instead of highlighting them, for
+    /// the languages it accepts (see [`FenceRenderer`]). Renderers are asked in
+    /// the order they were added. Not in upstream, which always highlights; with
+    /// none added, output is unchanged.
+    pub fn fence_renderer(mut self, renderer: Arc<dyn FenceRenderer>) -> Self {
+        self.options.fences.push(renderer);
         self.reparse()
     }
 
@@ -1157,6 +1171,7 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                         code: source,
                         theme: md.code_theme.clone(),
                         highlighter: md.highlighter.clone(),
+                        fences: md.fences.clone(),
                     });
                 }
             }
@@ -1701,26 +1716,40 @@ fn render_blocks(
                 code,
                 theme,
                 highlighter,
+                fences,
             } => {
-                // Render the code block via the Syntax renderable (functional,
-                // not byte-parity — see DIVERGENCES). Split its segment stream
-                // back into per-line rows for the shared join below.
-                // Upstream: `Syntax(code, lexer, theme=..., word_wrap=True, padding=1)`.
-                // Upstream: `Syntax(code, lexer, theme=..., word_wrap=True, padding=1)`.
-                // Without word_wrap a long line was cropped dead at the console
-                // width and its tail discarded entirely — a README's install
-                // command lost half its flags, with no marker that anything went.
-                let mut syntax = Syntax::new(code.as_str(), language.as_str())
-                    .word_wrap(true)
-                    .padding(1);
-                if let Some(theme) = theme {
-                    syntax = syntax.theme(theme.as_str());
-                }
-                if let Some(highlighter) = highlighter {
-                    syntax = syntax.highlighter(highlighter.clone());
-                }
                 let inner = options.update_width(width);
-                let segments = syntax.rich_render(console, &inner);
+                // An indented block has no language, so it never reaches a
+                // fence renderer.
+                let drawn = if language.is_empty() {
+                    None
+                } else {
+                    fences
+                        .iter()
+                        .find_map(|fence| fence.render_fence(language, code, console, &inner))
+                };
+                let segments = match drawn {
+                    Some(segments) => segments,
+                    None => {
+                        // Render the code block via the Syntax renderable (functional,
+                        // not byte-parity — see DIVERGENCES). Split its segment stream
+                        // back into per-line rows for the shared join below.
+                        // Upstream: `Syntax(code, lexer, theme=..., word_wrap=True, padding=1)`.
+                        // Without word_wrap a long line was cropped dead at the console
+                        // width and its tail discarded entirely — a README's install
+                        // command lost half its flags, with no marker that anything went.
+                        let mut syntax = Syntax::new(code.as_str(), language.as_str())
+                            .word_wrap(true)
+                            .padding(1);
+                        if let Some(theme) = theme {
+                            syntax = syntax.theme(theme.as_str());
+                        }
+                        if let Some(highlighter) = highlighter {
+                            syntax = syntax.highlighter(highlighter.clone());
+                        }
+                        syntax.rich_render(console, &inner)
+                    }
+                };
                 lines.extend(Segment::split_lines(&segments));
             }
             Block::Rule => {
@@ -1812,6 +1841,45 @@ mod tests {
         assert_eq!(
             default,
             render_with(&Markdown::new(source).code_theme("no-such-theme"))
+        );
+    }
+
+    /// A fence renderer draws the fences it accepts, including ones nested in a
+    /// list or quote; it declines others (and indented code never reaches it),
+    /// which then render exactly as without it.
+    #[test]
+    fn fence_renderers_draw_accepted_fences_and_decline_the_rest() {
+        use crate::protocol::FenceRenderer;
+        struct Boxed;
+        impl FenceRenderer for Boxed {
+            fn render_fence(
+                &self,
+                language: &str,
+                code: &str,
+                _console: &Console,
+                options: &ConsoleOptions,
+            ) -> Option<Vec<Segment>> {
+                (language == "shout").then(|| {
+                    let line = format!("<{}>", code.to_uppercase());
+                    assert!(options.max_width >= line.len());
+                    vec![Segment::new(line, None), Segment::line()]
+                })
+            }
+        }
+        let fences = Arc::new(Boxed);
+        let source = "# T\n\n```shout\nhi\n```\n\n- item\n\n  ```shout\n  nested\n  ```\n\n```rust\nfn x() {}\n```\n\n    indented\n";
+        let plain = render_with(&Markdown::new(source));
+        let drawn = render_with(&Markdown::new(source).fence_renderer(fences.clone()));
+        assert!(
+            drawn.contains("<HI>") && drawn.contains("<NESTED>"),
+            "{drawn}"
+        );
+        assert!(!plain.contains("<HI>"));
+        // Declined fences and indented code are untouched.
+        let rust = "```rust\nfn x() {}\n```\n\n    indented\n";
+        assert_eq!(
+            render_with(&Markdown::new(rust)),
+            render_with(&Markdown::new(rust).fence_renderer(fences))
         );
     }
 

@@ -138,7 +138,7 @@ There are two separate decisions here:
    crate does not, by policy alone, require an unrelated crate's version to
    change.
 2. **The tag explicitly selects what ships.** A `vX.Y.Z` tag retains the
-   coordinated workspace meaning: all six manifests and their internal
+   coordinated workspace meaning: all seven manifests and their internal
    requirements must agree at `X.Y.Z`. A `<crate>-vX.Y.Z` tag selects only that
    crate, whose manifest must match the tag. Unselected crates keep their own
    versions and are neither published nor verified as if they had changed.
@@ -152,6 +152,7 @@ There are two separate decisions here:
 | `rs-rich-ext-v0.0.3` | Only `rs-rich-ext` at `0.0.3` |
 | `rs-rich-cli-v0.0.3` | Only `rs-rich-cli` at `0.0.3` |
 | `rs-rich-art-v0.0.3` | Only `rs-rich-art` at `0.0.3` |
+| `rs-rich-mermaid-v0.0.1` | Only `rs-rich-mermaid` at `0.0.1` |
 
 The same forms accept SemVer prereleases, for example
 `rs-rich-cli-v0.0.3-rc.1`. Manual dispatch accepts an **existing tag** in one of
@@ -361,7 +362,9 @@ before tagging `rs-rich-ext` 0.0.9, whose optional `macros` dependency must
 resolve on crates.io for its own upload. 0.0.12 adds `rs-rich-plugin-api`
 0.0.1, which follows the same steps: publish it by hand after `rs-rich` 0.0.8
 and before tagging `rs-rich-ext` 0.0.10, which depends on it unconditionally.
-The planned `rs-rich-lumis` (#524) comes after it. From the tagged commit on
+`rs-rich-mermaid` 0.0.1 is new too: publish it by hand after `rs-rich-art`
+0.0.10 (its optional `mmdc` dependency) and before tagging `rs-rich-cli` 0.0.12,
+which depends on it. The planned `rs-rich-lumis` (#524) follows the same steps. From the tagged commit on
 `main`:
 
 ```bash

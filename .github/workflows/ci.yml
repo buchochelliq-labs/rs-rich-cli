@@ -136,6 +136,12 @@ jobs:
             args: ""
           - crate: rs-rich-art
             args: "--all-features"
+          # Text flowcharts only, and with the mmdc backend compiled in (its
+          # real-mmdc test runs in the `mermaid-cli` job).
+          - crate: rs-rich-mermaid
+            args: ""
+          - crate: rs-rich-mermaid
+            args: "--all-features"
           # The CLI must still build without network or image decoders.
           - crate: rs-rich-cli
             args: "--no-default-features"
@@ -255,6 +261,38 @@ jobs:
           env -u NO_COLOR TERM=xterm-256color python -m unittest discover -s scripts -p 'test_diff*.py' -v
           env -u NO_COLOR TERM=xterm-256color python scripts/diff_rich.py
 
+  # The `mmdc` Mermaid backend against the real Mermaid CLI (Node and headless
+  # Chromium): a flowchart, a sequence, a class and a state diagram render, and
+  # show as Sixel or blocks. Everywhere else its fallbacks are tested with fakes.
+  mermaid-cli:
+    name: Mermaid CLI backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install @mermaid-js/mermaid-cli
+        run: |
+          npm install --global @mermaid-js/mermaid-cli@11
+          mmdc --version
+          # The runner's AppArmor policy blocks Chromium's sandbox.
+          echo '{"args": ["--no-sandbox"]}' > "$RUNNER_TEMP/puppeteer.json"
+
+      - name: Render with the real mmdc
+        env:
+          RICH_MERMAID_PUPPETEER_CONFIG: ${{ runner.temp }}/puppeteer.json
+        run: |
+          export RICH_MERMAID_MMDC="$(command -v mmdc)"
+          cargo test -p rs-rich-mermaid --locked --features mmdc --test mmdc -- --nocapture
+
   # One stable, aggregate context for branch protection to require.
   #
   # Requiring the individual jobs by name looks tighter but is a trap: the
@@ -269,7 +307,7 @@ jobs:
   # then never touches branch protection again.
   ci-ok:
     name: ci-ok
-    needs: [check, features, msrv, parity, release-tests, windows-pager, packages]
+    needs: [check, features, msrv, parity, release-tests, windows-pager, packages, mermaid-cli]
     # `always()` so this reports failure rather than being skipped when a
     # dependency fails — a skipped required check blocks the PR forever.
     if: always()

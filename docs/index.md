@@ -150,6 +150,7 @@ Each crate versions independently; see [Branching and releases](BRANCHING.md).
 | [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.10` |
 | [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.12` |
 | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.10` |
+| [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.1` |
 <!-- END MANIFEST VERSIONS -->
 
 ## Install

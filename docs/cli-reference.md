@@ -83,6 +83,7 @@ Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by exten
 | Option | Description |
 | --- | --- |
 | `--log-presentation <MODE>` | With --log, select log presentation. Default: `plain`. Config: `log_presentation`. Possible values: `plain`, `rich`. |
+| `--mermaid-backend <BACKEND>` | How Mermaid diagrams (`rich mermaid`, ```mermaid fences in Markdown) are drawn: text draws flowcharts as text, mmdc uses Mermaid's own CLI (a build with the mmdc feature; `rich mermaid` tries it first there), off leaves fences as code. Config: `mermaid_backend`. Possible values: `text`, `mmdc`, `off`. |
 | `--loop <N>` | With --gif, repeat N times (default 1; 0 = forever) |
 | `--gif-mode <M>` | With --gif: ascii or blocks (half-block pixels). Blocks fall back to ASCII without color or when piped. Default: `ascii`. Possible values: `ascii`, `blocks`. |
 
@@ -252,6 +253,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `unicode` | Show graphemes, code points, UTF-8 bytes, widths and invalid sequences |
 | `env` | List environment variables, secrets masked; `rich env PATH` checks each PATH entry |
 | `capture` | Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE records it, --redact masks secrets), then exit with the command's status |
+| `mermaid`, `mmd` | Draw a Mermaid diagram: flowcharts as text, every type through mmdc where built in (.mmd and .mermaid files are detected) |
 | `config` | Show, validate, explain or document configuration |
 | `completions` | Print a shell completion script |
 | `docs` | Print reference documentation generated from this help |
@@ -718,6 +720,34 @@ rich capture [OPTIONS] [RESOURCE]
 | --- | --- |
 | `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
 
+### rich mermaid
+
+Draw a Mermaid diagram: flowcharts as text, every type through mmdc where built in (.mmd and .mermaid files are detected)
+
+#### Usage
+
+```text
+rich mermaid [OPTIONS] [RESOURCE]
+```
+
+#### Mode options
+
+| Option | Description |
+| --- | --- |
+| `--mermaid-backend <BACKEND>` | How Mermaid diagrams (`rich mermaid`, ```mermaid fences in Markdown) are drawn: text draws flowcharts as text, mmdc uses Mermaid's own CLI (a build with the mmdc feature; `rich mermaid` tries it first there), off leaves fences as code. Possible values: `text`, `mmdc`, `off`. |
+
+#### Layout
+
+| Option | Description |
+| --- | --- |
+| `-w`, `--width <N>` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
 ### rich config
 
 Show, validate, explain or document configuration.
@@ -773,7 +803,7 @@ rich config explain [OPTIONS] [KEY]
 
 | Argument | Description |
 | --- | --- |
-| `[KEY]` | Explain one setting instead of all of them. Possible values: `mode`, `format`, `width`, `panel`, `padding`, `log_presentation`, `height`, `image_fit`, `image_anchor`, `image_max_width`, `image_max_height`, `image_background`, `image_color`, `image_dither`, `image_color_distance`, `image_brightness`, `image_contrast`, `image_gamma`, `image_rotate`, `image_flip_horizontal`, `image_flip_vertical`, `image_grayscale`, `export_html`, `export_svg`, `pager`, `auto_pager`, `watch`, `watch_interval`, `watch_debounce`, `watch_poll`, `watch_exit_on_error`, `watch_cache`, `batch`, `batch_input_root`, `batch_preserve_dirs`, `batch_name_template`, `jobs`, `progress`, `continue_on_error`, `overwrite`, `collision`, `theme`, `theme_file`, `no_color`, `sanitize`. |
+| `[KEY]` | Explain one setting instead of all of them. Possible values: `mode`, `format`, `width`, `panel`, `padding`, `log_presentation`, `mermaid_backend`, `height`, `image_fit`, `image_anchor`, `image_max_width`, `image_max_height`, `image_background`, `image_color`, `image_dither`, `image_color_distance`, `image_brightness`, `image_contrast`, `image_gamma`, `image_rotate`, `image_flip_horizontal`, `image_flip_vertical`, `image_grayscale`, `export_html`, `export_svg`, `pager`, `auto_pager`, `watch`, `watch_interval`, `watch_debounce`, `watch_poll`, `watch_exit_on_error`, `watch_cache`, `batch`, `batch_input_root`, `batch_preserve_dirs`, `batch_name_template`, `jobs`, `progress`, `continue_on_error`, `overwrite`, `collision`, `theme`, `theme_file`, `no_color`, `sanitize`. |
 
 #### rich config reference
 
@@ -962,6 +992,7 @@ Settings are read from these sources, lowest precedence first; a later source ov
 | `panel` | enum: `ascii`, `ascii2`, `square`, `rounded`, `heavy`, `double`, `none` | | | `--panel` | Wrap output in a panel, shrunk to fit its content (none = no panel) |
 | `padding` | string | | | `--padding` | Wrap output in padding (1, 2, or 4 comma-separated ints) |
 | `log_presentation` | enum: `plain`, `rich` | `plain` | | `--log-presentation` | With --log, select log presentation |
+| `mermaid_backend` | enum: `text`, `mmdc`, `off` | | | `--mermaid-backend` | How Mermaid diagrams (`rich mermaid`, ```mermaid fences in Markdown) are drawn: text draws flowcharts as text, mmdc uses Mermaid's own CLI (a build with the mmdc feature; `rich mermaid` tries it first there), off leaves fences as code |
 | `height` | positive integer | | | `--height` | With --image, render this many rows instead of the backend's default |
 | `image_fit` | enum: `contain`, `cover`, `stretch` | | | `--image-fit` | With --image and --height: contain letterboxes, cover crops at --image-anchor, stretch fills ignoring aspect |
 | `image_anchor` | enum: `center`, `top`, `bottom`, `left`, `right`, `top-left`, `top-right`, `bottom-left`, `bottom-right` | `center` | | `--image-anchor` | Cover crop anchor |

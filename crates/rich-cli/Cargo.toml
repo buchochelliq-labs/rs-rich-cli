@@ -30,7 +30,7 @@ workspace = true
 syntax-cache = ["rich/syntax-cache"]
 # Oniguruma regex engine for syntax highlighting (DIVERGENCES #26).
 onig = ["rich/onig"]
-default = ["fetch", "art"]
+default = ["fetch", "art", "mermaid"]
 # Optional JSON display divergence; never enabled by default.
 json-escape-safe = ["rich/json-escape-safe"]
 # `fetch` enables the CLI's URL support (`rich <url>`); disable it
@@ -40,6 +40,11 @@ fetch = ["dep:ureq"]
 # diffing) and the image renderers behind `--image-mode`, including Sixel.
 # Pulls in image decoders, so it can be dropped for a smaller binary.
 art = ["dep:rich-art"]
+# `rich mermaid FILE` and ```mermaid fences in `rich --markdown`, drawn as text.
+mermaid = ["dep:rich-mermaid"]
+# The `mmdc` Mermaid backend (Mermaid's CLI: Node and headless Chromium,
+# installed separately). Off by default because it starts a browser.
+mmdc = ["mermaid", "art", "rich-mermaid/mmdc"]
 
 [dependencies]
 rich.workspace = true
@@ -48,6 +53,7 @@ terminal_size.workspace = true
 serde_json.workspace = true
 ureq = { workspace = true, optional = true }
 rich-art = { workspace = true, optional = true, features = ["gif", "sixel"] }
+rich-mermaid = { workspace = true, optional = true }
 
 toml = "1.1"
 tempfile = "3"

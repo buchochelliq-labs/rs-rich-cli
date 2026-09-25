@@ -58,7 +58,7 @@ Entries below record subsequent releases and development.
 ## [Unreleased]
 
 Cohort versions for 0.0.12 (not published): core 0.0.8, plugin API 0.0.1
-(new), macros 0.0.2, ext 0.0.10, art 0.0.10, CLI 0.0.12. Core changes below, so
+(new), macros 0.0.2, ext 0.0.10, art 0.0.10, Mermaid 0.0.1 (new), CLI 0.0.12. Core changes below, so
 every dependent moves with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
 
 ### Pluggable code highlighters, core (0.0.12 workstream 1: #522, #523)
@@ -105,6 +105,54 @@ every dependent moves with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
   release readiness, and the release scripts and tests know the new crate. Its
   first version is uploaded by hand after core 0.0.8 and before ext 0.0.10
   (BRANCHING, "Registry authentication").
+
+### Markdown fences and Mermaid diagrams (0.0.12 workstream 3: #222)
+
+- **Core: `FenceRenderer`.** A new extension point in `rich::protocol`.
+  `Markdown::fence_renderer` asks each renderer, in the order added, whether it
+  draws a ```` ```lang ```` fence; if none does, the fence is highlighted as
+  before. Indented code never reaches a renderer. With none added, Markdown is
+  byte-identical: goldens are unchanged.
+- **Plugin API and ext.** `PluginRegistrar::fence_renderer(language, …)` and
+  `Capability::FenceRenderer`. `ExtensionRegistry::fence_renderer(language)`
+  looks one up, and `fences()` combines them into one for Markdown, routed by
+  language; two plugins cannot claim the same language.
+- **New crate `rs-rich-mermaid` 0.0.1** (`rich_mermaid`), built on the plugin
+  API alone (`MermaidPlugin`, `MermaidFences`, `Mermaid`).
+  - **Flowcharts as text:** `graph`/`flowchart` in `TD`, `TB`, `BT`, `LR` and
+    `RL`; the common shapes; solid, thick, dotted and invisible edges with
+    arrow, circle and cross heads, labels, longer links, chains and `&`. A
+    layered layout gives every edge its own port and track, so lines never
+    run together. ASCII where the console is ASCII-only; cropped with a note
+    when wider than the terminal. Styling statements are ignored; subgraphs
+    are drawn flat with a note.
+  - **Every diagram type through `mmdc`** behind the off-by-default `mmdc`
+    feature: Mermaid's own CLI renders a PNG, shown as Sixel where the terminal
+    supports it, otherwise quadrant blocks with a note. Without real pixels,
+    flowcharts still prefer text. The source goes through a private temporary
+    file, never a shell; there is a 20 s timeout (Chromium is stopped with its
+    process group) and a 64 KiB cap.
+  - **Never an error on screen:** whatever cannot be drawn shows its source
+    in a code block under a one-line note saying why (unsupported type, parse
+    error with its line, `mmdc` missing, timed out or failed). Labels and
+    shown source lose control characters, so a diagram cannot write escape
+    sequences.
+- **CLI.**
+  - `rich mermaid FILE` (alias `mmd`), with `.mmd` and `.mermaid` files
+    detected.
+  - ```` ```mermaid ```` fences draw in `rich --markdown`.
+  - `--mermaid-backend text|mmdc|off` and the `mermaid_backend` config key.
+    `off` keeps upstream's plain fences.
+  - `rich mermaid` tries `mmdc` first in a build with it.
+  - A working-directory `rich.toml` cannot choose `mmdc`, since it starts a
+    browser: the setting is dropped with a warning and a `config explain` note.
+  - The `mermaid` feature is on by default and `mmdc` is off.
+  - `rich doctor` lists the Mermaid plugin, and both features.
+- **Release tooling and CI.** `rs-rich-mermaid-v*` tags, the feature matrix
+  (with and without `mmdc`), release readiness, release scripts, and a
+  `Mermaid CLI backend` job that installs `@mermaid-js/mermaid-cli` and renders
+  a flowchart, sequence, class and state diagram. The crate's first version is
+  a manual upload after art 0.0.10 and before CLI 0.0.12 (BRANCHING).
 
 ### Packaging
 

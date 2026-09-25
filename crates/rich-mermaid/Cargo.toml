@@ -1,0 +1,44 @@
+# crates/rich-mermaid — Mermaid diagrams for the `rich` Rust port.
+#
+# A plugin built on rs-rich-plugin-api: it never depends on rs-rich-ext. Draws
+# flowcharts as text natively; the optional `mmdc` feature adds Mermaid's own
+# CLI for every diagram type, shown through rs-rich-art. Independent SemVer from
+# 0.0.1. See AGENTS.md → Versioning and docs/PLUGINS.md.
+[package]
+name = "rs-rich-mermaid"
+version = "0.0.1"
+description = "Mermaid diagrams for the `rich` Rust port: flowcharts drawn as text, and every diagram type through mermaid-cli"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rs-rich-mermaid"
+keywords = ["terminal", "mermaid", "diagram", "flowchart", "rich"]
+categories = ["command-line-interface", "visualization"]
+include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
+
+[lib]
+name = "rich_mermaid"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# Render every diagram type with Mermaid's own CLI (`mmdc`: Node and headless
+# Chromium, installed separately) and show the PNG through rs-rich-art: Sixel
+# where the terminal supports it, otherwise quadrant blocks. Off by default
+# because it starts a browser.
+mmdc = ["dep:rich-art", "rich-art/sixel"]
+
+[dependencies]
+rich.workspace = true
+rich-plugin-api.workspace = true
+rich-art = { workspace = true, optional = true }
+
+[dev-dependencies]
+# Path only: stripped when packaging, so publishing never waits on ext.
+rich-ext = { package = "rs-rich-ext", path = "../rich-ext" }
