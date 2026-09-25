@@ -286,7 +286,7 @@ impl<'py> Inspector<'py> {
                 "[b cyan]{not_shown}[/][i] attribute(s) not shown.[/i] Run \
                  [b][magenta]inspect[/]([not b]inspect[/])[/b] for options."
             ))
-            .map_err(|e| crate::errors::MarkupError::new_err(e.to_string()))?;
+            .map_err(crate::color::markup::markup_error)?;
             parts.push(Box::new(text));
         }
         Ok(parts)

@@ -19,7 +19,6 @@ use rich::{
 
 use super::progress::cell;
 use super::util;
-use crate::errors::MarkupError;
 use crate::renderable::PyRenderable;
 use crate::style::Style;
 use crate::text::Text;

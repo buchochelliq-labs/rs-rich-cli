@@ -76,7 +76,7 @@ use rich::protocol::{Highlighter, Renderable};
 use rich::segment::Segment as CoreSegment;
 use rich::Text as CoreText;
 
-use crate::errors::{MarkupError, NotRenderableError};
+use crate::errors::NotRenderableError;
 use crate::limits::MAX_NESTING;
 use crate::protocol::{ConsoleOptions, Measurement, OptionsBase};
 use crate::segment::Segment;
@@ -403,7 +403,7 @@ pub(crate) fn render_str_with(
         rich::emoji::replace_with_variant(content, variant)
     };
     let text = if markup {
-        CoreText::from_markup(&content).map_err(|e| MarkupError::new_err(e.to_string()))?
+        CoreText::from_markup(&content).map_err(crate::color::markup::markup_error)?
     } else {
         CoreText::new(content)
     };
@@ -491,7 +491,7 @@ pub(crate) fn to_renderable(
     if let Ok(string) = value.cast::<PyString>() {
         let markup = string.to_cow()?.into_owned();
         // Rich raises on bad markup; core's lenient path would print it.
-        CoreText::from_markup(&markup).map_err(|e| MarkupError::new_err(e.to_string()))?;
+        CoreText::from_markup(&markup).map_err(crate::color::markup::markup_error)?;
         return Ok(Box::new(MarkupStr { markup, highlight }));
     }
     let cast = rich_cast(value)?;

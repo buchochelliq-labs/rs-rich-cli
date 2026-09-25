@@ -21,7 +21,6 @@ use rich::segment::Segment as CoreSegment;
 use rich::table::{Cell, Table as CoreTable};
 use rich::Text as CoreText;
 
-use crate::errors::MarkupError;
 use crate::renderable::{self, AsRenderable, PyRenderable};
 use crate::style::style_type;
 use crate::text::Text;
@@ -82,7 +81,7 @@ fn text_arg(text: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     match text.cast::<PyString>() {
         Ok(markup) => {
             let inner = CoreText::from_markup(markup.to_cow()?.as_ref())
-                .map_err(|e| MarkupError::new_err(e.to_string()))?;
+                .map_err(crate::color::markup::markup_error)?;
             Ok(Py::new(text.py(), Text::from_core(inner))?.into_any())
         }
         Err(_) => Ok(text.clone().unbind()),

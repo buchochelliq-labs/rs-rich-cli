@@ -12,7 +12,6 @@ use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple, PyT
 use rich::Text as CoreText;
 
 use super::util::{self, Arg};
-use crate::renderable;
 
 fn ellipsis(py: Python<'_>) -> Py<PyAny> {
     py.Ellipsis()

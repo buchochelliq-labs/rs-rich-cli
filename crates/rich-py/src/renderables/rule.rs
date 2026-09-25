@@ -14,7 +14,6 @@ use rich::protocol::Renderable;
 use rich::style::StyleType;
 use rich::{Rule as CoreRule, Text as CoreText};
 
-use crate::errors::MarkupError;
 use crate::renderable::{self, AsRenderable};
 use crate::style::style_type;
 use crate::text::Text;
@@ -55,7 +54,7 @@ impl AsRenderable for Rule {
             CoreRule::with_title_text(text.inner.clone())
         } else if let Ok(markup) = title.cast::<PyString>() {
             let markup = markup.to_cow()?.into_owned();
-            CoreText::from_markup(&markup).map_err(|e| MarkupError::new_err(e.to_string()))?;
+            CoreText::from_markup(&markup).map_err(crate::color::markup::markup_error)?;
             if markup.is_empty() {
                 CoreRule::line()
             } else {

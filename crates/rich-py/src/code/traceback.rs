@@ -52,7 +52,7 @@ fn repr_text(py: Python<'_>, text: &str) -> PyResult<CoreText> {
 }
 
 fn markup(text: &str) -> PyResult<CoreText> {
-    CoreText::from_markup(text).map_err(|e| crate::errors::MarkupError::new_err(e.to_string()))
+    CoreText::from_markup(text).map_err(crate::color::markup::markup_error)
 }
 
 // ---------------------------------------------------------------------------

@@ -13,7 +13,6 @@ use rich::protocol::Renderable;
 use rich::table::Cell;
 use rich::{Columns as CoreColumns, Text as CoreText};
 
-use crate::errors::MarkupError;
 use crate::renderable::{self, AsRenderable, PyRenderable};
 use crate::text::Text;
 
@@ -47,7 +46,7 @@ impl AsRenderable for Columns {
         for item in self.renderables.bind(py).iter() {
             if let Ok(markup) = item.cast::<PyString>() {
                 let markup = markup.to_cow()?.into_owned();
-                CoreText::from_markup(&markup).map_err(|e| MarkupError::new_err(e.to_string()))?;
+                CoreText::from_markup(&markup).map_err(crate::color::markup::markup_error)?;
                 cells.push(Cell::Markup(markup));
             } else if let Ok(text) = item.extract::<PyRef<'_, Text>>() {
                 cells.push(Cell::Text(text.inner.clone()));

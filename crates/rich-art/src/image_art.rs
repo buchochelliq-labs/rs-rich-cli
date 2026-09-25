@@ -145,6 +145,64 @@ fn checkerboard(image: &RgbaImage, square: (u32, u32)) -> RgbImage {
     })
 }
 
+/// The most cells any character backend ([`AsciiArt`], [`BlockArt`],
+/// [`QuadrantArt`], [`BrailleArt`]) renders: 2^20, about 1024×1024. At up to
+/// eight sampled pixels per cell the resampled raster stays well inside
+/// [`sixel::MAX_PIXELS`](crate::sixel::MAX_PIXELS)'s 16 megapixels.
+///
+/// A derived size is bounded before any resampling: a tiny, very tall image
+/// would otherwise ask for millions of rows. Its columns are narrowed to keep
+/// the aspect ratio (to one column at least) rather than failing.
+pub const MAX_CELLS: usize = 1 << 20;
+
+/// Check an explicit `width` × `height` request against [`MAX_CELLS`]; a
+/// missing side counts as one cell. Strict entry points (such as
+/// [`ImageArt::render`]) report [`ImageArtError::TooLarge`] from this; the
+/// infallible renderables clamp to the budget instead.
+pub fn check_cell_budget(width: Option<usize>, height: Option<usize>) -> Result<(), ImageArtError> {
+    let cells = width.unwrap_or(1).max(1).checked_mul(height.unwrap_or(1).max(1));
+    match cells {
+        Some(cells) if cells <= MAX_CELLS => Ok(()),
+        _ => Err(ImageArtError::TooLarge),
+    }
+}
+
+/// Bound a backend's `(columns, rows)` grid to [`MAX_CELLS`] before it is
+/// resampled.
+///
+/// `rows_derived` says the rows came from the image's aspect ratio (not an
+/// exact request): they are then also capped by `max_rows` (the console's
+/// `options.height`, when it fixes one) and shrunk together with the columns,
+/// keeping the aspect ratio. Exact rows are kept (up to the budget) and only
+/// the columns narrow.
+pub(crate) fn bound_grid(
+    columns: usize,
+    rows: usize,
+    rows_derived: bool,
+    max_rows: Option<usize>,
+) -> (usize, usize) {
+    let (mut columns, mut rows) = (columns.clamp(1, MAX_CELLS), rows.max(1));
+    if rows_derived {
+        let cap = max_rows.unwrap_or(usize::MAX).clamp(1, MAX_CELLS);
+        if rows > cap {
+            let factor = cap as f64 / rows as f64;
+            columns = ((columns as f64 * factor).round() as usize).max(1);
+            rows = cap;
+        }
+        if columns.saturating_mul(rows) > MAX_CELLS {
+            let factor = (MAX_CELLS as f64 / (columns as f64 * rows as f64)).sqrt();
+            columns = ((columns as f64 * factor).floor() as usize).max(1);
+            rows = ((rows as f64 * factor).floor() as usize).max(1);
+        }
+        // Whatever rounding did, the product stays inside the budget.
+        rows = rows.min(MAX_CELLS / columns);
+    } else {
+        rows = rows.min(MAX_CELLS);
+        columns = columns.min(MAX_CELLS / rows);
+    }
+    (columns, rows)
+}
+
 /// Which pixels of a sampled raster count as transparent (under half
 /// opacity), or `None` when transparency is not being kept.
 ///
@@ -264,6 +322,10 @@ pub enum ImageArtError {
     /// Brightness or contrast is negative or not finite, or gamma is not a
     /// finite positive number. See [`ImageTransforms`](crate::ImageTransforms).
     InvalidAdjustment,
+    /// An explicit width and height ask for more than [`MAX_CELLS`] cells.
+    /// Derived sizes never fail this way: a backend narrows its columns to
+    /// keep the aspect ratio inside the budget instead.
+    TooLarge,
 }
 
 impl std::fmt::Display for ImageArtError {
@@ -287,6 +349,9 @@ impl std::fmt::Display for ImageArtError {
             }
             Self::SixelTooLarge => {
                 write!(f, "the Sixel image would exceed 16 megapixels at this size; set a smaller width or a height")
+            }
+            Self::TooLarge => {
+                write!(f, "the image would exceed {MAX_CELLS} cells at this size; set a smaller width or height")
             }
             Self::SixelNotSupported => {
                 write!(f, "this terminal is not known to support Sixel graphics; set RICH_SIXEL=1 or RICH_GRAPHICS=sixel to force it, or use ASCII, Braille, blocks or quadrants")
