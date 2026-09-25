@@ -1060,12 +1060,18 @@ impl LineRenderable for Table {
         if self.columns.is_empty() {
             return emit(vec![Segment::new("", None)]);
         }
-        // Fall back to a terminal-safe box on legacy Windows / non-UTF-8.
+        // Fall back to a terminal-safe box on legacy Windows / non-UTF-8, and
+        // to a plain-headed box when there is no header to set apart.
         let box_set = self.box_set.substitute(
             console.legacy_windows(),
             console.safe_box(),
             console.ascii_only(),
         );
+        let box_set = if self.show_header {
+            box_set
+        } else {
+            box_set.get_plain_headed_box()
+        };
         let extra_width = self.extra_width();
         let available = options.max_width.saturating_sub(extra_width);
 

@@ -107,6 +107,46 @@ every dependent moves with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
   first version is uploaded by hand after core 0.0.8 and before ext 0.0.10
   (BRANCHING, "Registry authentication").
 
+### Python bindings, first slice (0.0.12 workstream 7: #197)
+
+- **`rs-rich` on PyPI, `import rs_rich`** (`crates/rich-py`, PyO3 and
+  maturin, version 0.0.1). It provides Rich's API for:
+  - `Console`: `print`, `rule`, `export_text`, `record=` and `file=`;
+  - `Text`, `Style` and markup (`escape`, `MarkupError`);
+  - `Table`, `Panel` and the `box` constants;
+  - `rs_rich.print`.
+
+  A Rich program moves over by changing its imports.
+- **All rendering is Rust.** The Python modules only re-export the compiled
+  module's classes. Anything outside the slice raises instead of rendering
+  differently.
+- **Byte-compared with Python rich 15.0.0.** The tests cover markup and
+  highlighting, `Text`, styles, the README table, table options, panels,
+  rules, justification and `export_text`, in truecolor and plain. Links match
+  except for upstream's random `id=`.
+- **Packaging.**
+  - One abi3 wheel per platform for CPython 3.9 and later, on Linux x86-64
+    and arm64, macOS arm64 and x86-64, and Windows x86-64.
+  - The new `python` workflow builds each wheel and smoke-tests it on Python
+    3.9 and 3.13.
+  - `pypi-release.yml` publishes from `python-v…` tags with PyPI Trusted
+    Publishing (the `pypi` environment).
+- The crate is outside the Cargo workspace, which is unchanged: its build
+  needs a Python interpreter.
+- Documentation: a [Python API reference](docs/python/index.md), one page per
+  class (Console, Text, Style, Table, Panel, boxes/markup/errors, and
+  compatibility). `tests/test_docs.py` runs every example and checks its
+  printed output. `BRANCHING.md` covers the Python release.
+- Tests: a pytest suite per class (`tests/test_*.py`); its expected output was
+  checked against Rich 15.0.0. `test_compat.py` still compares whole programs
+  byte for byte. Type stubs (`_native.pyi`) cover every class, and a test
+  keeps them matched with the runtime names.
+- `MarkupError` and `StyleSyntaxError` derive from `ConsoleError`, as in Rich.
+  `Table.add_column(header_style=...)` now styles the whole header cell.
+- Core parity fix: a table with `show_header=False` draws head-styled boxes
+  plain, like upstream's `Box.get_plain_headed_box` (for example `HEAVY_HEAD` as
+  `SQUARE`). The fix has new `table_headless_*` goldens.
+
 ### Native image sizing (0.0.12 workstream 6: #519)
 
 - **`rich_art::ImageFit::Native`** renders an image at its own pixel size in

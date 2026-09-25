@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
 members = ["crates/rich", "crates/rich-plugin-api", "crates/rich-macros", "crates/rich-ext", "crates/rich-cli", "crates/rich-art", "crates/rich-mermaid", "crates/rich-lumis"]
+# The Python bindings build with maturin and need a Python interpreter; they
+# have their own workspace and CI workflow (`python.yml`).
+exclude = ["crates/rich-py"]
 
 # Shared metadata. `version` is intentionally NOT inherited: each crate owns its
 # SemVer. A `vX.Y.Z` tag selects the coordinated workspace; a

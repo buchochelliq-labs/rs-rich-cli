@@ -402,6 +402,30 @@ A partial upload still requires manual recovery, not a blind rerun. Planning and
 do not create tags or publish packages. Create the annotated tag on `main`;
 the protected release workflow publishes the selected packages.
 
+### Python package (PyPI)
+
+The Python bindings (`crates/rich-py`, `rs-rich` on PyPI, `import rs_rich`)
+release separately from the crates, from their own `python-vX.Y.Z` tags. A
+Python tag never matches `release.yml`'s crate tags, and a crate tag never
+matches the Python workflow's.
+
+1. Bump `version` in `crates/rich-py/pyproject.toml` and `Cargo.toml`. The
+   package has its own SemVer, independent of the crates.
+2. Tag the merged commit on `main`: `git tag -a python-v0.0.1 -m "rs-rich
+   (PyPI) 0.0.1"`, then push the tag.
+3. `.github/workflows/pypi-release.yml` checks that the tag matches the
+   version and is on `main`. It builds and smoke-tests the wheels, builds the
+   sdist, and publishes from the `pypi` environment with PyPI Trusted
+   Publishing (`id-token: write`, no token secret).
+
+PyPI's publisher for `rs-rich` was created as a pending publisher on
+2026-09-24. It expects this repository, the workflow file
+`pypi-release.yml` and the environment `pypi`, so none of them may be
+renamed. The first successful upload creates the project. Create the `pypi`
+environment under Settings → Environments before the first tag, and protect it
+like `crates-io`: tags only, with a required reviewer if wanted. Uploads are
+permanent: a version can be yanked but never replaced.
+
 ## What is enforced, and what is merely written down
 
 Documented discipline decays; these are the mechanisms.

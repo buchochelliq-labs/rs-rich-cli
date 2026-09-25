@@ -81,6 +81,7 @@ in the release notes; the crates.io links show available packages.
 | `rs-rich-macros` | checked markup and derive macros (via `rs-rich-ext`'s `macros` feature) | `use rich_ext::richf` |
 | `rs-rich-cli` | CLI tracking Python rich-cli 1.8.1 | executable `rich` |
 | `rs-rich-art` | FIGlet, image→ASCII, animated GIFs | `use rich_art` |
+| `rs-rich` (PyPI) | Python bindings: Rich's API over the Rust core (first slice) | `import rs_rich` |
 
 The published package names carry an `rs-` prefix because `rich` is already taken
 on crates.io by an unrelated crate. The library targets keep the short names, so

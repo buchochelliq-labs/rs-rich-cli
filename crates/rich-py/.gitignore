@@ -1,0 +1,6 @@
+# Build output of maturin and cargo.
+target/
+python/rs_rich/*.so
+python/rs_rich/*.pyd
+__pycache__/
+.pytest_cache/

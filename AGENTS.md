@@ -28,6 +28,7 @@ rich-cli ──▶ rich-ext ──▶ rich
                  └──▶ rich-macros   (proc-macros; optional, behind ext's `macros` feature)
 rich-cli ──▶ rich-mermaid ──▶ rich-plugin-api      (a plugin crate; optional rich-art for `mmdc`)
              rich-lumis   ──▶ rich-plugin-api      (a plugin crate: the lumis/tree-sitter highlighter)
+rich-py  ──▶ rich          (Python bindings; outside the workspace, released to PyPI only)
 ```
 
 If a change would make `crates/rich` diverge from upstream `rich`, it is almost
@@ -52,6 +53,7 @@ possible, and keep the boundary free of core back-dependencies.
 | `rs-rich-lumis` | independent SemVer | whenever we ship anything             |
 | `rs-rich-macros` | independent SemVer | whenever we ship anything            |
 | `rs-rich-art`  | independent SemVer | whenever we ship anything              |
+| `rs-rich` (PyPI, `crates/rich-py`) | independent SemVer, `python-v…` tags | whenever we ship anything |
 
 ### Why not mirror the upstream version?
 

@@ -1,0 +1,100 @@
+# The Python bindings (`crates/rich-py`, the `rs-rich` wheel): lint, the
+# compatibility tests against Python rich 15.0.0, and a wheel for every
+# release target that must install and import on the oldest and newest
+# supported Python. `pypi-release.yml` builds the same wheels from a tag.
+name: python
+
+on:
+  pull_request:
+    paths:
+      - "crates/rich/**"
+      - "crates/rich-py/**"
+      - "docs/python/**"
+      - ".github/workflows/python.yml"
+      - ".github/workflows/pypi-release.yml"
+  push:
+    branches: [main]
+    paths:
+      - "crates/rich/**"
+      - "crates/rich-py/**"
+      - "docs/python/**"
+      - ".github/workflows/python.yml"
+      - ".github/workflows/pypi-release.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: fmt · clippy (rich-py)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/rich-py
+      - run: cargo fmt --manifest-path crates/rich-py/Cargo.toml --check
+      - run: cargo clippy --manifest-path crates/rich-py/Cargo.toml --all-targets -- -D warnings
+
+  compat:
+    name: compatibility with rich 15.0.0 (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/rich-py
+      - name: Install the bindings and the reference
+        run: python -m pip install ./crates/rich-py "rich==15.0.0" pytest
+      - name: Compatibility and API tests
+        run: python -m pytest -q crates/rich-py/tests
+
+  wheels:
+    name: wheel (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-x86_64, os: ubuntu-latest, target: x86_64 }
+          - { name: linux-aarch64, os: ubuntu-24.04-arm, target: aarch64 }
+          - { name: macos-arm64, os: macos-14, target: aarch64 }
+          - { name: macos-x86_64, os: macos-15-intel, target: x86_64 }
+          - { name: windows-x86_64, os: windows-latest, target: x64 }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Build the abi3 wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: auto
+          args: --release --out dist --manifest-path crates/rich-py/Cargo.toml
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.9"
+      - name: Install and import on Python 3.9
+        shell: bash
+        run: python crates/rich-py/tests/smoke.py dist
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install and import on Python 3.13
+        shell: bash
+        run: python crates/rich-py/tests/smoke.py dist

@@ -41,7 +41,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 
 | upstream `rich/…` | rust file | status | parity |
 |-------------------|-----------|:------:|:------:|
-| `box.py` (all boxes + substitute) | `box.rs` | 🟢 | ✅ |
+| `box.py` (all boxes, `substitute`, `get_plain_headed_box`) | `box.rs` | 🟢 | ✅ |
 | `rule.py` | `rule.rs` | 🟡 | ✅ |
 | `padding.py` | `padding.rs` | 🟡 | ✅ |
 | `panel.py` | `panel.rs` | 🟡 | ✅ |
@@ -158,6 +158,7 @@ and explicit overrides, not a materialized list of built-in defaults.
 | `--image-color ansi16\|grayscale` (#125) | CLI routing; art `image_color.rs` | `ImageColorMode::Ansi16` (rich `STANDARD_PALETTE`) and `Grayscale` (luma over 16/232–255/231); every dither |
 | `--image-mode quadrants` (#199) | CLI routing; art `quadrant.rs` | `ImageMode::Quadrants`, `QuadrantArt`; cheapest of eight two-colour 2×2 partitions; also draws `--diff` heatmaps |
 | `--image-fit stretch`, `--image-max-width/height`, `--image-brightness/contrast/gamma` (#126) | CLI routing; art `image_art.rs`, `transform.rs` | `ImageFit::Stretch`, `ImageArt::max_width`/`max_height`, `ImageTransforms` brightness/contrast/gamma in a fixed order |
+| Python bindings, first slice (0.0.12 WS7, #197): `rs-rich` on PyPI, `import rs_rich` with `Console`, `Text`, `Style`, markup, `Table`, `Panel`, `box` | `crates/rich-py` (PyO3, outside the workspace) | converts Python arguments to core types and writes core's output; byte-compared with Python rich 15.0.0 in `tests/test_compat.py`; no core change |
 | `--image-fit native` and `image_fit = "native"` (0.0.12 WS6, #519) | CLI routing; art `image_art.rs` | `ImageFit::Native` and `ImageArt::native_grid`: the image's pixels at the backend's cell density, unscaled onto whole cells, capped (never enlarged) by width and the max-size options |
 | `--image-dither atkinson`, `--image-color-distance`, Sixel and `--gif` colour modes (#498) | CLI routing; art `image_color.rs`, `sixel.rs`, `gif.rs` | `Dither::Atkinson`, `ColorDistance::{Rgb, Oklab}`, a fixed-palette indexed Sixel encoder, `AnimatedArt::color_mode`/`dither`/`color_distance`; Braille keeps a documented rejection |
 | `--image-background default\|checkerboard` (#126) | CLI routing; art `image_art.rs` and the text backends | `ImageBackground::{Color, TerminalDefault, Checkerboard}`; alpha kept through fitting; unpainted cells for pixels under half opacity |

@@ -305,6 +305,16 @@ def _style_table() -> Table:
     return table
 
 
+def _headless_table(box_set) -> Table:
+    # `show_header=False` draws with `box.get_plain_headed_box()`.
+    table = Table(box=box_set, show_header=False)
+    table.add_column("Name")
+    table.add_column("Age")
+    table.add_row("Alice", "30")
+    table.add_row("Bob", "7")
+    return table
+
+
 def _pad_edge_table() -> Table:
     table = Table(box=box.SQUARE, pad_edge=False)
     table.add_column("Name")
@@ -540,6 +550,10 @@ RENDERABLE_CASES = [
     ("table_default", 40, _table(box.HEAVY_HEAD)),
     ("table_simple", 40, _table(box.SIMPLE)),
     ("table_double_edge", 40, _table(box.DOUBLE_EDGE)),
+    ("table_headless_heavy_head", 40, _headless_table(box.HEAVY_HEAD)),
+    ("table_headless_square_double_head", 40, _headless_table(box.SQUARE_DOUBLE_HEAD)),
+    ("table_headless_minimal_heavy_head", 40, _headless_table(box.MINIMAL_HEAVY_HEAD)),
+    ("table_headless_ascii_double_head", 40, _headless_table(box.ASCII_DOUBLE_HEAD)),
     ("table_shrink", 30, _shrink_table()),
     ("table_expand", 30, _expand_table()),
     ("table_justify", 30, _justify_table()),
