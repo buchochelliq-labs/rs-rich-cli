@@ -26,6 +26,44 @@ fn doctor_json_reports_redirected_capabilities_without_environment_secrets() {
     assert!(!text.contains("never-disclose-this"));
 }
 
+/// Doctor lists the registered plugins and the plugin API version, so a user
+/// can see which highlighters and renderers are available.
+#[test]
+fn doctor_lists_registered_plugins() {
+    let output = Command::new(env!("CARGO_BIN_EXE_rich"))
+        .args(["doctor", "--no-config", "--report", "json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["plugins"]["api_version"], 1);
+    let builtin = &report["plugins"]["registered"][0];
+    assert_eq!(builtin["id"], "rich-ext");
+    assert_eq!(builtin["api_version"], 1);
+    let capabilities: Vec<&str> = builtin["capabilities"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c.as_str().unwrap())
+        .collect();
+    assert!(
+        capabilities.contains(&"code highlighter \"syntect\""),
+        "{capabilities:?}"
+    );
+
+    let text = Command::new(env!("CARGO_BIN_EXE_rich"))
+        .args(["doctor", "--no-config"])
+        .env("NO_COLOR", "1")
+        .output()
+        .unwrap();
+    let text = String::from_utf8(text.stdout).unwrap();
+    assert!(
+        text.lines()
+            .any(|line| line.starts_with("Plugins (API 1): rich-ext ")),
+        "{text}"
+    );
+}
+
 #[test]
 fn doctor_validates_selected_config_and_profile() {
     let root = tempfile::tempdir().unwrap();

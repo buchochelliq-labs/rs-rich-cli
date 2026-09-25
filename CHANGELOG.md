@@ -57,9 +57,9 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
-Cohort versions for 0.0.12 (not published): core 0.0.8, macros 0.0.2, ext
-0.0.10, art 0.0.10, CLI 0.0.12. Core changes below, so every dependent moves
-with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
+Cohort versions for 0.0.12 (not published): core 0.0.8, plugin API 0.0.1
+(new), macros 0.0.2, ext 0.0.10, art 0.0.10, CLI 0.0.12. Core changes below, so
+every dependent moves with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
 
 ### Pluggable code highlighters, core (0.0.12 workstream 1: #522, #523)
 
@@ -83,6 +83,28 @@ with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
   background. Pygments token types map to TextMate scopes (DIVERGENCES #18).
 - **Migration.** `Syntax::theme` names are now the highlighter's own; with the
   default nothing changes, and `ansi_dark`/`ansi_light` are new.
+
+### Plugin API crate and ext host (0.0.12 workstream 2)
+
+- **New crate `rs-rich-plugin-api` 0.0.1** (`rich_plugin_api`, also
+  `rich_ext::plugin`). It defines the plugin contract and depends on core only,
+  so a plugin never depends on `rs-rich-ext`. A plugin implements `Plugin`
+  (`metadata()` plus `register()`) and adds regex highlighters, named code
+  highlighters, themes, box styles and source renderers through a
+  `PluginRegistrar`. `PLUGIN_API_VERSION` is 1, and every breaking change bumps it.
+- **Ext host.** `ExtensionRegistry::add_plugin` checks the plugin's API version
+  and names, rejects duplicate ids and conflicting capability names, and adds
+  everything or nothing. Look-ups: `plugins()`, `code_highlighter()`,
+  `code_highlighter_names()`, `theme()`, `box_style()`, `renderer()` and
+  `provided_by()`. `with_defaults()` registers the built-in `rich-ext` plugin
+  (the number highlighter and the `syntect` code highlighter). The existing
+  `register_highlighter`, `install` and `install_defaults` are unchanged.
+- **CLI.** `rich doctor` lists the registered plugins and the plugin API version
+  in its text report and as `plugins` in `--json`.
+- **Release tooling.** `rs-rich-plugin-api-v*` tags, the CI feature matrix,
+  release readiness, and the release scripts and tests know the new crate. Its
+  first version is uploaded by hand after core 0.0.8 and before ext 0.0.10
+  (BRANCHING, "Registry authentication").
 
 ### Packaging
 

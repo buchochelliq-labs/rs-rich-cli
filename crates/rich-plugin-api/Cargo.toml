@@ -1,0 +1,31 @@
+# crates/rich-plugin-api — the stable plugin contract.
+#
+# Deliberately small: a plugin crate depends on this and on core `rich` only,
+# never on rs-rich-ext (which hosts plugins). Independent SemVer from 0.0.1, like
+# every crate here; each breaking change to the contract also bumps
+# `PLUGIN_API_VERSION`. See AGENTS.md → Versioning and docs/PLUGINS.md.
+[package]
+name = "rs-rich-plugin-api"
+version = "0.0.1"
+description = "The plugin contract for the `rich` Rust port: register highlighters, themes, box styles and renderers"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rs-rich-plugin-api"
+keywords = ["terminal", "console", "plugin", "rich"]
+categories = ["command-line-interface"]
+include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
+
+[lib]
+name = "rich_plugin_api"
+
+[lints]
+workspace = true
+
+[dependencies]
+# The only dependency, by design (tests/dependencies.rs checks it).
+rich.workspace = true

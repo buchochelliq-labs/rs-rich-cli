@@ -38,6 +38,7 @@ workspace = true
 
 [dependencies]
 rich.workspace = true
+rich-plugin-api.workspace = true
 rich-macros = { workspace = true, optional = true }
 fancy-regex.workspace = true
 serde = { version = "1", features = ["derive"], optional = true }

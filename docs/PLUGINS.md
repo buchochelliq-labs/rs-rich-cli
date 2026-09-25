@@ -54,13 +54,73 @@ registry.install(&mut console);
 The registry ([`crates/rich-ext/src/registry.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-ext/src/registry.rs))
 holds *factories* so one registry can be installed onto many consoles.
 
+## Writing a plugin (0.0.12)
+
+The plugin contract is its own crate, `rs-rich-plugin-api` (imported as
+`rich_plugin_api`, and re-exported as `rich_ext::plugin`). It depends only on
+core `rich`, so a plugin crate never depends on `rich-ext`, and every
+first-party plugin goes through the same contract.
+
+A plugin implements `Plugin`: `metadata()` says who it is, and `register()`
+adds capabilities through a `PluginRegistrar`:
+
+| registrar method | adds |
+|---|---|
+| `highlighter(factory)` | a regex `Highlighter` for printed text |
+| `code_highlighter(name, engine)` | a `CodeHighlighter`, selectable by name |
+| `theme(name, theme)` | a named `Theme` |
+| `box_style(name, box)` | a named table/panel box style |
+| `renderer(name, renderer)` | a `SourceRenderer` that turns source text into a renderable |
+
+```rust
+use rich_ext::plugin::{Plugin, PluginError, PluginMetadata, PluginRegistrar};
+use rich_ext::ExtensionRegistry;
+
+struct Solarized;
+
+impl Plugin for Solarized {
+    fn metadata(&self) -> PluginMetadata {
+        PluginMetadata::new("solarized", "Solarized themes", env!("CARGO_PKG_VERSION"))
+    }
+    fn register(&self, registrar: &mut dyn PluginRegistrar) -> Result<(), PluginError> {
+        let theme = rich::Theme::from_styles([("repr.number", "#268bd2")], true)
+            .map_err(|e| PluginError::Other(e.to_string()))?;
+        registrar.theme("solarized", theme);
+        Ok(())
+    }
+}
+
+let mut registry = ExtensionRegistry::with_defaults();
+registry.add_plugin(&Solarized)?;
+```
+
+`ExtensionRegistry::add_plugin` is the host. It is all-or-nothing: a plugin
+whose `register` fails, or that breaks a rule below, leaves the registry as it
+was.
+
+- **API version.** `PluginMetadata::new` records `PLUGIN_API_VERSION`. A host
+  refuses a plugin built for another version (`PluginError::IncompatibleApi`).
+  At 0.0.x the contract still changes, and every breaking change bumps it.
+- **Names.** The plugin id and every capability name use lowercase letters,
+  digits, `-`, `_` and `.` (at most 64 bytes), so they are safe to print and to
+  use as CLI values.
+- **No silent overrides.** Two plugins may not register the same capability
+  under the same name, and a plugin id may be added once (`Conflict`,
+  `DuplicatePlugin`).
+
+`ExtensionRegistry::with_defaults()` adds the built-in `rich-ext` plugin, which
+provides the number highlighter and the `syntect` code highlighter. Query what
+is registered with `plugins()`, `code_highlighter(name)`, `theme(name)`,
+`box_style(name)`, `renderer(name)` and `provided_by(capability)`.
+`rich doctor` lists the registered plugins and the API version (and includes
+them in `--json`).
+
 ## Roadmap: from internal to public
 
-1. **Now — internal.** `rich-ext` is the only registrant. The registry API is
-   usable but not yet a stability promise.
-2. **Next — stable public API.** Promote `register_*` + the extension traits to a
-   documented, semver-stable surface so downstream crates can register their own
-   highlighters/renderables against a released `rich`.
+1. **Done — internal.** `rich-ext` was the only registrant.
+2. **Now — a public contract (0.0.12).** `rs-rich-plugin-api` defines what a
+   plugin is; the ext registry hosts it. Not yet a stability promise: see the
+   API version above.
 3. **Later — third-party plugin loading.** Evaluate compile-time aggregation
    (`inventory`/`linkme`) for "just add the dependency" registration, and/or a
    dynamic/WASM boundary for runtime plugins. Tracked as its own roadmap issue;

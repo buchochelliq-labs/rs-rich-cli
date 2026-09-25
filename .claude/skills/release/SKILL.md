@@ -15,11 +15,12 @@ Every crate owns its independent SemVer. Choose a tag form explicitly:
 
 | Tag | Scope |
 |---|---|
-| `vX.Y.Z` | All five crates; all manifests must match X.Y.Z |
+| `vX.Y.Z` | Every crate; all manifests must match X.Y.Z |
 | `<crate>-vX.Y.Z` | Only that package; its manifest must match X.Y.Z |
 
-Supported packages: `rs-rich`, `rs-rich-macros`, `rs-rich-ext`, `rs-rich-cli`, `rs-rich-art`.
-Publish `rs-rich-macros` after `rs-rich` and before `rs-rich-ext`, which depends on it.
+Supported packages: `rs-rich`, `rs-rich-plugin-api`, `rs-rich-macros`, `rs-rich-ext`,
+`rs-rich-cli`, `rs-rich-art`. Publish `rs-rich-plugin-api` and `rs-rich-macros`
+after `rs-rich` and before `rs-rich-ext`, which depends on both.
 Both forms accept prereleases such as `-rc.1`. Manual workflow dispatch takes
 an existing tag, never a branch name.
 
@@ -148,8 +149,8 @@ cannot publish a brand-new crate. That upload needs a maintainer's API token,
 either by hand from the tagged commit (`cargo publish -p <crate> --locked`), or
 through the workflow with a token secret added for that one run. Ask the
 maintainer which. Then add the crate's Trusted Publishing entry. See
-`docs/BRANCHING.md`, "Registry authentication". `rs-rich-macros` 0.0.1 is the
-first case.
+`docs/BRANCHING.md`, "Registry authentication". `rs-rich-macros` 0.0.1 was the
+first case; `rs-rich-plugin-api` 0.0.1 is the next.
 
 ## 4. Observe publication and verification
 

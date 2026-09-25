@@ -145,6 +145,7 @@ Each crate versions independently; see [Branching and releases](BRANCHING.md).
 | Package | Manifest version |
 |---|---|
 | [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.8` |
+| [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.0.1` |
 | [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.2` |
 | [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.10` |
 | [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.12` |

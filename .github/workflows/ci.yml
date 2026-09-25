@@ -124,6 +124,8 @@ jobs:
           # rich-art is zero-dependency by default; its image/GIF support is
           # opt-in, and each config compiles different code. `--all-features`
           # rather than naming them, so new features are covered automatically.
+          - crate: rs-rich-plugin-api
+            args: ""
           - crate: rs-rich-macros
             args: ""
           - crate: rs-rich-ext

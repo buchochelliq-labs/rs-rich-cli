@@ -64,6 +64,28 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                     ),
                     format!("Build features: {}", report["features"]),
                     format!(
+                        "Plugins (API {}): {}",
+                        report["plugins"]["api_version"],
+                        report["plugins"]["registered"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .map(|plugin| format!(
+                                "{} {} ({})",
+                                plugin["id"].as_str().unwrap_or_default(),
+                                plugin["version"].as_str().unwrap_or_default(),
+                                plugin["capabilities"]
+                                    .as_array()
+                                    .into_iter()
+                                    .flatten()
+                                    .filter_map(|c| c.as_str())
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            ))
+                            .collect::<Vec<_>>()
+                            .join("; ")
+                    ),
+                    format!(
                         "Terminal: stdout TTY={}, {}×{} cells, colour={} ({}); NO_COLOR={}",
                         report["terminal"]["stdout_tty"],
                         report["terminal"]["width"],
@@ -230,6 +252,24 @@ fn report(args: &[String]) -> Result<(serde_json::Value, Report, bool), String> 
             "dumb" | "emacs"
         );
     let capabilities_json = serde_json::to_value(&capabilities).map_err(|e| e.to_string())?;
+    let registry = rich_ext::ExtensionRegistry::with_defaults();
+    let plugins: Vec<serde_json::Value> = registry
+        .plugins()
+        .iter()
+        .map(|plugin| {
+            serde_json::json!({
+                "id": plugin.metadata.id,
+                "name": plugin.metadata.name,
+                "version": plugin.metadata.version,
+                "api_version": plugin.metadata.api_version,
+                "capabilities": plugin
+                    .capabilities
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>(),
+            })
+        })
+        .collect();
     let json = serde_json::json!({
         "package": {"name": env!("CARGO_PKG_NAME"), "version": env!("CARGO_PKG_VERSION")},
         "features": {"art": cfg!(feature="art"), "fetch": cfg!(feature="fetch"), "syntax-cache": cfg!(feature="syntax-cache"), "onig": cfg!(feature="onig"), "json-escape-safe": cfg!(feature="json-escape-safe")},
@@ -237,6 +277,7 @@ fn report(args: &[String]) -> Result<(serde_json::Value, Report, bool), String> 
         "image": {"requested_mode": requested_mode, "selected_mode": selected_mode, "sixel_inferred": sixel, "detection": "inferred from environment; no probe"},
         "config": {"source": config["source"], "profile": config["profile"], "disabled": config["disabled"]},
         "pager": {"source": pager_source, "program": pager_program, "availability": "not checked", "terminal_eligible": pager_eligible, "explicit": settings["pager"].as_bool().unwrap_or(false), "automatic": settings["auto_pager"].as_bool().unwrap_or(false)},
+        "plugins": {"api_version": rich_ext::plugin::PLUGIN_API_VERSION, "registered": plugins},
         "capabilities": capabilities_json
     });
     Ok((json, capabilities, no_color))
