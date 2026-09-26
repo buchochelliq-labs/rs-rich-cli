@@ -208,6 +208,28 @@ def fixtures_012(work: Path) -> None:
 
     write_rgba_png(work / "sprite.png", 24, 16, pixel)
 
+    # The Python package: a Rich program with its imports changed. Needs the
+    # installed wheel's `python3` on the case PATH (see cases_012).
+    (work / "report.py").write_text(
+        "from rs_rich.console import Console\n"
+        "from rs_rich.panel import Panel\n"
+        "from rs_rich.table import Table\n"
+        "from rs_rich.tree import Tree\n"
+        "\n"
+        "console = Console()\n"
+        "table = Table(title=\"0.0.12 cohort\", title_style=\"bold\")\n"
+        "table.add_column(\"Package\", style=\"cyan\")\n"
+        "table.add_column(\"Version\", justify=\"right\", style=\"magenta\")\n"
+        "for name, version in [(\"rs-rich\", \"0.0.8\"), (\"rs-rich-ext\", \"0.0.10\"),\n"
+        "                      (\"rs-rich-mermaid\", \"0.0.1\"), (\"rs-rich (PyPI)\", \"0.0.1\")]:\n"
+        "    table.add_row(name, version)\n"
+        "tree = Tree(\"[bold]rs_rich[/]\")\n"
+        "for module in [\"console\", \"table\", \"ext\", \"art\", \"mermaid\"]:\n"
+        "    tree.add(f\"[green]{module}\")\n"
+        "console.print(Panel.fit(table, title=\"[b]rs_rich[/b]: Rich's API, rendered in Rust\"))\n"
+        "console.print(tree)\n"
+    )
+
 
 def cases_011(c, work):
     img = "rich --no-config image gradient.png --width 48 --height 14 --image-fit contain"
@@ -254,7 +276,7 @@ def cases_012(c, work):
         c("03-markdown-mermaid", "A ```mermaid fence in Markdown is drawn in place",
           ["rich --no-config design.md"], cols=80, rows=22),
         c("04-code-theme", "--code-theme ansi_dark: code in the terminal's own palette",
-          ["rich --no-config worker.rs --code-theme ansi_dark --line-numbers"], cols=80, rows=12),
+          ["rich --no-config worker.rs --code-theme ansi_dark"], cols=80, rows=12),
         c("05-filter-highlight", "--filter keeps matching lines; --highlight marks matches",
           ["rich --no-config service.log --filter ERROR --highlight 'timeout|refused'",
            "rich --no-config inspect deploy.yaml --highlight '$.limits.*'"], cols=80, rows=22),
@@ -262,6 +284,9 @@ def cases_012(c, work):
           ["rich --no-config image sprite.png --image-fit native --image-mode quadrants",
            "rich --no-config image sprite.png --image-fit native --image-mode half-block"],
           cols=60, rows=20),
+        # --bin-dir must also hold the installed wheel's python3 (a venv's bin).
+        c("07-python", "The rs-rich wheel: a Rich program with only its imports changed",
+          ["python3 report.py"], cols=80, rows=20),
     ]
 
 
