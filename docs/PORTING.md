@@ -102,6 +102,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | upstream feature | rust `crates/rich-cli/src/…` | status |
 |------------------|------------------------------|:------:|
 | arg parsing, plain-file print, capability demo | `lib.rs` | 🟡 |
+| rendering options not yet ported: `--head`/`--tail`, `-n`/`--line-numbers`, `--guides`, `--lexer`, `--emoji`, `--soft`, `--no-wrap`, `--max-width`, `--text-left`/`-center`/`-right`/`-full`, `--rule-style`, `--rule-char`, `--rst`, `--force-terminal`, and most short aliases (`-d -a -c -l -r -u -t -v`); upstream's `-h` is `--head`, which clashes with `-h` for help here | `lib.rs` | 🔴 planned for 0.0.13 (#542) |
 | `--print` / `--markdown` / `--json` / `--syntax` / `--csv` / `--rule`, width + justify, stdin, extension auto-detect | `lib.rs` | 🟡 |
 | `csv`/`tsv` table render (blue border, numeric-column bold-green, quoted-field parse, `csv.Sniffer`) | `lib.rs` | 🟡 sniffer agrees with CPython's on 42/42 samples |
 | HTML export (`--export-html`) + SVG export (`--export-svg`) | `lib.rs` | 🟡 both done |
