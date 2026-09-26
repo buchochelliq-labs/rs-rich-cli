@@ -99,6 +99,7 @@ impl BlockArt {
     }
 
     /// Columns and character rows for the available width.
+    #[cfg(any(feature = "gif", test))]
     pub(crate) fn grid(&self, available: usize) -> (usize, usize) {
         self.grid_within(available, None)
     }

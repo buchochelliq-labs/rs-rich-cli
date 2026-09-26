@@ -151,10 +151,10 @@ fn audit_edges_parity() {
                 .zip(got.chars())
                 .find(|((_, a), b)| a != b)
                 .map_or(expected.len().min(got.len()), |((at, _), _)| at);
-            let from = expected.floor_char_boundary(at.saturating_sub(160));
+            let from = floor_boundary(&expected, at.saturating_sub(160));
             let near = |text: &str| {
-                let start = text.floor_char_boundary(from.min(text.len()));
-                let end = text.floor_char_boundary((at + 160).min(text.len()));
+                let start = floor_boundary(text, from.min(text.len()));
+                let end = floor_boundary(text, (at + 160).min(text.len()));
                 text[start..end].to_string()
             };
             failures.push(format!(
@@ -167,4 +167,14 @@ fn audit_edges_parity() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
     assert_eq!(checked, 10, "expected every audit edge case to run");
+}
+
+/// The largest char boundary at or below `index` (`str::floor_char_boundary`
+/// is stable only from Rust 1.91; the workspace MSRV is 1.90).
+fn floor_boundary(text: &str, index: usize) -> usize {
+    let mut index = index.min(text.len());
+    while !text.is_char_boundary(index) {
+        index -= 1;
+    }
+    index
 }
