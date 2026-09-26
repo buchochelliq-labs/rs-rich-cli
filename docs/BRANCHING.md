@@ -360,14 +360,14 @@ later versions from the workflow.
 tag run would have failed the token exchange, so 0.0.1 was published by hand on
 2026-09-24, after `rs-rich` 0.0.7 was on crates.io (it depends on the core) and
 before tagging `rs-rich-ext` 0.0.9, whose optional `macros` dependency must
-resolve on crates.io for its own upload. 0.0.12 adds `rs-rich-plugin-api`
-0.0.1, which follows the same steps: publish it by hand after `rs-rich` 0.0.8
-and before tagging `rs-rich-ext` 0.0.10, which depends on it unconditionally.
-`rs-rich-mermaid` 0.0.1 is new too: publish it by hand after `rs-rich-art`
-0.0.10 (its optional `mmdc` dependency) and before tagging `rs-rich-cli` 0.0.12,
-which depends on it. `rs-rich-lumis` 0.0.1 (#524) follows the same steps: publish
-it by hand after `rs-rich-plugin-api` 0.0.1 and before `rs-rich-cli` 0.0.12 (which
-will depend on it through an optional feature). From the tagged commit on
+resolve on crates.io for its own upload. 0.0.12 did the same for its three new
+crates on 2026-09-26: `rs-rich-plugin-api` 0.0.1 by hand after `rs-rich` 0.0.8
+and before tagging `rs-rich-ext` 0.0.10 (which depends on it unconditionally);
+`rs-rich-lumis` 0.0.1 after the plugin API; and `rs-rich-mermaid` 0.0.1 after
+`rs-rich-art` 0.0.10 (its optional `mmdc` dependency). All three went up before
+the `rs-rich-cli` 0.0.12 tag, which depends on each of them. The rule for any
+new crate: upload it only once every dependency it names, optional ones
+included, is on crates.io, and before anything that depends on it. From the tagged commit on
 `main`:
 
 ```bash
