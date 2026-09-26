@@ -57,10 +57,15 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
-Cohort versions for 0.0.12 (not published): core 0.0.8, plugin API 0.0.1
-(new), macros 0.0.2, ext 0.0.10, art 0.0.10, Mermaid 0.0.1 (new), lumis 0.0.1
-(new), CLI 0.0.12. Core changes below, so
-every dependent moves with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
+Nothing yet.
+
+## Core 0.0.8 / plugin API 0.0.1 / macros 0.0.2 / ext 0.0.10 / art 0.0.10 / Mermaid 0.0.1 / lumis 0.0.1 / CLI 0.0.12 / Python 0.0.1 — published 2026-09-26
+
+Cohort versions for 0.0.12: core 0.0.8, plugin API 0.0.1 (new), macros 0.0.2,
+ext 0.0.10, art 0.0.10, Mermaid 0.0.1 (new), lumis 0.0.1 (new), CLI 0.0.12, and
+the first `rs-rich` Python package, 0.0.1, on PyPI. Core changes below, so
+every dependent moves with it. See the [0.0.12 plan](docs/plans/0.0.12.md) and
+the [release notes](docs/releases/0.0.12.md).
 
 ### Release test: second audit round (Python package and new core)
 
