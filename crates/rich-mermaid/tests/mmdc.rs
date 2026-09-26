@@ -268,3 +268,185 @@ fn real_mmdc_renders_every_diagram_type() {
         text.lines().rev().take(4).collect::<Vec<_>>().join("\n")
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn the_temporary_directory_is_removed_after_success_and_failure() {
+    for (name, status) in [("ok-mmdc", 0), ("bad-mmdc", 1)] {
+        let program = script(
+            name,
+            &format!(
+                "while [ $# -gt 0 ]; do case $1 in --input) in=$2;; --output) out=$2;; esac; shift; done\n\
+                 echo \"$in\" > \"$(dirname \"$0\")/{name}.input\"; cp \"$in\" \"$out\"; exit {status}"
+            ),
+        );
+        let options = MmdcOptions {
+            program: program.clone(),
+            ..MmdcOptions::default()
+        };
+        assert_eq!(render_png(SEQUENCE, &options).is_ok(), status == 0);
+        let input = std::fs::read_to_string(program.with_extension("input")).unwrap();
+        let dir = PathBuf::from(input.trim()).parent().unwrap().to_path_buf();
+        assert!(!dir.exists(), "{} was left behind", dir.display());
+    }
+}
+
+/// `render_png` reads only what fits under `max_output`: a 100 MB "PNG" is
+/// refused without being read, and a log of any size costs 4 KiB.
+#[cfg(unix)]
+#[test]
+fn oversized_images_and_logs_are_not_read_into_memory() {
+    let big = MmdcOptions {
+        program: script(
+            "big-mmdc",
+            "while [ $# -gt 0 ]; do case $1 in --output) out=$2;; esac; shift; done\n\
+             printf '\\211PNG\\r\\n\\032\\n' > \"$out\"; truncate -s 100M \"$out\"",
+        ),
+        ..MmdcOptions::default()
+    };
+    assert_eq!(
+        render_png(SEQUENCE, &big),
+        Err(MmdcError::OutputTooLarge {
+            bytes: 100 * 1024 * 1024,
+            limit: 16 * 1024 * 1024
+        })
+    );
+    let small = MmdcOptions {
+        max_output: 7,
+        ..big.clone()
+    };
+    assert!(matches!(
+        render_png(SEQUENCE, &small),
+        Err(MmdcError::OutputTooLarge { limit: 7, .. })
+    ),);
+    let chatty = MmdcOptions {
+        program: script(
+            "chatty-mmdc",
+            "head -c 1000000 /dev/zero | tr '\\0' 'x' >&2; exit 1",
+        ),
+        ..MmdcOptions::default()
+    };
+    let Err(MmdcError::Failed(message)) = render_png(SEQUENCE, &chatty) else {
+        panic!("expected a failure");
+    };
+    assert!(message.starts_with(&"x".repeat(200)), "{message}");
+}
+
+/// Ctrl-C at a terminal sends SIGINT to the foreground process group. `mmdc`
+/// must be in that group (so it stops, and Puppeteer closes Chromium), and the
+/// private temporary directory holding the source must still be removed
+/// although the process that made it was killed.
+#[cfg(unix)]
+mod interrupt {
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+    use std::time::{Duration, Instant};
+
+    use rich_mermaid::mmdc::{render_png, MmdcOptions};
+
+    const CHILD: &str = "RICH_MERMAID_INTERRUPT_CHILD";
+
+    fn wait_for(path: &Path, limit: Duration) -> bool {
+        let started = Instant::now();
+        while started.elapsed() < limit {
+            if std::fs::read_to_string(path).is_ok_and(|s| s.ends_with('\n')) {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        false
+    }
+
+    /// Running, not merely unreaped: where PID 1 does not reap orphans (some
+    /// containers), a killed process stays a zombie that `kill -0` still finds.
+    fn running(pid: &str) -> bool {
+        let found = Command::new("kill")
+            .args(["-0", pid])
+            .status()
+            .is_ok_and(|s| s.success());
+        let zombie = Command::new("ps")
+            .args(["-o", "stat=", "-p", pid])
+            .output()
+            .is_ok_and(|out| out.stdout.starts_with(b"Z"));
+        found && !zombie
+    }
+
+    /// Runs only as the parent test's child process: renders with a fake
+    /// mmdc that records its pid and input path, then sleeps.
+    #[test]
+    fn helper_child_render() {
+        let Some(dir) = std::env::var_os(CHILD) else {
+            return;
+        };
+        let dir = PathBuf::from(dir);
+        let script = dir.join("mmdc");
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::write(
+                &script,
+                format!(
+                    "#!/bin/sh\nwhile [ $# -gt 0 ]; do case $1 in --input) echo \"$2\" > '{d}/input';; esac; shift; done\necho $$ > '{d}/pid'\nsleep 3\n",
+                    d = dir.display()
+                ),
+            )
+            .unwrap();
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let options = MmdcOptions {
+            program: script,
+            ..MmdcOptions::default()
+        };
+        let _ = render_png("sequenceDiagram\n  A->>B: secret", &options);
+    }
+
+    #[test]
+    fn ctrl_c_stops_mmdc_and_removes_its_temp_dir() {
+        if std::env::var_os(CHILD).is_some() {
+            return;
+        }
+        use std::os::unix::process::CommandExt;
+        let dir =
+            std::env::temp_dir().join(format!("rich-mermaid-interrupt-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "interrupt::helper_child_render",
+                "--exact",
+                "--test-threads=1",
+            ])
+            .env(CHILD, &dir)
+            .process_group(0) // the "foreground job" a shell would create
+            .spawn()
+            .unwrap();
+        assert!(
+            wait_for(&dir.join("pid"), Duration::from_secs(20)),
+            "fake mmdc never ran"
+        );
+        let pid = std::fs::read_to_string(dir.join("pid"))
+            .unwrap()
+            .trim()
+            .to_string();
+        let input = PathBuf::from(std::fs::read_to_string(dir.join("input")).unwrap().trim());
+        let temp = input.parent().unwrap().to_path_buf();
+        // Ctrl-C: SIGINT to the whole foreground group.
+        Command::new("kill")
+            .args(["-INT", "--", &format!("-{}", child.id())])
+            .status()
+            .unwrap();
+        let _ = child.wait();
+        std::thread::sleep(Duration::from_millis(300));
+        let mmdc_survived = running(&pid);
+        // Well before the fake mmdc's own 3 s would have run out.
+        let started = Instant::now();
+        while temp.exists() && started.elapsed() < Duration::from_secs(4) {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let leaked = temp.exists();
+        if leaked {
+            let _ = std::fs::remove_dir_all(&temp);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(!mmdc_survived, "mmdc (pid {pid}) kept running after Ctrl-C");
+        assert!(!leaked, "{} was left behind", temp.display());
+    }
+}

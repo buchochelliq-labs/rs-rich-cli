@@ -72,23 +72,28 @@ def test_errors():
         Style.parse("bold not-a-colour")
     with pytest.raises(RuntimeError, match="record=True"):
         Console(file=io.StringIO()).export_text()
-    with pytest.raises(ValueError, match="too many values"):
-        table = Table("one")
-        table.add_row("a", "b")
     with pytest.raises(TypeError):
         Panel("x", box="rounded")
 
 
-def test_unsupported_input_is_refused_not_rendered_differently():
-    console = Console(file=io.StringIO())
-    with pytest.raises(NotImplementedError, match="first slice"):
-        console.print({"a": 1})
-    with pytest.raises(NotImplementedError):
-        console.print("x", end="")
-    with pytest.raises(NotImplementedError):
-        Table("a").add_row(Panel("nested"))
-    with pytest.raises(NotImplementedError, match="justifies str"):
-        console.print(Panel("x"), justify="center")
+def test_what_rs_rich_cannot_do_is_refused_not_rendered_differently():
+    # Jupyter output is the only Console option the port has no renderer for.
+    with pytest.raises(NotImplementedError, match="Jupyter"):
+        Console(force_jupyter=True)
+
+
+def test_containers_print_pretty_as_in_rich():
+    out = io.StringIO()
+    Console(file=out, width=40).print({"a": [1, 2]}, [None])
+    assert out.getvalue() == "{'a': [1, 2]}\n[None]\n"
+
+
+def test_renderables_nest_anywhere():
+    table = Table("a")
+    table.add_row(Panel("nested"))
+    out = io.StringIO()
+    Console(file=out, width=20).print(table, Panel("x"), justify="center")
+    assert "nested" in out.getvalue()
 
 
 def test_text_uses_python_character_offsets():
@@ -104,5 +109,5 @@ def test_text_uses_python_character_offsets():
 def test_style_repr_and_equality():
     assert str(Style(bold=True, color="red")) == "bold red"
     assert Style(bold=True) + Style(italic=True) == Style.parse("bold italic")
-    assert repr(Style()) == 'Style.parse("none")'
+    assert repr(Style()) == "Style()"
     assert rs_rich.__version__ == "0.0.1"

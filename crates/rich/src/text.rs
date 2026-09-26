@@ -26,8 +26,8 @@ pub(crate) fn is_control_code(c: char) -> bool {
     matches!(c, '\u{7}' | '\u{8}' | '\u{b}' | '\u{c}' | '\r')
 }
 
-/// Cell width of a tab stop. Upstream's `Console.tab_size` default; a per-console
-/// override is not ported yet (see `docs/DIVERGENCES.md`).
+/// Cell width of a tab stop: upstream's `Console.tab_size` default, and the
+/// fallback when neither a text nor its console sets one (`tab_size or 8`).
 pub const DEFAULT_TAB_SIZE: usize = 8;
 
 /// A style applied to a byte range `[start, end)` of a [`Text`]'s plain string.
@@ -50,14 +50,20 @@ pub struct Text {
     spans: Vec<Span>,
     /// A base style applied to the whole text. May be an unresolved name.
     style: StyleType,
-    /// How lines are justified within the render width.
-    justify: Justify,
+    /// How lines are justified within the render width. `None` defers to
+    /// the console options (upstream's `justify=None`); `Some(Default)` is an
+    /// explicit `justify="default"`, which a container's justify does not
+    /// override.
+    justify: Option<Justify>,
     /// What to do with lines wider than the render width. `None` defers to the
     /// console options, then to [`Overflow::Fold`].
     overflow: Option<Overflow>,
     /// Whether to skip wrapping. `None` defers to the console options, then to
     /// `false`.
     no_wrap: Option<bool>,
+    /// Tab stop width. `None` defers to the console's `tab_size` when
+    /// rendered, then to [`DEFAULT_TAB_SIZE`]. Upstream's `Text.tab_size`.
+    tab_size: Option<usize>,
 }
 
 impl Text {
@@ -79,9 +85,10 @@ impl Text {
             plain: Text::strip_control_codes(&plain.into()),
             spans: Vec::new(),
             style: StyleType::default(),
-            justify: Justify::Default,
+            justify: None,
             overflow: None,
             no_wrap: None,
+            tab_size: None,
         }
     }
 
@@ -95,25 +102,45 @@ impl Text {
             plain: Text::strip_control_codes(&plain.into()),
             spans: Vec::new(),
             style: style.into(),
-            justify: Justify::Default,
+            justify: None,
             overflow: None,
             no_wrap: None,
+            tab_size: None,
         }
     }
 
     /// Set how lines are justified within the render width (builder form).
     pub fn justify(mut self, justify: Justify) -> Self {
-        self.justify = justify;
+        self.set_justify(justify);
         self
     }
 
     /// Set how lines are justified within the render width.
+    ///
+    /// [`Justify::Default`] means *unset* here (upstream's `justify=None`),
+    /// deferring to the console options; use
+    /// [`set_justify_option`](Self::set_justify_option) for an explicit
+    /// `justify="default"`.
     pub fn set_justify(&mut self, justify: Justify) {
+        self.justify = (justify != Justify::Default).then_some(justify);
+    }
+
+    /// This text's own justify method ([`Justify::Default`] when unset).
+    pub fn get_justify(&self) -> Justify {
+        self.justify.unwrap_or_default()
+    }
+
+    /// Set this text's justify, distinguishing an explicit
+    /// `Some(Justify::Default)` (upstream's `justify="default"`, which a
+    /// table column's or the print call's justify does not override) from
+    /// `None` (upstream's `justify=None`, which defers to them).
+    pub fn set_justify_option(&mut self, justify: Option<Justify>) {
         self.justify = justify;
     }
 
-    /// This text's own justify method.
-    pub fn get_justify(&self) -> Justify {
+    /// This text's own justify, `None` when unset. See
+    /// [`set_justify_option`](Self::set_justify_option).
+    pub fn get_justify_option(&self) -> Option<Justify> {
         self.justify
     }
 
@@ -149,6 +176,23 @@ impl Text {
     /// This text's own no-wrap setting, if it set one.
     pub fn get_no_wrap(&self) -> Option<bool> {
         self.no_wrap
+    }
+
+    /// Set the tab stop width (builder form). Port of `Text(tab_size=…)`.
+    pub fn tab_size(mut self, tab_size: usize) -> Self {
+        self.tab_size = Some(tab_size);
+        self
+    }
+
+    /// Set the tab stop width. Pass `None` to defer to the console's
+    /// `tab_size`. Upstream's `Text.tab_size` attribute.
+    pub fn set_tab_size(&mut self, tab_size: Option<usize>) {
+        self.tab_size = tab_size;
+    }
+
+    /// This text's own tab stop width, if it set one.
+    pub fn get_tab_size(&self) -> Option<usize> {
+        self.tab_size
     }
 
     /// Shorten this text to at most `max_width` cells, optionally padding it out
@@ -230,6 +274,7 @@ impl Text {
             justify: self.justify,
             overflow: self.overflow,
             no_wrap: self.no_wrap,
+            tab_size: self.tab_size,
         }
     }
 
@@ -377,24 +422,29 @@ impl Text {
 
     /// Remove trailing whitespace. Port of `Text.rstrip`.
     pub fn rstrip(&mut self) {
-        let plain = self.plain.trim_end().to_string();
+        // Python's `str.rstrip()` whitespace, which includes U+001C..U+001F.
+        let plain = self.plain.trim_end_matches(is_python_space).to_string();
         self.set_plain(plain);
     }
 
     /// Remove *only as much* trailing whitespace as it takes to get down to
-    /// `size` cells, leaving the rest. Port of `Text.rstrip_end`.
+    /// `size` characters, leaving the rest. Port of `Text.rstrip_end`.
     ///
     /// This is what lets a wrapped line keep the space that ended it while a
-    /// line that overshot the width gives its padding back.
+    /// line that overshot the width gives its padding back. As upstream, the
+    /// length is `len(self)` — characters, not cells.
     pub fn rstrip_end(&mut self, size: usize) {
-        let length = self.cell_len();
+        let length = self.plain.chars().count();
         if length <= size {
             return;
         }
         let excess = length - size;
-        let whitespace = self.plain.len() - self.plain.trim_end().len();
+        let trimmed = self.plain.trim_end_matches(is_python_space);
+        let whitespace = self.plain[trimmed.len()..].chars().count();
         if whitespace > 0 {
-            self.right_crop(whitespace.min(excess));
+            let keep = length - whitespace.min(excess);
+            let bytes = self.plain.len() - char_to_byte(&self.plain, keep);
+            self.right_crop(bytes);
         }
     }
 
@@ -470,6 +520,110 @@ impl Text {
             }
         }
         joined
+    }
+
+    /// A `Text` from a string containing ANSI escape codes, one decoded line
+    /// per line joined by newlines, with base `style`. Port of
+    /// `Text.from_ansi` (its `tab_size` defaults to 8; set `justify`,
+    /// `overflow` and `no_wrap` with the builders).
+    pub fn from_ansi(text: &str, style: impl Into<StyleType>) -> Text {
+        let mut joiner = Text::styled("\n", style);
+        joiner.tab_size = Some(DEFAULT_TAB_SIZE);
+        let lines = crate::ansi::AnsiDecoder::new().decode_split_newlines(text);
+        joiner.join(&lines)
+    }
+
+    /// The indentation unit of the text: the greatest common divisor of its
+    /// even line indents, or 1. Port of `Text.detect_indentation`.
+    pub fn detect_indentation(&self) -> usize {
+        fn gcd(a: usize, b: usize) -> usize {
+            if b == 0 {
+                a
+            } else {
+                gcd(b, a % b)
+            }
+        }
+        let mut indents: Vec<usize> = self
+            .plain
+            .split('\n')
+            .map(|line| line.len() - line.trim_start_matches(' ').len())
+            .filter(|indent| indent % 2 == 0)
+            .collect();
+        indents.sort_unstable();
+        indents.dedup();
+        match indents.into_iter().reduce(gcd) {
+            None | Some(0) => 1,
+            Some(indentation) => indentation,
+        }
+    }
+
+    /// A copy with indent guides drawn in each line's leading spaces: every
+    /// `indent_size` spaces (auto-detected for `None`) become `character`
+    /// then padding, styled `style`. Port of `Text.with_indent_guides`
+    /// (upstream's defaults are `"│"` and `"dim green"`).
+    pub fn with_indent_guides(
+        &self,
+        indent_size: Option<usize>,
+        character: &str,
+        style: impl Into<StyleType>,
+    ) -> Text {
+        let style = style.into();
+        let indent_size = indent_size.unwrap_or_else(|| self.detect_indentation());
+        let mut text = self.clone();
+        text.expand_tabs(match self.tab_size {
+            None => DEFAULT_TAB_SIZE,
+            Some(tab_size) => tab_size,
+        });
+        let indent_line = format!("{character}{}", " ".repeat(indent_size.saturating_sub(1)));
+        let mut new_lines: Vec<Text> = Vec::new();
+        let mut blank_lines = 0usize;
+        for mut line in text.split("\n", false, true) {
+            let indent = line.plain.len() - line.plain.trim_start_matches(' ').len();
+            // `re.match(r"^( *)(.*)$")`: `.` stops at a line break, so a
+            // line with nothing after its indent (or a `\r`) counts as blank.
+            let rest = &line.plain[indent..];
+            if rest.is_empty() || rest.starts_with('\r') {
+                blank_lines += 1;
+                continue;
+            }
+            let (full_indents, remaining_space) = (
+                indent.checked_div(indent_size).unwrap_or(0),
+                indent.checked_rem(indent_size).unwrap_or(indent),
+            );
+            let new_indent = format!(
+                "{}{}",
+                indent_line.repeat(full_indents),
+                " ".repeat(remaining_space)
+            );
+            // `line.plain = new_indent + line.plain[len(new_indent):]`: the
+            // same number of characters, so upstream's (character) spans stay
+            // put; here the byte offsets past the indent shift.
+            let old_bytes = char_to_byte(&line.plain, new_indent.chars().count());
+            let plain = format!("{new_indent}{}", &line.plain[old_bytes..]);
+            let remap = |position: usize| {
+                if position >= old_bytes {
+                    position - old_bytes + new_indent.len()
+                } else {
+                    char_to_byte(&new_indent, position)
+                }
+            };
+            for span in &mut line.spans {
+                span.start = remap(span.start);
+                span.end = remap(span.end);
+            }
+            line.plain = plain;
+            line.stylize(style.clone(), 0, new_indent.len());
+            for _ in 0..std::mem::take(&mut blank_lines) {
+                new_lines.push(Text::styled(new_indent.clone(), style.clone()));
+            }
+            new_lines.push(line);
+        }
+        for _ in 0..blank_lines {
+            new_lines.push(Text::styled("", style.clone()));
+        }
+        let mut separator = text.blank_copy();
+        separator.plain.push('\n');
+        separator.join(&new_lines)
     }
 
     /// Style every occurrence of any of `words`. Port of `Text.highlight_words`,
@@ -607,7 +761,9 @@ impl Text {
         // displays as `PASSED`.
         self.plain.push_str(&Text::strip_control_codes(text));
         let end = self.plain.len();
-        if let Some(style) = style {
+        // `if style:` — a null style or an empty name adds no span, so it
+        // leaves no segment boundary behind either.
+        if let Some(style) = style.filter(|style| !is_falsy_style(style)) {
             self.spans.push(Span { start, end, style });
         }
     }
@@ -646,28 +802,74 @@ impl Text {
     /// A range that is empty or inverted is ignored, which is what gives us
     /// upstream's `end > start` skip for non-participating regex groups.
     pub fn stylize(&mut self, style: impl Into<StyleType>, start: usize, end: usize) {
+        let style = style.into();
         let end = end.min(self.plain.len());
-        if start >= end {
+        // `if style:` — a falsy style adds no span.
+        if start >= end || is_falsy_style(&style) {
             return;
         }
-        self.spans.push(Span {
-            start,
-            end,
-            style: style.into(),
-        });
+        self.spans.push(Span { start, end, style });
     }
 
-    /// Push a raw span (used by the markup parser).
-    pub(crate) fn push_span(&mut self, span: Span) {
+    /// As [`stylize`](Self::stylize), but the span goes *first*, beneath every
+    /// existing span. Port of `Text.stylize_before`.
+    pub fn stylize_before(&mut self, style: impl Into<StyleType>, start: usize, end: usize) {
+        let style = style.into();
+        let end = end.min(self.plain.len());
+        if start >= end || is_falsy_style(&style) {
+            return;
+        }
+        self.spans.insert(0, Span { start, end, style });
+    }
+
+    /// Apply metadata to the byte range `start..end` (the rest of the text
+    /// when `end` is `None`). Port of `Text.apply_meta`: a span of
+    /// `Style.from_meta(meta)`, which an empty map (a null style) skips.
+    pub fn apply_meta(&mut self, meta: crate::style::Meta, start: usize, end: Option<usize>) {
+        let end = end.unwrap_or(self.plain.len());
+        self.stylize(Style::from_meta(meta), start, end);
+    }
+
+    /// Apply event-handler metadata to the whole text. Port of `Text.on`:
+    /// handlers are stored as `"@name"` keys over `meta`.
+    pub fn on(
+        &mut self,
+        meta: Option<crate::style::Meta>,
+        handlers: &[(&str, crate::style::MetaValue)],
+    ) -> &mut Self {
+        let len = self.plain.len();
+        self.stylize(Style::on(meta, handlers), 0, len);
+        self
+    }
+
+    /// Append a raw span, as upstream's `text.spans.append(span)` does: no
+    /// clamping and no falsy-style check.
+    ///
+    /// Offsets are **byte** offsets into [`plain`](Self::plain) and must fall
+    /// on `char` boundaries (upstream's are character offsets; convert first).
+    /// A span may extend past the end of the text, as upstream allows.
+    pub fn push_span(&mut self, span: Span) {
         self.spans.push(span);
+    }
+
+    /// The spans, mutably. Upstream's `Text.spans` is a public, mutable list;
+    /// the same byte-offset rules as [`push_span`](Self::push_span) apply.
+    pub fn spans_mut(&mut self) -> &mut Vec<Span> {
+        &mut self.spans
+    }
+
+    /// Replace every span. Port of the `Text.spans` setter.
+    pub fn set_spans(&mut self, spans: Vec<Span>) {
+        self.spans = spans;
     }
 
     /// Drop this text's own `justify`, `overflow` and `no_wrap`, so they defer to
     /// the console options as upstream's `Text.join` result does.
     pub(crate) fn clear_layout_options(&mut self) {
-        self.justify = Justify::Default;
+        self.justify = None;
         self.overflow = None;
         self.no_wrap = None;
+        self.tab_size = None;
     }
 
     /// Move the base style into a span over the whole text, ahead of the
@@ -688,6 +890,12 @@ impl Text {
                 },
             );
         }
+    }
+
+    /// The whole-text base style, resolved or named. Port of the `Text.style`
+    /// attribute.
+    pub fn base_style(&self) -> &StyleType {
+        &self.style
     }
 
     /// Set the whole-text base style, resolved or named.
@@ -722,7 +930,7 @@ impl Text {
         base_style: &Style,
         width: Option<usize>,
     ) -> Vec<Vec<Segment>> {
-        self.render_lines_justified(theme, base_style, width, self.justify)
+        self.render_lines_justified(theme, base_style, width, self.get_justify())
     }
 
     /// Like [`render_lines`](Self::render_lines) but with an explicit `justify`
@@ -751,6 +959,10 @@ impl Text {
     /// when `overflow` is [`Overflow::Fold`]), justified, and finally truncated
     /// to `width`. [`Overflow::Ignore`] skips wrapping and truncation both, so
     /// lines may come back wider than `width`.
+    ///
+    /// Tabs expand to this text's own [`tab_size`](Self::get_tab_size), else
+    /// [`DEFAULT_TAB_SIZE`]; [`render_lines_wrapped_tabs`](Self::render_lines_wrapped_tabs)
+    /// takes the width explicitly (upstream's `wrap(tab_size=…)`).
     pub fn render_lines_wrapped(
         &self,
         theme: &Theme,
@@ -760,15 +972,53 @@ impl Text {
         overflow: Overflow,
         no_wrap: bool,
     ) -> Vec<Vec<Segment>> {
+        self.render_lines_wrapped_tabs(
+            theme,
+            base_style,
+            width,
+            justify,
+            overflow,
+            no_wrap,
+            match self.tab_size {
+                None | Some(0) => DEFAULT_TAB_SIZE,
+                Some(tab_size) => tab_size,
+            },
+        )
+    }
+
+    /// The tab stop width `Text.__rich_console__` wraps with on `console`:
+    /// this text's own, else the console's, and `8` for zero
+    /// (`tab_size or 8`).
+    pub fn console_tab_size(&self, console: &crate::console::Console) -> usize {
+        match self.tab_size.unwrap_or_else(|| console.tab_size()) {
+            0 => DEFAULT_TAB_SIZE,
+            tab_size => tab_size,
+        }
+    }
+
+    /// [`render_lines_wrapped`](Self::render_lines_wrapped) with an explicit
+    /// tab stop width. Port of `Text.wrap(…, tab_size=…)`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_lines_wrapped_tabs(
+        &self,
+        theme: &Theme,
+        base_style: &Style,
+        width: Option<usize>,
+        justify: Justify,
+        overflow: Overflow,
+        no_wrap: bool,
+        tab_size: usize,
+    ) -> Vec<Vec<Segment>> {
         // Tabs are expanded before anything measures or wraps the text, as
         // upstream's `Text.wrap` does per line. Without this a tab occupies one
         // cell everywhere in the layout and then eight on the terminal, so every
         // width calculation downstream is wrong.
         if self.plain.contains('\t') {
             let mut expanded = self.clone();
-            expanded.expand_tabs(DEFAULT_TAB_SIZE);
-            return expanded
-                .render_lines_wrapped(theme, base_style, width, justify, overflow, no_wrap);
+            expanded.expand_tabs(tab_size);
+            return expanded.render_lines_wrapped_tabs(
+                theme, base_style, width, justify, overflow, no_wrap, tab_size,
+            );
         }
 
         // Resolve every span's style once, up front, into a vector parallel to
@@ -783,11 +1033,19 @@ impl Text {
         // Upstream folds `overflow == "ignore"` into no_wrap before splitting.
         let no_wrap = no_wrap || overflow == Overflow::Ignore;
         let groups = self.wrapped_ranges(width, overflow, no_wrap);
+        // Which spans touch which visual line, found once by binary search as
+        // upstream's `divide` does. Scanning every span for every line (and
+        // every cut within it) made printing a long highlighted repr quadratic.
+        let line_spans = self.spans_by_line(&groups);
+        let mut line_spans = line_spans.iter();
         let Some(width) = width else {
             return groups
                 .into_iter()
                 .flatten()
-                .map(|(start, end)| self.line_segments(&resolved, start, end, &effective_base))
+                .map(|(start, end)| {
+                    let ids = line_spans.next().map(Vec::as_slice).unwrap_or(&[]);
+                    self.line_segments(&resolved, start, end, &effective_base, ids)
+                })
                 .collect();
         };
 
@@ -796,9 +1054,16 @@ impl Text {
         // does — the paragraph boundary is what full justification treats as
         // ragged, so the groups cannot be flattened first.
         for group in groups {
+            let group_spans: Vec<&[usize]> = group
+                .iter()
+                .map(|_| line_spans.next().map(Vec::as_slice).unwrap_or(&[]))
+                .collect();
             let mut new_lines: Vec<Vec<Segment>> = group
-                .into_iter()
-                .map(|(start, end)| self.line_segments(&resolved, start, end, &effective_base))
+                .iter()
+                .zip(&group_spans)
+                .map(|(&(start, end), ids)| {
+                    self.line_segments(&resolved, start, end, &effective_base, ids)
+                })
                 .collect();
 
             // `overflow == "ignore"` is a hard stop upstream: the line is
@@ -831,6 +1096,7 @@ impl Text {
                 for (index, line) in new_lines.iter_mut().enumerate() {
                     // Full justification leaves the final line of the paragraph
                     // ragged, so it needs to know where it is in the group.
+                    let (start, end) = group[index];
                     *line = justify_line(
                         line,
                         width,
@@ -838,6 +1104,7 @@ impl Text {
                         overflow,
                         &effective_base,
                         index == last,
+                        &|char_index| self.covered_at(start, end, char_index, group_spans[index]),
                     );
                 }
             }
@@ -847,6 +1114,55 @@ impl Text {
             lines.append(&mut new_lines);
         }
         lines
+    }
+
+    /// Whether any span covers the `char_index`-th character of the line
+    /// `[start, end)` — i.e. whether upstream's `Text.render` has a span
+    /// boundary at that character's edge of the line. Justify padding joins
+    /// the neighbouring run only where it does not.
+    ///
+    /// `ids` are the spans touching that line (see [`spans_by_line`](Self::spans_by_line)).
+    fn covered_at(&self, start: usize, end: usize, char_index: usize, ids: &[usize]) -> bool {
+        let Some((offset, _)) = self.plain[start..end].char_indices().nth(char_index) else {
+            return false;
+        };
+        let position = start + offset;
+        ids.iter().any(|&id| {
+            let span = &self.spans[id];
+            span.start <= position && position < span.end
+        })
+    }
+
+    /// For each visual line of `groups` (flattened, in order), the indices of
+    /// the spans that overlap it, in span order. Lines are ordered and
+    /// disjoint, so each span binary-searches its first and last line, as
+    /// upstream's `Text.divide` does; the cost is the number of (span, line)
+    /// pairs that actually overlap rather than spans × lines.
+    fn spans_by_line(&self, groups: &[Vec<(usize, usize)>]) -> Vec<Vec<usize>> {
+        let lines: Vec<(usize, usize)> = groups.iter().flatten().copied().collect();
+        let mut by_line: Vec<Vec<usize>> = vec![Vec::new(); lines.len()];
+        // Upstream only divides a text that has a newline or a wrap cut, and
+        // `divide` drops spans that come out empty. An undivided text keeps
+        // its empty spans, whose start/end events still split the run
+        // (`[b]a[i][/i]b[/b]` renders `a` and `b` as two segments).
+        let undivided = lines.len() == 1;
+        for (id, span) in self.spans.iter().enumerate() {
+            if span.start >= span.end {
+                if undivided && span.start == span.end {
+                    by_line[0].push(id);
+                }
+                continue;
+            }
+            let first = lines.partition_point(|&(_, end)| end <= span.start);
+            let last = lines.partition_point(|&(start, _)| start < span.end);
+            for index in first..last.max(first) {
+                let (start, end) = lines[index];
+                if span.start.max(start) < span.end.min(end) {
+                    by_line[index].push(id);
+                }
+            }
+        }
+        by_line
     }
 
     /// As [`render_lines_wrapped`](Self::render_lines_wrapped), flattened into a
@@ -860,11 +1176,51 @@ impl Text {
         overflow: Overflow,
         no_wrap: bool,
     ) -> Vec<Segment> {
-        let lines =
-            self.render_lines_wrapped(theme, base_style, Some(width), justify, overflow, no_wrap);
+        self.render_joined_wrapped_tabs(
+            theme,
+            base_style,
+            width,
+            justify,
+            overflow,
+            no_wrap,
+            match self.tab_size {
+                None | Some(0) => DEFAULT_TAB_SIZE,
+                Some(tab_size) => tab_size,
+            },
+        )
+    }
+
+    /// [`render_joined_wrapped`](Self::render_joined_wrapped) with an explicit
+    /// tab stop width (see [`console_tab_size`](Self::console_tab_size)).
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_joined_wrapped_tabs(
+        &self,
+        theme: &Theme,
+        base_style: &Style,
+        width: usize,
+        justify: Justify,
+        overflow: Overflow,
+        no_wrap: bool,
+        tab_size: usize,
+    ) -> Vec<Segment> {
+        let lines = self.render_lines_wrapped_tabs(
+            theme,
+            base_style,
+            Some(width),
+            justify,
+            overflow,
+            no_wrap,
+            tab_size,
+        );
         let mut segments = Vec::new();
         let last = lines.len().saturating_sub(1);
         for (index, line) in lines.into_iter().enumerate() {
+            // A final empty line (a trailing newline, or an empty text left
+            // unpadded, as with `overflow="ignore"`) is still a line upstream:
+            // `Text.render` yields `Segment("")` before the `end`.
+            if index == last && line.is_empty() {
+                segments.push(Segment::new("", None));
+            }
             segments.extend(line);
             if index != last {
                 segments.push(Segment::line());
@@ -948,13 +1304,16 @@ impl Text {
     }
 
     /// Combine `effective_base` with every span covering `[start, end)`,
-    /// producing non-overlapping segments for that byte range.
+    /// producing non-overlapping segments for that byte range. Port of the
+    /// sweep in upstream's `Text.render`: span start/end events are sorted
+    /// once and walked with a stack of active spans.
     ///
-    /// `resolved` is the per-render style map, index-parallel to `self.spans`.
-    /// Spans are folded in vector order, and spans that resolved to nothing are
-    /// **not** skipped — they still contribute a boundary. Upstream behaves the
-    /// same way, and the highlighter fixtures depend on it: an ISO-8601 date
-    /// emits separate segments per sub-field even where the field styles are
+    /// `resolved` is the per-render style map, index-parallel to `self.spans`;
+    /// `ids` are the spans overlapping this line, in span order. Active spans
+    /// are combined in span order (upstream's `sorted(stack)`), and spans that
+    /// resolved to nothing are **not** skipped — they still contribute a
+    /// boundary. The highlighter fixtures depend on it: an ISO-8601 date emits
+    /// separate segments per sub-field even where the field styles are
     /// identical.
     fn line_segments(
         &self,
@@ -962,40 +1321,65 @@ impl Text {
         start: usize,
         end: usize,
         effective_base: &Style,
+        ids: &[usize],
     ) -> Vec<Segment> {
         if start >= end {
             return Vec::new();
         }
-        let mut points: Vec<usize> = vec![start, end];
-        for span in &self.spans {
-            let span_start = span.start.clamp(start, end);
-            let span_end = span.end.clamp(start, end);
-            points.push(span_start);
-            points.push(span_end);
+        // (offset, leaving, span id); entering sorts before leaving.
+        let mut events: Vec<(usize, bool, usize)> = Vec::with_capacity(ids.len() * 2 + 1);
+        for &id in ids {
+            let span = &self.spans[id];
+            let (span_start, span_end) = (span.start.max(start), span.end.min(end));
+            // An empty span (kept only on an undivided line) is a boundary.
+            let empty = span.start == span.end && start < span.start && span.end < end;
+            if span_start < span_end || empty {
+                events.push((span_start, false, id));
+                events.push((span_end, true, id));
+            }
         }
-        points.sort_unstable();
-        points.dedup();
+        events.sort_unstable();
 
         let mut segments = Vec::new();
-        for window in points.windows(2) {
-            let (a, b) = (window[0], window[1]);
-            if a >= b {
-                continue;
-            }
-            let slice = &self.plain[a..b];
-            if slice.is_empty() {
-                continue;
-            }
-            let mut style = effective_base.clone();
-            for (span, span_style) in self.spans.iter().zip(resolved) {
-                if span.start <= a && span.end >= b {
-                    style = style.combine(span_style);
+        let mut stack: Vec<usize> = Vec::new();
+        let mut offset = start;
+        let mut events = events.into_iter().peekable();
+        loop {
+            // Apply every event at `offset`.
+            while let Some(&(position, leaving, id)) = events.peek() {
+                if position > offset {
+                    break;
+                }
+                events.next();
+                match stack.binary_search(&id) {
+                    Ok(index) if leaving => {
+                        stack.remove(index);
+                    }
+                    Err(index) if !leaving => stack.insert(index, id),
+                    _ => {}
                 }
             }
-            segments.push(Segment::new(slice, Some(style)));
+            let next = events
+                .peek()
+                .map_or(end, |&(position, _, _)| position.min(end));
+            if next <= offset {
+                break;
+            }
+            let mut style = effective_base.clone();
+            for &id in &stack {
+                style = style.combine(&resolved[id]);
+            }
+            segments.push(Segment::new(&self.plain[offset..next], Some(style)));
+            offset = next;
         }
         segments
     }
+}
+
+/// Python truthiness of a style argument: a null `Style` and an empty style
+/// name are falsy, and upstream's `append`/`stylize` skip them.
+fn is_falsy_style(style: &StyleType) -> bool {
+    style.is_null_style() || matches!(style, StyleType::Name(name) if name.is_empty())
 }
 
 /// Byte offset of the `char_idx`-th char in `text` (clamped to `text.len()`).
@@ -1152,6 +1536,11 @@ fn full_justify(line: &[Segment], width: usize, style: &Style) -> Vec<Segment> {
 ///
 /// `is_last` marks the final line of the paragraph, which full justification
 /// leaves ragged rather than stretching.
+///
+/// `covered(i)` says whether a span covers the line's `i`-th character.
+/// Upstream pads the plain string, so its padding joins the adjacent run
+/// unless a span ends (or starts) at the text's edge; a separate segment
+/// would re-emit the style as a second SGR run.
 fn justify_line(
     line: &[Segment],
     width: usize,
@@ -1159,6 +1548,7 @@ fn justify_line(
     overflow: Overflow,
     style: &Style,
     is_last: bool,
+    covered: &dyn Fn(usize) -> bool,
 ) -> Vec<Segment> {
     // Full justification rewrites the interior gaps instead of padding an edge.
     if justify == Justify::Full {
@@ -1189,6 +1579,14 @@ fn justify_line(
         content = truncate_line(&content, width, overflow);
     }
 
+    // Whether padding may join the content's first / last run: no span
+    // covers the character at that edge, so upstream's run there is the base
+    // style alone and the padding extends it.
+    let content_chars: usize = content.iter().map(|s| s.text.chars().count()).sum();
+    // With no content at all, the two pads of a centred line are one run.
+    let join_left = content_chars > 0 && !covered(0);
+    let join_right = content_chars == 0 || !covered(content_chars - 1);
+
     let mut out = Vec::with_capacity(content.len() + 2);
     match justify {
         Justify::Right => {
@@ -1197,7 +1595,7 @@ fn justify_line(
             if excess > 0 {
                 out.push(Segment::new(" ".repeat(excess), Some(style.clone())));
             }
-            out.append(&mut content);
+            append_joined(&mut out, content, join_left);
         }
         Justify::Center => {
             // `pad_left((width - cell_len) // 2)` and then `pad_right(width -
@@ -1207,10 +1605,14 @@ fn justify_line(
             if left > 0 {
                 out.push(Segment::new(" ".repeat(left), Some(style.clone())));
             }
-            out.append(&mut content);
+            append_joined(&mut out, content, join_left);
             let right = width.saturating_sub(line_cell_len(&out));
             if right > 0 {
-                out.push(Segment::new(" ".repeat(right), Some(style.clone())));
+                push_joined(
+                    &mut out,
+                    Segment::new(" ".repeat(right), Some(style.clone())),
+                    join_right,
+                );
             }
         }
         // Left, Default, and full justification's ragged last line pad right.
@@ -1221,11 +1623,36 @@ fn justify_line(
             let excess = width.saturating_sub(line_cell_len(&content));
             out.append(&mut content);
             if excess > 0 {
-                out.push(Segment::new(" ".repeat(excess), Some(style.clone())));
+                push_joined(
+                    &mut out,
+                    Segment::new(" ".repeat(excess), Some(style.clone())),
+                    join_right,
+                );
             }
         }
     }
     out
+}
+
+/// Append `segment`, extending the last segment instead when `join` allows it
+/// and the two share a style.
+fn push_joined(out: &mut Vec<Segment>, segment: Segment, join: bool) {
+    match out.last_mut() {
+        Some(last) if join && !last.control && last.style == segment.style => {
+            last.text.push_str(&segment.text);
+        }
+        _ => out.push(segment),
+    }
+}
+
+/// Append `content`, joining its first segment onto the last of `out` when
+/// `join` allows it and the two share a style.
+fn append_joined(out: &mut Vec<Segment>, content: Vec<Segment>, join: bool) {
+    let mut content = content.into_iter();
+    if let Some(first) = content.next() {
+        push_joined(out, first, join);
+    }
+    out.extend(content);
 }
 
 /// The cell width of a rendered line.
@@ -1241,7 +1668,7 @@ fn line_cell_len(line: &[Segment]) -> usize {
 fn trailing_whitespace(line: &[Segment]) -> usize {
     let mut count = 0usize;
     for segment in line.iter().rev() {
-        let trimmed = segment.text.trim_end();
+        let trimmed = segment.text.trim_end_matches(is_python_space);
         count += segment.text[trimmed.len()..].chars().count();
         if !trimmed.is_empty() {
             break;
@@ -1293,13 +1720,60 @@ fn rstrip_end_line(line: &mut Vec<Segment>, size: usize) {
 
 /// `Text.__rich_measure__` on a plain string: `(widest word, widest line)`.
 pub(crate) fn measure_plain(plain: &str) -> (usize, usize) {
-    let max_line = plain.split('\n').map(cell_len).max().unwrap_or(0);
+    // `text.splitlines()` and `text.split()`: Python's line boundaries
+    // (U+2028, U+0085, …) and whitespace (including U+001C..U+001F), not
+    // just `\n` and Rust's `White_Space`.
+    let max_line = python_splitlines(plain)
+        .into_iter()
+        .map(cell_len)
+        .max()
+        .unwrap_or(0);
     let min_word = plain
-        .split_whitespace()
+        .split(is_python_space)
+        .filter(|word| !word.is_empty())
         .map(cell_len)
         .max()
         .unwrap_or(max_line);
     (min_word, max_line)
+}
+
+/// Python's `str.isspace()`: Rust's `White_Space` plus the four ASCII
+/// information separators U+001C..=U+001F.
+pub(crate) fn is_python_space(c: char) -> bool {
+    c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
+}
+
+/// Port of Python's `str.splitlines()`: every Unicode line boundary ends a
+/// line, `\r\n` counts once, and a trailing boundary adds no empty line.
+pub(crate) fn python_splitlines(text: &str) -> Vec<&str> {
+    let mut lines = Vec::new();
+    let mut start = 0;
+    let mut chars = text.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        if matches!(
+            c,
+            '\n' | '\r'
+                | '\x0b'
+                | '\x0c'
+                | '\x1c'
+                | '\x1d'
+                | '\x1e'
+                | '\u{85}'
+                | '\u{2028}'
+                | '\u{2029}'
+        ) {
+            lines.push(&text[start..i]);
+            start = i + c.len_utf8();
+            if c == '\r' && chars.peek().map(|&(_, n)| n) == Some('\n') {
+                chars.next();
+                start += 1;
+            }
+        }
+    }
+    if start < text.len() {
+        lines.push(&text[start..]);
+    }
+    lines
 }
 
 #[cfg(test)]
@@ -1643,6 +2117,33 @@ mod tests {
                 10
             ),
             vec!["abcdefghi…", "more"]
+        );
+    }
+
+    /// `Text.apply_meta` / `Text.on`, as rich 15.0.0 records them.
+    #[test]
+    fn apply_meta_and_on_add_meta_spans() {
+        use crate::style::{Meta, MetaValue};
+        let mut text = Text::new("hello");
+        text.apply_meta([("a", MetaValue::Int(1))].into_iter().collect(), 1, Some(3));
+        text.on(None, &[("click", MetaValue::Str("x".into()))]);
+        text.apply_meta(Meta::new(), 0, None);
+        let spans = text.spans();
+        assert_eq!(spans.len(), 2);
+        assert_eq!((spans[0].start, spans[0].end), (1, 3));
+        let meta = |span: &Span| match &span.style {
+            StyleType::Style(style) => style.meta(),
+            StyleType::Name(_) => Meta::new(),
+        };
+        assert_eq!(
+            meta(&spans[0]),
+            [("a", MetaValue::Int(1))].into_iter().collect()
+        );
+        assert_eq!(
+            meta(&spans[1]),
+            [("@click", MetaValue::Str("x".into()))]
+                .into_iter()
+                .collect()
         );
     }
 

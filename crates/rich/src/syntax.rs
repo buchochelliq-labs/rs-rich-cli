@@ -13,6 +13,7 @@
 //! rich — see docs/DIVERGENCES.md. Everything else (the renderable protocol,
 //! width handling) matches the port's conventions.
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 #[cfg(feature = "syntax-cache")]
@@ -24,14 +25,17 @@ mod syntect_adapter;
 pub use syntect_adapter::SyntectHighlighter;
 
 use crate::cells::cell_len;
+use crate::color::{Color, ColorSystem, ColorTriplet, ColorType};
 use crate::console::{Console, ConsoleOptions};
+use crate::console::{Justify, Overflow};
 use crate::measure::Measurement;
 use crate::protocol::{
     CodeHighlighter, HighlightError, HighlightedCode, HighlightedLine, Renderable,
 };
 use crate::segment::Segment;
-use crate::style::Style;
-use crate::text::is_control_code;
+use crate::style::{Style, StyleType};
+use crate::text::python_splitlines;
+use crate::text::Text;
 
 /// Upstream's `Syntax(tab_size=4)`.
 const DEFAULT_TAB_SIZE: usize = 4;
@@ -43,11 +47,37 @@ pub struct Syntax {
     /// `None` means the highlighter's default theme.
     theme: Option<String>,
     word_wrap: bool,
-    padding: usize,
+    /// `(top, right, bottom, left)`.
+    padding: (usize, usize, usize, usize),
     tab_size: usize,
     /// `None` means [`SyntectHighlighter`].
     highlighter: Option<Arc<dyn CodeHighlighter>>,
+    line_numbers: bool,
+    start_line: i64,
+    line_range: Option<(Option<i64>, Option<i64>)>,
+    highlight_lines: BTreeSet<i64>,
+    code_width: Option<usize>,
+    background_color: Option<String>,
+    indent_guides: bool,
+    stylized_ranges: Vec<StylizedRange>,
 }
+
+/// A `(line, column)` position in the code: 1-based line, 0-based column.
+/// Upstream's `SyntaxPosition`: a 1-based line and a 0-based column. Both
+/// are signed, as upstream's are (see [`Syntax::stylize_range`]).
+pub type SyntaxPosition = (i64, i64);
+
+/// Upstream's `_SyntaxHighlightRange`.
+#[derive(Clone, Debug)]
+struct StylizedRange {
+    style: StyleType,
+    start: SyntaxPosition,
+    end: SyntaxPosition,
+    style_before: bool,
+}
+
+/// Upstream's `NUMBERS_COLUMN_DEFAULT_PADDING`.
+const NUMBERS_COLUMN_DEFAULT_PADDING: usize = 2;
 
 /// Port of Python's `str.expandtabs(tab_size)`, which `Syntax._process_code`
 /// runs over the source before highlighting it.
@@ -104,12 +134,20 @@ impl Syntax {
     pub fn new(code: impl Into<String>, language: impl Into<String>) -> Self {
         Syntax {
             word_wrap: false,
-            padding: 0,
+            padding: (0, 0, 0, 0),
             tab_size: DEFAULT_TAB_SIZE,
             code: code.into(),
             language: Some(language.into()).filter(|l| !l.is_empty()),
             theme: None,
             highlighter: None,
+            line_numbers: false,
+            start_line: 1,
+            line_range: None,
+            highlight_lines: BTreeSet::new(),
+            code_width: None,
+            background_color: None,
+            indent_guides: false,
+            stylized_ranges: Vec::new(),
         }
     }
 
@@ -138,7 +176,83 @@ impl Syntax {
     /// its one-column gutter. Without it the code sat flush against the
     /// surrounding text and every document containing a fence diverged.
     pub fn padding(mut self, padding: usize) -> Self {
+        self.padding = (padding, padding, padding, padding);
+        self
+    }
+
+    /// Padding on each side, `(top, right, bottom, left)`, in the code
+    /// background (upstream `padding` as a tuple).
+    pub fn padding_sides(mut self, padding: (usize, usize, usize, usize)) -> Self {
         self.padding = padding;
+        self
+    }
+
+    /// Number the lines in a gutter (upstream `line_numbers`, default off).
+    pub fn line_numbers(mut self, line_numbers: bool) -> Self {
+        self.line_numbers = line_numbers;
+        self
+    }
+
+    /// The number of the first line (upstream `start_line`, default 1). Any
+    /// integer, as upstream's: zero and negative numbers are drawn as they are.
+    pub fn start_line(mut self, start_line: i64) -> Self {
+        self.start_line = start_line;
+        self
+    }
+
+    /// Render only lines `start..=end` (1-based; `None` leaves that end open).
+    /// Upstream `line_range`, with its Python semantics: a start of 0 or less
+    /// is the first line, and a negative end counts back from the last line
+    /// (`lines[start - 1:end]`) after the highlighter has stopped at the first
+    /// line it reached.
+    pub fn line_range(mut self, start: Option<i64>, end: Option<i64>) -> Self {
+        self.line_range = Some((start, end));
+        self
+    }
+
+    /// Mark these line numbers with a pointer in the gutter (upstream
+    /// `highlight_lines`; shown with `line_numbers`).
+    pub fn highlight_lines(mut self, lines: impl IntoIterator<Item = i64>) -> Self {
+        self.highlight_lines = lines.into_iter().collect();
+        self
+    }
+
+    /// A fixed width for the code, excluding line numbers (upstream
+    /// `code_width`; default all the available width).
+    pub fn code_width(mut self, code_width: usize) -> Self {
+        self.code_width = Some(code_width);
+        self
+    }
+
+    /// Override the theme's background colour (upstream `background_color`).
+    pub fn background_color(mut self, color: impl Into<String>) -> Self {
+        self.background_color = Some(color.into());
+        self
+    }
+
+    /// Draw indent guides (upstream `indent_guides`, default off; not on an
+    /// ASCII-only console).
+    pub fn indent_guides(mut self, indent_guides: bool) -> Self {
+        self.indent_guides = indent_guides;
+        self
+    }
+
+    /// Style a range of the code, from `start` to `end` (`(line, column)`,
+    /// 1-based lines, 0-based columns), on top of the highlighting — or
+    /// beneath it with `style_before`. Port of `Syntax.stylize_range`.
+    pub fn stylize_range(
+        &mut self,
+        style: impl Into<StyleType>,
+        start: SyntaxPosition,
+        end: SyntaxPosition,
+        style_before: bool,
+    ) -> &mut Self {
+        self.stylized_ranges.push(StylizedRange {
+            style: style.into(),
+            start,
+            end,
+            style_before,
+        });
         self
     }
 
@@ -158,23 +272,9 @@ impl Syntax {
     /// The engine is this `Syntax`'s own, else `console`'s default (whose theme
     /// then applies unless this `Syntax` names one), else syntect.
     fn highlighted(&self, code: &str, console: Option<&Console>) -> HighlightedCode {
-        use crate::protocol::ConsoleCodeHighlighting;
-        let default = match &self.highlighter {
-            Some(_) => None,
-            None => console.and_then(|console| console.code_highlighting()),
-        };
-        let engine = self
-            .highlighter
-            .clone()
-            .or_else(|| default.map(|d| d.highlighter.clone()))
-            .unwrap_or_else(SyntectHighlighter::shared);
+        let (engine, theme) = self.engine_and_theme(console);
         let language = self.language.as_deref();
-        let theme = self
-            .theme
-            .as_deref()
-            .or_else(|| default.and_then(|d| d.theme.as_deref()))
-            .unwrap_or(engine.default_theme());
-        let result = match engine.highlight(code, language, theme) {
+        let result = match engine.highlight(code, language, &theme) {
             Err(HighlightError::UnknownTheme(_)) => {
                 engine.highlight(code, language, engine.default_theme())
             }
@@ -238,6 +338,49 @@ fn line_pieces<'a>(
 }
 
 impl Syntax {
+    /// The highlighting engine and theme name: this `Syntax`'s own, else
+    /// `console`'s default (whose theme then applies unless this `Syntax`
+    /// names one), else syntect's.
+    fn engine_and_theme(&self, console: Option<&Console>) -> (Arc<dyn CodeHighlighter>, String) {
+        use crate::protocol::ConsoleCodeHighlighting;
+        let default = match &self.highlighter {
+            Some(_) => None,
+            None => console.and_then(|console| console.code_highlighting()),
+        };
+        let engine = self
+            .highlighter
+            .clone()
+            .or_else(|| default.map(|d| d.highlighter.clone()))
+            .unwrap_or_else(SyntectHighlighter::shared);
+        let theme = self
+            .theme
+            .as_deref()
+            .or_else(|| default.and_then(|d| d.theme.as_deref()))
+            .unwrap_or(engine.default_theme())
+            .to_string();
+        (engine, theme)
+    }
+
+    /// The theme's style for a token type, falling back to the default theme
+    /// when the chosen one is unknown (as highlighting does).
+    fn token_style(&self, console: &Console, token: &str) -> Style {
+        let (engine, theme) = self.engine_and_theme(Some(console));
+        let theme = if engine.themes().contains(&theme) {
+            theme
+        } else {
+            engine.default_theme().to_string()
+        };
+        engine.token_style(&theme, token).unwrap_or_default()
+    }
+
+    /// `Style(bgcolor=background_color)`, or null.
+    fn background_style(&self) -> Style {
+        self.background_color
+            .as_deref()
+            .and_then(|color| Color::parse(color).ok())
+            .map_or_else(Style::new, |color| Style::new().with_bgcolor(color))
+    }
+
     /// Highlight the code into a [`Text`](crate::text::Text) rather than a padded block. Port of
     /// `Syntax.highlight`: the theme background is the text's base style and
     /// every token carries its own style. Tabs are expanded first, as
@@ -253,184 +396,577 @@ impl Syntax {
         self.highlight_text(Some(console))
     }
 
-    fn highlight_text(&self, console: Option<&Console>) -> crate::text::Text {
-        let code = expand_tabs(&self.code, self.tab_size);
+    /// `Syntax._process_code` plus Pygments' own preprocessing: tabs are
+    /// expanded, then `\r\n` and a lone `\r` become `\n` (Pygments' `Lexer`
+    /// does this for every lexer, the plain-text one included). Without it a
+    /// lone `\r` was stripped as a control code and joined two lines.
+    fn process_code(&self) -> String {
+        let mut code = expand_tabs(&self.code, self.tab_size);
+        if !code.contains('\r') {
+            return code;
+        }
+        // Upstream appends `\n` to code that lacks one and removes it after
+        // highlighting, so a trailing lone `\r` becomes that `\r\n` and goes.
+        if code.ends_with('\r') {
+            code.pop();
+        }
+        code.replace("\r\n", "\n").replace('\r', "\n")
+    }
+
+    /// Port of `Syntax.highlight(code, line_range)` over this `Syntax`'s
+    /// code: the highlighted `Text` in the base style (the theme's
+    /// background and `background_color`), with upstream's `justify`,
+    /// `tab_size` and `no_wrap`. With a `line_range`, lines before it are
+    /// left unstyled and lines after it dropped. `console` supplies a
+    /// default code highlighter, as in [`highlight_for`](Self::highlight_for).
+    pub fn highlight_range(
+        &self,
+        line_range: Option<(Option<i64>, Option<i64>)>,
+        console: Option<&Console>,
+    ) -> crate::text::Text {
+        let mut code = self.process_code();
+        if !code.ends_with('\n') {
+            code.push('\n');
+        }
         let highlighted = self.highlighted(&code, console);
-        let mut text = crate::text::Text::new("");
+        let base_style = highlighted
+            .background
+            .clone()
+            .map_or_else(Style::new, |bg| Style::new().with_bgcolor(bg))
+            .combine(&self.background_style());
+        let transparent = base_style.bgcolor().is_none();
+        let mut text = self.highlighted_text(&code, &highlighted, line_range);
+        text.set_base_style(base_style);
+        text.set_justify(if transparent {
+            Justify::Default
+        } else {
+            Justify::Left
+        });
+        text.set_tab_size(Some(self.tab_size));
+        text.set_no_wrap(Some(!self.word_wrap));
+        text
+    }
+
+    fn highlight_text(&self, console: Option<&Console>) -> crate::text::Text {
+        let code = self.process_code();
+        let highlighted = self.highlighted(&code, console);
+        let mut text = self.highlighted_text(&code, &highlighted, None);
         if let Some(background) = &highlighted.background {
             text.set_base_style(Style::new().with_bgcolor(background.clone()));
         }
+        text
+    }
+
+    /// Port of `Syntax.highlight`'s token loop over already highlighted
+    /// `code`: with a `line_range`, lines before it are left unstyled and
+    /// lines after it are dropped. Then `background_color` and the stylized
+    /// ranges.
+    fn highlighted_text(
+        &self,
+        code: &str,
+        highlighted: &HighlightedCode,
+        line_range: Option<(Option<i64>, Option<i64>)>,
+    ) -> Text {
+        let mut text = Text::new("");
+        let (line_start, line_end) = line_range.unwrap_or((None, None));
+        // `_line_start = line_start - 1 if line_start else 0`; below zero no
+        // line is skipped.
+        let skip = line_start.filter(|&start| start != 0).map_or(0, |start| {
+            usize::try_from(start.saturating_sub(1)).unwrap_or(0)
+        });
         let sources: Vec<&str> = code.split('\n').collect();
         let last = sources.len().saturating_sub(1);
         for (index, (source, line)) in sources.iter().zip(&highlighted.lines).enumerate() {
-            let mut pieces: Vec<(String, Style)> =
+            let mut pieces: Vec<(String, Option<Style>)> =
                 line_pieces(source, line, &highlighted.default_style)
                     .into_iter()
-                    .map(|(piece, style)| (piece.to_string(), style))
+                    .map(|(piece, style)| (piece.to_string(), Some(style)))
                     .collect();
             if index != last {
                 // The engine's style for the line break. When it matches the
                 // last piece, the break joins that piece, as one token.
                 let style = line.newline_style.clone().unwrap_or_default();
                 match pieces.last_mut() {
-                    Some((piece, last_style))
+                    Some((piece, Some(last_style)))
                         if line.newline_style.is_some() && *last_style == style =>
                     {
                         piece.push('\n');
                     }
-                    _ => pieces.push(("\n".to_string(), style)),
+                    _ => pieces.push(("\n".to_string(), Some(style))),
                 }
             }
             for (piece, style) in pieces {
-                text.append(piece.as_str(), Some(style.into()));
+                // Tokens before the range carry no style (`yield (token, None)`).
+                let style = style.filter(|_| index >= skip);
+                text.append(piece.as_str(), style.map(Into::into));
+            }
+            // `if line_end and line_no >= line_end: break`.
+            // A negative end is truthy and already passed.
+            if line_end.is_some_and(|end| end != 0 && (index as i64) + 1 >= end && index >= skip) {
+                break;
             }
         }
+        if let Some(color) = &self.background_color {
+            let len = text.plain().len();
+            text.stylize(StyleType::Name(format!("on {color}")), 0, len);
+        }
+        self.apply_stylized_ranges(&mut text);
         text
+    }
+
+    /// Port of `Syntax._apply_stylized_ranges`: positions are resolved
+    /// against the highlighted text; a column past the end of its line is
+    /// clamped, a line out of range skips the range.
+    fn apply_stylized_ranges(&self, text: &mut Text) {
+        if self.stylized_ranges.is_empty() {
+            return;
+        }
+        let plain = text.plain().to_string();
+        // Character offsets of each line start, plus `len + 1`.
+        let mut offsets = vec![0usize];
+        let mut chars = 0usize;
+        for ch in plain.chars() {
+            chars += 1;
+            if ch == '\n' {
+                offsets.push(chars);
+            }
+        }
+        offsets.push(chars + 1);
+        // Port of `_get_code_index_for_syntax_position`, with Python's
+        // negative list indexing: a line before the first counts back from
+        // the end of `offsets`, and a negative column back from the line's
+        // start. An index Python would raise `IndexError` for is skipped.
+        let count = offsets.len() as i64;
+        let offset_at = |index: i64| -> Option<i64> {
+            let index = if index < 0 {
+                count.saturating_add(index)
+            } else {
+                index
+            };
+            usize::try_from(index)
+                .ok()
+                .and_then(|index| offsets.get(index))
+                .map(|&offset| offset as i64)
+        };
+        let index_for = |(line_number, column): SyntaxPosition| -> Option<i64> {
+            if line_number > count || count < line_number.saturating_add(1) {
+                return None;
+            }
+            let line_index = line_number.saturating_sub(1);
+            let line_length = offset_at(line_index.saturating_add(1))? - offset_at(line_index)? - 1;
+            Some(offset_at(line_index)?.saturating_add(column.min(line_length)))
+        };
+        let length = chars as i64;
+        let byte = |char_index: usize| {
+            plain
+                .char_indices()
+                .nth(char_index)
+                .map_or(plain.len(), |(at, _)| at)
+        };
+        for range in &self.stylized_ranges {
+            let (Some(start), Some(end)) = (index_for(range.start), index_for(range.end)) else {
+                continue;
+            };
+            // `Text.stylize`: negative offsets count from the end, and an
+            // empty or out-of-range span is dropped.
+            let start = if start < 0 {
+                length.saturating_add(start)
+            } else {
+                start
+            };
+            let end = if end < 0 {
+                length.saturating_add(end)
+            } else {
+                end
+            };
+            if start >= length || end <= start {
+                continue;
+            }
+            let (start, end) = (byte(start.max(0) as usize), byte(end.min(length) as usize));
+            if range.style_before {
+                text.stylize_before(range.style.clone(), start, end);
+            } else {
+                text.stylize(range.style.clone(), start, end);
+            }
+        }
     }
 }
 
-/// Port of Python's `str.splitlines()`: every Unicode line boundary ends a
-/// line, `\r\n` counts once, and a trailing boundary adds no empty line.
-fn python_splitlines(text: &str) -> Vec<&str> {
-    let mut lines = Vec::new();
-    let mut start = 0;
-    let mut chars = text.char_indices().peekable();
-    while let Some((i, c)) = chars.next() {
+impl Syntax {
+    /// Upstream's `_numbers_column_width`.
+    fn numbers_column_width(&self) -> usize {
+        if !self.line_numbers {
+            return 0;
+        }
+        // Python ints are unbounded: widen so `i64::MAX` does not overflow.
+        let last = i128::from(self.start_line) + self.code.matches('\n').count() as i128;
+        last.to_string().len() + NUMBERS_COLUMN_DEFAULT_PADDING
+    }
+
+    /// `(background, number, highlighted number)` styles for the gutter.
+    /// Port of `Syntax._get_number_styles`.
+    fn number_styles(&self, console: &Console, base_style: &Style) -> (Style, Style, Style) {
+        let dim = |on: bool| Style::parse(if on { "dim" } else { "not dim" }).unwrap_or_default();
+        if base_style.bgcolor().is_none() {
+            return (Style::new(), dim(true), Style::new());
+        }
         if matches!(
-            c,
-            '\n' | '\r'
-                | '\x0b'
-                | '\x0c'
-                | '\x1c'
-                | '\x1d'
-                | '\x1e'
-                | '\u{85}'
-                | '\u{2028}'
-                | '\u{2029}'
+            console.color_system(),
+            Some(ColorSystem::EightBit | ColorSystem::Truecolor)
         ) {
-            lines.push(&text[start..i]);
-            start = i + c.len_utf8();
-            if c == '\r' && chars.peek().map(|&(_, n)| n) == Some('\n') {
-                chars.next();
-                start += 1;
-            }
+            let text_style = self.token_style(console, "Text");
+            let background = self.background_style();
+            let number = base_style
+                .combine(&text_style)
+                .combine(
+                    &Style::new().with_color(self.line_numbers_color(console, base_style, 0.3)),
+                )
+                .combine(&background);
+            let highlight = base_style
+                .combine(&text_style)
+                .combine(
+                    &Style::parse("bold")
+                        .unwrap_or_default()
+                        .with_color(self.line_numbers_color(console, base_style, 0.9)),
+                )
+                .combine(&background);
+            (base_style.clone(), number, highlight)
+        } else {
+            (
+                base_style.clone(),
+                base_style.combine(&dim(true)),
+                base_style.combine(&dim(false)),
+            )
         }
     }
-    if start < text.len() {
-        lines.push(&text[start..]);
+
+    /// Port of `Syntax._get_line_numbers_color`: the text colour blended
+    /// into the background.
+    fn line_numbers_color(&self, console: &Console, base_style: &Style, blend: f64) -> Color {
+        let system_defined =
+            |color: &Color| !matches!(color.kind, ColorType::EightBit | ColorType::Truecolor);
+        let Some(background) = base_style.bgcolor().filter(|color| !system_defined(color)) else {
+            return Color::default_color();
+        };
+        let text_style = self.token_style(console, "Text");
+        let Some(foreground) = text_style.color().filter(|color| !system_defined(color)) else {
+            return text_style
+                .color()
+                .cloned()
+                .unwrap_or_else(Color::default_color);
+        };
+        let (Some(bg), Some(fg)) = (background.get_truecolor(), foreground.get_truecolor()) else {
+            return Color::default_color();
+        };
+        let mix = |a: u8, b: u8| (f64::from(a) + (f64::from(b) - f64::from(a)) * blend) as u8;
+        let ColorTriplet { red, green, blue } = ColorTriplet::new(
+            mix(bg.red, fg.red),
+            mix(bg.green, fg.green),
+            mix(bg.blue, fg.blue),
+        );
+        Color::from_rgb(red, green, blue)
     }
-    lines
+
+    /// Port of `Syntax._get_syntax`: the code's lines, without the padding.
+    fn syntax_lines(&self, console: &Console, options: &ConsoleOptions) -> Vec<Vec<Segment>> {
+        let (_, pad_right, _, pad_left) = self.padding;
+        let horizontal_padding = pad_left + pad_right;
+        let numbers_column_width = self.numbers_column_width();
+        let code_width = match self.code_width {
+            Some(code_width) => code_width,
+            None => {
+                let width = if self.line_numbers {
+                    options.max_width.saturating_sub(numbers_column_width + 1)
+                } else {
+                    options.max_width
+                };
+                width.saturating_sub(horizontal_padding)
+            }
+        };
+
+        // `_process_code`: the code always ends with a newline to highlight.
+        let ends_on_nl = self.code.ends_with('\n');
+        let mut code = self.process_code();
+        if !code.ends_with('\n') {
+            code.push('\n');
+        }
+        let highlighted = self.highlighted(&code, Some(console));
+        let background_style = self.background_style();
+        let base_style = highlighted
+            .background
+            .clone()
+            .map_or_else(Style::new, |bg| Style::new().with_bgcolor(bg))
+            .combine(&background_style);
+        let transparent = base_style.bgcolor().is_none();
+        let mut text = self.highlighted_text(&code, &highlighted, self.line_range);
+        text.set_base_style(base_style.clone());
+        text.set_justify(if transparent {
+            Justify::Default
+        } else {
+            Justify::Left
+        });
+        text.set_tab_size(Some(self.tab_size));
+        text.set_no_wrap(Some(!self.word_wrap));
+        let guide_style = || {
+            base_style
+                .combine(&self.token_style(console, "Comment"))
+                .combine(&Style::parse("dim").unwrap_or_default())
+                .combine(&background_style)
+        };
+        let render_text = |text: &Text, width: usize, justify: Justify| {
+            let overflow = text
+                .get_overflow()
+                .or(options.overflow)
+                .unwrap_or(Overflow::Fold);
+            let no_wrap = text.get_no_wrap().or(options.no_wrap).unwrap_or(false);
+            let mut lines = text.render_lines_wrapped_tabs(
+                console.theme(),
+                console.base_style(),
+                Some(width),
+                justify,
+                overflow,
+                no_wrap,
+                self.tab_size.max(1),
+            );
+            if lines.is_empty() {
+                lines.push(Vec::new());
+            }
+            lines
+        };
+
+        if !self.line_numbers && !self.word_wrap && self.line_range.is_none() {
+            if !ends_on_nl && text.plain().ends_with('\n') {
+                text.right_crop(1);
+            }
+            if self.indent_guides && !options.ascii_only() {
+                text = text.with_indent_guides(Some(self.tab_size), "│", guide_style());
+                text.set_overflow(Some(Overflow::Crop));
+            }
+            if code_width == 0 {
+                return Vec::new();
+            }
+            if transparent {
+                // `console.render(text, options.update(width=code_width))`.
+                return render_text(&text, code_width, text.get_justify());
+            }
+            // `render_lines(text, width=code_width, justify="left",
+            // style=background_style, pad=True)`.
+            return render_text(&text, code_width, Justify::Left)
+                .into_iter()
+                .map(|line| {
+                    let line = if background_style.is_null() {
+                        line
+                    } else {
+                        Segment::apply_style(&line, &background_style)
+                    };
+                    Segment::adjust_line_length(&line, code_width, Some(background_style.clone()))
+                })
+                .collect();
+        }
+
+        let (start_line, end_line) = self.line_range.unwrap_or((None, None));
+        // `line_offset = max(0, start_line - 1)` when `start_line` is truthy.
+        let line_offset = start_line.filter(|&start| start != 0).map_or(0, |start| {
+            usize::try_from(start.saturating_sub(1)).unwrap_or(0)
+        });
+        let mut lines = text.split("\n", false, ends_on_nl);
+        if self.line_range.is_some() {
+            if line_offset > lines.len() {
+                return Vec::new();
+            }
+            // `lines[line_offset:end_line]`, with Python's slice bounds.
+            let len = lines.len() as i64;
+            let end = match end_line {
+                None => len,
+                Some(end) if end < 0 => (len + end).max(0),
+                Some(end) => end.min(len),
+            } as usize;
+            lines = if end > line_offset {
+                lines[line_offset..end].to_vec()
+            } else {
+                Vec::new()
+            };
+        }
+        if self.indent_guides && !options.ascii_only() {
+            let style = guide_style().combine(&Style::parse("not italic").unwrap_or_default());
+            lines = Text::new("\n")
+                .join(&lines)
+                .with_indent_guides(Some(self.tab_size), "│", style)
+                .split("\n", false, true);
+        }
+
+        let (background, number_style, highlight_number_style) =
+            self.number_styles(console, &base_style);
+        let line_pointer = if options.legacy_windows { "> " } else { "❱ " };
+        let mut out: Vec<Vec<Segment>> = Vec::new();
+        for (index, line) in lines.iter().enumerate() {
+            // Widened, as Python ints are unbounded (`start_line` may be
+            // `i64::MAX`).
+            let line_no = i128::from(self.start_line) + (line_offset + index) as i128;
+            let wrapped_lines: Vec<Vec<Segment>> = if self.word_wrap {
+                if code_width == 0 {
+                    Vec::new()
+                } else {
+                    render_text(line, code_width, line.get_justify())
+                        .into_iter()
+                        .map(|wrapped| {
+                            let wrapped = if background.is_null() {
+                                wrapped
+                            } else {
+                                Segment::apply_style(&wrapped, &background)
+                            };
+                            if transparent {
+                                wrapped
+                            } else {
+                                Segment::adjust_line_length(
+                                    &wrapped,
+                                    code_width,
+                                    Some(background.clone()),
+                                )
+                            }
+                        })
+                        .collect()
+                }
+            } else {
+                let segments = line.render(console.theme(), console.base_style());
+                if options.no_wrap == Some(true) {
+                    vec![segments]
+                } else if transparent {
+                    vec![crop_line(&segments, code_width)]
+                } else {
+                    vec![Segment::adjust_line_length(
+                        &segments,
+                        code_width,
+                        Some(background.clone()),
+                    )]
+                }
+            };
+            if self.line_numbers {
+                let left_pad = Segment::new(
+                    " ".repeat(numbers_column_width + 1),
+                    Some(background.clone()),
+                );
+                for (first, wrapped) in wrapped_lines.into_iter().enumerate() {
+                    let mut row = Vec::new();
+                    if first == 0 {
+                        let line_column = format!(
+                            "{:>width$} ",
+                            line_no,
+                            width = numbers_column_width.saturating_sub(2)
+                        );
+                        if i64::try_from(line_no)
+                            .is_ok_and(|line_no| self.highlight_lines.contains(&line_no))
+                        {
+                            row.push(Segment::new(
+                                line_pointer,
+                                Some(Style::parse("red").unwrap_or_default()),
+                            ));
+                            row.push(Segment::new(
+                                line_column,
+                                Some(highlight_number_style.clone()),
+                            ));
+                        } else {
+                            row.push(Segment::new("  ", Some(highlight_number_style.clone())));
+                            row.push(Segment::new(line_column, Some(number_style.clone())));
+                        }
+                    } else {
+                        row.push(left_pad.clone());
+                    }
+                    row.extend(wrapped);
+                    out.push(row);
+                }
+            } else {
+                out.extend(wrapped_lines);
+            }
+        }
+        out
+    }
+}
+
+impl Syntax {}
+
+/// `Segment.adjust_line_length(…, pad=False)`: crop a line to `width`, never
+/// pad it.
+fn crop_line(line: &[Segment], width: usize) -> Vec<Segment> {
+    let length: usize = line.iter().map(Segment::cell_length).sum();
+    if length > width {
+        Segment::adjust_line_length(line, width, None)
+    } else {
+        line.to_vec()
+    }
+}
+
+/// Lines already rendered, as upstream's `Segments(…)` under `Padding`.
+struct RenderedLines(Vec<Vec<Segment>>);
+
+impl Renderable for RenderedLines {
+    fn rich_render(&self, _console: &Console, _options: &ConsoleOptions) -> Vec<Segment> {
+        join_lines(self.0.clone())
+    }
+
+    /// No `__rich_measure__`: `Measurement(0, max_width)`.
+    fn measure(&self, _console: &Console, options: &ConsoleOptions) -> Measurement {
+        Measurement::new(0, options.max_width)
+    }
+}
+
+/// Lines joined by newlines. An empty last line is marked with an empty
+/// segment, so a container splitting the stream keeps it (see
+/// [`Segment::split_lines`]).
+fn join_lines(lines: Vec<Vec<Segment>>) -> Vec<Segment> {
+    let mut segments = Vec::new();
+    let last = lines.len().saturating_sub(1);
+    for (index, line) in lines.into_iter().enumerate() {
+        // Even when it is the only line: `Syntax("")` prints a blank line.
+        if index == last && line.is_empty() {
+            segments.push(Segment::new("", None));
+        }
+        segments.extend(line);
+        if index != last {
+            segments.push(Segment::line());
+        }
+    }
+    segments
 }
 
 impl Renderable for Syntax {
-    /// Port of `Syntax.__rich_measure__` (no line numbers or `code_width` in
-    /// this port, so the numbers column is zero wide). Like upstream it
-    /// measures the raw source, where a tab counts as zero cells.
+    /// Port of `Syntax.__rich_measure__`. Like upstream it measures the raw
+    /// source, where a tab counts as zero cells.
     fn measure(&self, _console: &Console, _options: &ConsoleOptions) -> Measurement {
+        let (_, right, _, left) = self.padding;
+        let padding = left + right;
+        let numbers = self.numbers_column_width();
+        if let Some(code_width) = self.code_width {
+            return Measurement::new(numbers, code_width + numbers + padding + 1);
+        }
         let widest = python_splitlines(&self.code)
             .into_iter()
             .map(cell_len)
             .max()
             .unwrap_or(0);
-        Measurement::new(0, self.padding * 2 + widest)
+        let mut width = numbers + padding + widest;
+        if self.line_numbers {
+            width += 1;
+        }
+        Measurement::new(numbers, width)
     }
 
+    /// Port of `Syntax.__rich_console__`: the lines, inside `Padding` in the
+    /// code's base style when there is any padding.
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        // The gutter eats into the space the code itself may occupy.
-        let width = options.max_width;
-        let code_width = width.saturating_sub(self.padding * 2);
-
-        // `Syntax._process_code`: the source is tab-expanded before it reaches
-        // the highlighter, so no U+0009 ever survives into a segment.
-        let code = expand_tabs(&self.code, self.tab_size);
-        let highlighted = self.highlighted(&code, Some(console));
-        let background = highlighted.background.clone();
-
-        // Upstream splits the source with Python's `str.split("\n")`, which keeps
-        // the empty element after a trailing newline — so a file ending in `\n`
-        // gets one final padded blank row, and an empty source one row. The
-        // highlighter returns exactly one line per element of that split.
-        let mut lines: Vec<Vec<Segment>> = Vec::new();
-        for (source, line) in code.split('\n').zip(&highlighted.lines) {
-            let mut row: Vec<Segment> = Vec::new();
-            for (text, style) in line_pieces(source, line, &highlighted.default_style) {
-                // Upstream's Syntax builds a `Text`, so `strip_control_codes`
-                // runs on every token. We emit segments directly, which let BEL,
-                // backspace, vertical tab and form feed through to the terminal
-                // — a backspace run rewrites what the reader sees.
-                let text: String = text.chars().filter(|c| !is_control_code(*c)).collect();
-                if text.is_empty() {
-                    continue;
-                }
-                row.push(Segment::new(text, Some(style)));
-            }
-            lines.push(row);
+        // The theme's background alone: highlighting no code finds it cheaply.
+        let theme_background = self.highlighted("", Some(console)).background;
+        let lines = self.syntax_lines(console, options);
+        let (top, right, bottom, left) = self.padding;
+        if top == 0 && right == 0 && bottom == 0 && left == 0 {
+            return join_lines(lines);
         }
-
-        // Wrapping happens before padding, so every *visual* row gets the same
-        // background treatment rather than only the first.
-        if self.word_wrap {
-            lines = lines
-                .into_iter()
-                .flat_map(|row| {
-                    // A blank source line has no segments at all, and folding an
-                    // empty row yields *zero* rows rather than one empty one — so
-                    // wrapping silently deleted every blank line in the file.
-                    // `rich -x` on a 2698-line source dropped all 386 of them, and
-                    // the loss was baked into HTML exports too.
-                    if row.is_empty() {
-                        vec![Vec::new()]
-                    } else {
-                        Segment::split_lines(&Segment::fold_lines_words(&row, code_width))
-                    }
-                })
-                .collect();
-        }
-
-        // Left gutter, then the blank inset rows, both in the block background.
-        let pad_style = {
-            let mut style = Style::new();
-            if let Some(bg) = &background {
-                style = style.with_bgcolor(bg.clone());
-            }
-            style
-        };
-        if self.padding > 0 {
-            for row in &mut lines {
-                row.insert(
-                    0,
-                    Segment::new(" ".repeat(self.padding), Some(pad_style.clone())),
-                );
-            }
-            let blank = vec![Segment::new(" ".repeat(width), Some(pad_style.clone()))];
-            for _ in 0..self.padding {
-                lines.insert(0, blank.clone());
-                lines.push(blank.clone());
-            }
-        }
-
-        // Pad each line to the full width with the theme background, so the
-        // block reads as a solid panel of code.
-        for row in &mut lines {
-            let used: usize = row.iter().map(Segment::cell_length).sum();
-            if width > used {
-                let mut pad = Style::new();
-                if let Some(bg) = &background {
-                    pad = pad.with_bgcolor(bg.clone());
-                }
-                row.push(Segment::new(" ".repeat(width - used), Some(pad)));
-            }
-        }
-
-        let mut segments = Vec::new();
-        let last = lines.len().saturating_sub(1);
-        for (index, line) in lines.into_iter().enumerate() {
-            segments.extend(line);
-            if index != last {
-                segments.push(Segment::line());
-            }
-        }
-        segments
+        let base_style = theme_background
+            .map_or_else(Style::new, |bg| Style::new().with_bgcolor(bg))
+            .combine(&self.background_style());
+        crate::padding::Padding::new(Box::new(RenderedLines(lines)), self.padding)
+            .style(base_style)
+            .rich_render(console, options)
     }
 }
 
@@ -460,6 +996,35 @@ mod tests {
         let out = console.render_to_string(&syntax);
         assert!(!out.contains('\x1b'), "{out:?}");
         assert_eq!(cell_len(out.lines().next().unwrap()), 30, "{out:?}");
+    }
+
+    #[test]
+    fn a_lone_carriage_return_breaks_the_line_like_pygments() {
+        // Expected output captured from rich 15.0.0 (color_system=None) with
+        // `Console.print`; `render_to_string` leaves out its final newline.
+        let render = |renderable: &dyn Renderable, width| {
+            let console = Console::builder().width(width).color_system(None).build();
+            console.render_to_string(renderable) + "\n"
+        };
+        assert_eq!(
+            render(&Syntax::new("ab\rcd\r", "python"), 10),
+            "ab        \ncd        \n"
+        );
+        assert_eq!(
+            render(&Syntax::new("ab\r\ncd", "text"), 10),
+            "ab        \ncd        \n"
+        );
+        assert_eq!(
+            render(
+                &crate::panel::Panel::fit(Box::new(Syntax::new("ab\rcd", "python"))),
+                20
+            ),
+            "╭────╮\n│ ab │\n│ cd │\n╰────╯\n"
+        );
+        assert_eq!(
+            render(&crate::markdown::Markdown::new("```python\nab\rcd\n```"), 20),
+            "                    \n ab                 \n cd                 \n                    \n"
+        );
     }
 
     #[test]
@@ -863,8 +1428,9 @@ mod tests {
     fn a_custom_highlighter_drives_the_rendered_styles() {
         let fixed = Fixed(vec![line(vec![span(0..1, "red"), span(4..5, "bold")])]);
         let out = render_with("x = 1", Arc::new(fixed), 7);
-        // `x` red, ` = ` in the default (unstyled) gap, `1` bold, then padding.
-        assert_eq!(out, "\u{1b}[31mx\u{1b}[0m = \u{1b}[1m1\u{1b}[0m  ");
+        // `x` red, ` = ` in the default (unstyled) gap, `1` bold. A theme
+        // with no background is transparent: upstream renders it unpadded.
+        assert_eq!(out, "\u{1b}[31mx\u{1b}[0m = \u{1b}[1m1\u{1b}[0m");
     }
 
     #[test]

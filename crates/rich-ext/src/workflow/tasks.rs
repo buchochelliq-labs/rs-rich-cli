@@ -241,8 +241,9 @@ impl TaskTree {
         let now = self.now();
         // Decide on the aggregate states first: a parent whose children all
         // finished is finished even if it was never started itself.
+        let summary = self.summary();
         let cancelled: Vec<usize> = (0..self.tasks.len())
-            .filter(|&i| !self.state(TaskId(i)).is_finished() && self.tasks[i].token.is_cancelled())
+            .filter(|&i| !summary[i].state.is_finished() && self.tasks[i].token.is_cancelled())
             .collect();
         for &i in &cancelled {
             let task = &mut self.tasks[i];
@@ -318,14 +319,51 @@ impl TaskTree {
     /// * all finished is the worst outcome — failed, cancelled, warning,
     ///   succeeded — and skipped only when every child was skipped.
     pub fn state(&self, id: TaskId) -> State {
-        let task = self.task(id);
-        if task.children.is_empty() || task.state.is_problem() {
-            return task.state;
+        self.subtree_summary(id).state
+    }
+
+    /// Fold one task's own state and span with its children's summaries.
+    fn fold(&self, id: usize, child: impl Fn(TaskId) -> Summary) -> Summary {
+        let task = &self.tasks[id];
+        let (mut start, mut end) = (task.started, task.finished);
+        let mut states = Vec::with_capacity(task.children.len());
+        for &c in &task.children {
+            let summary = child(c);
+            start = min_opt(start, summary.start);
+            end = max_opt(end, summary.end);
+            states.push(summary.state);
         }
-        aggregate(
-            task.state,
-            task.children.iter().map(|child| self.state(*child)),
-        )
+        let state = if task.children.is_empty() || task.state.is_problem() {
+            task.state
+        } else {
+            aggregate(task.state, states.into_iter())
+        };
+        Summary { state, start, end }
+    }
+
+    /// Every task's aggregate state and span, in one pass without
+    /// recursion: a child is always added after its parent, so walking the
+    /// ids backwards visits children first.
+    fn summary(&self) -> Vec<Summary> {
+        let mut out = vec![Summary::default(); self.tasks.len()];
+        for i in (0..self.tasks.len()).rev() {
+            let summary = self.fold(i, |c| out[c.0]);
+            out[i] = summary;
+        }
+        out
+    }
+
+    /// The summary of `id` alone, visiting only its subtree (children
+    /// first, without recursion).
+    fn subtree_summary(&self, id: TaskId) -> Summary {
+        let order: Vec<TaskId> = self.iter_subtree(id).collect();
+        let mut done: std::collections::HashMap<usize, Summary> =
+            std::collections::HashMap::with_capacity(order.len());
+        for &t in order.iter().rev() {
+            let summary = self.fold(t.0, |c| done[&c.0]);
+            done.insert(t.0, summary);
+        }
+        done[&id.0]
     }
 
     /// The state of the whole tree, aggregated from the top-level tasks.
@@ -333,9 +371,10 @@ impl TaskTree {
         if self.roots.is_empty() {
             return State::Pending;
         }
+        let summary = self.summary();
         aggregate(
             State::Pending,
-            self.roots.iter().map(|root| self.state(*root)),
+            self.roots.iter().map(|root| summary[root.0].state),
         )
     }
 
@@ -344,37 +383,29 @@ impl TaskTree {
         self.overall().is_finished()
     }
 
-    fn span_of(&self, id: TaskId) -> (Option<Duration>, Option<Duration>) {
-        let task = self.task(id);
-        let (mut start, mut end) = (task.started, task.finished);
-        for child in &task.children {
-            let (s, e) = self.span_of(*child);
-            start = min_opt(start, s);
-            end = max_opt(end, e);
-        }
-        (start, end)
-    }
-
     /// How long `id` has run: from its (or its first child's) start to its
     /// last finish, or to now while it is unfinished. `None` before it starts.
     pub fn elapsed(&self, id: TaskId) -> Option<Duration> {
-        let (start, end) = self.span_of(id);
-        let end = if self.state(id).is_finished() {
-            end
+        self.elapsed_of(self.subtree_summary(id))
+    }
+
+    fn elapsed_of(&self, summary: Summary) -> Option<Duration> {
+        let end = if summary.state.is_finished() {
+            summary.end
         } else {
             None
         };
-        let start = start?;
+        let start = summary.start?;
         Some(end.unwrap_or_else(|| self.now()).saturating_sub(start))
     }
 
     /// How long the whole tree has run, as [`elapsed`](Self::elapsed).
     pub fn total_elapsed(&self) -> Option<Duration> {
         let (mut start, mut end) = (None, None);
+        let summary = self.summary();
         for root in &self.roots {
-            let (s, e) = self.span_of(*root);
-            start = min_opt(start, s);
-            end = max_opt(end, e);
+            start = min_opt(start, summary[root.0].start);
+            end = max_opt(end, summary[root.0].end);
         }
         let end = if self.is_finished() { end } else { None };
         Some(end.unwrap_or_else(|| self.now()).saturating_sub(start?))
@@ -392,6 +423,24 @@ impl TaskTree {
     /// A view of this tree with the default options.
     pub fn view(&self) -> TaskTreeView<'_> {
         TaskTreeView::new(self)
+    }
+}
+
+/// A task's aggregate state and the span of it and its descendants.
+#[derive(Clone, Copy, Debug)]
+struct Summary {
+    state: State,
+    start: Option<Duration>,
+    end: Option<Duration>,
+}
+
+impl Default for Summary {
+    fn default() -> Self {
+        Summary {
+            state: State::Pending,
+            start: None,
+            end: None,
+        }
     }
 }
 
@@ -504,20 +553,35 @@ impl<'a> TaskTreeView<'a> {
         self
     }
 
-    fn collapsible(&self, id: TaskId) -> bool {
+    /// Every task's summary, whether its whole subtree succeeded or was
+    /// skipped, and its subtree's size: one pass, children first.
+    fn cache(&self) -> ViewCache {
         let tree = self.tree;
-        self.collapse_finished
-            && !tree.children(id).is_empty()
-            && matches!(tree.state(id), State::Succeeded | State::Skipped)
-            && tree
-                .iter_subtree(id)
-                .all(|t| matches!(tree.state(t), State::Succeeded | State::Skipped))
+        let summary = tree.summary();
+        let n = summary.len();
+        let (mut settled, mut size) = (vec![false; n], vec![1usize; n]);
+        for i in (0..n).rev() {
+            let children = &tree.tasks[i].children;
+            settled[i] = matches!(summary[i].state, State::Succeeded | State::Skipped)
+                && children.iter().all(|c| settled[c.0]);
+            size[i] += children.iter().map(|c| size[c.0]).sum::<usize>();
+        }
+        ViewCache {
+            summary,
+            settled,
+            size,
+        }
     }
 
-    fn line(&self, console: &Console, id: TaskId, prefix: &str) -> Text {
+    fn collapsible(&self, id: TaskId, cache: &ViewCache) -> bool {
+        self.collapse_finished && !self.tree.children(id).is_empty() && cache.settled[id.0]
+    }
+
+    fn line(&self, console: &Console, id: TaskId, prefix: &str, cache: &ViewCache) -> Text {
         let tree = self.tree;
-        let state = tree.state(id);
-        let elapsed = tree.elapsed(id);
+        let summary = cache.summary[id.0];
+        let state = summary.state;
+        let elapsed = tree.elapsed_of(summary);
         let mut text = Text::new("");
         if !prefix.is_empty() {
             text.append(prefix, span(console, "workflow.guide"));
@@ -547,8 +611,8 @@ impl<'a> TaskTreeView<'a> {
             text.append("  ", None);
             text.append(&progress, span(console, "workflow.task.progress"));
         }
-        if self.collapsible(id) {
-            let hidden = tree.iter_subtree(id).count() - 1;
+        if self.collapsible(id, cache) {
+            let hidden = cache.size[id.0] - 1;
             let noun = if hidden == 1 { "task" } else { "tasks" };
             text.append(
                 &format!(" (+{hidden} {noun})"),
@@ -570,20 +634,53 @@ impl<'a> TaskTreeView<'a> {
         text.no_wrap(true).overflow(Overflow::Ellipsis)
     }
 
-    fn walk(&self, console: &Console, id: TaskId, prefix: &str, first: &str, out: &mut Vec<Text>) {
-        out.push(self.line(console, id, first));
-        if self.collapsible(id) {
-            return;
-        }
+    /// Push the lines of `root`'s subtree, depth first and without
+    /// recursion. A guide prefix stops growing once it is wider than
+    /// `width`: the line is cut to that width with an ellipsis either way,
+    /// so a very deep tree renders the same without quadratic prefixes.
+    #[allow(clippy::too_many_arguments)]
+    fn walk(
+        &self,
+        console: &Console,
+        root: TaskId,
+        prefix: &str,
+        first: &str,
+        width: usize,
+        cache: &ViewCache,
+        out: &mut Vec<Text>,
+    ) {
         let [fork, last, cont, space] = guides(self.look.ascii());
-        let children = self.tree.children(id);
-        for (index, child) in children.iter().enumerate() {
-            let is_last = index + 1 == children.len();
-            let head = format!("{prefix}{}", if is_last { last } else { fork });
-            let rest = format!("{prefix}{}", if is_last { space } else { cont });
-            self.walk(console, *child, &rest, &head, out);
+        let grow = |prefix: &str, piece: &str| {
+            if prefix.chars().count() > width {
+                prefix.to_string()
+            } else {
+                format!("{prefix}{piece}")
+            }
+        };
+        let mut stack = vec![(root, prefix.to_string(), first.to_string())];
+        while let Some((id, prefix, head)) = stack.pop() {
+            out.push(self.line(console, id, &head, cache));
+            if self.collapsible(id, cache) {
+                continue;
+            }
+            let children = self.tree.children(id);
+            for (index, child) in children.iter().enumerate().rev() {
+                let is_last = index + 1 == children.len();
+                let head = grow(&prefix, if is_last { last } else { fork });
+                let rest = grow(&prefix, if is_last { space } else { cont });
+                stack.push((*child, rest, head));
+            }
         }
     }
+}
+
+/// What a render of a [`TaskTreeView`] needs per task, computed once.
+struct ViewCache {
+    summary: Vec<Summary>,
+    /// Every task in the subtree succeeded or was skipped.
+    settled: Vec<bool>,
+    /// Tasks in the subtree, itself included.
+    size: Vec<usize>,
 }
 
 impl TaskTree {
@@ -603,6 +700,8 @@ impl Renderable for TaskTreeView<'_> {
         let mut lines = Vec::new();
         let [fork, last, cont, space] = guides(self.look.ascii());
         let roots = self.tree.roots();
+        let cache = self.cache();
+        let width = options.max_width;
         match &self.tree.title {
             Some(title) => {
                 lines.push(Text::styled(
@@ -612,12 +711,12 @@ impl Renderable for TaskTreeView<'_> {
                 for (index, root) in roots.iter().enumerate() {
                     let is_last = index + 1 == roots.len();
                     let (head, rest) = if is_last { (last, space) } else { (fork, cont) };
-                    self.walk(console, *root, rest, head, &mut lines);
+                    self.walk(console, *root, rest, head, width, &cache, &mut lines);
                 }
             }
             None => {
                 for root in roots {
-                    self.walk(console, *root, "", "", &mut lines);
+                    self.walk(console, *root, "", "", width, &cache, &mut lines);
                 }
             }
         }

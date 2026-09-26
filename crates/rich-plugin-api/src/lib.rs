@@ -226,7 +226,7 @@ impl fmt::Display for PluginError {
             PluginError::InvalidName { plugin, name } => write!(
                 f,
                 "plugin {plugin:?} uses the invalid name {name:?}: use lowercase letters, digits, \
-                 '-', '_' and '.'"
+                 '-', '_' and '.', starting with a letter or digit"
             ),
             PluginError::Failed { plugin, message } => {
                 write!(f, "plugin {plugin:?} failed to register: {message}")
@@ -238,10 +238,15 @@ impl fmt::Display for PluginError {
 
 impl std::error::Error for PluginError {}
 
-/// Whether `name` is a valid plugin id or capability name.
+/// Whether `name` is a valid plugin id or capability name: lowercase
+/// letters, digits, `-`, `_` and `.`, starting with a letter or digit so it
+/// is never read as a flag (`-x`) or a path component (`.`, `..`).
 pub fn is_valid_name(name: &str) -> bool {
-    !name.is_empty()
-        && name.len() <= 64
+    name.len() <= 64
+        && name
+            .bytes()
+            .next()
+            .is_some_and(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
         && name.bytes().all(|b| {
             b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'-' | b'_' | b'.')
         })
@@ -250,6 +255,27 @@ pub fn is_valid_name(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn names_are_safe_cli_values() {
+        for good in ["syntect", "lumis", "ansi_dark", "a.b-c", "7z"] {
+            assert!(is_valid_name(good), "{good}");
+        }
+        for bad in [
+            "",
+            "-",
+            "-x",
+            "--help",
+            ".",
+            "..",
+            "_x",
+            "Upper",
+            "a b",
+            &"x".repeat(65),
+        ] {
+            assert!(!is_valid_name(bad), "{bad:?}");
+        }
+    }
 
     #[test]
     fn metadata_targets_this_api_version() {

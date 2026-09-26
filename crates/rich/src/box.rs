@@ -17,6 +17,9 @@ pub enum RowLevel {
     Row,
     /// Separator above the footer (`foot_row_*`).
     Foot,
+    /// A blank row between body rows: `mid_left`, spaces, `mid_vertical`,
+    /// `mid_right` (upstream's `level="mid"`, drawn by `Table(leading=…)`).
+    Mid,
 }
 
 /// A set of box-drawing characters. Mirrors `rich.box.Box`.
@@ -163,6 +166,7 @@ impl Box {
                 self.foot_row_cross,
                 self.foot_row_right,
             ),
+            RowLevel::Mid => (self.mid_left, ' ', self.mid_vertical, self.mid_right),
         };
         let mut parts = String::new();
         if edge {
@@ -196,10 +200,50 @@ impl Box {
         {
             result = SQUARE;
         }
-        if ascii_only && result != ASCII {
+        if ascii_only && !result.is_ascii() {
             result = ASCII;
         }
         result
+    }
+
+    /// Whether every glyph is ASCII. Upstream passes `ascii=True` to exactly
+    /// the built-in boxes drawn in ASCII (`ASCII`, `ASCII2`,
+    /// `ASCII_DOUBLE_HEAD`, `MARKDOWN`), which `substitute` keeps on an
+    /// ASCII-only terminal.
+    pub fn is_ascii(&self) -> bool {
+        [
+            self.top_left,
+            self.top,
+            self.top_divider,
+            self.top_right,
+            self.head_left,
+            self.head_vertical,
+            self.head_right,
+            self.head_row_left,
+            self.head_row_horizontal,
+            self.head_row_cross,
+            self.head_row_right,
+            self.mid_left,
+            self.mid_vertical,
+            self.mid_right,
+            self.row_left,
+            self.row_horizontal,
+            self.row_cross,
+            self.row_right,
+            self.foot_row_left,
+            self.foot_row_horizontal,
+            self.foot_row_cross,
+            self.foot_row_right,
+            self.foot_left,
+            self.foot_vertical,
+            self.foot_right,
+            self.bottom_left,
+            self.bottom,
+            self.bottom_divider,
+            self.bottom_right,
+        ]
+        .iter()
+        .all(char::is_ascii)
     }
 
     /// If this box draws its header border with special characters, the most

@@ -45,6 +45,18 @@ impl Bar {
         }
     }
 
+    /// The bar colour (upstream `color=`, default `"default"`).
+    pub fn color(mut self, color: Color) -> Self {
+        self.style = Style::from_color(Some(color), self.style.bgcolor().cloned());
+        self
+    }
+
+    /// The background colour (upstream `bgcolor=`, default `"default"`).
+    pub fn bgcolor(mut self, bgcolor: Color) -> Self {
+        self.style = Style::from_color(self.style.color().cloned(), Some(bgcolor));
+        self
+    }
+
     /// Fix the bar width (otherwise it fills the available width).
     pub fn width(mut self, width: usize) -> Self {
         self.width = Some(width);

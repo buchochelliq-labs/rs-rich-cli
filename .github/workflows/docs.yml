@@ -12,11 +12,19 @@ on:
       - docs/**
       - mkdocs.yml
       - .github/workflows/docs.yml
+      - mkdocs-python.yml
+      - scripts/gen_python_api.py
+      # The Python site's API reference is read from the stubs and modules.
+      - crates/rich-py/python/**
   pull_request:
     paths:
       - docs/**
       - mkdocs.yml
       - .github/workflows/docs.yml
+      - mkdocs-python.yml
+      - scripts/gen_python_api.py
+      # The Python site's API reference is read from the stubs and modules.
+      - crates/rich-py/python/**
   workflow_dispatch:
 
 permissions:
@@ -38,12 +46,20 @@ jobs:
           python-version: "3.12"
 
       - name: Install MkDocs
-        run: pip install mkdocs-material
+        run: pip install mkdocs-material "mkdocstrings[python]>=1,<2"
 
       # --strict turns broken internal links into failures. A docs site whose
       # links rot is worse than no docs site.
       - name: Build
         run: mkdocs build --strict
+
+      # The Python package has its own site, published under /python/. Its
+      # API reference is generated from the type stubs, so no wheel is built.
+      - name: Check the Python API pages are current
+        run: python scripts/gen_python_api.py --check
+
+      - name: Build the Python site
+        run: mkdocs build --strict -f mkdocs-python.yml
 
       - name: Check every referenced image exists
         run: |

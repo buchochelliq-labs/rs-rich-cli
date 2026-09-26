@@ -37,7 +37,8 @@ def test_adding_combines_and_the_right_side_wins():
 
 
 def test_repr():
-    assert repr(Style(dim=True)) == 'Style.parse("dim")'
+    # rich 15.0.0's rich-repr form.
+    assert repr(Style(dim=True)) == "Style(dim=True)"
 
 
 def test_styles_are_immutable():
@@ -52,6 +53,16 @@ def test_bad_definitions(definition):
     assert issubclass(StyleSyntaxError, ConsoleError)
 
 
-def test_a_bad_colour_keyword_is_a_style_syntax_error():
-    with pytest.raises(StyleSyntaxError):
+def test_a_bad_colour_keyword_is_a_color_parse_error():
+    # rich 15.0.0 raises ColorParseError from the keyword constructor.
+    from rs_rich.color import ColorParseError
+
+    with pytest.raises(ColorParseError):
         Style(color="no-such-colour")
+
+
+def test_styles_are_hashable_and_equal_styles_hash_alike():
+    # rich 15.0.0's Style is hashable, so it can key a dict or join a set.
+    assert {Style.parse("bold"): 1}[Style(bold=True)] == 1
+    assert hash(Style.parse("bold red")) == hash(Style(color="red", bold=True))
+    assert len({Style.parse("bold"), Style(bold=True), Style.parse("italic")}) == 2

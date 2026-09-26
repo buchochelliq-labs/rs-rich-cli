@@ -76,6 +76,61 @@ pub struct ConsoleOptions {
     /// Disable wrapping, or `None` to let each renderable pick. Mirrors
     /// `ConsoleOptions.no_wrap`.
     pub no_wrap: Option<bool>,
+    /// Highlight override for strings rendered under these options, or `None`
+    /// for the console default. Mirrors `ConsoleOptions.highlight`: `Panel`,
+    /// `Table` and `Tree` set it for their children, and upstream's
+    /// `Console.render` passes it to `render_str` for a `str` renderable.
+    pub highlight: Option<bool>,
+    /// Markup override for strings rendered under these options, or `None` for
+    /// the console default. Mirrors `ConsoleOptions.markup`.
+    pub markup: Option<bool>,
+    /// Height of the container (starts as the terminal height). Mirrors
+    /// `ConsoleOptions.max_height`.
+    pub max_height: usize,
+    /// Encoding of the terminal (`"utf-8"`, or `"ascii"` for an ASCII-only
+    /// console). Mirrors `ConsoleOptions.encoding`.
+    pub encoding: String,
+    /// Whether the target is a terminal. Mirrors `ConsoleOptions.is_terminal`.
+    pub is_terminal: bool,
+    /// Whether the target is a legacy Windows console. Mirrors
+    /// `ConsoleOptions.legacy_windows`.
+    pub legacy_windows: bool,
+    /// The size of the console. Mirrors `ConsoleOptions.size`.
+    pub size: ConsoleDimensions,
+}
+
+/// The size of a console in cells. Mirrors `rich.console.ConsoleDimensions`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ConsoleDimensions {
+    /// Width in cells.
+    pub width: usize,
+    /// Height in rows.
+    pub height: usize,
+}
+
+impl Default for ConsoleOptions {
+    /// The options of a default 80x25 UTF-8 console, as
+    /// [`Console::options`] builds them.
+    fn default() -> Self {
+        ConsoleOptions {
+            min_width: 1,
+            max_width: DEFAULT_WIDTH,
+            height: None,
+            justify: Justify::Default,
+            overflow: None,
+            no_wrap: None,
+            highlight: None,
+            markup: None,
+            max_height: DEFAULT_HEIGHT,
+            encoding: "utf-8".to_string(),
+            is_terminal: false,
+            legacy_windows: false,
+            size: ConsoleDimensions {
+                width: DEFAULT_WIDTH,
+                height: DEFAULT_HEIGHT,
+            },
+        }
+    }
 }
 
 impl ConsoleOptions {
@@ -95,8 +150,63 @@ impl ConsoleOptions {
     pub fn update_dimensions(&self, width: usize, height: usize) -> ConsoleOptions {
         let mut options = self.update_width(width);
         options.height = Some(height);
+        options.max_height = height;
         options
     }
+
+    /// Return a copy with the height (and `max_height`) set. Port of
+    /// `ConsoleOptions.update_height`.
+    pub fn update_height(&self, height: usize) -> ConsoleOptions {
+        let mut options = self.clone();
+        options.height = Some(height);
+        options.max_height = height;
+        options
+    }
+
+    /// Return a copy with `height` cleared. Port of
+    /// `ConsoleOptions.reset_height`.
+    pub fn reset_height(&self) -> ConsoleOptions {
+        let mut options = self.clone();
+        options.height = None;
+        options
+    }
+
+    /// Whether renderables should use ASCII only: the encoding is not a UTF
+    /// one. Port of the `ConsoleOptions.ascii_only` property.
+    pub fn ascii_only(&self) -> bool {
+        !self.encoding.starts_with("utf")
+    }
+}
+
+/// Keyword arguments of upstream's `Console.render_str`, for
+/// [`Console::render_str_with`]. `None` takes the console's default.
+#[derive(Clone, Default)]
+pub struct RenderStrOptions<'a> {
+    /// Base style of the result (`style=`, default none).
+    pub style: crate::style::StyleType,
+    /// `justify=`; `None` leaves the text's justify unset.
+    pub justify: Option<Justify>,
+    /// `overflow=`; `None` leaves the text's overflow unset.
+    pub overflow: Option<Overflow>,
+    /// `emoji=`: replace emoji codes, or `None` for the console default.
+    pub emoji: Option<bool>,
+    /// `markup=`: parse console markup, or `None` for the console default.
+    pub markup: Option<bool>,
+    /// `highlight=`: highlight, or `None` for the console default.
+    pub highlight: Option<bool>,
+    /// `highlighter=`: highlight with this instead of the console's
+    /// highlighters (registered ones plus `ReprHighlighter`).
+    pub highlighter: Option<&'a dyn Highlighter>,
+}
+
+/// Per-thread capture buffer stacks (innermost capture last).
+type CaptureStacks = std::collections::HashMap<std::thread::ThreadId, Vec<Vec<Segment>>>;
+
+/// The calling thread's innermost capture buffer, if it is capturing.
+fn current_capture(captures: &mut CaptureStacks) -> Option<&mut Vec<Segment>> {
+    captures
+        .get_mut(&std::thread::current().id())
+        .and_then(|stack| stack.last_mut())
 }
 
 /// The high-level interface for rendering to a terminal. Mirrors
@@ -121,11 +231,108 @@ pub struct Console {
     /// themes above it. Never empty; styles resolve against the top entry.
     theme_stack: Vec<Theme>,
     base_style: Style,
-    highlighters: Vec<Box<dyn Highlighter + Send>>,
-    /// While capturing, print paths append their segments here instead of
-    /// writing to stdout. Mirrors `Console._record_buffer` under `capture()`.
-    record_buffer: std::cell::RefCell<Vec<Segment>>,
-    capturing: std::cell::Cell<bool>,
+    /// Registered highlighters. Shared (`Arc`) so a [`Clone`] of the console
+    /// keeps them; each is behind a lock so the console is `Sync`.
+    highlighters: Vec<std::sync::Arc<dyn Highlighter + Send + Sync>>,
+    /// Upstream's `Console(markup=…)`: whether printed strings are parsed as
+    /// console markup.
+    markup: bool,
+    /// Upstream's `Console(emoji_variant=…)`: the variant appended to emoji
+    /// codes that name none.
+    emoji_variant: Option<crate::emoji::EmojiVariant>,
+    /// Upstream's `Console(tab_size=…)`: the tab stop width `Text` expands to.
+    tab_size: usize,
+    /// While a thread is capturing, its print paths append their segments to
+    /// the innermost buffer of its stack here instead of writing to stdout.
+    /// Mirrors upstream's `ConsoleThreadLocals.buffer`: capture state is per
+    /// thread, so a thread printing while another captures is not swallowed
+    /// by that capture, and concurrent captures never mix. Each nested
+    /// capture on a thread pushes a buffer and pops it when it ends.
+    captures: std::sync::Mutex<CaptureStacks>,
+    /// Upstream's `Console._is_alt_screen`: set by
+    /// [`set_alt_screen`](Console::set_alt_screen).
+    is_alt_screen: std::sync::atomic::AtomicBool,
+}
+
+/// A `Send`-only highlighter behind a lock, so it can be shared by a `Sync`
+/// console.
+struct LockedHighlighter(std::sync::Mutex<Box<dyn Highlighter + Send>>);
+
+impl Highlighter for LockedHighlighter {
+    fn highlight(&self, text: &mut Text) {
+        let highlighter = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        highlighter.highlight(text);
+    }
+}
+
+/// `NoAltScreen("Alt screen must be enabled to call update_screen")`.
+fn no_alt_screen() -> crate::errors::RichError {
+    crate::errors::RichError::NoAltScreen(
+        "Alt screen must be enabled to call update_screen".to_string(),
+    )
+}
+
+/// Rendered lines placed at an offset on the screen: each line is preceded
+/// by a cursor move to its row. Port of `rich.console.ScreenUpdate`.
+pub struct ScreenUpdate {
+    lines: Vec<Vec<Segment>>,
+    x: usize,
+    y: usize,
+}
+
+impl ScreenUpdate {
+    /// `lines` drawn from column `x`, row `y`.
+    pub fn new(lines: Vec<Vec<Segment>>, x: usize, y: usize) -> Self {
+        ScreenUpdate { lines, x, y }
+    }
+}
+
+impl Renderable for ScreenUpdate {
+    fn rich_render(&self, _console: &Console, _options: &ConsoleOptions) -> Vec<Segment> {
+        let mut segments = Vec::new();
+        for (offset, line) in self.lines.iter().enumerate() {
+            // `Control.move_to(x, y + offset)`, widened so huge coordinates
+            // are written in full (upstream's ints are unbounded).
+            let to = crate::control::move_to_code(self.x as u128, self.y as u128 + offset as u128);
+            segments.push(Segment::control(to));
+            segments.extend(line.iter().cloned());
+        }
+        segments
+    }
+}
+
+impl Clone for Console {
+    /// An independent console with the same configuration, theme stack and
+    /// highlighters (shared). The clone starts with an empty capture buffer
+    /// and is not capturing, whatever the original is doing.
+    fn clone(&self) -> Self {
+        Console {
+            render_environment: self.render_environment.clone(),
+            code_highlighting: self.code_highlighting.clone(),
+            color_system: self.color_system,
+            width: self.width,
+            height: self.height,
+            is_terminal: self.is_terminal,
+            no_color: self.no_color,
+            get_time: self.get_time.clone(),
+            emoji: self.emoji,
+            highlight: self.highlight,
+            legacy_windows: self.legacy_windows,
+            safe_box: self.safe_box,
+            ascii_only: self.ascii_only,
+            theme_stack: self.theme_stack.clone(),
+            base_style: self.base_style.clone(),
+            highlighters: self.highlighters.clone(),
+            markup: self.markup,
+            emoji_variant: self.emoji_variant,
+            tab_size: self.tab_size,
+            captures: std::sync::Mutex::new(CaptureStacks::new()),
+            is_alt_screen: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
 }
 
 /// A theme in use on a [`Console`] until this guard drops. Returned by
@@ -308,7 +515,10 @@ impl Console {
     /// The highlighter must be `Send` so a [`Console`](Console) can move to a
     /// background thread (e.g. an auto-refreshing [`Live`](crate::live::Live)).
     pub fn add_highlighter(&mut self, highlighter: Box<dyn Highlighter + Send>) {
-        self.highlighters.push(highlighter);
+        self.highlighters
+            .push(std::sync::Arc::new(LockedHighlighter(
+                std::sync::Mutex::new(highlighter),
+            )));
     }
 
     /// The default render options for this console (full width, no height).
@@ -320,6 +530,32 @@ impl Console {
             justify: Justify::Default,
             overflow: None,
             no_wrap: None,
+            highlight: None,
+            markup: None,
+            max_height: self.height,
+            encoding: self.encoding().to_string(),
+            is_terminal: self.is_terminal,
+            legacy_windows: self.legacy_windows,
+            size: self.size(),
+        }
+    }
+
+    /// The size of the console. Port of the `Console.size` property.
+    pub fn size(&self) -> ConsoleDimensions {
+        ConsoleDimensions {
+            width: self.width,
+            height: self.height,
+        }
+    }
+
+    /// The output encoding: `"ascii"` for an [ASCII-only](Self::ascii_only)
+    /// console, else `"utf-8"`. Port of the `Console.encoding` property (which
+    /// reads the output file's encoding; this port has no file to ask).
+    pub fn encoding(&self) -> &'static str {
+        if self.ascii_only {
+            "ascii"
+        } else {
+            "utf-8"
         }
     }
 
@@ -342,33 +578,90 @@ impl Console {
         self.render_segments_with(renderable, &self.options())
     }
 
-    /// [`render_segments`](Self::render_segments) with explicit render options,
-    /// as upstream's `Console.print(…, justify=, overflow=, no_wrap=)` builds
-    /// them.
-    fn render_segments_with(
+    /// Render a renderable to segments with explicit render options, exactly
+    /// as [`print_with`](Self::print_with) does before writing: a printed
+    /// `Text` goes through upstream's `Text.join`, a renderable that opts in
+    /// is fitted to its measurement, and the result is cropped to the console
+    /// width (`print(crop=True)`). No trailing newline is added.
+    ///
+    /// For upstream's lower-level `Console.render`, see [`render`](Self::render).
+    pub fn render_segments_with(
         &self,
         renderable: &dyn Renderable,
         options: &ConsoleOptions,
     ) -> Vec<Segment> {
         let mut options = options.clone();
         let joined;
-        let renderable = match renderable.printed_text() {
+        let joined_text = renderable.printed_text();
+        let renderable = match joined_text.clone() {
             Some(text) => {
+                // `print(justify="left"|"center"|"right")` wraps the joined
+                // text in `Align`, which renders a zero-width text (such as an
+                // empty one) at no width at all: nothing is printed.
+                if matches!(
+                    options.justify,
+                    Justify::Left | Justify::Center | Justify::Right
+                ) && text.measurement().1 == 0
+                {
+                    return Vec::new();
+                }
                 joined = text;
                 &joined as &dyn Renderable
             }
             None => renderable,
         };
+        // `print(justify="left"|"center"|"right")` wraps every other
+        // renderable in `Align(renderable, justify)` (`_collect_renderables`).
+        let align = match options.justify {
+            Justify::Left if joined_text.is_none() => Some(crate::align::HorizontalAlign::Left),
+            Justify::Center if joined_text.is_none() => Some(crate::align::HorizontalAlign::Center),
+            Justify::Right if joined_text.is_none() => Some(crate::align::HorizontalAlign::Right),
+            _ => None,
+        };
         if options.justify == Justify::Default && renderable.fit_to_measurement() {
             let measurement = renderable.measure(self, &options);
             options.max_width = measurement.maximum.min(options.max_width).max(1);
         }
-        let segments = renderable.rich_render(self, &options);
+        let segments = match align {
+            // `Console.render` yields nothing when there is no width.
+            _ if options.max_width < 1 => Vec::new(),
+            Some(align) => crate::align::Align::render_child(renderable, align, self, &options),
+            None => renderable.rich_render(self, &options),
+        };
         // `Console.print(crop=True)`: the final backstop against a line running
         // off the side of the terminal. Renderables that fit are untouched; this
         // is what gives `Overflow::Ignore` its "wrap nothing, but still don't
         // corrupt the display" behaviour.
         Segment::crop_lines(&segments, self.width)
+    }
+
+    /// Render a renderable to segments. Port of `Console.render`: `options`
+    /// defaults to [`options`](Self::options), and nothing is rendered when
+    /// there is no width (`max_width < 1`).
+    ///
+    /// Unlike the print path ([`render_segments_with`](Self::render_segments_with))
+    /// the renderable is rendered as-is: no `Text.join`, no fitting and no
+    /// crop. Container renderables use this for their children.
+    ///
+    /// As everywhere in this port, lines are *separated* by newline segments:
+    /// the final line has no trailing `"\n"` where upstream's has one.
+    pub fn render(
+        &self,
+        renderable: &dyn Renderable,
+        options: Option<&ConsoleOptions>,
+    ) -> Vec<Segment> {
+        let default_options;
+        let options = match options {
+            Some(options) => options,
+            None => {
+                default_options = self.options();
+                &default_options
+            }
+        };
+        if options.max_width < 1 {
+            return Vec::new();
+        }
+        renderable.rich_render(self, options)
     }
 
     /// Write (or, while capturing, record) a rendered segment stream, adding a
@@ -384,14 +677,17 @@ impl Console {
         if segments.is_empty() {
             return;
         }
-        if self.capturing.get() {
-            let mut buffer = self.record_buffer.borrow_mut();
-            buffer.extend(segments);
-            if newline {
-                buffer.push(Segment::line());
+        let segments = {
+            let mut captures = self.lock_captures();
+            if let Some(buffer) = current_capture(&mut captures) {
+                buffer.extend(segments);
+                if newline {
+                    buffer.push(Segment::line());
+                }
+                return;
             }
-            return;
-        }
+            segments
+        };
         let mut output = self.segments_to_string(&segments);
         if newline {
             output.push('\n');
@@ -452,6 +748,9 @@ impl Console {
         style: Option<&Style>,
         pad: bool,
     ) -> Vec<Vec<Segment>> {
+        // Upstream pads with the `style` argument as given (default `None`),
+        // so the pad segments carry no style unless one was passed.
+        let pad_style = style.cloned();
         let style = style.filter(|style| !style.is_null());
         // Upstream `Console.render` yields nothing when `max_width < 1`, so a
         // renderable squeezed to zero width contributes no lines (#449).
@@ -475,7 +774,6 @@ impl Console {
         {
             lines.push(Vec::new());
         }
-        let pad_style = Some(style.cloned().unwrap_or_default());
         if pad {
             for line in &mut lines {
                 *line = Segment::adjust_line_length(line, options.max_width, pad_style.clone());
@@ -552,11 +850,86 @@ impl Console {
             return;
         }
         let text = control.as_str();
+        // Upstream buffers control codes with everything else, so a capture
+        // records them.
+        if let Some(buffer) = current_capture(&mut self.lock_captures()) {
+            if !text.is_empty() {
+                buffer.push(Segment::control(text));
+            }
+            return;
+        }
         if !text.is_empty() {
             let stdout = std::io::stdout();
             let mut lock = stdout.lock();
             let _ = write!(lock, "{text}");
         }
+    }
+
+    /// Whether the alternate screen is enabled. Port of
+    /// `Console.is_alt_screen`.
+    pub fn is_alt_screen(&self) -> bool {
+        self.is_alt_screen.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Enable or disable the alternate screen. Port of
+    /// `Console.set_alt_screen`: only a terminal (not a legacy Windows
+    /// console) switches, and the result says whether it did.
+    pub fn set_alt_screen(&self, enable: bool) -> bool {
+        if self.is_terminal && !self.legacy_windows {
+            self.control(&crate::control::Control::alt_screen(enable));
+            self.is_alt_screen
+                .store(enable, std::sync::atomic::Ordering::SeqCst);
+            return true;
+        }
+        false
+    }
+
+    /// Render `renderable` into `region` of the alternate screen (the whole
+    /// screen when `None`). Port of `Console.update_screen`.
+    pub fn update_screen(
+        &self,
+        renderable: &dyn Renderable,
+        region: Option<crate::region::Region>,
+        options: Option<&ConsoleOptions>,
+    ) -> crate::errors::Result<()> {
+        if !self.is_alt_screen() {
+            return Err(no_alt_screen());
+        }
+        let render_options = options.cloned().unwrap_or_else(|| self.options());
+        let (x, y, render_options) = match region {
+            None => {
+                let height = render_options
+                    .height
+                    .filter(|&height| height > 0)
+                    .unwrap_or(self.height);
+                let width = render_options.max_width;
+                (0, 0, render_options.update_dimensions(width, height))
+            }
+            Some(region) => (
+                region.x,
+                region.y,
+                render_options.update_dimensions(region.width, region.height),
+            ),
+        };
+        let lines = self.render_lines(renderable, &render_options, true);
+        self.update_screen_lines(&lines, x, y)
+    }
+
+    /// Write rendered `lines` to the alternate screen at column `x`, row `y`.
+    /// Port of `Console.update_screen_lines` (through [`ScreenUpdate`]).
+    pub fn update_screen_lines(
+        &self,
+        lines: &[Vec<Segment>],
+        x: usize,
+        y: usize,
+    ) -> crate::errors::Result<()> {
+        if !self.is_alt_screen() {
+            return Err(no_alt_screen());
+        }
+        let update = ScreenUpdate::new(lines.to_vec(), x, y);
+        let segments = self.render(&update, None);
+        self.emit_end(segments, false);
+        Ok(())
     }
 
     /// Show or hide the cursor. Port of `Console.show_cursor`.
@@ -691,6 +1064,48 @@ impl Console {
         crate::svg::export_svg(&segments, theme, title, unique_id, self.width())
     }
 
+    /// Capture output printed inside `f` and export it as HTML with every
+    /// option of upstream's `Console.export_html`: `code_format` (default
+    /// [`CONSOLE_HTML_FORMAT`](crate::export::CONSOLE_HTML_FORMAT)) and
+    /// `inline_styles`. See [`export::export_html_with`](crate::export::export_html_with).
+    pub fn export_html_with(
+        &self,
+        theme: &crate::terminal_theme::TerminalTheme,
+        code_format: Option<&str>,
+        inline_styles: bool,
+        f: impl FnOnce(&Console),
+    ) -> Result<String, crate::export::ExportFormatError> {
+        let segments = self.record(f);
+        crate::export::export_html_with(&segments, theme, code_format, inline_styles)
+    }
+
+    /// Capture output printed inside `f` and export it as SVG with every
+    /// option of upstream's `Console.export_svg`: `code_format` (default
+    /// [`CONSOLE_SVG_FORMAT`](crate::svg::CONSOLE_SVG_FORMAT)) and
+    /// `font_aspect_ratio` (upstream default 0.61). See
+    /// [`svg::export_svg_with`](crate::svg::export_svg_with).
+    #[allow(clippy::too_many_arguments)]
+    pub fn export_svg_with(
+        &self,
+        theme: &crate::terminal_theme::TerminalTheme,
+        title: &str,
+        unique_id: &str,
+        code_format: Option<&str>,
+        font_aspect_ratio: f64,
+        f: impl FnOnce(&Console),
+    ) -> Result<String, crate::export::ExportFormatError> {
+        let segments = self.record(f);
+        crate::svg::export_svg_with(
+            &segments,
+            theme,
+            title,
+            unique_id,
+            self.width(),
+            code_format.unwrap_or(crate::svg::CONSOLE_SVG_FORMAT),
+            font_aspect_ratio,
+        )
+    }
+
     /// Record everything `f` prints and hand back the raw segments, without
     /// writing to the terminal.
     ///
@@ -711,15 +1126,50 @@ impl Console {
         self.record(f)
     }
 
-    /// Run `f` with output recorded to a fresh buffer, returning the captured
-    /// segments and restoring the previous capture state (so captures nest).
+    /// Run `f` with this thread's output recorded to a fresh buffer, returning
+    /// the captured segments. Captures nest (each pushes its own buffer), are
+    /// per thread (upstream's `ConsoleThreadLocals`), and end even if `f`
+    /// panics (upstream's `Capture.__exit__` always runs).
     fn record(&self, f: impl FnOnce(&Console)) -> Vec<Segment> {
-        let previous = std::mem::take(&mut *self.record_buffer.borrow_mut());
-        let was_capturing = self.capturing.replace(true);
+        /// Pops this thread's capture buffer on drop, so an unwinding `f`
+        /// does not leave the console capturing.
+        struct CaptureGuard<'a>(&'a Console);
+        impl CaptureGuard<'_> {
+            fn pop(&self) -> Vec<Segment> {
+                let id = std::thread::current().id();
+                let mut captures = self.0.lock_captures();
+                let Some(stack) = captures.get_mut(&id) else {
+                    return Vec::new();
+                };
+                let captured = stack.pop().unwrap_or_default();
+                if stack.is_empty() {
+                    captures.remove(&id);
+                }
+                captured
+            }
+        }
+        impl Drop for CaptureGuard<'_> {
+            fn drop(&mut self) {
+                self.pop();
+            }
+        }
+        self.lock_captures()
+            .entry(std::thread::current().id())
+            .or_default()
+            .push(Vec::new());
+        let guard = CaptureGuard(self);
         f(self);
-        let captured = std::mem::replace(&mut *self.record_buffer.borrow_mut(), previous);
-        self.capturing.set(was_capturing);
+        let captured = guard.pop();
+        std::mem::forget(guard);
         captured
+    }
+
+    /// The per-thread capture stacks, recovering them if a panicking print
+    /// poisoned the lock.
+    fn lock_captures(&self) -> std::sync::MutexGuard<'_, CaptureStacks> {
+        self.captures
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Parse `content` as console markup, apply registered highlighters, and
@@ -751,8 +1201,11 @@ impl Console {
     /// [`RichError::Markup`](crate::errors::RichError::Markup) for malformed
     /// markup instead of falling back to the raw text — upstream's behaviour.
     pub fn try_build_text(&self, content: &str) -> crate::errors::Result<Text> {
-        let expanded = self.expand_emoji(content);
-        let markup = Text::from_markup(&expanded)?;
+        if !self.markup {
+            // `Console(markup=False)`: the string is taken literally.
+            return Ok(self.decorate(Text::new(self.expand_emoji_plain(content))));
+        }
+        let markup = self.parse_markup(content, self.emoji)?;
 
         // The highlighter runs on the *markup-stripped* text and its spans go on
         // first; the markup spans are appended afterwards. Spans combine in
@@ -783,9 +1236,11 @@ impl Console {
         let highlight = highlight.unwrap_or(self.highlight);
         // `markup.render` returns the (emoji-replaced) string untouched when it
         // holds no `[`; skip the parser for the common plain cell.
-        let markup = if content.contains('[') {
-            let expanded = self.expand_emoji(content);
-            Text::from_markup(&expanded).unwrap_or_else(|_| Text::new(expanded))
+        let markup = if !self.markup {
+            Text::new(self.expand_emoji_plain(content))
+        } else if content.contains('[') {
+            self.parse_markup(content, self.emoji)
+                .unwrap_or_else(|_| Text::new(self.expand_emoji(content)))
         } else if content.contains(':') {
             Text::new(self.expand_emoji(content))
         } else {
@@ -825,11 +1280,140 @@ impl Console {
 
     /// Expand `:emoji:` shortcodes. Runs before markup parsing (matching
     /// upstream's default `emoji=True`); `:name:` and `[tag]` don't overlap.
+    ///
+    /// The console's default emoji variant applies only when `content` holds
+    /// no `[`: upstream's `markup.render` passes `default_variant` on its
+    /// tag-free fast path only, and replaces the text between tags without it.
     pub(crate) fn expand_emoji(&self, content: &str) -> String {
+        if !self.emoji {
+            return content.to_string();
+        }
+        let variant = if content.contains('[') {
+            None
+        } else {
+            self.emoji_variant
+        };
+        crate::emoji::replace_with_variant(content, variant)
+    }
+
+    /// Port of `markup.render(content, emoji=emoji, emoji_variant=…)`: a
+    /// string with no `[` is only emoji-replaced (with the console's default
+    /// variant); otherwise emoji codes are replaced chunk by chunk between the
+    /// tags, so error positions refer to the original string.
+    fn parse_markup(&self, content: &str, emoji: bool) -> crate::errors::Result<Text> {
+        if !content.contains('[') {
+            return Ok(Text::new(if emoji {
+                crate::emoji::replace_with_variant(content, self.emoji_variant)
+            } else {
+                content.to_string()
+            }));
+        }
+        if emoji {
+            crate::markup::render_emoji(content)
+        } else {
+            crate::markup::render(content)
+        }
+    }
+
+    /// Expand `:emoji:` shortcodes in a string that is not markup, with the
+    /// console's default variant (upstream's `markup=False` branch of
+    /// `render_str`).
+    fn expand_emoji_plain(&self, content: &str) -> String {
         if self.emoji {
-            crate::emoji::replace(content)
+            crate::emoji::replace_with_variant(content, self.emoji_variant)
         } else {
             content.to_string()
+        }
+    }
+
+    /// Convert a string to [`Text`] with every keyword upstream's
+    /// `Console.render_str` takes. Port of `Console.render_str`, strict:
+    /// malformed markup is an error (`MarkupError`), not the literal text.
+    ///
+    /// Emoji, markup and highlighting default to the console's settings when
+    /// the option is `None`. As upstream, a highlighted result is a fresh
+    /// `Text` carrying only spans (the highlighter's, then the markup's): the
+    /// `style`, `justify` and `overflow` are dropped by `copy_styles`.
+    pub fn render_str_with(
+        &self,
+        content: &str,
+        options: &RenderStrOptions<'_>,
+    ) -> crate::errors::Result<Text> {
+        let emoji = options.emoji.unwrap_or(self.emoji);
+        let markup = options.markup.unwrap_or(self.markup);
+        let highlight = options.highlight.unwrap_or(self.highlight);
+
+        let mut rich_text = if markup {
+            self.parse_markup(content, emoji)?
+        } else if emoji {
+            Text::new(crate::emoji::replace_with_variant(
+                content,
+                self.emoji_variant,
+            ))
+        } else {
+            Text::new(content)
+        };
+        rich_text.set_base_style(options.style.clone());
+        rich_text.set_justify(options.justify.unwrap_or_default());
+        rich_text.set_overflow(options.overflow);
+
+        if !highlight {
+            return Ok(rich_text);
+        }
+        let mut text = Text::new(rich_text.plain());
+        match options.highlighter {
+            Some(highlighter) => highlighter.highlight(&mut text),
+            None => text = self.decorate_with_repr(text),
+        }
+        for span in rich_text.spans() {
+            text.push_span(span.clone());
+        }
+        Ok(text)
+    }
+
+    /// Whether `:emoji:` codes are replaced by default. Port of
+    /// `Console(emoji=…)`.
+    pub fn emoji(&self) -> bool {
+        self.emoji
+    }
+
+    /// Whether printed strings are highlighted by default. Port of
+    /// `Console(highlight=…)`.
+    pub fn highlight(&self) -> bool {
+        self.highlight
+    }
+
+    /// Whether printed strings are parsed as console markup by default. Port
+    /// of `Console(markup=…)`.
+    pub fn markup(&self) -> bool {
+        self.markup
+    }
+
+    /// The default emoji variant. Port of `Console(emoji_variant=…)`.
+    pub fn emoji_variant(&self) -> Option<crate::emoji::EmojiVariant> {
+        self.emoji_variant
+    }
+
+    /// The tab stop width `Text` expands tabs to. Port of `Console.tab_size`.
+    pub fn tab_size(&self) -> usize {
+        self.tab_size
+    }
+
+    /// Change the tab stop width. Upstream's `Console.tab_size` is a plain
+    /// attribute.
+    pub fn set_tab_size(&mut self, tab_size: usize) {
+        self.tab_size = tab_size;
+    }
+
+    /// Set the terminal window title. Port of `Console.set_window_title`:
+    /// only a terminal is sent the code, and the return value says whether it
+    /// was.
+    pub fn set_window_title(&self, title: &str) -> bool {
+        if self.is_terminal {
+            self.control(&crate::control::Control::title(title));
+            true
+        } else {
+            false
         }
     }
 
@@ -916,6 +1500,62 @@ fn segments_to_plain(segments: &[Segment]) -> String {
         .collect()
 }
 
+/// A string renders as upstream's `Console.render` renders a `str`: through
+/// [`Console::render_str`] with the options' `highlight` and `markup`
+/// (`None` taking the console's defaults), then as that `Text`. Malformed
+/// markup falls back to the literal text, as `render_str` does.
+impl Renderable for String {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        self.options_text(console, options, options.highlight)
+            .rich_render(console, options)
+    }
+
+    /// `Measurement.get` of a `str`: `render_str(markup=options.markup,
+    /// highlight=False)`, then the text's measurement.
+    fn measure(&self, console: &Console, options: &ConsoleOptions) -> crate::measure::Measurement {
+        let text = self.options_text(console, options, Some(false));
+        crate::measure::Measurement::get(console, options, &text)
+    }
+}
+
+/// `render_str` for a `str` renderable under `options`.
+trait OptionsText {
+    fn options_text(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        highlight: Option<bool>,
+    ) -> Text;
+}
+
+impl OptionsText for String {
+    fn options_text(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        highlight: Option<bool>,
+    ) -> Text {
+        let render_options = RenderStrOptions {
+            highlight,
+            markup: options.markup,
+            ..Default::default()
+        };
+        console
+            .render_str_with(self, &render_options)
+            .unwrap_or_else(|_| {
+                console
+                    .render_str_with(
+                        self,
+                        &RenderStrOptions {
+                            markup: Some(false),
+                            ..render_options
+                        },
+                    )
+                    .unwrap_or_else(|_| Text::new(self.as_str()))
+            })
+    }
+}
+
 impl Renderable for Text {
     fn printed_text(&self) -> Option<Text> {
         // `Text("").join([self])`: the text and its spans survive; justify,
@@ -932,16 +1572,14 @@ impl Renderable for Text {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         // Empty Text still represents a printable blank line; an empty
         // generator such as Markdown does not. Preserve that distinction.
-        if self.is_empty() {
-            return vec![Segment::new("", None)];
-        }
         // Wrap to the available width; the effective justify is this text's own
         // justify, falling back to the console options' justify.
-        let justify = if self.get_justify() != Justify::Default {
-            self.get_justify()
-        } else {
-            options.justify
-        };
+        let justify = self.get_justify_option().unwrap_or(options.justify);
+        // A justified empty line is still padded to the width (upstream's
+        // `truncate(width, pad=True)`), so only an unjustified one is bare.
+        if self.is_empty() && matches!(justify, Justify::Default | Justify::Full) {
+            return vec![Segment::new("", None)];
+        }
         // Same precedence for overflow and no_wrap: the text's own setting wins,
         // then the options', then upstream's default. Mirrors the `self.x or
         // options.x or DEFAULT` chain in `Text.__rich_console__`.
@@ -950,13 +1588,15 @@ impl Renderable for Text {
             .or(options.overflow)
             .unwrap_or(Overflow::Fold);
         let no_wrap = self.get_no_wrap().or(options.no_wrap).unwrap_or(false);
-        self.render_joined_wrapped(
+        // `tab_size = console.tab_size if self.tab_size is None else …`.
+        self.render_joined_wrapped_tabs(
             console.theme(),
             console.base_style(),
             options.max_width,
             justify,
             overflow,
             no_wrap,
+            self.console_tab_size(console),
         )
     }
 
@@ -984,6 +1624,9 @@ pub struct ConsoleBuilder {
     safe_box: Option<bool>,
     ascii_only: Option<bool>,
     theme: Option<Theme>,
+    markup: Option<bool>,
+    emoji_variant: Option<crate::emoji::EmojiVariant>,
+    tab_size: Option<usize>,
 }
 
 impl ConsoleBuilder {
@@ -1002,7 +1645,31 @@ impl ConsoleBuilder {
             safe_box: None,
             ascii_only: None,
             theme: None,
+            markup: None,
+            emoji_variant: None,
+            tab_size: None,
         }
+    }
+
+    /// Enable/disable console markup in printed strings (default enabled).
+    /// Port of `Console(markup=…)`.
+    pub fn markup(mut self, value: bool) -> Self {
+        self.markup = Some(value);
+        self
+    }
+
+    /// The emoji variant appended to codes that name none (default none).
+    /// Port of `Console(emoji_variant=…)`.
+    pub fn emoji_variant(mut self, variant: Option<crate::emoji::EmojiVariant>) -> Self {
+        self.emoji_variant = variant;
+        self
+    }
+
+    /// The tab stop width `Text` expands tabs to (default 8). Port of
+    /// `Console(tab_size=…)`.
+    pub fn tab_size(mut self, tab_size: usize) -> Self {
+        self.tab_size = Some(tab_size);
+        self
     }
 
     pub fn force_terminal(mut self, value: bool) -> Self {
@@ -1123,8 +1790,12 @@ impl ConsoleBuilder {
             theme_stack: vec![self.theme.unwrap_or_else(Theme::default_theme)],
             base_style: Style::new(),
             highlighters: Vec::new(),
-            record_buffer: std::cell::RefCell::new(Vec::new()),
-            capturing: std::cell::Cell::new(false),
+            markup: self.markup.unwrap_or(true),
+            emoji_variant: self.emoji_variant,
+            // `tab_size: int = 8`.
+            tab_size: self.tab_size.unwrap_or(crate::text::DEFAULT_TAB_SIZE),
+            captures: std::sync::Mutex::new(CaptureStacks::new()),
+            is_alt_screen: std::sync::atomic::AtomicBool::new(false),
         }
     }
 }
@@ -1514,6 +2185,24 @@ mod tests {
         let expected =
             include_str!("../tests/golden/export_html_classes.html").replace("\r\n", "\n");
         assert_eq!(html, expected);
+    }
+
+    /// Upstream's `render_lines` pads with its `style` argument as given
+    /// (default `None`), so the pad segments carry no style.
+    #[test]
+    fn render_lines_pads_with_the_given_style() {
+        let console = test_console();
+        let options = console.options().update_width(5).update_height(2);
+        let lines = console.render_lines(&Text::new("hi"), &options, true);
+        assert_eq!(lines.len(), 2);
+        let width_pad = lines[0].last().unwrap();
+        assert_eq!((width_pad.text.as_str(), &width_pad.style), ("   ", &None));
+        assert_eq!(lines[1], vec![Segment::new("     ", None)]);
+
+        let red = Style::parse("red").unwrap();
+        let lines = console.render_lines_styled(&Text::new("hi"), &options, Some(&red), true);
+        assert_eq!(lines[0].last().unwrap().style, Some(red.clone()));
+        assert_eq!(lines[1], vec![Segment::new("     ", Some(red))]);
     }
 
     #[test]

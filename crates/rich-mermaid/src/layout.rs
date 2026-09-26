@@ -13,7 +13,7 @@
 //! the finished geometry. Lines are drawn as direction bits per cell, so
 //! crossings and joins pick the right junction character.
 
-use crate::flowchart::{Direction, Flowchart, Head, Shape, Stroke};
+use crate::flowchart::{Direction, Flowchart, Head, Shape, Stroke, MAX_LINK_LENGTH};
 use rich::cells::{cell_len, char_cell_width};
 
 /// A drawn diagram: lines of text without trailing spaces.
@@ -26,6 +26,11 @@ pub struct Diagram {
 
 /// The most cells a diagram may occupy before it is refused as too large.
 const MAX_CELLS: i64 = 2_000_000;
+
+/// The most points (nodes, plus one per rank crossed by a long edge) the
+/// layout may place. Checked right after ranking, before any of the work that
+/// grows with them.
+const MAX_VERTICES: usize = 5_000;
 
 const N: u8 = 1;
 const E: u8 = 2;
@@ -41,7 +46,7 @@ pub fn draw(chart: &Flowchart, ascii: bool) -> Result<Diagram, String> {
         });
     }
     let horizontal = chart.direction.is_horizontal();
-    let mut geometry = layout(chart, horizontal);
+    let mut geometry = layout(chart, horizontal)?;
     if matches!(chart.direction, Direction::BottomUp | Direction::RightLeft) {
         geometry.flip(horizontal);
     }
@@ -215,7 +220,7 @@ fn edge_text(label: &str) -> String {
     label.split('\n').collect::<Vec<_>>().join(" ")
 }
 
-fn layout(chart: &Flowchart, horizontal: bool) -> Geometry {
+fn layout(chart: &Flowchart, horizontal: bool) -> Result<Geometry, String> {
     let n = chart.nodes.len();
 
     // 1. Break cycles: reverse the edges a DFS finds going back.
@@ -263,7 +268,7 @@ fn layout(chart: &Flowchart, horizontal: bool) -> Geometry {
             } else {
                 (e.from, e.to)
             };
-            (u, v, e.length.max(1), i)
+            (u, v, e.length.clamp(1, MAX_LINK_LENGTH), i)
         })
         .collect();
 
@@ -301,6 +306,17 @@ fn layout(chart: &Flowchart, horizontal: bool) -> Geometry {
                 .min()
                 .unwrap_or(0);
         }
+    }
+
+    // Refuse before building anything that grows with the ranks crossed.
+    let dummies = oriented.iter().fold(0usize, |total, &(u, v, _, _)| {
+        total.saturating_add(rank[v].saturating_sub(rank[u] + 1))
+    });
+    let points = n.saturating_add(dummies);
+    if points > MAX_VERTICES {
+        return Err(format!(
+            "its edges cross {points} rank positions, more than {MAX_VERTICES}"
+        ));
     }
 
     // 3. Vertices (nodes, then dummies) and rank-to-rank pieces.
@@ -457,10 +473,13 @@ fn layout(chart: &Flowchart, horizontal: bool) -> Geometry {
             _ => None,
         }
     };
+    // Pieces by the rank they leave, in piece order.
+    let mut leaving_rank: Vec<Vec<usize>> = vec![Vec::new(); ranks];
+    for (p, piece) in pieces.iter().enumerate() {
+        leaving_rank[vertices[piece.from].rank].push(p);
+    }
     for r in 0..ranks.saturating_sub(1) {
-        let here: Vec<usize> = (0..pieces.len())
-            .filter(|&p| vertices[pieces[p].from].rank == r)
-            .collect();
+        let here = std::mem::take(&mut leaving_rank[r]);
         gap_tracks[r] = assign_tracks(&here, &port_from, &port_to, &mut track, |p| {
             chart.edges[pieces[p].edge].stroke == Stroke::Invisible
         });
@@ -598,7 +617,7 @@ fn layout(chart: &Flowchart, horizontal: bool) -> Geometry {
             label,
         });
     }
-    geometry
+    Ok(geometry)
 }
 
 /// Give each piece that changes position a track (a row, or a column
@@ -625,14 +644,21 @@ fn assign_tracks(
     });
     // `before[i]`: pieces that must take a lower track than piece i.
     let count = routed.len();
-    let mut before: Vec<Vec<usize>> = vec![Vec::new(); count];
-    for i in 0..count {
-        for j in 0..count {
-            if i != j && port_from[routed[j]] == port_to[routed[i]] {
-                before[i].push(j);
-            }
-        }
+    let mut leaving_at: std::collections::HashMap<i64, Vec<usize>> =
+        std::collections::HashMap::new();
+    for (j, &p) in routed.iter().enumerate() {
+        leaving_at.entry(port_from[p]).or_default().push(j);
     }
+    let before: Vec<Vec<usize>> = routed
+        .iter()
+        .enumerate()
+        .map(|(i, &p)| {
+            leaving_at
+                .get(&port_to[p])
+                .map(|list| list.iter().copied().filter(|&j| j != i).collect())
+                .unwrap_or_default()
+        })
+        .collect();
     let mut occupied: Vec<Vec<(i64, i64)>> = Vec::new();
     let mut assigned: Vec<Option<i64>> = vec![None; count];
     let mut done = 0;
@@ -727,21 +753,48 @@ fn order_layers(
     layers.clone_from_slice(&best);
 }
 
-/// Edge crossings between adjacent ranks.
+/// Edge crossings between adjacent ranks: pairs of pieces whose ends are in
+/// strictly opposite orders. Counted with a Fenwick tree, O(E log V) a rank.
 fn crossings(layers: &[Vec<usize>], succs: &[Vec<usize>], index: &[usize]) -> usize {
     let mut total = 0;
+    let mut tree: Vec<usize> = Vec::new();
     for layer in layers {
         let mut pairs: Vec<(usize, usize)> = layer
             .iter()
             .flat_map(|&v| succs[v].iter().map(move |&w| (index[v], index[w])))
             .collect();
         pairs.sort_unstable();
-        for i in 0..pairs.len() {
-            for j in i + 1..pairs.len() {
-                if pairs[i].0 < pairs[j].0 && pairs[i].1 > pairs[j].1 {
-                    total += 1;
-                }
+        let size = pairs.iter().map(|&(_, lower)| lower + 1).max().unwrap_or(0);
+        tree.clear();
+        tree.resize(size + 1, 0);
+        // How many inserted pieces end at or before `lower`.
+        let at_most = |tree: &[usize], lower: usize| {
+            let mut i = lower + 1;
+            let mut sum = 0;
+            while i > 0 {
+                sum += tree[i];
+                i &= i - 1;
             }
+            sum
+        };
+        let mut inserted = 0;
+        let mut start = 0;
+        while start < pairs.len() {
+            // Pieces from the same upper vertex never cross each other.
+            let upper = pairs[start].0;
+            let end = start + pairs[start..].partition_point(|&(u, _)| u == upper);
+            for &(_, lower) in &pairs[start..end] {
+                total += inserted - at_most(&tree, lower);
+            }
+            for &(_, lower) in &pairs[start..end] {
+                let mut i = lower + 1;
+                while i <= size {
+                    tree[i] += 1;
+                    i += i & i.wrapping_neg();
+                }
+                inserted += 1;
+            }
+            start = end;
         }
     }
     total
@@ -1146,4 +1199,70 @@ fn render(chart: &Flowchart, geometry: &Geometry, ascii: bool, width: i64, heigh
     let lines = canvas.lines();
     let width = lines.iter().map(|l| cell_len(l)).max().unwrap_or(0);
     Diagram { lines, width }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The pairwise count the Fenwick tree replaces.
+    fn crossings_by_pairs(layers: &[Vec<usize>], succs: &[Vec<usize>], index: &[usize]) -> usize {
+        let mut total = 0;
+        for layer in layers {
+            let pairs: Vec<(usize, usize)> = layer
+                .iter()
+                .flat_map(|&v| succs[v].iter().map(move |&w| (index[v], index[w])))
+                .collect();
+            for (i, a) in pairs.iter().enumerate() {
+                for b in &pairs[i + 1..] {
+                    if (a.0 < b.0 && a.1 > b.1) || (b.0 < a.0 && b.1 > a.1) {
+                        total += 1;
+                    }
+                }
+            }
+        }
+        total
+    }
+
+    #[test]
+    fn crossings_match_the_pairwise_count() {
+        let mut seed = 0x2545_f491_4f6c_dd1du64;
+        let mut next = |bound: usize| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed % bound as u64) as usize
+        };
+        for _ in 0..200 {
+            let widths: Vec<usize> = (0..1 + next(5)).map(|_| 1 + next(7)).collect();
+            let mut layers: Vec<Vec<usize>> = Vec::new();
+            let mut count = 0;
+            for &w in &widths {
+                layers.push((count..count + w).collect());
+                count += w;
+            }
+            let mut succs = vec![Vec::new(); count];
+            for r in 0..layers.len() - 1 {
+                for _ in 0..next(12) {
+                    let u = layers[r][next(layers[r].len())];
+                    let w = layers[r + 1][next(layers[r + 1].len())];
+                    succs[u].push(w);
+                }
+            }
+            let mut index = vec![0; count];
+            for layer in &mut layers {
+                // Shuffle so indexes differ from vertex order.
+                for i in (1..layer.len()).rev() {
+                    layer.swap(i, next(i + 1));
+                }
+                for (i, &v) in layer.iter().enumerate() {
+                    index[v] = i;
+                }
+            }
+            assert_eq!(
+                crossings(&layers, &succs, &index),
+                crossings_by_pairs(&layers, &succs, &index)
+            );
+        }
+    }
 }

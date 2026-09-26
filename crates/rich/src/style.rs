@@ -106,6 +106,122 @@ impl From<&str> for StyleType {
     }
 }
 
+/// One value in a style's [`Meta`]. Upstream's meta is any marshal-able
+/// Python value; this port keeps the scalar subset plus lists.
+///
+/// Equality follows marshal's bytes: `true` is not `1`, `1` is not `1.0`, and
+/// floats compare by bit pattern (so `NaN == NaN` and `0.0 != -0.0`).
+#[derive(Debug, Clone)]
+pub enum MetaValue {
+    /// Python `None`.
+    None,
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    Str(String),
+    /// A list or tuple of values.
+    List(Vec<MetaValue>),
+}
+
+impl PartialEq for MetaValue {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (MetaValue::None, MetaValue::None) => true,
+            (MetaValue::Bool(a), MetaValue::Bool(b)) => a == b,
+            (MetaValue::Int(a), MetaValue::Int(b)) => a == b,
+            (MetaValue::Float(a), MetaValue::Float(b)) => a.to_bits() == b.to_bits(),
+            (MetaValue::Str(a), MetaValue::Str(b)) => a == b,
+            (MetaValue::List(a), MetaValue::List(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for MetaValue {}
+
+impl std::hash::Hash for MetaValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+        match self {
+            MetaValue::None => {}
+            MetaValue::Bool(value) => value.hash(state),
+            MetaValue::Int(value) => value.hash(state),
+            MetaValue::Float(value) => value.to_bits().hash(state),
+            MetaValue::Str(value) => value.hash(state),
+            MetaValue::List(values) => values.hash(state),
+        }
+    }
+}
+
+/// A style's metadata: upstream's `Style.meta` dict. Upstream stores it
+/// marshal-encoded; this port keeps the entries themselves, **in insertion
+/// order**, because marshal's bytes (and so style equality) depend on it.
+/// Assigning an existing key replaces its value in place, as a `dict` does.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub struct Meta {
+    entries: Vec<(String, MetaValue)>,
+}
+
+impl Meta {
+    /// An empty map.
+    pub fn new() -> Self {
+        Meta::default()
+    }
+
+    /// Set `key` (`meta[key] = value`).
+    pub fn insert(&mut self, key: impl Into<String>, value: MetaValue) {
+        let key = key.into();
+        match self
+            .entries
+            .iter_mut()
+            .find(|(existing, _)| *existing == key)
+        {
+            Some((_, slot)) => *slot = value,
+            None => self.entries.push((key, value)),
+        }
+    }
+
+    /// The value for `key`.
+    pub fn get(&self, key: &str) -> Option<&MetaValue> {
+        self.entries
+            .iter()
+            .find(|(existing, _)| existing == key)
+            .map(|(_, value)| value)
+    }
+
+    /// Merge `other` in (`dict.update`): its values win.
+    pub fn update(&mut self, other: &Meta) {
+        for (key, value) in &other.entries {
+            self.insert(key.clone(), value.clone());
+        }
+    }
+
+    /// The entries in insertion order.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &MetaValue)> {
+        self.entries
+            .iter()
+            .map(|(key, value)| (key.as_str(), value))
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+impl<K: Into<String>> FromIterator<(K, MetaValue)> for Meta {
+    fn from_iter<I: IntoIterator<Item = (K, MetaValue)>>(iter: I) -> Self {
+        let mut meta = Meta::new();
+        for (key, value) in iter {
+            meta.insert(key, value);
+        }
+        meta
+    }
+}
+
 /// A terminal text style. Mirrors `rich.style.Style`.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Style {
@@ -114,6 +230,9 @@ pub struct Style {
     attrs: [Option<bool>; ATTR_COUNT],
     /// An OSC 8 hyperlink target, if any.
     link: Option<String>,
+    /// Upstream's `_meta`: metadata that never renders but takes part in
+    /// equality and combination (`None` is upstream's `_meta = None`).
+    meta: Option<Meta>,
 }
 
 impl Style {
@@ -130,6 +249,7 @@ impl Style {
             bgcolor,
             attrs: [None; ATTR_COUNT],
             link: None,
+            meta: None,
         }
     }
 
@@ -178,6 +298,7 @@ impl Style {
             bgcolor: None,
             attrs: self.attrs,
             link: self.link.clone(),
+            meta: self.meta.clone(),
         }
     }
 
@@ -187,12 +308,58 @@ impl Style {
         self.attrs.get(index).copied().flatten()
     }
 
-    /// True when nothing at all is set (renders as a no-op).
+    /// True when nothing at all is set (renders as a no-op). Non-empty
+    /// metadata counts, as upstream's `_null` includes `meta`.
     pub fn is_null(&self) -> bool {
         self.color.is_none()
             && self.bgcolor.is_none()
             && self.link.is_none()
+            && self.meta.as_ref().is_none_or(Meta::is_empty)
             && self.attrs.iter().all(Option::is_none)
+    }
+
+    /// Attach metadata. Port of `Style(meta=…)`. An empty map leaves the style
+    /// null, but it still differs from one with no metadata at all (upstream
+    /// hashes the marshal-encoded `{}`).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = Some(meta);
+        self
+    }
+
+    /// The metadata, empty when none is set. Port of the `Style.meta`
+    /// property.
+    pub fn meta(&self) -> Meta {
+        self.meta.clone().unwrap_or_default()
+    }
+
+    /// The metadata as stored: `None` when the style carries none.
+    pub fn meta_ref(&self) -> Option<&Meta> {
+        self.meta.as_ref()
+    }
+
+    /// A style carrying only `meta`. Port of `Style.from_meta` (null when
+    /// `meta` is empty). Upstream also gives it a random `link_id`, which
+    /// this port does not model (see DIVERGENCES #20).
+    pub fn from_meta(meta: Meta) -> Style {
+        Style::new().with_meta(meta)
+    }
+
+    /// A style with event-handler metadata. Port of `Style.on`: each handler
+    /// is stored as `"@name"` over `meta` (default empty).
+    pub fn on(meta: Option<Meta>, handlers: &[(&str, MetaValue)]) -> Style {
+        let mut meta = meta.unwrap_or_default();
+        for (name, value) in handlers {
+            meta.insert(format!("@{name}"), value.clone());
+        }
+        Style::from_meta(meta)
+    }
+
+    /// A copy without metadata or link. Port of `Style.clear_meta_and_links`.
+    pub fn clear_meta_and_links(&self) -> Style {
+        let mut style = self.clone();
+        style.link = None;
+        style.meta = None;
+        style
     }
 
     /// Regenerate the style definition string. Port of `Style.__str__`.
@@ -320,6 +487,16 @@ impl Style {
             bgcolor: other.bgcolor.clone().or_else(|| self.bgcolor.clone()),
             attrs,
             link: other.link.clone().or_else(|| self.link.clone()),
+            // `if self._meta and style._meta: {**self.meta, **style.meta}`,
+            // else `style._meta or self._meta`.
+            meta: match (&self.meta, &other.meta) {
+                (Some(mine), Some(theirs)) => {
+                    let mut merged = mine.clone();
+                    merged.update(theirs);
+                    Some(merged)
+                }
+                (mine, theirs) => theirs.clone().or_else(|| mine.clone()),
+            },
         }
     }
 
@@ -463,6 +640,57 @@ impl Style {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Expectations captured from real rich 15.0.0.
+    #[test]
+    fn meta_matches_upstream() {
+        let meta = |entries: &[(&str, MetaValue)]| -> Meta { entries.iter().cloned().collect() };
+        let a = Style::parse("bold")
+            .unwrap()
+            .with_meta(meta(&[("x", MetaValue::Int(1)), ("y", MetaValue::Int(2))]));
+        let b = Style::new().with_meta(meta(&[("y", MetaValue::Int(3)), ("z", MetaValue::Int(4))]));
+        // `{'x': 1, 'y': 3, 'z': 4}`
+        assert_eq!(
+            a.combine(&b).meta(),
+            meta(&[
+                ("x", MetaValue::Int(1)),
+                ("y", MetaValue::Int(3)),
+                ("z", MetaValue::Int(4))
+            ])
+        );
+        assert!(Style::new().with_meta(Meta::new()).is_null());
+        assert!(Style::from_meta(Meta::new()).is_null());
+        let ab = meta(&[("a", MetaValue::Int(1)), ("b", MetaValue::Int(2))]);
+        let ba = meta(&[("b", MetaValue::Int(2)), ("a", MetaValue::Int(1))]);
+        assert_ne!(Style::new().with_meta(ab), Style::new().with_meta(ba));
+        assert_ne!(
+            Style::new().with_meta(meta(&[("a", MetaValue::Bool(true))])),
+            Style::new().with_meta(meta(&[("a", MetaValue::Int(1))]))
+        );
+        assert_eq!(
+            Style::on(
+                Some(meta(&[("k", MetaValue::Int(1))])),
+                &[("click", MetaValue::Str("go".into()))]
+            )
+            .meta(),
+            meta(&[
+                ("k", MetaValue::Int(1)),
+                ("@click", MetaValue::Str("go".into()))
+            ])
+        );
+        let rich = Style::parse("bold link x")
+            .unwrap()
+            .with_meta(meta(&[("a", MetaValue::Int(1))]));
+        assert_eq!(rich.definition(), "bold link x");
+        assert_eq!(rich.clear_meta_and_links(), Style::parse("bold").unwrap());
+        // Meta never renders.
+        assert_eq!(
+            rich.ansi_codes(ColorSystem::Truecolor),
+            Style::parse("bold")
+                .unwrap()
+                .ansi_codes(ColorSystem::Truecolor)
+        );
+    }
 
     /// `normalize` round-trips a parseable definition through `definition()` and
     /// merely trims+lowercases one that isn't. Every expectation here was taken

@@ -10,7 +10,13 @@
 //! multi-line/wrapped cells (with **ellipsis overflow**), **shrink-to-fit** +
 //! **expand** column widths, per-column justify, **explicit width**, per-column
 //! **`ratio`/`min_width`/`max_width`**, **per-column style**, **`no_wrap`**,
-//! title, caption, and `show_lines`. Headers and cells may be styled [`Text`]
+//! title, caption, and `show_lines`; the table-level `width` / `min_width`,
+//! footers (`show_footer`, column `footer` / `footer_style`), `leading`,
+//! alternating `row_styles`, per-row `style` and sections (`add_section`,
+//! `end_section`), `header_style` / `footer_style` / `title_style` /
+//! `caption_style`, `title_justify` / `caption_justify` and `safe_box`.
+//! A row with more cells than columns adds columns, as upstream's `add_row`
+//! does. Headers and cells may be styled [`Text`]
 //! (`add_column_text`, `add_row_text`), as upstream accepts renderables; plain
 //! strings (`add_column`, `add_row`) are console markup, as upstream's `str`
 //! cells are (see [`Cell::Markup`]).
@@ -23,12 +29,19 @@ use crate::measure::Measurement;
 use crate::protocol::{LineRenderable, Renderable};
 use crate::r#box::{Box as BoxSet, RowLevel, HEAVY_HEAD};
 use crate::segment::Segment;
-use crate::style::Style;
-use crate::text::{Text, DEFAULT_TAB_SIZE};
+use crate::style::{Style, StyleType};
+use crate::text::Text;
 
 /// A single column definition. Mirrors the used subset of `rich.table.Column`.
 struct Column {
     header: Cell,
+    /// The footer cell (port of `Column.footer`), shown with `show_footer`.
+    footer: Cell,
+    /// A per-column footer *cell* style, combined over the table-level
+    /// `footer_style` (port of `Column.footer_style`).
+    footer_fill: Option<Style>,
+    /// Vertical alignment of body cells (port of `Column.vertical`).
+    vertical: crate::align::VerticalAlign,
     /// Highlight `str` cells (port of `Column.highlight`); `None` takes the
     /// table's `highlight`, as `add_column(highlight=None)` does.
     highlight: Option<bool>,
@@ -58,6 +71,48 @@ struct Column {
     /// How over-long cell text is handled (upstream `Column.overflow`,
     /// default `"ellipsis"`). A cell `Text`'s own overflow wins.
     overflow: Overflow,
+}
+
+impl Column {
+    /// A column with every upstream default and the given header / justify.
+    fn new(header: Cell, justify: Justify) -> Self {
+        Column {
+            header,
+            footer: Cell::Markup(String::new()),
+            footer_fill: None,
+            highlight: None,
+            vertical: crate::align::VerticalAlign::Top,
+            justify,
+            width: None,
+            style: Style::new(),
+            header_content_style: None,
+            header_fill: None,
+            ratio: None,
+            min_width: None,
+            max_width: None,
+            no_wrap: false,
+            overflow: Overflow::Ellipsis,
+        }
+    }
+}
+
+/// A row's cells and the row's own options. Port of `rich.table.Row` (which
+/// upstream keeps apart from the cells, stored per column).
+struct Row {
+    cells: Vec<Cell>,
+    /// A style for the whole row (`add_row(..., style=…)`).
+    style: Option<StyleType>,
+    /// Draw a line beneath the row (`end_section`).
+    end_section: bool,
+}
+
+/// Which kind of row is being rendered: the header, a body row (with its
+/// resolved row style) or the footer.
+#[derive(Clone)]
+enum RowKind {
+    Header,
+    Body(Style),
+    Footer,
 }
 
 /// A table cell: a markup string, styled text, or any renderable (upstream
@@ -189,7 +244,7 @@ impl Default for ColumnOptions {
 /// A grid of cells rendered inside a box. Mirrors `rich.table.Table`.
 pub struct Table {
     columns: Vec<Column>,
-    rows: Vec<Vec<Cell>>,
+    rows: Vec<Row>,
     box_set: BoxSet,
     /// `box=None`: no borders and no column dividers (see [`Table::grid`]).
     no_box: bool,
@@ -199,14 +254,35 @@ pub struct Table {
     pad_edge: bool,
     collapse_padding: bool,
     expand: bool,
-    title: Option<String>,
-    caption: Option<String>,
+    /// The title: a markup string or a [`Text`] (upstream `TextType`).
+    title: Option<Cell>,
+    caption: Option<Cell>,
     padding: (usize, usize, usize, usize),
-    header_style: Style,
+    /// The header row's style (upstream default `"table.header"`).
+    header_style: StyleType,
+    /// The footer row's style (upstream default `"table.footer"`).
+    footer_style: StyleType,
     border_style: Style,
     style: Style,
     /// Highlight `str` cells (port of `Table.highlight`, default `False`).
     highlight: bool,
+    /// The table's width, borders included; setting it implies `expand`.
+    width: Option<usize>,
+    /// The table's minimum width, borders included.
+    min_width: Option<usize>,
+    show_footer: bool,
+    /// Blank lines between rows (drawn with the box's `mid` row).
+    leading: usize,
+    /// Styles that body rows cycle through.
+    row_styles: Vec<StyleType>,
+    /// `None` (the default) takes `table.title` / `table.caption`.
+    title_style: Option<StyleType>,
+    caption_style: Option<StyleType>,
+    title_justify: Justify,
+    caption_justify: Justify,
+    /// Substitute boxes a legacy Windows console cannot draw; `None` takes
+    /// the console's `safe_box`.
+    safe_box: Option<bool>,
 }
 
 impl Default for Table {
@@ -225,10 +301,21 @@ impl Default for Table {
             title: None,
             caption: None,
             padding: (0, 1, 0, 1),
-            header_style: Style::parse("bold").expect("valid built-in style"),
+            header_style: StyleType::Name("table.header".to_string()),
+            footer_style: StyleType::Name("table.footer".to_string()),
             border_style: Style::new(),
             style: Style::new(),
             highlight: false,
+            width: None,
+            min_width: None,
+            show_footer: false,
+            leading: 0,
+            row_styles: Vec::new(),
+            title_style: None,
+            caption_style: None,
+            title_justify: Justify::Center,
+            caption_justify: Justify::Center,
+            safe_box: None,
         }
     }
 }
@@ -355,15 +442,149 @@ impl Table {
         (left, right)
     }
 
-    /// A centered title rendered above the table.
+    /// A title rendered above the table (console markup, centered by
+    /// default).
     pub fn title(mut self, title: impl Into<String>) -> Self {
-        self.title = Some(title.into());
+        self.title = Some(Cell::Markup(title.into()));
         self
     }
 
-    /// A centered caption rendered below the table.
+    /// A caption rendered below the table (console markup).
     pub fn caption(mut self, caption: impl Into<String>) -> Self {
-        self.caption = Some(caption.into());
+        self.caption = Some(Cell::Markup(caption.into()));
+        self
+    }
+
+    /// A [`Text`] title (upstream `title=Text(...)`): rendered as it is, in
+    /// its own style and justify, with no `title_style`.
+    pub fn title_text(mut self, title: Text) -> Self {
+        self.title = Some(Cell::Text(title));
+        self
+    }
+
+    /// A [`Text`] caption (upstream `caption=Text(...)`).
+    pub fn caption_text(mut self, caption: Text) -> Self {
+        self.caption = Some(Cell::Text(caption));
+        self
+    }
+
+    /// The style of a markup title (upstream `title_style`; default
+    /// `table.title`).
+    pub fn title_style(mut self, style: impl Into<StyleType>) -> Self {
+        self.title_style = Some(style.into());
+        self
+    }
+
+    /// The style of a markup caption (upstream `caption_style`; default
+    /// `table.caption`).
+    pub fn caption_style(mut self, style: impl Into<StyleType>) -> Self {
+        self.caption_style = Some(style.into());
+        self
+    }
+
+    /// How the title is justified (upstream `title_justify`, default center).
+    pub fn title_justify(mut self, justify: Justify) -> Self {
+        self.title_justify = justify;
+        self
+    }
+
+    /// How the caption is justified (upstream `caption_justify`).
+    pub fn caption_justify(mut self, justify: Justify) -> Self {
+        self.caption_justify = justify;
+        self
+    }
+
+    /// The header row's style (upstream `header_style`, default
+    /// `table.header`). A column's own header style combines over it.
+    pub fn header_style(mut self, style: impl Into<StyleType>) -> Self {
+        self.header_style = style.into();
+        self
+    }
+
+    /// The footer row's style (upstream `footer_style`, default
+    /// `table.footer`).
+    pub fn footer_style(mut self, style: impl Into<StyleType>) -> Self {
+        self.footer_style = style.into();
+        self
+    }
+
+    /// The table's width, borders included (upstream `width`). Setting it
+    /// expands the table to exactly that width.
+    pub fn width(mut self, width: Option<usize>) -> Self {
+        self.width = width;
+        self
+    }
+
+    /// The table's minimum width, borders included (upstream `min_width`).
+    pub fn min_width(mut self, min_width: Option<usize>) -> Self {
+        self.min_width = min_width;
+        self
+    }
+
+    /// Render a footer row from each column's `footer` (upstream
+    /// `show_footer`).
+    pub fn show_footer(mut self, show: bool) -> Self {
+        self.show_footer = show;
+        self
+    }
+
+    /// Blank lines between rows (upstream `leading`); takes precedence over
+    /// `show_lines`.
+    pub fn leading(mut self, leading: usize) -> Self {
+        self.leading = leading;
+        self
+    }
+
+    /// Styles body rows cycle through (upstream `row_styles`).
+    pub fn row_styles(mut self, styles: Vec<StyleType>) -> Self {
+        self.row_styles = styles;
+        self
+    }
+
+    /// Whether to substitute boxes a legacy Windows console cannot draw
+    /// (upstream `safe_box`; `None` takes the console's).
+    pub fn safe_box(mut self, safe_box: Option<bool>) -> Self {
+        self.safe_box = safe_box;
+        self
+    }
+
+    /// Whether the table expands: `expand`, or any explicit `width`. Port
+    /// of the `Table.expand` property.
+    pub fn is_expand(&self) -> bool {
+        self.expand || self.width.is_some()
+    }
+
+    /// The number of rows (upstream `row_count`).
+    pub fn row_count(&self) -> usize {
+        self.rows.len()
+    }
+
+    /// The number of columns.
+    pub fn column_count(&self) -> usize {
+        self.columns.len()
+    }
+
+    /// The style of body row `index`: its place in `row_styles`, then its
+    /// own style. Port of `Table.get_row_style`.
+    pub fn get_row_style(&self, console: &Console, index: usize) -> Style {
+        let theme = console.theme();
+        let mut style = Style::new();
+        if !self.row_styles.is_empty() {
+            style = style
+                .combine(&theme.get_style_or_null(&self.row_styles[index % self.row_styles.len()]));
+        }
+        if let Some(row_style) = self.rows.get(index).and_then(|row| row.style.as_ref()) {
+            style = style.combine(&theme.get_style_or_null(row_style));
+        }
+        style
+    }
+
+    /// End the current section: draw a line beneath the last row. Port of
+    /// `Table.add_section`.
+    pub fn add_section(&mut self) -> &mut Self {
+        if let Some(row) = self.rows.last_mut() {
+            row.end_section = true;
+        }
         self
     }
 
@@ -388,20 +609,32 @@ impl Table {
     /// header cell; its own `justify`, `overflow` and `no_wrap` override the
     /// column's, as `Text.__rich_console__` prefers them over the options.
     pub fn add_column_text(&mut self, header: Text, justify: Justify) -> &mut Self {
-        self.columns.push(Column {
-            header: Cell::Text(header),
-            highlight: None,
-            justify,
-            width: None,
-            style: Style::new(),
-            header_content_style: None,
-            header_fill: None,
-            ratio: None,
-            min_width: None,
-            max_width: None,
-            no_wrap: false,
-            overflow: Overflow::Ellipsis,
-        });
+        self.columns.push(Column::new(Cell::Text(header), justify));
+        self
+    }
+
+    /// Add a column whose header is any [`Cell`] (upstream's `header` is any
+    /// renderable).
+    pub fn add_column_cell(&mut self, header: Cell, justify: Justify) -> &mut Self {
+        self.columns.push(Column::new(header, justify));
+        self
+    }
+
+    /// Set the most-recently-added column's footer (upstream
+    /// `Column.footer`), shown with [`show_footer`](Self::show_footer).
+    pub fn column_footer(&mut self, footer: impl Into<Cell>) -> &mut Self {
+        if let Some(column) = self.columns.last_mut() {
+            column.footer = footer.into();
+        }
+        self
+    }
+
+    /// Style the most-recently-added column's whole footer cell, combined
+    /// over the table-level `footer_style` (upstream `Column.footer_style`).
+    pub fn column_footer_fill(&mut self, style: Style) -> &mut Self {
+        if let Some(column) = self.columns.last_mut() {
+            column.footer_fill = Some(style);
+        }
         self
     }
 
@@ -409,19 +642,26 @@ impl Table {
     /// `add_column(header, justify=…, width=…, ratio=…, …)` does.
     pub fn add_column_with(&mut self, header: Text, options: ColumnOptions) -> &mut Self {
         self.columns.push(Column {
-            header: Cell::Text(header),
-            highlight: None,
-            justify: options.justify,
             width: options.width,
             style: options.style,
-            header_content_style: None,
-            header_fill: None,
             ratio: options.ratio,
             min_width: options.min_width,
             max_width: options.max_width,
             no_wrap: options.no_wrap,
             overflow: options.overflow,
+            ..Column::new(Cell::Text(header), options.justify)
         });
+        self
+    }
+
+    /// Set the vertical alignment of the most-recently-added column's body
+    /// cells (upstream `Column.vertical`, default top). A cell whose
+    /// renderable has its own [`vertical`](crate::protocol::Renderable::vertical)
+    /// uses that instead. Chain after `add_column`.
+    pub fn column_vertical(&mut self, vertical: crate::align::VerticalAlign) -> &mut Self {
+        if let Some(column) = self.columns.last_mut() {
+            column.vertical = vertical;
+        }
         self
     }
 
@@ -523,12 +763,46 @@ impl Table {
     /// empty). Each string is console markup, as upstream's `add_row("[b]x")`
     /// is; use [`add_row_text`](Self::add_row_text) for literal data.
     pub fn add_row(&mut self, cells: &[&str]) -> &mut Self {
-        self.rows.push(
+        self.push_row(
             cells
                 .iter()
                 .map(|s| Cell::Markup((*s).to_string()))
                 .collect(),
-        );
+            None,
+            false,
+        )
+    }
+
+    /// Add a row with upstream's keyword options: a `style` for the whole
+    /// row and `end_section` to draw a line beneath it. Port of
+    /// `add_row(*renderables, style=…, end_section=…)`.
+    pub fn add_row_with(
+        &mut self,
+        cells: Vec<Cell>,
+        style: Option<StyleType>,
+        end_section: bool,
+    ) -> &mut Self {
+        self.push_row(cells, style, end_section)
+    }
+
+    /// Port of `add_row`'s body: a row longer than the table adds a column
+    /// (with every default and the table's `highlight`) for each extra cell.
+    fn push_row(
+        &mut self,
+        cells: Vec<Cell>,
+        style: Option<StyleType>,
+        end_section: bool,
+    ) -> &mut Self {
+        while self.columns.len() < cells.len() {
+            let mut column = Column::new(Cell::Markup(String::new()), Justify::Left);
+            column.highlight = Some(self.highlight);
+            self.columns.push(column);
+        }
+        self.rows.push(Row {
+            cells,
+            style,
+            end_section,
+        });
         self
     }
 
@@ -536,14 +810,12 @@ impl Table {
     /// Each cell keeps its spans, and its own `justify`, `overflow` and
     /// `no_wrap` override the column's.
     pub fn add_row_text(&mut self, cells: Vec<Text>) -> &mut Self {
-        self.rows.push(cells.into_iter().map(Cell::Text).collect());
-        self
+        self.push_row(cells.into_iter().map(Cell::Text).collect(), None, false)
     }
 
     /// Add a row of [`Cell`]s, which may be any renderable.
     pub fn add_row_cells(&mut self, cells: Vec<Cell>) -> &mut Self {
-        self.rows.push(cells);
-        self
+        self.push_row(cells, None, false)
     }
 
     /// The width of the borders: `ncols - 1` dividers, plus the two outer
@@ -636,10 +908,14 @@ impl Table {
         let padding = self.cell_padding(index, self.columns.len());
         let empty = Cell::Markup(String::new());
         let header = self.show_header.then_some(&column.header);
-        let body = self.rows.iter().map(|row| row.get(index).unwrap_or(&empty));
+        let body = self
+            .rows
+            .iter()
+            .map(|row| row.cells.get(index).unwrap_or(&empty));
+        let footer = self.show_footer.then_some(&column.footer);
         let mut measured = false;
         let (mut minimum, mut maximum) = (0, 0);
-        for cell in header.into_iter().chain(body) {
+        for cell in header.into_iter().chain(body).chain(footer) {
             let width = self.measure_padded_cell(console, options, cell, padding);
             minimum = minimum.max(width.minimum);
             maximum = maximum.max(width.maximum);
@@ -658,8 +934,8 @@ impl Table {
     }
 
     /// The rendered width (content + padding) of each column, shrinking the
-    /// widest columns to fit `available` when necessary. Port of the non-flexible
-    /// path of `Table._calculate_column_widths` + `_collapse_widths`.
+    /// widest columns to fit `available` when necessary. Port of
+    /// `Table._calculate_column_widths` + `_collapse_widths`.
     fn column_widths(
         &self,
         console: &Console,
@@ -667,6 +943,8 @@ impl Table {
         available: usize,
     ) -> Vec<usize> {
         let options = &options.update_width(available);
+        let max_width = available as i64;
+        let extra_width = self.extra_width() as i64;
         // A fixed-width column uses its declared width; others measure content,
         // clamped to the column's [min_width, max_width]. Port of `_measure_column`.
         let maximums: Vec<i64> = (0..self.columns.len())
@@ -677,12 +955,12 @@ impl Table {
         // Expand with explicit ratios: flexible (ratio) columns share the free
         // width in proportion, fixed columns keep their measured width. Port of
         // the `if self.expand: … if any(ratios)` block of `_calculate_column_widths`.
-        if self.expand {
+        if self.is_expand() {
             let ratios: Vec<i64> = self
                 .columns
                 .iter()
                 .filter(|c| c.ratio.is_some())
-                .map(|c| c.ratio.unwrap() as i64)
+                .map(|c| i64::try_from(c.ratio.unwrap()).unwrap_or(i64::MAX))
                 .collect();
             if ratios.iter().any(|&r| r > 0) {
                 let fixed_widths: Vec<i64> = maximums
@@ -697,7 +975,7 @@ impl Table {
                     .filter(|(_, c)| c.ratio.is_some())
                     .map(|(index, c)| (c.width.unwrap_or(1) + self.padding_width(index)) as i64)
                     .collect();
-                let flexible_width = available as i64 - fixed_widths.iter().sum::<i64>();
+                let flexible_width = max_width - fixed_widths.iter().sum::<i64>();
                 let flex_widths = ratio_distribute(flexible_width, &ratios, Some(&flex_minimum));
                 let mut iter_flex = flex_widths.into_iter();
                 for (index, column) in self.columns.iter().enumerate() {
@@ -708,9 +986,8 @@ impl Table {
             }
         }
 
-        let table_width: i64 = widths.iter().sum();
-        let collapsed = table_width > available as i64;
-        if collapsed {
+        let mut table_width: i64 = widths.iter().sum();
+        if table_width > max_width {
             // Only auto-width, wrapping columns may shrink; fixed and no_wrap
             // columns hold their width (no_wrap only yields via the last resort).
             let wrapable: Vec<bool> = self
@@ -718,18 +995,20 @@ impl Table {
                 .iter()
                 .map(|c| c.width.is_none() && !c.no_wrap)
                 .collect();
-            widths = collapse_widths(widths, &wrapable, available as i64);
+            widths = collapse_widths(widths, &wrapable, max_width);
+            table_width = widths.iter().sum();
             // Last resort: if fixed columns still overflow, reduce every column
             // evenly. Port of `_calculate_column_widths`'s final `ratio_reduce`.
-            let table_width: i64 = widths.iter().sum();
-            if table_width > available as i64 {
-                let excess = table_width - available as i64;
+            if table_width > max_width {
+                let excess = table_width - max_width;
                 let ratios = vec![1i64; widths.len()];
                 widths = ratio_reduce(excess, &ratios, &widths, &widths);
+                table_width = widths.iter().sum();
             }
             // Upstream measures every column again at its reduced width, so a
             // `min_width` re-inflates its column and the table overflows (the
-            // console crop then cuts it).
+            // console crop then cuts it). `table_width` keeps the reduced sum,
+            // as upstream's does.
             widths = widths
                 .iter()
                 .enumerate()
@@ -744,14 +1023,22 @@ impl Table {
                 .collect();
         }
 
-        // Expand: distribute the leftover width proportionally. Port of the
-        // `elif … and self.expand` tail of `_calculate_column_widths` (via
-        // `ratio_distribute`), which a table that had to collapse never reaches.
-        let table_width: i64 = widths.iter().sum();
-        if !collapsed && self.expand && table_width < available as i64 && table_width > 0 {
-            let pad = ratio_distribute(available as i64 - table_width, &widths, None);
-            for (width, extra) in widths.iter_mut().zip(pad) {
-                *width += extra;
+        // Expand, or grow to the table's `min_width`: distribute the leftover
+        // width proportionally (`ratio_distribute`, which asserts a positive
+        // total ratio — a table of zero-width columns is left as it is).
+        let min_width = self.min_width.map(|width| width as i64);
+        if (table_width < max_width && self.is_expand())
+            || min_width.is_some_and(|min_width| table_width < min_width - extra_width)
+        {
+            let target = match min_width {
+                None => max_width,
+                Some(min_width) => (min_width - extra_width).min(max_width),
+            };
+            if widths.iter().sum::<i64>() > 0 {
+                let pad = ratio_distribute(target - table_width, &widths, None);
+                for (width, extra) in widths.iter_mut().zip(pad) {
+                    *width += extra;
+                }
             }
         }
         widths.into_iter().map(|w| w.max(0) as usize).collect()
@@ -780,20 +1067,31 @@ impl Table {
         (pl, pr)
     }
 
-    /// The effective style for a cell in column `index`: the header style for a
-    /// header row, else that column's own style.
-    fn cell_style(&self, index: usize, is_header: bool) -> Style {
-        if is_header {
-            // A per-column header cell style is combined over the table-level one.
-            match self.columns.get(index).and_then(|c| c.header_fill.as_ref()) {
-                Some(fill) => self.header_style.combine(fill),
-                None => self.header_style.clone(),
+    /// The effective style for a cell in column `index`: `_get_cells`' cell
+    /// style plus the row style. The header row takes `header_style` and the
+    /// column's own header style, the footer likewise, and a body cell the
+    /// column's style and then its row's.
+    fn cell_style(&self, console: &Console, index: usize, kind: &RowKind) -> Style {
+        let column = self.columns.get(index);
+        match kind {
+            RowKind::Header => {
+                let base = console.theme().get_style_or_null(&self.header_style);
+                match column.and_then(|c| c.header_fill.as_ref()) {
+                    Some(fill) => base.combine(fill),
+                    None => base,
+                }
             }
-        } else {
-            self.columns
-                .get(index)
+            RowKind::Footer => {
+                let base = console.theme().get_style_or_null(&self.footer_style);
+                match column.and_then(|c| c.footer_fill.as_ref()) {
+                    Some(fill) => base.combine(fill),
+                    None => base,
+                }
+            }
+            RowKind::Body(row_style) => column
                 .map(|c| c.style.clone())
                 .unwrap_or_default()
+                .combine(row_style),
         }
     }
 
@@ -868,14 +1166,14 @@ impl Table {
         options: &ConsoleOptions,
         cells: &[Cell],
         rendered_widths: &[usize],
-        is_header: bool,
+        kind: &RowKind,
         (first_row, last_row): (bool, bool),
-        edges: Option<(char, char, char)>,
+        edges: Option<(Segment, Segment, Segment)>,
     ) -> Vec<Vec<Segment>> {
+        let is_header = matches!(kind, RowKind::Header);
         // Horizontal padding is per-column (see `cell_padding`); vertical
         // padding depends on the row's place (see `vertical_padding`).
         let vertical = self.vertical_padding(first_row, last_row);
-        let border = Some(self.style.combine(&self.border_style));
         let ncols = self.columns.len();
         // Derived here rather than by the caller so the padding used to lay the
         // row out is the same padding the content width was reduced by.
@@ -895,7 +1193,7 @@ impl Table {
         let mut cell_lines: Vec<Vec<Vec<Segment>>> = Vec::with_capacity(ncols);
         let mut height = 1;
         for (index, width) in content_widths.iter().enumerate() {
-            let style = self.cell_style(index, is_header);
+            let style = self.cell_style(console, index, kind);
             let column = self.columns.get(index);
             let mut text = match cells.get(index) {
                 Some(Cell::Text(text)) => text.clone(),
@@ -911,6 +1209,8 @@ impl Table {
                     // at the content width, with the column's justify,
                     // no_wrap and overflow as options.
                     let mut cell_options = options.update_width(*width);
+                    cell_options.highlight =
+                        Some(column.and_then(|c| c.highlight).unwrap_or(self.highlight));
                     cell_options.justify = column.map_or(Justify::Left, |c| c.justify);
                     cell_options.no_wrap = Some(column.is_some_and(|c| c.no_wrap));
                     cell_options.overflow = Some(column.map_or(Overflow::Ellipsis, |c| c.overflow));
@@ -939,10 +1239,9 @@ impl Table {
             // `no_wrap` and `overflow="ellipsis"` as options, which the text's own
             // settings override: wrap, then justify (which strips a right- or
             // center-justified line before measuring it), then truncate.
-            let justify = match text.get_justify() {
-                Justify::Default => column.map(|c| c.justify).unwrap_or(Justify::Left),
-                own => own,
-            };
+            let justify = text
+                .get_justify_option()
+                .unwrap_or_else(|| column.map(|c| c.justify).unwrap_or(Justify::Left));
             let overflow = text
                 .get_overflow()
                 .unwrap_or_else(|| column.map_or(Overflow::Ellipsis, |c| c.overflow));
@@ -965,22 +1264,24 @@ impl Table {
             // The text renders on its own and the cell style is applied to the
             // result (`render_lines(..., style=...)`), so a span keeps its own
             // segment even where it matches the cell style: `[b]Name` under a
-            // bold header is `Name` + padding, as upstream prints it. Only
-            // equal *unstyled-cell* runs merge, which rejoins the justify
-            // padding that `Text.pad_right` would have appended to the plain.
+            // bold header is `Name` + padding, as upstream prints it. The
+            // justify padding joins the text's last run only where no span
+            // ends there, as `Text.pad_right` on the plain string does.
+            let tab_size = text.console_tab_size(console);
             let mut lines: Vec<Vec<Segment>> = if *width == 0 {
                 Vec::new()
             } else {
-                text.render_lines_wrapped(
+                text.render_lines_wrapped_tabs(
                     console.theme(),
                     &Style::new(),
                     Some(*width),
                     justify,
                     overflow,
                     no_wrap,
+                    tab_size,
                 )
                 .iter()
-                .map(|line| Segment::apply_style(&Segment::simplify(line), &style))
+                .map(|line| Segment::apply_style(line, &style))
                 .collect()
             };
             if lines.is_empty() && *width > 0 {
@@ -999,18 +1300,38 @@ impl Table {
         // unstyled blank.
         let row_height = cell_lines.iter().map(Vec::len).max().unwrap_or(0);
         for (index, lines) in cell_lines.iter_mut().enumerate() {
+            // `getattr(renderable, "vertical", None) or column.vertical`; a
+            // header row aligns to the bottom and a footer to the top,
+            // whatever the cell says.
+            let vertical = if is_header {
+                crate::align::VerticalAlign::Bottom
+            } else if matches!(kind, RowKind::Footer) {
+                crate::align::VerticalAlign::Top
+            } else {
+                match cells.get(index) {
+                    Some(Cell::Renderable(renderable)) => renderable.vertical(),
+                    _ => None,
+                }
+                .unwrap_or_else(|| {
+                    self.columns
+                        .get(index)
+                        .map_or(crate::align::VerticalAlign::Top, |c| c.vertical)
+                })
+            };
             let (cpl, cpr) = paddings[index];
             let blank = " ".repeat(cpl + content_widths[index] + cpr);
             let filler = vec![Segment::new(
                 blank.clone(),
-                Some(self.cell_style(index, is_header)),
+                Some(self.cell_style(console, index, kind)),
             )];
             let missing = row_height.saturating_sub(lines.len());
-            if is_header {
-                lines.splice(0..0, std::iter::repeat_n(filler, missing));
-            } else {
-                lines.extend(std::iter::repeat_n(filler, missing));
-            }
+            let top = match vertical {
+                crate::align::VerticalAlign::Top => 0,
+                crate::align::VerticalAlign::Middle => missing / 2,
+                crate::align::VerticalAlign::Bottom => missing,
+            };
+            lines.splice(0..0, std::iter::repeat_n(filler.clone(), top));
+            lines.extend(std::iter::repeat_n(filler, missing - top));
             while lines.len() < height {
                 lines.push(vec![Segment::new(blank.clone(), None)]);
             }
@@ -1023,18 +1344,18 @@ impl Table {
         #[allow(clippy::needless_range_loop)]
         for r in 0..height {
             let mut row = Vec::new();
-            if let (Some((edge_left, _, _)), true) = (edges, self.show_edge) {
-                row.push(Segment::new(edge_left.to_string(), border.clone()));
+            if let (Some((edge_left, _, _)), true) = (&edges, self.show_edge) {
+                row.push(edge_left.clone());
             }
             for (c, column_lines) in cell_lines.iter().enumerate() {
                 row.extend(column_lines[r].clone());
-                let Some((_, edge_vertical, edge_right)) = edges else {
+                let Some((_, divider, edge_right)) = &edges else {
                     continue;
                 };
                 if c != last {
-                    row.push(Segment::new(edge_vertical.to_string(), border.clone()));
+                    row.push(divider.clone());
                 } else if self.show_edge {
-                    row.push(Segment::new(edge_right.to_string(), border.clone()));
+                    row.push(edge_right.clone());
                 }
             }
             rows_out.push(row);
@@ -1064,7 +1385,7 @@ impl LineRenderable for Table {
         // to a plain-headed box when there is no header to set apart.
         let box_set = self.box_set.substitute(
             console.legacy_windows(),
-            console.safe_box(),
+            self.safe_box.unwrap_or_else(|| console.safe_box()),
             console.ascii_only(),
         );
         let box_set = if self.show_header {
@@ -1072,18 +1393,31 @@ impl LineRenderable for Table {
         } else {
             box_set.get_plain_headed_box()
         };
+        // `max_width = self.width` when the table has one.
+        let max_width = self.width.unwrap_or(options.max_width);
         let extra_width = self.extra_width();
-        let available = options.max_width.saturating_sub(extra_width);
+        let available = max_width.saturating_sub(extra_width);
 
         let rendered_widths = self.column_widths(console, options, available);
-        let border = Some(self.style.combine(&self.border_style));
+        let border_style = self.style.combine(&self.border_style);
+        let border = Some(border_style.clone());
 
-        // Full table width (for centering title/caption): columns + borders.
+        // Full table width (for the title and caption): columns + borders.
         let table_width: usize = rendered_widths.iter().sum::<usize>() + extra_width;
 
-        // Title, centered above the table.
-        if let Some(title) = self.title.as_ref().filter(|title| !title.is_empty()) {
-            for line in render_annotation(console, options, title, "table.title", table_width) {
+        if let Some(title) = &self.title {
+            let style = self
+                .title_style
+                .clone()
+                .unwrap_or_else(|| StyleType::Name("table.title".to_string()));
+            for line in render_annotation(
+                console,
+                options,
+                title,
+                &style,
+                self.title_justify,
+                table_width,
+            ) {
                 emit(line)?;
             }
         }
@@ -1097,51 +1431,105 @@ impl LineRenderable for Table {
             )])?;
         }
 
-        let head_edges =
-            boxed.then_some((box_set.head_left, box_set.head_vertical, box_set.head_right));
-        let body_edges =
-            boxed.then_some((box_set.mid_left, box_set.mid_vertical, box_set.mid_right));
+        // `box_segments[0 if first else (2 if last else 1)]`: the first row
+        // drawn (header or not) takes the head glyphs and the last the foot's.
+        let segments = |(left, vertical, right): (char, char, char)| {
+            (
+                Segment::new(left.to_string(), border.clone()),
+                Segment::new(vertical.to_string(), border.clone()),
+                Segment::new(right.to_string(), border.clone()),
+            )
+        };
+        let head_edges = segments((box_set.head_left, box_set.head_vertical, box_set.head_right));
+        let mid_edges = segments((box_set.mid_left, box_set.mid_vertical, box_set.mid_right));
+        let foot_edges = segments((box_set.foot_left, box_set.foot_vertical, box_set.foot_right));
 
+        // Every row drawn, as upstream's `row_cells` holds them.
+        let mut row_list: Vec<(RowKind, &[Cell], Option<&Row>)> = Vec::new();
+        let header_cells: Vec<Cell> = self.columns.iter().map(|c| c.header.clone()).collect();
+        let footer_cells: Vec<Cell> = self.columns.iter().map(|c| c.footer.clone()).collect();
         if self.show_header {
-            let headers: Vec<Cell> = self.columns.iter().map(|c| c.header.clone()).collect();
+            row_list.push((RowKind::Header, &header_cells, None));
+        }
+        for (index, row) in self.rows.iter().enumerate() {
+            row_list.push((
+                RowKind::Body(self.get_row_style(console, index)),
+                &row.cells,
+                Some(row),
+            ));
+        }
+        if self.show_footer {
+            row_list.push((RowKind::Footer, &footer_cells, None));
+        }
+        let total = row_list.len();
+        for (index, (kind, cells, row)) in row_list.iter().enumerate() {
+            let first = index == 0;
+            let last = index + 1 == total;
+            let header_row = first && self.show_header;
+            if boxed && last && self.show_footer {
+                emit(vec![Segment::new(
+                    box_set.get_row(&rendered_widths, RowLevel::Foot, edge),
+                    border.clone(),
+                )])?;
+            }
+            let edges = boxed.then(|| {
+                let (left, divider, right) = if first {
+                    head_edges.clone()
+                } else if last {
+                    foot_edges.clone()
+                } else {
+                    mid_edges.clone()
+                };
+                // A whitespace divider takes the row's background too.
+                let divider = if divider.text.trim().is_empty() {
+                    let background = match kind {
+                        RowKind::Body(row_style) => {
+                            Style::from_color(None, row_style.bgcolor().cloned())
+                        }
+                        _ => Style::new(),
+                    };
+                    Segment::new(
+                        divider.text.clone(),
+                        Some(background.combine(&border_style)),
+                    )
+                } else {
+                    divider
+                };
+                (left, divider, right)
+            });
             for line in self.render_row(
                 console,
                 options,
-                &headers,
+                cells,
                 &rendered_widths,
-                true,
-                (true, self.rows.is_empty()),
-                head_edges,
+                kind,
+                (first, last),
+                edges,
             ) {
                 emit(line)?;
             }
-            if boxed {
+            if boxed && header_row {
                 emit(vec![Segment::new(
                     box_set.get_row(&rendered_widths, RowLevel::Head, edge),
                     border.clone(),
                 )])?;
             }
-        }
-
-        let row_last = self.rows.len().saturating_sub(1);
-        for (index, row) in self.rows.iter().enumerate() {
-            let place = (!self.show_header && index == 0, index == row_last);
-            for line in self.render_row(
-                console,
-                options,
-                row,
-                &rendered_widths,
-                false,
-                place,
-                body_edges,
-            ) {
-                emit(line)?;
-            }
-            if boxed && self.show_lines && index != row_last {
-                emit(vec![Segment::new(
-                    box_set.get_row(&rendered_widths, RowLevel::Row, edge),
-                    border.clone(),
-                )])?;
+            let end_section = row.is_some_and(|row| row.end_section);
+            if boxed
+                && (self.show_lines || self.leading > 0 || end_section)
+                && !last
+                && !(self.show_footer && index + 2 >= total)
+                && !header_row
+            {
+                let line = if self.leading > 0 {
+                    // Upstream repeats the row on one line, as it is here.
+                    box_set
+                        .get_row(&rendered_widths, RowLevel::Mid, edge)
+                        .repeat(self.leading)
+                } else {
+                    box_set.get_row(&rendered_widths, RowLevel::Row, edge)
+                };
+                emit(vec![Segment::new(line, border.clone())])?;
             }
         }
 
@@ -1152,9 +1540,19 @@ impl LineRenderable for Table {
             )])?;
         }
 
-        // Caption, centered below the table.
-        if let Some(caption) = self.caption.as_ref().filter(|caption| !caption.is_empty()) {
-            for line in render_annotation(console, options, caption, "table.caption", table_width) {
+        if let Some(caption) = &self.caption {
+            let style = self
+                .caption_style
+                .clone()
+                .unwrap_or_else(|| StyleType::Name("table.caption".to_string()));
+            for line in render_annotation(
+                console,
+                options,
+                caption,
+                &style,
+                self.caption_justify,
+                table_width,
+            ) {
                 emit(line)?;
             }
         }
@@ -1165,41 +1563,40 @@ impl LineRenderable for Table {
 
 impl crate::protocol::OwnedTableRows for Table {
     fn extend_owned_rows(&mut self, rows: Vec<Vec<String>>) -> &mut Self {
-        self.rows.extend(
-            rows.into_iter()
-                .map(|row| row.into_iter().map(Cell::Markup).collect::<Vec<_>>()),
-        );
+        for row in rows {
+            self.push_row(row.into_iter().map(Cell::Markup).collect(), None, false);
+        }
         self
     }
 }
 
 impl Renderable for Table {
     /// Port of `Table.__rich_measure__`: the column widths the table would
-    /// render at, then each column measured within their total.
+    /// render at, then each column measured within their total; an explicit
+    /// `width` is the maximum, and `min_width` a floor.
     fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+        let max_width = self.width.unwrap_or(options.max_width);
         if self.columns.is_empty() {
             // `_extra_width` counts `len(columns) - 1` dividers, so an empty
             // boxed table measures `2 - 1` with edges and `-1` (normalized to
             // 0) without.
             let width = usize::from(!self.no_box && self.show_edge);
-            return Measurement::new(width, width);
+            return Measurement::new(width, self.width.unwrap_or(width))
+                .clamp(self.min_width, None);
         }
         let extra_width = self.extra_width();
-        let max_width: usize = self
-            .column_widths(
-                console,
-                options,
-                options.max_width.saturating_sub(extra_width),
-            )
+        let columns_width: usize = self
+            .column_widths(console, options, max_width.saturating_sub(extra_width))
             .iter()
             .sum();
-        let options = options.update_width(max_width);
+        let options = options.update_width(columns_width);
         let (minimum, maximum) = (0..self.columns.len())
             .map(|index| self.measure_column(console, &options, index))
             .fold((0, 0), |(minimum, maximum), width| {
                 (minimum + width.minimum, maximum + width.maximum)
             });
-        Measurement::new(minimum + extra_width, maximum + extra_width)
+        let maximum = self.width.unwrap_or(maximum + extra_width);
+        Measurement::new(minimum + extra_width, maximum).clamp(self.min_width, None)
     }
 
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
@@ -1221,54 +1618,54 @@ impl Renderable for Table {
     }
 }
 
-/// Port of `Table.__rich_console__.render_annotation`: markup and emoji are
-/// enabled, automatic highlighting is disabled, and long annotations wrap.
+/// Port of `Table.__rich_console__.render_annotation`: a string title is
+/// `console.render_str(text, style=style, highlight=False)` (markup and emoji
+/// on, no highlighting); a `Text` renders as it is. Either renders at the
+/// table's width with `justify` unless the text has its own.
 fn render_annotation(
     console: &Console,
     options: &ConsoleOptions,
-    annotation: &str,
-    style: &str,
+    annotation: &Cell,
+    style: &StyleType,
+    justify: Justify,
     width: usize,
 ) -> Vec<Vec<Segment>> {
-    let expanded = console.expand_emoji(annotation);
-    let mut text = Text::from_markup(&expanded).unwrap_or_else(|_| Text::new(expanded));
-    text.set_base_style(style);
-    let overflow = options.overflow.unwrap_or(Overflow::Fold);
-    let no_wrap = options.no_wrap.unwrap_or(false) || overflow == Overflow::Ignore;
-    let mut lines = Vec::new();
-    for mut hard_line in text.split("\n", false, true) {
-        hard_line.expand_tabs(DEFAULT_TAB_SIZE);
-        let wrapped = if no_wrap {
-            vec![hard_line]
-        } else {
-            let char_offsets: Vec<usize> = hard_line
-                .plain()
-                .char_indices()
-                .map(|(i, _)| i)
-                .chain(std::iter::once(hard_line.plain().len()))
-                .collect();
-            let breaks: Vec<usize> =
-                crate::wrap::divide_line(hard_line.plain(), width, overflow == Overflow::Fold)
-                    .into_iter()
-                    .map(|i| char_offsets[i])
-                    .collect();
-            hard_line.divide(&breaks)
-        };
-        for mut line in wrapped {
-            if overflow != Overflow::Ignore {
-                // Upstream justifies the Text before rendering its segments.
-                // This preserves annotation span boundaries while merging the
-                // base-styled padding with an unstyled title's single run.
-                line.rstrip();
-                line.truncate(width, Some(overflow), false);
-                line.pad_left(width.saturating_sub(line.cell_len()) / 2, ' ');
-                line.pad_right(width.saturating_sub(line.cell_len()), ' ');
-                line.truncate(width, Some(overflow), false);
+    let text = match annotation {
+        Cell::Markup(markup) => {
+            if markup.is_empty() {
+                return Vec::new();
             }
-            lines.push(line.render(console.theme(), console.base_style()));
+            let mut text = console.render_str(markup, Some(false));
+            text.set_base_style(style.clone());
+            text
         }
+        Cell::Text(text) => {
+            if text.plain().is_empty() {
+                return Vec::new();
+            }
+            text.clone()
+        }
+        Cell::Renderable(_) => return Vec::new(),
+    };
+    if width == 0 {
+        return Vec::new();
     }
-    lines
+    let justify = text.get_justify_option().unwrap_or(justify);
+    let overflow = text
+        .get_overflow()
+        .or(options.overflow)
+        .unwrap_or(Overflow::Fold);
+    let no_wrap = text.get_no_wrap().or(options.no_wrap).unwrap_or(false);
+    let tab_size = text.console_tab_size(console);
+    text.render_lines_wrapped_tabs(
+        console.theme(),
+        console.base_style(),
+        Some(width),
+        justify,
+        overflow,
+        no_wrap,
+        tab_size,
+    )
 }
 
 /// Round half to even (banker's rounding), matching Python's `round`.
@@ -1295,7 +1692,7 @@ fn ratio_reduce(total: i64, ratios: &[i64], maximums: &[i64], values: &[i64]) ->
         .zip(maximums)
         .map(|(&r, &m)| if m != 0 { r } else { 0 })
         .collect();
-    let mut total_ratio: i64 = ratios.iter().sum();
+    let mut total_ratio: i128 = ratios.iter().map(|&r| i128::from(r)).sum();
     if total_ratio == 0 {
         return values.to_vec();
     }
@@ -1308,7 +1705,7 @@ fn ratio_reduce(total: i64, ratios: &[i64], maximums: &[i64], values: &[i64]) ->
             ));
             result.push(value - distributed);
             total_remaining -= distributed;
-            total_ratio -= ratio;
+            total_ratio -= i128::from(ratio);
         } else {
             result.push(value);
         }
@@ -1329,11 +1726,14 @@ fn ratio_distribute(total: i64, ratios: &[i64], minimums: Option<&[i64]>) -> Vec
             .collect(),
         None => ratios.to_vec(),
     };
-    let mut total_ratio: i64 = ratios.iter().sum();
-    let mut total_remaining = total;
+    // Python ints never overflow; `ratio * total_remaining` can exceed i64
+    // for a huge ratio, so the arithmetic runs in i128.
+    let mut total_ratio: i128 = ratios.iter().map(|&r| i128::from(r)).sum();
+    let mut total_remaining = i128::from(total);
     let mut result = Vec::with_capacity(ratios.len());
     for (index, &ratio) in ratios.iter().enumerate() {
-        let minimum = minimums.map_or(0, |m| m[index]);
+        let ratio = i128::from(ratio);
+        let minimum = i128::from(minimums.map_or(0, |m| m[index]));
         let distributed = if total_ratio > 0 {
             // ceil(ratio * total_remaining / total_ratio) for positive values,
             // then floored at `minimum`.
@@ -1343,7 +1743,11 @@ fn ratio_distribute(total: i64, ratios: &[i64], minimums: Option<&[i64]>) -> Vec
         } else {
             total_remaining
         };
-        result.push(distributed);
+        result.push(i64::try_from(distributed).unwrap_or(if distributed < 0 {
+            i64::MIN
+        } else {
+            i64::MAX
+        }));
         total_ratio -= ratio;
         total_remaining -= distributed;
     }
@@ -1390,6 +1794,25 @@ fn collapse_widths(mut widths: Vec<i64>, wrapable: &[bool], max_width: i64) -> V
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_huge_column_ratio_does_not_overflow() {
+        // Python ints never overflow. Expected output captured from rich 15.0.0
+        // (`ratio=2**64 - 1`; the collapsed widths come out narrow there too).
+        let console = crate::Console::builder()
+            .width(40)
+            .color_system(None)
+            .build();
+        let mut table = Table::new().expand(true);
+        table.add_column("a").column_ratio(usize::MAX);
+        table.add_column("b").column_ratio(1);
+        table.add_row(&["x", "y"]);
+        assert_eq!(
+            console.render_to_string(&table) + "\n",
+            "┏━━━┳━━━┓\n┃ a ┃ b ┃\n┡━━━╇━━━┩\n│ x │ y │\n└───┴───┘\n"
+        );
+    }
+
     use super::*;
     use crate::color::ColorSystem;
     use crate::r#box::SQUARE;

@@ -1,8 +1,7 @@
 //! An explicit overflow policy for any renderable (#149).
 //!
-//! Core `Syntax` keeps each source line whole and lets it run past the width
-//! (the console's final crop is the only bound), while `Json` word-wraps like
-//! `Text`. [`Overflowing`] renders a renderable at its measured natural width
+//! Core `Syntax` crops each source line at the width (as upstream does), while
+//! `Json` word-wraps like `Text`. [`Overflowing`] renders a renderable at its measured natural width
 //! and then applies one [`OverflowPolicy`] to every line, so Syntax, JSON and
 //! Text share the same cell-aware wrap/fold/crop/ellipsis semantics. Output
 //! that already fits is returned untouched, byte for byte.
@@ -82,7 +81,20 @@ impl Renderable for Overflowing {
         // A padded block (Syntax's background) keeps every row solid, including
         // rows folded out of its widest line, which carried no padding itself.
         let trimmed: Vec<_> = lines.into_iter().map(trim_padding).collect();
-        let pad = trimmed.iter().find_map(|(_, pad)| pad.clone());
+        let pad = trimmed.iter().find_map(|(_, pad)| pad.clone()).map(|pad| {
+            // Rendered with `overflow="ignore"`, Syntax pads in its (often
+            // null) `background_style`, as upstream does; the theme background
+            // is on the code itself, so fill with that.
+            match pad.as_ref().and_then(Style::bgcolor) {
+                Some(_) => pad,
+                None => trimmed
+                    .iter()
+                    .flat_map(|(content, _)| content.iter())
+                    .find_map(|segment| segment.style.as_ref()?.bgcolor().cloned())
+                    .map(|bg| Style::new().with_bgcolor(bg))
+                    .or(pad),
+            }
+        });
         let mut out = Vec::new();
         for (index, (content, _)) in trimmed.iter().enumerate() {
             // An empty line folds to zero rows; keep it as one.

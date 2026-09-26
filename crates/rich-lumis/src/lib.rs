@@ -274,6 +274,32 @@ impl<'a> Lines<'a> {
     }
 }
 
+/// Pygments names that lumis does not know, mapped to the lumis language that
+/// highlights them. Code fences and `Syntax` use Pygments names (`shell`,
+/// `console`, `python3`), and the default syntect highlighter accepts them.
+fn lumis_language(name: &str) -> &str {
+    const ALIASES: &[(&str, &str)] = &[
+        ("shell", "bash"),
+        ("sh", "bash"),
+        ("zsh", "bash"),
+        ("ksh", "bash"),
+        ("console", "bash"),
+        ("shell-session", "bash"),
+        ("shellsession", "bash"),
+        ("python3", "python"),
+        ("py3", "python"),
+        ("golang", "go"),
+        ("patch", "diff"),
+        ("udiff", "diff"),
+        ("jsonc", "json"),
+        ("json5", "json"),
+    ];
+    ALIASES
+        .iter()
+        .find(|(alias, _)| alias.eq_ignore_ascii_case(name))
+        .map_or(name, |(_, target)| target)
+}
+
 impl CodeHighlighter for LumisHighlighter {
     fn highlight(
         &self,
@@ -285,7 +311,7 @@ impl CodeHighlighter for LumisHighlighter {
         let language = match language {
             // An unknown name highlights as plain text rather than guessing
             // from the content.
-            Some(name) => Language::guess(Some(name), ""),
+            Some(name) => Language::guess(Some(lumis_language(name)), ""),
             None => Language::PlainText,
         };
         let (theme, background, base) = match palette {

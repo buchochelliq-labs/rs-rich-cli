@@ -56,6 +56,15 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** make the strict form the default, renaming the lenient one to
   `*_lossy`.
 
+### 3a. `Style.meta` is a typed map, not marshal bytes
+- **Differs:** upstream stores `meta` as `marshal.dumps(dict)`; `Style` here
+  holds a `Meta` (string keys, `MetaValue` scalars and lists) kept in insertion
+  order, which gives the same equality (`{a, b}` ≠ `{b, a}`, `True` ≠ `1`),
+  combination (`{**a, **b}`) and truthiness. Non-marshal-able Python values have
+  no representation; `Style.from_meta`'s random `link_id` is not modelled (#20);
+  markup `[@handler]` tags do not produce meta.
+- **Why:** Rust has no marshal; the map round-trips what the bindings need.
+
 ### 3. Byte offsets in `Text` spans
 - **Differs:** upstream `Text` uses code-point offsets for spans; our `Text` uses
   byte offsets internally.
@@ -83,8 +92,10 @@ Format: what differs · why · how to remove it (if temporary).
 ### 6. Box substitution is opt-in (no legacy-terminal auto-detection)
 - **Differs:** `Box.substitute` **is** ported — `Box::substitute` maps the fancy
   boxes (`ROUNDED`/`HEAVY`/`HEAVY_HEAD`) to `SQUARE` when `legacy_windows` is set,
-  and any non-ASCII box to `ASCII` when `ascii_only` is set; `Panel`/`Table`
-  apply it. The `legacy_windows`/`safe_box`/`ascii_only` console flags exist. What
+  and any box drawn with non-ASCII glyphs to `ASCII` when `ascii_only` is set
+  (the built-in boxes upstream flags `ascii=True` are exactly the all-ASCII
+  ones); `Panel`/`Table` apply it, with their own `safe_box` over the
+  console's. The `legacy_windows`/`safe_box`/`ascii_only` console flags exist. What
   differs: those flags default **off** and are not auto-detected from the runtime
   terminal (upstream auto-detects legacy Windows / a non-UTF-8 encoding), so the
   default build always emits the requested glyphs.
@@ -100,7 +111,10 @@ Format: what differs · why · how to remove it (if temporary).
   per-column **style**, **`no_wrap`** (crop to one line with ellipsis), **ellipsis
   overflow** (the table default), a **table-level style**, `pad_edge`/`show_edge`/
   `collapse_padding`, title, caption, and `show_lines` are all ported and
-  byte-parity. The only residual: a *wrapping* column squeezed to width 0 by a
+  byte-parity, as are (0.0.12) the table `width`/`min_width`, footers,
+  `leading`, `row_styles`, row styles and sections, the header/footer/title/
+  caption styles and justification, `Text` annotations and `safe_box`
+  (`golden/api_gaps.tsv`). The only residual: a *wrapping* column squeezed to width 0 by a
   greedy `no_wrap` neighbor still renders its cell padding (upstream drops it) — a
   rare over-constrained case.
 - **Why:** the width-0 padding edge only appears when a table is narrower than its
@@ -139,12 +153,12 @@ Format: what differs · why · how to remove it (if temporary).
   #20. Covered by round-trip unit tests (a golden isn't possible precisely because
   upstream's `id=` is random).
 
-### 11. `Layout` — empty-leaf placeholder
-- **Differs:** an empty `Layout` leaf renders as blank space, not upstream's
-  interactive `_Placeholder` panel (which shows the layout name/size).
-- **Why:** the split/sizing/tiling core is the valuable part; the placeholder is
-  a debugging aid.
-- **Remove:** add a placeholder renderable under the Layout issue (#7).
+### 11. ~~`Layout` — empty-leaf placeholder~~ (resolved)
+- **Resolved:** an empty leaf renders upstream's `_Placeholder` panel (name,
+  size and highlighted repr), byte-parity in `upstream_features.tsv`, along with
+  `name`/`visible`, `split`/`add_split`/`unsplit`, lookup by name, `tree` and
+  `map`. `map` keys leaves by name and child-index path (Rust has no object
+  identity to key by). `refresh_screen` is not ported.
 - **Resolved:** height-aware leaves — `Panel` now consumes `options.height` and
   expands to fill its region (byte-parity), via `Console::render_lines`'s height
   handling. Other containers can adopt the same pattern as needed.
@@ -209,6 +223,11 @@ Format: what differs · why · how to remove it (if temporary).
   namespaces the CSS classes / element ids within one document.
 - **Remove:** add an `adler32`-of-`repr` default id only if a caller needs the
   exact auto-generated ids (rare); the explicit-id form already round-trips.
+- Links (`<a href>`), `code_format` (both exports, as Python format strings via
+  `export::format_template`) and SVG `font_aspect_ratio` are ported
+  (`export::export_html_with`, `svg::export_svg_with`, golden `core_gaps.tsv`).
+  A `code_format` using conversions or format specs (`{code!r}`, `{width:>5}`)
+  is refused with `ExportFormatError` rather than formatted.
 
 ### 16. `Progress` — columns, task model, pulse and live display done
 - **Resolved (0.0.10, core 0.0.6):** the time, rate and spinner columns and the
@@ -278,8 +297,16 @@ Format: what differs · why · how to remove it (if temporary).
   the token colors are **not byte-identical** to Python rich — this is the one
   renderable whose output is functional rather than golden-tested. The default
   theme is `base16-ocean.dark` (a syntect built-in), not rich's `ansi_dark`/
-  `monokai`. Line numbers, the `Syntax.from_path` loader, word-wrap/`line_range`,
-  and background-highlight ranges are not yet ported.
+  `monokai`. The `Syntax.from_path` loader and `dedent` are not yet ported.
+- **Upstream layout (0.0.x).** `line_numbers`, `start_line`, `line_range`,
+  `highlight_lines`, `code_width`, `background_color`, `indent_guides`,
+  `stylize_range`, 4-sided padding and unpadded lines for transparent themes
+  follow upstream's `_get_syntax`, golden-tested with the plain-text lexer and
+  `ansi_dark`. `CodeHighlighter::token_style` supplies the theme's `Text` and
+  `Comment` styles for line numbers and guides. The default case follows
+  upstream too: a long line is cropped at the width, and under
+  `overflow="ignore"` rows are padded in `background_style` (the theme
+  background stays on the code), as upstream does.
 - **Why:** Rust has no Pygments; `syntect` is the standard Rust equivalent
   (mirrors how `cells` delegates East-Asian-width to `unicode-width`). Byte-parity
   is impossible across highlighter engines.
@@ -408,6 +435,72 @@ Format: what differs · why · how to remove it (if temporary).
   depth) cost quadratic memory until the process was killed; a machine-dependent
   cutoff cannot be reproduced exactly.
 - **Remove:** not removable exactly; the constant can be tuned.
+
+### 27. ~~A `Text`'s trailing blank line is lost inside containers~~ (resolved)
+- **Resolved:** `Text` marks a final empty line with an empty segment, which
+  `Segment::split_lines` keeps, so `Padding(Text("a\n"))`, `Panel(Text("a\n\n"))`,
+  `Table` cells, `Tree` labels and `Align` keep the blank line as upstream does
+  (the rich-cli `--syntax` bottom pad that compensated for it was removed in the
+  same change).
+
+### 28. `AnsiDecoder::decode` splits lines like rich 12
+- **Differs:** `decode` splits with `str::lines` (Python's `splitlines` for
+  `\n`/`\r\n`), as rich 12.6 did; rich 15.0.0 splits after each `\n`, keeps a
+  `\r` before it (which then resets the line) and yields a final empty line
+  for text ending in a newline. `AnsiDecoder::decode_split_newlines` is the 15.0
+  behaviour, which `Text::from_ansi` uses.
+- **Why kept:** rich-cli's notebook rendering relies on the old split
+  (`notebook_group_uses_upstream_cell_spacing_and_output_execution_count`).
+- **Remove:** switch `decode` to the 15.0 split with that CLI path.
+
+### 29. Renderables cannot end without a newline when printed
+- **Differs:** `Console::print` always ends the output line, so `Rule(end=…)`
+  with an `end` that has no trailing newline, and a printed `LiveRender` (which
+  upstream ends without one), still end the line. Inside containers both match
+  upstream.
+- **Why:** the port's `Renderable` output separates lines and has no `end`.
+
+### 30. A lone surrogate in `Json` prints as U+FFFD without `ensure_ascii`
+- **Differs:** Python's `json` accepts an unpaired `\uD800`-`\uDFFF` escape,
+  and `json.dumps(ensure_ascii=False)` puts the surrogate itself in the
+  output. A Rust `String` cannot hold one, so the port prints U+FFFD in its
+  place. With `ensure_ascii` (re-escaped as `\ud800`) and for `sort_keys`
+  ordering and repeated-key detection the port is exact: strings are kept as
+  generalized UTF-8 until they are printed (golden `json_lone_surrogate_ascii`
+  in `audit_edges.tsv`).
+- **Why:** the rendered output is a Rust string; upstream's own output cannot
+  be written to a UTF-8 terminal either (`UnicodeEncodeError`).
+- **Remove:** not removable without non-UTF-8 output.
+
+### 31. Unknown style names in renderable options resolve to no style
+- **Differs:** upstream's `Console.get_style` raises `MissingStyle` for a name
+  that is neither in the theme nor parseable, so `Table(row_styles=["nope"])`,
+  `Panel(border_style="nope")` and the like fail at render time. Core's
+  renderables resolve every such option with `Theme::get_style_or_null` /
+  `console.get_style(..).unwrap_or_default()`, consistently: the unknown name
+  applies no style and the rest renders. (Style *strings* in markup and
+  `Text` spans are already silent upstream.)
+- **Why:** `Renderable::rich_render` has no error channel; `Style::parse` and
+  `Console::get_style` return errors for callers that want to validate first.
+- **Remove:** would need a fallible render path through every container.
+
+### 32. `Columns(width=0)` with no horizontal padding renders nothing
+- **Differs:** upstream computes `max_width // (width + padding)` and raises
+  `ZeroDivisionError` when both are zero. Core's `Columns` returns no output
+  for that case instead of panicking (the Python binding raises
+  `ZeroDivisionError` itself before calling core).
+- **Why:** `Renderable::rich_render` has no error channel (see §31).
+- **Remove:** would need a fallible render path.
+
+### 33. An invalid GFM delimiter row inside a list or quote stays a table
+- **Differs:** pulldown-cmark accepts delimiter rows markdown-it rejects (a
+  cell of a lone `:`, an empty cell between two others, a cell count that
+  differs from the header's). At the top level such a "table" is re-parsed as
+  the paragraph markdown-it prints (golden `gfm_invalid_delimiter_row`);
+  nested in a list item or block quote it still renders as a table.
+- **Why:** the re-parse works on the table's source range, which inside a
+  container still carries the container's markers.
+- **Remove:** strip the container prefixes from each line before re-parsing.
 
 ## Feature-flagged divergences
 

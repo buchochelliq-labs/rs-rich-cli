@@ -182,6 +182,22 @@ pub fn escape(markup: &str) -> String {
 /// *syntax* errors — an unmatched or mismatched closing tag. An unknown tag
 /// *name* is not an error: it renders as a no-op, as it does upstream.
 pub fn render(markup: &str) -> Result<Text> {
+    render_inner(markup, false)
+}
+
+/// [`render`] with `:emoji:` codes replaced, as upstream's
+/// `markup.render(emoji=True)` does: only in the text *between* tags, one
+/// chunk at a time, so tag names and parameters are left alone and a
+/// [`MarkupError`](RichError::Markup) position counts characters of the
+/// original string, not of the emoji-replaced one.
+///
+/// Callers handle a string with no `[` themselves: upstream replaces it whole,
+/// with the console's default variant, instead of parsing it.
+pub fn render_emoji(markup: &str) -> Result<Text> {
+    render_inner(markup, true)
+}
+
+fn render_inner(markup: &str, emoji: bool) -> Result<Text> {
     let mut plain = String::new();
     let mut raw_spans: Vec<RawSpan> = Vec::new();
     // Open tags, as `(normalized name, parameters, start offset)`. The name is
@@ -190,12 +206,17 @@ pub fn render(markup: &str) -> Result<Text> {
 
     for event in parse(markup)? {
         match event {
+            Event::Text(chunk) if emoji => push_plain(&mut plain, &crate::emoji::replace(&chunk)),
             Event::Text(chunk) => push_plain(&mut plain, &chunk),
             Event::Tag {
                 name: tag_name,
                 parameters,
-                position: i,
+                position,
             } => {
+                // Upstream reports the position in characters (a Python
+                // string index), not bytes. Counted only for an error: doing
+                // it per tag would make long markup quadratic.
+                let at = || markup[..position].chars().count();
                 if let Some(name) = tag_name.strip_prefix('/') {
                     let name = name.trim();
                     let end = plain.len();
@@ -203,7 +224,8 @@ pub fn render(markup: &str) -> Result<Text> {
                         // Auto-close: pop the most recent open tag, or error.
                         stack.pop().ok_or_else(|| {
                             RichError::Markup(format!(
-                                "closing tag '[/]' at position {i} has nothing to close"
+                                "closing tag '[/]' at position {} has nothing to close",
+                                at()
                             ))
                         })?
                     } else {
@@ -216,7 +238,8 @@ pub fn render(markup: &str) -> Result<Text> {
                             .rposition(|(open, _, _)| *open == wanted)
                             .ok_or_else(|| {
                                 RichError::Markup(format!(
-                                "closing tag '[/{name}]' at position {i} doesn't match any open tag"
+                                "closing tag '[/{name}]' at position {} doesn't match any open tag",
+                                at()
                             ))
                             })?;
                         stack.remove(pos)
@@ -297,6 +320,20 @@ pub fn render(markup: &str) -> Result<Text> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Error positions are character offsets into the original markup, and
+    /// emoji codes are replaced only between tags.
+    #[test]
+    fn error_positions_count_characters_of_the_original() {
+        let message = |source: &str| match render_emoji(source) {
+            Err(RichError::Markup(message)) => message,
+            other => panic!("{other:?}"),
+        };
+        assert!(message("é中[/i]").contains("position 2 "));
+        assert!(message(":smile: [/i]").contains("position 8 "));
+        assert_eq!(render_emoji("[b]:smile:[/b]").unwrap().plain(), "😄");
+        assert_eq!(render("[b]:smile:[/b]").unwrap().plain(), ":smile:");
+    }
     use crate::color::ColorSystem;
     use crate::theme::Theme;
 

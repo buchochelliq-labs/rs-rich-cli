@@ -3,14 +3,14 @@
 //! Port of upstream `rich/columns.py`. [`Columns`] packs items into as many
 //! equal-gap columns as fit the available width, filling row by row.
 //!
-//! Slice scope: string (markup), `Text` and renderable items with the default
-//! padding `(0, 1)`, laid out in upstream's box-less `Table.grid` (collapsed
-//! single-space gaps, no edge padding), plus `equal` and `expand`.
-//! `width`/`column_first`/`right_to_left`/`align`/`title` are deferred with
-//! the rest of `columns.py`.
+//! String (markup), `Text` and renderable items, laid out in upstream's
+//! box-less `Table.grid` (collapsed gaps, no edge padding), with every
+//! upstream option: `padding`, `width`, `expand`, `equal`, `column_first`,
+//! `right_to_left`, `align` and `title`.
 
 use std::sync::Arc;
 
+use crate::align::{Align, HorizontalAlign};
 use crate::console::{Console, ConsoleOptions};
 use crate::measure::Measurement;
 use crate::protocol::Renderable;
@@ -24,6 +24,11 @@ pub struct Columns {
     padding: (usize, usize, usize, usize),
     expand: bool,
     equal: bool,
+    width: Option<usize>,
+    column_first: bool,
+    right_to_left: bool,
+    align: Option<HorizontalAlign>,
+    title: Option<String>,
 }
 
 impl Columns {
@@ -42,7 +47,58 @@ impl Columns {
             padding: (0, 1, 0, 1),
             expand: false,
             equal: false,
+            width: None,
+            column_first: false,
+            right_to_left: false,
+            align: None,
+            title: None,
         }
+    }
+
+    /// Add an item. Port of `Columns.add_renderable`.
+    pub fn add_renderable(&mut self, item: impl Into<Cell>) -> &mut Self {
+        self.items.push(item.into());
+        self
+    }
+
+    /// Padding around each cell as `(top, right, bottom, left)` (upstream
+    /// `padding`, default `(0, 1)`); the gap between columns is the larger of
+    /// left and right.
+    pub fn padding(mut self, padding: (usize, usize, usize, usize)) -> Self {
+        self.padding = padding;
+        self
+    }
+
+    /// A fixed width for every column (upstream `width`): as many columns as
+    /// `max_width // (width + gap)`.
+    pub fn width(mut self, width: usize) -> Self {
+        self.width = Some(width);
+        self
+    }
+
+    /// Fill columns top to bottom rather than rows left to right (upstream
+    /// `column_first`).
+    pub fn column_first(mut self, column_first: bool) -> Self {
+        self.column_first = column_first;
+        self
+    }
+
+    /// Lay each row out from the right (upstream `right_to_left`).
+    pub fn right_to_left(mut self, right_to_left: bool) -> Self {
+        self.right_to_left = right_to_left;
+        self
+    }
+
+    /// Align every item within its column (upstream `align`).
+    pub fn align(mut self, align: HorizontalAlign) -> Self {
+        self.align = Some(align);
+        self
+    }
+
+    /// A title (console markup) above the columns (upstream `title`).
+    pub fn title(mut self, title: impl Into<String>) -> Self {
+        self.title = Some(title.into());
+        self
     }
 
     /// Expand columns to the full width (upstream `expand`).
@@ -58,24 +114,56 @@ impl Columns {
     }
 }
 
-/// The width sequence for `column_count`: item widths, then zero-padded so the
-/// final row is complete. Port of the non-`column_first` branch of
-/// `iter_renderables`.
-fn iter_widths(widths: &[usize], column_count: usize) -> Vec<usize> {
-    let mut sequence = widths.to_vec();
-    let remainder = widths.len() % column_count;
+/// The item order for `column_count` columns, `None` padding the final row
+/// so it is complete. Port of `iter_renderables`.
+fn iter_order(item_count: usize, column_count: usize, column_first: bool) -> Vec<Option<usize>> {
+    let mut order: Vec<Option<usize>> = if column_first {
+        let mut column_lengths = vec![item_count / column_count; column_count];
+        for length in column_lengths.iter_mut().take(item_count % column_count) {
+            *length += 1;
+        }
+        let row_count = item_count.div_ceil(column_count);
+        let mut cells = vec![vec![None; column_count]; row_count];
+        let (mut row, mut col) = (0, 0);
+        for index in 0..item_count {
+            cells[row][col] = Some(index);
+            column_lengths[col] -= 1;
+            if column_lengths[col] > 0 {
+                row += 1;
+            } else {
+                col += 1;
+                row = 0;
+            }
+        }
+        // `if index == -1: break` at the first gap.
+        cells
+            .into_iter()
+            .flatten()
+            .map_while(|index| index.map(Some))
+            .collect()
+    } else {
+        (0..item_count).map(Some).collect()
+    };
+    let remainder = item_count % column_count;
     if remainder != 0 {
-        sequence.resize(widths.len() + (column_count - remainder), 0);
+        order.resize(order.len() + (column_count - remainder), None);
     }
-    sequence
+    order
 }
 
 /// Choose the largest column count whose total width fits `max_width`.
 /// Direct port of the width-fitting `while` loop in `Columns.__rich_console__`.
-fn compute_column_count(widths: &[usize], max_width: usize, width_padding: usize) -> usize {
+fn compute_column_count(
+    widths: &[usize],
+    max_width: usize,
+    width_padding: usize,
+    column_first: bool,
+) -> usize {
     let mut column_count = widths.len();
     while column_count > 1 {
-        let sequence = iter_widths(widths, column_count);
+        let sequence = iter_order(widths.len(), column_count, column_first)
+            .into_iter()
+            .map(|index| index.map_or(0, |index| widths[index]));
         let mut columns: Vec<usize> = Vec::new();
         let mut column_no = 0usize;
         let mut broke = false;
@@ -131,7 +219,44 @@ impl Renderable for Columns {
             widths = vec![widest; widths.len()];
         }
 
-        let column_count = compute_column_count(&widths, options.max_width, width_padding);
+        let mut table = Table::grid()
+            .padding(top, right, bottom, left)
+            .collapse_padding(true)
+            .pad_edge(false)
+            .expand(self.expand);
+        if let Some(title) = &self.title {
+            table = table.title(title.clone());
+        }
+        let column_count = match self.width {
+            Some(width) => {
+                // Upstream divides by zero columns only to fail later; a
+                // single column is the nearest working layout. A zero width
+                // with no horizontal padding is `ZeroDivisionError` upstream
+                // (the divisor itself is zero); core renders nothing rather
+                // than panic (docs/DIVERGENCES.md).
+                let Some(column_count) = options.max_width.checked_div(width + width_padding)
+                else {
+                    return Vec::new();
+                };
+                let column_count = column_count.max(1);
+                for _ in 0..column_count {
+                    table.add_column("").column_width(width);
+                }
+                column_count
+            }
+            None => {
+                let column_count = compute_column_count(
+                    &widths,
+                    options.max_width,
+                    width_padding,
+                    self.column_first,
+                );
+                for _ in 0..column_count {
+                    table.add_column("");
+                }
+                column_count
+            }
+        };
 
         // Upstream yields the items in
         // `Table.grid(padding=self.padding, collapse_padding=True, pad_edge=False)`,
@@ -139,39 +264,59 @@ impl Renderable for Columns {
         // With `equal`, upstream wraps each item in `Constrain(renderable,
         // renderable_widths[0])`; for text items that is a no-op, since no item
         // measures wider than the constraint, so only renderables are wrapped.
-        let mut table = Table::grid()
-            .padding(top, right, bottom, left)
-            .collapse_padding(true)
-            .pad_edge(false)
-            .expand(self.expand);
-        for _ in 0..column_count {
-            table.add_column("");
-        }
-        let mut cells = renderables;
-        if self.equal {
-            let width = widths.first().copied().unwrap_or(0);
-            for cell in &mut cells {
-                if let Cell::Renderable(renderable) = cell {
-                    *cell = Cell::Renderable(Arc::new(ConstrainCell {
-                        renderable: renderable.clone(),
-                        width,
-                    }));
+        let equal_width = widths.first().copied().unwrap_or(0);
+        let cells: Vec<Cell> = iter_order(renderables.len(), column_count, self.column_first)
+            .into_iter()
+            .map(|index| {
+                // `None` pads the last row: `Table.add_row` renders an empty cell.
+                let Some(index) = index else {
+                    return Cell::Markup(String::new());
+                };
+                let mut cell = renderables[index].clone();
+                if self.equal {
+                    if let Cell::Renderable(renderable) = &cell {
+                        cell = Cell::Renderable(Arc::new(ConstrainCell {
+                            renderable: renderable.clone(),
+                            width: equal_width,
+                        }));
+                    }
                 }
-            }
-        }
-        let remainder = cells.len() % column_count;
-        if remainder != 0 {
-            // `iter_renderables` pads the last row with `None`, which
-            // `Table.add_row` renders as an empty cell.
-            cells.resize(
-                cells.len() + (column_count - remainder),
-                Cell::Markup(String::new()),
-            );
-        }
+                if let Some(align) = self.align {
+                    let child: Arc<dyn Renderable + Send + Sync> = match cell {
+                        Cell::Renderable(renderable) => renderable,
+                        Cell::Text(text) => Arc::new(text),
+                        Cell::Markup(markup) => Arc::new(console.render_str(&markup, None)),
+                    };
+                    cell = Cell::Renderable(Arc::new(AlignCell { child, align }));
+                }
+                cell
+            })
+            .collect();
         for row in cells.chunks(column_count) {
-            table.add_row_cells(row.to_vec());
+            let mut row = row.to_vec();
+            if self.right_to_left {
+                row.reverse();
+            }
+            table.add_row_cells(row);
         }
         table.rich_render(console, options)
+    }
+}
+
+/// `Align(renderable, align)` around a shared cell renderable (the `align`
+/// path).
+struct AlignCell {
+    child: Arc<dyn Renderable + Send + Sync>,
+    align: HorizontalAlign,
+}
+
+impl Renderable for AlignCell {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        Align::render_child(self.child.as_ref(), self.align, console, options)
+    }
+
+    fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+        Measurement::get(console, options, self.child.as_ref())
     }
 }
 

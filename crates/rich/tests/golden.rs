@@ -478,6 +478,12 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
         "panel_tiny_title" => Box::new(Panel::new(Box::new(Text::new("x")))
             .title("[bold red]T[/]").subtitle("[green]S[/]")),
         "panel_plain" => Box::new(Panel::new(Box::new(Text::new("hello")))),
+        "padding_text_trailing_blank" => Box::new(rich::padding::Padding::symmetric(
+            Box::new(Text::new("a\n")),
+            0,
+            1,
+        )),
+        "panel_text_trailing_blanks" => Box::new(Panel::new(Box::new(Text::new("a\n\n")))),
         "panel_title" => Box::new(Panel::new(Box::new(Text::new("hello"))).title("T")),
         "panel_title_left" => Box::new(
             Panel::new(Box::new(Text::new("x")))

@@ -20,12 +20,28 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rich = { package = "rs-rich", path = "../rich" }
+# Everything the Rust crates expose is exposed to Python (0.0.12 workstream 8).
+rich-ext = { package = "rs-rich-ext", path = "../rich-ext", features = ["data", "yaml", "toml", "xml", "jsonpath", "test-report", "serde", "testing"] }
+rich-art = { package = "rs-rich-art", path = "../rich-art", features = ["image", "gif", "sixel"] }
+rich-mermaid = { package = "rs-rich-mermaid", path = "../rich-mermaid" }
+rich-plugin-api = { package = "rs-rich-plugin-api", path = "../rich-plugin-api" }
+# The `rich` command line, run in-process by `python -m rs_rich` (default features, `fetch` included).
+rich-cli = { package = "rs-rich-cli", path = "../rich-cli" }
+# The tree-sitter highlighter: a separate, much larger wheel.
+rich-lumis = { package = "rs-rich-lumis", path = "../rich-lumis", optional = true }
+# rich-ext's reports and assertions, as its `testing` feature serialises them.
+serde = "1"
+serde_json = "1"
 # One abi3 wheel per platform covers CPython 3.9 and later.
 pyo3 = { version = "0.29", features = ["abi3-py39"] }
 
 [features]
 # maturin turns this on for wheels; plain `cargo check` leaves it off.
 extension-module = ["pyo3/extension-module"]
+# Mermaid's `mmdc` backend (needs Mermaid's CLI installed separately).
+mmdc = ["rich-mermaid/mmdc"]
+# `lumis` as a code highlighter; built as its own wheel.
+lumis = ["dep:rich-lumis", "rich-cli/lumis"]
 
 # Its own workspace root, so the repository's workspace never builds it.
 [workspace]

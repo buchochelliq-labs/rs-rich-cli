@@ -564,6 +564,56 @@ fn untitled_trees_start_at_the_roots_and_long_lines_end_in_an_ellipsis() {
 }
 
 #[test]
+fn a_ten_thousand_deep_chain_builds_cancels_and_renders() {
+    let clock = ManualClock::new();
+    let mut tree = TaskTree::with_clock(clock);
+    let mut parent = None;
+    let mut ids = Vec::new();
+    for _ in 0..10_000 {
+        let id = tree.add(parent, "x");
+        ids.push(id);
+        parent = Some(id);
+    }
+    let leaf = parent.unwrap();
+    tree.start(leaf);
+    assert_eq!(tree.state(ids[0]), State::Running);
+    let out = plain(20, &tree);
+    assert_eq!(out.lines().count(), 10_000);
+    assert!(out.lines().all(|l| l.chars().count() <= 20), "cropped");
+    // Deep lines are all guide, cut with an ellipsis.
+    assert_eq!(out.lines().last().unwrap(), format!("{}…", " ".repeat(19)));
+    tree.cancel(ids[0]);
+    assert!(tree.token(leaf).is_cancelled());
+    assert_eq!(tree.state(leaf), State::Cancelled);
+    assert_eq!(tree.overall(), State::Cancelled);
+    drop(tree);
+}
+
+#[test]
+fn a_frozen_guide_prefix_renders_like_the_full_one() {
+    // Past the width the guide stops growing; the cropped lines match the
+    // ones a full-length prefix would give.
+    let mut tree = TaskTree::with_clock(ManualClock::new());
+    let mut parent = None;
+    for _ in 0..12 {
+        let id = tree.add(parent, "task");
+        tree.add(parent, "sibling");
+        parent = Some(id);
+    }
+    let narrow = plain(18, &tree);
+    let wide = plain(200, &tree);
+    for (narrow, wide) in narrow.lines().zip(wide.lines()) {
+        let wide = wide.trim_end();
+        if wide.chars().count() <= 18 {
+            assert_eq!(narrow.trim_end(), wide);
+        } else {
+            let kept: String = wide.chars().take(17).collect();
+            assert_eq!(narrow, format!("{kept}…"));
+        }
+    }
+}
+
+#[test]
 fn parents_aggregate_their_children() {
     let clock = ManualClock::new();
     let mut tree = TaskTree::with_clock(clock);

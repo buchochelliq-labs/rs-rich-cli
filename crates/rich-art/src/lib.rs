@@ -80,8 +80,8 @@ pub use crate::sixel::SixelArt;
 
 #[cfg(feature = "image")]
 pub use crate::image_art::{
-    ImageAnchor, ImageArt, ImageArtError, ImageBackground, ImageFit, ImageMode, ImageOptions,
-    RenderCapabilities,
+    check_cell_budget, ImageAnchor, ImageArt, ImageArtError, ImageBackground, ImageFit, ImageMode,
+    ImageOptions, RenderCapabilities, MAX_CELLS,
 };
 
 #[cfg(feature = "image")]

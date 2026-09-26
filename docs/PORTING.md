@@ -19,64 +19,66 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 
 | upstream `rich/…`                     | rust `crates/rich/src/…` | status | parity |
 |---------------------------------------|--------------------------|:------:|:------:|
-| `color.py`, `color_triplet.py`, `_palettes.py`, `palette.py` | `color.rs` | 🟡 | ✅ truecolor + 8-bit + standard |
-| `style.py`                            | `style.rs`               | 🟡 | ✅ |
+| `color.py`, `color_triplet.py`, `_palettes.py`, `palette.py` | `color.rs` | 🟡 | ✅ truecolor + 8-bit + standard; `windows` downgrade through `WINDOWS_PALETTE` and bare `grey`/`gray` rejected (`audit2.tsv`) |
+| `style.py`                            | `style.rs`               | 🟡 | ✅ (+ `meta`: an insertion-ordered `Meta` map instead of marshal bytes) |
 | `cells.py`, `_cell_widths.py`         | `cells.rs`               | 🟢 | ✅ 0 / 127,754 codepoints |
-| `segment.py`                          | `segment.rs`             | 🟡 | — |
-| `markup.py`                           | `markup.rs`              | 🟡 | ✅ |
-| `text.py` (+ justify, overflow)       | `text.rs`                | 🟡 | ✅ |
+| `segment.py`                          | `segment.rs`             | 🟡 | `split_and_crop_lines`/`adjust_line_length` crop (newline inside a segment, zero-width past the edge: `audit2.tsv` + unit tests) |
+| `markup.py`                           | `markup.rs`              | 🟡 | ✅ (error positions in characters of the original string, per-chunk emoji: `audit2.tsv`) |
+| `text.py` (+ justify, overflow, `tab_size`) | `text.rs`          | 🟡 | ✅ (+ `core_gaps.tsv`: tab stops, justify-padding runs; `upstream_features.tsv`: `with_indent_guides`, `detect_indentation`, `from_ansi(style=…)`, `stylize_before`; `audit2.tsv`: span sweep over many lines, empty spans, explicit `justify="default"`, `splitlines`/`isspace` measurement) |
 | `_wrap.py`                            | `wrap.rs`                | 🟢 | ✅ 0 / 30,680 wrap cases |
 | `theme.py`, `themes.py`, `default_styles.py` | `theme.rs` | 🟢 | ✅ (theme stack and theme files since core 0.0.6) |
 | `terminal_theme.py` | `terminal_theme.rs` | 🟡 | ✅ |
-| `console.py` (+ `ConsoleOptions`, `render_lines`) | `console.rs`  | 🟡 | ✅ (+ `no_color.tsv`: colour removal, exports) |
+| `console.py` (+ `ConsoleOptions`, `render_lines`, `render`, `render_str`) | `console.rs`  | 🟡 | ✅ (+ `no_color.tsv`: colour removal, exports; `core_gaps.tsv`: `render`, `render_str` keywords, `tab_size`, `emoji_variant`, `markup`; `upstream_features.tsv`: `print(justify=…)` wraps renderables in `Align`) |
 | `protocol.py`, `abc.py`, `_extension.py` | `protocol.rs`         | 🟡 | — |
 | `measure.py` (+ `Renderable::measure`, fit, `Measurement.get`) | `measure.rs`       | 🟡 | ✅ `Syntax`/`JSON` measurement golden (`measure.tsv`); container `__rich_measure__` (`measure_renderables.tsv`) |
 | `errors.py`                           | `errors.rs`              | 🟡 | — |
-| `control.py`                          | `control.rs`             | 🟢 | ✅ |
+| `control.py`                          | `control.rs`             | 🟢 | ✅ (`alt_screen` homes the cursor; `title`) |
 | `ansi.py`                             | `ansi.rs`                | 🟡 | ✅ |
 | `highlighter.py` (Regex/Repr/ISO8601) | `highlighter.rs`         | 🟡 | ✅ |
-| `scope.py`, `region.py`, `containers.py` | (tbd)                 | ⬜ | — |
+| `containers.py` (`Renderables`)       | `containers.rs`          | 🟡 | ✅ via `LogRender` (`core_gaps.tsv`) |
+| `region.py`                           | `region.rs`              | ✅ | via `Layout` regions (`upstream_features.tsv`) |
+| `scope.py`                            | (tbd)                    | ⬜ | — |
 
 ## Widgets & layout
 
 | upstream `rich/…` | rust file | status | parity |
 |-------------------|-----------|:------:|:------:|
 | `box.py` (all boxes, `substitute`, `get_plain_headed_box`) | `box.rs` | 🟢 | ✅ |
-| `rule.py` | `rule.rs` | 🟡 | ✅ |
-| `padding.py` | `padding.rs` | 🟡 | ✅ |
-| `panel.py` | `panel.rs` | 🟡 | ✅ |
-| `align.py` | `align.rs` | 🟡 | ✅ |
+| `rule.py` | `rule.rs` | ✅ | ✅ (+ `upstream_features.tsv`: `end`, `style` names, `Text` titles, ASCII fallback) |
+| `padding.py` | `padding.rs` | 🟡 | ✅ (+ `expand`, `indent`, height in `core_gaps.tsv`) |
+| `panel.py` | `panel.rs` | 🟡 | ✅ (+ `upstream_features.tsv`: `style`, `height`, `Text` titles; `api_gaps.tsv`: `Text` subtitles, `safe_box`; `audit_edges.tsv`: `width=0`) |
+| `align.py` | `align.rs` | 🟡 | ✅ (+ `vertical`, `style`, `pad`, `width`, `height`, `VerticalCenter`, table-cell `vertical` in `core_gaps.tsv`) |
 | `constrain.py` | `constrain.rs` | 🟡 | ✅ |
-| `table.py` | `table.rs` | 🟡 | ✅ (renderable cells via `Cell`, `ColumnOptions`, markup `str` cells, `__rich_measure__`) |
-| `columns.py` | `columns.rs` | 🟡 | ✅ (markup/`Text`/renderable items) |
-| `tree.py` | `tree.rs` | 🟡 | ✅ (markup labels, `__rich_measure__`) |
-| `layout.py` | `layout.rs` | 🟡 | ✅ |
+| `table.py` | `table.rs` | 🟡 | ✅ (renderable cells via `Cell`, `ColumnOptions`, markup `str` cells, `__rich_measure__`; `api_gaps.tsv`: `width`, `min_width`, footers, `leading`, `row_styles`, row styles and sections, header/footer/title/caption styles and justification, `Text` annotations, `safe_box`, extra cells adding columns) |
+| `columns.py` | `columns.rs` | ✅ | ✅ (markup/`Text`/renderable items; `upstream_features.tsv`: `padding`, `width`, `column_first`, `right_to_left`, `align`, `title`) |
+| `tree.py` | `tree.rs` | ✅ | ✅ (markup labels, `__rich_measure__`; `upstream_features.tsv`: `style`, `guide_style` heavy/double/ASCII guides, `expanded`, `hide_root`, `highlight`) |
+| `layout.py` | `layout.rs` | 🟡 | ✅ (+ `upstream_features.tsv`: `name`/`visible`, `split`/`add_split`/`unsplit`, lookup, placeholder panel, `tree`, `map`); `refresh_screen` with `Console::update_screen`/`update_screen_lines` (`api_gaps.tsv`); `size=0` is flexible and `ratio_resolve` is exact (`audit_edges.tsv`) |
 | `styled.py` | `styled.rs` | 🟢 | ✅ |
 | `screen.py` | `screen.rs` | 🟡 | — |
 | `progress_bar.py` | `progress_bar.rs` | 🟢 | ✅ `bar_*`, `progress_three`, `progress_bar.tsv` (pulse, ASCII, no-colour) |
-| `bar.py` | `bar.rs` | 🟡 | ✅ |
+| `bar.py` | `bar.rs` | 🟡 | ✅ (+ `color`/`bgcolor` in `core_gaps.tsv`) |
 
 ## Live & progress
 
 | upstream `rich/…` | rust file | status | parity |
 |-------------------|-----------|:------:|--------|
-| `progress.py` | `progress.rs` + `pyformat.rs` | 🟡 | ✅ `progress_time.tsv` step programs (columns incl. `TextColumn`/`RenderableColumn`, fields, pulse, task API, clock, expand, table-column options, `bar_width=None`), `progress_live.tsv` (live stream, transient, disable, non-terminal) |
-| `spinner.py`, `_spinners.py` (full table) | `spinner.rs` | 🟡 | ✅ `live_status.tsv` (start at first render, `update`, markup text, console clock, measure) |
+| `progress.py` | `progress.rs` + `pyformat.rs` | 🟡 | ✅ `progress_time.tsv` step programs (columns incl. `TextColumn`/`RenderableColumn`, fields, pulse, task API, clock, expand, table-column options, `bar_width=None`), `progress_live.tsv` (live stream, transient, disable, non-terminal); user-defined columns (`CustomProgressColumn`, `upstream_features.tsv`) |
+| `spinner.py`, `_spinners.py` (full table; public via `spinner_names`/`spinner_frames`) | `spinner.rs` | 🟡 | ✅ `live_status.tsv` (start at first render, `update`, markup text, console clock, measure) |
 | `status.py` | `status.rs` | 🟡 | ✅ `live_status.tsv` (frames, `update`, console clock) |
-| `live_render.py` | `live_render.rs` | 🟡 | ✅ `live_status.tsv` (`position_cursor`/`restore_cursor`, style, wrap) |
+| `live_render.py` | `live_render.rs` | ✅ | ✅ `live_status.tsv` (`position_cursor`/`restore_cursor`, style, wrap); `vertical_overflow` (`upstream_features.tsv`; height 0 in `audit_edges.tsv`) |
 | `live.py` | `live.rs` | 🟡 | ✅ `progress_live.tsv` (start/refresh/stop stream); auto-refresh timing by unit tests |
 
 ## Content renderers
 
 | upstream `rich/…` | rust file | status | notes |
 |-------------------|-----------|:------:|-------|
-| `syntax.py` | `syntax.rs` | 🟡 | functional via `syntect` (non-parity, DIVERGENCES #18); `__rich_measure__` is parity-tested; not upstream: `Syntax::highlighter`, `Syntax::highlight_for` and a console-wide default engine (`ConsoleCodeHighlighting`), unused by default; adapters are checked by `rich_ext::testing::conformance` |
-| `markdown.py` | `markdown.rs` | 🟡 | paragraphs/headings/inline/lists/quotes/code/links (both `hyperlinks` modes) + images (including table-cell hoisting and adjacency) + **GFM tables** via `pulldown-cmark`, with inline styling inside cells (golden `markdown_table_inline`); constructor options `justify`/`style` (golden `markdown_options`), `code_theme`/`inline_code_lexer`/`inline_code_theme` (syntect); not upstream: `Markdown::highlighter` and `Markdown::fence_renderer` extension points, unused by default |
-| `json.py` | `json.rs` | 🟡 | ✅ default layout, arbitrary integers, Python float `repr` and overflowing exponents; optional escape-safe layout is off by default (DIVERGENCES §22) |
+| `syntax.py` | `syntax.rs` | 🟡 | functional via `syntect` (non-parity, DIVERGENCES #18); `__rich_measure__` is parity-tested; `line_numbers`, `start_line`, `line_range`, `highlight_lines`, `code_width`, `background_color`, `indent_guides`, `stylize_range`, 4-sided padding and unpadded transparent themes are golden-tested with `ansi_dark` (`upstream_features.tsv`; signed line numbers, ranges and positions and `highlight(code, line_range)` in `api_gaps.tsv`; line numbers past 64 bits in `audit_edges.tsv`); `dedent`/`from_path` not ported; not upstream: `Syntax::highlighter`, `Syntax::highlight_for` and a console-wide default engine (`ConsoleCodeHighlighting`), unused by default; adapters are checked by `rich_ext::testing::conformance` |
+| `markdown.py` | `markdown.rs` | 🟡 | paragraphs/headings/inline/lists/quotes/code/links (both `hyperlinks` modes) + images (including table-cell hoisting and adjacency) + **GFM tables** via `pulldown-cmark`, with inline styling inside cells (golden `markdown_table_inline`); constructor options `justify`/`style` (golden `markdown_options`), inherited `overflow`/`no_wrap`/`justify` and markdown-it's delimiter-row rules (`audit2.tsv`), `code_theme`/`inline_code_lexer`/`inline_code_theme` (syntect); not upstream: `Markdown::highlighter` and `Markdown::fence_renderer` extension points, unused by default |
+| `json.py` | `json.rs` | 🟡 | ✅ default layout, arbitrary integers, Python float `repr` and overflowing exponents; `JsonOptions` (`indent`, `sort_keys`, `ensure_ascii`, `allow_nan`, `highlight`) and print `justify`/`overflow`/`no_wrap` (`core_gaps.tsv`); lone surrogate escapes under `ensure_ascii` (`audit_edges.tsv`; without it see DIVERGENCES §30); optional escape-safe layout is off by default (DIVERGENCES §22) |
 | `pretty.py` | `pretty.rs` | 🟡 | Rust-native (`Debug` + repr highlight, #19) |
 | `repr.py`, `_inspect.py` | resp. | ⬜ | need Rust reflection — see #19 |
 | `traceback.py` | `traceback.rs` | 🟡 | Rust-native (error `source()` chain, #19) |
-| `_log_render.py` | `log_render.rs` | 🟡 | ✅ `log_render.tsv`; takes a pre-formatted time (DIVERGENCES §19) |
+| `_log_render.py` | `log_render.rs` | 🟡 | ✅ `log_render.tsv`, renderable messages (`render_renderables`) in `core_gaps.tsv`; takes a pre-formatted time (DIVERGENCES §19) |
 | `logging.py` (log::Log handler) | `rich-ext` `log_handler.rs` | 🟡 | `RichHandler` over the `log`/`tracing` adapters; UTC default time, no rich tracebacks (DIVERGENCES §19) |
 
 ## Utilities & platform
@@ -93,22 +95,23 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `jupyter.py`, `file_proxy.py`, `diagnose.py`, `_fileno.py`, `_null_file.py` | resp. | ⬜ |
 | `_ratio.py` (`ratio_resolve`) | `ratio.rs` | 🟡 | ✅ |
 | `_loop.py`, `_pick.py`, `_stack.py`, `_timer.py` | internal helpers | ⬜ |
-| `_export_format.py`, `Console.export_html` | `export.rs` | 🟡 | ✅ |
+| `_export_format.py`, `Console.export_html` | `export.rs` | 🟡 | ✅ (links, `code_format`, SVG `font_aspect_ratio` in `core_gaps.tsv`; extreme and non-finite ratios in `audit_edges.tsv`) |
 
 ## `rich-cli` (tool — tracks upstream 1.8.1, see UPSTREAM.toml)
 
 | upstream feature | rust `crates/rich-cli/src/…` | status |
 |------------------|------------------------------|:------:|
-| arg parsing, plain-file print, capability demo | `main.rs` | 🟡 |
-| `--print` / `--markdown` / `--json` / `--syntax` / `--csv` / `--rule`, width + justify, stdin, extension auto-detect | `main.rs` | 🟡 |
-| `csv`/`tsv` table render (blue border, numeric-column bold-green, quoted-field parse, `csv.Sniffer`) | `main.rs` | 🟡 sniffer agrees with CPython's on 42/42 samples |
-| HTML export (`--export-html`) + SVG export (`--export-svg`) | `main.rs` | 🟡 both done |
-| `--panel`/`--padding` decorators (+ title/caption/style), `--ipynb`, URL fetch (`fetch` feature) | `main.rs` | 🟡 done |
-| paging (`--pager`) | `pager.rs` + `main.rs` | 🟡 done |
-| preferred subcommands (`print`, `markdown`, `syntax`, `json`, `csv`/`tsv`, `ipynb`, `jsonl`, `log`, `gif`, `diff`, `image`, `rule`) while preserving flat flags | `main.rs` | 🟡 done; `image` is a local rich-art convenience, and the tool commands (`inspect`, `ansi explain`, `view`, …) are listed under the conveniences below |
-| stable exit-code classes and `--report json` / `--machine-json` result/error envelopes | `main.rs` | 🟡 done |
-| JSONL / NDJSON and structured-log streaming from files/stdin | `main.rs` | 🟡 done |
-| 0.0.7 binary-boundary `--watch` polling for files and fetch-enabled URLs | `main.rs` | 🟡 done; deliberate CLI convenience |
+| arg parsing, plain-file print, capability demo | `lib.rs` | 🟡 |
+| rendering options not yet ported: `--head`/`--tail`, `-n`/`--line-numbers`, `--guides`, `--lexer`, `--emoji`, `--soft`, `--no-wrap`, `--max-width`, `--text-left`/`-center`/`-right`/`-full`, `--rule-style`, `--rule-char`, `--rst`, `--force-terminal`, and most short aliases (`-d -a -c -l -r -u -t -v`); upstream's `-h` is `--head`, which clashes with `-h` for help here | `lib.rs` | 🔴 planned for 0.0.13 (#542) |
+| `--print` / `--markdown` / `--json` / `--syntax` / `--csv` / `--rule`, width + justify, stdin, extension auto-detect | `lib.rs` | 🟡 |
+| `csv`/`tsv` table render (blue border, numeric-column bold-green, quoted-field parse, `csv.Sniffer`) | `lib.rs` | 🟡 sniffer agrees with CPython's on 42/42 samples |
+| HTML export (`--export-html`) + SVG export (`--export-svg`) | `lib.rs` | 🟡 both done |
+| `--panel`/`--padding` decorators (+ title/caption/style), `--ipynb`, URL fetch (`fetch` feature) | `lib.rs` | 🟡 done |
+| paging (`--pager`) | `pager.rs` + `lib.rs` | 🟡 done |
+| preferred subcommands (`print`, `markdown`, `syntax`, `json`, `csv`/`tsv`, `ipynb`, `jsonl`, `log`, `gif`, `diff`, `image`, `rule`) while preserving flat flags | `lib.rs` | 🟡 done; `image` is a local rich-art convenience, and the tool commands (`inspect`, `ansi explain`, `view`, …) are listed under the conveniences below |
+| stable exit-code classes and `--report json` / `--machine-json` result/error envelopes | `lib.rs` | 🟡 done |
+| JSONL / NDJSON and structured-log streaming from files/stdin | `lib.rs` | 🟡 done |
+| 0.0.7 binary-boundary `--watch` polling for files and fetch-enabled URLs | `lib.rs` | 🟡 done; deliberate CLI convenience |
 
 ### Binary-boundary conveniences (not upstream `rich-cli`)
 
@@ -120,22 +123,22 @@ core mirror is untouched and a sync does not have to reconcile them.
 
 | convenience | rust `crates/rich-cli/src/…` | rationale |
 |-------------|------------------------------|-----------|
-| `--demo` and `--demo-delay` | `demo.rs` + `main.rs` | bounded, offline tour composes existing public renderers and CLI workflows; uses temporary examples and restores terminal state on interruption |
-| batch planning and `--dry-run`, with `--jobs` concurrency for file exports | `batch.rs` + `main.rs` | subprocess workers reuse the single-resource renderer; disk-spooled output is replayed in input order; terminal-only batches remain serial |
-| strict TOML profiles, inverse booleans, `config show` / `config validate` | `config.rs` + `main.rs` | validated defaults/profile/CLI precedence and JSON inspection compose existing options without changing core; a working-directory `rich.toml` cannot turn colour back on against `NO_COLOR` (the user's config, `--config` and `--color` can) |
-| `--auto-pager` and `--no-pager` | `main.rs` | CLI destination/height policy composes public pager APIs; redirected stdout is never paged |
-| `--image-anchor` for still-image cover fitting | `main.rs` | routes to public `rich-art::ImageArt::anchor`; crop implementation and `ImageAnchor` remain in art |
-| multi-file `--watch` with `--watch-debounce`, `--watch-poll`, `--watch-exit-on-error` (0.0.10, #139) | `watch.rs` + `main.rs` + `config.rs` | `notify` file events on each parent directory, polling fallback; several files repaint as public `rich-ext` `LiveCoordinator` regions; no core change |
-| `rich view`, `hex`, `unicode`, `env`, `capture` (0.0.11 WS11) | `viewers.rs` + `main.rs` | compose `rich_ext::{source_view, hex, unicode_inspect, env_inspect}` and core's `AnsiDecoder`; `view` routes to the existing modes by extension and content; no core change |
-| `rich capture --redact` and `--redact-pattern` (0.0.11 WS10, #224) | `viewers.rs` + `main.rs` | masks the capture with the public `rich_ext::redact::Redactor` before it is shown, exported or recorded; no core change |
-| terminal-control hygiene and input limits for the 0.0.11 commands: `view` and text `diff` sanitize by default (`--no-sanitize` opts out), `capture --sanitize`, inert capture titles and error-message paths, bounded `view`/`hex`/`unicode`/`inspect`/`capture` reads, the capture exit grace, regular-file 1 MiB theme files, and a working-directory `rich.toml` that cannot set `theme_file`, `export_html`, `export_svg` or `sanitize = false` | `controls.rs` + `viewers.rs` + `tools.rs` + `config.rs` + `main.rs` | composes the public `rich_ext::sanitize_terminal_controls`; none of these commands exists upstream, and the upstream modes keep their ESC-preserving default; no core change |
-| `rich inspect` / `--inspect` and `--format` (0.0.11 WS4) | `inspect.rs` + `main.rs` | composes `rich_ext::data` parsers, `Explorer`, `select`, `Redaction` and document diff; `--format auto` routes piped or extensionless input to the existing modes; no core change |
-| text and patch `rich diff`, with `--side-by-side`, `--context`, `--language` and `--threshold` for text (0.0.11 WS8) | `main.rs` + `tools.rs` | composes `rich_ext::diff` (engine, `DiffView`, patch view); image diffs keep their existing path; exit 5 above the threshold as for images; no core change |
-| `rich mermaid` (alias `mmd`), `.mmd`/`.mermaid` detection, ```` ```mermaid ```` fences in `rich --markdown`, `--mermaid-backend text\|mmdc\|off` and the `mermaid_backend` key, which a working-directory `rich.toml` cannot set to `mmdc` (0.0.12 WS3, #222) | `main.rs` + `cli_spec.rs` + `config.rs` | composes the public `rs-rich-mermaid` plugin through `rich_ext::ExtensionRegistry::fences` and core's `Markdown::fence_renderer`; `--mermaid-backend off` restores upstream's plain code fences; behind the default `mermaid` and the optional `mmdc` features; no core change |
-| `--highlighter NAME`, `--code-theme NAME` and the `highlighter` / `code_theme` keys (0.0.12, #525), which a working-directory `rich.toml` may set (a plain choice among compiled-in engines); `syntect` always, `lumis` behind the off-by-default `lumis` feature; unknown names are usage errors listing the choices; `rich doctor` reports them | `main.rs` + `cli_spec.rs` + `config.rs` + `doctor.rs` | installs the choice with the public `rich_ext::ExtensionRegistry::set_default_code_highlighter` onto the console, where `Syntax`, Markdown, `view` and `diff` pick it up; batch workers receive the flags; with neither given, nothing is installed and output is unchanged; upstream's `--theme` (a syntax theme) is this CLI's config-theme option, so the code theme is `--code-theme` |
-| `--filter PATTERN` and `--highlight PATTERN` (0.0.12 WS4, #216): JSONPath with `--inspect`, a regular expression for text, `--print` and `--syntax`; one fixed pipeline order, documented in docs/cli.md; refused in other modes | `inspect.rs` + `main.rs` + `cli_spec.rs` | builds `rich_ext::transform::Pipeline`s from `rich_ext::transform` and `rich_ext::data::transform`; `--redact` and `--select` now run as stages of the same pipeline with unchanged output; `--syntax` with either flag renders `Syntax::highlight_for`'s text; without them nothing changes; no core change |
-| `rich ansi explain` / `--ansi-explain` (0.0.11 WS9) | `tools.rs` + `main.rs` | composes `rich_ext::ansi_explain` and its `ExplanationView`; no core change |
-| `rich bench compare` (0.0.11 WS8) | `tools.rs` + `main.rs` | composes `rich_ext::qa::bench` comparison and its table; exit 5 on a regression; no core change |
+| `--demo` and `--demo-delay` | `demo.rs` + `lib.rs` | bounded, offline tour composes existing public renderers and CLI workflows; uses temporary examples and restores terminal state on interruption |
+| batch planning and `--dry-run`, with `--jobs` concurrency for file exports | `batch.rs` + `lib.rs` | subprocess workers reuse the single-resource renderer; disk-spooled output is replayed in input order; terminal-only batches remain serial |
+| strict TOML profiles, inverse booleans, `config show` / `config validate` | `config.rs` + `lib.rs` | validated defaults/profile/CLI precedence and JSON inspection compose existing options without changing core; a working-directory `rich.toml` cannot turn colour back on against `NO_COLOR` (the user's config, `--config` and `--color` can) |
+| `--auto-pager` and `--no-pager` | `lib.rs` | CLI destination/height policy composes public pager APIs; redirected stdout is never paged |
+| `--image-anchor` for still-image cover fitting | `lib.rs` | routes to public `rich-art::ImageArt::anchor`; crop implementation and `ImageAnchor` remain in art |
+| multi-file `--watch` with `--watch-debounce`, `--watch-poll`, `--watch-exit-on-error` (0.0.10, #139) | `watch.rs` + `lib.rs` + `config.rs` | `notify` file events on each parent directory, polling fallback; several files repaint as public `rich-ext` `LiveCoordinator` regions; no core change |
+| `rich view`, `hex`, `unicode`, `env`, `capture` (0.0.11 WS11) | `viewers.rs` + `lib.rs` | compose `rich_ext::{source_view, hex, unicode_inspect, env_inspect}` and core's `AnsiDecoder`; `view` routes to the existing modes by extension and content; no core change |
+| `rich capture --redact` and `--redact-pattern` (0.0.11 WS10, #224) | `viewers.rs` + `lib.rs` | masks the capture with the public `rich_ext::redact::Redactor` before it is shown, exported or recorded; no core change |
+| terminal-control hygiene and input limits for the 0.0.11 commands: `view` and text `diff` sanitize by default (`--no-sanitize` opts out), `capture --sanitize`, inert capture titles and error-message paths, bounded `view`/`hex`/`unicode`/`inspect`/`capture` reads, the capture exit grace, regular-file 1 MiB theme files, and a working-directory `rich.toml` that cannot set `theme_file`, `export_html`, `export_svg` or `sanitize = false` | `controls.rs` + `viewers.rs` + `tools.rs` + `config.rs` + `lib.rs` | composes the public `rich_ext::sanitize_terminal_controls`; none of these commands exists upstream, and the upstream modes keep their ESC-preserving default; no core change |
+| `rich inspect` / `--inspect` and `--format` (0.0.11 WS4) | `inspect.rs` + `lib.rs` | composes `rich_ext::data` parsers, `Explorer`, `select`, `Redaction` and document diff; `--format auto` routes piped or extensionless input to the existing modes; no core change |
+| text and patch `rich diff`, with `--side-by-side`, `--context`, `--language` and `--threshold` for text (0.0.11 WS8) | `lib.rs` + `tools.rs` | composes `rich_ext::diff` (engine, `DiffView`, patch view); image diffs keep their existing path; exit 5 above the threshold as for images; no core change |
+| `rich mermaid` (alias `mmd`), `.mmd`/`.mermaid` detection, ```` ```mermaid ```` fences in `rich --markdown`, `--mermaid-backend text\|mmdc\|off` and the `mermaid_backend` key, which a working-directory `rich.toml` cannot set to `mmdc` (0.0.12 WS3, #222) | `lib.rs` + `cli_spec.rs` + `config.rs` | composes the public `rs-rich-mermaid` plugin through `rich_ext::ExtensionRegistry::fences` and core's `Markdown::fence_renderer`; `--mermaid-backend off` restores upstream's plain code fences; behind the default `mermaid` and the optional `mmdc` features; no core change |
+| `--highlighter NAME`, `--code-theme NAME` and the `highlighter` / `code_theme` keys (0.0.12, #525), which a working-directory `rich.toml` may set (a plain choice among compiled-in engines); `syntect` always, `lumis` behind the off-by-default `lumis` feature; unknown names are usage errors listing the choices; `rich doctor` reports them | `lib.rs` + `cli_spec.rs` + `config.rs` + `doctor.rs` | installs the choice with the public `rich_ext::ExtensionRegistry::set_default_code_highlighter` onto the console, where `Syntax`, Markdown, `view` and `diff` pick it up; batch workers receive the flags; with neither given, nothing is installed and output is unchanged; upstream's `--theme` (a syntax theme) is this CLI's config-theme option, so the code theme is `--code-theme` |
+| `--filter PATTERN` and `--highlight PATTERN` (0.0.12 WS4, #216): JSONPath with `--inspect`, a regular expression for text, `--print` and `--syntax`; one fixed pipeline order, documented in docs/cli.md; refused in other modes | `inspect.rs` + `lib.rs` + `cli_spec.rs` | builds `rich_ext::transform::Pipeline`s from `rich_ext::transform` and `rich_ext::data::transform`; `--redact` and `--select` now run as stages of the same pipeline with unchanged output; `--syntax` with either flag renders `Syntax::highlight_for`'s text; without them nothing changes; no core change |
+| `rich ansi explain` / `--ansi-explain` (0.0.11 WS9) | `tools.rs` + `lib.rs` | composes `rich_ext::ansi_explain` and its `ExplanationView`; no core change |
+| `rich bench compare` (0.0.11 WS8) | `tools.rs` + `lib.rs` | composes `rich_ext::qa::bench` comparison and its table; exit 5 on a regression; no core change |
 | rich-rendered `--help`, `rich <command> --help`, `rich completions`, `rich docs markdown\|man\|config`, `rich config explain\|reference` (0.0.11 WS6) | `cli_spec.rs` + `authoring.rs` + `config.rs` | one `rich_ext::cli_doc::CommandSpec` feeds help, completion scripts, Markdown/man pages and the config reference; a unit test keeps it in step with the hand-written parser; upstream prints click's help, and core is untouched |
 
 The 0.0.8 additions are published; workflow and registry-consumer evidence is

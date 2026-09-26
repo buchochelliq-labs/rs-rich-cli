@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import render
+from conftest import in_thread, render
 from rs_rich import box
 from rs_rich.panel import Panel
 from rs_rich.table import Table
@@ -82,14 +82,29 @@ def test_cells_are_markup_text_or_empty():
     assert table.row_count == 1
 
 
-def test_too_many_cells():
-    with pytest.raises(ValueError, match="too many values"):
-        Table("a").add_row("1", "2")
+def test_too_many_cells_add_columns():
+    table = Table("a")
+    table.add_row("1", "2")
+    assert render(table) == (
+        "┏━━━┳━━━┓\n"
+        "┃ a ┃   ┃\n"
+        "┡━━━╇━━━┩\n"
+        "│ 1 │ 2 │\n"
+        "└───┴───┘\n"
+    )
 
 
-def test_renderable_cells_are_not_supported_yet():
-    with pytest.raises(NotImplementedError, match="str or Text"):
-        Table("a").add_row(Panel("x"))
+def test_renderable_cells():
+    table = Table("a", box=None, show_header=False)
+    table.add_row(Panel.fit("x"))
+    assert render(table) == " ╭───╮ \n │ x │ \n ╰───╯ \n"
+
+
+def test_a_cell_that_is_not_renderable_is_refused():
+    from rs_rich.errors import NotRenderableError
+
+    with pytest.raises(NotRenderableError, match="unable to render list"):
+        Table("a").add_row([1])
 
 
 def test_rows_added_after_use_are_printed():
@@ -97,3 +112,73 @@ def test_rows_added_after_use_are_printed():
     panel = Panel.fit(table)
     table.add_row("late")
     assert "late" in render(panel)
+
+
+def test_a_huge_ratio_renders_as_rich_does():
+    table = Table(expand=True)
+    table.add_column("a", ratio=2**32 - 1)
+    table.add_column("b", ratio=1)
+    table.add_row("x", "y")
+    # rich 15.0.0's output for the same table.
+    assert render(table) == "┏━━━┳━━━┓\n┃ a ┃ b ┃\n┡━━━╇━━━┩\n│ x │ y │\n└───┴───┘\n"
+
+
+@pytest.mark.parametrize(
+    "option, limit",
+    [("width", 2**16), ("min_width", 2**16), ("max_width", 2**16), ("ratio", 2**32 - 1)],
+)
+def test_column_sizes_past_their_limit_are_value_errors(option, limit):
+    # rich 15.0.0 has no limit, but a huge min_width takes it minutes (or
+    # all its memory) to print; a huge ratio overflowed core.
+    Table().add_column("a", **{option: limit})
+    with pytest.raises(ValueError, match=f"{option} must be at most {limit}, got {limit + 1}"):
+        Table().add_column("a", **{option: limit + 1})
+
+
+def test_the_widest_min_width_prints_quickly():
+    table = Table(box=None, show_header=False)
+    table.add_column(min_width=2**16)
+    table.add_row("x")
+    assert render(table, width=20) == " x" + " " * 18 + "\n"
+
+
+def test_usable_from_another_thread():
+    table = Table("a", box=None)
+    error = in_thread(lambda: table.add_row("1"))
+    assert error is None, repr(error)
+    assert render(table) == " a \n 1 \n"
+
+
+def test_attributes_can_be_read_and_set_as_in_rich():
+    table = Table("a")
+    table.show_header = False
+    table.title = "T"
+    table.box = box.ASCII
+    table.padding = 0
+    table.add_row("x")
+    assert (table.show_header, table.title, table.padding, table.style) == (
+        False,
+        "T",
+        (0, 0, 0, 0),
+        "none",
+    )
+    assert render(table, width=30) == " T \n+-+\n|x|\n+-+\n"
+
+
+@pytest.mark.parametrize("build", [
+    lambda: Table("[/]"),
+    lambda: Table("a", title="[/]"),
+    lambda: Table("a", caption="[/x]"),
+])
+def test_bad_markup_raises_when_the_table_prints(build):
+    from rs_rich.errors import MarkupError
+
+    table = build()  # as in Rich, not when it is built
+    with pytest.raises(MarkupError):
+        render(table)
+
+
+def test_markup_off_leaves_headers_and_titles_literal():
+    table = Table("[b]h\\", title="[i]t")
+    expected = "  [i]t   \n┏━━━━━━━┓\n┃ [b]h\\ ┃\n┡━━━━━━━┩\n└───────┘\n"
+    assert render(table, width=30, markup=False) == expected

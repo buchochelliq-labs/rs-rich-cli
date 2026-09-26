@@ -26,7 +26,7 @@ import sys
 import tomllib
 
 from rich import box
-from rich.align import Align
+from rich.align import Align, VerticalCenter
 from rich.ansi import AnsiDecoder
 from rich.bar import Bar as HBar
 from rich.columns import Columns
@@ -36,10 +36,12 @@ from rich.constrain import Constrain
 from rich.control import Control
 from rich.json import JSON
 from rich.layout import Layout
+from rich.live_render import LiveRender
 from rich.markdown import Markdown
 from rich.measure import Measurement
 from rich.padding import Padding
 from rich.panel import Panel
+from rich.region import Region
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 from rich.progress_bar import ProgressBar
 
@@ -516,6 +518,9 @@ RENDERABLE_CASES = [
     ("panel_empty_title", 12, Panel("x", title="", subtitle="")),
     ("panel_tiny_title", 4, Panel("x", title="[bold red]T[/]", subtitle="[green]S[/]")),
     ("panel_plain", 20, Panel("hello")),
+    # A Text's blank last line survives inside containers.
+    ("padding_text_trailing_blank", 12, Padding(Text("a\n"), (0, 1))),
+    ("panel_text_trailing_blanks", 12, Panel(Text("a\n\n"))),
     ("panel_title", 20, Panel("hello", title="T")),
     ("panel_title_left", 20, Panel("x", title="T", title_align="left", box=box.SQUARE)),
     ("panel_title_right", 20, Panel("x", title="T", title_align="right", box=box.SQUARE)),
@@ -2924,6 +2929,1076 @@ def main() -> None:
         newline="\n",
     )
     print("wrote export fixtures (html inline, html classes, svg)")
+
+    capture_core_gaps()
+    capture_upstream_features()
+    capture_api_gaps()
+    capture_audit_edges()
+    capture_audit2()
+
+
+# --- core gaps (bindings foundation) ------------------------------------------
+# One fixture, `core_gaps.tsv`: `name<TAB>json(output)`. Each case is a function
+# returning the exact string upstream produces; `tests/golden_core_gaps.rs` has
+# a Rust builder per name. Every console is truecolor, and its colour system is
+# the only one used in the process for these cases (see the colour-isolation
+# note on `_capture_colors_isolated`).
+
+
+def _cg_console(width: int = 40, **overrides) -> Console:
+    options = dict(
+        force_terminal=True,
+        color_system="truecolor",
+        width=width,
+        highlight=False,
+        safe_box=False,
+        legacy_windows=False,
+        no_color=False,
+    )
+    options.update(overrides)
+    return Console(**options)
+
+
+def _cg_print(console: Console, *objects, **kwargs) -> str:
+    with console.capture() as capture:
+        console.print(*objects, **kwargs)
+    return capture.get()
+
+
+def _cg_render(console: Console, renderable, width: int) -> str:
+    """`Console.render` at an explicit width, as a terminal string."""
+    segments = list(console.render(renderable, console.options.update_width(width)))
+    return console._render_buffer(segments)
+
+
+def _cg_render_str(content: str, width: int = 20, console_options=None, **kwargs) -> str:
+    console = _cg_console(width, **(console_options or {}))
+    try:
+        text = console.render_str(content, **kwargs)
+    except MarkupError:
+        return "<ERROR>"
+    return _cg_print(console, Panel(text))
+
+
+def _cg_json(source: str, width: int = 40, print_options=None, **options) -> str:
+    try:
+        renderable = JSON(source, **options)
+    except ValueError:
+        return "<ERROR>"
+    return _cg_print(_cg_console(width), renderable, **(print_options or {}))
+
+
+def _cg_log(width: int, renderables_factory) -> str:
+    from rich._log_render import LogRender
+
+    console = _cg_console(width)
+    render = LogRender(show_level=True)
+    out = []
+    for time, renderables in renderables_factory():
+        table = render(
+            console,
+            renderables,
+            time_format=lambda _, t=time: Text(t),
+            level=Text.styled("INFO".ljust(8), "logging.level.info"),
+            path="app.py",
+            line_no=7,
+        )
+        out.append(_cg_print(console, table))
+    return "".join(out)
+
+
+def _cg_log_records():
+    table = Table("a", "b")
+    table.add_row("1", "2")
+    return [
+        ("[t1]", [Text("plain message")]),
+        ("[t1]", [Text("before the panel"), Panel("boxed", expand=False)]),
+        ("[t2]", [table, Text.from_markup("[bold]after[/] the table")]),
+    ]
+
+
+def _cg_record(width: int, markup: str) -> Console:
+    console = _cg_console(width, record=True)
+    console.print(markup)
+    return console
+
+
+_CG_EXPORT_MARKUP = "[link=https://example.com/a?b=1&c=2]hi[/link] [blink]b[/] [bold red]r[/] <&>"
+_CG_SVG_FORMAT = "{unique_id}|{char_width}|{char_height}|{line_height}|{terminal_width}|{terminal_height}|{width}|{height}|{terminal_x}|{terminal_y}|{{lit}}\n{styles}\n{matrix}\n{backgrounds}\n{lines}\n{chrome}"
+
+
+def _cg_justify_panels() -> str:
+    console = _cg_console(16)
+    out = []
+    for justify in ["left", "center", "right", "full"]:
+        out.append(_cg_print(console, Panel(Text("abc", style="red", justify=justify))))
+        out.append(_cg_print(console, Panel(Text.from_markup("x[red]abc[/]", style="bold", justify=justify))))
+        out.append(_cg_print(console, Panel(Text.from_markup("[red]abc[/] de", justify=justify))))
+    table = Table()
+    table.add_column("hhhhhhh")
+    table.add_row(Text.from_markup("[red]a[/][red]b[/]"))
+    table.add_row(Text("c", style="green", justify="center"))
+    out.append(_cg_print(console, table))
+    return "".join(out)
+
+
+CORE_GAP_CASES = [
+    # 1. Console.render
+    ("render_panel_width20", lambda: _cg_render(_cg_console(), Panel(Text("hello"), title="T"), 20)),
+    ("render_zero_width", lambda: _cg_render(_cg_console(), Text("hello"), 0)),
+    # 2. ConsoleOptions.highlight, set by containers for their children
+    ("options_highlight_panel_default", lambda: _cg_print(_cg_console(30, highlight=True), Panel("x 123 True"))),
+    ("options_highlight_panel_on", lambda: _cg_print(_cg_console(30), Panel("x 123 True", highlight=True))),
+    ("options_highlight_tree_on", lambda: _cg_print(_cg_console(30), Tree("x 123", highlight=True))),
+    # 3. Console.render_str keywords
+    ("render_str_markup_off", lambda: _cg_render_str("[b]x[/] 1", markup=False)),
+    ("render_str_highlight_drops_style", lambda: _cg_render_str("abc 12", style="red", justify="center", highlight=True)),
+    ("render_str_style_justify", lambda: _cg_render_str("[b]abc[/]", style="red", justify="right", highlight=False)),
+    ("render_str_emoji_off", lambda: _cg_render_str(":rocket: x", emoji=False)),
+    ("render_str_console_markup_off", lambda: _cg_render_str("[b]x[/] :rocket:", console_options={"markup": False})),
+    ("render_str_bad_markup", lambda: _cg_render_str("x [/b]")),
+    # 5. tab_size
+    ("tab_console_4", lambda: _cg_print(_cg_console(20, tab_size=4), Text("a\tbc\td"))),
+    ("tab_text_2", lambda: _cg_print(_cg_console(20), Text("a\tb", tab_size=2))),
+    ("tab_markup_console_3", lambda: _cg_print(_cg_console(20, tab_size=3), "x\ty")),
+    ("tab_table_cell_console_4", lambda: _cg_print(_cg_console(20, tab_size=4), _cg_tab_table())),
+    # 6. emoji_variant
+    ("emoji_variant_text", lambda: _cg_print(_cg_console(20, emoji_variant="text"), ":rocket: hi")),
+    ("emoji_variant_markup", lambda: _cg_print(_cg_console(20, emoji_variant="text"), ":rocket: [b]hi[/]")),
+    ("emoji_variant_explicit", lambda: _cg_print(_cg_console(20, emoji_variant="emoji"), ":rocket-text: :rocket:")),
+    # 7. LogRender over renderables
+    ("log_renderables", lambda: _cg_log(50, _cg_log_records)),
+    # 8. JSON options
+    ("json_indent_4", lambda: _cg_json(JSON_SAMPLE, indent=4)),
+    ("json_indent_none", lambda: _cg_json(JSON_SAMPLE, 80, indent=None)),
+    ("json_indent_none_wrapped", lambda: _cg_json(JSON_SAMPLE, 30, indent=None)),
+    ("json_indent_zero", lambda: _cg_json('{"a": [1, {"b": []}]}', indent=0)),
+    ("json_indent_tab", lambda: _cg_json('{"a": [1, 2]}', indent="\t")),
+    ("json_sort_keys", lambda: _cg_json('{"b": 1, "a": {"d": 2, "c": 3}, "B": 4}', sort_keys=True)),
+    ("json_ensure_ascii", lambda: _cg_json('{"café": "❤ \U0001f600 \u007f"}', ensure_ascii=True)),
+    ("json_no_highlight", lambda: _cg_json(JSON_SAMPLE, highlight=False)),
+    ("json_trailing_backslash", lambda: _cg_json('{"k": "a\\\\", "b": 1}')),
+    ("json_allow_nan_off", lambda: _cg_json("[NaN]", allow_nan=False)),
+    ("json_print_no_wrap_ellipsis", lambda: _cg_json(JSON_SAMPLE, 16, print_options={"no_wrap": True, "overflow": "ellipsis"})),
+    ("json_print_crop", lambda: _cg_json(JSON_SAMPLE, 16, print_options={"overflow": "crop"})),
+    ("json_print_center", lambda: _cg_json('{"a": 1}', 20, print_options={"justify": "center"})),
+    ("json_nested_panel", lambda: _cg_print(_cg_console(16), Panel(JSON(JSON_SAMPLE)))),
+    # 9. HTML / SVG export options
+    ("export_html_inline_links", lambda: _cg_record(40, _CG_EXPORT_MARKUP).export_html(inline_styles=True, clear=False)),
+    ("export_html_classes_links", lambda: _cg_record(40, _CG_EXPORT_MARKUP).export_html(clear=False)),
+    ("export_html_code_format", lambda: _cg_record(40, _CG_EXPORT_MARKUP).export_html(clear=False, code_format="<{foreground}|{background}>{stylesheet}<pre>{code}</pre>{{x}}")),
+    ("export_svg_aspect", lambda: _cg_record(12, "[bold red]Hi[/] ok\n[on blue]x[/]").export_svg(title="T", unique_id="u", clear=False, font_aspect_ratio=0.5)),
+    ("export_svg_code_format", lambda: _cg_record(12, "[bold red]Hi[/] ok\n[on blue]x[/]").export_svg(title="T", unique_id="u", clear=False, code_format=_CG_SVG_FORMAT)),
+    # 10. Control codes
+    ("control_alt_screen", lambda: str(Control.alt_screen(True)) + "|" + str(Control.alt_screen(False))),
+    ("control_title", lambda: str(Control.title("my title"))),
+    # 11. justify padding joins the text's last run
+    ("justify_padding_runs", _cg_justify_panels),
+    # 12. Panel title segmentation, visible in SVG export
+    ("panel_title_svg", lambda: _cg_svg_of(22, Panel("hi", title="Title", subtitle="[b]S[/]"))),
+    ("panel_title_styled_border_svg", lambda: _cg_svg_of(22, Panel("hi", title="Title", border_style="red"))),
+    ("rule_title_svg", lambda: _cg_svg_of(22, Rule("Title"))),
+    # 16. vertical alignment: Align, VerticalCenter, Table cells
+    ("align_vertical", lambda: "".join(
+        _cg_print(_cg_console(10), renderable, height=4)
+        for renderable in (
+            Align("hi", "center", vertical="top", style="on blue"),
+            Align("hi", "center", vertical="middle", style="on blue"),
+            Align("hi", "right", vertical="bottom"),
+            Align("hi", "left", vertical="middle", pad=False),
+            Align(Text("a b c d"), "center", width=3, vertical="middle", style="on red"),
+        )
+    )),
+    ("vertical_center", lambda: _cg_print(_cg_console(6), VerticalCenter(Text("x"), style="on red"), height=3)),
+    ("table_vertical", lambda: _cg_table_vertical()),
+    # 17. a justified empty Text still pads to the width
+    ("empty_text_justify", lambda: "".join(
+        [_cg_print(_cg_console(10), Panel(Text("", style="on red", justify=justify)))
+         for justify in ("left", "center", "right", "full", "default")]
+        + [_cg_print(_cg_console(10), Text("", style="on red"), justify="left")]
+    )),
+    # Padding expand / indent / height, Bar colours
+    ("padding_options", lambda: "".join([
+        _cg_print(_cg_console(20), Padding("hi", (0, 2), expand=False, style="on blue")),
+        _cg_print(_cg_console(20), Padding.indent(Text("x"), 3)),
+        _cg_print(_cg_console(20), Padding(Text("a"), (1, 1), style="on blue"), height=5),
+    ])),
+    ("bar_colours", lambda: _cg_print(_cg_console(20), HBar(10, 2, 6, color="red", bgcolor="blue", width=10))),
+    # 15. Panel at (almost) no inner width, with and without a height
+    ("panel_narrow_heights", lambda: "".join(
+        _cg_print(_cg_console(width), Panel(Text("hi"), padding=padding), height=height)
+        for width in (2, 3, 4, 5)
+        for padding in ((0, 1), (1, 1))
+        for height in (None, 5)
+    )),
+]
+
+
+def _cg_table_vertical() -> str:
+    table = Table()
+    table.add_column("a", vertical="middle")
+    table.add_column("b")
+    table.add_column("c", vertical="bottom")
+    table.add_row("x", "1\n2\n3\n4", "z")
+    table.add_row(Align("y", vertical="bottom"), "1\n2\n3", Align("w", vertical="top"))
+    return _cg_print(_cg_console(30), table)
+
+
+def _cg_tab_table() -> Table:
+    table = Table()
+    table.add_column("h")
+    table.add_row(Text("a\tb"))
+    return table
+
+
+def _cg_svg_of(width: int, renderable) -> str:
+    console = _cg_console(width, record=True)
+    console.print(renderable)
+    return console.export_svg(title="S", unique_id="p", clear=False)
+
+
+def capture_core_gaps() -> None:
+    path = golden_dir() / "core_gaps.tsv"
+    lines = [
+        "# name\tjson(expected output) — see CORE_GAP_CASES in scripts/capture_golden.py"
+    ]
+    for name, build in CORE_GAP_CASES:
+        lines.append(f"{name}\t{json.dumps(build(), ensure_ascii=False)}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(CORE_GAP_CASES)} core gap cases to {path}")
+
+
+
+# --- upstream features (bindings parity) --------------------------------------
+# One fixture, `upstream_features.tsv`: `name<TAB>json(output)`, built like
+# `core_gaps.tsv` (same `_cg_*` consoles). These are upstream options the Python
+# bindings needed from core; `tests/golden_upstream_features.rs` has a Rust
+# builder per name.
+
+
+def _uf_render_with(console: Console, renderable, **attributes) -> str:
+    """`Console.render` with `ConsoleOptions` attributes overridden."""
+    options = console.options.copy()
+    for name, value in attributes.items():
+        setattr(options, name, value)
+    return console._render_buffer(list(console.render(renderable, options)))
+
+
+def _uf_tree(**root_options) -> Tree:
+    tree = Tree("root", **root_options)
+    a = tree.add("child [b]A[/]")
+    a.add("leaf A1")
+    a.add(Text("leaf A2\nsecond line"))
+    tree.add("child B").add("leaf B1")
+    return tree
+
+
+def _uf_tree_styles() -> Tree:
+    tree = Tree("root", style="on blue", guide_style="red")
+    bold = tree.add("bold guides", guide_style="bold green")
+    bold.add("x")
+    bold.add("y").add("z")
+    double = tree.add("double guides", guide_style="underline2", style="italic")
+    double.add("p")
+    double.add("q")
+    return tree
+
+
+_UF_WORDS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven"]
+
+
+def _uf_prints(console: Console, objects) -> str:
+    with console.capture() as capture:
+        for renderable in objects:
+            console.print(renderable)
+    return capture.get()
+
+
+def _uf_layout() -> Layout:
+    layout = Layout(name="root")
+    layout.split_column(Layout(Text("head", style="on blue"), name="header", size=1), Layout(name="body"))
+    layout["body"].split_row(
+        Layout(Text("L"), name="left"),
+        Layout(name="hidden", visible=False),
+        Layout(Panel("side"), ratio=2, minimum_size=3),
+    )
+    layout["body"].add_split(Layout(name="extra", size=6))
+    return layout
+
+
+def _uf_layout_map() -> str:
+    layout = _uf_layout()
+    _cg_print(_cg_console(40, height=8), layout)
+    return ";".join(
+        f"{child.name}|{r.region.x},{r.region.y},{r.region.width},{r.region.height}|{len(r.render)}"
+        for child, r in layout.map.items()
+    )
+
+
+def _uf_layout_update() -> str:
+    layout = _uf_layout()
+    layout["left"].update(Text("updated"))
+    out = _cg_print(_cg_console(40, height=6), layout)
+    layout["body"].unsplit()
+    return out + _cg_print(_cg_console(40, height=6), layout)
+
+
+_UF_INDENTED = Text.from_markup(
+    "def f():\n    [red]if x:[/]\n        return 1\n\n      odd\n    [b]done[/]\n", style="green"
+)
+
+
+def _uf_stylize_before() -> Text:
+    text = Text("hello world")
+    text.stylize("red", 0, 3)
+    text.stylize_before("bold on blue", 1, 7)
+    text.stylize_before("italic", 5, 20)
+    return text
+
+
+def _uf_live_render(overflow: str, style: str, content: str = "1\n2\n3\n4\n5\n6") -> str:
+    from rich.live_render import LiveRender
+
+    live = LiveRender(Text(content), style=style, vertical_overflow=overflow)
+    out = _cg_print(_cg_console(12, height=4), live)
+    return out + "|" + str(live.position_cursor()) + "|"
+
+
+def _uf_progress_custom() -> str:
+    from rich.progress import ProgressColumn
+    from rich.table import Column
+
+    class Stars(ProgressColumn):
+        def render(self, task):
+            return Text("*" * int(task.percentage // 20), style="yellow")
+
+    class Counter(ProgressColumn):
+        max_refresh = 10.0
+
+        def __init__(self):
+            super().__init__(table_column=Column(width=4, justify="right"))
+            self.calls = 0
+
+        def render(self, task):
+            self.calls += 1
+            return Panel.fit(str(self.calls)) if task.description == "p" else Text(str(self.calls))
+
+    now = [100.0]
+    progress = Progress(
+        Stars(), TextColumn("{task.description}"), Counter(), BarColumn(bar_width=6), get_time=lambda: now[0]
+    )
+    progress.add_task("a", total=100, completed=40)
+    progress.add_task("b", total=100)
+    progress.add_task("p", total=100, completed=100)
+    console = _cg_console(40)
+    out = _cg_print(console, progress.make_tasks_table(progress.tasks))
+    now[0] += 1
+    out += _cg_print(console, progress.make_tasks_table(progress.tasks))
+    now[0] += 20
+    return out + _cg_print(console, progress.make_tasks_table(progress.tasks))
+
+
+_UF_CODE = "def f(x):\n    if x:\n        return 'a very long line of code'\n\n    return x\n"
+
+_UF_SYNTAX_OPTIONS = [
+    {},
+    {"line_numbers": True},
+    {"line_numbers": True, "start_line": 9, "highlight_lines": {10, 12}},
+    {"line_numbers": True, "line_range": (2, 3)},
+    {"line_range": (4, None)},
+    {"line_range": (None, 2), "word_wrap": True},
+    {"code_width": 12},
+    {"word_wrap": True},
+    {"word_wrap": True, "line_numbers": True, "code_width": 14},
+    {"indent_guides": True},
+    {"indent_guides": True, "line_numbers": True},
+    {"padding": (1, 2)},
+    {"padding": (0, 1, 2, 3), "line_numbers": True},
+    {"background_color": "red"},
+    {"background_color": "red", "line_numbers": True, "highlight_lines": {2}},
+    {"background_color": "red", "word_wrap": True, "code_width": 20},
+    {"tab_size": 2, "indent_guides": True},
+]
+
+
+def _uf_syntax(code: str = _UF_CODE, **options) -> Syntax:
+    return Syntax(code, "text", theme="ansi_dark", **options)
+
+
+def _uf_syntax_ranges() -> Syntax:
+    syntax = _uf_syntax(line_numbers=True)
+    syntax.stylize_range("reverse", (1, 4), (2, 6))
+    syntax.stylize_range("on blue", (3, 0), (3, 99), style_before=True)
+    syntax.stylize_range("bold", (4, 0), (9, 0))
+    syntax.stylize_range("underline", (5, 2), (5, 5))
+    return syntax
+
+
+def _uf_strip_ansi(text: str) -> str:
+    import re
+
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
+def _uf_small_table() -> Table:
+    table = Table("a", "bb")
+    table.add_row("1", "22")
+    return table
+
+
+def _uf_tree_highlight() -> Tree:
+    tree = Tree("x 123", highlight=True, style="bold")
+    tree.add("y 45 True")
+    tree.add(Text("z 6"))
+    return tree
+
+
+def _uf_tree_collapsed() -> Tree:
+    tree = Tree("root")
+    closed = tree.add("closed", expanded=False)
+    closed.add("hidden")
+    tree.add("open").add("shown")
+    return tree
+
+
+UPSTREAM_FEATURE_CASES = [
+    # 1. Tree
+    ("tree_default", lambda: _cg_print(_cg_console(30), _uf_tree())),
+    ("tree_styles", lambda: _cg_print(_cg_console(30), _uf_tree_styles())),
+    ("tree_hide_root", lambda: _cg_print(_cg_console(30), _uf_tree(hide_root=True))),
+    ("tree_collapsed", lambda: _cg_print(_cg_console(30), _uf_tree_collapsed())),
+    ("tree_ascii", lambda: _uf_render_with(_cg_console(30), _uf_tree_styles(), encoding="ascii")),
+    ("tree_highlight", lambda: _cg_print(_cg_console(30), _uf_tree_highlight())),
+    ("tree_narrow", lambda: _cg_print(_cg_console(9), _uf_tree_styles())),
+    ("tree_justify", lambda: _cg_print(_cg_console(20), _uf_tree(), justify="right")),
+    ("tree_measure", lambda: _cg_print(_cg_console(40), Panel(_uf_tree_collapsed(), expand=False))),
+    # 2. Columns
+    ("columns_options", lambda: "".join(
+        _cg_print(_cg_console(30), Columns(_UF_WORDS, **options))
+        for options in (
+            {},
+            {"padding": (0, 2)},
+            {"padding": (1, 1, 0, 3)},
+            {"width": 6},
+            {"width": 6, "padding": (0, 1, 0, 0)},
+            {"column_first": True},
+            {"column_first": True, "equal": True},
+            {"right_to_left": True},
+            {"right_to_left": True, "column_first": True, "expand": True},
+            {"align": "right", "equal": True},
+            {"align": "center", "expand": True},
+            {"title": "[b]Words[/]"},
+            {"title": "T", "expand": True, "align": "left"},
+        )
+    )),
+    ("columns_renderables", lambda: _cg_print(_cg_console(30), Columns(
+        [Panel("a"), Text("bb", style="red"), "[i]ccc[/]", Panel.fit("dddd")],
+        align="center", equal=True, column_first=True,
+    ))),
+    # 3. Rule
+    ("rule_end", lambda: _uf_prints(_cg_console(12), [
+        Rule("t", end="\n\n"), "y", Rule(end="\n\n"), "z", Rule("t", end="\n"), Rule("t", end="!\n"),
+    ])),
+    ("rule_ascii", lambda: "".join(
+        _uf_render_with(_cg_console(12), rule, encoding="ascii")
+        for rule in (Rule("t"), Rule(), Rule("t", characters="="), Rule("t", align="left"), Rule("t", align="right"))
+    )),
+    ("rule_style", lambda: "".join([
+        _cg_print(_cg_console(12), Rule("t", style="bold red")),
+        _cg_print(_cg_console(12), Rule("t", style="rule.text")),
+        _cg_print(_cg_console(12, theme=RichTheme({"rule.line": "blue", "rule.text": "italic"})), Rule("t")),
+        _cg_print(_cg_console(12, theme=RichTheme({"rule.line": "blue"})), Rule()),
+    ])),
+    ("rule_text_title", lambda: "".join(
+        _cg_print(_cg_console(14), Rule(Text("a\tb\n[c]", style="red"), align=align))
+        for align in ("left", "center", "right")
+    )),
+    # 4. Layout
+    ("layout_placeholder", lambda: "".join([
+        _cg_print(_cg_console(30, height=7), Layout(name="root", size=3, ratio=2, minimum_size=4)),
+        _cg_print(_cg_console(20, height=5), Layout()),
+        _cg_print(_cg_console(40, height=4), Layout(name="it's")),
+    ])),
+    ("layout_split", lambda: _cg_print(_cg_console(40, height=8), _uf_layout())),
+    ("layout_tree", lambda: _cg_print(_cg_console(50), _uf_layout().tree)),
+    ("layout_map", _uf_layout_map),
+    ("layout_update_unsplit", _uf_layout_update),
+    # 6. Text
+    ("text_indent_guides", lambda: "".join(
+        _cg_print(_cg_console(30), text)
+        for text in (
+            _UF_INDENTED.with_indent_guides(),
+            _UF_INDENTED.with_indent_guides(2, character="|", style="red"),
+            _UF_INDENTED.with_indent_guides(3),
+            Text("a\n\tb\n\n", style="on blue").with_indent_guides(4),
+            Text("x\n  ", style="italic").with_indent_guides(),
+        )
+    ) + "|" + str(_UF_INDENTED.detect_indentation()) + "," + str(Text("a\n   b\n     c").detect_indentation())),
+    ("text_from_ansi", lambda: "".join(
+        _cg_print(_cg_console(20), text)
+        for text in (
+            Text.from_ansi("\x1b[1mbold\x1b[0m plain\nnext \x1b[31mred", style="on blue"),
+            Text.from_ansi("a\tb", style="italic"),
+            Text.from_ansi("x\r\ny\n"),
+        )
+    )),
+    ("text_stylize_before", lambda: _cg_print(_cg_console(20), _uf_stylize_before())),
+    # 9. LiveRender vertical_overflow
+    ("live_render_vertical_overflow", lambda: "".join(
+        _uf_live_render(overflow, style) for overflow in ("crop", "ellipsis", "visible") for style in ("", "on blue")
+    ) + _uf_live_render("ellipsis", "", "1\n2\n3\n4")),
+    # 10. Progress: a user-defined ProgressColumn
+    ("progress_custom_column", _uf_progress_custom),
+    # 5. Syntax (DIVERGENCES #18: colours come from syntect, so these use the
+    # plain-text lexer with upstream's `ansi_dark` theme, which the port
+    # reproduces, or compare the plain text of a background theme)
+    ("syntax_ansi_options", lambda: "".join(
+        _cg_print(_cg_console(30), _uf_syntax(**options))
+        for options in _UF_SYNTAX_OPTIONS
+    )),
+    ("syntax_ansi_ranges", lambda: _cg_print(_cg_console(30), _uf_syntax_ranges())),
+    ("syntax_measure", lambda: "".join(
+        _cg_print(_cg_console(40), Panel.fit(_uf_syntax(**options)))
+        for options in ({}, {"line_numbers": True}, {"code_width": 8}, {"padding": (0, 2)}, {"line_numbers": True, "code_width": 6, "padding": 1})
+    )),
+    ("syntax_plain_background_theme", lambda: _uf_strip_ansi("".join(
+        _cg_print(_cg_console(30), Syntax(_UF_CODE, "python", theme="monokai", **options))
+        for options in _UF_SYNTAX_OPTIONS
+    ))),
+    # 7. Panel style / height
+    ("panel_style", lambda: "".join([
+        _cg_print(_cg_console(16), Panel("hi", style="on blue")),
+        _cg_print(_cg_console(16), Panel("hi\nthere", style="red on blue", border_style="bold", title="[i]T[/]", subtitle="s")),
+        _cg_print(_cg_console(16), Panel(Text("x", style="green"), style="on blue", padding=(1, 2))),
+        _cg_print(_cg_console(16), Panel("h", height=5, style="on red")),
+        _cg_print(_cg_console(16), Panel("h", height=2)),
+        _cg_print(_cg_console(16), Panel("a\nb\nc\nd", height=4)),
+        _cg_print(_cg_console(16), Panel("h", style="repr.number")),
+        _cg_print(_cg_console(16), Panel.fit("h", style="on blue", border_style="red")),
+    ])),
+    # 11. print(justify=…) wraps a non-Text renderable in Align
+    ("print_justify_renderables", lambda: "".join(
+        _cg_print(_cg_console(20), renderable, justify=justify)
+        for justify in ("left", "center", "right", "full", "default")
+        for renderable in (Panel.fit("hi"), _uf_small_table(), Panel("wide"))
+    )),
+]
+
+
+def capture_upstream_features() -> None:
+    path = golden_dir() / "upstream_features.tsv"
+    lines = [
+        "# name\tjson(expected output) — see UPSTREAM_FEATURE_CASES in scripts/capture_golden.py"
+    ]
+    for name, build in UPSTREAM_FEATURE_CASES:
+        lines.append(f"{name}\t{json.dumps(build(), ensure_ascii=False)}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(UPSTREAM_FEATURE_CASES)} upstream feature cases to {path}")
+
+
+
+# --- API gaps (the last Rich options core lacked) ------------------------------
+# One fixture, `api_gaps.tsv`: `name<TAB>json(output)`, built with the same
+# `_cg_*` consoles. Table's width / footers / leading / row styles / sections /
+# annotation styles, Panel's Text subtitle and safe_box, Syntax's signed
+# `start_line` and `line_range`, and `Layout.refresh_screen`;
+# `tests/golden_api_gaps.rs` has a Rust builder per name.
+
+
+class _AsciiFile(io.StringIO):
+    """A file whose encoding is ASCII, so the console is `ascii_only`."""
+
+    @property
+    def encoding(self) -> str:  # type: ignore[override]
+        return "ascii"
+
+
+def _ag_table(**options) -> Table:
+    table = Table(**options)
+    table.add_column("Name", "Total", footer_style="green")
+    table.add_column("Qty", "12", justify="right")
+    table.add_row("apple", "3")
+    table.add_row("banana split", "4")
+    table.add_row("cherry", "5")
+    return table
+
+
+def _ag_ratio_table(width: int) -> Table:
+    table = Table(width=width)
+    table.add_column("fixed")
+    table.add_column("one", ratio=1)
+    table.add_column("two", ratio=2)
+    table.add_row("a", "b", "c")
+    return table
+
+
+def _ag_sections() -> Table:
+    table = Table(title="Sections", show_footer=True)
+    table.add_column("a", "A")
+    table.add_column("b", "B")
+    table.add_row("1", "one", end_section=True)
+    table.add_row("2", "two", style="on blue")
+    table.add_section()
+    table.add_row("3", "three", style="bold")
+    table.add_row("4", "four")
+    return table
+
+
+def _ag_extra_cells() -> Table:
+    table = Table()
+    table.add_column("x")
+    table.add_row("1")
+    table.add_row("2", "extra", "more")
+    return table
+
+
+def _ag_annotations(**options) -> Table:
+    table = Table(title="The [b]title[/b]", caption="a caption", **options)
+    table.add_column("column one")
+    table.add_column("two")
+    table.add_row("x", "y")
+    return table
+
+
+def _ag_print_all(console: Console, *renderables) -> str:
+    return "".join(_cg_print(console, renderable) for renderable in renderables)
+
+
+def _ag_syntax(**options) -> Syntax:
+    return Syntax(_UF_CODE, "text", theme="ansi_dark", **options)
+
+
+_AG_SYNTAX_OPTIONS = [
+    {"line_numbers": True, "start_line": 0},
+    {"line_numbers": True, "start_line": -3, "highlight_lines": {-2, 0}},
+    {"line_numbers": True, "start_line": -12},
+    {"line_numbers": True, "line_range": (0, 2)},
+    {"line_numbers": True, "line_range": (-2, 3)},
+    {"line_numbers": True, "line_range": (2, -1)},
+    {"line_numbers": True, "line_range": (1, -2)},
+    {"line_numbers": True, "line_range": (None, -1)},
+    {"line_numbers": True, "line_range": (3, 0)},
+    {"line_numbers": True, "line_range": (None, None)},
+    {"line_numbers": True, "line_range": (4, 99)},
+    {"line_range": (2, -1)},
+    {"line_range": (-5, None), "word_wrap": True},
+    {"line_numbers": True, "start_line": -1, "line_range": (2, 4), "word_wrap": True},
+]
+
+
+def _ag_stylized() -> Syntax:
+    syntax = _ag_syntax(line_numbers=True)
+    syntax.stylize_range("bold", (-1, 2), (2, 3))
+    syntax.stylize_range("reverse", (2, -4), (3, 2))
+    syntax.stylize_range("underline", (0, 1), (1, 3))
+    syntax.stylize_range("italic", (-3, 0), (1, 1))
+    syntax.stylize_range("on blue", (4, -30), (5, -1), style_before=True)
+    return syntax
+
+
+def _ag_layout() -> Layout:
+    layout = Layout(name="root")
+    layout.split_row(
+        Layout(Panel("left"), name="a"),
+        Layout(name="right"),
+    )
+    layout["right"].split_column(Layout("top", name="b"), Layout("bottom", name="c"))
+    return layout
+
+
+def _ag_refresh_screen() -> str:
+    console = _cg_console(20, height=6, file=io.StringIO())
+    layout = _ag_layout()
+    out = []
+    with console.capture() as capture:
+        console.print(layout)
+        try:
+            layout.refresh_screen(console, "b")
+        except Exception as error:  # upstream raises NoAltScreen
+            out.append(f"<{type(error).__name__}>")
+    out.append(capture.get())
+    with console.capture() as capture:
+        console.set_alt_screen(True)
+        console.print(layout)
+        layout["b"].update(Text("changed", style="bold"))
+        layout.refresh_screen(console, "b")
+        layout["a"].update(Panel("new", title="t"))
+        layout.refresh_screen(console, "a")
+        try:
+            layout.refresh_screen(console, "right")
+        except KeyError:
+            out.append("<KeyError>")
+        console.update_screen(Text("region"), region=Region(3, 1, 6, 2))
+        console.set_alt_screen(False)
+    out.append(capture.get())
+    return "".join(out)
+
+
+API_GAP_CASES = [
+    # Table: width and min_width
+    ("table_width", lambda: _ag_print_all(
+        _cg_console(50),
+        _ag_table(width=30),
+        _ag_table(width=12),
+        _ag_table(width=45, show_edge=False),
+        _ag_table(width=10, box=None),
+    )),
+    ("table_width_ratio", lambda: _ag_print_all(_cg_console(50), _ag_ratio_table(40))),
+    ("table_min_width", lambda: _ag_print_all(
+        _cg_console(50),
+        _ag_table(min_width=40),
+        _ag_table(min_width=5),
+        _ag_table(min_width=80),
+        _ag_table(min_width=30, expand=True),
+    )),
+    ("table_width_measure", lambda: _ag_print_all(
+        _cg_console(50),
+        Panel.fit(_ag_table(width=28)),
+        Panel.fit(_ag_table(min_width=36)),
+        Columns([_ag_table(width=20), _ag_table(min_width=24)]),
+    )),
+    # Table: footers
+    ("table_footer", lambda: _ag_print_all(
+        _cg_console(40),
+        _ag_table(show_footer=True),
+        _ag_table(show_footer=True, show_edge=False),
+        _ag_table(show_footer=True, show_lines=True),
+        _ag_table(show_footer=True, box=None),
+        _ag_table(show_footer=True, show_header=False, box=box.SIMPLE),
+        _ag_table(show_footer=True, footer_style="italic red", box=box.DOUBLE_EDGE),
+        _ag_table(show_footer=True, footer_style=None, padding=(1, 1)),
+        _ag_table(show_footer=True, box=box.MINIMAL_DOUBLE_HEAD, pad_edge=False),
+    )),
+    # Table: leading and sections
+    ("table_leading", lambda: _ag_print_all(
+        _cg_console(40),
+        _ag_table(leading=1),
+        _ag_table(leading=2, width=18),
+        _ag_table(leading=1, show_footer=True, show_edge=False),
+        _ag_table(leading=1, box=box.SIMPLE),
+    )),
+    ("table_sections", lambda: _ag_print_all(_cg_console(40), _ag_sections())),
+    # Table: row styles
+    ("table_row_styles", lambda: _ag_print_all(
+        _cg_console(40),
+        _ag_table(row_styles=["", "on blue"]),
+        _ag_table(row_styles=["red", "green", "italic"], box=box.SIMPLE),
+        _ag_table(row_styles=["on red"], box=box.MINIMAL, show_footer=True),
+    )),
+    ("table_row_style_markup", lambda: _ag_print_all(
+        _cg_console(40, theme=RichTheme({"zebra": "on magenta"})),
+        _ag_table(row_styles=["zebra", "none"], header_style="zebra"),
+    )),
+    # Table: header / footer / title / caption styles and justification
+    ("table_header_style", lambda: _ag_print_all(
+        _cg_console(40),
+        _ag_table(header_style="magenta"),
+        _ag_table(header_style=None),
+        _ag_table(header_style="bold on blue", show_footer=True, footer_style="underline"),
+    )),
+    ("table_annotation_styles", lambda: _ag_print_all(
+        _cg_console(40),
+        _ag_annotations(title_style="bold red", caption_style="green"),
+        _ag_annotations(title_justify="left", caption_justify="right"),
+        _ag_annotations(title_justify="right", caption_justify="left"),
+        _ag_annotations(title_justify="full", caption_justify="full", width=16),
+        _ag_annotations(title_justify="default"),
+    )),
+    ("table_text_annotations", lambda: _ag_print_all(
+        _cg_console(40),
+        Table("a", "b", title=Text("Text title", style="blue"), caption=Text("right", justify="right"), title_style="red"),
+        Table("a", title=Text("t", justify="left"), title_justify="right", caption=Text("")),
+    )),
+    # Table: rows longer than the table add columns
+    ("table_extra_cells", lambda: _ag_print_all(_cg_console(40), _ag_extra_cells())),
+    # Table / Panel: safe_box on a legacy Windows console
+    ("safe_box", lambda: _ag_print_all(
+        _cg_console(30, legacy_windows=True, safe_box=True),
+        _ag_table(),
+        _ag_table(safe_box=False),
+        Panel("p"),
+        Panel("p", safe_box=False),
+    ) + _ag_print_all(
+        _cg_console(30, legacy_windows=True, safe_box=False),
+        _ag_table(safe_box=True),
+        Panel("p", safe_box=True),
+        Panel("p", box=box.HEAVY),
+    )),
+    # Box substitution keeps ASCII boxes on an ASCII-only console
+    ("ascii_boxes", lambda: _ag_print_all(
+        _cg_console(30, file=_AsciiFile()),
+        _ag_table(box=box.ASCII2),
+        _ag_table(box=box.ASCII_DOUBLE_HEAD),
+        _ag_table(box=box.MARKDOWN),
+        _ag_table(box=box.ROUNDED),
+        Panel("p", box=box.ASCII2),
+    )),
+    # Panel: Text subtitles
+    ("panel_text_subtitle", lambda: _ag_print_all(
+        _cg_console(30),
+        Panel("body", subtitle=Text("sub", style="bold red")),
+        Panel("body", subtitle=Text.assemble(("a", "green"), " b\nc"), subtitle_align="left", border_style="blue"),
+        Panel("body", title=Text("T", style="italic"), subtitle=Text("S"), title_align="right", subtitle_align="right"),
+        Panel.fit("body", subtitle=Text("a long subtitle here")),
+        Panel("body", subtitle=Text("")),
+    )),
+    # Syntax: signed start_line and line_range
+    ("syntax_signed_lines", lambda: "".join(
+        _cg_print(_cg_console(30), _ag_syntax(**options)) for options in _AG_SYNTAX_OPTIONS
+    )),
+    ("syntax_signed_stylize", lambda: _cg_print(_cg_console(30), _ag_stylized())),
+    ("syntax_highlight_range", lambda: "".join(
+        _cg_print(_cg_console(40), repr(_ag_syntax().highlight(_UF_CODE, line_range=line_range).plain), markup=False)
+        + _cg_print(_cg_console(40), _ag_syntax(background_color="red").highlight(_UF_CODE, line_range=line_range))
+        for line_range in [None, (-1, -2), (2, -1), (0, 0), (None, -1), (3, None)]
+    )),
+    # Layout.refresh_screen and Console.update_screen
+    ("layout_refresh_screen", _ag_refresh_screen),
+]
+
+
+def capture_api_gaps() -> None:
+    path = golden_dir() / "api_gaps.tsv"
+    lines = [
+        "# name\tjson(expected output) — see API_GAP_CASES in scripts/capture_golden.py"
+    ]
+    for name, build in API_GAP_CASES:
+        lines.append(f"{name}\t{json.dumps(build(), ensure_ascii=False)}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(API_GAP_CASES)} API gap cases to {path}")
+
+
+# --- audit edges (second core audit) -------------------------------------------
+# One fixture, `audit_edges.tsv`: `name<TAB>json(output)`, built with the same
+# `_cg_*` consoles. Edge values upstream defines: Layout `size=0` (flexible),
+# Syntax line numbers past 64 bits, LiveRender's ellipsis at height 0, a
+# zero-width Panel, lone surrogates in JSON under `ensure_ascii`, and extreme
+# SVG `font_aspect_ratio`s. `tests/golden_audit_edges.rs` has a Rust builder
+# per name.
+
+_I64_MAX = 2**63 - 1
+_I64_MIN = -(2**63)
+
+
+def _ae_layout(split: str) -> str:
+    layout = Layout()
+    children = [
+        Layout(Text("a"), size=0),
+        Layout(Text("b")),
+        Layout(Text("c"), size=0),
+    ]
+    getattr(layout, split)(*children)
+    return _cg_print(_cg_console(10, height=4), layout)
+
+
+def _ae_syntax_extremes() -> str:
+    options = [
+        {"line_numbers": True, "start_line": _I64_MAX},
+        {"line_numbers": True, "start_line": _I64_MAX, "highlight_lines": {_I64_MAX}},
+        {"line_numbers": True, "start_line": _I64_MIN},
+        {"line_numbers": True, "line_range": (_I64_MIN, None)},
+        {"line_numbers": True, "line_range": (None, _I64_MAX)},
+        {"line_numbers": True, "line_range": (_I64_MAX, None)},
+        {"line_range": (_I64_MIN, _I64_MIN)},
+        {"line_range": (2, _I64_MIN), "word_wrap": True},
+    ]
+    out = [_cg_print(_cg_console(30), _ag_syntax(**option)) for option in options]
+    syntax = _ag_syntax(line_numbers=True)
+    # A line far before the first raises `IndexError` upstream (the port
+    # skips the range), and a column far before the start never finishes
+    # rendering upstream, so only positions past the end are extreme.
+    syntax.stylize_range("reverse", (1, 2), (2, _I64_MAX))
+    syntax.stylize_range("bold", (2, _I64_MAX), (3, _I64_MAX))
+    syntax.stylize_range("underline", (_I64_MAX, 0), (_I64_MAX, 1))
+    out.append(_cg_print(_cg_console(30), syntax))
+    return "".join(out)
+
+
+def _ae_live(overflow: str) -> str:
+    live = LiveRender(Text("1\n2\n3\n4"), vertical_overflow=overflow)
+    return _cg_print(_cg_console(10, height=0), Panel(live))
+
+
+def _ae_svg(ratio: float) -> str:
+    console = _cg_console(20, record=True, file=io.StringIO())
+    console.print("[red]hi[/] [b]x[/]")
+    try:
+        return console.export_svg(title="t", unique_id="U", font_aspect_ratio=ratio)
+    except (OverflowError, ValueError) as error:
+        return f"<{type(error).__name__}>"
+
+
+AUDIT_EDGE_CASES = [
+    ("layout_size_zero_row", lambda: _ae_layout("split_row")),
+    ("layout_size_zero_column", lambda: _ae_layout("split_column")),
+    ("syntax_extreme_lines", _ae_syntax_extremes),
+    ("live_ellipsis_h0", lambda: _ae_live("ellipsis")),
+    ("live_crop_h0", lambda: _ae_live("crop")),
+    ("live_visible_h0", lambda: _ae_live("visible")),
+    ("panel_width0", lambda: _ag_print_all(
+        _cg_console(10),
+        Panel("a", width=0),
+        Panel.fit("a", width=0),
+        Panel("a", width=0, title="T", subtitle="S"),
+        Panel("a", width=1),
+        Panel("a", width=2, border_style="red"),
+    )),
+    ("json_lone_surrogate_ascii", lambda: _cg_print(
+        _cg_console(40),
+        JSON(
+            '["\\ud800", "\\udc00x\\ud83d\\ude00", "\\ud800\\u0041\\udbff",'
+            ' {"\\ue000": 1, "\\ud800": 2, "\\ud7ff": 3}]',
+            ensure_ascii=True,
+            sort_keys=True,
+        ),
+    )),
+    ("svg_font_aspect_ratio", lambda: "".join(
+        _ae_svg(ratio) + "\n" for ratio in [1e300, 1e20, -1.0, 1e-7, 0.0, 2.5]
+    )),
+    ("svg_font_aspect_ratio_errors", lambda: "".join(
+        _ae_svg(ratio) for ratio in [1e308, float("inf"), float("-inf"), float("nan")]
+    )),
+]
+
+
+def capture_audit_edges() -> None:
+    path = golden_dir() / "audit_edges.tsv"
+    lines = [
+        "# name\tjson(expected output) — see AUDIT_EDGE_CASES in scripts/capture_golden.py"
+    ]
+    for name, build in AUDIT_EDGE_CASES:
+        lines.append(f"{name}\t{json.dumps(build(), ensure_ascii=False)}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(AUDIT_EDGE_CASES)} audit edge cases to {path}")
+
+
+# --- audit 2 (renderables audit, core side) -----------------------------------
+# One fixture, `audit2.tsv`: `name<TAB>json(output)`, built with the `_cg_*`
+# consoles. Crop of zero-width characters, Markdown inheriting overflow and
+# justify, the Windows palette, blank lines of empty renderables, U+2028 in
+# measurement, an explicit `justify="default"`, GFM delimiter rows, markup
+# error positions, bare `grey`, and span rendering over many lines.
+# `tests/golden_audit2.rs` has a Rust builder per name.
+
+from rich.color import Color as _A2Color, ColorParseError as _A2ColorParseError
+from rich.console import Group as _A2Group
+from rich.text import Span as _A2Span
+
+
+def _a2_crop_zero_width() -> str:
+    table = Table(show_header=False, box=None, padding=0, width=19)
+    table.add_column()
+    table.add_column()
+    table.add_row("", "\u200b[dim]r[/dim]")
+    return _cg_print(_cg_console(10), table)
+
+
+def _a2_markdown_overflow() -> str:
+    console = _cg_console(12)
+    table = Table("h")
+    table.add_row(Markdown("supercalifragilistic word"))
+    out = _cg_print(console, table)
+    out += _cg_print(console, Markdown("hello"), overflow="crop", width=3)
+    out += _cg_print(console, Markdown("hello world"), no_wrap=True, overflow="ellipsis", width=8)
+    out += _cg_print(console, Markdown("![alt](x)", hyperlinks=False), justify="right", width=12)
+    out += _cg_print(console, Markdown("![alt](x)", hyperlinks=False), justify="center", width=12)
+    return out
+
+
+def _a2_windows_palette() -> str:
+    console = _cg_console(20, color_system="windows")
+    return _cg_print(
+        console,
+        "[#808080 on #82c9b0]x[/] [color(100)]y[/] [color(9) on color(200)]z[/] [red on bright_black]w",
+    )
+
+
+def _a2_empty_blank_lines() -> str:
+    return _cg_print(
+        _cg_console(10),
+        Tree(""),
+        Syntax("", "python", theme="ansi_dark"),
+        _A2Group(Text("", justify="left", overflow="ignore"), "x"),
+    )
+
+
+def _a2_unicode_line_separators() -> str:
+    console = _cg_console(12)
+    return "".join(
+        _cg_print(console, Panel(f"a{separator}o", expand=False))
+        for separator in ["\u2028", "\u2029", "\x1c", "\x85", "\r"]
+    )
+
+
+def _a2_default_justify_column() -> str:
+    table = Table()
+    table.add_column("h", justify="right", width=6)
+    table.add_row(Text("x", justify="default"))
+    table.add_row(Text("y"))
+    return _cg_print(_cg_console(20), table)
+
+
+def _a2_markup_error_position() -> str:
+    out = []
+    for source in ["é中[/i]", ":smile: [/i]", "中[/]", ":smile:[b]:smile:[/i]"]:
+        try:
+            _cg_console(40).render_str(source)
+            out.append("ok\n")
+        except MarkupError as error:
+            out.append(f"{error}\n")
+    return "".join(out)
+
+
+def _a2_grey() -> str:
+    out = _cg_print(_cg_console(20), "[grey]x[/] [on gray]y [gray50]z")
+    try:
+        _A2Color.parse("grey")
+    except _A2ColorParseError as error:
+        out += f"{error}\n"
+    return out
+
+
+def _a2_many_spans() -> str:
+    console = _cg_console(30, highlight=True)
+    items = ", ".join(str(n) for n in range(60))
+    out = _cg_print(console, f"[{items}]\n{{'a': 1, 'b': [True, None]}}")
+    for spans in [
+        [_A2Span(1, 1, "bold"), _A2Span(0, 4, "red")],
+        [_A2Span(0, 5, "red"), _A2Span(2, 2, "bold"), _A2Span(3, 5, "blue")],
+    ]:
+        out += _cg_print(console, Text("ab cd", spans=spans))
+        out += _cg_print(console, Text("ab\ncd", spans=spans))
+    return out
+
+
+AUDIT2_CASES = [
+    ("crop_zero_width_past_edge", _a2_crop_zero_width),
+    ("markdown_inherits_overflow", _a2_markdown_overflow),
+    ("windows_palette", _a2_windows_palette),
+    ("empty_blank_lines", _a2_empty_blank_lines),
+    ("unicode_line_separators", _a2_unicode_line_separators),
+    ("default_justify_column", _a2_default_justify_column),
+    ("panel_width0_empty", lambda: _cg_print(_cg_console(5), Panel("", width=0))),
+    ("gfm_invalid_delimiter_row", lambda: "".join(
+        _cg_print(_cg_console(10), Markdown(source))
+        for source in ["a||\n-|:", "a|b\n-|:", "a|b\n-|-:", "a|b\n:|-"]
+    )),
+    ("markup_error_position", _a2_markup_error_position),
+    ("grey_is_not_a_colour", _a2_grey),
+    ("brackets_and_tildes", lambda: _cg_print(
+        _cg_console(30), Markdown("[[~~x~~]] a~[~b ~~[c]~~ [~~~d~~~]")
+    )),
+    ("many_spans", _a2_many_spans),
+]
+
+
+def capture_audit2() -> None:
+    path = golden_dir() / "audit2.tsv"
+    lines = ["# name\tjson(expected output) — see AUDIT2_CASES in scripts/capture_golden.py"]
+    for name, build in AUDIT2_CASES:
+        lines.append(f"{name}\t{json.dumps(build(), ensure_ascii=False)}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(AUDIT2_CASES)} audit 2 cases to {path}")
 
 
 if __name__ == "__main__":

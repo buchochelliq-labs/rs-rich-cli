@@ -166,6 +166,20 @@ impl AnsiDecoder {
         terminal_text.lines().map(|l| self.decode_line(l)).collect()
     }
 
+    /// Decode as upstream 15.0.0's `AnsiDecoder.decode` splits:
+    /// `re.split(r"(?<=\n)", text)` then `line.rstrip("\n")`. Only `\n` ends
+    /// a line (a `\r` before it is kept, so it resets the line), and text
+    /// ending in a newline, or empty text, yields a final empty line.
+    /// [`decode`](Self::decode) keeps the older `splitlines` behaviour that
+    /// existing callers rely on.
+    pub fn decode_split_newlines(&mut self, terminal_text: &str) -> Vec<Text> {
+        terminal_text
+            .split_inclusive('\n')
+            .chain((terminal_text.is_empty() || terminal_text.ends_with('\n')).then_some(""))
+            .map(|line| self.decode_line(line.trim_end_matches('\n')))
+            .collect()
+    }
+
     /// Decode a single line containing ANSI codes.
     pub fn decode_line(&mut self, line: &str) -> Text {
         // A carriage return resets the line: keep only what follows the last one.

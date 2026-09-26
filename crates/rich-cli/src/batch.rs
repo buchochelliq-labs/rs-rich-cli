@@ -466,7 +466,7 @@ fn spawn(
     }
     let stdout = tempfile::tempfile()?;
     let stderr = tempfile::tempfile()?;
-    let mut command = Command::new(std::env::current_exe()?);
+    let mut command = super::self_command()?;
     worker_terminal(
         &mut command,
         std::io::stdout().is_terminal(),

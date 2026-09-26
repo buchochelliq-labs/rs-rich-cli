@@ -18,13 +18,17 @@ PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
 @pytest.mark.parametrize(
     "module, names",
     [
-        ("rs_rich.console", ["Console"]),
+        ("rs_rich.console", ["Console", "ConsoleOptions", "ConsoleDimensions", "Capture", "CaptureError"]),
+        ("rs_rich.segment", ["Segment"]),
+        ("rs_rich.measure", ["Measurement"]),
+        ("rs_rich.theme", ["Theme", "ThemeStackError"]),
+        ("rs_rich.terminal_theme", ["TerminalTheme", "DEFAULT_TERMINAL_THEME", "MONOKAI"]),
         ("rs_rich.text", ["Text"]),
         ("rs_rich.style", ["Style"]),
         ("rs_rich.table", ["Table"]),
         ("rs_rich.panel", ["Panel"]),
         ("rs_rich.markup", ["escape"]),
-        ("rs_rich.errors", ["ConsoleError", "MarkupError", "StyleSyntaxError"]),
+        ("rs_rich.errors", ["ConsoleError", "MarkupError", "StyleSyntaxError", "NotRenderableError", "MissingStyle"]),
         ("rs_rich.box", ["ROUNDED", "HEAVY_HEAD", "SIMPLE", "ASCII", "MARKDOWN"]),
     ],
 )
@@ -43,9 +47,57 @@ def test_the_stubs_describe_exactly_the_compiled_module():
             stubbed.add(node.name)
         elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
             stubbed.add(node.target.id)
-    aliases = {"JustifyMethod", "OverflowMethod", "AlignMethod", "StyleType", "PaddingDimensions", "RenderableType"}
+    aliases = {
+        "JustifyMethod",
+        "OverflowMethod",
+        "AlignMethod",
+        "StyleType",
+        "PaddingDimensions",
+        "RenderableType",
+        "RichCast",
+        "ConsoleRenderable",
+    }
+    # Stubbed for every build, compiled only into some (the lumis wheel).
+    optional = {"LumisPlugin"}
     runtime = {name for name in dir(_native) if not name.startswith("_")} | {"__version__"}
-    assert stubbed - aliases == runtime
+    assert stubbed - aliases - optional == runtime - optional
+
+
+# Every module an area fills in later exists now, so areas never create
+# (and collide on) shared files. Each imports, even while empty.
+AREA_MODULES = [
+    "rule", "padding", "align", "columns", "constrain", "styled", "tree", "layout", "bar", "spinner",
+    "markdown", "syntax", "json", "pretty", "traceback", "highlighter",
+    "live", "progress", "status", "screen", "pager", "prompt", "logging",
+    "color", "emoji", "theme", "segment", "measure", "terminal_theme",
+    "ext", "art", "mermaid", "plugins",
+]
+
+
+@pytest.mark.parametrize("name", AREA_MODULES)
+def test_every_area_module_imports(name):
+    module = importlib.import_module(f"rs_rich.{name}")
+    assert isinstance(module.__all__, list)
+    for exported in module.__all__:
+        assert getattr(module, exported) is getattr(_native, exported)
+
+
+def test_the_stub_file_has_a_section_per_area():
+    sections = [
+        line for line in (PACKAGE / "_native.pyi").read_text(encoding="utf-8").splitlines()
+        if line.startswith("# --- area: ")
+    ]
+    for area in ["text-style", "renderables", "code", "live", "ext", "art", "plugins", "cli"]:
+        assert any(line.startswith(f"# --- area: {area} ") for line in sections), area
+
+
+def test_python_dash_m_is_the_cli():
+    import rs_rich.__main__ as main
+    import rs_rich.cli
+
+    # Importing it runs nothing; `python -m rs_rich` runs `rs_rich.cli.main`
+    # (see test_cli.py for the command itself).
+    assert main.main is rs_rich.cli.main
 
 
 def test_box_constants():

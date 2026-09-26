@@ -10,7 +10,8 @@
 //! `dict` and serde_json's `preserve_order` do. Number formatting follows
 //! `json.dumps` too: floats are written
 //! with Python's `float.__repr__` ([`crate::pyformat::float_repr`]).
-//! Custom indent/sort options are deferred — see docs/DIVERGENCES.md.
+//! [`JsonOptions`] carries upstream's `indent`, `sort_keys`, `ensure_ascii`,
+//! `allow_nan` and `highlight`; highlighting is upstream's `JSONHighlighter`.
 //!
 //! ## Why the parser is hand-written
 //!
@@ -50,17 +51,83 @@ use crate::errors::{Result, RichError};
 use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
-use crate::style::Style;
+use crate::style::StyleType;
+use crate::text::{Span, Text};
 
 /// A parsed JSON document, rendered with syntax highlighting. Mirrors `rich.json.JSON`.
+///
+/// Like upstream, the document is re-serialized (`json.dumps`) with the
+/// [`JsonOptions`] and highlighted with `JSONHighlighter` when it is built;
+/// [`text`](Json::text) is that highlighted `Text`.
 pub struct Json {
     value: Node,
-    styles: JsonStyles,
+    options: JsonOptions,
+    /// The highlighted document, one `Text` per physical line (upstream
+    /// wraps a `Text` line by line, so this is how it renders). Built on
+    /// first use: a document near [`MAX_DEPTH`] formats to hundreds of
+    /// megabytes of indentation, and one that is only parsed and dropped
+    /// should not pay for that.
+    lines: std::sync::OnceLock<Vec<Text>>,
     /// See [`Json::no_wrap`].
     no_wrap: bool,
     #[cfg(feature = "json-escape-safe")]
     escape_safe: bool,
 }
+
+/// The keyword arguments of `rich.json.JSON`, for [`Json::with_options`].
+///
+/// `skip_keys` and `check_circular` are accepted for parity but cannot change
+/// the output of a document parsed from a string: its keys are all strings
+/// and it has no cycles. Upstream's `default=` callable only applies to
+/// `JSON.from_data`, which serializes arbitrary (non-JSON) objects.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct JsonOptions {
+    /// `indent=`: the indent string, or `None` for a single line. An integer
+    /// indent `n` is `n` spaces (see [`JsonOptions::indent_spaces`]).
+    pub indent: Option<String>,
+    /// `highlight=`: apply `JSONHighlighter` (default on).
+    pub highlight: bool,
+    /// `skip_keys=` (no effect on a parsed document).
+    pub skip_keys: bool,
+    /// `ensure_ascii=`: escape every non-ASCII character (default off).
+    pub ensure_ascii: bool,
+    /// `check_circular=` (no effect on a parsed document).
+    pub check_circular: bool,
+    /// `allow_nan=`: with it off, `NaN` and the infinities are an error
+    /// (default on).
+    pub allow_nan: bool,
+    /// `sort_keys=`: sort object keys (default off).
+    pub sort_keys: bool,
+}
+
+impl Default for JsonOptions {
+    fn default() -> Self {
+        JsonOptions {
+            indent: Some("  ".to_string()),
+            highlight: true,
+            skip_keys: false,
+            ensure_ascii: false,
+            check_circular: true,
+            allow_nan: true,
+            sort_keys: false,
+        }
+    }
+}
+
+impl JsonOptions {
+    /// An integer `indent=`: `n` spaces, as `json.dumps` turns an int into
+    /// `" " * n` (so zero or a negative number puts each item on its own line
+    /// with no indentation).
+    pub fn indent_spaces(indent: i64) -> Option<String> {
+        Some(" ".repeat(usize::try_from(indent).unwrap_or(0)))
+    }
+}
+
+/// A Python `str` as generalized UTF-8 (WTF-8): UTF-8, except that a lone
+/// surrogate from a `\uD800`-style escape (which Python's `json` accepts)
+/// is kept as its three-byte encoding, as `surrogatepass` writes it. Byte
+/// order is still code point order, so `sort_keys` sorts as Python does.
+type PyStr = Vec<u8>;
 
 /// A parsed JSON value.
 ///
@@ -76,9 +143,9 @@ enum Node {
     /// rich's `JSONHighlighter` has no rule that matches them, so they print
     /// unstyled.
     NonFinite(&'static str),
-    Str(String),
+    Str(PyStr),
     Array(Vec<Node>),
-    Object(Vec<(String, Node)>),
+    Object(Vec<(PyStr, Node)>),
 }
 
 impl Drop for Node {
@@ -108,49 +175,70 @@ fn take_children(node: &mut Node, out: &mut Vec<Node>) {
     }
 }
 
-struct JsonStyles {
-    brace: Style,
-    key: Style,
-    string: Style,
-    number: Style,
-    bool_true: Style,
-    bool_false: Style,
-    null: Style,
-}
-
-impl JsonStyles {
-    fn defaults() -> Self {
-        let s = |spec: &str| Style::parse(spec).expect("valid built-in style");
-        JsonStyles {
-            brace: s("bold"),
-            key: s("bold blue"),
-            string: s("green"),
-            number: s("bold cyan"),
-            bool_true: s("italic bright_green"),
-            bool_false: s("italic bright_red"),
-            null: s("italic magenta"),
-        }
-    }
-}
-
-/// One entry of the render work list, consumed newest-first.
-enum Task<'a> {
-    /// Render this value indented `usize` levels deep.
-    Value(&'a Node, usize),
-    /// Emit a segment that has already been decided.
-    Emit(Segment),
-}
-
 impl Json {
-    /// Parse `text` as JSON. Returns an error if it is not valid JSON.
+    /// Parse `text` as JSON with upstream's default options. Returns an error
+    /// if it is not valid JSON.
     pub fn new(text: &str) -> Result<Self> {
+        Json::with_options(text, &JsonOptions::default())
+    }
+
+    /// Parse `text` as JSON and format it with `options`. Port of
+    /// `rich.json.JSON(json, indent=…, highlight=…, …)`.
+    pub fn with_options(text: &str, options: &JsonOptions) -> Result<Self> {
+        let value = Parser::new(text).parse_document()?;
+        // `json.dumps(allow_nan=False)` raises here, at construction.
+        if !options.allow_nan {
+            if let Some(literal) = first_non_finite(&value) {
+                return Err(RichError::Json(format!(
+                    "Out of range float values are not JSON compliant: {}",
+                    match literal {
+                        "NaN" => "nan",
+                        "Infinity" => "inf",
+                        _ => "-inf",
+                    }
+                )));
+            }
+        }
         Ok(Json {
-            value: Parser::new(text).parse_document()?,
-            styles: JsonStyles::defaults(),
+            value,
+            options: options.clone(),
+            lines: std::sync::OnceLock::new(),
             no_wrap: false,
             #[cfg(feature = "json-escape-safe")]
             escape_safe: false,
         })
+    }
+
+    /// The formatted document, one highlighted `Text` per line.
+    fn lines(&self) -> &[Text] {
+        self.lines.get_or_init(|| {
+            let dumped = dumps(&self.value, &self.options);
+            let text = if !self.options.highlight {
+                Text::new(dumped.json)
+            } else if dumped.exact {
+                let mut text = Text::new(dumped.json);
+                let mut spans = dumped.spans;
+                spans.extend(dumped.keys);
+                text.set_spans(spans);
+                text
+            } else {
+                json_highlight(dumped.json)
+            };
+            if text.plain().contains('\n') {
+                text.split("\n", false, true)
+            } else {
+                vec![text]
+            }
+        })
+    }
+
+    /// The formatted, highlighted document. Port of the `JSON.text`
+    /// attribute (upstream's `__rich__` returns it).
+    pub fn text(&self) -> Text {
+        match self.lines() {
+            [line] => line.clone(),
+            lines => Text::new("\n").join(lines),
+        }
     }
 
     /// Opt in to escape-aware display boundaries (requires `json-escape-safe`).
@@ -174,7 +262,10 @@ impl Json {
     /// `Text(sep, justify=…, end=…).join(buffered)` — and `Text.join` starts
     /// from `self.blank_copy()`, i.e. from the *separator's* metadata. The
     /// separator has `no_wrap=None`, so the copy that actually renders wraps
-    /// with the default `fold` overflow.
+    /// with the default `fold` overflow — or with the `no_wrap` and
+    /// `overflow` that `print` was given, which reach it as
+    /// [`ConsoleOptions`] and which this renderable honours while the flag is
+    /// off.
     ///
     /// Turn it on whenever the document is **nested** inside another
     /// renderable — a `Panel`, `Padding`, `Styled`, `Constrain`, or rich-cli's
@@ -193,127 +284,307 @@ impl Json {
         self
     }
 
-    /// Flatten the document into segments, iteratively.
-    ///
-    /// A recursive walk would descend once per nesting level and overflow the
-    /// stack on the deep documents the parser now accepts.
-    fn render_value(&self) -> Vec<Segment> {
-        let brace = |text: &str| Segment::new(text.to_string(), Some(self.styles.brace.clone()));
-        let plain = |text: String| Segment::new(text, None);
-
+    /// The document's lines rendered without wrapping, joined by newlines.
+    #[cfg(feature = "json-escape-safe")]
+    fn render_unwrapped(&self, console: &Console) -> Vec<Segment> {
         let mut out = Vec::new();
-        let mut stack = vec![Task::Value(&self.value, 0)];
-        while let Some(task) = stack.pop() {
-            let (node, level) = match task {
-                Task::Emit(segment) => {
-                    out.push(segment);
-                    continue;
-                }
-                Task::Value(node, level) => (node, level),
-            };
-            match node {
-                Node::Null => out.push(Segment::new(
-                    "null".to_string(),
-                    Some(self.styles.null.clone()),
-                )),
-                Node::Bool(true) => out.push(Segment::new(
-                    "true".to_string(),
-                    Some(self.styles.bool_true.clone()),
-                )),
-                Node::Bool(false) => out.push(Segment::new(
-                    "false".to_string(),
-                    Some(self.styles.bool_false.clone()),
-                )),
-                Node::Number(number) => out.push(Segment::new(
-                    number.clone(),
-                    Some(self.styles.number.clone()),
-                )),
-                Node::NonFinite(literal) => out.push(plain((*literal).to_string())),
-                Node::Str(string) => out.push(Segment::new(
-                    quote(string),
-                    Some(self.styles.string.clone()),
-                )),
-                Node::Array(items) => {
-                    out.push(brace("["));
-                    if items.is_empty() {
-                        out.push(brace("]"));
-                        continue;
-                    }
-                    out.push(plain("\n".to_string()));
-                    // Pushed back-to-front, so they pop in document order.
-                    stack.push(Task::Emit(brace("]")));
-                    stack.push(Task::Emit(plain("  ".repeat(level))));
-                    let last = items.len() - 1;
-                    for (index, item) in items.iter().enumerate().rev() {
-                        stack.push(Task::Emit(plain("\n".to_string())));
-                        if index != last {
-                            stack.push(Task::Emit(plain(",".to_string())));
-                        }
-                        stack.push(Task::Value(item, level + 1));
-                        stack.push(Task::Emit(plain("  ".repeat(level + 1))));
-                    }
-                }
-                Node::Object(entries) => {
-                    out.push(brace("{"));
-                    if entries.is_empty() {
-                        out.push(brace("}"));
-                        continue;
-                    }
-                    out.push(plain("\n".to_string()));
-                    stack.push(Task::Emit(brace("}")));
-                    stack.push(Task::Emit(plain("  ".repeat(level))));
-                    let last = entries.len() - 1;
-                    for (index, (key, item)) in entries.iter().enumerate().rev() {
-                        stack.push(Task::Emit(plain("\n".to_string())));
-                        if index != last {
-                            stack.push(Task::Emit(plain(",".to_string())));
-                        }
-                        stack.push(Task::Value(item, level + 1));
-                        stack.push(Task::Emit(plain(": ".to_string())));
-                        stack.push(Task::Emit(Segment::new(
-                            quote(key),
-                            Some(self.styles.key.clone()),
-                        )));
-                        stack.push(Task::Emit(plain("  ".repeat(level + 1))));
-                    }
-                }
+        for (index, line) in self.lines().iter().enumerate() {
+            if index > 0 {
+                out.push(Segment::line());
             }
+            out.extend(line.render(console.theme(), console.base_style()));
         }
         out
     }
+}
+
+/// A serialized document, with the spans `JSONHighlighter` would give it.
+struct Dumped {
+    json: String,
+    /// Token spans (`json.brace`, `json.str`, …) in document order.
+    spans: Vec<Span>,
+    /// `json.key` spans, which upstream appends after every token span.
+    keys: Vec<Span>,
+    /// Whether `spans` + `keys` are exactly what the highlighter's regexes
+    /// produce. They are for a whitespace indent and strings whose closing
+    /// quote does not follow a backslash; otherwise the regexes run.
+    exact: bool,
+}
+
+impl Dumped {
+    fn styled(&mut self, token: &str, style: &'static str) {
+        let start = self.json.len();
+        self.json.push_str(token);
+        self.spans.push(Span {
+            start,
+            end: self.json.len(),
+            style: StyleType::Name(style.to_string()),
+        });
+    }
+
+    /// A quoted string. `JSON_STR`'s lazy `".*?(?<!\\)"` ends at the first
+    /// quote not preceded by a backslash, which is this string's own closing
+    /// quote unless the string ends in an escaped backslash.
+    fn string(&mut self, quoted: &str, key: bool) {
+        if quoted.as_bytes().get(quoted.len().wrapping_sub(2)) == Some(&b'\\') {
+            self.exact = false;
+        }
+        let start = self.json.len();
+        self.styled(quoted, "json.str");
+        if key {
+            self.keys.push(Span {
+                start,
+                end: self.json.len(),
+                style: StyleType::Name("json.key".to_string()),
+            });
+        }
+    }
+}
+
+/// Serialize `value` as Python's `json.dumps` does with `options`, iteratively
+/// so nesting depth costs heap rather than stack.
+fn dumps(value: &Node, options: &JsonOptions) -> Dumped {
+    use std::borrow::Cow;
+    let indent = options.indent.as_deref();
+    // `json.dumps` separators: `(', ', ': ')` on one line, `(',', ': ')` with
+    // an indent.
+    let item_separator = if indent.is_some() { "," } else { ", " };
+    let newline_indent = |level: usize| -> Cow<'static, str> {
+        match indent {
+            Some(indent) => Cow::Owned(format!("\n{}", indent.repeat(level))),
+            None => Cow::Borrowed(""),
+        }
+    };
+    let quote_string = |string: &[u8]| -> String { quote_py(string, options.ensure_ascii) };
+
+    /// One entry of the serializer's work list, consumed newest-first.
+    enum Task<'a> {
+        /// Serialize this value, `usize` levels deep.
+        Value(&'a Node, usize),
+        /// Write this unstyled text.
+        Plain(Cow<'a, str>),
+        /// Write a closing brace.
+        Close(&'static str),
+        /// Write an object key and its `": "`.
+        Key(&'a [u8]),
+    }
+
+    let mut dumped = Dumped {
+        json: String::new(),
+        spans: Vec::new(),
+        keys: Vec::new(),
+        // The highlighter's patterns could match inside any other indent.
+        exact: indent.is_none_or(|indent| indent.chars().all(|c| c == ' ' || c == '\t')),
+    };
+    let mut stack = vec![Task::Value(value, 0)];
+    while let Some(task) = stack.pop() {
+        let (node, level) = match task {
+            Task::Plain(text) => {
+                dumped.json.push_str(&text);
+                continue;
+            }
+            Task::Close(brace) => {
+                dumped.styled(brace, "json.brace");
+                continue;
+            }
+            Task::Key(key) => {
+                dumped.string(&quote_string(key), true);
+                dumped.json.push_str(": ");
+                continue;
+            }
+            Task::Value(node, level) => (node, level),
+        };
+        match node {
+            Node::Null => dumped.styled("null", "json.null"),
+            Node::Bool(true) => dumped.styled("true", "json.bool_true"),
+            Node::Bool(false) => dumped.styled("false", "json.bool_false"),
+            Node::Number(number) => dumped.styled(number, "json.number"),
+            // No `JSONHighlighter` pattern matches `NaN` or the infinities.
+            Node::NonFinite(literal) => dumped.json.push_str(literal),
+            Node::Str(string) => dumped.string(&quote_string(string), false),
+            Node::Array(items) => {
+                dumped.styled("[", "json.brace");
+                if items.is_empty() {
+                    dumped.styled("]", "json.brace");
+                    continue;
+                }
+                // Pushed back-to-front, so they pop in document order.
+                stack.push(Task::Close("]"));
+                stack.push(Task::Plain(newline_indent(level)));
+                let last = items.len() - 1;
+                for (index, item) in items.iter().enumerate().rev() {
+                    if index != last {
+                        stack.push(Task::Plain(Cow::Borrowed(item_separator)));
+                    }
+                    stack.push(Task::Value(item, level + 1));
+                    stack.push(Task::Plain(newline_indent(level + 1)));
+                }
+            }
+            Node::Object(entries) => {
+                dumped.styled("{", "json.brace");
+                if entries.is_empty() {
+                    dumped.styled("}", "json.brace");
+                    continue;
+                }
+                let mut order: Vec<&(PyStr, Node)> = entries.iter().collect();
+                if options.sort_keys {
+                    // `sorted(dct.items())`: keys are unique, so this is by key,
+                    // in code point order (which UTF-8 byte order preserves).
+                    order.sort_by(|a, b| a.0.cmp(&b.0));
+                }
+                stack.push(Task::Close("}"));
+                stack.push(Task::Plain(newline_indent(level)));
+                let last = order.len() - 1;
+                for (index, (key, item)) in order.into_iter().enumerate().rev() {
+                    if index != last {
+                        stack.push(Task::Plain(Cow::Borrowed(item_separator)));
+                    }
+                    stack.push(Task::Value(item, level + 1));
+                    stack.push(Task::Key(key));
+                    stack.push(Task::Plain(newline_indent(level + 1)));
+                }
+            }
+        }
+    }
+    dumped
+}
+
+/// The first non-finite literal in the document, if any, found iteratively.
+fn first_non_finite(value: &Node) -> Option<&'static str> {
+    let mut pending = vec![value];
+    while let Some(node) = pending.pop() {
+        match node {
+            Node::NonFinite(literal) => return Some(literal),
+            Node::Array(items) => pending.extend(items.iter()),
+            Node::Object(entries) => pending.extend(entries.iter().map(|(_, value)| value)),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// `ensure_ascii=True`: re-escape every character outside `' '..='~'` in an
+/// already-quoted JSON string as `\uXXXX` (a surrogate pair above the BMP),
+/// as `py_encode_basestring_ascii` does. The quoted form's own escapes are
+/// ASCII already.
+fn ascii_escape(quoted: &str) -> String {
+    if quoted.bytes().all(|b| (b' '..=b'~').contains(&b)) {
+        return quoted.to_string();
+    }
+    let mut out = String::with_capacity(quoted.len() + 16);
+    for c in quoted.chars() {
+        if (' '..='~').contains(&c) {
+            out.push(c);
+            continue;
+        }
+        let mut units = [0u16; 2];
+        for unit in c.encode_utf16(&mut units) {
+            out.push_str(&format!("\\u{unit:04x}"));
+        }
+    }
+    out
+}
+
+/// Upstream's `JSONHighlighter` regexes: the combined token pattern, and the
+/// string pattern its key pass re-scans with.
+fn json_patterns() -> &'static (fancy_regex::Regex, fancy_regex::Regex) {
+    static PATTERNS: std::sync::OnceLock<(fancy_regex::Regex, fancy_regex::Regex)> =
+        std::sync::OnceLock::new();
+    PATTERNS.get_or_init(|| {
+        const JSON_STR: &str = r#"(?<![\\\w])(?P<str>b?".*?(?<!\\)")"#;
+        let combined = [
+            r"(?P<brace>[\{\[\(\)\]\}])",
+            r"\b(?P<bool_true>true)\b|\b(?P<bool_false>false)\b|\b(?P<null>null)\b",
+            r"(?P<number>(?<!\w)\-?[0-9]+\.?[0-9]*(e[\-\+]?\d+?)?\b|0x[0-9a-fA-F]*)",
+            JSON_STR,
+        ]
+        .join("|");
+        (
+            fancy_regex::Regex::new(&combined).expect("valid JSON highlighter pattern"),
+            fancy_regex::Regex::new(JSON_STR).expect("valid JSON string pattern"),
+        )
+    })
+}
+
+/// Highlight a formatted document. Port of `JSONHighlighter.highlight`: the
+/// `json.`-prefixed token spans, then a `json.key` span on every string that
+/// is followed (past whitespace) by a colon.
+fn json_highlight(json: String) -> Text {
+    let (combined, string) = json_patterns();
+    let mut text = Text::new(json);
+    text.highlight_with_regex(combined, None, "json.");
+    let plain = text.plain();
+    let mut keys = Vec::new();
+    for found in string.find_iter(plain) {
+        let Ok(found) = found else { break };
+        for &byte in &plain.as_bytes()[found.end()..] {
+            match byte {
+                b':' => keys.push((found.start(), found.end())),
+                b' ' | b'\n' | b'\r' | b'\t' => continue,
+                _ => {}
+            }
+            break;
+        }
+    }
+    for (start, end) in keys {
+        text.push_span(Span {
+            start,
+            end,
+            style: StyleType::Name("json.key".to_string()),
+        });
+    }
+    text
 }
 
 impl Renderable for Json {
     /// Upstream `JSON.__rich__` returns its highlighted `Text`, so measuring a
     /// `JSON` is `Text.__rich_measure__` over the formatted document.
     fn measure(&self, _console: &Console, _options: &ConsoleOptions) -> Measurement {
-        let plain: String = self
-            .render_value()
-            .iter()
-            .map(|s| s.text.as_str())
-            .collect();
-        let (minimum, maximum) = crate::text::Text::new(plain).measurement();
+        let mut minimum = 0;
+        let mut maximum = 0;
+        for line in self.lines() {
+            let (line_minimum, line_maximum) = line.measurement();
+            minimum = minimum.max(line_minimum);
+            maximum = maximum.max(line_maximum);
+        }
         Measurement::new(minimum, maximum)
     }
 
-    fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        let segments = self.render_value();
+    /// `Text.__rich_console__` of the document: each line wraps (or, with
+    /// `no_wrap`, is truncated) to the width with the options' `justify` and
+    /// `overflow` — the document's own `overflow` is `None`.
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         #[cfg(feature = "json-escape-safe")]
         if self.escape_safe {
+            let segments = self.render_unwrapped(console);
             return escape_safe_lines(&segments, options.max_width, self.no_wrap);
         }
-        if self.no_wrap {
-            // `Text.wrap` with `no_wrap` keeps the line whole and then calls
-            // `line.truncate(width, overflow="fold")`, which is a crop. See
-            // [`Json::no_wrap`] for when upstream gets here.
-            Segment::crop_lines(&segments, options.max_width)
-        } else {
-            // The break must land at a *word* boundary: the joined copy carries
-            // no overflow either, so upstream wraps with the default `fold`
-            // overflow and only splits mid-word when a single token is wider
-            // than the line.
-            Segment::fold_lines_words(&segments, options.max_width)
+        let no_wrap = self.no_wrap || options.no_wrap.unwrap_or(false);
+        let overflow = options.overflow.unwrap_or_default();
+        let tab_size = match console.tab_size() {
+            0 => crate::text::DEFAULT_TAB_SIZE,
+            tab_size => tab_size,
+        };
+        let mut out = Vec::new();
+        let mut first = true;
+        for line in self.lines() {
+            for rendered in line.render_lines_wrapped_tabs(
+                console.theme(),
+                console.base_style(),
+                Some(options.max_width),
+                options.justify,
+                overflow,
+                no_wrap,
+                tab_size,
+            ) {
+                if !first {
+                    out.push(Segment::line());
+                }
+                first = false;
+                out.extend(rendered);
+            }
         }
+        out
     }
 }
 
@@ -430,6 +701,113 @@ fn escape_safe_lines(segments: &[Segment], width: usize, crop: bool) -> Vec<Segm
 }
 
 /// Serialize a string as a JSON string literal (quoted + escaped).
+/// `json.dumps` of a [`PyStr`]. A lone surrogate is `\udXXX` under
+/// `ensure_ascii`; otherwise Python emits the surrogate itself, which a Rust
+/// string cannot hold, so it becomes U+FFFD (see docs/DIVERGENCES.md).
+fn quote_py(string: &[u8], ensure_ascii: bool) -> String {
+    let escape = |run: &str| -> String {
+        let quoted = quote(run);
+        if ensure_ascii {
+            ascii_escape(&quoted)
+        } else {
+            quoted
+        }
+    };
+    if let Ok(run) = std::str::from_utf8(string) {
+        return escape(run);
+    }
+    let mut out = String::from("\"");
+    let mut rest = string;
+    while !rest.is_empty() {
+        let valid = match std::str::from_utf8(rest) {
+            Ok(_) => rest.len(),
+            Err(error) => error.valid_up_to(),
+        };
+        let (run, tail) = rest.split_at(valid);
+        let quoted = escape(std::str::from_utf8(run).unwrap_or_default());
+        out.push_str(&quoted[1..quoted.len() - 1]);
+        rest = tail;
+        if let [0xED, b1 @ 0xA0..=0xBF, b2, tail @ ..] = rest {
+            let unit = 0xD000 | (u32::from(b1 & 0x3F) << 6) | u32::from(b2 & 0x3F);
+            if ensure_ascii {
+                out.push_str(&format!("\\u{unit:04x}"));
+            } else {
+                out.push(char::REPLACEMENT_CHARACTER);
+            }
+            rest = tail;
+        } else if !rest.is_empty() {
+            // Unreachable for parser output; never loop forever.
+            out.push(char::REPLACEMENT_CHARACTER);
+            rest = &rest[1..];
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// Decode a JSON string token as Python's `json` does, keeping unpaired
+/// `\uD800`-`\uDFFF` escapes as surrogates in the result. `None` when the
+/// token is invalid for another reason (the caller reports `serde_json`'s
+/// error for it).
+fn decode_with_surrogates(token: &str) -> Option<PyStr> {
+    let inner = token.strip_prefix('"')?.strip_suffix('"')?;
+    let mut out = Vec::with_capacity(inner.len());
+    let mut chars = inner.chars().peekable();
+    let hex4 = |chars: &mut std::iter::Peekable<std::str::Chars<'_>>| -> Option<u32> {
+        let mut value = 0;
+        for _ in 0..4 {
+            value = value * 16 + chars.next()?.to_digit(16)?;
+        }
+        Some(value)
+    };
+    while let Some(c) = chars.next() {
+        if c < ' ' {
+            return None;
+        }
+        if c != '\\' {
+            let mut buf = [0u8; 4];
+            out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+            continue;
+        }
+        let decoded = match chars.next()? {
+            '"' => '"',
+            '\\' => '\\',
+            '/' => '/',
+            'b' => '\u{8}',
+            'f' => '\u{c}',
+            'n' => '\n',
+            'r' => '\r',
+            't' => '\t',
+            'u' => {
+                let mut unit = hex4(&mut chars)?;
+                if (0xD800..0xDC00).contains(&unit) {
+                    let mut lookahead = chars.clone();
+                    if lookahead.next() == Some('\\') && lookahead.next() == Some('u') {
+                        if let Some(low @ 0xDC00..=0xDFFF) = hex4(&mut lookahead) {
+                            unit = 0x10000 + ((unit - 0xD800) << 10) + (low - 0xDC00);
+                            chars = lookahead;
+                        }
+                    }
+                }
+                match char::from_u32(unit) {
+                    Some(c) => c,
+                    None => {
+                        // A lone surrogate: its generalized UTF-8 encoding.
+                        out.push(0xE0 | (unit >> 12) as u8);
+                        out.push(0x80 | ((unit >> 6) & 0x3F) as u8);
+                        out.push(0x80 | (unit & 0x3F) as u8);
+                        continue;
+                    }
+                }
+            }
+            _ => return None,
+        };
+        let mut buf = [0u8; 4];
+        out.extend_from_slice(decoded.encode_utf8(&mut buf).as_bytes());
+    }
+    Some(out)
+}
+
 fn quote(string: &str) -> String {
     serde_json::to_string(string).unwrap_or_else(|_| format!("{string:?}"))
 }
@@ -438,13 +816,13 @@ fn quote(string: &str) -> String {
 enum Frame {
     Array(Vec<Node>),
     Object {
-        entries: Vec<(String, Node)>,
+        entries: Vec<(PyStr, Node)>,
         /// Key -> position in `entries`, so a repeated key overwrites in place
         /// (`{"a": 1, "a": 2}` is one entry) without an O(n^2) rescan. Dropped
         /// with the frame, so only the objects on the current path pay for it.
-        seen: HashMap<String, usize>,
+        seen: HashMap<PyStr, usize>,
         /// The key whose value is currently being parsed.
-        key: String,
+        key: PyStr,
     },
 }
 
@@ -575,7 +953,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse `"key" :`, leaving the parser on the value.
-    fn parse_key(&mut self) -> Result<String> {
+    fn parse_key(&mut self) -> Result<PyStr> {
         self.skip_whitespace();
         if self.peek() != Some(b'"') {
             return Err(self.error("key must be a string"));
@@ -627,7 +1005,7 @@ impl<'a> Parser<'a> {
 
     /// Read a string token and decode it with `serde_json`, so escapes, lone
     /// surrogates and raw control characters behave exactly as before.
-    fn parse_string(&mut self) -> Result<String> {
+    fn parse_string(&mut self) -> Result<PyStr> {
         let start = self.pos;
         let mut end = self.pos + 1;
         loop {
@@ -657,8 +1035,14 @@ impl<'a> Parser<'a> {
                 Some(_) => end += 1,
             }
         }
-        let decoded: String = serde_json::from_str(&self.src[start..end])
-            .map_err(|error| self.error_at(start, &describe(&error)))?;
+        let token = &self.src[start..end];
+        let decoded = match serde_json::from_str::<String>(token) {
+            Ok(decoded) => decoded.into_bytes(),
+            // `serde_json` refuses lone surrogates, which Python's `json`
+            // accepts; anything else it refuses stays an error.
+            Err(error) => decode_with_surrogates(token)
+                .ok_or_else(|| self.error_at(start, &describe(&error)))?,
+        };
         self.pos = end;
         Ok(decoded)
     }
@@ -795,6 +1179,48 @@ fn describe(error: &serde_json::Error) -> String {
 mod tests {
     use super::*;
     use crate::color::ColorSystem;
+
+    /// The spans recorded while serializing are exactly the ones upstream's
+    /// `JSONHighlighter` regexes find, wherever `dumps` claims they are.
+    #[test]
+    fn recorded_spans_match_the_highlighter_regexes() {
+        let documents = [
+            r#"{"name": "Alice", "age": 30, "admin": true, "tags": ["a", "b"], "meta": null}"#,
+            r#"[1e20, -0.0, 1.5e-7, 12345678901234567890, false, [], {}, [[]], {"a": {}}]"#,
+            r#"{"true": "false", "x:y": "a\"b", "q\"": ": null", "n": [NaN, Infinity, -Infinity]}"#,
+            r#"{"caf\u00e9": "\u2764 \ud83d\ude00", "ctl": "\u0001\t\n", "": ""}"#,
+            r#"["[{(1)}]", "0x1F", "b\"x", "\\\"", "tail\\x"]"#,
+        ];
+        let indents = [None, Some("  "), Some("\t"), Some("")];
+        for document in documents {
+            for indent in indents {
+                for ensure_ascii in [false, true] {
+                    let options = JsonOptions {
+                        indent: indent.map(str::to_string),
+                        ensure_ascii,
+                        sort_keys: true,
+                        ..JsonOptions::default()
+                    };
+                    let value = Parser::new(document).parse_document().unwrap();
+                    let dumped = dumps(&value, &options);
+                    assert!(dumped.exact, "{document} / {indent:?}");
+                    let mut recorded = dumped.spans.clone();
+                    recorded.extend(dumped.keys.clone());
+                    let expected = json_highlight(dumped.json.clone());
+                    assert_eq!(recorded, expected.spans(), "{document} / {indent:?}");
+                }
+            }
+        }
+        // A string ending in a backslash defeats `JSON_STR`, so the regexes run.
+        let value = Parser::new(r#"{"k": "a\\"}"#).parse_document().unwrap();
+        assert!(!dumps(&value, &JsonOptions::default()).exact);
+        let value = Parser::new("[1]").parse_document().unwrap();
+        let options = JsonOptions {
+            indent: Some("1".to_string()),
+            ..JsonOptions::default()
+        };
+        assert!(!dumps(&value, &options).exact);
+    }
 
     fn render(text: &str) -> String {
         let console = Console::builder()
@@ -1188,7 +1614,6 @@ mod tests {
             r#""\q""#,
             r#""é""#,
             r#""😀""#,
-            r#""\ud800""#,
             "\"raw\nnewline\"",
             r#""café ❤""#,
             "\"\u{e9}\\\"",

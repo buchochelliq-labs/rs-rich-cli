@@ -11,7 +11,10 @@ from test_demo_pty import capture
 
 # Release -> media name; evidence goes to .github/evidence/<release>/demo-tour.
 # 0.0.8 keeps its original names.
-RECORDINGS = {'0.0.8': 'v8-demo-tour', '0.0.10': 'v10-demo-tour', '0.0.11': 'v11-demo-tour'}
+RECORDINGS = {'0.0.8': 'v8-demo-tour', '0.0.10': 'v10-demo-tour', '0.0.11': 'v11-demo-tour',
+              '0.0.12': 'v12-demo-tour'}
+# The section whose first frame is the poster: the release's headline.
+POSTERS = {'0.0.12': 'Mermaid flowcharts'}
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--binary', type=Path, required=True)
@@ -36,7 +39,7 @@ for tick in range(math.ceil((events[-1][0] + 1) * media.FPS)):
     frames.append(media.frame(screen, 'rich --demo --demo-delay 0.5 | actual CLI tour'))
 assert index == len(events), 'recording must include the entire tour' 
 media.encode(frames, name)
-poster_time = next(event[0] for event in events if 'Half-block' in event[2]) + .25
+poster_time = next(event[0] for event in events if POSTERS.get(args.release, 'Half-block') in event[2]) + .25
 frames[min(len(frames) - 1, round(poster_time * media.FPS))].save(media.OUT / f'{name}.png')
 # One frame per second keeps the lightweight GIF representative of the recording.
 stills = [frame.resize((880, 528)) for frame in frames[::media.FPS]]

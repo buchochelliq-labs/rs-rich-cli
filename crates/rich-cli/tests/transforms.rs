@@ -71,13 +71,23 @@ fn filter_keeps_matching_lines_of_text_print_and_syntax() {
     ));
     assert_eq!(print, "WARN a\n");
 
-    // `.log` renders as syntax; the filter runs on the highlighted text.
+    // `.log` renders as syntax; the filter runs on the highlighted text, and
+    // the kept lines keep `Syntax`'s layout: every row filled to the width,
+    // and the empty row after a final newline.
     let syntax = text(&run_in(
         dir,
         &["--no-color", "app.log", "--filter", "^INFO"],
         "",
     ));
-    assert_eq!(syntax, "INFO start\nINFO done\n\n");
+    let rows: Vec<&str> = syntax.lines().collect();
+    assert_eq!(rows.len(), 3, "{syntax:?}");
+    assert_eq!(rows[0].trim_end(), "INFO start");
+    assert_eq!(rows[1].trim_end(), "INFO done");
+    assert_eq!(rows[2].trim_end(), "");
+    assert!(
+        rows.iter().all(|row| row.len() == rows[0].len()),
+        "{syntax:?}"
+    );
 }
 
 #[test]

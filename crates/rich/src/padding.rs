@@ -16,6 +16,7 @@ pub struct Padding {
     child: Box<dyn Renderable>,
     pad: (usize, usize, usize, usize),
     style: Style,
+    expand: bool,
 }
 
 impl Padding {
@@ -25,7 +26,21 @@ impl Padding {
             child,
             pad,
             style: Style::new(),
+            expand: true,
         }
+    }
+
+    /// Indent `child` by `level` cells without expanding it. Port of
+    /// `Padding.indent` (`pad=(0, 0, 0, level)`, `expand=False`).
+    pub fn indent(child: Box<dyn Renderable>, level: usize) -> Self {
+        Padding::new(child, (0, 0, 0, level)).expand(false)
+    }
+
+    /// Expand to the available width (upstream `expand=`, default on), or fit
+    /// the child's measured width plus the padding.
+    pub fn expand(mut self, expand: bool) -> Self {
+        self.expand = expand;
+        self
     }
 
     /// Equal padding on all four sides.
@@ -48,10 +63,19 @@ impl Padding {
 impl Renderable for Padding {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let (top, right, bottom, left) = self.pad;
-        let width = options.max_width;
+        let width = if self.expand {
+            options.max_width
+        } else {
+            let child = Measurement::get(console, options, self.child.as_ref()).maximum;
+            (child + left + right).min(options.max_width)
+        };
         let child_width = width.saturating_sub(left).saturating_sub(right);
 
-        let child_options = options.update_width(child_width);
+        let mut child_options = options.update_width(child_width);
+        // `render_options.update_height(height - top - bottom)`.
+        if let Some(height) = options.height {
+            child_options = child_options.update_height(height.saturating_sub(top + bottom));
+        }
         // Upstream renders the child with `style=style`, so the padding style
         // also sits under the content and its fill (#442).
         let lines = console.render_lines_styled(

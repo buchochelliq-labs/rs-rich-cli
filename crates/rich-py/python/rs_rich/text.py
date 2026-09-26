@@ -1,5 +1,5 @@
-"""``rich.text``: styled text."""
+"""``rich.text``: ``Text``, ``Span`` and ``Lines``."""
 
-from ._native import Text
+from ._native import Lines, Span, Text
 
-__all__ = ["Text"]
+__all__ = ["Lines", "Span", "Text"]

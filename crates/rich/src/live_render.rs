@@ -6,22 +6,38 @@
 //! `Live` display uses to redraw in place. The full `Live` loop (threading,
 //! timing, stdout management) is deferred; this is its byte-parity-testable core.
 //!
-//! Scope: rendering + `position_cursor`/`restore_cursor`. Vertical-overflow
-//! cropping (when content is taller than the screen) is deferred.
+//! Content taller than the screen is cropped, ended with an ellipsis line
+//! (the default) or left visible, per [`VerticalOverflow`].
 
 use std::cell::Cell;
 
-use crate::console::{Console, ConsoleOptions};
+use crate::console::{Console, ConsoleOptions, Justify, Overflow};
 use crate::control::{Control, ControlType};
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::style::Style;
+use crate::text::Text;
+
+/// What a live render does with content taller than the screen. Mirrors
+/// upstream's `VerticalOverflowMethod`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VerticalOverflow {
+    /// Keep only the lines that fit.
+    Crop,
+    /// Keep all but the last line that fits, then a centred `...` line in
+    /// `live.ellipsis` (upstream's default).
+    #[default]
+    Ellipsis,
+    /// Render every line.
+    Visible,
+}
 
 /// Wraps a renderable for repeated in-place redraws. Mirrors
 /// `rich.live_render.LiveRender`.
 pub struct LiveRender {
     renderable: Box<dyn Renderable>,
     style: Option<Style>,
+    vertical_overflow: VerticalOverflow,
     /// `(width, height)` of the last render, or `None` before the first.
     shape: Cell<Option<(usize, usize)>>,
 }
@@ -31,6 +47,7 @@ impl LiveRender {
         LiveRender {
             renderable,
             style: None,
+            vertical_overflow: VerticalOverflow::Ellipsis,
             shape: Cell::new(None),
         }
     }
@@ -39,6 +56,18 @@ impl LiveRender {
     pub fn style(mut self, style: Style) -> Self {
         self.style = Some(style);
         self
+    }
+
+    /// What to do with content taller than the screen (upstream
+    /// `vertical_overflow`, default [`VerticalOverflow::Ellipsis`]).
+    pub fn vertical_overflow(mut self, vertical_overflow: VerticalOverflow) -> Self {
+        self.vertical_overflow = vertical_overflow;
+        self
+    }
+
+    /// Set [`vertical_overflow`](Self::vertical_overflow) in place.
+    pub fn set_vertical_overflow(&mut self, vertical_overflow: VerticalOverflow) {
+        self.vertical_overflow = vertical_overflow;
     }
 
     /// Replace the wrapped renderable (the shape carries over until the next
@@ -93,6 +122,27 @@ impl Renderable for LiveRender {
         if let Some(style) = &self.style {
             for line in &mut lines {
                 *line = Segment::apply_style(line, style);
+            }
+        }
+
+        // Content taller than the screen (`options.size.height`).
+        let screen_height = options.size.height;
+        if lines.len() > screen_height {
+            match self.vertical_overflow {
+                VerticalOverflow::Crop => lines.truncate(screen_height),
+                VerticalOverflow::Ellipsis => {
+                    // `lines[: height - 1]`: at height 0 that is Python's
+                    // `lines[:-1]`, every line but the last.
+                    let keep = screen_height
+                        .checked_sub(1)
+                        .unwrap_or_else(|| lines.len() - 1);
+                    lines.truncate(keep);
+                    let overflow_text = Text::styled("...", "live.ellipsis")
+                        .overflow(Overflow::Crop)
+                        .justify(Justify::Center);
+                    lines.push(console.render(&overflow_text, None));
+                }
+                VerticalOverflow::Visible => {}
             }
         }
 

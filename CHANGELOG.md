@@ -62,6 +62,167 @@ Cohort versions for 0.0.12 (not published): core 0.0.8, plugin API 0.0.1
 (new), CLI 0.0.12. Core changes below, so
 every dependent moves with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
 
+### Release test: second audit round (Python package and new core)
+
+Four more audits covered the Python package end to end (console and threads,
+live displays, renderables by differential fuzzing against Rich 15.0.0, and
+the ext/art/plugin/CLI surface). Every finding has a regression test:
+`crates/rich-py/tests/test_robustness_*.py`, `crates/rich/tests/robustness_audit.rs`
+and the goldens `audit_edges.tsv` (10 cases) and `audit2.tsv` (12 cases),
+captured from rich 15.0.0.
+
+Core (`rs-rich`):
+- Text renders by one sweep over span events, as upstream: printing
+  `list(range(20000))` is linear (it took minutes). Output is unchanged.
+- `Segment::crop_lines` ports `split_and_crop_lines`: a newline inside a
+  segment (a print `end` like `"!!\n"`) survives the crop, and zero-width
+  characters past the edge are dropped.
+- Markdown paragraphs and images inherit overflow, no-wrap and justify; an
+  invalid GFM delimiter row is a paragraph; text with many brackets parses in
+  linear time.
+- `Console::capture` is per thread, as upstream, and ends when the captured
+  code panics.
+- Layout `size=0` is flexible; `ratio_resolve` uses exact integer arithmetic
+  (no dropped rows); huge sizes and screen coordinates no longer overflow.
+- Syntax accepts any `i64` line numbers and ranges without panicking.
+- Colour downgrade to `windows` uses the Windows palette; bare `grey`/`gray`
+  are not colour names.
+- `Tree("")`, `Syntax("")` and an unpadded empty `Text` print their blank line;
+  measuring splits on Python's line and word separators (U+2028 and friends).
+- Markup error positions count characters of the original string; the console
+  replaces emoji codes only between tags (`markup::render_emoji`).
+- New `Text::set_justify_option`/`get_justify_option`: an explicit
+  `justify="default"` is not overridden by a table column.
+- `render_lines` pads with no style; `Panel.width(0)` draws Rich's empty box;
+  SVG export rejects a non-finite `font_aspect_ratio` and formats numbers as
+  Python does; Json accepts lone surrogates (DIVERGENCES §30); `Columns` with
+  zero width and padding renders nothing instead of panicking (§32).
+
+Ext, art and CLI:
+- rs-rich-art: image backends cap their grid at `MAX_CELLS` (262,144 cells)
+  before resampling, and derived rows respect a fixed `options.height`: a tiny,
+  very tall image no longer hangs or aborts. **Breaking:** new
+  `ImageArtError::TooLarge` (and `check_cell_budget`) for an explicit size over
+  the budget (CLI exit 3).
+- rs-rich-ext: `CancelToken` shares its ancestors, so deep task trees build in
+  linear time; `TaskTree` state, elapsed time and rendering no longer recurse (a
+  10,000-deep tree renders).
+- rs-rich-cli: arguments that are not valid Unicode no longer panic; files named
+  by them open by their original bytes, as upstream rich-cli.
+
+Python package (`rs-rich` on PyPI):
+- No lock is held while Python code runs (getters, replacing `file` or
+  `highlighter`, the plugin table), so a `__del__` that prints cannot deadlock.
+- A print re-entered from what it prints (`__str__`, a highlighter, a fence, a
+  hook) raises `RecursionError` instead of crashing; deeply nested objects
+  pretty-print as in Rich, with Rich's `<repr-error ...>` where the recursion
+  limit runs out.
+- Leaving a `Live`, `Progress`, `track` or status just before the interpreter
+  exits no longer crashes it: refresh threads are joined.
+- Render hook items print on any thread (those from `log` or a justified
+  `print` on the collecting thread only); Ctrl-C works while waiting for
+  another thread's print; output under a `Live` goes past its file proxy, and a
+  console with no file writes to a null file, as Rich.
+- `markup=False` applies to strings inside every container; bad markup raises
+  `MarkupError` when printed (Table cells and titles, Panel titles included),
+  with Rich's message and position.
+- Huge sizes (console height and `tab_size`, `ConsoleOptions`, `Text.pad` and
+  friends, `Syntax`, `Panel`/`Align` height, `Table(leading=)`, ...) raise
+  `MemoryError`/`OverflowError` instead of aborting or eating all memory.
+- Progress columns handle integers past 2**63 and huge floats as Rich;
+  `Task.percentage` clamps -0 and NaN to 0; `RichHandler` builds its path link
+  as Rich (no link for a path Rich cannot parse).
+- `Table` and `Panel` expose Rich's attributes (`table.show_header = False`).
+- `Console.rule` takes a `Text` title and rejects empty `characters`; a hook
+  returning a non-renderable raises `NotRenderableError`; `print(width=-1)`
+  prints nothing; `Text.end` is kept inside `Group`, `Styled` and `Constrain`;
+  `Spinner` text expands emoji; `Columns(width=0, padding=0)` raises
+  `ZeroDivisionError`.
+- `Text.stylize`, `tokenize`, the diffs and the `find` helpers no longer do
+  work proportional to the text length per call; `DataNode.from_python` caps
+  embedded nodes at 512 levels.
+
+### Release test: fixes from five independent audits
+
+Five audits covered the whole 0.0.12 delta: core, the plugin API and ext host,
+Mermaid, art and CLI flags, and the Python bindings. Every finding below was
+reproduced by a test that failed first.
+
+- **Core (parity).**
+  - `Syntax` turns a lone `\r` into a line break, as Pygments does for every
+    lexer. It used to join the two lines, and `Panel.fit` then cropped the
+    second one away. Markdown fences behave the same.
+  - A `Panel` in no width renders nothing, as upstream does, instead of two
+    empty lines.
+  - Table ratio arithmetic runs in `i128`, so a huge column `ratio` no longer
+    overflows. The output matches rich 15.0.0's.
+  - With a console-wide default code highlighter, inline code in Markdown
+    uses it too, not just code blocks.
+  - `Text::base_style()` exposes the base style (upstream's `Text.style`).
+- **Plugin API and host.**
+  - A plugin that panics in `metadata` or `register` is refused with
+    `PluginError::Failed`, and the registry is left unchanged. It used to take
+    the host down.
+  - Plugin and capability names must start with a letter or digit, so `-x`,
+    `--help`, `.` and `..` are refused. This narrows the contract before the
+    crate's first release.
+  - `provided_by(&Capability::Highlighter)` names the plugin that registered
+    the highlighter, `"(direct)"` for one registered without a plugin, and
+    `None` when there is none.
+- **Transforms.** `HighlightMatches` styles whole matches only: a named group
+  is no longer used as a style name (`(?P<blink>…)` added blink). It also
+  reports the regex engine's backtrack limit as an error, as `KeepLines` does.
+  The pattern is compiled once.
+- **lumis.** Pygments names that lumis lacks map to the language that
+  highlights them: `shell`, `sh`, `zsh`, `console`, `python3`, `golang`,
+  `patch`, `jsonc` and more. These used to come out as plain text.
+- **Mermaid.**
+  - A link's extra dashes count for at most 10 ranks (`MAX_LINK_LENGTH`).
+  - A flowchart whose layout needs more than 5,000 points is refused at once.
+    An input under 1 KiB used to take four minutes. Crossings are now counted
+    in O(E log V), with unchanged output.
+  - `mmdc` stays in the caller's process group, so Ctrl-C stops it and
+    Chromium. A timeout sends SIGTERM, then SIGKILL after 2 s. On Unix the
+    temporary directory is removed even if `rich` is killed.
+  - `MmdcOptions::max_output` (16 MiB) caps the image read into memory
+    (`MmdcError::OutputTooLarge`). Only the first 4 KiB of the log is read.
+- **CLI.**
+  - `rich doctor` reports an unknown configured highlighter or code theme
+    instead of failing. It is where the error message sends you.
+  - `rich config validate` rejects an unknown highlighter or code theme,
+    which every render would reject.
+  - `--filter` and `--highlight` keep `--syntax`'s full-width background rows,
+    so a pattern that matches nothing leaves the output byte-identical.
+  - `mermaid_backend = "mmdc"` in a user config, on a build without mmdc,
+    warns and draws Mermaid as text. It used to make every command exit 2.
+    On the command line it is still an error.
+- **Python bindings (`rs-rich` on PyPI).**
+  - `Console`, `Table` and `Panel` work from any thread, including
+    `rs_rich.print` from a worker thread. Concurrent prints to one console
+    don't interleave. Printing from inside the console's own `file.write`
+    raises `RuntimeError`.
+  - `print` and `rule` flush the file, as Rich does.
+  - Panels nested more than 100 deep raise `RecursionError` instead of
+    crashing the interpreter.
+  - Sizes are limited. `Console(width=…)` and a column's `width`,
+    `min_width` and `max_width` go up to 65536, and `ratio` up to
+    4294967295. A `Panel`'s padding goes up to 65536 on each side, where Rich
+    has no limit. Larger values raise `ValueError` instead of aborting,
+    hanging or taking minutes to print.
+  - `t.append(t)` works; `Text.stylize` clamps offsets of any size; `Style`
+    is hashable; reference cycles through a panel's child or `Console.file`
+    are collected.
+- **Workflows.**
+  - `python.yml` also runs when the root `Cargo.toml` or `Cargo.lock` changes.
+  - `pypi-release.yml` runs the whole test suite against the Linux wheel
+    before publishing.
+  - Third-party actions (`maturin-action`, `gh-action-pypi-publish`) are
+    pinned by commit SHA.
+- **Release material.** `rich --demo` has sections for Mermaid, code themes,
+  filter and highlight, and native image size. The CLI README covers the
+  0.0.12 flags and features. `make_cases.py --release 0.0.12` builds the
+  screenshot set.
+
 ### Pluggable code highlighters, core (0.0.12 workstream 1: #522, #523)
 
 - **`CodeHighlighter` (#522).** A new extension point in `rich::protocol`: an
@@ -118,8 +279,8 @@ every dependent moves with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
 
   A Rich program moves over by changing its imports.
 - **All rendering is Rust.** The Python modules only re-export the compiled
-  module's classes. Anything outside the slice raises instead of rendering
-  differently.
+  module's classes. Anything outside the slice raised instead of rendering
+  differently; workstream 8 (below) fills in the rest.
 - **Byte-compared with Python rich 15.0.0.** The tests cover markup and
   highlighting, `Text`, styles, the README table, table options, panels,
   rules, justification and `export_text`, in truecolor and plain. Links match
@@ -146,6 +307,116 @@ every dependent moves with it. See the [0.0.12 plan](docs/plans/0.0.12.md).
 - Core parity fix: a table with `show_header=False` draws head-styled boxes
   plain, like upstream's `Box.get_plain_headed_box` (for example `HEAVY_HEAD` as
   `SQUARE`). The fix has new `table_headless_*` goldens.
+
+### Python bindings: full parity (0.0.12 workstream 8)
+
+- **Its own docs site**, published under `/python/` beside the main one: a
+  getting started guide, a page per area, and an API reference for every module
+  generated from the type stubs (`mkdocs-python.yml`,
+  `scripts/gen_python_api.py`).
+
+`rs_rich` now covers all of Rich 15.0.0's API and exposes every Rust crate.
+Output is byte-compared with Rich (and, for the port's own crates, with the
+Rust crates); 850+ tests and every documentation example run in CI.
+
+- **Console.** `Console(highlighter=...)`, `tab_size` and `emoji_variant`;
+  `log` of any renderable and `log_locals=True`; every `print_json` option;
+  `export_html`/`export_svg` with `code_format` and `font_aspect_ratio`;
+  `set_window_title`; containers, dataclasses and `__rich_repr__` objects
+  pretty-print; an `Emoji` (and a titled `Rule(end="")`) leaves its line open.
+- **Render hooks.** `push_render_hook`/`pop_render_hook`, `set_live`/
+  `clear_live`: `Live`, `Status` and `Progress` redraw through the console
+  instead of wrapping its file, so recorded output includes redrawn frames.
+- **Text, Style and colour.** `Text` complete (`end` is a real field; meta
+  data on spans: `apply_meta`, `on`, `assemble(meta=)`); `Style` complete
+  (meta, `render`, `get_html_style`, `StyleStack`); `rs_rich.color`;
+  `Theme.from_file`/`read`/`ThemeStack`; `markup.render`/`Tag`; `Emoji`;
+  Rich's error messages and reprs (`Segment` included).
+- **Renderables.** `Rule`, `Padding`, `Align`, `VerticalCenter`, `Constrain`,
+  `Styled`; `Columns`; `Group`/`group`, `Renderables`, `measure_renderables`;
+  `Tree` (no stack overflow on deep trees); `Layout` with splitters and
+  regions; `Bar`; `Spinner` and `SPINNERS` (core's table; an unknown name is a
+  `KeyError`). `Table` gains `Table.grid`, padding, `collapse_padding`,
+  `pad_edge`, `style`, `highlight` and per-column `vertical`/`highlight`, and a
+  cell's own `vertical` (`Align`) is honoured; `Panel` gains `style`, `height`,
+  `highlight`, `safe_box` and `Text` titles.
+- **Code and data.** `Markdown` and `Syntax` with every option, a code
+  highlighter by name or plugin, and `Markdown(fences=)`; `Pretty`, `pprint`,
+  `install`, `JSON`, `inspect`, subclassable highlighters; `Traceback`,
+  `print_exception` and `install`.
+- **Live and interactive.** `Live`, `LiveRender`, `Status`, `Screen`,
+  `Pager`; `Progress` with every column, `track`, `wrap_file` and `open`;
+  prompts; `RichHandler`.
+- **The port's crates.** `rs_rich.ext` (38 modules, including `testing` and
+  `qa`: snapshots, assertions with rendered diffs, stress, lint, explain,
+  profile, fuzz, matrix, screenshots, benchmarks); `rs_rich.art` (images with
+  every option, Pillow optional, byte-identical Sixel, FIGlet, GIFs, image
+  diffs); `rs_rich.mermaid` (parse, draw, fences, `mmdc` in `mmdc` builds);
+  `rs_rich.plugins` (Python classes as all seven capability kinds, checked by
+  the Rust host; `ExtensionRegistry.install(console)`).
+- **The command line.** The wheel ships the `rich` command as
+  `python -m rs_rich` and the `rich-rs` script; `rs_rich.cli.main(argv)`
+  returns the exit code. `rs-rich-cli` gains a library target (`run`,
+  `run_embedded`); `--batch` workers and `--watch` restart through the host's
+  command. In the `lumis` build the command line has the lumis highlighter too.
+- **Rendered by core.** `Rule`, `Tree`, `Columns`, `Syntax` (every option,
+  and `Syntax.highlight`), `Text.from_ansi`/`with_indent_guides` and the
+  spinner table now render through core's, replacing the bindings' ports;
+  output is unchanged against Rich. Code highlighters gain an optional
+  `token_style(theme, token)` for line numbers and indent guides.
+- **Core, additively, for the bindings.** Style meta data, a public spinner
+  table (`spinner_names`, `spinner_frames`), `Console` `Clone + Sync`,
+  `render_str_with`, `Json::with_options`, `export_*_with`,
+  `set_window_title`, console `tab_size` and `emoji_variant`.
+- **The last API gaps.** `Table` takes every Rich option: `width`,
+  `min_width`, `show_footer` with column `footer`/`footer_style`, `leading`,
+  `row_styles`, `header_style`/`footer_style`/`title_style`/`caption_style`,
+  `title_justify`/`caption_justify`, `safe_box`, `Text` titles and captions,
+  headers and footers of any renderable, `add_row(style=, end_section=)` and
+  `add_section()`; a row with more cells than columns adds columns, as in
+  Rich. `Panel` takes a `Text` subtitle, and `safe_box` is honoured.
+  `Syntax` negative `start_line`, `line_range` and `stylize_range` positions
+  render through core. `Layout.refresh_screen`, `Console.update_screen` and
+  `update_screen_lines` redraw part of the alternate screen. None of these
+  raises `NotImplementedError` any more; each is byte-compared with Rich.
+- **Known differences** are listed in
+  [Compatibility](docs/python/compatibility.md): Pygments versus syntect
+  colours, no Jupyter output.
+- **Docs and CI.** A page per module under `docs/python/` (and `ext/`), each
+  example run by `test_docs.py`; the Rust oracle for the art and Mermaid tests
+  lives in `crates/rich-py/oracles`; `python.yml` builds the `rich` binary for
+  the CLI comparison, installs Pillow, and lints the `mmdc` build.
+
+### Core: the last Rich API gaps (0.0.12 workstream 8)
+
+Faithful ports of rich 15.0.0, each proved by goldens captured from real
+Rich (`API_GAP_CASES` in `scripts/capture_golden.py`, `golden/api_gaps.tsv`,
+`tests/golden_api_gaps.rs`).
+
+- **`Table`**: `width` (implies `expand`) and `min_width`, in rendering and
+  in `__rich_measure__`; `show_footer` with column `footer` and
+  `footer_style` (`column_footer`, `column_footer_fill`) and a table
+  `footer_style`; `leading` (the box's new `RowLevel::Mid` row, repeated on
+  one line as upstream does); alternating `row_styles`, per-row `style`
+  (whitespace dividers take its background) and sections (`add_row_with`,
+  `add_section`, `end_section`); `header_style` as a theme-resolved
+  `StyleType`; `title_style`, `caption_style`, `title_justify`,
+  `caption_justify`, `Text` titles and captions (`title_text`,
+  `caption_text`); `safe_box`; headers of any `Cell` (`add_column_cell`);
+  the first and last rows drawn take the box's head and foot glyphs; a row
+  with more cells than columns adds columns; `row_count`, `get_row_style`.
+- **`Panel`**: `subtitle_as_text` and `safe_box`.
+- **`Box::substitute`** keeps every ASCII box (`ASCII2`, `ASCII_DOUBLE_HEAD`,
+  `MARKDOWN`) on an ASCII-only console, as upstream's `ascii` flag does.
+- **`Syntax`**: `start_line`, `line_range`, `highlight_lines` and
+  `stylize_range` positions are signed (`i64`), with upstream's Python
+  semantics (a start of 0 or less is the first line, a negative end counts
+  back, negative positions index from the end); `highlight_range` ports
+  `Syntax.highlight(code, line_range)`.
+- **`Layout::refresh_screen`**, with `Console::set_alt_screen`,
+  `is_alt_screen`, `update_screen`, `update_screen_lines`, `ScreenUpdate` and
+  `RichError::NoAltScreen`. `Console::control` now records into a capture,
+  as upstream buffers control codes.
 
 ### Native image sizing (0.0.12 workstream 6: #519)
 

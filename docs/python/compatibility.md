@@ -1,45 +1,86 @@
 # Compatibility with Rich
 
-`rs_rich` 0.0.1 implements a slice of Rich 15.0.0's API. Within the slice,
-output is byte-for-byte Rich's. Outside it, calls raise instead of rendering
-something different.
+`rs_rich` implements Rich 15.0.0's API. Its output is Rich's, byte for byte,
+except for the differences listed below. What the port cannot do raises
+instead of rendering something different. The port's own crates (`ext`,
+`art`, `mermaid`, `plugins`, the command line) have no Rich counterpart; their
+output is compared with the Rust crates'.
 
 ## What is covered
 
-| Rich | rs_rich 0.0.1 |
+| Rich | rs_rich |
 |---|---|
-| `rich.print`, `rich.get_console` | yes |
-| `Console` | `file`, `width`, `height`, `color_system`, `force_terminal`, `no_color`, `record`, `highlight`, `emoji`, `safe_box`; `print`, `rule`, `export_text` |
-| `Text` | constructor, `from_markup`, `append`, `stylize`, `plain`, `len` |
-| `Style` | keyword constructor, `parse`, `+`, `==` |
-| `Table` | the constructor options and `add_column` options listed in [Table](table.md), `add_row` with `str`/`Text` cells |
-| `Panel` | constructor and `Panel.fit` |
-| `rich.box` | every box constant |
-| `rich.markup` | `escape` |
-| `rich.errors` | `ConsoleError`, `MarkupError`, `StyleSyntaxError` |
-| `Rule`, `Columns`, `Padding`, `Align`, `Group`, `Markdown`, `Syntax`, `Progress`, `Live`, `Tree`, `Pretty`, `inspect`, logging, tracebacks, `Console.log`, `input`, `status`, `export_html`/`export_svg` | not yet |
+| `rich.print`, `rich.get_console`, `rich.print_json`, `rich.reconfigure`, `rich.inspect` | yes (`reconfigure` replaces the global console object) |
+| `Console` | everything but Jupyter output: the constructor (with `highlighter`, `tab_size`, `emoji_variant`), `print`, `log` (any renderable, `log_locals`), `out`, `rule`, `line`, `input`, `print_json` (every option), `capture`, `with console:`, `measure`, `render`, `render_lines`, `render_str`, themes, the exports (with `code_format` and `font_aspect_ratio`), render hooks and the live stack, `status`, `pager`, `screen`, `update_screen`, `update_screen_lines`, `print_exception`, `set_window_title`, terminal control ([Console](console.md)) |
+| The render protocol | `__rich__`, `__rich_console__`, `__rich_measure__`; `ConsoleOptions`, `Measurement`, `Segment` ([The render protocol](protocol.md)) |
+| `Text` | the whole class, `Span`, `Lines`, meta data ([Text](text.md)) |
+| `Style`, `rich.theme` | the whole class, `StyleStack`; `Theme`, `from_file`, `read`, `config`, `ThemeStack` ([Style](style.md)) |
+| `rich.color` | `Color`, `ColorTriplet`, `ColorSystem`, `ColorType`, `ColorParseError`, `parse_rgb_hex`, `blend_rgb` ([Color](color.md)) |
+| `rich.markup`, `rich.emoji` | `escape`, `render`, `Tag`; `Emoji`, `NoEmoji` |
+| `rich.box`, `rich.errors`, `rich.terminal_theme` | every box, exception and palette |
+| `Table` | every constructor, `add_column` and `add_row` option (footers, `width`, `min_width`, `leading`, `row_styles`, sections, annotation styles and justification), `add_section`, `Table.grid`; headers, footers and cells of any renderable. Headers are strings or renderables, not `Column` objects ([Table](table.md)) |
+| `Panel` | every option, around any renderable ([Panel](panel.md)) |
+| `Rule`, `Padding`, `Align`, `VerticalCenter`, `Constrain`, `Styled`, `Bar`, `Spinner`, `SPINNERS` | yes ([Rules, padding, alignment and bars](rule.md)) |
+| `Columns`, `Group`, `group`, `Layout` (splitters, `Region`, `LayoutRender`, `refresh_screen`), `containers.Renderables`, `measure_renderables` | yes ([Layout, columns and groups](layout.md)) |
+| `Tree` | yes ([Tree](tree.md)) |
+| `Markdown` | yes, with `highlighter=` and `fences=` for the port's code highlighters ([Markdown](markdown.md)) |
+| `Syntax` | every option ([Syntax](syntax.md)); colours as below |
+| `Pretty`, `pprint`, `pretty_repr`, `install`, `JSON`, `inspect`, `rich.highlighter` | yes; containers, dataclasses and `__rich_repr__` objects print as in Rich ([Pretty, JSON, inspect and highlighters](pretty.md)) |
+| `Traceback`, `print_exception`, `install` | yes ([Traceback](traceback.md)) |
+| `Live`, `LiveRender`, `Status`, `Screen`, `Pager` | yes ([Live, status, screen and pager](live.md)) |
+| `Progress` (every column, `track`, `wrap_file`, `open`), `ProgressBar` | yes ([Progress](progress.md)) |
+| `rich.prompt` | `Prompt`, `Confirm`, `IntPrompt`, `FloatPrompt`, `InvalidResponse` ([Prompts](prompt.md)) |
+| `RichHandler` | yes ([Logging](logging.md)) |
+| rich-cli's `rich` command | `python -m rs_rich` and the `rich-rs` script: the rs-rich `rich` binary, byte for byte ([The command line](cli.md)) |
+
+The port's own crates:
+
+| Crate | rs_rich |
+|---|---|
+| `rs_rich.ext.*` (38 modules) | No Rich counterpart; output compared byte for byte with `rs-rich-ext` ([Extensions](ext/index.md)) |
+| `rs_rich.art` (images, FIGlet, GIFs, image diff) | No Rich counterpart; matches `rs-rich-art` byte for byte. Printing `ImageArt` is strict: it raises `ImageArtError` rather than falling back to ASCII ([Art](art.md)) |
+| `rs_rich.mermaid` | No Rich counterpart; matches `rs-rich-mermaid`. The `mmdc` backend only in wheels built with `mmdc` ([Mermaid](mermaid.md)) |
+| `rs_rich.plugins` | No Rich counterpart: the `rs-rich-plugin-api` contract and rich-ext's `ExtensionRegistry`. Python plugins go through the Rust host and match the Rust plugins' output ([Plugins](plugins.md)) |
 
 ## Known differences
 
 | Difference | Why |
 |---|---|
-| `Console.print` accepts only `end="\n"`, `justify=` only for strings, and no `style=`, `markup=`, `highlight=` or `overflow=` arguments | Not implemented in this slice. It raises `NotImplementedError` or `TypeError`. |
-| Consecutive `str` arguments to `print` are joined with `sep` before their markup is read, so a tag can span arguments | Rich parses each separately. Output differs only when a tag spans arguments. |
-| Table cells are `str`, `Text` or `None` | Renderables in cells come in a later slice. |
-| Hyperlinks carry no `id=` | Rich tags each link with a random id. The Rust port leaves it out so output is reproducible ([Divergences #20](../DIVERGENCES.md)). |
+| Code colours (`Syntax`, and code in `Markdown` and `Traceback`) come from syntect, not Pygments: `monokai` is not a theme, and some token classes differ | The port highlights with syntect ([Divergences #18](https://buchochelliq-labs.github.io/rs-rich-cli/DIVERGENCES/)); layout is Rich's byte for byte ([Syntax: colours](syntax.md#colours)). |
+| `Console(force_jupyter=True)` raises `NotImplementedError` | There is no Jupyter output. |
+| A `Syntax.stylize_range` position so far before the first line that Rich raises `IndexError` is ignored | Core applies ranges when it renders, where it cannot raise. |
+| `export_svg(unique_id=None)` gives a different (stable) id | Rich derives the default id from Python reprs. With an explicit `unique_id` the SVG is Rich's. |
+| Hyperlinks carry no `id=` | Rich tags each link with a random id. The Rust port leaves it out so output is reproducible ([Divergences #20](https://buchochelliq-labs.github.io/rs-rich-cli/DIVERGENCES/)). |
+| `text.spans` returns a copy | Spans live in the core `Text`; assign `text.spans` to change them. |
+| Meta data on `Text` spans holds `None`, `bool`, `int`, `float`, `str` and lists or tuples of them (a tuple reads back as a list); other values raise `TypeError` | Core's style meta keeps that subset of what `marshal` can store. A `Style` alone keeps any meta. |
+| `Spinner.render()` with renderable text returns a grid, not a `Table`; `Status.renderable` is not a `Spinner` | The live area's spinner is core's; both print the same. |
+| `Progress.make_tasks_table()` returns a renderable grid; `get_table_column()` returns `None` for a column made without `table_column=`; `SpinnerColumn` has no `spinner` attribute (use `set_spinner()`) | There is no `rs_rich.table.Column`. |
+| A `Text` with a style of its own, rendered justified inside a container (a table cell), has its padding in a separate ANSI run | Core renders the padding as a second segment in the same style; the terminal shows the same. |
+| The theme stack, and `capture()`, belong to the console | Rich keeps the theme stack per thread. Captures are per thread, as in Rich. |
 | `repr(box.ROUNDED)` is `box.ROUNDED` | Rich prints `Box(...)` with the box's characters. Boxes compare and render the same. |
-| On a terminal, `width=None` uses the process's terminal size | Rich asks the file's own descriptor. They differ only when `file` is a different terminal from standard output. |
+| `Console(width=...)` and a table column's `width`, `min_width` and `max_width` are at most 65536, and a column's `ratio` at most 4294967295; larger values raise `ValueError` | Rich accepts them, then runs out of memory or takes minutes to print. The Rust port would abort, overflow or take as long, so the binding refuses them up front. |
+| A `Panel`'s padding is at most 65536 on each side; more raises `ValueError` | Rich renders any padding, slowly; up to the limit output is Rich's. |
+| A console's `height`, `ConsoleOptions` heights (and widths) and `tab_size` are at most 65536, and `Console.line` writes at most 16777216 lines; larger values raise `MemoryError` | Rich tries to allocate them and usually raises `MemoryError` too. |
+| A `Text` grows to at most 268435456 characters by padding (`pad`, `pad_left`, `pad_right`, `extend_style`, `set_length`, `align`, `fit`, `truncate(pad=True)`, `with_indent_guides`); a `Text` `tab_size`, a `Syntax` `tab_size` (with tabs to expand), a `Syntax` `code_width`, an `Align` or `Panel` `width`, and a `Pretty` `indent_size` (with something to indent) are at most 65536, as are an `Align` or `Panel` `height` and a `Table`'s `leading` (with rows to separate). Larger values raise `MemoryError`, or `OverflowError` past `sys.maxsize`, where Rich raises it | Rich tries to allocate them and raises `MemoryError` (or `OverflowError`) too; the Rust port would abort the process. |
+| Pretty printing goes at most 3000 levels deep; deeper values print as `<repr-error 'maximum recursion depth exceeded ...'>` | Rich's walk is recursive Python: it prints that node where it runs out of frames, a little under Python's recursion limit (about 990 levels by default), which the port matches. Only a raised recursion limit reaches the cap. |
+| Pretty-printing data nested deeper than Python's recursion limit shows Rich's `<repr-error 'maximum recursion depth exceeded ...'>` where the limit runs out, on every Python | Rich does the same, within a few levels, on most Pythons; on 3.13 its walk lets the `RecursionError` escape instead. |
+| Renderables nest at most 100 deep; deeper raises `RecursionError` | Rich also raises `RecursionError`, at a depth that depends on Python's recursion limit. |
+| A render hook's item from `log`, or from `print` with `justify`, prints only on the thread that collected it; on another thread it raises `RuntimeError` | Every other item prints on any thread, as with Rich. |
+| A `print` from inside the same console's `file.write` raises `RuntimeError` | Rich recurses until it hits Python's recursion limit. |
+| The command is `rich-rs`, not `rich` | `rich` is installed by rich-cli. |
 
 ## How compatibility is tested
 
 `crates/rich-py/tests` holds the tests, run by the `python` workflow on Python
-3.9 and 3.13:
+3.9 and 3.13 against the compiled wheel:
 
 | File | What it checks |
 |---|---|
-| `test_compat.py` | Each program runs twice, once with Rich 15.0.0's modules and once with `rs_rich`'s, and the output must be identical, in truecolor and without colour. The programs cover markup and highlighting, `Text`, styles, Rich's README table, table options, header-less tables, panels, rules, justification, `export_text` and links (except for Rich's random ids). |
-| `test_api.py` | Rich's README example (`examples/star_wars.py`) runs with only its imports changed, with identical output; errors and refusals. |
-| `test_console.py`, `test_text.py`, `test_style.py`, `test_table.py`, `test_panel.py`, `test_modules.py` | Each class's arguments, defaults, validation, errors and exact output. They also check that the type stubs describe exactly the compiled module. |
-| `test_docs.py` | Runs every example in these pages and compares its output with the page. |
+| `test_compat.py`, `test_protocol.py`, `test_integration.py` | Programs written once against Rich's API run under Rich 15.0.0 and under `rs_rich`, in colour and without, and the output must be identical: printing, the console's options, exports, the render protocol, highlighters, `log`, `print_json`, render hooks and live displays, tables and panels. |
+| `test_text_style.py`, `test_renderables.py`, `test_code.py`, `test_live.py` | The same comparison for each area: `Text`, `Style`, colours and themes; rules, layout, columns and trees; Markdown, Syntax, Pretty and tracebacks; live displays, progress, prompts and logging. |
+| `test_ext*.py`, `test_art.py`, `test_mermaid.py`, `test_plugins.py` | The port's crates, compared with what the Rust crates render for the same input (expected outputs generated by Rust; see `crates/rich-py/oracles`). |
+| `test_cli.py` | `python -m rs_rich` against the `rich` binary built from the same source: stdout, stderr and exit status. |
+| `test_api.py`, `test_console.py`, `test_text.py`, `test_style.py`, `test_table.py`, `test_panel.py`, `test_modules.py` | Rich's README example runs with only its imports changed; each class's arguments, validation and errors; the type stubs describe exactly the compiled module, and every module path exists. |
+| `test_docs.py` | Runs every example in these pages (and `ext/`) and compares its output with the page. |
 
 The tests assert that the installed reference really is Rich 15.0.0.

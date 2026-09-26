@@ -35,6 +35,7 @@ mod color_names;
 pub mod columns;
 pub mod console;
 pub mod constrain;
+pub mod containers;
 pub mod control;
 pub mod emoji;
 mod emoji_codes;
@@ -61,6 +62,7 @@ pub mod prompt;
 pub mod protocol;
 pub mod pyformat;
 pub mod ratio;
+pub mod region;
 mod repr_patterns;
 pub mod rule;
 pub mod screen;
@@ -81,40 +83,46 @@ pub mod tree;
 pub mod wrap;
 
 // A small, curated prelude mirroring the most-used names from `rich`'s top level.
-pub use crate::align::{Align, HorizontalAlign};
+pub use crate::align::{Align, HorizontalAlign, VerticalAlign, VerticalCenter};
 pub use crate::ansi::AnsiDecoder;
 pub use crate::bar::Bar;
 pub use crate::color::{Color, ColorSystem, ColorTriplet};
 pub use crate::columns::Columns;
-pub use crate::console::{Console, ConsoleOptions, Justify, Overflow, ThemeContext};
+pub use crate::console::{
+    Console, ConsoleDimensions, ConsoleOptions, Justify, Overflow, RenderStrOptions, ScreenUpdate,
+    ThemeContext,
+};
 pub use crate::constrain::Constrain;
 pub use crate::control::{Control, ControlType};
+pub use crate::emoji::EmojiVariant;
 pub use crate::errors::{Result, RichError};
 pub use crate::highlighter::{ISO8601Highlighter, RegexHighlighter, ReprHighlighter};
 pub use crate::json::Json;
-pub use crate::layout::Layout;
+pub use crate::layout::{Layout, LayoutRender, Splitter};
 pub use crate::live::{AutoLive, Live, LivePanic};
-pub use crate::live_render::LiveRender;
+pub use crate::live_render::{LiveRender, VerticalOverflow};
 pub use crate::log_render::{level_text, LogLevel, LogRecord, LogRender};
 pub use crate::padding::Padding;
 pub use crate::pager::{Pager, SystemPager};
 pub use crate::panel::Panel;
 pub use crate::pretty::Pretty;
 pub use crate::progress::{
-    track, BarColumn, LiveProgress, Progress, ProgressColumn, ProgressReader, SpinnerColumn, Task,
-    TaskId, TaskUpdate, TextColumn, TimeRemainingColumn, Track, TrackStdout,
+    track, BarColumn, CustomColumn, CustomProgressColumn, LiveProgress, Progress, ProgressColumn,
+    ProgressReader, SpinnerColumn, Task, TaskId, TaskUpdate, TextColumn, TimeRemainingColumn,
+    Track, TrackStdout,
 };
 pub use crate::progress_bar::ProgressBar;
 pub use crate::protocol::{
     CodeHighlighter, CodeHighlighting, ConsoleCodeHighlighting, FenceRenderer, HighlightError,
     HighlightSpan, HighlightedCode, HighlightedLine, Highlighter, LineRenderable, Renderable,
 };
+pub use crate::region::Region;
 pub use crate::rule::Rule;
 pub use crate::screen::Screen;
 pub use crate::segment::Segment;
 pub use crate::spinner::Spinner;
 pub use crate::status::Status;
-pub use crate::style::{Style, StyleType};
+pub use crate::style::{Meta, MetaValue, Style, StyleType};
 pub use crate::styled::Styled;
 pub use crate::syntax::{Syntax, SyntectHighlighter};
 pub use crate::table::{Cell, ColumnOptions, Table};

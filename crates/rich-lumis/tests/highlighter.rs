@@ -242,3 +242,38 @@ fn lumis_passes_the_conformance_kit() {
     rich_ext::testing::conformance::check(LumisHighlighter::shared())
         .unwrap_or_else(|error| panic!("{error}"));
 }
+
+/// Language names `Syntax` and Markdown fences pass (Pygments aliases, which
+/// the default syntect adapter highlights) must not silently become plain
+/// text when `--highlighter lumis` is chosen.
+#[test]
+fn pygments_aliases_syntect_knows_are_not_plain_text_under_lumis() {
+    let cases = [
+        ("shell", "echo \"a\" # c\n"),
+        ("console", "$ ls -la\n"),
+        ("python3", "def f(): pass\n"),
+        ("py3", "def f(): pass\n"),
+        ("golang", "package main\n"),
+        ("patch", "--- a\n+++ b\n@@ -1 +1 @@\n-a\n+b\n"),
+        ("jsonc", "{\"a\": 1}\n"),
+        ("json5", "{\"a\": 1}\n"),
+        ("zsh", "echo \"a\" # c\n"),
+    ];
+    let syntect = rich::SyntectHighlighter::shared();
+    let lumis = LumisHighlighter::new();
+    let styled = |h: &dyn CodeHighlighter, lang: &str, code: &str| {
+        let out = h.highlight(code, Some(lang), "ansi_dark").unwrap();
+        out.lines.iter().any(|l| !l.spans.is_empty())
+    };
+    let mut plain = Vec::new();
+    for (lang, code) in cases {
+        assert!(styled(syntect.as_ref(), lang, code), "syntect: {lang}");
+        if !styled(&lumis, lang, code) {
+            plain.push(lang);
+        }
+    }
+    assert!(
+        plain.is_empty(),
+        "lumis highlights these as plain text: {plain:?}"
+    );
+}

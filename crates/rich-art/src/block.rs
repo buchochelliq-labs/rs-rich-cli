@@ -99,7 +99,14 @@ impl BlockArt {
     }
 
     /// Columns and character rows for the available width.
+    #[cfg(any(feature = "gif", test))]
     pub(crate) fn grid(&self, available: usize) -> (usize, usize) {
+        self.grid_within(available, None)
+    }
+
+    /// The grid with derived rows also capped by `max_rows`, and the whole
+    /// of it by [`MAX_CELLS`](crate::image_art::MAX_CELLS).
+    fn grid_within(&self, available: usize, max_rows: Option<usize>) -> (usize, usize) {
         let (iw, ih) = self.image.dimensions();
         if iw == 0 || ih == 0 {
             return (1, 1);
@@ -119,13 +126,17 @@ impl BlockArt {
                 rows = cap.max(1);
             }
         }
-        (columns, rows)
+        crate::image_art::bound_grid(columns, rows, true, max_rows)
     }
 
     /// The rendered rows as `(upper, lower)` colour pairs. A half is `None`
     /// only when transparency is kept and that pixel is under half opacity.
-    fn cells(&self, available: usize) -> Vec<Vec<(Option<Color>, Option<Color>)>> {
-        let (columns, rows) = self.grid(available);
+    fn cells(
+        &self,
+        available: usize,
+        max_rows: Option<usize>,
+    ) -> Vec<Vec<(Option<Color>, Option<Color>)>> {
+        let (columns, rows) = self.grid_within(available, max_rows);
         let mut scaled = self
             .image
             .resize_exact(columns as u32, (rows * 2) as u32, FilterType::Triangle)
@@ -177,7 +188,7 @@ impl BlockArt {
 
 impl Renderable for BlockArt {
     fn rich_render(&self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        let rows = self.cells(options.max_width);
+        let rows = self.cells(options.max_width, options.height);
         let mut segments = Vec::new();
         let last = rows.len().saturating_sub(1);
         for (index, row) in rows.iter().enumerate() {
@@ -243,7 +254,7 @@ mod tests {
             }
         }))
         .width(4);
-        let rows = art.cells(80);
+        let rows = art.cells(80, None);
         assert_eq!(rows.len(), 2);
         // The first character row covers the two red pixel rows.
         for (upper, lower) in &rows[0] {

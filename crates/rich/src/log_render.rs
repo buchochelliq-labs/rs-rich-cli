@@ -13,13 +13,15 @@
 //! [`LogRecord`] is a one-record convenience over it.
 
 use std::cell::RefCell;
+use std::sync::Arc;
 
 use crate::console::{Console, ConsoleOptions, Overflow};
+use crate::containers::Renderables;
 use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::style::{Style, StyleType};
-use crate::table::Table;
+use crate::table::{Cell, Table};
 use crate::text::Text;
 
 /// Lays out log records. Port of `rich._log_render.LogRender`.
@@ -87,11 +89,63 @@ impl LogRender {
     /// Lay out one record. Port of `LogRender.__call__`: `time` is the
     /// formatted log time, `level` the styled level text (see [`level_text`]),
     /// and `link_path` makes the path a `file://` hyperlink.
+    ///
+    /// The message is a single `Text`; [`render_renderables`](Self::render_renderables)
+    /// takes any renderables, as upstream's `renderables` argument does.
     #[allow(clippy::too_many_arguments)]
     pub fn render(
         &self,
         console: &Console,
         message: Text,
+        time: Option<Text>,
+        level: Text,
+        path: Option<&str>,
+        line_no: Option<u32>,
+        link_path: Option<&str>,
+    ) -> Table {
+        self.render_cell(
+            console,
+            Cell::Text(message),
+            time,
+            level,
+            path,
+            line_no,
+            link_path,
+        )
+    }
+
+    /// Lay out one record whose message is any sequence of renderables. Port
+    /// of `LogRender.__call__` with its `renderables` argument: they render
+    /// one after another in the message column, as upstream's
+    /// `Renderables(renderables)` cell does. `Console.log` of a table, a panel
+    /// or `log_locals`' scope goes through here.
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_renderables(
+        &self,
+        console: &Console,
+        renderables: Vec<Arc<dyn Renderable + Send + Sync>>,
+        time: Option<Text>,
+        level: Text,
+        path: Option<&str>,
+        line_no: Option<u32>,
+        link_path: Option<&str>,
+    ) -> Table {
+        self.render_cell(
+            console,
+            Cell::Renderable(Arc::new(Renderables::new(renderables))),
+            time,
+            level,
+            path,
+            line_no,
+            link_path,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_cell(
+        &self,
+        console: &Console,
+        message: Cell,
         time: Option<Text>,
         level: Text,
         path: Option<&str>,
@@ -125,20 +179,22 @@ impl LogRender {
             output.add_column("").column_style(style("log.path"));
         }
 
-        let mut row = Vec::new();
+        let mut row: Vec<Cell> = Vec::new();
         if self.show_time {
             let display = time.unwrap_or_default();
             let mut last = self.last_time.borrow_mut();
             let repeated = last.as_ref().is_some_and(|last| same_text(last, &display));
             if repeated && self.omit_repeated_times {
-                row.push(Text::new(" ".repeat(display.plain().chars().count())));
+                row.push(Cell::Text(Text::new(
+                    " ".repeat(display.plain().chars().count()),
+                )));
             } else {
-                row.push(display.clone());
+                row.push(Cell::Text(display.clone()));
                 *last = Some(display);
             }
         }
         if self.show_level {
-            row.push(level);
+            row.push(Cell::Text(level));
         }
         row.push(message);
         if let Some(path) = path {
@@ -155,9 +211,9 @@ impl LogRender {
                     link_path.map(|link_path| link(format!("file://{link_path}#{line_no}")).into()),
                 );
             }
-            row.push(path_text);
+            row.push(Cell::Text(path_text));
         }
-        output.add_row_text(row);
+        output.add_row_cells(row);
         output
     }
 }

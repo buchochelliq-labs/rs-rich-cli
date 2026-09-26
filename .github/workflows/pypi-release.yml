@@ -52,7 +52,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - uses: PyO3/maturin-action@v1
+      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           target: ${{ matrix.target }}
           manylinux: auto
@@ -81,7 +81,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: PyO3/maturin-action@v1
+      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           command: sdist
           args: --out dist --manifest-path crates/rich-py/Cargo.toml
@@ -91,9 +91,31 @@ jobs:
           path: dist/*.tar.gz
           if-no-files-found: error
 
+  test:
+    # The whole suite, compatibility included, against the wheel that is
+    # about to be published. Rich 15.0.0 is the reference; never install
+    # rich-cli here, it would downgrade rich (see AGENTS.md).
+    name: tests (linux-x86_64 wheel)
+    needs: wheels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheel-linux-x86_64
+          path: dist
+      - name: Install the wheel and the reference
+        shell: bash
+        run: python -m pip install dist/rs_rich-*.whl "rich==15.0.0" pytest
+      - name: Compatibility and API tests
+        run: python -m pytest -q crates/rich-py/tests
+
   publish:
     name: publish to PyPI
-    needs: [wheels, sdist]
+    needs: [wheels, sdist, test]
     runs-on: ubuntu-latest
     environment: pypi          # PyPI's trusted publisher is bound to this environment
     permissions:
@@ -104,6 +126,6 @@ jobs:
           path: dist
           merge-multiple: true
       - run: ls -l dist
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           packages-dir: dist

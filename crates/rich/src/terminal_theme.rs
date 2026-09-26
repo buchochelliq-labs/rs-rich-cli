@@ -30,10 +30,10 @@ impl TerminalTheme {
                     self.background
                 }
             }
-            ColorType::Standard | ColorType::Windows => {
-                self.ansi[(color.number.unwrap_or(0) as usize) & 0x0f]
-            }
-            ColorType::EightBit | ColorType::Truecolor => {
+            ColorType::Standard => self.ansi[(color.number.unwrap_or(0) as usize) & 0x0f],
+            // Upstream's `get_truecolor` ignores the theme for a Windows color
+            // and reads `WINDOWS_PALETTE`.
+            ColorType::Windows | ColorType::EightBit | ColorType::Truecolor => {
                 color.get_truecolor().unwrap_or(self.foreground)
             }
         }

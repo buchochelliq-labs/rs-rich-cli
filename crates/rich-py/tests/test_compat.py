@@ -28,6 +28,10 @@ def modules(package: str) -> SimpleNamespace:
         panel=load("panel"),
         box=load("box"),
         markup=load("markup"),
+        segment=load("segment"),
+        measure=load("measure"),
+        theme=load("theme"),
+        terminal_theme=load("terminal_theme"),
     )
 
 
@@ -157,6 +161,93 @@ def justified_prints(m, c):
     c.print("right [b]bold[/]", justify="right")
 
 
+def print_arguments(m, c):
+    c.print("hello [b]world[/]", 42, style="on blue")
+    c.print("a", m.text.Text("b", style="red"), "c", sep="-", end="!\n")
+    c.print("no newline", end="")
+    c.print(" continues")
+    c.print("x" * 70, overflow="ellipsis")
+    c.print("word " * 15, no_wrap=True)
+    c.print("y" * 70, crop=False)
+    c.print("z" * 70, soft_wrap=True)
+    c.print("narrow text that wraps", width=10)
+    c.print("[b]not markup[/] :thumbs_up: 1", markup=False)
+    c.print("[b]markup[/] :thumbs_up: 1", emoji=False, highlight=False)
+    c.print(123, None, 4.5, highlight=False)
+    c.print("one\ntwo", new_line_start=True)
+    c.print("single", new_line_start=True)
+    c.print("tall", height=3)
+
+
+def justified_renderables(m, c):
+    c.print(m.panel.Panel.fit("fit"), justify="right")
+    c.print(m.panel.Panel.fit("fit"), "and text", justify="center")
+    c.print("full justification spreads the words of a long line out", justify="full")
+    c.print("left", justify="left")
+    c.print("end", justify="center", end="!!")
+    c.print(" is inside the aligned block", justify="right")
+
+
+def out_line_and_rules(m, c):
+    c.out("raw", 1, "[b]not markup[/]", style="red")
+    c.out("x" * 70)
+    c.line()
+    c.line(2)
+    c.rule("left title", align="left", style="rule.line")
+    c.rule("right", align="right", characters="=")
+    c.print()
+
+
+def console_style_and_themes(m, c):
+    styled = m.console.Console(
+        file=c.file, width=40, style="italic", force_terminal=c.is_terminal,
+        color_system=c.color_system, theme=m.theme.Theme({"accent": "bold magenta"}),
+    )
+    styled.print("[accent]themed[/] and italic", m.panel.Panel.fit("boxed"))
+    styled.push_theme(m.theme.Theme({"accent": "green"}))
+    styled.print("[accent]pushed[/]")
+    styled.pop_theme()
+    with styled.use_theme(m.theme.Theme({"accent": "underline"})):
+        styled.print("[accent]used[/]")
+    styled.print("[accent]restored[/]")
+    styled.print("ends", end="E", style="bold")
+    styled.print()
+    styled.rule("styled rule")
+    c.print(str(styled.get_style("accent")))
+
+
+def capture_and_render_str(m, c):
+    with c.capture() as capture:
+        c.print("[bold]captured[/] 1")
+    c.begin_capture()
+    c.print("again")
+    again = c.end_capture()
+    c.print(repr(capture.get()), repr(again))
+    c.print(c.render_str("[b]no highlight[/] 1", highlight=False, justify="right", style="red"))
+    c.print(c.render_str("[b]highlighted[/] 1"))
+    c.print(c.render_str("[b]plain[/]", markup=False))
+
+
+def json_printing(m, c):
+    c.print_json('{"name": "rs_rich", "tags": [1, 2.5, null, true, false], "nested": {"a": []}}')
+    c.print_json(data={"z": 1, "a": "a long string that does not wrap even past the width " * 2}, sort_keys=True)
+
+
+def render_measure_and_options(m, c):
+    options = c.options
+    c.print(options.max_width, options.min_width, options.is_terminal, options.encoding, options.justify)
+    updated = options.update(width=10, justify="center", no_wrap=True, height=2)
+    c.print(updated.max_width, updated.min_width, updated.justify, updated.no_wrap, updated.height, updated.max_height)
+    c.print(c.size.width, c.size.height, c.encoding, c.is_dumb_terminal)
+    c.print(repr(c.measure("a few words")), repr(c.measure(m.panel.Panel.fit("abc"))))
+    segments = c.render(m.text.Text("hi", style="bold"))
+    c.print(repr([(s.text, bool(s.style), bool(s.control)) for s in segments]))
+    lines = c.render_lines("a\nbb [b]c[/]", c.options.update_width(6))
+    c.print(repr([[s.text for s in line] for line in lines]))
+    lines = c.render_lines(m.panel.Panel("p"), c.options.update_width(7), pad=False, new_lines=True)
+    c.print(repr(["".join(s.text for s in line) for line in lines]))
+
+
 PROGRAMS = [
     markup_and_highlighting,
     text_objects,
@@ -167,6 +258,13 @@ PROGRAMS = [
     panels,
     rules,
     justified_prints,
+    print_arguments,
+    justified_renderables,
+    out_line_and_rules,
+    console_style_and_themes,
+    capture_and_render_str,
+    json_printing,
+    render_measure_and_options,
 ]
 
 
@@ -197,6 +295,94 @@ def test_export_text_matches_rich(styles):
         c.rule("done")
         outputs.append(c.export_text(styles=styles))
         assert c.export_text() == ""  # cleared
+    assert outputs[1] == outputs[0]
+
+
+@pytest.mark.parametrize("inline_styles", [False, True])
+def test_export_html_matches_rich(inline_styles):
+    outputs = []
+    for package in ["rich", "rs_rich"]:
+        m = modules(package)
+        c = console(m, True, record=True)
+        star_wars_table(m, c)
+        # Core's HTML export leaves links out (Rich wraps them in <a href>).
+        c.print("[bold red on white]styled[/] [italic]text[/]")
+        outputs.append(c.export_html(inline_styles=inline_styles, clear=False))
+        outputs.append(c.export_html(theme=m.terminal_theme.MONOKAI, inline_styles=inline_styles))
+        assert c.export_text() == ""
+    assert outputs[2:] == outputs[:2]
+
+
+def test_export_svg_matches_rich():
+    # Rich derives the default unique_id from its segments' Python reprs;
+    # with an explicit one the documents are identical. (Panel and rule
+    # titles are left out: core splits a title from the border line beside
+    # it into two segments where Rich has one, which only SVG shows.)
+    outputs = []
+    for package in ["rich", "rs_rich"]:
+        m = modules(package)
+        c = console(m, True, record=True)
+        star_wars_table(m, c)
+        text_objects(m, c)
+        styles(m, c)
+        outputs.append(c.export_svg(title="Test", unique_id="compat"))
+    assert outputs[1] == outputs[0]
+
+
+def test_saving_matches_rich(tmp_path):
+    for package in ["rich", "rs_rich"]:
+        m = modules(package)
+        c = console(m, True, record=True)
+        table_options(m, c)
+        c.save_text(tmp_path / f"{package}.txt", clear=False)
+        c.save_html(tmp_path / f"{package}.html", clear=False)
+        c.save_svg(tmp_path / f"{package}.svg", unique_id="x")
+    for suffix in ["txt", "html", "svg"]:
+        rich_bytes = (tmp_path / f"rich.{suffix}").read_bytes()
+        assert (tmp_path / f"rs_rich.{suffix}").read_bytes() == rich_bytes
+
+
+def log_program(m, c):
+    import datetime
+
+    logging_console = m.console.Console(
+        file=c.file, width=60, force_terminal=c.is_terminal, color_system=c.color_system,
+        get_datetime=lambda: datetime.datetime(2026, 9, 25, 12, 34, 56),
+    )
+    logging_console.log("first [b]record[/]", 1)
+    logging_console.log("same second, so the time is blank")
+    logging_console.log("a long message " * 6, justify="right")
+    m.console.Console(
+        file=c.file, width=60, force_terminal=c.is_terminal, color_system=c.color_system,
+        log_time=False, log_path=False,
+    ).log("no time", "no path", style="italic")
+    m.console.Console(
+        file=c.file, width=60, force_terminal=c.is_terminal, color_system=c.color_system,
+        log_path=False, log_time_format="%Y-%m-%d",
+        get_datetime=lambda: datetime.datetime(2026, 9, 25),
+    ).log("custom format")
+
+
+@pytest.mark.parametrize("color", [True, False], ids=["truecolor", "plain"])
+def test_log_matches_rich_except_for_link_ids(color):
+    outputs = []
+    for package in ["rich", "rs_rich"]:
+        m = modules(package)
+        c = console(m, color)
+        log_program(m, c)
+        outputs.append(c.file.getvalue())
+    expected = re.sub(r"\x1b\]8;id=[^;]*;", "\x1b]8;;", outputs[0])
+    assert outputs[1] == expected
+
+
+def test_input_matches_rich():
+    outputs = []
+    for package in ["rich", "rs_rich"]:
+        m = modules(package)
+        c = console(m, True)
+        answer = c.input("[bold]name?[/] ", stream=io.StringIO("Ada\n"))
+        c.print(repr(answer))
+        outputs.append(c.file.getvalue())
     assert outputs[1] == outputs[0]
 
 

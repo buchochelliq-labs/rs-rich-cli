@@ -1,0 +1,21 @@
+# The Rust oracle for tests/test_art.py and tests/test_mermaid.py: renders
+# their CASES with the Rust crates, so the Python bindings are compared with
+# Rust's own output. Never published; see ../README.md.
+[package]
+name = "art-oracle"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+rich = { package = "rs-rich", path = "../../../rich" }
+rich-art = { package = "rs-rich-art", path = "../../../rich-art", features = ["image", "gif", "sixel"] }
+rich-mermaid = { package = "rs-rich-mermaid", path = "../../../rich-mermaid" }
+serde_json = "1"
+
+[features]
+# Mermaid's `mmdc` backend, for the mmdc cases.
+mmdc = ["rich-mermaid/mmdc"]
+
+# Its own workspace root, as rich-py's.
+[workspace]

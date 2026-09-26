@@ -100,7 +100,10 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                             .filter_map(|h| h["name"].as_str())
                             .collect::<Vec<_>>()
                             .join(", ")
-                    ),
+                    ) + &report["code_highlighters"]["active"]["error"]
+                        .as_str()
+                        .map(|error| format!("\n  Not usable: {error}"))
+                        .unwrap_or_default(),
                     format!(
                         "Terminal: stdout TTY={}, {}×{} cells, colour={} ({}); NO_COLOR={}",
                         report["terminal"]["stdout_tty"],
@@ -289,11 +292,14 @@ fn report(args: &[String]) -> Result<(serde_json::Value, Report, bool), String> 
         .collect();
     // The engines compiled in, and the one `highlighter` / `code_theme` (from
     // config or the command line) select; an unknown choice is reported.
+    // Reported, not fatal: doctor is where the error message sends the user
+    // to find the valid names.
     let active_name = settings["highlighter"].as_str().unwrap_or("syntect");
-    super::code_highlighting(
+    let choice_error = super::code_highlighting(
         settings["highlighter"].as_str(),
         settings["code_theme"].as_str(),
-    )?;
+    )
+    .err();
     let available: Vec<serde_json::Value> = registry
         .code_highlighter_names()
         .into_iter()
@@ -323,7 +329,7 @@ fn report(args: &[String]) -> Result<(serde_json::Value, Report, bool), String> 
         "config": {"source": config["source"], "profile": config["profile"], "disabled": config["disabled"]},
         "pager": {"source": pager_source, "program": pager_program, "availability": "not checked", "terminal_eligible": pager_eligible, "explicit": settings["pager"].as_bool().unwrap_or(false), "automatic": settings["auto_pager"].as_bool().unwrap_or(false)},
         "plugins": {"api_version": rich_ext::plugin::PLUGIN_API_VERSION, "registered": plugins},
-        "code_highlighters": {"available": available, "active": {"name": active_name, "theme": active_theme}},
+        "code_highlighters": {"available": available, "active": {"name": active_name, "theme": active_theme, "error": choice_error}},
         "capabilities": capabilities_json
     });
     Ok((json, capabilities, no_color))

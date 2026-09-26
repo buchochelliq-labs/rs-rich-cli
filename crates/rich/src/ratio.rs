@@ -28,10 +28,16 @@ impl Edge {
 
 /// Distribute `total` across `edges`, returning a concrete size per edge.
 ///
-/// Direct port of `rich._ratio.ratio_resolve`.
+/// Direct port of `rich._ratio.ratio_resolve`, with its `Fraction`
+/// arithmetic done exactly on integers (`portion = remaining / ratio_sum`
+/// is kept as a numerator over `ratio_sum`), so no float rounding can drop
+/// a cell.
 pub fn ratio_resolve(total: usize, edges: &[Edge]) -> Vec<usize> {
-    let total = total as f64;
-    let mut sizes: Vec<Option<usize>> = edges.iter().map(|e| e.size).collect();
+    // `edge.size or None`: a size of 0 is flexible, like no size.
+    let mut sizes: Vec<Option<usize>> = edges
+        .iter()
+        .map(|e| e.size.filter(|&size| size > 0))
+        .collect();
 
     // Resolve one flexible edge per pass until all are fixed.
     while sizes.iter().any(Option::is_none) {
@@ -42,9 +48,9 @@ pub fn ratio_resolve(total: usize, edges: &[Edge]) -> Vec<usize> {
             .map(|(i, _)| i)
             .collect();
 
-        let fixed_sum: f64 = sizes.iter().flatten().map(|&s| s as f64).sum();
-        let remaining = total - fixed_sum;
-        if remaining <= 0.0 {
+        let fixed_sum: i128 = sizes.iter().flatten().map(|&s| s as i128).sum();
+        let remaining = total as i128 - fixed_sum;
+        if remaining <= 0 {
             // No room for flexible edges: give each its minimum (or its size).
             return sizes
                 .iter()
@@ -56,28 +62,36 @@ pub fn ratio_resolve(total: usize, edges: &[Edge]) -> Vec<usize> {
                 .collect();
         }
 
-        let ratio_sum: f64 = flexible.iter().map(|&i| edges[i].ratio.max(1) as f64).sum();
-        let portion = remaining / ratio_sum;
+        // `portion = Fraction(remaining, sum(edge.ratio or 1 ...))`. `u128`
+        // holds any `usize` product, so nothing here overflows.
+        let remaining = remaining as u128;
+        let ratio_sum: u128 = flexible
+            .iter()
+            .map(|&i| edges[i].ratio.max(1) as u128)
+            .fold(0, u128::saturating_add);
 
-        // If any flexible edge would fall below its minimum, pin it and retry —
+        // If any flexible edge would fall below its minimum
+        // (`portion * edge.ratio <= edge.minimum_size`), pin it and retry —
         // a newly fixed size changes the remaining distribution.
         let mut pinned = false;
         for &i in &flexible {
-            if portion * edges[i].ratio.max(1) as f64 <= edges[i].minimum_size as f64 {
-                sizes[i] = Some(edges[i].minimum_size);
+            let edge = &edges[i];
+            if remaining * edge.ratio as u128
+                <= (edge.minimum_size as u128).saturating_mul(ratio_sum)
+            {
+                sizes[i] = Some(edge.minimum_size);
                 pinned = true;
                 break;
             }
         }
         if !pinned {
-            // Distribute the flexible space, carrying the rounding remainder
-            // forward so the totals stay exact (upstream's `divmod` loop).
-            let mut remainder = 0.0;
+            // `size, remainder = divmod(portion * edge.ratio + remainder, 1)`,
+            // in units of `1 / ratio_sum`.
+            let mut remainder = 0u128;
             for &i in &flexible {
-                let value = portion * edges[i].ratio.max(1) as f64 + remainder;
-                let size = value.floor();
-                remainder = value - size;
-                sizes[i] = Some(size as usize);
+                let value = (remaining * edges[i].ratio as u128).saturating_add(remainder);
+                sizes[i] = Some(usize::try_from(value / ratio_sum).unwrap_or(usize::MAX));
+                remainder = value % ratio_sum;
             }
             break;
         }

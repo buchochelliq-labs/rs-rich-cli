@@ -161,6 +161,76 @@ def fixtures_011(work: Path) -> None:
     write_rgba_png(work / "alpha.png", 120, 60, pixel)
 
 
+def fixtures_012(work: Path) -> None:
+    (work / "release.mmd").write_text(
+        "flowchart LR\n"
+        "    core[rs-rich 0.0.8] --> api[plugin API 0.0.1]\n"
+        "    api --> mermaid[rs-rich-mermaid]\n"
+        "    api --> lumis[rs-rich-lumis]\n"
+        "    core --> py{{rs_rich on PyPI}}\n"
+        "    mermaid --> cli([rich 0.0.12])\n"
+        "    lumis -.-> cli\n"
+    )
+    (work / "design.md").write_text(
+        "# Release flow\n\n"
+        "Fenced Mermaid in Markdown is drawn, not printed:\n\n"
+        "```mermaid\nflowchart TD\n    tag[Tag on main] --> ci{CI green?}\n"
+        "    ci -->|yes| publish[Publish]\n    ci -->|no| fix[Fix]\n```\n"
+    )
+    (work / "worker.rs").write_text(
+        "/// Retry a job with backoff.\n"
+        "fn retry(job: &Job, attempts: u32) -> Result<(), Error> {\n"
+        "    for n in 0..attempts {\n"
+        "        if job.run().is_ok() {\n"
+        "            return Ok(());\n"
+        "        }\n"
+        "        sleep(Duration::from_millis(100 << n));\n"
+        "    }\n"
+        "    Err(Error::GaveUp(attempts))\n"
+        "}\n"
+    )
+    (work / "service.log").write_text(
+        "09:00:01 INFO  api listening on :8080\n"
+        "09:00:04 WARN  cache miss rate 12%\n"
+        "09:00:07 ERROR upstream timeout after 30s\n"
+        "09:00:09 INFO  retrying upstream\n"
+        "09:00:12 ERROR connection refused by db:5432\n"
+        "09:00:15 INFO  recovered\n"
+    )
+
+    # A 24x16 pixel sprite: native sizing draws it at its own size, never enlarged.
+    def pixel(x, y):
+        if (x - 12) ** 2 + (y - 8) ** 2 < 7 * 7:
+            return (255, 196, 0, 255) if y < 8 else (255, 120, 0, 255)
+        if y > 13:
+            return (60, 170, 90, 255)
+        return (40, 60, 120, 255)
+
+    write_rgba_png(work / "sprite.png", 24, 16, pixel)
+
+    # The Python package: a Rich program with its imports changed. Needs the
+    # installed wheel's `python3` on the case PATH (see cases_012).
+    (work / "report.py").write_text(
+        "from rs_rich.console import Console\n"
+        "from rs_rich.panel import Panel\n"
+        "from rs_rich.table import Table\n"
+        "from rs_rich.tree import Tree\n"
+        "\n"
+        "console = Console()\n"
+        "table = Table(title=\"0.0.12 cohort\", title_style=\"bold\")\n"
+        "table.add_column(\"Package\", style=\"cyan\")\n"
+        "table.add_column(\"Version\", justify=\"right\", style=\"magenta\")\n"
+        "for name, version in [(\"rs-rich\", \"0.0.8\"), (\"rs-rich-ext\", \"0.0.10\"),\n"
+        "                      (\"rs-rich-mermaid\", \"0.0.1\"), (\"rs-rich (PyPI)\", \"0.0.1\")]:\n"
+        "    table.add_row(name, version)\n"
+        "tree = Tree(\"[bold]rs_rich[/]\")\n"
+        "for module in [\"console\", \"table\", \"ext\", \"art\", \"mermaid\"]:\n"
+        "    tree.add(f\"[green]{module}\")\n"
+        "console.print(Panel.fit(table, title=\"[b]rs_rich[/b]: Rich's API, rendered in Rust\"))\n"
+        "console.print(tree)\n"
+    )
+
+
 def cases_011(c, work):
     img = "rich --no-config image gradient.png --width 48 --height 14 --image-fit contain"
     alpha = "rich --no-config image alpha.png --image-mode quadrants --width 48 --height 12"
@@ -197,7 +267,30 @@ def cases_011(c, work):
     ]
 
 
-CASE_SETS = {"0.0.9": cases_009, "0.0.10": cases_010, "0.0.11": cases_011}
+def cases_012(c, work):
+    return [
+        c("01-version-doctor", "Installed from the packaged crates: version, highlighters and plugins",
+          ["rich --version", "rich doctor --no-config"], rows=30),
+        c("02-mermaid", "rich mermaid: a flowchart drawn as text, no browser needed",
+          ["rich --no-config mermaid release.mmd"], cols=100, rows=24),
+        c("03-markdown-mermaid", "A ```mermaid fence in Markdown is drawn in place",
+          ["rich --no-config design.md"], cols=80, rows=22),
+        c("04-code-theme", "--code-theme ansi_dark: code in the terminal's own palette",
+          ["rich --no-config worker.rs --code-theme ansi_dark"], cols=80, rows=12),
+        c("05-filter-highlight", "--filter keeps matching lines; --highlight marks matches",
+          ["rich --no-config service.log --filter ERROR --highlight 'timeout|refused'",
+           "rich --no-config inspect deploy.yaml --highlight '$.limits.*'"], cols=80, rows=22),
+        c("06-image-native", "--image-fit native: an image at its own pixel size",
+          ["rich --no-config image sprite.png --image-fit native --image-mode quadrants",
+           "rich --no-config image sprite.png --image-fit native --image-mode half-block"],
+          cols=60, rows=20),
+        # --bin-dir must also hold the installed wheel's python3 (a venv's bin).
+        c("07-python", "The rs-rich wheel: a Rich program with only its imports changed",
+          ["python3 report.py"], cols=80, rows=20),
+    ]
+
+
+CASE_SETS = {"0.0.9": cases_009, "0.0.10": cases_010, "0.0.11": cases_011, "0.0.12": cases_012}
 
 
 def main() -> None:
@@ -212,6 +305,7 @@ def main() -> None:
     fixtures(work, args.image)
     fixtures_010(work)
     fixtures_011(work)
+    fixtures_012(work)
     c = lambda *a, **k: case(*a, work=work, bin_dir=bin_dir, **k)
     print(json.dumps(CASE_SETS[args.release](c, work), indent=1))
 

@@ -3,7 +3,9 @@
 //! Port of upstream `rich/rule.py`. A [`Rule`] draws a horizontal line across
 //! the available width, optionally with a centered title.
 //!
-//! Titles support console markup and left, center or right alignment.
+//! Titles are console markup or a literal [`Text`], aligned left, center or
+//! right; `characters`, `style` (default the theme's `rule.line`) and `end`
+//! follow upstream.
 
 use crate::align::HorizontalAlign;
 use crate::cells::{cell_len, set_cell_size};
@@ -11,14 +13,17 @@ use crate::console::{Console, ConsoleOptions, Overflow};
 use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
-use crate::style::Style;
+use crate::style::StyleType;
 use crate::text::{Text, DEFAULT_TAB_SIZE};
 
 /// A horizontal rule, optionally titled. Mirrors `rich.rule.Rule`.
 pub struct Rule {
     title: Option<String>,
+    /// A literal title (upstream `Rule(Text(…))`), in place of `title`.
+    title_text: Option<Text>,
     characters: String,
-    style: Style,
+    style: StyleType,
+    end: String,
     align: HorizontalAlign,
 }
 
@@ -26,9 +31,11 @@ impl Default for Rule {
     fn default() -> Self {
         Rule {
             title: None,
+            title_text: None,
             characters: "─".to_string(),
-            // Upstream's `rule.line` default style.
-            style: Style::parse("bright_green").expect("valid built-in style"),
+            // Upstream's default `style="rule.line"`, resolved per console.
+            style: StyleType::Name("rule.line".to_string()),
+            end: "\n".to_string(),
             align: HorizontalAlign::Center,
         }
     }
@@ -48,15 +55,34 @@ impl Rule {
         }
     }
 
+    /// A rule titled with a literal [`Text`] (upstream `Rule(Text(…))`): no
+    /// markup, and no `rule.text` style beneath it.
+    pub fn with_title_text(title: Text) -> Self {
+        Rule {
+            title_text: Some(title),
+            ..Rule::default()
+        }
+    }
+
+    /// What follows a *titled* rule (upstream `end`, default `"\n"`). As
+    /// upstream, an untitled rule ignores it. The port's renderables separate
+    /// lines rather than ending them, so one trailing newline of `end` is the
+    /// line end the printer adds; an `end` without one cannot suppress it.
+    pub fn end(mut self, end: impl Into<String>) -> Self {
+        self.end = end.into();
+        self
+    }
+
     /// Override the fill character(s).
     pub fn characters(mut self, characters: impl Into<String>) -> Self {
         self.characters = characters.into();
         self
     }
 
-    /// Override the rule style.
-    pub fn style(mut self, style: Style) -> Self {
-        self.style = style;
+    /// Override the rule style: a [`Style`], or a theme name / definition
+    /// (default `"rule.line"`).
+    pub fn style(mut self, style: impl Into<StyleType>) -> Self {
+        self.style = style.into();
         self
     }
 
@@ -67,20 +93,52 @@ impl Rule {
     }
 
     /// Repeat `characters` to at least `width` cells, then crop to exactly `width`.
-    fn fill(&self, width: usize) -> String {
+    fn fill(characters: &str, width: usize) -> String {
         if width == 0 {
             return String::new();
         }
-        let chars_len = cell_len(&self.characters).max(1);
+        let chars_len = cell_len(characters).max(1);
         let repeat = width / chars_len + 1;
-        let repeated = self.characters.repeat(repeat);
+        let repeated = characters.repeat(repeat);
         set_cell_size(&repeated, width)
     }
 
-    fn build_text(&self, console: &Console, width: usize) -> Text {
-        let Some(title) = self.title.as_ref().filter(|title| !title.is_empty()) else {
-            return Text::styled(self.fill(width), self.style.clone());
+    /// The rule as a `Text`, and whether it is titled (only a titled rule
+    /// carries `end`).
+    fn build_text(&self, console: &Console, options: &ConsoleOptions) -> (Text, bool) {
+        let width = options.max_width;
+        // `"-" if options.ascii_only and not characters.isascii()`: only the
+        // titled layouts use the substitute; `_rule_line` keeps the original.
+        let characters = if options.ascii_only() && !self.characters.is_ascii() {
+            "-"
+        } else {
+            self.characters.as_str()
         };
+        let rule_line = || Text::styled(Self::fill(&self.characters, width), self.style.clone());
+        let title = match (&self.title_text, &self.title) {
+            (Some(text), _) if !text.plain().is_empty() => {
+                let mut title = text.blank_copy();
+                title.append(&text.plain().replace('\n', " "), None);
+                for span in text.spans() {
+                    title.push_span(span.clone());
+                }
+                title
+            }
+            (None, Some(title)) if !title.is_empty() => {
+                // Upstream uses Console.render_str, so titles retain markup, emoji,
+                // the console's highlighter and the `rule.text` theme style.
+                let parsed = console.build_text(title);
+                let mut title = parsed.blank_copy();
+                title.append(&parsed.plain().replace('\n', " "), None);
+                for span in parsed.spans() {
+                    title.push_span(span.clone());
+                }
+                title.set_base_style("rule.text");
+                title
+            }
+            _ => return (rule_line(), false),
+        };
+        let mut title = title;
 
         // Upstream: `required_space = 4 if align == "center" else 2`, and when
         // no space is left for the title it falls back to an untitled rule.
@@ -94,18 +152,8 @@ impl Rule {
         };
         let truncate_width = width.saturating_sub(required_space);
         if truncate_width == 0 {
-            return Text::styled(self.fill(width), self.style.clone());
+            return (rule_line(), false);
         }
-
-        // Upstream uses Console.render_str, so titles retain markup, emoji,
-        // the console's highlighter and the `rule.text` theme style.
-        let parsed = console.build_text(title);
-        let mut title = parsed.blank_copy();
-        title.append(&parsed.plain().replace('\n', " "), None);
-        for span in parsed.spans() {
-            title.push_span(span.clone());
-        }
-        title.set_base_style("rule.text");
         title.expand_tabs(DEFAULT_TAB_SIZE);
         title.truncate(truncate_width, Some(Overflow::Ellipsis), false);
 
@@ -115,17 +163,17 @@ impl Rule {
                 let title_len = title.cell_len();
 
                 let side_width = width.saturating_sub(title_len) / 2;
-                let left = self.fill(side_width.saturating_sub(1));
+                let left = Self::fill(characters, side_width.saturating_sub(1));
                 let right_length = width
                     .saturating_sub(title_len)
                     .saturating_sub(cell_len(&left))
                     .saturating_sub(2);
-                let right = self.fill(right_length);
+                let right = Self::fill(characters, right_length);
 
                 let mut text = Text::new("");
-                text.append(&format!("{left} "), Some(self.style.clone().into()));
+                text.append(&format!("{left} "), Some(self.style.clone()));
                 text = text.append_text(&title);
-                text.append(&format!(" {right}"), Some(self.style.clone().into()));
+                text.append(&format!(" {right}"), Some(self.style.clone()));
                 text
             }
             HorizontalAlign::Left => {
@@ -133,7 +181,7 @@ impl Rule {
                 let mut text = Text::new("");
                 text = text.append_text(&title);
                 text.append(" ", None);
-                text.append(&self.fill(fill_len), Some(self.style.clone().into()));
+                text.append(&Self::fill(characters, fill_len), Some(self.style.clone()));
                 text
             }
             HorizontalAlign::Right => {
@@ -142,10 +190,7 @@ impl Rule {
                 // final crop below removes the title (#444).
                 let repeat = width.saturating_sub(title.cell_len()).saturating_sub(1);
                 let mut text = Text::new("");
-                text.append(
-                    &self.characters.repeat(repeat),
-                    Some(self.style.clone().into()),
-                );
+                text.append(&characters.repeat(repeat), Some(self.style.clone()));
                 text.append(" ", None);
                 text = text.append_text(&title);
                 text
@@ -153,14 +198,21 @@ impl Rule {
         };
         // Upstream: `rule_text.plain = set_cell_size(rule_text.plain, width)`.
         text.truncate(width, Some(Overflow::Crop), true);
-        text
+        (text, true)
     }
 }
 
 impl Renderable for Rule {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        let text = self.build_text(console, options.max_width);
-        text.render(console.theme(), console.base_style())
+        let (text, titled) = self.build_text(console, options);
+        let mut segments = text.render(console.theme(), console.base_style());
+        if titled {
+            let end = self.end.strip_suffix('\n').unwrap_or(&self.end);
+            if !end.is_empty() {
+                segments.push(Segment::new(end, None));
+            }
+        }
+        segments
     }
 
     /// Port of `Rule.__rich_measure__`: a rule fits any width, so it asks for

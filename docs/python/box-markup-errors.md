@@ -83,14 +83,24 @@ Console(width=40).print(escape(user_input))
 ## Errors
 
 ```python
-from rs_rich.errors import ConsoleError, MarkupError, StyleSyntaxError
+from rs_rich.errors import ConsoleError, MarkupError, NotRenderableError, StyleSyntaxError
 ```
+
+`rs_rich.errors` has every Rich exception, with Rich's hierarchy:
 
 | Exception | Base | Raised when |
 |---|---|---|
-| `ConsoleError` | `Exception` | Never raised itself; the base of the two below, as in Rich. |
+| `ConsoleError` | `Exception` | Never raised itself; the base of most below, as in Rich. |
 | `MarkupError` | `ConsoleError` | Markup does not parse, for example a closing tag with no opening one. |
 | `StyleSyntaxError` | `ConsoleError` | A style definition or colour does not parse. |
+| `NotRenderableError` | `ConsoleError` | An object that is not a string, a `Segment` or a renderable is printed or put in a table. |
+| `StyleError` | `Exception` | The base of `MissingStyle`. |
+| `MissingStyle` | `StyleError` | `Console.get_style` finds no style of that name and cannot parse it. |
+| `StyleStackError`, `LiveError`, `NoAltScreen` | `ConsoleError` | Kept for Rich's API; raised by the live displays. |
+
+`rs_rich.console.CaptureError` (a `Capture` read too early) and
+`rs_rich.theme.ThemeStackError` (popping the console's own theme) are there
+too, as in Rich.
 
 Other errors are Python's own:
 
@@ -99,7 +109,8 @@ Other errors are Python's own:
 | `ValueError` | An argument has an invalid value, such as `justify="middle"` or a table row with more cells than columns. |
 | `TypeError` | An argument has the wrong type, such as a `style` that is not a string or `Style`, or a `box` that is not a box constant. |
 | `NotImplementedError` | Something Rich supports that this version does not yet. It is raised instead of rendering differently from Rich. |
-| `RuntimeError` | `export_text` on a console created without `record=True`. |
+| `RuntimeError` | An export on a console created without `record=True`. |
+| `RecursionError` | Renderables nested more than 100 deep. |
 
 ```python
 from rs_rich.console import Console

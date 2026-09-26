@@ -18,6 +18,13 @@ keywords = ["cli", "terminal", "markdown", "syntax", "pretty-print"]
 categories = ["command-line-utilities", "text-processing"]
 include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
 
+# The command line is a library target so the Python wheel (`crates/rich-py`)
+# can run it in-process; its only public item is `rich_cli::run`.
+[lib]
+name = "rich_cli"
+path = "src/lib.rs"
+doctest = false
+
 [[bin]]
 name = "rich"
 path = "src/main.rs"

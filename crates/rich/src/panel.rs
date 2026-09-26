@@ -13,7 +13,7 @@ use crate::padding::join_rows;
 use crate::protocol::Renderable;
 use crate::r#box::{Box as BoxSet, ROUNDED};
 use crate::segment::Segment;
-use crate::style::Style;
+use crate::style::{Style, StyleType};
 use crate::text::{Text, DEFAULT_TAB_SIZE};
 
 /// A bordered box around a renderable. Mirrors `rich.panel.Panel`.
@@ -21,14 +21,22 @@ pub struct Panel {
     child: Box<dyn Renderable>,
     box_set: BoxSet,
     title: Option<String>,
+    /// A literal title (upstream `Panel(title=Text(…))`), in place of `title`.
+    title_value: Option<Text>,
     title_align: HorizontalAlign,
     subtitle: Option<String>,
+    /// A literal subtitle (upstream `Panel(subtitle=Text(…))`).
+    subtitle_value: Option<Text>,
     subtitle_align: HorizontalAlign,
+    /// `None` takes the console's `safe_box` (upstream `safe_box`).
+    safe_box: Option<bool>,
     padding: (usize, usize, usize, usize),
-    border_style: Style,
-    style: Style,
+    border_style: StyleType,
+    style: StyleType,
     expand: bool,
     width: Option<usize>,
+    height: Option<usize>,
+    highlight: bool,
 }
 
 impl Panel {
@@ -38,14 +46,19 @@ impl Panel {
             child,
             box_set: ROUNDED,
             title: None,
+            title_value: None,
             title_align: HorizontalAlign::Center,
             subtitle: None,
+            subtitle_value: None,
             subtitle_align: HorizontalAlign::Center,
+            safe_box: None,
             padding: (0, 1, 0, 1),
-            border_style: Style::new(),
-            style: Style::new(),
+            border_style: StyleType::Style(Style::new()),
+            style: StyleType::Style(Style::new()),
             expand: true,
             width: None,
+            height: None,
+            highlight: false,
         }
     }
 
@@ -75,6 +88,13 @@ impl Panel {
         self
     }
 
+    /// Set a literal [`Text`] title (upstream `Panel(title=Text(…))`): no
+    /// markup is parsed. Replaces a [`title`](Self::title).
+    pub fn title_as_text(mut self, title: Text) -> Self {
+        self.title_value = Some(title);
+        self
+    }
+
     /// Set the title alignment within the top border.
     pub fn title_align(mut self, align: HorizontalAlign) -> Self {
         self.title_align = align;
@@ -84,6 +104,20 @@ impl Panel {
     /// Set a subtitle (drawn into the bottom border, centered by default).
     pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self {
         self.subtitle = Some(subtitle.into());
+        self
+    }
+
+    /// Set a literal [`Text`] subtitle (upstream `Panel(subtitle=Text(…))`):
+    /// no markup is parsed. Replaces a [`subtitle`](Self::subtitle).
+    pub fn subtitle_as_text(mut self, subtitle: Text) -> Self {
+        self.subtitle_value = Some(subtitle);
+        self
+    }
+
+    /// Whether to substitute boxes a legacy Windows console cannot draw
+    /// (upstream `safe_box`; `None`, the default, takes the console's).
+    pub fn safe_box(mut self, safe_box: Option<bool>) -> Self {
+        self.safe_box = safe_box;
         self
     }
 
@@ -105,25 +139,51 @@ impl Panel {
         self
     }
 
-    /// Set the border style.
-    pub fn border_style(mut self, style: Style) -> Self {
-        self.border_style = style;
+    /// Highlight strings rendered inside the panel (upstream
+    /// `Panel(highlight=…)`, default off). Passed to the child as
+    /// [`ConsoleOptions::highlight`].
+    pub fn highlight(mut self, highlight: bool) -> Self {
+        self.highlight = highlight;
+        self
+    }
+
+    /// Set the border style: a [`Style`], or a theme name / definition.
+    /// It is combined over [`style`](Self::style).
+    pub fn border_style(mut self, style: impl Into<StyleType>) -> Self {
+        self.border_style = style.into();
+        self
+    }
+
+    /// The style of the whole panel, border and contents (upstream `style`,
+    /// default none): the background under the padded child, and beneath the
+    /// border style.
+    pub fn style(mut self, style: impl Into<StyleType>) -> Self {
+        self.style = style.into();
+        self
+    }
+
+    /// A fixed height for the whole panel, borders included (upstream
+    /// `height`); else the options' height, else the content's.
+    pub fn height(mut self, height: usize) -> Self {
+        self.height = Some(height);
         self
     }
 
     /// Build a top/bottom border. Port of `Panel._title`, `_subtitle` and
     /// `align_text`: markup is styled before its visible cell width is measured.
+    #[allow(clippy::too_many_arguments)]
     fn border_line(
         &self,
         console: &Console,
+        border: &Style,
         inner_width: usize,
         corners: (char, char, char),
-        label: Option<&String>,
+        label: Option<Text>,
         align: HorizontalAlign,
     ) -> Vec<Segment> {
         let (left_corner, fill_char, right_corner) = corners;
-        let border_style = Some(self.border_style.clone());
-        let Some(label) = label.filter(|label| !label.is_empty() && inner_width > 2) else {
+        let border_style = Some(border.clone());
+        let Some(mut label) = label.filter(|_| inner_width > 2) else {
             return vec![Segment::new(
                 format!(
                     "{left_corner}{}{right_corner}",
@@ -133,8 +193,16 @@ impl Panel {
             )];
         };
 
-        let mut label = label_text(label);
-        label.set_base_style(self.border_style.clone());
+        // `title_text.stylize_before(border_style)`, then `align_text`'s
+        // `text.stylize(text.style)` for a title with its own base style.
+        if label.base_style().is_null_style() {
+            label.set_base_style(border.clone());
+        } else {
+            let own = console.get_style(label.base_style()).unwrap_or_default();
+            let len = label.plain().len();
+            label.stylize_before(border.clone(), 0, len);
+            label.stylize(own, 0, len);
+        }
         let label_width = inner_width - 2;
         label.truncate(label_width, None, false);
 
@@ -144,14 +212,11 @@ impl Panel {
             HorizontalAlign::Left => (0, fill),
             HorizontalAlign::Right => (fill, 0),
         };
-        let mut text = Text::styled(
-            fill_char.to_string().repeat(left),
-            self.border_style.clone(),
-        )
-        .append_text(&label);
+        let mut text =
+            Text::styled(fill_char.to_string().repeat(left), border.clone()).append_text(&label);
         text.append(
             &fill_char.to_string().repeat(right),
-            Some(self.border_style.clone().into()),
+            Some(border.clone().into()),
         );
         let mut segments = vec![Segment::new(
             format!("{left_corner}{fill_char}"),
@@ -172,6 +237,12 @@ impl Panel {
 fn label_text(label: &str) -> Text {
     let expanded = crate::emoji::replace(label);
     let parsed = Text::from_markup(&expanded).unwrap_or_else(|_| Text::new(expanded));
+    label_from_text(&parsed)
+}
+
+/// `Panel._title` for a `Text` title: a copy with newlines flattened, tabs
+/// expanded and a space either side.
+fn label_from_text(parsed: &Text) -> Text {
     let mut text = parsed.blank_copy();
     text.append(&parsed.plain().replace('\n', " "), None);
     for span in parsed.spans() {
@@ -185,9 +256,23 @@ fn label_text(label: &str) -> Text {
 impl Panel {
     /// The title as `Panel._title` builds it, when there is one.
     fn title_text(&self) -> Option<Text> {
+        if let Some(title) = &self.title_value {
+            return (!title.plain().is_empty()).then(|| label_from_text(title));
+        }
         self.title
             .as_deref()
             .filter(|title| !title.is_empty())
+            .map(label_text)
+    }
+
+    /// The subtitle as `Panel._subtitle` builds it, when there is one.
+    fn subtitle_text(&self) -> Option<Text> {
+        if let Some(subtitle) = &self.subtitle_value {
+            return (!subtitle.plain().is_empty()).then(|| label_from_text(subtitle));
+        }
+        self.subtitle
+            .as_deref()
+            .filter(|subtitle| !subtitle.is_empty())
             .map(label_text)
     }
 
@@ -226,10 +311,20 @@ impl Renderable for Panel {
             Some(width) => width.min(options.max_width),
             None => options.max_width,
         };
+        // `style = console.get_style(self.style)`,
+        // `border_style = style + console.get_style(self.border_style)`.
+        let style = console.get_style(&self.style).unwrap_or_default();
+        let border_style =
+            style.combine(&console.get_style(&self.border_style).unwrap_or_default());
+        // `child_height = self.height or options.height or None`.
+        let height = self.height.or(options.height).filter(|&height| height > 0);
+        // A zero `width` still draws the two-cell empty box upstream (its
+        // `width - 2` is negative); a zero-width console renders nothing
+        // before any renderable is asked (`Console.render`).
         // Fall back to a terminal-safe box on legacy Windows / non-UTF-8.
         let box_set = self.box_set.substitute(
             console.legacy_windows(),
-            console.safe_box(),
+            self.safe_box.unwrap_or_else(|| console.safe_box()),
             console.ascii_only(),
         );
         // The padded child fills `width - 2`, or, when not expanding, its
@@ -246,25 +341,30 @@ impl Renderable for Panel {
                 .saturating_sub(2)
                 .min(inner_width.max(title.cell_len() + 2));
         }
-        let (pt, pr, pb, pl) = self.padding;
+        // Upstream renders the padded child through `Console.render`, which
+        // yields nothing at all in no width: with no inner width there is no
+        // padding either, only the (height-padded) empty rows.
+        let (pt, pr, pb, pl) = if inner_width == 0 {
+            (0, 0, 0, 0)
+        } else {
+            self.padding
+        };
         let child_width = inner_width.saturating_sub(pl).saturating_sub(pr);
 
         let mut child_options = options.update_width(child_width);
+        // `options.update(width=…, height=…, highlight=self.highlight)`.
+        child_options.highlight = Some(self.highlight);
         // When a height is imposed (e.g. as a Layout leaf), the child fills the
         // space left by the two borders and the top/bottom padding rows, so the
         // panel expands to exactly `height` rows. Port of `Panel`'s
         // `child_height = height - 2` (padding here lives outside the child).
-        child_options.height = options.height.map(|h| h.saturating_sub(2 + pt + pb));
+        child_options.height = height.map(|h| h.saturating_sub(2 + pt + pb));
         // Upstream: `console.render_lines(renderable, child_options, style=style)`.
-        let child_lines = console.render_lines_styled(
-            self.child.as_ref(),
-            &child_options,
-            Some(&self.style),
-            true,
-        );
+        let child_lines =
+            console.render_lines_styled(self.child.as_ref(), &child_options, Some(&style), true);
 
-        let border = Some(self.border_style.clone());
-        let inner_style = Some(self.style.clone());
+        let border = Some(border_style.clone());
+        let inner_style = Some(style.clone());
         let left_border = || Segment::new(box_set.mid_left.to_string(), border.clone());
         let right_border = || Segment::new(box_set.mid_right.to_string(), border.clone());
         let blank_inner = || Segment::new(" ".repeat(inner_width), inner_style.clone());
@@ -274,20 +374,23 @@ impl Renderable for Panel {
         // Top border (with title if present).
         rows.push(self.border_line(
             console,
+            &border_style,
             inner_width,
             (box_set.top_left, box_set.top, box_set.top_right),
-            self.title.as_ref(),
+            self.title_text(),
             self.title_align,
         ));
 
-        // Top padding rows.
+        // The padded child as upstream's `Padding` yields it: blank rows,
+        // then each line between the side padding. `Console.render_lines`
+        // then fits every row to the inner width and, under a height, the
+        // row count to `height - 2`.
+        let mut inner_rows: Vec<Vec<Segment>> = Vec::new();
         for _ in 0..pt {
-            rows.push(vec![left_border(), blank_inner(), right_border()]);
+            inner_rows.push(vec![blank_inner()]);
         }
-
-        // Content rows: border + left pad + content + right pad + border.
         for line in child_lines {
-            let mut row = vec![left_border()];
+            let mut row = Vec::new();
             if pl > 0 {
                 row.push(Segment::new(" ".repeat(pl), inner_style.clone()));
             }
@@ -295,21 +398,36 @@ impl Renderable for Panel {
             if pr > 0 {
                 row.push(Segment::new(" ".repeat(pr), inner_style.clone()));
             }
-            row.push(right_border());
-            rows.push(row);
+            inner_rows.push(row);
         }
-
-        // Bottom padding rows.
         for _ in 0..pb {
-            rows.push(vec![left_border(), blank_inner(), right_border()]);
+            inner_rows.push(vec![blank_inner()]);
+        }
+        if let Some(height) = height {
+            let height = height.saturating_sub(2);
+            inner_rows.truncate(height);
+            while inner_rows.len() < height {
+                inner_rows.push(vec![blank_inner()]);
+            }
+        }
+        for row in inner_rows {
+            let mut line = vec![left_border()];
+            line.extend(Segment::adjust_line_length(
+                &row,
+                inner_width,
+                inner_style.clone(),
+            ));
+            line.push(right_border());
+            rows.push(line);
         }
 
         // Bottom border (with subtitle if present).
         rows.push(self.border_line(
             console,
+            &border_style,
             inner_width,
             (box_set.bottom_left, box_set.bottom, box_set.bottom_right),
-            self.subtitle.as_ref(),
+            self.subtitle_text(),
             self.subtitle_align,
         ));
 
@@ -341,6 +459,34 @@ impl Renderable for Panel {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn tiny_widths_match_upstream() {
+        // Expected output captured from rich 15.0.0 (`Console.print`).
+        let render = |panel: Panel, width| {
+            let console = Console::builder().width(width).color_system(None).build();
+            let out = console.render_to_string(&panel);
+            if out.is_empty() {
+                out
+            } else {
+                out + "\n"
+            }
+        };
+        for width in [0, 1, 2] {
+            let expected = ["", "╭\n╰\n", "╭╮\n╰╯\n"][width];
+            assert_eq!(
+                render(Panel::new(Box::new(crate::text::Text::new("hi"))), width),
+                expected,
+                "width {width}"
+            );
+            assert_eq!(
+                render(Panel::fit(Box::new(crate::text::Text::new("hi"))), width),
+                expected,
+                "fit width {width}"
+            );
+        }
+    }
+
     use super::*;
     use crate::r#box::SQUARE;
     use crate::text::Text;

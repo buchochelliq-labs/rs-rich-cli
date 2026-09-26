@@ -129,7 +129,7 @@ fn command(
     full.extend(args);
     let cli = parse(&full).map_err(std::io::Error::other)?;
     if let Some(cli) = cli {
-        if run(cli) != ExitCode::SUCCESS {
+        if run_cli(cli) != ExitCode::SUCCESS {
             return Err(std::io::Error::other(format!("example failed: {label}")));
         }
     }
@@ -311,6 +311,7 @@ fn tour(no_color: bool, delay: Duration, group: Option<&str>) -> std::io::Result
             &watch_child,
         )?;
         tools(&console, no_color, delay, root.path())?;
+        additions_012(&console, no_color, delay, root.path())?;
         section(&console, delay, "Pager, input and confidence controls");
         console.print(&Text::new("--auto-pager opens a pager for tall TTY output; --no-pager opts out.\nURL fetch, encoding, sanitization and JSON reports support scripts and CI.\nThe tour stays offline and does not open an external pager."));
         command(
@@ -404,6 +405,69 @@ fn tools(console: &Console, no_color: bool, delay: Duration, root: &Path) -> std
     )
 }
 
+/// The 0.0.12 additions: a Mermaid flowchart drawn as text, code in the
+/// terminal's own palette, and filtering and highlighting matching lines.
+/// Every input is written into the tour's temporary directory.
+fn additions_012(
+    console: &Console,
+    no_color: bool,
+    delay: Duration,
+    root: &Path,
+) -> std::io::Result<()> {
+    let file = |name: &str| root.join(name).to_string_lossy().into_owned();
+    for (name, contents) in [
+        (
+            "flow.mmd",
+            "flowchart LR\n    core[rs-rich] --> api[plugin API]\n    api --> mermaid[Mermaid]\n    api --> lumis[lumis]\n    mermaid --> cli([rich])\n",
+        ),
+        (
+            "worker.rs",
+            "fn retry(job: &Job, attempts: u32) -> Result<(), Error> {\n    for n in 0..attempts {\n        if job.run().is_ok() {\n            return Ok(());\n        }\n    }\n    Err(Error::GaveUp(attempts))\n}\n",
+        ),
+        (
+            "service.log",
+            "INFO  api listening on :8080\nERROR upstream timeout after 30s\nINFO  retrying upstream\nERROR connection refused by db:5432\nINFO  recovered\n",
+        ),
+    ] {
+        std::fs::write(file(name), contents)?;
+    }
+    #[cfg(feature = "mermaid")]
+    {
+        section(console, delay, "Mermaid flowcharts");
+        command(
+            console,
+            no_color,
+            "mermaid flow.mmd",
+            vec!["mermaid".into(), file("flow.mmd")],
+        )?;
+    }
+    section(console, delay, "Code themes");
+    command(
+        console,
+        no_color,
+        "--syntax worker.rs --code-theme ansi_dark",
+        vec![
+            "--syntax".into(),
+            file("worker.rs"),
+            "--code-theme".into(),
+            "ansi_dark".into(),
+        ],
+    )?;
+    section(console, delay, "Filter and highlight");
+    command(
+        console,
+        no_color,
+        "service.log --filter ERROR --highlight 'timeout|refused'",
+        vec![
+            file("service.log"),
+            "--filter".into(),
+            "ERROR".into(),
+            "--highlight".into(),
+            "timeout|refused".into(),
+        ],
+    )
+}
+
 /// Watch two files, each in its own Live region. The tour cannot deliver a
 /// portable Ctrl+C to the child, so the last edit writes invalid JSON and
 /// `--watch-exit-on-error` ends the watch, restoring the terminal itself.
@@ -432,7 +496,7 @@ fn watch(
     // Run beside the files and pass bare names, so the region headers read
     // `first.json` rather than a temporary path.
     let (first_path, second_path) = (Path::new(first), Path::new(second));
-    let mut cmd = std::process::Command::new(std::env::current_exe()?);
+    let mut cmd = super::self_command()?;
     if let Some(directory) = first_path.parent() {
         cmd.current_dir(directory);
     }
@@ -657,6 +721,31 @@ fn art(console: &Console, no_color: bool, delay: Duration, root: &Path) -> std::
             "40".into(),
             "--height".into(),
             "10".into(),
+        ],
+    )?;
+    section(console, delay, "Native image size");
+    let sprite = RgbaImage::from_fn(24, 16, |x, y| {
+        if (x as i32 - 12).pow(2) + (y as i32 - 8).pow(2) < 7 * 7 {
+            Rgba([255, 196, 0, 255])
+        } else if y > 13 {
+            Rgba([60, 170, 90, 255])
+        } else {
+            Rgba([40, 60, 120, 255])
+        }
+    });
+    let sprite_path = root.join("sprite.png");
+    sprite.save(&sprite_path).map_err(std::io::Error::other)?;
+    command(
+        console,
+        no_color,
+        "--image sprite.png --image-fit native --image-mode quadrants",
+        vec![
+            "--image".into(),
+            sprite_path.to_string_lossy().into_owned(),
+            "--image-fit".into(),
+            "native".into(),
+            "--image-mode".into(),
+            "quadrants".into(),
         ],
     )?;
     section(console, delay, "Image diff");

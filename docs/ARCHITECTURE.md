@@ -54,7 +54,7 @@ tracks this checkout; registry badges show published versions.
   only: the compiled module converts arguments and writes output, and core
   renders. Outside the Cargo workspace (it needs a Python interpreter to
   build), with its own CI (`python.yml`) and release (`pypi-release.yml`).
-  Never published to crates.io; see [Python bindings](python/index.md).
+  Never published to crates.io; see [Python bindings](https://buchochelliq-labs.github.io/rs-rich-cli/python/).
 - **`crates/rich-macros`** — procedural macros (`richf!`, `style!`,
   `theme_key!`, `markup!`, `#[derive(Rich)]`) that check markup and styles at
   compile time. Depends on `rich` only (to parse markup and styles while

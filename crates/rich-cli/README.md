@@ -26,6 +26,7 @@ Tools that upstream `rich-cli` does not have:
 
 ```bash
 rich inspect deploy.yaml --select '$.servers[*].name'   # JSON/YAML/TOML/XML/INI/dotenv as a tree
+rich mermaid flow.mmd                                   # a Mermaid flowchart, drawn as text
 rich diff old.rs new.rs --side-by-side                  # text diff; `git diff | rich diff -` for patches
 rich view src/main.rs --search todo                     # any file, rendered or highlighted, paged
 rich hex firmware.bin --offset 0x200 --length 64        # hex dump (alias: hexdump)
@@ -67,7 +68,9 @@ With no flag the mode is picked from the file extension; a bare `-` reads stdin.
 `--format auto` (the default) detects piped or extensionless input, and a named
 format (`json`, `yaml`, `toml`, `xml`, `ini`, `env`) overrides the extension.
 Preferred subcommands such as `rich json`, `rich markdown`, `rich csv`,
-`rich jsonl` and `rich log` are aliases over the same renderers. Existing flat
+`rich jsonl` and `rich log` are aliases over the same renderers. Mermaid has
+only a subcommand, `rich mermaid` (alias `mmd`); `.mmd` and `.mermaid` files
+are detected. Existing flat
 flags remain supported.
 
 ## Options
@@ -123,11 +126,30 @@ Configuration
 
 Still-image crop
 : `--image-fit contain|cover` fits the image into an explicit height and bounded
-  width. `--image-background '#RRGGBB'` composites transparency; `default`
+  width. `--image-fit native` needs no height: it draws the image at its own
+  pixel size, never enlarged, capped by the width and the terminal. `--image-background '#RRGGBB'` composites transparency; `default`
   leaves it to the terminal's background and `checkerboard` shows it on a gray
   checkerboard. With cover,
   `--image-anchor` selects center (default), top, bottom, left, right or a corner
   such as `top-left`. Contain stays centered.
+
+Code highlighting
+: `--highlighter syntect` (the default) or `lumis` (a build with the `lumis`
+  feature) picks the highlighter for source, Markdown code, `view` and `diff`.
+  `--code-theme NAME` picks one of its themes; every highlighter has
+  `ansi_dark` and `ansi_light`, which use the terminal's own 16 colours.
+  `rich doctor --report json` lists the highlighters and themes.
+
+Mermaid
+: `rich mermaid FILE` and ` ```mermaid ` fences in Markdown draw flowcharts as
+  text. `--mermaid-backend mmdc` (a build with the `mmdc` feature) renders every
+  diagram type through Mermaid's own CLI, which needs Node and a headless
+  browser; `off` leaves fences as code.
+
+Filter and highlight
+: `--filter PATTERN` keeps only what matches, and `--highlight PATTERN` marks
+  matches in reverse video. For text, `--print` and `--syntax` the pattern is a
+  regular expression over lines; with `--inspect` it is a JSONPath.
 
 Image palette
 : `--image-color ansi256|ansi16|grayscale` opts ASCII, half-block, quadrant and
@@ -160,15 +182,21 @@ Viewers and capture
 
 See the [workflow recipes](https://buchochelliq-labs.github.io/rs-rich-cli/recipes/), the
 [CLI reference](https://buchochelliq-labs.github.io/rs-rich-cli/cli-reference/) and the
-[0.0.11 release notes](https://buchochelliq-labs.github.io/rs-rich-cli/releases/0.0.11/). Source versions do not imply
+[0.0.12 release notes](https://buchochelliq-labs.github.io/rs-rich-cli/releases/0.0.12/). Source versions do not imply
 publication.
 
 ## Features
 
-Both are on by default and can be dropped for a smaller binary:
+These three are on by default and can be dropped for a smaller binary:
 
 - **`fetch`** — URL support (`rich <url>`), via `ureq` with bundled TLS roots.
 - **`art`** — `--gif` playback and `--diff`/`--image` picture rendering, via [`rs-rich-art`](https://crates.io/crates/rs-rich-art).
+- **`mermaid`** — `rich mermaid` and Mermaid fences in Markdown, drawn as text, via [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid).
+
+Off by default:
+
+- **`lumis`** — the tree-sitter highlighter (`--highlighter lumis`), via [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis). It compiles many grammars, so the binary is much larger, and it needs Rust 1.91.
+- **`mmdc`** — the `mmdc` Mermaid backend. It starts Mermaid's CLI, which must be installed separately.
 
 ```bash
 cargo install rs-rich-cli --no-default-features   # installs `rich`; no network or image decoders

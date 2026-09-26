@@ -100,8 +100,8 @@ fn each_policy_bounds_long_syntax_lines() {
             "{policy:?}"
         );
     }
-    // Core alone lets the long line run past the width.
-    assert_eq!(cell_len(&rows(&Syntax::new(CODE, "python"), 16)[1]), 39);
+    // Core alone crops the long line at the width, as upstream Syntax does.
+    assert_eq!(cell_len(&rows(&Syntax::new(CODE, "python"), 16)[1]), 16);
 }
 
 #[test]

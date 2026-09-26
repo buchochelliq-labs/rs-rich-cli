@@ -54,11 +54,23 @@ impl ControlType {
             ControlType::CursorDown(n) => format!("\x1b[{n}B"),
             ControlType::CursorForward(n) => format!("\x1b[{n}C"),
             ControlType::CursorBackward(n) => format!("\x1b[{n}D"),
-            ControlType::CursorMoveToColumn(x) => format!("\x1b[{}G", x + 1),
-            ControlType::CursorMoveTo(x, y) => format!("\x1b[{};{}H", y + 1, x + 1),
+            // Widened: `u32::MAX + 1` is written as upstream's unbounded
+            // Python int would be, not overflowed.
+            ControlType::CursorMoveToColumn(x) => format!("\x1b[{}G", u64::from(x) + 1),
+            ControlType::CursorMoveTo(x, y) => move_to_code(u128::from(x), u128::from(y)),
             ControlType::EraseInLine(n) => format!("\x1b[{n}K"),
         }
     }
+}
+
+/// `CURSOR_MOVE_TO`'s escape for a zero-based `(x, y)` of any size (the
+/// sequence is one-based). [`Console::update_screen_lines`] positions rows
+/// with it, so `usize` coordinates are written in full, as upstream writes
+/// its unbounded ints.
+///
+/// [`Console::update_screen_lines`]: crate::console::Console::update_screen_lines
+pub(crate) fn move_to_code(x: u128, y: u128) -> String {
+    format!("\x1b[{};{}H", y + 1, x + 1)
 }
 
 /// A renderable that inserts terminal control codes.
@@ -149,13 +161,22 @@ impl Control {
         })
     }
 
-    /// Enable or disable the terminal's alternate screen buffer.
+    /// Enable or disable the terminal's alternate screen buffer. Port of
+    /// `Control.alt_screen`: enabling also moves the cursor home.
     pub fn alt_screen(enable: bool) -> Self {
-        Control::single(if enable {
-            ControlType::EnableAltScreen
+        if enable {
+            Control::new(&[ControlType::EnableAltScreen, ControlType::Home])
         } else {
-            ControlType::DisableAltScreen
-        })
+            Control::single(ControlType::DisableAltScreen)
+        }
+    }
+
+    /// Set the terminal window title. Port of `Control.title`
+    /// (`ControlType.SET_WINDOW_TITLE`, formatted `ESC ] 0 ; title BEL`).
+    pub fn title(title: &str) -> Self {
+        Control {
+            segment: Segment::control(format!("\x1b]0;{title}\x07")),
+        }
     }
 
     /// The raw escape string this control emits.
@@ -189,7 +210,8 @@ mod tests {
         assert_eq!(Control::move_(2, -1).as_str(), "\x1b[2C\x1b[1A");
         assert_eq!(Control::move_to(3, 4).as_str(), "\x1b[5;4H");
         assert_eq!(Control::move_to_column(5, 0).as_str(), "\x1b[6G");
-        assert_eq!(Control::alt_screen(true).as_str(), "\x1b[?1049h");
+        assert_eq!(Control::alt_screen(true).as_str(), "\x1b[?1049h\x1b[H");
+        assert_eq!(Control::title("my title").as_str(), "\x1b]0;my title\x07");
         assert_eq!(Control::alt_screen(false).as_str(), "\x1b[?1049l");
     }
 

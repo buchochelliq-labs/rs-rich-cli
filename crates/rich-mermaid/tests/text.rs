@@ -154,3 +154,51 @@ fn labels_cannot_carry_escape_sequences() {
     assert!(out.contains("A->>B"), "{out}");
     assert!(!out.contains('\u{1b}') && !out.contains('\u{7}'), "{out:?}");
 }
+
+/// Render `source` on another thread; fail if it takes longer than `limit`
+/// (generous for a debug build; these took minutes before the limits).
+fn render_within(source: String, limit: std::time::Duration) -> String {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(render(&source, 80, false));
+    });
+    rx.recv_timeout(limit)
+        .unwrap_or_else(|_| panic!("rendering took longer than {limit:?}"))
+}
+
+/// `a0 & … & a44 ---…---> b0 & … & b43`: under 1 KiB, 1980 edges, each
+/// crossing many ranks. Refused as too large right after ranking, before the
+/// layout builds its per-rank points.
+#[test]
+fn long_fanout_links_are_refused_quickly() {
+    let left: Vec<String> = (0..45).map(|i| format!("a{i}")).collect();
+    let right: Vec<String> = (0..44).map(|i| format!("b{i}")).collect();
+    let source = format!(
+        "graph TD\n{} {}> {}\n",
+        left.join("&"),
+        "-".repeat(400),
+        right.join("&")
+    );
+    assert!(source.len() < 1024, "{}", source.len());
+    let out = render_within(source, std::time::Duration::from_secs(10));
+    assert!(out.contains("Mermaid: too large to draw: "), "{out}");
+}
+
+/// Links longer than `MAX_LINK_LENGTH` ranks are drawn at that length.
+#[test]
+fn very_long_links_are_capped() {
+    let capped = render_within(
+        format!("graph TD\nA {}> B\n", "-".repeat(60_000)),
+        std::time::Duration::from_secs(10),
+    );
+    let longest = render(
+        &format!(
+            "graph TD\nA {}> B\n",
+            "-".repeat(rich_mermaid::flowchart::MAX_LINK_LENGTH + 1)
+        ),
+        80,
+        false,
+    );
+    assert_eq!(capped, longest);
+    assert!(capped.contains('▼'), "{capped}");
+}

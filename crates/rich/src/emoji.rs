@@ -8,12 +8,56 @@
 const VARIANT_EMOJI: &str = "\u{fe0f}";
 const VARIANT_TEXT: &str = "\u{fe0e}";
 
+/// An emoji presentation variant. Mirrors `rich.emoji.EmojiVariant`
+/// (`"emoji"` or `"text"`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EmojiVariant {
+    /// Emoji presentation: appends U+FE0F.
+    Emoji,
+    /// Text presentation: appends U+FE0E.
+    Text,
+}
+
+impl EmojiVariant {
+    /// Parse upstream's variant name (`"emoji"` or `"text"`).
+    pub fn parse(name: &str) -> Option<EmojiVariant> {
+        match name {
+            "emoji" => Some(EmojiVariant::Emoji),
+            "text" => Some(EmojiVariant::Text),
+            _ => None,
+        }
+    }
+
+    /// The variant's name, as upstream spells it.
+    pub fn name(self) -> &'static str {
+        match self {
+            EmojiVariant::Emoji => "emoji",
+            EmojiVariant::Text => "text",
+        }
+    }
+
+    /// The variation selector this variant appends.
+    fn selector(self) -> &'static str {
+        match self {
+            EmojiVariant::Emoji => VARIANT_EMOJI,
+            EmojiVariant::Text => VARIANT_TEXT,
+        }
+    }
+}
+
 /// Replace `:name:` emoji shortcodes in `text`. Port of `_emoji_replace`.
 ///
 /// Mirrors one `re.sub` over `(:(\S*?)(?:(?:\-)(emoji|text))?:)`: every match,
 /// including an unknown code or an empty `::`, is consumed, and scanning
 /// resumes after its closing colon.
 pub fn replace(text: &str) -> String {
+    replace_with_variant(text, None)
+}
+
+/// [`replace`] with upstream's `default_variant`: the selector appended to a
+/// code that names no variant of its own. Port of
+/// `_emoji_replace(text, default_variant=…)`.
+pub fn replace_with_variant(text: &str, default_variant: Option<EmojiVariant>) -> String {
     let chars: Vec<char> = text.chars().collect();
     let len = chars.len();
     let mut out = String::with_capacity(text.len());
@@ -29,7 +73,7 @@ pub fn replace(text: &str) -> String {
             }
             if end < len && chars[end] == ':' {
                 let body: String = chars[index + 1..end].iter().collect();
-                match lookup(&body) {
+                match lookup(&body, default_variant) {
                     Some(replacement) => out.push_str(&replacement),
                     None => out.extend(&chars[index..=end]),
                 }
@@ -50,16 +94,19 @@ fn is_python_space(c: char) -> bool {
 }
 
 /// Resolve a shortcode body (with optional variant suffix) to its replacement.
-fn lookup(body: &str) -> Option<String> {
-    let lower = body.to_lowercase();
-    let (name, variant) = if let Some(name) = lower.strip_suffix("-emoji") {
+///
+/// The suffix is matched case-sensitively, as upstream's `(emoji|text)` group
+/// is; only the name is lowercased (`get_emoji(emoji_name.lower())`).
+fn lookup(body: &str, default_variant: Option<EmojiVariant>) -> Option<String> {
+    let default = default_variant.map_or("", EmojiVariant::selector);
+    let (name, variant) = if let Some(name) = body.strip_suffix("-emoji") {
         (name, VARIANT_EMOJI)
-    } else if let Some(name) = lower.strip_suffix("-text") {
+    } else if let Some(name) = body.strip_suffix("-text") {
         (name, VARIANT_TEXT)
     } else {
-        (lower.as_str(), "")
+        (body, default)
     };
-    emoji_code(name).map(|code| format!("{code}{variant}"))
+    emoji_code(&name.to_lowercase()).map(|code| format!("{code}{variant}"))
 }
 
 /// Resolve an emoji name to its glyph(s) from the full vendored table.
@@ -90,6 +137,21 @@ mod tests {
     fn variant_selectors() {
         assert_eq!(replace(":rocket-emoji:"), "\u{1f680}\u{fe0f}");
         assert_eq!(replace(":rocket-text:"), "\u{1f680}\u{fe0e}");
+    }
+
+    #[test]
+    fn default_variant_and_case_sensitive_suffix() {
+        // Captured from real rich 15.0.0 `_emoji_replace`.
+        assert_eq!(replace(":rocket-EMOJI:"), ":rocket-EMOJI:");
+        assert_eq!(replace(":ROCKET-text:"), "\u{1f680}\u{fe0e}");
+        assert_eq!(
+            replace_with_variant(":rocket: :rocket-text:", Some(EmojiVariant::Emoji)),
+            "\u{1f680}\u{fe0f} \u{1f680}\u{fe0e}"
+        );
+        assert_eq!(
+            replace_with_variant(":rocket:", Some(EmojiVariant::Text)),
+            "\u{1f680}\u{fe0e}"
+        );
     }
 
     #[test]

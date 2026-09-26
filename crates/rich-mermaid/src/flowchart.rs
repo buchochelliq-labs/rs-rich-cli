@@ -15,6 +15,11 @@ pub const MAX_SOURCE: usize = 64 * 1024;
 pub const MAX_NODES: usize = 500;
 /// The most edges a flowchart may have.
 pub const MAX_EDGES: usize = 2000;
+/// The longest link, in ranks. Each extra `-` (or `=`, `.`) lengthens a link
+/// by one rank; Mermaid documents lengths 1 to 3 and sets no maximum, but
+/// every rank a link spans costs layout work, so longer runs are treated as
+/// this length.
+pub const MAX_LINK_LENGTH: usize = 10;
 
 /// Which way the flowchart flows.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -116,7 +121,8 @@ pub struct Edge {
     pub start: Head,
     /// The head at `to`.
     pub end: Head,
-    /// The minimum number of ranks the edge spans: 1 for `-->`, 2 for `--->`.
+    /// The minimum number of ranks the edge spans: 1 for `-->`, 2 for `--->`,
+    /// at most [`MAX_LINK_LENGTH`].
     pub length: usize,
 }
 
@@ -379,7 +385,7 @@ impl Parser {
                         stroke: link.stroke,
                         start: link.start,
                         end: link.end,
-                        length: link.length,
+                        length: link.length.min(MAX_LINK_LENGTH),
                     });
                 }
             }
@@ -976,5 +982,9 @@ mod tests {
             parse(&format!("graph TD\n{many}")),
             Err(ParseError::TooLarge(_))
         ));
+        let long = parse(&format!("graph TD\nA {}> B", "-".repeat(1000))).unwrap();
+        assert_eq!(long.edges[0].length, MAX_LINK_LENGTH);
+        let long = parse(&format!("graph TD\nA {} B", "=".repeat(1000))).unwrap();
+        assert_eq!(long.edges[0].length, MAX_LINK_LENGTH);
     }
 }

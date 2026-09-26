@@ -1,0 +1,112 @@
+{
+  "binary": "rich (rs-rich-cli) 0.0.12 installed with cargo install from target/package/rs-rich-cli-0.0.12.crate, siblings (core, plugin API, macros, ext, art, Mermaid, lumis) patched to their packaged .crate sources",
+  "binary_sha256": "93e6162ce40f2b151365597aaeaa2106bd068216d320f1b8f22a7a30c1c45025",
+  "python_wheel": "rs_rich-0.0.1-cp39-abi3-manylinux_2_39_x86_64.whl (maturin build --release), installed into a fresh venv; 07-python runs its python3",
+  "python_wheel_sha256": "5c60a61ae80913efb72d58762eb9584c74660fcdc049a56edd5d44c951d4b3fb",
+  "packaged_crates_sha256": {
+    "rs-rich-0.0.8.crate": "2dc812a7987402aa95d86add4358201a94bbdb2ff30a6facf0ecc61dfc63c26d",
+    "rs-rich-art-0.0.10.crate": "845680767ce311d3698b25334a9aed2ec2e0d56279c52f9bdeedd144e58f1ba0",
+    "rs-rich-cli-0.0.12.crate": "52f9dc6ca62f832cf5900c5f640a9eb855e1ddab15b6fd719636fe6042949844",
+    "rs-rich-ext-0.0.10.crate": "25dc7a1b8b43e6dca14b718d92638739092fb9bee058b4e86be34697224c5b3b",
+    "rs-rich-lumis-0.0.1.crate": "042d95fa76c20a964085904c112f902fdb066540ca0790492488158809243b6d",
+    "rs-rich-macros-0.0.2.crate": "a6205dd67ee8b34d2305d468447d43e44e597329310e000ae725e9ffec0af9f8",
+    "rs-rich-mermaid-0.0.1.crate": "c0f78827186b15142ad9e794e26205369acd5b663314d3063cc256e9e480b3ae",
+    "rs-rich-plugin-api-0.0.1.crate": "fc9824a413fbc23e321b00656d308396e75097bdeb8908f614474e716dfb745e"
+  },
+  "source_commit": "205c34f24a74dc8fa5f556b97915c28028589f4c",
+  "renderer": "xterm.js 5 with Unicode 11 widths in headless Chromium replaying the captured PTY bytes verbatim",
+  "reproduce": "scripts/terminal_shots/make_cases.py --release 0.0.12 + shoot.js",
+  "cases": [
+    {
+      "name": "01-version-doctor",
+      "title": "Installed from the packaged crates: version, highlighters and plugins",
+      "exit_code": 0,
+      "pty": {
+        "cols": 100,
+        "rows": 30,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "a203eb5e4561710f63273d753b1af677fb8ff81faf1fe9ef7a68f46618f284a8",
+      "png_sha256": "e35969c6d37b8775961abb7bf62ceba7f44fa301329e3f8d2d87067e150339c4"
+    },
+    {
+      "name": "02-mermaid",
+      "title": "rich mermaid: a flowchart drawn as text, no browser needed",
+      "exit_code": 0,
+      "pty": {
+        "cols": 100,
+        "rows": 24,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "814af693bd1b0c6e2badede5b9f90a5d40d8c48147f31f6c73474c0b04e4bf59",
+      "png_sha256": "d039dd6db8a09d494e931d145f6e7d3d3d982731ad09883b7ceb470a985d4c95"
+    },
+    {
+      "name": "03-markdown-mermaid",
+      "title": "A ```mermaid fence in Markdown is drawn in place",
+      "exit_code": 0,
+      "pty": {
+        "cols": 80,
+        "rows": 22,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "171433978703aef1cb00e2241dcfcc046028c996d77afb0a61836a81690c6a7e",
+      "png_sha256": "fe47a1194dc72982f468058284c157b28c91d53db18e9fab0eaa6b722487b172"
+    },
+    {
+      "name": "04-code-theme",
+      "title": "--code-theme ansi_dark: code in the terminal's own palette",
+      "exit_code": 0,
+      "pty": {
+        "cols": 80,
+        "rows": 12,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "daccc2fe90f43204a2dcef9a84efc4a6e4f36dd718bd852ce7989fa5e65b0ea7",
+      "png_sha256": "2437f4320ad9b386fd2b425eb68c22a3db6738e24c3f130f03d51077b59f51a2"
+    },
+    {
+      "name": "05-filter-highlight",
+      "title": "--filter keeps matching lines; --highlight marks matches",
+      "exit_code": 0,
+      "pty": {
+        "cols": 80,
+        "rows": 22,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "ed3802262295228eccbe99ad26440769e100726e387899bec42eb33ac068e6f8",
+      "png_sha256": "4c11f5872d2b33f2c90e9f62a1b918535ed927d761f58246349de241e054aeef"
+    },
+    {
+      "name": "06-image-native",
+      "title": "--image-fit native: an image at its own pixel size",
+      "exit_code": 0,
+      "pty": {
+        "cols": 60,
+        "rows": 20,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "0faf32a4f5095e5882cadef6bc48c32022183288893aa96386e5a12bc58f3a40",
+      "png_sha256": "b37c3f36c0a2883000a4c374c4b3aa1b99e40c997b52ddaec21cbda13aba2935"
+    },
+    {
+      "name": "07-python",
+      "title": "The rs-rich wheel: a Rich program with only its imports changed",
+      "exit_code": 0,
+      "pty": {
+        "cols": 80,
+        "rows": 20,
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+      },
+      "raw_pty_sha256": "5b35c90c37a6f6efe1bf567f5702ed05ac2660a3e6fefe0f57d6d17d3f4379c0",
+      "png_sha256": "6fa6fcaa0f3dbc932218b235b0bd28341349c7b6a30acea4c576a585c04c66e7"
+    }
+  ]
+}
