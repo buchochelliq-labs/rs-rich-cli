@@ -617,7 +617,10 @@ def test_deep_nesting_pretty_prints_as_rich_does_instead_of_crashing():
     # native stack. Rich prints a list this deep, with a repr-error where its
     # recursive walk runs out of Python frames; so does rs_rich, at the same
     # depth (it measures what is left of the recursion limit where it is
-    # called).
+    # called), give or take a few frames that differ between Python
+    # versions. On some Pythons (3.13) Rich's own walk instead lets the
+    # RecursionError escape from `typing`; rs_rich still prints, and the
+    # depths are compared only where Rich finishes.
     import rich.pretty
     from rs_rich.pretty import pretty_repr, traverse
 
@@ -626,11 +629,15 @@ def test_deep_nesting_pretty_prints_as_rich_does_instead_of_crashing():
     for _ in range(1500):
         inner.append([])
         inner = inner[0]
-    for pretty in [rich.pretty.pretty_repr, pretty_repr]:
-        text = pretty(deep)
-        assert "<repr-error 'maximum recursion depth exceeded" in text
-    depth = pretty_repr(deep).count("[")
-    assert depth == rich.pretty.pretty_repr(deep).count("[")
+    text = pretty_repr(deep)
+    assert "<repr-error 'maximum recursion depth exceeded" in text
+    try:
+        expected = rich.pretty.pretty_repr(deep)
+    except RecursionError:
+        expected = None
+    if expected is not None:
+        assert "<repr-error 'maximum recursion depth exceeded" in expected
+        assert abs(text.count("[") - expected.count("[")) <= 8
     node = traverse(deep)
     assert node == traverse(deep) and node.children[0].children is not None
     c = console(modules("rs_rich"), False, width=80)
