@@ -11,7 +11,8 @@ from test_demo_pty import capture
 
 # Release -> media name; evidence goes to .github/evidence/<release>/demo-tour.
 # 0.0.8 keeps its original names.
-RECORDINGS = {'0.0.8': 'v8-demo-tour', '0.0.10': 'v10-demo-tour', '0.0.11': 'v11-demo-tour'}
+RECORDINGS = {'0.0.8': 'v8-demo-tour', '0.0.10': 'v10-demo-tour', '0.0.11': 'v11-demo-tour',
+              '0.0.12': 'v12-demo-tour'}
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--binary', type=Path, required=True)
