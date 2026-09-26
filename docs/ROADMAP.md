@@ -215,7 +215,26 @@ and #499). Delivered:
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
 
-## 0.0.12 — plugin platform and extensibility (planned)
+## 0.0.13 — interactive CLI, first slice (planned)
+
+The [0.0.13 plan](plans/0.0.13.md) covers the first slice of
+[milestone 4](https://github.com/buchochelliq-labs/rs-rich-cli/milestone/4):
+
+- frames with a cell diff in `rich-ext`, the ext phase of the render-tree
+  design (#226);
+- a new `rs-rich-interact` crate: a terminal session that always restores the
+  terminal, key and mouse input, a viewport, an item model, a degradation
+  policy for pipes and CI, and a headless test driver (#451, #452, #489, #492,
+  #495);
+- first components: fuzzy selector, input, form, confirmation sheet and a
+  pager with search (#287, #288, #289, #291, #457, #470);
+- `rich choose`/`filter`/`input`/`confirm`/`pager`, and the rich-cli 1.8.1
+  options the binary still lacks (#493, #494, #542);
+- the same components from Python.
+
+Core does not change, and stays at 0.0.8.
+
+## 0.0.12 — plugin platform and extensibility (published 2026-09-26)
 
 The [0.0.12 plan](plans/0.0.12.md) covers
 [milestone 3](https://github.com/buchochelliq-labs/rs-rich-cli/milestone/3):
