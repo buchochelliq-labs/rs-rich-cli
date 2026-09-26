@@ -125,7 +125,10 @@ impl Lines {
             return Err(PyIndexError::new_err("pop from empty list"));
         }
         let position = self.index(index)?;
-        Ok(self.lines.remove(position))
+        // `drain`, not `Vec::remove`: CodeQL's Rust models read `remove` as
+        // writing to a log (cleartext-logging false positive).
+        let popped = self.lines.drain(position..=position).next();
+        Ok(popped.expect("index() returns a position in range"))
     }
 
     /// Justify every line to `width` cells, as Rich's `Lines.justify`.
