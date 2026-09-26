@@ -227,7 +227,9 @@ The [0.0.13 plan](plans/0.0.13.md) covers the first slice of
   policy for pipes and CI, and a headless test driver (#451, #452, #489, #492,
   #495);
 - first components: fuzzy selector, input, form, confirmation sheet and a
-  pager with search (#287, #288, #289, #291, #457, #470);
+  pager with search (#287, #288, #289, #291, #457, #470), each runnable as a
+  blocking call or inside a small event loop, the first step towards
+  intuiTUIve;
 - `rich choose`/`filter`/`input`/`confirm`/`pager`, and the rich-cli 1.8.1
   options the binary still lacks (#493, #494, #542);
 - the same components from Python.
