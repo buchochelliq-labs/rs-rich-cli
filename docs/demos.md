@@ -6,31 +6,32 @@ CLI 0.0.8 introduced `rich --demo`: a single guided pass through the
 suite with three-second section pauses. Use `--demo-delay 5` to slow it down;
 Ctrl+C stops cleanly. See [the tour instructions](cli.md#take-the-guided-tour).
 
-<video controls playsinline preload="none" poster="../assets/demos/v11-demo-tour.png" style="width:100%;max-width:1100px" aria-label="Guided tour of the rich CLI suite">
-  <source src="../assets/demos/v11-demo-tour.mp4" type="video/mp4">
+<video controls playsinline preload="none" poster="../assets/demos/v12-demo-tour.png" style="width:100%;max-width:1100px" aria-label="Guided tour of the rich CLI suite">
+  <source src="../assets/demos/v12-demo-tour.mp4" type="video/mp4">
   Your browser cannot play this video. Use the download below.
 </video>
 
-[Tour MP4](assets/demos/v11-demo-tour.mp4) · [Tour GIF](assets/demos/v11-demo-tour.gif)
+[Tour MP4](assets/demos/v12-demo-tour.mp4) · [Tour GIF](assets/demos/v12-demo-tour.gif)
 
-This recording runs the 0.0.11 `rich --demo --demo-delay 0.5` in a real terminal, faster than the default three-second pace. New in
-0.0.11:
+This recording runs the 0.0.12 `rich --demo --demo-delay 0.5` in a real terminal, faster than the default three-second pace. New in
+0.0.12:
 
-- `rich inspect` drawing a structured document as a tree;
-- `rich diff` comparing two source files, with the changed words highlighted;
-- `rich view` showing a file numbered and highlighted;
-- the `hex`, `unicode` and `ansi explain` inspectors looking inside bytes,
-  graphemes and escape sequences;
-- a line styled from an upstream rich theme file (`--theme-file`);
-- `rich capture --redact` masking a secret in a command's output;
-- Atkinson dithering with OKLab colour distance, and a transparent image on the
-  terminal's own background and on a checkerboard.
+- `rich mermaid` drawing a flowchart as text, with no browser or Node;
+- code themes that use the terminal's own palette (`--code-theme ansi_dark`);
+- `--filter` keeping only matching lines, and `--highlight` marking matches;
+- `--image-fit native`, drawing an image at its own pixel size.
 
 Playback and command output are captured from the optimized build, with a
 caption added and no audio. Reproduce with
-`python scripts/capture_demo_tour.py --binary target/release/rich --release 0.0.11`
+`python scripts/capture_demo_tour.py --binary target/release/rich --release 0.0.12`
 after installing the docs-media dependencies listed below; provenance is in
-`.github/evidence/0.0.11/demo-tour/capture.json`.
+`.github/evidence/0.0.12/demo-tour/capture.json`.
+
+The 0.0.11 tour is kept as a historical recording:
+[MP4](assets/demos/v11-demo-tour.mp4) · [GIF](assets/demos/v11-demo-tour.gif).
+It shows `inspect`, `diff`, `view`, the `hex`, `unicode` and `ansi explain`
+inspectors, a theme file, a redacted `capture`, Atkinson dithering with OKLab
+colour distance, and transparent images.
 
 The 0.0.10 tour is kept as a historical recording:
 [MP4](assets/demos/v10-demo-tour.mp4) · [GIF](assets/demos/v10-demo-tour.gif).

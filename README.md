@@ -16,16 +16,16 @@ color, and beautiful formatting in the terminal.
 Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
 (see [`UPSTREAM.toml`](UPSTREAM.toml)).
 
-![The rich CLI 0.0.11 demo tour](docs/assets/demos/v11-demo-tour.gif)
+![The rich CLI 0.0.12 demo tour](docs/assets/demos/v12-demo-tour.gif)
 
 **[Watch the CLI and art videos](https://buchochelliq-labs.github.io/rs-rich-cli/demos/)** ·
 [User guide](docs/guide/index.md) · [Output gallery](docs/gallery.md) · [CLI guide](docs/cli.md)
 
-This preview is the recorded 0.0.11 demo tour: `inspect`, `diff`, `view`, the
-`hex`, `unicode` and `ansi explain` inspectors, a theme file, a redacted
-`capture`, and the new image modes.
+This preview is the recorded 0.0.12 demo tour: the 0.0.11 inspectors, then
+Mermaid flowcharts drawn as text, code themes in the terminal's own palette,
+`--filter` and `--highlight`, and native image sizing.
 [Tour and reproduction](docs/demos.md) ·
-[0.0.11 release notes](docs/releases/0.0.11.md).
+[0.0.12 release notes](docs/releases/0.0.12.md).
 
 ## Install and try
 
