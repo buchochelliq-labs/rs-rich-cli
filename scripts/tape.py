@@ -108,6 +108,14 @@ def size(text):
     return int(match.group(1)), int(match.group(2))
 
 
+ESCAPES = {"n": "\n", "t": "\t", "\\": "\\", '"': '"', "'": "'"}
+
+
+def unescape(text):
+    """`Write`'s escapes (\\n, \\t, \\\\, \\", \\'); other text, Unicode included, as is."""
+    return re.sub(r"\\(.)", lambda m: ESCAPES.get(m.group(1), m.group(0)), text)
+
+
 def parse(path):
     """Parse a tape into (line number, command, arguments) steps."""
     steps = []
@@ -345,6 +353,9 @@ class Session:
         with self.lock:
             self.columns, self.rows = columns, rows
             self.screen.resize(rows, columns)
+            if not self.hidden:
+                # asciinema v2 resize event, so players follow the new size.
+                self.events.append((self.now(), "r", f"{columns}x{rows}"))
         if getattr(self, "alive", False):
             os.kill(self.pid, signal.SIGWINCH)
 
@@ -518,7 +529,7 @@ def run(tape, bin_dir):
             elif command == "Write":
                 path = workspace / args[0]
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(args[1].encode().decode("unicode_escape"), encoding="utf-8")
+                path.write_text(unescape(args[1]), encoding="utf-8")
             elif command == "Exec":
                 result = subprocess.run(args[0], shell=True, cwd=workspace, env=env,
                                         capture_output=True, text=True, timeout=60)
@@ -581,6 +592,14 @@ def write_video(directory, stem, result, fonts):
     frames = video_frames(result)
     images = [(render_png(cells, cursor, fonts, result["title"], key), seconds)
               for (cells, cursor, key), seconds in frames]
+    # After a `Resize` frames differ in size: centre each on one canvas.
+    width = max(image.width for image, _ in images)
+    height = max(image.height for image, _ in images)
+    for index, (image, seconds) in enumerate(images):
+        if image.size != (width, height):
+            canvas = Image.new("RGB", (width, height), CHROME)
+            canvas.paste(image, ((width - image.width) // 2, (height - image.height) // 2))
+            images[index] = (canvas, seconds)
     first, rest = images[0][0], [image for image, _ in images[1:]]
     first.save(directory / f"{stem}.gif", save_all=True, append_images=rest,
                duration=[round(seconds * 1000) for _, seconds in images], loop=0,
@@ -635,7 +654,14 @@ def main():
             print(f"  FAILED: {error}")
             continue
         directory = MEDIA / tape.stem
+        # Screenshots the tape no longer takes: stale media the docs may serve.
+        orphans = sorted(path.stem for path in directory.glob("*.txt")
+                         if path.stem not in result["shots"]) if directory.exists() else []
         if args.check:
+            for name in orphans:
+                failures.append(f"{tape.name}: committed screenshot {name} is no longer taken; "
+                                f"regenerate to remove it")
+                print(f"  {name}: ORPHANED")
             for name, (cells, _) in result["shots"].items():
                 committed = directory / f"{name}.txt"
                 got = text_grid(cells)
@@ -650,6 +676,10 @@ def main():
                     print(f"  {name}: ok")
             continue
         directory.mkdir(parents=True, exist_ok=True)
+        for name in orphans:
+            for suffix in (".txt", ".png", ".svg"):
+                (directory / f"{name}{suffix}").unlink(missing_ok=True)
+            print(f"  {name}: removed (no longer taken)")
         big = Fonts(28)
         for name, (cells, cursor) in result["shots"].items():
             render_png(cells, cursor, big, result["title"]).save(directory / f"{name}.png",
