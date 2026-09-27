@@ -59,6 +59,8 @@ fn cell_repaints_leave_the_screen_as_a_full_repaint_would() {
         "ok",
         "busy",
         "漢字",
+        "\u{301}",
+        "e\u{301}",
         "done ✔",
         "",
         "a longer status line",

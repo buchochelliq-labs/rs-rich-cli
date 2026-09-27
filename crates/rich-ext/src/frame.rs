@@ -434,29 +434,47 @@ impl Frame {
     }
 
     /// One cell per grapheme of row `index`, using core's widths. A wide
-    /// grapheme is followed by continuation cells.
+    /// grapheme is followed by continuation cells, so a cell's index in the
+    /// result is its column. A zero-width grapheme occupies no column: it
+    /// joins the cell before it, even across runs, or the first cell of the
+    /// row when nothing precedes it.
     pub fn cells(&self, index: usize) -> Vec<Cell<'_>> {
         let row = self.row(index);
-        let mut cells = Vec::with_capacity(row.iter().map(Run::cells).sum());
+        // Arena ranges first: the runs of a row are stored in order in the
+        // text arena, so a zero-width grapheme extends its neighbour's range.
+        let mut cells: Vec<(Range<usize>, u8, StyleId)> =
+            Vec::with_capacity(row.iter().map(Run::cells).sum());
+        let mut leading: Option<usize> = None;
         for run in row {
-            let text = self.run_text(run);
-            let (graphemes, _) = split_graphemes(text);
+            let base = run.text as usize;
+            let (graphemes, _) = split_graphemes(self.run_text(run));
             for (start, end, width) in graphemes {
-                cells.push(Cell {
-                    text: &text[start..end],
-                    width: width as u8,
-                    style: run.style,
-                });
+                let range = base + start..base + end;
+                if width == 0 {
+                    match cells.iter_mut().rev().find(|cell| cell.1 > 0) {
+                        Some(lead) if lead.0.end == range.start => lead.0.end = range.end,
+                        Some(_) => {}
+                        None => {
+                            leading.get_or_insert(range.start);
+                        }
+                    }
+                    continue;
+                }
+                let start = leading.take().unwrap_or(range.start);
+                cells.push((start..range.end, width as u8, run.style));
                 for _ in 1..width {
-                    cells.push(Cell {
-                        text: "",
-                        width: 0,
-                        style: run.style,
-                    });
+                    cells.push((range.end..range.end, 0, run.style));
                 }
             }
         }
         cells
+            .into_iter()
+            .map(|(range, width, style)| Cell {
+                text: &self.text[range],
+                width,
+                style,
+            })
+            .collect()
     }
 
     /// The cells that differ from `previous`, as column ranges per row, in
@@ -612,6 +630,37 @@ mod tests {
         assert_eq!(widths, [1, 2, 0, 1]);
         assert!(cells[2].is_continuation());
         assert_eq!(frame.width(), 4);
+    }
+
+    #[test]
+    fn zero_width_graphemes_take_no_column() {
+        // A combining mark styled on its own joins the cell before it.
+        let frame =
+            Frame::from_segments(&[seg("a", None), seg("\u{301}", Some("bold")), seg("x", None)]);
+        let cells = frame.cells(0);
+        assert_eq!(cells.len(), 2);
+        assert_eq!(cells[0].text, "a\u{301}");
+        assert_eq!(cells[1].text, "x");
+        let changed =
+            Frame::from_segments(&[seg("a", None), seg("\u{301}", Some("bold")), seg("y", None)]);
+        assert_eq!(
+            changed.diff(&frame),
+            [Change {
+                row: 0,
+                columns: 1..2
+            }]
+        );
+        // After a wide grapheme it joins the lead, not the continuation.
+        let wide = Frame::from_segments(&[seg("漢", None), seg("\u{301}", None), seg("z", None)]);
+        let cells = wide.cells(0);
+        assert_eq!(cells.len(), 3);
+        assert_eq!(cells[0].text, "漢\u{301}");
+        assert!(cells[1].is_continuation());
+        // At the start of a row it joins the first cell.
+        let leading = Frame::from_segments(&[seg("\u{301}", None), seg("b", None)]);
+        let cells = leading.cells(0);
+        assert_eq!(cells.len(), 1);
+        assert_eq!(cells[0].text, "\u{301}b");
     }
 
     #[test]
