@@ -141,7 +141,7 @@ recordings that match.
 Regenerate everything, or check it as CI does:
 
 ```bash
-cargo build -p rs-rich-cli -p rs-rich-interact --examples
+cargo build -p rs-rich-cli -p rs-rich-interact --bins --examples
 rich=target/debug/rich
 $rich record --bin-dir target/debug --output docs/media/tapes docs/tapes/*.tape
 $rich record --check --bin-dir target/debug --output docs/media/tapes docs/tapes/*.tape
