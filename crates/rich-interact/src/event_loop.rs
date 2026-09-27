@@ -486,7 +486,7 @@ pub struct RunOptions {
 /// session starts and the policy's fallback decides the result.
 pub fn run<C: Component>(component: C, options: &RunOptions) -> Result<Outcome<C::Output>, Error> {
     let mut component = component;
-    if let Err(reason) = options.policy.detect() {
+    if let Err(reason) = options.policy.detect_for(options.session.output) {
         return degrade(
             &mut component,
             options.policy.fallback,

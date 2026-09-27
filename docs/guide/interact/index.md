@@ -205,6 +205,8 @@ stays on screen. The options can change that:
 
 - `SessionOptions { alternate_screen: true, .. }` takes over the whole screen
   and restores it afterwards;
+- `output: Output::Stderr` paints on standard error, which leaves standard
+  output to the answer a script captures (`choice=$(app)`);
 - `mouse: true` reports clicks and the wheel;
 - `bracketed_paste: true` delivers a paste as one event;
 - `LoopOptions { transient: true, .. }` clears the region at the end;
@@ -270,6 +272,12 @@ What happens then is the `Policy` fallback:
 | `Error` | `Error::NotInteractive` with the reason |
 
 Nothing emits control sequences or waits on a pipe.
+
+A picker that reads its list from a pipe (`ls | app`) can still take keys
+from the keyboard: `Policy { tty_keys: true, .. }` reads them from the
+controlling terminal when standard input is not one. `rich choose`,
+`rich filter`, `rich input`, `rich confirm` and `rich pager` run this way,
+painting on standard error ([the CLI guide](../../cli.md#ask-in-a-script)).
 
 ## Viewport
 

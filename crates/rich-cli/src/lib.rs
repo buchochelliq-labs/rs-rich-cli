@@ -38,6 +38,8 @@ mod controls;
 mod demo;
 mod doctor;
 mod inspect;
+#[cfg(feature = "interact")]
+mod interactive;
 #[cfg(feature = "record")]
 mod record;
 mod render_target;
@@ -794,6 +796,10 @@ fn dispatch(args: Vec<String>) -> ExitCode {
     }
     if doctor::requested(&args) {
         return doctor::dispatch(&args);
+    }
+    #[cfg(feature = "interact")]
+    if let Some(command) = interactive::requested(&args) {
+        return interactive::dispatch(command, &args);
     }
     #[cfg(feature = "record")]
     if record::requested(&args) {

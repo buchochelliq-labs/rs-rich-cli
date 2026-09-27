@@ -37,7 +37,7 @@ workspace = true
 syntax-cache = ["rich/syntax-cache"]
 # Oniguruma regex engine for syntax highlighting (DIVERGENCES #26).
 onig = ["rich/onig"]
-default = ["fetch", "art", "mermaid", "record"]
+default = ["fetch", "art", "mermaid", "record", "interact"]
 # Optional JSON display divergence; never enabled by default.
 json-escape-safe = ["rich/json-escape-safe"]
 # `fetch` enables the CLI's URL support (`rich <url>`); disable it
@@ -56,6 +56,9 @@ mmdc = ["mermaid", "art", "rich-mermaid/mmdc"]
 # asciinema casts, GIF and MP4 (rs-rich-record, #599). Pulls in a PTY, a VT
 # emulator and an embedded font.
 record = ["dep:rich-record"]
+# `rich choose`, `filter`, `input`, `confirm` and `pager`: the rs-rich-interact
+# components as shell commands (#493, #494).
+interact = ["dep:rich-interact"]
 # The lumis (tree-sitter) code highlighter, chosen with `--highlighter lumis`.
 # Off by default: it compiles lumis's grammars (a much larger binary) and needs
 # Rust 1.91.
@@ -70,6 +73,7 @@ ureq = { workspace = true, optional = true }
 rich-art = { workspace = true, optional = true, features = ["gif", "sixel"] }
 rich-mermaid = { workspace = true, optional = true }
 rich-record = { workspace = true, optional = true }
+rich-interact = { workspace = true, optional = true }
 rich-lumis = { workspace = true, optional = true }
 
 toml = "1.1"
@@ -83,3 +87,8 @@ fastrand = "2"
 
 [target."cfg(windows)".dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization"] }
+
+[dev-dependencies]
+# PTY tests for the interactive commands: a real terminal, keys sent to it.
+portable-pty = "0.9"
+vt100 = "0.16"

@@ -1554,9 +1554,11 @@ dependencies = [
  "ctrlc",
  "fastrand",
  "notify",
+ "portable-pty",
  "rs-rich",
  "rs-rich-art",
  "rs-rich-ext",
+ "rs-rich-interact",
  "rs-rich-lumis",
  "rs-rich-mermaid",
  "rs-rich-record",
@@ -1566,6 +1568,7 @@ dependencies = [
  "terminal_size",
  "toml",
  "ureq",
+ "vt100",
  "windows-sys 0.61.2",
 ]
 

@@ -57,6 +57,7 @@ fn child() {
                 policy: Policy {
                     interactive: Some(false),
                     fallback: Fallback::Prompt,
+                    ..Policy::default()
                 },
                 ..RunOptions::default()
             };

@@ -32,6 +32,67 @@ static ACTIVE: AtomicU8 = AtomicU8::new(0);
 static HOOK: Once = Once::new();
 /// Whether a [`Session`] is alive. Held from `start` until drop.
 static OWNED: AtomicBool = AtomicBool::new(false);
+/// Whether the live session paints to standard error, for the panic hook.
+static ON_STDERR: AtomicBool = AtomicBool::new(false);
+
+/// Where a session paints.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Output {
+    /// Standard output.
+    #[default]
+    Stdout,
+    /// Standard error, which leaves standard output to the answer a script
+    /// captures: `choice=$(rich choose a b c)`. Keys still come from the
+    /// terminal, which crossterm opens itself when standard input is a pipe.
+    Stderr,
+}
+
+impl Output {
+    /// Whether the stream is a terminal.
+    pub fn is_terminal(self) -> bool {
+        use std::io::IsTerminal;
+        match self {
+            Output::Stdout => io::stdout().is_terminal(),
+            Output::Stderr => io::stderr().is_terminal(),
+        }
+    }
+
+    fn write(self, text: &str) -> io::Result<()> {
+        match self {
+            Output::Stdout => {
+                let mut out = io::stdout().lock();
+                out.write_all(text.as_bytes())?;
+                out.flush()
+            }
+            Output::Stderr => {
+                let mut out = io::stderr().lock();
+                out.write_all(text.as_bytes())?;
+                out.flush()
+            }
+        }
+    }
+}
+
+/// Whether keys can be read from a terminal: standard input, or the
+/// process's controlling terminal when standard input is a pipe.
+pub(crate) fn keys_available() -> bool {
+    use std::io::IsTerminal;
+    if io::stdin().is_terminal() {
+        return true;
+    }
+    #[cfg(unix)]
+    let terminal = "/dev/tty";
+    #[cfg(windows)]
+    let terminal = "CONIN$";
+    #[cfg(any(unix, windows))]
+    return std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(terminal)
+        .is_ok();
+    #[cfg(not(any(unix, windows)))]
+    false
+}
 
 /// Undo whatever `ACTIVE` records. Safe to call twice.
 fn restore() -> io::Result<()> {
@@ -50,10 +111,12 @@ fn restore() -> io::Result<()> {
     if active & ALTERNATE != 0 {
         out.push_str("\x1b[?1049l");
     }
-    let mut stdout = io::stdout();
-    let written = stdout
-        .write_all(out.as_bytes())
-        .and_then(|()| stdout.flush());
+    let output = if ON_STDERR.load(Ordering::SeqCst) {
+        Output::Stderr
+    } else {
+        Output::Stdout
+    };
+    let written = output.write(&out);
     if active & RAW != 0 {
         crossterm::terminal::disable_raw_mode()?;
     }
@@ -80,6 +143,8 @@ pub struct SessionOptions {
     pub mouse: bool,
     /// Deliver pasted text as one [`Event::Paste`].
     pub bracketed_paste: bool,
+    /// Where to paint.
+    pub output: Output,
 }
 
 /// Where the event loop reads events and writes paints: the terminal, or
@@ -106,7 +171,8 @@ pub trait Backend {
     }
 }
 
-/// The real terminal, on stdin and stdout.
+/// The real terminal: keys from it, paints to standard output or standard
+/// error ([`SessionOptions::output`]).
 pub struct Session {
     options: SessionOptions,
     start: Instant,
@@ -139,6 +205,7 @@ impl Session {
     }
 
     fn enter(&mut self) -> io::Result<()> {
+        ON_STDERR.store(self.options.output == Output::Stderr, Ordering::SeqCst);
         crossterm::terminal::enable_raw_mode()?;
         ACTIVE.fetch_or(RAW, Ordering::SeqCst);
         // Active as soon as anything is on, so a failure below still
@@ -158,9 +225,7 @@ impl Session {
             ACTIVE.fetch_or(PASTE, Ordering::SeqCst);
         }
         out.push_str("\x1b[?25l");
-        let mut stdout = io::stdout();
-        stdout.write_all(out.as_bytes())?;
-        stdout.flush()
+        self.options.output.write(&out)
     }
 
     /// Restore the terminal. Also done on drop and on panic.
@@ -210,9 +275,7 @@ impl Backend for Session {
     }
 
     fn write(&mut self, text: &str) -> io::Result<()> {
-        let mut stdout = io::stdout().lock();
-        stdout.write_all(text.as_bytes())?;
-        stdout.flush()
+        self.options.output.write(text)
     }
 
     fn elapsed(&self) -> Duration {

@@ -89,6 +89,30 @@ Entries below record subsequent releases and development.
   the document and renders it byte for byte as `rich-rst` does on rich
   15.0.0, checked against fixtures from `scripts/capture_rst_golden.py`.
 
+### CLI 0.0.13: interactive commands (#493, #494)
+
+- **`rich choose`, `rich filter`, `rich input`, `rich confirm` and
+  `rich pager`** run the rs-rich-interact components from a shell script.
+  The answer goes to stdout and the component paints on stderr, so
+  `choice=$(rich choose a b c)` works, and keys come from the terminal even
+  when stdin is the list (`ls | rich filter`). Exit codes: 0 answered (or
+  yes), 1 cancelled (or no), 130 Ctrl+C, 2 usage, 3 no answer without a
+  terminal.
+- **`--preview COMMAND`** (#494) for `choose` and `filter` shows a command's
+  output beside the list, with `{}` the focused item: `rich {}` renders it.
+- Without a terminal they degrade: line prompts on stderr, `--selected` or
+  `--default` answers, and `filter` prints the lines matching `--value`.
+- Behind the new default `interact` feature. PTY tests cover the captured
+  answer, keys with a piped list, cancel, Ctrl+C, the pager and previews.
+
+### Interact 0.0.1: painting on standard error
+
+- `SessionOptions::output` (`Output::Stdout` or `Output::Stderr`) chooses
+  where a session paints, and the terminal is restored on the same stream.
+- `Policy::tty_keys` reads keys from the controlling terminal when standard
+  input is a pipe, and `Policy::detect_for(output)` decides for a given
+  output; `run` uses it. New `Reason`s: `StderrNotTerminal`, `NoTerminal`.
+
 ### Docs and tooling
 
 - **Tapes (#598).** A first, Python runner (`scripts/tape.py`, since

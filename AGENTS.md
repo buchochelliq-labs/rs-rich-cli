@@ -29,7 +29,8 @@ rich-cli ──▶ rich-ext ──▶ rich
 rich-cli ──▶ rich-mermaid ──▶ rich-plugin-api      (a plugin crate; optional rich-art for `mmdc`)
              rich-lumis   ──▶ rich-plugin-api      (a plugin crate: the lumis/tree-sitter highlighter)
              rich-record  ──▶ rich-ext ──▶ rich    (tapes: `rich record`; PTY, VT emulator, renderers)
-rich-interact ──▶ rich-ext ──▶ rich      (interactive components: session, event loop, viewport)
+rich-cli ──▶ rich-interact ──▶ rich-ext ──▶ rich   (interactive components: session, event loop, viewport;
+                                                 `rich choose`/`filter`/`input`/`confirm`/`pager`)
 rich-py  ──▶ rich          (Python bindings; outside the workspace, released to PyPI only)
 ```
 

@@ -38,6 +38,7 @@ fn child_options() -> RunOptions {
             alternate_screen: true,
             mouse: true,
             bracketed_paste: true,
+            ..SessionOptions::default()
         },
         ..RunOptions::default()
     }
