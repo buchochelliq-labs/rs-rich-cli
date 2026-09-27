@@ -392,6 +392,7 @@ impl SourceOptions {
             || self.line_numbers
             || self.guides
             || self.lexer.is_some()
+            || self.no_wrap
     }
 
     /// Upstream's `_line_range(head, tail, num_lines)`, for `Syntax`'s
@@ -2265,6 +2266,20 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--rule",
             effective_mode == Mode::Rule,
         ),
+        // The streaming modes write each record as it arrives, not through
+        // the final print these shape.
+        (
+            "--soft",
+            soft,
+            "a mode other than --jsonl or --log",
+            !matches!(effective_mode, Mode::JsonLines | Mode::Log),
+        ),
+        (
+            "--max-width",
+            max_width.is_some(),
+            "a mode other than --jsonl or --log",
+            !matches!(effective_mode, Mode::JsonLines | Mode::Log),
+        ),
         (
             "--threshold",
             diff_threshold.is_some(),
@@ -3763,9 +3778,13 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         };
         // `Rule(resource, style=rule_style, characters=rule_char or "─",
         // align="center" if justify in ("full", "default") else justify)`.
-        if let Some(style) = cli.rule_style.clone() {
-            rule = rule.style(style);
-        }
+        // Upstream's default is an explicit `bright_green`, not the theme's
+        // `rule.line`, so a theme cannot restyle a plain `--rule`.
+        let style = cli
+            .rule_style
+            .clone()
+            .unwrap_or_else(|| Style::parse("bright_green").expect("a valid style"));
+        rule = rule.style(style);
         if let Some(characters) = cli.rule_char.as_deref().filter(|c| !c.is_empty()) {
             rule = rule.characters(characters);
         }
@@ -4191,7 +4210,22 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         // `--filter` and `--highlight` work on the highlighted text.
         Mode::Syntax if cli.data.transform_option().is_some() => {
             let language = cli.source.lexer.as_deref().unwrap_or(&language);
-            let text = Syntax::new(content.as_str(), language).highlight_for(&console);
+            // `--head`/`--tail` pick the lines first, as `Syntax`'s
+            // `line_range` does on the other path.
+            let code = match cli.source.line_range(&content) {
+                Ok(Some((start, end))) => {
+                    let start = start.max(1) as usize - 1;
+                    let end = end.max(0) as usize;
+                    let lines: Vec<&str> = content.lines().collect();
+                    lines
+                        .get(start.min(lines.len())..end.min(lines.len()))
+                        .unwrap_or_default()
+                        .join("\n")
+                }
+                Ok(None) => content.clone(),
+                Err(err) => return fail(&cli, ExitClass::Usage, err),
+            };
+            let text = Syntax::new(code.as_str(), language).highlight_for(&console);
             let text = match cli
                 .data
                 .text_pipeline()

@@ -69,6 +69,8 @@ Entries below record subsequent releases and development.
 - **Text and output:** `--emoji`, `--soft` (byte-identical to rich 15.0.0's
   `print(soft_wrap=True)`), `-W/--max-width`, `-L/-C/-R/-F` (the `--text-*`
   justifies), `--rule-style`, `--rule-char` and `--force-terminal`.
+  `--soft` and `-W` are refused with `--jsonl` and `--log`, which stream
+  records without the final print they shape.
 - **Short aliases:** `-J` (`--json`), `-u` (`--rule`), `-d` (`--padding`),
   `-a` (`--panel`), `-l/-c/-r` (`--left/--center/--right`) and `-v`
   (`--version`). `-j` and `-x` keep this CLI's meanings (DIVERGENCES §34).
