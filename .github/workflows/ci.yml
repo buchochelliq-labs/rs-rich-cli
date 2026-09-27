@@ -348,10 +348,10 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install less (the pager tape pages through it)
+      - name: Install less (the pager tape pages through it), zsh and fish
         run: |
           sudo apt-get update
-          sudo apt-get install -y less
+          sudo apt-get install -y less zsh fish
 
       - name: Build the CLI
         run: cargo build -p rs-rich-cli --locked
@@ -360,6 +360,14 @@ jobs:
         run: >-
           target/debug/rich record --check --bin-dir target/debug
           --output docs/media/tapes docs/tapes/*.tape
+
+      # `Set Shell`: a recording in each of the four shells, none skipped.
+      - name: Record in bash, zsh, fish and sh
+        env:
+          RICH_RECORD_REQUIRE_SHELLS: bash,zsh,fish,sh
+        run: >-
+          cargo test -p rs-rich-record --locked --test record
+          every_shell_records_with_the_same_prompt -- --nocapture
 
   ci-ok:
     name: ci-ok

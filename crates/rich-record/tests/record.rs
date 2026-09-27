@@ -168,14 +168,22 @@ fn a_wait_that_never_matches_names_its_line() {
     );
 }
 
+/// Every `Set Shell` records with the same prompt. A shell that is not
+/// installed is skipped, unless `RICH_RECORD_REQUIRE_SHELLS` names it: CI's
+/// tapes job installs all four and requires them.
 #[test]
-fn every_installed_shell_records_with_the_same_prompt() {
+fn every_shell_records_with_the_same_prompt() {
+    let required = std::env::var("RICH_RECORD_REQUIRE_SHELLS").unwrap_or_default();
     for name in ["bash", "zsh", "fish", "sh"] {
         let installed = std::process::Command::new(name)
             .args(["-c", "exit 0"])
             .status()
             .is_ok_and(|s| s.success());
         if !installed {
+            assert!(
+                !required.split(',').any(|shell| shell.trim() == name),
+                "{name} is required by RICH_RECORD_REQUIRE_SHELLS but not installed"
+            );
             eprintln!("skipping {name}: not installed");
             continue;
         }

@@ -93,7 +93,7 @@ rich measures it.
 | Step | Meaning |
 |---|---|
 | `Set Size 100x28`, `Set Title "…"`, `Set TypingDelay 40ms`, `Set Timeout 15s`, `Set Env NAME value` | Configure the session |
-| `Set Shell zsh` | Run in `bash` (the default), `zsh`, `fish` or `sh`, each without your profile or rc files and with the same `❯` prompt |
+| `Set Shell zsh` | Run in `bash` (the default), `zsh`, `fish` or `sh`, each without your profile or rc files and with the same `❯` prompt. CI records in all four |
 | `Write FILE "text"`, `Exec "command"` | Prepare or change files, outside the terminal |
 | `Type "text"` | Type into the terminal, one character at a time |
 | `Enter`, `Tab`, `Space`, `Backspace`, `Escape`, arrows, `Home`, `End`, `PageUp`, `PageDown`, `Ctrl+C` | Press a key; a number after it repeats it |
