@@ -71,6 +71,37 @@ Entries below record subsequent releases and development.
   hero recording. The first tapes cover rendering Markdown, CSV and code,
   `--watch` re-rendering on save, and `view --pager` scrolling and searching.
 
+### Interact 0.0.1 (new crate, unreleased): interactive components (0.0.13 workstream 2: #451, #452, #489, #492, #495)
+
+- **`rs-rich-interact`** (`rich_interact`) is the layer between printing and a
+  full TUI. A `Component` is a state machine: it handles one `Event` and
+  renders one `View`, and returns `Flow::Continue`, `Done`, `Cancel` or
+  `Handoff(command)`.
+- **Two drivers:** `run` takes the terminal, drives one component to an
+  `Outcome` and gives the terminal back; `EventLoop` runs several, with ticks
+  and timers. `run` is the loop with one component, so the two cannot differ.
+- **Repaint on change.** Views are painted through `Frame::diff` from
+  workstream 1, cell by cell: an idle loop writes nothing.
+- **The terminal is always given back.** The `Session` restores raw mode, the
+  alternate screen, mouse and bracketed paste on every way out: finishing,
+  `?`, Ctrl+C and a panic (#489). `Flow::Handoff` lends the terminal to
+  `$EDITOR` or a pager and takes it back. PTY tests check each path with
+  `stty -a`.
+- **`Viewport`** (#495) is a scrollable window over rendered lines, and a
+  minimal pager on its own (`--example viewport`).
+- **`Item<T>`** (#452) is the one item model behind every picker: label,
+  description, metadata, preview, key-bound actions and search keywords.
+- **The degradation policy** (#492). With no terminal on stdin or stdout,
+  under `CI`, with `TERM=dumb`, or when the caller asks, no session starts.
+  The component then asks line by line, returns its default, or fails, as the
+  caller chooses; nothing blocks on a pipe.
+- **The headless driver** (scripted events, a virtual clock, every paint
+  recorded as bytes and text) tests all of it without a terminal.
+- A new guide page, "Interactive (rs-rich-interact)". Release tooling, the
+  release workflow's tag list, the CI feature matrix and the version tables
+  include the crate; it is uploaded by hand as 0.0.1 after `rs-rich-ext`
+  0.0.11.
+
 ### Record 0.0.1 (new crate, unreleased) and CLI 0.0.13: `rich record` (#599)
 
 - **`rs-rich-record`** (`rich_record`) records tapes from Rust: `tape::parse`,

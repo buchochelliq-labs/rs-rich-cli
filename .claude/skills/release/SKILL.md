@@ -19,12 +19,12 @@ Every crate owns its independent SemVer. Choose a tag form explicitly:
 | `<crate>-vX.Y.Z` | Only that package; its manifest must match X.Y.Z |
 
 Supported packages: `rs-rich`, `rs-rich-plugin-api`, `rs-rich-macros`, `rs-rich-ext`,
-`rs-rich-cli`, `rs-rich-art`, `rs-rich-mermaid`, `rs-rich-lumis`, `rs-rich-record`. Publish `rs-rich-plugin-api` and
+`rs-rich-cli`, `rs-rich-art`, `rs-rich-mermaid`, `rs-rich-lumis`, `rs-rich-record`, `rs-rich-interact`. Publish `rs-rich-plugin-api` and
 `rs-rich-macros` after `rs-rich` and before `rs-rich-ext`, which depends on both;
 publish `rs-rich-mermaid` after `rs-rich-art`, and `rs-rich-lumis` after
 `rs-rich-plugin-api`, both before `rs-rich-cli`. Publish `rs-rich-record` after
 `rs-rich-ext` and before `rs-rich-cli`, whose default `record` feature depends
-on it.
+on it. Publish `rs-rich-interact` after `rs-rich-ext`, which it depends on.
 Both forms accept prereleases such as `-rc.1`. Manual workflow dispatch takes
 an existing tag, never a branch name.
 
