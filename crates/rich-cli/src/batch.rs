@@ -72,7 +72,7 @@ fn destination_key(path: &str) -> PathBuf {
 }
 
 fn resolved_destination_key(path: &str) -> PathBuf {
-    let path = Path::new(path);
+    let path = &super::fs_path(path);
     let absolute = if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -128,7 +128,7 @@ impl OutputRoots {
         let capture = |configured: Option<&str>| {
             configured
                 .map(|path| {
-                    let path = Path::new(path);
+                    let path = &super::fs_path(path);
                     let directory_mode =
                         cli.batch_paths.preserve_dirs || cli.batch_paths.template.is_some();
                     let root = if directory_mode || (total > 1 && path.is_dir()) {
@@ -157,7 +157,7 @@ impl OutputRoots {
             ("svg", &self.svg, &outputs.svg),
         ] {
             if let (Some(root), Some(path)) = (root, path) {
-                destinations.push((kind, root.destination(Path::new(path), create)?));
+                destinations.push((kind, root.destination(&super::fs_path(path), create)?));
             }
         }
         Ok(destinations)
@@ -225,8 +225,8 @@ pub(super) fn run_batch(cli: &Cli) -> ExitCode {
                     continue;
                 }
                 match batch_paths::plan_destination(
-                    Path::new(input),
-                    Path::new(configured),
+                    &super::fs_path(input),
+                    &super::fs_path(configured),
                     extension,
                     index + 1,
                     &cli.batch_paths,
@@ -235,15 +235,7 @@ pub(super) fn run_batch(cli: &Cli) -> ExitCode {
                         if cli.batch_paths.preserve_dirs {
                             planned_directories.extend(plan.create_parents);
                         }
-                        let Some(path) = plan.path.to_str() else {
-                            errors.push((
-                                input.clone(),
-                                ExitClass::Usage,
-                                Some("CLI output path is not UTF-8".into()),
-                            ));
-                            continue;
-                        };
-                        path.to_owned()
+                        super::path_arg(&plan.path)
                     }
                     Err(error) => {
                         errors.push((input.clone(), ExitClass::Usage, Some(error.to_string())));
@@ -445,7 +437,8 @@ fn spawn(
     {
         if resources.iter().any(|input| {
             destination_key(input) == destination_key(path)
-                || same_file::is_same_file(input, path).unwrap_or(false)
+                || same_file::is_same_file(super::fs_path(input), super::fs_path(path))
+                    .unwrap_or(false)
         }) {
             return Err(std::io::Error::other(
                 "batch output would overwrite a batch input",
@@ -456,7 +449,7 @@ fn spawn(
                 .into_iter()
                 .flatten()
             {
-                if Path::new(path).starts_with(root)
+                if super::fs_path(path).starts_with(super::fs_path(root))
                     && !destination_key(path).starts_with(destination_key(root))
                 {
                     return Err(std::io::Error::other("destination is outside output root"));
@@ -481,7 +474,8 @@ fn spawn(
         exports.push((destination, path));
     }
     let child = command
-        .args(["--", input])
+        .arg("--")
+        .arg(super::fs_path(input))
         .stdin(Stdio::null())
         .stdout(stdout.try_clone()?)
         .stderr(stderr.try_clone()?)

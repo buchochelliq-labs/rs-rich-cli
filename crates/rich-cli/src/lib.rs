@@ -775,6 +775,46 @@ pub(crate) fn fs_path(arg: &str) -> std::path::PathBuf {
         .map_or_else(|| std::path::PathBuf::from(arg), std::path::PathBuf::from)
 }
 
+/// A path as the `String` the rest of the CLI passes around. A path that is
+/// not valid Unicode (a file found by a batch glob, a planned output named
+/// after one) is spelled with each invalid byte as `\xNN`, so no two such
+/// paths share a spelling, and remembered, so [`fs_path`] gives the original
+/// back wherever the spelling reaches the file system.
+pub(crate) fn path_arg(path: &Path) -> String {
+    if let Some(text) = path.to_str() {
+        return text.to_string();
+    }
+    let spelling = escaped_path(path.as_os_str());
+    if let Ok(mut raw) = RAW_ARGS.lock() {
+        let original = path.as_os_str().to_owned();
+        match raw.iter_mut().find(|(known, _)| *known == spelling) {
+            Some((_, known)) if known.as_ref() != Some(&original) => *known = None,
+            Some(_) => {}
+            None => raw.push((spelling.clone(), Some(original))),
+        }
+    }
+    spelling
+}
+
+/// The Unicode parts of `path` as they are, each other byte as `\xNN`.
+#[cfg(unix)]
+fn escaped_path(path: &std::ffi::OsStr) -> String {
+    use std::os::unix::ffi::OsStrExt;
+    let mut out = String::new();
+    for chunk in path.as_bytes().utf8_chunks() {
+        out.push_str(chunk.valid());
+        for byte in chunk.invalid() {
+            out.push_str(&format!("\\x{byte:02X}"));
+        }
+    }
+    out
+}
+
+#[cfg(not(unix))]
+fn escaped_path(path: &std::ffi::OsStr) -> String {
+    path.to_string_lossy().into_owned()
+}
+
 /// [`run`] for a host process that is not the `rich` executable: `program` is
 /// the command that starts this CLI again (for the Python wheel,
 /// `[sys.executable, "-m", "rs_rich"]`), used for `--batch` workers and the
@@ -1131,7 +1171,7 @@ fn collect_files(dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
             if kind.is_dir() {
                 stack.push(path);
             } else if kind.is_file() {
-                out.push(path.to_string_lossy().into_owned());
+                out.push(path_arg(&path));
             }
         }
     }
@@ -1152,6 +1192,7 @@ fn expand_batch_resources(resources: &[String]) -> Result<Vec<String>, String> {
                     "batch glob {resource:?} may only use * and ? in the final path segment"
                 ));
             }
+            let dir = fs_path(&dir.to_string_lossy());
             let entries = std::fs::read_dir(&dir)
                 .map_err(|error| format!("cannot scan {}: {error}", dir.display()))?;
             for entry in entries {
@@ -1163,16 +1204,16 @@ fn expand_batch_resources(resources: &[String]) -> Result<Vec<String>, String> {
                     continue;
                 }
                 if glob_match(&pattern, &entry.file_name().to_string_lossy()) {
-                    out.push(path.to_string_lossy().into_owned());
+                    out.push(path_arg(&path));
                 }
             }
             continue;
         }
-        let path = Path::new(resource);
+        let path = fs_path(resource);
         if path.is_file() {
             out.push(resource.clone());
         } else if path.is_dir() {
-            collect_files(path, &mut out)?;
+            collect_files(&path, &mut out)?;
         } else {
             return Err(format!("batch resource does not exist: {resource}"));
         }
@@ -1205,38 +1246,42 @@ fn batch_export_path(
     total: usize,
 ) -> Option<String> {
     let path = path?;
-    let p = Path::new(path);
     if total == 1 {
         return Some(path.into());
     }
-    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or_default();
-    let stem = Path::new(input)
+    let p = fs_path(path);
+    // The input's stem as its bytes: a non-Unicode name keeps them.
+    let input = fs_path(input);
+    let stem = input
         .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("output");
-    let name = if ext.is_empty() {
-        format!("{stem}-{index}")
+        .unwrap_or_else(|| std::ffi::OsStr::new("output"));
+    let mut name = stem.to_owned();
+    match p.extension() {
+        Some(ext) if !ext.is_empty() => {
+            name.push(".");
+            name.push(ext);
+        }
+        _ => name.push(format!("-{index}")),
+    }
+    Some(path_arg(&if p.is_dir() {
+        p.join(name)
     } else {
-        format!("{stem}.{ext}")
-    };
-    Some(if p.is_dir() {
-        p.join(name).to_string_lossy().into_owned()
-    } else {
-        p.with_file_name(name).to_string_lossy().into_owned()
-    })
+        p.with_file_name(name)
+    }))
 }
 
 /// `out.html` -> `out-2.html`, keeping an extension-less name intact.
 fn suffixed_path(path: &Path, suffix: usize) -> String {
-    let stem = path
+    let mut name = path
         .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("output");
-    let name = match path.extension().and_then(|s| s.to_str()) {
-        Some(ext) => format!("{stem}-{suffix}.{ext}"),
-        None => format!("{stem}-{suffix}"),
-    };
-    path.with_file_name(name).to_string_lossy().into_owned()
+        .unwrap_or_else(|| std::ffi::OsStr::new("output"))
+        .to_owned();
+    name.push(format!("-{suffix}"));
+    if let Some(ext) = path.extension() {
+        name.push(".");
+        name.push(ext);
+    }
+    path_arg(&path.with_file_name(name))
 }
 
 /// Settle one planned output against the rest of the plan and against the disk.
@@ -1250,7 +1295,7 @@ fn resolve_destination(
     taken: &mut std::collections::BTreeSet<String>,
 ) -> Result<String, (ExitClass, String)> {
     let occupied = |path: &str, taken: &std::collections::BTreeSet<String>| {
-        taken.contains(path) || (!cli.overwrite && Path::new(path).exists())
+        taken.contains(path) || (!cli.overwrite && fs_path(path).exists())
     };
     match cli.collision {
         CollisionPolicy::Overwrite => {
@@ -1262,7 +1307,7 @@ fn resolve_destination(
             let mut suffix = 2;
             while occupied(&chosen, taken) {
                 batch::check_interrupted().map_err(|message| (ExitClass::Input, message))?;
-                chosen = suffixed_path(Path::new(&candidate), suffix);
+                chosen = suffixed_path(&fs_path(&candidate), suffix);
                 suffix += 1;
             }
             taken.insert(chosen.clone());
@@ -1275,7 +1320,7 @@ fn resolve_destination(
                     format!("batch output collision: {candidate}"),
                 ));
             }
-            if !cli.overwrite && Path::new(&candidate).exists() {
+            if !cli.overwrite && fs_path(&candidate).exists() {
                 return Err((
                     ExitClass::Input,
                     format!("refusing to overwrite existing output: {candidate} (use --overwrite)"),
@@ -6281,7 +6326,7 @@ fn save_exports(console: &Console, export: &Export, segments: &[Segment]) -> Res
     if let Some(path) = export.html_path {
         // CSS-class stylesheet form, as upstream's `save_html` default.
         let html = rich::export::export_html_classes(segments, &DEFAULT_TERMINAL_THEME);
-        if let Err(err) = std::fs::write(path, html) {
+        if let Err(err) = std::fs::write(fs_path(path), html) {
             first_error = Some(format!("failed to save HTML: {err}"));
         }
     }
@@ -6295,7 +6340,7 @@ fn save_exports(console: &Console, export: &Export, segments: &[Segment]) -> Res
             "rich-cli",
             console.width(),
         );
-        if let Err(err) = std::fs::write(path, svg) {
+        if let Err(err) = std::fs::write(fs_path(path), svg) {
             first_error.get_or_insert_with(|| format!("failed to save SVG: {err}"));
         }
     }
