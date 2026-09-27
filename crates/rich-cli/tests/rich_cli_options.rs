@@ -316,3 +316,57 @@ fn notebook_code_cells_take_the_source_options() {
     assert!(out.contains("2 b = 2"), "{out}");
     assert!(!out.contains("c = 3"), "{out}");
 }
+
+/// `--no-wrap` alone makes automatic mode render source, as upstream renders
+/// every unrecognised file, so an extensionless file's long line is cropped.
+#[test]
+fn no_wrap_alone_renders_an_extensionless_file_as_source() {
+    let (_dir, path) = file("Makefile", &"word ".repeat(40));
+    let out = ok(&[&path, "--no-wrap"], "");
+    assert_eq!(
+        out.lines().filter(|line| !line.trim().is_empty()).count(),
+        1,
+        "{out}"
+    );
+}
+
+/// `--head`/`--tail` pick the lines before `--highlight` transforms them,
+/// and still may not be combined.
+#[test]
+fn head_applies_before_a_highlight_transform() {
+    let (_dir, path) = file("code.py", "alpha\nbeta\ngamma\n");
+    let out = ok(&[&path, "--head", "2", "--highlight", "beta"], "");
+    assert_eq!(lines(&out), ["alpha", "beta"]);
+    let (_, err, code) = rich(&[&path, "-h", "1", "-t", "1", "--highlight", "beta"], "");
+    assert_eq!(code, 2);
+    assert!(err.contains("cannot specify both head and tail"), "{err}");
+}
+
+/// A plain `--rule` is upstream's explicit `bright_green`, whatever the
+/// theme's `rule.line` says.
+#[test]
+fn rule_style_defaults_to_bright_green_over_the_theme() {
+    let out = ok(
+        &[
+            "--rule",
+            "--force-terminal",
+            "--theme-style",
+            "rule.line=red",
+        ],
+        "",
+    );
+    assert!(out.contains("\x1b[92m"), "{out:?}");
+}
+
+/// The streaming modes never reach the final print, so `--soft` and
+/// `--max-width` are refused there rather than ignored.
+#[test]
+fn soft_and_max_width_are_refused_with_streaming_modes() {
+    for args in [["--jsonl", "--soft"].as_slice(), &["--log", "-W", "20"]] {
+        let mut args = args.to_vec();
+        args.push("-");
+        let (_, err, code) = rich(&args, "{}\n");
+        assert_eq!(code, 2, "{args:?}");
+        assert!(err.contains("a mode other than --jsonl or --log"), "{err}");
+    }
+}
