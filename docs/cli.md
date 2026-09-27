@@ -80,6 +80,31 @@ also config keys (`code_theme`, `highlighter`), which a project's `rich.toml`
 may set. `rich doctor` lists the highlighters and themes available. See the
 [code highlighters guide](guide/ext/code-highlighters.md).
 
+### Show part of a file, with line numbers
+
+rich-cli's source options work on source files, CSV and notebooks:
+
+```bash
+rich main.rs --head 20            # the first 20 lines (-h 20)
+rich main.rs -n -g                # line numbers and indentation guides
+rich script --lexer python        # highlight as Python, whatever the name
+rich log.csv --tail 5             # the last 5 rows (-t 5)
+rich notebook.ipynb -n --no-wrap  # numbered code cells, long lines cropped
+```
+
+`-h` is `--head`, as in rich-cli; help is `--help`. As upstream,
+`--tail N` shows the last `N - 1` lines of source (all `N` rows of a CSV).
+Automatic mode renders a file as syntax once one of these options is given.
+
+Upstream's other text options are here too: `--emoji` replaces `:emoji:`
+codes (they are left as typed otherwise), `--soft` leaves long lines for the
+terminal to wrap, `-W/--max-width N` narrows the output, and `--force-terminal`
+writes colour into a pipe. With `--print` and `--rule`, `-L/-C/-R/-F`
+(`--text-left`, `--text-center`, `--text-right`, `--text-full`) justify the
+text; like rich-cli on rich 15, a bare line only shows it once `--width` or a
+panel gives it a width to fill. `--rule-style` and `--rule-char` set the rule's
+line.
+
 Read from standard input with `-` (including `-p -` for markup):
 
 ```bash

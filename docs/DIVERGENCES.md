@@ -502,6 +502,21 @@ Format: what differs · why · how to remove it (if temporary).
   container still carries the container's markers.
 - **Remove:** strip the container prefixes from each line before re-parsing.
 
+### 34. `rich -j` is `--json` and `rich -x` is `--syntax`
+- **Differs:** in rich-cli 1.8.1, `-j` is `--emoji` and `-x` is `--lexer`
+  (its JSON is `-J`, and `--syntax` has no short). This CLI gave `-j` to
+  `--json` and `-x` to `--syntax` before it ported those options. It keeps
+  them, accepts upstream's `-J` for `--json` too, and spells the other two
+  out: `--emoji` and `--lexer` have no short name. Every other upstream short
+  alias is upstream's, `-h` for `--head` included, so help is `--help` only.
+- **Also:** where rich-cli exits 255 on a usage error it reports itself
+  (`cannot specify both head and tail`), this CLI exits 2, its usage class.
+  A source option given in a mode where it does nothing (`--head` with
+  `--markdown`) is an error here; rich-cli ignores it.
+- **Why:** changing `-j` and `-x` would break scripts written for this CLI
+  to fix scripts written for rich-cli, and both uses are common.
+- **Remove:** a major CLI release could move them to upstream's meanings.
+
 ## Feature-flagged divergences
 
 ### 22. Escape-safe JSON presentation (`json-escape-safe`)

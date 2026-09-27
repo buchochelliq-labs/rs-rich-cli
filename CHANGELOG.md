@@ -57,6 +57,29 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### CLI 0.0.13: rich-cli 1.8.1's rendering options (#542)
+
+- **Source:** `-h/--head LINES` and `-t/--tail LINES` for source files, CSV
+  rows and notebook code cells; `-n/--line-numbers`; `-g/--guides`;
+  `--lexer LEXER`; `--no-wrap`. Automatic mode renders as syntax when any of
+  these is given, as rich-cli renders anything it does not recognise.
+  `--tail N` keeps rich-cli's arithmetic and shows the last `N - 1` source
+  lines. Given both, `--head` and `--tail` are an error, except for CSV,
+  where the head wins, as upstream.
+- **Text and output:** `--emoji`, `--soft` (byte-identical to rich 15.0.0's
+  `print(soft_wrap=True)`), `-W/--max-width`, `-L/-C/-R/-F` (the `--text-*`
+  justifies), `--rule-style`, `--rule-char` and `--force-terminal`.
+- **Short aliases:** `-J` (`--json`), `-u` (`--rule`), `-d` (`--padding`),
+  `-a` (`--panel`), `-l/-c/-r` (`--left/--center/--right`) and `-v`
+  (`--version`). `-j` and `-x` keep this CLI's meanings (DIVERGENCES §34).
+- **Breaking:**
+  - `-h` is `--head`, as in rich-cli, so `rich -h 20 file` works as it does
+    upstream. Help is `--help` only, in every subcommand.
+  - `:emoji:` codes are left as typed unless `--emoji` is given, matching
+    rich-cli's `Console(emoji=False)`.
+- **Ext:** `cli_doc::ArgSpec` gains `short_aliases` and `short_alias()`, for
+  a second short name; help, man pages and completions list it.
+
 ### Docs and tooling
 
 - **Tapes (#598).** A first, Python runner (`scripts/tape.py`, since

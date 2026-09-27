@@ -820,7 +820,7 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
         .cleaned
         .iter()
         .take_while(|arg| *arg != "--")
-        .any(|arg| arg == "--help" || arg == "-h")
+        .any(|arg| arg == "--help")
     {
         let mut path = vec!["config"];
         path.extend(

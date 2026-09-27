@@ -86,6 +86,7 @@ fn convert_arg(arg: &clap::Arg) -> ArgSpec {
     let mut spec = ArgSpec::new(arg.get_id().as_str());
     spec.long = arg.get_long().map(str::to_string);
     spec.short = arg.get_short();
+    spec.short_aliases = arg.get_visible_short_aliases().unwrap_or_default();
     spec.aliases = arg
         .get_visible_aliases()
         .unwrap_or_default()
