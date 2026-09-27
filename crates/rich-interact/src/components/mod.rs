@@ -3,8 +3,12 @@
 //! [fuzzy](crate::fuzzy) matcher. Each works under both drivers, degrades to
 //! a line-based prompt without a terminal, and is styled by one [`Theme`].
 
+mod confirm;
+mod input;
 mod select;
 
+pub use confirm::{Choice, Confirm};
+pub use input::{Input, Provider, Suggestion};
 pub use select::{MultiSelect, PreviewLayout, Select};
 
 use rich::{Segment, Style};

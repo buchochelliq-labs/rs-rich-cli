@@ -63,7 +63,9 @@ pub mod session;
 pub mod viewport;
 
 pub use component::{Component, Context, Flow, View};
-pub use components::{MultiSelect, PreviewLayout, Select, Theme};
+pub use components::{
+    Choice, Confirm, Input, MultiSelect, PreviewLayout, Select, Suggestion, Theme,
+};
 pub use event::{Button, Event, Key, KeyCode, Modifiers, Mouse, MouseKind};
 pub use event_loop::{degrade, run, Error, EventLoop, Handle, LoopOptions, Outcome, RunOptions};
 pub use item::{Action, Item, Preview};
