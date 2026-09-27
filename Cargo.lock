@@ -1550,6 +1550,7 @@ dependencies = [
 name = "rs-rich-record"
 version = "0.0.1"
 dependencies = [
+ "color_quant",
  "fancy-regex 0.19.2",
  "fontdue",
  "gif",

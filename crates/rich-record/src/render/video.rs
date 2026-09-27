@@ -60,28 +60,39 @@ pub fn sample(timeline: &Timeline, fps: f64) -> Vec<VideoFrame> {
     out
 }
 
-/// Draw sampled frames.
+/// Draw sampled frames, spread over the machine's cores.
 pub fn render(
     frames: &[VideoFrame],
     theme: &Theme,
     fonts: &Fonts,
     title: &str,
 ) -> Vec<(Canvas, f64)> {
-    frames
-        .iter()
-        .map(|frame| {
-            let options = raster::Frame {
-                title,
-                key: frame.key.as_deref(),
-                size: 16.0,
-                window: true,
-            };
-            (
-                raster::render(&frame.snapshot, theme, fonts, &options),
-                frame.seconds,
-            )
-        })
-        .collect()
+    let draw = |frame: &VideoFrame| {
+        let options = raster::Frame {
+            title,
+            key: frame.key.as_deref(),
+            size: 16.0,
+            window: true,
+        };
+        (
+            raster::render(&frame.snapshot, theme, fonts, &options),
+            frame.seconds,
+        )
+    };
+    let threads = std::thread::available_parallelism()
+        .map_or(1, |n| n.get())
+        .min(frames.len().max(1));
+    let chunk = frames.len().div_ceil(threads.max(1)).max(1);
+    std::thread::scope(|scope| {
+        let workers: Vec<_> = frames
+            .chunks(chunk)
+            .map(|part| scope.spawn(move || part.iter().map(draw).collect::<Vec<_>>()))
+            .collect();
+        workers
+            .into_iter()
+            .flat_map(|worker| worker.join().expect("frame renderer"))
+            .collect()
+    })
 }
 
 /// Whether FFmpeg can be run.

@@ -40,3 +40,5 @@ vt100 = "0.16"
 fontdue = "0.9"
 png = "0.18"
 gif = "0.14"
+# One NeuQuant pass per GIF (not per frame); gif already depends on it.
+color_quant = "1.1"
