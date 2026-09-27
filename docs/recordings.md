@@ -87,8 +87,8 @@ borders join between rows, and block, quadrant and braille characters are
 drawn as shapes, so images and progress bars have no seams. Text uses DejaVu
 Sans Mono and emoji use Twemoji, in colour, both embedded in the recorder, so
 a PNG or GIF looks the same on every machine; `--font FILE` chooses another
-text font. An emoji sequence such as 👩‍👧 or 👍🏽 takes one two-cell cell, as
-rich measures it.
+text font. An emoji cluster such as 👩‍👧, 👍🏽, ❤️ or 🇺🇸 takes one cell as
+wide as rich measures it, so the columns after it line up.
 
 | Step | Meaning |
 |---|---|

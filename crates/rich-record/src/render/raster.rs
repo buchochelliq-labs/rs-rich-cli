@@ -627,7 +627,7 @@ pub fn render(snapshot: &Snapshot, theme: &Theme, fonts: &Fonts, options: &Frame
                 .map(|c| (c as u32 - 0x2800) as u8)
             {
                 draw_braille(&mut canvas, dots, left, row_top, w, h, fg);
-            } else if !(fonts.is_emoji(text, cell_info.width == 2) && {
+            } else if !(fonts.is_emoji(text, cell_info.width >= 2) && {
                 // A narrow emoji (❤️, 1️⃣) spreads into a blank cell after
                 // it, as terminals draw it.
                 let spread = cell_info.width == 1

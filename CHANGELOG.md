@@ -80,10 +80,11 @@ Entries below record subsequent releases and development.
   with an embedded DejaVu Sans Mono (Bitstream Vera licence, shipped as
   `fonts/LICENSE-DejaVu`). Emoji are drawn in colour from an embedded Twemoji
   (Twemoji Mozilla 0.7.0, CC BY 4.0, shipped as `fonts/LICENSE-Twemoji`),
-  with ZWJ sequences, skin tones and keycaps through the font's ligatures.
-  The emulator keeps a ZWJ sequence or skin-toned emoji in one two-cell cell,
-  as rich measures it; vt100 alone split 👩‍👧 over four cells and shifted
-  the rest of the row. Box-drawing characters are drawn as lines, so borders
+  with ZWJ sequences, skin tones, flags and keycaps through the font's
+  ligatures. The emulator gives each grapheme cluster one cell as wide as
+  `rich::cells::cell_len` measures it: vt100 alone split 👩‍👧 over four
+  cells, left ❤️ and 1️⃣ one cell wide and a flag's regional indicators
+  apart, and shifted the rest of the row. Box-drawing characters are drawn as lines, so borders
   join between rows, and block elements, quadrants and braille as shapes, so
   half-block and quadrant images have no seams. `Set Shell` runs a tape in
   `bash` (the default), `zsh`, `fish` or `sh`, each without the user's
