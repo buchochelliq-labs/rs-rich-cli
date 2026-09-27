@@ -34,6 +34,8 @@ pub struct Recording {
     pub rows: u16,
     /// Screenshots in the order they were taken.
     pub shots: Vec<(String, Snapshot)>,
+    /// The tape's `Mask` rewrites, applied to text grids.
+    pub masks: Vec<(fancy_regex::Regex, String)>,
     pub timeline: Timeline,
 }
 
@@ -117,7 +119,7 @@ fn wait_for(
 ) -> Result<(), TapeError> {
     let end = Instant::now() + limit;
     while Instant::now() < end {
-        if pattern.is_match(&session.contents()) {
+        if session.seen(|screen| pattern.is_match(screen)) {
             return Ok(());
         }
         if !session.alive() {
@@ -198,6 +200,11 @@ pub fn record(tape: &Tape, stem: &str, options: &Options) -> Result<Recording, T
     session.show();
     for (line, step) in &tape.steps {
         let io = |e: std::io::Error| TapeError::new(*line, e.to_string());
+        // A `Wait` matches anything shown since the step before it began, so
+        // fast output that scrolls past between polls is not missed.
+        if !matches!(step, Step::Wait { .. }) {
+            session.mark();
+        }
         match step {
             Step::TypingDelay(delay) => typing = *delay,
             Step::Timeout(limit) => timeout = *limit,
@@ -246,8 +253,16 @@ pub fn record(tape: &Tape, stem: &str, options: &Options) -> Result<Recording, T
         columns: tape.columns,
         rows: tape.rows,
         shots,
+        masks: tape.masks.clone(),
         timeline,
     })
+}
+
+impl Recording {
+    /// A screenshot's text grid, with the tape's masks applied.
+    pub fn text_grid(&self, snapshot: &Snapshot) -> String {
+        crate::tape::apply_masks(&self.masks, &snapshot.text_grid())
+    }
 }
 
 /// Which files [`write`] produces. Text grids are always written: `--check`
@@ -329,7 +344,7 @@ impl std::fmt::Display for Problem {
 pub fn check(recording: &Recording, dir: &Path) -> Vec<Problem> {
     let mut problems = Vec::new();
     for (name, snapshot) in &recording.shots {
-        let got = snapshot.text_grid();
+        let got = recording.text_grid(snapshot);
         let want = std::fs::read_to_string(dir.join(format!("{name}.txt"))).unwrap_or_default();
         if got != want {
             let diff = rich_ext::diff::TextDiff::new(&want, &got).unified("committed", "this run");
@@ -383,7 +398,10 @@ pub fn write(
         Ok(())
     };
     for (name, snapshot) in &recording.shots {
-        save(format!("{name}.txt"), snapshot.text_grid().as_bytes())?;
+        save(
+            format!("{name}.txt"),
+            recording.text_grid(snapshot).as_bytes(),
+        )?;
         if formats.svg {
             save(
                 format!("{name}.svg"),

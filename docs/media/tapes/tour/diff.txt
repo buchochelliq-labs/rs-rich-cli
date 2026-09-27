@@ -1,0 +1,28 @@
+    "art"
+  ]
+}
+rich: invalid JSON: json parse error: EOF while parsing a value at line 1 column 16
+─────────────────────────────── Inspect structured data ────────────────────────────────
+$ rich inspect deploy.yaml
+deploy.yaml
+├── service: "api"
+├── replicas: 3
+├── image
+│   ├── name: "rs-rich"
+│   └── tag: "0.0.11"
+└── ports
+    ├── [0]: 8080
+    └── [1]: 8443
+────────────────────────────────────── Text diffs ──────────────────────────────────────
+$ rich diff old.toml new.toml
+--- <tmp>/old.toml
++++ <tmp>/new.toml
+@@ -1,3 +1,4 @@
+1   - retries = 2
+  1 + retries = 3
+2 2   timeout = 30
+3   - mode = "fast"
+  3 + mode = "safe"
+  4 + log = true
+old.toml → new.toml: 3 added, 2 removed (71.4% of lines changed)
+

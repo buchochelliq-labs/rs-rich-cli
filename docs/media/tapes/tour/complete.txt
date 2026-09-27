@@ -1,0 +1,28 @@
+         .','..
+       .'ckX0o,.
+       .'lKMNd;.
+        .';c:,.
+
+
+
+
+
+0.0% of the canvas changed perceptibly
+(a plain pixel diff would say 1.4%)
+No region large enough to report.
+──────────────────────────────────── GIF animation ─────────────────────────────────────
+$ rich --gif demo.gif --loop 1 --width 40
+
+         .,::::'.
+       :xkkkkkkkkd'       .ccccccccccccc
+     .dkkkNNN0kkkkkl      ,OOOOOOOOOOOOO
+     lkkkkWMM0kkkkkk'     ,OOOOOOOOOOOOO
+     lkkkkOOOkkkkkkk'     ,OOOOOOOOOOOOO
+     .xkkkkkkkkkkkkd      ,OOOOOOOOOOOOO
+      .lxkkkkkkkkx:       'ooooooooooooo
+        .,cllll:'
+
+Sixel is available on compatible terminals; this tour uses portable image modes.
+──────────────────────────────────── Tour complete ─────────────────────────────────────
+Try rich --help for every option. Run rich --demo again to replay the tour.
+❯

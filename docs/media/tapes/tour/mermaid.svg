@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 882.8 655.4" font-family="Fira Code, DejaVu Sans Mono, Menlo, monospace" font-size="16">
+<rect width="100%" height="100%" rx="9" fill="#292929" stroke="#464646"/>
+<path d="M0 9a9 9 0 0 1 9-9h864.8a9 9 0 0 1 9 9v26h-882.8z" fill="#1e1e1e"/>
+<circle cx="19" cy="17.5" r="6" fill="#ff5f56"/>
+<circle cx="41" cy="17.5" r="6" fill="#ffbd2e"/>
+<circle cx="63" cy="17.5" r="6" fill="#27c93f"/>
+<text x="441.4" y="22.5" fill="#969696" font-family="DejaVu Sans, sans-serif" font-size="13" text-anchor="middle">rich --demo · the guided tour</text>
+<text x="19.0" y="69.6" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│ 12     │ ESC[0m    │ SGR     │ reset               │                                  </text>
+<text x="19.0" y="90.4" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│ 16     │  done     │ text    │ 5 characters        │                                  </text>
+<text x="19.0" y="111.2" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│ 21     │ &lt;LF&gt;      │ control │ line feed (newline) │                                  </text>
+<text x="19.0" y="132.0" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">└────────┴───────────┴─────────┴─────────────────────┘                                  </text>
+<text x="19.0" y="152.8" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Visible text:                                                                           </text>
+<text x="19.0" y="173.6" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Error done                                                                              </text>
+<text x="19.0" y="215.2" fill="#00823d" textLength="326.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">───────────────────────────────── </text>
+<text x="345.4" y="215.2" fill="#c5c8c6" textLength="192.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Upstream theme files</text>
+<text x="537.4" y="215.2" fill="#00823d" textLength="326.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> ─────────────────────────────────</text>
+<text x="19.0" y="236.0" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">$ rich --theme-file demo.theme --print '[release]0.0.11[/] adds inspectors'             </text>
+<text x="19.0" y="256.8" fill="#ff2c7a" font-weight="bold" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">0.0.11</text>
+<text x="76.6" y="256.8" fill="#c5c8c6" textLength="787.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> adds inspectors                                                                  </text>
+<text x="19.0" y="277.6" fill="#00823d" textLength="259.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">────────────────────────── </text>
+<text x="278.2" y="277.6" fill="#c5c8c6" textLength="316.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Capture a command, with redaction</text>
+<text x="595.0" y="277.6" fill="#00823d" textLength="268.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> ───────────────────────────</text>
+<text x="19.0" y="298.4" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Redaction is experimental and best effort: check captures before sharing them.          </text>
+<text x="19.0" y="319.2" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">$ rich capture --redact -- sh -c 'echo deploy                                           </text>
+<text x="19.0" y="340.0" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">token=ghp_0123456789abcdefghijklmnopqrstuvwxyzAB'                                       </text>
+<text x="19.0" y="360.8" fill="#98a84b" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╭─────── $ sh -c 'echo deploy token=******************************************' ───────╮</text>
+<text x="19.0" y="381.6" fill="#98a84b" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="28.6" y="381.6" fill="#c5c8c6" textLength="825.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> deploy token=******************************************                              </text>
+<text x="854.2" y="381.6" fill="#98a84b" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="19.0" y="402.4" fill="#98a84b" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╰──────────────────────────────────── exit 0 · 1ms ────────────────────────────────────╯</text>
+<text x="19.0" y="423.2" fill="#00823d" textLength="336.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">────────────────────────────────── </text>
+<text x="355.0" y="423.2" fill="#c5c8c6" textLength="172.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Mermaid flowcharts</text>
+<text x="527.8" y="423.2" fill="#00823d" textLength="336.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> ──────────────────────────────────</text>
+<text x="19.0" y="444.0" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">$ rich mermaid flow.mmd                                                                 </text>
+<text x="19.0" y="464.8" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">                               ┌─────────┐  ╭──────╮                                    </text>
+<text x="19.0" y="485.6" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">              ┌────────────┐ ┌►│ Mermaid ├─►( rich )                                    </text>
+<text x="19.0" y="506.4" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">┌─────────┐ ┌►│ plugin API ├─┘ └─────────┘  ╰──────╯                                    </text>
+<text x="19.0" y="527.2" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│ rs-rich ├─┘ │            ├─┐                                                          </text>
+<text x="19.0" y="548.0" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">└─────────┘   └────────────┘ │ ┌───────┐                                                </text>
+<text x="19.0" y="568.8" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">                             └►│ lumis │                                                </text>
+<text x="19.0" y="589.6" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">                               └───────┘                                                </text>
+<rect x="19.0" y="615.6" width="9.6" height="20.8" fill="#c5c8c6" opacity="0.7"/>
+</svg>

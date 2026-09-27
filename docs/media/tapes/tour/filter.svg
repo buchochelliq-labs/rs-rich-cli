@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 882.8 655.4" font-family="Fira Code, DejaVu Sans Mono, Menlo, monospace" font-size="16">
+<rect width="100%" height="100%" rx="9" fill="#292929" stroke="#464646"/>
+<path d="M0 9a9 9 0 0 1 9-9h864.8a9 9 0 0 1 9 9v26h-882.8z" fill="#1e1e1e"/>
+<circle cx="19" cy="17.5" r="6" fill="#ff5f56"/>
+<circle cx="41" cy="17.5" r="6" fill="#ffbd2e"/>
+<circle cx="63" cy="17.5" r="6" fill="#27c93f"/>
+<text x="441.4" y="22.5" fill="#969696" font-family="DejaVu Sans, sans-serif" font-size="13" text-anchor="middle">rich --demo · the guided tour</text>
+<text x="19.0" y="69.6" fill="#98a84b" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╰──────────────────────────────────── exit 0 · 1ms ────────────────────────────────────╯</text>
+<text x="19.0" y="90.4" fill="#00823d" textLength="336.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">────────────────────────────────── </text>
+<text x="355.0" y="90.4" fill="#c5c8c6" textLength="172.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Mermaid flowcharts</text>
+<text x="527.8" y="90.4" fill="#00823d" textLength="336.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> ──────────────────────────────────</text>
+<text x="19.0" y="111.2" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">$ rich mermaid flow.mmd                                                                 </text>
+<text x="19.0" y="132.0" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">                               ┌─────────┐  ╭──────╮                                    </text>
+<text x="19.0" y="152.8" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">              ┌────────────┐ ┌►│ Mermaid ├─►( rich )                                    </text>
+<text x="19.0" y="173.6" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">┌─────────┐ ┌►│ plugin API ├─┘ └─────────┘  ╰──────╯                                    </text>
+<text x="19.0" y="194.4" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│ rs-rich ├─┘ │            ├─┐                                                          </text>
+<text x="19.0" y="215.2" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">└─────────┘   └────────────┘ │ ┌───────┐                                                </text>
+<text x="19.0" y="236.0" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">                             └►│ lumis │                                                </text>
+<text x="19.0" y="256.8" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">                               └───────┘                                                </text>
+<text x="19.0" y="298.4" fill="#00823d" textLength="364.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">───────────────────────────────────── </text>
+<text x="383.8" y="298.4" fill="#c5c8c6" textLength="105.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Code themes</text>
+<text x="489.4" y="298.4" fill="#00823d" textLength="374.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> ──────────────────────────────────────</text>
+<text x="19.0" y="319.2" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">$ rich --syntax worker.rs --code-theme ansi_dark                                        </text>
+<text x="19.0" y="340.0" fill="#1984e9" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">fn</text>
+<text x="47.8" y="340.0" fill="#00823d" textLength="48.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">retry</text>
+<text x="95.8" y="340.0" fill="#c5c8c6" textLength="211.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">(job: &amp;Job, attempts: </text>
+<text x="307.0" y="340.0" fill="#1984e9" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">u32</text>
+<text x="335.8" y="340.0" fill="#c5c8c6" textLength="528.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">) -&gt; Result&lt;(), Error&gt; {                               </text>
+<text x="57.4" y="360.8" fill="#1984e9" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">for</text>
+<text x="86.2" y="360.8" fill="#c5c8c6" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> n in </text>
+<text x="143.8" y="360.8" fill="#1984e9" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">0</text>
+<text x="153.4" y="360.8" fill="#c5c8c6" textLength="710.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">..attempts {                                                              </text>
+<text x="95.8" y="381.6" fill="#1984e9" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">if</text>
+<text x="115.0" y="381.6" fill="#c5c8c6" textLength="748.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> job.run().is_ok() {                                                          </text>
+<text x="134.2" y="402.4" fill="#1984e9" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">return</text>
+<text x="201.4" y="402.4" fill="#398280" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Ok</text>
+<text x="220.6" y="402.4" fill="#c5c8c6" textLength="643.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">(());                                                              </text>
+<text x="19.0" y="423.2" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">        }                                                                               </text>
+<text x="19.0" y="444.0" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">    }                                                                                   </text>
+<text x="57.4" y="464.8" fill="#398280" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Err</text>
+<text x="86.2" y="464.8" fill="#c5c8c6" textLength="777.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">(Error::GaveUp(attempts))                                                        </text>
+<text x="19.0" y="485.6" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">}                                                                                       </text>
+<text x="19.0" y="527.2" fill="#00823d" textLength="326.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">───────────────────────────────── </text>
+<text x="345.4" y="527.2" fill="#c5c8c6" textLength="192.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Filter and highlight</text>
+<text x="537.4" y="527.2" fill="#00823d" textLength="326.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> ─────────────────────────────────</text>
+<text x="19.0" y="548.0" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">$ rich service.log --filter ERROR --highlight 'timeout|refused'                         </text>
+<rect x="19.0" y="553.2" width="144.0" height="20.8" fill="#2b303b"/>
+<text x="19.0" y="568.8" fill="#c0c5ce" textLength="144.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">ERROR upstream </text>
+<rect x="163.0" y="553.2" width="67.2" height="20.8" fill="#c0c5ce"/>
+<text x="163.0" y="568.8" fill="#2b303b" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">timeout</text>
+<rect x="230.2" y="553.2" width="96.0" height="20.8" fill="#2b303b"/>
+<text x="230.2" y="568.8" fill="#c0c5ce" textLength="96.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> after 30s</text>
+<rect x="326.2" y="553.2" width="537.6" height="20.8" fill="#2b303b"/>
+<rect x="19.0" y="574.0" width="163.2" height="20.8" fill="#2b303b"/>
+<text x="19.0" y="589.6" fill="#c0c5ce" textLength="163.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">ERROR connection </text>
+<rect x="182.2" y="574.0" width="67.2" height="20.8" fill="#c0c5ce"/>
+<text x="182.2" y="589.6" fill="#2b303b" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">refused</text>
+<rect x="249.4" y="574.0" width="105.6" height="20.8" fill="#2b303b"/>
+<text x="249.4" y="589.6" fill="#c0c5ce" textLength="105.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> by db:5432</text>
+<rect x="355.0" y="574.0" width="508.8" height="20.8" fill="#2b303b"/>
+<rect x="19.0" y="594.8" width="844.8" height="20.8" fill="#2b303b"/>
+<rect x="19.0" y="615.6" width="9.6" height="20.8" fill="#c5c8c6" opacity="0.7"/>
+</svg>
