@@ -47,4 +47,8 @@ Linux and macOS are supported. Windows builds through ConPTY but needs `bash`
 on `PATH`, and is experimental.
 
 Text in PNG and GIF output uses DejaVu Sans Mono, embedded in the crate under
-the Bitstream Vera licence (see `fonts/LICENSE-DejaVu`).
+the Bitstream Vera licence (see `fonts/LICENSE-DejaVu`). Emoji are drawn in
+colour from Twemoji, also embedded, under CC BY 4.0 (see
+`fonts/LICENSE-Twemoji`). Emoji ZWJ sequences and skin tones keep one cell, as
+rich measures them, and box-drawing, block and braille characters are drawn as
+geometry, so borders join and block images have no seams.

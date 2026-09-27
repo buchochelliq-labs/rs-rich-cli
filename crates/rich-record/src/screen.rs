@@ -117,6 +117,16 @@ impl Snapshot {
     /// bold turns the eight standard foreground colours bright, as most
     /// terminals do; dim blends the foreground halfway to the background.
     pub fn from_screen(screen: &vt100::Screen, theme: &Theme) -> Snapshot {
+        Snapshot::read(screen, theme, std::borrow::Cow::Borrowed)
+    }
+
+    /// [`Snapshot::from_screen`], with each cell's text passed through
+    /// `text` (see [`crate::terminal::Terminal`]).
+    pub(crate) fn read<'a>(
+        screen: &'a vt100::Screen,
+        theme: &Theme,
+        text: impl Fn(&'a str) -> std::borrow::Cow<'a, str>,
+    ) -> Snapshot {
         let (height, width) = screen.size();
         let mut rows = Vec::with_capacity(height as usize);
         for y in 0..height {
@@ -142,7 +152,7 @@ impl Snapshot {
                     (String::new(), 0)
                 } else if cell.has_contents() {
                     (
-                        cell.contents().to_string(),
+                        text(cell.contents()).into_owned(),
                         if cell.is_wide() { 2 } else { 1 },
                     )
                 } else {

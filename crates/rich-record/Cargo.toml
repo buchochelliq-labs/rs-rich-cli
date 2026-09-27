@@ -36,8 +36,11 @@ serde_json.workspace = true
 portable-pty = "0.9"
 # The VT emulator that follows the screen.
 vt100 = "0.16"
-# PNG and GIF output: glyphs from the embedded DejaVu Sans Mono.
+unicode-width = "0.2"
+# PNG and GIF output: glyphs from the embedded DejaVu Sans Mono, emoji from
+# the embedded Twemoji (COLR layers and ZWJ ligatures read with ttf-parser).
 fontdue = "0.9"
+ttf-parser = { version = "0.25", default-features = false, features = ["std", "opentype-layout"] }
 png = "0.18"
 gif = "0.14"
 # One NeuQuant pass per GIF (not per frame); gif already depends on it.

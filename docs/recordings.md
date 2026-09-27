@@ -83,9 +83,12 @@ From one run it writes, under `docs/media/tapes/<tape>/`:
   versions, and the commit.
 
 Box-drawing characters are drawn as lines rather than font glyphs, so table
-borders join between rows. Text uses DejaVu Sans Mono, embedded in the
-recorder, so a PNG or GIF looks the same on every machine; `--font FILE`
-chooses another font.
+borders join between rows, and block, quadrant and braille characters are
+drawn as shapes, so images and progress bars have no seams. Text uses DejaVu
+Sans Mono and emoji use Twemoji, in colour, both embedded in the recorder, so
+a PNG or GIF looks the same on every machine; `--font FILE` chooses another
+text font. An emoji sequence such as 👩‍👧 or 👍🏽 takes one two-cell cell, as
+rich measures it.
 
 | Step | Meaning |
 |---|---|

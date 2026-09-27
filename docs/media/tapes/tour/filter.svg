@@ -5,7 +5,7 @@
 <circle cx="41" cy="17.5" r="6" fill="#ffbd2e"/>
 <circle cx="63" cy="17.5" r="6" fill="#27c93f"/>
 <text x="441.4" y="22.5" fill="#969696" font-family="DejaVu Sans, sans-serif" font-size="13" text-anchor="middle">rich --demo · the guided tour</text>
-<text x="19.0" y="69.6" fill="#98a84b" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╰──────────────────────────────────── exit 0 · 1ms ────────────────────────────────────╯</text>
+<text x="19.0" y="69.6" fill="#98a84b" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╰──────────────────────────────────── exit 0 · 2ms ────────────────────────────────────╯</text>
 <text x="19.0" y="90.4" fill="#00823d" textLength="336.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">────────────────────────────────── </text>
 <text x="355.0" y="90.4" fill="#c5c8c6" textLength="172.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Mermaid flowcharts</text>
 <text x="527.8" y="90.4" fill="#00823d" textLength="336.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> ──────────────────────────────────</text>
