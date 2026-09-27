@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 882.8 655.4" font-family="Fira Code, DejaVu Sans Mono, Menlo, monospace" font-size="16">
+<rect width="100%" height="100%" rx="9" fill="#292929" stroke="#464646"/>
+<path d="M0 9a9 9 0 0 1 9-9h864.8a9 9 0 0 1 9 9v26h-882.8z" fill="#1e1e1e"/>
+<circle cx="19" cy="17.5" r="6" fill="#ff5f56"/>
+<circle cx="41" cy="17.5" r="6" fill="#ffbd2e"/>
+<circle cx="63" cy="17.5" r="6" fill="#27c93f"/>
+<text x="441.4" y="22.5" fill="#969696" font-family="DejaVu Sans, sans-serif" font-size="13" text-anchor="middle">rich --demo · the guided tour</text>
+<text x="19.0" y="69.6" fill="#1984e9" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">fn</text>
+<text x="47.8" y="69.6" fill="#00823d" textLength="48.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">retry</text>
+<text x="95.8" y="69.6" fill="#c5c8c6" textLength="211.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">(job: &amp;Job, attempts: </text>
+<text x="307.0" y="69.6" fill="#1984e9" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">u32</text>
+<text x="335.8" y="69.6" fill="#c5c8c6" textLength="528.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">) -&gt; Result&lt;(), Error&gt; {                               </text>
+<text x="57.4" y="90.4" fill="#1984e9" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">for</text>
+<text x="86.2" y="90.4" fill="#c5c8c6" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> n in </text>
+<text x="143.8" y="90.4" fill="#1984e9" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">0</text>
+<text x="153.4" y="90.4" fill="#c5c8c6" textLength="710.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">..attempts {                                                              </text>
+<text x="95.8" y="111.2" fill="#1984e9" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">if</text>
+<text x="115.0" y="111.2" fill="#c5c8c6" textLength="748.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> job.run().is_ok() {                                                          </text>
+<text x="134.2" y="132.0" fill="#1984e9" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">return</text>
+<text x="201.4" y="132.0" fill="#398280" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Ok</text>
+<text x="220.6" y="132.0" fill="#c5c8c6" textLength="643.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">(());                                                              </text>
+<text x="19.0" y="152.8" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">        }                                                                               </text>
+<text x="19.0" y="173.6" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">    }                                                                                   </text>
+<text x="57.4" y="194.4" fill="#398280" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Err</text>
+<text x="86.2" y="194.4" fill="#c5c8c6" textLength="777.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">(Error::GaveUp(attempts))                                                        </text>
+<text x="19.0" y="215.2" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">}                                                                                       </text>
+<text x="19.0" y="256.8" fill="#00823d" textLength="326.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">───────────────────────────────── </text>
+<text x="345.4" y="256.8" fill="#c5c8c6" textLength="192.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Filter and highlight</text>
+<text x="537.4" y="256.8" fill="#00823d" textLength="326.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> ─────────────────────────────────</text>
+<text x="19.0" y="277.6" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">$ rich service.log --filter ERROR --highlight 'timeout|refused'                         </text>
+<rect x="19.0" y="282.8" width="144.0" height="20.8" fill="#2b303b"/>
+<text x="19.0" y="298.4" fill="#c0c5ce" textLength="144.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">ERROR upstream </text>
+<rect x="163.0" y="282.8" width="67.2" height="20.8" fill="#c0c5ce"/>
+<text x="163.0" y="298.4" fill="#2b303b" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">timeout</text>
+<rect x="230.2" y="282.8" width="96.0" height="20.8" fill="#2b303b"/>
+<text x="230.2" y="298.4" fill="#c0c5ce" textLength="96.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> after 30s</text>
+<rect x="326.2" y="282.8" width="537.6" height="20.8" fill="#2b303b"/>
+<rect x="19.0" y="303.6" width="163.2" height="20.8" fill="#2b303b"/>
+<text x="19.0" y="319.2" fill="#c0c5ce" textLength="163.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">ERROR connection </text>
+<rect x="182.2" y="303.6" width="67.2" height="20.8" fill="#c0c5ce"/>
+<text x="182.2" y="319.2" fill="#2b303b" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">refused</text>
+<rect x="249.4" y="303.6" width="105.6" height="20.8" fill="#2b303b"/>
+<text x="249.4" y="319.2" fill="#c0c5ce" textLength="105.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> by db:5432</text>
+<rect x="355.0" y="303.6" width="508.8" height="20.8" fill="#2b303b"/>
+<rect x="19.0" y="324.4" width="844.8" height="20.8" fill="#2b303b"/>
+<text x="19.0" y="360.8" fill="#00823d" textLength="249.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">───────────────────────── </text>
+<text x="268.6" y="360.8" fill="#c5c8c6" textLength="345.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Pager, input and confidence controls</text>
+<text x="614.2" y="360.8" fill="#00823d" textLength="249.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> ─────────────────────────</text>
+<text x="19.0" y="381.6" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">--auto-pager opens a pager for tall TTY output; --no-pager opts out.                    </text>
+<text x="19.0" y="402.4" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">URL fetch, encoding, sanitization and JSON reports support scripts and CI.              </text>
+<text x="19.0" y="423.2" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">The tour stays offline and does not open an external pager.                             </text>
+<text x="19.0" y="444.0" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">$ rich --print --sanitize '&lt;ESC&gt;[31m visible controls'                                  </text>
+<text x="19.0" y="464.8" fill="#c5c8c6" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">␛</text>
+<text x="28.6" y="464.8" fill="#c5c8c6" font-weight="bold" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">[</text>
+<text x="38.2" y="464.8" fill="#398280" font-weight="bold" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">31</text>
+<text x="57.4" y="464.8" fill="#c5c8c6" textLength="806.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">m visible controls                                                                  </text>
+<text x="19.0" y="485.6" fill="#00823d" textLength="355.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">──────────────────────────────────── </text>
+<text x="374.2" y="485.6" fill="#c5c8c6" textLength="134.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">FIGlet banners</text>
+<text x="508.6" y="485.6" fill="#00823d" textLength="355.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> ────────────────────────────────────</text>
+<text x="19.0" y="506.4" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> ____  ___ ____ _   _                                                                   </text>
+<text x="19.0" y="527.2" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">|  _ \|_ _/ ___| | | |                                                                  </text>
+<text x="19.0" y="548.0" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">| |_) || | |   | |_| |                                                                  </text>
+<text x="19.0" y="568.8" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">|  _ &lt; | | |___|  _  |                                                                  </text>
+<text x="19.0" y="589.6" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">|_| \_\___\____|_| |_|                                                                  </text>
+<rect x="19.0" y="615.6" width="9.6" height="20.8" fill="#c5c8c6" opacity="0.7"/>
+</svg>

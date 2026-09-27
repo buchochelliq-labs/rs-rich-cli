@@ -86,6 +86,22 @@ Entries below record subsequent releases and development.
   `--bin-dir` and `--font`. It reproduced every screenshot the Python runner
   had committed, so the "docs tapes up to date" CI job now runs
   `rich record --check`, and `scripts/tape.py` is removed.
+- **Every terminal recording is now made in Rust.** The guided tour is a tape
+  (`docs/tapes/tour.tape`), and the README and demos page show its recording.
+  The Python capture scripts are removed: `capture_demo_tour.py`,
+  `capture_release_demos.py`, `capture_v8_demos.py`, `capture_v9_demos.py`,
+  `capture_expanded_v9.py`, `capture_image_modes_010.py`,
+  `build_docs_media.py` and the `terminal_shots` kit. The media they made is
+  kept, with pointers to where they last existed. `capture_golden.py` stays: it
+  runs upstream Python `rich` for the parity goldens.
+- **Faster GIFs.** One palette per recording, frames rendered in parallel, and
+  fast paths for fills. Two tapes take 0.63 s of CPU in release (was 1.83 s)
+  and 2.1 s in debug (was about 66 s). The recorder's image crates are
+  optimised in dev builds too.
+- **`Mask /regex/ "text"`** hides output that varies between runs (temporary
+  paths, timings) from the text grids `--check` compares; images keep what was
+  shown. **`Wait`** now also matches text shown since the previous step, so
+  fast output that scrolls past between polls is not missed.
 
 ### Ext (0.0.11, unreleased)
 

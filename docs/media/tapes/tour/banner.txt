@@ -1,0 +1,28 @@
+fn retry(job: &Job, attempts: u32) -> Result<(), Error> {
+    for n in 0..attempts {
+        if job.run().is_ok() {
+            return Ok(());
+        }
+    }
+    Err(Error::GaveUp(attempts))
+}
+
+───────────────────────────────── Filter and highlight ─────────────────────────────────
+$ rich service.log --filter ERROR --highlight 'timeout|refused'
+ERROR upstream timeout after 30s
+ERROR connection refused by db:5432
+
+───────────────────────── Pager, input and confidence controls ─────────────────────────
+--auto-pager opens a pager for tall TTY output; --no-pager opts out.
+URL fetch, encoding, sanitization and JSON reports support scripts and CI.
+The tour stays offline and does not open an external pager.
+$ rich --print --sanitize '<ESC>[31m visible controls'
+␛[31m visible controls
+──────────────────────────────────── FIGlet banners ────────────────────────────────────
+ ____  ___ ____ _   _
+|  _ \|_ _/ ___| | | |
+| |_) || | |   | |_| |
+|  _ < | | |___|  _  |
+|_| \_\___\____|_| |_|
+
+

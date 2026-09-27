@@ -1,0 +1,28 @@
+╰── exit · Nms ──╯
+────────────────────────────────── Mermaid flowcharts ──────────────────────────────────
+$ rich mermaid flow.mmd
+                               ┌─────────┐  ╭──────╮
+              ┌────────────┐ ┌►│ Mermaid ├─►( rich )
+┌─────────┐ ┌►│ plugin API ├─┘ └─────────┘  ╰──────╯
+│ rs-rich ├─┘ │            ├─┐
+└─────────┘   └────────────┘ │ ┌───────┐
+                             └►│ lumis │
+                               └───────┘
+
+───────────────────────────────────── Code themes ──────────────────────────────────────
+$ rich --syntax worker.rs --code-theme ansi_dark
+fn retry(job: &Job, attempts: u32) -> Result<(), Error> {
+    for n in 0..attempts {
+        if job.run().is_ok() {
+            return Ok(());
+        }
+    }
+    Err(Error::GaveUp(attempts))
+}
+
+───────────────────────────────── Filter and highlight ─────────────────────────────────
+$ rich service.log --filter ERROR --highlight 'timeout|refused'
+ERROR upstream timeout after 30s
+ERROR connection refused by db:5432
+
+

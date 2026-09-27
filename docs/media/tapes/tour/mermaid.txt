@@ -1,0 +1,28 @@
+│ 12     │ ESC[0m    │ SGR     │ reset               │
+│ 16     │  done     │ text    │ 5 characters        │
+│ 21     │ <LF>      │ control │ line feed (newline) │
+└────────┴───────────┴─────────┴─────────────────────┘
+Visible text:
+Error done
+
+───────────────────────────────── Upstream theme files ─────────────────────────────────
+$ rich --theme-file demo.theme --print '[release]0.0.11[/] adds inspectors'
+0.0.11 adds inspectors
+────────────────────────── Capture a command, with redaction ───────────────────────────
+Redaction is experimental and best effort: check captures before sharing them.
+$ rich capture --redact -- sh -c 'echo deploy
+token=ghp_0123456789abcdefghijklmnopqrstuvwxyzAB'
+╭─────── $ sh -c 'echo deploy token=******************************************' ───────╮
+│ deploy token=******************************************                              │
+╰── exit · Nms ──╯
+────────────────────────────────── Mermaid flowcharts ──────────────────────────────────
+$ rich mermaid flow.mmd
+                               ┌─────────┐  ╭──────╮
+              ┌────────────┐ ┌►│ Mermaid ├─►( rich )
+┌─────────┐ ┌►│ plugin API ├─┘ └─────────┘  ╰──────╯
+│ rs-rich ├─┘ │            ├─┐
+└─────────┘   └────────────┘ │ ┌───────┐
+                             └►│ lumis │
+                               └───────┘
+
+

@@ -21,14 +21,14 @@ Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
 **[Play the terminal recordings](https://buchochelliq-labs.github.io/rs-rich-cli/recordings/)**:
 real sessions you can pause and copy text from, re-run by CI on every change.
 
-![The rich CLI 0.0.12 demo tour](docs/assets/demos/v12-demo-tour.gif)
+![The guided tour of the rich CLI, recorded by rich record](docs/media/tapes/tour/tour.gif)
 
 **[Watch the CLI and art videos](https://buchochelliq-labs.github.io/rs-rich-cli/demos/)** ·
 [User guide](docs/guide/index.md) · [Output gallery](docs/gallery.md) · [CLI guide](docs/cli.md)
 
-This preview is the recorded 0.0.12 demo tour: the 0.0.11 inspectors, then
-Mermaid flowcharts drawn as text, code themes in the terminal's own palette,
-`--filter` and `--highlight`, and native image sizing.
+This is the guided tour (`rich --demo`), recorded from a tape by `rich record`
+in a real terminal: inspectors, diffs, Mermaid flowcharts drawn as text, code
+themes, `--filter` and `--highlight`, banners and images.
 [Tour and reproduction](docs/demos.md) ·
 [0.0.12 release notes](docs/releases/0.0.12.md).
 

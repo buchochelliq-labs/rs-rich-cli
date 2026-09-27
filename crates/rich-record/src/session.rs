@@ -39,6 +39,9 @@ struct State {
     hidden_total: Duration,
     start: Instant,
     utf8: Vec<u8>,
+    /// Every screen shown since the last [`Session::mark`], so a `Wait`
+    /// sees text that scrolled away between polls.
+    seen: Vec<String>,
     timeline: Timeline,
     alive: bool,
 }
@@ -127,6 +130,7 @@ impl Session {
             hidden_total: Duration::ZERO,
             start: now,
             utf8: Vec::new(),
+            seen: Vec::new(),
             timeline: Timeline::default(),
             alive: true,
         }));
@@ -140,6 +144,10 @@ impl Session {
                 };
                 let mut state = shared.lock().expect("session state");
                 state.parser.process(&buffer[..read]);
+                let screen = state.parser.screen().contents();
+                if state.seen.last() != Some(&screen) {
+                    state.seen.push(screen);
+                }
                 if !state.hidden {
                     let t = state.now();
                     state.utf8.extend_from_slice(&buffer[..read]);
@@ -203,6 +211,21 @@ impl Session {
             state.frame(t);
         }
         Ok(())
+    }
+
+    /// Forget the screens seen so far: the next [`Session::seen`] starts
+    /// from the current screen.
+    pub fn mark(&self) {
+        let mut state = self.lock();
+        let screen = state.parser.screen().contents();
+        state.seen = vec![screen];
+    }
+
+    /// Whether `test` holds for the current screen or any screen shown since
+    /// the last [`Session::mark`].
+    pub fn seen(&self, test: impl Fn(&str) -> bool) -> bool {
+        let state = self.lock();
+        test(&state.parser.screen().contents()) || state.seen.iter().any(|screen| test(screen))
     }
 
     /// The screen's text, rows joined by line breaks.

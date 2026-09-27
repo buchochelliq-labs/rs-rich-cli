@@ -709,9 +709,8 @@ let art = ImageArt::from_path("photo.png")?
 
 This is a historical capture from the 0.0.10 binary; it predates Atkinson,
 OKLab and the Sixel/GIF colour modes. Every panel is the binary's own SVG export
-of one gradient fixture. The script that made it,
-`python scripts/capture_image_modes_010.py --binary target/release/rich`, checks
-for a 0.0.10 binary.
+of one gradient fixture. It was made by `scripts/capture_image_modes_010.py`,
+since replaced by `rich record` (see it at commit `9157264`).
 
 ## Watch a changing file
 
@@ -1338,8 +1337,8 @@ adapters without installing a global logger automatically.
 
 ![Actual structured diagnostic and layout export](media/expanded-v9/cli-v9-diagnostics.png)
 
-These are real renderer outputs; reproduce them with
-`python scripts/capture_expanded_v9.py --binary target/debug/rich` after building.
+These are real renderer outputs, made by `scripts/capture_expanded_v9.py`
+(since replaced by `rich record`; see it at commit `9157264`).
 Raw HTML/SVG exports, source fixture and provenance accompany the previews.
 Braille uses fixed luminance thresholding with 2×4 dot cells; half-block uses top
 foreground/bottom background pairs. Tests enumerate all eight Braille positions,

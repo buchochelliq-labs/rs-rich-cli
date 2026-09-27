@@ -13,10 +13,12 @@
 //! Enter  Tab  Space  Backspace  Escape  Up  Down  Left  Right
 //! Home  End  PageUp  PageDown  Ctrl+C   # keys; an optional count repeats
 //! Sleep 500ms
-//! Wait "text"                # until the screen shows it (or /regex/ [timeout])
+//! Wait "text"                # until the screen shows it, or has since the last
+//!                            # step began (or /regex/ [timeout])
 //! Screenshot name
 //! Hide / Show                # steps between them are not recorded
 //! Resize 80x24
+//! Mask /\/tmp\/\S+/ "<tmp>"  # in text grids only: hide output that varies
 //! ```
 //!
 //! This is the format of the first, Python tape runner (#598), unchanged, so
@@ -205,6 +207,10 @@ pub struct Tape {
     pub rows: u16,
     pub title: Option<String>,
     pub env: Vec<(String, String)>,
+    /// Rewrites applied to text grids (what `--check` compares), for output
+    /// that differs on every run: temporary paths, timings. Images and casts
+    /// keep what was recorded.
+    pub masks: Vec<(Regex, String)>,
     pub steps: Vec<(usize, Step)>,
 }
 
@@ -219,6 +225,15 @@ impl Tape {
             })
             .collect()
     }
+}
+
+/// Apply `Mask` rewrites in order.
+pub fn apply_masks(masks: &[(Regex, String)], text: &str) -> String {
+    let mut text = text.to_string();
+    for (regex, replacement) in masks {
+        text = regex.replace_all(&text, replacement.as_str()).into_owned();
+    }
+    text
 }
 
 /// `500ms` or `2s` (fractions allowed).
@@ -333,9 +348,11 @@ pub fn parse(source: &str) -> Result<Tape, TapeError> {
         rows: 28,
         title: None,
         env: Vec::new(),
+        masks: Vec::new(),
         steps: Vec::new(),
     };
     let wait_regex = Regex::new(r"^Wait\s+/(.*)/(?:\s+(\S+))?$").expect("valid regex");
+    let mask_regex = Regex::new(r"^Mask\s+/(.*)/\s+(.+)$").expect("valid regex");
     for (index, line) in source.lines().enumerate() {
         let number = index + 1;
         let trimmed = line.trim();
@@ -343,6 +360,16 @@ pub fn parse(source: &str) -> Result<Tape, TapeError> {
             continue;
         }
         let error = |message: String| TapeError::new(number, message);
+        if let Ok(Some(captures)) = mask_regex.captures(trimmed) {
+            let regex = Regex::new(&captures[1])
+                .map_err(|e| error(format!("bad regex /{}/: {e}", &captures[1])))?;
+            let replacement = match words(&captures[2]).map_err(error)?.as_slice() {
+                [one] => one.clone(),
+                _ => return Err(error("Mask needs /regex/ and one replacement".into())),
+            };
+            tape.masks.push((regex, replacement));
+            continue;
+        }
         // A /regex/ is kept whole, backslashes included.
         if let Ok(Some(captures)) = wait_regex.captures(trimmed) {
             let regex = Regex::new(&captures[1])
@@ -489,6 +516,17 @@ mod tests {
             other => panic!("{other:?}"),
         }
         assert_eq!(tape.steps[8].0, 13);
+    }
+
+    #[test]
+    fn masks_rewrite_text() {
+        let tape = parse("Mask /\\/tmp\\/\\S+/ \"<tmp>\"\nMask /\\d+ms/ \"Nms\"\n").unwrap();
+        assert_eq!(tape.masks.len(), 2);
+        assert_eq!(
+            apply_masks(&tape.masks, "at /tmp/x1/a.toml in 12ms"),
+            "at <tmp> in Nms"
+        );
+        assert!(parse("Mask /x/").is_err());
     }
 
     #[test]

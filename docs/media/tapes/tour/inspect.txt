@@ -1,0 +1,28 @@
+}
+Created preview.svg; all demo exports are removed when the tour finishes.
+──────────────────────────────────── Watch updates ─────────────────────────────────────
+$ rich --watch --watch-exit-on-error first.json second.json
+  (two edits to first.json repaint only its region; invalid JSON then ends the watch)
+first.json ────────────────────────────────────────────────────────────────────────────
+rich: invalid JSON: json parse error: EOF while parsing a value at line 1 column 16
+second.json ───────────────────────────────────────────────────────────────────────────
+{
+  "features": [
+    "config",
+    "batch",
+    "art"
+  ]
+}
+rich: invalid JSON: json parse error: EOF while parsing a value at line 1 column 16
+─────────────────────────────── Inspect structured data ────────────────────────────────
+$ rich inspect deploy.yaml
+deploy.yaml
+├── service: "api"
+├── replicas: 3
+├── image
+│   ├── name: "rs-rich"
+│   └── tag: "0.0.11"
+└── ports
+    ├── [0]: 8080
+    └── [1]: 8443
+

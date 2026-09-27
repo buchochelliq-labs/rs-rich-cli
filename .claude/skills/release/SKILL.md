@@ -83,6 +83,17 @@ selection, then regenerate version docs and CLI help. Move only the selected
 changes from `Unreleased` under the appropriate release heading when finalizing
 the release. Record tests and actual screenshot evidence in the PR.
 
+Screenshots, the guided tour and every other terminal recording come from
+tapes (`docs/tapes/*.tape`) recorded by `rich record`, never from ad hoc
+scripts. Add a tape for each new user-visible command, then regenerate with the
+release build and share the media:
+
+```bash
+cargo build --release -p rs-rich-cli --locked
+target/release/rich record --bin-dir target/release --output docs/media/tapes docs/tapes/*.tape
+target/release/rich record --check --bin-dir target/release --output docs/media/tapes docs/tapes/*.tape
+```
+
 Before calling the PR ready, take and report the final readiness snapshot:
 
 ```bash

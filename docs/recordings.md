@@ -93,11 +93,12 @@ chooses another font.
 | `Write FILE "text"`, `Exec "command"` | Prepare or change files, outside the terminal |
 | `Type "text"` | Type into the terminal, one character at a time |
 | `Enter`, `Tab`, `Space`, `Backspace`, `Escape`, arrows, `Home`, `End`, `PageUp`, `PageDown`, `Ctrl+C` | Press a key; a number after it repeats it |
-| `Wait "text"`, `Wait /regex/` | Wait until the screen shows it |
+| `Wait "text"`, `Wait /regex/` | Wait until the screen shows it, or has since the previous step began (so fast output that scrolls past is not missed) |
 | `Sleep 500ms` | Pause the recording |
 | `Screenshot NAME` | Save the screen |
 | `Hide`, `Show` | Leave steps out of the recording |
 | `Resize 80x24` | Resize the terminal |
+| `Mask /regex/ "text"` | Replace matches in the text grids `--check` compares, for output that differs on every run such as temporary paths or timings; images keep what was shown |
 
 Regenerate everything, or check it as CI does:
 

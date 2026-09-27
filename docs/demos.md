@@ -6,26 +6,34 @@ CLI 0.0.8 introduced `rich --demo`: a single guided pass through the
 suite with three-second section pauses. Use `--demo-delay 5` to slow it down;
 Ctrl+C stops cleanly. See [the tour instructions](cli.md#take-the-guided-tour).
 
-<video controls playsinline preload="none" poster="../assets/demos/v12-demo-tour.png" style="width:100%;max-width:1100px" aria-label="Guided tour of the rich CLI suite">
-  <source src="../assets/demos/v12-demo-tour.mp4" type="video/mp4">
-  Your browser cannot play this video. Use the download below.
-</video>
+<div class="tape-player" data-cast="../media/tapes/tour/tour.cast" data-poster="npt:0:20">
+  <img src="../media/tapes/tour/tour.gif" alt="The guided tour of the rich CLI suite, recorded in a real terminal">
+</div>
 
-[Tour MP4](assets/demos/v12-demo-tour.mp4) · [Tour GIF](assets/demos/v12-demo-tour.gif)
+[Cast](media/tapes/tour/tour.cast) · [GIF](media/tapes/tour/tour.gif) ·
+[Tape](tapes/tour.tape)
 
-This recording runs the 0.0.12 `rich --demo --demo-delay 0.5` in a real terminal, faster than the default three-second pace. New in
-0.0.12:
+This recording runs `rich --demo --demo-delay 1.5` in a real terminal, faster
+than the default three-second pace. It is a [tape](recordings.md#how-it-works)
+recorded by `rich record`, so it is replayed from the build in this repository
+and CI checks its screenshots on every change:
 
-- `rich mermaid` drawing a flowchart as text, with no browser or Node;
-- code themes that use the terminal's own palette (`--code-theme ansi_dark`);
-- `--filter` keeping only matching lines, and `--highlight` marking matches;
-- `--image-fit native`, drawing an image at its own pixel size.
+| Inspect | Diff | Mermaid | Filter and highlight |
+|---|---|---|---|
+| ![Structured data as a tree](media/tapes/tour/inspect.png) | ![A text diff](media/tapes/tour/diff.png) | ![A Mermaid flowchart as text](media/tapes/tour/mermaid.png) | ![Filtered and highlighted log lines](media/tapes/tour/filter.png) |
 
-Playback and command output are captured from the optimized build, with a
-caption added and no audio. Reproduce with
-`python scripts/capture_demo_tour.py --binary target/release/rich --release 0.0.12`
-after installing the docs-media dependencies listed below; provenance is in
-`.github/evidence/0.0.12/demo-tour/capture.json`.
+| FIGlet banner | Image diff | Tour complete |
+|---|---|---|
+| ![A FIGlet banner](media/tapes/tour/banner.png) | ![An image diff](media/tapes/tour/image-diff.png) | ![The end of the tour](media/tapes/tour/complete.png) |
+
+The recordings below, up to 0.0.12, are kept as historical records. They were
+captured by Python scripts that `rich record` has since replaced; their raw
+recordings and source/binary provenance are in `.github/evidence/`.
+
+The 0.0.12 tour:
+[MP4](assets/demos/v12-demo-tour.mp4) · [GIF](assets/demos/v12-demo-tour.gif).
+It shows `rich mermaid` drawing a flowchart as text, code themes in the
+terminal's own palette, `--filter` and `--highlight`, and `--image-fit native`.
 
 The 0.0.11 tour is kept as a historical recording:
 [MP4](assets/demos/v11-demo-tour.mp4) · [GIF](assets/demos/v11-demo-tour.gif).
@@ -52,7 +60,6 @@ recorded terminal output, with captions and three-second holds; no audio.
 
 [Download MP4](assets/demos/v9-workflows.mp4) · [Looping GIF](assets/demos/v9-workflows.gif)
 
-Reproduce with `python scripts/capture_v9_demos.py --binary target/release/rich`.
 The raw recordings, fixture, export checks and source/binary hashes are committed
 in `.github/evidence/0.0.9/`. See [release notes](releases/0.0.9.md) for the bounded
 feature scope and [recipes](recipes.md) for copyable commands.
@@ -106,12 +113,12 @@ not change precedence.
 
 [Capture evidence and benchmark results](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/0.0.8)
 include source/binary hashes, exact arguments, exit codes, raw ANSI/asciinema
-recordings, fixtures and exported HTML. Reproduce from the repository root:
+recordings, fixtures and exported HTML. The videos were made by
+`scripts/capture_v8_demos.py`, since replaced by `rich record` (see it at
+commit `9157264`). The benchmark still runs from the repository root:
 
 ```bash
 cargo build --release -p rs-rich-cli --locked
-python -m pip install -r scripts/requirements-docs-media.txt
-python scripts/capture_v8_demos.py
 python scripts/bench_batch.py
 ```
 
@@ -165,10 +172,9 @@ A file changes, becomes invalid and recovers; batch then exports two HTML files.
 
 [Commands and source/binary hashes](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/release-finish)
 are committed with raw ANSI/asciinema recordings and the exported HTML files.
-The alpha fixture is generated deterministically by the capture script.
-Run `cargo build --release -p rs-rich-cli --locked`, install the media requirements below, then
-`python scripts/capture_release_demos.py` to capture and encode again.
-The capture needs a POSIX PTY, FFmpeg and the DejaVu fonts.
+The alpha fixture was generated deterministically by the capture script,
+`scripts/capture_release_demos.py`, since replaced by `rich record` (see it at
+commit `9157264`).
 See [workflow recipes](recipes.md) and [image fitting options](cli.md#fit-crop-and-transparent-backgrounds).
 
 ## Archived GIF playback
@@ -233,15 +239,8 @@ the preview GIF loops continuously. This presentation timing differs from the
 original recording. Titles and comparison layout are added by the media script.
 
 - [Original recordings and capture script](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/.github/evidence/v0.0.4-gif)
-- [Media generator](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/scripts/build_docs_media.py)
-
-To rebuild the media from the repository root (requires FFmpeg, Cairo and the
-DejaVu Sans Mono font installed on the system):
-
-```bash
-python -m pip install -r scripts/requirements-docs-media.txt
-python scripts/build_docs_media.py
-```
+- [Media generator, as last used](https://github.com/buchochelliq-labs/rs-rich-cli/blob/9157264/scripts/build_docs_media.py),
+  since replaced by `rich record`
 
 The progress and spinner GIFs elsewhere in the docs are conversions of committed
 SVG frame sequences exported by the library. They are not terminal recordings.
