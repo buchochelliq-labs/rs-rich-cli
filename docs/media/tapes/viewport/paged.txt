@@ -1,18 +1,18 @@
- Wait /"replicas": 5/
- Screenshot after
- Ctrl+C
+ retries  3        Tries before a job fails
+ port     8080     Where the status page listens
 
 
-The recorder runs it in bash on a real PTY with a pinned environment,
-follows the screen with a VT emulator, and writes:
-
- • per Screenshot: a PNG in a window frame, an SVG with selectable text, and
-   a text grid;
- • an asciinema v2 cast, with input events and the palette in its header;
- • a GIF with a key overlay, and an MP4 when FFmpeg is installed.
-
-check compares a new run's text grids with committed ones, so documentation
-media cannot drift from the program it shows.
+Running it
 
 
-lines 18–34 of 56 · ↑↓ PgUp PgDn · q quits
+ orbit --workers 8 queue.toml
+
+
+The status page shows each worker, its job and how long it has run. A worker
+that has run a job for more than a minute is marked slow; a job that failed
+three times is listed with its last error.
+
+Components
+
+The terminal side is built from rs-rich-interact components: a picker for
+lines 18–34 of 52 · ↑↓ PgUp PgDn · q quits

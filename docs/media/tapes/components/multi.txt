@@ -1,0 +1,22 @@
+❯ c multi
+? Publish ›
+  ◉ rs-rich  the faithful port of rich
+  ○ rs-rich-ext  extensions: frames, live, workflows
+  ◉ rs-rich-cli  the rich command
+  ◉ rs-rich-art  images, GIFs and banners
+❯ ○ rs-rich-record  tapes: record terminal sessions
+  ○ rs-rich-interact  interactive components
+  ○ rs-rich-mermaid  Mermaid diagrams as text
+  ○ rs-rich-lumis  tree-sitter highlighting
+  8/8 · 3 marked · tab mark · ↑↓ move · enter pick · esc cancel
+
+
+
+
+
+
+
+
+
+
+

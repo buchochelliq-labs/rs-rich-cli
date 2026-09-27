@@ -1,0 +1,22 @@
+❯ c form
+? New service
+  Name          api
+  Port          8080
+  Environment   prod
+  TLS           yes
+  Deploy token  •••••••
+name: api
+port: 8080
+env: prod
+tls: true
+token: (set)
+❯
+
+
+
+
+
+
+
+
+

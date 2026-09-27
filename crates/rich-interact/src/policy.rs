@@ -133,6 +133,11 @@ pub trait LineIo {
     fn write(&mut self, text: &str);
     /// One line without its line break, or `None` at end of input.
     fn read_line(&mut self) -> Option<String>;
+    /// One line for a secret, typed without echo where there is echo to
+    /// turn off. The default reads a line as usual.
+    fn read_secret(&mut self) -> Option<String> {
+        self.read_line()
+    }
 }
 
 /// [`LineIo`] on the process: prompts to stderr (stdout may be the data a
@@ -153,6 +158,59 @@ impl LineIo for StdLineIo {
             Ok(_) => Some(line.trim_end_matches(['\n', '\r']).to_string()),
         }
     }
+
+    /// With stdin a terminal (stdout redirected, say), read with echo off,
+    /// as Python's `getpass` does: the terminal is in raw mode for the one
+    /// line, and given back after it. Backspace and Ctrl+U edit; Ctrl+C,
+    /// Escape, and Ctrl+D on an empty line give no answer. From a pipe,
+    /// read a line as usual.
+    fn read_secret(&mut self) -> Option<String> {
+        if !std::io::stdin().is_terminal() {
+            return self.read_line();
+        }
+        let answer = read_hidden();
+        // The Enter was not echoed either: end the prompt's line.
+        self.write("\n");
+        answer
+    }
+}
+
+/// One line read in raw mode, so nothing typed is echoed.
+fn read_hidden() -> Option<String> {
+    use crate::event::{from_crossterm, Event, KeyCode};
+
+    /// Raw mode off again on every way out, a panic included.
+    struct Raw;
+    impl Drop for Raw {
+        fn drop(&mut self) {
+            let _ = crossterm::terminal::disable_raw_mode();
+        }
+    }
+    crossterm::terminal::enable_raw_mode().ok()?;
+    let _raw = Raw;
+    let mut line = String::new();
+    loop {
+        let event = crossterm::event::read().ok()?;
+        match from_crossterm(event) {
+            Some(Event::Key(key)) => {
+                let ctrl = key.modifiers.ctrl;
+                match key.code {
+                    KeyCode::Enter => return Some(line),
+                    KeyCode::Escape => return None,
+                    KeyCode::Char('c') if ctrl => return None,
+                    KeyCode::Char('d') if ctrl && line.is_empty() => return None,
+                    KeyCode::Char('u') if ctrl => line.clear(),
+                    KeyCode::Backspace => {
+                        line.pop();
+                    }
+                    KeyCode::Char(c) if !ctrl => line.push(c),
+                    _ => {}
+                }
+            }
+            Some(Event::Paste(text)) => line.push_str(&text.replace(['\n', '\r'], "")),
+            _ => {}
+        }
+    }
 }
 
 /// [`LineIo`] from a script, for tests: answers in order, prompts kept.
@@ -160,6 +218,8 @@ impl LineIo for StdLineIo {
 pub struct ScriptedLineIo {
     pub answers: std::collections::VecDeque<String>,
     pub written: String,
+    /// How many answers were read as secrets.
+    pub secrets: usize,
 }
 
 impl ScriptedLineIo {
@@ -167,6 +227,7 @@ impl ScriptedLineIo {
         ScriptedLineIo {
             answers: answers.into_iter().map(Into::into).collect(),
             written: String::new(),
+            secrets: 0,
         }
     }
 }
@@ -178,6 +239,11 @@ impl LineIo for ScriptedLineIo {
 
     fn read_line(&mut self) -> Option<String> {
         self.answers.pop_front()
+    }
+
+    fn read_secret(&mut self) -> Option<String> {
+        self.secrets += 1;
+        self.read_line()
     }
 }
 

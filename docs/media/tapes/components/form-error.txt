@@ -1,0 +1,22 @@
+❯ c form
+? New service
+❯ Name          API
+                ✗ lowercase letters and dashes
+  Port          (8080)
+  Environment   prod
+  TLS           ◉ yes
+  Deploy token  •••••••
+  tab/↑↓ move · enter next · ctrl+s submit · esc cancel
+
+
+
+
+
+
+
+
+
+
+
+
+

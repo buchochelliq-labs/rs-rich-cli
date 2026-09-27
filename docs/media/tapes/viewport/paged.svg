@@ -5,38 +5,29 @@
 <circle cx="41" cy="17.5" r="6" fill="#ffbd2e"/>
 <circle cx="63" cy="17.5" r="6" fill="#27c93f"/>
 <text x="383.8" y="22.5" fill="#969696" font-family="DejaVu Sans, sans-serif" font-size="13" text-anchor="middle">rich_interact::Viewport · the example pager</text>
-<rect x="19.0" y="54.0" width="9.6" height="20.8" fill="#2b303b"/>
-<rect x="28.6" y="54.0" width="192.0" height="20.8" fill="#2b303b"/>
-<text x="28.6" y="69.6" fill="#c0c5ce" textLength="192.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Wait /"replicas": 5/</text>
-<rect x="220.6" y="54.0" width="528.0" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="74.8" width="9.6" height="20.8" fill="#2b303b"/>
-<rect x="28.6" y="74.8" width="153.6" height="20.8" fill="#2b303b"/>
-<text x="28.6" y="90.4" fill="#c0c5ce" textLength="153.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Screenshot after</text>
-<rect x="182.2" y="74.8" width="566.4" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="95.6" width="9.6" height="20.8" fill="#2b303b"/>
-<rect x="28.6" y="95.6" width="57.6" height="20.8" fill="#2b303b"/>
-<text x="28.6" y="111.2" fill="#c0c5ce" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Ctrl+C</text>
-<rect x="86.2" y="95.6" width="662.4" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="116.4" width="729.6" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="173.6" fill="#c5c8c6" textLength="230.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">The recorder runs it in </text>
-<rect x="249.4" y="158.0" width="38.4" height="20.8" fill="#4b4e55"/>
-<text x="249.4" y="173.6" fill="#398280" font-weight="bold" textLength="38.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">bash</text>
-<text x="287.8" y="173.6" fill="#c5c8c6" textLength="460.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> on a real PTY with a pinned environment,       </text>
-<text x="19.0" y="194.4" fill="#c5c8c6" textLength="729.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">follows the screen with a VT emulator, and writes:                          </text>
-<text x="19.0" y="236.0" fill="#c5c8c6" font-weight="bold" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> • </text>
-<text x="47.8" y="236.0" fill="#c5c8c6" textLength="38.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">per </text>
-<rect x="86.2" y="220.4" width="96.0" height="20.8" fill="#4b4e55"/>
-<text x="86.2" y="236.0" fill="#398280" font-weight="bold" textLength="96.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Screenshot</text>
-<text x="182.2" y="236.0" fill="#c5c8c6" textLength="566.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">: a PNG in a window frame, an SVG with selectable text, and</text>
-<text x="47.8" y="256.8" fill="#c5c8c6" textLength="700.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">a text grid;                                                             </text>
-<text x="19.0" y="277.6" fill="#c5c8c6" font-weight="bold" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> • </text>
-<text x="47.8" y="277.6" fill="#c5c8c6" textLength="700.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">an asciinema v2 cast, with input events and the palette in its header;   </text>
-<text x="19.0" y="298.4" fill="#c5c8c6" font-weight="bold" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> • </text>
-<text x="47.8" y="298.4" fill="#c5c8c6" textLength="700.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">a GIF with a key overlay, and an MP4 when FFmpeg is installed.           </text>
-<rect x="19.0" y="324.4" width="48.0" height="20.8" fill="#4b4e55"/>
-<text x="19.0" y="340.0" fill="#398280" font-weight="bold" textLength="48.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">check</text>
-<text x="67.0" y="340.0" fill="#c5c8c6" textLength="681.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> compares a new run's text grids with committed ones, so documentation </text>
-<text x="19.0" y="360.8" fill="#c5c8c6" textLength="729.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">media cannot drift from the program it shows.                               </text>
-<rect x="19.0" y="386.8" width="729.6" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="423.2" fill="#777877" textLength="403.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">lines 18–34 of 56 · ↑↓ PgUp PgDn · q quits</text>
+<rect x="28.6" y="54.0" width="67.2" height="20.8" fill="#4b4e55"/>
+<text x="28.6" y="69.6" fill="#398280" font-weight="bold" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">retries</text>
+<text x="115.0" y="69.6" fill="#c5c8c6" textLength="76.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">3       </text>
+<text x="201.4" y="69.6" fill="#c5c8c6" textLength="278.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Tries before a job fails     </text>
+<rect x="28.6" y="74.8" width="38.4" height="20.8" fill="#4b4e55"/>
+<text x="28.6" y="90.4" fill="#398280" font-weight="bold" textLength="38.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">port</text>
+<text x="115.0" y="90.4" fill="#c5c8c6" textLength="76.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">8080    </text>
+<text x="201.4" y="90.4" fill="#c5c8c6" textLength="278.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Where the status page listens</text>
+<text x="19.0" y="152.8" fill="#98729f" text-decoration="underline" textLength="96.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Running it</text>
+<rect x="19.0" y="178.8" width="729.6" height="20.8" fill="#2b303b"/>
+<rect x="19.0" y="199.6" width="9.6" height="20.8" fill="#2b303b"/>
+<rect x="28.6" y="199.6" width="48.0" height="20.8" fill="#2b303b"/>
+<text x="28.6" y="215.2" fill="#8fa1b3" textLength="48.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">orbit</text>
+<rect x="76.6" y="199.6" width="96.0" height="20.8" fill="#2b303b"/>
+<text x="76.6" y="215.2" fill="#bf616a" textLength="96.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> --workers</text>
+<rect x="172.6" y="199.6" width="124.8" height="20.8" fill="#2b303b"/>
+<text x="172.6" y="215.2" fill="#c0c5ce" textLength="124.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 8 queue.toml</text>
+<rect x="297.4" y="199.6" width="451.2" height="20.8" fill="#2b303b"/>
+<rect x="19.0" y="220.4" width="729.6" height="20.8" fill="#2b303b"/>
+<text x="19.0" y="277.6" fill="#c5c8c6" textLength="729.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">The status page shows each worker, its job and how long it has run. A worker</text>
+<text x="19.0" y="298.4" fill="#c5c8c6" textLength="729.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">that has run a job for more than a minute is marked slow; a job that failed </text>
+<text x="19.0" y="319.2" fill="#c5c8c6" textLength="729.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">three times is listed with its last error.                                  </text>
+<text x="19.0" y="360.8" fill="#98729f" text-decoration="underline" textLength="96.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Components</text>
+<text x="19.0" y="402.4" fill="#c5c8c6" textLength="729.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">The terminal side is built from rs-rich-interact components: a picker for   </text>
+<text x="19.0" y="423.2" fill="#777877" textLength="403.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">lines 18–34 of 52 · ↑↓ PgUp PgDn · q quits</text>
 </svg>

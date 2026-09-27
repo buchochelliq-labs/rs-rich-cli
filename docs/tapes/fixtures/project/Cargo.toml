@@ -1,0 +1,9 @@
+[package]
+name = "orbit"
+version = "0.3.0"
+edition = "2021"
+description = "A tiny service used by the docs' recordings"
+
+[dependencies]
+rs-rich = "0.0.8"
+rs-rich-interact = "0.0.1"

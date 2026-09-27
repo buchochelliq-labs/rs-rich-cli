@@ -55,6 +55,32 @@ page down, then `/characters` to search.
 
 [Tape](tapes/pager.tape) · [Cast](media/tapes/pager/pager.cast) · [GIF](media/tapes/pager/pager.gif)
 
+## Components
+
+Every `rs-rich-interact` component, one after another, recorded in a small
+fixture project:
+
+- a fuzzy file picker with a highlighted preview;
+- a multi-select;
+- an input with suggestions and validation;
+- a confirmation sheet with a diff and four choices;
+- a form that reports an error under its field;
+- a pager that searches.
+
+See [Interactive components](guide/interact/index.md#ready-made-components).
+
+<div class="tape-player" data-cast="../media/tapes/components/components.cast" data-poster="npt:0:5">
+  <img src="../media/tapes/components/components.gif" alt="rs-rich-interact's components, one after another">
+</div>
+
+| Select | Input | Confirm |
+|---|---|---|
+| ![A fuzzy pick with a preview](media/tapes/components/select.png) | ![Suggestions as you type](media/tapes/components/input-suggestions.png) | ![A confirmation sheet](media/tapes/components/confirm.png) |
+| **Form** | **MultiSelect** | **Pager** |
+| ![A form with an error](media/tapes/components/form-error.png) | ![Marking several](media/tapes/components/multi.png) | ![Searching](media/tapes/components/pager.png) |
+
+[Tape](tapes/components.tape) · [Cast](media/tapes/components/components.cast) · [GIF](media/tapes/components/components.gif)
+
 ## An interactive component
 
 `rs-rich-interact`'s `Viewport`, run as its example pager, pages a Markdown

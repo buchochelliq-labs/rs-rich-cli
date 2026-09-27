@@ -47,6 +47,141 @@ impl Component for Counter {
 `context.lines(&renderable)` renders any rich renderable (a `Table`, a
 `Panel`, `Markdown`) into lines.
 
+A component can also implement `start`, which runs once before its first
+paint and gets the same `Context`. Use it for work that needs the terminal's
+size, such as rendering content at the width. It can also finish the
+component straight away, without waiting for a key. The `Pager` renders its
+content there, and a `Form` with no fields returns from it.
+
+## Ready-made components
+
+Each of these is a `Component`, so it runs under `run`, in an event loop and
+headless. Each also has a line-based form for when there is no terminal. All
+are styled by one `Theme`. When finished, each collapses to a one-line answer
+(`? Open › src/main.rs`), so a sequence of prompts reads like a transcript.
+The screenshots come from the
+[components tape](../../recordings.md#components), which runs
+`--example components`.
+
+### Select and MultiSelect
+
+A fuzzy picker over [items](#items):
+
+- typing filters, with smart case, and highlights what matched;
+- the arrows, PageUp and PageDown move, and Enter picks;
+- `MultiSelect` marks with Tab (Ctrl+A marks every match) and returns what was
+  marked;
+- an item's actions pick it by their key, and `select.action()` says which one
+  was used.
+
+When the focused item has a preview, a pane shows it: beside the list from 72
+columns, below it on a narrower terminal. The preview can be text, markup, or
+any renderable, such as a `Syntax`.
+
+```rust
+use rich_interact::{run, Item, Preview, RunOptions, Select};
+
+let items = paths.into_iter().map(|path| {
+    let preview = Preview::Renderable(Arc::new(Syntax::new(read(&path), "rust")));
+    Item::new(path.clone(), path.display().to_string()).preview(preview)
+});
+let picked = run(Select::new("Open", items), &RunOptions::default())?;
+```
+
+![A fuzzy file picker with a highlighted preview](../../media/tapes/components/select.png)
+
+![Marking several crates](../../media/tapes/components/multi.png)
+
+### Input
+
+One line, which edits like a shell's: the arrows, Home and End, Ctrl+A, Ctrl+E,
+Ctrl+U and Ctrl+W.
+
+- **Placeholder, default and masking.** A placeholder shows while the line is
+  empty; `default` answers an empty line; `Input::masked` hides what is typed,
+  for passwords and tokens, and shows a default only as `(default set)`.
+  Without a terminal session but with stdin a terminal (`token=$(app)`), it
+  reads its line with echo off, as Python's `getpass` does.
+- **Validation.** A validator's message shows under the line, and Enter waits
+  until it passes.
+- **History.** Up and Down walk earlier answers.
+- **Suggestions.** They come from a fixed list, filtered as you type, or from a
+  `provider` that runs on a background thread, so a slow lookup (a registry, a
+  file system) never stalls typing. The input keeps one such thread. It runs
+  one lookup at a time and, when free, takes only the latest text, so fast
+  typing never piles up lookups. Tab accepts one. Suggestions work the same
+  inside a `Form` field.
+
+```rust
+let input = Input::new("Crate")
+    .suggestions(["serde", "serde_json", "tokio"])
+    .validate(|text| if text.is_empty() { Err("required".into()) } else { Ok(()) });
+```
+
+![Suggestions as you type](../../media/tapes/components/input-suggestions.png)
+
+![A validation message under the line](../../media/tapes/components/input-error.png)
+
+### Confirm
+
+A confirmation sheet: what will happen, then a choice.
+
+- **Body:** any renderables (a diff, a table of affected files), in a
+  scrollable viewport.
+- **Warnings:** listed under the body.
+- **Choices:** as many as needed, each with a key: `Apply`, `Dry run`, `Edit`,
+  `Cancel`. `Confirm::new` alone is yes or no.
+
+```rust
+let sheet = Confirm::new("Apply this change to production?")
+    .body(diff)
+    .warning("5 pods will restart, one at a time")
+    .choices([
+        Choice::new("apply", "Apply", 'a'),
+        Choice::new("dry-run", "Dry run", 'd'),
+    ])
+    .default("dry-run");
+```
+
+![A confirmation sheet with a diff, a warning and four choices](../../media/tapes/components/confirm.png)
+
+### Form
+
+Several fields answered together.
+
+- **Field kinds:** text (any configured `Input`), masked text for passwords
+  (`Form::masked`), a choice among
+  options, and yes/no toggles.
+- **Moving:** Tab and the arrows move between fields; Enter moves on and, on
+  the last field, submits.
+- **Errors:** submitting checks every field, puts each failure's message under
+  its field, and focuses the first one.
+
+The result, `Answers`, gives each value by field name.
+
+```rust
+let form = Form::new("New service")
+    .input("name", Input::new("Name").validate(lowercase))
+    .input("port", Input::new("Port").default("8080"))
+    .choice("env", "Environment", ["dev", "staging", "prod"])
+    .toggle("tls", "TLS", true);
+let answers = run(form, &options)?.value();
+```
+
+![A form with an error under its field](../../media/tapes/components/form-error.png)
+
+### Pager
+
+Pages any renderable at the terminal's width, and renders it again after a
+resize.
+
+- **Moving:** it scrolls like the viewport; `q` or Escape closes it.
+- **Searching:** `/` starts a search. Matches are marked in place, the current
+  one in yellow, and `n` and `N` jump between them.
+- **Without a terminal:** it writes the content out in full.
+
+![Searching in the pager](../../media/tapes/components/pager.png)
+
 ## Running one
 
 `run` is the blocking driver:

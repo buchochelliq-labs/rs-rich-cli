@@ -21,7 +21,9 @@
 //! - [`policy`]: with no terminal, under CI or with `TERM=dumb`, a
 //!   component asks line by line, returns its default, or fails, as the
 //!   caller chooses, and never blocks on a pipe (#492);
-//! - [`headless`]: scripted events in, frames out, for tests.
+//! - [`headless`]: scripted events in, frames out, for tests;
+//! - [`components`]: [`Select`], [`MultiSelect`], [`Input`], [`Confirm`],
+//!   [`Form`] and [`Pager`], built on the above with a [`fuzzy`] matcher.
 //!
 //! ```
 //! use rich_interact::{headless, Component, Context, Event, Flow, KeyCode, Outcome, View};
@@ -51,8 +53,10 @@
 //! ```
 
 pub mod component;
+pub mod components;
 pub mod event;
 pub mod event_loop;
+pub mod fuzzy;
 pub mod headless;
 pub mod item;
 pub mod paint;
@@ -61,6 +65,10 @@ pub mod session;
 pub mod viewport;
 
 pub use component::{Component, Context, Flow, View};
+pub use components::{
+    Answers, Choice, Confirm, Form, Input, MultiSelect, Pager, PreviewLayout, Select, Suggestion,
+    Theme, Value,
+};
 pub use event::{Button, Event, Key, KeyCode, Modifiers, Mouse, MouseKind};
 pub use event_loop::{degrade, run, Error, EventLoop, Handle, LoopOptions, Outcome, RunOptions};
 pub use item::{Action, Item, Preview};
@@ -72,6 +80,10 @@ pub use viewport::Viewport;
 /// and still read its state after the loop.
 impl<C: Component + ?Sized> Component for &mut C {
     type Output = C::Output;
+
+    fn start(&mut self, context: &Context<'_>) -> Flow<C::Output> {
+        (**self).start(context)
+    }
 
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<C::Output> {
         (**self).handle(event, context)

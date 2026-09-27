@@ -98,6 +98,15 @@ pub trait Component {
     /// component with [`Outcome::Interrupted`](crate::Outcome::Interrupted).
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<Self::Output>;
 
+    /// Called once, before the component is first painted, with the
+    /// terminal's size: for work that needs it, such as rendering content
+    /// at the width. Returning `Done` or `Cancel` finishes the component
+    /// without waiting for an event. The default does nothing.
+    fn start(&mut self, context: &Context<'_>) -> Flow<Self::Output> {
+        let _ = context;
+        Flow::Continue
+    }
+
     /// Render the current state.
     fn render(&self, context: &Context<'_>) -> View;
 

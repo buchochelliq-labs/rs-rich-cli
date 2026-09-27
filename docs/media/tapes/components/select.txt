@@ -1,0 +1,22 @@
+❯ c select
+? Open › evlp
+❯ src/event_loop.rs  611 B                    │    1 //! The event loop: take jobs, hand them to wor
+                                              │    2
+                                              │    3 use std::time::Duration;
+                                              │    4
+                                              │    5 /// One job from the queue.
+                                              │    6 pub struct Job {
+                                              │    7     pub name: String,
+                                              │    8     pub tries: u32,
+  1/8 · ↑↓ move · enter pick · esc cancel
+
+
+
+
+
+
+
+
+
+
+

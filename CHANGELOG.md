@@ -71,6 +71,52 @@ Entries below record subsequent releases and development.
   hero recording. The first tapes cover rendering Markdown, CSV and code,
   `--watch` re-rendering on save, and `view --pager` scrolling and searching.
 
+### Interact 0.0.1: the first components (0.0.13 workstream 3: #287, #288, #289, #291, #454, #457, #470, #472)
+
+- **`Select` and `MultiSelect`** (#287) filter items with a new fuzzy matcher
+  (`rich_interact::fuzzy`):
+  - it prefers word starts and runs, uses smart case, and needs every
+    space-separated term to match;
+  - matched characters are highlighted;
+  - `MultiSelect` marks with Tab and Ctrl+A;
+  - item actions pick by key.
+
+  A preview pane (#454) shows the focused item's preview beside the list, or
+  below it on a narrow terminal.
+- **`Input`** (#457, #289) edits like a shell line and offers:
+  - a placeholder, a default and masking (`Input::masked`, for passwords
+    and tokens). A masked input's
+    default is shown only as `(default set)`, on screen and in the line
+    prompt, never as its value. In the line prompt it reads with echo off
+    when stdin is a terminal (`LineIo::read_secret`);
+  - a validator whose message shows under the line;
+  - history;
+  - suggestions, fixed or from a provider. The provider runs on one
+    background thread per input, one lookup at a time, always for the
+    latest text; stale results are dropped.
+- **`Confirm`** (#470) is a confirmation sheet: a scrollable body of any
+  renderables, warnings, and any number of keyed choices.
+- **`Form`** (#288, #472) has text, masked (`Form::masked`), choice and
+  toggle fields. Tab and the arrows move between fields, and each validation
+  error shows under its field. A text field with suggestions shows them under it, and Tab and
+  the arrows pick one there. A form with no fields finishes at once. It
+  returns `Answers` by field name.
+- **`Pager`** (#291) pages any renderable at the terminal's width. `/`
+  searches, matches are marked, and `n`/`N` jump between them. A search given
+  up front opens on its first match.
+- **`Component::start`** runs once before a component's first paint, with
+  the terminal's size. It can finish the component without waiting for a
+  key. The trait's default does nothing.
+- **Finished components collapse** to a one-line answer
+  (`? Open › src/main.rs`), and the painter clears what a taller view left
+  below. Lines wider than the terminal are cropped instead of wrapping.
+- **Tests and recordings:**
+  - every component has headless tests, a PTY test and a line-based fallback;
+  - `--example components` runs each one;
+  - the `components` tape records them all in a fixture project
+    (`docs/tapes/fixtures/project`), which the viewport tape now pages too,
+    so the recordings do not change when the crate's own files do.
+
 ### Interact 0.0.1 (new crate, unreleased): interactive components (0.0.13 workstream 2: #451, #452, #489, #492, #495)
 
 - **`rs-rich-interact`** (`rich_interact`) is the layer between printing and a

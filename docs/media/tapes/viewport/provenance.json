@@ -1,8 +1,8 @@
 {
   "tape": "docs/tapes/viewport.tape",
-  "tape_fnv1a64": "ab87eb038e76c945",
+  "tape_fnv1a64": "3f08c4cc647f587c",
   "recorder": "rs-rich-record 0.0.1",
   "rich": null,
-  "commit": "ee01e182c3c8b3fea39eaaacb6336f8580799efe",
+  "commit": "3c805cc61d3b935a6d464adbe21a05aa23e1c25e",
   "note": "Every frame is real output of the program under test on a PTY."
 }
