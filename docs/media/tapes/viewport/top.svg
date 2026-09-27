@@ -50,5 +50,5 @@
 <rect x="28.6" y="386.8" width="336.0" height="20.8" fill="#2b303b"/>
 <text x="28.6" y="402.4" fill="#c0c5ce" textLength="336.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Exec "sed -i 's/2/5/' service.json"</text>
 <rect x="364.6" y="386.8" width="384.0" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="423.2" fill="#777877" textLength="393.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">lines 1–17 of 51 · ↑↓ PgUp PgDn · q quits</text>
+<text x="19.0" y="423.2" fill="#777877" textLength="393.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">lines 1–17 of 56 · ↑↓ PgUp PgDn · q quits</text>
 </svg>

@@ -3,6 +3,6 @@
   "tape_fnv1a64": "ab87eb038e76c945",
   "recorder": "rs-rich-record 0.0.1",
   "rich": null,
-  "commit": "c85130c8c6908c37724b000b0c4b061e10a9c7a1",
+  "commit": "ee01e182c3c8b3fea39eaaacb6336f8580799efe",
   "note": "Every frame is real output of the program under test on a PTY."
 }
