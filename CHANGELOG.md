@@ -59,7 +59,8 @@ Entries below record subsequent releases and development.
 
 ### Docs and tooling
 
-- **Tapes (#598).** `scripts/tape.py` runs a scripted terminal session
+- **Tapes (#598).** A first, Python runner (`scripts/tape.py`, since
+  replaced by `rich record`) ran a scripted terminal session
   (`docs/tapes/*.tape`: type, press keys, wait for screen text, take
   screenshots) against the built `rich` on a real PTY. From one run it writes
   PNG, SVG and text screenshots, an asciinema cast, a GIF with a key overlay,
@@ -69,6 +70,22 @@ Entries below record subsequent releases and development.
   vendored asciinema-player 3.17.0 (Apache-2.0), and the README opens with the
   hero recording. The first tapes cover rendering Markdown, CSV and code,
   `--watch` re-rendering on save, and `view --pager` scrolling and searching.
+
+### Record 0.0.1 (new crate, unreleased) and CLI 0.0.13: `rich record` (#599)
+
+- **`rs-rich-record`** (`rich_record`) records tapes from Rust: `tape::parse`,
+  `record::record` (bash on a PTY through `portable-pty`, followed by the
+  `vt100` emulator), then `record::write` or `record::check`. Screenshots go
+  through `rich_ext::frame::Frame` for their text grids. PNG and GIF are drawn
+  with an embedded DejaVu Sans Mono (Bitstream Vera licence, shipped as
+  `fonts/LICENSE-DejaVu`), with box-drawing characters drawn as lines so
+  borders join between rows. Linux and macOS are supported; Windows builds
+  through ConPTY and is experimental.
+- **`rich record TAPE…`** in the CLI (the new default `record` feature):
+  `--check`, `--output`, `--format png,svg,cast,gif,mp4`, `--no-video`,
+  `--bin-dir` and `--font`. It reproduced every screenshot the Python runner
+  had committed, so the "docs tapes up to date" CI job now runs
+  `rich record --check`, and `scripts/tape.py` is removed.
 
 ### Ext (0.0.11, unreleased)
 

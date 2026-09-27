@@ -1,0 +1,134 @@
+//! End to end: a tape runs in a real PTY and every output is produced.
+#![cfg(unix)]
+
+use rich_record::record::{self, Formats, Options, Problem};
+use rich_record::render::raster::Fonts;
+use rich_record::tape;
+
+const TAPE: &str = r#"
+Set Size 40x8
+Set Title "Test"
+Write greeting.txt "café 👍\n"
+Type "cat greeting.txt"
+Enter
+Wait "café"
+Screenshot first
+Exec "printf 'second\n' > more.txt"
+Hide
+Type "clear"
+Enter
+Show
+Type "printf '\033[1;31mred\033[0m\n'; cat more.txt"
+Enter
+Wait /second\s*\n/
+Screenshot second
+Resize 30x6
+Sleep 300ms
+"#;
+
+fn scratch(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("rich-record-test-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    dir
+}
+
+#[test]
+fn records_writes_and_checks() {
+    let tape = tape::parse(TAPE).unwrap();
+    let recording = record::record(&tape, "test", &Options::default()).unwrap();
+    assert_eq!(recording.shots.len(), 2);
+    let first = recording.shots[0].1.text_grid();
+    assert!(first.contains("café 👍"), "{first}");
+    let second = &recording.shots[1].1;
+    assert!(
+        second.text_grid().contains("red\nsecond"),
+        "{}",
+        second.text_grid()
+    );
+    // `red` was bold red: bright red in the theme.
+    let output = second
+        .rows
+        .iter()
+        .find(|row| {
+            row.iter()
+                .map(|c| c.text.as_str())
+                .collect::<String>()
+                .starts_with("red")
+        })
+        .unwrap();
+    assert!(output[0].bold);
+    assert_eq!(output[0].fg, rich_record::Theme::default().ansi[9]);
+    // The resize is in the timeline.
+    assert!(recording.timeline.events.iter().any(|(_, e)| *e
+        == rich_record::session::Event::Resize {
+            columns: 30,
+            rows: 6
+        }));
+
+    let dir = scratch("write");
+    let fonts = Fonts::embedded();
+    let formats = Formats {
+        gif: true,
+        ..Formats::NO_VIDEO
+    };
+    let written = record::write(
+        &recording,
+        &dir,
+        "test",
+        formats,
+        &fonts,
+        &Default::default(),
+        None,
+    )
+    .unwrap();
+    for name in [
+        "first.txt",
+        "first.png",
+        "first.svg",
+        "second.png",
+        "test.cast",
+        "test.gif",
+    ] {
+        assert!(
+            written.iter().any(|p| p.ends_with(name)),
+            "{name} missing from {written:?}"
+        );
+    }
+    assert!(record::check(&recording, &dir).is_empty());
+
+    // A stale grid and an orphaned screenshot are both reported.
+    std::fs::write(dir.join("first.txt"), "something else\n").unwrap();
+    std::fs::write(dir.join("gone.txt"), "old\n").unwrap();
+    let problems = record::check(&recording, &dir);
+    assert!(problems
+        .iter()
+        .any(|p| matches!(p, Problem::Differs { name, .. } if name == "first")));
+    assert!(problems
+        .iter()
+        .any(|p| matches!(p, Problem::Orphaned { name } if name == "gone")));
+    // Writing again removes the orphan.
+    record::write(
+        &recording,
+        &dir,
+        "test",
+        Formats::NO_VIDEO,
+        &fonts,
+        &Default::default(),
+        None,
+    )
+    .unwrap();
+    assert!(!dir.join("gone.txt").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_wait_that_never_matches_names_its_line() {
+    let tape =
+        tape::parse("Type \"echo hi\"\nEnter\nWait \"never\" 500ms\nScreenshot x\n").unwrap();
+    let error = record::record(&tape, "timeout", &Options::default()).unwrap_err();
+    assert_eq!(error.line, 3);
+    assert!(
+        error.message.contains("timed out waiting for \"never\""),
+        "{error}"
+    );
+}

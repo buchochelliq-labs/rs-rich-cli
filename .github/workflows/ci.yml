@@ -142,6 +142,9 @@ jobs:
             args: ""
           - crate: rs-rich-mermaid
             args: "--all-features"
+          # The tape recorder (PTY, VT emulator, embedded font).
+          - crate: rs-rich-record
+            args: ""
           # Every lumis language (its default); the bundles only select fewer.
           - crate: rs-rich-lumis
             args: ""
@@ -330,8 +333,9 @@ jobs:
   # Require `ci-ok` and nothing else from this workflow. Adding or renaming jobs
   # then never touches branch protection again.
   # Every docs recording is a tape (docs/tapes/*.tape) run against the binary
-  # built here. Re-run them and compare each screenshot's text grid with the
-  # committed one, so docs media cannot drift from the CLI (#598).
+  # built here, by that binary's own `rich record` (#599). Re-run them and
+  # compare each screenshot's text grid with the committed one, so docs media
+  # cannot drift from the CLI (#598).
   tapes:
     name: docs tapes up to date
     runs-on: ubuntu-latest
@@ -340,25 +344,22 @@ jobs:
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install the docs-media tools
+      - name: Install less (the pager tape pages through it)
         run: |
           sudo apt-get update
           sudo apt-get install -y less
-          python3 -m pip install -r scripts/requirements-docs-media.txt
 
       - name: Build the CLI
         run: cargo build -p rs-rich-cli --locked
 
       - name: Check every tape's screenshots
-        run: python3 scripts/tape.py --check --no-video docs/tapes/*.tape
+        run: >-
+          target/debug/rich record --check --bin-dir target/debug
+          --output docs/media/tapes docs/tapes/*.tape
 
   ci-ok:
     name: ci-ok

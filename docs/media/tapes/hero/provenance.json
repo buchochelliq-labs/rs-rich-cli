@@ -1,8 +1,8 @@
 {
   "tape": "docs/tapes/hero.tape",
-  "tape_sha256": "f5636c7b1ac06f8bb196b468f77cae618eeeae1ee89af9f2ee31079baafaf141",
-  "rich": "rich (rs-rich-cli) 0.0.13",
-  "commit": "9157264cc031abfc9a3cc5dd34a722b7206d93ca",
-  "pyte": "0.8.2",
-  "note": "Every frame is real output of the binary under test on a PTY."
+  "tape_fnv1a64": "c70bee216440cf7e",
+  "recorder": "rs-rich-record 0.0.1",
+  "rich": null,
+  "commit": "b1892cf105dc9313cebc122f3d8c626bfdd230b2",
+  "note": "Every frame is real output of the program under test on a PTY."
 }

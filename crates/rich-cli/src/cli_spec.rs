@@ -1207,6 +1207,19 @@ pub(crate) fn spec() -> CommandSpec {
         spec = spec.subcommand(command);
     }
     spec.subcommand(
+        CommandSpec::new("record")
+            .about(
+                "Run tapes (scripted terminal sessions: type, press keys, wait for screen text, \
+                 take screenshots) in a real terminal and write PNG, SVG and text screenshots, an \
+                 asciinema cast, a GIF and an MP4 (with FFmpeg); --check compares screenshots \
+                 with committed ones instead",
+            )
+            .usage(
+                "record [--check] [--output DIR] [--bin-dir DIR] [--format png,svg,cast,gif,mp4] \
+                 [--no-video] [--font FILE] TAPE...",
+            ),
+    )
+    .subcommand(
         CommandSpec::new("doctor")
             .about(
                 "Read-only build, terminal, config and pager diagnostics; --report json writes \

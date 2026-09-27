@@ -262,6 +262,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `completions` | Print a shell completion script |
 | `docs` | Print reference documentation generated from this help |
 | `bench` | Compare benchmark runs |
+| `record` | Run tapes (scripted terminal sessions: type, press keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF and an MP4 (with FFmpeg); --check compares screenshots with committed ones instead |
 | `doctor` | Read-only build, terminal, config and pager diagnostics; --report json writes diagnostic data to stdout |
 
 ### Environment
@@ -969,6 +970,16 @@ Gate CI on a 10% slowdown
 
 ```sh
 rich bench compare baseline.json candidate.json --threshold 10
+```
+
+### rich record
+
+Run tapes (scripted terminal sessions: type, press keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF and an MP4 (with FFmpeg); --check compares screenshots with committed ones instead
+
+#### Usage
+
+```text
+rich record [--check] [--output DIR] [--bin-dir DIR] [--format png,svg,cast,gif,mp4] [--no-video] [--font FILE] TAPE...
 ```
 
 ### rich doctor
