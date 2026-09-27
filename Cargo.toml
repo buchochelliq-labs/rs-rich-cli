@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/rich", "crates/rich-plugin-api", "crates/rich-macros", "crates/rich-ext", "crates/rich-cli", "crates/rich-art", "crates/rich-mermaid", "crates/rich-lumis", "crates/rich-record"]
+members = ["crates/rich", "crates/rich-plugin-api", "crates/rich-macros", "crates/rich-ext", "crates/rich-cli", "crates/rich-art", "crates/rich-mermaid", "crates/rich-lumis", "crates/rich-record", "crates/rich-interact"]
 # The Python bindings build with maturin and need a Python interpreter; they
 # have their own workspace and CI workflow (`python.yml`).
 exclude = ["crates/rich-py"]
@@ -32,6 +32,7 @@ rich-art = { package = "rs-rich-art", path = "crates/rich-art", version = "0.0.1
 rich-mermaid = { package = "rs-rich-mermaid", path = "crates/rich-mermaid", version = "0.0.1" }
 rich-lumis = { package = "rs-rich-lumis", path = "crates/rich-lumis", version = "0.0.1" }
 rich-record = { package = "rs-rich-record", path = "crates/rich-record", version = "0.0.1" }
+rich-interact = { package = "rs-rich-interact", path = "crates/rich-interact", version = "0.0.1" }
 # Cargo's default caret requirement treats 0.0.x specially: `version = "0.0.2"`
 # means >=0.0.2,<0.0.3, not >=0.0.2,<0.1.0. Therefore any internal crate bump
 # must also update every direct dependent's workspace requirement.
