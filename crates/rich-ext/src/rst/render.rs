@@ -15,6 +15,7 @@ use rich::{
     Table, Text,
 };
 
+use super::entities::ENTITIES;
 use super::parse::{blocks_text, parse, Block, DefinitionItem, Field, Inline};
 
 /// A reStructuredText document, rendered as `rich-rst` 1.3.2 renders it.
@@ -112,33 +113,186 @@ fn translate(text: &str, (from, to): (&str, &str)) -> String {
         .collect()
 }
 
-/// `html.parser`-based `strip_tags`: the text between tags, with character
-/// references decoded.
+/// `rich_rst.strip_tags`: the data an `html.parser.HTMLParser` with
+/// `convert_charrefs` reports, fed `html` and never closed. Tags, comments,
+/// declarations and processing instructions go; character references are
+/// decoded as `html.unescape` decodes them; `script` and `style` bodies are
+/// kept as written. Like the parser, it holds back (and so drops) text it
+/// cannot finish: an unclosed tag, or a trailing `&` that may start a
+/// reference.
 fn strip_tags(html: &str) -> String {
     let mut out = String::new();
-    let mut rest = html;
-    while let Some(open) = rest.find('<') {
-        out.push_str(&rest[..open]);
-        rest = &rest[open..];
-        let close = if rest.starts_with("<!--") {
-            rest.find("-->").map(|end| end + 3)
-        } else {
-            rest.find('>').map(|end| end + 1)
-        };
-        match close {
-            Some(close) => rest = &rest[close..],
+    let n = html.len();
+    let mut i = 0;
+    while i < n {
+        let rest = &html[i..];
+        let j = match rest.find('<') {
+            Some(offset) => i + offset,
             None => {
-                rest = "";
+                // A reference may be cut off at the end of the input.
+                let from = i.max(n.saturating_sub(34));
+                let from = (from..=n).find(|&k| html.is_char_boundary(k)).unwrap_or(n);
+                if let Some(amp) = html[from..].rfind('&') {
+                    let after = &html[from + amp..];
+                    if !after.contains(|c: char| c.is_whitespace() || c == ';') {
+                        break;
+                    }
+                }
+                n
+            }
+        };
+        out.push_str(&unescape_html(&html[i..j]));
+        i = j;
+        if i == n {
+            break;
+        }
+        let rest = &html[i..];
+        let next = rest[1..].chars().next();
+        let end = if next.is_some_and(|c| c.is_ascii_alphabetic()) {
+            tag_end(rest).and_then(|end| {
+                // `script` and `style` hold raw text up to their end tag.
+                let name: String = rest[1..]
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric())
+                    .collect::<String>()
+                    .to_ascii_lowercase();
+                if name == "script" || name == "style" {
+                    let body = &rest[end..];
+                    let close = body.to_ascii_lowercase().find(&format!("</{name}"));
+                    return close.map(|close| {
+                        out.push_str(&body[..close]);
+                        end + close
+                    });
+                }
+                Some(end)
+            })
+        } else if rest.starts_with("<!--") {
+            rest.find("-->").map(|end| end + 3)
+        } else if rest.starts_with("</") || rest.starts_with("<?") || rest.starts_with("<!") {
+            rest.find('>').map(|end| end + 1)
+        } else if next.is_some() {
+            out.push('<');
+            Some(1)
+        } else {
+            None
+        };
+        match end {
+            Some(end) => i += end,
+            None => break,
+        }
+    }
+    out
+}
+
+/// Where a start tag ends: after its `>`, skipping quoted attribute values.
+fn tag_end(tag: &str) -> Option<usize> {
+    let mut quote = None;
+    for (index, c) in tag.char_indices() {
+        match (quote, c) {
+            (None, '"' | '\'') => quote = Some(c),
+            (Some(open), _) if c == open => quote = None,
+            (None, '>') => return Some(index + 1),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Python's `html.unescape`.
+fn unescape_html(text: &str) -> String {
+    if !text.contains('&') {
+        return text.to_string();
+    }
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(amp) = rest.find('&') {
+        out.push_str(&rest[..amp]);
+        let reference = &rest[amp + 1..];
+        match char_reference(reference) {
+            Some((decoded, used)) => {
+                out.push_str(&decoded);
+                rest = &reference[used..];
+            }
+            None => {
+                out.push('&');
+                rest = reference;
             }
         }
     }
     out.push_str(rest);
-    out.replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&#39;", "'")
-        .replace("&nbsp;", "\u{a0}")
-        .replace("&amp;", "&")
+    out
+}
+
+/// A character reference after `&`: what it decodes to and how much of the
+/// text it used, or `None` when nothing matches `html.unescape`'s pattern.
+fn char_reference(text: &str) -> Option<(String, usize)> {
+    if let Some(number) = text.strip_prefix('#') {
+        let (digits, radix, prefix) = match number.strip_prefix(['x', 'X']) {
+            Some(hex) => (hex, 16, 2),
+            None => (number, 10, 1),
+        };
+        let len = digits.chars().take_while(|c| c.is_digit(radix)).count();
+        if len == 0 {
+            return None;
+        }
+        let semicolon = usize::from(digits[len..].starts_with(';'));
+        let value = u32::from_str_radix(&digits[..len], radix).unwrap_or(u32::MAX);
+        return Some((numeric_reference(value), prefix + len + semicolon));
+    }
+    // `[^\t\n\f <&#;]{1,32};?`
+    let name_len: usize = text
+        .char_indices()
+        .take_while(|&(_, c)| !matches!(c, '\t' | '\n' | '\x0c' | ' ' | '<' | '&' | '#' | ';'))
+        .take(32)
+        .last()
+        .map_or(0, |(index, c)| index + c.len_utf8());
+    if name_len == 0 {
+        return None;
+    }
+    let semicolon = usize::from(text[name_len..].starts_with(';'));
+    let name = &text[..name_len + semicolon];
+    if let Some(value) = entity(name) {
+        return Some((value.to_string(), name.len()));
+    }
+    // The longest known prefix, as the standard reads a reference.
+    let mut cut = name.len() - 1;
+    while cut > 1 {
+        if name.is_char_boundary(cut) {
+            if let Some(value) = entity(&name[..cut]) {
+                return Some((format!("{value}{}", &name[cut..]), name.len()));
+            }
+        }
+        cut -= 1;
+    }
+    Some((format!("&{name}"), name.len()))
+}
+
+fn entity(name: &str) -> Option<&'static str> {
+    ENTITIES
+        .binary_search_by(|(key, _)| (*key).cmp(name))
+        .ok()
+        .map(|index| ENTITIES[index].1)
+}
+
+/// `html.unescape` for `&#N;`: the Windows-1252 fixes, then replacement or
+/// removal of what is not a character.
+fn numeric_reference(value: u32) -> String {
+    const WINDOWS_1252: [u32; 32] = [
+        0x20ac, 0x81, 0x201a, 0x192, 0x201e, 0x2026, 0x2020, 0x2021, 0x2c6, 0x2030, 0x160, 0x2039,
+        0x152, 0x8d, 0x17d, 0x8f, 0x90, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022, 0x2013, 0x2014,
+        0x2dc, 0x2122, 0x161, 0x203a, 0x153, 0x9d, 0x17e, 0x178,
+    ];
+    let value = match value {
+        0x00 => 0xfffd,
+        0x0d => 0x0d,
+        0x80..=0x9f => WINDOWS_1252[(value - 0x80) as usize],
+        0xd800..=0xdfff => 0xfffd,
+        value if value > 0x10ffff => 0xfffd,
+        0x01..=0x08 | 0x0b | 0x0e..=0x1f | 0x7f..=0x9f | 0xfdd0..=0xfdef => return String::new(),
+        value if value & 0xfffe == 0xfffe => return String::new(),
+        value => value,
+    };
+    char::from_u32(value).map(String::from).unwrap_or_default()
 }
 
 impl<'a> Visitor<'a> {

@@ -35,7 +35,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "crates" / "rich-ext" / "tests" / "fixtures" / "rst"
 WIDTHS = (80, 40)
 # Documents with no code blocks, whose colours are comparable.
-COLOUR = {"inline", "lists", "defs", "tables", "blocks_nocode", "line_blocks"}
+COLOUR = {"inline", "lists", "defs", "tables", "blocks_nocode", "line_blocks", "wide_tables"}
 
 
 def check_versions() -> None:

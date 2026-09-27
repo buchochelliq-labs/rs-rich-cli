@@ -917,16 +917,30 @@ fn directive(lines: &[String], start: usize, name: &str, argument: &str) -> (Vec
     (blocks, next)
 }
 
+/// A table row by display cell: a wide character takes its cell and a
+/// `None` after it, so column offsets from the ASCII border line up.
+fn display_columns(line: &str) -> Vec<Option<char>> {
+    let mut cells = Vec::new();
+    for c in line.chars() {
+        cells.push(Some(c));
+        for _ in 1..width(c.encode_utf8(&mut [0; 4])) {
+            cells.push(None);
+        }
+    }
+    cells
+}
+
 fn is_simple_table_border(line: &str) -> bool {
     line.starts_with('=') && line.contains(' ') && line.chars().all(|c| c == '=' || c == ' ')
 }
 
 /// A simple table: its cells, each a paragraph, in row order.
 fn simple_table(lines: &[String], start: usize) -> Option<(Block, usize)> {
+    // Columns are display cells, as docutils' `pad_double_width` makes them.
     let border = &lines[start];
     let mut columns = Vec::new();
     let mut in_column = None;
-    for (index, c) in border.char_indices() {
+    for (index, c) in border.chars().enumerate() {
         match (c, in_column) {
             ('=', None) => in_column = Some(index),
             (' ', Some(from)) => {
@@ -957,13 +971,15 @@ fn simple_table(lines: &[String], start: usize) -> Option<(Block, usize)> {
             i += 1;
             continue;
         }
+        let chars = display_columns(line);
         for (column, &(from, to)) in columns.iter().enumerate() {
             let end = if column + 1 == columns.len() {
-                line.len()
+                chars.len()
             } else {
-                to.min(line.len())
+                to.min(chars.len())
             };
-            let cell = line.get(from.min(line.len())..end).unwrap_or("").trim();
+            let cell: String = chars[from.min(end)..end].iter().flatten().collect();
+            let cell = cell.trim();
             if !cell.is_empty() {
                 cells.push(Block::Paragraph(parse_inline(cell)));
             }
@@ -980,8 +996,10 @@ fn grid_table(lines: &[String], start: usize) -> (Block, usize) {
         end += 1;
     }
     let table = &lines[start..end];
+    // Columns are display cells, as docutils' `pad_double_width` makes them.
     let columns: Vec<usize> = table[0]
-        .char_indices()
+        .chars()
+        .enumerate()
         .filter(|(_, c)| *c == '+')
         .map(|(index, _)| index)
         .collect();
@@ -998,8 +1016,13 @@ fn grid_table(lines: &[String], start: usize) -> (Block, usize) {
             }
             continue;
         }
+        let chars = display_columns(line);
         for (column, pair) in columns.windows(2).enumerate() {
-            let text = line.get(pair[0] + 1..pair[1].min(line.len())).unwrap_or("");
+            let end = pair[1].min(chars.len());
+            let text: String = chars[(pair[0] + 1).min(end)..end]
+                .iter()
+                .flatten()
+                .collect();
             row[column].push(text.trim_end().to_string());
         }
     }
