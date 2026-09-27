@@ -57,6 +57,19 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### Docs and tooling
+
+- **Tapes (#598).** `scripts/tape.py` runs a scripted terminal session
+  (`docs/tapes/*.tape`: type, press keys, wait for screen text, take
+  screenshots) against the built `rich` on a real PTY. From one run it writes
+  PNG, SVG and text screenshots, an asciinema cast, a GIF with a key overlay,
+  and an MP4 when FFmpeg is installed. A new CI job, "docs tapes up to date",
+  re-runs every tape and fails when a screenshot's text changes.
+- **Terminal recordings page.** `docs/recordings.md` plays the casts with a
+  vendored asciinema-player 3.17.0 (Apache-2.0), and the README opens with the
+  hero recording. The first tapes cover rendering Markdown, CSV and code,
+  `--watch` re-rendering on save, and `view --pager` scrolling and searching.
+
 ### Ext (0.0.11, unreleased)
 
 - **Frames (#226).** `rich_ext::frame::Frame` stores a render as rows of styled

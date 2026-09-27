@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 998.0 613.8" font-family="Fira Code, DejaVu Sans Mono, Menlo, monospace" font-size="16">
+<rect width="100%" height="100%" rx="9" fill="#292929" stroke="#464646"/>
+<path d="M0 9a9 9 0 0 1 9-9h980.0a9 9 0 0 1 9 9v26h-998.0z" fill="#1e1e1e"/>
+<circle cx="19" cy="17.5" r="6" fill="#ff5f56"/>
+<circle cx="41" cy="17.5" r="6" fill="#ffbd2e"/>
+<circle cx="63" cy="17.5" r="6" fill="#27c93f"/>
+<text x="499.0" y="22.5" fill="#969696" font-family="DejaVu Sans, sans-serif" font-size="13" text-anchor="middle">rich · the terminal toolbox</text>
+<text x="19.0" y="69.6" fill="#ff2c7a" font-weight="bold" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">❯</text>
+<text x="28.6" y="69.6" fill="#c5c8c6" textLength="950.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> rich notes.md                                                                                     </text>
+<text x="431.8" y="90.4" fill="#c5c8c6" font-weight="bold" text-decoration="underline" textLength="134.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Release 0.0.13</text>
+<text x="19.0" y="132.0" fill="#c5c8c6" textLength="115.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Interactive </text>
+<text x="134.2" y="132.0" fill="#c5c8c6" font-weight="bold" textLength="48.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">tapes</text>
+<text x="182.2" y="132.0" fill="#c5c8c6" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">, </text>
+<text x="201.4" y="132.0" fill="#c5c8c6" font-style="italic" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">frames</text>
+<text x="259.0" y="132.0" fill="#c5c8c6" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> and a </text>
+<rect x="326.2" y="116.4" width="105.6" height="20.8" fill="#4b4e55"/>
+<text x="326.2" y="132.0" fill="#398280" font-weight="bold" textLength="105.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">rich choose</text>
+<text x="431.8" y="132.0" fill="#c5c8c6" textLength="547.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> preview.                                                </text>
+<text x="19.0" y="194.4" fill="#68a0b3" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> Crate</text>
+<text x="143.8" y="194.4" fill="#68a0b3" textLength="86.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> Version </text>
+<text x="19.0" y="215.2" fill="#68a0b3" textLength="211.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> ──────────────────── </text>
+<text x="28.6" y="236.0" fill="#c5c8c6" textLength="115.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">rs-rich-ext </text>
+<text x="153.4" y="236.0" fill="#c5c8c6" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">0.0.11 </text>
+<text x="28.6" y="256.8" fill="#c5c8c6" textLength="115.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">rs-rich-cli </text>
+<text x="153.4" y="256.8" fill="#c5c8c6" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">0.0.13 </text>
+<text x="19.0" y="319.2" fill="#98729f" textLength="940.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▌ Every frame in this recording is real output.                                                   </text>
+<text x="19.0" y="360.8" fill="#c5c8c6" font-weight="bold" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> • </text>
+<text x="47.8" y="360.8" fill="#c5c8c6" textLength="931.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">[x] frames with a cell diff                                                                      </text>
+<text x="19.0" y="381.6" fill="#c5c8c6" font-weight="bold" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> • </text>
+<text x="47.8" y="381.6" fill="#c5c8c6" textLength="931.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">[ ] interactive components                                                                       </text>
+<text x="19.0" y="402.4" fill="#ff2c7a" font-weight="bold" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">❯</text>
+<rect x="38.2" y="386.8" width="9.6" height="20.8" fill="#c5c8c6" opacity="0.7"/>
+</svg>

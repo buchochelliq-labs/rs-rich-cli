@@ -1,0 +1,24 @@
+  1 │ //! Horizontal rules.
+  2 │ //!
+  3 │ //! Port of upstream `rich/rule.py`. A [`Rule`] draws a horizontal line across
+  4 │ //! the available width, optionally with a centered title.
+  5 │ //!
+  6 │ //! Titles are console markup or a literal [`Text`], aligned left, center or
+  7 │ //! right; `characters`, `style` (default the theme's `rule.line`) and `end`
+  8 │ //! follow upstream.
+  9 │
+ 10 │ use crate::align::HorizontalAlign;
+ 11 │ use crate::cells::{cell_len, set_cell_size};
+ 12 │ use crate::console::{Console, ConsoleOptions, Overflow};
+ 13 │ use crate::measure::Measurement;
+ 14 │ use crate::protocol::Renderable;
+ 15 │ use crate::segment::Segment;
+ 16 │ use crate::style::StyleType;
+ 17 │ use crate::text::{Text, DEFAULT_TAB_SIZE};
+ 18 │
+ 19 │ /// A horizontal rule, optionally titled. Mirrors `rich.rule.Rule`.
+ 20 │ pub struct Rule {
+ 21 │     title: Option<String>,
+ 22 │     /// A literal title (upstream `Rule(Text(…))`), in place of `title`.
+ 23 │     title_text: Option<Text>,
+:

@@ -1,0 +1,26 @@
+❯ rich notes.md
+                                           Release 0.0.13
+
+Interactive tapes, frames and a rich choose preview.
+
+
+ Crate        Version
+ ────────────────────
+ rs-rich-ext  0.0.11
+ rs-rich-cli  0.0.13
+
+
+▌ Every frame in this recording is real output.
+
+ • [x] frames with a cell diff
+ • [ ] interactive components
+❯
+
+
+
+
+
+
+
+
+

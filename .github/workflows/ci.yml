@@ -329,9 +329,40 @@ jobs:
   #
   # Require `ci-ok` and nothing else from this workflow. Adding or renaming jobs
   # then never touches branch protection again.
+  # Every docs recording is a tape (docs/tapes/*.tape) run against the binary
+  # built here. Re-run them and compare each screenshot's text grid with the
+  # committed one, so docs media cannot drift from the CLI (#598).
+  tapes:
+    name: docs tapes up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install the docs-media tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y less
+          python3 -m pip install -r scripts/requirements-docs-media.txt
+
+      - name: Build the CLI
+        run: cargo build -p rs-rich-cli --locked
+
+      - name: Check every tape's screenshots
+        run: python3 scripts/tape.py --check --no-video docs/tapes/*.tape
+
   ci-ok:
     name: ci-ok
-    needs: [check, features, msrv, parity, release-tests, windows-pager, packages, mermaid-cli]
+    needs: [check, features, msrv, parity, release-tests, windows-pager, packages, mermaid-cli, tapes]
     # `always()` so this reports failure rather than being skipped when a
     # dependency fails — a skipped required check blocks the PR forever.
     if: always()

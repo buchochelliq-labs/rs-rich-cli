@@ -8,6 +8,7 @@ guide page has more.
 
 | What you want to do | Start here |
 |---|---|
+| See the CLI used interactively | [Terminal recordings](recordings.md) |
 | Animate images in the terminal | [CLI and art videos](demos.md) |
 | Style text | [Markup tutorial](tutorial/02-markup.md) |
 | Present structured data | [Table tutorial](tutorial/03-tables.md) |
