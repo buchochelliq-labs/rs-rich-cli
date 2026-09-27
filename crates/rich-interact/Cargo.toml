@@ -1,0 +1,40 @@
+# crates/rich-interact — interactive components between static rendering and a
+# full TUI (#451).
+#
+# Not a port of anything upstream: an rs-rich addition. Components are state
+# machines (one event in, one view out) run by a blocking call or an event
+# loop, painted through rich-ext's frame diff, with a headless driver for
+# tests and a degradation policy for pipes and CI. Independent SemVer from
+# 0.0.1.
+[package]
+name = "rs-rich-interact"
+version = "0.0.1"
+description = "Interactive terminal components for rs-rich: event loop, viewport, item model, headless testing"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rs-rich-interact"
+keywords = ["terminal", "interactive", "tui", "prompt", "cli"]
+categories = ["command-line-interface"]
+include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
+
+[lib]
+name = "rich_interact"
+
+[lints]
+workspace = true
+
+[dependencies]
+rich.workspace = true
+rich-ext.workspace = true
+# Raw mode, the alternate screen, and key and mouse events on every platform.
+crossterm = { version = "0.29", default-features = false, features = ["events", "bracketed-paste", "windows"] }
+
+[dev-dependencies]
+# PTY tests: the terminal is restored after every way out.
+portable-pty = "0.9"
+vt100 = "0.16"
