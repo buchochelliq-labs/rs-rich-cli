@@ -232,7 +232,10 @@ The [0.0.13 plan](plans/0.0.13.md) covers the first slice of
   intuiTUIve;
 - `rich choose`/`filter`/`input`/`confirm`/`pager`, and the rich-cli 1.8.1
   options the binary still lacks (#493, #494, #542);
-- the same components from Python.
+- the same components from Python;
+- tapes: scripted terminal recordings for the docs (#598), and
+  `rich record` with the new `rs-rich-record` crate, to record any terminal
+  program into screenshots, casts, GIF and MP4 (#599, #600).
 
 Core does not change, and stays at 0.0.8.
 
