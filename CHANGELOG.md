@@ -87,15 +87,22 @@ Entries below record subsequent releases and development.
   - a placeholder, a default and password masking;
   - a validator whose message shows under the line;
   - history;
-  - suggestions, fixed or from a provider that runs on a background thread.
-    Stale results are dropped.
+  - suggestions, fixed or from a provider. The provider runs on one
+    background thread per input, one lookup at a time, always for the
+    latest text; stale results are dropped.
 - **`Confirm`** (#470) is a confirmation sheet: a scrollable body of any
   renderables, warnings, and any number of keyed choices.
 - **`Form`** (#288, #472) has text, password, choice and toggle fields. Tab
   and the arrows move between fields, and each validation error shows under
-  its field. It returns `Answers` by field name.
+  its field. A text field with suggestions shows them under it, and Tab and
+  the arrows pick one there. A form with no fields finishes at once. It
+  returns `Answers` by field name.
 - **`Pager`** (#291) pages any renderable at the terminal's width. `/`
-  searches, matches are marked, and `n`/`N` jump between them.
+  searches, matches are marked, and `n`/`N` jump between them. A search given
+  up front opens on its first match.
+- **`Component::start`** runs once before a component's first paint, with
+  the terminal's size. It can finish the component without waiting for a
+  key. The trait's default does nothing.
 - **Finished components collapse** to a one-line answer
   (`? Open › src/main.rs`), and the painter clears what a taller view left
   below. Lines wider than the terminal are cropped instead of wrapping.

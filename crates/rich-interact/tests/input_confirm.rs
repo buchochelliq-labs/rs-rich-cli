@@ -259,3 +259,41 @@ fn confirm_degrades_to_a_line() {
         Outcome::Done("yes".into())
     );
 }
+
+#[test]
+fn a_slow_provider_runs_one_lookup_at_a_time_for_the_latest_text() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let running = Arc::new(AtomicUsize::new(0));
+    let most = Arc::new(AtomicUsize::new(0));
+    let (c, r, m) = (Arc::clone(&calls), Arc::clone(&running), Arc::clone(&most));
+    let input = Input::new("Package").provider(move |query| {
+        c.fetch_add(1, Ordering::SeqCst);
+        let now = r.fetch_add(1, Ordering::SeqCst) + 1;
+        m.fetch_max(now, Ordering::SeqCst);
+        std::thread::sleep(Duration::from_millis(40));
+        r.fetch_sub(1, Ordering::SeqCst);
+        vec![Suggestion::from(format!("{query}-crate").as_str())]
+    });
+    // Ten keys at once, then enough time for the lookups to settle.
+    let script = Script::new()
+        .text("abcdefghij")
+        .wait(Duration::from_millis(3000))
+        .keys("escape");
+    let (_, record) = headless::run(input, script, 40, 8);
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(most.load(Ordering::SeqCst), 1, "lookups overlapped");
+    let calls = calls.load(Ordering::SeqCst);
+    assert!(calls < 10, "{calls} lookups for ten keys");
+    // The latest text's results are what shows.
+    assert!(
+        record
+            .frames
+            .iter()
+            .any(|frame| frame.contains("abcdefghij-crate")),
+        "{:#?}",
+        record.frames
+    );
+}

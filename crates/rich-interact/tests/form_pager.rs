@@ -3,7 +3,7 @@
 use rich::Segment;
 use rich_interact::headless::{self, Script};
 use rich_interact::policy::{Fallback, Reason, ScriptedLineIo};
-use rich_interact::{degrade, Form, Input, Outcome, Pager, Value};
+use rich_interact::{degrade, Answers, Form, Input, Outcome, Pager, Value};
 
 fn form() -> Form {
     Form::new("New service")
@@ -207,4 +207,57 @@ fn a_pager_degrades_to_printing_everything() {
     )
     .unwrap();
     assert_eq!(io.written.trim_end(), "from a renderable");
+}
+
+#[test]
+fn a_form_with_no_fields_is_done_at_once() {
+    // No keys at all: the form must not wait for one.
+    let (outcome, _) = headless::run(Form::new("Nothing to ask"), Script::new(), 40, 5);
+    assert_eq!(outcome.unwrap(), Outcome::Done(Answers::default()));
+}
+
+#[test]
+fn a_form_field_offers_its_suggestions() {
+    let form = Form::new("Deploy")
+        .input(
+            "service",
+            Input::new("Service").suggestions(["api", "auth", "billing"]),
+        )
+        .input("region", Input::new("Region"));
+    let script = Script::new()
+        .text("bil")
+        .keys("tab enter")
+        .text("eu")
+        .keys("enter");
+    let (outcome, record) = headless::run(form, script, 50, 10);
+    let answers = outcome.unwrap().value().unwrap();
+    // Tab completed the suggestion instead of moving to the next field.
+    assert_eq!(answers.text("service"), Some("billing"));
+    assert_eq!(answers.text("region"), Some("eu"));
+    assert!(
+        record
+            .frames
+            .iter()
+            .any(|frame| frame.contains("❯ Service  bil\n             billing\n")),
+        "{:#?}",
+        record.frames
+    );
+}
+
+#[test]
+fn a_search_given_up_front_shows_its_first_match() {
+    let text: Vec<String> = numbered(50)
+        .into_iter()
+        .map(|line| line[0].text.clone())
+        .collect();
+    let pager = Pager::new(rich::Text::new(text.join("\n"))).search("needle");
+    let (_, record) = headless::run(pager, Script::new().keys("n q"), 60, 11);
+    // Before any key: the first match, current, on screen.
+    let first = &record.frames[0];
+    assert!(first.contains("line 10: needle"), "{first}");
+    assert!(first.contains("match 1/5 · n/N"), "{first}");
+    // `n` goes to the second, not the third.
+    let last = record.last_frame();
+    assert!(last.contains("match 2/5"), "{last}");
+    assert!(last.contains("line 20: needle"), "{last}");
 }

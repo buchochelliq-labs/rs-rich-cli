@@ -81,6 +81,10 @@ pub use viewport::Viewport;
 impl<C: Component + ?Sized> Component for &mut C {
     type Output = C::Output;
 
+    fn start(&mut self, context: &Context<'_>) -> Flow<C::Output> {
+        (**self).start(context)
+    }
+
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<C::Output> {
         (**self).handle(event, context)
     }

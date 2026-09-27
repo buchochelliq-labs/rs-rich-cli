@@ -109,6 +109,8 @@ enum Step {
 
 /// A component with its result slot, behind one object-safe face.
 trait Mounted {
+    /// `None` once started.
+    fn start(&mut self, context: &Context<'_>) -> Option<Step>;
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Step;
     fn render(&self, context: &Context<'_>) -> View;
     fn tick(&self) -> Option<Duration>;
@@ -119,11 +121,12 @@ trait Mounted {
 struct Slot<C: Component> {
     component: C,
     result: Rc<RefCell<Shared<C::Output>>>,
+    started: bool,
 }
 
-impl<C: Component> Mounted for Slot<C> {
-    fn handle(&mut self, event: &Event, context: &Context<'_>) -> Step {
-        let outcome = match self.component.handle(event, context) {
+impl<C: Component> Slot<C> {
+    fn step(&mut self, flow: Flow<C::Output>) -> Step {
+        let outcome = match flow {
             Flow::Continue => return Step::Continue,
             Flow::Handoff(command) => return Step::Handoff(command),
             Flow::Done(value) => Outcome::Done(value),
@@ -131,6 +134,21 @@ impl<C: Component> Mounted for Slot<C> {
         };
         self.result.borrow_mut().finish(outcome);
         Step::Finished
+    }
+}
+
+impl<C: Component> Mounted for Slot<C> {
+    fn start(&mut self, context: &Context<'_>) -> Option<Step> {
+        if std::mem::replace(&mut self.started, true) {
+            return None;
+        }
+        let flow = self.component.start(context);
+        Some(self.step(flow))
+    }
+
+    fn handle(&mut self, event: &Event, context: &Context<'_>) -> Step {
+        let flow = self.component.handle(event, context);
+        self.step(flow)
     }
 
     fn render(&self, context: &Context<'_>) -> View {
@@ -226,6 +244,7 @@ impl<'a> EventLoop<'a> {
             Box::new(Slot {
                 component,
                 result: Rc::clone(&result),
+                started: false,
             }),
             next,
         ));
@@ -329,6 +348,25 @@ impl<'a> EventLoop<'a> {
         Ok(())
     }
 
+    /// Start every component not started yet, before it is painted.
+    fn start(&mut self) -> io::Result<()> {
+        for index in 0..self.mounted.len() {
+            if self.mounted[index].0.finished() {
+                continue;
+            }
+            let (width, height) = self.space();
+            let context = Context {
+                console: &self.console,
+                width,
+                height,
+            };
+            if let Some(step) = self.mounted[index].0.start(&context) {
+                self.apply(index, step)?;
+            }
+        }
+        Ok(())
+    }
+
     fn deliver(&mut self, index: usize, event: &Event) -> io::Result<()> {
         let (width, height) = self.space();
         // Field by field, so the context can borrow the console while the
@@ -339,6 +377,12 @@ impl<'a> EventLoop<'a> {
             height,
         };
         let step = self.mounted[index].0.handle(event, &context);
+        self.apply(index, step)
+    }
+
+    /// Carry out what a component asked for: for a hand-off, run the
+    /// command and deliver [`Event::Returned`].
+    fn apply(&mut self, index: usize, step: Step) -> io::Result<()> {
         if let Step::Handoff(mut command) = step {
             let finish = self.painter.finish(false);
             self.backend.write(&finish)?;
@@ -360,6 +404,7 @@ impl<'a> EventLoop<'a> {
 
     fn run_inner(&mut self) -> io::Result<()> {
         loop {
+            self.start()?;
             self.paint()?;
             if !self.running() {
                 return Ok(());

@@ -5,7 +5,9 @@
 //! and Enter waits until it passes. Up and Down walk the history, or the
 //! suggestions when some are showing; Tab accepts one. Suggestions come from
 //! a fixed list, filtered as you type, or from a provider called on a
-//! background thread, so a slow lookup never stalls typing.
+//! background thread, so a slow lookup never stalls typing. The input has
+//! one such thread; it runs one lookup at a time and, when it is free,
+//! takes only the latest text, so typing never piles up lookups.
 
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
@@ -74,7 +76,9 @@ pub struct Input {
     recall: Option<(usize, String)>,
     suggestions: Vec<Suggestion>,
     provider: Option<Provider>,
-    /// (generation, results) from provider threads.
+    /// (generation, text) to the provider's thread, started on first use.
+    requests: Option<Sender<(u64, String)>>,
+    /// (generation, results) back from it.
     sender: Sender<(u64, Vec<Suggestion>)>,
     receiver: Receiver<(u64, Vec<Suggestion>)>,
     generation: u64,
@@ -104,6 +108,7 @@ impl Input {
             recall: None,
             suggestions: Vec::new(),
             provider: None,
+            requests: None,
             sender,
             receiver,
             generation: 0,
@@ -228,12 +233,25 @@ impl Input {
         if let Some(provider) = &self.provider {
             self.generation += 1;
             self.pending = true;
-            let (provider, sender, generation) =
-                (Arc::clone(provider), self.sender.clone(), self.generation);
-            let query = self.value.clone();
-            std::thread::spawn(move || {
-                let _ = sender.send((generation, provider(&query)));
+            let requests = self.requests.get_or_insert_with(|| {
+                let (requests, queue) = channel::<(u64, String)>();
+                let (provider, sender) = (Arc::clone(provider), self.sender.clone());
+                // Ends when the input, and with it `requests`, is dropped.
+                std::thread::spawn(move || {
+                    while let Ok(mut request) = queue.recv() {
+                        // Skip to the latest text: older lookups are stale.
+                        while let Ok(newer) = queue.try_recv() {
+                            request = newer;
+                        }
+                        let (generation, query) = request;
+                        if sender.send((generation, provider(&query))).is_err() {
+                            return;
+                        }
+                    }
+                });
+                requests
             });
+            let _ = requests.send((self.generation, self.value.clone()));
             // Until the new results come, keep only what still fits.
             let current: Vec<Suggestion> = self.shown.iter().map(|(s, _)| s.clone()).collect();
             self.show(current);
@@ -371,6 +389,54 @@ impl Input {
         &self.prompt
     }
 
+    /// Whether suggestions are showing: Tab, Up, Down and Enter (with one
+    /// selected) are theirs.
+    pub(crate) fn suggesting(&self) -> bool {
+        !self.shown.is_empty()
+    }
+
+    /// Whether Enter would accept a selected suggestion rather than submit.
+    pub(crate) fn has_selection(&self) -> bool {
+        self.selected.is_some()
+    }
+
+    /// Accept the selected suggestion, as Enter does before submitting.
+    pub(crate) fn accept_selected(&mut self) {
+        if let Some(index) = self.selected {
+            self.accept(index);
+        }
+    }
+
+    /// The suggestion rows (or a pending marker), each after `indent`.
+    pub(crate) fn suggestion_rows(&self, width: usize, indent: &str) -> Vec<Vec<Segment>> {
+        let theme = &self.theme;
+        let mut lines = Vec::new();
+        for (index, (suggestion, positions)) in self.shown.iter().enumerate() {
+            let selected = self.selected == Some(index);
+            let mut row: Vec<Segment> = vec![plain(indent.to_string())];
+            row.push(if selected {
+                text(format!("  {} ", theme.pointer), &theme.pointer_style)
+            } else {
+                plain("    ")
+            });
+            let base = selected.then_some(&theme.focused);
+            row.extend(highlight(
+                &suggestion.value,
+                positions,
+                base,
+                &theme.matched,
+            ));
+            if let Some(description) = &suggestion.description {
+                row.push(text(format!("  {description}"), &theme.hint));
+            }
+            lines.push(fit(row, width));
+        }
+        if self.pending && self.shown.is_empty() && !self.value.is_empty() {
+            lines.push(vec![text(format!("{indent}    …"), &theme.hint)]);
+        }
+        lines
+    }
+
     pub(crate) fn masked(&self, value: &str) -> String {
         self.shown_value(value)
     }
@@ -498,28 +564,7 @@ impl Component for Input {
         } else if let Some(help) = &self.help {
             lines.push(fit(vec![text(format!("  {help}"), &theme.hint)], width));
         }
-        for (index, (suggestion, positions)) in self.shown.iter().enumerate() {
-            let selected = self.selected == Some(index);
-            let mut row: Vec<Segment> = if selected {
-                vec![text(format!("  {} ", theme.pointer), &theme.pointer_style)]
-            } else {
-                vec![plain("    ")]
-            };
-            let base = selected.then_some(&theme.focused);
-            row.extend(highlight(
-                &suggestion.value,
-                positions,
-                base,
-                &theme.matched,
-            ));
-            if let Some(description) = &suggestion.description {
-                row.push(text(format!("  {description}"), &theme.hint));
-            }
-            lines.push(fit(row, width));
-        }
-        if self.pending && self.shown.is_empty() && !self.value.is_empty() {
-            lines.push(vec![text("    …", &theme.hint)]);
-        }
+        lines.extend(self.suggestion_rows(width, ""));
         View::new(lines).with_cursor(0, column.min(width.saturating_sub(1)))
     }
 

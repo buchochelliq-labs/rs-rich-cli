@@ -183,6 +183,14 @@ impl Pager {
 impl Component for Pager {
     type Output = ();
 
+    /// Render the content at the terminal's width and, for a search given
+    /// up front, show its first match.
+    fn start(&mut self, context: &Context<'_>) -> Flow<()> {
+        self.render_at(context);
+        self.jump(0, Self::page(context));
+        Flow::Continue
+    }
+
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<()> {
         self.render_at(context);
         let page = Self::page(context);

@@ -7,6 +7,8 @@
 //! last, submits. Submitting checks every field and focuses the first that
 //! fails, with its message under it.
 
+use std::time::Duration;
+
 use rich::Segment;
 
 use crate::component::{Component, Context, Flow, View};
@@ -189,9 +191,47 @@ impl Form {
 impl Component for Form {
     type Output = Answers;
 
+    /// A form with no fields has nothing to ask: done at once.
+    fn start(&mut self, _: &Context<'_>) -> Flow<Answers> {
+        if self.fields.is_empty() {
+            self.answer = Some(true);
+            return Flow::Done(Answers::default());
+        }
+        Flow::Continue
+    }
+
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<Answers> {
         if self.fields.is_empty() {
             return Flow::Done(Answers::default());
+        }
+        if let Event::Tick = event {
+            // Provider results for every text field, not only the focused.
+            for field in &mut self.fields {
+                if let Kind::Text(input) = &mut field.kind {
+                    input.handle(event, context);
+                }
+            }
+            return Flow::Continue;
+        }
+        // While a text field shows suggestions, the keys that pick one are
+        // its own: Tab and the arrows, and Enter with one selected.
+        let field = &mut self.fields[self.focus];
+        if let (Some(key), Kind::Text(input)) = (event.key(), &mut field.kind) {
+            if input.suggesting() {
+                match key.code {
+                    KeyCode::Tab | KeyCode::Up | KeyCode::Down => {
+                        input.handle(event, context);
+                        field.error = None;
+                        return Flow::Continue;
+                    }
+                    KeyCode::Enter if input.has_selection() => {
+                        input.accept_selected();
+                        field.error = None;
+                        return Flow::Continue;
+                    }
+                    _ => {}
+                }
+            }
         }
         if let Some(key) = event.key() {
             let last = self.focus + 1 == self.fields.len();
@@ -311,6 +351,9 @@ impl Component for Form {
                 }),
             }
             lines.push(fit(row, width));
+            if let (true, Kind::Text(input)) = (focused, &field.kind) {
+                lines.extend(input.suggestion_rows(width, &" ".repeat(label_width + 2)));
+            }
             if let Some(error) = &field.error {
                 let indent = " ".repeat(label_width + 4);
                 lines.push(fit(
@@ -333,6 +376,18 @@ impl Component for Form {
             Some((row, column)) => view.with_cursor(row, column),
             None => view,
         }
+    }
+
+    /// Ticks for text fields with a suggestion provider, so its results
+    /// arrive.
+    fn tick(&self) -> Option<Duration> {
+        self.fields
+            .iter()
+            .filter_map(|field| match &field.kind {
+                Kind::Text(input) => input.tick(),
+                _ => None,
+            })
+            .min()
     }
 
     fn prompt(&mut self, io: &mut dyn LineIo) -> Result<Option<Answers>, NotInteractive> {

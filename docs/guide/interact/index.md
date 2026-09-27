@@ -47,6 +47,12 @@ impl Component for Counter {
 `context.lines(&renderable)` renders any rich renderable (a `Table`, a
 `Panel`, `Markdown`) into lines.
 
+A component can also implement `start`, which runs once before its first
+paint and gets the same `Context`. Use it for work that needs the terminal's
+size, such as rendering content at the width. It can also finish the
+component straight away, without waiting for a key. The `Pager` renders its
+content there, and a `Form` with no fields returns from it.
+
 ## Ready-made components
 
 Each of these is a `Component`, so it runs under `run`, in an event loop and
@@ -99,7 +105,10 @@ Ctrl+U and Ctrl+W.
 - **History.** Up and Down walk earlier answers.
 - **Suggestions.** They come from a fixed list, filtered as you type, or from a
   `provider` that runs on a background thread, so a slow lookup (a registry, a
-  file system) never stalls typing. Tab accepts one.
+  file system) never stalls typing. The input keeps one such thread. It runs
+  one lookup at a time and, when free, takes only the latest text, so fast
+  typing never piles up lookups. Tab accepts one. Suggestions work the same
+  inside a `Form` field.
 
 ```rust
 let input = Input::new("Crate")
