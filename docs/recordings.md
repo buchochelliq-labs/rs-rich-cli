@@ -100,6 +100,6 @@ python3 scripts/tape.py docs/tapes/*.tape          # write the media
 python3 scripts/tape.py --check docs/tapes/*.tape  # compare the screenshots
 ```
 
-The same tape format becomes a `rich record` command in a later release
+The same tape format becomes the `rich record` command later in 0.0.13
 ([#599](https://github.com/buchochelliq-labs/rs-rich-cli/issues/599)), so you
 will be able to record your own programs the same way.
