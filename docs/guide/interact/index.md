@@ -108,6 +108,11 @@ A component can lend the terminal to another program by returning
 terminal as it was, and the session comes back. The component then receives
 `Event::Returned(exit_code)`. That is how "open in `$EDITOR`" works.
 
+Only one session runs at a time, because the terminal's modes belong to the
+whole process. A component that calls `run` from inside another gets an
+`io::ErrorKind::ResourceBusy` error, and the outer session carries on
+unchanged. Mount both components on one `EventLoop` instead.
+
 PTY tests check each of these by running `stty -a` in the same terminal
 afterwards.
 

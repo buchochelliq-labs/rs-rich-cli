@@ -1,6 +1,7 @@
 //! In a real PTY: the terminal is restored after every way out (#489) —
 //! finishing, Ctrl+C, a panic, and after handing the terminal to another
-//! program.
+//! program. A second session started inside the first is refused and
+//! leaves the first one's terminal as it was.
 //!
 //! The test binary runs itself as the child (`child` below, which does
 //! nothing unless `INTERACT_CHILD` is set), inside `sh`, and runs `stty -a`
@@ -21,9 +22,26 @@ use rich_interact::{
 };
 
 /// The child's component: `enter` finishes, `p` panics, `e` hands the
-/// terminal to `sh -c 'echo handed-off'`.
+/// terminal to `sh -c 'echo handed-off'`, `n` runs another component from
+/// inside this one.
 struct Child {
     returned: Option<Option<i32>>,
+    nested: Option<String>,
+}
+
+fn child_options() -> RunOptions {
+    RunOptions {
+        policy: Policy {
+            interactive: Some(true),
+            ..Policy::default()
+        },
+        session: SessionOptions {
+            alternate_screen: true,
+            mouse: true,
+            bracketed_paste: true,
+        },
+        ..RunOptions::default()
+    }
 }
 
 impl Component for Child {
@@ -35,6 +53,18 @@ impl Component for Child {
             Event::Key(key) => match key.code {
                 KeyCode::Enter => return Flow::Done("finished".into()),
                 KeyCode::Char('p') => panic!("child panics on purpose"),
+                KeyCode::Char('n') => {
+                    let inner = Child {
+                        returned: None,
+                        nested: None,
+                    };
+                    let kind = run(inner, &child_options()).map_err(|error| match error {
+                        rich_interact::Error::Io(error) => format!("{:?}", error.kind()),
+                        other => other.to_string(),
+                    });
+                    let raw = crossterm::terminal::is_raw_mode_enabled().unwrap();
+                    self.nested = Some(format!("nested {kind:?} raw {raw}"));
+                }
                 KeyCode::Char('e') => {
                     let mut command = Command::new("sh");
                     command.args(["-c", "echo handed-off"]);
@@ -48,9 +78,10 @@ impl Component for Child {
     }
 
     fn render(&self, context: &Context<'_>) -> View {
-        let text = match self.returned {
-            Some(code) => format!("back from handoff {code:?}"),
-            None => "child ready".to_string(),
+        let text = match (&self.nested, self.returned) {
+            (Some(nested), _) => nested.clone(),
+            (None, Some(code)) => format!("back from handoff {code:?}"),
+            (None, None) => "child ready".to_string(),
         };
         View::new(context.markup(&text))
     }
@@ -61,19 +92,11 @@ fn child() {
     if std::env::var_os("INTERACT_CHILD").is_none() {
         return;
     }
-    let options = RunOptions {
-        policy: Policy {
-            interactive: Some(true),
-            ..Policy::default()
-        },
-        session: SessionOptions {
-            alternate_screen: true,
-            mouse: true,
-            bracketed_paste: true,
-        },
-        ..RunOptions::default()
+    let child = Child {
+        returned: None,
+        nested: None,
     };
-    let outcome = run(Child { returned: None }, &options);
+    let outcome = run(child, &child_options());
     println!("OUTCOME {outcome:?}");
 }
 
@@ -225,6 +248,22 @@ fn restored_for_a_handoff_and_taken_back() {
     let left = output[..handed].rfind("\x1b[?1049l").expect("left before");
     let entered = output[handed..].find("\x1b[?1049h").expect("entered after");
     assert!(left < handed && entered > 0);
+    assert!(
+        output.contains("OUTCOME Ok(Done(\"finished\"))"),
+        "{output}"
+    );
+    assert_restored(&output, &parser);
+}
+
+#[test]
+fn a_session_inside_a_session_is_refused() {
+    let mut pty = Pty::start("nested");
+    pty.wait_for("child ready");
+    pty.send("n");
+    // The inner run fails and the outer terminal is still raw.
+    pty.wait_for("nested Err(\"ResourceBusy\") raw true");
+    pty.send("\r");
+    let (output, parser) = pty.finish();
     assert!(
         output.contains("OUTCOME Ok(Done(\"finished\"))"),
         "{output}"
