@@ -78,5 +78,27 @@ unsafe_code = "deny"
 # Keep the core faithful and readable; deny sloppy stuff in CI.
 all = { level = "warn", priority = -1 }
 
+# `rich record` rasterises and encodes every frame of a recording. Unoptimised,
+# that is the slow part of a debug build, so the recorder and its pixel crates
+# are optimised even in dev builds (it changes nothing else).
+[profile.dev.package.rs-rich-record]
+opt-level = 3
+[profile.dev.package.fontdue]
+opt-level = 3
+[profile.dev.package.gif]
+opt-level = 3
+[profile.dev.package.color_quant]
+opt-level = 3
+[profile.dev.package.weezl]
+opt-level = 3
+[profile.dev.package.png]
+opt-level = 3
+[profile.dev.package.fdeflate]
+opt-level = 3
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+[profile.dev.package.crc32fast]
+opt-level = 3
+
 [profile.release]
 lto = "thin"

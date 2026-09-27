@@ -45,6 +45,10 @@ impl Canvas {
             return;
         }
         let i = (y as usize * self.width + x as usize) * 3;
+        if alpha == 255 {
+            self.pixels[i..i + 3].copy_from_slice(&[colour.0, colour.1, colour.2]);
+            return;
+        }
         let a = alpha as u32;
         for (offset, c) in [colour.0, colour.1, colour.2].into_iter().enumerate() {
             let old = self.pixels[i + offset] as u32;
@@ -53,9 +57,16 @@ impl Canvas {
     }
 
     pub fn fill_rect(&mut self, x: i64, y: i64, width: i64, height: i64, colour: Rgb) {
+        let x0 = x.clamp(0, self.width as i64) as usize;
+        let x1 = (x + width).clamp(0, self.width as i64) as usize;
+        let rgb = [colour.0, colour.1, colour.2];
         for py in y.max(0)..(y + height).min(self.height as i64) {
-            for px in x.max(0)..(x + width).min(self.width as i64) {
-                self.blend(px, py, colour, 255);
+            let row = py as usize * self.width * 3;
+            for pixel in self.pixels[row + x0 * 3..row + x1 * 3]
+                .as_chunks_mut::<3>()
+                .0
+            {
+                pixel.copy_from_slice(&rgb);
             }
         }
     }
@@ -71,9 +82,28 @@ impl Canvas {
         colour: Rgb,
     ) {
         let (x1, y1) = (x + width, y + height);
+        let (left, right) = (x.floor() as i64, x1.ceil() as i64);
         for py in y.floor() as i64..y1.ceil() as i64 {
-            for px in x.floor() as i64..x1.ceil() as i64 {
-                let (cx, cy) = (px as f64 + 0.5, py as f64 + 0.5);
+            let cy = py as f64 + 0.5;
+            // The part of the row the shape covers fully: clear of the
+            // antialiased edges, and of the corners unless the row is
+            // between them. Filled directly; only the rest needs coverage.
+            // (A radius under half a pixel never reaches full coverage.)
+            let (span_lo, span_hi) = if radius < 0.5 || cy - y < 1.5 || y1 - cy < 1.5 {
+                (right, right)
+            } else if cy - y > radius + 1.0 && y1 - cy > radius + 1.0 {
+                ((x + 1.5).ceil() as i64, (x1 - 1.5).floor() as i64)
+            } else {
+                (
+                    (x + radius + 1.0).ceil() as i64,
+                    (x1 - radius - 1.0).floor() as i64,
+                )
+            };
+            if span_hi > span_lo {
+                self.fill_rect(span_lo, py, span_hi - span_lo, 1, colour);
+            }
+            for px in (left..right).filter(|px| *px < span_lo || *px >= span_hi.max(span_lo)) {
+                let cx = px as f64 + 0.5;
                 // Distance outside the rounded shape, in pixels.
                 let dx = (x + radius - cx).max(cx - (x1 - radius)).max(0.0);
                 let dy = (y + radius - cy).max(cy - (y1 - radius)).max(0.0);
@@ -523,59 +553,151 @@ fn changed(a: &Canvas, b: &Canvas) -> Option<(usize, usize, usize, usize)> {
     (x0 != usize::MAX).then(|| (x0, y0, x1 - x0 + 1, y1 - y0 + 1))
 }
 
-/// Encode frames as a looping GIF; frames of different sizes are centred on
-/// one canvas. After the first, each frame stores only the rectangle that
-/// changed, drawn over the previous one. `delays` are in seconds.
+/// A hasher for packed RGB keys: one multiply, where SipHash was most of the
+/// palette's cost.
+#[derive(Default)]
+struct RgbHasher(u64);
+
+impl std::hash::Hasher for RgbHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.0 = (self.0 << 8 | *byte as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        }
+    }
+    fn write_u32(&mut self, value: u32) {
+        self.0 = (value as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    }
+}
+
+type RgbMap<V> = HashMap<u32, V, std::hash::BuildHasherDefault<RgbHasher>>;
+
+fn rgb(pixel: &[u8]) -> u32 {
+    (pixel[0] as u32) << 16 | (pixel[1] as u32) << 8 | pixel[2] as u32
+}
+
+/// The pixels of each frame that the GIF stores: all of the first frame, then
+/// the rectangle that changed (None when nothing did).
+type Region = Option<(usize, usize, usize, usize)>;
+
+/// One palette for a whole GIF, and the index of every colour in it.
+///
+/// Terminal frames use few colours, so when the stored pixels together have
+/// 256 or fewer the palette is exact. Otherwise NeuQuant is trained once, on
+/// the distinct colours weighted by use, and each distinct colour is mapped
+/// to its nearest entry once: quantising every frame was the slow part of
+/// GIF encoding.
+fn palette(frames: &[Canvas], regions: &[Region]) -> (Vec<u8>, RgbMap<u8>) {
+    let mut colours: RgbMap<u32> = RgbMap::default();
+    for (canvas, region) in frames.iter().zip(regions) {
+        let Some((x, y, w, h)) = *region else {
+            continue;
+        };
+        for row in y..y + h {
+            let start = (row * canvas.width + x) * 3;
+            for pixel in canvas.pixels[start..start + w * 3].as_chunks::<3>().0 {
+                *colours.entry(rgb(pixel)).or_default() += 1;
+            }
+        }
+    }
+    let unpack = |c: u32| [(c >> 16) as u8, (c >> 8) as u8, c as u8];
+    if colours.len() <= 256 {
+        let mut sorted: Vec<u32> = colours.into_keys().collect();
+        sorted.sort_unstable();
+        let palette = sorted.iter().flat_map(|c| unpack(*c)).collect();
+        let index = sorted
+            .into_iter()
+            .enumerate()
+            .map(|(i, c)| (c, i as u8))
+            .collect();
+        return (palette, index);
+    }
+    // Weighted by use (capped, so flat backgrounds cannot crowd out text),
+    // and at most ~100k samples whatever the recording's length.
+    let total: u64 = colours.values().map(|n| (*n).min(32) as u64).sum();
+    let scale = (100_000.0 / total as f64).min(1.0);
+    let mut sample = Vec::new();
+    for (colour, count) in &colours {
+        let repeats = (((*count).min(32) as f64 * scale).ceil() as usize).max(1);
+        let [r, g, b] = unpack(*colour);
+        for _ in 0..repeats {
+            sample.extend_from_slice(&[r, g, b, 255]);
+        }
+    }
+    let quantizer = color_quant::NeuQuant::new(10, 256, &sample);
+    let palette = quantizer.color_map_rgb();
+    let index = colours
+        .into_keys()
+        .map(|c| {
+            let [r, g, b] = unpack(c);
+            (c, quantizer.index_of(&[r, g, b, 255]) as u8)
+        })
+        .collect();
+    (palette, index)
+}
+
+/// Encode frames as a looping GIF with one global palette; frames of
+/// different sizes are centred on one canvas. After the first, each frame
+/// stores only the rectangle that changed, drawn over the previous one.
+/// `delays` are in seconds.
 pub fn gif(frames: &[(Canvas, f64)], out: impl Write) -> Result<(), gif::EncodingError> {
     let width = frames.iter().map(|(c, _)| c.width).max().unwrap_or(1);
     let height = frames.iter().map(|(c, _)| c.height).max().unwrap_or(1);
-    let mut encoder = gif::Encoder::new(out, width as u16, height as u16, &[])?;
+    let fitted: Vec<Canvas> = frames
+        .iter()
+        .map(|(canvas, _)| {
+            if (canvas.width, canvas.height) == (width, height) {
+                canvas.clone()
+            } else {
+                let mut padded = Canvas::new(width, height, CHROME);
+                padded.paste(
+                    canvas,
+                    (width - canvas.width) / 2,
+                    (height - canvas.height) / 2,
+                );
+                padded
+            }
+        })
+        .collect();
+    let regions: Vec<Region> = (0..fitted.len())
+        .map(|i| match i {
+            0 => Some((0, 0, width, height)),
+            _ => changed(&fitted[i - 1], &fitted[i]),
+        })
+        .collect();
+    let (palette, index) = palette(&fitted, &regions);
+    let mut encoder = gif::Encoder::new(out, width as u16, height as u16, &palette)?;
     encoder.set_repeat(gif::Repeat::Infinite)?;
-    let mut previous: Option<Canvas> = None;
+    let delay = |seconds: f64| (seconds * 100.0).round().clamp(2.0, 65535.0) as u16;
     // A frame and the delay it has accumulated, waiting to be written.
     let mut pending: Option<gif::Frame<'static>> = None;
-    for (canvas, seconds) in frames {
-        let full = if (canvas.width, canvas.height) == (width, height) {
-            canvas.clone()
-        } else {
-            let mut padded = Canvas::new(width, height, CHROME);
-            padded.paste(
-                canvas,
-                (width - canvas.width) / 2,
-                (height - canvas.height) / 2,
-            );
-            padded
-        };
-        let delay = |seconds: f64| (seconds * 100.0).round().clamp(2.0, 65535.0) as u16;
-        let rect = match &previous {
-            None => Some((0, 0, width, height)),
-            Some(before) => changed(before, &full),
-        };
-        match rect {
+    for (i, full) in fitted.iter().enumerate() {
+        let seconds = frames[i].1;
+        let Some((x, y, w, h)) = regions[i] else {
             // Nothing changed: the frame on hold simply lasts longer.
-            None => {
-                if let Some(frame) = pending.as_mut() {
-                    frame.delay = frame.delay.saturating_add(delay(*seconds));
-                }
+            if let Some(frame) = pending.as_mut() {
+                frame.delay = frame.delay.saturating_add(delay(seconds));
             }
-            Some((x, y, w, h)) => {
-                if let Some(frame) = pending.take() {
-                    encoder.write_frame(&frame)?;
-                }
-                let mut pixels = Vec::with_capacity(w * h * 3);
-                for row in y..y + h {
-                    let start = (row * width + x) * 3;
-                    pixels.extend_from_slice(&full.pixels[start..start + w * 3]);
-                }
-                let mut frame = gif::Frame::from_rgb_speed(w as u16, h as u16, &pixels, 20);
-                frame.left = x as u16;
-                frame.top = y as u16;
-                frame.dispose = gif::DisposalMethod::Keep;
-                frame.delay = delay(*seconds);
-                pending = Some(frame);
+            continue;
+        };
+        if let Some(frame) = pending.take() {
+            encoder.write_frame(&frame)?;
+        }
+        let mut indices = Vec::with_capacity(w * h);
+        for row in y..y + h {
+            let start = (row * width + x) * 3;
+            for pixel in full.pixels[start..start + w * 3].as_chunks::<3>().0 {
+                indices.push(index[&rgb(pixel)]);
             }
         }
-        previous = Some(full);
+        let mut frame = gif::Frame::from_indexed_pixels(w as u16, h as u16, indices, None);
+        frame.left = x as u16;
+        frame.top = y as u16;
+        frame.dispose = gif::DisposalMethod::Keep;
+        frame.delay = delay(seconds);
+        pending = Some(frame);
     }
     if let Some(frame) = pending {
         encoder.write_frame(&frame)?;
@@ -612,6 +734,49 @@ mod tests {
         assert_eq!(&canvas.pixels[..3], &[CHROME.0, CHROME.1, CHROME.2]);
         let png = canvas.png();
         assert_eq!(&png[1..4], b"PNG");
+    }
+
+    /// The original per-pixel `fill_rounded`, before the row spans.
+    fn reference_rounded(
+        canvas: &mut Canvas,
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+        radius: f64,
+        colour: Rgb,
+    ) {
+        let (x1, y1) = (x + width, y + height);
+        for py in y.floor() as i64..y1.ceil() as i64 {
+            for px in x.floor() as i64..x1.ceil() as i64 {
+                let (cx, cy) = (px as f64 + 0.5, py as f64 + 0.5);
+                let dx = (x + radius - cx).max(cx - (x1 - radius)).max(0.0);
+                let dy = (y + radius - cy).max(cy - (y1 - radius)).max(0.0);
+                let outside = (dx * dx + dy * dy).sqrt() - radius;
+                let edge = (cx - x).min(x1 - cx).min(cy - y).min(y1 - cy);
+                let coverage = (0.5 - outside).clamp(0.0, 1.0) * (edge + 0.5).clamp(0.0, 1.0);
+                canvas.blend(px, py, colour, (coverage * 255.0) as u8);
+            }
+        }
+    }
+
+    #[test]
+    fn rounded_fill_matches_the_per_pixel_reference() {
+        let shapes = [
+            (0.0, 0.0, 40.0, 30.0, 6.0),
+            (1.0, 1.0, 38.0, 12.0, 6.0),
+            (3.5, 2.25, 20.5, 25.75, 4.5),
+            (5.0, 5.0, 10.0, 10.0, 5.0),
+            (0.0, 0.0, 40.0, 40.0, 0.0),
+            (-3.0, -2.0, 30.0, 8.0, 10.0),
+        ];
+        for (x, y, w, h, r) in shapes {
+            let mut fast = Canvas::new(48, 48, (10, 20, 30));
+            let mut slow = fast.clone();
+            fast.fill_rounded(x, y, w, h, r, (200, 100, 50));
+            reference_rounded(&mut slow, x, y, w, h, r, (200, 100, 50));
+            assert!(fast == slow, "shape {:?} differs", (x, y, w, h, r));
+        }
     }
 
     #[test]

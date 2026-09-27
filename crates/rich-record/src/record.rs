@@ -66,7 +66,13 @@ impl Drop for Workspace {
 fn environment(workspace: &Path, tape: &Tape, options: &Options) -> Vec<(String, String)> {
     let home = workspace.join(".home");
     let inherited = std::env::var_os("PATH").unwrap_or_else(|| "/usr/bin:/bin".into());
-    let mut dirs: Vec<PathBuf> = options.bin_dir.iter().cloned().collect();
+    // The shell runs in the workspace, so a relative directory is resolved
+    // against where the recorder was started.
+    let mut dirs: Vec<PathBuf> = options
+        .bin_dir
+        .iter()
+        .map(|dir| std::path::absolute(dir).unwrap_or_else(|_| dir.clone()))
+        .collect();
     dirs.extend(std::env::split_paths(&inherited));
     let path = std::env::join_paths(dirs).map_or_else(
         |_| inherited.to_string_lossy().into_owned(),
@@ -96,6 +102,7 @@ fn environment(workspace: &Path, tape: &Tape, options: &Options) -> Vec<(String,
         ("HISTFILE".into(), "/dev/null".into()),
     ];
     if let Some(repo) = &options.repo {
+        let repo = std::path::absolute(repo).unwrap_or_else(|_| repo.clone());
         env.push(("REPO".into(), repo.display().to_string()));
     }
     env.extend(tape.env.iter().cloned());

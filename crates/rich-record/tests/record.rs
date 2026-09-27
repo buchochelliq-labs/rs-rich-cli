@@ -122,6 +122,41 @@ fn records_writes_and_checks() {
 }
 
 #[test]
+fn a_relative_bin_dir_resolves_against_the_current_directory() {
+    // The shell runs in a temporary workspace: `bin` must still be found.
+    let base = scratch("bin");
+    std::fs::create_dir_all(base.join("bin")).unwrap();
+    let tool = base.join("bin/tape-tool");
+    std::fs::write(&tool, "#!/bin/sh\necho tool-ran\n").unwrap();
+    let mut permissions = std::fs::metadata(&tool).unwrap().permissions();
+    std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o755);
+    std::fs::set_permissions(&tool, permissions).unwrap();
+    let relative = pathdiff(&base.join("bin"));
+    let options = Options {
+        bin_dir: Some(relative),
+        ..Options::default()
+    };
+    let tape =
+        tape::parse("Type \"tape-tool\"\nEnter\nWait \"tool-ran\" 5s\nScreenshot x\n").unwrap();
+    record::record(&tape, "bin", &options).unwrap();
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// `path` relative to the current directory, climbing with `..` as needed.
+fn pathdiff(path: &std::path::Path) -> std::path::PathBuf {
+    let cwd = std::env::current_dir().unwrap();
+    let mut up = std::path::PathBuf::new();
+    let mut base = cwd.as_path();
+    loop {
+        if let Ok(rest) = path.strip_prefix(base) {
+            return up.join(rest);
+        }
+        up.push("..");
+        base = base.parent().expect("a common ancestor");
+    }
+}
+
+#[test]
 fn a_wait_that_never_matches_names_its_line() {
     let tape =
         tape::parse("Type \"echo hi\"\nEnter\nWait \"never\" 500ms\nScreenshot x\n").unwrap();
