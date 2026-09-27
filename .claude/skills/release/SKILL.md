@@ -89,7 +89,7 @@ scripts. Add a tape for each new user-visible command, then regenerate with the
 release build and share the media:
 
 ```bash
-cargo build --release -p rs-rich-cli --locked
+cargo build --release -p rs-rich-cli -p rs-rich-interact --examples --locked
 target/release/rich record --bin-dir target/release --output docs/media/tapes docs/tapes/*.tape
 target/release/rich record --check --bin-dir target/release --output docs/media/tapes docs/tapes/*.tape
 ```

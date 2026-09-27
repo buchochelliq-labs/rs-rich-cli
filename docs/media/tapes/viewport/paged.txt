@@ -1,0 +1,18 @@
+ Wait /"replicas": 5/
+ Screenshot after
+ Ctrl+C
+
+
+The recorder runs it in bash on a real PTY with a pinned environment,
+follows the screen with a VT emulator, and writes:
+
+ • per Screenshot: a PNG in a window frame, an SVG with selectable text, and
+   a text grid;
+ • an asciinema v2 cast, with input events and the palette in its header;
+ • a GIF with a key overlay, and an MP4 when FFmpeg is installed.
+
+check compares a new run's text grids with committed ones, so documentation
+media cannot drift from the program it shows.
+
+
+lines 18–34 of 51 · ↑↓ PgUp PgDn · q quits

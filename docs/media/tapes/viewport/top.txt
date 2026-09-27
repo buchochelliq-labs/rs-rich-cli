@@ -1,0 +1,18 @@
+                               rs-rich-record
+
+Record scripted terminal sessions (tapes) into screenshots, asciinema casts,
+GIF and MP4. Part of rs-rich, the Rust port of Python's rich. This crate is
+an rs-rich addition, not a port.
+
+A tape scripts a session, one step per line:
+
+
+ Set Size 90x22
+ Set Title "rich --watch · re-render on save"
+ Write service.json '{"replicas": 2}'
+ Type "rich --watch service.json"
+ Enter
+ Wait /"replicas": 2/
+ Screenshot before
+ Exec "sed -i 's/2/5/' service.json"
+lines 1–17 of 51 · ↑↓ PgUp PgDn · q quits

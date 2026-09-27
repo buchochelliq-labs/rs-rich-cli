@@ -356,8 +356,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y less zsh fish
 
-      - name: Build the CLI
-        run: cargo build -p rs-rich-cli --locked
+      - name: Build the CLI and the interact examples (the viewport tape)
+        run: cargo build -p rs-rich-cli -p rs-rich-interact --examples --locked
 
       - name: Check every tape's screenshots
         run: >-
