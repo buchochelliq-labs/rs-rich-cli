@@ -19,6 +19,8 @@ pub struct Painter {
     previous: Option<Frame>,
     /// Rows the region has taken on screen so far.
     extent: usize,
+    /// Rows of the last view painted.
+    height: usize,
     /// The row of the region the cursor is on.
     row: usize,
     /// Where the terminal cursor was left for the view, and whether shown.
@@ -33,6 +35,7 @@ impl Painter {
             no_color,
             previous: None,
             extent: 0,
+            height: 0,
             row: 0,
             cursor: None,
             // The session hides the cursor on entry.
@@ -51,6 +54,7 @@ impl Painter {
     pub fn reset(&mut self) {
         self.previous = None;
         self.extent = 0;
+        self.height = 0;
         self.row = 0;
         self.cursor_shown = false;
     }
@@ -165,6 +169,7 @@ impl Painter {
             }
         }
         self.cursor = cursor;
+        self.height = height;
         self.previous = Some(frame);
         out
     }
@@ -181,9 +186,18 @@ impl Painter {
                 out.push_str("\x1b[J");
             }
         } else if self.extent > 0 {
-            let last = self.extent - 1;
-            self.go(last, 0, &mut out);
-            out.push_str("\r\n");
+            // Below the last view, clearing rows a taller earlier view left
+            // (a picker that collapsed to its answer).
+            if self.height > 0 {
+                self.go(self.height - 1, 0, &mut out);
+                out.push_str("\r\n");
+            } else {
+                self.up_to(0, &mut out);
+                out.push('\r');
+            }
+            if self.extent > self.height {
+                out.push_str("\x1b[J");
+            }
         }
         if !self.cursor_shown {
             out.push_str("\x1b[?25h");

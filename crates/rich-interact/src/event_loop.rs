@@ -15,7 +15,7 @@ use std::process::Command;
 use std::rc::Rc;
 use std::time::Duration;
 
-use rich::{ColorSystem, Console};
+use rich::{ColorSystem, Console, Segment};
 
 use crate::component::{Component, Context, Flow, View};
 use crate::event::Event;
@@ -266,6 +266,13 @@ impl<'a> EventLoop<'a> {
         let mut view = View::default();
         for (component, _) in &self.mounted {
             view.push(component.render(&context));
+        }
+        // A line wider than the terminal would wrap and shift every row
+        // below it: crop.
+        for line in &mut view.lines {
+            if line.iter().map(Segment::cell_length).sum::<usize>() > context.width {
+                *line = Segment::adjust_line_length(line, context.width, None);
+            }
         }
         let out = self.painter.paint(&view, max_rows);
         if !out.is_empty() {
