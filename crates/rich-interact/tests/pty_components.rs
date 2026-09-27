@@ -4,7 +4,7 @@
 
 mod support;
 
-use rich_interact::policy::Policy;
+use rich_interact::policy::{Fallback, Policy};
 use rich_interact::{run, Confirm, Form, Input, Item, MultiSelect, Pager, RunOptions, Select};
 use support::{assert_restored, Pty};
 
@@ -51,6 +51,21 @@ fn child() {
                 &options
             )
         ),
+        // No session: the line fallback, with stdin still the terminal.
+        "secret" => {
+            let options = RunOptions {
+                policy: Policy {
+                    interactive: Some(false),
+                    fallback: Fallback::Prompt,
+                },
+                ..RunOptions::default()
+            };
+            // The answer's length only: the test looks for the answer itself.
+            match run(Input::masked("Token ready"), &options) {
+                Ok(rich_interact::Outcome::Done(token)) => format!("Done({})", token.len()),
+                other => format!("{other:?}"),
+            }
+        }
         other => panic!("unknown child {other}"),
     };
     println!("OUTCOME {outcome}");
@@ -114,4 +129,17 @@ fn pager_in_a_terminal() {
 #[test]
 fn ctrl_c_interrupts_any_component() {
     drive("form", &["ab", "\x03"], "Ok(Interrupted)");
+}
+
+#[test]
+fn a_masked_line_prompt_does_not_echo() {
+    let mut pty = Pty::start("secret");
+    pty.wait_for("Token ready: ");
+    pty.send("hunter2");
+    std::thread::sleep(std::time::Duration::from_millis(40));
+    pty.send("\r");
+    let (output, parser) = pty.finish();
+    assert!(output.contains("OUTCOME Done(7)"), "{output}");
+    assert!(!output.contains("hunter2"), "echoed: {output}");
+    assert_restored(&output, &parser);
 }

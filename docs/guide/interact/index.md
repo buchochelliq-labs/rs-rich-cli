@@ -100,6 +100,8 @@ Ctrl+U and Ctrl+W.
 - **Placeholder, default and masking.** A placeholder shows while the line is
   empty; `default` answers an empty line; `Input::masked` hides what is typed,
   for passwords and tokens, and shows a default only as `(default set)`.
+  Without a terminal session but with stdin a terminal (`token=$(app)`), it
+  reads its line with echo off, as Python's `getpass` does.
 - **Validation.** A validator's message shows under the line, and Enter waits
   until it passes.
 - **History.** Up and Down walk earlier answers.

@@ -325,3 +325,19 @@ fn a_password_default_is_never_shown_or_written() {
     );
     assert_eq!(io.written, "Token [default set]: ");
 }
+
+#[test]
+fn a_masked_answer_is_read_as_a_secret() {
+    let reason = Reason::StdoutNotTerminal;
+    let mut masked = Input::masked("Token");
+    let mut io = ScriptedLineIo::new(["hunter2"]);
+    assert_eq!(
+        degrade(&mut masked, Fallback::Prompt, reason, &mut io).unwrap(),
+        Outcome::Done("hunter2".into())
+    );
+    assert_eq!(io.secrets, 1, "read without echo");
+    let mut plain = Input::new("Name");
+    let mut io = ScriptedLineIo::new(["ada"]);
+    degrade(&mut plain, Fallback::Prompt, reason, &mut io).unwrap();
+    assert_eq!(io.secrets, 0, "an ordinary answer is echoed as usual");
+}

@@ -588,7 +588,13 @@ impl Component for Input {
             prompt.push_str(&format!(" [{}]", &hint[1..hint.len() - 1]));
         }
         io.write(&format!("{prompt}: "));
-        let Some(mut line) = io.read_line() else {
+        // A masked answer is read without echo where the terminal has it.
+        let read = if self.mask.is_some() {
+            io.read_secret()
+        } else {
+            io.read_line()
+        };
+        let Some(mut line) = read else {
             return Ok(None);
         };
         if line.is_empty() {

@@ -87,7 +87,8 @@ Entries below record subsequent releases and development.
   - a placeholder, a default and masking (`Input::masked`, for passwords
     and tokens). A masked input's
     default is shown only as `(default set)`, on screen and in the line
-    prompt, never as its value;
+    prompt, never as its value. In the line prompt it reads with echo off
+    when stdin is a terminal (`LineIo::read_secret`);
   - a validator whose message shows under the line;
   - history;
   - suggestions, fixed or from a provider. The provider runs on one
