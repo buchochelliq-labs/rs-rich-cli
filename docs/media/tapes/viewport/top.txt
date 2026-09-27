@@ -15,4 +15,4 @@ A tape scripts a session, one step per line:
  Wait /"replicas": 2/
  Screenshot before
  Exec "sed -i 's/2/5/' service.json"
-lines 1–17 of 51 · ↑↓ PgUp PgDn · q quits
+lines 1–17 of 56 · ↑↓ PgUp PgDn · q quits

@@ -15,4 +15,4 @@ check compares a new run's text grids with committed ones, so documentation
 media cannot drift from the program it shows.
 
 
-lines 18–34 of 51 · ↑↓ PgUp PgDn · q quits
+lines 18–34 of 56 · ↑↓ PgUp PgDn · q quits
