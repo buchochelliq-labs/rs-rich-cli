@@ -55,6 +55,23 @@ page down, then `/characters` to search.
 
 [Tape](tapes/pager.tape) · [Cast](media/tapes/pager/pager.cast) · [GIF](media/tapes/pager/pager.gif)
 
+## An interactive component
+
+`rs-rich-interact`'s `Viewport`, run as its example pager, pages a Markdown
+file on the alternate screen. Each key repaints only the cells that changed.
+Enter gives the terminal back, as it was, with the line it was left at. See
+[Interactive components](guide/interact/index.md).
+
+<div class="tape-player" data-cast="../media/tapes/viewport/viewport.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/viewport/viewport.gif" alt="A Markdown file paged in rich_interact's Viewport">
+</div>
+
+| Opened | Paged down | Given back |
+|---|---|---|
+| ![The top of the README](media/tapes/viewport/top.png) | ![One page further](media/tapes/viewport/paged.png) | ![The shell again, with the line it was left at](media/tapes/viewport/returned.png) |
+
+[Tape](tapes/viewport.tape) · [Cast](media/tapes/viewport/viewport.cast) · [GIF](media/tapes/viewport/viewport.gif)
+
 ## How it works
 
 A tape is a short script, one step per line. This is the watch tape:
@@ -124,7 +141,7 @@ recordings that match.
 Regenerate everything, or check it as CI does:
 
 ```bash
-cargo build -p rs-rich-cli
+cargo build -p rs-rich-cli -p rs-rich-interact --examples
 rich=target/debug/rich
 $rich record --bin-dir target/debug --output docs/media/tapes docs/tapes/*.tape
 $rich record --check --bin-dir target/debug --output docs/media/tapes docs/tapes/*.tape
