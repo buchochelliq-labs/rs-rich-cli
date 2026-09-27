@@ -3,14 +3,19 @@
 //! Glyphs come from DejaVu Sans Mono, embedded in the crate (Bitstream Vera
 //! licence, `fonts/LICENSE-DejaVu`), so output is identical on every machine.
 //! [`Fonts::load`] takes another font instead. Italic is drawn upright:
-//! only the regular and bold faces are embedded.
+//! only the regular and bold faces are embedded. Emoji come from the embedded
+//! Twemoji (CC BY 4.0, `fonts/LICENSE-Twemoji`), in colour. Box-drawing,
+//! block and braille characters are drawn as geometry over the whole cell, so
+//! borders join and images and bars have no seams whatever the line height.
 
 use std::collections::HashMap;
 use std::io::Write;
 use std::sync::Mutex;
 
 use fontdue::{Font, FontSettings, Metrics};
+use unicode_width::UnicodeWidthChar;
 
+use crate::render::emoji::Emoji;
 use crate::screen::{Rgb, Snapshot, Theme};
 
 const REGULAR: &[u8] = include_bytes!("../../fonts/DejaVuSansMono.ttf");
@@ -266,10 +271,100 @@ fn draw_box(
     }
 }
 
+/// A block element (U+2580–U+259F) as rectangles in eighths of the cell,
+/// (x0, y0, x1, y1), and the coverage they are filled with: full, or a
+/// shade for ░ ▒ ▓.
+fn blocks(c: char) -> Option<(Vec<[u8; 4]>, u8)> {
+    const QUADRANTS: [[u8; 4]; 4] = [[0, 0, 4, 4], [4, 0, 8, 4], [0, 4, 4, 8], [4, 4, 8, 8]];
+    let code = c as u32;
+    let rects = match code {
+        0x2580 => vec![[0, 0, 8, 4]],
+        0x2581..=0x2588 => vec![[0, (0x2588 - code) as u8, 8, 8]],
+        0x2589..=0x258f => vec![[0, 0, (0x2590 - code) as u8, 8]],
+        0x2590 => vec![[4, 0, 8, 8]],
+        0x2591..=0x2593 => {
+            return Some((vec![[0, 0, 8, 8]], [64, 128, 191][(code - 0x2591) as usize]))
+        }
+        0x2594 => vec![[0, 0, 8, 1]],
+        0x2595 => vec![[7, 0, 8, 8]],
+        0x2596..=0x259f => {
+            // Upper left, upper right, lower left, lower right.
+            let bits: u8 = [4, 8, 1, 13, 9, 7, 11, 2, 6, 14][(code - 0x2596) as usize];
+            (0..4)
+                .filter(|q| bits & (1 << q) != 0)
+                .map(|q| QUADRANTS[q])
+                .collect()
+        }
+        _ => return None,
+    };
+    Some((rects, 255))
+}
+
+/// Draw a block element over the cell at (left, top). Edges are rounded
+/// to the same pixels as cell backgrounds, so neighbours meet exactly.
+#[allow(clippy::too_many_arguments)]
+fn draw_blocks(
+    canvas: &mut Canvas,
+    rects: &[[u8; 4]],
+    alpha: u8,
+    left: f64,
+    top: f64,
+    width: f64,
+    height: f64,
+    colour: Rgb,
+) {
+    let x = |eighths: u8| (left + width * eighths as f64 / 8.0).round() as i64;
+    let y = |eighths: u8| (top + height * eighths as f64 / 8.0).round() as i64;
+    for &[x0, y0, x1, y1] in rects {
+        if alpha == 255 {
+            canvas.fill_rect(x(x0), y(y0), x(x1) - x(x0), y(y1) - y(y0), colour);
+        } else {
+            for py in y(y0)..y(y1) {
+                for px in x(x0)..x(x1) {
+                    canvas.blend(px, py, colour, alpha);
+                }
+            }
+        }
+    }
+}
+
+/// Draw a braille pattern (U+2800–U+28FF): up to eight dots in two columns
+/// of four.
+fn draw_braille(
+    canvas: &mut Canvas,
+    dots: u8,
+    left: f64,
+    top: f64,
+    width: f64,
+    height: f64,
+    colour: Rgb,
+) {
+    // Bit order: dots 1–3 down the left, 4–6 down the right, then 7 and 8.
+    const PLACES: [(u8, u8); 8] = [
+        (0, 0),
+        (0, 1),
+        (0, 2),
+        (1, 0),
+        (1, 1),
+        (1, 2),
+        (0, 3),
+        (1, 3),
+    ];
+    let radius = (width / 4.0).min(height / 8.0) * 0.7;
+    for (bit, (column, row)) in PLACES.into_iter().enumerate() {
+        if dots & (1 << bit) != 0 {
+            let cx = left + width * (column as f64 * 2.0 + 1.0) / 4.0;
+            let cy = top + height * (row as f64 * 2.0 + 1.0) / 8.0;
+            canvas.fill_circle(cx, cy, radius, colour);
+        }
+    }
+}
+
 /// The faces used for text, with a glyph cache.
 pub struct Fonts {
     regular: Font,
     bold: Font,
+    emoji: Emoji,
     cache: Mutex<HashMap<GlyphKey, (Metrics, Vec<u8>)>>,
 }
 
@@ -288,6 +383,7 @@ impl Fonts {
         Fonts {
             regular: load(REGULAR),
             bold: load(BOLD),
+            emoji: Emoji::default(),
             cache: Mutex::new(HashMap::new()),
         }
     }
@@ -298,6 +394,7 @@ impl Fonts {
         Ok(Fonts {
             regular: font.clone(),
             bold: font,
+            emoji: Emoji::default(),
             cache: Mutex::new(HashMap::new()),
         })
     }
@@ -358,6 +455,47 @@ impl Fonts {
                 canvas.blend(left + gx as i64, top + gy as i64, colour, alpha);
             }
         }
+    }
+
+    /// Whether a cell's text is drawn as a colour emoji: a wide emoji, one
+    /// with an emoji variation selector, ZWJ or skin tone, or one the text
+    /// face lacks. Digits, `#` and `*` only as keycaps.
+    fn is_emoji(&self, text: &str, wide: bool) -> bool {
+        let Some(first) = text.chars().next() else {
+            return false;
+        };
+        if first.is_ascii() {
+            return text.contains('\u{20e3}') && self.emoji.has(first);
+        }
+        self.emoji.has(first)
+            && (wide
+                || !self.regular.has_glyph(first)
+                || text
+                    .chars()
+                    .any(|c| matches!(c, '\u{fe0f}' | '\u{200d}' | '\u{1f3fb}'..='\u{1f3ff}')))
+    }
+
+    /// Draw a colour emoji centred in the box at (left, top).
+    #[allow(clippy::too_many_arguments)]
+    fn draw_emoji(
+        &self,
+        canvas: &mut Canvas,
+        text: &str,
+        left: f64,
+        top: f64,
+        width: f64,
+        height: f64,
+    ) -> bool {
+        let side = (width.min(height) * 0.95).round().max(1.0) as usize;
+        let Some(bitmap) = self.emoji.render(text, side) else {
+            return false;
+        };
+        let x0 = (left + (width - side as f64) / 2.0).round() as i64;
+        let y0 = (top + (height - side as f64) / 2.0).round() as i64;
+        for (i, [r, g, b, a]) in bitmap.rgba.iter().copied().enumerate() {
+            canvas.blend(x0 + (i % side) as i64, y0 + (i / side) as i64, (r, g, b), a);
+        }
+        true
     }
 
     fn text_width(&self, text: &str, size: f32) -> f64 {
@@ -473,24 +611,49 @@ pub fn render(snapshot: &Snapshot, theme: &Theme, fonts: &Fonts, options: &Frame
                 fg = theme.background;
             }
             let baseline = row_top + baseline_offset;
-            let mut chars = cell_info.text.chars();
-            match (chars.next().and_then(box_lines), chars.next()) {
-                (Some(lines), None) => {
-                    draw_box(&mut canvas, lines, left, row_top, cell, line, size, fg)
-                }
-                _ => {
-                    for c in cell_info.text.chars().filter(|c| *c != ' ') {
-                        fonts.draw(
-                            &mut canvas,
-                            c,
-                            cell_info.bold,
-                            size,
-                            left,
-                            baseline,
-                            span,
-                            fg,
-                        );
-                    }
+            let text = cell_info.text.as_str();
+            let mut chars = text.chars();
+            let only = match (chars.next(), chars.next()) {
+                (Some(c), None) => Some(c),
+                _ => None,
+            };
+            let (w, h) = (span * cell, line);
+            if let Some(lines) = only.and_then(box_lines) {
+                draw_box(&mut canvas, lines, left, row_top, cell, line, size, fg);
+            } else if let Some((rects, alpha)) = only.and_then(blocks) {
+                draw_blocks(&mut canvas, &rects, alpha, left, row_top, w, h, fg);
+            } else if let Some(dots) = only
+                .filter(|c| ('\u{2800}'..='\u{28ff}').contains(c))
+                .map(|c| (c as u32 - 0x2800) as u8)
+            {
+                draw_braille(&mut canvas, dots, left, row_top, w, h, fg);
+            } else if !(fonts.is_emoji(text, cell_info.width >= 2) && {
+                // A narrow emoji (❤️, 1️⃣) spreads into a blank cell after
+                // it, as terminals draw it.
+                let spread = cell_info.width == 1
+                    && row.get(x + 1).is_some_and(|next| {
+                        next.text == " " && next.bg == cell_info.bg && !next.underline
+                    });
+                let w = if spread { 2.0 * cell } else { w };
+                fonts.draw_emoji(&mut canvas, text, left, row_top, w, h)
+            }) {
+                // Joiners, selectors and tags the face lacks are
+                // invisible, not tofu.
+                let face = fonts.face(cell_info.bold);
+                for c in text
+                    .chars()
+                    .filter(|c| *c != ' ' && (c.width() != Some(0) || face.has_glyph(*c)))
+                {
+                    fonts.draw(
+                        &mut canvas,
+                        c,
+                        cell_info.bold,
+                        size,
+                        left,
+                        baseline,
+                        span,
+                        fg,
+                    );
                 }
             }
             if cell_info.underline {

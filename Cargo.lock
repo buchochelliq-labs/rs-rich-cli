@@ -1559,6 +1559,8 @@ dependencies = [
  "rs-rich",
  "rs-rich-ext",
  "serde_json",
+ "ttf-parser",
+ "unicode-width",
  "vt100",
 ]
 

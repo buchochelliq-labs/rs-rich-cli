@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 
 use crate::screen::{Snapshot, Theme};
+use crate::terminal::Terminal;
 
 /// What happened, and when, in the visible parts of a session.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -32,7 +33,7 @@ pub struct Timeline {
 }
 
 struct State {
-    parser: vt100::Parser,
+    terminal: Terminal,
     theme: Theme,
     hidden: bool,
     hidden_since: Instant,
@@ -52,7 +53,7 @@ impl State {
     }
 
     fn frame(&mut self, t: f64) {
-        let snapshot = Snapshot::from_screen(self.parser.screen(), &self.theme);
+        let snapshot = self.terminal.snapshot(&self.theme);
         if self
             .timeline
             .frames
@@ -87,9 +88,10 @@ pub struct Session {
 }
 
 impl Session {
-    /// Start `bash` (interactive, no profile or rc) in `workspace`, with
-    /// exactly the environment `env`.
+    /// Start `command` (an interactive shell) in `workspace`, with exactly
+    /// the environment `env`.
     pub fn start(
+        command: &[String],
         workspace: &Path,
         columns: u16,
         rows: u16,
@@ -104,8 +106,9 @@ impl Session {
                 pixel_height: 0,
             })
             .map_err(std::io::Error::other)?;
-        let mut command = CommandBuilder::new("bash");
-        command.args(["--noprofile", "--norc", "-i"]);
+        let (program, args) = command.split_first().expect("a shell command");
+        let mut command = CommandBuilder::new(program);
+        command.args(args);
         command.env_clear();
         for (key, value) in env {
             command.env(key, value);
@@ -123,7 +126,7 @@ impl Session {
         let writer = pty.master.take_writer().map_err(std::io::Error::other)?;
         let now = Instant::now();
         let state = Arc::new(Mutex::new(State {
-            parser: vt100::Parser::new(rows, columns, 0),
+            terminal: Terminal::new(rows, columns),
             theme,
             hidden: true,
             hidden_since: now,
@@ -143,8 +146,8 @@ impl Session {
                     Ok(read) => read,
                 };
                 let mut state = shared.lock().expect("session state");
-                state.parser.process(&buffer[..read]);
-                let screen = state.parser.screen().contents();
+                state.terminal.process(&buffer[..read]);
+                let screen = state.terminal.contents();
                 if state.seen.last() != Some(&screen) {
                     state.seen.push(screen);
                 }
@@ -201,7 +204,7 @@ impl Session {
             })
             .map_err(std::io::Error::other)?;
         let mut state = self.lock();
-        state.parser.screen_mut().set_size(rows, columns);
+        state.terminal.set_size(rows, columns);
         if !state.hidden {
             let t = state.now();
             state
@@ -217,7 +220,7 @@ impl Session {
     /// from the current screen.
     pub fn mark(&self) {
         let mut state = self.lock();
-        let screen = state.parser.screen().contents();
+        let screen = state.terminal.contents();
         state.seen = vec![screen];
     }
 
@@ -225,12 +228,12 @@ impl Session {
     /// the last [`Session::mark`].
     pub fn seen(&self, test: impl Fn(&str) -> bool) -> bool {
         let state = self.lock();
-        test(&state.parser.screen().contents()) || state.seen.iter().any(|screen| test(screen))
+        test(&state.terminal.contents()) || state.seen.iter().any(|screen| test(screen))
     }
 
     /// The screen's text, rows joined by line breaks.
     pub fn contents(&self) -> String {
-        self.lock().parser.screen().contents()
+        self.lock().terminal.contents()
     }
 
     pub fn alive(&self) -> bool {
@@ -239,7 +242,7 @@ impl Session {
 
     pub fn snapshot(&self) -> Snapshot {
         let state = self.lock();
-        Snapshot::from_screen(state.parser.screen(), &state.theme)
+        state.terminal.snapshot(&state.theme)
     }
 
     pub fn hide(&self) {
@@ -260,7 +263,7 @@ impl Session {
             state.hidden = false;
             state.utf8.clear();
             let t = state.now();
-            let snapshot = Snapshot::from_screen(state.parser.screen(), &state.theme);
+            let snapshot = state.terminal.snapshot(&state.theme);
             let repaint = crate::render::cast::repaint(&snapshot, &state.theme);
             state.timeline.events.push((t, Event::Output(repaint)));
             state.frame(t);

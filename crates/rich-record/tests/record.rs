@@ -167,3 +167,37 @@ fn a_wait_that_never_matches_names_its_line() {
         "{error}"
     );
 }
+
+/// Every `Set Shell` records with the same prompt. A shell that is not
+/// installed is skipped, unless `RICH_RECORD_REQUIRE_SHELLS` names it: CI's
+/// tapes job installs all four and requires them.
+#[test]
+fn every_shell_records_with_the_same_prompt() {
+    let required = std::env::var("RICH_RECORD_REQUIRE_SHELLS").unwrap_or_default();
+    for name in ["bash", "zsh", "fish", "sh"] {
+        let installed = std::process::Command::new(name)
+            .args(["-c", "exit 0"])
+            .status()
+            .is_ok_and(|s| s.success());
+        if !installed {
+            assert!(
+                !required.split(',').any(|shell| shell.trim() == name),
+                "{name} is required by RICH_RECORD_REQUIRE_SHELLS but not installed"
+            );
+            eprintln!("skipping {name}: not installed");
+            continue;
+        }
+        let source = format!(
+            "Set Shell {name}\nSet Size 40x5\nType \"echo one; echo two\"\nEnter\n\
+             Wait /two\\s*\\n/\nScreenshot shot\n"
+        );
+        let tape = tape::parse(&source).unwrap();
+        let recording = record::record(&tape, name, &Options::default())
+            .unwrap_or_else(|e| panic!("{name}: {e}"));
+        let grid = recording.shots[0].1.text_grid();
+        assert!(
+            grid.starts_with("❯ echo one; echo two\none\ntwo\n❯"),
+            "{name}:\n{grid}"
+        );
+    }
+}

@@ -32,6 +32,7 @@ pub mod render;
 pub mod screen;
 pub mod session;
 pub mod tape;
+pub mod terminal;
 
 pub use record::{Formats, Options, Problem, Recording};
 pub use screen::{Snapshot, Theme};
