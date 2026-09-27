@@ -91,14 +91,14 @@ impl Painter {
     pub fn paint(&mut self, view: &View, max_rows: usize) -> String {
         let rows = view.lines.len().min(max_rows);
         let mut segments = Vec::new();
-        for (index, line) in view.lines[..rows].iter().enumerate() {
-            if index > 0 {
-                segments.push(Segment::line());
-            }
+        // Every line ends with a newline, so a trailing (or only) empty
+        // line is still a row of the frame rather than a terminator.
+        for line in &view.lines[..rows] {
             segments.extend(line.iter().cloned());
+            segments.push(Segment::line());
         }
         let frame = Frame::from_segments(&segments);
-        let height = if rows == 0 { 0 } else { frame.height() };
+        let height = frame.height();
         let mut out = String::new();
         match self.previous.take() {
             None => {
@@ -256,6 +256,19 @@ mod tests {
         let mut painter = Painter::new(None, false);
         painter.paint(&view(&["x", "y"]), 10);
         assert_eq!(painter.finish(true), "\x1b[1A\r\x1b[J\x1b[?25h");
+    }
+
+    #[test]
+    fn empty_rows_at_the_end_are_rows() {
+        // A trailing empty line is part of the region, so finishing lands
+        // below it rather than on it.
+        let mut painter = Painter::new(None, false);
+        assert_eq!(painter.paint(&view(&["a", ""]), 10), "\ra\r\n\r");
+        assert_eq!(painter.finish(false), "\r\r\n\x1b[?25h");
+        // A view of one empty line is one row.
+        let mut painter = Painter::new(None, false);
+        assert_eq!(painter.paint(&view(&[""]), 10), "\r");
+        assert_eq!(painter.finish(false), "\r\r\n\x1b[?25h");
     }
 
     #[test]

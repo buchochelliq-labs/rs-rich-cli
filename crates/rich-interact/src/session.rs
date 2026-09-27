@@ -8,10 +8,15 @@
 //! Ctrl+C arrives as a key in raw mode, so it ends the event loop the
 //! ordinary way. [`Session::handoff`] gives the terminal to another program
 //! (`$EDITOR`, a pager) and takes it back.
+//!
+//! The terminal's modes are process-wide, so only one session exists at a
+//! time: starting a second while the first is alive (a component that
+//! calls [`run`](crate::run) from inside another) fails with
+//! [`io::ErrorKind::ResourceBusy`] and changes nothing.
 
 use std::io::{self, Write};
 use std::process::Command;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Once;
 use std::time::{Duration, Instant};
 
@@ -25,6 +30,8 @@ const PASTE: u8 = 8;
 /// What is currently turned on, for the panic hook.
 static ACTIVE: AtomicU8 = AtomicU8::new(0);
 static HOOK: Once = Once::new();
+/// Whether a [`Session`] is alive. Held from `start` until drop.
+static OWNED: AtomicBool = AtomicBool::new(false);
 
 /// Undo whatever `ACTIVE` records. Safe to call twice.
 fn restore() -> io::Result<()> {
@@ -108,9 +115,20 @@ pub struct Session {
 
 impl Session {
     /// Turn on raw mode and the options. Fails, changing nothing, when the
-    /// terminal cannot do raw mode.
+    /// terminal cannot do raw mode or another session is alive.
     pub fn start(options: SessionOptions) -> io::Result<Session> {
+        if OWNED
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::ResourceBusy,
+                "a terminal session is already running",
+            ));
+        }
         install_hook();
+        // From here on, dropping the session releases ownership, including
+        // when `enter` fails part way.
         let mut session = Session {
             options,
             start: Instant::now(),
@@ -123,6 +141,9 @@ impl Session {
     fn enter(&mut self) -> io::Result<()> {
         crossterm::terminal::enable_raw_mode()?;
         ACTIVE.fetch_or(RAW, Ordering::SeqCst);
+        // Active as soon as anything is on, so a failure below still
+        // restores on drop.
+        self.active = true;
         let mut out = String::new();
         if self.options.alternate_screen {
             out.push_str("\x1b[?1049h\x1b[H");
@@ -137,7 +158,6 @@ impl Session {
             ACTIVE.fetch_or(PASTE, Ordering::SeqCst);
         }
         out.push_str("\x1b[?25l");
-        self.active = true;
         let mut stdout = io::stdout();
         stdout.write_all(out.as_bytes())?;
         stdout.flush()
@@ -159,6 +179,7 @@ impl Session {
 impl Drop for Session {
     fn drop(&mut self) {
         let _ = self.leave();
+        OWNED.store(false, Ordering::SeqCst);
     }
 }
 

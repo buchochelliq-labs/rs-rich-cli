@@ -229,6 +229,22 @@ fn runs_several_components_first_one_first() {
 }
 
 #[test]
+fn taking_an_outcome_leaves_the_component_finished() {
+    let backend = Headless::new(Script::new().keys("up enter up up enter"), 30, 5);
+    let mut event_loop = EventLoop::new(backend, LoopOptions::default());
+    let first = event_loop.mount(Counter::default());
+    event_loop.run().unwrap();
+    assert_eq!(first.take(), Some(Outcome::Done(1)));
+    assert!(first.is_finished());
+    assert_eq!(first.take(), None);
+    // The finished component gets none of the next one's keys.
+    let second = event_loop.mount(Counter::default());
+    event_loop.run().unwrap();
+    assert_eq!(second.take(), Some(Outcome::Done(2)));
+    assert_eq!(first.take(), None);
+}
+
+#[test]
 fn a_borrowed_component_keeps_its_state() {
     let mut counter = Counter::default();
     let (outcome, _) = headless::run(&mut counter, Script::new().keys("up up escape"), 30, 5);

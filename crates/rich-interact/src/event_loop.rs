@@ -43,17 +43,35 @@ impl<T> Outcome<T> {
     }
 }
 
+/// A component's outcome and whether it finished. Kept apart so taking the
+/// outcome does not make a finished component look like it is running.
+struct Shared<T> {
+    outcome: Option<Outcome<T>>,
+    finished: bool,
+}
+
+impl<T> Shared<T> {
+    fn finish(&mut self, outcome: Outcome<T>) {
+        if !self.finished {
+            self.outcome = Some(outcome);
+            self.finished = true;
+        }
+    }
+}
+
 /// A component's result, readable once the loop has run.
-pub struct Handle<T>(Rc<RefCell<Option<Outcome<T>>>>);
+pub struct Handle<T>(Rc<RefCell<Shared<T>>>);
 
 impl<T> Handle<T> {
-    /// The outcome, once; `None` while the component is running.
+    /// The outcome, once; `None` while the component is running or after
+    /// it was taken.
     pub fn take(&self) -> Option<Outcome<T>> {
-        self.0.borrow_mut().take()
+        self.0.borrow_mut().outcome.take()
     }
 
+    /// Whether the component finished, even after its outcome was taken.
     pub fn is_finished(&self) -> bool {
-        self.0.borrow().is_some()
+        self.0.borrow().finished
     }
 }
 
@@ -100,7 +118,7 @@ trait Mounted {
 
 struct Slot<C: Component> {
     component: C,
-    result: Rc<RefCell<Option<Outcome<C::Output>>>>,
+    result: Rc<RefCell<Shared<C::Output>>>,
 }
 
 impl<C: Component> Mounted for Slot<C> {
@@ -111,7 +129,7 @@ impl<C: Component> Mounted for Slot<C> {
             Flow::Done(value) => Outcome::Done(value),
             Flow::Cancel => Outcome::Cancelled,
         };
-        *self.result.borrow_mut() = Some(outcome);
+        self.result.borrow_mut().finish(outcome);
         Step::Finished
     }
 
@@ -124,14 +142,11 @@ impl<C: Component> Mounted for Slot<C> {
     }
 
     fn finished(&self) -> bool {
-        self.result.borrow().is_some()
+        self.result.borrow().finished
     }
 
     fn interrupt(&mut self) {
-        let mut result = self.result.borrow_mut();
-        if result.is_none() {
-            *result = Some(Outcome::Interrupted);
-        }
+        self.result.borrow_mut().finish(Outcome::Interrupted);
     }
 }
 
@@ -201,7 +216,10 @@ impl<'a> EventLoop<'a> {
 
     /// Add a component. Its outcome is in the handle once it finishes.
     pub fn mount<C: Component + 'a>(&mut self, component: C) -> Handle<C::Output> {
-        let result = Rc::new(RefCell::new(None));
+        let result = Rc::new(RefCell::new(Shared {
+            outcome: None,
+            finished: false,
+        }));
         let tick = component.tick();
         let next = tick.map(|interval| self.backend.elapsed() + interval);
         self.mounted.push((
