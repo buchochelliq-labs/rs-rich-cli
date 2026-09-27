@@ -49,6 +49,12 @@ tracks this checkout; registry badges show published versions.
   a plugin that registers it as `"lumis"`. Its own crate because lumis links
   tree-sitter's C runtime and grammars; it declares its own minimum Rust
   (lumis's). Depends on `rich` and `rich-plugin-api` only. Independent SemVer.
+- **`crates/rich-record`** — tapes: scripted terminal sessions run in `bash`
+  on a PTY (`portable-pty`), followed by a VT emulator (`vt100`), and rendered
+  as PNG, SVG and text screenshots, asciinema casts, GIF and MP4, with an
+  embedded DejaVu Sans Mono. Text grids go through `rich_ext::frame::Frame`.
+  Behind `rich record` in the CLI (the default `record` feature). Depends on
+  `rich` and `rich-ext`. Independent SemVer.
 - **`crates/rich-py`** — the Python bindings (`rs-rich` on PyPI, `import
   rs_rich`), built with PyO3 and maturin. Rich's Python API over core `rich`
   only: the compiled module converts arguments and writes output, and core

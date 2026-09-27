@@ -71,12 +71,12 @@ class StagedCargoTests(unittest.TestCase):
             root = Path(directory)
             target = root / "target"
             (root / "Cargo.toml").write_text(
-                '[workspace]\nresolver="2"\nmembers=["core","plugin-api","macros","ext","art","mermaid","lumis","cli"]\n')
+                '[workspace]\nresolver="2"\nmembers=["core","plugin-api","macros","ext","art","mermaid","lumis","record","cli"]\n')
             for folder, name in [("core", "rs-rich"), ("plugin-api", "rs-rich-plugin-api"),
                                  ("macros", "rs-rich-macros"),
                                  ("ext", "rs-rich-ext"), ("art", "rs-rich-art"),
                                  ("mermaid", "rs-rich-mermaid"), ("lumis", "rs-rich-lumis"),
-                                 ("cli", "rs-rich-cli")]:
+                                 ("record", "rs-rich-record"), ("cli", "rs-rich-cli")]:
                 crate = root / folder
                 (crate / "src").mkdir(parents=True)
                 manifest = (f'[package]\nname="{name}"\nversion="0.0.5"\nedition="2021"\n'
@@ -127,7 +127,7 @@ class StagedCargoTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="restage-regression-") as directory:
             root = Path(directory)
             (root / "Cargo.toml").write_text(
-                '[workspace]\nresolver="2"\nmembers=["core","plugin-api","macros","ext","art","mermaid","lumis","cli"]\n')
+                '[workspace]\nresolver="2"\nmembers=["core","plugin-api","macros","ext","art","mermaid","lumis","record","cli"]\n')
             for folder, name, dependency in [("core", "rs-rich", None),
                                              ("plugin-api", "rs-rich-plugin-api", None),
                                              ("macros", "rs-rich-macros", None),
@@ -135,6 +135,7 @@ class StagedCargoTests(unittest.TestCase):
                                              ("art", "rs-rich-art", None),
                                              ("mermaid", "rs-rich-mermaid", None),
                                              ("lumis", "rs-rich-lumis", None),
+                                             ("record", "rs-rich-record", None),
                                              ("cli", "rs-rich-cli", ("rs-rich-ext", "ext"))]:
                 crate = root / folder
                 (crate / "src").mkdir(parents=True)

@@ -37,7 +37,7 @@ workspace = true
 syntax-cache = ["rich/syntax-cache"]
 # Oniguruma regex engine for syntax highlighting (DIVERGENCES #26).
 onig = ["rich/onig"]
-default = ["fetch", "art", "mermaid"]
+default = ["fetch", "art", "mermaid", "record"]
 # Optional JSON display divergence; never enabled by default.
 json-escape-safe = ["rich/json-escape-safe"]
 # `fetch` enables the CLI's URL support (`rich <url>`); disable it
@@ -52,6 +52,10 @@ mermaid = ["dep:rich-mermaid"]
 # The `mmdc` Mermaid backend (Mermaid's CLI: Node and headless Chromium,
 # installed separately). Off by default because it starts a browser.
 mmdc = ["mermaid", "art", "rich-mermaid/mmdc"]
+# `rich record TAPE`: run scripted terminal sessions and render screenshots,
+# asciinema casts, GIF and MP4 (rs-rich-record, #599). Pulls in a PTY, a VT
+# emulator and an embedded font.
+record = ["dep:rich-record"]
 # The lumis (tree-sitter) code highlighter, chosen with `--highlighter lumis`.
 # Off by default: it compiles lumis's grammars (a much larger binary) and needs
 # Rust 1.91.
@@ -65,6 +69,7 @@ serde_json.workspace = true
 ureq = { workspace = true, optional = true }
 rich-art = { workspace = true, optional = true, features = ["gif", "sixel"] }
 rich-mermaid = { workspace = true, optional = true }
+rich-record = { workspace = true, optional = true }
 rich-lumis = { workspace = true, optional = true }
 
 toml = "1.1"

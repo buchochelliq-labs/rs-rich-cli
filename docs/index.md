@@ -152,6 +152,7 @@ Each crate versions independently; see [Branching and releases](BRANCHING.md).
 | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.10` |
 | [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.1` |
 | [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.0.1` |
+| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.1` |
 <!-- END MANIFEST VERSIONS -->
 
 ## Install

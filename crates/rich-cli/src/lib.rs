@@ -38,6 +38,8 @@ mod controls;
 mod demo;
 mod doctor;
 mod inspect;
+#[cfg(feature = "record")]
+mod record;
 mod render_target;
 mod structured_log;
 mod tools;
@@ -711,6 +713,10 @@ fn dispatch(args: Vec<String>) -> ExitCode {
     }
     if doctor::requested(&args) {
         return doctor::dispatch(&args);
+    }
+    #[cfg(feature = "record")]
+    if record::requested(&args) {
+        return record::dispatch(&args);
     }
     match parse(&args) {
         Ok(None) => ExitCode::SUCCESS, // help/version already printed

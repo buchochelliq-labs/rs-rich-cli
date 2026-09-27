@@ -1,0 +1,42 @@
+# crates/rich-record — record scripted terminal sessions (tapes).
+#
+# Not a port of anything upstream: an rs-rich addition (#599). A tape scripts a
+# session (type, press keys, wait for screen text, take screenshots); this
+# crate runs it in a real PTY, follows the screen with a VT emulator and
+# renders screenshots, asciinema casts, GIF and MP4. `rich record` in rich-cli
+# is a thin command over it. Independent SemVer from 0.0.1.
+[package]
+name = "rs-rich-record"
+version = "0.0.1"
+description = "Record scripted terminal sessions (tapes) into screenshots, asciinema casts, GIF and MP4"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rs-rich-record"
+keywords = ["terminal", "recording", "asciinema", "screenshot", "gif"]
+categories = ["command-line-utilities", "development-tools::testing", "multimedia"]
+include = ["src/**/*", "fonts/**/*", "README.md", "LICENSE", "Cargo.toml"]
+
+[lib]
+name = "rich_record"
+
+[lints]
+workspace = true
+
+[dependencies]
+rich.workspace = true
+rich-ext.workspace = true
+fancy-regex.workspace = true
+serde_json.workspace = true
+# A PTY on Unix and ConPTY on Windows.
+portable-pty = "0.9"
+# The VT emulator that follows the screen.
+vt100 = "0.16"
+# PNG and GIF output: glyphs from the embedded DejaVu Sans Mono.
+fontdue = "0.9"
+png = "0.18"
+gif = "0.14"

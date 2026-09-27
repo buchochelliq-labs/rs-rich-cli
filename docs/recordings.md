@@ -63,7 +63,9 @@ A tape is a short script, one step per line. This is the watch tape:
 --8<-- "docs/tapes/watch.tape"
 ```
 
-`scripts/tape.py` runs it. It starts `bash` on a pseudo-terminal with a pinned
+`rich record` runs it: the CLI's own recorder, built on the
+[`rs-rich-record`](https://docs.rs/rs-rich-record) crate. It starts `bash` on
+a pseudo-terminal with a pinned
 environment (a temporary home and working directory, `TERM=xterm-256color`,
 truecolor, UTF-8, UTC), puts the binaries under test first on `PATH`, and
 follows the screen with a terminal emulator. `Wait` blocks until the screen
@@ -77,7 +79,13 @@ From one run it writes, under `docs/media/tapes/<tape>/`:
 - the whole session as an asciinema cast, with the keys pressed;
 - a GIF with the keys shown as they are pressed, and an MP4 when FFmpeg is
   installed;
-- `provenance.json`: the tape's hash, the `rich --version` and the commit.
+- `provenance.json`: the tape's fingerprint, the recorder and `rich`
+  versions, and the commit.
+
+Box-drawing characters are drawn as lines rather than font glyphs, so table
+borders join between rows. Text uses DejaVu Sans Mono, embedded in the
+recorder, so a PNG or GIF looks the same on every machine; `--font FILE`
+chooses another font.
 
 | Step | Meaning |
 |---|---|
@@ -95,11 +103,34 @@ Regenerate everything, or check it as CI does:
 
 ```bash
 cargo build -p rs-rich-cli
-pip install -r scripts/requirements-docs-media.txt
-python3 scripts/tape.py docs/tapes/*.tape          # write the media
-python3 scripts/tape.py --check docs/tapes/*.tape  # compare the screenshots
+rich=target/debug/rich
+$rich record --bin-dir target/debug --output docs/media/tapes docs/tapes/*.tape
+$rich record --check --bin-dir target/debug --output docs/media/tapes docs/tapes/*.tape
 ```
 
-The same tape format becomes the `rich record` command later in 0.0.13
-([#599](https://github.com/buchochelliq-labs/rs-rich-cli/issues/599)), so you
-will be able to record your own programs the same way.
+## Record your own
+
+`rich record` is not limited to `rich`: a tape can drive any program you can
+start from `bash`. Write a tape, then:
+
+```bash
+rich record demo.tape                       # writes recordings/demo/
+rich record --format gif,png demo.tape      # only the GIF and the PNGs
+rich record --check demo.tape               # fail if a screenshot changed
+```
+
+| Option | Meaning |
+|---|---|
+| `--output DIR` | Write to `DIR/<tape>/` (default `recordings`) |
+| `--check` | Compare each screenshot's text with `DIR/<tape>/<name>.txt` instead of writing, and report screenshots the tape no longer takes; exits non-zero on any difference |
+| `--format LIST` | Any of `png`, `svg`, `cast`, `gif`, `mp4`, or `all` (the default). Text grids are always written |
+| `--no-video` | Skip the GIF and MP4 |
+| `--bin-dir DIR` | Put `DIR` first on the session's `PATH` (default: the directory of the running `rich`) |
+| `--font FILE` | Draw PNG and GIF text in another font |
+
+`$REPO` in a tape is the directory `rich record` was started in, so a tape
+can copy fixtures (`Exec "cp $REPO/fixtures/data.json ."`). Linux and macOS
+are supported; on Windows it builds through ConPTY but needs `bash` on
+`PATH`, and is experimental. Use the recorder from Rust through the
+`rs-rich-record` crate: `tape::parse`, `record::record`, then
+`record::write` or `record::check`.
