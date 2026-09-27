@@ -52,3 +52,17 @@
   max-width: 100%;
   height: auto;
 }
+
+/* Tape recordings (recordings.md): a framed player, with the GIF as the
+   no-JavaScript fallback. */
+.tape-player {
+  margin: 1rem 0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  background: #292929;
+}
+.tape-player img {
+  display: block;
+  width: 100%;
+}

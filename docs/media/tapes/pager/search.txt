@@ -1,0 +1,24 @@
+ 24 │     characters: String,
+ 25 │     style: StyleType,
+ 26 │     end: String,
+ 27 │     align: HorizontalAlign,
+ 28 │ }
+ 29 │
+ 30 │ impl Default for Rule {
+ 31 │     fn default() -> Self {
+ 32 │         Rule {
+ 33 │             title: None,
+ 34 │             title_text: None,
+ 35 │             characters: "─".to_string(),
+ 36 │             // Upstream's default `style="rule.line"`, resolved per console.
+ 37 │             style: StyleType::Name("rule.line".to_string()),
+ 38 │             end: "\n".to_string(),
+ 39 │             align: HorizontalAlign::Center,
+ 40 │         }
+ 41 │     }
+ 42 │ }
+ 43 │
+ 44 │ impl Rule {
+ 45 │     /// A plain, untitled rule.
+ 46 │     pub fn line() -> Self {
+:

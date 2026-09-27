@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 998.0 613.8" font-family="Fira Code, DejaVu Sans Mono, Menlo, monospace" font-size="16">
+<rect width="100%" height="100%" rx="9" fill="#292929" stroke="#464646"/>
+<path d="M0 9a9 9 0 0 1 9-9h980.0a9 9 0 0 1 9 9v26h-998.0z" fill="#1e1e1e"/>
+<circle cx="19" cy="17.5" r="6" fill="#ff5f56"/>
+<circle cx="41" cy="17.5" r="6" fill="#ffbd2e"/>
+<circle cx="63" cy="17.5" r="6" fill="#27c93f"/>
+<text x="499.0" y="22.5" fill="#969696" font-family="DejaVu Sans, sans-serif" font-size="13" text-anchor="middle">rich · the terminal toolbox</text>
+<text x="19.0" y="69.6" fill="#ff2c7a" font-weight="bold" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">❯</text>
+<text x="28.6" y="69.6" fill="#c5c8c6" textLength="950.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> rich orders.csv                                                                                   </text>
+<text x="19.0" y="90.4" fill="#608ab1" textLength="451.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">┏━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━┓</text>
+<text x="19.0" y="111.2" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">┃</text>
+<text x="28.6" y="111.2" fill="#00823d" font-weight="bold" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> order </text>
+<text x="95.8" y="111.2" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">┃</text>
+<text x="105.4" y="111.2" fill="#c5c8c6" font-weight="bold" textLength="163.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> customer        </text>
+<text x="268.6" y="111.2" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">┃</text>
+<text x="278.2" y="111.2" fill="#00823d" font-weight="bold" textLength="76.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  total </text>
+<text x="355.0" y="111.2" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">┃</text>
+<text x="364.6" y="111.2" fill="#c5c8c6" font-weight="bold" textLength="96.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> status   </text>
+<text x="460.6" y="111.2" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">┃</text>
+<text x="19.0" y="132.0" fill="#608ab1" textLength="451.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">┡━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━┩</text>
+<text x="19.0" y="152.8" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="28.6" y="152.8" fill="#00823d" font-weight="bold" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  1001 </text>
+<text x="95.8" y="152.8" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="105.4" y="152.8" fill="#c5c8c6" textLength="163.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> Ada Lovelace    </text>
+<text x="268.6" y="152.8" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="278.2" y="152.8" fill="#00823d" font-weight="bold" textLength="76.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 129.00 </text>
+<text x="355.0" y="152.8" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="364.6" y="152.8" fill="#c5c8c6" textLength="96.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> shipped  </text>
+<text x="460.6" y="152.8" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="19.0" y="173.6" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="28.6" y="173.6" fill="#00823d" font-weight="bold" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  1002 </text>
+<text x="95.8" y="173.6" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="105.4" y="173.6" fill="#c5c8c6" textLength="163.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> Grace Hopper    </text>
+<text x="268.6" y="173.6" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="278.2" y="173.6" fill="#00823d" font-weight="bold" textLength="76.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  54.50 </text>
+<text x="355.0" y="173.6" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="364.6" y="173.6" fill="#c5c8c6" textLength="96.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> pending  </text>
+<text x="460.6" y="173.6" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="19.0" y="194.4" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="28.6" y="194.4" fill="#00823d" font-weight="bold" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  1003 </text>
+<text x="95.8" y="194.4" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="105.4" y="194.4" fill="#c5c8c6" textLength="163.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> Alan Turing     </text>
+<text x="268.6" y="194.4" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="278.2" y="194.4" fill="#00823d" font-weight="bold" textLength="76.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 310.25 </text>
+<text x="355.0" y="194.4" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="364.6" y="194.4" fill="#c5c8c6" textLength="96.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> shipped  </text>
+<text x="460.6" y="194.4" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="19.0" y="215.2" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="28.6" y="215.2" fill="#00823d" font-weight="bold" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  1004 </text>
+<text x="95.8" y="215.2" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="105.4" y="215.2" fill="#c5c8c6" textLength="163.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> Edsger Dijkstra </text>
+<text x="268.6" y="215.2" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="278.2" y="215.2" fill="#00823d" font-weight="bold" textLength="76.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  12.99 </text>
+<text x="355.0" y="215.2" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="364.6" y="215.2" fill="#c5c8c6" textLength="96.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> refunded </text>
+<text x="460.6" y="215.2" fill="#608ab1" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="19.0" y="236.0" fill="#608ab1" textLength="451.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">└───────┴─────────────────┴────────┴──────────┘</text>
+<text x="19.0" y="256.8" fill="#ff2c7a" font-weight="bold" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">❯</text>
+<rect x="38.2" y="241.2" width="9.6" height="20.8" fill="#c5c8c6" opacity="0.7"/>
+</svg>

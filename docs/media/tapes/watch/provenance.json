@@ -1,0 +1,8 @@
+{
+  "tape": "docs/tapes/watch.tape",
+  "tape_sha256": "a8edbe0bb86a598e83ebc3a1859b0fbf6c3a1fa1bbc136ade1afcb492e39517f",
+  "rich": "rich (rs-rich-cli) 0.0.13",
+  "commit": "9157264cc031abfc9a3cc5dd34a722b7206d93ca",
+  "pyte": "0.8.2",
+  "note": "Every frame is real output of the binary under test on a PTY."
+}

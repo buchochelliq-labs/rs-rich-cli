@@ -1,0 +1,26 @@
+❯ rich orders.csv
+┏━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━┓
+┃ order ┃ customer        ┃  total ┃ status   ┃
+┡━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━┩
+│  1001 │ Ada Lovelace    │ 129.00 │ shipped  │
+│  1002 │ Grace Hopper    │  54.50 │ pending  │
+│  1003 │ Alan Turing     │ 310.25 │ shipped  │
+│  1004 │ Edsger Dijkstra │  12.99 │ refunded │
+└───────┴─────────────────┴────────┴──────────┘
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

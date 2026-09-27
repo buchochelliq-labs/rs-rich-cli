@@ -16,6 +16,11 @@ color, and beautiful formatting in the terminal.
 Currently tracking **`rich` 15.0.0** and **`rich-cli` 1.8.1**
 (see [`UPSTREAM.toml`](UPSTREAM.toml)).
 
+![rich rendering Markdown, a CSV table and Python source in a real terminal](docs/media/tapes/hero/hero.gif)
+
+**[Play the terminal recordings](https://buchochelliq-labs.github.io/rs-rich-cli/recordings/)**:
+real sessions you can pause and copy text from, re-run by CI on every change.
+
 ![The rich CLI 0.0.12 demo tour](docs/assets/demos/v12-demo-tour.gif)
 
 **[Watch the CLI and art videos](https://buchochelliq-labs.github.io/rs-rich-cli/demos/)** ·

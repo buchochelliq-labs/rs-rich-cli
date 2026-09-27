@@ -68,6 +68,11 @@ plugins:
 
 extra_css:
   - assets/extra.css
+  - assets/vendor/asciinema-player-3.17.0/asciinema-player.css
+
+extra_javascript:
+  - assets/vendor/asciinema-player-3.17.0/asciinema-player.min.js
+  - assets/tapes.js
 
 nav:
   - Home: index.md
@@ -125,6 +130,7 @@ nav:
           - Walkthrough: guide/cli/walkthrough.md
           - Smoke test: guide/cli/smoke.md
   - Gallery: gallery.md
+  - Terminal recordings: recordings.md
   - CLI and art videos: demos.md
   - Using the CLI: cli.md
   - CLI reference: cli-reference.md
