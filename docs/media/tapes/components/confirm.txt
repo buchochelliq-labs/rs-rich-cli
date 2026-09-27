@@ -1,0 +1,22 @@
+❯ c confirm
+? Apply this change to production?
+  deployment.yaml
+    - replicas: 2
+    + replicas: 5
+    - image: api:1.4
+    + image: api:1.5
+  ⚠ 5 pods will restart, one at a time
+   Apply   Dry run   Edit   Cancel
+  a/d/e/c · ←→ move · enter choose · esc cancel
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,22 @@
+❯ c input
+? Crate › recrd
+    rs-rich-record  tapes: record terminal sessions
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

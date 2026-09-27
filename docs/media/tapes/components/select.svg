@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 998.0 530.6" font-family="Fira Code, DejaVu Sans Mono, Menlo, monospace" font-size="16">
+<rect width="100%" height="100%" rx="9" fill="#292929" stroke="#464646"/>
+<path d="M0 9a9 9 0 0 1 9-9h980.0a9 9 0 0 1 9 9v26h-998.0z" fill="#1e1e1e"/>
+<circle cx="19" cy="17.5" r="6" fill="#ff5f56"/>
+<circle cx="41" cy="17.5" r="6" fill="#ffbd2e"/>
+<circle cx="63" cy="17.5" r="6" fill="#27c93f"/>
+<text x="499.0" y="22.5" fill="#969696" font-family="DejaVu Sans, sans-serif" font-size="13" text-anchor="middle">rs-rich-interact · components</text>
+<text x="19.0" y="69.6" fill="#ff2c7a" font-weight="bold" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">❯</text>
+<text x="28.6" y="69.6" fill="#c5c8c6" textLength="950.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> c select                                                                                          </text>
+<text x="19.0" y="90.4" fill="#00823d" font-weight="bold" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">?</text>
+<text x="38.2" y="90.4" fill="#c5c8c6" font-weight="bold" textLength="38.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Open</text>
+<text x="86.2" y="90.4" fill="#777877" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">›</text>
+<text x="95.8" y="90.4" fill="#c5c8c6" textLength="883.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> evlp                                                                                       </text>
+<text x="19.0" y="111.2" fill="#ff2c7a" font-weight="bold" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">❯ </text>
+<text x="38.2" y="111.2" fill="#c5c8c6" font-weight="bold" textLength="38.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">src/</text>
+<text x="76.6" y="111.2" fill="#ff2c7a" font-weight="bold" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">ev</text>
+<text x="95.8" y="111.2" fill="#c5c8c6" font-weight="bold" textLength="38.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">ent_</text>
+<text x="134.2" y="111.2" fill="#ff2c7a" font-weight="bold" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">l</text>
+<text x="143.8" y="111.2" fill="#c5c8c6" font-weight="bold" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">oo</text>
+<text x="163.0" y="111.2" fill="#ff2c7a" font-weight="bold" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">p</text>
+<text x="172.6" y="111.2" fill="#c5c8c6" font-weight="bold" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">.rs</text>
+<text x="201.4" y="111.2" fill="#777877" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  611 B</text>
+<text x="451.0" y="111.2" fill="#777877" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> │ </text>
+<rect x="479.8" y="95.6" width="19.2" height="20.8" fill="#2b303b"/>
+<rect x="499.0" y="95.6" width="28.8" height="20.8" fill="#2b303b"/>
+<text x="499.0" y="111.2" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 1 </text>
+<rect x="527.8" y="95.6" width="451.2" height="20.8" fill="#2b303b"/>
+<text x="527.8" y="111.2" fill="#65737e" textLength="451.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">//! The event loop: take jobs, hand them to wor</text>
+<text x="451.0" y="132.0" fill="#777877" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> │ </text>
+<rect x="479.8" y="116.4" width="19.2" height="20.8" fill="#2b303b"/>
+<rect x="499.0" y="116.4" width="28.8" height="20.8" fill="#2b303b"/>
+<text x="499.0" y="132.0" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 2 </text>
+<rect x="527.8" y="116.4" width="451.2" height="20.8" fill="#2b303b"/>
+<text x="451.0" y="152.8" fill="#777877" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> │ </text>
+<rect x="479.8" y="137.2" width="19.2" height="20.8" fill="#2b303b"/>
+<rect x="499.0" y="137.2" width="28.8" height="20.8" fill="#2b303b"/>
+<text x="499.0" y="152.8" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 3 </text>
+<rect x="527.8" y="137.2" width="28.8" height="20.8" fill="#2b303b"/>
+<text x="527.8" y="152.8" fill="#b48ead" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">use</text>
+<rect x="556.6" y="137.2" width="201.6" height="20.8" fill="#2b303b"/>
+<text x="556.6" y="152.8" fill="#c0c5ce" textLength="201.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> std::time::Duration;</text>
+<rect x="758.2" y="137.2" width="220.8" height="20.8" fill="#2b303b"/>
+<text x="451.0" y="173.6" fill="#777877" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> │ </text>
+<rect x="479.8" y="158.0" width="19.2" height="20.8" fill="#2b303b"/>
+<rect x="499.0" y="158.0" width="28.8" height="20.8" fill="#2b303b"/>
+<text x="499.0" y="173.6" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 4 </text>
+<rect x="527.8" y="158.0" width="451.2" height="20.8" fill="#2b303b"/>
+<text x="451.0" y="194.4" fill="#777877" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> │ </text>
+<rect x="479.8" y="178.8" width="19.2" height="20.8" fill="#2b303b"/>
+<rect x="499.0" y="178.8" width="28.8" height="20.8" fill="#2b303b"/>
+<text x="499.0" y="194.4" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 5 </text>
+<rect x="527.8" y="178.8" width="259.2" height="20.8" fill="#2b303b"/>
+<text x="527.8" y="194.4" fill="#65737e" textLength="259.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">/// One job from the queue.</text>
+<rect x="787.0" y="178.8" width="192.0" height="20.8" fill="#2b303b"/>
+<text x="451.0" y="215.2" fill="#777877" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> │ </text>
+<rect x="479.8" y="199.6" width="19.2" height="20.8" fill="#2b303b"/>
+<rect x="499.0" y="199.6" width="28.8" height="20.8" fill="#2b303b"/>
+<text x="499.0" y="215.2" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 6 </text>
+<rect x="527.8" y="199.6" width="28.8" height="20.8" fill="#2b303b"/>
+<text x="527.8" y="215.2" fill="#b48ead" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">pub</text>
+<rect x="556.6" y="199.6" width="9.6" height="20.8" fill="#2b303b"/>
+<rect x="566.2" y="199.6" width="57.6" height="20.8" fill="#2b303b"/>
+<text x="566.2" y="215.2" fill="#b48ead" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">struct</text>
+<rect x="623.8" y="199.6" width="57.6" height="20.8" fill="#2b303b"/>
+<text x="623.8" y="215.2" fill="#c0c5ce" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> Job {</text>
+<rect x="681.4" y="199.6" width="297.6" height="20.8" fill="#2b303b"/>
+<text x="451.0" y="236.0" fill="#777877" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> │ </text>
+<rect x="479.8" y="220.4" width="19.2" height="20.8" fill="#2b303b"/>
+<rect x="499.0" y="220.4" width="28.8" height="20.8" fill="#2b303b"/>
+<text x="499.0" y="236.0" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 7 </text>
+<rect x="527.8" y="220.4" width="38.4" height="20.8" fill="#2b303b"/>
+<rect x="566.2" y="220.4" width="28.8" height="20.8" fill="#2b303b"/>
+<text x="566.2" y="236.0" fill="#b48ead" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">pub</text>
+<rect x="595.0" y="220.4" width="9.6" height="20.8" fill="#2b303b"/>
+<rect x="604.6" y="220.4" width="38.4" height="20.8" fill="#2b303b"/>
+<text x="604.6" y="236.0" fill="#bf616a" textLength="38.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">name</text>
+<rect x="643.0" y="220.4" width="86.4" height="20.8" fill="#2b303b"/>
+<text x="643.0" y="236.0" fill="#c0c5ce" textLength="86.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">: String,</text>
+<rect x="729.4" y="220.4" width="249.6" height="20.8" fill="#2b303b"/>
+<text x="451.0" y="256.8" fill="#777877" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> │ </text>
+<rect x="479.8" y="241.2" width="19.2" height="20.8" fill="#2b303b"/>
+<rect x="499.0" y="241.2" width="28.8" height="20.8" fill="#2b303b"/>
+<text x="499.0" y="256.8" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 8 </text>
+<rect x="527.8" y="241.2" width="38.4" height="20.8" fill="#2b303b"/>
+<rect x="566.2" y="241.2" width="28.8" height="20.8" fill="#2b303b"/>
+<text x="566.2" y="256.8" fill="#b48ead" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">pub</text>
+<rect x="595.0" y="241.2" width="9.6" height="20.8" fill="#2b303b"/>
+<rect x="604.6" y="241.2" width="48.0" height="20.8" fill="#2b303b"/>
+<text x="604.6" y="256.8" fill="#bf616a" textLength="48.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">tries</text>
+<rect x="652.6" y="241.2" width="19.2" height="20.8" fill="#2b303b"/>
+<text x="652.6" y="256.8" fill="#c0c5ce" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">: </text>
+<rect x="671.8" y="241.2" width="28.8" height="20.8" fill="#2b303b"/>
+<text x="671.8" y="256.8" fill="#b48ead" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">u32</text>
+<rect x="700.6" y="241.2" width="9.6" height="20.8" fill="#2b303b"/>
+<text x="700.6" y="256.8" fill="#c0c5ce" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">,</text>
+<rect x="710.2" y="241.2" width="268.8" height="20.8" fill="#2b303b"/>
+<text x="19.0" y="277.6" fill="#777877" textLength="393.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  1/8 · ↑↓ move · enter pick · esc cancel</text>
+<rect x="143.8" y="74.8" width="9.6" height="20.8" fill="#c5c8c6" opacity="0.7"/>
+</svg>

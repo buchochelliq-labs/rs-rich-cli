@@ -6,7 +6,7 @@ Set Title "rich_interact::Viewport · the example pager"
 Set Size 76x18
 Hide
 Exec "mkdir -p bin && ln -sf \"$(dirname \"$(command -v rich)\")/examples/viewport\" bin/viewport"
-Exec "cp $REPO/crates/rich-record/README.md ."
+Exec "cp $REPO/docs/tapes/fixtures/project/README.md ."
 Type "export PATH=\"$PWD/bin:$PATH\"; clear"
 Enter
 Wait /❯\s*$/

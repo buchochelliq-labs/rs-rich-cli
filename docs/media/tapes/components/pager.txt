@@ -1,0 +1,22 @@
+   1 # orbit
+   2
+   3 A tiny service, here so the documentation's recordings have something to
+   4 page through, pick from and search. Nothing in it runs.
+   5
+   6 ## What it does
+   7
+   8 orbit watches a queue, hands each job to a worker and reports progress in the
+   9 terminal. Workers are plain functions; the scheduler decides how many run at
+  10 once, retries a job that fails, and gives up after three tries.
+  11
+  12 ## Configuration
+  13
+  14 | Setting | Default | Meaning |
+  15 |---|---|---|
+  16 | `workers` | 4 | Jobs that run at once |
+  17 | `retries` | 3 | Tries before a job fails |
+  18 | `port` | 8080 | Where the status page listens |
+  19
+  20 ## Running it
+  21
+lines 1–21 of 50 · match 2/13 · n/N · / search · q quit

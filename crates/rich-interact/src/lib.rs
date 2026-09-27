@@ -21,7 +21,9 @@
 //! - [`policy`]: with no terminal, under CI or with `TERM=dumb`, a
 //!   component asks line by line, returns its default, or fails, as the
 //!   caller chooses, and never blocks on a pipe (#492);
-//! - [`headless`]: scripted events in, frames out, for tests.
+//! - [`headless`]: scripted events in, frames out, for tests;
+//! - [`components`]: [`Select`], [`MultiSelect`], [`Input`], [`Confirm`],
+//!   [`Form`] and [`Pager`], built on the above with a [`fuzzy`] matcher.
 //!
 //! ```
 //! use rich_interact::{headless, Component, Context, Event, Flow, KeyCode, Outcome, View};

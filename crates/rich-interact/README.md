@@ -41,6 +41,17 @@ assert_eq!(outcome.unwrap(), Outcome::Done(2));
 assert_eq!(record.last_frame(), "count: 2");
 ```
 
+Ready-made components:
+
+- `Select` and `MultiSelect`: fuzzy pickers with highlighted matches and a
+  preview pane;
+- `Input`: one line with validation, history, and suggestions, from a list or
+  a background provider;
+- `Confirm`: a confirmation sheet with a body, warnings and several choices;
+- `Form`: text, password, choice and toggle fields, with each error under its
+  field;
+- `Pager`: page any renderable, with search.
+
 What else is in the box:
 
 - **Painting cell by cell.** Views are painted through
