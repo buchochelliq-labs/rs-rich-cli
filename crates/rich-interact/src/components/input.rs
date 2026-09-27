@@ -121,8 +121,9 @@ impl Input {
         }
     }
 
-    /// A password: shown as `•`, never echoed without a terminal's help.
-    pub fn password(prompt: impl Into<String>) -> Input {
+    /// A masked input, for passwords and tokens: what is typed shows as
+    /// `•`, and a default only as `(default set)`.
+    pub fn masked(prompt: impl Into<String>) -> Input {
         Input::new(prompt).mask('•')
     }
 
@@ -445,7 +446,7 @@ impl Input {
         lines
     }
 
-    pub(crate) fn masked(&self, value: &str) -> String {
+    pub(crate) fn display_value(&self, value: &str) -> String {
         self.shown_value(value)
     }
 

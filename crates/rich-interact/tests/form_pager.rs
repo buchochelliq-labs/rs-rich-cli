@@ -84,7 +84,7 @@ fn escape_cancels_a_form() {
 #[test]
 fn a_form_degrades_to_a_line_per_field() {
     let mut io = ScriptedLineIo::new(["api", "", "staging", "y"]);
-    let mut form = form().password("token", "Token");
+    let mut form = form().masked("token", "Token");
     io.answers.push_back("secret".into());
     let answers = degrade(
         &mut form,

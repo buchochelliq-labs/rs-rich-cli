@@ -97,9 +97,9 @@ let picked = run(Select::new("Open", items), &RunOptions::default())?;
 One line, which edits like a shell's: the arrows, Home and End, Ctrl+A, Ctrl+E,
 Ctrl+U and Ctrl+W.
 
-- **Placeholder, default and password.** A placeholder shows while the line is
-  empty; `default` answers an empty line; `Input::password` masks what is
-  typed.
+- **Placeholder, default and masking.** A placeholder shows while the line is
+  empty; `default` answers an empty line; `Input::masked` hides what is typed,
+  for passwords and tokens, and shows a default only as `(default set)`.
 - **Validation.** A validator's message shows under the line, and Enter waits
   until it passes.
 - **History.** Up and Down walk earlier answers.
@@ -147,7 +147,8 @@ let sheet = Confirm::new("Apply this change to production?")
 
 Several fields answered together.
 
-- **Field kinds:** text (any configured `Input`), passwords, a choice among
+- **Field kinds:** text (any configured `Input`), masked text for passwords
+  (`Form::masked`), a choice among
   options, and yes/no toggles.
 - **Moving:** Tab and the arrows move between fields; Enter moves on and, on
   the last field, submits.

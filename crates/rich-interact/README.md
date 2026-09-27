@@ -48,7 +48,7 @@ Ready-made components:
 - `Input`: one line with validation, history, and suggestions, from a list or
   a background provider;
 - `Confirm`: a confirmation sheet with a body, warnings and several choices;
-- `Form`: text, password, choice and toggle fields, with each error under its
+- `Form`: text, masked (password), choice and toggle fields, with each error under its
   field;
 - `Pager`: page any renderable, with search.
 

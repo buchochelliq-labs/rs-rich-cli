@@ -80,7 +80,7 @@ fn defaults_placeholders_and_masks() {
     assert_eq!(outcome.unwrap(), Outcome::Done("world".into()));
     assert_eq!(record.frames[0], "? Name › (world)");
     let (outcome, record) = headless::run(
-        Input::password("Token"),
+        Input::masked("Token"),
         Script::new().text("s3cret").keys("enter"),
         40,
         6,
@@ -302,7 +302,7 @@ fn a_slow_provider_runs_one_lookup_at_a_time_for_the_latest_text() {
 fn a_password_default_is_never_shown_or_written() {
     // On a terminal: the hint says there is a default, not what it is.
     let (outcome, record) = headless::run(
-        Input::password("Token").default("s3cr3t"),
+        Input::masked("Token").default("s3cr3t"),
         Script::new().keys("enter"),
         40,
         6,
@@ -311,7 +311,7 @@ fn a_password_default_is_never_shown_or_written() {
     assert_eq!(record.frames[0], "? Token › (default set)");
     assert!(!record.output().contains("s3cr3t"), "{:?}", record.output());
     // Without one: the line prompt does not write it either.
-    let mut input = Input::password("Token").default("s3cr3t");
+    let mut input = Input::masked("Token").default("s3cr3t");
     let mut io = ScriptedLineIo::new([""]);
     assert_eq!(
         degrade(

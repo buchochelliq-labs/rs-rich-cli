@@ -2,7 +2,7 @@
 //! error shown under it (#472).
 //!
 //! Fields are text (an [`Input`], with its validation, placeholder and
-//! default), passwords, a choice among options, and yes/no toggles. Tab and
+//! default), masked fields for passwords, a choice among options, and yes/no toggles. Tab and
 //! the arrows move between fields; Enter moves to the next field and, on the
 //! last, submits. Submitting checks every field and focuses the first that
 //! fails, with its message under it.
@@ -79,7 +79,7 @@ impl Field {
     /// The answer as shown once submitted.
     fn summary(&self) -> String {
         match (&self.kind, self.value()) {
-            (Kind::Text(input), Ok(Value::Text(text))) => input.masked(&text),
+            (Kind::Text(input), Ok(Value::Text(text))) => input.display_value(&text),
             (_, Ok(Value::Text(text))) => text,
             (_, Ok(Value::Flag(on))) => if on { "yes" } else { "no" }.to_string(),
             (_, Err(_)) => String::new(),
@@ -131,9 +131,11 @@ impl Form {
         self.push(name, label, Kind::Text(Box::new(input)))
     }
 
-    pub fn password(self, name: impl Into<String>, label: impl Into<String>) -> Self {
+    /// A masked text field, for passwords and tokens (see
+    /// [`Input::masked`]).
+    pub fn masked(self, name: impl Into<String>, label: impl Into<String>) -> Self {
         let label = label.into();
-        let input = Input::password(label.clone());
+        let input = Input::masked(label.clone());
         self.push(name, label, Kind::Text(Box::new(input)))
     }
 

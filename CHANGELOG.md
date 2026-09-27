@@ -84,7 +84,8 @@ Entries below record subsequent releases and development.
   A preview pane (#454) shows the focused item's preview beside the list, or
   below it on a narrow terminal.
 - **`Input`** (#457, #289) edits like a shell line and offers:
-  - a placeholder, a default and password masking. A masked input's
+  - a placeholder, a default and masking (`Input::masked`, for passwords
+    and tokens). A masked input's
     default is shown only as `(default set)`, on screen and in the line
     prompt, never as its value;
   - a validator whose message shows under the line;
@@ -94,9 +95,9 @@ Entries below record subsequent releases and development.
     latest text; stale results are dropped.
 - **`Confirm`** (#470) is a confirmation sheet: a scrollable body of any
   renderables, warnings, and any number of keyed choices.
-- **`Form`** (#288, #472) has text, password, choice and toggle fields. Tab
-  and the arrows move between fields, and each validation error shows under
-  its field. A text field with suggestions shows them under it, and Tab and
+- **`Form`** (#288, #472) has text, masked (`Form::masked`), choice and
+  toggle fields. Tab and the arrows move between fields, and each validation
+  error shows under its field. A text field with suggestions shows them under it, and Tab and
   the arrows pick one there. A form with no fields finishes at once. It
   returns `Answers` by field name.
 - **`Pager`** (#291) pages any renderable at the terminal's width. `/`

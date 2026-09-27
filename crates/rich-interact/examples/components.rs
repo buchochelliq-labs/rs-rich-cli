@@ -141,7 +141,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .input("port", Input::new("Port").default("8080"))
                 .choice("env", "Environment", ["dev", "staging", "prod"])
                 .toggle("tls", "TLS", true)
-                .password("token", "Deploy token");
+                .masked("token", "Deploy token");
             if let Outcome::Done(answers) = run(form, &options)? {
                 // Everything but the token, which is only said to be set.
                 for (name, value) in &answers.0 {
