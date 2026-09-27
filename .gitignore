@@ -35,3 +35,6 @@ crates/rich-art/examples/assets/waving_cat.gif
 
 # Terminal screenshot harness (scripts/terminal_shots)
 node_modules/
+
+# mkdocs build output.
+site/

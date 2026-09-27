@@ -68,6 +68,10 @@ plugins:
 
 extra_css:
   - assets/extra.css
+  - assets/imgdiff.css
+
+extra_javascript:
+  - assets/imgdiff.js
 
 nav:
   - Home: index.md
