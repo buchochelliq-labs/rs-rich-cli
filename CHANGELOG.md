@@ -84,7 +84,9 @@ Entries below record subsequent releases and development.
   A preview pane (#454) shows the focused item's preview beside the list, or
   below it on a narrow terminal.
 - **`Input`** (#457, #289) edits like a shell line and offers:
-  - a placeholder, a default and password masking;
+  - a placeholder, a default and password masking. A masked input's
+    default is shown only as `(default set)`, on screen and in the line
+    prompt, never as its value;
   - a validator whose message shows under the line;
   - history;
   - suggestions, fixed or from a provider. The provider runs on one

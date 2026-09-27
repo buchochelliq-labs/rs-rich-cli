@@ -372,10 +372,7 @@ impl Input {
         let before: String = self.value.chars().take(self.caret).collect();
         let column = cell_len(&self.shown_value(&before));
         if self.value.is_empty() {
-            let hint = self
-                .placeholder
-                .clone()
-                .or_else(|| self.default.clone().map(|default| format!("({default})")));
+            let hint = self.placeholder.clone().or_else(|| self.default_hint());
             return (
                 hint.map(|hint| vec![text(hint, &self.theme.hint)])
                     .unwrap_or_default(),
@@ -383,6 +380,17 @@ impl Input {
             );
         }
         (vec![plain(self.shown_value(&self.value))], column)
+    }
+
+    /// How the default is shown when nothing is typed: `(value)`, or for
+    /// a masked input only that there is one, so a secret default is never
+    /// shown or written in clear.
+    fn default_hint(&self) -> Option<String> {
+        let default = self.default.as_ref()?;
+        Some(match self.mask {
+            Some(_) => "(default set)".to_string(),
+            None => format!("({default})"),
+        })
     }
 
     pub(crate) fn label(&self) -> &str {
@@ -548,10 +556,7 @@ impl Component for Input {
         let before: String = self.value.chars().take(self.caret).collect();
         let column = crate::components::width(&line) + cell_len(&self.shown_value(&before));
         if self.value.is_empty() {
-            let hint = self
-                .placeholder
-                .clone()
-                .or_else(|| self.default.clone().map(|default| format!("({default})")));
+            let hint = self.placeholder.clone().or_else(|| self.default_hint());
             if let Some(hint) = hint {
                 line.push(text(hint, &theme.hint));
             }
@@ -578,8 +583,8 @@ impl Component for Input {
 
     fn prompt(&mut self, io: &mut dyn LineIo) -> Result<Option<String>, NotInteractive> {
         let mut prompt = self.prompt.clone();
-        if let Some(default) = &self.default {
-            prompt.push_str(&format!(" [{default}]"));
+        if let Some(hint) = self.default_hint() {
+            prompt.push_str(&format!(" [{}]", &hint[1..hint.len() - 1]));
         }
         io.write(&format!("{prompt}: "));
         let Some(mut line) = io.read_line() else {
