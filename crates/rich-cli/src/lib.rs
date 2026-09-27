@@ -6,7 +6,7 @@
 //!
 //! This binary mirrors the upstream `rich-cli` command-line tool and is built on
 //! the [`rich`] library crate. It implements the rendering modes `--print`,
-//! `--markdown`, `--json`, `--syntax`, `--csv`, `--ipynb`, and `--rule`, plus
+//! `--markdown`, `--rst`, `--json`, `--syntax`, `--csv`, `--ipynb`, and `--rule`, plus
 //! width/justify, HTML/SVG export to a file (`--export-html PATH` / `-o PATH`,
 //! `--export-svg PATH`, which may be combined), the
 //! `--panel`/`--padding` decorators (with `--title`/`--caption`/`--style`), a
@@ -90,6 +90,8 @@ enum Mode {
     Csv,
     /// `.ipynb`: render a Jupyter notebook (markdown + code cells + outputs).
     Ipynb,
+    /// `--rst`: render reStructuredText, as upstream's `rich-rst` does.
+    Rst,
     /// `--gif`: animate one or more GIFs in place.
     Gif,
     /// `--diff`: perceptually compare two images (takes exactly two resources).
@@ -183,6 +185,11 @@ const MODE_SPECS: &[ModeSpec] = &[
         aliases: &["ipynb", "notebook"],
     },
     ModeSpec {
+        mode: Mode::Rst,
+        primary: "rst",
+        aliases: &["rst"],
+    },
+    ModeSpec {
         mode: Mode::Gif,
         primary: "gif",
         aliases: &["gif"],
@@ -255,7 +262,7 @@ const MODE_SPECS: &[ModeSpec] = &[
 ];
 
 const RENDER_MODE_FLAGS: &str =
-    "--print/--markdown/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--image/--jsonl/--log/--inspect/--ansi-explain";
+    "--print/--markdown/--rst/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--image/--jsonl/--log/--inspect/--ansi-explain";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReportFormat {
@@ -976,6 +983,7 @@ fn mode_flag_alias(arg: &str) -> Option<&'static str> {
         "--syntax" | "-x" => "--syntax",
         "--csv" => "--csv",
         "--ipynb" => "--ipynb",
+        "--rst" => "--rst",
         "--jsonl" | "--ndjson" => "--jsonl",
         "--log" => "--log",
         "--rule" => "--rule",
@@ -1587,6 +1595,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "-x" | "--syntax" => set_mode(&mut mode, Mode::Syntax)?,
             "--csv" => set_mode(&mut mode, Mode::Csv)?,
             "--ipynb" => set_mode(&mut mode, Mode::Ipynb)?,
+            "--rst" => set_mode(&mut mode, Mode::Rst)?,
             "--gif" => set_mode(&mut mode, Mode::Gif)?,
             "--diff" => set_mode(&mut mode, Mode::Diff)?,
             "--image" => set_mode(&mut mode, Mode::Image)?,
@@ -2229,8 +2238,8 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         (
             "--lexer",
             source.lexer.is_some(),
-            "--syntax or --ipynb",
-            source_mode,
+            "--syntax, --ipynb or --rst",
+            source_mode || effective_mode == Mode::Rst,
         ),
         (
             "--no-wrap",
@@ -2880,6 +2889,7 @@ fn content_type_mode(content_type: &str) -> Option<Mode> {
     let mime = mime_of(content_type);
     match mime.as_str() {
         "text/markdown" | "text/x-markdown" => Some(Mode::Markdown),
+        "text/x-rst" | "text/prs.fallenstein.rst" => Some(Mode::Rst),
         "application/json" | "text/json" => Some(Mode::Json),
         "text/csv" => Some(Mode::Csv),
         _ => None,
@@ -2946,6 +2956,7 @@ fn detect_mode(resource: Option<&str>) -> Mode {
         Some("json") => Mode::Json,
         Some("csv") | Some("tsv") => Mode::Csv,
         Some("ipynb") => Mode::Ipynb,
+        Some("rst") => Mode::Rst,
         Some("gif") => Mode::Gif,
         Some("mmd") | Some("mermaid") if cfg!(feature = "mermaid") => Mode::Mermaid,
         // Anything the table above does not divert is source code, and upstream
@@ -4054,6 +4065,14 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 markdown = markdown.fence_renderer(fences);
             }
             (Box::new(markdown), None)
+        }
+        // Upstream is `RestructuredText(data, code_theme=theme,
+        // default_lexer=lexer or "python", show_errors=False)`; the theme
+        // reaches its code blocks through the console's code highlighting.
+        Mode::Rst => {
+            let lexer = cli.source.lexer.as_deref().unwrap_or("python");
+            let document = rich_ext::rst::RestructuredText::new(&content).default_lexer(lexer);
+            (Box::new(document), None)
         }
         #[cfg(feature = "mermaid")]
         Mode::Mermaid => {

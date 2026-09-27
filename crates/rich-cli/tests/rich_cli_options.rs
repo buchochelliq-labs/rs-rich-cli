@@ -316,3 +316,30 @@ fn notebook_code_cells_take_the_source_options() {
     assert!(out.contains("2 b = 2"), "{out}");
     assert!(!out.contains("c = 3"), "{out}");
 }
+
+/// `--rst` prints what rich-cli's `rich-rst` prints: the renderer's own
+/// parity fixture, byte for byte, found by the `.rst` extension.
+#[test]
+fn rst_renders_as_upstream_and_is_detected_by_extension() {
+    let fixtures = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../rich-ext/tests/fixtures/rst"
+    );
+    let source = std::fs::read_to_string(format!("{fixtures}/sample.rst")).unwrap();
+    let expected = std::fs::read_to_string(format!("{fixtures}/sample.80.txt")).unwrap();
+    let (_dir, path) = file("doc.rst", &source);
+    assert_eq!(ok(&[&path], ""), expected);
+    assert_eq!(ok(&["--rst", "-"], &source), expected);
+}
+
+/// With `--rst`, `--lexer` is the lexer for code blocks that name none
+/// (upstream's `default_lexer=lexer or "python"`).
+#[test]
+fn rst_lexer_is_the_default_for_unlabelled_code() {
+    let source = "Code::\n\n    puts 1\n\n.. code:: sh\n\n   echo 1\n";
+    let out = ok(&["--rst", "--lexer", "ruby", "-"], source);
+    assert!(out.contains(" ruby "), "{out}");
+    assert!(out.contains(" sh "), "{out}");
+    let out = ok(&["--rst", "-"], source);
+    assert!(out.contains(" python "), "{out}");
+}

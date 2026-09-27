@@ -160,7 +160,7 @@ cargo run -p rs-rich-cli -- --help  # every supported flag
 cargo run -p rs-rich-cli -- FILE    # print a file (type auto-detected)
 ```
 
-The CLI covers upstream's `--markdown` · `--syntax` · `--json` · `--csv` ·
+The CLI covers upstream's `--markdown` · `--rst` · `--syntax` · `--json` · `--csv` ·
 `--ipynb` · `--print` · `--rule` · `--panel` · `--padding` · `--pager` ·
 `--export-html` · `--export-svg` and alignment and width flags, plus fetching an
 `http(s)` URL directly. It adds `--jsonl` · `--log` · `--image` · `--gif` ·

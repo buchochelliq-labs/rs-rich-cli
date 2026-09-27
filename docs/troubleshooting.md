@@ -66,7 +66,7 @@ The document is not valid JSON. The line and column point at the first problem.
 `rich` accepts `NaN`, `Infinity` and `-Infinity` (as Python's `json` module
 emits them) and nests arbitrarily deep, so those are not the cause.
 
-## `rich: only one render mode (--print/--markdown/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--image/--jsonl/--log/--inspect/--ansi-explain) may be given (try --help)`
+## `rich: only one render mode (--print/--markdown/--rst/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--image/--jsonl/--log/--inspect/--ansi-explain) may be given (try --help)`
 
 Two mode flags were passed. Pick one — they are alternatives, not layers.
 

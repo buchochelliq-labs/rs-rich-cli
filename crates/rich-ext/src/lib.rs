@@ -57,6 +57,7 @@ pub mod hex;
 pub mod highlighter;
 pub mod redact;
 pub mod registry;
+pub mod rst;
 pub mod sanitize;
 pub mod size_bar;
 pub mod source_view;

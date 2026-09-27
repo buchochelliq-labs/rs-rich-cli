@@ -34,8 +34,8 @@ const GENERAL: &str = "General";
 
 /// The render modes a `mode` config value (and the command word) may name.
 pub(crate) const MODES: &[&str] = &[
-    "print", "markdown", "json", "syntax", "csv", "ipynb", "jsonl", "log", "rule", "image", "gif",
-    "diff", "inspect", "ansi",
+    "print", "markdown", "rst", "json", "syntax", "csv", "ipynb", "jsonl", "log", "rule", "image",
+    "gif", "diff", "inspect", "ansi",
 ];
 
 fn flag(long: &str, heading: &str, help: &str) -> ArgSpec {
@@ -150,6 +150,7 @@ fn render_modes() -> Vec<ArgSpec> {
             "Treat RESOURCE as literal markup TEXT, not a file path",
         ),
         mode("markdown", Some('m'), "Render RESOURCE as Markdown"),
+        mode("rst", None, "Render RESOURCE as reStructuredText"),
         mode("json", Some('j'), "Pretty-print RESOURCE as JSON").short_alias('J'),
         mode(
             "syntax",
@@ -454,7 +455,8 @@ fn source_options() -> Vec<ArgSpec> {
             "lexer",
             "LEXER",
             SOURCE,
-            "Highlight source as LEXER instead of guessing from the file name",
+            "Highlight source as LEXER instead of guessing from the file name; with --rst, \
+             highlight code blocks that name no language as LEXER",
         ),
         flag(
             "no-wrap",
@@ -1209,7 +1211,7 @@ pub(crate) fn spec() -> CommandSpec {
         .args(root_args())
         .heading_note(
             RENDER_MODE,
-            "Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by \
+            "Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb by \
              extension — anything else with a file extension is syntax-highlighted.",
         )
         .heading_note(
@@ -1223,6 +1225,7 @@ pub(crate) fn spec() -> CommandSpec {
             "Treat RESOURCE as literal markup TEXT (`--print`)",
         ),
         ("markdown", &["md"][..], "Render Markdown (`--markdown`)"),
+        ("rst", &[][..], "Render reStructuredText (`--rst`)"),
         (
             "syntax",
             &["code"][..],

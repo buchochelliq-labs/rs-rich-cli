@@ -1,0 +1,21 @@
+Inline markup: emphasis, strong, 
+literal, title ref, ₂, H₂O, E = mc². 
+Escapes: *not emphasis*, 2 * 3 * 4, 
+a*b*c, "quoted" and '*'. Roles: x = 1, 
+emph, bold, lit, os.path.join, Title, 
+a^2, :bogus:`thing`, PEP 8, RFC 2822. 
+References: Python, Rust lang, inline, 
+anonymous, 
+https://example.com/path?q=1., mail 
+me@example.com, see 1 and  and CIT2002. 
+Substitution name and ref here. Target  
+here.
+
+replaced text╭────────────── citation ──
+│ CIT2002                              │
+│                                      │
+│ A citation.                          │
+╰──────────────────────────────────────╯
+┌─────────────── Footer ───────────────┐
+│            Auto footnote.            │
+└──────────────────────────────────────┘

@@ -60,7 +60,7 @@ terminal, and with `NO_COLOR` or `--no-color`.
 ## Upstream and additions
 
 The port tracks upstream `rich-cli` 1.8.1 for the features it mirrors: the
-flat mode flags (`-p`, `-m`, `-j`, `-x`, `--csv`, `--ipynb`, `--rule`), width
+flat mode flags (`-p`, `-m`, `--rst`, `-j`, `-x`, `--csv`, `--ipynb`, `--rule`), width
 and justification, panels and padding, stdin, URL fetching, HTML/SVG export
 and `--pager`.
 
@@ -84,6 +84,7 @@ records exactly which parts are upstream and which are additions.
 | `rich FILE` | — | Auto-detect the mode from the extension | [Rendering files](walkthrough.md#rendering-files) |
 | `print` | `-p`, `--print` | Render the RESOURCE as console markup text | [Markup](walkthrough.md#markup-and-rules) |
 | `markdown`, `md` | `-m`, `--markdown` | Render Markdown | [Rendering files](walkthrough.md#markdown) |
+| `rst` | `--rst` | Render reStructuredText | [Command-line guide](../../cli.md#restructuredtext) |
 | `syntax`, `code` | `-x`, `--syntax` | Syntax-highlight source code | [Rendering files](walkthrough.md#source-code) |
 | `json` | `-j`, `--json` | Pretty-print JSON | [Rendering files](walkthrough.md#json) |
 | `csv`, `tsv` | `--csv` | Render CSV/TSV as a table | [Rendering files](walkthrough.md#csv-and-tsv) |
