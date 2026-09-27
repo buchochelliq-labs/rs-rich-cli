@@ -72,9 +72,14 @@ impl Screen {
                     match command {
                         'A' => self.y = self.y.saturating_sub(n),
                         'B' => self.y = (self.y + n).min(self.height - 1),
+                        'G' => self.x = (n - 1).min(self.width - 1),
                         'K' => {
-                            assert_eq!(n, 2);
-                            self.cells[self.y].fill(" ".into());
+                            let from = match args.as_str() {
+                                "2" => 0,
+                                "" | "0" => self.x,
+                                other => panic!("unsupported erase mode {other}"),
+                            };
+                            self.cells[self.y][from..].fill(" ".into());
                         }
                         'm' => {}
                         'h' | 'l' => {

@@ -65,12 +65,35 @@ What a target gives you:
   control segments dropped when not interactive, links stripped when
   hyperlinks are off.
 - `target.text(&renderable)`: those segments as a string.
+- `target.frame(&renderable)`: those segments as a
+  [`Frame`](#frames), without control segments.
 - A zero width or height renders nothing, without calling the renderable.
 
 `target::resolve_capabilities(observations, overrides)` merges what you
 observed with explicit overrides and records where each value came from
 (`Configured`, `Detected`, `Inferred`, `Default`), still without reading the
 environment itself.
+
+## Frames
+
+`rich_ext::frame::Frame` holds a render as rows of styled runs over one text
+buffer, with each style stored once in a `StyleTable`. It is built from the
+segments any renderable already returns (`Frame::from_segments`, or
+`target.frame`), so no renderable changes.
+
+- `frame.to_ansi(&console)` writes exactly what
+  `console.segments_to_string` writes for the same segments, less control
+  segments: the same bytes upstream writes.
+- `frame.to_ansi_merged(&console)` joins neighbouring runs of one style
+  first. It writes fewer bytes, but not upstream's, so use it only where
+  byte parity does not matter.
+- `frame.plain()`, `frame.height()`, `frame.row(i)`, `frame.row_width(i)`
+  and `frame.width()` read the layout without re-splitting text.
+- `frame.cells(i)` gives one cell per grapheme of row `i`, with core's
+  widths; a wide grapheme is followed by a continuation cell.
+- `frame.diff(&previous)` lists the cells that changed, as column ranges per
+  row, and `frame.encode_span(row, columns, …)` encodes one such range.
+  Styles compare by value, so the two frames need not share a style table.
 
 ## Bounded layouts
 
@@ -205,8 +228,11 @@ How it behaves:
   `live.print(…)` (or `live.handle().print(…)`), never with `Console::print`
   or another `Live` on the same stream, or the display tears.
 - **Explicit refresh.** `add` and `update` only record content;
-  `refresh` redraws, repainting only the rows that changed. `print` clears the
-  regions, writes the lines, and repaints.
+  `refresh` redraws only what changed: within a row whose length in rows is
+  unchanged, it moves to each changed run of cells and rewrites just those,
+  falling back to rewriting the whole row when that is shorter. A one-digit
+  countdown tick writes the digit, not the line. `print` clears the regions,
+  writes the lines, and repaints.
 - **Opaque ids.** `add` returns a `RegionId`. `update` and `remove` take it by
   value, so clone it to use it again. An id from another coordinator is
   rejected with `LiveError::InvalidRegion`.

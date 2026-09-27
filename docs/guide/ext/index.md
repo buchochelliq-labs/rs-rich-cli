@@ -31,6 +31,7 @@ always available. The `use` path is `rich_ext::<module>`.
 | `adapters` | `LogAdapter` (the `log` facade) and `EventLayer` (a `tracing` layer), both feeding an `EventSink` | `log`, `tracing` | [Logging](logging.md) |
 | `target` | `RenderTarget` and `TargetKind`: explicit, deterministic destinations | none | [Live and layout](live-and-layout.md#render-targets) |
 | `layout` | `LayoutNode`, `Constraint`, `allocate`, `OverflowPolicy`, `Overflowing`: bounded layouts | none | [Live and layout](live-and-layout.md#bounded-layouts) |
+| `frame` | `Frame`: a render as rows of styled runs, with exact and merged ANSI encoding, cells and a cell diff | none | [Live and layout](live-and-layout.md#frames) |
 | `live` | `LiveCoordinator`: several live regions and printed lines through one writer | none | [Live and layout](live-and-layout.md#coordinated-live-regions) |
 | `macros` | `rich_table!`, `rich_panel!`, `rich_tree!`, `rich_progress!`, `rich_dbg!`; with `macros`, `rich_println!`, `rich_eprintln!`, `rich_trace!` | none; `macros` for the print macros | [Macros](macros.md) |
 | `richf!`, `style!`, `theme_key!`, `markup!`, `#[derive(Rich)]` | Compile-time checked markup and styles; derive rendering (re-exported from `rs-rich-macros`) | `macros` | [Macros](macros.md) |

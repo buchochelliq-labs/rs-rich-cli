@@ -57,7 +57,24 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
-Nothing yet.
+### Ext (0.0.11, unreleased)
+
+- **Frames (#226).** `rich_ext::frame::Frame` stores a render as rows of styled
+  runs with interned styles. `Frame::to_ansi` writes the same bytes as
+  `Console::segments_to_string` for the same control-free segments; this is
+  tested on random segment streams, core renderables in every colour system,
+  and every golden fixture. `to_ansi_merged` is a smaller, opt-in encoding.
+  `cells`, `diff` and `encode_span` give a cell-level view and diff.
+  `RenderTarget::frame` renders straight to a frame.
+- **`LiveCoordinator` repaints changed cells**, not whole rows, when that
+  writes fewer bytes. A one-cell change in a table row wrote 45 bytes before
+  and 27 now. What ends up on screen is unchanged.
+- **Snapshot schema 2.** `RenderSnapshot::capture_frame` stores rows of merged
+  runs, so output that is only split differently compares equal. `diff`
+  compares schema 1 and schema 2 snapshots by what shows, and `upgrade`
+  converts schema 1. `capture` and schema 1 JSON are unchanged.
+- Migration: `RenderSnapshot` has a new `rows` field, so code that builds one
+  with a struct literal must add `rows: None`.
 
 ## Core 0.0.8 / plugin API 0.0.1 / macros 0.0.2 / ext 0.0.10 / art 0.0.10 / Mermaid 0.0.1 / lumis 0.0.1 / CLI 0.0.12 / Python 0.0.1 — published 2026-09-26
 

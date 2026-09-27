@@ -1,6 +1,7 @@
 //! Synchronous single-writer coordination for inline terminal regions.
 mod region;
 use crate::{
+    frame::Frame,
     layout::{fit_segments, OverflowPolicy},
     target::RenderTarget,
 };
@@ -9,7 +10,7 @@ pub use region::RegionId;
 use rich::{
     control::{Control, ControlType},
     protocol::RenderEnvironment,
-    Segment,
+    Console, Segment,
 };
 use std::{io::Write, sync::Arc};
 #[derive(Debug)]
@@ -42,6 +43,18 @@ impl From<std::io::Error> for LiveError {
         Self::Io(e)
     }
 }
+/// A painted row: its encoded text, and the frame the next paint diffs
+/// against.
+#[derive(Debug)]
+struct Row {
+    text: String,
+    frame: Frame,
+}
+impl PartialEq for Row {
+    fn eq(&self, other: &Row) -> bool {
+        self.text == other.text
+    }
+}
 pub struct LiveCoordinator<W: Write> {
     writer: W,
     target: RenderTarget,
@@ -50,7 +63,7 @@ pub struct LiveCoordinator<W: Write> {
     regions: Vec<Region>,
     width: usize,
     height: usize,
-    painted: Vec<String>,
+    painted: Vec<Row>,
     hidden: bool,
     closed: bool,
 }
@@ -124,25 +137,68 @@ impl<W: Write> LiveCoordinator<W> {
         self.writer
             .write_all(Control::new(codes).as_str().as_bytes())
     }
-    fn row_string(&self, mut row: Vec<Segment>) -> String {
+    fn row(&self, console: &Console, mut row: Vec<Segment>) -> Row {
         if !self.target.capabilities().hyperlinks {
             for segment in &mut row {
                 segment.style = segment.style.as_ref().map(|style| style.update_link(None));
             }
         }
-        self.target.console().segments_to_string(&row)
+        Row {
+            text: console.segments_to_string(&row),
+            frame: Frame::from_segments(&row),
+        }
     }
-    fn rows(&self, width: usize, height: usize) -> Vec<String> {
+    fn rows(&self, width: usize, height: usize) -> Vec<Row> {
+        let console = self.target.console();
         let mut result = Vec::new();
         for region in &self.regions {
             for row in fit_segments(&region.content, width, OverflowPolicy::Crop) {
                 if result.len() == height {
                     return result;
                 }
-                result.push(self.row_string(row));
+                result.push(self.row(&console, row));
             }
         }
         result
+    }
+    /// The bytes that bring `old` up to `new` on the current line: only the
+    /// changed cells, each after a column move, or the whole row when that is
+    /// shorter.
+    fn repaint(&self, new: &Row, old: &Row) -> Vec<u8> {
+        let console = self.target.console();
+        let (system, no_color) = (console.color_system(), console.no_color());
+        let width = if new.frame.height() == 0 {
+            0
+        } else {
+            new.frame.row_width(0)
+        };
+        let mut cells = String::new();
+        if new.frame.height() > 0 && old.frame.height() > 0 {
+            for change in new.frame.diff(&old.frame) {
+                let column = change.columns.start.min(u32::MAX as usize) as u32;
+                cells.push_str(Control::new(&[ControlType::CursorMoveToColumn(column)]).as_str());
+                if change.columns.start < width {
+                    cells.push_str(&new.frame.encode_span(
+                        0,
+                        change.columns.start..change.columns.end.min(width),
+                        system,
+                        no_color,
+                    ));
+                }
+                if change.columns.end > width {
+                    cells.push_str(Control::new(&[ControlType::EraseInLine(0)]).as_str());
+                }
+            }
+        }
+        let mut whole = Control::new(&[ControlType::EraseInLine(2)])
+            .as_str()
+            .to_string();
+        whole.push_str(&new.text);
+        if !cells.is_empty() && cells.len() < whole.len() {
+            cells.into_bytes()
+        } else {
+            whole.into_bytes()
+        }
     }
     fn clear(&mut self) -> std::io::Result<()> {
         let count = self
@@ -184,12 +240,9 @@ impl<W: Write> LiveCoordinator<W> {
                     continue;
                 }
                 let distance = (rows.len() - i) as u32;
-                self.control(&[
-                    ControlType::CarriageReturn,
-                    ControlType::CursorUp(distance),
-                    ControlType::EraseInLine(2),
-                ])?;
-                self.writer.write_all(row.as_bytes())?;
+                let bytes = self.repaint(row, &self.painted[i]);
+                self.control(&[ControlType::CarriageReturn, ControlType::CursorUp(distance)])?;
+                self.writer.write_all(&bytes)?;
                 self.control(&[
                     ControlType::CarriageReturn,
                     ControlType::CursorDown(distance),
@@ -199,7 +252,7 @@ impl<W: Write> LiveCoordinator<W> {
             self.clear()?;
             for row in &rows {
                 self.control(&[ControlType::CarriageReturn, ControlType::EraseInLine(2)])?;
-                self.writer.write_all(row.as_bytes())?;
+                self.writer.write_all(row.text.as_bytes())?;
                 self.writer.write_all(b"\n\r")?;
             }
         }
@@ -250,9 +303,10 @@ impl<W: Write> LiveCoordinator<W> {
                 self.width
             }
             .max(1);
+            let console = self.target.console();
             for row in fit_segments(content, width, OverflowPolicy::Fold) {
-                let text = self.row_string(row);
-                self.writer.write_all(text.as_bytes())?;
+                let row = self.row(&console, row);
+                self.writer.write_all(row.text.as_bytes())?;
                 self.writer
                     .write_all(if interactive { b"\n\r" } else { b"\n" })?;
             }
@@ -270,7 +324,7 @@ impl<W: Write> LiveCoordinator<W> {
             // A pipe or CI log scrolls: the final snapshot is written whole,
             // not cut to the height a terminal would show.
             for row in self.rows(self.width, usize::MAX) {
-                if let Err(e) = writeln!(self.writer, "{row}") {
+                if let Err(e) = writeln!(self.writer, "{}", row.text) {
                     error = Some(e);
                     break;
                 }

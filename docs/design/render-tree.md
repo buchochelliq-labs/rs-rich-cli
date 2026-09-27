@@ -1,7 +1,8 @@
 # Render tree spike (#226)
 
-**Status:** design note for review (0.0.12 workstream 5). Nothing in the
-crates changes. The prototype lives in
+**Status:** design note (0.0.12 workstream 5). Phase 1's frame type, live
+cell diff and snapshot schema 2 are implemented in ext 0.0.11
+(`rich_ext::frame`); the rest of this note is still a proposal. The prototype lives in
 [`docs/design/render-tree/prototype`](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/docs/design/render-tree/prototype),
 a standalone crate that is not a workspace member, not published and not built
 by CI.

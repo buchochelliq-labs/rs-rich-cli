@@ -1,4 +1,5 @@
 //! Explicit destinations for deterministic, nested rendering. No environment probes.
+use crate::frame::Frame;
 use rich::protocol::{
     CodeHighlighting, ConsoleCodeHighlighting, ConsoleEnvironment, RenderEnvironment, Support,
     TargetCapabilities,
@@ -91,6 +92,12 @@ impl RenderTarget {
             }
         }
         segments
+    }
+    /// The render as a [`Frame`], with the same filtering as
+    /// [`RenderTarget::segments`]. Control segments are not content, so the
+    /// frame drops them even on an interactive target.
+    pub fn frame(&self, value: &dyn Renderable) -> Frame {
+        Frame::from_segments(&self.segments(value))
     }
     pub fn text(&self, value: &dyn Renderable) -> String {
         self.console().segments_to_string(&self.segments(value))
