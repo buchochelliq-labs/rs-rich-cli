@@ -64,8 +64,8 @@ A tape is a short script, one step per line. This is the watch tape:
 ```
 
 `rich record` runs it: the CLI's own recorder, built on the
-[`rs-rich-record`](https://docs.rs/rs-rich-record) crate. It starts `bash` on
-a pseudo-terminal with a pinned
+[`rs-rich-record`](https://docs.rs/rs-rich-record) crate. It starts a shell
+(`bash` unless the tape sets another) on a pseudo-terminal with a pinned
 environment (a temporary home and working directory, `TERM=xterm-256color`,
 truecolor, UTF-8, UTC), puts the binaries under test first on `PATH`, and
 follows the screen with a terminal emulator. `Wait` blocks until the screen
@@ -93,6 +93,7 @@ rich measures it.
 | Step | Meaning |
 |---|---|
 | `Set Size 100x28`, `Set Title "…"`, `Set TypingDelay 40ms`, `Set Timeout 15s`, `Set Env NAME value` | Configure the session |
+| `Set Shell zsh` | Run in `bash` (the default), `zsh`, `fish` or `sh`, each without your profile or rc files and with the same `❯` prompt |
 | `Write FILE "text"`, `Exec "command"` | Prepare or change files, outside the terminal |
 | `Type "text"` | Type into the terminal, one character at a time |
 | `Enter`, `Tab`, `Space`, `Backspace`, `Escape`, arrows, `Home`, `End`, `PageUp`, `PageDown`, `Ctrl+C` | Press a key; a number after it repeats it |
@@ -102,6 +103,23 @@ rich measures it.
 | `Hide`, `Show` | Leave steps out of the recording |
 | `Resize 80x24` | Resize the terminal |
 | `Mask /regex/ "text"` | Replace matches in the text grids `--check` compares, for output that differs on every run such as temporary paths or timings; images keep what was shown |
+
+### Shells and emoji
+
+A tape can type and print emoji, and the recorder draws them as the program
+measures them: rich, and modern terminals, give 👩‍👧 two cells. A shell's
+line editor may not agree. bash, zsh and fish take character widths from the
+C library, which counts 👩‍👧 as four, so moving the cursor back across a
+joined emoji at the prompt (`Left`, `Home`, `Backspace`) redraws the line in
+the wrong place, as it does in a real terminal. The command that runs is
+still right; only the echoed line is garbled. Keep such text out of line
+editing: put it in a file with `Write` and run that, or have the program
+print it.
+
+The docs' tapes use `bash`, as CI does. macOS ships bash 3.2, whose line
+editing is older than CI's; `rich record` warns when it finds a bash older
+than 4, and a newer one (`brew install bash`) first on `PATH` gives
+recordings that match.
 
 Regenerate everything, or check it as CI does:
 
@@ -115,7 +133,8 @@ $rich record --check --bin-dir target/debug --output docs/media/tapes docs/tapes
 ## Record your own
 
 `rich record` is not limited to `rich`: a tape can drive any program you can
-start from `bash`. Write a tape, then:
+start from a shell, in `bash`, `zsh`, `fish` or `sh` (`Set Shell`). Write a
+tape, then:
 
 ```bash
 rich record demo.tape                       # writes recordings/demo/
@@ -134,7 +153,7 @@ rich record --check demo.tape               # fail if a screenshot changed
 
 `$REPO` in a tape is the directory `rich record` was started in, so a tape
 can copy fixtures (`Exec "cp $REPO/fixtures/data.json ."`). Linux and macOS
-are supported; on Windows it builds through ConPTY but needs `bash` on
-`PATH`, and is experimental. Use the recorder from Rust through the
+are supported; on Windows it builds through ConPTY but needs the tape's shell
+on `PATH`, and is experimental. Use the recorder from Rust through the
 `rs-rich-record` crate: `tape::parse`, `record::record`, then
 `record::write` or `record::check`.

@@ -164,6 +164,8 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
         ..Options::default()
     };
     let mut failures = 0;
+    // Each warning about the machine once, not once per tape.
+    let mut warned = std::collections::BTreeSet::new();
     for path in &args.tapes {
         let stem = path
             .file_stem()
@@ -184,6 +186,11 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
             Err(error) => return emit_error(json, ExitClass::Input, &format!("{shown}: {error}")),
         };
         eprintln!("{shown}");
+        for warning in recorder::warnings(&parsed) {
+            if warned.insert(warning.clone()) {
+                eprintln!("  warning: {warning}");
+            }
+        }
         let recording = match recorder::record(&parsed, &stem, &options) {
             Ok(recording) => recording,
             Err(error) => {

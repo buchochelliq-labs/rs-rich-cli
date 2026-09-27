@@ -167,3 +167,29 @@ fn a_wait_that_never_matches_names_its_line() {
         "{error}"
     );
 }
+
+#[test]
+fn every_installed_shell_records_with_the_same_prompt() {
+    for name in ["bash", "zsh", "fish", "sh"] {
+        let installed = std::process::Command::new(name)
+            .args(["-c", "exit 0"])
+            .status()
+            .is_ok_and(|s| s.success());
+        if !installed {
+            eprintln!("skipping {name}: not installed");
+            continue;
+        }
+        let source = format!(
+            "Set Shell {name}\nSet Size 40x5\nType \"echo one; echo two\"\nEnter\n\
+             Wait /two\\s*\\n/\nScreenshot shot\n"
+        );
+        let tape = tape::parse(&source).unwrap();
+        let recording = record::record(&tape, name, &Options::default())
+            .unwrap_or_else(|e| panic!("{name}: {e}"));
+        let grid = recording.shots[0].1.text_grid();
+        assert!(
+            grid.starts_with("❯ echo one; echo two\none\ntwo\n❯"),
+            "{name}:\n{grid}"
+        );
+    }
+}

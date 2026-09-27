@@ -7,6 +7,7 @@
 //! Set Timeout 15s            # default for `Wait`
 //! Set Title "Watching files" # caption for the window frame and the cast
 //! Set Env NAME value         # extra environment for the shell and `Exec`
+//! Set Shell zsh              # bash (default), zsh, fish or sh
 //! Write data.json '{"a": 1}' # create a file in the workspace (\n, \t escapes)
 //! Exec "sed -i s/1/2/ data.json"   # run a command outside the terminal
 //! Type "rich data.json"      # type into the shell, one character at a time
@@ -200,12 +201,46 @@ pub enum Step {
     Exec(String),
 }
 
+/// The shell a tape runs in (`Set Shell`). Each starts without the user's
+/// profile or rc files and with the same `❯` prompt.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Shell {
+    #[default]
+    Bash,
+    Zsh,
+    Fish,
+    Sh,
+}
+
+impl Shell {
+    pub fn parse(name: &str) -> Option<Shell> {
+        Some(match name {
+            "bash" => Shell::Bash,
+            "zsh" => Shell::Zsh,
+            "fish" => Shell::Fish,
+            "sh" => Shell::Sh,
+            _ => return None,
+        })
+    }
+
+    /// The program's name, looked up on `PATH`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Shell::Bash => "bash",
+            Shell::Zsh => "zsh",
+            Shell::Fish => "fish",
+            Shell::Sh => "sh",
+        }
+    }
+}
+
 /// A parsed tape: its settings, and its steps with their line numbers.
 #[derive(Debug, Clone)]
 pub struct Tape {
     pub columns: u16,
     pub rows: u16,
     pub title: Option<String>,
+    pub shell: Shell,
     pub env: Vec<(String, String)>,
     /// Rewrites applied to text grids (what `--check` compares), for output
     /// that differs on every run: temporary paths, timings. Images and casts
@@ -347,6 +382,7 @@ pub fn parse(source: &str) -> Result<Tape, TapeError> {
         columns: 100,
         rows: 28,
         title: None,
+        shell: Shell::default(),
         env: Vec::new(),
         masks: Vec::new(),
         steps: Vec::new(),
@@ -414,6 +450,14 @@ pub fn parse(source: &str) -> Result<Tape, TapeError> {
                     }
                     "Title" => {
                         tape.title = Some(value.to_string());
+                        continue;
+                    }
+                    "Shell" => {
+                        tape.shell = Shell::parse(value).ok_or_else(|| {
+                            error(format!(
+                                "unknown shell {value:?} (use bash, zsh, fish or sh)"
+                            ))
+                        })?;
                         continue;
                     }
                     "Env" => {
@@ -557,5 +601,17 @@ mod tests {
         assert_eq!(Key::Ctrl('C').bytes(), "\x03");
         assert_eq!(Key::Down.bytes(), "\x1b[B");
         assert_eq!(Key::Ctrl('C').label(), "Ctrl+C");
+    }
+
+    #[test]
+    fn shells() {
+        assert_eq!(parse("Set Size 10x2\n").unwrap().shell, Shell::Bash);
+        let tape = parse("Set Shell fish\n").unwrap();
+        assert_eq!(tape.shell, Shell::Fish);
+        let error = parse("\nSet Shell pwsh\n").unwrap_err().to_string();
+        assert!(
+            error.contains("line 2") && error.contains("unknown shell"),
+            "{error}"
+        );
     }
 }

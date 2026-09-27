@@ -88,9 +88,10 @@ pub struct Session {
 }
 
 impl Session {
-    /// Start `bash` (interactive, no profile or rc) in `workspace`, with
-    /// exactly the environment `env`.
+    /// Start `command` (an interactive shell) in `workspace`, with exactly
+    /// the environment `env`.
     pub fn start(
+        command: &[String],
         workspace: &Path,
         columns: u16,
         rows: u16,
@@ -105,8 +106,9 @@ impl Session {
                 pixel_height: 0,
             })
             .map_err(std::io::Error::other)?;
-        let mut command = CommandBuilder::new("bash");
-        command.args(["--noprofile", "--norc", "-i"]);
+        let (program, args) = command.split_first().expect("a shell command");
+        let mut command = CommandBuilder::new(program);
+        command.args(args);
         command.env_clear();
         for (key, value) in env {
             command.env(key, value);

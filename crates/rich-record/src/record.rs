@@ -10,7 +10,7 @@ use serde_json::json;
 use crate::render::{cast, raster, svg, video};
 use crate::screen::{Snapshot, Theme};
 use crate::session::{Session, Timeline};
-use crate::tape::{Pattern, Step, Tape, TapeError};
+use crate::tape::{Pattern, Shell, Step, Tape, TapeError};
 
 /// The prompt the recorded shell shows; `run` waits for it.
 const PROMPT: &str = "❯";
@@ -54,6 +54,14 @@ impl Workspace {
             path.join(".home/.inputrc"),
             "set enable-bracketed-paste off\n",
         )?;
+        // zsh reads only this, through ZDOTDIR, when started with -d.
+        std::fs::write(
+            path.join(".home/.zshrc"),
+            format!(
+                "PROMPT=$'%{{\\e[1;35m%}}{PROMPT}%{{\\e[0m%}} '\nRPROMPT=''\n\
+                 unsetopt PROMPT_SP BEEP\nunset zle_bracketed_paste\nHISTFILE=/dev/null\n"
+            ),
+        )?;
         Ok(Workspace(path))
     }
 }
@@ -96,19 +104,79 @@ fn environment(workspace: &Path, tape: &Tape, options: &Options) -> Vec<(String,
         ("LANG".into(), "C.UTF-8".into()),
         ("LC_ALL".into(), "C.UTF-8".into()),
         ("TZ".into(), "UTC".into()),
-        (
-            "PS1".into(),
-            format!("\\[\\e[1;35m\\]{PROMPT}\\[\\e[0m\\] "),
-        ),
         ("PROMPT_COMMAND".into(), String::new()),
         ("HISTFILE".into(), "/dev/null".into()),
     ];
+    match tape.shell {
+        Shell::Bash => env.push((
+            "PS1".into(),
+            format!("\\[\\e[1;35m\\]{PROMPT}\\[\\e[0m\\] "),
+        )),
+        // POSIX sh has no escapes in PS1: the bytes themselves.
+        Shell::Sh => env.push(("PS1".into(), format!("\x1b[1;35m{PROMPT}\x1b[0m "))),
+        Shell::Zsh => env.push(("ZDOTDIR".into(), home.display().to_string())),
+        Shell::Fish => {}
+    }
     if let Some(repo) = &options.repo {
         let repo = std::path::absolute(repo).unwrap_or_else(|_| repo.clone());
         env.push(("REPO".into(), repo.display().to_string()));
     }
     env.extend(tape.env.iter().cloned());
     env
+}
+
+/// The command line that starts `shell` interactively, without the user's
+/// profile or rc files.
+fn shell_command(shell: Shell) -> Vec<String> {
+    let args: &[&str] = match shell {
+        Shell::Bash => &["--noprofile", "--norc", "-i"],
+        // -d skips /etc/zsh*; ZDOTDIR points at the workspace's .zshrc.
+        Shell::Zsh => &["-d", "-i"],
+        Shell::Fish => &[
+            "--no-config",
+            "--private",
+            "-i",
+            "-C",
+            "function fish_prompt; set_color -o magenta; echo -n '❯'; \
+             set_color normal; echo -n ' '; end; set -g fish_greeting ''; \
+             set -g fish_autosuggestion_enabled 0",
+        ],
+        Shell::Sh => &["-i"],
+    };
+    std::iter::once(shell.name())
+        .chain(args.iter().copied())
+        .map(str::to_string)
+        .collect()
+}
+
+/// The major version of the `bash` on `PATH`, if it runs.
+fn bash_major() -> Option<u32> {
+    let output = Command::new("bash")
+        .args(["-c", "echo ${BASH_VERSINFO[0]}"])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    String::from_utf8_lossy(&output.stdout).trim().parse().ok()
+}
+
+/// Warnings about the machine a tape is about to be recorded on: a shell
+/// that is missing, or a bash old enough (macOS ships 3.2) that its line
+/// editing may differ from recordings made elsewhere.
+pub fn warnings(tape: &Tape) -> Vec<String> {
+    let mut out = Vec::new();
+    if tape.shell == Shell::Bash {
+        match bash_major() {
+            Some(major) if major < 4 => out.push(format!(
+                "bash {major} is older than 4 (macOS ships 3.2): line editing may \
+                 differ from recordings made with a newer bash; install one (for \
+                 example `brew install bash`) and put it first on PATH"
+            )),
+            Some(_) => {}
+            None => out.push("bash was not found on PATH".into()),
+        }
+    }
+    out
 }
 
 fn wait_for(
@@ -180,14 +248,16 @@ pub fn record(tape: &Tape, stem: &str, options: &Options) -> Result<Recording, T
     let io = |e: std::io::Error| TapeError::new(0, e.to_string());
     let workspace = Workspace::new(stem).map_err(io)?;
     let env = environment(&workspace.0, tape, options);
+    let shell = shell_command(tape.shell);
     let mut session = Session::start(
+        &shell,
         &workspace.0,
         tape.columns,
         tape.rows,
         &env,
         options.theme.clone(),
     )
-    .map_err(io)?;
+    .map_err(|e| TapeError::new(0, format!("cannot start {}: {e}", tape.shell.name())))?;
     let mut typing = Duration::from_millis(40);
     let mut timeout = Duration::from_secs(15);
     let prompt = Pattern::Text(PROMPT.into());

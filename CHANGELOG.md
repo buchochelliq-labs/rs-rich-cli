@@ -85,7 +85,13 @@ Entries below record subsequent releases and development.
   as rich measures it; vt100 alone split 👩‍👧 over four cells and shifted
   the rest of the row. Box-drawing characters are drawn as lines, so borders
   join between rows, and block elements, quadrants and braille as shapes, so
-  half-block and quadrant images have no seams. Linux and macOS are supported; Windows builds
+  half-block and quadrant images have no seams. `Set Shell` runs a tape in
+  `bash` (the default), `zsh`, `fish` or `sh`, each without the user's
+  profile or rc files and with the same prompt, and `rich record` warns when
+  the `bash` on `PATH` is older than 4 (macOS ships 3.2), whose line editing
+  differs from CI's. The recordings page says why a tape should not
+  line-edit across a joined emoji: shells take widths from the C library,
+  which counts 👩‍👧 as four cells. Linux and macOS are supported; Windows builds
   through ConPTY and is experimental.
 - **`rich record TAPE…`** in the CLI (the new default `record` feature):
   `--check`, `--output`, `--format png,svg,cast,gif,mp4`, `--no-video`,
