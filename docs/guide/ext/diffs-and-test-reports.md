@@ -110,6 +110,16 @@ the plain text alone still shows:
 
 `RenderSnapshot::diff(&other)` returns the same comparison as unified text.
 
+`RenderSnapshot::capture` writes schema 1, which stores the segments as
+rendered, so output that was only split differently shows as a change.
+`RenderSnapshot::capture_frame` writes schema 2: `rows` of runs, with
+neighbouring segments that look the same merged and control segments
+dropped, and `ansi` in the merged encoding. When either side of `diff` is
+schema 2, both are compared by size, plain text and rows, so a schema 1
+fixture you already have still compares against a new schema 2 capture.
+`upgrade()` converts a schema 1 snapshot. Schema 1 JSON is unchanged: it has
+no `rows` key.
+
 ## Source diffs
 
 `SourceDiff` highlights each side as a whole file with core's `Syntax`, then

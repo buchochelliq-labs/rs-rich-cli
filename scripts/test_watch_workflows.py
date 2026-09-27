@@ -9,6 +9,7 @@ terminal before a later sentinel frame does.
 """
 
 import argparse
+import codecs
 import errno
 import os
 from pathlib import Path
@@ -146,6 +147,17 @@ class WatchSession:
         test.addCleanup(WatchRecoveryTests.stop_child, self.child)
         self.pending = bytearray()
         self.transcript = bytearray()
+        # Live regions repaint only the cells that change, so new text can be
+        # on screen without ever being written whole: keep an emulated screen
+        # and a snapshot of it after every carriage return (each row repaint
+        # ends with one).
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from test_live_regions_pty import Screen
+        self.screen = Screen(columns, rows, strict=False)
+        self.decoder = codecs.getincrementaldecoder("utf-8")()
+        self.unfed = ""
+        self.observed = []
+        self.last_observed = ""
 
     def read(self, timeout):
         readable, _, _ = select.select([self.master], [], [], timeout)
@@ -161,19 +173,35 @@ class WatchSession:
             return None
         self.pending.extend(chunk)
         self.transcript.extend(chunk)
+        self.unfed += self.decoder.decode(chunk)
+        cut = self.unfed.rfind("\r")
+        if cut >= 0:
+            for piece in self.unfed[:cut + 1].split("\r"):
+                self.screen.feed(piece + "\r")
+                self.observed.append("\n".join(self.screen.lines()))
+            self.unfed = self.unfed[cut + 1:]
         return True
+
+    def on_screen(self, needle):
+        return any(needle in snapshot for snapshot in self.observed)
 
     def await_text(self, needle, deadline=10):
         """Consume output through `needle`; return everything consumed."""
         expected = needle.encode()
         end = time.monotonic() + deadline
-        while expected not in self.pending and time.monotonic() < end:
+        while (expected not in self.pending and not self.on_screen(needle)
+               and time.monotonic() < end):
             self.test.assertIsNone(self.child.poll(), f"watch exited: {bytes(self.pending)!r}")
             if self.read(0.1) is None:
                 self.test.fail(f"watch closed PTY: {bytes(self.pending)!r}")
-        self.test.assertIn(expected, self.pending,
-                           f"watch did not produce {needle!r}: {bytes(self.pending)!r}")
-        cut = self.pending.index(expected) + len(expected)
+        self.last_observed = "\n\n".join(self.observed)
+        self.observed = []
+        if expected in self.pending:
+            cut = self.pending.index(expected) + len(expected)
+        else:
+            self.test.assertIn(needle, self.last_observed,
+                               f"watch did not produce {needle!r}: {bytes(self.pending)!r}")
+            cut = len(self.pending)
         consumed = bytes(self.pending[:cut])
         del self.pending[:cut]
         return consumed
@@ -232,10 +260,15 @@ class MultiFileWatchTests(unittest.TestCase):
         for step in range(1, 6):
             first.write_text(f'{{"first":"BURST_{step}"}}', encoding="utf-8")
         burst = session.await_text("BURST_5")
+        seen = session.last_observed
         save_atomically(second, '{"second":"SENTINEL"}')
         burst += session.await_text("SENTINEL")
+        seen += session.last_observed
         for step in range(1, 5):
             self.assertNotIn(f"BURST_{step}".encode(), burst)
+            # Cell repaints write only what changed: no intermediate frame
+            # may have reached the screen either.
+            self.assertNotIn(f"BURST_{step}", seen)
 
     def test_atomic_rename_over_save(self):
         root, first, second = self.workspace()

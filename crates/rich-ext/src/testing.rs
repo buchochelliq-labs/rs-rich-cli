@@ -16,6 +16,39 @@ pub struct SnapshotSegment {
     pub attributes: Vec<String>,
     pub link: Option<String>,
 }
+/// A run of text in one style on one row, as schema 2 stores it: adjacent
+/// segments that look the same are merged, so how the output was split into
+/// segments does not show.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SnapshotRun {
+    pub text: String,
+    pub foreground: Option<String>,
+    pub background: Option<String>,
+    pub attributes: Vec<String>,
+    pub link: Option<String>,
+}
+impl SnapshotRun {
+    fn same_style(&self, other: &SnapshotRun) -> bool {
+        (
+            &self.foreground,
+            &self.background,
+            &self.attributes,
+            &self.link,
+        ) == (
+            &other.foreground,
+            &other.background,
+            &other.attributes,
+            &other.link,
+        )
+    }
+}
+/// A render captured for comparison.
+///
+/// Schema 1 ([`RenderSnapshot::capture`]) stores the segments as rendered.
+/// Schema 2 ([`RenderSnapshot::capture_frame`]) stores `rows` of merged runs
+/// instead, drops control segments, and keeps `ansi` in the merged encoding;
+/// its `segments` is empty. [`RenderSnapshot::diff`] compares a schema 2
+/// snapshot with either schema by what shows.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RenderSnapshot {
     pub schema_version: u32,
@@ -24,9 +57,40 @@ pub struct RenderSnapshot {
     pub plain: String,
     pub ansi: String,
     pub segments: Vec<SnapshotSegment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rows: Option<Vec<Vec<SnapshotRun>>>,
 }
 pub type SnapshotError = serde_json::Error;
 impl RenderSnapshot {
+    /// A schema 2 snapshot, built from the render's [`Frame`](crate::frame::Frame).
+    pub fn capture_frame(target: &RenderTarget, renderable: &dyn Renderable) -> Self {
+        let segments = target.segments(renderable);
+        let caps = target.capabilities();
+        let frame = crate::frame::Frame::from_segments(&segments);
+        let snapshot: Vec<SnapshotSegment> = segments.iter().map(snapshot_segment).collect();
+        Self {
+            schema_version: 2,
+            width: caps.width,
+            height: caps.height,
+            plain: frame.plain(),
+            ansi: frame.to_ansi_merged(&target.console()),
+            segments: Vec::new(),
+            rows: Some(rows(&snapshot)),
+        }
+    }
+    /// This snapshot as schema 2: rows of merged runs from its segments. A
+    /// schema 2 snapshot is returned unchanged. `ansi` is kept as captured.
+    pub fn upgrade(&self) -> Self {
+        if self.rows.is_some() {
+            return self.clone();
+        }
+        Self {
+            schema_version: 2,
+            segments: Vec::new(),
+            rows: Some(rows(&self.segments)),
+            ..self.clone()
+        }
+    }
     pub fn capture(target: &RenderTarget, renderable: &dyn Renderable) -> Self {
         let segments = target.segments(renderable);
         let caps = target.capabilities();
@@ -41,6 +105,7 @@ impl RenderSnapshot {
                 .collect(),
             ansi: target.console().segments_to_string(&segments),
             segments: segments.iter().map(snapshot_segment).collect(),
+            rows: None,
         }
     }
     pub fn to_json(&self) -> Result<String, SnapshotError> {
@@ -50,7 +115,37 @@ impl RenderSnapshot {
     /// changes: a `diff -u` of the plain text when it differs, else the
     /// style-changed lines and the first differing segment field, else the
     /// first differing metadata path.
+    ///
+    /// When either snapshot is schema 2, both are compared as schema 2: size,
+    /// plain text and rows, not `ansi` or how the text was segmented.
     pub fn diff(&self, other: &Self) -> Option<String> {
+        if self.rows.is_some() || other.rows.is_some() {
+            let (a, b) = (self.upgrade(), other.upgrade());
+            if (a.width, a.height, &a.plain, &a.rows) == (b.width, b.height, &b.plain, &b.rows) {
+                return None;
+            }
+            if a.plain != b.plain {
+                return Some(
+                    crate::diff::TextDiff::new(&a.plain, &b.plain).unified("self", "other"),
+                );
+            }
+            let (a_value, b_value) = (
+                serde_json::to_value(&a).ok()?,
+                serde_json::to_value(&b).ok()?,
+            );
+            let mut out = String::new();
+            let lines = crate::diff::DiffView::ansi(&a.ansi, &b.ansi).style_changed_lines();
+            if !lines.is_empty() {
+                let lines: Vec<String> = lines.iter().map(usize::to_string).collect();
+                out.push_str(&format!("style changed on line {}\n", lines.join(", ")));
+            }
+            let field = first_difference("rows", &a_value["rows"], &b_value["rows"])
+                .or_else(|| first_difference("snapshot", &a_value, &b_value));
+            if let Some(field) = field {
+                out.push_str(&field);
+            }
+            return Some(out);
+        }
         if self == other {
             return None;
         }
@@ -112,6 +207,34 @@ fn first_difference(path: &str, a: &serde_json::Value, b: &serde_json::Value) ->
         _ => {}
     }
     Some(format!("{path}: {a} -> {b}"))
+}
+/// Rows of merged runs from segments: control segments dropped, text split at
+/// line breaks, empty runs dropped, and neighbours that look the same joined.
+fn rows(segments: &[SnapshotSegment]) -> Vec<Vec<SnapshotRun>> {
+    let mut rows: Vec<Vec<SnapshotRun>> = vec![Vec::new()];
+    for segment in segments.iter().filter(|s| !s.control) {
+        for (index, piece) in segment.text.split('\n').enumerate() {
+            if index > 0 {
+                rows.push(Vec::new());
+            }
+            if piece.is_empty() {
+                continue;
+            }
+            let run = SnapshotRun {
+                text: piece.to_owned(),
+                foreground: segment.foreground.clone(),
+                background: segment.background.clone(),
+                attributes: segment.attributes.clone(),
+                link: segment.link.clone(),
+            };
+            let row = rows.last_mut().expect("at least one row");
+            match row.last_mut() {
+                Some(last) if last.same_style(&run) => last.text.push_str(&run.text),
+                _ => row.push(run),
+            }
+        }
+    }
+    rows
 }
 fn snapshot_segment(s: &Segment) -> SnapshotSegment {
     const ATTRS: [&str; 13] = [

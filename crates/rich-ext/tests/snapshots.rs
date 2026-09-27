@@ -122,3 +122,79 @@ fn diagnostic_snapshots_match_fixtures() {
         );
     }
 }
+
+/// Returns its segments as given, to control how output is split.
+struct Segments(Vec<rich::Segment>);
+impl rich::Renderable for Segments {
+    fn rich_render(
+        &self,
+        _console: &rich::Console,
+        _options: &rich::ConsoleOptions,
+    ) -> Vec<rich::Segment> {
+        self.0.clone()
+    }
+}
+fn seg(text: &str, style: &str) -> rich::Segment {
+    rich::Segment::new(text, Some(rich::Style::parse(style).unwrap()))
+}
+#[test]
+fn schema_2_ignores_resegmentation_but_not_style() {
+    let t = target();
+    let whole = Segments(vec![seg("hello world", "bold"), seg("\nnext", "")]);
+    let split = Segments(vec![
+        seg("hello", "bold"),
+        seg(" world", "bold"),
+        seg("\n", ""),
+        seg("ne", ""),
+        seg("xt", ""),
+    ]);
+    let a = RenderSnapshot::capture_frame(&t, &whole);
+    let b = RenderSnapshot::capture_frame(&t, &split);
+    assert_eq!(a.schema_version, 2);
+    assert_eq!(a.diff(&b), None);
+    assert_eq!(a, b);
+    let rows = a.rows.as_ref().unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].len(), 1);
+    assert_eq!(rows[0][0].text, "hello world");
+    // Schema 1 still sees the split.
+    let (a1, b1) = (
+        RenderSnapshot::capture(&t, &whole),
+        RenderSnapshot::capture(&t, &split),
+    );
+    assert!(a1.diff(&b1).is_some());
+    // A style change still shows.
+    let red = Segments(vec![seg("hello world", "bold red"), seg("\nnext", "")]);
+    let diff = a.diff(&RenderSnapshot::capture_frame(&t, &red)).unwrap();
+    assert!(diff.contains("foreground"), "{diff}");
+    assert!(diff.contains("style changed on line 1"), "{diff}");
+}
+#[test]
+fn schema_1_fixtures_load_and_compare_with_schema_2() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+    let json = std::fs::read_to_string(dir.join("diagnostic_chain.json")).unwrap();
+    let old: RenderSnapshot = serde_json::from_str(&json).unwrap();
+    assert_eq!(old.schema_version, 1);
+    assert!(old.rows.is_none());
+    // Round-trips byte for byte: schema 1 output has no `rows` key.
+    assert_eq!(old.to_json().unwrap(), json);
+    let upgraded = old.upgrade();
+    assert_eq!(upgraded.schema_version, 2);
+    assert_eq!(upgraded.diff(&old), None);
+    let rows = upgraded.rows.as_ref().unwrap();
+    let plain: Vec<String> = rows
+        .iter()
+        .map(|row| row.iter().map(|run| run.text.as_str()).collect())
+        .collect();
+    assert_eq!(plain.join("\n"), old.plain);
+}
+#[test]
+fn schema_2_round_trips_through_json() {
+    let t = target();
+    let a = RenderSnapshot::capture_frame(&t, &Text::styled("one\ntwo", "red"));
+    let json = a.to_json().unwrap();
+    assert!(json.contains("\"rows\""));
+    let back: RenderSnapshot = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, a);
+    assert!(a.ansi.contains("\x1b[31m"));
+}

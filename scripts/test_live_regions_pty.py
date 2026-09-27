@@ -14,8 +14,10 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 class Screen:
-    def __init__(self, w, h):
+    def __init__(self, w, h, strict=True):
+        # `strict` fails on auto-wrap, which live regions must never trigger.
         self.w, self.h, self.x, self.y = w, h, 0, h-1
+        self.strict = strict
         self.rows = [[' ']*w for _ in range(h)]
         self.visible = True
     def resize(self, w, h):
@@ -32,8 +34,14 @@ class Screen:
                 args, command = m.groups(); text = text[m.end():]
                 if command == 'A': self.y = max(0,self.y-int(args))
                 elif command == 'B': self.y = min(self.h-1,self.y+int(args))
+                elif command == 'G': self.x = min(self.w-1, int(args or 1)-1)
                 elif command == 'K':
-                    assert args == '2'; self.rows[self.y] = [' ']*self.w
+                    assert args in ('', '0', '2'), args
+                    start = 0 if args == '2' else self.x
+                    self.rows[self.y][start:] = [' ']*(self.w-start)
+                elif command == 'H' and args == '': self.x, self.y = 0, 0
+                elif command == 'J':
+                    assert args == '2', args; self.rows = [[' ']*self.w for _ in range(self.h)]
                 elif command in 'hl':
                     assert args == '?25'; self.visible = command == 'h'
                 elif command != 'm': raise AssertionError((args,command))
@@ -45,7 +53,9 @@ class Screen:
                 if self.y == self.h:
                     self.rows.pop(0); self.rows.append([' ']*self.w); self.y -= 1
             else:
-                assert self.x < self.w, 'unexpected terminal auto-wrap'
+                if self.x >= self.w:
+                    assert not self.strict, 'unexpected terminal auto-wrap'
+                    self.feed('\r\n')
                 self.rows[self.y][self.x] = c; self.x += 1
     def lines(self): return [''.join(row).rstrip() for row in self.rows]
 
