@@ -4,11 +4,15 @@
 //! a line-based prompt without a terminal, and is styled by one [`Theme`].
 
 mod confirm;
+mod form;
 mod input;
+mod pager;
 mod select;
 
 pub use confirm::{Choice, Confirm};
+pub use form::{Answers, Form, Value};
 pub use input::{Input, Provider, Suggestion};
+pub use pager::Pager;
 pub use select::{MultiSelect, PreviewLayout, Select};
 
 use rich::{Segment, Style};

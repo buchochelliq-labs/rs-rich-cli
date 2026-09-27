@@ -333,6 +333,48 @@ impl Input {
         Flow::Done(answer)
     }
 
+    /// The answer Enter would give: the text, or the default when empty,
+    /// checked by the validator.
+    pub(crate) fn resolve(&self) -> Result<String, String> {
+        let mut answer = self.value.clone();
+        if answer.is_empty() {
+            if let Some(default) = &self.default {
+                answer = default.clone();
+            }
+        }
+        if let Some(validator) = &self.validator {
+            validator(&answer)?;
+        }
+        Ok(answer)
+    }
+
+    /// The line's text as shown (masked, or the placeholder), and the
+    /// caret's column in it.
+    pub(crate) fn field(&self) -> (Vec<Segment>, usize) {
+        let before: String = self.value.chars().take(self.caret).collect();
+        let column = cell_len(&self.shown_value(&before));
+        if self.value.is_empty() {
+            let hint = self
+                .placeholder
+                .clone()
+                .or_else(|| self.default.clone().map(|default| format!("({default})")));
+            return (
+                hint.map(|hint| vec![text(hint, &self.theme.hint)])
+                    .unwrap_or_default(),
+                column,
+            );
+        }
+        (vec![plain(self.shown_value(&self.value))], column)
+    }
+
+    pub(crate) fn label(&self) -> &str {
+        &self.prompt
+    }
+
+    pub(crate) fn masked(&self, value: &str) -> String {
+        self.shown_value(value)
+    }
+
     fn shown_value(&self, value: &str) -> String {
         match self.mask {
             Some(mask) => std::iter::repeat_n(mask, value.chars().count()).collect(),
