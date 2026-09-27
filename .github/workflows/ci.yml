@@ -145,6 +145,9 @@ jobs:
           # The tape recorder (PTY, VT emulator, embedded font).
           - crate: rs-rich-record
             args: ""
+          # Interactive components: session, event loop, PTY restoration.
+          - crate: rs-rich-interact
+            args: ""
           # Every lumis language (its default); the bundles only select fewer.
           - crate: rs-rich-lumis
             args: ""
