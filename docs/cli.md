@@ -105,6 +105,22 @@ text; like rich-cli on rich 15, a bare line only shows it once `--width` or a
 panel gives it a width to fill. `--rule-style` and `--rule-char` set the rule's
 line.
 
+### reStructuredText
+
+`--rst` renders reStructuredText as rich-cli does, through a port of
+`rich-rst`. A `.rst` file is detected by its extension:
+
+```bash
+rich README.rst
+rich --rst docs/intro.txt
+rich --rst notes.rst --lexer ruby   # code blocks that name no language
+```
+
+Titles are drawn in double-bordered panels, admonitions in titled panels,
+field lists as a table and code in a bordered `Syntax` panel. The port covers
+the common subset of reStructuredText; DIVERGENCES §35 lists what it leaves
+out.
+
 Read from standard input with `-` (including `-p -` for markup):
 
 ```bash

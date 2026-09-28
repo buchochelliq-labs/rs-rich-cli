@@ -81,6 +81,13 @@ Entries below record subsequent releases and development.
     rich-cli's `Console(emoji=False)`.
 - **Ext:** `cli_doc::ArgSpec` gains `short_aliases` and `short_alias()`, for
   a second short name; help, man pages and completions list it.
+- **`--rst`:** renders reStructuredText as rich-cli does (`rich-rst` 1.3.2,
+  now pinned in UPSTREAM.toml). A `.rst` file and a `text/x-rst` response are
+  detected, and `--lexer` names the lexer for code blocks that name none.
+  The port covers the common subset of reStructuredText (DIVERGENCES §35).
+- **Ext:** `rich_ext::rst`, a port of `rich-rst`: `RestructuredText` parses
+  the document and renders it byte for byte as `rich-rst` does on rich
+  15.0.0, checked against fixtures from `scripts/capture_rst_golden.py`.
 
 ### Docs and tooling
 

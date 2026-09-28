@@ -517,6 +517,28 @@ Format: what differs · why · how to remove it (if temporary).
   to fix scripts written for rich-cli, and both uses are common.
 - **Remove:** a major CLI release could move them to upstream's meanings.
 
+### 35. `rich --rst` renders a subset of reStructuredText
+- **Differs:** rich-cli's `--rst` hands the document to docutils, and
+  `rich-rst` 1.3.2 renders the tree. `rich_ext::rst` parses the common subset
+  itself: sections, paragraphs and inline markup, lists, definition, field and
+  option lists, literal and doctest blocks, block quotes, line blocks, grid
+  and simple tables, footnotes, citations, hyperlink targets, `replace` and
+  `image` substitutions, and the `code`, admonition, `image`, `figure`,
+  `contents`, `topic`, `rubric`, `math`, `sidebar`, `raw`, `container` and
+  `compound` directives. Other directives (`list-table`, `csv-table`,
+  `include`, `unicode`, `header`, …) render nothing, and a figure's caption
+  is dropped. Two documents that make `rich-rst` raise render here: one that
+  starts with a field list, and a sidebar with more than a subtitle and one
+  paragraph.
+- **Same:** everything the subset covers prints byte for byte what
+  `rich-rst` prints on rich 15.0.0, quirks included
+  (`crates/rich-ext/tests/rst.rs`, fixtures from
+  `scripts/capture_rst_golden.py`). As everywhere, code blocks are
+  highlighted by syntect (§18) and OSC 8 links carry no `id=`.
+- **Why:** there is no docutils for Rust, and the subset is what READMEs and
+  docstrings use.
+- **Remove:** as more of docutils' directives are ported.
+
 ## Feature-flagged divergences
 
 ### 22. Escape-safe JSON presentation (`json-escape-safe`)

@@ -1,0 +1,25 @@
+[1;33m • [0mitem one
+[1;33m • [0mitem two  second paragraph of two
+  [1;33m ∘ [0mitem three
+  [1;33m ∘ [0mnested a  nested b
+    [1;33m ▪ [0mnested a
+    [1;33m ▪ [0mnested b
+[1;33m • [0mnested b
+
+[1;33m • [0mstar list
+[1;33m • [0manother
+
+[1;33m 1[0m first
+[1;33m 2[0m second
+[1;33m 3[0m third
+[1;33m 4[0m auto
+[1;33m 5[0m auto two
+
+[1;33m 1[0m letter
+[1;33m 2[0m letters
+
+[1;33m 1[0m roman
+[1;33m 2[0m roman two
+
+[1;33m • [0mouter  inner enum  inner enum b
+[1;33m • [0mouter two

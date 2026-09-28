@@ -1,0 +1,27 @@
+Before table.
+
+Header 1
+
+Header 2
+
+cell 1
+
+cell 2
+
+cell 3
+
+cell 4
+
+A
+
+B
+
+x
+
+y
+
+z
+
+w
+
+After tables.

@@ -103,7 +103,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 |------------------|------------------------------|:------:|
 | arg parsing, plain-file print, capability demo | `lib.rs` | 🟡 |
 | rendering options (#542): `-h/--head`, `-t/--tail` (for source, CSV rows and notebook cells, keeping upstream's `--tail` arithmetic), `-n/--line-numbers`, `-g/--guides`, `--lexer`, `--emoji` (off by default, as upstream), `--soft`, `--no-wrap`, `-W/--max-width`, `-L/-C/-R/-F` (`--text-*`), `--rule-style`, `--rule-char`, `--force-terminal`, and the short aliases `-J -u -d -a -c -l -r -v`; help is `--help` only, since `-h` is `--head`. `-j`/`-x` keep this CLI's meanings (DIVERGENCES §34) | `lib.rs` + `cli_spec.rs` | 🟡 done; semantics checked against the rich-cli 1.8.1 oracle, `--soft` byte-identical to rich 15.0.0's `print(soft_wrap=True)` (`tests/rich_cli_options.rs`) |
-| `--rst` (rich-rst's `RestructuredText`) | — | 🔴 planned for 0.0.13 (#542), in its own PR |
+| `--rst` (rich-rst 1.3.2's `RestructuredText`, pinned in UPSTREAM.toml) | `rich-ext/src/rst/` + `lib.rs` | 🟡 done for the reStructuredText subset in DIVERGENCES §35; byte-identical to rich-rst on rich 15.0.0 (`rich-ext/tests/rst.rs`) |
 | `--print` / `--markdown` / `--json` / `--syntax` / `--csv` / `--rule`, width + justify, stdin, extension auto-detect | `lib.rs` | 🟡 |
 | `csv`/`tsv` table render (blue border, numeric-column bold-green, quoted-field parse, `csv.Sniffer`) | `lib.rs` | 🟡 sniffer agrees with CPython's on 42/42 samples |
 | HTML export (`--export-html`) + SVG export (`--export-svg`) | `lib.rs` | 🟡 both done |

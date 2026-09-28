@@ -1,0 +1,37 @@
+╔══════════════════════════════════════╗
+║                 Top                  ║
+╚══════════════════════════════════════╝
+Italic start then plain.
+
+a lineParagraph right after a line 
+block.
+-x
+    Option.
+After option list.
+
+Link to early and late here.
+
+╔══════════════════════════════════════╗
+║               Section                ║
+╚══════════════════════════════════════╝
+╔══════════════════════════════════════╗
+║             Sub-section              ║
+╚══════════════════════════════════════╝
+Text with a literal over lines and emph 
+over lines.
+┌─────────────── python ───────────────┐
+│ literal only                         │
+└──────────────────────────────────────┘
+A para:
+┌─────────────── python ───────────────┐
+│ code after para                      │
+└──────────────────────────────────────┘
+Text: 42 and True and 'str' here.
+
+Definitions:
+
+term
+    bullet in def  another
+      
+ 1 enum with  two paragraphs
+ 2 and nested  bullet

@@ -25,5 +25,14 @@ version = "1.8.1"
 git_tag = "v1.8.1"
 git_sha = "c45f6c9697f6c8c2ed278da0ce8c164a87f097b6"
 
+[rich-rst]
+# Mirrored by: crates/rich-ext/src/rst (rich-cli's `--rst` renderer), whose
+# parity fixtures scripts/capture_rst_golden.py captures. rich-rst parses
+# with docutils, so its version is pinned too.
+upstream = "https://github.com/wasi-master/rich-rst"
+pypi = "rich-rst"
+version = "1.3.2"
+docutils = "0.23"
+
 # NOTE: crates/rich-ext deliberately has NO upstream pin — it is our own code and
 # versions independently. See AGENTS.md → Versioning.

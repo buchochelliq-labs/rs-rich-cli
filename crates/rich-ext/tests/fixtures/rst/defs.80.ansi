@@ -1,0 +1,34 @@
+[39;49mSome paragraph first.[0m
+
+[36mterm 1[0m
+    Definition 1.
+      
+    term 2 : [36mclassifier[0m
+      Definition 2, which is long enough to wrap onto another line when narrow.
+
+[36mmulti[0m
+    Paragraph one.  Paragraph two.
+      
+-a
+    Option a.
+-b FILE
+    Option b with argument.
+--long
+    Long option.
+--input=FILE
+    Long with argument.
+-v, --verbose, 
+    Two options.
+/V
+    DOS option.
+┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┓
+┃[1m [0m[1mField Name [0m[1m [0m┃[1m [0m[1mField Value   [0m[1m [0m┃
+┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━┩
+│ [1mField      [0m │ value          │
+├─────────────┼────────────────┤
+│ [1mOther field[0m │ another value  │
+│             │ continued here │
+├─────────────┼────────────────┤
+│ [1mEmpty      [0m │                │
+└─────────────┴────────────────┘
+[39;49mAfter fields.[0m

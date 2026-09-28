@@ -35,12 +35,13 @@ rich --watch [OPTIONS] FILE...
 
 ### Render mode
 
-Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by extension — anything else with a file extension is syntax-highlighted.
+Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb by extension — anything else with a file extension is syntax-highlighted.
 
 | Option | Description |
 | --- | --- |
 | `-p`, `--print` | Treat RESOURCE as literal markup TEXT, not a file path. |
 | `-m`, `--markdown` | Render RESOURCE as Markdown. |
+| `--rst` | Render RESOURCE as reStructuredText. |
 | `-j`, `-J`, `--json` | Pretty-print RESOURCE as JSON. |
 | `-x`, `--syntax` | Syntax-highlight RESOURCE (language from its extension) |
 | `--csv` | Render RESOURCE as a CSV/TSV table. |
@@ -93,7 +94,7 @@ Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by exten
 | `-t`, `--tail <LINES>` | Show the end of a source file or CSV (as upstream, --tail N shows the last N-1 source lines) |
 | `-n`, `--line-numbers` | Number the lines of source. |
 | `-g`, `--guides` | Draw indentation guides in source. |
-| `--lexer <LEXER>` | Highlight source as LEXER instead of guessing from the file name. |
+| `--lexer <LEXER>` | Highlight source as LEXER instead of guessing from the file name; with --rst, highlight code blocks that name no language as LEXER. |
 | `--no-wrap` | Crop long lines of source instead of wrapping them; with --print, don't wrap text. |
 
 ### Mode options
@@ -261,6 +262,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | --- | --- |
 | `print` | Treat RESOURCE as literal markup TEXT (`--print`) |
 | `markdown`, `md` | Render Markdown (`--markdown`) |
+| `rst` | Render reStructuredText (`--rst`) |
 | `syntax`, `code` | Syntax-highlight source (`--syntax`) |
 | `json` | Pretty-print JSON (`--json`) |
 | `csv`, `tsv` | Render CSV/TSV as a table (`--csv`) |
@@ -329,6 +331,22 @@ Render Markdown (`--markdown`)
 
 ```text
 rich markdown [OPTIONS] [RESOURCE]
+```
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[RESOURCE]` | A file path, an http(s) URL, or `-` for stdin; every `rich` option applies. |
+
+### rich rst
+
+Render reStructuredText (`--rst`)
+
+#### Usage
+
+```text
+rich rst [OPTIONS] [RESOURCE]
 ```
 
 #### Arguments
@@ -1031,7 +1049,7 @@ Settings are read from these sources, lowest precedence first; a later source ov
 
 | Key | Type | Default | Environment | Flag | Description |
 | --- | --- | --- | --- | --- | --- |
-| `mode` | enum: `print`, `markdown`, `json`, `syntax`, `csv`, `ipynb`, `jsonl`, `log`, `rule`, `image`, `gif`, `diff`, `inspect`, `ansi` | `auto` | | `--print, --markdown, ... or a command word` | Render mode, as the flag or command of the same name |
+| `mode` | enum: `print`, `markdown`, `rst`, `json`, `syntax`, `csv`, `ipynb`, `jsonl`, `log`, `rule`, `image`, `gif`, `diff`, `inspect`, `ansi` | `auto` | | `--print, --markdown, ... or a command word` | Render mode, as the flag or command of the same name |
 | `format` | enum: `auto`, `json`, `yaml`, `toml`, `xml`, `ini`, `env` | `auto` | | `--format` | Input format. With --inspect, the parser (default auto-detect); otherwise `auto` detects piped or extensionless input and routes it (JSON to --json, other formats to highlighting, anything else to plain text), and a named format overrides the extension |
 | `width` | positive integer | | | `--width` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) |
 | `panel` | enum: `ascii`, `ascii2`, `square`, `rounded`, `heavy`, `double`, `none` | | | `--panel` | Wrap output in a panel, shrunk to fit its content (none = no panel) |

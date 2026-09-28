@@ -1,0 +1,21 @@
+[39;49mInline markup: [0m[3;39;49memphasis[0m[39;49m, [0m[1;39;49mstrong[0m[39;49m, [0m
+[38;5;251;48;5;233mliteral[0m[39;49m, [0m[39;49mtitle ref[0m[39;49m, [0m[39;49m₂[0m[39;49m, H[0m[39;49m₂[0m[39;49mO, E = mc[0m[39;49m²[0m[39;49m. [0m
+[39;49mEscapes: *not emphasis*, 2 * 3 * 4, [0m
+[39;49ma*b*c, "[0m[3;39;49mquoted[0m[39;49m" and '*'. Roles: [0m[38;5;251;48;5;233mx = 1[0m[39;49m, [0m
+[3;39;49memph[0m[39;49m, [0m[1;39;49mbold[0m[39;49m, [0m[38;5;251;48;5;233mlit[0m[39;49m, [0m[38;5;251;48;5;233mos.path.join[0m[39;49m, [0m[38;5;251;48;5;233mTitle[0m[39;49m, [0m
+[39;49ma^2[0m[39;49m, [0m[39;49m:bogus:`thing`[0m[39;49m, [0m]8;;https://peps.python.org/pep-0008\[4;34;49mPEP 8[0m]8;;\[39;49m, [0m]8;;https://tools.ietf.org/html/rfc2822.html\[4;34;49mRFC 2822[0m]8;;\[39;49m. [0m
+[39;49mReferences: [0m]8;;https://www.python.org\[4;34;49mPython[0m]8;;\[39;49m, [0m]8;;https://www.rust-lang.org\[4;34;49mRust lang[0m]8;;\[39;49m, [0m]8;;https://rust-lang.org\[4;34;49minline[0m]8;;\[39;49m, [0m
+[4;34;49manonymous[0m[39;49m, [0m
+]8;;https://example.com/path?q=1\[4;34;49mhttps://example.com/path?q=1[0m]8;;\[39;49m., mail [0m
+]8;;mailto:me@example.com\[4;34;49mme@example.com[0m]8;;\[39;49m, see [0m[39;49m1[0m[39;49m and [0m[39;49m and [0m[38;5;250;49mCIT2002[0m[39;49m. [0m
+[39;49mSubstitution [0m[39;49mname[0m[39;49m and [0m[4;34;49mref[0m[39;49m here. Target [0m[39;49m [0m
+[39;49mhere.[0m
+
+[39;49mreplaced text[0m[38;5;250m╭─[0m[38;5;250m─────────────[0m[38;5;250m citation [0m[38;5;250m──[0m
+[38;5;250m│[0m CIT2002                              [38;5;250m│[0m
+[38;5;250m│[0m                                      [38;5;250m│[0m
+[38;5;250m│[0m A citation.                          [38;5;250m│[0m
+[38;5;250m╰──────────────────────────────────────╯[0m
+[38;5;250m┌─[0m[38;5;250m──────────────[0m[38;5;250m Footer [0m[38;5;250m──────────────[0m[38;5;250m─┐[0m
+[38;5;250m│[0m            Auto footnote.            [38;5;250m│[0m
+[38;5;250m└──────────────────────────────────────┘[0m
