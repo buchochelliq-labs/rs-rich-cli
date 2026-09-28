@@ -96,17 +96,10 @@ fn records_writes_and_checks() {
     }
     assert!(record::check(&recording, &dir).is_empty());
 
-    // A stale grid and an orphaned screenshot are both reported.
-    std::fs::write(dir.join("first.txt"), "something else\n").unwrap();
-    std::fs::write(dir.join("gone.txt"), "old\n").unwrap();
-    let problems = record::check(&recording, &dir);
-    assert!(problems
-        .iter()
-        .any(|p| matches!(p, Problem::Differs { name, .. } if name == "first")));
-    assert!(problems
-        .iter()
-        .any(|p| matches!(p, Problem::Orphaned { name } if name == "gone")));
-    // Writing again removes the orphan.
+    // A stale grid and an orphaned screenshot are both reported. A
+    // screenshot is orphaned only when an earlier write listed it in
+    // provenance.json: other files in the directory are never touched.
+    let tape_path = std::path::Path::new("test.tape");
     record::write(
         &recording,
         &dir,
@@ -114,10 +107,50 @@ fn records_writes_and_checks() {
         Formats::NO_VIDEO,
         &fonts,
         &Default::default(),
-        None,
+        Some((tape_path, TAPE.as_bytes())),
+    )
+    .unwrap();
+    let provenance = std::fs::read_to_string(dir.join("provenance.json")).unwrap();
+    let mut json: serde_json::Value = serde_json::from_str(&provenance).unwrap();
+    assert_eq!(json["screenshots"], serde_json::json!(["first", "second"]));
+    // A name that would leave the directory is ignored.
+    let escape = format!("rich-record-escape-{}", std::process::id());
+    let outside = dir.parent().unwrap().join(format!("{escape}.txt"));
+    json["screenshots"] = serde_json::json!(["first", "second", "gone", format!("../{escape}")]);
+    std::fs::write(dir.join("provenance.json"), json.to_string()).unwrap();
+    std::fs::write(dir.join("first.txt"), "something else\n").unwrap();
+    std::fs::write(dir.join("gone.txt"), "old\n").unwrap();
+    std::fs::write(dir.join("gone.png"), "old").unwrap();
+    std::fs::write(dir.join("notes.txt"), "mine\n").unwrap();
+    std::fs::write(&outside, "outside\n").unwrap();
+    let problems = record::check(&recording, &dir);
+    assert!(problems
+        .iter()
+        .any(|p| matches!(p, Problem::Differs { name, .. } if name == "first")));
+    let orphaned: Vec<_> = problems
+        .iter()
+        .filter_map(|p| match p {
+            Problem::Orphaned { name } => Some(name.as_str()),
+            Problem::Differs { .. } => None,
+        })
+        .collect();
+    assert_eq!(orphaned, ["gone"]);
+    // Writing again removes the orphan, and only it.
+    record::write(
+        &recording,
+        &dir,
+        "test",
+        Formats::NO_VIDEO,
+        &fonts,
+        &Default::default(),
+        Some((tape_path, TAPE.as_bytes())),
     )
     .unwrap();
     assert!(!dir.join("gone.txt").exists());
+    assert!(!dir.join("gone.png").exists());
+    assert!(dir.join("notes.txt").exists());
+    assert!(outside.exists());
+    let _ = std::fs::remove_file(&outside);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -200,4 +233,43 @@ fn every_shell_records_with_the_same_prompt() {
             "{name}:\n{grid}"
         );
     }
+}
+
+#[test]
+fn a_flood_of_output_is_recorded_in_bounded_frames() {
+    let tape = tape::parse(
+        "Set Size 40x8\nSet TypingDelay 1ms\nType \"seq 1 300000; echo done\"\nEnter\n\
+         Wait /\\ndone\\s*\\n/\nScreenshot end\n",
+    )
+    .unwrap();
+    let recording = record::record(&tape, "flood", &Options::default()).unwrap();
+    let timeline = &recording.timeline;
+    let (first, last) = (timeline.frames[0].0, timeline.frames.last().unwrap().0);
+    // At most one frame per 1/12 s (plus the ones input forces).
+    let inputs = timeline
+        .events
+        .iter()
+        .filter(|(_, e)| matches!(e, rich_record::session::Event::Input(_)))
+        .count();
+    let allowed = ((last - first) * rich_record::session::FRAME_RATE).ceil() as usize + inputs + 2;
+    assert!(
+        timeline.frames.len() <= allowed,
+        "{} frames over {:.2}s",
+        timeline.frames.len(),
+        last - first
+    );
+    // 2 MB of numbers, but no one output event holds more than a screen's
+    // repaint or a batch.
+    let largest = timeline
+        .events
+        .iter()
+        .filter_map(|(_, e)| match e {
+            rich_record::session::Event::Output(text) => Some(text.len()),
+            _ => None,
+        })
+        .max()
+        .unwrap();
+    assert!(largest < 64 * 1024, "{largest}");
+    assert!(!timeline.truncated);
+    assert!(recording.shots[0].1.text_grid().contains("done"));
 }

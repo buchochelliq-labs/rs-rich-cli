@@ -23,6 +23,9 @@ Screenshot mermaid
 Wait "Filter and highlight" 60s
 Sleep 400ms
 Screenshot filter
+Wait "Ask in a script" 60s
+Sleep 400ms
+Screenshot ask
 Wait "FIGlet banners" 60s
 Sleep 400ms
 Screenshot banner

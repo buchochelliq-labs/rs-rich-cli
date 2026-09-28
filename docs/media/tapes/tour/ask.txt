@@ -1,0 +1,28 @@
+─────────────────────────────────── reStructuredText ───────────────────────────────────
+$ rich --rst release.rst
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║                                    Release 0.0.13                                    ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+Ask, choose and browse from a script:
+
+ • rich choose picks one item
+ • rich filter narrows a list as you type
+ • rich confirm answers with its exit code
+
+╭─────────────────────────────────────── Note:  ───────────────────────────────────────╮
+│ Keys come from the terminal even when stdin is the list.                             │
+╰──────────────────────────────────────────────────────────────────────────────────────╯
+─────────────────────────────────── Ask in a script ────────────────────────────────────
+$ fruit=$(rich choose apple banana cherry)   # ↓ then Enter
+╭──────────────────── drawn headless: the keys a user would press ─────────────────────╮
+│ ? Pick a fruit ›                                                                     │
+│   apple                                                                              │
+│ ❯ banana                                                                             │
+│   cherry                                                                             │
+│   3/3 · ↑↓ move · enter pick · esc cancel                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────╯
+$ echo "$fruit"
+banana
+$ ls | rich filter --value toml    # without a terminal: a fuzzy grep
+$ rich confirm 'Deploy?' && deploy  # exit 0 for yes, 1 for no
+

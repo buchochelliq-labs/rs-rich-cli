@@ -238,7 +238,16 @@ reporting and bracketed paste. It undoes all of them on every way out:
 - on an early return or `?`, when the session is dropped;
 - on Ctrl+C, which ends the loop as `Interrupted`;
 - on a panic, through a hook that restores the terminal before the panic
-  message prints.
+  message prints;
+- on Unix, on SIGTERM, SIGHUP and SIGQUIT, through a thread that restores
+  the terminal and then takes the signal's default action, so the process
+  still ends as the signal asks. The handlers are installed with the first
+  session and stay, because removing them would leave the signals ignored.
+
+Whatever a view holds, terminal controls in its text (an escape from a
+file, a pasted `ESC c`, an 8-bit CSI) are painted as visible characters
+(`␛c`, `�`), one for one; styles reach the terminal only as styles. Pasted
+text loses its controls before it reaches an `Input` or a picker's query.
 
 A component can lend the terminal to another program by returning
 `Flow::Handoff(command)`. The session is left, the command runs with the
@@ -272,6 +281,15 @@ What happens then is the `Policy` fallback:
 | `Error` | `Error::NotInteractive` with the reason |
 
 Nothing emits control sequences or waits on a pipe.
+
+When input ends before an answer, the built-in components answer with their
+default (an `Input` or `Confirm` default, a `Select` default, the marked
+items of a `MultiSelect`), as they do for an empty line. Without one, `run`
+fails with `NotInteractive::NoDefault`: end of input is no answer, not a
+cancel. `Component::prompt` returns `Ok(None)` only when the user backed out,
+`Err(NotInteractive::Ended)` when input ran out, and a masked line read with
+echo off returns `Err(NotInteractive::Interrupted)` on Ctrl+C, which `run`
+reports as `Outcome::Interrupted`.
 
 A picker that reads its list from a pipe (`ls | app`) can still take keys
 from the keyboard: `Policy { tty_keys: true, .. }` reads them from the

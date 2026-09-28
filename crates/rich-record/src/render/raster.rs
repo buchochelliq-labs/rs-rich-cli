@@ -517,20 +517,39 @@ pub struct Frame<'a> {
     pub window: bool,
 }
 
+/// The most pixels [`render`] is asked to draw for one image: 300 MB of RGB.
+/// Callers check [`size`] against it first, so a huge terminal or font is an
+/// error rather than an allocation that fails.
+pub const MAX_PIXELS: usize = 100_000_000;
+
+/// The line height, padding and title-bar height of a frame, in pixels.
+fn layout(options: &Frame<'_>) -> (f64, f64, f64) {
+    let size = options.size as f64;
+    let bar = if options.window {
+        (size * 2.2).round()
+    } else {
+        0.0
+    };
+    ((size * 1.3).round(), (size * 1.2).round(), bar)
+}
+
+/// The width and height, in pixels, of [`render`]'s image of a terminal of
+/// `columns` x `rows`.
+pub fn size(columns: usize, rows: usize, fonts: &Fonts, options: &Frame<'_>) -> (usize, usize) {
+    let (cell, _) = fonts.metrics(options.size);
+    let (line, pad, bar) = layout(options);
+    (
+        (columns as f64 * cell + 2.0 * pad).round() as usize,
+        (rows as f64 * line + 2.0 * pad + bar).round() as usize,
+    )
+}
+
 /// Draw `snapshot` as pixels.
 pub fn render(snapshot: &Snapshot, theme: &Theme, fonts: &Fonts, options: &Frame<'_>) -> Canvas {
     let size = options.size;
     let (cell, ascent) = fonts.metrics(size);
-    let line = (size as f64 * 1.3).round();
-    let pad = (size as f64 * 1.2).round();
-    let bar = if options.window {
-        (size as f64 * 2.2).round()
-    } else {
-        0.0
-    };
-    let columns = snapshot.columns() as f64;
-    let width = (columns * cell + 2.0 * pad).round() as usize;
-    let height = (snapshot.rows.len() as f64 * line + 2.0 * pad + bar).round() as usize;
+    let (line, pad, bar) = layout(options);
+    let (width, height) = self::size(snapshot.columns(), snapshot.rows.len(), fonts, options);
     let mut canvas = Canvas::new(
         width,
         height,
@@ -745,26 +764,15 @@ fn rgb(pixel: &[u8]) -> u32 {
 /// the rectangle that changed (None when nothing did).
 type Region = Option<(usize, usize, usize, usize)>;
 
-/// One palette for a whole GIF, and the index of every colour in it.
+/// One palette for a whole GIF, and the index of every colour in it, from
+/// how often each colour is stored.
 ///
 /// Terminal frames use few colours, so when the stored pixels together have
 /// 256 or fewer the palette is exact. Otherwise NeuQuant is trained once, on
 /// the distinct colours weighted by use, and each distinct colour is mapped
 /// to its nearest entry once: quantising every frame was the slow part of
 /// GIF encoding.
-fn palette(frames: &[Canvas], regions: &[Region]) -> (Vec<u8>, RgbMap<u8>) {
-    let mut colours: RgbMap<u32> = RgbMap::default();
-    for (canvas, region) in frames.iter().zip(regions) {
-        let Some((x, y, w, h)) = *region else {
-            continue;
-        };
-        for row in y..y + h {
-            let start = (row * canvas.width + x) * 3;
-            for pixel in canvas.pixels[start..start + w * 3].as_chunks::<3>().0 {
-                *colours.entry(rgb(pixel)).or_default() += 1;
-            }
-        }
-    }
+fn palette(colours: RgbMap<u32>) -> (Vec<u8>, RgbMap<u8>) {
     let unpack = |c: u32| [(c >> 16) as u8, (c >> 8) as u8, c as u8];
     if colours.len() <= 256 {
         let mut sorted: Vec<u32> = colours.into_keys().collect();
@@ -801,59 +809,116 @@ fn palette(frames: &[Canvas], regions: &[Region]) -> (Vec<u8>, RgbMap<u8>) {
     (palette, index)
 }
 
-/// Encode frames as a looping GIF with one global palette; frames of
-/// different sizes are centred on one canvas. After the first, each frame
-/// stores only the rectangle that changed, drawn over the previous one.
-/// `delays` are in seconds.
-pub fn gif(frames: &[(Canvas, f64)], out: impl Write) -> Result<(), gif::EncodingError> {
-    let width = frames.iter().map(|(c, _)| c.width).max().unwrap_or(1);
-    let height = frames.iter().map(|(c, _)| c.height).max().unwrap_or(1);
-    let fitted: Vec<Canvas> = frames
-        .iter()
-        .map(|(canvas, _)| {
-            if (canvas.width, canvas.height) == (width, height) {
-                canvas.clone()
-            } else {
-                let mut padded = Canvas::new(width, height, CHROME);
-                padded.paste(
-                    canvas,
-                    (width - canvas.width) / 2,
-                    (height - canvas.height) / 2,
-                );
-                padded
+/// `canvas` centred on a `width` x `height` one, unless it is that size.
+fn fit(canvas: Canvas, width: usize, height: usize) -> Canvas {
+    if (canvas.width, canvas.height) == (width, height) {
+        return canvas;
+    }
+    let mut padded = Canvas::new(width, height, CHROME);
+    padded.paste(
+        &canvas,
+        width.saturating_sub(canvas.width) / 2,
+        height.saturating_sub(canvas.height) / 2,
+    );
+    padded
+}
+
+/// The pixels of `canvas` that the GIF stores, given the frame before it.
+fn region(previous: Option<&Canvas>, canvas: &Canvas) -> Region {
+    match previous {
+        None => Some((0, 0, canvas.width, canvas.height)),
+        Some(previous) => changed(previous, canvas),
+    }
+}
+
+/// The rows of `region` in `canvas`, as packed RGB pixels.
+fn pixels(
+    canvas: &Canvas,
+    (x, y, w, h): (usize, usize, usize, usize),
+) -> impl Iterator<Item = u32> + '_ {
+    (y..y + h).flat_map(move |row| {
+        let start = (row * canvas.width + x) * 3;
+        canvas.pixels[start..start + w * 3]
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .map(|pixel| rgb(pixel))
+    })
+}
+
+fn gif_error(error: gif::EncodingError) -> std::io::Error {
+    match error {
+        gif::EncodingError::Io(error) => error,
+        other => std::io::Error::other(other),
+    }
+}
+
+/// Frames for [`gif_streamed`]: each call hands every frame, in order, with
+/// how long it lasts in seconds, to the sink it is given.
+pub type Sink<'a> = dyn FnMut(Canvas, f64) -> std::io::Result<()> + 'a;
+
+/// Encode frames as a looping `width` x `height` GIF with one global
+/// palette, holding at most two frames in memory. `frames` is called twice,
+/// and must hand the same frames both times: once to choose the palette, once
+/// to encode. Smaller frames are centred. After the first, each frame stores
+/// only the rectangle that changed, drawn over the previous one.
+pub fn gif_streamed(
+    width: usize,
+    height: usize,
+    mut frames: impl FnMut(&mut Sink<'_>) -> std::io::Result<()>,
+    out: impl Write,
+) -> std::io::Result<()> {
+    let limit = u16::MAX as usize;
+    if width == 0 || height == 0 || width > limit || height > limit {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("a GIF of {width}x{height} pixels is larger than GIF allows ({limit}x{limit})"),
+        ));
+    }
+    // Pass one: how often each stored colour is used.
+    let mut colours: RgbMap<u32> = RgbMap::default();
+    let mut previous: Option<Canvas> = None;
+    frames(&mut |canvas, _| {
+        let canvas = fit(canvas, width, height);
+        if let Some(area) = region(previous.as_ref(), &canvas) {
+            for colour in pixels(&canvas, area) {
+                *colours.entry(colour).or_default() += 1;
             }
-        })
-        .collect();
-    let regions: Vec<Region> = (0..fitted.len())
-        .map(|i| match i {
-            0 => Some((0, 0, width, height)),
-            _ => changed(&fitted[i - 1], &fitted[i]),
-        })
-        .collect();
-    let (palette, index) = palette(&fitted, &regions);
-    let mut encoder = gif::Encoder::new(out, width as u16, height as u16, &palette)?;
-    encoder.set_repeat(gif::Repeat::Infinite)?;
+        }
+        previous = Some(canvas);
+        Ok(())
+    })?;
+    let (palette, index) = palette(colours);
+    // Pass two: encode.
+    let mut encoder =
+        gif::Encoder::new(out, width as u16, height as u16, &palette).map_err(gif_error)?;
+    encoder
+        .set_repeat(gif::Repeat::Infinite)
+        .map_err(gif_error)?;
     let delay = |seconds: f64| (seconds * 100.0).round().clamp(2.0, 65535.0) as u16;
     // A frame and the delay it has accumulated, waiting to be written.
     let mut pending: Option<gif::Frame<'static>> = None;
-    for (i, full) in fitted.iter().enumerate() {
-        let seconds = frames[i].1;
-        let Some((x, y, w, h)) = regions[i] else {
+    let mut previous: Option<Canvas> = None;
+    frames(&mut |canvas, seconds| {
+        let canvas = fit(canvas, width, height);
+        let area = region(previous.as_ref(), &canvas);
+        let Some((x, y, w, h)) = area else {
             // Nothing changed: the frame on hold simply lasts longer.
             if let Some(frame) = pending.as_mut() {
                 frame.delay = frame.delay.saturating_add(delay(seconds));
             }
-            continue;
+            return Ok(());
         };
         if let Some(frame) = pending.take() {
-            encoder.write_frame(&frame)?;
+            encoder.write_frame(&frame).map_err(gif_error)?;
         }
         let mut indices = Vec::with_capacity(w * h);
-        for row in y..y + h {
-            let start = (row * width + x) * 3;
-            for pixel in full.pixels[start..start + w * 3].as_chunks::<3>().0 {
-                indices.push(index[&rgb(pixel)]);
-            }
+        for colour in pixels(&canvas, (x, y, w, h)) {
+            // Pass two hands a colour pass one did not: `frames` changed.
+            let Some(i) = index.get(&colour) else {
+                return Err(std::io::Error::other("GIF frames differ between passes"));
+            };
+            indices.push(*i);
         }
         let mut frame = gif::Frame::from_indexed_pixels(w as u16, h as u16, indices, None);
         frame.left = x as u16;
@@ -861,11 +926,30 @@ pub fn gif(frames: &[(Canvas, f64)], out: impl Write) -> Result<(), gif::Encodin
         frame.dispose = gif::DisposalMethod::Keep;
         frame.delay = delay(seconds);
         pending = Some(frame);
-    }
+        previous = Some(canvas);
+        Ok(())
+    })?;
     if let Some(frame) = pending {
-        encoder.write_frame(&frame)?;
+        encoder.write_frame(&frame).map_err(gif_error)?;
     }
     Ok(())
+}
+
+/// [`gif_streamed`] for frames already drawn, on a canvas the size of the
+/// largest.
+pub fn gif(frames: &[(Canvas, f64)], out: impl Write) -> std::io::Result<()> {
+    let width = frames.iter().map(|(c, _)| c.width).max().unwrap_or(1);
+    let height = frames.iter().map(|(c, _)| c.height).max().unwrap_or(1);
+    gif_streamed(
+        width,
+        height,
+        |sink| {
+            frames
+                .iter()
+                .try_for_each(|(canvas, seconds)| sink(canvas.clone(), *seconds))
+        },
+        out,
+    )
 }
 
 #[cfg(test)]
@@ -967,5 +1051,61 @@ mod tests {
             sizes.push((frame.left, frame.top, frame.width, frame.height));
         }
         assert_eq!(sizes, [(0, 0, 20, 20), (5, 6, 3, 2), (5, 6, 3, 2)]);
+    }
+
+    #[test]
+    fn gif_larger_than_the_format_allows_is_an_error() {
+        let mut calls = 0;
+        let error = gif_streamed(
+            70_000,
+            10,
+            |_| {
+                calls += 1;
+                Ok(())
+            },
+            Vec::new(),
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(error.to_string().contains("70000x10"), "{error}");
+        // Refused before a frame is drawn.
+        assert_eq!(calls, 0);
+    }
+
+    #[test]
+    fn gif_frames_are_streamed_twice() {
+        let a = Canvas::new(8, 8, (0, 0, 0));
+        let mut b = a.clone();
+        b.fill_rect(1, 1, 2, 2, (200, 10, 10));
+        let mut passes = 0;
+        let mut streamed = Vec::new();
+        gif_streamed(
+            8,
+            8,
+            |sink| {
+                passes += 1;
+                sink(a.clone(), 0.5)?;
+                sink(b.clone(), 0.5)
+            },
+            &mut streamed,
+        )
+        .unwrap();
+        assert_eq!(passes, 2);
+        let mut whole = Vec::new();
+        gif(&[(a, 0.5), (b, 0.5)], &mut whole).unwrap();
+        assert_eq!(streamed, whole);
+    }
+
+    #[test]
+    fn size_matches_what_render_draws() {
+        let fonts = Fonts::embedded();
+        let options = Frame {
+            title: "t",
+            key: None,
+            size: 16.0,
+            window: true,
+        };
+        let canvas = render(&shot(b"hi"), &Theme::default(), &fonts, &options);
+        assert_eq!(size(12, 3, &fonts, &options), (canvas.width, canvas.height));
     }
 }

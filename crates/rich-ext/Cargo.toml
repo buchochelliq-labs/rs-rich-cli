@@ -41,6 +41,8 @@ rich.workspace = true
 rich-plugin-api.workspace = true
 rich-macros = { workspace = true, optional = true }
 fancy-regex.workspace = true
+# Which characters terminals disagree about the width of (live cell repaints).
+unicode-width = "0.2"
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { workspace = true, optional = true }
 saphyr-parser = { version = "0.1", optional = true }

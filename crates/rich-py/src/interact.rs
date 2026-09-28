@@ -558,9 +558,9 @@ impl LineIo for GuardedIo<'_> {
         self.0.read_line()
     }
 
-    fn read_secret(&mut self) -> Option<String> {
+    fn read_secret(&mut self) -> Result<Option<String>, CoreNot> {
         if renderable::has_pending() {
-            return None;
+            return Ok(None);
         }
         self.0.read_secret()
     }

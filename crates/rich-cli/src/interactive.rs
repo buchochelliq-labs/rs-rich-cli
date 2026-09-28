@@ -19,7 +19,8 @@ use super::*;
 
 use std::io::{IsTerminal, Read};
 use std::process::ExitCode;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use rich_ext::cli_doc::{ArgSpec, CommandSpec};
 use rich_ext::sanitize_terminal_controls;
@@ -51,6 +52,18 @@ pub(super) fn requested(args: &[String]) -> Option<&'static str> {
 
 const EXIT_CANCELLED: u8 = 1;
 const EXIT_INTERRUPTED: u8 = 130;
+
+/// The most standard input (or a paged file) read, so an endless input such
+/// as `yes` ends with an error instead of exhausting memory.
+const MAX_INPUT_BYTES: usize = 64 * 1024 * 1024;
+/// The most items `choose` and `filter` read from standard input.
+const MAX_ITEMS: usize = 1_000_000;
+/// How long a `--preview` command may run before it is killed.
+const PREVIEW_TIMEOUT: Duration = Duration::from_secs(5);
+/// The most output kept from a `--preview` command.
+const PREVIEW_MAX_BYTES: usize = 1024 * 1024;
+/// The most lines of a preview kept for the pane.
+const PREVIEW_MAX_LINES: usize = 1000;
 
 /// The commands' help: registered with the root spec in `cli_spec`.
 pub(super) fn commands() -> Vec<CommandSpec> {
@@ -307,6 +320,32 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
             _ => parsed.search = Some(value()?),
         }
     }
+    // Arguments that were not valid Unicode are text here (items, prompts),
+    // shown lossily; only the pager's FILE is a path, read through fs_path.
+    if command != "pager" {
+        for positional in &mut parsed.positionals {
+            *positional = text_arg(positional);
+        }
+    }
+    for text in [
+        &mut parsed.header,
+        &mut parsed.preview,
+        &mut parsed.value,
+        &mut parsed.prompt,
+        &mut parsed.placeholder,
+        &mut parsed.default,
+        &mut parsed.affirmative,
+        &mut parsed.negative,
+        &mut parsed.search,
+    ]
+    .into_iter()
+    .flatten()
+    {
+        *text = text_arg(text);
+    }
+    for selected in &mut parsed.selected {
+        *selected = text_arg(selected);
+    }
     match command {
         "input" if !parsed.positionals.is_empty() => {
             return Err("`rich input` takes no arguments; the prompt is --prompt".into())
@@ -421,18 +460,32 @@ fn write_stdout(text: &str) -> Answer {
     }
 }
 
-/// Standard input, whole.
+/// At most `limit` bytes of `reader`, or an input error (exit 3) naming
+/// `what` when there is more.
+fn read_bounded(
+    reader: impl Read,
+    limit: usize,
+    what: &str,
+) -> Result<Vec<u8>, (ExitClass, String)> {
+    let mut bytes = Vec::new();
+    reader
+        .take(limit as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| (ExitClass::Input, format!("could not read {what}: {error}")))?;
+    if bytes.len() > limit {
+        return Err((
+            ExitClass::Input,
+            format!("{what} is over the {} MiB limit", limit / (1024 * 1024)),
+        ));
+    }
+    Ok(bytes)
+}
+
+/// Standard input, up to [`MAX_INPUT_BYTES`], as text: invalid UTF-8 is
+/// replaced rather than failing the command.
 fn read_stdin() -> Result<String, (ExitClass, String)> {
-    let mut text = String::new();
-    std::io::stdin()
-        .read_to_string(&mut text)
-        .map_err(|error| {
-            (
-                ExitClass::Input,
-                format!("could not read standard input: {error}"),
-            )
-        })?;
-    Ok(text)
+    let bytes = read_bounded(std::io::stdin().lock(), MAX_INPUT_BYTES, "standard input")?;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 /// `choose` and `filter`.
@@ -448,10 +501,16 @@ fn pick(args: &Args) -> Answer {
                 ),
             ));
         }
+        let text = read_stdin()?;
+        if text.lines().nth(MAX_ITEMS).is_some() {
+            return Err((
+                ExitClass::Input,
+                format!("standard input is over the {MAX_ITEMS} line limit"),
+            ));
+        }
         // `filter` keeps every line, as grep would; a blank choice is no
         // choice.
-        read_stdin()?
-            .lines()
+        text.lines()
             .filter(|line| args.command == "filter" || !line.trim().is_empty())
             .map(str::to_string)
             .collect()
@@ -492,11 +551,10 @@ fn pick(args: &Args) -> Answer {
             // their controls as text, but answer with the item as it came.
             let entry = Item::new(item.clone(), sanitize_terminal_controls(item));
             match &args.preview {
-                Some(command) => entry.preview(Preview::Renderable(Arc::new(CommandPreview {
-                    command: command.clone(),
-                    item: item.clone(),
-                    output: OnceLock::new(),
-                }))),
+                Some(command) => entry.preview(Preview::Renderable(Arc::new(CommandPreview::new(
+                    command.clone(),
+                    item.clone(),
+                )))),
                 None => entry,
             }
         })
@@ -518,6 +576,9 @@ fn pick(args: &Args) -> Answer {
             }
         }
         let mut select = MultiSelect::new(prompt, entries).marked(selected);
+        if args.preview.is_some() {
+            select = select.repaint_every(PREVIEW_REPAINT);
+        }
         if let Some(rows) = args.height {
             select = select.height(rows);
         }
@@ -527,6 +588,9 @@ fn pick(args: &Args) -> Answer {
         finish(rich_interact::run(select, &options))
     } else {
         let mut select = Select::new(prompt, entries);
+        if args.preview.is_some() {
+            select = select.repaint_every(PREVIEW_REPAINT);
+        }
         if let Some(&index) = selected.first() {
             select = select.default(index);
         }
@@ -592,19 +656,20 @@ fn confirm(args: &Args) -> Answer {
 }
 
 fn pager(args: &Args) -> Answer {
-    let source = match args.positionals.first().map(String::as_str) {
-        None | Some("-") => {
-            if std::io::stdin().is_terminal() {
-                return Err((
-                    ExitClass::Usage,
-                    "`rich pager` needs a FILE, or text on standard input".into(),
-                ));
-            }
-            read_stdin()?
-        }
-        Some(path) => std::fs::read(fs_path(path))
-            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
-            .map_err(|error| (ExitClass::Input, format!("could not read {path}: {error}")))?,
+    let path = args
+        .positionals
+        .first()
+        .map(String::as_str)
+        .filter(|path| *path != "-");
+    if path.is_none() && std::io::stdin().is_terminal() {
+        return Err((
+            ExitClass::Usage,
+            "`rich pager` needs a FILE, or text on standard input".into(),
+        ));
+    }
+    let open = |path: &str| {
+        std::fs::File::open(fs_path(path))
+            .map_err(|error| (ExitClass::Input, format!("could not read {path}: {error}")))
     };
     // The pager owns standard output: without a terminal there, it is only
     // the content.
@@ -624,9 +689,30 @@ fn pager(args: &Args) -> Answer {
         },
     };
     if options.policy.detect_for(Output::Stdout).is_err() {
-        return write_stdout(&source);
+        // Byte for byte, whatever the encoding, streamed rather than held.
+        let copied = match path {
+            Some(path) => std::io::copy(&mut open(path)?, &mut std::io::stdout().lock()),
+            None => std::io::copy(&mut std::io::stdin().lock(), &mut std::io::stdout().lock()),
+        };
+        return match copied {
+            Ok(_) => Ok(ExitCode::SUCCESS),
+            Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => Ok(ExitCode::SUCCESS),
+            Err(error) => Err((
+                ExitClass::Input,
+                format!("could not copy the content: {error}"),
+            )),
+        };
     }
-    let text = Text::from_ansi(&source, rich::style::StyleType::default());
+    let source = match path {
+        Some(path) => {
+            String::from_utf8_lossy(&read_bounded(open(path)?, MAX_INPUT_BYTES, path)?).into_owned()
+        }
+        None => read_stdin()?,
+    };
+    // A file's last newline ends its last line; it is not an empty line
+    // after it, as a pager such as `less` shows it.
+    let source = source.strip_suffix('\n').unwrap_or(&source);
+    let text = Text::from_ansi(source, rich::style::StyleType::default());
     let mut pager = Pager::new(text);
     if let Some(query) = &args.search {
         pager = pager.search(query.clone());
@@ -638,65 +724,266 @@ fn pager(args: &Args) -> Answer {
     }
 }
 
-/// `--preview COMMAND` for one item: the command runs the first time the
-/// item's preview is drawn, at the pane's width, and its output (colours
-/// kept) is reused after that.
+/// How often a picker with `--preview` repaints, so a preview shows as
+/// soon as its command finishes.
+const PREVIEW_REPAINT: Duration = Duration::from_millis(100);
+
+/// Where a preview command has got to.
+enum PreviewState {
+    /// Not drawn yet.
+    Idle,
+    Running,
+    Done(Text),
+}
+
+/// `--preview COMMAND` for one item: the command starts the first time the
+/// item's preview is drawn, at the pane's width, on a thread of its own, so
+/// a slow command never holds up the keys (Ctrl+C included); the pane says
+/// it is running until the output (colours kept) arrives, and reuses it
+/// after that. A command still running after [`PREVIEW_TIMEOUT`] is killed,
+/// and at most [`PREVIEW_MAX_BYTES`] of its output is kept.
 struct CommandPreview {
     command: String,
     item: String,
-    output: OnceLock<Text>,
+    state: Arc<Mutex<PreviewState>>,
+    /// The running command, killed when the picker is dropped.
+    child: Arc<Mutex<Option<std::process::Child>>>,
+    /// How long the command may run: [`PREVIEW_TIMEOUT`], shorter in tests.
+    timeout: Duration,
 }
 
 impl CommandPreview {
-    fn run(&self, width: usize) -> Text {
-        let command = self.command.replace("{}", &shell_quote(&self.item));
+    fn new(command: String, item: String) -> CommandPreview {
+        CommandPreview {
+            command,
+            item,
+            state: Arc::new(Mutex::new(PreviewState::Idle)),
+            child: Arc::new(Mutex::new(None)),
+            timeout: PREVIEW_TIMEOUT,
+        }
+    }
+
+    /// Start the command for a pane `width` columns wide.
+    fn start(&self, width: usize) -> Result<(), String> {
+        let command = if self.command.contains("{}") {
+            self.command
+                .replace("{}", &quote_item(&self.item, cfg!(windows))?)
+        } else {
+            self.command.clone()
+        };
         #[cfg(windows)]
         let mut process = {
+            use std::os::windows::process::CommandExt;
+            // `/S /C "…"`: cmd strips the outer quotes and runs the rest
+            // as typed, instead of the C runtime's escaping it ignores.
             let mut process = std::process::Command::new("cmd");
-            process.arg("/C").arg(&command);
+            process
+                .args(["/D", "/S", "/C"])
+                .raw_arg(format!("\"{command}\""));
             process
         };
         #[cfg(not(windows))]
         let mut process = {
+            use std::os::unix::process::CommandExt;
             let mut process = std::process::Command::new("sh");
-            process.arg("-c").arg(&command);
+            // A process group of its own, so a timeout or the picker's end
+            // kills what the command started (`a | b`, `x & wait`) too.
+            process.arg("-c").arg(&command).process_group(0);
             process
         };
-        let output = process
+        let mut child = process
             .env("COLUMNS", width.to_string())
             .stdin(std::process::Stdio::null())
-            .output();
-        match output {
-            Ok(output) => {
-                let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
-                if !output.status.success() {
-                    text.push_str(&String::from_utf8_lossy(&output.stderr));
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|error| format!("preview failed: {error}"))?;
+        let stdout = Arc::new(Mutex::new(Vec::new()));
+        let stderr = Arc::new(Mutex::new(Vec::new()));
+        let readers = [
+            child
+                .stdout
+                .take()
+                .map(|pipe| drain(pipe, Arc::clone(&stdout))),
+            child
+                .stderr
+                .take()
+                .map(|pipe| drain(pipe, Arc::clone(&stderr))),
+        ];
+        *self.child.lock().unwrap_or_else(|e| e.into_inner()) = Some(child);
+        let (state, child) = (Arc::clone(&self.state), Arc::clone(&self.child));
+        let timeout = self.timeout;
+        std::thread::spawn(move || {
+            let started = Instant::now();
+            let mut timed_out = false;
+            let status = loop {
+                std::thread::sleep(Duration::from_millis(20));
+                let mut guard = child.lock().unwrap_or_else(|e| e.into_inner());
+                // Taken: the picker is gone.
+                let Some(running) = guard.as_mut() else {
+                    return;
+                };
+                match running.try_wait() {
+                    Ok(Some(status)) => break Some(status),
+                    Ok(None) if started.elapsed() < timeout => {}
+                    Ok(None) | Err(_) => {
+                        timed_out = true;
+                        kill_tree(running);
+                        break running.wait().ok();
+                    }
                 }
-                Text::from_ansi(
-                    text.trim_end_matches('\n'),
-                    rich::style::StyleType::default(),
-                )
+            };
+            child.lock().unwrap_or_else(|e| e.into_inner()).take();
+            // The rest of the output, for a moment: a background process
+            // the command left may hold the pipes open.
+            let deadline = Instant::now() + Duration::from_millis(200);
+            while readers.iter().flatten().any(|reader| !reader.is_finished())
+                && Instant::now() < deadline
+            {
+                std::thread::sleep(Duration::from_millis(10));
             }
-            Err(error) => Text::new(format!("preview failed: {error}")),
+            let take = |buffer: &Arc<Mutex<Vec<u8>>>| {
+                std::mem::take(&mut *buffer.lock().unwrap_or_else(|e| e.into_inner()))
+            };
+            let mut bytes = take(&stdout);
+            if !status.is_some_and(|status| status.success()) {
+                bytes.extend(take(&stderr));
+            }
+            let cut = bytes.len() > PREVIEW_MAX_BYTES;
+            bytes.truncate(PREVIEW_MAX_BYTES);
+            let text = String::from_utf8_lossy(&bytes);
+            let mut lines: Vec<&str> = text.lines().take(PREVIEW_MAX_LINES).collect();
+            while lines.last().is_some_and(|line| line.is_empty()) {
+                lines.pop();
+            }
+            let mut shown = lines.join("\n");
+            if timed_out {
+                shown.push_str(&format!(
+                    "\n(preview timed out after {} s)",
+                    timeout.as_secs()
+                ));
+            } else if cut {
+                shown.push_str("\n(preview cut at 1 MiB)");
+            }
+            let text = Text::from_ansi(
+                shown.trim_start_matches('\n'),
+                rich::style::StyleType::default(),
+            );
+            *state.lock().unwrap_or_else(|e| e.into_inner()) = PreviewState::Done(text);
+        });
+        Ok(())
+    }
+}
+
+/// Read `pipe` into `sink` until it ends or holds more than
+/// [`PREVIEW_MAX_BYTES`]; then the pipe is closed, and a command still
+/// writing gets a broken pipe.
+fn drain(
+    mut pipe: impl Read + Send + 'static,
+    sink: Arc<Mutex<Vec<u8>>>,
+) -> std::thread::JoinHandle<()> {
+    std::thread::spawn(move || {
+        let mut buffer = [0u8; 8192];
+        loop {
+            match pipe.read(&mut buffer) {
+                Ok(0) | Err(_) => return,
+                Ok(read) => {
+                    let mut sink = sink.lock().unwrap_or_else(|e| e.into_inner());
+                    let room = (PREVIEW_MAX_BYTES + 1).saturating_sub(sink.len());
+                    sink.extend_from_slice(&buffer[..read.min(room)]);
+                    if read >= room {
+                        return;
+                    }
+                }
+            }
+        }
+    })
+}
+
+impl Drop for CommandPreview {
+    fn drop(&mut self) {
+        let running = self.child.lock().unwrap_or_else(|e| e.into_inner()).take();
+        if let Some(mut child) = running {
+            kill_tree(&mut child);
+            let _ = child.wait();
         }
     }
 }
 
+/// Kill a preview command and everything it started: on Unix its process
+/// group (the command leads one of its own), on Windows its process tree.
+#[allow(unsafe_code)]
+fn kill_tree(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    {
+        if let Ok(pgid) = libc::pid_t::try_from(child.id()) {
+            // SAFETY: `kill` takes plain integers; a negative pid names the
+            // process group the child leads, and it has not been reaped
+            // yet, so the id cannot have been reused.
+            unsafe {
+                libc::kill(-pgid, libc::SIGKILL);
+            }
+        }
+    }
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/T", "/F", "/PID", &child.id().to_string()])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+    let _ = child.kill();
+}
+
 impl Renderable for CommandPreview {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        self.output
-            .get_or_init(|| self.run(options.max_width))
-            .rich_render(console, options)
+        let text = {
+            let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            match &*state {
+                PreviewState::Done(text) => text.clone(),
+                PreviewState::Running => Text::new("…"),
+                PreviewState::Idle => {
+                    *state = PreviewState::Running;
+                    drop(state);
+                    match self.start(options.max_width) {
+                        Ok(()) => Text::new("…"),
+                        Err(message) => {
+                            let text = Text::new(message);
+                            *self.state.lock().unwrap_or_else(|e| e.into_inner()) =
+                                PreviewState::Done(text.clone());
+                            text
+                        }
+                    }
+                }
+            }
+        };
+        text.rich_render(console, options)
     }
 }
 
-/// `item` as one shell word.
-fn shell_quote(item: &str) -> String {
-    if cfg!(windows) {
-        format!("\"{}\"", item.replace('"', "\\\""))
-    } else {
-        format!("'{}'", item.replace('\'', "'\\''"))
+/// `item` as one word for the shell `--preview` runs: `sh` or, when
+/// `windows`, `cmd.exe`. cmd has no quoting that keeps `%`, `!`, `"` and
+/// the like literal inside a double-quoted word, so an item holding one of
+/// them (or a line break) is refused rather than run.
+fn quote_item(item: &str, windows: bool) -> Result<String, String> {
+    if !windows {
+        return Ok(format!("'{}'", item.replace('\'', "'\\''")));
     }
+    let unsafe_for_cmd = |c: char| {
+        matches!(
+            c,
+            '"' | '%' | '!' | '^' | '&' | '|' | '<' | '>' | '(' | ')' | '\n' | '\r'
+        ) || c.is_control()
+    };
+    if item.contains(unsafe_for_cmd) {
+        return Err(format!(
+            "no preview: {:?} holds characters cmd.exe cannot be given safely",
+            sanitize_terminal_controls(item)
+        ));
+    }
+    Ok(format!("\"{item}\""))
 }
 
 #[cfg(test)]
@@ -729,8 +1016,122 @@ mod tests {
 
     #[test]
     fn items_are_quoted_as_one_shell_word() {
-        if !cfg!(windows) {
-            assert_eq!(shell_quote("it's"), "'it'\\''s'");
+        assert_eq!(quote_item("it's", false).unwrap(), "'it'\\''s'");
+        assert_eq!(
+            quote_item("$(touch x) `y` \"z\"", false).unwrap(),
+            "'$(touch x) `y` \"z\"'"
+        );
+    }
+
+    #[test]
+    fn items_cmd_cannot_quote_are_refused() {
+        assert_eq!(
+            quote_item("My Documents\\a b.txt", true).unwrap(),
+            "\"My Documents\\a b.txt\""
+        );
+        for item in [
+            "x\" & calc & \"",
+            "%PATH%",
+            "!x!",
+            "a^b",
+            "a|b",
+            "a<b",
+            "a>b",
+            "a&b",
+            "a\nb",
+            "(x)",
+        ] {
+            assert!(quote_item(item, true).is_err(), "{item:?}");
         }
+    }
+
+    /// A preview command that leaves a grandchild (`sleep 30 &`), and the
+    /// file the grandchild's pid is written to.
+    #[cfg(target_os = "linux")]
+    fn preview_with_grandchild(dir: &std::path::Path) -> (CommandPreview, std::path::PathBuf) {
+        let pidfile = dir.join("pid");
+        let path = quote_item(pidfile.to_str().unwrap(), false).unwrap();
+        let command = format!("sleep 30 & echo $! > {path}; wait");
+        (CommandPreview::new(command, String::new()), pidfile)
+    }
+
+    /// The pid in `pidfile`, once the command has written it.
+    #[cfg(target_os = "linux")]
+    fn grandchild_pid(pidfile: &std::path::Path) -> u32 {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            if let Some(pid) = std::fs::read_to_string(pidfile)
+                .ok()
+                .and_then(|text| text.trim().parse().ok())
+            {
+                return pid;
+            }
+            assert!(Instant::now() < deadline, "no pid written");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    /// Whether `pid` is still running: present and not a zombie waiting
+    /// for a parent (a container's init may never reap it).
+    #[cfg(target_os = "linux")]
+    fn running(pid: u32) -> bool {
+        std::fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|stat| {
+            stat.rsplit_once(')')
+                .is_some_and(|(_, rest)| !rest.trim_start().starts_with('Z'))
+        })
+    }
+
+    #[cfg(target_os = "linux")]
+    fn wait_until_gone(pid: u32) -> bool {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while running(pid) {
+            if Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        true
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn preview_timeout_kills_the_commands_background_processes() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut preview, pidfile) = preview_with_grandchild(dir.path());
+        preview.timeout = Duration::from_millis(300);
+        preview.start(80).unwrap();
+        let pid = grandchild_pid(&pidfile);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !matches!(
+            *preview.state.lock().unwrap(),
+            PreviewState::Done(ref text) if text.plain().contains("timed out")
+        ) {
+            assert!(Instant::now() < deadline, "the preview never timed out");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let gone = wait_until_gone(pid);
+        if !gone {
+            let _ = std::process::Command::new("kill")
+                .arg(pid.to_string())
+                .status();
+        }
+        assert!(gone, "the preview's `sleep 30` outlived its timeout");
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn dropping_a_preview_kills_the_commands_background_processes() {
+        let dir = tempfile::tempdir().unwrap();
+        let (preview, pidfile) = preview_with_grandchild(dir.path());
+        preview.start(80).unwrap();
+        let pid = grandchild_pid(&pidfile);
+        drop(preview);
+        let gone = wait_until_gone(pid);
+        if !gone {
+            let _ = std::process::Command::new("kill")
+                .arg(pid.to_string())
+                .status();
+        }
+        assert!(gone, "the preview's `sleep 30` outlived the picker");
     }
 }

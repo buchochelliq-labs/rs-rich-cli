@@ -82,7 +82,9 @@ With standard input or the output not a terminal, under CI, with
 `fallback` decides:
 
 - `"prompt"` (the default): ask line by line, prompts on standard error and
-  answers from standard input (a password without echo);
+  answers from standard input (a password without echo). When input ends
+  before an answer, the component's default answers; without one,
+  `NotInteractive` is raised;
 - `"default"`: return the component's default (`Select(default=...)`,
   `MultiSelect(marked=...)`, `Input(default=...)`, `Confirm(default=...)`),
   or raise `NotInteractive` when there is none;

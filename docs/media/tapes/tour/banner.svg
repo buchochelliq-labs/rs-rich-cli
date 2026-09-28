@@ -5,44 +5,22 @@
 <circle cx="41" cy="17.5" r="6" fill="#ffbd2e"/>
 <circle cx="63" cy="17.5" r="6" fill="#27c93f"/>
 <text x="441.4" y="22.5" fill="#969696" font-family="DejaVu Sans, sans-serif" font-size="13" text-anchor="middle">rich --demo · the guided tour</text>
-<text x="19.0" y="69.6" fill="#1984e9" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">fn</text>
-<text x="47.8" y="69.6" fill="#00823d" textLength="48.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">retry</text>
-<text x="95.8" y="69.6" fill="#c5c8c6" textLength="211.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">(job: &amp;Job, attempts: </text>
-<text x="307.0" y="69.6" fill="#1984e9" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">u32</text>
-<text x="335.8" y="69.6" fill="#c5c8c6" textLength="528.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">) -&gt; Result&lt;(), Error&gt; {                               </text>
-<text x="57.4" y="90.4" fill="#1984e9" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">for</text>
-<text x="86.2" y="90.4" fill="#c5c8c6" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> n in </text>
-<text x="143.8" y="90.4" fill="#1984e9" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">0</text>
-<text x="153.4" y="90.4" fill="#c5c8c6" textLength="710.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">..attempts {                                                              </text>
-<text x="95.8" y="111.2" fill="#1984e9" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">if</text>
-<text x="115.0" y="111.2" fill="#c5c8c6" textLength="748.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> job.run().is_ok() {                                                          </text>
-<text x="134.2" y="132.0" fill="#1984e9" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">return</text>
-<text x="201.4" y="132.0" fill="#398280" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Ok</text>
-<text x="220.6" y="132.0" fill="#c5c8c6" textLength="643.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">(());                                                              </text>
-<text x="19.0" y="152.8" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">        }                                                                               </text>
-<text x="19.0" y="173.6" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">    }                                                                                   </text>
-<text x="57.4" y="194.4" fill="#398280" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Err</text>
-<text x="86.2" y="194.4" fill="#c5c8c6" textLength="777.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">(Error::GaveUp(attempts))                                                        </text>
-<text x="19.0" y="215.2" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">}                                                                                       </text>
-<text x="19.0" y="256.8" fill="#00823d" textLength="326.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">───────────────────────────────── </text>
-<text x="345.4" y="256.8" fill="#c5c8c6" textLength="192.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Filter and highlight</text>
-<text x="537.4" y="256.8" fill="#00823d" textLength="326.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> ─────────────────────────────────</text>
-<text x="19.0" y="277.6" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">$ rich service.log --filter ERROR --highlight 'timeout|refused'                         </text>
-<rect x="19.0" y="282.8" width="144.0" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="298.4" fill="#c0c5ce" textLength="144.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">ERROR upstream </text>
-<rect x="163.0" y="282.8" width="67.2" height="20.8" fill="#c0c5ce"/>
-<text x="163.0" y="298.4" fill="#2b303b" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">timeout</text>
-<rect x="230.2" y="282.8" width="96.0" height="20.8" fill="#2b303b"/>
-<text x="230.2" y="298.4" fill="#c0c5ce" textLength="96.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> after 30s</text>
-<rect x="326.2" y="282.8" width="537.6" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="303.6" width="163.2" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="319.2" fill="#c0c5ce" textLength="163.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">ERROR connection </text>
-<rect x="182.2" y="303.6" width="67.2" height="20.8" fill="#c0c5ce"/>
-<text x="182.2" y="319.2" fill="#2b303b" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">refused</text>
-<rect x="249.4" y="303.6" width="105.6" height="20.8" fill="#2b303b"/>
-<text x="249.4" y="319.2" fill="#c0c5ce" textLength="105.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> by db:5432</text>
-<rect x="355.0" y="303.6" width="508.8" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="324.4" width="844.8" height="20.8" fill="#2b303b"/>
+<text x="19.0" y="69.6" fill="#fdfdc5" font-weight="bold" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╰──────────────────────────────────────────────────────────────────────────────────────╯</text>
+<text x="19.0" y="90.4" fill="#00823d" textLength="345.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">─────────────────────────────────── </text>
+<text x="364.6" y="90.4" fill="#c5c8c6" textLength="144.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Ask in a script</text>
+<text x="508.6" y="90.4" fill="#00823d" textLength="355.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> ────────────────────────────────────</text>
+<text x="19.0" y="111.2" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">$ fruit=$(rich choose apple banana cherry)   # ↓ then Enter                             </text>
+<text x="19.0" y="132.0" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╭──────────────────── drawn headless: the keys a user would press ─────────────────────╮</text>
+<text x="19.0" y="152.8" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│ ? Pick a fruit ›                                                                     │</text>
+<text x="19.0" y="173.6" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│   apple                                                                              │</text>
+<text x="19.0" y="194.4" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│ ❯ banana                                                                             │</text>
+<text x="19.0" y="215.2" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│   cherry                                                                             │</text>
+<text x="19.0" y="236.0" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│   3/3 · ↑↓ move · enter pick · esc cancel                                            │</text>
+<text x="19.0" y="256.8" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╰──────────────────────────────────────────────────────────────────────────────────────╯</text>
+<text x="19.0" y="277.6" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">$ echo "$fruit"                                                                         </text>
+<text x="19.0" y="298.4" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">banana                                                                                  </text>
+<text x="19.0" y="319.2" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">$ ls | rich filter --value toml    # without a terminal: a fuzzy grep                   </text>
+<text x="19.0" y="340.0" fill="#c5c8c6" textLength="844.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">$ rich confirm 'Deploy?' &amp;&amp; deploy  # exit 0 for yes, 1 for no                          </text>
 <text x="19.0" y="360.8" fill="#00823d" textLength="249.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">───────────────────────── </text>
 <text x="268.6" y="360.8" fill="#c5c8c6" textLength="345.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Pager, input and confidence controls</text>
 <text x="614.2" y="360.8" fill="#00823d" textLength="249.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> ─────────────────────────</text>

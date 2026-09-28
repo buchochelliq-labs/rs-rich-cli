@@ -1,0 +1,24 @@
+❯ rich --syntax retry.py -n --guides --head 8
+   1 import time
+   2
+   3
+   4 def retry(job, attempts=3, delay=1.0):
+   5 │   for n in range(attempts):
+   6 │   │   try:
+   7 │   │   │   return job()
+   8 │   │   except ConnectionError:
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+

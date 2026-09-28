@@ -32,6 +32,10 @@ const MARKERS: usize = 0xE0FFF - 0xE0200 + 1;
 /// Pads a cluster to rich's width: a private-use character one cell wide,
 /// read back as a continuation of the cluster's cell.
 const FILLER: char = '\u{10fffd}';
+/// The most characters a cluster is followed for. Real clusters are far
+/// shorter; past this, characters go to vt100 as they are, so a flood of
+/// combining marks costs linear time, not quadratic.
+const MAX_CLUSTER_CHARS: usize = 32;
 
 fn marker(c: char) -> Option<usize> {
     let index = (c as u32).checked_sub(MARKER_FIRST)? as usize;
@@ -50,6 +54,9 @@ fn regional(c: char) -> bool {
 enum Mode {
     Ground,
     Escape,
+    /// After ESC and intermediate bytes (0x20–0x2F), as in `ESC ( B`, up to
+    /// the final byte.
+    EscapeIntermediate,
     Csi,
     /// OSC, DCS and the other string sequences, up to BEL or ST.
     Text,
@@ -60,6 +67,8 @@ enum Mode {
 #[derive(Debug)]
 struct Cluster {
     text: String,
+    /// Characters in `text`.
+    chars: usize,
     /// Cells its first character took in vt100.
     native: usize,
     /// Cells it takes now: `native` plus fillers.
@@ -83,6 +92,17 @@ pub struct Terminal {
     clusters: Vec<String>,
     ids: HashMap<String, usize>,
     capacity: usize,
+    /// Why vt100 panicked, once it has: the terminal takes no more input.
+    broken: Option<String>,
+}
+
+/// The message a caught panic carried.
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "a panic".into())
 }
 
 impl Terminal {
@@ -96,10 +116,42 @@ impl Terminal {
             clusters: Vec::new(),
             ids: HashMap::new(),
             capacity: MARKERS,
+            broken: None,
         }
     }
 
-    pub fn process(&mut self, bytes: &[u8]) {
+    /// Run `f`, turning a panic in vt100 into an error. vt100 panics on some
+    /// input (a wide character in one column; a resize that cuts one at the
+    /// right edge); after one its screen cannot be trusted, so every later
+    /// call fails too.
+    fn guard<T>(&mut self, what: &str, f: impl FnOnce(&mut Self) -> T) -> std::io::Result<T> {
+        if let Some(message) = &self.broken {
+            return Err(std::io::Error::other(message.clone()));
+        }
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(self))) {
+            Ok(value) => Ok(value),
+            Err(payload) => {
+                let message = format!(
+                    "the terminal emulator failed while {what}: {}",
+                    panic_message(payload.as_ref())
+                );
+                self.broken = Some(message.clone());
+                Err(std::io::Error::other(message))
+            }
+        }
+    }
+
+    /// Why the emulator failed, if it has.
+    pub fn error(&self) -> Option<&str> {
+        self.broken.as_deref()
+    }
+
+    /// Feed the program's output to the emulator. Fails when vt100 panics.
+    pub fn process(&mut self, bytes: &[u8]) -> std::io::Result<()> {
+        self.guard("processing output", |terminal| terminal.feed(bytes))
+    }
+
+    fn feed(&mut self, bytes: &[u8]) {
         for &byte in bytes {
             match self.mode {
                 Mode::Ground => self.ground(byte),
@@ -107,7 +159,20 @@ impl Terminal {
                     self.mode = match byte {
                         b'[' => Mode::Csi,
                         b']' | b'P' | b'X' | b'^' | b'_' => Mode::Text,
+                        0x20..=0x2f => Mode::EscapeIntermediate,
+                        0x1b => Mode::Escape,
                         _ => Mode::Ground,
+                    };
+                    self.out.push(byte);
+                }
+                Mode::EscapeIntermediate => {
+                    self.mode = match byte {
+                        0x20..=0x2f => Mode::EscapeIntermediate,
+                        0x1b => Mode::Escape,
+                        // The final byte, or CAN and SUB, which cancel.
+                        0x30..=0x7e | 0x18 | 0x1a => Mode::Ground,
+                        // Other controls run inside the sequence.
+                        _ => Mode::EscapeIntermediate,
                     };
                     self.out.push(byte);
                 }
@@ -178,9 +243,7 @@ impl Terminal {
             let continues = width == Some(0)
                 || cluster.text.ends_with(ZWJ)
                 || modifier(c)
-                || (regional(c)
-                    && first.is_some_and(regional)
-                    && cluster.text.chars().count() == 1);
+                || (regional(c) && first.is_some_and(regional) && cluster.chars == 1);
             if continues && self.extend(c) {
                 return;
             }
@@ -189,6 +252,7 @@ impl Terminal {
         self.cluster = match width {
             Some(native) if native > 0 => Some(Cluster {
                 text: c.to_string(),
+                chars: 1,
                 native,
                 cells: native,
                 at: None,
@@ -202,12 +266,18 @@ impl Terminal {
     /// caller then prints `c` as vt100 would.
     fn extend(&mut self, c: char) -> bool {
         let cluster = self.cluster.as_ref().expect("cluster");
+        if cluster.chars >= MAX_CLUSTER_CHARS {
+            self.cluster = None;
+            return false;
+        }
         let mut text = cluster.text.clone();
         text.push(c);
         let cells = rich::cells::cell_len(&text).max(cluster.native);
         if cluster.at.is_none() && c.width() == Some(0) && cells == cluster.cells {
             push(&mut self.out, c);
-            self.cluster.as_mut().expect("cluster").text = text;
+            let cluster = self.cluster.as_mut().expect("cluster");
+            cluster.text = text;
+            cluster.chars += 1;
             return true;
         }
         self.flush();
@@ -256,6 +326,7 @@ impl Terminal {
             push(&mut self.out, FILLER);
         }
         cluster.text = text;
+        cluster.chars += 1;
         cluster.cells = cells;
         cluster.at = Some((row, start));
         true
@@ -273,9 +344,12 @@ impl Terminal {
         Some(self.clusters.len() - 1)
     }
 
-    pub fn set_size(&mut self, rows: u16, columns: u16) {
-        self.cluster = None;
-        self.parser.screen_mut().set_size(rows, columns);
+    /// Resize the screen. Fails when vt100 panics.
+    pub fn set_size(&mut self, rows: u16, columns: u16) -> std::io::Result<()> {
+        self.guard("resizing", |terminal| {
+            terminal.cluster = None;
+            terminal.parser.screen_mut().set_size(rows, columns);
+        })
     }
 
     pub fn screen(&self) -> &vt100::Screen {
@@ -344,7 +418,7 @@ mod tests {
 
     fn screen(bytes: &str, columns: u16) -> (Terminal, Snapshot) {
         let mut terminal = Terminal::new(2, columns);
-        terminal.process(bytes.as_bytes());
+        terminal.process(bytes.as_bytes()).unwrap();
         let snapshot = terminal.snapshot(&Theme::default());
         (terminal, snapshot)
     }
@@ -426,12 +500,14 @@ mod tests {
     #[test]
     fn clusters_are_interned_and_never_reused() {
         let mut terminal = Terminal::new(3, 20);
-        terminal.process("👩\u{200d}👧\r\n👩\u{200d}👧".as_bytes());
+        terminal
+            .process("👩\u{200d}👧\r\n👩\u{200d}👧".as_bytes())
+            .unwrap();
         assert_eq!(terminal.clusters.len(), 1);
         // With every marker taken, a new cluster is printed as vt100 would,
         // and the cells already on screen keep their text.
         terminal.capacity = 1;
-        terminal.process("\r\n👍🏽".as_bytes());
+        terminal.process("\r\n👍🏽".as_bytes()).unwrap();
         let snapshot = terminal.snapshot(&Theme::default());
         assert_eq!(snapshot.rows[0][0].text, "👩\u{200d}👧");
         assert_eq!(snapshot.rows[2][0].text, "👍");
@@ -450,9 +526,64 @@ mod tests {
         let bytes = "x👩\u{200d}👧❤\u{fe0f}y".as_bytes();
         let mut terminal = Terminal::new(1, 10);
         for byte in bytes {
-            terminal.process(std::slice::from_ref(byte));
+            terminal.process(std::slice::from_ref(byte)).unwrap();
         }
         assert_eq!(terminal.contents(), "x👩\u{200d}👧❤\u{fe0f}y");
         assert_eq!(terminal.snapshot(&Theme::default()).rows[0][5].text, "y");
+    }
+
+    #[test]
+    fn escapes_with_intermediate_bytes_print_nothing() {
+        // `ESC ( B` selects a character set: the B is not printed, so a skin
+        // tone or ZWJ after it does not join the cell before.
+        for text in [
+            "ab\x1b(B\u{1F3FD}",
+            "ab\x1b(B\u{200d}\u{1F467}",
+            "ab\x1b#8\x1b( B",
+        ] {
+            let mut terminal = Terminal::new(1, 10);
+            terminal.process(text.as_bytes()).unwrap();
+            let mut parser = vt100::Parser::new(1, 10, 0);
+            parser.process(text.as_bytes());
+            assert_eq!(terminal.contents(), parser.screen().contents(), "{text:?}");
+        }
+        let (_, snapshot) = screen("ab\x1b(B\u{1F3FD}", 10);
+        assert_eq!(snapshot.rows[0][1].text, "b");
+        assert_eq!(snapshot.rows[0][2].text, "\u{1F3FD}");
+    }
+
+    #[test]
+    fn a_flood_of_combining_marks_takes_linear_time() {
+        // Each mark re-measured the whole cluster: 40,000 took ten seconds.
+        let mut text = String::from("a");
+        text.extend(std::iter::repeat_n('\u{301}', 40_000));
+        text.push('b');
+        let start = std::time::Instant::now();
+        let mut terminal = Terminal::new(2, 10);
+        terminal.process(text.as_bytes()).unwrap();
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(2),
+            "{:?}",
+            start.elapsed()
+        );
+        assert!(terminal.contents().starts_with("a\u{301}"));
+        assert!(terminal.contents().ends_with('b'));
+    }
+
+    #[test]
+    fn a_vt100_panic_is_an_error() {
+        // vt100 0.16 panics on a wide character in a one-column screen, and on
+        // a resize that cuts a wide character at the right edge.
+        let mut terminal = Terminal::new(2, 1);
+        let error = terminal.process("漢".as_bytes()).unwrap_err();
+        assert!(error.to_string().contains("emulator failed"), "{error}");
+        assert!(terminal.error().is_some());
+        assert!(terminal.process(b"x").is_err());
+        let mut terminal = Terminal::new(2, 4);
+        terminal.process("漢漢".as_bytes()).unwrap();
+        let resized = terminal
+            .set_size(2, 3)
+            .and_then(|()| terminal.process(b"x"));
+        assert!(resized.is_err());
     }
 }

@@ -11,6 +11,67 @@ use rich_ext::frame::Frame;
 
 use crate::component::View;
 
+/// The visible stand-in for a terminal control, or `None` for any other
+/// character. One character for one, in the style of
+/// [`rich_ext::sanitize_terminal_controls`]: C0 controls as their control
+/// pictures (`␛`, `␇`), DEL as `␡`, a tab as a space (it would move the
+/// cursor), and C1 controls (8-bit CSI and OSC among them) as `�`.
+fn visible(c: char) -> Option<char> {
+    match c {
+        '\t' => Some(' '),
+        '\u{1b}' => Some('␛'),
+        '\u{7f}' => Some('␡'),
+        '\0'..='\u{1f}' => char::from_u32(0x2400 + c as u32),
+        '\u{80}'..='\u{9f}' => Some('\u{fffd}'),
+        _ => None,
+    }
+}
+
+/// Make the terminal controls in `line`'s text visible, so no view (a
+/// pager's content, a preview command's output, a label) can drive the
+/// terminal: styles are already [`Style`](rich::Style)s, and whatever is
+/// left in the text would otherwise reach it raw. Each control becomes one
+/// character, so character offsets into the text still hold. Control
+/// segments are left alone; the frame skips them.
+pub fn sanitize_line(line: &mut [Segment]) {
+    for segment in line.iter_mut().filter(|segment| !segment.control) {
+        if segment.text.chars().any(|c| visible(c).is_some()) {
+            segment.text = segment
+                .text
+                .chars()
+                .map(|c| visible(c).unwrap_or(c))
+                .collect();
+        }
+    }
+}
+
+/// Where `column`, a cell of `line` as rendered, lands once
+/// [`sanitize_line`] has run: a control measures no cells (a tab and ESC
+/// among them) until it is shown as a one-cell character, which moves every
+/// cell after it. A zero-width control at `column` itself counts as before
+/// it, so a caret after a prompt ending in ESC lands after its `␛`.
+pub fn sanitized_column(line: &[Segment], column: usize) -> usize {
+    let mut shift = 0isize;
+    let mut base = 0;
+    for segment in line.iter().filter(|segment| !segment.control) {
+        for (index, c) in segment.text.char_indices() {
+            let Some(shown) = visible(c) else { continue };
+            let at = base + rich::cells::cell_len(&segment.text[..index]);
+            let before = cell_len_of(c);
+            if at < column || (at == column && before == 0) {
+                shift += cell_len_of(shown) as isize - before as isize;
+            }
+        }
+        base += segment.cell_length();
+    }
+    column.saturating_add_signed(shift)
+}
+
+fn cell_len_of(c: char) -> usize {
+    let mut buffer = [0; 4];
+    rich::cells::cell_len(c.encode_utf8(&mut buffer))
+}
+
 /// Paints successive views into one region.
 #[derive(Debug)]
 pub struct Painter {
@@ -98,7 +159,10 @@ impl Painter {
         // Every line ends with a newline, so a trailing (or only) empty
         // line is still a row of the frame rather than a terminator.
         for line in &view.lines[..rows] {
+            let start = segments.len();
             segments.extend(line.iter().cloned());
+            // The one way to the terminal: nothing raw gets past it.
+            sanitize_line(&mut segments[start..]);
             segments.push(Segment::line());
         }
         let frame = Frame::from_segments(&segments);
@@ -283,6 +347,28 @@ mod tests {
         let mut painter = Painter::new(None, false);
         assert_eq!(painter.paint(&view(&[""]), 10), "\r");
         assert_eq!(painter.finish(false), "\r\r\n\x1b[?25h");
+    }
+
+    #[test]
+    fn terminal_controls_in_a_view_are_painted_as_text() {
+        let mut painter = Painter::new(None, false);
+        let out = painter.paint(&view(&["a\x1bcb\u{9b}2Jc\x1b]0;t\x07d\x7fe\tf\x1b"]), 10);
+        assert_eq!(out, "\ra␛cb\u{fffd}2Jc␛]0;t␇d␡e f␛");
+        assert!(!out[1..].contains(['\x1b', '\u{9b}', '\x07', '\x7f', '\t']));
+        // One character for one.
+        let mut line = vec![Segment::new("x\x1by", None)];
+        sanitize_line(&mut line);
+        assert_eq!(line[0].text.chars().count(), 3);
+    }
+
+    #[test]
+    fn sanitized_column_counts_the_shown_controls_before_it() {
+        let line = vec![Segment::new("x\x1b", None), Segment::new("\ty z", None)];
+        // Rendered, ESC and the tab take no cells: "x" then "y z".
+        assert_eq!(sanitized_column(&line, 0), 0);
+        assert_eq!(sanitized_column(&line, 1), 3);
+        assert_eq!(sanitized_column(&line, 2), 4);
+        assert_eq!(sanitized_column(&[Segment::new("ab", None)], 2), 2);
     }
 
     #[test]

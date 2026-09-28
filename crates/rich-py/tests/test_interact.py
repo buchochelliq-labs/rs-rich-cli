@@ -513,7 +513,10 @@ def test_fallback_prompt_asks_line_by_line():
     assert degrade(Confirm("Go?"), ["y"]).value == "yes"
     assert degrade(Confirm("Go?"), ["n"]).value == "no"
     assert degrade(MultiSelect("Pick", [1, 2, 3]), ["1,3"]).value == [1, 3]
-    assert degrade(Input("Name"), []).outcome.cancelled
+    # The end of input takes the default; without one it is no answer.
+    assert degrade(Input("Name", default="d"), []).value == "d"
+    with pytest.raises(NotInteractive):
+        degrade(Input("Name"), [])
 
 
 def test_form_prompts_each_field():
@@ -539,20 +542,20 @@ def test_run_without_a_terminal_follows_the_fallback():
 
 def test_ask_prompts_on_stdin_without_a_terminal():
     program = (
-        "from rs_rich.interact import Select, Confirm, Input, Cancelled\n"
+        "from rs_rich.interact import Select, Confirm, Input, NotInteractive\n"
         "print(repr(Select('Pick', [10, 20, 30]).ask()))\n"
         "print(Confirm('Sure?').ask())\n"
         "try:\n"
         "    Input('Name').ask()\n"
-        "except Cancelled:\n"
-        "    print('cancelled')\n"
+        "except NotInteractive:\n"
+        "    print('no answer')\n"
     )
     env = {k: v for k, v in os.environ.items() if k != "CI"}
     result = subprocess.run(
         [sys.executable, "-c", program], input=b"3\nn\n", capture_output=True, env=env, timeout=60
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout == b"30\nno\ncancelled\n"
+    assert result.stdout == b"30\nno\nno answer\n"
     assert b"Number or name: " in result.stderr and b"Sure? [y=Yes, n=No]: " in result.stderr
 
 

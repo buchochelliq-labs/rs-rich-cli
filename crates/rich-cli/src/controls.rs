@@ -115,9 +115,11 @@ pub(crate) fn neutralize_for_decoder(input: &str) -> String {
 }
 
 /// `path` for an error message, with any terminal controls in it made
-/// visible.
+/// visible. A NUL only ever marks the escaped spelling of a path that is not
+/// valid Unicode (no argument or path can contain one), so it is dropped and
+/// the path shows as its `\xNN` spelling.
 pub(crate) fn shown(text: &str) -> String {
-    sanitize_terminal_controls(text)
+    sanitize_terminal_controls(&text.replace('\0', ""))
 }
 
 #[cfg(test)]

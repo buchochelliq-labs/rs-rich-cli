@@ -402,7 +402,7 @@ impl SourceOptions {
     /// `(num_lines - tail + 2, num_lines + 1)`, which shows the last `N - 1`
     /// lines: `rich-cli --tail 3` prints two.
     fn line_range(&self, code: &str) -> Result<Option<(i64, i64)>, String> {
-        let lines = code.lines().count() as i64;
+        let lines = python_line_count(code) as i64;
         match (self.head, self.tail) {
             (Some(_), Some(_)) => Err("cannot specify both head and tail".into()),
             (Some(head), None) => Ok(Some((1, head as i64))),
@@ -422,6 +422,33 @@ impl SourceOptions {
         }
         Ok(syntax)
     }
+}
+
+/// `len(text.splitlines())`, which upstream's `num_lines` is: Python also
+/// ends a line at `\r`, `\v`, `\f`, `\x1c`–`\x1e`, `\x85`, U+2028 and
+/// U+2029, where `str::lines` ends one only at `\n`.
+fn python_line_count(text: &str) -> usize {
+    let mut count = 0;
+    let mut chars = text.chars().peekable();
+    let mut open = false;
+    while let Some(c) = chars.next() {
+        match c {
+            '\r' => {
+                if chars.peek() == Some(&'\n') {
+                    chars.next();
+                }
+                count += 1;
+                open = false;
+            }
+            '\n' | '\u{b}' | '\u{c}' | '\u{1c}' | '\u{1d}' | '\u{1e}' | '\u{85}' | '\u{2028}'
+            | '\u{2029}' => {
+                count += 1;
+                open = false;
+            }
+            _ => open = true,
+        }
+    }
+    count + usize::from(open)
 }
 
 /// Parsed command line.
@@ -722,21 +749,28 @@ fn build_markdown(source: &str, hyperlinks: bool) -> Markdown {
 /// (`--batch`, `--watch`, the demo) install a process-wide Ctrl-C handler, and
 /// a few error paths end the process.
 ///
-/// Arguments that are not valid Unicode are parsed by their lossy spelling,
-/// but a file named by one is opened by its original bytes (see
-/// [`fs_path`]), as upstream's click does through `surrogateescape`.
+/// Arguments that are not valid Unicode are parsed by their escaped
+/// spelling (see [`path_arg`]), and a file named by one is opened by its
+/// original bytes (see [`fs_path`]), as upstream's click does through
+/// `surrogateescape`; text such as `--print`'s shows lossily ([`text_arg`]).
 pub fn run(args: Vec<std::ffi::OsString>) -> ExitCode {
     dispatch(remember_raw_args(args))
 }
 
-/// Arguments that were not valid Unicode, by their lossy spelling; `None`
-/// when two different arguments share one spelling (which then cannot say
-/// which it was).
+/// Paths and arguments that were not valid Unicode, by their escaped
+/// spelling ([`escaped_path`]); `None` when two different ones share one
+/// spelling (which then cannot say which it was).
 static RAW_ARGS: std::sync::Mutex<Vec<(String, Option<std::ffi::OsString>)>> =
     std::sync::Mutex::new(Vec::new());
 
 /// The arguments as `String`s for the parser, keeping the originals of any
 /// that are not valid Unicode for [`fs_path`].
+///
+/// Such an argument is spelled as [`path_arg`] spells a path, after a NUL
+/// that no argument can contain, never by its lossy spelling: `\xff.txt`
+/// and a real `\u{fffd}.txt` share that one, so `rich $'\xff.txt'
+/// --export-html \u{fffd}.txt` resolved the export to the input and
+/// overwrote it.
 fn remember_raw_args(args: Vec<std::ffi::OsString>) -> Vec<String> {
     let mut raw: Vec<(String, Option<std::ffi::OsString>)> = Vec::new();
     let args = args
@@ -744,13 +778,13 @@ fn remember_raw_args(args: Vec<std::ffi::OsString>) -> Vec<String> {
         .map(|arg| match arg.into_string() {
             Ok(arg) => arg,
             Err(arg) => {
-                let lossy = arg.to_string_lossy().into_owned();
-                match raw.iter_mut().find(|(spelling, _)| *spelling == lossy) {
+                let spelling = escaped_path(&arg);
+                match raw.iter_mut().find(|(known, _)| *known == spelling) {
                     Some((_, original)) if original.as_ref() != Some(&arg) => *original = None,
                     Some(_) => {}
-                    None => raw.push((lossy.clone(), Some(arg))),
+                    None => raw.push((spelling.clone(), Some(arg))),
                 }
-                lossy
+                spelling
             }
         })
         .collect();
@@ -773,6 +807,27 @@ pub(crate) fn fs_path(arg: &str) -> std::path::PathBuf {
                 .and_then(|(_, original)| original.clone())
         })
         .map_or_else(|| std::path::PathBuf::from(arg), std::path::PathBuf::from)
+}
+
+/// An argument used as text rather than a path (`--print`'s text, a
+/// `--title`): an escaped spelling of one that was not valid Unicode shows
+/// lossily, as the text it was meant to be.
+pub(crate) fn text_arg(arg: &str) -> String {
+    if !arg.starts_with('\0') {
+        return arg.to_string();
+    }
+    RAW_ARGS
+        .lock()
+        .ok()
+        .and_then(|raw| {
+            raw.iter()
+                .find(|(spelling, _)| spelling == arg)
+                .and_then(|(_, original)| original.clone())
+        })
+        .map_or_else(
+            || arg.to_string(),
+            |original| original.to_string_lossy().into_owned(),
+        )
 }
 
 /// A path as the `String` the rest of the CLI passes around. A path that is
@@ -1029,14 +1084,14 @@ fn mode_flag_alias(arg: &str) -> Option<&'static str> {
     Some(match arg {
         "--print" | "-p" => "--print",
         "--markdown" | "-m" => "--markdown",
-        "--json" | "-j" => "--json",
+        "--json" | "-j" | "-J" => "--json",
         "--syntax" | "-x" => "--syntax",
         "--csv" => "--csv",
         "--ipynb" => "--ipynb",
         "--rst" => "--rst",
         "--jsonl" | "--ndjson" => "--jsonl",
         "--log" => "--log",
-        "--rule" => "--rule",
+        "--rule" | "-u" => "--rule",
         "--image" => "--image",
         "--gif" => "--gif",
         "--diff" => "--diff",
@@ -1105,16 +1160,50 @@ fn success(cli: &Cli) -> ExitCode {
 /// Substring containment is not a glob: `*.md` used that way also matched
 /// `notes.md.bak`, and a `?` pattern matched nothing at all because the literal
 /// `?` was still being searched for.
+#[cfg(test)]
 fn glob_match(pattern: &str, text: &str) -> bool {
-    let pattern: Vec<char> = pattern.chars().collect();
-    let text: Vec<char> = text.chars().collect();
+    let pattern: Vec<GlobUnit> = pattern.chars().map(GlobUnit::Char).collect();
+    let text: Vec<GlobUnit> = text.chars().map(GlobUnit::Char).collect();
+    glob_match_units(&pattern, &text)
+}
+
+/// One unit a glob matches: a character, or a byte of a name that is not
+/// valid Unicode, which `?` matches alone and nothing else stands for.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum GlobUnit {
+    Char(char),
+    Byte(u8),
+}
+
+/// A file name's units, from its bytes where it is not valid Unicode:
+/// matching its lossy spelling let `a\xff*` match `a\xfe.txt`.
+fn glob_units(name: &std::ffi::OsStr) -> Vec<GlobUnit> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let mut units = Vec::new();
+        for chunk in name.as_bytes().utf8_chunks() {
+            units.extend(chunk.valid().chars().map(GlobUnit::Char));
+            units.extend(chunk.invalid().iter().map(|&byte| GlobUnit::Byte(byte)));
+        }
+        units
+    }
+    #[cfg(not(unix))]
+    {
+        name.to_string_lossy().chars().map(GlobUnit::Char).collect()
+    }
+}
+
+fn glob_match_units(pattern: &[GlobUnit], text: &[GlobUnit]) -> bool {
+    const ANY: GlobUnit = GlobUnit::Char('?');
+    const STAR: GlobUnit = GlobUnit::Char('*');
     let (mut p, mut t) = (0usize, 0usize);
     let (mut star, mut retry) = (None, 0usize);
     while t < text.len() {
-        if p < pattern.len() && (pattern[p] == '?' || pattern[p] == text[t]) {
+        if p < pattern.len() && (pattern[p] == ANY || pattern[p] == text[t]) {
             p += 1;
             t += 1;
-        } else if p < pattern.len() && pattern[p] == '*' {
+        } else if p < pattern.len() && pattern[p] == STAR {
             star = Some(p);
             retry = t;
             p += 1;
@@ -1126,7 +1215,7 @@ fn glob_match(pattern: &str, text: &str) -> bool {
             return false;
         }
     }
-    while p < pattern.len() && pattern[p] == '*' {
+    while p < pattern.len() && pattern[p] == STAR {
         p += 1;
     }
     p == pattern.len()
@@ -1189,24 +1278,33 @@ fn expand_batch_resources(resources: &[String]) -> Result<Vec<String>, String> {
             return Err("batch resources must be local files or directories".into());
         }
         if has_glob_meta(resource) {
-            let (dir, pattern) = split_glob(resource);
-            if pattern.contains('/') || pattern.contains('\\') {
-                return Err(format!(
-                    "batch glob {resource:?} may only use * and ? in the final path segment"
-                ));
-            }
-            // A glob that was not valid Unicode is split on its own bytes:
-            // only the whole argument's are remembered.
+            // A glob that was not valid Unicode is split and matched on its
+            // own bytes: only the whole argument's are remembered, and its
+            // escaped spelling spells each such byte with a `\`.
             let raw = fs_path(resource);
-            let dir = match raw.parent() {
-                Some(parent) if raw.as_os_str() != std::ffi::OsStr::new(resource) => {
-                    if parent.as_os_str().is_empty() {
-                        PathBuf::from(".")
-                    } else {
-                        parent.to_path_buf()
-                    }
+            let escaped = raw.as_os_str() != std::ffi::OsStr::new(resource);
+            let (dir, pattern) = if escaped {
+                let parent = raw.parent().unwrap_or(Path::new(""));
+                if has_glob_meta(&parent.to_string_lossy()) {
+                    return Err(format!(
+                        "batch glob {} may only use * and ? in the final path segment",
+                        controls::shown(resource)
+                    ));
                 }
-                _ => dir,
+                let dir = if parent.as_os_str().is_empty() {
+                    PathBuf::from(".")
+                } else {
+                    parent.to_path_buf()
+                };
+                (dir, glob_units(raw.file_name().unwrap_or_default()))
+            } else {
+                let (dir, pattern) = split_glob(resource);
+                if pattern.contains('/') || pattern.contains('\\') {
+                    return Err(format!(
+                        "batch glob {resource:?} may only use * and ? in the final path segment"
+                    ));
+                }
+                (dir, pattern.chars().map(GlobUnit::Char).collect())
             };
             let entries = std::fs::read_dir(&dir)
                 .map_err(|error| format!("cannot scan {}: {error}", dir.display()))?;
@@ -1218,7 +1316,7 @@ fn expand_batch_resources(resources: &[String]) -> Result<Vec<String>, String> {
                 if !path.is_file() {
                     continue;
                 }
-                if glob_match(&pattern, &entry.file_name().to_string_lossy()) {
+                if glob_match_units(&pattern, &glob_units(&entry.file_name())) {
                     out.push(path_arg(&path));
                 }
             }
@@ -2546,7 +2644,17 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             || (mode == Mode::Diff
                 && !(resources.len() == 2 && resources.iter().all(|r| looks_like_image(r))))
     });
-    let resource = resources.first().cloned();
+    // `--print` and `--rule` show their resource as text.
+    let resource = resources.first().map(|resource| {
+        if print_mode {
+            text_arg(resource)
+        } else {
+            resource.clone()
+        }
+    });
+    let title = title.map(|title| text_arg(&title));
+    let caption = caption.map(|caption| text_arg(&caption));
+    let rule_char = rule_char.map(|characters| text_arg(&characters));
 
     // An unknown highlighter or theme is a usage error, listing the choices.
     code_highlighting(highlighter.as_deref(), code_theme.as_deref())?;
@@ -3255,11 +3363,9 @@ fn decorate_and_emit_with(
             .title
             .as_deref()
             .map(|title| {
-                let title = if cli.emoji {
-                    rich::emoji::replace(title)
-                } else {
-                    title.to_string()
-                };
+                // `Text.from_markup(title)` replaces emoji codes whatever the
+                // console's `emoji`, so the title draws (and measures) them.
+                let title = rich::emoji::replace(title);
                 let mut title = Text::from_markup(&title.replace('\n', " "))
                     .expect("title markup validated before rendering");
                 title.expand_tabs(8);
@@ -3552,6 +3658,8 @@ fn read_theme_file(
     label: &str,
 ) -> Result<std::collections::BTreeMap<String, Style>, String> {
     let limit = controls::THEME_FILE_LIMIT;
+    // A path that is not valid Unicode is read by its own bytes.
+    let path = &fs_path(path);
     // Checked before opening: opening a FIFO blocks until a writer appears.
     let metadata = std::fs::metadata(path).map_err(|err| format!("{label}: {err}"))?;
     if !metadata.is_file() {
@@ -3852,7 +3960,13 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             .unwrap_or_else(|| Style::parse("bright_green").expect("a valid style"));
         rule = rule.style(style);
         if let Some(characters) = cli.rule_char.as_deref().filter(|c| !c.is_empty()) {
-            rule = rule.characters(characters);
+            // The line repeats its characters across the terminal, so a
+            // control in them acts once per cell unless shown.
+            if cli.sanitize {
+                rule = rule.characters(sanitize_terminal_controls(characters));
+            } else {
+                rule = rule.characters(characters);
+            }
         }
         match cli.text_justify {
             Some(Justify::Left) => rule = rule.align(rich::align::HorizontalAlign::Left),
@@ -7260,6 +7374,19 @@ mod tests {
             .err()
             .unwrap();
         assert!(error.contains("--pager cannot be combined with --batch"));
+    }
+
+    #[test]
+    fn line_counts_follow_python_splitlines() {
+        assert_eq!(python_line_count(""), 0);
+        assert_eq!(python_line_count("a"), 1);
+        assert_eq!(python_line_count("a\n"), 1);
+        assert_eq!(python_line_count("a\n\n"), 2);
+        assert_eq!(python_line_count("a\r\nb"), 2);
+        assert_eq!(
+            python_line_count("a\rb\x0bc\x0cd\x1ce\u{85}f\u{2028}g\u{2029}h"),
+            8
+        );
     }
 
     #[test]

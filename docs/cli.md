@@ -788,7 +788,12 @@ git log --color | rich pager
   and `filter --value QUERY` starts with a query typed.
 - `--preview COMMAND` shows COMMAND's output beside the list for the focused
   item. `{}` is the item, shell-quoted, and `$COLUMNS` is the pane's width;
-  the command runs once per item, the first time it is focused.
+  the command runs once per item, the first time it is focused, in the
+  background, so keys (Ctrl+C included) work while it runs. A command still
+  running after 5 seconds is killed and the pane says the preview timed out;
+  at most 1 MiB of its output is kept. On Windows, where `cmd.exe` cannot
+  quote them, items holding `"`, `%`, `!`, `^`, `&`, `|`, `<`, `>`,
+  parentheses or a line break are not previewed.
 - `input` takes `--prompt`, `--placeholder`, `--value`, `--default` and
   `--password`; `confirm` takes a QUESTION, `--default yes|no`,
   `--affirmative` and `--negative`.
@@ -810,7 +815,17 @@ Without a terminal (in CI, or with nothing to read keys from) they degrade
 instead of waiting: `input`, `confirm` and `choose ITEM…` ask line by line on
 stderr and read the answer from stdin; `choose` from stdin answers with
 `--selected` (with `--multi`, nothing marked is no answer); `filter` prints the lines that match `--value`, best first, blank lines
-included, so it works as a fuzzy `grep`; `pager` writes the content out.
+included, so it works as a fuzzy `grep`; `pager` writes the content out,
+byte for byte. When the line prompt's input ends (`</dev/null`), `--default`
+or `--selected` is the answer, as for an empty line; without one the command
+exits 3, since there was no answer, rather than 1.
+
+Standard input is read as UTF-8, with invalid bytes shown as `�`. `choose`
+and `filter` read at most 64 MiB and 1,000,000 lines of it, and `pager`
+pages at most 64 MiB (without a terminal it streams any amount through), so
+`yes | rich choose` ends with an input error (exit 3) instead of exhausting
+memory. SIGTERM, SIGHUP and SIGQUIT give the
+terminal back before the command ends.
 
 ## Use it in a script or CI
 
@@ -1133,6 +1148,8 @@ an endless input such as `/dev/zero` or `yes` ends instead of exhausting memory.
 | `hex` without `--length` | 64 KiB from `--offset` | shows those, with a notice; `--offset`/`--length` read any window |
 | `unicode` | 64 KiB | shows those, with a notice |
 | `inspect` (and `--compare`) | 64 MiB per document | input error (exit 3) |
+| `choose`, `filter` (items from stdin) | 64 MiB and 1,000,000 lines | input error (exit 3) |
+| `pager` (paging) | 64 MiB of FILE or stdin; without a terminal it streams any amount | input error (exit 3) |
 | `capture` | 1 MiB or 20,000 lines of output | stops the command, with a notice (the exit status is then its signal's) |
 | `--theme-file`, `theme_file` | 1 MiB, regular files only | usage error (exit 2) |
 

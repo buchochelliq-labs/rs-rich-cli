@@ -1,0 +1,24 @@
+❯ rich --version
+rich (rs-rich-cli) 0.0.13
+❯ fruit=$(rich choose apple banana cherry --header 'Pick a fruit')
+? Pick a fruit › banana
+❯ echo "picked: $fruit (exit $?)"
+picked: banana (exit 0)
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -257,7 +257,11 @@ impl Component for Confirm {
             .collect();
         io.write(&format!("{} [{}]: ", self.title, keys.join(", ")));
         let Some(line) = io.read_line() else {
-            return Ok(None);
+            // Input ended: the default is the answer, as for an empty line.
+            return match self.default {
+                Some(index) => Ok(Some(self.choices[index].id.clone())),
+                None => Err(NotInteractive::Ended),
+            };
         };
         let answer = line.trim().to_lowercase();
         if answer.is_empty() {

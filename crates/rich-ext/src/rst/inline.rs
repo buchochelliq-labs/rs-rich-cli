@@ -164,7 +164,7 @@ pub(super) fn parse_inline(text: &str) -> Vec<Inline> {
             }
             // A start-string with no end-string is docutils' `problematic`
             // node: its own text node, which nothing inside starts again.
-            if let Some(len) = problematic(&chars, i) {
+            if let Some(len) = problematic(&chars, i, &mut misses) {
                 implicit(&chars[plain_start..i], &mut inlines);
                 inlines.push(Inline::Text(unescape(&chars[i..i + len])));
                 i += len;
@@ -185,7 +185,7 @@ pub(super) fn parse_inline(text: &str) -> Vec<Inline> {
 
 /// The length of the start-string at `i` when it is one (followed by
 /// non-whitespace, not between quotes), for when it finds no end-string.
-fn problematic(chars: &[char], i: usize) -> Option<usize> {
+fn problematic(chars: &[char], i: usize, misses: &mut Misses) -> Option<usize> {
     let at = |offset: usize| chars.get(i + offset).copied();
     let len = match at(0)? {
         '*' if at(1) == Some('*') => 2,
@@ -194,8 +194,13 @@ fn problematic(chars: &[char], i: usize) -> Option<usize> {
         '*' | '`' => 1,
         '|' if at(1) != Some('|') => 1,
         ':' => {
-            let name_end = simplename(chars, i + 1)?;
+            let name_end = misses.simplename(chars, i + 1)?;
             if chars.get(name_end) != Some(&':') || chars.get(name_end + 1) != Some(&'`') {
+                return None;
+            }
+            // `:role:` before ``` `` ``` starts nothing: the role is text and
+            // the inline literal after it starts on its own.
+            if chars.get(name_end + 2) == Some(&'`') {
                 return None;
             }
             name_end + 2 - i
@@ -211,10 +216,47 @@ fn problematic(chars: &[char], i: usize) -> Option<usize> {
 /// qualifies by what surrounds it, not by where the search began, so a search
 /// from further on fails too; skipping it keeps a paragraph full of unmatched
 /// start-strings linear.
+///
+/// It also remembers the last `simplename` run and the last `]` found, which
+/// every start inside the run (or before the `]`) shares: without them a
+/// paragraph like `a-a-a-…` or `[1 [1 [1 …` rescans its rest at each word.
 #[derive(Default)]
-struct Misses(HashMap<&'static str, usize>);
+struct Misses(
+    HashMap<&'static str, usize>,
+    Option<(usize, usize)>,
+    Option<(usize, Option<usize>)>,
+);
 
 impl Misses {
+    /// [`simplename`] at `start`, reusing the run it last found: a name that
+    /// starts inside that run ends where it ends.
+    fn simplename(&mut self, chars: &[char], start: usize) -> Option<usize> {
+        if !chars.get(start).copied().is_some_and(is_word) {
+            return None;
+        }
+        if let Some((from, end)) = self.1 {
+            if from <= start && start < end {
+                return Some(end);
+            }
+        }
+        let end = simplename(chars, start)?;
+        self.1 = Some((start, end));
+        Some(end)
+    }
+
+    /// The first `]` at or after `from`, reusing the last search: nothing
+    /// between where it started and what it found is a `]`.
+    fn close_bracket(&mut self, chars: &[char], from: usize) -> Option<usize> {
+        if let Some((searched, found)) = self.2 {
+            if searched <= from && found.is_none_or(|found| from <= found) {
+                return found;
+            }
+        }
+        let found = (from..chars.len()).find(|&j| chars[j] == ']');
+        self.2 = Some((from, found));
+        found
+    }
+
     fn search<T>(
         &mut self,
         kind: &'static str,
@@ -295,9 +337,9 @@ fn markup_at(chars: &[char], i: usize, misses: &mut Misses) -> Option<(Vec<Inlin
             }
             misses.search("|", i + 2, || substitution(chars, i))
         }
-        '[' => footnote_reference(chars, i),
+        '[' => footnote_reference(chars, i, misses),
         ':' => {
-            let name_end = simplename(chars, i + 1)?;
+            let name_end = misses.simplename(chars, i + 1)?;
             if chars.get(name_end) != Some(&':') || chars.get(name_end + 1) != Some(&'`') {
                 return None;
             }
@@ -307,7 +349,7 @@ fn markup_at(chars: &[char], i: usize, misses: &mut Misses) -> Option<(Vec<Inlin
             let role: String = chars[i + 1..name_end].iter().collect();
             interpreted(chars, i, name_end + 2, Some(role), misses)
         }
-        c if is_word(c) => reference_name(chars, i),
+        c if is_word(c) => reference_name(chars, i, misses),
         _ => None,
     }
 }
@@ -537,8 +579,12 @@ fn substitution(chars: &[char], start: usize) -> Option<(Vec<Inline>, usize)> {
 }
 
 /// `[1]_`, `[#]_`, `[#name]_`, `[*]_` (footnotes) and `[name]_` (citations).
-fn footnote_reference(chars: &[char], start: usize) -> Option<(Vec<Inline>, usize)> {
-    let close = (start + 1..chars.len()).find(|&j| chars[j] == ']')?;
+fn footnote_reference(
+    chars: &[char],
+    start: usize,
+    misses: &mut Misses,
+) -> Option<(Vec<Inline>, usize)> {
+    let close = misses.close_bracket(chars, start + 1)?;
     if chars.get(close + 1) != Some(&'_') || !end_suffix(chars.get(close + 2).copied()) {
         return None;
     }
@@ -566,8 +612,12 @@ fn footnote_reference(chars: &[char], start: usize) -> Option<(Vec<Inline>, usiz
 }
 
 /// `name_` and `name__`.
-fn reference_name(chars: &[char], start: usize) -> Option<(Vec<Inline>, usize)> {
-    let end = simplename(chars, start)?;
+fn reference_name(
+    chars: &[char],
+    start: usize,
+    misses: &mut Misses,
+) -> Option<(Vec<Inline>, usize)> {
+    let end = misses.simplename(chars, start)?;
     let mut k = end;
     let mut refend = 0;
     while refend < 2 && chars.get(k) == Some(&'_') {
@@ -639,12 +689,15 @@ fn emailc(c: char) -> bool {
 /// Standalone URIs and email addresses in plain text: docutils' implicit
 /// inline markup.
 fn implicit(chars: &[char], inlines: &mut Vec<Inline>) {
+    let mut runs = Runs::default();
     let mut plain_start = 0;
     let mut i = 0;
     while i < chars.len() {
         let prev = i.checked_sub(1).map(|p| chars[p]);
         if start_prefix(prev) && chars[i].is_ascii_alphanumeric() {
-            if let Some((node, end)) = uri_at(chars, i).or_else(|| email_at(chars, i)) {
+            if let Some((node, end)) =
+                uri_at(chars, i, &mut runs).or_else(|| email_at(chars, i, &mut runs))
+            {
                 inlines.push(Inline::Text(unescape(&chars[plain_start..i])));
                 inlines.push(node);
                 i = end;
@@ -657,6 +710,34 @@ fn implicit(chars: &[char], inlines: &mut Vec<Inline>) {
     inlines.push(Inline::Text(unescape(&chars[plain_start..])));
 }
 
+/// The ends of the last scheme and email-name runs scanned: every start
+/// inside a run shares its end, so a paragraph like `a-a-a-…` scans once.
+#[derive(Default)]
+struct Runs {
+    scheme: Option<(usize, usize)>,
+    name: Option<(usize, usize)>,
+}
+
+/// The end of the run of `pred` characters from `start`, reusing `last`.
+fn run_end(
+    last: &mut Option<(usize, usize)>,
+    chars: &[char],
+    start: usize,
+    pred: impl Fn(char) -> bool,
+) -> usize {
+    if let Some((from, end)) = *last {
+        if from <= start && start <= end {
+            return end;
+        }
+    }
+    let mut end = start;
+    while chars.get(end).is_some_and(|&c| pred(c)) {
+        end += 1;
+    }
+    *last = Some((start, end));
+    end
+}
+
 /// The longest end in `start..=max` at which `last` holds and the URI may
 /// end.
 fn uri_end(chars: &[char], min: usize, max: usize, last: impl Fn(char) -> bool) -> Option<usize> {
@@ -666,14 +747,10 @@ fn uri_end(chars: &[char], min: usize, max: usize, last: impl Fn(char) -> bool) 
     })
 }
 
-fn uri_at(chars: &[char], start: usize) -> Option<(Inline, usize)> {
-    let mut i = start + 1;
-    while chars
-        .get(i)
-        .is_some_and(|&c| c.is_ascii_alphanumeric() || ".+-".contains(c))
-    {
-        i += 1;
-    }
+fn uri_at(chars: &[char], start: usize, runs: &mut Runs) -> Option<(Inline, usize)> {
+    let i = run_end(&mut runs.scheme, chars, start + 1, |c| {
+        c.is_ascii_alphanumeric() || ".+-".contains(c)
+    });
     if chars.get(i) != Some(&':') {
         return None;
     }
@@ -701,11 +778,8 @@ fn uri_at(chars: &[char], start: usize) -> Option<(Inline, usize)> {
     ))
 }
 
-fn email_at(chars: &[char], start: usize) -> Option<(Inline, usize)> {
-    let mut at = start;
-    while chars.get(at).is_some_and(|&c| emailc(c) || c == '.') {
-        at += 1;
-    }
+fn email_at(chars: &[char], start: usize, runs: &mut Runs) -> Option<(Inline, usize)> {
+    let at = run_end(&mut runs.name, chars, start, |c| emailc(c) || c == '.');
     if chars.get(at) != Some(&'@') || at == start || chars[at - 1] == ESCAPE {
         return None;
     }

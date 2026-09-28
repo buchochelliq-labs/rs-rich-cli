@@ -1,8 +1,8 @@
 {
   "tape": "docs/tapes/tour.tape",
-  "tape_fnv1a64": "b05db774f420680e",
+  "tape_fnv1a64": "b3dae48854cfdfc0",
   "recorder": "rs-rich-record 0.0.1",
   "rich": null,
-  "commit": "c9d7960d245b0f447fbe17f536acd74a674ed607",
+  "commit": "e46b08cf595e9d5e61f25454f29b06bd614c62f9",
   "note": "Every frame is real output of the program under test on a PTY."
 }

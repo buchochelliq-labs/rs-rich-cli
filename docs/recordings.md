@@ -123,7 +123,8 @@ From one run it writes, under `docs/media/tapes/<tape>/`:
 - a GIF with the keys shown as they are pressed, and an MP4 when FFmpeg is
   installed;
 - `provenance.json`: the tape's fingerprint, the recorder and `rich`
-  versions, and the commit.
+  versions, the commit, and the screenshots written, so the next run removes
+  only the ones the tape no longer takes.
 
 Box-drawing characters are drawn as lines rather than font glyphs, so table
 borders join between rows, and block, quadrant and braille characters are
@@ -188,7 +189,7 @@ rich record --check demo.tape               # fail if a screenshot changed
 | Option | Meaning |
 |---|---|
 | `--output DIR` | Write to `DIR/<tape>/` (default `recordings`) |
-| `--check` | Compare each screenshot's text with `DIR/<tape>/<name>.txt` instead of writing, and report screenshots the tape no longer takes; exits non-zero on any difference |
+| `--check` | Compare each screenshot's text with `DIR/<tape>/<name>.txt` instead of writing, and report screenshots the last write listed that the tape no longer takes; exits non-zero on any difference |
 | `--format LIST` | Any of `png`, `svg`, `cast`, `gif`, `mp4`, or `all` (the default). Text grids are always written |
 | `--no-video` | Skip the GIF and MP4 |
 | `--bin-dir DIR` | Put `DIR` first on the session's `PATH` (default: the directory of the running `rich`) |
@@ -200,3 +201,25 @@ are supported; on Windows it builds through ConPTY but needs the tape's shell
 on `PATH`, and is experimental. Use the recorder from Rust through the
 `rs-rich-record` crate: `tape::parse`, `record::record`, then
 `record::write` or `record::check`.
+
+### Limits, and what a tape can do
+
+**A tape is code: record only tapes you trust.** `Exec` runs its command with
+`sh`, and everything `Type` sends runs in the shell, with your user's
+permissions. The recorder pins the environment and works in a temporary
+directory so recordings repeat, not to contain the tape.
+
+What the recorder does limit, so a mistake fails clearly rather than filling
+the disk or memory:
+
+| Limit | |
+|---|---|
+| Terminal size | `Set Size` and `Resize` from 2x2 to 500x200 |
+| Durations | `Sleep`, `Wait` and `Set Timeout` at most `3600s` |
+| `Write` | A relative path inside the working directory: no `/…`, no `..` |
+| `Exec` | 60 seconds; the first 64 KiB of its error output is reported |
+| Tape names | A tape's name is its output directory: `...tape` (named `..`) is refused |
+| Stale screenshots | Removed only when `provenance.json` lists them from an earlier run; other files in the output directory are never touched |
+| Frames | At most 12 a second; a burst over 32 KiB is kept as a repaint of the screen |
+| Video | The first 5 minutes; a GIF or MP4 of a longer recording is an error (use `--no-video`) |
+| Images | At most 100 million pixels; a GIF at most 65535 pixels a side |

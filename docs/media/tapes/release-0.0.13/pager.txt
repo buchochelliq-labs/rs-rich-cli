@@ -1,0 +1,24 @@
+INFO  api listening on :8080
+INFO  worker 1 ready
+ERROR upstream timeout after 30s
+INFO  retrying upstream
+WARN  slow query: 1.8s
+ERROR connection refused by db:5432
+INFO  recovered
+INFO  worker 2 ready
+all 8 lines · match 1/2 · n/N · / search · q quit
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

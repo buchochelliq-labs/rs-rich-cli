@@ -156,3 +156,40 @@ fn arbitrary_documents_render() {
         let _ = console.render_to_string(&RestructuredText::new(&document));
     }
 }
+
+/// Nesting deeper than docutils manages (it stops with a `RecursionError`
+/// near 170 levels) renders the rest as text, and never exhausts the stack,
+/// even on a test thread's small one.
+#[test]
+fn deep_nesting_never_overflows() {
+    let console = Console::builder().width(40).color_system(None).build();
+    for marker in ["- ", "* ", "1. ", "#. ", "(a) ", "i) "] {
+        let document = format!("{}x", marker.repeat(3000));
+        let out = console.render_to_string(&RestructuredText::new(&document));
+        assert!(out.contains('x'), "{marker:?}");
+    }
+    // Quotes in quotes, one level per line: bounded in time as well.
+    let document: Vec<String> = (0..1500).map(|i| format!("{}x", " ".repeat(i))).collect();
+    let start = std::time::Instant::now();
+    let out = console.render_to_string(&RestructuredText::new(&document.join("\n\n")));
+    assert!(out.contains('x'));
+    assert!(start.elapsed().as_secs() < 20, "{:?}", start.elapsed());
+}
+
+/// Runs of would-be markup that never closes stay linear: each start used to
+/// rescan the rest of the paragraph.
+#[test]
+fn unclosed_inline_runs_are_linear() {
+    let console = Console::builder().width(80).color_system(None).build();
+    for run in ["a-", ":a", "[1 ", "a.", "a:"] {
+        let document = run.repeat(32_000);
+        let start = std::time::Instant::now();
+        let out = console.render_to_string(&RestructuredText::new(&document));
+        assert!(!out.is_empty());
+        assert!(
+            start.elapsed().as_secs() < 8,
+            "{run:?} took {:?}",
+            start.elapsed()
+        );
+    }
+}

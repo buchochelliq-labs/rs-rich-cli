@@ -286,9 +286,20 @@ impl<'a> EventLoop<'a> {
         for (component, _) in &self.mounted {
             view.push(component.render(&context));
         }
+        // The cursor was placed on the rendered cells; shown controls take
+        // one each, so it moves with them.
+        if let Some((row, column)) = view.cursor {
+            if let Some(line) = view.lines.get(row) {
+                let shown = crate::paint::sanitized_column(line, column);
+                let last = context.width.saturating_sub(1).max(column);
+                view.cursor = Some((row, shown.min(last)));
+            }
+        }
         // A line wider than the terminal would wrap and shift every row
-        // below it: crop.
+        // below it: crop, once controls are shown as the characters the
+        // painter will write.
         for line in &mut view.lines {
+            crate::paint::sanitize_line(line);
             if line.iter().map(Segment::cell_length).sum::<usize>() > context.width {
                 *line = Segment::adjust_line_length(line, context.width, None);
             }
@@ -502,7 +513,10 @@ pub fn run<C: Component>(component: C, options: &RunOptions) -> Result<Outcome<C
 }
 
 /// What [`run`] does without a terminal: follow `fallback`, asking through
-/// `io` when it says to prompt.
+/// `io` when it says to prompt. A prompt that ends with
+/// [`NotInteractive::Ended`] (input ran out, no default) fails with
+/// [`NotInteractive::NoDefault`] and the reason; one that ends with
+/// [`NotInteractive::Interrupted`] is [`Outcome::Interrupted`].
 pub fn degrade<C: Component>(
     component: &mut C,
     fallback: Fallback,
@@ -522,6 +536,10 @@ pub fn degrade<C: Component>(
             Ok(Some(value)) => Ok(Outcome::Done(value)),
             Ok(None) => Ok(Outcome::Cancelled),
             Err(NotInteractive::NoPrompt) => default(component),
+            Err(NotInteractive::Ended) => {
+                Err(Error::NotInteractive(NotInteractive::NoDefault(reason)))
+            }
+            Err(NotInteractive::Interrupted) => Ok(Outcome::Interrupted),
             Err(error) => Err(Error::NotInteractive(error)),
         },
     }

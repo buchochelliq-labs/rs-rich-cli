@@ -22,9 +22,9 @@ and CI checks its screenshots on every change:
 |---|---|---|---|
 | ![Structured data as a tree](media/tapes/tour/inspect.png) | ![A text diff](media/tapes/tour/diff.png) | ![A Mermaid flowchart as text](media/tapes/tour/mermaid.png) | ![Filtered and highlighted log lines](media/tapes/tour/filter.png) |
 
-| FIGlet banner | Image diff | Tour complete |
-|---|---|---|
-| ![A FIGlet banner](media/tapes/tour/banner.png) | ![An image diff](media/tapes/tour/image-diff.png) | ![The end of the tour](media/tapes/tour/complete.png) |
+| Ask in a script | FIGlet banner | Image diff | Tour complete |
+|---|---|---|---|
+| ![A rich choose picker, with the answer captured by the shell](media/tapes/tour/ask.png) | ![A FIGlet banner](media/tapes/tour/banner.png) | ![An image diff](media/tapes/tour/image-diff.png) | ![The end of the tour](media/tapes/tour/complete.png) |
 
 The recordings below, up to 0.0.12, are kept as historical records. They were
 captured by Python scripts that `rich record` has since replaced; their raw
