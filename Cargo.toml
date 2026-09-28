@@ -25,7 +25,7 @@ rust-version = "1.90"
 # the short names, so every `use rich::…` in this workspace is unaffected.
 # External users get the same short names via each crate's `[lib] name`.
 rich = { package = "rs-rich", path = "crates/rich", version = "0.0.8" }
-rich-plugin-api = { package = "rs-rich-plugin-api", path = "crates/rich-plugin-api", version = "0.0.1" }
+rich-plugin-api = { package = "rs-rich-plugin-api", path = "crates/rich-plugin-api", version = "0.0.2" }
 rich-macros = { package = "rs-rich-macros", path = "crates/rich-macros", version = "0.0.2" }
 rich-ext = { package = "rs-rich-ext", path = "crates/rich-ext", version = "0.0.11" }
 rich-art = { package = "rs-rich-art", path = "crates/rich-art", version = "0.0.10" }

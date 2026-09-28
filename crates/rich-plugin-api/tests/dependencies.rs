@@ -1,6 +1,7 @@
 //! The plugin contract must stay small: a plugin depends on this crate and core
 //! `rich`, never on `rs-rich-ext`. This fails if anything else becomes a normal
-//! dependency.
+//! dependency. `inventory` (no dependencies of its own that matter, no proc
+//! macros) collects `export_plugin!` registrations at link time.
 
 #[test]
 fn the_only_dependency_is_core() {
@@ -18,5 +19,9 @@ fn the_only_dependency_is_core() {
             found.push(line.split(['=', '.']).next().unwrap().trim().to_string());
         }
     }
-    assert_eq!(found, ["rich"], "unexpected dependencies: {found:?}");
+    assert_eq!(
+        found,
+        ["rich", "inventory"],
+        "unexpected dependencies: {found:?}"
+    );
 }
