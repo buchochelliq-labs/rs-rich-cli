@@ -1601,6 +1601,7 @@ dependencies = [
  "toml",
  "ureq",
  "vt100",
+ "wat",
  "windows-sys 0.61.2",
 ]
 

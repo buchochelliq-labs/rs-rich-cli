@@ -40,6 +40,7 @@ mod doctor;
 mod inspect;
 #[cfg(feature = "interact")]
 mod interactive;
+mod plugins;
 #[cfg(feature = "record")]
 mod record;
 mod render_target;
@@ -510,6 +511,9 @@ struct Cli {
     highlighter: Option<String>,
     /// `--code-theme NAME`: a theme of the chosen code highlighter.
     code_theme: Option<String>,
+    /// `--plugin PATH` (and a trusted config's `plugins`): runtime plugins to
+    /// load, in order.
+    plugins: Vec<String>,
     theme_styles: std::collections::BTreeMap<String, Style>,
     /// `--theme-file PATH`: styles from an upstream `[styles]` theme file,
     /// layered under config themes and `--theme-style`.
@@ -644,8 +648,16 @@ fn mermaid_options(backend: MermaidBackend) -> rich_mermaid::MermaidOptions {
     }
 }
 
-/// The CLI's plugin registry: the built-ins, and Mermaid where compiled in.
+/// The CLI's plugin registry: [`builtin_registry`], then the linked plugins
+/// and the runtime plugins `--plugin` loaded (see [`plugins`]).
 fn plugin_registry(mermaid: MermaidBackend) -> rich_ext::ExtensionRegistry {
+    let mut registry = builtin_registry(mermaid);
+    plugins::add_to(&mut registry);
+    registry
+}
+
+/// The built-in plugins: rich-ext's, and Mermaid and lumis where compiled in.
+fn builtin_registry(mermaid: MermaidBackend) -> rich_ext::ExtensionRegistry {
     #[cfg_attr(not(feature = "mermaid"), allow(unused_mut))]
     let mut registry = rich_ext::ExtensionRegistry::with_defaults();
     #[cfg(feature = "mermaid")]
@@ -895,6 +907,9 @@ fn dispatch(args: Vec<String>) -> ExitCode {
     if doctor::requested(&args) {
         return doctor::dispatch(&args);
     }
+    if plugins::requested(&args) {
+        return plugins::dispatch(&args);
+    }
     #[cfg(feature = "interact")]
     if let Some(command) = interactive::requested(&args) {
         return interactive::dispatch(command, &args);
@@ -906,6 +921,15 @@ fn dispatch(args: Vec<String>) -> ExitCode {
     match parse(&args) {
         Ok(None) => ExitCode::SUCCESS, // help/version already printed
         Ok(Some(cli)) => {
+            if let Err(message) = plugins::check_linked() {
+                return fail(&cli, ExitClass::Usage, message);
+            }
+            if !cli.plugins.is_empty() {
+                match plugins::load(&cli.plugins) {
+                    Ok(loaded) => plugins::install(loaded),
+                    Err((class, message)) => return fail(&cli, class, message),
+                }
+            }
             if cli.batch {
                 if let Err(error) = batch::install_interrupt_handler() {
                     return fail(
@@ -952,6 +976,7 @@ const VALUE_OPTIONS: &[&str] = &[
     "--mermaid-backend",
     "--highlighter",
     "--code-theme",
+    "--plugin",
     "-w",
     "--width",
     "-o",
@@ -1649,6 +1674,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut log_presentation = String::from("plain");
     let mut mermaid_backend = None;
     let mut highlighter: Option<String> = None;
+    let mut plugins: Vec<String> = Vec::new();
     let mut code_theme: Option<String> = None;
     let mut theme_styles = std::collections::BTreeMap::new();
     let mut theme_file_styles = std::collections::BTreeMap::new();
@@ -1777,6 +1803,10 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--code-theme" => {
                 let value = iter.next().ok_or("--code-theme requires a theme name")?;
                 code_theme = Some(value.clone());
+            }
+            "--plugin" => {
+                let path = iter.next().ok_or("--plugin requires PATH")?;
+                plugins.push(path.clone());
             }
             "--mermaid-backend" => {
                 let value = iter
@@ -2684,6 +2714,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         mermaid_backend,
         highlighter,
         code_theme,
+        plugins,
         theme_styles,
         theme_file_styles,
         height,
@@ -3856,6 +3887,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     let mut console = builder.build();
     render_target::attach(&mut console);
     console.install_extensions();
+    plugins::install_highlighters(&mut console);
     apply_code_highlighting(&mut console, &cli);
 
     if mode == Mode::Rule {

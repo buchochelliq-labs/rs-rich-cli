@@ -27,6 +27,9 @@ struct Configuration {
     /// Set when a working-directory `rich.toml` asked for
     /// `mermaid_backend = "mmdc"`, which was ignored (see `load`).
     ignored_mmdc: bool,
+    /// Set when a working-directory `rich.toml` listed `plugins`, which were
+    /// ignored (see `load`).
+    ignored_plugins: bool,
     /// The `export_*` keys a working-directory `rich.toml` set, which were
     /// ignored (see `load`).
     ignored_export: Vec<&'static str>,
@@ -81,6 +84,12 @@ struct Arguments {
     profile: Option<String>,
     theme: Option<String>,
     disabled: bool,
+}
+
+/// Whether `arg` is an option that takes a value, in the config layer's view
+/// (`VALUE_OPTIONS` and a few more).
+pub(crate) fn takes_value_option(arg: &str) -> bool {
+    takes_value(arg)
 }
 
 fn takes_value(arg: &str) -> bool {
@@ -205,6 +214,7 @@ const VALUE_KEYS: &[&str] = &[
     "mermaid_backend",
     "highlighter",
     "code_theme",
+    "plugins",
 ];
 
 pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
@@ -311,6 +321,12 @@ pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
                     && parts.iter().all(|p| p.trim().parse::<usize>().is_ok())
             }),
             "theme_file" => value.as_str().is_some_and(|v| !v.is_empty()),
+            // Runtime plugin files, loaded in this order.
+            "plugins" => value.as_array().is_some_and(|paths| {
+                paths
+                    .iter()
+                    .all(|path| path.as_str().is_some_and(|p| !p.is_empty()))
+            }),
             "export_html" | "export_svg" | "batch_input_root" | "batch_name_template" => {
                 value.is_str()
             }
@@ -421,6 +437,7 @@ fn decode_configuration(text: &str, selected: Option<&str>) -> Result<Configurat
         ignored_theme_file: false,
         ignored_sanitize: false,
         ignored_mmdc: false,
+        ignored_plugins: false,
         ignored_export: Vec::new(),
     })
 }
@@ -489,9 +506,10 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
     // (`theme_file`: a FIFO hangs every run) or to write (`export_html`,
     // `export_svg`: any path the user can write), nor turn off the sanitizing
     // `rich view` and `rich diff` do by default, nor start a browser for every
-    // Markdown document (`mermaid_backend = "mmdc"`).
+    // Markdown document (`mermaid_backend = "mmdc"`), nor load a plugin, which
+    // runs its code (`plugins`).
     if untrusted {
-        let (mut theme_file, mut sanitize, mut mmdc) = (false, false, false);
+        let (mut theme_file, mut sanitize, mut mmdc, mut plugins) = (false, false, false, false);
         let mut export = Vec::new();
         for table in std::iter::once(&mut settings.settings)
             .chain(std::iter::once(&mut settings.base))
@@ -506,6 +524,7 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
                 table.remove("mermaid_backend");
                 mmdc = true;
             }
+            plugins |= table.remove("plugins").is_some();
             for key in EXPORT_KEYS {
                 if table.remove(*key).is_some() && !export.contains(key) {
                     export.push(*key);
@@ -516,6 +535,7 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
         settings.ignored_theme_file = theme_file;
         settings.ignored_sanitize = sanitize;
         settings.ignored_mmdc = mmdc;
+        settings.ignored_plugins = plugins;
         settings.ignored_export = export;
     }
     // A theme file named in a config file is relative to that file, so the
@@ -528,6 +548,16 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
             if let Some(Value::String(file)) = table.get_mut("theme_file") {
                 if PathBuf::from(&*file).is_relative() {
                     *file = dir.join(&*file).to_string_lossy().into_owned();
+                }
+            }
+            // Plugin paths too.
+            if let Some(Value::Array(paths)) = table.get_mut("plugins") {
+                for path in paths {
+                    if let Value::String(file) = path {
+                        if PathBuf::from(&*file).is_relative() {
+                            *file = dir.join(&*file).to_string_lossy().into_owned();
+                        }
+                    }
                 }
             }
         }
@@ -739,6 +769,9 @@ pub(crate) fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<St
     if configuration.ignored_mmdc && !json_report && !explicit.contains("mermaid_backend") {
         eprintln!("rich: warning: {UNTRUSTED_MMDC}");
     }
+    if configuration.ignored_plugins && !json_report {
+        eprintln!("rich: warning: {UNTRUSTED_PLUGINS}");
+    }
     let mut result = Vec::new();
     for (name, style) in theme_styles {
         result.extend(["--theme-style".into(), format!("{name}={style}")]);
@@ -778,6 +811,16 @@ pub(crate) fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<St
             // Name the setting in errors: the command line has no --theme-file.
             let label = format!("config {}: theme_file {file}", config.display());
             super::read_theme_file(file, &label)?;
+        }
+        if key == "plugins" {
+            // A list: one `--plugin` each, in order, ahead of the command
+            // line's own.
+            for path in value.as_array().into_iter().flatten() {
+                if let Some(path) = path.as_str() {
+                    result.extend(["--plugin".to_string(), path.to_string()]);
+                }
+            }
+            continue;
         }
         if let Some((yes, no)) = boolean_flags(&key) {
             result.push(if value.as_bool().unwrap() { yes } else { no }.to_string());
@@ -851,7 +894,10 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
         let value_option = VALUE_KEYS
             .iter()
             .any(|key| format!("--{}", key.replace('_', "-")) == *arg)
-            || matches!(arg.as_str(), "-w" | "-o" | "--interval" | "--theme-style");
+            || matches!(
+                arg.as_str(),
+                "-w" | "-o" | "--interval" | "--theme-style" | "--plugin"
+            );
         if value_option {
             iter.next();
         } else if arg == "--report" {
@@ -899,6 +945,7 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
             ignored_theme_file: configuration.ignored_theme_file,
             ignored_sanitize: configuration.ignored_sanitize,
             ignored_mmdc: configuration.ignored_mmdc,
+            ignored_plugins: configuration.ignored_plugins,
             ignored_export: &configuration.ignored_export,
         };
         return Ok(Some(explain(&layers, key)));
@@ -944,6 +991,8 @@ struct Layers<'a> {
     ignored_sanitize: bool,
     /// The working-directory config's `mermaid_backend = "mmdc"` was ignored.
     ignored_mmdc: bool,
+    /// The working-directory config's `plugins` were ignored.
+    ignored_plugins: bool,
     /// The working-directory config's `export_*` keys that were ignored.
     ignored_export: &'a [&'static str],
 }
@@ -1033,6 +1082,7 @@ fn explain(layers: &Layers, key: Option<&str>) -> String {
         ),
         (layers.ignored_sanitize, "sanitize", UNTRUSTED_SANITIZE),
         (layers.ignored_mmdc, "mermaid_backend", UNTRUSTED_MMDC),
+        (layers.ignored_plugins, "plugins", UNTRUSTED_PLUGINS),
     ] {
         if ignored && key.is_none_or(|key| key == name) {
             if !output.ends_with('\n') {
@@ -1081,6 +1131,12 @@ const UNTRUSTED_SANITIZE: &str =
 const UNTRUSTED_MMDC: &str =
     "mermaid_backend = \"mmdc\" in ./rich.toml is ignored: a project's config may not start a \
      browser; pass --mermaid-backend mmdc, or set it in ~/.config/rich/config.toml or a file \
+     given with --config";
+
+/// Why a working-directory `rich.toml`'s `plugins` have no effect.
+pub(crate) const UNTRUSTED_PLUGINS: &str =
+    "plugins in ./rich.toml are ignored: a project's config may not load plugins, which run \
+     their own code; pass --plugin PATH, or list them in ~/.config/rich/config.toml or a file \
      given with --config";
 
 /// Every key `validate_value` accepts.
