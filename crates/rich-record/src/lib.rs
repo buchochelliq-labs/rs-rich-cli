@@ -5,10 +5,16 @@
 //! pinned environment, follows the screen with a VT emulator, and returns the
 //! screenshots and a timeline. [`record::write`] turns them into files:
 //!
-//! - per screenshot, a PNG in a window frame, an SVG with selectable text, and
-//!   a text grid (through [`rich_ext::frame::Frame`]);
+//! - per screenshot, a PNG in a window frame, an SVG with selectable text
+//!   (drawn by rich-ext's frame exporter, [`rich_ext::frame::Frame::to_svg`]),
+//!   and a text grid (through [`rich_ext::frame::Frame`]);
 //! - an asciinema v2 cast with input events and the theme in its header;
-//! - a GIF with a key overlay, and an MP4 when FFmpeg is installed.
+//! - a GIF with a key overlay, and an MP4 when FFmpeg is installed;
+//! - a self-contained HTML page with a small player and the screenshots.
+//!
+//! The window frame, a caption and the key overlay can each be switched on
+//! or off ([`record::Presentation`]), and a tape's `Output` chooses what is
+//! written.
 //!
 //! [`record::check`] compares a new run's text grids with committed ones, so
 //! documentation media cannot drift from the program it shows.
@@ -34,6 +40,6 @@ pub mod session;
 pub mod tape;
 pub mod terminal;
 
-pub use record::{Formats, Options, Problem, Recording};
+pub use record::{Formats, Options, Presentation, Problem, Recording};
 pub use screen::{Snapshot, Theme};
-pub use tape::{Tape, TapeError};
+pub use tape::{Format, Output, Tape, TapeError};
