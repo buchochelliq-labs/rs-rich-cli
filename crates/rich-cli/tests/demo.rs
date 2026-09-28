@@ -27,10 +27,14 @@ fn guided_demo_shows_suite_without_writing_working_directory() {
         "Watch updates",
         "Code themes",
         "Filter and highlight",
+        "rich-cli options",
+        "reStructuredText",
         "Tour complete",
     ] {
         assert!(text.contains(section), "missing {section}");
     }
+    #[cfg(feature = "interact")]
+    assert!(text.contains("Ask in a script"), "missing the picker");
     #[cfg(feature = "art")]
     for section in [
         "FIGlet",

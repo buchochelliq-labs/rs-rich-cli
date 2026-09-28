@@ -312,6 +312,7 @@ fn tour(no_color: bool, delay: Duration, group: Option<&str>) -> std::io::Result
         )?;
         tools(&console, no_color, delay, root.path())?;
         additions_012(&console, no_color, delay, root.path())?;
+        additions_013(&console, no_color, delay, root.path())?;
         section(&console, delay, "Pager, input and confidence controls");
         console.print(&Text::new("--auto-pager opens a pager for tall TTY output; --no-pager opts out.\nURL fetch, encoding, sanitization and JSON reports support scripts and CI.\nThe tour stays offline and does not open an external pager."));
         command(
@@ -466,6 +467,64 @@ fn additions_012(
             "timeout|refused".into(),
         ],
     )
+}
+
+/// The 0.0.13 additions: rich-cli's own options (line numbers, guides,
+/// `--head`), reStructuredText, and a `rich choose` picker. The tour runs
+/// unattended, so the picker is drawn headless, with the keys a user would
+/// press, rather than waiting on the terminal.
+fn additions_013(
+    console: &Console,
+    no_color: bool,
+    delay: Duration,
+    root: &Path,
+) -> std::io::Result<()> {
+    let file = |name: &str| root.join(name).to_string_lossy().into_owned();
+    std::fs::write(
+        file("release.rst"),
+        "Release 0.0.13\n==============\n\nAsk, choose and browse from a script:\n\n* ``rich choose`` picks one item\n* ``rich filter`` narrows a list as you type\n* ``rich confirm`` answers with its exit code\n\n.. note:: Keys come from the terminal even when stdin is the list.\n",
+    )?;
+    section(console, delay, "rich-cli options");
+    command(
+        console,
+        no_color,
+        "--syntax worker.rs -n --guides --head 5",
+        vec![
+            "--syntax".into(),
+            file("worker.rs"),
+            "-n".into(),
+            "--guides".into(),
+            "--head".into(),
+            "5".into(),
+        ],
+    )?;
+    section(console, delay, "reStructuredText");
+    command(
+        console,
+        no_color,
+        "--rst release.rst",
+        vec!["--rst".into(), file("release.rst")],
+    )?;
+    #[cfg(feature = "interact")]
+    {
+        use rich_interact::{headless, Select};
+        section(console, delay, "Ask in a script");
+        console.print(&Text::new(
+            "$ fruit=$(rich choose apple banana cherry)   # ↓ then Enter",
+        ));
+        let select = Select::new("Pick a fruit", ["apple", "banana", "cherry"]);
+        let (_, record) = headless::run(select, headless::Script::new().keys("down"), 60, 6);
+        console.print(
+            &Panel::new(Box::new(Text::new(
+                record.last_frame().trim_end().to_owned(),
+            )))
+            .title("drawn headless: the keys a user would press"),
+        );
+        console.print(&Text::new(
+            "$ echo \"$fruit\"\nbanana\n$ ls | rich filter --value toml    # without a terminal: a fuzzy grep\n$ rich confirm 'Deploy?' && deploy  # exit 0 for yes, 1 for no",
+        ));
+    }
+    Ok(())
 }
 
 /// Watch two files, each in its own Live region. The tour cannot deliver a

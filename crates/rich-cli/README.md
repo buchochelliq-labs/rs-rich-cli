@@ -172,6 +172,14 @@ Discovery and diagnostics
   requests or pager execution. Its successful `--report json` document goes to
   stdout. Sixel capability is inferred, not tested.
 
+Ask in a script
+: `rich choose`, `rich filter`, `rich input`, `rich confirm` and `rich pager`
+  paint on stderr and answer on stdout, so `x=$(rich choose a b c)` works, and
+  read keys from the terminal even when stdin is the list (`ls | rich filter`).
+  `--preview COMMAND` shows a command's output for the focused item. Exit codes:
+  0 answered (or yes), 1 cancelled (or no), 130 Ctrl+C, 2 usage, 3 no answer
+  without a terminal, where they degrade instead of waiting.
+
 Viewers and capture
 : `rich view` sanitises terminal controls by default, as text `rich diff` does
   (`--no-sanitize` opts out). `view`, `hex`, `unicode`, `inspect` and `capture`
@@ -182,16 +190,18 @@ Viewers and capture
 
 See the [workflow recipes](https://buchochelliq-labs.github.io/rs-rich-cli/recipes/), the
 [CLI reference](https://buchochelliq-labs.github.io/rs-rich-cli/cli-reference/) and the
-[0.0.12 release notes](https://buchochelliq-labs.github.io/rs-rich-cli/releases/0.0.12/). Source versions do not imply
+[0.0.13 release notes](https://buchochelliq-labs.github.io/rs-rich-cli/releases/0.0.13/). Source versions do not imply
 publication.
 
 ## Features
 
-These three are on by default and can be dropped for a smaller binary:
+These five are on by default and can be dropped for a smaller binary:
 
 - **`fetch`** — URL support (`rich <url>`), via `ureq` with bundled TLS roots.
 - **`art`** — `--gif` playback and `--diff`/`--image` picture rendering, via [`rs-rich-art`](https://crates.io/crates/rs-rich-art).
 - **`mermaid`** — `rich mermaid` and Mermaid fences in Markdown, drawn as text, via [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid).
+- **`record`** — `rich record TAPE`: scripted terminal sessions rendered as screenshots, casts, GIF and MP4, via [`rs-rich-record`](https://crates.io/crates/rs-rich-record).
+- **`interact`** — `rich choose`, `filter`, `input`, `confirm` and `pager`, via [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact).
 
 Off by default:
 
