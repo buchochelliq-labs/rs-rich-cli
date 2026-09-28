@@ -1211,8 +1211,8 @@ pub(crate) fn traverse_with(
 /// CPython version, for an object `d` containers deep (`tests/test_panel.py`):
 /// `5 + d` on 3.9 and 3.10, `4 + d` on 3.11, and `max(4, 1 + d)` on 3.12 and
 /// later, which inline more of the walk.
-fn pretty_frames(object: &Bound<'_, PyAny>) -> PyResult<usize> {
-    let depth = container_depth(object)?;
+fn pretty_frames(object: &Bound<'_, PyAny>, limits: Limits) -> PyResult<usize> {
+    let depth = container_depth(object, limits)?;
     let version = object.py().version_info();
     Ok(if version >= (3, 12) {
         (1 + depth).max(4)
@@ -1223,35 +1223,46 @@ fn pretty_frames(object: &Bound<'_, PyAny>) -> PyResult<usize> {
     })
 }
 
-/// The containers `item` holds, or `None` when Rich's walk does not go
-/// into it.
-fn walked_children<'py>(item: &Bound<'py, PyAny>) -> PyResult<Option<Vec<Bound<'py, PyAny>>>> {
+/// The children of `item` Rich's walk looks at (the first `max_length`),
+/// or `None` when it does not go into `item`.
+fn walked_children<'py>(
+    item: &Bound<'py, PyAny>,
+    max_length: Option<usize>,
+) -> PyResult<Option<Vec<Bound<'py, PyAny>>>> {
+    let take = max_length.unwrap_or(usize::MAX);
     Ok(if let Ok(dict) = item.cast::<PyDict>() {
-        Some(dict.values().iter().collect())
+        Some(dict.values().iter().take(take).collect())
     } else if item.is_instance_of::<pyo3::types::PyList>()
         || item.is_instance_of::<pyo3::types::PyTuple>()
         || item.is_instance_of::<pyo3::types::PySet>()
         || item.is_instance_of::<pyo3::types::PyFrozenSet>()
     {
-        Some(item.try_iter()?.collect::<PyResult<_>>()?)
+        Some(item.try_iter()?.take(take).collect::<PyResult<_>>()?)
     } else {
         None
     })
 }
 
 /// How many containers deep `object` goes (`[[1]]` is 2), as Rich's walk
-/// goes: a container met again inside itself is shown as `...`, not
-/// entered. Each container is walked once, by identity, and without native
-/// recursion, so shared and cyclic values (a list holding itself a hundred
-/// times) cost one pass over their edges.
-fn container_depth(object: &Bound<'_, PyAny>) -> PyResult<usize> {
+/// goes: it looks at the first `max_length` children of each container, it
+/// goes at most `max_depth` containers deep (the next shows as `...`), and a
+/// container met again inside itself is shown as `...`, not entered. Each container is walked once, by identity, and without
+/// native recursion, so shared and cyclic values (a list holding itself a
+/// hundred times) cost one pass over their edges; only a subtree cut short
+/// by `max_depth` is walked again where it recurs higher up.
+fn container_depth(object: &Bound<'_, PyAny>, limits: Limits) -> PyResult<usize> {
     struct Open<'py> {
         key: usize,
         children: Vec<Bound<'py, PyAny>>,
         next: usize,
         deepest: usize,
+        cut: bool,
     }
-    let Some(children) = walked_children(object)? else {
+    let deepest_walked = limits.max_depth.unwrap_or(usize::MAX);
+    if deepest_walked == 0 {
+        return Ok(0);
+    }
+    let Some(children) = walked_children(object, limits.max_length)? else {
         return Ok(0);
     };
     let mut done: HashMap<usize, usize> = HashMap::new();
@@ -1261,22 +1272,30 @@ fn container_depth(object: &Bound<'_, PyAny>) -> PyResult<usize> {
         children,
         next: 0,
         deepest: 0,
+        cut: false,
     }];
-    while let Some(top) = stack.last_mut() {
+    loop {
+        let depth = stack.len();
+        let Some(top) = stack.last_mut() else { break };
         if let Some(child) = top.children.get(top.next).cloned() {
             top.next += 1;
             let key = child.as_ptr() as usize;
             if let Some(&height) = done.get(&key) {
                 top.deepest = top.deepest.max(height);
             } else if !open.contains(&key) {
-                if let Some(children) = walked_children(&child)? {
-                    open.insert(key);
-                    stack.push(Open {
-                        key,
-                        children,
-                        next: 0,
-                        deepest: 0,
-                    });
+                if let Some(children) = walked_children(&child, limits.max_length)? {
+                    if depth >= deepest_walked {
+                        top.cut = true;
+                    } else {
+                        open.insert(key);
+                        stack.push(Open {
+                            key,
+                            children,
+                            next: 0,
+                            deepest: 0,
+                            cut: false,
+                        });
+                    }
                 }
             }
             continue;
@@ -1284,9 +1303,14 @@ fn container_depth(object: &Bound<'_, PyAny>) -> PyResult<usize> {
         let finished = stack.pop().expect("a container is open");
         let height = finished.deepest + 1;
         open.remove(&finished.key);
-        done.insert(finished.key, height);
+        if !finished.cut {
+            done.insert(finished.key, height);
+        }
         match stack.last_mut() {
-            Some(parent) => parent.deepest = parent.deepest.max(height),
+            Some(parent) => {
+                parent.deepest = parent.deepest.max(height);
+                parent.cut |= finished.cut;
+            }
             None => return Ok(height),
         }
     }
@@ -1584,7 +1608,7 @@ impl AsRenderable for Pretty {
         // each container its walk goes into.
         let depth = renderable::nesting_depth();
         if depth >= renderable::CHECK_FROM {
-            renderable::check_frames(depth, pretty_frames(object)?)?;
+            renderable::check_frames(depth, pretty_frames(object, self.limits())?)?;
         }
         let node = traverse_in_render(object, self.limits())?;
         node.check_indent(self.indent_size)?;
