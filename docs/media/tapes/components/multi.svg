@@ -1,40 +1,146 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 998.0 530.6" font-family="Fira Code, DejaVu Sans Mono, Menlo, monospace" font-size="16">
-<rect width="100%" height="100%" rx="9" fill="#292929" stroke="#464646"/>
-<path d="M0 9a9 9 0 0 1 9-9h980.0a9 9 0 0 1 9 9v26h-998.0z" fill="#1e1e1e"/>
-<circle cx="19" cy="17.5" r="6" fill="#ff5f56"/>
-<circle cx="41" cy="17.5" r="6" fill="#ffbd2e"/>
-<circle cx="63" cy="17.5" r="6" fill="#27c93f"/>
-<text x="499.0" y="22.5" fill="#969696" font-family="DejaVu Sans, sans-serif" font-size="13" text-anchor="middle">rs-rich-interact · components</text>
-<text x="19.0" y="69.6" fill="#ff2c7a" font-weight="bold" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">❯</text>
-<text x="28.6" y="69.6" fill="#c5c8c6" textLength="950.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> c multi                                                                                           </text>
-<text x="19.0" y="90.4" fill="#00823d" font-weight="bold" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">?</text>
-<text x="38.2" y="90.4" fill="#c5c8c6" font-weight="bold" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Publish</text>
-<text x="115.0" y="90.4" fill="#777877" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">›</text>
-<text x="38.2" y="111.2" fill="#98a84b" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">◉ </text>
-<text x="57.4" y="111.2" fill="#c5c8c6" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">rs-rich</text>
-<text x="124.6" y="111.2" fill="#777877" textLength="259.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  the faithful port of rich</text>
-<text x="38.2" y="132.0" fill="#777877" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">○ </text>
-<text x="57.4" y="132.0" fill="#c5c8c6" textLength="105.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">rs-rich-ext</text>
-<text x="163.0" y="132.0" fill="#777877" textLength="355.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  extensions: frames, live, workflows</text>
-<text x="38.2" y="152.8" fill="#98a84b" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">◉ </text>
-<text x="57.4" y="152.8" fill="#c5c8c6" textLength="105.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">rs-rich-cli</text>
-<text x="163.0" y="152.8" fill="#777877" textLength="172.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  the rich command</text>
-<text x="38.2" y="173.6" fill="#98a84b" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">◉ </text>
-<text x="57.4" y="173.6" fill="#c5c8c6" textLength="105.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">rs-rich-art</text>
-<text x="163.0" y="173.6" fill="#777877" textLength="249.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  images, GIFs and banners</text>
-<text x="19.0" y="194.4" fill="#ff2c7a" font-weight="bold" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">❯ </text>
-<text x="38.2" y="194.4" fill="#777877" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">○ </text>
-<text x="57.4" y="194.4" fill="#c5c8c6" font-weight="bold" textLength="134.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">rs-rich-record</text>
-<text x="191.8" y="194.4" fill="#777877" textLength="316.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  tapes: record terminal sessions</text>
-<text x="38.2" y="215.2" fill="#777877" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">○ </text>
-<text x="57.4" y="215.2" fill="#c5c8c6" textLength="153.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">rs-rich-interact</text>
-<text x="211.0" y="215.2" fill="#777877" textLength="230.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  interactive components</text>
-<text x="38.2" y="236.0" fill="#777877" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">○ </text>
-<text x="57.4" y="236.0" fill="#c5c8c6" textLength="144.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">rs-rich-mermaid</text>
-<text x="201.4" y="236.0" fill="#777877" textLength="249.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  Mermaid diagrams as text</text>
-<text x="38.2" y="256.8" fill="#777877" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">○ </text>
-<text x="57.4" y="256.8" fill="#c5c8c6" textLength="124.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">rs-rich-lumis</text>
-<text x="182.2" y="256.8" fill="#777877" textLength="249.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  tree-sitter highlighting</text>
-<text x="19.0" y="277.6" fill="#777877" textLength="604.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  8/8 · 3 marked · tab mark · ↑↓ move · enter pick · esc cancel</text>
-<rect x="134.2" y="74.8" width="9.6" height="20.8" fill="#c5c8c6" opacity="0.7"/>
+<svg class="rich-terminal" viewBox="0 0 1238 586.8" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .rich-record-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .rich-record-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .rich-record-r1 { fill: #ff2c7a;font-weight: bold }
+.rich-record-r2 { fill: #c5c8c6 }
+.rich-record-r3 { fill: #00823d;font-weight: bold }
+.rich-record-r4 { fill: #c5c8c6;font-weight: bold }
+.rich-record-r5 { fill: #777877 }
+.rich-record-r6 { fill: #98a84b }
+    </style>
+
+    <defs>
+    <clipPath id="rich-record-clip-terminal">
+      <rect x="0" y="0" width="1219.0" height="535.8" />
+    </clipPath>
+    <clipPath id="rich-record-line-0">
+    <rect x="0" y="1.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-1">
+    <rect x="0" y="25.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-2">
+    <rect x="0" y="50.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-3">
+    <rect x="0" y="74.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-4">
+    <rect x="0" y="99.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-5">
+    <rect x="0" y="123.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-6">
+    <rect x="0" y="147.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-7">
+    <rect x="0" y="172.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-8">
+    <rect x="0" y="196.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-9">
+    <rect x="0" y="221.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-10">
+    <rect x="0" y="245.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-11">
+    <rect x="0" y="269.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-12">
+    <rect x="0" y="294.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-13">
+    <rect x="0" y="318.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-14">
+    <rect x="0" y="343.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-15">
+    <rect x="0" y="367.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-16">
+    <rect x="0" y="391.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-17">
+    <rect x="0" y="416.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-18">
+    <rect x="0" y="440.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-19">
+    <rect x="0" y="465.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-20">
+    <rect x="0" y="489.5" width="1220" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="1236" height="584.8" rx="8"/><text class="rich-record-title" fill="#c5c8c6" text-anchor="middle" x="618" y="27">rs-rich-interact&#160;·&#160;components</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#rich-record-clip-terminal)">
+    
+    <g class="rich-record-matrix">
+    <text class="rich-record-r1" x="0" y="20" textLength="12.2" clip-path="url(#rich-record-line-0)">❯</text><text class="rich-record-r2" x="12.2" y="20" textLength="1207.8" clip-path="url(#rich-record-line-0)">&#160;c&#160;multi&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r2" x="1220" y="20" textLength="12.2" clip-path="url(#rich-record-line-0)">
+</text><text class="rich-record-r3" x="0" y="44.4" textLength="12.2" clip-path="url(#rich-record-line-1)">?</text><text class="rich-record-r4" x="24.4" y="44.4" textLength="85.4" clip-path="url(#rich-record-line-1)">Publish</text><text class="rich-record-r5" x="122" y="44.4" textLength="12.2" clip-path="url(#rich-record-line-1)">›</text><text class="rich-record-r2" x="1220" y="44.4" textLength="12.2" clip-path="url(#rich-record-line-1)">
+</text><text class="rich-record-r6" x="24.4" y="68.8" textLength="24.4" clip-path="url(#rich-record-line-2)">◉&#160;</text><text class="rich-record-r2" x="48.8" y="68.8" textLength="85.4" clip-path="url(#rich-record-line-2)">rs-rich</text><text class="rich-record-r5" x="134.2" y="68.8" textLength="329.4" clip-path="url(#rich-record-line-2)">&#160;&#160;the&#160;faithful&#160;port&#160;of&#160;rich</text><text class="rich-record-r2" x="1220" y="68.8" textLength="12.2" clip-path="url(#rich-record-line-2)">
+</text><text class="rich-record-r5" x="24.4" y="93.2" textLength="24.4" clip-path="url(#rich-record-line-3)">○&#160;</text><text class="rich-record-r2" x="48.8" y="93.2" textLength="134.2" clip-path="url(#rich-record-line-3)">rs-rich-ext</text><text class="rich-record-r5" x="183" y="93.2" textLength="451.4" clip-path="url(#rich-record-line-3)">&#160;&#160;extensions:&#160;frames,&#160;live,&#160;workflows</text><text class="rich-record-r2" x="1220" y="93.2" textLength="12.2" clip-path="url(#rich-record-line-3)">
+</text><text class="rich-record-r6" x="24.4" y="117.6" textLength="24.4" clip-path="url(#rich-record-line-4)">◉&#160;</text><text class="rich-record-r2" x="48.8" y="117.6" textLength="134.2" clip-path="url(#rich-record-line-4)">rs-rich-cli</text><text class="rich-record-r5" x="183" y="117.6" textLength="219.6" clip-path="url(#rich-record-line-4)">&#160;&#160;the&#160;rich&#160;command</text><text class="rich-record-r2" x="1220" y="117.6" textLength="12.2" clip-path="url(#rich-record-line-4)">
+</text><text class="rich-record-r6" x="24.4" y="142" textLength="24.4" clip-path="url(#rich-record-line-5)">◉&#160;</text><text class="rich-record-r2" x="48.8" y="142" textLength="134.2" clip-path="url(#rich-record-line-5)">rs-rich-art</text><text class="rich-record-r5" x="183" y="142" textLength="317.2" clip-path="url(#rich-record-line-5)">&#160;&#160;images,&#160;GIFs&#160;and&#160;banners</text><text class="rich-record-r2" x="1220" y="142" textLength="12.2" clip-path="url(#rich-record-line-5)">
+</text><text class="rich-record-r1" x="0" y="166.4" textLength="24.4" clip-path="url(#rich-record-line-6)">❯&#160;</text><text class="rich-record-r5" x="24.4" y="166.4" textLength="24.4" clip-path="url(#rich-record-line-6)">○&#160;</text><text class="rich-record-r4" x="48.8" y="166.4" textLength="170.8" clip-path="url(#rich-record-line-6)">rs-rich-record</text><text class="rich-record-r5" x="219.6" y="166.4" textLength="402.6" clip-path="url(#rich-record-line-6)">&#160;&#160;tapes:&#160;record&#160;terminal&#160;sessions</text><text class="rich-record-r2" x="1220" y="166.4" textLength="12.2" clip-path="url(#rich-record-line-6)">
+</text><text class="rich-record-r5" x="24.4" y="190.8" textLength="24.4" clip-path="url(#rich-record-line-7)">○&#160;</text><text class="rich-record-r2" x="48.8" y="190.8" textLength="195.2" clip-path="url(#rich-record-line-7)">rs-rich-interact</text><text class="rich-record-r5" x="244" y="190.8" textLength="292.8" clip-path="url(#rich-record-line-7)">&#160;&#160;interactive&#160;components</text><text class="rich-record-r2" x="1220" y="190.8" textLength="12.2" clip-path="url(#rich-record-line-7)">
+</text><text class="rich-record-r5" x="24.4" y="215.2" textLength="24.4" clip-path="url(#rich-record-line-8)">○&#160;</text><text class="rich-record-r2" x="48.8" y="215.2" textLength="183" clip-path="url(#rich-record-line-8)">rs-rich-mermaid</text><text class="rich-record-r5" x="231.8" y="215.2" textLength="317.2" clip-path="url(#rich-record-line-8)">&#160;&#160;Mermaid&#160;diagrams&#160;as&#160;text</text><text class="rich-record-r2" x="1220" y="215.2" textLength="12.2" clip-path="url(#rich-record-line-8)">
+</text><text class="rich-record-r5" x="24.4" y="239.6" textLength="24.4" clip-path="url(#rich-record-line-9)">○&#160;</text><text class="rich-record-r2" x="48.8" y="239.6" textLength="158.6" clip-path="url(#rich-record-line-9)">rs-rich-lumis</text><text class="rich-record-r5" x="207.4" y="239.6" textLength="317.2" clip-path="url(#rich-record-line-9)">&#160;&#160;tree-sitter&#160;highlighting</text><text class="rich-record-r2" x="1220" y="239.6" textLength="12.2" clip-path="url(#rich-record-line-9)">
+</text><text class="rich-record-r5" x="0" y="264" textLength="768.6" clip-path="url(#rich-record-line-10)">&#160;&#160;8/8&#160;·&#160;3&#160;marked&#160;·&#160;tab&#160;mark&#160;·&#160;↑↓&#160;move&#160;·&#160;enter&#160;pick&#160;·&#160;esc&#160;cancel</text><text class="rich-record-r2" x="1220" y="264" textLength="12.2" clip-path="url(#rich-record-line-10)">
+</text><text class="rich-record-r2" x="1220" y="288.4" textLength="12.2" clip-path="url(#rich-record-line-11)">
+</text><text class="rich-record-r2" x="1220" y="312.8" textLength="12.2" clip-path="url(#rich-record-line-12)">
+</text><text class="rich-record-r2" x="1220" y="337.2" textLength="12.2" clip-path="url(#rich-record-line-13)">
+</text><text class="rich-record-r2" x="1220" y="361.6" textLength="12.2" clip-path="url(#rich-record-line-14)">
+</text><text class="rich-record-r2" x="1220" y="386" textLength="12.2" clip-path="url(#rich-record-line-15)">
+</text><text class="rich-record-r2" x="1220" y="410.4" textLength="12.2" clip-path="url(#rich-record-line-16)">
+</text><text class="rich-record-r2" x="1220" y="434.8" textLength="12.2" clip-path="url(#rich-record-line-17)">
+</text><text class="rich-record-r2" x="1220" y="459.2" textLength="12.2" clip-path="url(#rich-record-line-18)">
+</text><text class="rich-record-r2" x="1220" y="483.6" textLength="12.2" clip-path="url(#rich-record-line-19)">
+</text><text class="rich-record-r2" x="1220" y="508" textLength="12.2" clip-path="url(#rich-record-line-20)">
+</text><rect x="146.4" y="25.9" width="12.2" height="24.65" fill="#c5c8c6" opacity="0.7"/>
+    </g>
+    </g>
 </svg>

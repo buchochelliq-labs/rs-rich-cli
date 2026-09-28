@@ -3,6 +3,16 @@
   "tape_fnv1a64": "b5f440906b0d3193",
   "recorder": "rs-rich-record 0.0.1",
   "rich": null,
-  "commit": "3c805cc61d3b935a6d464adbe21a05aa23e1c25e",
+  "commit": "21795ba3bc9777bf53c918b152d2d34cad27b39d",
+  "screenshots": [
+    "select",
+    "multi",
+    "input-suggestions",
+    "input-error",
+    "confirm",
+    "form-error",
+    "form-done",
+    "pager"
+  ],
   "note": "Every frame is real output of the program under test on a PTY."
 }

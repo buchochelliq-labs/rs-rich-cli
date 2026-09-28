@@ -292,7 +292,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `completions` | Print a shell completion script |
 | `docs` | Print reference documentation generated from this help |
 | `bench` | Compare benchmark runs |
-| `record` | Run tapes (scripted terminal sessions: type, press keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF and an MP4 (with FFmpeg); --check compares screenshots with committed ones instead |
+| `record` | Run tapes (scripted terminal sessions: type, press keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an MP4 (with FFmpeg) and an HTML page with a player; --check compares screenshots with committed ones instead |
 | `plugins` | List the plugins this build has — built in, linked, and any --plugin PATH loads — with their source, version, ABI and capabilities |
 | `doctor` | Read-only build, terminal, config and pager diagnostics; --report json writes diagnostic data to stdout |
 
@@ -979,6 +979,7 @@ rich input [OPTIONS]
 | `--value <TEXT>` | Start with TEXT typed. |
 | `--default <TEXT>` | The answer to an empty line, and without a terminal. |
 | `--password` | Hide what is typed; without a terminal, read with echo off. |
+| `--required` | Refuse an empty answer: Enter shows an error under the line and waits. |
 
 #### Examples
 
@@ -986,6 +987,12 @@ A name
 
 ```sh
 name=$(rich input --prompt Name --placeholder 'Ada Lovelace')
+```
+
+An answer that cannot be empty
+
+```sh
+rich input --prompt Project --required
 ```
 
 ### rich confirm
@@ -1195,12 +1202,12 @@ rich bench compare baseline.json candidate.json --threshold 10
 
 ### rich record
 
-Run tapes (scripted terminal sessions: type, press keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF and an MP4 (with FFmpeg); --check compares screenshots with committed ones instead
+Run tapes (scripted terminal sessions: type, press keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an MP4 (with FFmpeg) and an HTML page with a player; --check compares screenshots with committed ones instead
 
 #### Usage
 
 ```text
-rich record [--check] [--output DIR] [--bin-dir DIR] [--format png,svg,cast,gif,mp4] [--no-video] [--font FILE] TAPE...
+rich record [--check] [--output DIR] [--bin-dir DIR] [--format png,svg,cast,gif,mp4,html] [--no-video] [--font FILE] [--window-frame on|off] [--caption TEXT] [--key-overlay on|off] TAPE...
 ```
 
 ### rich plugins

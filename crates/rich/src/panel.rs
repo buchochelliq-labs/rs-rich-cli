@@ -307,6 +307,31 @@ impl Panel {
 
 impl Renderable for Panel {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        // Not upstream: a semantic region, only when a sink is installed.
+        crate::protocol::report_region(
+            console,
+            || {
+                let info = crate::protocol::RegionInfo::new(crate::protocol::RegionRole::Panel);
+                match self.title_text() {
+                    Some(title) => info.label(title.plain()),
+                    None => info,
+                }
+            },
+            || self.render_panel(console, options),
+        )
+    }
+
+    /// Port of `Panel.__rich_measure__`: the widest of the content and the
+    /// title, measured inside the borders and padding, plus both; or the
+    /// fixed `width`. Either way the panel asks for exactly one width.
+    fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+        self.measure_panel(console, options)
+    }
+}
+
+impl Panel {
+    /// Port of `Panel.__rich_console__`.
+    fn render_panel(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let width = match self.width {
             Some(width) => width.min(options.max_width),
             None => options.max_width,
@@ -434,10 +459,7 @@ impl Renderable for Panel {
         join_rows(rows)
     }
 
-    /// Port of `Panel.__rich_measure__`: the widest of the content and the
-    /// title, measured inside the borders and padding, plus both; or the
-    /// fixed `width`. Either way the panel asks for exactly one width.
-    fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+    fn measure_panel(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
         let (_, right, _, left) = self.padding;
         let padding = left + right;
         let width = match self.width {

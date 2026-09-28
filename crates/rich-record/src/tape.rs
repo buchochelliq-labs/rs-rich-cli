@@ -5,7 +5,10 @@
 //! Set Size 100x28            # columns x rows (default 100x28; 2x2 to 500x200)
 //! Set TypingDelay 40ms       # per character typed by `Type`
 //! Set Timeout 15s            # default for `Wait`
-//! Set Title "Watching files" # caption for the window frame and the cast
+//! Set Title "Watching files" # title of the window frame and the cast
+//! Set WindowFrame off        # draw the window frame around stills and video (on)
+//! Set Caption "Save to see"  # a line of text under stills, video and the page
+//! Set KeyOverlay off         # show keys as they are pressed, in video (on)
 //! Set Env NAME value         # extra environment for the shell and `Exec`
 //! Set Shell zsh              # bash (default), zsh, fish or sh
 //! Write data.json '{"a": 1}' # create a file in the workspace (\n, \t escapes)
@@ -20,10 +23,13 @@
 //! Hide / Show                # steps between them are not recorded
 //! Resize 80x24
 //! Mask /\/tmp\/\S+/ "<tmp>"  # in text grids only: hide output that varies
+//! Output gif png             # write only these (png svg cast gif mp4 html)
+//! Output demo.html           # ... or name a file: cast, gif, mp4 or html
 //! ```
 //!
-//! This is the format of the first, Python tape runner (#598), unchanged, so
-//! its tapes run under `rich record` as they are.
+//! This is the format of the first, Python tape runner (#598), extended with
+//! presentation settings and `Output`; its tapes run under `rich record` as
+//! they are.
 
 use std::fmt;
 use std::time::Duration;
@@ -147,6 +153,67 @@ impl Key {
     }
 }
 
+/// An output format `rich record` can write. Text grids are always written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Format {
+    /// A PNG per screenshot.
+    Png,
+    /// An SVG per screenshot.
+    Svg,
+    /// The asciinema cast.
+    Cast,
+    Gif,
+    /// Needs FFmpeg.
+    Mp4,
+    /// A self-contained page: a player and the screenshots.
+    Html,
+}
+
+impl Format {
+    pub const ALL: [Format; 6] = [
+        Format::Png,
+        Format::Svg,
+        Format::Cast,
+        Format::Gif,
+        Format::Mp4,
+        Format::Html,
+    ];
+
+    /// `png`, `svg`, `cast`, `gif`, `mp4` or `html`.
+    pub fn parse(name: &str) -> Option<Format> {
+        Format::ALL
+            .into_iter()
+            .find(|format| format.extension() == name)
+    }
+
+    /// The file extension, which is also the name.
+    pub fn extension(self) -> &'static str {
+        match self {
+            Format::Png => "png",
+            Format::Svg => "svg",
+            Format::Cast => "cast",
+            Format::Gif => "gif",
+            Format::Mp4 => "mp4",
+            Format::Html => "html",
+        }
+    }
+
+    /// Whether one file holds the whole tape (so `Output` may name it), as
+    /// opposed to one file per screenshot.
+    pub fn per_tape(self) -> bool {
+        !matches!(self, Format::Png | Format::Svg)
+    }
+}
+
+/// One `Output` word: a format, and the file to write it to when the word
+/// was a path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Output {
+    pub format: Format,
+    /// Relative to the tape's output directory.
+    pub path: Option<String>,
+}
+
 /// What `Wait` waits for.
 #[derive(Debug, Clone)]
 pub enum Pattern {
@@ -246,6 +313,14 @@ pub struct Tape {
     /// that differs on every run: temporary paths, timings. Images and casts
     /// keep what was recorded.
     pub masks: Vec<(Regex, String)>,
+    /// `Set WindowFrame`: `None` when the tape does not say.
+    pub window_frame: Option<bool>,
+    /// `Set Caption`.
+    pub caption: Option<String>,
+    /// `Set KeyOverlay`: `None` when the tape does not say.
+    pub key_overlay: Option<bool>,
+    /// `Output`, in order. Empty: every format.
+    pub outputs: Vec<Output>,
     pub steps: Vec<(usize, Step)>,
 }
 
@@ -417,6 +492,40 @@ fn words(line: &str) -> Result<Vec<String>, String> {
     Ok(words)
 }
 
+/// One `Output` word: a format name, or a relative path ending in a
+/// per-tape format's extension.
+fn parse_output(word: &str) -> Result<Output, String> {
+    if let Some(format) = Format::parse(word) {
+        return Ok(Output { format, path: None });
+    }
+    let names = "png, svg, cast, gif, mp4 or html";
+    let Some(format) = std::path::Path::new(word)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .and_then(Format::parse)
+    else {
+        return Err(format!(
+            "Output {word:?} is neither a format ({names}) nor a file ending in one"
+        ));
+    };
+    if !format.per_tape() {
+        return Err(format!(
+            "Output {word:?}: {} files are named by Screenshot; write `Output {}`",
+            format.extension(),
+            format.extension()
+        ));
+    }
+    if !write_path_allowed(word) {
+        return Err(format!(
+            "Output {word:?} must be relative and stay in the output directory (no ..)"
+        ));
+    }
+    Ok(Output {
+        format,
+        path: Some(word.to_string()),
+    })
+}
+
 /// Parse a tape.
 pub fn parse(source: &str) -> Result<Tape, TapeError> {
     let mut tape = Tape {
@@ -426,6 +535,10 @@ pub fn parse(source: &str) -> Result<Tape, TapeError> {
         shell: Shell::default(),
         env: Vec::new(),
         masks: Vec::new(),
+        window_frame: None,
+        caption: None,
+        key_overlay: None,
+        outputs: Vec::new(),
         steps: Vec::new(),
     };
     let wait_regex = Regex::new(r"^Wait\s+/(.*)/(?:\s+(\S+))?$").expect("valid regex");
@@ -485,6 +598,11 @@ pub fn parse(source: &str) -> Result<Tape, TapeError> {
                 ))
             })
         };
+        let switch = |text: &str| match text {
+            "on" | "true" => Ok(true),
+            "off" | "false" => Ok(false),
+            _ => Err(error(format!("{text:?} must be on or off"))),
+        };
         let size = |text: &str| {
             parse_size(text).ok_or_else(|| {
                 error(format!(
@@ -503,6 +621,18 @@ pub fn parse(source: &str) -> Result<Tape, TapeError> {
                     }
                     "Title" => {
                         tape.title = Some(value.to_string());
+                        continue;
+                    }
+                    "Caption" => {
+                        tape.caption = Some(value.to_string()).filter(|c| !c.is_empty());
+                        continue;
+                    }
+                    "WindowFrame" => {
+                        tape.window_frame = Some(switch(value)?);
+                        continue;
+                    }
+                    "KeyOverlay" => {
+                        tape.key_overlay = Some(switch(value)?);
                         continue;
                     }
                     "Shell" => {
@@ -557,6 +687,15 @@ pub fn parse(source: &str) -> Result<Tape, TapeError> {
                 }
             }
             "Exec" => Step::Exec(arg(0)?.to_string()),
+            "Output" => {
+                if args.is_empty() {
+                    return Err(error("Output needs a format or a file".into()));
+                }
+                for word in args {
+                    tape.outputs.push(parse_output(word).map_err(error)?);
+                }
+                continue;
+            }
             name => match Key::parse(name) {
                 Some(key) => {
                     let count = match args.first() {
@@ -705,6 +844,47 @@ mod tests {
         assert_eq!(Key::Ctrl('C').bytes(), "\x03");
         assert_eq!(Key::Down.bytes(), "\x1b[B");
         assert_eq!(Key::Ctrl('C').label(), "Ctrl+C");
+    }
+
+    #[test]
+    fn presentation_and_outputs() {
+        let tape = parse(
+            "Set WindowFrame off\nSet Caption \"Save, and it redraws\"\nSet KeyOverlay off\n\
+             Output gif png\nOutput media/demo.html\n",
+        )
+        .unwrap();
+        assert_eq!(tape.window_frame, Some(false));
+        assert_eq!(tape.key_overlay, Some(false));
+        assert_eq!(tape.caption.as_deref(), Some("Save, and it redraws"));
+        assert_eq!(
+            tape.outputs,
+            [
+                Output {
+                    format: Format::Gif,
+                    path: None
+                },
+                Output {
+                    format: Format::Png,
+                    path: None
+                },
+                Output {
+                    format: Format::Html,
+                    path: Some("media/demo.html".into())
+                },
+            ]
+        );
+        let defaults = parse("Type x\n").unwrap();
+        assert_eq!((defaults.window_frame, defaults.key_overlay), (None, None));
+        for (bad, message) in [
+            ("Set WindowFrame maybe", "on or off"),
+            ("Output webm", "neither a format"),
+            ("Output shot.png", "named by Screenshot"),
+            ("Output ../x.gif", "stay in the output directory"),
+            ("Output", "needs a format"),
+        ] {
+            let error = parse(bad).unwrap_err();
+            assert!(error.message.contains(message), "{bad}: {error}");
+        }
     }
 
     #[test]

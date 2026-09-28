@@ -1169,6 +1169,7 @@ impl Table {
         kind: &RowKind,
         (first_row, last_row): (bool, bool),
         edges: Option<(Segment, Segment, Segment)>,
+        row_index: usize,
     ) -> Vec<Vec<Segment>> {
         let is_header = matches!(kind, RowKind::Header);
         // Horizontal padding is per-column (see `cell_padding`); vertical
@@ -1192,7 +1193,24 @@ impl Table {
         // Render each cell into padded, simplified visual lines.
         let mut cell_lines: Vec<Vec<Vec<Segment>>> = Vec::with_capacity(ncols);
         let mut height = 1;
+        // Not upstream: each cell's region, only when a sink is installed.
+        let mut cell_regions = Vec::new();
         for (index, width) in content_widths.iter().enumerate() {
+            let region = crate::protocol::enter_region(console, || {
+                use crate::protocol::{RegionInfo, RegionRole};
+                RegionInfo::new(match kind {
+                    RowKind::Header => RegionRole::TableHeader { column: index },
+                    RowKind::Footer => RegionRole::TableFooter { column: index },
+                    RowKind::Body(_) => RegionRole::TableCell {
+                        row: row_index,
+                        column: index,
+                    },
+                })
+            });
+            // Nothing is allocated without a sink.
+            if let Some(guard) = &region {
+                cell_regions.push((index, guard.id()));
+            }
             let style = self.cell_style(console, index, kind);
             let column = self.columns.get(index);
             let mut text = match cells.get(index) {
@@ -1335,6 +1353,11 @@ impl Table {
             while lines.len() < height {
                 lines.push(vec![Segment::new(blank.clone(), None)]);
             }
+            if let Some((_, id)) = cell_regions.iter().find(|(cell, _)| *cell == index) {
+                for line in lines.iter_mut() {
+                    crate::protocol::tag_region(line, *id);
+                }
+            }
         }
 
         let last = ncols.saturating_sub(1);
@@ -1376,8 +1399,26 @@ impl LineRenderable for Table {
         &self,
         console: &Console,
         options: &ConsoleOptions,
-        mut emit: impl FnMut(Vec<Segment>) -> Result<(), E>,
+        emit: impl FnMut(Vec<Segment>) -> Result<(), E>,
     ) -> Result<(), E> {
+        // Not upstream: a semantic region, only when a sink is installed.
+        let region = crate::protocol::enter_region(console, || {
+            let info = crate::protocol::RegionInfo::new(crate::protocol::RegionRole::Table);
+            match &self.title {
+                Some(title) => info.label(annotation_plain(console, title)),
+                None => info,
+            }
+        });
+        let mut emit = {
+            let mut emit = emit;
+            let region = region.as_ref().map(|guard| guard.id());
+            move |mut line: Vec<Segment>| {
+                if let Some(id) = region {
+                    crate::protocol::tag_region(&mut line, id);
+                }
+                emit(line)
+            }
+        };
         if self.columns.is_empty() {
             return emit(vec![Segment::new("", None)]);
         }
@@ -1505,6 +1546,7 @@ impl LineRenderable for Table {
                 kind,
                 (first, last),
                 edges,
+                index - usize::from(self.show_header && !matches!(kind, RowKind::Header)),
             ) {
                 emit(line)?;
             }
@@ -1622,6 +1664,15 @@ impl Renderable for Table {
 /// `console.render_str(text, style=style, highlight=False)` (markup and emoji
 /// on, no highlighting); a `Text` renders as it is. Either renders at the
 /// table's width with `justify` unless the text has its own.
+/// A title or caption as plain text, for a region's label. Not upstream.
+fn annotation_plain(console: &Console, annotation: &Cell) -> String {
+    match annotation {
+        Cell::Markup(markup) => console.render_str(markup, Some(false)).plain().to_string(),
+        Cell::Text(text) => text.plain().to_string(),
+        Cell::Renderable(_) => String::new(),
+    }
+}
+
 fn render_annotation(
     console: &Console,
     options: &ConsoleOptions,

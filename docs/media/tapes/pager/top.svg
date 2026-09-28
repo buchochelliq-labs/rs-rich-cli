@@ -1,154 +1,155 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 998.0 572.2" font-family="Fira Code, DejaVu Sans Mono, Menlo, monospace" font-size="16">
-<rect width="100%" height="100%" rx="9" fill="#292929" stroke="#464646"/>
-<path d="M0 9a9 9 0 0 1 9-9h980.0a9 9 0 0 1 9 9v26h-998.0z" fill="#1e1e1e"/>
-<circle cx="19" cy="17.5" r="6" fill="#ff5f56"/>
-<circle cx="41" cy="17.5" r="6" fill="#ffbd2e"/>
-<circle cx="63" cy="17.5" r="6" fill="#27c93f"/>
-<text x="499.0" y="22.5" fill="#969696" font-family="DejaVu Sans, sans-serif" font-size="13" text-anchor="middle">rich view --pager · scroll and search</text>
-<text x="19.0" y="69.6" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  1 │ </text>
-<rect x="76.6" y="54.0" width="201.6" height="20.8" fill="#2b303b"/>
-<text x="76.6" y="69.6" fill="#65737e" textLength="201.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">//! Horizontal rules.</text>
-<rect x="278.2" y="54.0" width="700.8" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="90.4" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  2 │ </text>
-<rect x="76.6" y="74.8" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="76.6" y="90.4" fill="#65737e" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">//!</text>
-<rect x="105.4" y="74.8" width="873.6" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="111.2" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  3 │ </text>
-<rect x="76.6" y="95.6" width="748.8" height="20.8" fill="#2b303b"/>
-<text x="76.6" y="111.2" fill="#65737e" textLength="748.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">//! Port of upstream `rich/rule.py`. A [`Rule`] draws a horizontal line across</text>
-<rect x="825.4" y="95.6" width="153.6" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="132.0" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  4 │ </text>
-<rect x="76.6" y="116.4" width="556.8" height="20.8" fill="#2b303b"/>
-<text x="76.6" y="132.0" fill="#65737e" textLength="556.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">//! the available width, optionally with a centered title.</text>
-<rect x="633.4" y="116.4" width="345.6" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="152.8" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  5 │ </text>
-<rect x="76.6" y="137.2" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="76.6" y="152.8" fill="#65737e" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">//!</text>
-<rect x="105.4" y="137.2" width="873.6" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="173.6" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  6 │ </text>
-<rect x="76.6" y="158.0" width="729.6" height="20.8" fill="#2b303b"/>
-<text x="76.6" y="173.6" fill="#65737e" textLength="729.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">//! Titles are console markup or a literal [`Text`], aligned left, center or</text>
-<rect x="806.2" y="158.0" width="172.8" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="194.4" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  7 │ </text>
-<rect x="76.6" y="178.8" width="729.6" height="20.8" fill="#2b303b"/>
-<text x="76.6" y="194.4" fill="#65737e" textLength="729.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">//! right; `characters`, `style` (default the theme's `rule.line`) and `end`</text>
-<rect x="806.2" y="178.8" width="172.8" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="215.2" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  8 │ </text>
-<rect x="76.6" y="199.6" width="192.0" height="20.8" fill="#2b303b"/>
-<text x="76.6" y="215.2" fill="#65737e" textLength="192.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">//! follow upstream.</text>
-<rect x="268.6" y="199.6" width="710.4" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="236.0" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  9 │ </text>
-<rect x="76.6" y="220.4" width="902.4" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="256.8" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 10 │ </text>
-<rect x="76.6" y="241.2" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="76.6" y="256.8" fill="#b48ead" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">use</text>
-<rect x="105.4" y="241.2" width="9.6" height="20.8" fill="#2b303b"/>
-<rect x="115.0" y="241.2" width="48.0" height="20.8" fill="#2b303b"/>
-<text x="115.0" y="256.8" fill="#b48ead" textLength="48.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">crate</text>
-<rect x="163.0" y="241.2" width="240.0" height="20.8" fill="#2b303b"/>
-<text x="163.0" y="256.8" fill="#c0c5ce" textLength="240.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">::align::HorizontalAlign;</text>
-<rect x="403.0" y="241.2" width="576.0" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="277.6" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 11 │ </text>
-<rect x="76.6" y="262.0" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="76.6" y="277.6" fill="#b48ead" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">use</text>
-<rect x="105.4" y="262.0" width="9.6" height="20.8" fill="#2b303b"/>
-<rect x="115.0" y="262.0" width="48.0" height="20.8" fill="#2b303b"/>
-<text x="115.0" y="277.6" fill="#b48ead" textLength="48.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">crate</text>
-<rect x="163.0" y="262.0" width="336.0" height="20.8" fill="#2b303b"/>
-<text x="163.0" y="277.6" fill="#c0c5ce" textLength="336.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">::cells::{cell_len, set_cell_size};</text>
-<rect x="499.0" y="262.0" width="480.0" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="298.4" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 12 │ </text>
-<rect x="76.6" y="282.8" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="76.6" y="298.4" fill="#b48ead" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">use</text>
-<rect x="105.4" y="282.8" width="9.6" height="20.8" fill="#2b303b"/>
-<rect x="115.0" y="282.8" width="48.0" height="20.8" fill="#2b303b"/>
-<text x="115.0" y="298.4" fill="#b48ead" textLength="48.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">crate</text>
-<rect x="163.0" y="282.8" width="451.2" height="20.8" fill="#2b303b"/>
-<text x="163.0" y="298.4" fill="#c0c5ce" textLength="451.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">::console::{Console, ConsoleOptions, Overflow};</text>
-<rect x="614.2" y="282.8" width="364.8" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="319.2" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 13 │ </text>
-<rect x="76.6" y="303.6" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="76.6" y="319.2" fill="#b48ead" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">use</text>
-<rect x="105.4" y="303.6" width="9.6" height="20.8" fill="#2b303b"/>
-<rect x="115.0" y="303.6" width="48.0" height="20.8" fill="#2b303b"/>
-<text x="115.0" y="319.2" fill="#b48ead" textLength="48.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">crate</text>
-<rect x="163.0" y="303.6" width="220.8" height="20.8" fill="#2b303b"/>
-<text x="163.0" y="319.2" fill="#c0c5ce" textLength="220.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">::measure::Measurement;</text>
-<rect x="383.8" y="303.6" width="595.2" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="340.0" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 14 │ </text>
-<rect x="76.6" y="324.4" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="76.6" y="340.0" fill="#b48ead" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">use</text>
-<rect x="105.4" y="324.4" width="9.6" height="20.8" fill="#2b303b"/>
-<rect x="115.0" y="324.4" width="48.0" height="20.8" fill="#2b303b"/>
-<text x="115.0" y="340.0" fill="#b48ead" textLength="48.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">crate</text>
-<rect x="163.0" y="324.4" width="220.8" height="20.8" fill="#2b303b"/>
-<text x="163.0" y="340.0" fill="#c0c5ce" textLength="220.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">::protocol::Renderable;</text>
-<rect x="383.8" y="324.4" width="595.2" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="360.8" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 15 │ </text>
-<rect x="76.6" y="345.2" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="76.6" y="360.8" fill="#b48ead" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">use</text>
-<rect x="105.4" y="345.2" width="9.6" height="20.8" fill="#2b303b"/>
-<rect x="115.0" y="345.2" width="48.0" height="20.8" fill="#2b303b"/>
-<text x="115.0" y="360.8" fill="#b48ead" textLength="48.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">crate</text>
-<rect x="163.0" y="345.2" width="182.4" height="20.8" fill="#2b303b"/>
-<text x="163.0" y="360.8" fill="#c0c5ce" textLength="182.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">::segment::Segment;</text>
-<rect x="345.4" y="345.2" width="633.6" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="381.6" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 16 │ </text>
-<rect x="76.6" y="366.0" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="76.6" y="381.6" fill="#b48ead" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">use</text>
-<rect x="105.4" y="366.0" width="9.6" height="20.8" fill="#2b303b"/>
-<rect x="115.0" y="366.0" width="48.0" height="20.8" fill="#2b303b"/>
-<text x="115.0" y="381.6" fill="#b48ead" textLength="48.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">crate</text>
-<rect x="163.0" y="366.0" width="182.4" height="20.8" fill="#2b303b"/>
-<text x="163.0" y="381.6" fill="#c0c5ce" textLength="182.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">::style::StyleType;</text>
-<rect x="345.4" y="366.0" width="633.6" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="402.4" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 17 │ </text>
-<rect x="76.6" y="386.8" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="76.6" y="402.4" fill="#b48ead" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">use</text>
-<rect x="105.4" y="386.8" width="9.6" height="20.8" fill="#2b303b"/>
-<rect x="115.0" y="386.8" width="48.0" height="20.8" fill="#2b303b"/>
-<text x="115.0" y="402.4" fill="#b48ead" textLength="48.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">crate</text>
-<rect x="163.0" y="386.8" width="144.0" height="20.8" fill="#2b303b"/>
-<text x="163.0" y="402.4" fill="#c0c5ce" textLength="144.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">::text::{Text, </text>
-<rect x="307.0" y="386.8" width="153.6" height="20.8" fill="#2b303b"/>
-<text x="307.0" y="402.4" fill="#d08770" textLength="153.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">DEFAULT_TAB_SIZE</text>
-<rect x="460.6" y="386.8" width="19.2" height="20.8" fill="#2b303b"/>
-<text x="460.6" y="402.4" fill="#c0c5ce" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">};</text>
-<rect x="479.8" y="386.8" width="499.2" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="423.2" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 18 │ </text>
-<rect x="76.6" y="407.6" width="902.4" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="444.0" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 19 │ </text>
-<rect x="76.6" y="428.4" width="643.2" height="20.8" fill="#2b303b"/>
-<text x="76.6" y="444.0" fill="#65737e" textLength="643.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">/// A horizontal rule, optionally titled. Mirrors `rich.rule.Rule`.</text>
-<rect x="719.8" y="428.4" width="259.2" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="464.8" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 20 │ </text>
-<rect x="76.6" y="449.2" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="76.6" y="464.8" fill="#b48ead" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">pub</text>
-<rect x="105.4" y="449.2" width="9.6" height="20.8" fill="#2b303b"/>
-<rect x="115.0" y="449.2" width="57.6" height="20.8" fill="#2b303b"/>
-<text x="115.0" y="464.8" fill="#b48ead" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">struct</text>
-<rect x="172.6" y="449.2" width="67.2" height="20.8" fill="#2b303b"/>
-<text x="172.6" y="464.8" fill="#c0c5ce" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> Rule {</text>
-<rect x="239.8" y="449.2" width="739.2" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="485.6" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 21 │ </text>
-<rect x="76.6" y="470.0" width="38.4" height="20.8" fill="#2b303b"/>
-<rect x="115.0" y="470.0" width="48.0" height="20.8" fill="#2b303b"/>
-<text x="115.0" y="485.6" fill="#bf616a" textLength="48.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">title</text>
-<rect x="163.0" y="470.0" width="163.2" height="20.8" fill="#2b303b"/>
-<text x="163.0" y="485.6" fill="#c0c5ce" textLength="163.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">: Option&lt;String&gt;,</text>
-<rect x="326.2" y="470.0" width="652.8" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="506.4" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 22 │ </text>
-<rect x="76.6" y="490.8" width="38.4" height="20.8" fill="#2b303b"/>
-<rect x="115.0" y="490.8" width="652.8" height="20.8" fill="#2b303b"/>
-<text x="115.0" y="506.4" fill="#65737e" textLength="652.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">/// A literal title (upstream `Rule(Text(…))`), in place of `title`.</text>
-<rect x="767.8" y="490.8" width="211.2" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="527.2" fill="#777877" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 23 │ </text>
-<rect x="76.6" y="511.6" width="38.4" height="20.8" fill="#2b303b"/>
-<rect x="115.0" y="511.6" width="96.0" height="20.8" fill="#2b303b"/>
-<text x="115.0" y="527.2" fill="#bf616a" textLength="96.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">title_text</text>
-<rect x="211.0" y="511.6" width="144.0" height="20.8" fill="#2b303b"/>
-<text x="211.0" y="527.2" fill="#c0c5ce" textLength="144.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">: Option&lt;Text&gt;,</text>
-<rect x="355.0" y="511.6" width="624.0" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="548.0" fill="#c5c8c6" textLength="960.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">:                                                                                                   </text>
-<rect x="28.6" y="532.4" width="9.6" height="20.8" fill="#c5c8c6" opacity="0.7"/>
+<svg class="rich-terminal" viewBox="0 0 1238 635.5999999999999" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .rich-record-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .rich-record-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .rich-record-r1 { fill: #777877 }
+.rich-record-r2 { fill: #65737e }
+.rich-record-r3 { fill: #c5c8c6 }
+.rich-record-r4 { fill: #b48ead }
+.rich-record-r5 { fill: #c0c5ce }
+.rich-record-r6 { fill: #d08770 }
+.rich-record-r7 { fill: #bf616a }
+    </style>
+
+    <defs>
+    <clipPath id="rich-record-clip-terminal">
+      <rect x="0" y="0" width="1219.0" height="584.5999999999999" />
+    </clipPath>
+    <clipPath id="rich-record-line-0">
+    <rect x="0" y="1.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-1">
+    <rect x="0" y="25.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-2">
+    <rect x="0" y="50.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-3">
+    <rect x="0" y="74.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-4">
+    <rect x="0" y="99.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-5">
+    <rect x="0" y="123.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-6">
+    <rect x="0" y="147.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-7">
+    <rect x="0" y="172.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-8">
+    <rect x="0" y="196.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-9">
+    <rect x="0" y="221.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-10">
+    <rect x="0" y="245.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-11">
+    <rect x="0" y="269.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-12">
+    <rect x="0" y="294.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-13">
+    <rect x="0" y="318.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-14">
+    <rect x="0" y="343.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-15">
+    <rect x="0" y="367.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-16">
+    <rect x="0" y="391.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-17">
+    <rect x="0" y="416.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-18">
+    <rect x="0" y="440.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-19">
+    <rect x="0" y="465.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-20">
+    <rect x="0" y="489.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-21">
+    <rect x="0" y="513.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-22">
+    <rect x="0" y="538.3" width="1220" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="1236" height="633.6" rx="8"/><text class="rich-record-title" fill="#c5c8c6" text-anchor="middle" x="618" y="27">rich&#160;view&#160;--pager&#160;·&#160;scroll&#160;and&#160;search</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#rich-record-clip-terminal)">
+    <rect fill="#2b303b" x="73.2" y="1.5" width="256.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="329.4" y="1.5" width="890.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="25.9" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="109.8" y="25.9" width="1110.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="50.3" width="951.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="1024.8" y="50.3" width="195.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="74.7" width="707.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="780.8" y="74.7" width="439.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="99.1" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="109.8" y="99.1" width="1110.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="123.5" width="927.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="1000.4" y="123.5" width="219.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="147.9" width="927.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="1000.4" y="147.9" width="219.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="172.3" width="244" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="317.2" y="172.3" width="902.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="196.7" width="1146.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="221.1" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="109.8" y="221.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="122" y="221.1" width="61" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="183" y="221.1" width="305" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="488" y="221.1" width="732" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="245.5" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="109.8" y="245.5" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="122" y="245.5" width="61" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="183" y="245.5" width="427" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="610" y="245.5" width="610" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="269.9" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="109.8" y="269.9" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="122" y="269.9" width="61" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="183" y="269.9" width="573.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="756.4" y="269.9" width="463.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="294.3" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="109.8" y="294.3" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="122" y="294.3" width="61" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="183" y="294.3" width="280.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="463.6" y="294.3" width="756.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="318.7" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="109.8" y="318.7" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="122" y="318.7" width="61" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="183" y="318.7" width="280.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="463.6" y="318.7" width="756.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="343.1" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="109.8" y="343.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="122" y="343.1" width="61" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="183" y="343.1" width="231.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="414.8" y="343.1" width="805.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="367.5" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="109.8" y="367.5" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="122" y="367.5" width="61" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="183" y="367.5" width="231.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="414.8" y="367.5" width="805.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="391.9" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="109.8" y="391.9" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="122" y="391.9" width="61" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="183" y="391.9" width="183" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="366" y="391.9" width="195.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="561.2" y="391.9" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="585.6" y="391.9" width="634.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="416.3" width="1146.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="440.7" width="817.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="890.6" y="440.7" width="329.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="465.1" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="109.8" y="465.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="122" y="465.1" width="73.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="195.2" y="465.1" width="85.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="280.6" y="465.1" width="939.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="489.5" width="48.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="122" y="489.5" width="61" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="183" y="489.5" width="207.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="390.4" y="489.5" width="829.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="513.9" width="48.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="122" y="513.9" width="829.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="951.6" y="513.9" width="268.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="538.3" width="48.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="122" y="538.3" width="122" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="244" y="538.3" width="183" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="427" y="538.3" width="793" height="24.65" shape-rendering="crispEdges"/>
+    <g class="rich-record-matrix">
+    <text class="rich-record-r1" x="0" y="20" textLength="73.2" clip-path="url(#rich-record-line-0)">&#160;&#160;1&#160;│&#160;</text><text class="rich-record-r2" x="73.2" y="20" textLength="256.2" clip-path="url(#rich-record-line-0)">//!&#160;Horizontal&#160;rules.</text><text class="rich-record-r3" x="1220" y="20" textLength="12.2" clip-path="url(#rich-record-line-0)">
+</text><text class="rich-record-r1" x="0" y="44.4" textLength="73.2" clip-path="url(#rich-record-line-1)">&#160;&#160;2&#160;│&#160;</text><text class="rich-record-r2" x="73.2" y="44.4" textLength="36.6" clip-path="url(#rich-record-line-1)">//!</text><text class="rich-record-r3" x="1220" y="44.4" textLength="12.2" clip-path="url(#rich-record-line-1)">
+</text><text class="rich-record-r1" x="0" y="68.8" textLength="73.2" clip-path="url(#rich-record-line-2)">&#160;&#160;3&#160;│&#160;</text><text class="rich-record-r2" x="73.2" y="68.8" textLength="951.6" clip-path="url(#rich-record-line-2)">//!&#160;Port&#160;of&#160;upstream&#160;`rich/rule.py`.&#160;A&#160;[`Rule`]&#160;draws&#160;a&#160;horizontal&#160;line&#160;across</text><text class="rich-record-r3" x="1220" y="68.8" textLength="12.2" clip-path="url(#rich-record-line-2)">
+</text><text class="rich-record-r1" x="0" y="93.2" textLength="73.2" clip-path="url(#rich-record-line-3)">&#160;&#160;4&#160;│&#160;</text><text class="rich-record-r2" x="73.2" y="93.2" textLength="707.6" clip-path="url(#rich-record-line-3)">//!&#160;the&#160;available&#160;width,&#160;optionally&#160;with&#160;a&#160;centered&#160;title.</text><text class="rich-record-r3" x="1220" y="93.2" textLength="12.2" clip-path="url(#rich-record-line-3)">
+</text><text class="rich-record-r1" x="0" y="117.6" textLength="73.2" clip-path="url(#rich-record-line-4)">&#160;&#160;5&#160;│&#160;</text><text class="rich-record-r2" x="73.2" y="117.6" textLength="36.6" clip-path="url(#rich-record-line-4)">//!</text><text class="rich-record-r3" x="1220" y="117.6" textLength="12.2" clip-path="url(#rich-record-line-4)">
+</text><text class="rich-record-r1" x="0" y="142" textLength="73.2" clip-path="url(#rich-record-line-5)">&#160;&#160;6&#160;│&#160;</text><text class="rich-record-r2" x="73.2" y="142" textLength="927.2" clip-path="url(#rich-record-line-5)">//!&#160;Titles&#160;are&#160;console&#160;markup&#160;or&#160;a&#160;literal&#160;[`Text`],&#160;aligned&#160;left,&#160;center&#160;or</text><text class="rich-record-r3" x="1220" y="142" textLength="12.2" clip-path="url(#rich-record-line-5)">
+</text><text class="rich-record-r1" x="0" y="166.4" textLength="73.2" clip-path="url(#rich-record-line-6)">&#160;&#160;7&#160;│&#160;</text><text class="rich-record-r2" x="73.2" y="166.4" textLength="927.2" clip-path="url(#rich-record-line-6)">//!&#160;right;&#160;`characters`,&#160;`style`&#160;(default&#160;the&#160;theme&#x27;s&#160;`rule.line`)&#160;and&#160;`end`</text><text class="rich-record-r3" x="1220" y="166.4" textLength="12.2" clip-path="url(#rich-record-line-6)">
+</text><text class="rich-record-r1" x="0" y="190.8" textLength="73.2" clip-path="url(#rich-record-line-7)">&#160;&#160;8&#160;│&#160;</text><text class="rich-record-r2" x="73.2" y="190.8" textLength="244" clip-path="url(#rich-record-line-7)">//!&#160;follow&#160;upstream.</text><text class="rich-record-r3" x="1220" y="190.8" textLength="12.2" clip-path="url(#rich-record-line-7)">
+</text><text class="rich-record-r1" x="0" y="215.2" textLength="73.2" clip-path="url(#rich-record-line-8)">&#160;&#160;9&#160;│&#160;</text><text class="rich-record-r3" x="1220" y="215.2" textLength="12.2" clip-path="url(#rich-record-line-8)">
+</text><text class="rich-record-r1" x="0" y="239.6" textLength="73.2" clip-path="url(#rich-record-line-9)">&#160;10&#160;│&#160;</text><text class="rich-record-r4" x="73.2" y="239.6" textLength="36.6" clip-path="url(#rich-record-line-9)">use</text><text class="rich-record-r4" x="122" y="239.6" textLength="61" clip-path="url(#rich-record-line-9)">crate</text><text class="rich-record-r5" x="183" y="239.6" textLength="305" clip-path="url(#rich-record-line-9)">::align::HorizontalAlign;</text><text class="rich-record-r3" x="1220" y="239.6" textLength="12.2" clip-path="url(#rich-record-line-9)">
+</text><text class="rich-record-r1" x="0" y="264" textLength="73.2" clip-path="url(#rich-record-line-10)">&#160;11&#160;│&#160;</text><text class="rich-record-r4" x="73.2" y="264" textLength="36.6" clip-path="url(#rich-record-line-10)">use</text><text class="rich-record-r4" x="122" y="264" textLength="61" clip-path="url(#rich-record-line-10)">crate</text><text class="rich-record-r5" x="183" y="264" textLength="427" clip-path="url(#rich-record-line-10)">::cells::{cell_len,&#160;set_cell_size};</text><text class="rich-record-r3" x="1220" y="264" textLength="12.2" clip-path="url(#rich-record-line-10)">
+</text><text class="rich-record-r1" x="0" y="288.4" textLength="73.2" clip-path="url(#rich-record-line-11)">&#160;12&#160;│&#160;</text><text class="rich-record-r4" x="73.2" y="288.4" textLength="36.6" clip-path="url(#rich-record-line-11)">use</text><text class="rich-record-r4" x="122" y="288.4" textLength="61" clip-path="url(#rich-record-line-11)">crate</text><text class="rich-record-r5" x="183" y="288.4" textLength="573.4" clip-path="url(#rich-record-line-11)">::console::{Console,&#160;ConsoleOptions,&#160;Overflow};</text><text class="rich-record-r3" x="1220" y="288.4" textLength="12.2" clip-path="url(#rich-record-line-11)">
+</text><text class="rich-record-r1" x="0" y="312.8" textLength="73.2" clip-path="url(#rich-record-line-12)">&#160;13&#160;│&#160;</text><text class="rich-record-r4" x="73.2" y="312.8" textLength="36.6" clip-path="url(#rich-record-line-12)">use</text><text class="rich-record-r4" x="122" y="312.8" textLength="61" clip-path="url(#rich-record-line-12)">crate</text><text class="rich-record-r5" x="183" y="312.8" textLength="280.6" clip-path="url(#rich-record-line-12)">::measure::Measurement;</text><text class="rich-record-r3" x="1220" y="312.8" textLength="12.2" clip-path="url(#rich-record-line-12)">
+</text><text class="rich-record-r1" x="0" y="337.2" textLength="73.2" clip-path="url(#rich-record-line-13)">&#160;14&#160;│&#160;</text><text class="rich-record-r4" x="73.2" y="337.2" textLength="36.6" clip-path="url(#rich-record-line-13)">use</text><text class="rich-record-r4" x="122" y="337.2" textLength="61" clip-path="url(#rich-record-line-13)">crate</text><text class="rich-record-r5" x="183" y="337.2" textLength="280.6" clip-path="url(#rich-record-line-13)">::protocol::Renderable;</text><text class="rich-record-r3" x="1220" y="337.2" textLength="12.2" clip-path="url(#rich-record-line-13)">
+</text><text class="rich-record-r1" x="0" y="361.6" textLength="73.2" clip-path="url(#rich-record-line-14)">&#160;15&#160;│&#160;</text><text class="rich-record-r4" x="73.2" y="361.6" textLength="36.6" clip-path="url(#rich-record-line-14)">use</text><text class="rich-record-r4" x="122" y="361.6" textLength="61" clip-path="url(#rich-record-line-14)">crate</text><text class="rich-record-r5" x="183" y="361.6" textLength="231.8" clip-path="url(#rich-record-line-14)">::segment::Segment;</text><text class="rich-record-r3" x="1220" y="361.6" textLength="12.2" clip-path="url(#rich-record-line-14)">
+</text><text class="rich-record-r1" x="0" y="386" textLength="73.2" clip-path="url(#rich-record-line-15)">&#160;16&#160;│&#160;</text><text class="rich-record-r4" x="73.2" y="386" textLength="36.6" clip-path="url(#rich-record-line-15)">use</text><text class="rich-record-r4" x="122" y="386" textLength="61" clip-path="url(#rich-record-line-15)">crate</text><text class="rich-record-r5" x="183" y="386" textLength="231.8" clip-path="url(#rich-record-line-15)">::style::StyleType;</text><text class="rich-record-r3" x="1220" y="386" textLength="12.2" clip-path="url(#rich-record-line-15)">
+</text><text class="rich-record-r1" x="0" y="410.4" textLength="73.2" clip-path="url(#rich-record-line-16)">&#160;17&#160;│&#160;</text><text class="rich-record-r4" x="73.2" y="410.4" textLength="36.6" clip-path="url(#rich-record-line-16)">use</text><text class="rich-record-r4" x="122" y="410.4" textLength="61" clip-path="url(#rich-record-line-16)">crate</text><text class="rich-record-r5" x="183" y="410.4" textLength="183" clip-path="url(#rich-record-line-16)">::text::{Text,&#160;</text><text class="rich-record-r6" x="366" y="410.4" textLength="195.2" clip-path="url(#rich-record-line-16)">DEFAULT_TAB_SIZE</text><text class="rich-record-r5" x="561.2" y="410.4" textLength="24.4" clip-path="url(#rich-record-line-16)">};</text><text class="rich-record-r3" x="1220" y="410.4" textLength="12.2" clip-path="url(#rich-record-line-16)">
+</text><text class="rich-record-r1" x="0" y="434.8" textLength="73.2" clip-path="url(#rich-record-line-17)">&#160;18&#160;│&#160;</text><text class="rich-record-r3" x="1220" y="434.8" textLength="12.2" clip-path="url(#rich-record-line-17)">
+</text><text class="rich-record-r1" x="0" y="459.2" textLength="73.2" clip-path="url(#rich-record-line-18)">&#160;19&#160;│&#160;</text><text class="rich-record-r2" x="73.2" y="459.2" textLength="817.4" clip-path="url(#rich-record-line-18)">///&#160;A&#160;horizontal&#160;rule,&#160;optionally&#160;titled.&#160;Mirrors&#160;`rich.rule.Rule`.</text><text class="rich-record-r3" x="1220" y="459.2" textLength="12.2" clip-path="url(#rich-record-line-18)">
+</text><text class="rich-record-r1" x="0" y="483.6" textLength="73.2" clip-path="url(#rich-record-line-19)">&#160;20&#160;│&#160;</text><text class="rich-record-r4" x="73.2" y="483.6" textLength="36.6" clip-path="url(#rich-record-line-19)">pub</text><text class="rich-record-r4" x="122" y="483.6" textLength="73.2" clip-path="url(#rich-record-line-19)">struct</text><text class="rich-record-r5" x="195.2" y="483.6" textLength="85.4" clip-path="url(#rich-record-line-19)">&#160;Rule&#160;{</text><text class="rich-record-r3" x="1220" y="483.6" textLength="12.2" clip-path="url(#rich-record-line-19)">
+</text><text class="rich-record-r1" x="0" y="508" textLength="73.2" clip-path="url(#rich-record-line-20)">&#160;21&#160;│&#160;</text><text class="rich-record-r7" x="122" y="508" textLength="61" clip-path="url(#rich-record-line-20)">title</text><text class="rich-record-r5" x="183" y="508" textLength="207.4" clip-path="url(#rich-record-line-20)">:&#160;Option&lt;String&gt;,</text><text class="rich-record-r3" x="1220" y="508" textLength="12.2" clip-path="url(#rich-record-line-20)">
+</text><text class="rich-record-r1" x="0" y="532.4" textLength="73.2" clip-path="url(#rich-record-line-21)">&#160;22&#160;│&#160;</text><text class="rich-record-r2" x="122" y="532.4" textLength="829.6" clip-path="url(#rich-record-line-21)">///&#160;A&#160;literal&#160;title&#160;(upstream&#160;`Rule(Text(…))`),&#160;in&#160;place&#160;of&#160;`title`.</text><text class="rich-record-r3" x="1220" y="532.4" textLength="12.2" clip-path="url(#rich-record-line-21)">
+</text><text class="rich-record-r1" x="0" y="556.8" textLength="73.2" clip-path="url(#rich-record-line-22)">&#160;23&#160;│&#160;</text><text class="rich-record-r7" x="122" y="556.8" textLength="122" clip-path="url(#rich-record-line-22)">title_text</text><text class="rich-record-r5" x="244" y="556.8" textLength="183" clip-path="url(#rich-record-line-22)">:&#160;Option&lt;Text&gt;,</text><text class="rich-record-r3" x="1220" y="556.8" textLength="12.2" clip-path="url(#rich-record-line-22)">
+</text><text class="rich-record-r3" x="0" y="581.2" textLength="1220" clip-path="url(#rich-record-line-23)">:&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><rect x="12.2" y="562.7" width="12.2" height="24.65" fill="#c5c8c6" opacity="0.7"/>
+    </g>
+    </g>
 </svg>

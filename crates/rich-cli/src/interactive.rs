@@ -147,9 +147,17 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                 ArgSpec::flag("password")
                     .help("Hide what is typed; without a terminal, read with echo off"),
             )
+            .arg(
+                ArgSpec::flag("required")
+                    .help("Refuse an empty answer: Enter shows an error under the line and waits"),
+            )
             .example(
                 "name=$(rich input --prompt Name --placeholder 'Ada Lovelace')",
                 "A name",
+            )
+            .example(
+                "rich input --prompt Project --required",
+                "An answer that cannot be empty",
             ),
         CommandSpec::new("confirm")
             .about("Ask a yes-or-no question; exits 0 for yes and 1 for no")
@@ -206,6 +214,8 @@ struct Args {
     placeholder: Option<String>,
     default: Option<String>,
     password: bool,
+    /// `rich input --required`.
+    required: bool,
     affirmative: Option<String>,
     negative: Option<String>,
     search: Option<String>,
@@ -234,6 +244,7 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
             "--value",
             "--default",
             "--password",
+            "--required",
         ],
         "confirm" => &["--default", "--affirmative", "--negative"],
         _ => &["--search"],
@@ -289,6 +300,7 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
             "--header" => parsed.header = Some(value()?),
             "--multi" => parsed.multi = true,
             "--password" => parsed.password = true,
+            "--required" => parsed.required = true,
             "--selected" => parsed.selected.push(value()?),
             "--height" => {
                 let rows = value()?;
@@ -614,6 +626,15 @@ fn input(args: &Args) -> Answer {
     }
     if let Some(default) = &args.default {
         input = input.default(default.clone());
+    }
+    if args.required {
+        input = input.validate(|answer| {
+            if answer.trim().is_empty() {
+                Err("an answer is required".into())
+            } else {
+                Ok(())
+            }
+        });
     }
     let outcome = rich_interact::run(input, &run_options(Fallback::Prompt, args.no_color));
     finish(outcome.map(|outcome| match outcome {

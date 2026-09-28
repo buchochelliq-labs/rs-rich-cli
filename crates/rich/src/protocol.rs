@@ -315,3 +315,170 @@ pub trait ConsoleEnvironment {
     fn set_render_environment(&mut self, value: Option<std::sync::Arc<dyn RenderEnvironment>>);
     fn render_environment(&self) -> Option<&dyn RenderEnvironment>;
 }
+
+/// What a semantic region is: the role a renderable reports for the cells it
+/// drew. See [`RegionSink`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RegionRole {
+    /// A [`Panel`](crate::panel::Panel): its border, padding and content.
+    Panel,
+    /// A [`Table`](crate::table::Table), title and caption included.
+    Table,
+    /// A header cell of column `column` (from 0).
+    TableHeader { column: usize },
+    /// A body cell: row `row` of the table's rows, column `column` (from 0).
+    TableCell { row: usize, column: usize },
+    /// A footer cell of column `column` (from 0).
+    TableFooter { column: usize },
+    /// A [`Rule`](crate::rule::Rule).
+    Rule,
+    /// A Markdown heading, `level` 1 to 6.
+    Heading { level: u8 },
+    /// A Markdown code block.
+    Code,
+    /// A hyperlink. Core reports links through [`Style::link`](crate::style::Style::link),
+    /// not through a sink; consumers derive link regions from styles.
+    Link,
+    /// A role an extension names.
+    Other(String),
+}
+
+/// A region a renderable reports: its role, and an optional label (a panel's
+/// title, a heading's text) and link target.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RegionInfo {
+    pub role: RegionRole,
+    pub label: Option<String>,
+    pub link: Option<String>,
+}
+
+impl RegionInfo {
+    pub fn new(role: RegionRole) -> Self {
+        RegionInfo {
+            role,
+            label: None,
+            link: None,
+        }
+    }
+
+    /// With `label`, trimmed, unless that leaves it empty.
+    pub fn label(mut self, label: impl AsRef<str>) -> Self {
+        let label = label.as_ref().trim();
+        self.label = (!label.is_empty()).then(|| label.to_string());
+        self
+    }
+
+    pub fn link(mut self, link: impl Into<String>) -> Self {
+        self.link = Some(link.into());
+        self
+    }
+}
+
+/// A region's identity, chosen by the [`RegionSink`] that recorded it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct RegionId(pub u64);
+
+/// The [`Meta`](crate::style::Meta) key under which a region's id rides on the
+/// styles of the segments it drew. It never renders.
+pub const REGION_META_KEY: &str = "rich.region";
+
+/// Observes semantic regions (#226): which cells a panel, table, table cell,
+/// rule, Markdown heading or code block drew. Not part of upstream.
+///
+/// Install one with [`ConsoleRegions::set_region_sink`]. Without one (the
+/// default) no renderable asks for a region, nothing is tagged, and output is
+/// exactly as before. With one, a reporting renderable calls
+/// [`enter`](Self::enter) before it renders its children and
+/// [`exit`](Self::exit) after, so the sink sees nesting in call order. It
+/// then tags every segment it drew that no child tagged, by setting
+/// [`REGION_META_KEY`] in the segment's style metadata. Metadata never
+/// renders, so the terminal bytes do not change; it does make styles compare
+/// unequal, so a consumer that merges equal styles (HTML export) should read
+/// the tags and strip them first, as `rich_ext::frame` does.
+pub trait RegionSink: Send + Sync {
+    /// A region starts. Return an id unique within this sink.
+    fn enter(&self, region: RegionInfo) -> RegionId;
+    /// The region `id` has finished rendering.
+    fn exit(&self, id: RegionId);
+}
+
+/// Attach/query a console's [`RegionSink`].
+pub trait ConsoleRegions {
+    fn set_region_sink(&mut self, value: Option<std::sync::Arc<dyn RegionSink>>);
+    fn region_sink(&self) -> Option<&dyn RegionSink>;
+}
+
+/// An entered region, exited when dropped, so an early return still exits.
+pub struct RegionGuard<'a> {
+    sink: &'a dyn RegionSink,
+    id: RegionId,
+}
+
+impl RegionGuard<'_> {
+    pub fn id(&self) -> RegionId {
+        self.id
+    }
+
+    /// Tag the segments of `segments` that carry no region yet with this one.
+    pub fn tag(&self, segments: &mut [Segment]) {
+        tag_region(segments, self.id);
+    }
+}
+
+impl Drop for RegionGuard<'_> {
+    fn drop(&mut self) {
+        self.sink.exit(self.id);
+    }
+}
+
+/// Enter a region when `console` has a sink. With none, `None`, and `info` is
+/// never called.
+pub fn enter_region<'a>(
+    console: &'a Console,
+    info: impl FnOnce() -> RegionInfo,
+) -> Option<RegionGuard<'a>> {
+    let sink = console.region_sink()?;
+    let id = sink.enter(info());
+    Some(RegionGuard { sink, id })
+}
+
+/// `render()` as a region. Without a sink, exactly `render()`.
+pub fn report_region(
+    console: &Console,
+    info: impl FnOnce() -> RegionInfo,
+    render: impl FnOnce() -> Vec<Segment>,
+) -> Vec<Segment> {
+    match enter_region(console, info) {
+        None => render(),
+        Some(guard) => {
+            let mut segments = render();
+            guard.tag(&mut segments);
+            segments
+        }
+    }
+}
+
+/// Set [`REGION_META_KEY`] to `id` on every non-control segment that has no
+/// region yet. An unstyled segment gets a style holding only the tag.
+pub fn tag_region(segments: &mut [Segment], id: RegionId) {
+    use crate::style::{Meta, MetaValue};
+    for segment in segments.iter_mut().filter(|segment| !segment.control) {
+        let style = segment.style.take().unwrap_or_default();
+        if region_of(&style).is_some() {
+            segment.style = Some(style);
+            continue;
+        }
+        let mut meta = style.meta_ref().cloned().unwrap_or_else(Meta::new);
+        meta.insert(REGION_META_KEY, MetaValue::Int(id.0 as i64));
+        segment.style = Some(style.with_meta(meta));
+    }
+}
+
+/// The region `style` was tagged with, if any.
+pub fn region_of(style: &crate::style::Style) -> Option<RegionId> {
+    match style.meta_ref()?.get(REGION_META_KEY)? {
+        crate::style::MetaValue::Int(id) => Some(RegionId(*id as u64)),
+        _ => None,
+    }
+}
