@@ -101,6 +101,7 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
             "select",
             "filter",
             "highlight",
+            "transform",
             "find",
             "flatten",
             "table",
@@ -709,6 +710,15 @@ fn inspect_options() -> Vec<ArgSpec> {
              expression",
         ),
         option(
+            "transform",
+            "NAME",
+            INSPECT,
+            "Apply a registered text transform, such as one a --plugin adds, to text, \
+             --print and --syntax; repeatable, applied in the order given, after --filter and \
+             before --highlight. `rich plugins list` shows the names",
+        )
+        .multiple(true),
+        option(
             "find",
             "TEXT",
             INSPECT,
@@ -942,6 +952,17 @@ fn config_options() -> Vec<ArgSpec> {
              --theme-style override it",
         )
         .config_key("theme_file"),
+        option(
+            "plugin",
+            "PATH",
+            CONFIG,
+            "Load a runtime plugin: a WASM module (.wasm, sandboxed) or a native library \
+             (.so, .dylib, .dll, which runs its own code), in a build with the wasm-plugins \
+             or dylib-plugins feature; repeatable. `rich plugins list` shows what is loaded",
+        )
+        .value(ValueHint::File)
+        .multiple(true)
+        .config_key("plugins"),
     ]
 }
 
@@ -1330,6 +1351,28 @@ pub(crate) fn spec() -> CommandSpec {
             ),
     )
     .subcommand(
+        CommandSpec::new("plugins")
+            .about(
+                "List the plugins this build has — built in, linked, and any --plugin PATH \
+                 loads — with their source, version, ABI and capabilities",
+            )
+            .usage(
+                "plugins [list | info NAME] [--plugin PATH]... [--report json] [--config PATH] \
+                 [--profile NAME] [--no-config] [--no-color]",
+            )
+            .subcommand(
+                CommandSpec::new("list")
+                    .about("A table of every plugin (the default)")
+                    .usage("list [--plugin PATH]... [--report json]"),
+            )
+            .subcommand(
+                CommandSpec::new("info")
+                    .about("One plugin: its path, ABI, capabilities and description")
+                    .usage("info NAME [--plugin PATH]... [--report json]")
+                    .arg(ArgSpec::positional("name").help("The plugin's id, as `list` shows it")),
+            ),
+    )
+    .subcommand(
         CommandSpec::new("doctor")
             .about(
                 "Read-only build, terminal, config and pager diagnostics; --report json writes \
@@ -1408,6 +1451,7 @@ pub(crate) fn config_reference() -> ConfigReference {
             }
             "watch_interval" | "watch_debounce" | "image_brightness" | "image_contrast"
             | "image_gamma" => "number",
+            "plugins" => "list of paths",
             _ => continue,
         };
         entry.kind = kind.to_string();

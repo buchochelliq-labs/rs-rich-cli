@@ -175,6 +175,10 @@ class ReadinessTests(unittest.TestCase):
         steps = validate_release.commands("rs-rich-cli-v0.0.6")
         self.assertIn(["cargo", "test", "--all"], steps)
         self.assertIn(["cargo", "build", "-p", "rs-rich-cli", "--locked"], steps)
+        # The plugin loaders are feature-gated, so they get a step of their own.
+        loaders = [step for step in steps if "--test" in step and "dylib_plugins" in step]
+        self.assertEqual(len(loaders), 1)
+        self.assertIn("rs-rich-cli/wasm-plugins", loaders[0][loaders[0].index("--features") + 1])
         self.assertIn(
             [sys.executable, "-m", "unittest", "discover", "-s", "scripts", "-p", "test_release.py", "-v"],
             steps,

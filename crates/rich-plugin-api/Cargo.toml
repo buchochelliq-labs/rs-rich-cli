@@ -27,5 +27,8 @@ name = "rich_plugin_api"
 workspace = true
 
 [dependencies]
-# The only dependency, by design (tests/dependencies.rs checks it).
+# The only dependencies, by design (tests/dependencies.rs checks them): core,
+# and `inventory` for `export_plugin!` (link-time collection; no proc macros,
+# see docs/design/plugin-loading.md).
 rich.workspace = true
+inventory = "0.3.21"

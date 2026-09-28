@@ -39,79 +39,11 @@ pub(crate) fn size(bytes: u64) -> String {
 }
 
 /// Neutralise terminal controls in ANSI-styled text while keeping what the
-/// ANSI decoder turns into styles.
-///
-/// CSI sequences (`ESC [ … final`) and two-character escapes pass through:
-/// the decoder applies SGR colours and drops the rest. OSC strings (titles,
-/// clipboard writes, hyperlinks) are removed. Every other control — a lone
-/// ESC the decoder would leave in the text, C1 controls such as U+009B, BEL
-/// and the other C0 controls — is made visible as `sanitize_terminal_controls`
-/// shows it. Newlines, tabs and carriage returns are kept for the decoder's
-/// line handling.
+/// ANSI decoder turns into styles; see
+/// [`rich_ext::sanitize::sanitize_ansi_for_decoder`], which runtime plugins'
+/// ANSI output goes through too.
 pub(crate) fn neutralize_for_decoder(input: &str) -> String {
-    let chars: Vec<char> = input.chars().collect();
-    let mut out = String::with_capacity(input.len());
-    let mut i = 0;
-    while i < chars.len() {
-        let ch = chars[i];
-        if ch != '\u{1b}' {
-            match ch {
-                '\n' | '\t' | '\r' => out.push(ch),
-                '\0'..='\u{1f}' | '\u{7f}'..='\u{9f}' => {
-                    out.push_str(&sanitize_terminal_controls(ch.encode_utf8(&mut [0; 4])))
-                }
-                _ => out.push(ch),
-            }
-            i += 1;
-            continue;
-        }
-        match chars.get(i + 1).copied() {
-            // OSC: drop through its terminator on this line (ST or BEL), or
-            // just the introducer when it has none.
-            Some(']') => {
-                let mut j = i + 2;
-                let mut end = None;
-                while j < chars.len() && chars[j] != '\n' {
-                    if chars[j] == '\u{7}' {
-                        end = Some(j + 1);
-                        break;
-                    }
-                    if chars[j] == '\u{1b}' && chars.get(j + 1) == Some(&'\\') {
-                        end = Some(j + 2);
-                        break;
-                    }
-                    j += 1;
-                }
-                i = end.unwrap_or(i + 2);
-            }
-            Some('[') => {
-                // ESC [ params(0x30-0x3f)* intermediates(0x20-0x2f)* final(0x40-0x7e)
-                let mut j = i + 2;
-                while j < chars.len() && ('\u{30}'..='\u{3f}').contains(&chars[j]) {
-                    j += 1;
-                }
-                while j < chars.len() && ('\u{20}'..='\u{2f}').contains(&chars[j]) {
-                    j += 1;
-                }
-                if j < chars.len() && ('\u{40}'..='\u{7e}').contains(&chars[j]) {
-                    out.extend(&chars[i..=j]);
-                    i = j + 1;
-                } else {
-                    out.push('␛');
-                    i += 1;
-                }
-            }
-            // Two-character escapes the decoder consumes and drops.
-            Some(c) if c == '(' || ('@'..='Z').contains(&c) || ('\\'..='_').contains(&c) => {
-                i += 2;
-            }
-            _ => {
-                out.push('␛');
-                i += 1;
-            }
-        }
-    }
-    out
+    rich_ext::sanitize::sanitize_ansi_for_decoder(input)
 }
 
 /// `path` for an error message, with any terminal controls in it made

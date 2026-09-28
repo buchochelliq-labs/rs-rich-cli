@@ -28,12 +28,26 @@
 //! # assert_eq!(Solarized.metadata().api_version, rich_plugin_api::PLUGIN_API_VERSION);
 //! ```
 //!
+//! **Three ways to load a plugin.** A host adds a plugin value it was given
+//! (`add_plugin`). A plugin crate can also register itself for link-time
+//! collection with [`export_plugin!`], so that depending on it is enough
+//! ([`linked_plugins`]). And a plugin can be built as a native library or a
+//! WASM module and loaded at run time, through the text-only ABI in [`abi`].
+//! See docs/design/plugin-loading.md.
+//!
 //! **Stability:** at 0.0.x this contract still changes. Every breaking change
 //! bumps [`PLUGIN_API_VERSION`], and hosts refuse a plugin built for another
 //! version rather than misbehaving.
 
 use std::fmt;
 use std::sync::Arc;
+
+pub mod abi;
+mod linked;
+
+#[doc(hidden)]
+pub use linked::__private;
+pub use linked::{linked_plugins, LinkedPlugin};
 
 use rich::r#box::Box as BoxStyle;
 use rich::{CodeHighlighter, FenceRenderer, Highlighter, Renderable, Text, Theme};

@@ -377,15 +377,28 @@ given in:
 | Input | Order |
 |---|---|
 | `--inspect` | parse, `--redact`, `--select`, `--filter`, `--highlight`, then the view (`--find`, `--flatten`, `--table` or the tree) |
-| text, `--print`, `--syntax` | read, `--sanitize`, markup or highlighting, `--filter`, `--highlight`, then panel, padding and export |
+| text, `--print`, `--syntax` | read, `--sanitize`, markup or highlighting, `--filter`, each `--transform` in the order given, `--highlight`, then panel, padding and export |
 
 So `--select` narrows first and `--filter`'s path is relative to the selection,
 and a redacted value can be selected but never shows. `--compare` applies only
 `--redact`; `--filter` and `--highlight` are refused with it, and
 `--highlight` is refused with `--find`, `--flatten` and `--table`, which draw
-no tree lines. Other modes, such as `--json` and `--markdown`, refuse both
-flags. With either flag, `--syntax` output is the highlighted text without the
-theme's background fill.
+no tree lines. Other modes, such as `--json` and `--markdown`, refuse these
+flags, and `--inspect` refuses `--transform`. With any of them, `--syntax`
+output is the highlighted text without the theme's background fill.
+
+`--transform NAME` applies a text transform a plugin registered (see
+[Plugins](#plugins)); repeat it to chain several, applied in the order given.
+An unknown name is a usage error (exit 2) that lists the names there are, and
+a transform that fails stops the command like a failed `--filter`
+(`--transform NAME failed: …`, exit 4). A runtime plugin's transform returns
+plain text, so it drops the styling before it, such as `--syntax`'s colours;
+`--highlight` still applies after it.
+
+```bash
+rich --plugin shout.wasm --transform upper notes.txt
+rich --plugin shout.wasm app.log --filter ERROR --transform upper --highlight TIMEOUT
+```
 
 Libraries get the same stages from `rich_ext::transform` and
 `rich_ext::data::transform`, and plugins can add text transforms: see
@@ -1223,6 +1236,44 @@ Successful `doctor --report json` writes the diagnostics document to stdout,
 not the rendered-content/report split used by rendering commands. Errors retain
 the existing usage/error reporting contract. `--no-config` helps diagnose an
 invalid local configuration independently.
+
+## Plugins
+
+```bash
+rich plugins list
+rich plugins info mermaid
+rich plugins list --report json
+rich --plugin ~/plugins/shout.wasm -m README.md   # a build with wasm-plugins
+```
+
+`rich plugins list` shows every plugin the binary has: the built-ins, any
+linked into a custom build, and the runtime plugins loaded for this run, with
+each one's source (`built-in`, `linked`, `native`, `wasm`), version, ABI and
+capabilities. `rich plugins info NAME` shows one, with its path and
+description.
+
+Runtime plugins need a build with a feature that is off by default:
+`cargo install rs-rich-cli --features wasm-plugins` for sandboxed WASM modules,
+`--features dylib-plugins` for native libraries, which run their own code with
+your permissions. `--plugin PATH` loads one for a single run, and is
+repeatable. To load them every time, list them in your own config:
+
+```toml
+# ~/.config/rich/config.toml
+[defaults]
+plugins = ["plugins/shout.wasm"]   # relative to this file
+```
+
+A project's `./rich.toml` may not list plugins: `rich` ignores the list with a
+warning, so running `rich` in a repository you cloned never loads that
+repository's code. A file you name with `--config` is trusted like your own.
+
+A loaded plugin draws the Markdown fences it registers (```` ```shout ````),
+highlights printed text, and adds the transforms `--transform NAME` applies
+(see [Filter and highlight](#filter-and-highlight)). A plugin that cannot load stops the command:
+exit 3 when the file cannot be read, 2 otherwise (another ABI version, a name
+another plugin already provides, a build without the loader). See the
+[plugin guide](PLUGINS.md) for what plugins can do and the threat model.
 
 ## Shell completions and generated docs
 
