@@ -43,12 +43,37 @@ impl From<std::io::Error> for LiveError {
         Self::Io(e)
     }
 }
-/// A painted row: its encoded text, and the frame the next paint diffs
-/// against.
+/// A painted row: its encoded text, the frame the next paint diffs
+/// against, and whether terminals may disagree about where its cells fall.
 #[derive(Debug)]
 struct Row {
     text: String,
     frame: Frame,
+    uncertain: bool,
+}
+
+/// Whether terminals disagree about the width of something in `text`, so a
+/// column computed from rich's widths may not be where the terminal put a
+/// cell: emoji presentation and text selectors, zero-width joiners, regional
+/// indicators (flags), skin-tone modifiers, keycaps, tag sequences, and East
+/// Asian ambiguous-width characters. Such a row is repainted whole.
+///
+/// Box-drawing and block characters are ambiguous too, but every table and
+/// bar is drawn with them and terminals draw them one cell wide unless told
+/// to treat ambiguous characters as wide; they keep cell repaints.
+fn uncertain(text: &str) -> bool {
+    use unicode_width::UnicodeWidthChar;
+    text.chars().any(|c| {
+        matches!(
+            c,
+            '\u{fe0e}' | '\u{fe0f}'
+                | '\u{200d}'
+                | '\u{20e3}'
+                | '\u{1f1e6}'..='\u{1f1ff}'
+                | '\u{1f3fb}'..='\u{1f3ff}'
+                | '\u{e0020}'..='\u{e007f}'
+        ) || (c.width() != c.width_cjk() && !matches!(c, '\u{2500}'..='\u{259f}'))
+    })
 }
 impl PartialEq for Row {
     fn eq(&self, other: &Row) -> bool {
@@ -143,8 +168,10 @@ impl<W: Write> LiveCoordinator<W> {
                 segment.style = segment.style.as_ref().map(|style| style.update_link(None));
             }
         }
+        let text = console.segments_to_string(&row);
         Row {
-            text: console.segments_to_string(&row),
+            uncertain: row.iter().any(|segment| uncertain(&segment.text)),
+            text,
             frame: Frame::from_segments(&row),
         }
     }
@@ -163,7 +190,7 @@ impl<W: Write> LiveCoordinator<W> {
     }
     /// The bytes that bring `old` up to `new` on the current line: only the
     /// changed cells, each after a column move, or the whole row when that is
-    /// shorter.
+    /// shorter or either row holds characters of [`uncertain`] width.
     fn repaint(&self, new: &Row, old: &Row) -> Vec<u8> {
         let console = self.target.console();
         let (system, no_color) = (console.color_system(), console.no_color());
@@ -173,7 +200,7 @@ impl<W: Write> LiveCoordinator<W> {
             new.frame.row_width(0)
         };
         let mut cells = String::new();
-        if new.frame.height() > 0 && old.frame.height() > 0 {
+        if new.frame.height() > 0 && old.frame.height() > 0 && !new.uncertain && !old.uncertain {
             for change in new.frame.diff(&old.frame) {
                 let column = change.columns.start.min(u32::MAX as usize) as u32;
                 cells.push_str(Control::new(&[ControlType::CursorMoveToColumn(column)]).as_str());

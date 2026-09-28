@@ -146,8 +146,16 @@ pub enum NotInteractive {
     NoDefault(Reason),
     /// The component has no line-based form.
     NoPrompt,
-    /// The line-based form got something it could not use, or input ended.
+    /// The line-based form got something it could not use.
     Invalid(String),
+    /// Input ended before an answer and the component has no default.
+    /// [`degrade`](crate::degrade) reports it as [`NotInteractive::NoDefault`]
+    /// with the reason there is no terminal.
+    Ended,
+    /// Ctrl+C at a line prompt read without echo.
+    /// [`degrade`](crate::degrade) reports it as
+    /// [`Outcome::Interrupted`](crate::Outcome::Interrupted).
+    Interrupted,
 }
 
 impl fmt::Display for NotInteractive {
@@ -159,6 +167,8 @@ impl fmt::Display for NotInteractive {
             }
             NotInteractive::NoPrompt => f.write_str("no line-based prompt for this component"),
             NotInteractive::Invalid(message) => f.write_str(message),
+            NotInteractive::Ended => f.write_str("input ended without an answer"),
+            NotInteractive::Interrupted => f.write_str("interrupted"),
         }
     }
 }
@@ -172,9 +182,12 @@ pub trait LineIo {
     /// One line without its line break, or `None` at end of input.
     fn read_line(&mut self) -> Option<String>;
     /// One line for a secret, typed without echo where there is echo to
-    /// turn off. The default reads a line as usual.
-    fn read_secret(&mut self) -> Option<String> {
-        self.read_line()
+    /// turn off: `Ok(Some(line))`, `Ok(None)` when the user backed out
+    /// (Escape), [`NotInteractive::Ended`] at end of input and
+    /// [`NotInteractive::Interrupted`] on Ctrl+C. The default reads a line
+    /// as usual.
+    fn read_secret(&mut self) -> Result<Option<String>, NotInteractive> {
+        self.read_line().map(Some).ok_or(NotInteractive::Ended)
     }
 }
 
@@ -199,12 +212,14 @@ impl LineIo for StdLineIo {
 
     /// With stdin a terminal (stdout redirected, say), read with echo off,
     /// as Python's `getpass` does: the terminal is in raw mode for the one
-    /// line, and given back after it. Backspace and Ctrl+U edit; Ctrl+C,
-    /// Escape, and Ctrl+D on an empty line give no answer. From a pipe,
-    /// read a line as usual.
-    fn read_secret(&mut self) -> Option<String> {
+    /// line, and given back after it. Backspace and Ctrl+U edit; Escape
+    /// backs out, Ctrl+D on an empty line ends the input and Ctrl+C
+    /// interrupts. A terminating signal (SIGTERM, SIGHUP, SIGQUIT) while
+    /// the line is read gives the terminal back before the process ends.
+    /// From a pipe, read a line as usual.
+    fn read_secret(&mut self) -> Result<Option<String>, NotInteractive> {
         if !std::io::stdin().is_terminal() {
-            return self.read_line();
+            return self.read_line().map(Some).ok_or(NotInteractive::Ended);
         }
         let answer = read_hidden();
         // The Enter was not echoed either: end the prompt's line.
@@ -214,29 +229,37 @@ impl LineIo for StdLineIo {
 }
 
 /// One line read in raw mode, so nothing typed is echoed.
-fn read_hidden() -> Option<String> {
+fn read_hidden() -> Result<Option<String>, NotInteractive> {
     use crate::event::{from_crossterm, Event, KeyCode};
 
-    /// Raw mode off again on every way out, a panic included.
+    /// Raw mode off again on every way out, a panic and a terminating
+    /// signal included.
     struct Raw;
     impl Drop for Raw {
         fn drop(&mut self) {
+            crate::session::raw_line(false);
             let _ = crossterm::terminal::disable_raw_mode();
         }
     }
-    crossterm::terminal::enable_raw_mode().ok()?;
+    crate::session::raw_line(true);
+    if crossterm::terminal::enable_raw_mode().is_err() {
+        crate::session::raw_line(false);
+        return Err(NotInteractive::Ended);
+    }
     let _raw = Raw;
     let mut line = String::new();
     loop {
-        let event = crossterm::event::read().ok()?;
+        let event = crossterm::event::read().map_err(|_| NotInteractive::Ended)?;
         match from_crossterm(event) {
             Some(Event::Key(key)) => {
                 let ctrl = key.modifiers.ctrl;
                 match key.code {
-                    KeyCode::Enter => return Some(line),
-                    KeyCode::Escape => return None,
-                    KeyCode::Char('c') if ctrl => return None,
-                    KeyCode::Char('d') if ctrl && line.is_empty() => return None,
+                    KeyCode::Enter => return Ok(Some(line)),
+                    KeyCode::Escape => return Ok(None),
+                    KeyCode::Char('c') if ctrl => return Err(NotInteractive::Interrupted),
+                    KeyCode::Char('d') if ctrl && line.is_empty() => {
+                        return Err(NotInteractive::Ended)
+                    }
                     KeyCode::Char('u') if ctrl => line.clear(),
                     KeyCode::Backspace => {
                         line.pop();
@@ -245,7 +268,7 @@ fn read_hidden() -> Option<String> {
                     _ => {}
                 }
             }
-            Some(Event::Paste(text)) => line.push_str(&text.replace(['\n', '\r'], "")),
+            Some(Event::Paste(text)) => line.push_str(&crate::components::pasted(&text, "")),
             _ => {}
         }
     }
@@ -279,9 +302,9 @@ impl LineIo for ScriptedLineIo {
         self.answers.pop_front()
     }
 
-    fn read_secret(&mut self) -> Option<String> {
+    fn read_secret(&mut self) -> Result<Option<String>, NotInteractive> {
         self.secrets += 1;
-        self.read_line()
+        self.read_line().map(Some).ok_or(NotInteractive::Ended)
     }
 }
 

@@ -330,7 +330,7 @@ impl Component for Form {
             let start = crate::components::width(&row);
             match &field.kind {
                 Kind::Text(input) => {
-                    let (segments, column) = input.field();
+                    let (segments, column) = input.field(width.saturating_sub(start));
                     row.extend(segments);
                     if focused {
                         cursor = Some((lines.len(), (start + column).min(width.saturating_sub(1))));
@@ -408,9 +408,9 @@ impl Component for Form {
                         options.join(" / "),
                         options[*index]
                     ));
-                    let Some(line) = io.read_line() else {
-                        return Ok(None);
-                    };
+                    // At the end of input, the current option answers, as
+                    // for an empty line.
+                    let line = io.read_line().unwrap_or_default();
                     let line = line.trim();
                     if line.is_empty() {
                         Value::Text(options[*index].clone())
@@ -430,9 +430,7 @@ impl Component for Form {
                         field.label,
                         if *on { "Y/n" } else { "y/N" }
                     ));
-                    let Some(line) = io.read_line() else {
-                        return Ok(None);
-                    };
+                    let line = io.read_line().unwrap_or_default();
                     Value::Flag(match line.trim().to_lowercase().as_str() {
                         "" => *on,
                         "y" | "yes" => true,

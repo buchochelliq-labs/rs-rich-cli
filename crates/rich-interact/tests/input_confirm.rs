@@ -341,3 +341,118 @@ fn a_masked_answer_is_read_as_a_secret() {
     degrade(&mut plain, Fallback::Prompt, reason, &mut io).unwrap();
     assert_eq!(io.secrets, 0, "an ordinary answer is echoed as usual");
 }
+
+#[test]
+fn the_caret_moves_and_deletes_by_grapheme() {
+    // `e` and a combining acute are one grapheme: Left steps over both,
+    // Backspace deletes both.
+    let script = Script::new()
+        .text("ae\u{301}")
+        .keys("left")
+        .text("x")
+        .keys("end backspace")
+        .keys("enter");
+    let (outcome, _) = headless::run(Input::new("Name"), script, 40, 6);
+    assert_eq!(outcome.unwrap(), Outcome::Done("ax".into()));
+    let script = Script::new().text("e\u{301}b").keys("home delete enter");
+    let (outcome, _) = headless::run(Input::new("Name"), script, 40, 6);
+    assert_eq!(outcome.unwrap(), Outcome::Done("b".into()));
+}
+
+#[test]
+fn a_long_line_scrolls_to_keep_the_caret_in_view() {
+    let script = Script::new()
+        .text(&"x".repeat(50))
+        .text("END")
+        .keys("enter");
+    let (_, record) = headless::run(Input::new("Input"), script, 40, 6);
+    // `? Input › ` takes 10 columns: the end of the line shows, with the
+    // caret after it on the last column.
+    let frame = before_answer(&record);
+    assert!(frame.ends_with("xxxEND"), "{frame:?}");
+    assert_eq!(frame.chars().count(), 39, "{frame:?}");
+    assert!(
+        record.output().contains("\x1b[39C"),
+        "{:?}",
+        record.output()
+    );
+    // Home scrolls back to the start.
+    let script = Script::new()
+        .text("START")
+        .text(&"x".repeat(50))
+        .keys("home")
+        .keys("enter");
+    let (_, record) = headless::run(Input::new("Input"), script, 40, 6);
+    assert!(
+        before_answer(&record).starts_with("? Input › STARTxxx"),
+        "{:?}",
+        before_answer(&record)
+    );
+}
+
+#[test]
+fn pasted_controls_do_not_reach_the_answer() {
+    let script = Script::new()
+        .event(rich_interact::Event::Paste(
+            "X\x1bcY\u{9b}2JZ\x07\x08W".into(),
+        ))
+        .keys("enter");
+    let (outcome, record) = headless::run(Input::new("Input"), script, 40, 6);
+    assert_eq!(outcome.unwrap(), Outcome::Done("XcY2JZW".into()));
+    assert!(!record.output().contains("\x1bc"), "{:?}", record.output());
+}
+
+#[test]
+fn at_the_end_of_input_the_default_answers() {
+    let reason = Reason::NoTerminal;
+    let none = || ScriptedLineIo::new(Vec::<String>::new());
+    let mut input = Input::new("Name").default("d");
+    assert_eq!(
+        degrade(&mut input, Fallback::Prompt, reason, &mut none()).unwrap(),
+        Outcome::Done("d".into())
+    );
+    let mut masked = Input::masked("Token").default("s3cr3t");
+    assert_eq!(
+        degrade(&mut masked, Fallback::Prompt, reason, &mut none()).unwrap(),
+        Outcome::Done("s3cr3t".into())
+    );
+    let mut sheet = Confirm::new("Go?").default("yes");
+    assert_eq!(
+        degrade(&mut sheet, Fallback::Prompt, reason, &mut none()).unwrap(),
+        Outcome::Done("yes".into())
+    );
+    // Without a default, the end of input is no answer, not a refusal.
+    for result in [
+        degrade(
+            &mut Input::new("Name"),
+            Fallback::Prompt,
+            reason,
+            &mut none(),
+        )
+        .map(|_| ()),
+        degrade(
+            &mut Confirm::new("Go?"),
+            Fallback::Prompt,
+            reason,
+            &mut none(),
+        )
+        .map(|_| ()),
+        degrade(
+            &mut Input::masked("Token"),
+            Fallback::Prompt,
+            reason,
+            &mut none(),
+        )
+        .map(|_| ()),
+    ] {
+        assert!(
+            matches!(
+                result,
+                Err(rich_interact::Error::NotInteractive(
+                    rich_interact::NotInteractive::NoDefault(Reason::NoTerminal)
+                ))
+            ),
+            "{result:?}"
+        );
+    }
+}

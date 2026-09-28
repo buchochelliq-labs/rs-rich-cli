@@ -132,6 +132,22 @@ pub(crate) fn highlight(
     segments
 }
 
+/// Pasted text for a one-line field: line breaks become `newline`, a tab a
+/// space, and other terminal controls (C0, DEL, C1) are dropped, so a paste
+/// cannot carry an escape sequence into the answer or onto the screen.
+pub(crate) fn pasted(text: &str, newline: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '\n' | '\r' => out.push_str(newline),
+            '\t' => out.push(' '),
+            '\0'..='\u{1f}' | '\u{7f}'..='\u{9f}' => {}
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 /// The question line every component starts with: `? prompt › `.
 pub(crate) fn question(theme: &Theme, prompt: &str) -> Vec<Segment> {
     vec![
@@ -160,6 +176,15 @@ mod tests {
             texts,
             [("ma", true), ("in.", false), ("r", true), ("s", false)]
         );
+    }
+
+    #[test]
+    fn pastes_drop_terminal_controls() {
+        assert_eq!(
+            pasted("X\x1bcY\u{9b}2JZ\x07\x08W\tV\r\nU", " "),
+            "XcY2JZW V  U"
+        );
+        assert_eq!(pasted("a\nb", ""), "ab");
     }
 
     #[test]

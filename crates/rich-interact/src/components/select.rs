@@ -9,6 +9,8 @@
 //! [`Action`](crate::Action) keys pick it and record which action was asked
 //! for.
 
+use std::time::Duration;
+
 use rich::Segment;
 
 use crate::component::{Component, Context, Flow, View};
@@ -48,6 +50,8 @@ pub struct Select<T> {
     theme: Theme,
     action: Option<String>,
     default: Option<usize>,
+    /// Repaint at least this often, for previews that change by themselves.
+    repaint: Option<Duration>,
     /// Once finished: the answer shown in place of the list (`None` inside
     /// means cancelled).
     answer: Option<Option<String>>,
@@ -75,6 +79,7 @@ impl<T> Select<T> {
             theme: Theme::default(),
             action: None,
             default: None,
+            repaint: None,
             answer: None,
         };
         select.refilter();
@@ -107,6 +112,14 @@ impl<T> Select<T> {
     pub fn query(mut self, query: impl Into<String>) -> Self {
         self.query = query.into();
         self.refilter();
+        self
+    }
+
+    /// Render again at least every `interval`, even with no key pressed:
+    /// for previews that fill in by themselves, such as a command's output
+    /// computed on another thread. An unchanged view still writes nothing.
+    pub fn repaint_every(mut self, interval: Duration) -> Self {
+        self.repaint = Some(interval);
         self
     }
 
@@ -203,7 +216,7 @@ impl<T> Select<T> {
             return None;
         }
         if let Event::Paste(text) = event {
-            self.query.push_str(&text.replace(['\n', '\r'], " "));
+            self.query.push_str(&crate::components::pasted(text, " "));
             self.refilter();
             return None;
         }
@@ -388,9 +401,22 @@ impl<T> Select<T> {
         } else {
             "Number or name: "
         });
-        let Some(line) = io.read_line() else {
-            return Ok(None);
+        // At the end of input, or on an empty line, the default answers:
+        // the default item, or with `multi` the marked ones.
+        let default: Vec<usize> = if self.multi {
+            (0..self.items.len()).filter(|&i| self.marked[i]).collect()
+        } else {
+            self.default.into_iter().collect()
         };
+        let Some(line) = io.read_line() else {
+            if default.is_empty() {
+                return Err(NotInteractive::Ended);
+            }
+            return Ok(Some(default));
+        };
+        if line.trim().is_empty() && !default.is_empty() {
+            return Ok(Some(default));
+        }
         let answers: Vec<&str> = if self.multi {
             line.split(',')
                 .map(str::trim)
@@ -438,6 +464,10 @@ impl<T: Clone> Component for Select<T> {
         self.render_view(context)
     }
 
+    fn tick(&self) -> Option<Duration> {
+        self.repaint
+    }
+
     fn default_value(&self) -> Option<T> {
         self.default.map(|index| self.items[index].value.clone())
     }
@@ -481,6 +511,11 @@ impl<T> MultiSelect<T> {
         MultiSelect(self.0.query(query))
     }
 
+    /// See [`Select::repaint_every`].
+    pub fn repaint_every(self, interval: Duration) -> Self {
+        MultiSelect(self.0.repaint_every(interval))
+    }
+
     /// Mark these items to begin with; they are also the default without a
     /// terminal.
     pub fn marked(mut self, indices: impl IntoIterator<Item = usize>) -> Self {
@@ -519,6 +554,10 @@ impl<T: Clone> Component for MultiSelect<T> {
 
     fn render(&self, context: &Context<'_>) -> View {
         self.0.render_view(context)
+    }
+
+    fn tick(&self) -> Option<Duration> {
+        self.0.repaint
     }
 
     fn default_value(&self) -> Option<Vec<T>> {

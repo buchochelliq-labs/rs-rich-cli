@@ -261,3 +261,26 @@ fn a_search_given_up_front_shows_its_first_match() {
     assert!(last.contains("match 2/5"), "{last}");
     assert!(last.contains("line 20: needle"), "{last}");
 }
+
+#[test]
+fn controls_in_paged_content_are_shown_not_sent() {
+    let lines = vec![
+        vec![Segment::new("G\x1bcx", None)],
+        vec![Segment::new("F\u{9b}2Jy", None)],
+        vec![Segment::new("M\x1b", None)],
+    ];
+    let (_, record) = headless::run(Pager::lines(lines), Script::new().keys("q"), 30, 6);
+    let output = record.output();
+    for raw in ["\x1bc", "\u{9b}", "M\x1b\r"] {
+        assert!(
+            !output.contains(raw),
+            "{raw:?} reached the terminal: {output:?}"
+        );
+    }
+    assert!(record.frames[0].contains("G␛cx"), "{:?}", record.frames[0]);
+    assert!(
+        record.frames[0].contains("F\u{fffd}2Jy"),
+        "{:?}",
+        record.frames[0]
+    );
+}

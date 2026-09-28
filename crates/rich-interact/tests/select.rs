@@ -245,3 +245,60 @@ fn degrades_to_numbers_or_names() {
         Outcome::Done(vec!["src/lib.rs", "Cargo.toml"])
     );
 }
+
+#[test]
+fn at_the_end_of_input_or_on_an_empty_line_the_default_answers() {
+    let reason = Reason::NoTerminal;
+    let mut defaulted = Select::new("Open", files()).default(3);
+    let mut io = ScriptedLineIo::new(Vec::<String>::new());
+    assert_eq!(
+        degrade(&mut defaulted, Fallback::Prompt, reason, &mut io).unwrap(),
+        Outcome::Done("Cargo.toml")
+    );
+    let mut io = ScriptedLineIo::new([""]);
+    assert_eq!(
+        degrade(&mut defaulted, Fallback::Prompt, reason, &mut io).unwrap(),
+        Outcome::Done("Cargo.toml")
+    );
+    let mut multi = MultiSelect::new("Stage", files()).marked([0, 4]);
+    let mut io = ScriptedLineIo::new(Vec::<String>::new());
+    assert_eq!(
+        degrade(&mut multi, Fallback::Prompt, reason, &mut io).unwrap(),
+        Outcome::Done(vec!["src/lib.rs", "README.md"])
+    );
+    // No default: no answer.
+    for mut io in [
+        ScriptedLineIo::new(Vec::<String>::new()),
+        ScriptedLineIo::new([""]),
+    ] {
+        let result = degrade(
+            &mut Select::new("Open", files()),
+            Fallback::Prompt,
+            reason,
+            &mut io,
+        );
+        assert!(result.is_err(), "{result:?}");
+    }
+    let mut io = ScriptedLineIo::new(Vec::<String>::new());
+    assert!(matches!(
+        degrade(
+            &mut MultiSelect::new("Stage", files()),
+            Fallback::Prompt,
+            reason,
+            &mut io
+        ),
+        Err(rich_interact::Error::NotInteractive(
+            rich_interact::NotInteractive::NoDefault(Reason::NoTerminal)
+        ))
+    ));
+}
+
+#[test]
+fn a_pasted_query_drops_terminal_controls() {
+    let script = Script::new()
+        .event(rich_interact::Event::Paste("ma\x1b\x07\u{9b}in".into()))
+        .keys("enter");
+    let (outcome, record) = headless::run(Select::new("Open", files()), script, 60, 10);
+    assert_eq!(outcome.unwrap(), Outcome::Done("src/main.rs"));
+    assert!(!record.output().contains('\u{9b}'), "{:?}", record.output());
+}

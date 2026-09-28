@@ -110,6 +110,25 @@ Entries below record subsequent releases and development.
 - Behind the new default `interact` feature, which the `rs_rich` wheel's
   `python -m rs_rich` also builds. PTY tests cover the captured answer, keys
   with a piped list, cancel, Ctrl+C, the pager and previews.
+- Release-test fixes:
+  - a `--preview` command runs on its own thread, so a slow one no longer
+    freezes the picker or delays Ctrl+C; it is killed after 5 s ("preview
+    timed out") and at most 1 MiB of its output is kept;
+  - on Windows, `{}` is no longer escaped for the C runtime, which
+    `cmd.exe` ignores (`x" & calc & "` ran `calc`): the command goes to
+    `cmd /S /C` as typed, and an item `cmd.exe` cannot quote is not
+    previewed;
+  - without a terminal, when input ends, `--default` and `--selected`
+    answer (`rich confirm --default yes </dev/null` exits 0); with neither
+    the command exits 3, not 1, and an empty line in `choose` takes
+    `--selected`;
+  - invalid UTF-8 on stdin is replaced instead of failing the command, and
+    `pager` without a terminal writes a FILE or stdin through byte for
+    byte;
+  - stdin is bounded: `choose` and `filter` read at most 64 MiB and
+    1,000,000 lines, `pager` pages at most 64 MiB, and more is an input
+    error (exit 3) instead of `yes | rich choose` exhausting memory;
+  - Ctrl+C at `input --password` read without echo exits 130, not 1.
 
 ### Interact 0.0.1: painting on standard error
 
@@ -118,6 +137,39 @@ Entries below record subsequent releases and development.
 - `Policy::tty_keys` reads keys from the controlling terminal when standard
   input is a pipe, and `Policy::detect_for(output)` decides for a given
   output; `run` uses it. New `Reason`s: `StderrNotTerminal`, `NoTerminal`.
+
+### Interact 0.0.1: release-test fixes
+
+- **Terminal controls never reach the terminal from a view.** The painter
+  shows C0 controls, DEL and C1 controls in any view's text as one visible
+  character each (`␛`, `␡`, `�`), so a paged file's `ESC c` or 8-bit CSI, a
+  preview command's output or a label cannot drive the terminal; styles
+  still arrive as styles. Pasted text drops its controls before it reaches
+  an `Input` or a picker's query.
+- **SIGTERM, SIGHUP and SIGQUIT restore the terminal** (Unix): from the first
+  session on, a thread restores raw mode, the alternate screen, mouse and
+  bracketed paste (and a masked line read with echo off), then takes the
+  signal's default action. New direct dependency: `signal-hook`, which
+  crossterm already used.
+- **The pager's search no longer panics** when lower-casing changes a
+  character's length (`ẞ`, `Ⱥ`): it folds case one character at a time and
+  maps matches back to the original, and lines holding `İ` are searched.
+- **The fuzzy matcher is bounded.** A candidate that does not hold the
+  pattern as a subsequence is rejected in one pass before anything is
+  allocated, and a problem over 2^20 cells (a 2000-character query against
+  a 300,000-character line) is matched greedily instead of allocating
+  gigabytes. Scores for ordinary sizes are unchanged.
+- **End of input is no answer.** The line prompts of `Input`, `Confirm`,
+  `Select`, `MultiSelect` and `Form` answer with their default at the end of
+  input; without one, `run` fails with `NotInteractive::NoDefault` instead
+  of reporting `Cancelled`. New `NotInteractive::Ended` and
+  `NotInteractive::Interrupted`; `LineIo::read_secret` returns
+  `Result<Option<String>, NotInteractive>`, so Ctrl+C at a line read with
+  echo off is `Outcome::Interrupted`.
+- **`Input` edits by grapheme** (an accent moves and deletes with its
+  letter) and scrolls a line longer than the terminal to keep the caret in
+  view. `Select::repaint_every` (and `MultiSelect`'s) repaints on a timer,
+  for previews that fill in by themselves.
 
 ### Python 0.0.2: interactive components and frames (0.0.13 workstream 5)
 
@@ -318,6 +370,44 @@ The `rs-rich` package on PyPI stays level with the Rust crates.
   paths, timings) from the text grids `--check` compares; images keep what was
   shown. **`Wait`** now also matches text shown since the previous step, so
   fast output that scrolls past between polls is not missed.
+- **Hardening (tapes are still trusted code: `Exec` and the shell run what
+  the tape says).**
+  - A tape whose name would leave `--output` (`...tape` names `..`) is refused
+    before any tape runs, by `rich record` and by `record::record` and
+    `record::write` (`record::stem_allowed`). `record::write` now removes only
+    the stale screenshots its last write listed in `provenance.json` (its new
+    `screenshots` field), never other files in the directory; `--check`
+    reports orphans the same way, so a directory written before this change
+    reports none until it is written again.
+  - Tape limits, as parse errors: `Sleep`, `Wait` and `Timeout` at most 1 hour
+    (`1e300s` panicked); `Set Size` and `Resize` from 2x2 to 500x200 (0x0
+    and 65535x65535 were accepted); `Write` paths relative and inside the
+    workspace. Images that would pass 100 million pixels (a large `--font`)
+    are refused before anything is written.
+  - Output is kept at most 12 times a second (the video's frame rate): a burst
+    is one event and one frame, and a burst over 32 KiB is recorded as a
+    repaint of the screen. `seq 1 300000` no longer keeps a frame per read.
+    Video covers the first 5 minutes; asking for a GIF or MP4 of a longer
+    recording is an error that says to use `--no-video`. The screens kept for
+    `Wait` are capped at 16 MiB.
+  - GIF and MP4 are drawn a batch at a time and streamed: the GIF's palette
+    is chosen on a first pass and frames are encoded on a second, so memory
+    no longer grows with the recording's length. A GIF wider or taller than
+    65535 pixels is an error, not a truncated size. FFmpeg is killed and
+    reaped when writing to it fails, and when a `Session` is dropped on an
+    error path its shell is killed and reaped.
+  - A panic in the `vt100` emulator fails the tape with an error instead of
+    poisoning the session; a flood of combining marks takes linear time; an
+    escape with intermediate bytes (`ESC ( B`) no longer prints its final byte.
+  - `Exec` reads its error output as it runs (a command that wrote more than a
+    pipe holds hung until the timeout), keeps the first 64 KiB for the report,
+    and is reaped after a timeout.
+  - SVG text replaces characters XML forbids (control characters in a title
+    or on screen) with U+FFFD, so the file stays well-formed.
+  - Migration: `Timeline` has a new `truncated` field; `Terminal::process` and
+    `set_size` return `io::Result`; `video::sample` returns references into
+    the timeline (`VideoFrame::snapshot`), `video::render` takes the timeline,
+    and `raster::gif` returns `io::Result`.
 
 ### Ext (0.0.11, unreleased)
 
@@ -331,6 +421,11 @@ The `rs-rich` package on PyPI stays level with the Rust crates.
 - **`LiveCoordinator` repaints changed cells**, not whole rows, when that
   writes fewer bytes. A one-cell change in a table row wrote 45 bytes before
   and 27 now. What ends up on screen is unchanged.
+  A row holding characters terminals may draw at a different width than rich
+  measures (emoji and text presentation selectors, ZWJ sequences, flags,
+  skin tones, keycaps, tag sequences, East Asian ambiguous-width characters
+  other than box drawing and blocks) is still repainted whole, since a column
+  move could land in the wrong cell. Adds a `unicode-width` dependency.
 - **Snapshot schema 2.** `RenderSnapshot::capture_frame` stores rows of merged
   runs, so output that is only split differently compares equal. `diff`
   compares schema 1 and schema 2 snapshots by what shows, and `upgrade`

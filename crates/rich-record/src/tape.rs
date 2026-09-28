@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! # A comment.
-//! Set Size 100x28            # columns x rows (default 100x28)
+//! Set Size 100x28            # columns x rows (default 100x28; 2x2 to 500x200)
 //! Set TypingDelay 40ms       # per character typed by `Type`
 //! Set Timeout 15s            # default for `Wait`
 //! Set Title "Watching files" # caption for the window frame and the cast
@@ -271,7 +271,19 @@ pub fn apply_masks(masks: &[(Regex, String)], text: &str) -> String {
     text
 }
 
-/// `500ms` or `2s` (fractions allowed).
+/// The longest `Sleep`, `Wait` or `Timeout` a tape may ask for.
+pub const MAX_DURATION: Duration = Duration::from_secs(3600);
+/// The smallest terminal a tape may ask for: the emulator needs room for a
+/// wide character.
+pub const MIN_COLUMNS: u16 = 2;
+pub const MIN_ROWS: u16 = 2;
+/// The largest terminal a tape may ask for (`Set Size`, `Resize`): its
+/// screenshots and video frames are drawn in memory, and a 500x200 PNG
+/// screenshot is already about 8500x7400 pixels.
+pub const MAX_COLUMNS: u16 = 500;
+pub const MAX_ROWS: u16 = 200;
+
+/// `500ms` or `2s` (fractions allowed), at most [`MAX_DURATION`].
 pub fn parse_duration(text: &str) -> Option<Duration> {
     let (number, scale) = if let Some(ms) = text.strip_suffix("ms") {
         (ms, 0.001)
@@ -279,14 +291,43 @@ pub fn parse_duration(text: &str) -> Option<Duration> {
         (text.strip_suffix('s')?, 1.0)
     };
     let value: f64 = number.parse().ok()?;
-    (value.is_finite() && value >= 0.0).then(|| Duration::from_secs_f64(value * scale))
+    if !value.is_finite() || value < 0.0 {
+        return None;
+    }
+    Duration::try_from_secs_f64(value * scale)
+        .ok()
+        .filter(|duration| *duration <= MAX_DURATION)
 }
 
-/// `100x28`.
+/// `100x28`: from [`MIN_COLUMNS`]x[`MIN_ROWS`] to [`MAX_COLUMNS`]x[`MAX_ROWS`].
 pub fn parse_size(text: &str) -> Option<(u16, u16)> {
     let (columns, rows) = text.split_once('x')?;
     let (columns, rows) = (columns.parse().ok()?, rows.parse().ok()?);
-    (columns > 0 && rows > 0).then_some((columns, rows))
+    size_allowed(columns, rows).then_some((columns, rows))
+}
+
+/// Whether a terminal of `columns` x `rows` is within the limits.
+pub fn size_allowed(columns: u16, rows: u16) -> bool {
+    (MIN_COLUMNS..=MAX_COLUMNS).contains(&columns) && (MIN_ROWS..=MAX_ROWS).contains(&rows)
+}
+
+/// Whether `name` may name a screenshot: letters, digits, `-` and `_`, so
+/// its files stay in the output directory.
+pub fn screenshot_name_allowed(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// Whether `Write` may create `path`: relative, and inside the workspace
+/// (no `..`, no root or drive prefix).
+pub fn write_path_allowed(path: &str) -> bool {
+    use std::path::Component;
+    !path.is_empty()
+        && std::path::Path::new(path)
+            .components()
+            .all(|part| matches!(part, Component::Normal(_) | Component::CurDir))
 }
 
 /// `Write`'s escapes: `\n`, `\t`, `\\`, `\"` and `\'`. Anything else,
@@ -411,10 +452,13 @@ pub fn parse(source: &str) -> Result<Tape, TapeError> {
             let regex = Regex::new(&captures[1])
                 .map_err(|e| error(format!("bad regex /{}/: {e}", &captures[1])))?;
             let timeout = match captures.get(2) {
-                Some(value) => Some(
-                    parse_duration(value.as_str())
-                        .ok_or_else(|| error(format!("bad duration {:?}", value.as_str())))?,
-                ),
+                Some(value) => Some(parse_duration(value.as_str()).ok_or_else(|| {
+                    error(format!(
+                        "bad duration {:?} (use 500ms or 2s, at most {}s)",
+                        value.as_str(),
+                        MAX_DURATION.as_secs()
+                    ))
+                })?),
                 None => None,
             };
             tape.steps.push((
@@ -434,11 +478,20 @@ pub fn parse(source: &str) -> Result<Tape, TapeError> {
                 .ok_or_else(|| error(format!("{command} needs an argument")))
         };
         let duration = |text: &str| {
-            parse_duration(text)
-                .ok_or_else(|| error(format!("bad duration {text:?} (use 500ms or 2s)")))
+            parse_duration(text).ok_or_else(|| {
+                error(format!(
+                    "bad duration {text:?} (use 500ms or 2s, at most {}s)",
+                    MAX_DURATION.as_secs()
+                ))
+            })
         };
         let size = |text: &str| {
-            parse_size(text).ok_or_else(|| error(format!("bad size {text:?} (use 100x28)")))
+            parse_size(text).ok_or_else(|| {
+                error(format!(
+                    "bad size {text:?} (use 100x28: {MIN_COLUMNS} to {MAX_COLUMNS} columns, \
+                     {MIN_ROWS} to {MAX_ROWS} rows)"
+                ))
+            })
         };
         let step = match command.as_str() {
             "Set" => {
@@ -478,11 +531,7 @@ pub fn parse(source: &str) -> Result<Tape, TapeError> {
             },
             "Screenshot" => {
                 let name = arg(0)?;
-                if name.is_empty()
-                    || !name
-                        .chars()
-                        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-                {
+                if !screenshot_name_allowed(name) {
                     return Err(error(format!(
                         "screenshot name {name:?} must be letters, digits, - or _"
                     )));
@@ -495,10 +544,18 @@ pub fn parse(source: &str) -> Result<Tape, TapeError> {
                 let (columns, rows) = size(arg(0)?)?;
                 Step::Resize { columns, rows }
             }
-            "Write" => Step::Write {
-                path: arg(0)?.to_string(),
-                content: unescape(arg(1)?),
-            },
+            "Write" => {
+                let path = arg(0)?;
+                if !write_path_allowed(path) {
+                    return Err(error(format!(
+                        "Write path {path:?} must be relative and stay in the workspace (no ..)"
+                    )));
+                }
+                Step::Write {
+                    path: path.to_string(),
+                    content: unescape(arg(1)?),
+                }
+            }
             "Exec" => Step::Exec(arg(0)?.to_string()),
             name => match Key::parse(name) {
                 Some(key) => {
@@ -594,6 +651,53 @@ mod tests {
         );
         assert_eq!(words("Type 'a # b'").unwrap(), ["Type", "a # b"]);
         assert_eq!(unescape(r"x\d\n\\"), "x\\d\n\\");
+    }
+
+    #[test]
+    fn huge_durations_are_parse_errors() {
+        // `Duration::from_secs_f64` panicked on these.
+        for step in [
+            "Sleep 1e300s",
+            "Set Timeout 1e20s",
+            "Wait \"x\" 1e300s",
+            "Sleep 3601s",
+        ] {
+            let error = parse(step).unwrap_err();
+            assert!(error.message.contains("bad duration"), "{step}: {error}");
+        }
+        assert!(parse("Wait /x/ 1e300s").is_err());
+        assert_eq!(parse_duration("3600s"), Some(MAX_DURATION));
+        assert_eq!(parse_duration("1.5ms"), Some(Duration::from_micros(1500)));
+    }
+
+    #[test]
+    fn sizes_are_bounded() {
+        for size in [
+            "1x5",
+            "5x1",
+            "0x0",
+            "501x10",
+            "10x201",
+            "65535x65535",
+            "7000x2",
+        ] {
+            assert!(
+                parse(&format!("Set Size {size}")).is_err(),
+                "Set Size {size}"
+            );
+            assert!(parse(&format!("Resize {size}")).is_err(), "Resize {size}");
+        }
+        let tape = parse("Set Size 500x200\nResize 2x2\n").unwrap();
+        assert_eq!((tape.columns, tape.rows), (500, 200));
+    }
+
+    #[test]
+    fn write_stays_in_the_workspace() {
+        for path in ["/tmp/x", "../x", "a/../../x", "a/..", ""] {
+            let error = parse(&format!("Write '{path}' hi")).unwrap_err();
+            assert!(error.message.contains("Write path"), "{path}: {error}");
+        }
+        assert!(parse("Write a/b.txt hi\nWrite ./c hi\n").is_ok());
     }
 
     #[test]

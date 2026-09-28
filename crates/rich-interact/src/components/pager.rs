@@ -77,7 +77,11 @@ impl Pager {
         self
     }
 
-    fn set(&mut self, lines: Vec<Vec<Segment>>) {
+    fn set(&mut self, mut lines: Vec<Vec<Segment>>) {
+        // Controls in the content are shown as text; search what is shown.
+        for line in &mut lines {
+            crate::paint::sanitize_line(line);
+        }
         self.plain = lines
             .iter()
             .map(|line| line.iter().map(|s| s.text.as_str()).collect())
@@ -105,24 +109,14 @@ impl Pager {
         let Some(query) = self.query.as_ref().filter(|q| !q.is_empty()) else {
             return;
         };
-        let needle = query.to_lowercase();
+        let needle: Vec<char> = query.chars().flat_map(char::to_lowercase).collect();
         for (line, text) in self.plain.iter().enumerate() {
-            let haystack = text.to_lowercase();
-            // Lower-casing can change byte lengths; fall back to the
-            // original only when it does not.
-            if haystack.len() != text.len() {
-                continue;
-            }
-            let mut from = 0;
-            while let Some(at) = haystack[from..].find(&needle) {
-                let start = from + at;
-                let end = start + needle.len();
+            for (start, end) in find_folded(text, &needle) {
                 self.hits.push(Hit {
                     line,
                     start: cell_len(&text[..start]),
                     end: cell_len(&text[..end]),
                 });
-                from = end.max(start + 1);
             }
         }
     }
@@ -178,6 +172,41 @@ impl Pager {
         }
         out
     }
+}
+
+/// The byte ranges of `text` whose lower-cased characters are `needle`
+/// (already lower-cased), without overlaps. Lower-casing can change a
+/// character's length (`ẞ` to `ß`, `İ` to `i̇`), so the text is folded one
+/// character at a time and each match mapped back to whole characters of
+/// the original: nothing is sliced with an offset into the folded text.
+fn find_folded(text: &str, needle: &[char]) -> Vec<(usize, usize)> {
+    let mut hits = Vec::new();
+    if needle.is_empty() {
+        return hits;
+    }
+    // Each folded character, and the byte range of the character it came
+    // from.
+    let mut folded: Vec<(char, usize, usize)> = Vec::with_capacity(text.len());
+    for (at, c) in text.char_indices() {
+        let end = at + c.len_utf8();
+        folded.extend(c.to_lowercase().map(|lower| (lower, at, end)));
+    }
+    let mut from = 0;
+    while from + needle.len() <= folded.len() {
+        let window = &folded[from..from + needle.len()];
+        if window.iter().map(|(c, _, _)| c).eq(needle.iter()) {
+            let (start, end) = (window[0].1, window[needle.len() - 1].2);
+            hits.push((start, end));
+            // Past the last original character the match touched.
+            from += needle.len();
+            while from < folded.len() && folded[from].1 < end {
+                from += 1;
+            }
+        } else {
+            from += 1;
+        }
+    }
+    hits
 }
 
 impl Component for Pager {
@@ -306,5 +335,39 @@ impl Component for Pager {
             io.write("\n");
         }
         Ok(Some(()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn search_folds_case_one_character_at_a_time() {
+        // `ẞ` lower-cases to `ß`, two bytes shorter: offsets into the
+        // folded text are not offsets into the line.
+        assert_eq!(find_folded("Ⱥẞ", &['ß']), [(2, 5)]);
+        assert_eq!(find_folded("ȺẞxSS", &['ß']), [(2, 5)]);
+        // `İ` folds to two characters; lines holding it are searched too.
+        let needle: Vec<char> = "x".chars().collect();
+        assert_eq!(find_folded("İx", &needle), [(2, 3)]);
+        let needle: Vec<char> = "i̇".chars().collect();
+        assert_eq!(find_folded("aİb", &needle), [(1, 3)]);
+        // Non-overlapping, case-insensitive.
+        assert_eq!(find_folded("AaAa", &['a', 'a']), [(0, 2), (2, 4)]);
+        assert!(find_folded("abc", &[]).is_empty());
+    }
+
+    #[test]
+    fn a_search_that_changes_byte_lengths_marks_the_right_cells() {
+        let pager = Pager::lines(vec![vec![Segment::new("Ⱥẞ end", None)]]).search("ß");
+        assert_eq!(
+            pager.hits,
+            [Hit {
+                line: 0,
+                start: 1,
+                end: 2
+            }]
+        );
     }
 }

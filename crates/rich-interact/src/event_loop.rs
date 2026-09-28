@@ -287,8 +287,10 @@ impl<'a> EventLoop<'a> {
             view.push(component.render(&context));
         }
         // A line wider than the terminal would wrap and shift every row
-        // below it: crop.
+        // below it: crop, once controls are shown as the characters the
+        // painter will write.
         for line in &mut view.lines {
+            crate::paint::sanitize_line(line);
             if line.iter().map(Segment::cell_length).sum::<usize>() > context.width {
                 *line = Segment::adjust_line_length(line, context.width, None);
             }
@@ -502,7 +504,10 @@ pub fn run<C: Component>(component: C, options: &RunOptions) -> Result<Outcome<C
 }
 
 /// What [`run`] does without a terminal: follow `fallback`, asking through
-/// `io` when it says to prompt.
+/// `io` when it says to prompt. A prompt that ends with
+/// [`NotInteractive::Ended`] (input ran out, no default) fails with
+/// [`NotInteractive::NoDefault`] and the reason; one that ends with
+/// [`NotInteractive::Interrupted`] is [`Outcome::Interrupted`].
 pub fn degrade<C: Component>(
     component: &mut C,
     fallback: Fallback,
@@ -522,6 +527,10 @@ pub fn degrade<C: Component>(
             Ok(Some(value)) => Ok(Outcome::Done(value)),
             Ok(None) => Ok(Outcome::Cancelled),
             Err(NotInteractive::NoPrompt) => default(component),
+            Err(NotInteractive::Ended) => {
+                Err(Error::NotInteractive(NotInteractive::NoDefault(reason)))
+            }
+            Err(NotInteractive::Interrupted) => Ok(Outcome::Interrupted),
             Err(error) => Err(Error::NotInteractive(error)),
         },
     }

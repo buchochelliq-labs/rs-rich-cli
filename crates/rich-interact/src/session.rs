@@ -6,7 +6,8 @@
 //! the session (an early return, `?`), or a panic, through a hook installed
 //! on first use that restores the terminal before the panic message prints.
 //! Ctrl+C arrives as a key in raw mode, so it ends the event loop the
-//! ordinary way. [`Session::handoff`] gives the terminal to another program
+//! ordinary way. On Unix, SIGTERM, SIGHUP and SIGQUIT restore the terminal
+//! too, from a thread that then takes the signal's default action. [`Session::handoff`] gives the terminal to another program
 //! (`$EDITOR`, a pager) and takes it back.
 //!
 //! The terminal's modes are process-wide, so only one session exists at a
@@ -100,6 +101,21 @@ fn restore() -> io::Result<()> {
     if active == 0 {
         return Ok(());
     }
+    let out = undo(active);
+    let output = if ON_STDERR.load(Ordering::SeqCst) {
+        Output::Stderr
+    } else {
+        Output::Stdout
+    };
+    let written = output.write(&out);
+    if active & RAW != 0 {
+        crossterm::terminal::disable_raw_mode()?;
+    }
+    written
+}
+
+/// The sequences that turn off what `active` records.
+fn undo(active: u8) -> String {
     let mut out = String::new();
     if active & MOUSE != 0 {
         out.push_str("\x1b[?1006l\x1b[?1015l\x1b[?1003l\x1b[?1002l\x1b[?1000l");
@@ -111,16 +127,75 @@ fn restore() -> io::Result<()> {
     if active & ALTERNATE != 0 {
         out.push_str("\x1b[?1049l");
     }
-    let output = if ON_STDERR.load(Ordering::SeqCst) {
-        Output::Stderr
-    } else {
-        Output::Stdout
-    };
-    let written = output.write(&out);
-    if active & RAW != 0 {
-        crossterm::terminal::disable_raw_mode()?;
+    out
+}
+
+/// Raw mode is on for a line read without echo
+/// ([`StdLineIo::read_secret`](crate::policy::StdLineIo)), outside any
+/// session: the signal thread turns it off too.
+static RAW_LINE: AtomicBool = AtomicBool::new(false);
+#[cfg(unix)]
+static SIGNALS: Once = Once::new();
+
+/// Record that a line is being read in raw mode (`on`), or no longer is.
+pub(crate) fn raw_line(on: bool) {
+    if on {
+        watch_signals();
     }
-    written
+    RAW_LINE.store(on, Ordering::SeqCst);
+}
+
+/// SIGTERM, SIGHUP and SIGQUIT end the process without unwinding, so
+/// neither `Drop` nor the panic hook would give the terminal back. From
+/// the first session on, a thread waits for them: it restores whatever is
+/// on, then takes the signal's default action (the process ends as it
+/// would have). The handlers stay installed once the session ends, since
+/// removing them would leave the signals ignored; with nothing on they
+/// only take the default action.
+fn watch_signals() {
+    #[cfg(unix)]
+    SIGNALS.call_once(|| {
+        use signal_hook::consts::{SIGHUP, SIGQUIT, SIGTERM};
+        let Ok(mut signals) = signal_hook::iterator::Signals::new([SIGTERM, SIGHUP, SIGQUIT])
+        else {
+            return;
+        };
+        let _ = std::thread::Builder::new()
+            .name("rich-interact-signals".into())
+            .spawn(move || {
+                for signal in signals.forever() {
+                    restore_for_signal();
+                    let _ = signal_hook::low_level::emulate_default_handler(signal);
+                }
+            });
+    });
+}
+
+/// [`restore`] from the signal thread. The sequences go straight to the
+/// terminal rather than through the standard stream's lock, which the
+/// interrupted thread may hold.
+#[cfg(unix)]
+fn restore_for_signal() {
+    let active = ACTIVE.swap(0, Ordering::SeqCst);
+    if active != 0 {
+        let out = undo(active);
+        let direct = std::fs::OpenOptions::new()
+            .write(true)
+            .open("/dev/tty")
+            .and_then(|mut tty| tty.write_all(out.as_bytes()));
+        if direct.is_err() {
+            let output = if ON_STDERR.load(Ordering::SeqCst) {
+                Output::Stderr
+            } else {
+                Output::Stdout
+            };
+            let _ = output.write(&out);
+        }
+    }
+    let raw_line = RAW_LINE.swap(false, Ordering::SeqCst);
+    if active & RAW != 0 || raw_line {
+        let _ = crossterm::terminal::disable_raw_mode();
+    }
 }
 
 fn install_hook() {
@@ -193,6 +268,7 @@ impl Session {
             ));
         }
         install_hook();
+        watch_signals();
         // From here on, dropping the session releases ownership, including
         // when `enter` fails part way.
         let mut session = Session {
