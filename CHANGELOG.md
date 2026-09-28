@@ -338,6 +338,12 @@ a plugin may do, and the threat model: [the plugin guide](docs/PLUGINS.md).
     naming the file, and never panics.
   - Loaded plugins draw their Markdown fences and highlight printed text, and
     linked plugins join every registry the binary builds.
+  - `--transform NAME` (repeatable) applies registered text transforms, a
+    plugin's or a built-in one, to text, `--print` and `--syntax`, in the
+    order given, after `--filter` and before `--highlight`. An unknown name is
+    a usage error (exit 2) listing the available names; a failed transform
+    reads `--transform NAME failed: …` (exit 4), as `--filter` does.
+    `--inspect` refuses it.
 - **Release tooling.** `validate_release.py` runs the loader tests with both
   features on, and the CI MSRV check builds the CLI with them.
 

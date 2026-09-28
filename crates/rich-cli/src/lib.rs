@@ -930,6 +930,13 @@ fn dispatch(args: Vec<String>) -> ExitCode {
                     Err((class, message)) => return fail(&cli, class, message),
                 }
             }
+            // `--transform` names are known once plugins are loaded.
+            if let Some(message) = cli
+                .data
+                .unknown_transform(&plugin_registry(MermaidBackend::Text))
+            {
+                return fail(&cli, ExitClass::Usage, message);
+            }
             if cli.batch {
                 if let Err(error) = batch::install_interrupt_handler() {
                     return fail(
@@ -1034,6 +1041,7 @@ const VALUE_OPTIONS: &[&str] = &[
     "--select",
     "--filter",
     "--highlight",
+    "--transform",
     "--find",
     "--max-depth",
     "--max-length",
@@ -2240,7 +2248,8 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     if let Some(flag) = data.transform_option() {
         if !transforms_apply(mode) {
             return Err(format!(
-                "{flag} only has an effect on text, --print, --syntax or --inspect"
+                "{flag} only has an effect on {}",
+                transform_modes(flag)
             ));
         }
         data.check_transforms(mode == Mode::Inspect)?;
@@ -3163,11 +3172,36 @@ fn transforms_apply(mode: Mode) -> bool {
     )
 }
 
+/// The usage error for a transform option `mode` does not take: any of them
+/// outside [`transforms_apply`], and `--transform` (text only) with
+/// `--inspect`.
+fn transform_misplaced_in(cli: &Cli, mode: Mode) -> Option<String> {
+    if let Some(flag) = cli
+        .data
+        .transform_option()
+        .filter(|_| !transforms_apply(mode))
+    {
+        return Some(transforms_misplaced(flag, mode));
+    }
+    (mode == Mode::Inspect && !cli.data.transforms().is_empty())
+        .then(|| cli.data.check_transforms(true).unwrap_err())
+}
+
 fn transforms_misplaced(flag: &str, mode: Mode) -> String {
     format!(
-        "{flag} only has an effect on text, --print, --syntax or --inspect, not {}",
+        "{flag} only has an effect on {}, not {}",
+        transform_modes(flag),
         mode_name(mode)
     )
+}
+
+/// Where a transform option applies: `--transform` rewrites text only.
+fn transform_modes(flag: &str) -> &'static str {
+    if flag == "--transform" {
+        "text, --print or --syntax"
+    } else {
+        "text, --print, --syntax or --inspect"
+    }
 }
 
 fn detect_mode(resource: Option<&str>) -> Mode {
@@ -3777,12 +3811,8 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         Mode::Auto => detect_mode(cli.resource.as_deref()),
         other => other,
     };
-    if let Some(flag) = cli
-        .data
-        .transform_option()
-        .filter(|_| !transforms_apply(mode))
-    {
-        return fail(&cli, ExitClass::Usage, transforms_misplaced(flag, mode));
+    if let Some(message) = transform_misplaced_in(&cli, mode) {
+        return fail(&cli, ExitClass::Usage, message);
     }
 
     // `view` decides what to show from the resource itself: an existing
@@ -4274,12 +4304,8 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         .unwrap_or_default();
 
     // `--format` or a URL's Content-Type can still route away from text.
-    if let Some(flag) = cli
-        .data
-        .transform_option()
-        .filter(|_| !transforms_apply(mode))
-    {
-        return fail(&cli, ExitClass::Usage, transforms_misplaced(flag, mode));
+    if let Some(message) = transform_misplaced_in(&cli, mode) {
+        return fail(&cli, ExitClass::Usage, message);
     }
 
     // Build the renderable, and the width a non-expanding `Panel`/`Padding`
@@ -4419,7 +4445,8 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             let fit = measure_rendered(&console, &table);
             (Box::new(table), Some(fit))
         }
-        // `--filter` and `--highlight` work on the highlighted text.
+        // `--filter`, `--transform` and `--highlight` work on the highlighted
+        // text.
         Mode::Syntax if cli.data.transform_option().is_some() => {
             let language = cli.source.lexer.as_deref().unwrap_or(&language);
             // `--head`/`--tail` pick the lines first, as `Syntax`'s
@@ -4440,7 +4467,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             let text = Syntax::new(code.as_str(), language).highlight_for(&console);
             let text = match cli
                 .data
-                .text_pipeline()
+                .text_pipeline(&plugin_registry(MermaidBackend::Text))
                 .and_then(|pipeline| pipeline.apply(text).map_err(inspect::transform_failed))
             {
                 Ok(text) => text,
@@ -4532,7 +4559,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             }
             let text = match cli
                 .data
-                .text_pipeline()
+                .text_pipeline(&plugin_registry(MermaidBackend::Text))
                 .and_then(|pipeline| pipeline.apply(text).map_err(inspect::transform_failed))
             {
                 Ok(text) => text,

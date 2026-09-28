@@ -212,7 +212,9 @@ shows one; both take `--report json`. In a build with `dylib-plugins` or
 `--plugin PATH` loads a runtime plugin for one run, and a `plugins = [...]`
 list in `~/.config/rich/config.toml` or a file given with `--config` loads
 them every time. Loaded plugins draw Markdown fences and highlight printed
-text.
+text, and `--transform NAME` (repeatable, in the order given) applies their
+transforms to text, `--print` and `--syntax`, after `--filter` and before
+`--highlight`.
 
 ## Security: threat model
 
@@ -260,8 +262,7 @@ its way:
 3. **Done — third-party loading (0.0.13).** Linked plugins, native and WASM
    runtime plugins, and `rich plugins list/info`, as above.
 4. **Later.** Plugin manifests that can be read without running code, a
-   Git-backed index, `rich plugin install` (#232), and CLI flags that apply a
-   runtime plugin's transforms.
+   Git-backed index, `rich plugin install` (#232).
 
 Whatever we add, the invariant holds: **the core never learns about a specific
 extension.**

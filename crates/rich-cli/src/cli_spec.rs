@@ -101,6 +101,7 @@ fn command_options(name: &str) -> Vec<ArgSpec> {
             "select",
             "filter",
             "highlight",
+            "transform",
             "find",
             "flatten",
             "table",
@@ -708,6 +709,15 @@ fn inspect_options() -> Vec<ArgSpec> {
              JSONPath selects; for text, --print and --syntax, the matches of a regular \
              expression",
         ),
+        option(
+            "transform",
+            "NAME",
+            INSPECT,
+            "Apply a registered text transform, such as one a --plugin adds, to text, \
+             --print and --syntax; repeatable, applied in the order given, after --filter and \
+             before --highlight. `rich plugins list` shows the names",
+        )
+        .multiple(true),
         option(
             "find",
             "TEXT",

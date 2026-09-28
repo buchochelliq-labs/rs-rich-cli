@@ -326,3 +326,243 @@ mod dylib {
         assert!(!stdout.contains("\u{1b}]0;"), "{stdout:?}");
     }
 }
+
+/// `--transform NAME` checks its names once plugins are loaded; with none
+/// registered, the message says so. It rewrites text only.
+#[test]
+fn an_unknown_or_misplaced_transform_is_a_usage_error() {
+    let (_root, work, home) = dirs();
+    let out = rich(&work, &home, &["--transform", "nope", "-p", "hi"]);
+    assert_eq!(out.status.code(), Some(2), "{}", text(&out.stderr));
+    let stderr = text(&out.stderr);
+    assert!(
+        stderr.contains("unknown transform \"nope\" for --transform"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("no transform is registered"), "{stderr}");
+    let out = rich(&work, &home, &["--transform"]);
+    assert_eq!(out.status.code(), Some(2));
+
+    std::fs::write(work.join("doc.md"), "# Doc\n").unwrap();
+    let out = rich(&work, &home, &["--transform", "x", "-m", "doc.md"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(
+        text(&out.stderr).contains("--transform only has an effect on text, --print or --syntax"),
+        "{}",
+        text(&out.stderr)
+    );
+    std::fs::write(work.join("a.json"), "{}").unwrap();
+    let out = rich(&work, &home, &["--transform", "x", "--inspect", "a.json"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(
+        text(&out.stderr).contains("not --inspect"),
+        "{}",
+        text(&out.stderr)
+    );
+}
+
+#[cfg(feature = "wasm-plugins")]
+mod wasm_transforms {
+    use super::*;
+
+    const SHOUT: &str = include_str!("../../rich-plugin-api/examples/wasm/shout.wat");
+
+    /// A second plugin, `tag`: its `tag` transform replaces any text with
+    /// "made by tag", and its `broken` transform always fails.
+    fn tag_wat() -> String {
+        let manifest = "rich-plugin-abi 1.0\\nname tag\\nversion 0.1.0\\n\
+                        capability transform tag\\ncapability transform broken\\n";
+        let len = manifest.replace("\\n", "\n").len();
+        format!(
+            r#"(module
+  (memory (export "memory") 1)
+  (data (i32.const 0) "{manifest}")
+  (data (i32.const 512) "made by tag")
+  (data (i32.const 600) "it broke")
+  (func $pack (param $ptr i32) (param $len i32) (result i64)
+    (i64.or (i64.shl (i64.extend_i32_u (local.get $ptr)) (i64.const 32))
+            (i64.extend_i32_u (local.get $len))))
+  (func (export "rich_plugin_alloc") (param $len i32) (result i32) (i32.const 4096))
+  (func (export "rich_plugin_manifest") (result i64)
+    (call $pack (i32.const 0) (i32.const {len})))
+  (func (export "rich_plugin_call")
+    (param $cap i32) (param $ptr i32) (param $len i32) (param $width i32) (result i64)
+    (if (i32.eqz (local.get $cap))
+      (then (return (call $pack (i32.const 512) (i32.const 11)))))
+    (i64.or (call $pack (i32.const 600) (i32.const 8)) (i64.const 0x8000000000000000)))
+)"#
+        )
+    }
+
+    /// `shout.wasm` (the `upper` transform) and `tag.wasm` in `dir`.
+    fn plugins(dir: &Path) {
+        std::fs::write(dir.join("shout.wasm"), wat::parse_str(SHOUT).unwrap()).unwrap();
+        std::fs::write(dir.join("tag.wasm"), wat::parse_str(tag_wat()).unwrap()).unwrap();
+    }
+
+    fn with_plugins<'a>(args: &[&'a str]) -> Vec<&'a str> {
+        let mut all = vec!["--plugin", "shout.wasm", "--plugin", "tag.wasm"];
+        all.extend_from_slice(args);
+        all
+    }
+
+    #[test]
+    fn a_plugin_transform_applies_to_text_print_and_syntax() {
+        let (_root, work, home) = dirs();
+        plugins(&work);
+        let out = rich(
+            &work,
+            &home,
+            &[
+                "--plugin",
+                "shout.wasm",
+                "--transform",
+                "upper",
+                "-p",
+                "hello there",
+            ],
+        );
+        assert!(out.status.success(), "{}", text(&out.stderr));
+        assert_eq!(text(&out.stdout).trim_end(), "HELLO THERE");
+
+        std::fs::write(work.join("notes.txt"), "quiet words\n").unwrap();
+        let out = rich(
+            &work,
+            &home,
+            &with_plugins(&["--transform", "upper", "notes.txt"]),
+        );
+        assert!(
+            text(&out.stdout).contains("QUIET WORDS"),
+            "{}",
+            text(&out.stdout)
+        );
+
+        std::fs::write(work.join("main.py"), "print('hi')\n").unwrap();
+        let out = rich(
+            &work,
+            &home,
+            &with_plugins(&["--transform", "upper", "main.py"]),
+        );
+        assert!(out.status.success(), "{}", text(&out.stderr));
+        assert!(
+            text(&out.stdout).contains("PRINT('HI')"),
+            "{}",
+            text(&out.stdout)
+        );
+
+        // `rich plugins list` shows the transform's name.
+        let out = rich(&work, &home, &with_plugins(&["plugins", "list"]));
+        assert!(text(&out.stdout).contains("transform \"upper\""));
+    }
+
+    #[test]
+    fn an_unknown_transform_lists_the_available_names() {
+        let (_root, work, home) = dirs();
+        plugins(&work);
+        let out = rich(
+            &work,
+            &home,
+            &with_plugins(&["--transform", "lower", "-p", "x"]),
+        );
+        assert_eq!(out.status.code(), Some(2), "{}", text(&out.stderr));
+        let stderr = text(&out.stderr);
+        assert!(
+            stderr.contains(
+                "unknown transform \"lower\" for --transform; transforms: broken, tag, upper"
+            ),
+            "{stderr}"
+        );
+        let out = rich(
+            &work,
+            &home,
+            &with_plugins(&["--transform", "lower", "-p", "x", "--report", "json"]),
+        );
+        let report: serde_json::Value = serde_json::from_slice(&out.stderr).unwrap();
+        assert_eq!(report["code"], "usage");
+    }
+
+    #[test]
+    fn transforms_apply_in_the_order_given() {
+        let (_root, work, home) = dirs();
+        plugins(&work);
+        let run = |order: &[&str]| {
+            let mut args = Vec::new();
+            for name in order {
+                args.extend(["--transform", *name]);
+            }
+            args.extend(["-p", "anything"]);
+            let out = rich(&work, &home, &with_plugins(&args));
+            assert!(out.status.success(), "{}", text(&out.stderr));
+            text(&out.stdout).trim_end().to_string()
+        };
+        assert_eq!(run(&["tag", "upper"]), "MADE BY TAG");
+        assert_eq!(run(&["upper", "tag"]), "made by tag");
+        // The same transform twice runs twice.
+        assert_eq!(run(&["upper", "upper"]), "ANYTHING");
+    }
+
+    #[test]
+    fn a_failing_transform_is_named_like_the_other_transforms() {
+        let (_root, work, home) = dirs();
+        plugins(&work);
+        let out = rich(
+            &work,
+            &home,
+            &with_plugins(&["--transform", "broken", "-p", "x"]),
+        );
+        assert_eq!(out.status.code(), Some(4), "{}", text(&out.stderr));
+        let stderr = text(&out.stderr);
+        assert!(stderr.contains("--transform broken failed: "), "{stderr}");
+        assert!(stderr.contains("it broke"), "{stderr}");
+    }
+
+    /// The documented order is `--filter`, each `--transform`, `--highlight`,
+    /// whatever order the flags are given in: the filter matches the text as
+    /// read, and the highlight the transformed text.
+    #[test]
+    fn transforms_run_between_filter_and_highlight() {
+        let (_root, work, home) = dirs();
+        plugins(&work);
+        std::fs::write(work.join("fruit.txt"), "apple\nbanana\ncherry\n").unwrap();
+        let out = Command::new(env!("CARGO_BIN_EXE_rich"))
+            .current_dir(&work)
+            .env("HOME", &home)
+            .env("XDG_CONFIG_HOME", home.join(".config"))
+            .env("COLUMNS", "40")
+            .env_remove("NO_COLOR")
+            .args(with_plugins(&[
+                "--highlight",
+                "AN",
+                "--transform",
+                "upper",
+                "--filter",
+                "an",
+                "--force-terminal",
+                "fruit.txt",
+            ]))
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{}", text(&out.stderr));
+        let stdout = text(&out.stdout);
+        // `--filter an` saw the lowercase input: only "banana" is left.
+        assert!(
+            !stdout.contains("APPLE") && !stdout.contains("CHERRY"),
+            "{stdout:?}"
+        );
+        // `--highlight AN` saw the upper-cased text: "AN" is in reverse video.
+        assert!(stdout.contains("\u{1b}[7mAN"), "{stdout:?}");
+        let plain: String = stdout
+            .split('\u{1b}')
+            .enumerate()
+            .map(|(i, part)| {
+                if i == 0 {
+                    part
+                } else {
+                    part.split_once('m').map_or("", |p| p.1)
+                }
+            })
+            .collect();
+        assert_eq!(plain.trim_end(), "BANANA");
+    }
+}

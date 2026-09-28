@@ -162,16 +162,18 @@ Loading fails closed: a missing file (exit 3), a file of an unknown kind, a
 build without the loader, a refused ABI or a name another plugin provides
 (exit 2) all stop the command with a message naming the file. Nothing panics.
 
+A loaded plugin draws its Markdown fences, adds its highlighters, and its
+transforms run with `--transform NAME`: repeatable, in the order given, on
+text, `--print` and `--syntax`, after `--filter` and before `--highlight`. The
+names are checked once plugins are loaded, so an unknown one is a usage error
+listing the names there are.
+
 `rich plugins list` and `rich plugins info NAME` show every plugin with its
 source (`built-in`, `linked`, `native`, `wasm`), version, ABI and
 capabilities; `--report json` writes the same to stdout.
 
 ## Deferred
 
-- **Transforms in the CLI.** A runtime plugin's transforms are registered and
-  shown by `rich plugins`, and a library host chains them with
-  `ExtensionRegistry::text_pipeline`, but the CLI has no flag that names one
-  yet.
 - **A Rust helper for WASM plugins.** Native plugins get
   `export_dylib_plugin!`; a WASM plugin is written against the documented
   exports (the example is hand-written WAT). A matching macro needs a
