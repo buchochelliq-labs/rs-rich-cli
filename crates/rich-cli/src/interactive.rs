@@ -1,7 +1,7 @@
-//! `rich choose`, `rich filter`, `rich input`, `rich confirm` and
-//! `rich pager` (#493, #494): the rs-rich-interact components as shell
-//! commands. Not upstream: a CLI convenience over the rs-rich-interact
-//! library.
+//! `rich choose`, `rich filter`, `rich input`, `rich confirm`,
+//! `rich pager`, `rich write`, `rich file`, `rich color` and `rich asset`
+//! (#493, #494): the rs-rich-interact components as shell commands. Not
+//! upstream: a CLI convenience over the rs-rich-interact library.
 //!
 //! They are made for scripts. The answer goes to standard output and the
 //! component paints on standard error, so `choice=$(rich choose a b c)`
@@ -11,10 +11,15 @@
 //! with Ctrl+C, 2 a usage error, 3 no answer without a terminal.
 //!
 //! Without a terminal they follow rs-rich-interact's degradation policy:
-//! `input` and `confirm`, and `choose` from arguments, ask line by line on
-//! standard error; `choose` from standard input answers with `--selected`;
-//! `filter` prints the lines that match `--value`, so it is a fuzzy `grep`
-//! in a pipeline; `pager` writes the content out.
+//! `input`, `confirm`, `color` and `asset`, and `choose` from arguments, ask
+//! line by line on standard error; `choose` from standard input and `file`
+//! answer with `--selected`; `filter` prints the lines that match `--value`,
+//! so it is a fuzzy `grep` in a pipeline; `pager` writes the content out;
+//! `write` answers with what standard input held.
+//!
+//! `--mouse` (#476) turns mouse reporting on where a command has something
+//! to click: rows, buttons, the border beside a preview. It is off by
+//! default, since it takes text selection away from the terminal.
 use super::*;
 
 use std::io::{IsTerminal, Read};
@@ -25,12 +30,15 @@ use std::time::{Duration, Instant};
 use rich_ext::cli_doc::{ArgSpec, CommandSpec};
 use rich_ext::sanitize_terminal_controls;
 use rich_interact::{
-    Choice, Confirm, Error as RunError, Fallback, Input, Item, LoopOptions, MultiSelect,
-    NotInteractive, Outcome, Output, Pager, Policy, Preview, RunOptions, Select, SessionOptions,
+    AssetKind, AssetPicker, Choice, ColorFormat, ColorPicker, Confirm, Error as RunError, Fallback,
+    FileMode, FilePicker, Input, Item, LoopOptions, MultiSelect, NotInteractive, Outcome, Output,
+    Pager, Policy, Preview, RunOptions, Select, SessionOptions, TextArea,
 };
 
 /// The commands, in the order help lists them.
-const COMMANDS: &[&str] = &["choose", "filter", "input", "confirm", "pager"];
+const COMMANDS: &[&str] = &[
+    "choose", "filter", "input", "confirm", "pager", "write", "file", "color", "asset",
+];
 
 /// The command word, when the first word that is not an option is one.
 pub(super) fn requested(args: &[String]) -> Option<&'static str> {
@@ -71,6 +79,13 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         "Show COMMAND's output for the focused item beside the list; `{}` is the item, \
          shell-quoted, and $COLUMNS the pane's width (e.g. `rich {} --force-terminal`)",
     );
+    let mouse = ArgSpec::flag("mouse").help(
+        "Report the mouse: click to focus and pick, drag the border beside a preview (off by \
+         default: it takes text selection from the terminal)",
+    );
+    let height = ArgSpec::option("height")
+        .value_name("ROWS")
+        .help("Show at most ROWS at once (default 10)");
     let pick = |name: &str, about: &str| {
         CommandSpec::new(name)
             .about(about)
@@ -101,6 +116,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                     .help("Show at most ROWS items at once (default 10)"),
             )
             .arg(preview.clone())
+            .arg(mouse.clone())
     };
     vec![
         pick(
@@ -182,6 +198,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                     .value_name("LABEL")
                     .help("The no label (default No)"),
             )
+            .arg(ArgSpec::flag("mouse").help("Report the mouse: the answers are buttons to click"))
             .example(
                 "rich confirm 'Deploy to production?' && ./deploy",
                 "Guard a command",
@@ -199,6 +216,142 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                     .help("Start with QUERY searched"),
             )
             .example("git log --color | rich pager", "Page coloured output"),
+        CommandSpec::new("write")
+            .about(
+                "Write several lines and print them: Enter starts a line, Ctrl+D submits, Esc \
+                 cancels; without a terminal, print standard input",
+            )
+            .usage("write [OPTIONS]")
+            .arg(
+                ArgSpec::option("header")
+                    .value_name("TEXT")
+                    .help("The prompt above the text (default \"Write\")"),
+            )
+            .arg(
+                ArgSpec::option("placeholder")
+                    .value_name("TEXT")
+                    .help("Shown while the text is empty"),
+            )
+            .arg(
+                ArgSpec::option("value")
+                    .value_name("TEXT")
+                    .help("Start with TEXT (standard input, when it is piped, otherwise)"),
+            )
+            .arg(
+                ArgSpec::option("height")
+                    .value_name("ROWS")
+                    .help("Rows of text shown (default 5)"),
+            )
+            .arg(
+                ArgSpec::option("char-limit")
+                    .value_name("N")
+                    .help("At most N characters, line breaks included"),
+            )
+            .arg(ArgSpec::flag("show-line-numbers").help("Number the lines"))
+            .example(
+                "message=$(rich write --header 'Commit message')",
+                "A multi-line answer",
+            ),
+        CommandSpec::new("file")
+            .about(
+                "Browse from DIR (default .) and print the path picked: type to filter, → opens, ← \
+                 goes up, Ctrl+T shows hidden files; without a terminal, print --selected",
+            )
+            .usage("file [OPTIONS] [DIR]")
+            .arg(ArgSpec::positional("DIR").help("Where to start (default the current directory)"))
+            .arg(
+                ArgSpec::option("header")
+                    .value_name("TEXT")
+                    .help("The prompt above the list"),
+            )
+            .arg(height.clone())
+            .arg(
+                ArgSpec::option("value")
+                    .value_name("QUERY")
+                    .help("Start with QUERY typed"),
+            )
+            .arg(
+                ArgSpec::option("selected")
+                    .value_name("PATH")
+                    .help("The answer without a terminal"),
+            )
+            .arg(ArgSpec::flag("all").help("Show hidden files to begin with"))
+            .arg(ArgSpec::flag("directory").help(
+                "Pick directories (files are not listed, unless --file is given too: then either)",
+            ))
+            .arg(ArgSpec::flag("file").help("Pick files (the default)"))
+            .arg(
+                ArgSpec::option("extension")
+                    .value_name("EXT")
+                    .multiple(true)
+                    .help("List only files ending in .EXT (repeatable, or comma-separated)"),
+            )
+            .arg(mouse.clone())
+            .example("$EDITOR \"$(rich file src)\"", "Open a file picked from src")
+            .example("rich file --directory ~", "Pick a directory"),
+        CommandSpec::new("color")
+            .about(
+                "Pick a colour and print it: rich's named colours, the 256 palette (Tab), or hex and \
+                 rgb typed in, with a live swatch",
+            )
+            .usage("color [OPTIONS]")
+            .arg(
+                ArgSpec::option("header")
+                    .value_name("TEXT")
+                    .help("The prompt (default \"Colour\")"),
+            )
+            .arg(
+                ArgSpec::option("value")
+                    .value_name("TEXT")
+                    .help("Start with TEXT typed: a name to filter by, or a colour"),
+            )
+            .arg(
+                ArgSpec::option("default")
+                    .value_name("COLOR")
+                    .help("The answer without a terminal, and to an empty line"),
+            )
+            .arg(
+                ArgSpec::option("format")
+                    .value_name("FORMAT")
+                    .choices(["hex", "name", "rgb"])
+                    .help("How to print it: #rrggbb (default), a rich name, or rgb(r,g,b)"),
+            )
+            .arg(height.clone())
+            .arg(mouse.clone())
+            .example(
+                "rich --style \"bold $(rich color --format name)\" --print Hello",
+                "Style text with a picked colour",
+            ),
+        CommandSpec::new("asset")
+            .about("Pick an emoji, a box style or a spinner, with a preview, and print it")
+            .usage("asset [OPTIONS]")
+            .arg(
+                ArgSpec::option("kind")
+                    .value_name("KIND")
+                    .choices(["emoji", "box", "spinner"])
+                    .help(
+                        "What to pick (default emoji): an emoji prints as itself, a box style or \
+                         spinner by name",
+                    ),
+            )
+            .arg(
+                ArgSpec::option("header")
+                    .value_name("TEXT")
+                    .help("The prompt above the list"),
+            )
+            .arg(height)
+            .arg(
+                ArgSpec::option("value")
+                    .value_name("QUERY")
+                    .help("Start with QUERY typed"),
+            )
+            .arg(
+                ArgSpec::option("selected")
+                    .value_name("NAME")
+                    .help("Focus NAME; the answer without a terminal and to an empty line"),
+            )
+            .arg(mouse)
+            .example("rich asset --kind box", "Pick a box style for --box"),
     ]
 }
 
@@ -220,6 +373,15 @@ struct Args {
     affirmative: Option<String>,
     negative: Option<String>,
     search: Option<String>,
+    mouse: bool,
+    char_limit: Option<usize>,
+    line_numbers: bool,
+    all: bool,
+    directory: bool,
+    file: bool,
+    extensions: Vec<String>,
+    format: Option<String>,
+    kind: Option<String>,
     /// The global `--no-color`.
     no_color: bool,
 }
@@ -230,7 +392,14 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
         ..Args::default()
     };
     let allowed: &[&str] = match command {
-        "choose" => &["--header", "--multi", "--selected", "--height", "--preview"],
+        "choose" => &[
+            "--header",
+            "--multi",
+            "--selected",
+            "--height",
+            "--preview",
+            "--mouse",
+        ],
         "filter" => &[
             "--header",
             "--multi",
@@ -238,6 +407,42 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
             "--height",
             "--preview",
             "--value",
+            "--mouse",
+        ],
+        "write" => &[
+            "--header",
+            "--placeholder",
+            "--value",
+            "--height",
+            "--char-limit",
+            "--show-line-numbers",
+        ],
+        "file" => &[
+            "--header",
+            "--height",
+            "--value",
+            "--selected",
+            "--all",
+            "--directory",
+            "--file",
+            "--extension",
+            "--mouse",
+        ],
+        "color" => &[
+            "--header",
+            "--value",
+            "--default",
+            "--format",
+            "--height",
+            "--mouse",
+        ],
+        "asset" => &[
+            "--kind",
+            "--header",
+            "--height",
+            "--value",
+            "--selected",
+            "--mouse",
         ],
         "input" => &[
             "--prompt",
@@ -246,7 +451,7 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
             "--default",
             "--password",
         ],
-        "confirm" => &["--default", "--affirmative", "--negative"],
+        "confirm" => &["--default", "--affirmative", "--negative", "--mouse"],
         _ => &["--search"],
     };
     let mut seen_command = false;
@@ -300,6 +505,45 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
             "--header" => parsed.header = Some(value()?),
             "--multi" => parsed.multi = true,
             "--password" => parsed.password = true,
+            "--mouse" => parsed.mouse = true,
+            "--show-line-numbers" => parsed.line_numbers = true,
+            "--all" => parsed.all = true,
+            "--directory" => parsed.directory = true,
+            "--file" => parsed.file = true,
+            "--char-limit" => {
+                let chars = value()?;
+                parsed.char_limit = Some(
+                    chars
+                        .parse::<usize>()
+                        .ok()
+                        .filter(|chars| *chars > 0)
+                        .ok_or_else(|| {
+                            format!("--char-limit: {chars:?} is not a positive number")
+                        })?,
+                );
+            }
+            "--extension" => {
+                for extension in value()?.split(',') {
+                    let extension = extension.trim().trim_start_matches('.');
+                    if !extension.is_empty() {
+                        parsed.extensions.push(extension.to_string());
+                    }
+                }
+            }
+            "--format" => {
+                let format = value()?;
+                if !matches!(format.as_str(), "hex" | "name" | "rgb") {
+                    return Err(format!("--format: {format:?} is not hex, name or rgb"));
+                }
+                parsed.format = Some(format);
+            }
+            "--kind" => {
+                let kind = value()?;
+                if !matches!(kind.as_str(), "emoji" | "box" | "spinner") {
+                    return Err(format!("--kind: {kind:?} is not emoji, box or spinner"));
+                }
+                parsed.kind = Some(kind);
+            }
             "--selected" => parsed.selected.push(value()?),
             "--height" => {
                 let rows = value()?;
@@ -321,8 +565,9 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
         }
     }
     // Arguments that were not valid Unicode are text here (items, prompts),
-    // shown lossily; only the pager's FILE is a path, read through fs_path.
-    if command != "pager" {
+    // shown lossily; only the pager's FILE and the file picker's DIR and
+    // --selected are paths, read through fs_path.
+    if !matches!(command, "pager" | "file") {
         for positional in &mut parsed.positionals {
             *positional = text_arg(positional);
         }
@@ -343,8 +588,10 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
     {
         *text = text_arg(text);
     }
-    for selected in &mut parsed.selected {
-        *selected = text_arg(selected);
+    if command != "file" {
+        for selected in &mut parsed.selected {
+            *selected = text_arg(selected);
+        }
     }
     match command {
         "input" if !parsed.positionals.is_empty() => {
@@ -361,6 +608,17 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
             }
         }
         "pager" if parsed.positionals.len() > 1 => return Err("`rich pager` pages one FILE".into()),
+        "write" | "color" | "asset" if !parsed.positionals.is_empty() => {
+            return Err(format!(
+                "`rich {command}` takes no arguments; the prompt is --header"
+            ))
+        }
+        "file" if parsed.positionals.len() > 1 => {
+            return Err("`rich file` starts from one DIR".into())
+        }
+        "file" | "asset" if parsed.selected.len() > 1 => {
+            return Err("--selected is given once".into())
+        }
         _ => {}
     }
     Ok(parsed)
@@ -384,6 +642,10 @@ pub(super) fn dispatch(command: &'static str, args: &[String]) -> ExitCode {
         "choose" | "filter" => pick(&args),
         "input" => input(&args),
         "confirm" => confirm(&args),
+        "write" => write(&args),
+        "file" => file(&args),
+        "color" => color(&args),
+        "asset" => asset(&args),
         _ => pager(&args),
     });
     match result {
@@ -575,7 +837,9 @@ fn pick(args: &Args) -> Answer {
                 ));
             }
         }
-        let mut select = MultiSelect::new(prompt, entries).marked(selected);
+        let mut select = MultiSelect::new(prompt, entries)
+            .marked(selected)
+            .with_mouse(args.mouse);
         if args.preview.is_some() {
             select = select.repaint_every(PREVIEW_REPAINT);
         }
@@ -587,7 +851,7 @@ fn pick(args: &Args) -> Answer {
         }
         finish(rich_interact::run(select, &options))
     } else {
-        let mut select = Select::new(prompt, entries);
+        let mut select = Select::new(prompt, entries).with_mouse(args.mouse);
         if args.preview.is_some() {
             select = select.repaint_every(PREVIEW_REPAINT);
         }
@@ -642,8 +906,9 @@ fn confirm(args: &Args) -> Answer {
         .unwrap_or_else(|| "Are you sure?".into());
     let yes = args.affirmative.clone().unwrap_or_else(|| "Yes".into());
     let no = args.negative.clone().unwrap_or_else(|| "No".into());
-    let mut sheet =
-        Confirm::new(question).choices([Choice::new("yes", yes, 'y'), Choice::new("no", no, 'n')]);
+    let mut sheet = Confirm::new(question)
+        .choices([Choice::new("yes", yes, 'y'), Choice::new("no", no, 'n')])
+        .with_mouse(args.mouse);
     if let Some(default) = args.default.as_deref() {
         sheet = sheet.default(default);
     }
@@ -722,6 +987,190 @@ fn pager(args: &Args) -> Answer {
         Ok(_) => Ok(ExitCode::SUCCESS),
         Err(error) => Err((ExitClass::Input, error.to_string())),
     }
+}
+
+/// `rich write`: several lines. Piped standard input is the text to start
+/// with or, without a terminal to edit it on, the answer.
+fn write(args: &Args) -> Answer {
+    let options = run_options(Fallback::Prompt, args.no_color);
+    let mut value = args.value.clone();
+    if !std::io::stdin().is_terminal() {
+        let piped = read_stdin()?;
+        let piped = piped.strip_suffix('\n').unwrap_or(&piped).to_string();
+        if options.policy.detect_for(options.session.output).is_err() {
+            let text: String = match args.char_limit {
+                Some(limit) => piped.chars().take(limit).collect(),
+                None => piped,
+            };
+            return write_stdout(&format!("{text}\n"));
+        }
+        value.get_or_insert(piped);
+    }
+    let mut area = TextArea::new(args.header.clone().unwrap_or_else(|| "Write".into()))
+        .line_numbers(args.line_numbers);
+    if let Some(limit) = args.char_limit {
+        area = area.char_limit(limit);
+    }
+    if let Some(rows) = args.height {
+        area = area.height(rows);
+    }
+    if let Some(placeholder) = &args.placeholder {
+        area = area.placeholder(placeholder.clone());
+    }
+    if let Some(value) = &value {
+        area = area.value(value);
+    }
+    finish(
+        rich_interact::run(area, &options).map(|outcome| match outcome {
+            Outcome::Done(text) => Outcome::Done(vec![text]),
+            Outcome::Cancelled => Outcome::Cancelled,
+            Outcome::Interrupted => Outcome::Interrupted,
+        }),
+    )
+}
+
+/// `rich file`: a path picked from DIR. Without a terminal, `--selected`
+/// or no answer (exit 3). An action a plugin registered (#491) prints what
+/// it returns, or its name and the path, tab-separated.
+fn file(args: &Args) -> Answer {
+    let root = args
+        .positionals
+        .first()
+        .map_or_else(|| std::path::PathBuf::from("."), |dir| fs_path(dir));
+    if !root.is_dir() {
+        return Err((
+            ExitClass::Input,
+            format!("{} is not a directory", controls::shown(&path_arg(&root))),
+        ));
+    }
+    let mode = match (args.directory, args.file) {
+        (true, true) => FileMode::Both,
+        (true, false) => FileMode::Directory,
+        _ => FileMode::File,
+    };
+    let registry = plugin_registry(MermaidBackend::Off);
+    let actions = rich_interact::Actions::from_registry(&registry);
+    let mut picker = FilePicker::new(args.header.clone().unwrap_or_else(|| "File".into()), root)
+        .mode(mode)
+        .show_hidden(args.all)
+        .extensions(&args.extensions)
+        .actions(actions)
+        .with_mouse(args.mouse);
+    if let Some(selected) = args.selected.first() {
+        picker = picker.default(fs_path(selected));
+    }
+    if let Some(rows) = args.height {
+        picker = picker.height(rows);
+    }
+    if let Some(query) = &args.value {
+        picker = picker.query(query.clone());
+    }
+    let options = run_options(Fallback::Default, args.no_color);
+    let outcome = rich_interact::run(&mut picker, &options);
+    match outcome {
+        Ok(Outcome::Done(path)) => match picker.action() {
+            Some(id) => {
+                let value = rich_interact::components::display_path(&path);
+                let action = registry
+                    .actions()
+                    .into_iter()
+                    .find(|(name, _, _)| *name == id)
+                    .map(|(_, _, action)| action);
+                match action.map(|action| action.run("file", &value)) {
+                    Some(Ok(Some(output))) => write_stdout(&format!("{output}\n")),
+                    Some(Err(error)) => Err((ExitClass::Input, error.to_string())),
+                    _ => write_stdout(&format!("{id}\t{value}\n")),
+                }
+            }
+            None => write_path(&path),
+        },
+        Ok(Outcome::Cancelled) => Ok(ExitCode::from(EXIT_CANCELLED)),
+        Ok(Outcome::Interrupted) => Ok(ExitCode::from(EXIT_INTERRUPTED)),
+        Err(error) => Err((ExitClass::Input, error.to_string())),
+    }
+}
+
+/// A path and a line break on standard output, byte for byte where paths
+/// are bytes, so a name that is not UTF-8 reaches the script intact.
+fn write_path(path: &std::path::Path) -> Answer {
+    use std::io::Write;
+    #[cfg(unix)]
+    let mut bytes = {
+        use std::os::unix::ffi::OsStrExt;
+        path.as_os_str().as_bytes().to_vec()
+    };
+    #[cfg(not(unix))]
+    let mut bytes = path.to_string_lossy().into_owned().into_bytes();
+    bytes.push(b'\n');
+    let mut stdout = std::io::stdout().lock();
+    match stdout.write_all(&bytes).and_then(|()| stdout.flush()) {
+        Ok(()) => Ok(ExitCode::SUCCESS),
+        Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => Ok(ExitCode::SUCCESS),
+        Err(error) => Err((
+            ExitClass::Input,
+            format!("could not write the answer: {error}"),
+        )),
+    }
+}
+
+/// `rich color`: a colour, printed as `--format` says.
+fn color(args: &Args) -> Answer {
+    let format = args
+        .format
+        .as_deref()
+        .and_then(ColorFormat::parse)
+        .unwrap_or_default();
+    let mut picker = ColorPicker::new(args.header.clone().unwrap_or_else(|| "Colour".into()))
+        .format(format)
+        .with_mouse(args.mouse);
+    if let Some(default) = &args.default {
+        picker = picker.default(default.clone());
+    }
+    if let Some(value) = &args.value {
+        picker = picker.value(value.clone());
+    }
+    if let Some(rows) = args.height {
+        picker = picker.height(rows);
+    }
+    let outcome = rich_interact::run(picker, &run_options(Fallback::Prompt, args.no_color));
+    finish(outcome.map(|outcome| match outcome {
+        Outcome::Done(color) => Outcome::Done(vec![color]),
+        Outcome::Cancelled => Outcome::Cancelled,
+        Outcome::Interrupted => Outcome::Interrupted,
+    }))
+}
+
+/// `rich asset`: an emoji, or a box style's or spinner's name.
+fn asset(args: &Args) -> Answer {
+    let kind = args
+        .kind
+        .as_deref()
+        .and_then(AssetKind::parse)
+        .unwrap_or_default();
+    let prompt = args.header.clone().unwrap_or_else(|| {
+        match kind {
+            AssetKind::Emoji => "Emoji",
+            AssetKind::Box => "Box style",
+            AssetKind::Spinner => "Spinner",
+        }
+        .to_string()
+    });
+    let mut picker = AssetPicker::new(prompt, kind).with_mouse(args.mouse);
+    if let Some(selected) = args.selected.first() {
+        picker = picker.default(selected);
+    }
+    if let Some(rows) = args.height {
+        picker = picker.height(rows);
+    }
+    if let Some(query) = &args.value {
+        picker = picker.query(query.clone());
+    }
+    let outcome = rich_interact::run(picker, &run_options(Fallback::Prompt, args.no_color));
+    finish(outcome.map(|outcome| match outcome {
+        Outcome::Done(asset) => Outcome::Done(vec![asset]),
+        Outcome::Cancelled => Outcome::Cancelled,
+        Outcome::Interrupted => Outcome::Interrupted,
+    }))
 }
 
 /// How often a picker with `--preview` repaints, so a preview shows as

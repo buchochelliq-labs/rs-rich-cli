@@ -287,6 +287,10 @@ Self-contained examples; ignores config; accepts --no-color.
 | `input` | Read one line with editing and history, and print it |
 | `confirm` | Ask a yes-or-no question; exits 0 for yes and 1 for no |
 | `pager` | Page FILE (or standard input), keeping its colours: arrows and Space scroll, / searches, q quits; without a terminal, write it out |
+| `write` | Write several lines and print them: Enter starts a line, Ctrl+D submits, Esc cancels; without a terminal, print standard input |
+| `file` | Browse from DIR (default .) and print the path picked: type to filter, → opens, ← goes up, Ctrl+T shows hidden files; without a terminal, print --selected |
+| `color` | Pick a colour and print it: rich's named colours, the 256 palette (Tab), or hex and rgb typed in, with a live swatch |
+| `asset` | Pick an emoji, a box style or a spinner, with a preview, and print it |
 | `completions` | Print a shell completion script |
 | `docs` | Print reference documentation generated from this help |
 | `bench` | Compare benchmark runs |
@@ -307,12 +311,12 @@ With no RESOURCE and no mode flag, a capability demo is shown. Layout, style, pa
 ### Exit codes
 
 - 0: success
-- 1: cancelled, or answered no (choose, filter, input, confirm)
+- 1: cancelled, or answered no (choose, filter, input, confirm, write, file, color, asset)
 - 2: usage/config error
 - 3: input/read/write error
 - 4: parse/render data error
 - 5: threshold/gate failure
-- 130: interrupted with Ctrl+C (choose, filter, input, confirm, pager)
+- 130: interrupted with Ctrl+C (choose, filter, input, confirm, pager, write, file, color, asset)
 
 ### rich print
 
@@ -894,6 +898,7 @@ rich choose [OPTIONS] [ITEM...]
 | `--selected <ITEM>...` | Focus ITEM (with --multi, mark it); the answer without a terminal. |
 | `--height <ROWS>` | Show at most ROWS items at once (default 10) |
 | `--preview <COMMAND>` | Show COMMAND's output for the focused item beside the list; `{}` is the item, shell-quoted, and $COLUMNS the pane's width (e.g. `rich {} --force-terminal`) |
+| `--mouse` | Report the mouse: click to focus and pick, drag the border beside a preview (off by default: it takes text selection from the terminal) |
 
 #### Arguments
 
@@ -934,6 +939,7 @@ rich filter [OPTIONS] [ITEM...]
 | `--selected <ITEM>...` | Focus ITEM (with --multi, mark it); the answer without a terminal. |
 | `--height <ROWS>` | Show at most ROWS items at once (default 10) |
 | `--preview <COMMAND>` | Show COMMAND's output for the focused item beside the list; `{}` is the item, shell-quoted, and $COLUMNS the pane's width (e.g. `rich {} --force-terminal`) |
+| `--mouse` | Report the mouse: click to focus and pick, drag the border beside a preview (off by default: it takes text selection from the terminal) |
 | `--value <QUERY>` | Start with QUERY typed. |
 
 #### Arguments
@@ -1001,6 +1007,7 @@ rich confirm [OPTIONS] [QUESTION]
 | `--default <ANSWER>` | The focused answer, and the answer without a terminal. Possible values: `yes`, `no`. |
 | `--affirmative <LABEL>` | The yes label (default Yes) |
 | `--negative <LABEL>` | The no label (default No) |
+| `--mouse` | Report the mouse: the answers are buttons to click. |
 
 #### Arguments
 
@@ -1044,6 +1051,137 @@ Page coloured output
 
 ```sh
 git log --color | rich pager
+```
+
+### rich write
+
+Write several lines and print them: Enter starts a line, Ctrl+D submits, Esc cancels; without a terminal, print standard input
+
+#### Usage
+
+```text
+rich write [OPTIONS]
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--header <TEXT>` | The prompt above the text (default "Write") |
+| `--placeholder <TEXT>` | Shown while the text is empty. |
+| `--value <TEXT>` | Start with TEXT (standard input, when it is piped, otherwise) |
+| `--height <ROWS>` | Rows of text shown (default 5) |
+| `--char-limit <N>` | At most N characters, line breaks included. |
+| `--show-line-numbers` | Number the lines. |
+
+#### Examples
+
+A multi-line answer
+
+```sh
+message=$(rich write --header 'Commit message')
+```
+
+### rich file
+
+Browse from DIR (default .) and print the path picked: type to filter, → opens, ← goes up, Ctrl+T shows hidden files; without a terminal, print --selected
+
+#### Usage
+
+```text
+rich file [OPTIONS] [DIR]
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--header <TEXT>` | The prompt above the list. |
+| `--height <ROWS>` | Show at most ROWS at once (default 10) |
+| `--value <QUERY>` | Start with QUERY typed. |
+| `--selected <PATH>` | The answer without a terminal. |
+| `--all` | Show hidden files to begin with. |
+| `--directory` | Pick directories (files are not listed, unless --file is given too: then either) |
+| `--file` | Pick files (the default) |
+| `--extension <EXT>...` | List only files ending in .EXT (repeatable, or comma-separated) |
+| `--mouse` | Report the mouse: click to focus and pick, drag the border beside a preview (off by default: it takes text selection from the terminal) |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[DIR]` | Where to start (default the current directory) |
+
+#### Examples
+
+Open a file picked from src
+
+```sh
+$EDITOR "$(rich file src)"
+```
+
+Pick a directory
+
+```sh
+rich file --directory ~
+```
+
+### rich color
+
+Pick a colour and print it: rich's named colours, the 256 palette (Tab), or hex and rgb typed in, with a live swatch
+
+#### Usage
+
+```text
+rich color [OPTIONS]
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--header <TEXT>` | The prompt (default "Colour") |
+| `--value <TEXT>` | Start with TEXT typed: a name to filter by, or a colour. |
+| `--default <COLOR>` | The answer without a terminal, and to an empty line. |
+| `--format <FORMAT>` | How to print it: #rrggbb (default), a rich name, or rgb(r,g,b) Possible values: `hex`, `name`, `rgb`. |
+| `--height <ROWS>` | Show at most ROWS at once (default 10) |
+| `--mouse` | Report the mouse: click to focus and pick, drag the border beside a preview (off by default: it takes text selection from the terminal) |
+
+#### Examples
+
+Style text with a picked colour
+
+```sh
+rich --style "bold $(rich color --format name)" --print Hello
+```
+
+### rich asset
+
+Pick an emoji, a box style or a spinner, with a preview, and print it
+
+#### Usage
+
+```text
+rich asset [OPTIONS]
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--kind <KIND>` | What to pick (default emoji): an emoji prints as itself, a box style or spinner by name. Possible values: `emoji`, `box`, `spinner`. |
+| `--header <TEXT>` | The prompt above the list. |
+| `--height <ROWS>` | Show at most ROWS at once (default 10) |
+| `--value <QUERY>` | Start with QUERY typed. |
+| `--selected <NAME>` | Focus NAME; the answer without a terminal and to an empty line. |
+| `--mouse` | Report the mouse: click to focus and pick, drag the border beside a preview (off by default: it takes text selection from the terminal) |
+
+#### Examples
+
+Pick a box style for --box
+
+```sh
+rich asset --kind box
 ```
 
 ### rich completions

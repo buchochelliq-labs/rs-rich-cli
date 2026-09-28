@@ -1356,12 +1356,14 @@ pub(crate) fn spec() -> CommandSpec {
     .section(
         "Exit codes",
         "- 0: success\n\
-         - 1: cancelled, or answered no (choose, filter, input, confirm)\n\
+         - 1: cancelled, or answered no (choose, filter, input, confirm, write, file, color, \
+           asset)\n\
          - 2: usage/config error\n\
          - 3: input/read/write error\n\
          - 4: parse/render data error\n\
          - 5: threshold/gate failure\n\
-         - 130: interrupted with Ctrl+C (choose, filter, input, confirm, pager)",
+         - 130: interrupted with Ctrl+C (choose, filter, input, confirm, pager, write, file, \
+           color, asset)",
     )
 }
 

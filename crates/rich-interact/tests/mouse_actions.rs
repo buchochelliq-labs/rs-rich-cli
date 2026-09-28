@@ -357,7 +357,7 @@ fn file_entries_take_file_actions() {
     );
     let mut picker = FilePicker::new("File", dir.path()).actions(actions);
     // An action on a directory picks it, where Enter would open it.
-    let (outcome, _) = headless::run(&mut picker, Script::new().keys("down ctrl+e"), 80, 12);
+    let (outcome, _) = headless::run(&mut picker, Script::new().keys("ctrl+e"), 80, 12);
     assert_eq!(outcome.unwrap(), Outcome::Done(dir.path().join("sub")));
     assert_eq!(picker.action(), Some("edit"));
 }

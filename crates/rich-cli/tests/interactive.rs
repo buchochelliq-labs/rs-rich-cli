@@ -252,8 +252,87 @@ fn items_that_are_not_utf8_are_shown_as_text() {
 }
 
 #[test]
+fn write_without_a_terminal_prints_standard_input() {
+    let (out, _, code) = piped(&["write"], "first\nsecond\n");
+    assert_eq!((out.as_str(), code), ("first\nsecond\n", 0));
+    let (out, _, code) = piped(&["write", "--char-limit", "7"], "first\nsecond\n");
+    assert_eq!((out.as_str(), code), ("first\ns\n", 0));
+    let big = vec![b'x'; 64 * 1024 * 1024 + 1];
+    let (out, err, code) = piped_bytes(&["write"], &big);
+    assert_eq!((out.as_slice(), code), (&b""[..], 3), "{err}");
+    assert!(err.contains("64 MiB limit"), "{err}");
+}
+
+#[test]
+fn file_without_a_terminal_prints_selected_or_has_no_answer() {
+    let (out, _, code) = piped(&["file", "--selected", "notes.md"], "");
+    assert_eq!((out.as_str(), code), ("notes.md\n", 0));
+    let (out, err, code) = piped(&["file"], "");
+    assert_eq!((out.as_str(), code), ("", 3), "{err}");
+    assert!(err.contains("no default"), "{err}");
+    let (_, err, code) = piped(&["file", "no-such-directory"], "");
+    assert_eq!(code, 3, "{err}");
+    assert!(err.contains("not a directory"), "{err}");
+}
+
+#[test]
+fn color_and_asset_ask_line_by_line_without_a_terminal() {
+    let (out, err, code) = piped(&["color", "--format", "rgb"], "#ff8800\n");
+    assert_eq!((out.as_str(), code), ("rgb(255,136,0)\n", 0), "{err}");
+    assert!(err.contains("#rrggbb"), "the prompt goes to stderr: {err}");
+    let (out, _, code) = piped(&["color", "--format", "name", "--default", "color(18)"], "");
+    assert_eq!((out.as_str(), code), ("dark_blue\n", 0));
+    let (out, err, code) = piped(&["color"], "not a colour\n");
+    assert_eq!((out.as_str(), code), ("", 3), "{err}");
+    let (out, _, code) = piped(&["asset"], "rocket\n");
+    assert_eq!((out.as_str(), code), ("🚀\n", 0));
+    let (out, _, code) = piped(&["asset", "--kind", "spinner", "--selected", "dots"], "\n");
+    assert_eq!((out.as_str(), code), ("dots\n", 0));
+    let (out, _, code) = piped(&["asset", "--kind", "box"], "");
+    assert_eq!((out.as_str(), code), ("", 3));
+}
+
+#[test]
+fn the_new_commands_check_their_arguments() {
+    for args in [
+        &["write", "extra"][..],
+        &["write", "--char-limit", "0"],
+        &["file", "a", "b"],
+        &["file", "--multi"],
+        &["color", "--format", "hsl"],
+        &["asset", "--kind", "icon"],
+        &["asset", "extra"],
+        &["input", "--mouse"],
+    ] {
+        let (_, err, code) = piped(args, "");
+        assert_eq!(code, 2, "{args:?}: {err}");
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn file_prints_a_path_that_is_not_utf8_byte_for_byte() {
+    use std::os::unix::ffi::OsStrExt;
+    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("file-non-utf8");
+    std::fs::create_dir_all(&dir).unwrap();
+    let name = std::ffi::OsStr::from_bytes(b"caf\xe9.txt");
+    std::fs::write(dir.join(name), "x").unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_rich"))
+        .args(["--no-config", "file", "--selected"])
+        .arg(dir.join(name))
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let mut expected = dir.join(name).as_os_str().as_bytes().to_vec();
+    expected.push(b'\n');
+    assert_eq!(output.stdout, expected);
+}
+
+#[test]
 fn every_command_has_help() {
-    for command in ["choose", "filter", "input", "confirm", "pager"] {
+    for command in [
+        "choose", "filter", "input", "confirm", "pager", "write", "file", "color", "asset",
+    ] {
         let (out, _, code) = piped(&[command, "--help"], "");
         assert_eq!(code, 0);
         assert!(out.contains(&format!("rich {command}")), "{out}");
@@ -653,5 +732,110 @@ mod pty {
         pty.send("\r");
         let out = pty.finish();
         assert!(out.contains("code=0 got=two"), "{out}");
+    }
+
+    #[test]
+    fn write_returns_the_lines_typed() {
+        let mut pty = Pty::start(r#"x=$(rich write --header Notes); echo "code=$? got=[$x]""#);
+        pty.wait_for("Notes");
+        pty.send("one\rtwo");
+        pty.wait_for("two");
+        pty.send("\x04");
+        let out = pty.finish();
+        assert!(out.contains("code=0 got=[one\r\ntwo]"), "{out:?}");
+    }
+
+    #[test]
+    fn write_starts_from_piped_input_and_escape_cancels() {
+        let mut pty = Pty::start(r#"x=$(echo draft | rich write); echo "code=$? got=[$x]""#);
+        pty.wait_for("draft");
+        pty.send(" more");
+        pty.wait_for("more");
+        pty.send("\x04");
+        let out = pty.finish();
+        assert!(out.contains("code=0 got=[draft more]"), "{out:?}");
+        let mut pty = Pty::start(r#"x=$(rich write); echo "code=$? got=[$x]""#);
+        pty.wait_for("submit");
+        pty.send("\x1b");
+        let out = pty.finish();
+        assert!(out.contains("code=1 got=[]"), "{out}");
+    }
+
+    fn picker_dir() -> std::path::PathBuf {
+        let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("file-picker");
+        std::fs::create_dir_all(dir.join("docs")).unwrap();
+        std::fs::write(dir.join("docs").join("guide.md"), "# Guide\n").unwrap();
+        std::fs::write(dir.join("README.md"), "# Readme\n").unwrap();
+        dir
+    }
+
+    #[test]
+    fn file_browses_and_prints_the_path() {
+        let dir = picker_dir();
+        let mut pty = Pty::start(&format!(
+            r#"x=$(rich file '{}'); echo "code=$? got=$x""#,
+            dir.display()
+        ));
+        pty.wait_for("README.md");
+        pty.send("docs");
+        std::thread::sleep(Duration::from_millis(200));
+        pty.send("\x1b[C");
+        pty.wait_for("guide.md");
+        std::thread::sleep(Duration::from_millis(200));
+        pty.send("\r");
+        let out = pty.finish();
+        let want = format!("code=0 got={}", dir.join("docs").join("guide.md").display());
+        assert!(out.contains(&want), "{out}");
+    }
+
+    #[test]
+    fn color_prints_the_colour_typed() {
+        let mut pty = Pty::start(r#"x=$(rich color --format rgb); echo "code=$? got=$x""#);
+        pty.wait_for("Colour");
+        pty.send("#00ff00");
+        pty.wait_for("#00ff00");
+        std::thread::sleep(Duration::from_millis(200));
+        pty.send("\r");
+        let out = pty.finish();
+        assert!(out.contains("code=0 got=rgb(0,255,0)"), "{out}");
+    }
+
+    #[test]
+    fn asset_prints_the_emoji_picked() {
+        let mut pty = Pty::start(r#"x=$(rich asset); echo "code=$? got=$x""#);
+        pty.wait_for("Emoji");
+        pty.send("rocket");
+        pty.wait_for("rocket");
+        std::thread::sleep(Duration::from_millis(200));
+        pty.send("\r");
+        let out = pty.finish();
+        assert!(out.contains("code=0 got=🚀"), "{out}");
+    }
+
+    #[test]
+    fn with_mouse_a_click_picks_and_the_modes_are_undone() {
+        let mut pty =
+            Pty::start(r#"x=$(rich choose --mouse apple banana cherry); echo "code=$? got=$x""#);
+        pty.wait_for("cherry");
+        std::thread::sleep(Duration::from_millis(200));
+        // On the alternate screen: the question is row 1, banana row 3
+        // (SGR mouse reports count from 1). Two clicks: focus, then pick.
+        for _ in 0..2 {
+            pty.send("\x1b[<0;5;3M\x1b[<0;5;3m");
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        let out = pty.finish();
+        assert!(out.contains("code=0 got=banana"), "{out}");
+        assert!(out.contains("\x1b[?1000h"), "mouse reporting on: {out:?}");
+        let after = &out[out.find("\x1b[?1000h").unwrap()..];
+        for mode in ["\x1b[?1000l", "\x1b[?1006l", "\x1b[?1049l"] {
+            assert!(after.contains(mode), "{mode:?} left on: {out:?}");
+        }
+        // Without --mouse, nothing asks for the mouse.
+        let mut pty = Pty::start(r#"x=$(rich choose apple banana); echo "got=$x""#);
+        pty.wait_for("banana");
+        pty.send("\r");
+        let out = pty.finish();
+        assert!(!out.contains("\x1b[?1000h"), "{out:?}");
     }
 }

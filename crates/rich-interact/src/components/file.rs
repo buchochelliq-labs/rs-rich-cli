@@ -365,8 +365,13 @@ impl FilePicker {
             };
             items.push(item);
         }
+        let entries = items.len();
         self.select.replace_items(items);
         self.select.set_values(values);
+        // The first entry, rather than `..`, is focused in a directory.
+        if up && entries > 1 {
+            self.select.focus_item(1);
+        }
         self.select.heading = Some(vec![text(
             display_path(&self.directory()),
             &self.theme.hint,

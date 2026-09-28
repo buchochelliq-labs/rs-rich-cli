@@ -161,8 +161,8 @@ fn file_picker_lists_directories_first_and_picks_a_file() {
     let dir = tree();
     let picker = FilePicker::new("File", dir.path());
     assert_eq!(picker.labels(), ["..", "src/", "a.rs", "b.txt"]);
-    // Enter on src/ opens it; then lib.rs.
-    let script = Script::new().keys("down enter").text("lib").keys("enter");
+    // The first entry is focused, not `..`: Enter opens src/; then lib.rs.
+    let script = Script::new().keys("enter").text("lib").keys("enter");
     let (outcome, record) = headless::run(picker, script, 100, 16);
     assert_eq!(
         outcome.unwrap(),
@@ -179,7 +179,7 @@ fn file_picker_lists_directories_first_and_picks_a_file() {
 fn file_picker_goes_up_and_toggles_hidden_files() {
     let dir = tree();
     // Into src/, then left back up: src/ is focused again.
-    let script = Script::new().keys("down right left enter");
+    let script = Script::new().keys("right left enter");
     let picker = FilePicker::new("File", dir.path()).mode(FileMode::Both);
     let (outcome, _) = headless::run(picker, script, 80, 16);
     assert_eq!(outcome.unwrap(), Outcome::Done(dir.path().join("src")));
@@ -198,7 +198,7 @@ fn file_picker_modes_and_extensions() {
     let rust = FilePicker::new("Rust", dir.path()).extensions([".RS"]);
     assert_eq!(rust.labels(), ["..", "src/", "a.rs"]);
     // Directory mode picks a directory on Enter.
-    let (outcome, _) = headless::run(dirs, Script::new().keys("down enter"), 80, 16);
+    let (outcome, _) = headless::run(dirs, Script::new().keys("enter"), 80, 16);
     assert_eq!(outcome.unwrap(), Outcome::Done(dir.path().join("src")));
 }
 
@@ -260,7 +260,7 @@ fn names_that_are_not_utf8_show_escaped_and_return_the_real_path() {
     std::fs::write(dir.path().join(name), "x").unwrap();
     let picker = FilePicker::new("File", dir.path());
     assert_eq!(picker.labels(), ["..", "caf\\xE9.txt"]);
-    let (outcome, record) = headless::run(picker, Script::new().keys("down enter"), 80, 16);
+    let (outcome, record) = headless::run(picker, Script::new().keys("enter"), 80, 16);
     assert_eq!(outcome.unwrap(), Outcome::Done(dir.path().join(name)));
     assert!(
         record.last_frame().ends_with("caf\\xE9.txt"),
