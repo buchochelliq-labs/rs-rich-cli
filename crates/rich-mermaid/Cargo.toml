@@ -6,7 +6,7 @@
 # 0.0.1. See AGENTS.md → Versioning and docs/PLUGINS.md.
 [package]
 name = "rs-rich-mermaid"
-version = "0.0.1"
+version = "0.0.2"
 description = "Mermaid diagrams for the `rich` Rust port: flowcharts drawn as text, and every diagram type through mermaid-cli"
 edition.workspace = true
 license.workspace = true

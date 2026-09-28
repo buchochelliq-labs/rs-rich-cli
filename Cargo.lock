@@ -1612,7 +1612,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-lumis"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "lumis",
  "rs-rich",
@@ -1632,7 +1632,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-mermaid"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "rs-rich",
  "rs-rich-art",
@@ -1642,7 +1642,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-plugin-api"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "rs-rich",
 ]
