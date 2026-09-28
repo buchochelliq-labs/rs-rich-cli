@@ -73,7 +73,7 @@ pub use event::{Button, Event, Key, KeyCode, Modifiers, Mouse, MouseKind};
 pub use event_loop::{degrade, run, Error, EventLoop, Handle, LoopOptions, Outcome, RunOptions};
 pub use item::{Action, Item, Preview};
 pub use policy::{Fallback, LineIo, NotInteractive, Policy, Reason};
-pub use session::{Backend, Session, SessionOptions};
+pub use session::{Backend, Output, Session, SessionOptions};
 pub use viewport::Viewport;
 
 /// A component borrowed mutably is a component, so a caller can mount one

@@ -373,7 +373,8 @@ included, is on crates.io, and before anything that depends on it. 0.0.13
 adds `rs-rich-record` 0.0.1 the same way: by hand after `rs-rich-ext` 0.0.11,
 and before the `rs-rich-cli` 0.0.13 tag, whose default `record` feature
 depends on it; and `rs-rich-interact` 0.0.1 by hand after `rs-rich-ext`
-0.0.11. From the tagged commit on
+0.0.11, also before the `rs-rich-cli` 0.0.13 tag, whose default `interact`
+feature depends on it. From the tagged commit on
 `main`:
 
 ```bash

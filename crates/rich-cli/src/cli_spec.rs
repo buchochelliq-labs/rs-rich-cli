@@ -1308,6 +1308,10 @@ pub(crate) fn spec() -> CommandSpec {
         spec = spec.subcommand(mode_command(name, aliases, about));
     }
     spec = spec.subcommand(config_command());
+    #[cfg(feature = "interact")]
+    for command in super::interactive::commands() {
+        spec = spec.subcommand(command);
+    }
     for command in authoring_commands() {
         spec = spec.subcommand(command);
     }
@@ -1352,10 +1356,12 @@ pub(crate) fn spec() -> CommandSpec {
     .section(
         "Exit codes",
         "- 0: success\n\
+         - 1: cancelled, or answered no (choose, filter, input, confirm)\n\
          - 2: usage/config error\n\
          - 3: input/read/write error\n\
          - 4: parse/render data error\n\
-         - 5: threshold/gate failure",
+         - 5: threshold/gate failure\n\
+         - 130: interrupted with Ctrl+C (choose, filter, input, confirm, pager)",
     )
 }
 
@@ -1494,6 +1500,8 @@ mod tests {
     const INSPECT: &str = include_str!("inspect.rs");
     const TOOLS: &str = include_str!("tools.rs");
     const VIEWERS: &str = include_str!("viewers.rs");
+    #[cfg(feature = "interact")]
+    const INTERACTIVE: &str = include_str!("interactive.rs");
 
     /// The source of the item that starts with `start`, up to the next
     /// top-level item.
@@ -1548,6 +1556,8 @@ mod tests {
         ] {
             out.extend(option_literals(source));
         }
+        #[cfg(feature = "interact")]
+        out.extend(option_literals(item(INTERACTIVE, "fn parse_args(")));
         for arg in rich_ext::cli::arg_specs() {
             out.extend(arg.switches());
         }

@@ -15,6 +15,11 @@ use std::io::{BufRead, IsTerminal, Write};
 pub enum Reason {
     StdinNotTerminal,
     StdoutNotTerminal,
+    /// Painting to standard error ([`Output::Stderr`](crate::session::Output)),
+    /// which is not a terminal.
+    StderrNotTerminal,
+    /// Neither standard input nor a controlling terminal to read keys from.
+    NoTerminal,
     /// `CI` is set (and not `0` or `false`).
     Ci,
     /// `TERM=dumb`.
@@ -28,6 +33,8 @@ impl fmt::Display for Reason {
         f.write_str(match self {
             Reason::StdinNotTerminal => "standard input is not a terminal",
             Reason::StdoutNotTerminal => "standard output is not a terminal",
+            Reason::StderrNotTerminal => "standard error is not a terminal",
+            Reason::NoTerminal => "there is no terminal to read keys from",
             Reason::Ci => "running under CI",
             Reason::DumbTerminal => "TERM is dumb",
             Reason::Requested => "interactive mode is turned off",
@@ -56,6 +63,11 @@ pub struct Policy {
     /// anyway: raw mode needs one), `Some(false)` forbids it, `None` detects.
     pub interactive: Option<bool>,
     pub fallback: Fallback,
+    /// Read keys from the controlling terminal when standard input is a
+    /// pipe, as pagers and pickers do: `ls | app` can still be driven from
+    /// the keyboard. Off by default, which degrades whenever standard input
+    /// is redirected.
+    pub tty_keys: bool,
 }
 
 impl Policy {
@@ -66,6 +78,32 @@ impl Policy {
             std::io::stdout().is_terminal(),
             |name| std::env::var(name).ok(),
         )
+    }
+
+    /// Detect for a session that paints to `output`: that stream must be a
+    /// terminal. With [`tty_keys`](Policy::tty_keys), keys may come from the
+    /// controlling terminal while standard input is a pipe
+    /// (`ls | rich filter`).
+    pub fn detect_for(&self, output: crate::session::Output) -> Result<(), Reason> {
+        use std::io::IsTerminal;
+        let stdin = std::io::stdin().is_terminal();
+        if self.interactive == Some(false) {
+            return Err(Reason::Requested);
+        }
+        if !stdin && !(self.tty_keys && crate::session::keys_available()) {
+            return Err(if self.tty_keys {
+                Reason::NoTerminal
+            } else {
+                Reason::StdinNotTerminal
+            });
+        }
+        if !output.is_terminal() {
+            return Err(match output {
+                crate::session::Output::Stdout => Reason::StdoutNotTerminal,
+                crate::session::Output::Stderr => Reason::StderrNotTerminal,
+            });
+        }
+        self.decide(true, true, |name| std::env::var(name).ok())
     }
 
     /// The decision, from explicit inputs. `Ok` means interactive.
@@ -297,5 +335,17 @@ mod tests {
             ..Policy::default()
         };
         assert_eq!(off.decide(true, true, env(&[])), Err(Reason::Requested));
+    }
+
+    #[test]
+    fn detect_for_honours_a_request_first_whatever_the_output() {
+        let off = Policy {
+            interactive: Some(false),
+            tty_keys: true,
+            ..Policy::default()
+        };
+        for output in [crate::Output::Stdout, crate::Output::Stderr] {
+            assert_eq!(off.detect_for(output), Err(Reason::Requested));
+        }
     }
 }

@@ -55,6 +55,15 @@ tracks this checkout; registry badges show published versions.
   embedded DejaVu Sans Mono. Text grids go through `rich_ext::frame::Frame`.
   Behind `rich record` in the CLI (the default `record` feature). Depends on
   `rich` and `rich-ext`. Independent SemVer.
+- **`crates/rich-interact`** — interactive components between printing and a
+  full TUI: a `Component` state machine, a blocking `run` and an `EventLoop`,
+  a terminal `Session` restored on every way out, a painter over
+  `rich_ext::frame` cell diffs, a headless driver for tests, and a policy
+  that degrades to line prompts without a terminal. Ready-made `Select`,
+  `MultiSelect`, `Input`, `Confirm`, `Form` and `Pager`. Behind `rich choose`,
+  `filter`, `input`, `confirm` and `pager` in the CLI (the default `interact`
+  feature), which paint on stderr. Depends on `rich` and `rich-ext`.
+  Independent SemVer.
 - **`crates/rich-py`** — the Python bindings (`rs-rich` on PyPI, `import
   rs_rich`), built with PyO3 and maturin. Rich's Python API over core `rich`
   only: the compiled module converts arguments and writes output, and core

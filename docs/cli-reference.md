@@ -282,6 +282,11 @@ Self-contained examples; ignores config; accepts --no-color.
 | `capture` | Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE records it, --redact masks secrets), then exit with the command's status |
 | `mermaid`, `mmd` | Draw a Mermaid diagram: flowcharts as text, every type through mmdc where built in (.mmd and .mermaid files are detected) |
 | `config` | Show, validate, explain or document configuration |
+| `choose` | Pick from ITEMs with a fuzzy-filtered list and print the choice; exits 1 when cancelled |
+| `filter` | Type to filter ITEMs and print the choice; without a terminal, print the lines that match --value |
+| `input` | Read one line with editing and history, and print it |
+| `confirm` | Ask a yes-or-no question; exits 0 for yes and 1 for no |
+| `pager` | Page FILE (or standard input), keeping its colours: arrows and Space scroll, / searches, q quits; without a terminal, write it out |
 | `completions` | Print a shell completion script |
 | `docs` | Print reference documentation generated from this help |
 | `bench` | Compare benchmark runs |
@@ -302,10 +307,12 @@ With no RESOURCE and no mode flag, a capability demo is shown. Layout, style, pa
 ### Exit codes
 
 - 0: success
+- 1: cancelled, or answered no (choose, filter, input, confirm)
 - 2: usage/config error
 - 3: input/read/write error
 - 4: parse/render data error
 - 5: threshold/gate failure
+- 130: interrupted with Ctrl+C (choose, filter, input, confirm, pager)
 
 ### rich print
 
@@ -866,6 +873,177 @@ List every configuration source and key
 
 ```text
 rich config reference [OPTIONS]
+```
+
+### rich choose
+
+Pick from ITEMs with a fuzzy-filtered list and print the choice; exits 1 when cancelled
+
+#### Usage
+
+```text
+rich choose [OPTIONS] [ITEM...]
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--header <TEXT>` | The prompt above the list. |
+| `--multi` | Pick several: Tab marks, Enter returns the marked items, one per line. |
+| `--selected <ITEM>...` | Focus ITEM (with --multi, mark it); the answer without a terminal. |
+| `--height <ROWS>` | Show at most ROWS items at once (default 10) |
+| `--preview <COMMAND>` | Show COMMAND's output for the focused item beside the list; `{}` is the item, shell-quoted, and $COLUMNS the pane's width (e.g. `rich {} --force-terminal`) |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[ITEM]...` | The items; without any, one per line from standard input. |
+
+#### Examples
+
+A branch
+
+```sh
+branch=$(git branch --format='%(refname:short)' | rich choose)
+```
+
+Preview each file as rich renders it
+
+```sh
+rich choose --preview 'rich {} --force-terminal' *.md
+```
+
+### rich filter
+
+Type to filter ITEMs and print the choice; without a terminal, print the lines that match --value
+
+#### Usage
+
+```text
+rich filter [OPTIONS] [ITEM...]
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--header <TEXT>` | The prompt above the list. |
+| `--multi` | Pick several: Tab marks, Enter returns the marked items, one per line. |
+| `--selected <ITEM>...` | Focus ITEM (with --multi, mark it); the answer without a terminal. |
+| `--height <ROWS>` | Show at most ROWS items at once (default 10) |
+| `--preview <COMMAND>` | Show COMMAND's output for the focused item beside the list; `{}` is the item, shell-quoted, and $COLUMNS the pane's width (e.g. `rich {} --force-terminal`) |
+| `--value <QUERY>` | Start with QUERY typed. |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[ITEM]...` | The items; without any, one per line from standard input. |
+
+#### Examples
+
+Pick a file
+
+```sh
+ls | rich filter
+```
+
+Fuzzy grep in a pipeline
+
+```sh
+rich filter --value err < log.txt
+```
+
+### rich input
+
+Read one line with editing and history, and print it
+
+#### Usage
+
+```text
+rich input [OPTIONS]
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--prompt <TEXT>` | The prompt (default "Input") |
+| `--placeholder <TEXT>` | Shown while the line is empty. |
+| `--value <TEXT>` | Start with TEXT typed. |
+| `--default <TEXT>` | The answer to an empty line, and without a terminal. |
+| `--password` | Hide what is typed; without a terminal, read with echo off. |
+
+#### Examples
+
+A name
+
+```sh
+name=$(rich input --prompt Name --placeholder 'Ada Lovelace')
+```
+
+### rich confirm
+
+Ask a yes-or-no question; exits 0 for yes and 1 for no
+
+#### Usage
+
+```text
+rich confirm [OPTIONS] [QUESTION]
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--default <ANSWER>` | The focused answer, and the answer without a terminal. Possible values: `yes`, `no`. |
+| `--affirmative <LABEL>` | The yes label (default Yes) |
+| `--negative <LABEL>` | The no label (default No) |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[QUESTION]` | The question (default "Are you sure?") |
+
+#### Examples
+
+Guard a command
+
+```sh
+rich confirm 'Deploy to production?' && ./deploy
+```
+
+### rich pager
+
+Page FILE (or standard input), keeping its colours: arrows and Space scroll, / searches, q quits; without a terminal, write it out
+
+#### Usage
+
+```text
+rich pager [OPTIONS] [FILE]
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--search <QUERY>` | Start with QUERY searched. |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[FILE]` | The file; `-` or none reads standard input. |
+
+#### Examples
+
+Page coloured output
+
+```sh
+git log --color | rich pager
 ```
 
 ### rich completions

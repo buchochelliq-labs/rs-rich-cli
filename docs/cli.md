@@ -767,6 +767,51 @@ with `--watch-poll`, so same-size edits and atomic saves are detected even when
 timestamps are preserved. Redirected stdout renders once and exits without
 terminal clear codes. See [watch recipes](recipes.md#watch-json-while-editing).
 
+## Ask in a script
+
+`rich choose`, `rich filter`, `rich input`, `rich confirm` and `rich pager`
+are the interactive components as shell commands, in the manner of gum. The
+answer goes to stdout and the component paints on stderr, so a script
+captures the answer with `$(…)`; keys come from the terminal even when stdin
+is the list.
+
+```bash
+branch=$(git branch --format='%(refname:short)' | rich choose --header Branch)
+file=$(ls | rich filter --preview 'rich {} --force-terminal')
+name=$(rich input --prompt Name --placeholder 'Ada Lovelace')
+rich confirm "Deploy $branch?" && ./deploy "$branch"
+git log --color | rich pager
+```
+
+- `choose` and `filter` take ITEMs as arguments or one per line on stdin;
+  `--multi` picks several (Tab marks), `--selected ITEM` focuses or marks one,
+  and `filter --value QUERY` starts with a query typed.
+- `--preview COMMAND` shows COMMAND's output beside the list for the focused
+  item. `{}` is the item, shell-quoted, and `$COLUMNS` is the pane's width;
+  the command runs once per item, the first time it is focused.
+- `input` takes `--prompt`, `--placeholder`, `--value`, `--default` and
+  `--password`; `confirm` takes a QUESTION, `--default yes|no`,
+  `--affirmative` and `--negative`.
+- `pager` pages a FILE or stdin, keeping its colours: `/` searches, `q`
+  quits.
+
+The exit code says what happened: 0 answered (for `confirm`, yes), 1
+cancelled with Escape (for `confirm`, no), 130 interrupted with Ctrl+C, 2 a
+usage error, 3 no answer without a terminal. The global `--no-color`,
+`--report json` and `--machine-json` apply: with `--report json` an answer
+(exit 0) adds the success envelope on stderr and a failure its error
+envelope.
+
+Items are shown with terminal controls made visible (`␛]0;…`), so a file
+name cannot retitle or recolour the terminal; the answer is the item as it
+came.
+
+Without a terminal (in CI, or with nothing to read keys from) they degrade
+instead of waiting: `input`, `confirm` and `choose ITEM…` ask line by line on
+stderr and read the answer from stdin; `choose` from stdin answers with
+`--selected` (with `--multi`, nothing marked is no answer); `filter` prints the lines that match `--value`, best first, blank lines
+included, so it works as a fuzzy `grep`; `pager` writes the content out.
+
 ## Use it in a script or CI
 
 `rich` writes rendered output to stdout and diagnostics to stderr, so the two
