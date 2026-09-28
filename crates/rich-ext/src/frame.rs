@@ -193,6 +193,8 @@ pub struct Frame {
     trailing_newline: bool,
     /// The region tags read off the segments' styles, each once.
     tags: Vec<RegionId>,
+    /// Each tag's index in `tags`, so a lookup does not scan them.
+    tag_index: HashMap<RegionId, u32>,
     /// Per run, 0 for no tag or an index into `tags` plus one. Empty when no
     /// segment was tagged.
     run_tags: Vec<u32>,
@@ -254,14 +256,12 @@ impl Frame {
 
     /// The index of `id` in `tags`, plus one.
     fn tag(&mut self, id: RegionId) -> u32 {
-        let at = match self.tags.iter().position(|tag| *tag == id) {
-            Some(at) => at,
-            None => {
-                self.tags.push(id);
-                self.tags.len() - 1
-            }
-        };
-        at as u32 + 1
+        let next = self.tags.len() as u32;
+        let at = *self.tag_index.entry(id).or_insert(next);
+        if at == next {
+            self.tags.push(id);
+        }
+        at + 1
     }
 
     fn push(&mut self, text: &str, style: StyleId, flags: u8, tag: u32) {
@@ -293,6 +293,7 @@ impl Frame {
             styles: self.styles.clone(),
             trailing_newline: self.trailing_newline,
             tags: self.tags.clone(),
+            tag_index: self.tag_index.clone(),
             regions: self.regions.clone(),
             region_ids: self.region_ids.clone(),
             ..Frame::default()

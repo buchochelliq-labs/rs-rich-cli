@@ -104,11 +104,21 @@ impl RenderTarget {
     /// [`RenderTarget::frame`] with the semantic regions the renderables
     /// report (see [`crate::frame::regions`]). The bytes are the same.
     pub fn frame_with_regions(&self, value: &dyn Renderable) -> Frame {
+        self.segments_and_frame_with_regions(value).1
+    }
+    /// One render with a region sink: its segments (region tags still in
+    /// their styles) and the frame with regions built from them.
+    pub(crate) fn segments_and_frame_with_regions(
+        &self,
+        value: &dyn Renderable,
+    ) -> (Vec<Segment>, Frame) {
         use rich::protocol::ConsoleRegions;
         let recorder = std::sync::Arc::new(crate::frame::RegionRecorder::new());
         let mut console = self.console();
         console.set_region_sink(Some(recorder.clone()));
-        Frame::from_segments(&self.segments_on(&console, value)).with_regions(&recorder)
+        let segments = self.segments_on(&console, value);
+        let frame = Frame::from_segments(&segments).with_regions(&recorder);
+        (segments, frame)
     }
     pub fn text(&self, value: &dyn Renderable) -> String {
         self.console().segments_to_string(&self.segments(value))

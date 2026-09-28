@@ -201,3 +201,55 @@ fn export_fixtures() {
         );
     }
 }
+
+/// Every cell of a 300 x 20 table is its own region: 6,000 distinct tags.
+/// Looking each one up by scanning the tags seen so far made building the
+/// frame quadratic in them; this size stays quick only when lookup is O(1).
+#[test]
+fn a_table_with_thousands_of_cell_regions_keeps_every_region() {
+    const ROWS: usize = 300;
+    const COLUMNS: usize = 20;
+    let mut table = Table::new();
+    for column in 0..COLUMNS {
+        table.add_column(format!("h{column}"));
+    }
+    for row in 0..ROWS {
+        let cells: Vec<String> = (0..COLUMNS).map(|c| format!("{row}.{c}")).collect();
+        let cells: Vec<&str> = cells.iter().map(String::as_str).collect();
+        table.add_row(&cells);
+    }
+    let console = console(400);
+    let frame = frame_with_regions(&console, &table);
+    let regions = frame.regions();
+    assert_eq!(regions.len(), 1 + COLUMNS + ROWS * COLUMNS);
+    assert_eq!(role_name(&regions[0].role), "table");
+    let cells: Vec<(usize, usize)> = regions
+        .iter()
+        .filter_map(|region| match region.role {
+            rich::protocol::RegionRole::TableCell { row, column } => Some((row, column)),
+            _ => None,
+        })
+        .collect();
+    // In render order: row by row, each row's columns left to right.
+    let expected: Vec<(usize, usize)> = (0..ROWS)
+        .flat_map(|row| (0..COLUMNS).map(move |column| (row, column)))
+        .collect();
+    assert_eq!(cells, expected);
+    // Each cell's region covers its own text.
+    let plain = frame.plain();
+    let lines: Vec<&str> = plain.lines().collect();
+    for region in &regions[1..] {
+        let span = &region.spans[0];
+        let text: String = lines[span.row]
+            .chars()
+            .skip(span.columns.start)
+            .take(span.columns.len())
+            .collect();
+        let want = match region.role {
+            rich::protocol::RegionRole::TableCell { row, column } => format!("{row}.{column}"),
+            rich::protocol::RegionRole::TableHeader { column } => format!("h{column}"),
+            _ => unreachable!("only cells and headers below the table"),
+        };
+        assert_eq!(text.trim(), want);
+    }
+}

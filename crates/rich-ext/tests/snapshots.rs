@@ -233,3 +233,38 @@ fn schema_3_records_regions_and_reads_older_schemas() {
     let diff = a.diff(&moved).unwrap();
     assert!(diff.contains("regions[3].spans"), "{diff}");
 }
+/// Draws one more `-` before its tagged `x` on each render, and counts them.
+struct ShiftsEachRender(std::sync::atomic::AtomicUsize);
+impl rich::Renderable for ShiftsEachRender {
+    fn rich_render(
+        &self,
+        console: &rich::Console,
+        _options: &rich::ConsoleOptions,
+    ) -> Vec<rich::Segment> {
+        use rich::protocol::{report_region, RegionInfo, RegionRole};
+        let n = self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let mut segments = vec![rich::Segment::new("-".repeat(n), None)];
+        segments.extend(report_region(
+            console,
+            || RegionInfo::new(RegionRole::Other("mark".into())),
+            || vec![rich::Segment::new("x", None)],
+        ));
+        segments
+    }
+}
+#[test]
+fn capture_regions_renders_once_and_its_regions_match_its_rows() {
+    let t = target();
+    let counter = ShiftsEachRender(std::sync::atomic::AtomicUsize::new(0));
+    let snapshot = RenderSnapshot::capture_regions(&t, &counter);
+    assert_eq!(counter.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(snapshot.plain, "x");
+    let rows = snapshot.rows.as_ref().unwrap();
+    let row: String = rows[0].iter().map(|run| run.text.as_str()).collect();
+    assert_eq!(row, "x");
+    let regions = snapshot.regions.as_ref().unwrap();
+    assert_eq!(regions.len(), 1);
+    assert_eq!(regions[0].role, "mark");
+    // The span covers the `x` in the stored rows, not one from another render.
+    assert_eq!(regions[0].spans, [[0, 0, 1]]);
+}

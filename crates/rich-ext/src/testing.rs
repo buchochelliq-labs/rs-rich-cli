@@ -117,8 +117,17 @@ impl RenderSnapshot {
     /// A schema 2 snapshot, built from the render's [`Frame`](crate::frame::Frame).
     pub fn capture_frame(target: &RenderTarget, renderable: &dyn Renderable) -> Self {
         let segments = target.segments(renderable);
-        let caps = target.capabilities();
         let frame = crate::frame::Frame::from_segments(&segments);
+        Self::from_frame(target, &segments, &frame)
+    }
+    /// Schema 2 fields from one render: its segments and the frame built
+    /// from them.
+    fn from_frame(
+        target: &RenderTarget,
+        segments: &[Segment],
+        frame: &crate::frame::Frame,
+    ) -> Self {
+        let caps = target.capabilities();
         let snapshot: Vec<SnapshotSegment> = segments.iter().map(snapshot_segment).collect();
         Self {
             schema_version: 2,
@@ -133,8 +142,10 @@ impl RenderSnapshot {
     }
     /// A schema 3 snapshot: schema 2 plus the regions the renderables
     /// reported (see [`RenderTarget::frame_with_regions`]) and the links.
+    /// Every field comes from one render, so the regions describe exactly
+    /// the stored rows.
     pub fn capture_regions(target: &RenderTarget, renderable: &dyn Renderable) -> Self {
-        let frame = target.frame_with_regions(renderable);
+        let (segments, frame) = target.segments_and_frame_with_regions(renderable);
         let regions = frame
             .regions()
             .iter()
@@ -143,7 +154,7 @@ impl RenderSnapshot {
         Self {
             schema_version: 3,
             regions: Some(regions),
-            ..Self::capture_frame(target, renderable)
+            ..Self::from_frame(target, &segments, &frame)
         }
     }
     /// This snapshot as schema 2: rows of merged runs from its segments. A
