@@ -22,9 +22,10 @@ use std::process::ExitCode;
 use std::sync::{Arc, OnceLock};
 
 use rich_ext::cli_doc::{ArgSpec, CommandSpec};
+use rich_ext::sanitize_terminal_controls;
 use rich_interact::{
-    Choice, Confirm, Error as RunError, Fallback, Input, Item, MultiSelect, Outcome, Output, Pager,
-    Policy, Preview, RunOptions, Select, SessionOptions,
+    Choice, Confirm, Error as RunError, Fallback, Input, Item, LoopOptions, MultiSelect,
+    NotInteractive, Outcome, Output, Pager, Policy, Preview, RunOptions, Select, SessionOptions,
 };
 
 /// The commands, in the order help lists them.
@@ -206,6 +207,8 @@ struct Args {
     affirmative: Option<String>,
     negative: Option<String>,
     search: Option<String>,
+    /// The global `--no-color`.
+    no_color: bool,
 }
 
 fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
@@ -253,9 +256,20 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
             options_done = true;
             continue;
         }
-        // The global options every command tolerates.
-        if matches!(name, "--no-color" | "--no-config") {
-            continue;
+        // The global options every command takes. `--report` was read by
+        // `dispatch`; here it only has to be well formed.
+        match name {
+            "--no-config" | "--machine-json" => continue,
+            "--no-color" => {
+                parsed.no_color = true;
+                continue;
+            }
+            // Spelled as the other commands take it: `--report json`.
+            "--report" if inline.is_none() => {
+                ReportFormat::Human.apply_option(name, iter.next().map(String::as_str))?;
+                continue;
+            }
+            _ => {}
         }
         if !allowed.contains(&name) {
             return Err(format!("unknown option {name} for `rich {command}`"));
@@ -334,7 +348,7 @@ pub(super) fn dispatch(command: &'static str, args: &[String]) -> ExitCode {
         _ => pager(&args),
     });
     match result {
-        Ok(code) => code,
+        Ok(code) => report(json, code),
         Err((ExitClass::Usage, message)) => {
             emit_error(json, ExitClass::Usage, &format!("{message} (try --help)"))
         }
@@ -342,10 +356,19 @@ pub(super) fn dispatch(command: &'static str, args: &[String]) -> ExitCode {
     }
 }
 
+/// The report envelope, on standard error, for an answered command; an
+/// answer of no (exit 1) or an interrupt (130) is not a failure to report.
+fn report(json: bool, code: ExitCode) -> ExitCode {
+    if json && code == ExitCode::SUCCESS {
+        emit_success_report(ReportFormat::Json);
+    }
+    code
+}
+
 type Answer = Result<ExitCode, (ExitClass, String)>;
 
 /// Painted on standard error, inline below the cursor.
-fn run_options(fallback: Fallback) -> RunOptions {
+fn run_options(fallback: Fallback, no_color: bool) -> RunOptions {
     RunOptions {
         policy: Policy {
             fallback,
@@ -357,7 +380,10 @@ fn run_options(fallback: Fallback) -> RunOptions {
             bracketed_paste: true,
             ..SessionOptions::default()
         },
-        ..RunOptions::default()
+        paint: LoopOptions {
+            no_color: no_color || LoopOptions::default().no_color,
+            ..LoopOptions::default()
+        },
     }
 }
 
@@ -422,9 +448,11 @@ fn pick(args: &Args) -> Answer {
                 ),
             ));
         }
+        // `filter` keeps every line, as grep would; a blank choice is no
+        // choice.
         read_stdin()?
             .lines()
-            .filter(|line| !line.trim().is_empty())
+            .filter(|line| args.command == "filter" || !line.trim().is_empty())
             .map(str::to_string)
             .collect()
     } else {
@@ -433,12 +461,15 @@ fn pick(args: &Args) -> Answer {
     if items.is_empty() {
         return Err((ExitClass::Usage, "no items to choose from".into()));
     }
-    let options = run_options(if from_stdin {
-        // Standard input was the list, so there is nothing left to ask on.
-        Fallback::Default
-    } else {
-        Fallback::Prompt
-    });
+    let options = run_options(
+        if from_stdin {
+            // Standard input was the list, so there is nothing left to ask on.
+            Fallback::Default
+        } else {
+            Fallback::Prompt
+        },
+        args.no_color,
+    );
     // Without a terminal, `filter` is a filter: the matching lines, best
     // first.
     if args.command == "filter" && options.policy.detect_for(options.session.output).is_err() {
@@ -457,7 +488,9 @@ fn pick(args: &Args) -> Answer {
     let entries: Vec<Item<String>> = items
         .iter()
         .map(|item| {
-            let entry = Item::new(item.clone(), item.clone());
+            // Items are often names from elsewhere (files, branches): paint
+            // their controls as text, but answer with the item as it came.
+            let entry = Item::new(item.clone(), sanitize_terminal_controls(item));
             match &args.preview {
                 Some(command) => entry.preview(Preview::Renderable(Arc::new(CommandPreview {
                     command: command.clone(),
@@ -474,6 +507,16 @@ fn pick(args: &Args) -> Answer {
         .filter_map(|wanted| items.iter().position(|item| item == wanted))
         .collect();
     if args.multi {
+        // Nothing marked is no default: without a terminal, say so (exit 3)
+        // rather than answer with nothing.
+        if selected.is_empty() && options.policy.fallback == Fallback::Default {
+            if let Err(reason) = options.policy.detect_for(options.session.output) {
+                return Err((
+                    ExitClass::Input,
+                    RunError::NotInteractive(NotInteractive::NoDefault(reason)).to_string(),
+                ));
+            }
+        }
         let mut select = MultiSelect::new(prompt, entries).marked(selected);
         if let Some(rows) = args.height {
             select = select.height(rows);
@@ -519,7 +562,7 @@ fn input(args: &Args) -> Answer {
     if let Some(default) = &args.default {
         input = input.default(default.clone());
     }
-    let outcome = rich_interact::run(input, &run_options(Fallback::Prompt));
+    let outcome = rich_interact::run(input, &run_options(Fallback::Prompt, args.no_color));
     finish(outcome.map(|outcome| match outcome {
         Outcome::Done(line) => Outcome::Done(vec![line]),
         Outcome::Cancelled => Outcome::Cancelled,
@@ -540,7 +583,7 @@ fn confirm(args: &Args) -> Answer {
     if let Some(default) = args.default.as_deref() {
         sheet = sheet.default(default);
     }
-    match rich_interact::run(sheet, &run_options(Fallback::Prompt)) {
+    match rich_interact::run(sheet, &run_options(Fallback::Prompt, args.no_color)) {
         Ok(Outcome::Done(answer)) if answer == "yes" => Ok(ExitCode::SUCCESS),
         Ok(Outcome::Done(_)) | Ok(Outcome::Cancelled) => Ok(ExitCode::from(EXIT_CANCELLED)),
         Ok(Outcome::Interrupted) => Ok(ExitCode::from(EXIT_INTERRUPTED)),
@@ -575,7 +618,10 @@ fn pager(args: &Args) -> Answer {
             mouse: true,
             ..SessionOptions::default()
         },
-        ..RunOptions::default()
+        paint: LoopOptions {
+            no_color: args.no_color || LoopOptions::default().no_color,
+            ..LoopOptions::default()
+        },
     };
     if options.policy.detect_for(Output::Stdout).is_err() {
         return write_stdout(&source);
