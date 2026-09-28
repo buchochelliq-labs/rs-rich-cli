@@ -556,9 +556,20 @@ const PADDING_SIDE: i64 = 8;
 /// The height of the caption line under the terminal.
 const CAPTION: i64 = 32;
 
-/// HTML-escape, then spaces as `&#160;`: core's SVG `escape_text`.
+/// HTML-escape, then spaces as `&#160;`: core's SVG `escape_text`. Unlike
+/// core, characters XML 1.0 forbids (controls other than tab, newline and
+/// carriage return, U+FFFE and U+FFFF) become U+FFFD, so the SVG stays
+/// well-formed whatever the text holds.
 fn escape_text(text: &str) -> String {
-    escape(text).replace(' ', "&#160;")
+    let text: String = text
+        .chars()
+        .map(|c| match c {
+            '\t' | '\n' | '\r' => c,
+            '\u{0}'..='\u{1f}' | '\u{fffe}' | '\u{ffff}' => '\u{fffd}',
+            c => c,
+        })
+        .collect();
+    escape(&text).replace(' ', "&#160;")
 }
 
 // The number formatting below is core's (`rich::svg`, private there), so the
