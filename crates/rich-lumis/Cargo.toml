@@ -7,7 +7,7 @@
 # SemVer from 0.0.1. See AGENTS.md → Versioning and docs/PLUGINS.md.
 [package]
 name = "rs-rich-lumis"
-version = "0.0.1"
+version = "0.0.2"
 description = "The lumis (tree-sitter) syntax highlighter for the `rich` Rust port, with Neovim themes and ANSI themes"
 edition.workspace = true
 license.workspace = true

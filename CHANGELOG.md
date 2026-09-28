@@ -296,6 +296,10 @@ The `rs-rich` package on PyPI stays level with the Rust crates.
 Why it works this way: [Plugin loading](docs/design/plugin-loading.md). What
 a plugin may do, and the threat model: [the plugin guide](docs/PLUGINS.md).
 
+- **Mermaid 0.0.2 and lumis 0.0.2.** Only their manifests change: they now
+  require `rs-rich-plugin-api` 0.0.2. Published crates are immutable, so both
+  bump and are republished after the plugin API.
+
 - **Plugin API 0.0.2.**
   - `export_plugin!(MyPlugin)` registers a plugin for link-time collection
     (through `inventory`, a new dependency with no proc macros);
