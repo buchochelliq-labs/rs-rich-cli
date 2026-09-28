@@ -118,6 +118,8 @@ impl FilePicker {
         };
         let mut select = Select::new(prompt, Vec::<Item<Entry>>::new());
         select.set_kind(TargetKind::File);
+        // One height for every directory, so the view does not jump.
+        select.steady = true;
         let mut picker = FilePicker {
             root,
             jail: None,

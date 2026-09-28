@@ -88,6 +88,9 @@ pub struct Select<T> {
     pub(crate) hidden: Vec<bool>,
     /// A line of extra key hints for the footer.
     pub(crate) hints: Option<String>,
+    /// Always take `height` rows, however few items there are: for lists
+    /// that change under the user, such as a directory's entries.
+    pub(crate) steady: bool,
     mouse: bool,
     /// The list's width beside the preview, once the border is dragged.
     split: Option<usize>,
@@ -128,6 +131,7 @@ impl<T> Select<T> {
             prefix_plain: false,
             hidden: Vec::new(),
             hints: None,
+            steady: false,
             mouse: false,
             split: None,
             dragging: false,
@@ -490,6 +494,9 @@ impl<T> Select<T> {
 
     /// Rows the list takes.
     fn rows(&self) -> usize {
+        if self.steady {
+            return self.height;
+        }
         self.height.min(self.items.len()).max(1)
     }
 
