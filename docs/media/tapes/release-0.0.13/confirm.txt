@@ -1,0 +1,24 @@
+❯ rich confirm 'Deploy 0.0.13?' && echo deploying
+? Deploy 0.0.13?
+   Yes   No
+  y/n · ←→ move · enter choose · esc cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

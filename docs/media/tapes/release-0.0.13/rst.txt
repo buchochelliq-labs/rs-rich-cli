@@ -1,0 +1,24 @@
+❯ rich --rst release.rst
+╔══════════════════════════════════════════════════════════════════════════════════════════════╗
+║                                        Release 0.0.13                                        ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════╝
+Ask, choose and browse from a script:
+
+ • rich choose picks one item
+ • rich filter narrows a list as you type
+ • rich confirm answers with its exit code
+
+╭─────────────────────────────────────────── Note:  ───────────────────────────────────────────╮
+│ Keys come from the terminal even when stdin is the list.                                     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────╯
+❯
+
+
+
+
+
+
+
+
+
+
