@@ -229,7 +229,7 @@ jobs:
       - name: Check the whole workspace on the declared MSRV
         run: |
           cargo check --workspace --all-targets --all-features --exclude rs-rich-lumis --exclude rs-rich-cli
-          cargo check -p rs-rich-cli --all-targets --features "fetch art mermaid mmdc syntax-cache onig json-escape-safe"
+          cargo check -p rs-rich-cli --all-targets --features "fetch art mermaid mmdc syntax-cache onig json-escape-safe dylib-plugins wasm-plugins"
 
       # rs-rich-lumis declares its own minimum, lumis's (newer than the
       # workspace's), and is checked on exactly that.

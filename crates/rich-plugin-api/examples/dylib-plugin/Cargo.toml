@@ -1,0 +1,28 @@
+# An example native plugin: a `cdylib` built against rs-rich-plugin-api's C
+# ABI (`rich_plugin_api::abi`). The rs-rich-ext and rs-rich-cli tests build it
+# and load it; it is also the template for a third-party native plugin.
+#
+#   cargo build --release --manifest-path crates/rich-plugin-api/examples/dylib-plugin/Cargo.toml
+#   rich --plugin target/release/librich_plugin_example_dylib.so -m README.md
+#
+# Not a workspace member (the empty [workspace] table below), so the
+# workspace's own builds never compile it.
+[package]
+name = "rich-plugin-example-dylib"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+rich-plugin-api = { package = "rs-rich-plugin-api", path = "../.." }
+
+[features]
+# Export a descriptor for a future ABI major instead, to test that hosts
+# refuse it.
+future-abi = []
+
+[workspace]

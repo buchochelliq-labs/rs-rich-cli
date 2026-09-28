@@ -55,6 +55,7 @@ pub mod format;
 pub mod frame;
 pub mod hex;
 pub mod highlighter;
+pub mod plugin_loading;
 pub mod redact;
 pub mod registry;
 pub mod rst;
