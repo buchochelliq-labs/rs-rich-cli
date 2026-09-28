@@ -41,8 +41,12 @@ pub(crate) const FRAMES_PER_LEVEL: usize = 8;
 /// Frames Rich's print takes around the outermost renderable, counted from
 /// what is left of the recursion limit where the caller prints: fitted to
 /// rich 15.0.0 frame by frame, so the port stops at the same depth as Rich
-/// from every call depth (`tests/test_panel.py`).
+/// from every call depth (`tests/test_panel.py`). CPython 3.12 and later
+/// spend two fewer here ([`RENDER_BASE_FRAMES_312`]).
 pub(crate) const RENDER_BASE_FRAMES: usize = 11;
+
+/// [`RENDER_BASE_FRAMES`] on CPython 3.12 and later.
+pub(crate) const RENDER_BASE_FRAMES_312: usize = 9;
 
 /// Native stack each nested level may take when core renders it, and what
 /// the render needs besides: a level is refused, with `RecursionError`,

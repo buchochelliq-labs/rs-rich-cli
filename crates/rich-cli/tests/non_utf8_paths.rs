@@ -109,3 +109,78 @@ fn a_single_non_utf8_file_renders() {
     assert!(result.status.success());
     assert!(String::from_utf8_lossy(&result.stdout).contains("latin one"));
 }
+
+#[test]
+fn an_escaped_spelling_never_names_a_real_file() {
+    let Some(dir) = fixture() else { return };
+    // A valid name spelled like the invalid one's escape.
+    let input = dir.path().join("input");
+    std::fs::write(input.join("na\\xFFme.txt"), "literal name").unwrap();
+    let out = dir.path().join("out");
+    std::fs::create_dir(&out).unwrap();
+    let result = rich(&[
+        OsStr::new("--batch"),
+        OsStr::new("--export-html"),
+        out.as_os_str(),
+        input.join("*.txt").as_os_str(),
+    ]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let names = exported(&out);
+    assert_eq!(names.len(), 4, "every input exported: {names:?}");
+    let bodies: Vec<String> = names
+        .iter()
+        .map(|name| std::fs::read_to_string(out.join(OsStr::from_bytes(name))).unwrap())
+        .collect();
+    for body in ["latin one", "invalid byte", "literal name", "plain"] {
+        assert_eq!(
+            bodies.iter().filter(|html| html.contains(body)).count(),
+            1,
+            "{body:?} rendered once"
+        );
+    }
+}
+
+#[test]
+fn a_glob_in_a_non_utf8_directory_is_scanned() {
+    let Some(dir) = fixture() else { return };
+    let input = dir.path().join(OsStr::from_bytes(b"in\xfe"));
+    std::fs::rename(dir.path().join("input"), &input).unwrap();
+    let out = dir.path().join("out");
+    std::fs::create_dir(&out).unwrap();
+    let result = rich(&[
+        OsStr::new("--batch"),
+        OsStr::new("--export-html"),
+        out.as_os_str(),
+        input.join("*.txt").as_os_str(),
+    ]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(exported(&out).len(), 3);
+}
+
+#[test]
+fn a_dry_run_checks_a_non_utf8_output_directory() {
+    let Some(dir) = fixture() else { return };
+    let out = dir.path().join(OsStr::from_bytes(b"out\xfd"));
+    std::fs::create_dir(&out).unwrap();
+    let result = rich(&[
+        OsStr::new("--batch"),
+        OsStr::new("--dry-run"),
+        OsStr::new("--export-html"),
+        out.as_os_str(),
+        dir.path().join("input/*.txt").as_os_str(),
+    ]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(exported(&out).is_empty(), "a dry run writes nothing");
+}

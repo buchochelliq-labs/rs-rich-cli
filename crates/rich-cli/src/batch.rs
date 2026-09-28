@@ -281,14 +281,15 @@ pub(super) fn run_batch(cli: &Cli) -> ExitCode {
                         errors.push((input.clone(), ExitClass::Usage, Some(format!("batch output collision: {path}; use --collision suffix (repeated overwrite destinations require --jobs 1)"))));
                     }
                     if cli.dry_run {
-                        if Path::new(&path).is_dir() {
+                        let planned = super::fs_path(&path);
+                        if planned.is_dir() {
                             errors.push((
                                 input.clone(),
                                 ExitClass::Input,
                                 Some(format!("output is a directory: {path}")),
                             ));
                         }
-                        if let Some(parent) = Path::new(&path)
+                        if let Some(parent) = planned
                             .parent()
                             .filter(|parent| !parent.as_os_str().is_empty())
                         {

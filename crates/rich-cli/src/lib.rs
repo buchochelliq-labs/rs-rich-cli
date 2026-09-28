@@ -777,9 +777,11 @@ pub(crate) fn fs_path(arg: &str) -> std::path::PathBuf {
 
 /// A path as the `String` the rest of the CLI passes around. A path that is
 /// not valid Unicode (a file found by a batch glob, a planned output named
-/// after one) is spelled with each invalid byte as `\xNN`, so no two such
-/// paths share a spelling, and remembered, so [`fs_path`] gives the original
-/// back wherever the spelling reaches the file system.
+/// after one) is spelled with each invalid byte as `\xNN` (and each `\` as
+/// `\x5C`, so no two such paths share a spelling), after a NUL, which no
+/// path or argument can contain, so the spelling never names another file.
+/// It is remembered, so [`fs_path`] gives the original back wherever the
+/// spelling reaches the file system.
 pub(crate) fn path_arg(path: &Path) -> String {
     if let Some(text) = path.to_str() {
         return text.to_string();
@@ -796,13 +798,14 @@ pub(crate) fn path_arg(path: &Path) -> String {
     spelling
 }
 
-/// The Unicode parts of `path` as they are, each other byte as `\xNN`.
+/// A NUL, then the Unicode parts of `path` with `\` as `\x5C`, and each
+/// other byte as `\xNN`.
 #[cfg(unix)]
 fn escaped_path(path: &std::ffi::OsStr) -> String {
     use std::os::unix::ffi::OsStrExt;
-    let mut out = String::new();
+    let mut out = String::from('\0');
     for chunk in path.as_bytes().utf8_chunks() {
-        out.push_str(chunk.valid());
+        out.push_str(&chunk.valid().replace('\\', "\\x5C"));
         for byte in chunk.invalid() {
             out.push_str(&format!("\\x{byte:02X}"));
         }
@@ -812,7 +815,7 @@ fn escaped_path(path: &std::ffi::OsStr) -> String {
 
 #[cfg(not(unix))]
 fn escaped_path(path: &std::ffi::OsStr) -> String {
-    path.to_string_lossy().into_owned()
+    format!("\0{}", path.to_string_lossy())
 }
 
 /// [`run`] for a host process that is not the `rich` executable: `program` is
@@ -1192,7 +1195,19 @@ fn expand_batch_resources(resources: &[String]) -> Result<Vec<String>, String> {
                     "batch glob {resource:?} may only use * and ? in the final path segment"
                 ));
             }
-            let dir = fs_path(&dir.to_string_lossy());
+            // A glob that was not valid Unicode is split on its own bytes:
+            // only the whole argument's are remembered.
+            let raw = fs_path(resource);
+            let dir = match raw.parent() {
+                Some(parent) if raw.as_os_str() != std::ffi::OsStr::new(resource) => {
+                    if parent.as_os_str().is_empty() {
+                        PathBuf::from(".")
+                    } else {
+                        parent.to_path_buf()
+                    }
+                }
+                _ => dir,
+            };
             let entries = std::fs::read_dir(&dir)
                 .map_err(|error| format!("cannot scan {}: {error}", dir.display()))?;
             for entry in entries {
@@ -1930,7 +1945,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--batch-preserve-dirs" => batch_paths.preserve_dirs = true,
             "--no-batch-preserve-dirs" => batch_paths.preserve_dirs = false,
             "--batch-input-root" => {
-                batch_paths.input_root = Some(PathBuf::from(
+                batch_paths.input_root = Some(fs_path(
                     iter.next().ok_or("--batch-input-root requires a path")?,
                 ))
             }

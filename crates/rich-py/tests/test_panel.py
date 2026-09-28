@@ -6,6 +6,7 @@ import gc
 import io
 import subprocess
 import sys
+import time
 import weakref
 
 import pytest
@@ -140,7 +141,7 @@ def _deepest(panel_type, console_type, leaf, callers=0):
 
 
 @pytest.mark.parametrize("callers", [0, 60])
-@pytest.mark.parametrize("leaf", ["str", "text", "pretty"])
+@pytest.mark.parametrize("leaf", ["str", "text", "pretty", "deep_pretty"])
 def test_nesting_stops_where_rich_does(leaf, callers):
     # Rich spends Python frames on each nested panel, so how deep it renders
     # depends on the recursion limit and on how deep the caller is.
@@ -157,12 +158,34 @@ def test_nesting_stops_where_rich_does(leaf, callers):
         "str": (lambda: "x", lambda: "x"),
         "text": (lambda: Text("x"), lambda: RichText("x")),
         "pretty": (lambda: Pretty({"a": [1]}), lambda: RichPretty({"a": [1]})),
+        "deep_pretty": (
+            lambda: Pretty([[[[[[1]]]]]]),
+            lambda: RichPretty([[[[[[1]]]]]]),
+        ),
     }
     ours, theirs = leaves[leaf]
     assert rich is not None
     assert _deepest(Panel, Console, ours, callers) == _deepest(
         RichPanel, RichConsole, theirs, callers
     )
+
+
+def test_a_cyclic_pretty_renders_in_linear_time():
+    # A list holding itself a hundred times: the depth estimate must visit
+    # each container once, not follow every path (100 ** 8 of them).
+    from rs_rich.console import Console
+    from rs_rich.pretty import Pretty
+
+    cyclic = []
+    cyclic.extend([cyclic] * 100)
+    panel = Pretty(cyclic)
+    for _ in range(40):
+        panel = Panel(panel)
+    started = time.monotonic()
+    out = io.StringIO()
+    Console(file=out, width=1000).print(panel)
+    assert "[..., ..., " in out.getvalue()
+    assert time.monotonic() - started < 30
 
 
 def test_a_small_thread_stack_raises_instead_of_crashing():
