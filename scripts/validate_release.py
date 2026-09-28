@@ -30,6 +30,12 @@ def commands(tag: str) -> list[list[str]]:
         ["cargo", "clippy", "-p", "rs-rich-cli", "--no-default-features", "--all-targets", "--", "-D", "warnings"],
         ["cargo", "test", "--all"],
         ["cargo", "test", "-p", "rs-rich-cli", "--no-default-features"],
+        # The runtime plugin loaders are off by default, so `test --all` skips
+        # their tests: build the example native plugin and load it, run the
+        # WASM sandbox limits, and the CLI's trust gating with both on.
+        ["cargo", "test", "-p", "rs-rich-ext", "-p", "rs-rich-cli", "--features",
+         "rs-rich-ext/dylib-plugins,rs-rich-ext/wasm-plugins,rs-rich-cli/dylib-plugins,rs-rich-cli/wasm-plugins",
+         "--test", "dylib_plugins", "--test", "wasm_plugins", "--test", "plugins"],
         [python, "-m", "unittest", "discover", "-s", "scripts", "-p", "test_release.py", "-v"],
         [python, "-m", "unittest", "discover", "-s", "scripts", "-p", "test_release_readiness.py", "-v"],
         [python, "-m", "unittest", "discover", "-s", "scripts", "-p", "test_release_packages.py", "-v"],

@@ -63,6 +63,13 @@ interact = ["dep:rich-interact"]
 # Off by default: it compiles lumis's grammars (a much larger binary) and needs
 # Rust 1.91.
 lumis = ["dep:rich-lumis"]
+# Runtime plugins, loaded with `--plugin PATH` or from a trusted config's
+# `plugins` list (never from a project's ./rich.toml). Both off by default:
+# `dylib-plugins` loads native libraries (they run arbitrary code), and
+# `wasm-plugins` sandboxed WASM modules (wasmi; no imports, fuel and memory
+# limits). See docs/PLUGINS.md.
+dylib-plugins = ["rich-ext/dylib-plugins"]
+wasm-plugins = ["rich-ext/wasm-plugins"]
 
 [dependencies]
 rich.workspace = true
@@ -96,3 +103,5 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Securit
 # PTY tests for the interactive commands: a real terminal, keys sent to it.
 portable-pty = "0.9"
 vt100 = "0.16"
+# The WASM plugin tests compile the example module from text.
+wat = "1"

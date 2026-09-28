@@ -1,10 +1,13 @@
 //! The extension registry: where plugins are hosted.
 //!
 //! A caller builds a registry, adds plugins, then installs it onto a
-//! [`Console`]. Registration is **explicit**: no compile-time discovery and no
-//! dynamic loading, for debuggability. Plugins implement the contract in
+//! [`Console`]. Registration is **explicit** by default: a plugin is added by
+//! [`ExtensionRegistry::add_plugin`], or, when the caller asks for them, every
+//! plugin linked in with `rich_plugin_api::export_plugin!`
+//! ([`ExtensionRegistry::add_linked_plugins`]) and runtime plugins loaded from
+//! a path ([`crate::plugin_loading`]). Plugins implement the contract in
 //! [`rich_plugin_api`], which depends only on core; this module is the host.
-//! See docs/PLUGINS.md.
+//! See docs/PLUGINS.md and docs/design/plugin-loading.md.
 
 use std::collections::BTreeMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -99,6 +102,62 @@ impl ExtensionRegistry {
             .add_plugin(&BuiltinPlugin)
             .expect("the built-in plugin registers cleanly");
         registry
+    }
+
+    /// [`with_defaults`](Self::with_defaults), then every plugin linked in with
+    /// `rich_plugin_api::export_plugin!` ([`add_linked_plugins`](Self::add_linked_plugins)).
+    pub fn with_linked_plugins() -> Result<Self, PluginError> {
+        let mut registry = ExtensionRegistry::with_defaults();
+        registry.add_linked_plugins()?;
+        Ok(registry)
+    }
+
+    /// Add every plugin linked into this binary with
+    /// `rich_plugin_api::export_plugin!`, sorted by plugin id so the order
+    /// never depends on the linker. Returns their ids, in that order.
+    ///
+    /// Two linked plugins with the same id are an error
+    /// ([`PluginError::DuplicatePlugin`]) and nothing is added; so is a linked
+    /// plugin whose metadata panics. Otherwise each is added with
+    /// [`add_plugin`](Self::add_plugin), and the first refusal is returned
+    /// (the plugins before it stay added).
+    pub fn add_linked_plugins(&mut self) -> Result<Vec<String>, PluginError> {
+        let plugins: Vec<Box<dyn Plugin>> = rich_plugin_api::linked_plugins()
+            .map(|linked| linked.plugin())
+            .collect();
+        self.add_plugin_set(plugins)
+    }
+
+    /// Add `plugins` as [`add_linked_plugins`](Self::add_linked_plugins) adds
+    /// the linked ones: sorted by id, with a duplicate id refused before any
+    /// is added.
+    pub fn add_plugin_set(
+        &mut self,
+        plugins: impl IntoIterator<Item = Box<dyn Plugin>>,
+    ) -> Result<Vec<String>, PluginError> {
+        let mut keyed = Vec::new();
+        for plugin in plugins {
+            let metadata =
+                catch_unwind(AssertUnwindSafe(|| plugin.metadata())).map_err(|panic| {
+                    PluginError::Failed {
+                        plugin: "(unknown)".to_string(),
+                        message: format!("metadata panicked: {}", panic_message(&*panic)),
+                    }
+                })?;
+            keyed.push((metadata.id, plugin));
+        }
+        keyed.sort_by(|a, b| a.0.cmp(&b.0));
+        if let Some(pair) = keyed.windows(2).find(|pair| pair[0].0 == pair[1].0) {
+            return Err(PluginError::DuplicatePlugin {
+                id: pair[0].0.clone(),
+            });
+        }
+        let mut added = Vec::with_capacity(keyed.len());
+        for (id, plugin) in keyed {
+            self.add_plugin(plugin.as_ref())?;
+            added.push(id);
+        }
+        Ok(added)
     }
 
     /// Register a highlighter factory directly, without a plugin. The factory

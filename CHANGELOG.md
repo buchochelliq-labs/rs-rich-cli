@@ -354,6 +354,66 @@ The `rs-rich` package on PyPI stays level with the Rust crates.
   `ttf-parser` (unmaintained; used by rs-rich-record through fontdue).
   `cargo audit` reports nothing else.
 
+### Third-party plugins: plugin API 0.0.2, ext 0.0.11, CLI 0.0.13 (0.0.13 workstream 9: #14, #232)
+
+Why it works this way: [Plugin loading](docs/design/plugin-loading.md). What
+a plugin may do, and the threat model: [the plugin guide](docs/PLUGINS.md).
+
+- **Mermaid 0.0.2 and lumis 0.0.2.** Only their manifests change: they now
+  require `rs-rich-plugin-api` 0.0.2. Published crates are immutable, so both
+  bump and are republished after the plugin API.
+
+- **Plugin API 0.0.2.**
+  - `export_plugin!(MyPlugin)` registers a plugin for link-time collection
+    (through `inventory`, a new dependency with no proc macros);
+    `linked_plugins()` lists them.
+  - `abi`: a versioned, text-only ABI (1.0) for runtime plugins. Native
+    plugins export one C entry point with a `repr(C)` descriptor and vtable,
+    written by `export_dylib_plugin!` so the plugin has no unsafe code; WASM
+    plugins export four functions and a text manifest. Both decode into one
+    `PluginAbi`. They may contribute transforms, highlighters, and Markdown
+    fence renderers that return markup or ANSI. A host refuses another ABI
+    major before reading the rest of a descriptor, and an unknown capability
+    kind.
+  - An example native plugin (`examples/dylib-plugin`) and WASM module
+    (`examples/wasm/shout.wat`).
+  - `PLUGIN_API_VERSION` stays 1: nothing existing changed.
+- **Ext 0.0.11.**
+  - `ExtensionRegistry::with_linked_plugins()`, `add_linked_plugins()` and
+    `add_plugin_set()` add plugins sorted by id; a duplicate id is an error and
+    adds nothing.
+  - `plugin_loading`: `load(path)` picks the loader by extension and returns a
+    `RuntimePlugin`, an ordinary `Plugin`, so `add_plugin` checks it like any
+    other. Every output is sanitized: controls made visible, and only
+    `fence-ansi` keeps SGR styling, through `sanitize_ansi_for_decoder`.
+  - New features, both off by default: `dylib-plugins` (`libloading`; the
+    library stays loaded while anything registered from it exists) and
+    `wasm-plugins` (`wasmi`, a pure-Rust interpreter: no imports allowed, a
+    fuel limit per call, a memory cap, a fresh instance per call).
+  - `sanitize::sanitize_ansi_for_decoder`, moved from the CLI so the CLI's
+    viewers and runtime plugins share one sanitizer. The CLI's behaviour is
+    unchanged.
+- **CLI 0.0.13.**
+  - `rich plugins list` and `rich plugins info NAME` show every plugin with
+    its source (`built-in`, `linked`, `native`, `wasm`), version, ABI and
+    capabilities; `--report json` writes them to stdout.
+  - `--plugin PATH` (repeatable) and a `plugins = [...]` config key load
+    runtime plugins, in a build with the new `dylib-plugins` or `wasm-plugins`
+    feature (both off by default). A project's `./rich.toml` may not list
+    plugins: the list is ignored with a warning, as `mermaid_backend = "mmdc"`
+    is. A failed load exits 3 (unreadable) or 2 (anything else) with a message
+    naming the file, and never panics.
+  - Loaded plugins draw their Markdown fences and highlight printed text, and
+    linked plugins join every registry the binary builds.
+  - `--transform NAME` (repeatable) applies registered text transforms, a
+    plugin's or a built-in one, to text, `--print` and `--syntax`, in the
+    order given, after `--filter` and before `--highlight`. An unknown name is
+    a usage error (exit 2) listing the available names; a failed transform
+    reads `--transform NAME failed: …` (exit 4), as `--filter` does.
+    `--inspect` refuses it.
+- **Release tooling.** `validate_release.py` runs the loader tests with both
+  features on, and the CI MSRV check builds the CLI with them.
+
 ### Docs and tooling
 
 - **Tapes (#598).** A first, Python runner (`scripts/tape.py`, since

@@ -40,22 +40,11 @@ const COMMANDS: &[&str] = &[
     "choose", "filter", "input", "confirm", "pager", "write", "file", "color", "asset",
 ];
 
-/// The command word, when the first word that is not an option is one.
+/// The command word, when the first word that is not an option is one and
+/// no render mode flag came before it (`rich -p choose` prints the word).
 pub(super) fn requested(args: &[String]) -> Option<&'static str> {
-    let mut iter = args.iter();
-    while let Some(arg) = iter.next() {
-        if arg == "--" {
-            return None;
-        }
-        if VALUE_OPTIONS.contains(&arg.as_str()) {
-            iter.next();
-            continue;
-        }
-        if !arg.starts_with('-') || arg == "-" {
-            return COMMANDS.iter().copied().find(|command| arg == command);
-        }
-    }
-    None
+    let word = super::subcommand_word(args)?;
+    COMMANDS.iter().copied().find(|command| word == *command)
 }
 
 const EXIT_CANCELLED: u8 = 1;

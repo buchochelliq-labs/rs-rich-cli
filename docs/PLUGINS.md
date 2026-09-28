@@ -31,11 +31,11 @@ More seams (custom `Box` sets, spinners, themes) are added here as the
 corresponding modules are ported — always as a trait the core calls, never as an
 `if cfg!(feature = "ours")` branch inside core logic.
 
-## Registration (explicit, not magic)
+## Registration (explicit by default)
 
-We deliberately use **explicit registration** rather than compile-time
-auto-discovery (`inventory`/`linkme`): it is easier to debug, reason about, and
-test, and it keeps the install order deterministic.
+Registration is **explicit** by default: a host names each plugin it adds, which
+is easy to debug, reason about and test, and keeps the install order
+deterministic. Linked and runtime plugins (below) are opt-in on top of that.
 
 ```rust
 use rich::{Console, ColorSystem};
@@ -140,16 +140,131 @@ every diagram type through `mmdc` behind its `mmdc` feature.
 `rich doctor` lists the registered plugins and the API version (and includes
 them in `--json`).
 
+## Third-party plugins (0.0.13)
+
+Beyond `add_plugin`, a plugin can reach a registry in three more ways, each
+more opt-in than the last. Why they work this way is in the design note,
+[Plugin loading](design/plugin-loading.md).
+
+### Linked: add the dependency
+
+A plugin crate registers itself once:
+
+```rust
+rich_plugin_api::export_plugin!(MyPlugin);
+```
+
+A host that wants every linked plugin asks for them:
+
+```rust
+let registry = rich_ext::ExtensionRegistry::with_linked_plugins()?;
+```
+
+They are collected at link time (with `inventory`) and added **sorted by
+plugin id**, never in link order; two with the same id are an error
+(`PluginError::DuplicatePlugin`) and none is added. `with_defaults()` does not
+add them. The `rich` binary does, so a custom build that depends on a plugin
+crate gets it. If the binary never names the crate, the linker may drop it:
+write `use my_plugin as _;`.
+
+### Runtime: native libraries and WASM modules
+
+Runtime plugins are loaded from a path, behind `rs-rich-ext` features that are
+off by default: `dylib-plugins` for native libraries (`.so`, `.dylib`,
+`.dll`) and `wasm-plugins` for WASM modules (`.wasm`).
+
+```rust
+use rich_ext::plugin_loading::{load, LoadOptions};
+
+let plugin = load(path, &LoadOptions::default())?; // a LoadError names the path
+registry.add_plugin(&plugin)?;
+```
+
+Rust types cannot cross a library boundary, so a runtime plugin exchanges UTF-8
+text only, through the ABI in `rich_plugin_api::abi`. It may contribute:
+
+| kind | input | output |
+|---|---|---|
+| `transform` | plain text | plain text, as a named `TextTransform` |
+| `highlighter` | plain text | `START END STYLE` lines (byte offsets), as a `Highlighter` |
+| `fence-markup` | a fence's code and the width | `rich` markup, as a `FenceRenderer` |
+| `fence-ansi` | a fence's code and the width | ANSI SGR text, as a `FenceRenderer` |
+
+Themes, box styles, renderables and code highlighters stay compile-time only.
+
+- **A native plugin** is a `cdylib` that depends on `rs-rich-plugin-api` and
+  calls `export_dylib_plugin!` with an `abi::Exports` description; it needs no
+  unsafe code. See
+  [`examples/dylib-plugin`](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/crates/rich-plugin-api/examples/dylib-plugin).
+- **A WASM plugin** exports `memory`, `rich_plugin_alloc`,
+  `rich_plugin_manifest` and `rich_plugin_call` (see `abi::wasm`) and imports
+  nothing. See the hand-written
+  [`examples/wasm/shout.wat`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-plugin-api/examples/wasm/shout.wat).
+
+The ABI is versioned separately from `PLUGIN_API_VERSION` (it is 1.0). A host
+refuses a plugin built for another major, and one that declares a capability
+kind the host does not know.
+
+### In the `rich` CLI
+
+`rich plugins list` shows every plugin with its source (`built-in`, `linked`,
+`native`, `wasm`), version, ABI and capabilities, and `rich plugins info NAME`
+shows one; both take `--report json`. In a build with `dylib-plugins` or
+`wasm-plugins` (`cargo install rs-rich-cli --features wasm-plugins`),
+`--plugin PATH` loads a runtime plugin for one run, and a `plugins = [...]`
+list in `~/.config/rich/config.toml` or a file given with `--config` loads
+them every time. Loaded plugins draw Markdown fences and highlight printed
+text, and `--transform NAME` (repeatable, in the order given) applies their
+transforms to text, `--print` and `--syntax`, after `--filter` and before
+`--highlight`.
+
+## Security: threat model
+
+Plugins are code from someone else. What each kind can do, and what stands in
+its way:
+
+- **Nothing loads unless the user opts in.** Compile-time plugins are chosen
+  by whoever builds the binary. Runtime plugins need a Cargo feature that is
+  off by default, and then a path: on the command line, or in the user's own
+  config. A project's `./rich.toml` may **not** list plugins; `rich` ignores
+  the list with a warning, so cloning a repository and running `rich` in it
+  never loads that repository's code. (The same rule keeps a project config
+  from choosing `mermaid_backend = "mmdc"` or files to write.)
+- **Native plugins run arbitrary code, so they are trust-only.** Loading a
+  library runs its initialisers, and every call runs in the `rich` process
+  with the user's permissions. The ABI makes the boundary well-defined (only
+  `repr(C)` data crosses it, another ABI major is refused before the rest of
+  the descriptor is read, and the functions `export_dylib_plugin!` generates
+  turn a panic into an error), but it is not a sandbox. Load only a library you
+  would run as a program.
+- **WASM plugins are sandboxed.** A module that imports anything is refused,
+  so it has no WASI, file system, network, clock or randomness. Each call runs
+  in a fresh instance with a fuel limit (a loop that never ends is stopped)
+  and a memory cap (a module that starts or grows past it is refused or
+  trapped). A WASM plugin can waste at most one call's fuel and cannot see
+  anything but its input.
+- **Output is sanitized, whatever the kind.** Output over 4 MiB or not UTF-8
+  is an error. Every control character in transform, highlighter and markup
+  output, ESC included, is made visible. Only `fence-ansi` may carry ANSI, and
+  it goes through the same sanitizer `rich view` uses: SGR styling survives,
+  OSC strings (titles, clipboard, hyperlinks) are removed, and every other
+  control is made visible. A highlighter span that does not fit its text is
+  skipped. A failed fence renders as a code block.
+- **Names cannot collide or spoof.** Every plugin, compiled in or loaded, goes
+  through `add_plugin`: its id and capability names are restricted to
+  lowercase letters, digits, `-`, `_` and `.`, and a name another plugin
+  already provides is refused, so a runtime plugin cannot replace a built-in.
+
 ## Roadmap: from internal to public
 
 1. **Done — internal.** `rich-ext` was the only registrant.
-2. **Now — a public contract (0.0.12).** `rs-rich-plugin-api` defines what a
+2. **Done — a public contract (0.0.12).** `rs-rich-plugin-api` defines what a
    plugin is; the ext registry hosts it. Not yet a stability promise: see the
    API version above.
-3. **Later — third-party plugin loading.** Evaluate compile-time aggregation
-   (`inventory`/`linkme`) for "just add the dependency" registration, and/or a
-   dynamic/WASM boundary for runtime plugins. Tracked as its own roadmap issue;
-   not built until the trait surface has settled.
+3. **Done — third-party loading (0.0.13).** Linked plugins, native and WASM
+   runtime plugins, and `rich plugins list/info`, as above.
+4. **Later.** Plugin manifests that can be read without running code, a
+   Git-backed index, `rich plugin install` (#232).
 
 Whatever we add, the invariant holds: **the core never learns about a specific
 extension.**

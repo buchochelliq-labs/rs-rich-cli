@@ -12,6 +12,7 @@ use rich_ext::data::{
     Selectors, View,
 };
 use rich_ext::transform::{HighlightMatches, KeepLines, Pipeline, PipelineError};
+use rich_ext::ExtensionRegistry;
 use std::borrow::Cow;
 
 /// `--format`'s value: a named format, or `auto` to detect one.
@@ -49,6 +50,9 @@ pub(crate) struct DataOptions {
     compare: Option<String>,
     filter: Option<String>,
     highlight: Option<String>,
+    /// `--transform NAME`, repeatable: registered text transforms (a plugin's
+    /// or a built-in one), in the order given.
+    transforms: Vec<String>,
 }
 
 /// The style `--highlight` gives what it matches: reverse video reads on any
@@ -95,6 +99,10 @@ impl DataOptions {
                 let pattern = rest.next().ok_or("--highlight requires a pattern")?;
                 self.highlight = Some(pattern.clone());
             }
+            "--transform" => {
+                let name = rest.next().ok_or("--transform requires a transform NAME")?;
+                self.transforms.push(name.clone());
+            }
             "--max-depth" => self.max_depth = Some(positive(arg, rest.next())?),
             "--max-length" => self.max_length = Some(positive(arg, rest.next())?),
             "--flatten" => self.flatten = true,
@@ -129,11 +137,13 @@ impl DataOptions {
         .find_map(|(flag, given)| given.then_some(flag))
     }
 
-    /// The first transform option given (`--filter`, `--highlight`). These
-    /// apply to plain text, `--print`, `--syntax` and `--inspect`.
+    /// The first transform option given (`--filter`, `--transform`,
+    /// `--highlight`). These apply to plain text, `--print` and `--syntax`,
+    /// and all but `--transform` to `--inspect`.
     pub(crate) fn transform_option(&self) -> Option<&'static str> {
         [
             ("--filter", self.filter.is_some()),
+            ("--transform", !self.transforms.is_empty()),
             ("--highlight", self.highlight.is_some()),
         ]
         .into_iter()
@@ -141,13 +151,41 @@ impl DataOptions {
     }
 
     /// Check `--filter` and `--highlight` before any input is read: JSONPath
-    /// with `--inspect`, a regular expression otherwise.
+    /// with `--inspect`, a regular expression otherwise. `--transform` names
+    /// are checked once plugins are loaded ([`Self::unknown_transform`]).
     pub(crate) fn check_transforms(&self, inspect: bool) -> Result<(), String> {
         if inspect {
+            if !self.transforms.is_empty() {
+                return Err(TRANSFORM_NOT_INSPECT.into());
+            }
             self.document_pipeline().map(drop)
         } else {
-            self.text_pipeline().map(drop)
+            self.text_stages(None).map(drop)
         }
+    }
+
+    /// The `--transform` names given, in order.
+    pub(crate) fn transforms(&self) -> &[String] {
+        &self.transforms
+    }
+
+    /// The usage error for the first `--transform` name `registry` does not
+    /// have, listing the names it does.
+    pub(crate) fn unknown_transform(&self, registry: &ExtensionRegistry) -> Option<String> {
+        let name = self
+            .transforms
+            .iter()
+            .find(|name| registry.transform(name).is_none())?;
+        let names = registry.transform_names();
+        let available = if names.is_empty() {
+            "no transform is registered (plugins add them: see `rich plugins list`)".to_string()
+        } else {
+            format!("transforms: {}", names.join(", "))
+        };
+        Some(format!(
+            "unknown transform {:?} for --transform; {available}",
+            crate::controls::shown(name)
+        ))
     }
 
     /// `--inspect`'s transforms, in their documented order: `--redact`,
@@ -177,12 +215,37 @@ impl DataOptions {
     }
 
     /// The transforms for plain text, `--print` and `--syntax`, in their
-    /// documented order: `--filter`, then `--highlight`.
-    pub(crate) fn text_pipeline(&self) -> Result<Pipeline<Text>, String> {
+    /// documented order: `--filter`, each `--transform` in the order given
+    /// (looked up in `registry`), then `--highlight`.
+    pub(crate) fn text_pipeline(
+        &self,
+        registry: &ExtensionRegistry,
+    ) -> Result<Pipeline<Text>, String> {
+        self.text_stages(Some(registry))
+    }
+
+    /// [`Self::text_pipeline`]; without a registry, the `--transform` stages
+    /// are left out (to check the patterns before plugins load).
+    fn text_stages(&self, registry: Option<&ExtensionRegistry>) -> Result<Pipeline<Text>, String> {
         let mut pipeline = Pipeline::new();
         if let Some(pattern) = &self.filter {
             let keep = KeepLines::new(pattern).map_err(|err| format!("--filter: {err}"))?;
             pipeline = pipeline.then("--filter", keep);
+        }
+        if let Some(registry) = registry {
+            if let Some(message) = self.unknown_transform(registry) {
+                return Err(message);
+            }
+            // The registry's own `text_pipeline` names each stage after the
+            // transform; here a stage is named after the flag, as the others
+            // are, so a failure reads `--transform NAME failed: …`.
+            for name in &self.transforms {
+                let transform = registry.text_pipeline([name.as_str()])?;
+                pipeline.push(
+                    format!("--transform {}", crate::controls::shown(name)),
+                    Box::new(Unnested(transform)),
+                );
+            }
         }
         if let Some(pattern) = &self.highlight {
             let highlight = HighlightMatches::new(pattern, highlight_style())
@@ -218,6 +281,20 @@ impl DataOptions {
             }
         }
         Ok(())
+    }
+}
+
+/// Why `--transform` is refused with `--inspect`.
+const TRANSFORM_NOT_INSPECT: &str =
+    "--transform only has an effect on text, --print or --syntax, not --inspect";
+
+/// A one-stage registry pipeline whose failure reports only the transform's
+/// own error, since the outer stage already names it.
+struct Unnested(Pipeline<Text>);
+
+impl rich_ext::transform::Transform<Text> for Unnested {
+    fn apply(&self, input: Text) -> Result<Text, rich_ext::transform::TransformError> {
+        self.0.apply(input).map_err(|error| error.error)
     }
 }
 
@@ -421,14 +498,68 @@ mod tests {
             ["--redact", "--select", "--filter", "--highlight"]
         );
         let text = parsed(&["--highlight", "x", "--filter", "y"]).unwrap();
+        let registry = ExtensionRegistry::new();
         assert_eq!(
-            text.text_pipeline().unwrap().names(),
+            text.text_pipeline(&registry).unwrap().names(),
             ["--filter", "--highlight"]
         );
         assert!(DataOptions::default()
             .document_pipeline()
             .unwrap()
             .is_empty());
+    }
+
+    struct Upper;
+
+    impl rich_ext::plugin::TextTransform for Upper {
+        fn transform(&self, text: Text) -> Result<Text, rich_ext::plugin::PluginError> {
+            Ok(Text::new(text.plain().to_uppercase()))
+        }
+    }
+
+    /// `--transform` stages sit between `--filter` and `--highlight`, in the
+    /// order given, named after the flag; an unknown name lists the others.
+    #[test]
+    fn transform_stages_run_in_the_order_given_between_filter_and_highlight() {
+        let mut registry = ExtensionRegistry::new();
+        registry
+            .register_transform("upper", std::sync::Arc::new(Upper))
+            .unwrap();
+        let options = parsed(&[
+            "--highlight",
+            "X",
+            "--transform",
+            "upper",
+            "--filter",
+            "x",
+            "--transform",
+            "upper",
+        ])
+        .unwrap();
+        let pipeline = options.text_pipeline(&registry).unwrap();
+        assert_eq!(
+            pipeline.names(),
+            [
+                "--filter",
+                "--transform upper",
+                "--transform upper",
+                "--highlight"
+            ]
+        );
+        assert_eq!(pipeline.apply(Text::new("x\ny")).unwrap().plain(), "X");
+        // Checked without the registry before plugins load.
+        assert!(options.check_transforms(false).is_ok());
+        assert!(options
+            .check_transforms(true)
+            .unwrap_err()
+            .contains("not --inspect"));
+
+        let unknown = parsed(&["--transform", "lower"]).unwrap();
+        assert_eq!(
+            unknown.unknown_transform(&registry).unwrap(),
+            "unknown transform \"lower\" for --transform; transforms: upper"
+        );
+        assert!(unknown.text_pipeline(&registry).is_err());
     }
 
     #[test]

@@ -40,6 +40,7 @@ mod doctor;
 mod inspect;
 #[cfg(feature = "interact")]
 mod interactive;
+mod plugins;
 #[cfg(feature = "record")]
 mod record;
 mod render_target;
@@ -510,6 +511,9 @@ struct Cli {
     highlighter: Option<String>,
     /// `--code-theme NAME`: a theme of the chosen code highlighter.
     code_theme: Option<String>,
+    /// `--plugin PATH` (and a trusted config's `plugins`): runtime plugins to
+    /// load, in order.
+    plugins: Vec<String>,
     theme_styles: std::collections::BTreeMap<String, Style>,
     /// `--theme-file PATH`: styles from an upstream `[styles]` theme file,
     /// layered under config themes and `--theme-style`.
@@ -644,8 +648,16 @@ fn mermaid_options(backend: MermaidBackend) -> rich_mermaid::MermaidOptions {
     }
 }
 
-/// The CLI's plugin registry: the built-ins, and Mermaid where compiled in.
+/// The CLI's plugin registry: [`builtin_registry`], then the linked plugins
+/// and the runtime plugins `--plugin` loaded (see [`plugins`]).
 fn plugin_registry(mermaid: MermaidBackend) -> rich_ext::ExtensionRegistry {
+    let mut registry = builtin_registry(mermaid);
+    plugins::add_to(&mut registry);
+    registry
+}
+
+/// The built-in plugins: rich-ext's, and Mermaid and lumis where compiled in.
+fn builtin_registry(mermaid: MermaidBackend) -> rich_ext::ExtensionRegistry {
     #[cfg_attr(not(feature = "mermaid"), allow(unused_mut))]
     let mut registry = rich_ext::ExtensionRegistry::with_defaults();
     #[cfg(feature = "mermaid")]
@@ -889,11 +901,17 @@ pub fn run_embedded(program: Vec<std::ffi::OsString>, args: Vec<std::ffi::OsStri
 static SELF_PROGRAM: std::sync::Mutex<Vec<std::ffi::OsString>> = std::sync::Mutex::new(Vec::new());
 
 fn dispatch(args: Vec<String>) -> ExitCode {
+    // An in-process host (`run_embedded`, the Python wheel) runs many
+    // command lines: a run's plugins are only the ones it names.
+    plugins::install(Vec::new());
     if demo::requested(&args) {
         return demo::dispatch(&args);
     }
     if doctor::requested(&args) {
         return doctor::dispatch(&args);
+    }
+    if plugins::requested(&args) {
+        return plugins::dispatch(&args);
     }
     #[cfg(feature = "interact")]
     if let Some(command) = interactive::requested(&args) {
@@ -906,6 +924,22 @@ fn dispatch(args: Vec<String>) -> ExitCode {
     match parse(&args) {
         Ok(None) => ExitCode::SUCCESS, // help/version already printed
         Ok(Some(cli)) => {
+            if let Err(message) = plugins::check_linked() {
+                return fail(&cli, ExitClass::Usage, message);
+            }
+            if !cli.plugins.is_empty() {
+                match plugins::load(&cli.plugins) {
+                    Ok(loaded) => plugins::install(loaded),
+                    Err((class, message)) => return fail(&cli, class, message),
+                }
+            }
+            // `--transform` names are known once plugins are loaded.
+            if let Some(message) = cli
+                .data
+                .unknown_transform(&plugin_registry(MermaidBackend::Text))
+            {
+                return fail(&cli, ExitClass::Usage, message);
+            }
             if cli.batch {
                 if let Err(error) = batch::install_interrupt_handler() {
                     return fail(
@@ -952,6 +986,7 @@ const VALUE_OPTIONS: &[&str] = &[
     "--mermaid-backend",
     "--highlighter",
     "--code-theme",
+    "--plugin",
     "-w",
     "--width",
     "-o",
@@ -1009,6 +1044,7 @@ const VALUE_OPTIONS: &[&str] = &[
     "--select",
     "--filter",
     "--highlight",
+    "--transform",
     "--find",
     "--max-depth",
     "--max-length",
@@ -1074,6 +1110,26 @@ fn command_word(args: &[String]) -> Option<&str> {
             iter.next();
         } else if !arg.starts_with('-') || arg == "-" {
             return command_mode(arg).map(|_| arg.as_str());
+        }
+    }
+    None
+}
+
+/// The first positional word, when it can name a subcommand (`plugins`,
+/// `doctor`, `record`, `choose`, `bench`, …): never after `--`, and never
+/// once a render-mode flag came before it, which makes the word a resource
+/// (`rich -p plugins` prints "plugins"). Every subcommand scanner uses this,
+/// so they agree with each other and with [`parse`].
+pub(crate) fn subcommand_word(args: &[String]) -> Option<&str> {
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        if arg == "--" || mode_flag_alias(arg).is_some() {
+            return None;
+        }
+        if VALUE_OPTIONS.contains(&arg.as_str()) {
+            iter.next();
+        } else if !arg.starts_with('-') || arg == "-" {
+            return Some(arg);
         }
     }
     None
@@ -1649,6 +1705,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut log_presentation = String::from("plain");
     let mut mermaid_backend = None;
     let mut highlighter: Option<String> = None;
+    let mut plugins: Vec<String> = Vec::new();
     let mut code_theme: Option<String> = None;
     let mut theme_styles = std::collections::BTreeMap::new();
     let mut theme_file_styles = std::collections::BTreeMap::new();
@@ -1777,6 +1834,10 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--code-theme" => {
                 let value = iter.next().ok_or("--code-theme requires a theme name")?;
                 code_theme = Some(value.clone());
+            }
+            "--plugin" => {
+                let path = iter.next().ok_or("--plugin requires PATH")?;
+                plugins.push(path.clone());
             }
             "--mermaid-backend" => {
                 let value = iter
@@ -2210,7 +2271,8 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     if let Some(flag) = data.transform_option() {
         if !transforms_apply(mode) {
             return Err(format!(
-                "{flag} only has an effect on text, --print, --syntax or --inspect"
+                "{flag} only has an effect on {}",
+                transform_modes(flag)
             ));
         }
         data.check_transforms(mode == Mode::Inspect)?;
@@ -2684,6 +2746,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         mermaid_backend,
         highlighter,
         code_theme,
+        plugins,
         theme_styles,
         theme_file_styles,
         height,
@@ -3132,11 +3195,36 @@ fn transforms_apply(mode: Mode) -> bool {
     )
 }
 
+/// The usage error for a transform option `mode` does not take: any of them
+/// outside [`transforms_apply`], and `--transform` (text only) with
+/// `--inspect`.
+fn transform_misplaced_in(cli: &Cli, mode: Mode) -> Option<String> {
+    if let Some(flag) = cli
+        .data
+        .transform_option()
+        .filter(|_| !transforms_apply(mode))
+    {
+        return Some(transforms_misplaced(flag, mode));
+    }
+    (mode == Mode::Inspect && !cli.data.transforms().is_empty())
+        .then(|| cli.data.check_transforms(true).unwrap_err())
+}
+
 fn transforms_misplaced(flag: &str, mode: Mode) -> String {
     format!(
-        "{flag} only has an effect on text, --print, --syntax or --inspect, not {}",
+        "{flag} only has an effect on {}, not {}",
+        transform_modes(flag),
         mode_name(mode)
     )
+}
+
+/// Where a transform option applies: `--transform` rewrites text only.
+fn transform_modes(flag: &str) -> &'static str {
+    if flag == "--transform" {
+        "text, --print or --syntax"
+    } else {
+        "text, --print, --syntax or --inspect"
+    }
 }
 
 fn detect_mode(resource: Option<&str>) -> Mode {
@@ -3746,12 +3834,8 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         Mode::Auto => detect_mode(cli.resource.as_deref()),
         other => other,
     };
-    if let Some(flag) = cli
-        .data
-        .transform_option()
-        .filter(|_| !transforms_apply(mode))
-    {
-        return fail(&cli, ExitClass::Usage, transforms_misplaced(flag, mode));
+    if let Some(message) = transform_misplaced_in(&cli, mode) {
+        return fail(&cli, ExitClass::Usage, message);
     }
 
     // `view` decides what to show from the resource itself: an existing
@@ -3856,6 +3940,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     let mut console = builder.build();
     render_target::attach(&mut console);
     console.install_extensions();
+    plugins::install_highlighters(&mut console);
     apply_code_highlighting(&mut console, &cli);
 
     if mode == Mode::Rule {
@@ -4242,12 +4327,8 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         .unwrap_or_default();
 
     // `--format` or a URL's Content-Type can still route away from text.
-    if let Some(flag) = cli
-        .data
-        .transform_option()
-        .filter(|_| !transforms_apply(mode))
-    {
-        return fail(&cli, ExitClass::Usage, transforms_misplaced(flag, mode));
+    if let Some(message) = transform_misplaced_in(&cli, mode) {
+        return fail(&cli, ExitClass::Usage, message);
     }
 
     // Build the renderable, and the width a non-expanding `Panel`/`Padding`
@@ -4387,7 +4468,8 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             let fit = measure_rendered(&console, &table);
             (Box::new(table), Some(fit))
         }
-        // `--filter` and `--highlight` work on the highlighted text.
+        // `--filter`, `--transform` and `--highlight` work on the highlighted
+        // text.
         Mode::Syntax if cli.data.transform_option().is_some() => {
             let language = cli.source.lexer.as_deref().unwrap_or(&language);
             // `--head`/`--tail` pick the lines first, as `Syntax`'s
@@ -4408,7 +4490,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             let text = Syntax::new(code.as_str(), language).highlight_for(&console);
             let text = match cli
                 .data
-                .text_pipeline()
+                .text_pipeline(&plugin_registry(MermaidBackend::Text))
                 .and_then(|pipeline| pipeline.apply(text).map_err(inspect::transform_failed))
             {
                 Ok(text) => text,
@@ -4500,7 +4582,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             }
             let text = match cli
                 .data
-                .text_pipeline()
+                .text_pipeline(&plugin_registry(MermaidBackend::Text))
                 .and_then(|pipeline| pipeline.apply(text).map_err(inspect::transform_failed))
             {
                 Ok(text) => text,
@@ -6935,6 +7017,85 @@ fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
 mod tests {
     use super::*;
     use rich::ColorSystem;
+
+    /// Every render-mode spelling [`mode_flag_alias`] knows, long and short.
+    const MODE_FLAGS: &[&str] = &[
+        "--print",
+        "-p",
+        "--markdown",
+        "-m",
+        "--json",
+        "-j",
+        "-J",
+        "--syntax",
+        "-x",
+        "--csv",
+        "--ipynb",
+        "--rst",
+        "--jsonl",
+        "--ndjson",
+        "--log",
+        "--rule",
+        "-u",
+        "--image",
+        "--gif",
+        "--diff",
+        "--inspect",
+        "--ansi-explain",
+    ];
+
+    /// A render-mode flag before a subcommand's word makes the word a
+    /// resource, for every subcommand scanner: `rich -p plugins` prints it.
+    #[test]
+    fn a_mode_flag_before_a_subcommand_word_makes_it_a_resource() {
+        for flag in MODE_FLAGS {
+            assert!(mode_flag_alias(flag).is_some(), "{flag}");
+        }
+        let claimed = |args: &[String]| {
+            let mut words = Vec::new();
+            if plugins::requested(args) {
+                words.push("plugins");
+            }
+            if doctor::requested(args) {
+                words.push("doctor");
+            }
+            #[cfg(feature = "record")]
+            if record::requested(args) {
+                words.push("record");
+            }
+            #[cfg(feature = "interact")]
+            words.extend(interactive::requested(args));
+            if tools::bench_dispatch(args).unwrap_or(true) {
+                words.push("bench");
+            }
+            let roots = ConfigRoots {
+                home: None,
+                cwd: std::env::temp_dir(),
+                no_color_env: false,
+            };
+            if !matches!(config::inspect(args, &roots), Ok(None)) {
+                words.push("config");
+            }
+            words
+        };
+        let words = [
+            "plugins", "doctor", "record", "choose", "filter", "input", "confirm", "pager",
+            "bench", "config",
+        ];
+        for word in words {
+            // Without a mode flag the word is the subcommand (where built).
+            let plain = claimed(&[word.to_string(), "--no-color".into()]);
+            assert!(plain.is_empty() || plain == [word], "{word}: {plain:?}");
+            for flag in MODE_FLAGS {
+                let args = [flag.to_string(), word.to_string()];
+                assert_eq!(claimed(&args), Vec::<&str>::new(), "{flag} {word}");
+                let args = ["--no-color".to_string(), flag.to_string(), word.to_string()];
+                assert_eq!(claimed(&args), Vec::<&str>::new(), "{args:?}");
+            }
+        }
+        assert!(plugins::requested(&["--no-color".into(), "plugins".into()]));
+        assert!(doctor::requested(&["doctor".into()]));
+    }
 
     #[cfg(feature = "art")]
     #[test]
