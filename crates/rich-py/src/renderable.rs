@@ -80,7 +80,7 @@ use crate::errors::NotRenderableError;
 pub(crate) use crate::limits::FRAMES_PER_LEVEL;
 use crate::limits::{
     MAX_NESTING, MAX_PRINT_NESTING, NATIVE_STACK_PER_LEVEL, NATIVE_STACK_RESERVE,
-    RENDER_BASE_FRAMES,
+    RENDER_BASE_FRAMES, RENDER_BASE_FRAMES_312,
 };
 use crate::protocol::{ConsoleOptions, Measurement, OptionsBase};
 use crate::segment::Segment;
@@ -315,7 +315,7 @@ pub(crate) struct Nesting(());
 /// How deep a render goes before [`Nesting`] looks at what Rich would allow:
 /// no render this shallow reaches Rich's limit from an ordinary call site,
 /// and looking costs a probe of the Python stack.
-const CHECK_FROM: usize = 32;
+pub(crate) const CHECK_FROM: usize = 32;
 
 impl Nesting {
     /// Enter a level, or raise `RecursionError` where Rich would run out of
@@ -361,7 +361,11 @@ fn rich_frame_budget(py: Python<'_>) -> PyResult<usize> {
     // the caller's to spend.
     let left = python_frames_left(py)? + 3;
     Ok(left
-        .saturating_sub(RENDER_BASE_FRAMES)
+        .saturating_sub(if py.version_info() >= (3, 12) {
+            RENDER_BASE_FRAMES_312
+        } else {
+            RENDER_BASE_FRAMES
+        })
         .min(MAX_NESTING * FRAMES_PER_LEVEL))
 }
 

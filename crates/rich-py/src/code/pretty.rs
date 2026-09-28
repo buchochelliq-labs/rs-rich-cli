@@ -9,7 +9,7 @@
 //! binding's reflection of Python values, the layout is a line-for-line port
 //! of upstream's `Node.render` and `_Line`.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
@@ -1206,36 +1206,91 @@ pub(crate) fn traverse_with(
     walk_object(object, limits, frames)
 }
 
-/// Python frames Rich's `Pretty` takes inside the level that holds it, for
-/// an object with nothing to walk into: measured on rich 15.0.0 against a
-/// `str` in the same `Panel`s.
-const PRETTY_FRAMES: usize = 5;
+/// Python frames Rich's `Pretty` of `object` takes inside the level that
+/// holds it, beyond what a `str` there takes. Measured on rich 15.0.0 per
+/// CPython version, for an object `d` containers deep (`tests/test_panel.py`):
+/// `5 + d` on 3.9 and 3.10, `4 + d` on 3.11, and `max(4, 1 + d)` on 3.12 and
+/// later, which inline more of the walk.
+fn pretty_frames(object: &Bound<'_, PyAny>) -> PyResult<usize> {
+    let depth = container_depth(object)?;
+    let version = object.py().version_info();
+    Ok(if version >= (3, 12) {
+        (1 + depth).max(4)
+    } else if version >= (3, 11) {
+        4 + depth
+    } else {
+        5 + depth
+    })
+}
 
-/// How many containers deep `object` goes (`[[1]]` is 2), as far as it
-/// matters to [`check_frames`](renderable::check_frames): eight.
+/// The containers `item` holds, or `None` when Rich's walk does not go
+/// into it.
+fn walked_children<'py>(item: &Bound<'py, PyAny>) -> PyResult<Option<Vec<Bound<'py, PyAny>>>> {
+    Ok(if let Ok(dict) = item.cast::<PyDict>() {
+        Some(dict.values().iter().collect())
+    } else if item.is_instance_of::<pyo3::types::PyList>()
+        || item.is_instance_of::<pyo3::types::PyTuple>()
+        || item.is_instance_of::<pyo3::types::PySet>()
+        || item.is_instance_of::<pyo3::types::PyFrozenSet>()
+    {
+        Some(item.try_iter()?.collect::<PyResult<_>>()?)
+    } else {
+        None
+    })
+}
+
+/// How many containers deep `object` goes (`[[1]]` is 2), as Rich's walk
+/// goes: a container met again inside itself is shown as `...`, not
+/// entered. Each container is walked once, by identity, and without native
+/// recursion, so shared and cyclic values (a list holding itself a hundred
+/// times) cost one pass over their edges.
 fn container_depth(object: &Bound<'_, PyAny>) -> PyResult<usize> {
-    let mut deepest = 0;
-    let mut pending = vec![(object.clone(), 0usize)];
-    while let Some((item, depth)) = pending.pop() {
-        if depth >= 8 {
-            deepest = deepest.max(depth);
+    struct Open<'py> {
+        key: usize,
+        children: Vec<Bound<'py, PyAny>>,
+        next: usize,
+        deepest: usize,
+    }
+    let Some(children) = walked_children(object)? else {
+        return Ok(0);
+    };
+    let mut done: HashMap<usize, usize> = HashMap::new();
+    let mut open: HashSet<usize> = HashSet::from([object.as_ptr() as usize]);
+    let mut stack = vec![Open {
+        key: object.as_ptr() as usize,
+        children,
+        next: 0,
+        deepest: 0,
+    }];
+    while let Some(top) = stack.last_mut() {
+        if let Some(child) = top.children.get(top.next).cloned() {
+            top.next += 1;
+            let key = child.as_ptr() as usize;
+            if let Some(&height) = done.get(&key) {
+                top.deepest = top.deepest.max(height);
+            } else if !open.contains(&key) {
+                if let Some(children) = walked_children(&child)? {
+                    open.insert(key);
+                    stack.push(Open {
+                        key,
+                        children,
+                        next: 0,
+                        deepest: 0,
+                    });
+                }
+            }
             continue;
         }
-        let children: Vec<Bound<'_, PyAny>> = if let Ok(dict) = item.cast::<PyDict>() {
-            dict.values().iter().collect()
-        } else if item.is_instance_of::<pyo3::types::PyList>()
-            || item.is_instance_of::<pyo3::types::PyTuple>()
-            || item.is_instance_of::<pyo3::types::PySet>()
-            || item.is_instance_of::<pyo3::types::PyFrozenSet>()
-        {
-            item.try_iter()?.collect::<PyResult<_>>()?
-        } else {
-            continue;
-        };
-        deepest = deepest.max(depth + 1);
-        pending.extend(children.into_iter().map(|child| (child, depth + 1)));
+        let finished = stack.pop().expect("a container is open");
+        let height = finished.deepest + 1;
+        open.remove(&finished.key);
+        done.insert(finished.key, height);
+        match stack.last_mut() {
+            Some(parent) => parent.deepest = parent.deepest.max(height),
+            None => return Ok(height),
+        }
     }
-    Ok(deepest)
+    Ok(0)
 }
 
 /// [`traverse`] for `Pretty`'s own conversion, which already counts as one
@@ -1526,12 +1581,11 @@ impl AsRenderable for Pretty {
     fn to_renderable(&self, py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
         let object = self.object.bind(py);
         // Rich's `Pretty` takes a few frames to render, and one more for
-        // each container its walk goes into, up to a level's worth: past
-        // that its walk runs out first, and prints a `<repr-error ...>`.
-        renderable::check_frames(
-            renderable::nesting_depth(),
-            (PRETTY_FRAMES + container_depth(object)?).min(renderable::FRAMES_PER_LEVEL),
-        )?;
+        // each container its walk goes into.
+        let depth = renderable::nesting_depth();
+        if depth >= renderable::CHECK_FROM {
+            renderable::check_frames(depth, pretty_frames(object)?)?;
+        }
         let node = traverse_in_render(object, self.limits())?;
         node.check_indent(self.indent_size)?;
         let layout = Layout {
