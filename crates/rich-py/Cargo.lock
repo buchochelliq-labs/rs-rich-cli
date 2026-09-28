@@ -1485,6 +1485,7 @@ dependencies = [
  "cap-std",
  "ctrlc",
  "fastrand",
+ "libc",
  "notify",
  "rs-rich",
  "rs-rich-art",

@@ -678,6 +678,56 @@ fn suggestions(value: &Bound<'_, PyAny>) -> PyResult<Vec<(String, Option<String>
         .collect()
 }
 
+impl Input {
+    /// Builds an `Input`; `masked` is Python's `password=`, kept under another
+    /// name so the `Form` fields that set it are not read as a literal password.
+    #[allow(clippy::too_many_arguments)]
+    fn build(
+        prompt: String,
+        value: String,
+        placeholder: Option<String>,
+        default: Option<String>,
+        help: Option<String>,
+        masked: bool,
+        mask: Option<&str>,
+        validate: Option<&Bound<'_, PyAny>>,
+        history: Option<&Bound<'_, PyAny>>,
+        suggestions: Option<&Bound<'_, PyAny>>,
+        limit: usize,
+    ) -> PyResult<Self> {
+        let history: Vec<String> = match history.filter(|h| !h.is_none()) {
+            Some(history) => iterable(history, "history")?,
+            None => Vec::new(),
+        };
+        let mask = match mask {
+            Some(mask) => Some(one_char(mask, "mask")?),
+            None if masked => Some('•'),
+            None => None,
+        };
+        let validator = match validate.filter(|v| !v.is_none()) {
+            Some(validator) if !validator.is_callable() => {
+                return Err(PyTypeError::new_err("validate must be callable"))
+            }
+            other => other.map(|v| v.clone().unbind()),
+        };
+        Ok(Input {
+            prompt,
+            value,
+            placeholder,
+            default,
+            help,
+            mask,
+            validator,
+            history,
+            suggestions: match suggestions.filter(|s| !s.is_none()) {
+                Some(suggestions) => self::suggestions(suggestions)?,
+                None => Vec::new(),
+            },
+            limit,
+        })
+    }
+}
+
 #[pymethods]
 impl Input {
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
@@ -706,36 +756,19 @@ impl Input {
         suggestions: Option<&Bound<'_, PyAny>>,
         limit: usize,
     ) -> PyResult<Self> {
-        let history: Vec<String> = match history.filter(|h| !h.is_none()) {
-            Some(history) => iterable(history, "history")?,
-            None => Vec::new(),
-        };
-        let mask = match mask {
-            Some(mask) => Some(one_char(mask, "mask")?),
-            None if password => Some('•'),
-            None => None,
-        };
-        let validator = match validate.filter(|v| !v.is_none()) {
-            Some(validator) if !validator.is_callable() => {
-                return Err(PyTypeError::new_err("validate must be callable"))
-            }
-            other => other.map(|v| v.clone().unbind()),
-        };
-        Ok(Input {
+        Input::build(
             prompt,
             value,
             placeholder,
             default,
             help,
+            password,
             mask,
-            validator,
+            validate,
             history,
-            suggestions: match suggestions.filter(|s| !s.is_none()) {
-                Some(suggestions) => self::suggestions(suggestions)?,
-                None => Vec::new(),
-            },
+            suggestions,
             limit,
-        })
+        )
     }
 
     /// Whether what is typed is masked.
@@ -1152,7 +1185,7 @@ impl Form {
         help: Option<String>,
         validate: Option<&Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, Self>> {
-        let input = Input::new(
+        let input = Input::build(
             label,
             value,
             placeholder,
@@ -1177,7 +1210,7 @@ impl Form {
         default: Option<String>,
         validate: Option<&Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, Self>> {
-        let input = Input::new(
+        let input = Input::build(
             label,
             String::new(),
             None,
