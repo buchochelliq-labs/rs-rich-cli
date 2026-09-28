@@ -769,8 +769,9 @@ terminal clear codes. See [watch recipes](recipes.md#watch-json-while-editing).
 
 ## Ask in a script
 
-`rich choose`, `rich filter`, `rich input`, `rich confirm` and `rich pager`
-are the interactive components as shell commands, in the manner of gum. The
+`rich choose`, `rich filter`, `rich input`, `rich confirm`, `rich pager`,
+`rich write`, `rich file`, `rich color` and `rich asset` are the interactive
+components as shell commands, in the manner of gum. The
 answer goes to stdout and the component paints on stderr, so a script
 captures the answer with `$(…)`; keys come from the terminal even when stdin
 is the list.
@@ -781,6 +782,10 @@ file=$(ls | rich filter --preview 'rich {} --force-terminal')
 name=$(rich input --prompt Name --placeholder 'Ada Lovelace')
 rich confirm "Deploy $branch?" && ./deploy "$branch"
 git log --color | rich pager
+message=$(rich write --header 'Commit message' --char-limit 500)
+$EDITOR "$(rich file src --extension rs)"
+accent=$(rich color --format name)
+icon=$(rich asset --value rocket)
 ```
 
 - `choose` and `filter` take ITEMs as arguments or one per line on stdin;
@@ -799,6 +804,24 @@ git log --color | rich pager
   `--affirmative` and `--negative`.
 - `pager` pages a FILE or stdin, keeping its colours: `/` searches, `q`
   quits.
+- `write` reads several lines: Enter starts a line, Ctrl+D submits. It takes
+  `--header`, `--placeholder`, `--value`, `--height`, `--char-limit` and
+  `--show-line-numbers`; piped stdin is the text to start from.
+- `file [DIR]` browses from DIR and prints the path picked: typing filters,
+  → opens, ← goes up, Ctrl+T shows hidden files, and a preview shows the
+  focused file. `--all` shows hidden files from the start, `--directory`
+  picks directories (with `--file` too, either), `--extension EXT` keeps
+  only some files. A path that is not UTF-8 is printed byte for byte.
+- `color` picks one of rich's named colours, a colour from the 256 palette
+  (Tab) or one typed as `#rrggbb` or `rgb(r,g,b)`, with a live swatch, and
+  prints it as `--format hex` (the default), `name` or `rgb`.
+- `asset` picks an emoji (printed as itself), a box style or a spinner
+  (printed by name, for `--box` and the like) with `--kind emoji|box|spinner`.
+- `--mouse` (choose, filter, confirm, file, color, asset) turns mouse
+  reporting on: click a row to focus it and again to pick it, click a
+  button, drag the border beside a preview. It is off by default because it
+  takes text selection from the terminal, and it paints on the alternate
+  screen.
 
 The exit code says what happened: 0 answered (for `confirm`, yes), 1
 cancelled with Escape (for `confirm`, no), 130 interrupted with Ctrl+C, 2 a
@@ -812,16 +835,18 @@ name cannot retitle or recolour the terminal; the answer is the item as it
 came.
 
 Without a terminal (in CI, or with nothing to read keys from) they degrade
-instead of waiting: `input`, `confirm` and `choose ITEM…` ask line by line on
-stderr and read the answer from stdin; `choose` from stdin answers with
-`--selected` (with `--multi`, nothing marked is no answer); `filter` prints the lines that match `--value`, best first, blank lines
+instead of waiting: `input`, `confirm`, `color`, `asset` and `choose ITEM…`
+ask line by line on stderr and read the answer from stdin; `choose` from stdin
+and `file` answer with `--selected` (with `--multi`, nothing marked is no
+answer); `write` prints what stdin held; `filter` prints the lines that match `--value`, best first, blank lines
 included, so it works as a fuzzy `grep`; `pager` writes the content out,
 byte for byte. When the line prompt's input ends (`</dev/null`), `--default`
 or `--selected` is the answer, as for an empty line; without one the command
 exits 3, since there was no answer, rather than 1.
 
 Standard input is read as UTF-8, with invalid bytes shown as `�`. `choose`
-and `filter` read at most 64 MiB and 1,000,000 lines of it, and `pager`
+and `filter` read at most 64 MiB and 1,000,000 lines of it, `write` at most
+64 MiB, and `pager`
 pages at most 64 MiB (without a terminal it streams any amount through), so
 `yes | rich choose` ends with an input error (exit 3) instead of exhausting
 memory. SIGTERM, SIGHUP and SIGQUIT give the

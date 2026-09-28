@@ -182,6 +182,107 @@ resize.
 
 ![Searching in the pager](../../media/tapes/components/pager.png)
 
+### TextArea
+
+Several lines of text, for `rich write`.
+
+- **Editing:** Enter starts a line; the arrows, Home/End, Ctrl+A/E,
+  Ctrl+U/K/W, Backspace and Delete edit, the caret moving by grapheme
+  cluster. Long lines wrap one cell short of the edge, and the text scrolls
+  to keep the caret in view.
+- **Finishing:** Ctrl+D submits (`submit_key` chooses another key); Escape
+  cancels.
+- **Limits:** `char_limit` counts line breaks too, and cuts pasted text.
+  A paste keeps its line breaks; other terminal controls are dropped.
+- **Without a terminal:** every line of input up to its end is the text.
+
+### FilePicker
+
+Browses from a root, for `rich file`. The listing is a `Select`, so typing
+filters it, and the focused entry is previewed beside it: a text file's
+first 200 lines, highlighted by extension; a directory's entries; or why
+there is nothing to show (a binary file, a FIFO, which is never opened).
+
+- **Moving:** Enter opens a directory or picks a file, Right opens, Left
+  and Backspace (with nothing typed) go up to `..`, Ctrl+T shows hidden
+  files. A directory opens with its first entry focused.
+- **What may be picked:** `FileMode::File` (the default), `Directory`
+  (files are not listed) or `Both`; `extensions` keeps only some files.
+- **A root jail:** with `jail(true)`, nothing outside the root is listed,
+  opened or read: `..` stops at the root and a symbolic link out of it is
+  left out.
+- **Names that are not UTF-8** show with each such byte as `\xNN`, as the
+  `rich` command spells such paths; the path returned is the real one.
+- **Without a terminal:** the `default` path, or no answer.
+
+### ColorPicker
+
+A colour, for `rich color`: rich's named colours, filtered as you type; a
+colour typed as `#rrggbb`, `rgb(r,g,b)` or `color(N)`, offered first; or
+the 256-colour palette, a 16 by 16 grid on Tab. A swatch shows the focused
+colour with its hex, RGB and names. The answer is a colour string rich
+parses, as `ColorFormat::Hex`, `Name` or `Rgb` says.
+
+### AssetPicker
+
+An emoji, a box style or a spinner, for `rich asset`, with a preview (the
+emoji, a small table drawn in the style, the spinner's frames). The lists
+come from core's public API: the emoji names are those of core's table,
+each resolved through `rich::emoji::replace`.
+
+### TableSelect and TreeSelect
+
+Pick a table's row (columns aligned under their headings, filtered by any
+cell) or a tree's node (guides drawn, Left and Right fold and unfold,
+searching finds nodes inside folded ones). Both are a `Select` underneath.
+
+## Mouse
+
+Mouse reporting is off unless a component asks for it
+(`Component::mouse`, set by each component's `with_mouse(true)`), since it
+takes text selection away from the terminal. `run` then turns it on for the
+session; a component painting inline on standard error is moved to the
+alternate screen, where clicks can be placed.
+
+- **Coordinates:** the event loop gives each component mouse events in its
+  own view's rows and columns, wherever the view is on screen; a press
+  outside the view is not delivered.
+- **Links:** a left click on a hyperlink (an OSC 8 region: a style with a
+  link) arrives as `Event::Link(url)`. Opening it is the caller's choice:
+  the pager records it (`Pager::links`) and shows it in its status line.
+- **Rows and buttons:** in `Select` a click focuses a row and a second click
+  picks it; `Confirm`'s choices are buttons, and `Form` shows Submit and
+  Cancel buttons and focuses (or flips) the field clicked.
+- **Pane resizing:** the border between a list and the preview beside it
+  drags, each pane keeping at least 12 columns.
+- **Tests:** `Script::click`, `drag`, `scroll` and `mouse` script it.
+
+## Actions
+
+An `Action` has an id, a label and an optional key. An item's own actions,
+and the view's `Actions` (offered on every target, or on those a filter
+accepts), apply to list items, table rows, tree nodes and file entries
+alike: the filter sees an `ActionTarget` with its `TargetKind` (`item`,
+`row`, `node` or `file`), label and value. An action's key picks the item
+directly; Ctrl+K opens a menu of every action for the focused item. The
+component finishes with the item, and `action()` says which action.
+
+```rust
+use rich_interact::{Action, Actions, FilePicker, Key, TargetKind};
+
+let actions = Actions::new()
+    .action_for(TargetKind::File, Action::new("edit", "Open in $EDITOR", Key::ctrl('e')))
+    .action_if(Action::menu("run", "Run it"), |target| target.value.ends_with(".sh"));
+let picker = FilePicker::new("File", ".").actions(actions);
+```
+
+Plugins add actions through `rs-rich-plugin-api`: a `CustomAction` (a
+label, an optional key name, the targets it applies to, and an optional
+`run`) registered with `PluginRegistrar::action`.
+`Actions::from_registry(&registry)` offers what the plugins of an
+`ExtensionRegistry` registered; `rich file` offers them, and prints what a
+plugin's `run` returns.
+
 ## Running one
 
 `run` is the blocking driver:
@@ -294,7 +395,8 @@ reports as `Outcome::Interrupted`.
 A picker that reads its list from a pipe (`ls | app`) can still take keys
 from the keyboard: `Policy { tty_keys: true, .. }` reads them from the
 controlling terminal when standard input is not one. `rich choose`,
-`rich filter`, `rich input`, `rich confirm` and `rich pager` run this way,
+`rich filter`, `rich input`, `rich confirm`, `rich pager`, `rich write`,
+`rich file`, `rich color` and `rich asset` run this way,
 painting on standard error ([the CLI guide](../../cli.md#ask-in-a-script)).
 
 ## Viewport
