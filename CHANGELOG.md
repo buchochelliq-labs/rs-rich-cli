@@ -102,6 +102,11 @@ Entries below record subsequent releases and development.
   output beside the list, with `{}` the focused item: `rich {}` renders it.
 - Without a terminal they degrade: line prompts on stderr, `--selected` or
   `--default` answers, and `filter` prints the lines matching `--value`.
+- Item labels are painted with terminal controls shown as text; the global
+  `--no-color`, `--report json` and `--machine-json` apply to every
+  interactive command; a `--multi` pick from stdin with nothing marked exits
+  3 without a terminal instead of answering with nothing; non-interactive
+  `filter` keeps blank lines.
 - Behind the new default `interact` feature, which the `rs_rich` wheel's
   `python -m rs_rich` also builds. PTY tests cover the captured answer, keys
   with a piped list, cancel, Ctrl+C, the pager and previews.

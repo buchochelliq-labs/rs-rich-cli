@@ -49,6 +49,57 @@ fn filter_without_a_terminal_prints_the_matching_lines_best_first() {
 }
 
 #[test]
+fn filter_keeps_blank_lines_as_grep_would() {
+    let (out, _, code) = piped(&["filter"], "a\n\n  \nb\n");
+    assert_eq!((out.as_str(), code), ("a\n\n  \nb\n", 0));
+}
+
+#[test]
+fn multi_from_stdin_with_nothing_selected_is_no_answer() {
+    let (out, err, code) = piped(&["choose", "--multi"], "apple\nbanana\n");
+    assert_eq!((out.as_str(), code), ("", 3));
+    assert!(err.contains("no default"), "{err}");
+    let (out, _, code) = piped(
+        &["choose", "--multi", "--selected", "nope"],
+        "apple\nbanana\n",
+    );
+    assert_eq!(
+        (out.as_str(), code),
+        ("", 3),
+        "an unknown --selected marks nothing"
+    );
+    let (out, _, code) = piped(
+        &["choose", "--multi", "--selected", "banana"],
+        "apple\nbanana\n",
+    );
+    assert_eq!((out.as_str(), code), ("banana\n", 0));
+}
+
+#[test]
+fn the_global_report_options_are_honoured() {
+    for report in [&["--report", "json"][..], &["--machine-json"]] {
+        let args: Vec<&str> = report
+            .iter()
+            .copied()
+            .chain(["choose", "--selected", "b"])
+            .collect();
+        let (out, err, code) = piped(&args, "a\nb\n");
+        assert_eq!((out.as_str(), code), ("b\n", 0), "{report:?}: {err}");
+        let envelope: serde_json::Value = serde_json::from_str(err.trim()).expect(&err);
+        assert_eq!(envelope["ok"], true, "{err}");
+    }
+    let (_, err, code) = piped(&["--report", "json", "choose"], "a\nb\n");
+    assert_eq!(code, 3);
+    let envelope: serde_json::Value = serde_json::from_str(err.trim()).expect(&err);
+    assert_eq!(envelope["ok"], false, "{err}");
+    for report in [&["--report", "xml"][..], &["--report=json"]] {
+        let args: Vec<&str> = report.iter().copied().chain(["choose", "a"]).collect();
+        let (_, err, code) = piped(&args, "");
+        assert_eq!(code, 2, "{report:?}: {err}");
+    }
+}
+
+#[test]
 fn choose_from_stdin_without_a_terminal_answers_with_selected() {
     let (out, _, code) = piped(&["choose", "--selected", "banana"], "apple\nbanana\n");
     assert_eq!((out.as_str(), code), ("banana\n", 0));
@@ -284,6 +335,73 @@ mod pty {
         let out = pty.finish();
         assert!(out.contains("code=0"), "{out}");
         assert!(!out.contains("\n200\r\n"), "paged, not printed: {out}");
+    }
+
+    /// Whether an SGR parameter list sets a foreground or background.
+    fn sets_colour(params: &str) -> bool {
+        params.split(';').any(|p| {
+            matches!(
+                p.parse::<u32>(),
+                Ok(30..=38 | 40..=48 | 90..=97 | 100..=107)
+            )
+        })
+    }
+
+    /// The parameters of every SGR sequence (`CSI … m`) in `text`.
+    fn sgr_params(text: &str) -> Vec<String> {
+        let mut params = Vec::new();
+        let mut rest = text;
+        while let Some(start) = rest.find("\x1b[") {
+            rest = &rest[start + 2..];
+            let end = rest
+                .find(|c: char| !(c.is_ascii_digit() || c == ';'))
+                .unwrap_or(rest.len());
+            if rest[end..].starts_with('m') {
+                params.push(rest[..end].to_string());
+            }
+            rest = &rest[end..];
+        }
+        params
+    }
+
+    #[test]
+    fn no_color_paints_without_colour() {
+        let mut pty = Pty::start(r#"x=$(rich choose apple banana); echo "got=$x""#);
+        pty.wait_for("banana");
+        pty.send("\r");
+        let coloured = pty.finish();
+        assert!(
+            sgr_params(&coloured).iter().any(|p| sets_colour(p)),
+            "the default paints colour: {coloured:?}"
+        );
+
+        let mut pty = Pty::start(r#"x=$(rich --no-color choose apple banana); echo "got=$x""#);
+        pty.wait_for("banana");
+        pty.send("\r");
+        let plain = pty.finish();
+        assert!(plain.contains("got=apple"), "{plain}");
+        for param in sgr_params(&plain) {
+            assert!(
+                !sets_colour(&param),
+                "colour {param:?} despite --no-color: {plain:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn item_labels_cannot_drive_the_terminal() {
+        let mut pty = Pty::start(
+            r#"x=$(printf 'safe\nevil\033]0;pwned\007\n' | rich choose); echo "code=$? got=$x""#,
+        );
+        pty.wait_for("pwned");
+        pty.send("\r");
+        let out = pty.finish();
+        assert!(
+            !out.contains("\x1b]0;pwned"),
+            "the title escape reached the terminal: {out:?}"
+        );
+        assert!(out.contains("␛]0;pwned"), "shown as text: {out:?}");
+        assert!(out.contains("code=0 got=safe"), "{out}");
     }
 
     #[test]

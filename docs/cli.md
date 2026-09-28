@@ -797,13 +797,20 @@ git log --color | rich pager
 
 The exit code says what happened: 0 answered (for `confirm`, yes), 1
 cancelled with Escape (for `confirm`, no), 130 interrupted with Ctrl+C, 2 a
-usage error, 3 no answer without a terminal.
+usage error, 3 no answer without a terminal. The global `--no-color`,
+`--report json` and `--machine-json` apply: with `--report json` an answer
+(exit 0) adds the success envelope on stderr and a failure its error
+envelope.
+
+Items are shown with terminal controls made visible (`␛]0;…`), so a file
+name cannot retitle or recolour the terminal; the answer is the item as it
+came.
 
 Without a terminal (in CI, or with nothing to read keys from) they degrade
 instead of waiting: `input`, `confirm` and `choose ITEM…` ask line by line on
 stderr and read the answer from stdin; `choose` from stdin answers with
-`--selected`; `filter` prints the lines that match `--value`, best first, so
-it works as a fuzzy `grep`; `pager` writes the content out.
+`--selected` (with `--multi`, nothing marked is no answer); `filter` prints the lines that match `--value`, best first, blank lines
+included, so it works as a fuzzy `grep`; `pager` writes the content out.
 
 ## Use it in a script or CI
 
