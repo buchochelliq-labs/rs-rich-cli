@@ -213,6 +213,8 @@ fn current_capture(captures: &mut CaptureStacks) -> Option<&mut Vec<Segment>> {
 /// `rich.console.Console`.
 pub struct Console {
     render_environment: Option<std::sync::Arc<dyn crate::protocol::RenderEnvironment>>,
+    /// The semantic-region observer (see `ConsoleRegions`); none by default.
+    region_sink: Option<std::sync::Arc<dyn crate::protocol::RegionSink>>,
     /// The default code highlighter (see `ConsoleCodeHighlighting`).
     code_highlighting: Option<crate::protocol::CodeHighlighting>,
     color_system: Option<ColorSystem>,
@@ -311,6 +313,7 @@ impl Clone for Console {
     fn clone(&self) -> Self {
         Console {
             render_environment: self.render_environment.clone(),
+            region_sink: self.region_sink.clone(),
             code_highlighting: self.code_highlighting.clone(),
             color_system: self.color_system,
             width: self.width,
@@ -1769,6 +1772,7 @@ impl ConsoleBuilder {
         let height = self.height.unwrap_or_else(detect_height);
         Console {
             render_environment: None,
+            region_sink: None,
             code_highlighting: None,
             color_system,
             width,
@@ -1899,6 +1903,15 @@ impl crate::protocol::ConsoleCodeHighlighting for Console {
     }
     fn code_highlighting(&self) -> Option<&crate::protocol::CodeHighlighting> {
         self.code_highlighting.as_ref()
+    }
+}
+
+impl crate::protocol::ConsoleRegions for Console {
+    fn set_region_sink(&mut self, value: Option<std::sync::Arc<dyn crate::protocol::RegionSink>>) {
+        self.region_sink = value;
+    }
+    fn region_sink(&self) -> Option<&dyn crate::protocol::RegionSink> {
+        self.region_sink.as_deref()
     }
 }
 
