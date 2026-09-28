@@ -58,9 +58,16 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["r
 # `color` — rich renders those. `error-context` and `suggestions` populate
 # `Error::context()` (invalid arg/value, "did you mean").
 clap = { version = "4.5", default-features = false, features = ["std", "help", "env", "error-context", "suggestions"], optional = true }
+# Runtime plugins (docs/design/plugin-loading.md). Native libraries through a
+# versioned C ABI, and WASM modules in wasmi, a pure-Rust interpreter (no JIT,
+# no WASI). Both off by default: loading either runs third-party code.
+libloading = { version = "0.9", optional = true }
+wasmi = { version = "2", default-features = false, features = ["std", "validate", "stable", "auto-dispatch"], optional = true }
 
 [dev-dependencies]
 serde_json.workspace = true
+# The WASM plugin tests compile their modules from text.
+wat = "1"
 thiserror = "2"
 trybuild = "1"
 
@@ -91,6 +98,11 @@ jsonpath = ["data"]
 # CLI authoring through clap: `cli_doc::clap` maps a `clap::Command` onto
 # the help, error, completion and docs renderers.
 clap = ["dep:clap"]
+# Load native plugins (`.so`, `.dylib`, `.dll`) through the C ABI in
+# `rich_plugin_api::abi`. They run arbitrary native code: trust-only.
+dylib-plugins = ["dep:libloading"]
+# Load sandboxed WASM plugins: no imports, a fuel limit and a memory cap.
+wasm-plugins = ["dep:wasmi"]
 
 [[example]]
 name = "snapshot"
