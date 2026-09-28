@@ -141,7 +141,7 @@ def _deepest(panel_type, console_type, leaf, callers=0):
 
 
 @pytest.mark.parametrize("callers", [0, 60])
-@pytest.mark.parametrize("leaf", ["str", "text", "pretty", "deep_pretty"])
+@pytest.mark.parametrize("leaf", ["str", "text", "pretty", "deep_pretty", "limited_pretty"])
 def test_nesting_stops_where_rich_does(leaf, callers):
     # Rich spends Python frames on each nested panel, so how deep it renders
     # depends on the recursion limit and on how deep the caller is.
@@ -158,6 +158,10 @@ def test_nesting_stops_where_rich_does(leaf, callers):
         "str": (lambda: "x", lambda: "x"),
         "text": (lambda: Text("x"), lambda: RichText("x")),
         "pretty": (lambda: Pretty({"a": [1]}), lambda: RichPretty({"a": [1]})),
+        "limited_pretty": (
+            lambda: Pretty(eval("[" * 60 + "1" + "]" * 60), max_depth=1),
+            lambda: RichPretty(eval("[" * 60 + "1" + "]" * 60), max_depth=1),
+        ),
         "deep_pretty": (
             lambda: Pretty([[[[[[1]]]]]]),
             lambda: RichPretty([[[[[[1]]]]]]),
@@ -186,6 +190,30 @@ def test_a_cyclic_pretty_renders_in_linear_time():
     Console(file=out, width=1000).print(panel)
     assert "[..., ..., " in out.getvalue()
     assert time.monotonic() - started < 30
+
+
+def test_the_depth_estimate_looks_only_where_rich_does():
+    # Rich's walk takes the first `max_length` children of a container, so a
+    # `Pretty` of an endless iterable prints; the estimate must stop there too.
+    program = (
+        "import io\n"
+        "from rs_rich.console import Console\n"
+        "from rs_rich.panel import Panel\n"
+        "from rs_rich.pretty import Pretty\n"
+        "class Endless(list):\n"
+        "    def __iter__(self):\n"
+        "        while True:\n"
+        "            yield [1]\n"
+        "panel = Pretty(Endless([1]), max_length=3)\n"
+        "for _ in range(40):\n"
+        "    panel = Panel(panel)\n"
+        "Console(file=io.StringIO(), width=300).print(panel)\n"
+        "print('printed')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", program], capture_output=True, timeout=120
+    )
+    assert result.stdout == b"printed\n", result.stderr
 
 
 def test_a_small_thread_stack_raises_instead_of_crashing():
