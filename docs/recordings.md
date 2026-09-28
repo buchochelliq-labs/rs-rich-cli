@@ -81,6 +81,29 @@ See [Interactive components](guide/interact/index.md#ready-made-components).
 
 [Tape](tapes/components.tape) · [Cast](media/tapes/components/components.cast) · [GIF](media/tapes/components/components.gif)
 
+## Ask for more in a script
+
+`rich write`, `rich file`, `rich color` and `rich asset`, each captured into
+a shell variable with `$(…)`: several lines of a commit message, a path
+picked from the fixture project with its preview, a colour from the
+names and the palette, and an emoji and a box style used together. See
+[Ask in a script](cli.md#ask-in-a-script).
+
+<div class="tape-player" data-cast="../media/tapes/file/file.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/file/file.gif" alt="rich file browsing a project and picking a file">
+</div>
+
+| rich write | rich file | rich file |
+|---|---|---|
+| ![Several lines typed](media/tapes/write/editing.png) | ![A directory listed](media/tapes/file/browse.png) | ![A file previewed](media/tapes/file/preview.png) |
+| **rich color** | **rich color** | **rich asset** |
+| ![Named colours with a swatch](media/tapes/color/names.png) | ![The 256 palette](media/tapes/color/palette.png) | ![Box styles previewed](media/tapes/asset/box.png) |
+
+[write tape](tapes/write.tape) · [cast](media/tapes/write/write.cast) ·
+[file tape](tapes/file.tape) · [cast](media/tapes/file/file.cast) ·
+[color tape](tapes/color.tape) · [cast](media/tapes/color/color.cast) ·
+[asset tape](tapes/asset.tape) · [cast](media/tapes/asset/asset.cast)
+
 ## An interactive component
 
 `rs-rich-interact`'s `Viewport`, run as its example pager, pages a Markdown

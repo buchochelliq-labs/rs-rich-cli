@@ -1,0 +1,20 @@
+❯ style=$(rich asset --kind box)
+? Box style › heavy
+❯ heavy                                       │ ┏━━━━━━━┳━━━━━━━┓
+  heavy_edge                                  │ ┃ Name  ┃ Value ┃
+  heavy_head                                  │ ┣━━━━━━━╋━━━━━━━┫
+  simple_heavy                                │ ┃ alpha ┃ 1     ┃
+  minimal_heavy_head                          │ ┃ beta  ┃ 2     ┃
+                                              │ ┗━━━━━━━┻━━━━━━━┛
+                                              │
+                                              │
+                                              │
+                                              │
+  5/19 · ↑↓ move · enter pick · esc cancel
+
+
+
+
+
+
+

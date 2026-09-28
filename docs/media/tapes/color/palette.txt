@@ -1,0 +1,26 @@
+❯ accent=$(rich color --format name)
+? Colour › orange
+            #ff0000  rgb(255,0,0)  red1  color(196)
+
+
+
+
+
+
+
+
+
+
+
+
+          <>
+
+
+
+  ←↑↓→ move · tab names · enter pick · esc cancel
+
+
+
+
+
+

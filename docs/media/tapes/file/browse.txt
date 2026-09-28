@@ -1,0 +1,20 @@
+❯ path=$(rich file --header Open)
+? Open ›
+  .
+  ..                                          │ event_loop.rs
+❯ src/                                        │ lib.rs
+  tests/                                      │ main.rs
+  Cargo.toml                                  │ render.rs
+  README.md                                   │
+                                              │
+                                              │
+                                              │
+                                              │
+                                              │
+  5/5 · ↑↓ move · enter pick · → open · ← up · ctrl+t hidden · esc cancel
+
+
+
+
+
+

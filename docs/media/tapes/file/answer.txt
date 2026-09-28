@@ -1,0 +1,20 @@
+❯ path=$(rich file --header Open)
+? Open › src/event_loop.rs
+❯ echo "$path"
+src/event_loop.rs
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
