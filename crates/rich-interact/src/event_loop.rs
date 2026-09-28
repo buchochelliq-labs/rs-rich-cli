@@ -2,10 +2,11 @@
 //!
 //! An [`EventLoop`] runs one or more mounted components at once: it renders
 //! them stacked, paints only what changed, waits for the next event, tick or
-//! timer, and routes keys to the first component still running. It is kept
-//! minimal on purpose (events, timers, repaint on change) so the intuiTUIve
-//! track can grow a component tree, reactive state and focus routing on top
-//! of it rather than beside it. [`run`] is the loop with one component, so a
+//! timer, and routes keys to the first component still running and mouse
+//! events to the running component under the pointer. It is kept minimal on
+//! purpose (events, timers, repaint on change) so the intuiTUIve track can
+//! grow a component tree, reactive state and focus routing on top of it
+//! rather than beside it. [`run`] is the loop with one component, so a
 //! component behaves the same under both.
 
 use std::cell::RefCell;
@@ -189,6 +190,9 @@ pub struct EventLoop<'a> {
     /// own coordinates and a click matched to a link.
     rows: Vec<usize>,
     shown: Vec<Vec<Segment>>,
+    /// The component a button press went to: its moves and release follow
+    /// it there (a drag), wherever the pointer goes.
+    grab: Option<usize>,
 }
 
 impl<'a> EventLoop<'a> {
@@ -208,6 +212,7 @@ impl<'a> EventLoop<'a> {
             size,
             rows: Vec::new(),
             shown: Vec::new(),
+            grab: None,
         }
     }
 
@@ -334,21 +339,8 @@ impl<'a> EventLoop<'a> {
     /// component `index`'s view: `None` for a press outside it. A press of
     /// the left button on a hyperlink is [`Event::Link`] instead.
     fn locate(&self, index: usize, mouse: Mouse) -> Option<Event> {
-        let top = if self.backend.alternate_screen() {
-            0
-        } else {
-            // An inline region that grew past the bottom of the screen
-            // scrolled up with it.
-            let rows = self.space().1;
-            (self.backend.origin() as usize).min(rows.saturating_sub(self.painter.extent()))
-        };
-        let region_row = (mouse.row as usize).checked_sub(top);
-        let start = self.rows.get(index).copied().unwrap_or(0);
-        let end = self
-            .rows
-            .get(index + 1)
-            .copied()
-            .unwrap_or(self.shown.len());
+        let region_row = self.region_row(mouse);
+        let (start, end) = self.extent(index);
         let inside = region_row.filter(|row| (start..end).contains(row));
         if let (MouseKind::Down(_), None) = (mouse.kind, inside) {
             return None;
@@ -363,6 +355,58 @@ impl<'a> EventLoop<'a> {
             row: u16::try_from(row).unwrap_or(u16::MAX),
             ..mouse
         }))
+    }
+
+    /// `mouse`'s row in the painted region, `None` above it.
+    fn region_row(&self, mouse: Mouse) -> Option<usize> {
+        let top = if self.backend.alternate_screen() {
+            0
+        } else {
+            // An inline region that grew past the bottom of the screen
+            // scrolled up with it.
+            let rows = self.space().1;
+            (self.backend.origin() as usize).min(rows.saturating_sub(self.painter.extent()))
+        };
+        (mouse.row as usize).checked_sub(top)
+    }
+
+    /// The rows mounted component `index`'s view took in the last paint.
+    fn extent(&self, index: usize) -> (usize, usize) {
+        let start = self.rows.get(index).copied().unwrap_or(0);
+        let end = self
+            .rows
+            .get(index + 1)
+            .copied()
+            .unwrap_or(self.shown.len());
+        (start, end)
+    }
+
+    /// The running component a mouse event goes to. A press goes to the
+    /// one under the pointer (none, outside every view) and holds it until
+    /// the release, so a drag stays where it started; anything else goes
+    /// to the one under the pointer, or the first running.
+    fn mouse_target(&mut self, mouse: Mouse) -> Option<usize> {
+        let running = |index: &usize| !self.mounted[*index].0.finished();
+        let grabbed = self.grab.filter(running);
+        let under = self.region_row(mouse).and_then(|row| {
+            (0..self.mounted.len()).filter(running).find(|&index| {
+                let (start, end) = self.extent(index);
+                (start..end).contains(&row)
+            })
+        });
+        let first = (0..self.mounted.len()).find(running);
+        match mouse.kind {
+            MouseKind::Down(_) => {
+                self.grab = under;
+                under
+            }
+            MouseKind::Drag(_) => grabbed.or(under).or(first),
+            MouseKind::Up(_) => {
+                self.grab = None;
+                grabbed.or(under).or(first)
+            }
+            _ => under.or(first),
+        }
     }
 
     fn running(&self) -> bool {
@@ -492,11 +536,7 @@ impl<'a> EventLoop<'a> {
                     }
                 }
                 Some(Event::Mouse(mouse)) => {
-                    if let Some(index) = self
-                        .mounted
-                        .iter()
-                        .position(|(component, _)| !component.finished())
-                    {
+                    if let Some(index) = self.mouse_target(mouse) {
                         if let Some(event) = self.locate(index, mouse) {
                             self.deliver(index, &event)?;
                         }

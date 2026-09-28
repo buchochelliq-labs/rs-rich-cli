@@ -374,6 +374,13 @@ impl ColorPicker {
                 "invalid format {format:?}; expected hex, name or rgb"
             ))
         })?;
+        if let Some(default) = default.as_deref() {
+            if !CoreColor::is_color(default) {
+                return Err(PyValueError::new_err(format!(
+                    "invalid default {default:?}; expected a colour"
+                )));
+            }
+        }
         Ok(ColorPicker {
             prompt,
             format,

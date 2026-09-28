@@ -873,6 +873,9 @@ def test_color_picker_formats_the_colour():
     assert degrade(ColorPicker(), ["rgb(1,2,3)"]).value == "#010203"
     with pytest.raises(ValueError):
         ColorPicker(format="hsl")
+    with pytest.raises(ValueError, match="definitely-not-a-color"):
+        ColorPicker(default="definitely-not-a-color")
+    assert degrade(ColorPicker(default="red"), [""]).value == "#800000"
 
 
 def test_asset_picker_picks_emoji_boxes_and_spinners():

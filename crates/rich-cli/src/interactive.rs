@@ -613,6 +613,15 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
                 "`rich {command}` takes no arguments; the prompt is --header"
             ))
         }
+        "color"
+            if parsed
+                .default
+                .as_deref()
+                .is_some_and(|default| !ColorPicker::is_color(default)) =>
+        {
+            let default = parsed.default.as_deref().unwrap_or_default();
+            return Err(format!("--default: {default:?} is not a colour"));
+        }
         "file" if parsed.positionals.len() > 1 => {
             return Err("`rich file` starts from one DIR".into())
         }

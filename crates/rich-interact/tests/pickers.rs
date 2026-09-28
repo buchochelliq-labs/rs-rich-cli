@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use rich_interact::headless::{self, Script};
 use rich_interact::policy::{Fallback, Reason, ScriptedLineIo};
 use rich_interact::{
-    degrade, AssetKind, AssetPicker, ColorFormat, ColorPicker, Error, Event, FileMode, FilePicker,
-    Key, NotInteractive, Outcome, TextArea,
+    degrade, AssetKind, AssetPicker, ColorFormat, ColorPicker, Component, Error, Event, FileMode,
+    FilePicker, Key, NotInteractive, Outcome, TextArea,
 };
 
 /// The last view before the component collapsed to its answer.
@@ -379,6 +379,59 @@ fn color_picker_degrades_to_a_line() {
         &mut io,
     );
     assert!(outcome.is_err());
+}
+
+fn degrade_color(
+    picker: ColorPicker,
+    lines: &[&str],
+    fallback: Fallback,
+) -> Result<Outcome<String>, Error> {
+    let mut io = ScriptedLineIo::new(lines.iter().map(|line| line.to_string()));
+    let mut picker = picker;
+    degrade(&mut picker, fallback, Reason::StdinNotTerminal, &mut io)
+}
+
+#[test]
+fn color_picker_rejects_a_default_that_is_not_a_colour() {
+    assert!(ColorPicker::is_color("red") && ColorPicker::is_color("#ff8800"));
+    assert!(!ColorPicker::is_color("definitely-not-a-color") && !ColorPicker::is_color(""));
+    // Input ended, an empty line, or a real answer: the bad default is
+    // reported before anything is asked.
+    for lines in [&[][..], &[""], &["blue"]] {
+        let bad = ColorPicker::new("Colour").default("definitely-not-a-color");
+        match degrade_color(bad, lines, Fallback::Prompt) {
+            Err(Error::NotInteractive(NotInteractive::Invalid(message))) => {
+                assert!(message.contains("definitely-not-a-color"), "{message}")
+            }
+            other => panic!("{lines:?}: {other:?}"),
+        }
+    }
+    let empty = ColorPicker::new("Colour").default("");
+    assert!(matches!(
+        degrade_color(empty, &[""], Fallback::Prompt),
+        Err(Error::NotInteractive(NotInteractive::Invalid(_)))
+    ));
+    // Asked for the default outright, a bad one is no default.
+    let bad = ColorPicker::new("Colour").default("nope");
+    assert!(Component::default_value(&bad).is_none());
+    assert!(matches!(
+        degrade_color(bad, &[], Fallback::Default),
+        Err(Error::NotInteractive(NotInteractive::NoDefault(_)))
+    ));
+}
+
+#[test]
+fn an_empty_colour_line_is_the_default_or_no_answer() {
+    let red = ColorPicker::new("Colour").default("red");
+    assert_eq!(
+        degrade_color(red, &[""], Fallback::Prompt).unwrap(),
+        Outcome::Done("#800000".into())
+    );
+    // No default: no answer, as when input ends.
+    assert!(matches!(
+        degrade_color(ColorPicker::new("Colour"), &[""], Fallback::Prompt),
+        Err(Error::NotInteractive(NotInteractive::NoDefault(_)))
+    ));
 }
 
 // ---- AssetPicker ----

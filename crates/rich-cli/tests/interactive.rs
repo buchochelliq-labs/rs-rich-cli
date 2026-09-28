@@ -293,6 +293,28 @@ fn color_and_asset_ask_line_by_line_without_a_terminal() {
 }
 
 #[test]
+fn color_checks_its_default_and_an_empty_line() {
+    // A default that is not a colour is a usage error, before anything is
+    // asked, whatever standard input holds.
+    for stdin in ["", "\n", "blue\n"] {
+        let (out, err, code) = piped(&["color", "--default", "definitely-not-a-color"], stdin);
+        assert_eq!((out.as_str(), code), ("", 2), "{stdin:?}: {err}");
+        assert!(
+            err.contains("--default: \"definitely-not-a-color\" is not a colour"),
+            "{err}"
+        );
+    }
+    let (out, err, code) = piped(&["color", "--default", ""], "\n");
+    assert_eq!((out.as_str(), code), ("", 2), "{err}");
+    // An empty line is the default, or no answer without one.
+    let (out, err, code) = piped(&["color", "--default", "red"], "\n");
+    assert_eq!((out.as_str(), code), ("#800000\n", 0), "{err}");
+    let (out, err, code) = piped(&["color"], "\n");
+    assert_eq!((out.as_str(), code), ("", 3), "{err}");
+    assert!(err.contains("no default"), "{err}");
+}
+
+#[test]
 fn the_new_commands_check_their_arguments() {
     for args in [
         &["write", "extra"][..],

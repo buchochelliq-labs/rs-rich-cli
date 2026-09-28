@@ -163,6 +163,96 @@ fn mouse_rows_are_relative_to_each_components_view() {
     assert_eq!(events.len(), 3, "{events:?}");
 }
 
+/// Two `Linked` views mounted and running at once: rows 0-1 are the
+/// first's, rows 2-3 the second's. `q` finishes the first running one.
+fn two_linked(script: Script) -> (Vec<Event>, Vec<Event>) {
+    use rich_interact::{EventLoop, LoopOptions};
+    let backend = headless::Headless::new(script.keys("q").keys("q"), 40, 10);
+    let mut event_loop = EventLoop::new(backend, LoopOptions::default());
+    let first = event_loop.mount(Linked(Vec::new()));
+    let second = event_loop.mount(Linked(Vec::new()));
+    event_loop.run().unwrap();
+    (
+        first.take().unwrap().value().unwrap(),
+        second.take().unwrap().value().unwrap(),
+    )
+}
+
+#[test]
+fn a_click_in_a_later_running_view_reaches_that_view() {
+    use rich_interact::Button;
+    let (first, second) = two_linked(Script::new().click(1, 3));
+    assert!(first.is_empty(), "{first:?}");
+    assert_eq!(
+        second,
+        vec![
+            Event::Mouse(rich_interact::Mouse::new(
+                MouseKind::Down(Button::Left),
+                1,
+                1
+            )),
+            Event::Mouse(rich_interact::Mouse::new(MouseKind::Up(Button::Left), 1, 1)),
+        ]
+    );
+    // A click in the first still reaches the first.
+    let (first, second) = two_linked(Script::new().click(1, 0));
+    assert_eq!(first.len(), 2, "{first:?}");
+    assert!(second.is_empty(), "{second:?}");
+}
+
+#[test]
+fn a_hyperlink_in_a_later_running_view_is_its_link_event() {
+    let (first, second) = two_linked(Script::new().click(6, 3));
+    assert!(first.is_empty(), "{first:?}");
+    assert_eq!(second[0], Event::Link("https://example.com/docs".into()));
+}
+
+#[test]
+fn a_drag_stays_with_the_view_it_started_in() {
+    use rich_interact::Button;
+    // Pressed in the first, dragged and released over the second.
+    let (first, second) = two_linked(Script::new().drag((1, 1), (3, 3)));
+    assert!(second.is_empty(), "{second:?}");
+    assert_eq!(
+        first.first(),
+        Some(&Event::Mouse(rich_interact::Mouse::new(
+            MouseKind::Down(Button::Left),
+            1,
+            1
+        )))
+    );
+    // Moves and the release are in the first's coordinates.
+    assert_eq!(
+        first.last(),
+        Some(&Event::Mouse(rich_interact::Mouse::new(
+            MouseKind::Up(Button::Left),
+            3,
+            3
+        )))
+    );
+    // A press outside every view reaches no one.
+    let (first, second) = two_linked(Script::new().mouse(MouseKind::Down(Button::Left), 1, 8));
+    assert!(
+        first.is_empty() && second.is_empty(),
+        "{first:?} {second:?}"
+    );
+}
+
+#[test]
+fn a_select_below_another_picks_on_its_own_click() {
+    use rich_interact::{EventLoop, LoopOptions};
+    // Each shows 4 rows (question, two items, help): the second's "y" is
+    // on row 6. Enter goes to the first.
+    let script = Script::new().click(4, 6).click(4, 6).keys("enter");
+    let backend = headless::Headless::new(script, 40, 12);
+    let mut event_loop = EventLoop::new(backend, LoopOptions::default());
+    let first = event_loop.mount(Select::new("First", ["a", "b"]).with_mouse(true));
+    let second = event_loop.mount(Select::new("Second", ["x", "y"]).with_mouse(true));
+    event_loop.run().unwrap();
+    assert_eq!(second.take(), Some(Outcome::Done("y")));
+    assert_eq!(first.take(), Some(Outcome::Done("a")));
+}
+
 #[test]
 fn confirm_choices_are_buttons() {
     let sheet = Confirm::new("Deploy?")

@@ -176,10 +176,29 @@ impl ColorPicker {
     }
 
     /// The colour returned without a terminal, and for an empty line at a
-    /// line prompt.
+    /// line prompt. One that is not a colour ([`ColorPicker::is_color`])
+    /// is reported when the line prompt starts, and is no default.
     pub fn default(mut self, color: impl Into<String>) -> Self {
         self.default = Some(color.into());
         self
+    }
+
+    /// Whether `text` is a colour the picker takes: a rich name, `#rrggbb`,
+    /// `rgb(r,g,b)` or `color(N)`. Check a default with it up front.
+    pub fn is_color(text: &str) -> bool {
+        Picked::parse(text).is_some()
+    }
+
+    /// The default, when it is a colour, in the picker's format.
+    fn valid_default(&self) -> Result<Option<String>, NotInteractive> {
+        let Some(default) = self.default.as_deref() else {
+            return Ok(None);
+        };
+        Picked::parse(default)
+            .map(|picked| Some(picked.format(self.format)))
+            .ok_or_else(|| {
+                NotInteractive::Invalid(format!("the default is not a colour: {default:?}"))
+            })
     }
 
     /// Show at most `rows` colours at once (default 10).
@@ -489,26 +508,22 @@ impl Component for ColorPicker {
     }
 
     fn default_value(&self) -> Option<String> {
-        let default = self.default.as_deref()?;
-        Some(Picked::parse(default).map_or_else(|| default.to_string(), |p| p.format(self.format)))
+        self.valid_default().ok().flatten()
     }
 
     fn prompt(&mut self, io: &mut dyn LineIo) -> Result<Option<String>, NotInteractive> {
+        // A bad default fails before anything is asked.
+        let default = self.valid_default()?;
         let mut prompt = format!("{} (a name, #rrggbb, rgb(r,g,b) or color(N))", self.prompt);
         if let Some(default) = &self.default {
             prompt.push_str(&format!(" [{default}]"));
         }
         io.write(&format!("{prompt}: "));
-        let line = match io.read_line() {
-            Some(line) => line,
-            None => return self.default_value().map(Some).ok_or(NotInteractive::Ended),
-        };
+        let line = io.read_line().unwrap_or_default();
         let line = line.trim();
+        // End of input or an empty line: the default, or no answer.
         if line.is_empty() {
-            return self
-                .default_value()
-                .map(Some)
-                .ok_or_else(|| NotInteractive::Invalid("no colour given".into()));
+            return default.map(Some).ok_or(NotInteractive::Ended);
         }
         Picked::parse(line)
             .map(|picked| Some(picked.format(self.format)))
