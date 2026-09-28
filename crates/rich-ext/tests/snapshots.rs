@@ -198,3 +198,38 @@ fn schema_2_round_trips_through_json() {
     assert_eq!(back, a);
     assert!(a.ansi.contains("\x1b[31m"));
 }
+#[test]
+fn schema_3_records_regions_and_reads_older_schemas() {
+    use rich::panel::Panel;
+    use rich::Table;
+    let t = target();
+    let table = || {
+        let mut table = Table::new();
+        table.add_column("A");
+        table.add_row(&["x"]);
+        table
+    };
+    let a = RenderSnapshot::capture_regions(&t, &Panel::new(Box::new(table())).title("P"));
+    assert_eq!(a.schema_version, 3);
+    let regions = a.regions.as_ref().unwrap();
+    let roles: Vec<&str> = regions.iter().map(|r| r.role.as_str()).collect();
+    assert_eq!(roles, ["panel", "table", "table-header", "table-cell"]);
+    assert_eq!(regions[0].label.as_deref(), Some("P"));
+    assert_eq!(regions[1].parent, Some(0));
+    assert_eq!((regions[3].row, regions[3].column), (Some(0), Some(0)));
+    // The rows and text are schema 2's: regions add, they change nothing.
+    let b = RenderSnapshot::capture_frame(&t, &Panel::new(Box::new(table())).title("P"));
+    assert_eq!((&a.plain, &a.rows, &a.ansi), (&b.plain, &b.rows, &b.ansi));
+    assert_eq!(a.diff(&b), None, "regions compare only when both have them");
+    let json = a.to_json().unwrap();
+    let back: RenderSnapshot = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, a);
+    // A schema 2 document has no regions key and still loads.
+    let old: RenderSnapshot = serde_json::from_str(&b.to_json().unwrap()).unwrap();
+    assert!(old.regions.is_none());
+    // A region that moved shows as a difference.
+    let mut moved = a.clone();
+    moved.regions.as_mut().unwrap()[3].spans[0][1] += 1;
+    let diff = a.diff(&moved).unwrap();
+    assert!(diff.contains("regions[3].spans"), "{diff}");
+}

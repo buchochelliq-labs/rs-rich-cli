@@ -76,13 +76,15 @@ impl RenderTarget {
         console
     }
     pub fn segments(&self, value: &dyn Renderable) -> Vec<Segment> {
+        self.segments_on(&self.console(), value)
+    }
+    fn segments_on(&self, console: &Console, value: &dyn Renderable) -> Vec<Segment> {
         let c = self.capabilities;
         if c.width == 0 || c.height == 0 {
             return Vec::new();
         }
-        let console = self.console();
         let mut segments = value.rich_render(
-            &console,
+            console,
             &console.options().update_dimensions(c.width, c.height),
         );
         segments.retain(|segment| !segment.control || c.interactive);
@@ -98,6 +100,15 @@ impl RenderTarget {
     /// frame drops them even on an interactive target.
     pub fn frame(&self, value: &dyn Renderable) -> Frame {
         Frame::from_segments(&self.segments(value))
+    }
+    /// [`RenderTarget::frame`] with the semantic regions the renderables
+    /// report (see [`crate::frame::regions`]). The bytes are the same.
+    pub fn frame_with_regions(&self, value: &dyn Renderable) -> Frame {
+        use rich::protocol::ConsoleRegions;
+        let recorder = std::sync::Arc::new(crate::frame::RegionRecorder::new());
+        let mut console = self.console();
+        console.set_region_sink(Some(recorder.clone()));
+        Frame::from_segments(&self.segments_on(&console, value)).with_regions(&recorder)
     }
     pub fn text(&self, value: &dyn Renderable) -> String {
         self.console().segments_to_string(&self.segments(value))

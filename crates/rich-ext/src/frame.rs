@@ -16,12 +16,23 @@
 //!
 //! Control segments are dropped: a frame holds content, and whatever paints
 //! it owns cursor movement. See `docs/design/render-tree.md`.
+//!
+//! A frame can also carry semantic [`Region`]s (see [`regions`]) and export
+//! itself as HTML or SVG with links kept ([`Frame::to_html`],
+//! [`Frame::to_svg`]).
+
+mod export;
+pub mod regions;
+
+pub use export::{HtmlOptions, SvgOptions};
+pub use regions::{render_frame, role_name, Rect, Region, RegionRecorder, Span};
 
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::ops::Range;
 
 use rich::cells::{cell_len, split_graphemes};
+use rich::protocol::RegionId;
 use rich::{ColorSystem, Console, Segment, Style};
 
 /// An index into a [`StyleTable`].
@@ -180,6 +191,14 @@ pub struct Frame {
     styles: StyleTable,
     /// The stream ended with a line break, so the last row is terminated.
     trailing_newline: bool,
+    /// The region tags read off the segments' styles, each once.
+    tags: Vec<RegionId>,
+    /// Per run, 0 for no tag or an index into `tags` plus one. Empty when no
+    /// segment was tagged.
+    run_tags: Vec<u32>,
+    /// Regions from [`Frame::with_regions`], and each tag's place in them.
+    regions: Vec<Region>,
+    region_ids: HashMap<RegionId, usize>,
 }
 
 impl Frame {
@@ -193,13 +212,22 @@ impl Frame {
         };
         let mut row_start = 0u32;
         for segment in segments.iter().filter(|segment| !segment.control) {
-            let style = frame.styles.intern(segment.style.as_ref());
+            // A region tag (metadata a region sink asked for) is kept beside
+            // the run, not in its style, so tagged and untagged text of one
+            // style still share a style.
+            let (style, tag) = match segment.style.as_ref() {
+                Some(style) if style.meta_ref().is_some() => match regions::split_region(style) {
+                    Some((id, bare)) => (frame.styles.intern(Some(&bare)), frame.tag(id)),
+                    None => (frame.styles.intern(Some(style)), 0),
+                },
+                other => (frame.styles.intern(other), 0),
+            };
             let mut flags = 0;
             let mut rest = segment.text.as_str();
             loop {
                 match rest.find('\n') {
                     Some(at) => {
-                        frame.push(&rest[..at], style, flags | NEWLINE);
+                        frame.push(&rest[..at], style, flags | NEWLINE, tag);
                         let end = frame.runs.len() as u32;
                         frame.rows.push(row_start..end);
                         row_start = end;
@@ -208,7 +236,7 @@ impl Frame {
                     }
                     None => {
                         if !rest.is_empty() {
-                            frame.push(rest, style, flags);
+                            frame.push(rest, style, flags, tag);
                         }
                         break;
                     }
@@ -224,7 +252,25 @@ impl Frame {
         frame
     }
 
-    fn push(&mut self, text: &str, style: StyleId, flags: u8) {
+    /// The index of `id` in `tags`, plus one.
+    fn tag(&mut self, id: RegionId) -> u32 {
+        let at = match self.tags.iter().position(|tag| *tag == id) {
+            Some(at) => at,
+            None => {
+                self.tags.push(id);
+                self.tags.len() - 1
+            }
+        };
+        at as u32 + 1
+    }
+
+    fn push(&mut self, text: &str, style: StyleId, flags: u8, tag: u32) {
+        if tag != 0 && self.run_tags.len() < self.runs.len() {
+            self.run_tags.resize(self.runs.len(), 0);
+        }
+        if tag != 0 || !self.run_tags.is_empty() {
+            self.run_tags.push(tag);
+        }
         let offset = self.text.len() as u32;
         self.text.push_str(text);
         self.runs.push(Run {
@@ -246,19 +292,28 @@ impl Frame {
             text: String::with_capacity(self.text.len()),
             styles: self.styles.clone(),
             trailing_newline: self.trailing_newline,
+            tags: self.tags.clone(),
+            regions: self.regions.clone(),
+            region_ids: self.region_ids.clone(),
             ..Frame::default()
         };
         for row in 0..self.height() {
             let start = frame.runs.len() as u32;
-            for run in self.row(row).iter().filter(|run| run.len > 0) {
+            for index in self.row_range(row) {
+                let run = &self.runs[index];
+                if run.len == 0 {
+                    continue;
+                }
+                let tag = self.run_tags.get(index).copied().unwrap_or(0);
                 let text = &self.text[run.range()];
+                let last_tag = frame.run_tags.last().copied().unwrap_or(0);
                 match frame.runs[start as usize..].last_mut() {
-                    Some(last) if last.style == run.style => {
+                    Some(last) if last.style == run.style && last_tag == tag => {
                         last.len += run.len;
                         last.cells += run.cells;
                         frame.text.push_str(text);
                     }
-                    _ => frame.push(text, run.style, 0),
+                    _ => frame.push(text, run.style, 0, tag),
                 }
             }
             frame.rows.push(start..frame.runs.len() as u32);
@@ -273,8 +328,21 @@ impl Frame {
 
     /// The runs of row `index`. Panics when `index >= height()`.
     pub fn row(&self, index: usize) -> &[Run] {
+        &self.runs[self.row_range(index)]
+    }
+
+    /// The indices of row `index`'s runs.
+    fn row_range(&self, index: usize) -> Range<usize> {
         let range = &self.rows[index];
-        &self.runs[range.start as usize..range.end as usize]
+        range.start as usize..range.end as usize
+    }
+
+    /// The region tag of run `index`, if it has one.
+    fn run_tag(&self, index: usize) -> Option<RegionId> {
+        match self.run_tags.get(index).copied().unwrap_or(0) {
+            0 => None,
+            tag => self.tags.get(tag as usize - 1).copied(),
+        }
     }
 
     /// The width of row `index` in cells.
