@@ -447,6 +447,15 @@ mod pty {
     }
 
     #[test]
+    fn the_pager_counts_the_lines_of_the_file() {
+        let mut pty = Pty::start(r#"printf 'one\ntwo\nthree\n' | rich pager; echo "code=$?""#);
+        pty.wait_for("all 3 lines");
+        pty.send("q");
+        let out = pty.finish();
+        assert!(out.contains("code=0"), "{out}");
+    }
+
+    #[test]
     fn pager_pages_piped_text_and_quits() {
         let mut pty = Pty::start(r#"seq 1 200 | rich pager; echo "code=$?""#);
         pty.wait_for("23");

@@ -709,7 +709,10 @@ fn pager(args: &Args) -> Answer {
         }
         None => read_stdin()?,
     };
-    let text = Text::from_ansi(&source, rich::style::StyleType::default());
+    // A file's last newline ends its last line; it is not an empty line
+    // after it, as a pager such as `less` shows it.
+    let source = source.strip_suffix('\n').unwrap_or(&source);
+    let text = Text::from_ansi(source, rich::style::StyleType::default());
     let mut pager = Pager::new(text);
     if let Some(query) = &args.search {
         pager = pager.search(query.clone());
