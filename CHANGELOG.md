@@ -57,6 +57,73 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### Render tree and recordings (0.0.13 stream 11: #226, #598, #600)
+
+- **Core 0.0.9: semantic regions, an opt-in seam (#226).**
+  `rich::protocol::RegionSink`, installed on a console with
+  `ConsoleRegions::set_region_sink`, is told when a `Panel`, a `Table` and each
+  of its header, body and footer cells, a `Rule`, and a Markdown heading or
+  code block starts and ends, and those renderables tag the segments they drew
+  with a `rich.region` key in the style's metadata. Without a sink (the
+  default) nothing is called or tagged, so every golden is unchanged; with one,
+  the terminal bytes are still the same (`crates/rich/tests/regions.rs`). See
+  DIVERGENCES §36. Core moves from 0.0.8 (published) to **0.0.9** for the new
+  public API; the plan had it unchanged.
+- **Plugin API 0.0.2, macros 0.0.3, art 0.0.11, Mermaid 0.0.2, lumis 0.0.2:**
+  no code change; each depends on `rs-rich` 0.0.9 now. Cargo's `0.0.x`
+  requirements are exact, so every published crate that depends on core has to
+  move with it.
+- **Ext 0.0.11: regions in frames.** `frame::RegionRecorder` records what the
+  renderables report; `Frame::from_segments` reads the tags off the styles
+  (styles that differ only by a tag still intern as one), and
+  `Frame::with_regions` turns them into `Region`s: a role, label, link,
+  parent, depth and cell spans per row, with `bounds()`. `Frame::regions()`
+  adds a `Link` region per stretch of OSC 8-linked text. `frame::render_frame`
+  and `RenderTarget::frame_with_regions` render with a recorder installed.
+- **Ext 0.0.11: HTML and SVG from a frame.** `Frame::to_html`,
+  `Frame::to_html_with` and `Frame::to_svg` use core's templates and themes:
+  without regions they write what `export_html` and `export_svg` write (tested
+  on tables, panels, trees, rules, Markdown and upstream's SVG fixture), and
+  they keep links (`<a href>`; in SVG an `<a>` around the text). Regions
+  become nested `<span class="rich-region …">` wrappers with ARIA roles
+  (`heading` with its level, `separator`, `code`, `group` for panels, tables
+  and cells), closed at the end of every row so the grid is intact. SVG can
+  leave out the window and add a cursor and a caption. The differences from
+  core's exporters are DIVERGENCES §37. Golden fixtures:
+  `crates/rich-ext/tests/fixtures/frame_export/`.
+- **Ext 0.0.11: snapshot schema 3.** `RenderSnapshot::capture_regions` adds
+  the frame's regions; `diff` compares them when both snapshots have them, and
+  schema 1 and 2 still load. Migration: `RenderSnapshot` has a new `regions`
+  field, so a struct literal must add `regions: None`.
+- **Record 0.0.1: HTML output (#600).** `rich record --format html` (and in
+  `all`) writes `<tape>.html`: the screenshots as selectable HTML text from
+  the frame exporter, and a small inline player that swaps the recorded
+  screens (each distinct row stored once) with the key overlay. It fetches
+  nothing and plays only when asked.
+- **Record 0.0.1: presentation.** `Set WindowFrame on|off`,
+  `Set Caption "…"` and `Set KeyOverlay on|off` in a tape, and
+  `--window-frame`, `--caption` and `--key-overlay` on the command line
+  (`record::Presentation`): the window frame around PNG, SVG, GIF and MP4
+  frames, a caption bar under them (and under the page's player), and the keys
+  in video and the player.
+- **Record 0.0.1: `Output`.** `Output gif png` chooses the formats a tape
+  writes (intersected with `--format`, so a check run can still skip video),
+  and `Output demo.html` names the file of a per-tape format, as in VHS.
+- **Record 0.0.1: SVG screenshots through rich-ext.** They are drawn by
+  `Frame::to_svg` from the emulator's screen as a frame, replacing the
+  recorder's own SVG writer, so they match rich's other SVG output. Every
+  tape's SVGs were regenerated and each tape gained its page; the PNGs, GIFs,
+  casts and text grids are unchanged, and `rich record --check` passes.
+- **CLI 0.0.13: `rich input --required`** refuses an empty answer with an
+  error under the line (without a terminal, exit 3).
+- **Tapes and docs (#598).** `docs/tapes/input.tape` records `rich input` with
+  a placeholder, the `--required` error and an answer. The recordings page
+  opens with a gallery: a card per tape whose still plays its GIF while the
+  card is hovered or focused, and stays still under reduced motion. The frames
+  guide covers regions and export; the render-tree design note marks phase 2
+  and the frame export done.
+
+
 ### CLI 0.0.13: rich-cli 1.8.1's rendering options (#542)
 
 - **Source:** `-h/--head LINES` and `-t/--tail LINES` for source files, CSV
