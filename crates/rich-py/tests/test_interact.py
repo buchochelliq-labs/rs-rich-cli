@@ -559,6 +559,53 @@ def test_ask_prompts_on_stdin_without_a_terminal():
     assert b"Number or name: " in result.stderr and b"Sure? [y=Yes, n=No]: " in result.stderr
 
 
+def test_a_fallback_render_is_not_a_terminal():
+    # Without a terminal the pager writes its content out: renderables that
+    # branch on the terminal must see a file, as they would printing to one.
+    program = (
+        "from rs_rich.interact import Pager, run\n"
+        "class Probe:\n"
+        "    def __rich_console__(self, console, options):\n"
+        "        yield 'terminal' if options.is_terminal else 'file'\n"
+        "run(Pager(Probe()), interactive=False)\n"
+        "run(Pager(Probe()))\n"
+    )
+    env = {k: v for k, v in os.environ.items() if k != "CI"}
+    result = subprocess.run(
+        [sys.executable, "-c", program], capture_output=True, env=env, timeout=60
+    )
+    assert result.returncode == 0, result.stderr
+    # The line fallback writes to stderr.
+    assert (result.stdout + result.stderr).split() == [b"file", b"file"]
+
+
+def test_reference_cycles_through_python_values_are_collected():
+    import gc
+    import weakref
+
+    class Box:
+        pass
+
+    def cycle(make):
+        box = Box()
+        box.owner = make(box)
+        return weakref.ref(box)
+
+    made = [
+        lambda box: Item(box),
+        lambda box: Item("x", preview=box),
+        lambda box: Select("Pick", [Item(box)]),
+        lambda box: MultiSelect("Pick", [Item(box)]),
+        lambda box: Input("x", validate=lambda text, box=box: None),
+        lambda box: Pager(box),
+        lambda box: Done(box),
+        lambda box: Form("f").input("name", Input("x", validate=lambda text, box=box: None)),
+    ]
+    refs = [cycle(make) for make in made]
+    gc.collect()
+    assert [ref() for ref in refs] == [None] * len(made)
+
+
 # ---------------------------------------------------------------------------
 # Fuzzy matching
 
@@ -583,3 +630,194 @@ def test_rank_orders_best_first():
     assert [index for index, _ in ranked] == [0, 2, 1]
     assert [index for index, _ in rank("", ["b", "a"])] == [0, 1]
     assert ranked[0][1] == fuzzy("fb", "foo_bar")
+
+
+# ---------------------------------------------------------------------------
+# Release audit: Python code that raises, nests runs, or passes iterables
+
+
+def test_a_raising_validator_ends_the_run_at_once():
+    calls = []
+
+    def validate(text):
+        calls.append(text)
+        raise KeyboardInterrupt
+
+    script = Script().text("a").keys("enter").text("b").keys("enter").text("c").keys("enter")
+    with pytest.raises(KeyboardInterrupt):
+        Input("p", validate=validate).headless(script)
+    assert calls == ["a"]
+
+
+def test_a_raising_form_validator_ends_the_run_at_once():
+    calls = []
+
+    def validate(text):
+        calls.append(text)
+        raise LookupError("bug")
+
+    form = Form("f").text("a", "A", validate=validate)
+    with pytest.raises(LookupError):
+        form.headless(Script().text("x").keys("enter").text("y").keys("enter"))
+    assert calls == ["x"]
+
+
+def test_a_raising_preview_ends_the_run_at_the_next_key():
+    class Preview:
+        def __init__(self):
+            self.renders = 0
+
+        def __rich_console__(self, console, options):
+            self.renders += 1
+            raise RuntimeError("preview")
+            yield  # pragma: no cover
+
+    preview = Preview()
+
+    select = Select("p", [Item(1, preview=preview), Item(2)])
+    with pytest.raises(RuntimeError, match="preview"):
+        select.headless("down up down up down up")
+    assert preview.renders == 1
+
+
+def test_a_raising_confirm_body_ends_the_run():
+    class Body:
+        def __rich_console__(self, console, options):
+            raise RuntimeError("body")
+            yield  # pragma: no cover
+
+    with pytest.raises(RuntimeError, match="body"):
+        Confirm(body=Body()).headless("left right left right")
+
+
+def test_a_raising_validator_ends_a_degraded_form():
+    calls = []
+
+    def validate(text):
+        calls.append(text)
+        raise LookupError("bug")
+
+    form = Form("f").text("a", "A", validate=validate).text("b", "B")
+    with pytest.raises(LookupError):
+        degrade(form, ["x", "y", "z"])
+    assert calls == ["x"]
+
+
+def test_nested_runs_raise_recursion_error_instead_of_crashing():
+    # Once a native stack overflow (SIGSEGV): run it where a crash cannot
+    # take pytest down, on a small thread stack.
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import threading\n"
+            "from rs_rich import interact as I\n"
+            "def validate(text):\n"
+            "    I.headless(I.Input('p', validate=validate), 'a enter')\n"
+            "def run():\n"
+            "    try:\n"
+            "        I.headless(I.Input('p', validate=validate), 'a enter')\n"
+            "        print('finished')\n"
+            "    except RecursionError:\n"
+            "        print('RecursionError')\n"
+            "threading.stack_size(1024 * 1024)\n"
+            "t = threading.Thread(target=run)\n"
+            "t.start()\n"
+            "t.join()\n",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert (result.returncode, result.stdout) == (0, "RecursionError\n"), result.stderr
+
+
+def test_nested_runs_are_capped_on_a_large_stack():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys\n"
+            "from rs_rich import interact as I\n"
+            "sys.setrecursionlimit(100000)\n"
+            "def validate(text):\n"
+            "    I.headless(I.Input('p', validate=validate), 'a enter')\n"
+            "try:\n"
+            "    I.headless(I.Input('p', validate=validate), 'a enter')\n"
+            "except RecursionError:\n"
+            "    print('RecursionError')\n"
+            "# The thread's count is back to zero: a plain run still works.\n"
+            "print(I.headless(I.Input('p'), 'a enter').value)\n",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert (result.returncode, result.stdout) == (0, "RecursionError\na\n"), result.stderr
+
+
+def test_iterable_arguments_accept_any_iterable():
+    assert degrade(Input("p"), (answer for answer in ["hi"])).value == "hi"
+    assert MultiSelect("p", [1, 2, 3], marked={1}).marked == [1]
+    assert MultiSelect("p", [1, 2, 3], marked=iter([0, 2])).marked == [0, 2]
+    assert Input("p", history=(h for h in ["a", "b"])).history == ["a", "b"]
+    item = Item(1, keywords=(k for k in "ab"), actions={Action("x", "X", "ctrl+x")})
+    assert item.keywords == ["a", "b"]
+    assert [action.id for action in item.actions] == ["x"]
+    assert Confirm(warnings=(w for w in ["careful"])).warnings == ["careful"]
+    for build in (
+        lambda: Input("p", history="abc"),
+        lambda: Item(1, keywords="ab"),
+        lambda: Confirm(warnings="w"),
+        lambda: degrade(Input("p"), "hi"),
+    ):
+        with pytest.raises(TypeError):
+            build()
+    with pytest.raises(TypeError):
+        Item(1, actions=["not an action"])
+
+
+def test_not_interactive_has_a_reason_even_when_raised_by_hand():
+    assert NotInteractive("x").reason is None
+    with pytest.raises(NotInteractive) as raised:
+        interact.run(Input("p"), interactive=False, fallback="error")
+    assert raised.value.reason == "requested"
+
+
+def test_run_refuses_a_height_of_zero():
+    with pytest.raises(ValueError, match="height"):
+        interact.run(Input("p"), interactive=False, height=0)
+
+
+def test_fuzzy_matching_releases_the_gil():
+    import threading
+    import time
+
+    # Big enough that ranking takes a while on this build.
+    candidates = ["x" * 2000 + "abc"] * 50
+    while True:
+        started = time.perf_counter()
+        rank("abc", candidates)
+        took = time.perf_counter() - started
+        if took >= 0.1 or len(candidates) >= 50 * 2**8:
+            break
+        candidates *= 2
+    # While another thread ranks, this one keeps running: the longest gap
+    # between its samples is far shorter than the ranking.
+    switch = sys.getswitchinterval()
+    sys.setswitchinterval(0.001)
+    try:
+        done = threading.Event()
+        ranked = []
+        thread = threading.Thread(target=lambda: (ranked.append(rank("abc", candidates)), done.set()))
+        samples = [time.perf_counter()]
+        thread.start()
+        while not done.is_set():
+            samples.append(time.perf_counter())
+        thread.join()
+    finally:
+        sys.setswitchinterval(switch)
+    longest = max(later - earlier for earlier, later in zip(samples, samples[1:]))
+    assert len(ranked[0]) == len(candidates)
+    assert longest < took / 2, (longest, took)
+    assert fuzzy("abc", candidates[0]) is not None

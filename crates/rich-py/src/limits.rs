@@ -55,6 +55,18 @@ pub(crate) const RENDER_BASE_FRAMES_312: usize = 9;
 pub(crate) const NATIVE_STACK_PER_LEVEL: usize = 8 << 10;
 pub(crate) const NATIVE_STACK_RESERVE: usize = 64 << 10;
 
+/// Native stack an interactive run (`rs_rich.interact`) needs left on this
+/// thread before it starts, and what each run inside it takes besides: a
+/// validator or Python component that starts another run nests them on the
+/// native stack (about 11 KiB a run in a release build, 31 KiB in a debug
+/// one), so past this a run raises `RecursionError` instead of overflowing.
+pub(crate) const INTERACT_STACK_RESERVE: usize = 256 << 10;
+pub(crate) const INTERACT_STACK_PER_RUN: usize = 32 << 10;
+
+/// The most interactive runs that may run inside each other on a thread,
+/// whatever its stack: the guard when the stack's size is not known.
+pub(crate) const MAX_INTERACT_NESTING: usize = 200;
+
 /// The tallest console, or options `height`, accepted: core pads renders to
 /// their height, so an absurd height aborts the process on allocation.
 pub(crate) const MAX_CONSOLE_HEIGHT: usize = 1 << 16;

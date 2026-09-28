@@ -23,20 +23,26 @@
 use std::time::Duration;
 
 use pyo3::create_exception;
-use pyo3::exceptions::{PyException, PyKeyboardInterrupt, PyOSError, PyTypeError, PyValueError};
+use pyo3::exceptions::{
+    PyException, PyKeyboardInterrupt, PyOSError, PyRecursionError, PyTypeError, PyValueError,
+};
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyString};
+use pyo3::{PyTraverseError, PyVisit};
 
 use rich_interact::headless::{self, Script as CoreScript};
-use rich_interact::policy::ScriptedLineIo;
+use rich_interact::policy::{LineIo, ScriptedLineIo};
 use rich_interact::{
-    Component, Error as RunError, Event, Fallback, Key, LoopOptions, NotInteractive as CoreNot,
-    Outcome as CoreOutcome, Output, Policy, Reason, RunOptions, SessionOptions,
+    Component, Context, Error as RunError, Event, Fallback, Flow, Key, LoopOptions,
+    NotInteractive as CoreNot, Outcome as CoreOutcome, Output, Policy, Reason, RunOptions,
+    SessionOptions, View,
 };
 
 mod components;
 
 use crate::ext::common::scoped;
+use crate::limits::{INTERACT_STACK_PER_RUN, INTERACT_STACK_RESERVE, MAX_INTERACT_NESTING};
+use crate::renderable;
 
 create_exception!(_native, InteractError, PyException);
 create_exception!(_native, Cancelled, InteractError);
@@ -99,6 +105,27 @@ fn reason_name(reason: Reason) -> &'static str {
         .iter()
         .find(|(_, r)| *r == reason)
         .map_or("unknown", |(text, _)| text)
+}
+
+// ---------------------------------------------------------------------------
+// Arguments
+
+/// Every element of an iterable (a list, a tuple, a set, a generator), each
+/// extracted as `T`; `what` names the argument when it is a bare `str`,
+/// which is iterable but never meant as one.
+pub(crate) fn iterable<'py, T>(value: &Bound<'py, PyAny>, what: &str) -> PyResult<Vec<T>>
+where
+    T: pyo3::conversion::FromPyObjectOwned<'py>,
+{
+    if value.is_instance_of::<PyString>() {
+        return Err(PyTypeError::new_err(format!(
+            "{what} must be an iterable, not a str"
+        )));
+    }
+    value
+        .try_iter()?
+        .map(|element| element?.extract::<T>().map_err(Into::into))
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -211,8 +238,9 @@ fn script_arg(value: Option<&Bound<'_, PyAny>>) -> PyResult<CoreScript> {
 // ---------------------------------------------------------------------------
 // Outcomes and records
 
-/// How a component ended: `kind` is `"done"`, `"cancelled"` (Escape, `q`)
-/// or `"interrupted"` (Ctrl+C); `value` is the answer when done.
+/// How a component ended: `kind` is `"done"`, `"cancelled"` (Escape, or a
+/// Python component's `Cancel()`) or `"interrupted"` (Ctrl+C); `value` is
+/// the answer when done.
 #[pyclass(name = "Outcome", module = "rs_rich.interact", frozen)]
 pub(crate) struct Outcome {
     kind: &'static str,
@@ -222,6 +250,13 @@ pub(crate) struct Outcome {
 
 #[pymethods]
 impl Outcome {
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        if let Some(value) = &self.value {
+            visit.call(value)?;
+        }
+        Ok(())
+    }
+
     #[getter]
     fn kind(&self) -> &'static str {
         self.kind
@@ -289,6 +324,13 @@ pub(crate) struct Record {
 
 #[pymethods]
 impl Record {
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        if let Some(outcome) = &self.outcome {
+            visit.call(outcome)?;
+        }
+        Ok(())
+    }
+
     #[getter]
     fn outcome(&self, py: Python<'_>) -> Option<Py<Outcome>> {
         self.outcome.as_ref().map(|outcome| outcome.clone_ref(py))
@@ -411,6 +453,119 @@ pub(crate) struct Ran<T> {
     action: Option<String>,
 }
 
+thread_local! {
+    /// How many interactive runs this thread is inside now.
+    static RUN_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// One interactive run on this thread; dropping it leaves it.
+struct RunNesting(());
+
+impl RunNesting {
+    /// Enter a run, or raise `RecursionError` when this thread's native
+    /// stack could not hold it: a validator or a Python component that
+    /// starts another run nests the runs on the native stack.
+    fn enter() -> PyResult<RunNesting> {
+        let depth = RUN_DEPTH.with(std::cell::Cell::get);
+        let needed = INTERACT_STACK_RESERVE + INTERACT_STACK_PER_RUN;
+        if depth >= MAX_INTERACT_NESTING
+            || stacker::remaining_stack().is_some_and(|left| left < needed)
+        {
+            return Err(PyRecursionError::new_err(format!(
+                "maximum recursion depth exceeded: {depth} interactive runs inside each other \
+                 fill this thread's stack"
+            )));
+        }
+        RUN_DEPTH.with(|slot| slot.set(depth + 1));
+        Ok(RunNesting(()))
+    }
+}
+
+impl Drop for RunNesting {
+    fn drop(&mut self) {
+        RUN_DEPTH.with(|depth| depth.set(depth.get().saturating_sub(1)));
+    }
+}
+
+/// Any component, ended as soon as Python code it runs raises: a
+/// validator, a preview, a confirmation body, a Python component. The
+/// exception is kept for the run's render scope ([`scoped`]), which raises
+/// it once the run returns; without this the run would go on, showing the
+/// exception as a validation message, until the user cancelled it.
+struct Guarded<C>(C);
+
+impl<C: Component> Guarded<C> {
+    fn check(flow: Flow<C::Output>) -> Flow<C::Output> {
+        if renderable::has_pending() {
+            Flow::Cancel
+        } else {
+            flow
+        }
+    }
+}
+
+impl<C: Component> Component for Guarded<C> {
+    type Output = C::Output;
+
+    fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<C::Output> {
+        if renderable::has_pending() {
+            return Flow::Cancel;
+        }
+        Self::check(self.0.handle(event, context))
+    }
+
+    fn start(&mut self, context: &Context<'_>) -> Flow<C::Output> {
+        if renderable::has_pending() {
+            return Flow::Cancel;
+        }
+        Self::check(self.0.start(context))
+    }
+
+    fn render(&self, context: &Context<'_>) -> View {
+        // A render raising ends the run at the next event: the loop only
+        // asks the component again then.
+        if renderable::has_pending() {
+            return View::default();
+        }
+        self.0.render(context)
+    }
+
+    fn tick(&self) -> Option<Duration> {
+        self.0.tick()
+    }
+
+    fn default_value(&self) -> Option<C::Output> {
+        self.0.default_value()
+    }
+
+    fn prompt(&mut self, io: &mut dyn LineIo) -> Result<Option<C::Output>, CoreNot> {
+        self.0.prompt(&mut GuardedIo(io))
+    }
+}
+
+/// Line prompts that stop reading once Python code has raised.
+struct GuardedIo<'a>(&'a mut dyn LineIo);
+
+impl LineIo for GuardedIo<'_> {
+    fn write(&mut self, text: &str) {
+        self.0.write(text);
+    }
+
+    fn read_line(&mut self) -> Option<String> {
+        if renderable::has_pending() {
+            return None;
+        }
+        self.0.read_line()
+    }
+
+    fn read_secret(&mut self) -> Option<String> {
+        if renderable::has_pending() {
+            return None;
+        }
+        self.0.read_secret()
+    }
+}
+
 /// Run a built component in `mode`, with the GIL released.
 pub(crate) fn execute<B>(
     py: Python<'_>,
@@ -421,11 +576,17 @@ where
     B: Build,
     <B::C as Component>::Output: Send,
 {
+    let _nesting = RunNesting::enter()?;
     let (width, height) = mode.size();
-    let interactive = matches!(mode, Mode::Terminal(_));
+    // Renderables see a terminal only when the run gets one: a run that
+    // takes its fallback (a pipe, `interactive=False`) renders as for a file.
+    let interactive = match &mode {
+        Mode::Terminal(options) => options.policy.detect_for(options.session.output).is_ok(),
+        _ => false,
+    };
     scoped(py, width, height, interactive, || {
         Ok(py.detach(move || {
-            let mut component = build.build();
+            let mut component = Guarded(build.build());
             let mut ran = Ran {
                 outcome: Ok(None),
                 record: headless::Record::default(),
@@ -462,7 +623,7 @@ where
                     ran.secrets = io.secrets;
                 }
             }
-            ran.action = B::action(&component);
+            ran.action = B::action(&component.0);
             ran
         }))
     })
@@ -531,6 +692,7 @@ pub(crate) fn record<T>(
 /// component finishes, and return its `Outcome`. Without a terminal
 /// (`interactive=False`, a pipe, CI, `TERM=dumb`) the fallback decides:
 /// ask line by line, return the default, or raise `NotInteractive`.
+/// `height` (rows to paint, at most the terminal's) must be at least 1.
 #[pyfunction]
 #[pyo3(signature = (
     component, *, fallback="prompt", interactive=None, output="stdout", no_color=None,
@@ -550,6 +712,11 @@ fn interact_run(
     alternate_screen: bool,
     mouse: bool,
 ) -> PyResult<Py<Outcome>> {
+    if height == Some(0) {
+        return Err(PyValueError::new_err(
+            "height must be at least 1 (None: the terminal's height)",
+        ));
+    }
     let mut paint = LoopOptions {
         height,
         transient,
@@ -616,18 +783,21 @@ fn interact_headless(
 /// reason="requested")`: what `run` does without a terminal, with the
 /// line prompts answered from `answers`.
 #[pyfunction]
-#[pyo3(signature = (component, answers=Vec::new(), *, fallback="prompt", reason="requested"))]
+#[pyo3(signature = (component, answers=None, *, fallback="prompt", reason="requested"))]
 fn interact_degrade(
     py: Python<'_>,
     component: &Bound<'_, PyAny>,
-    answers: Vec<String>,
+    answers: Option<&Bound<'_, PyAny>>,
     fallback: &str,
     reason: &str,
 ) -> PyResult<Record> {
     let mode = Mode::Degrade {
         fallback: self::fallback(fallback)?,
         reason: self::reason(reason)?,
-        answers,
+        answers: match answers.filter(|a| !a.is_none()) {
+            Some(answers) => iterable(answers, "answers")?,
+            None => Vec::new(),
+        },
     };
     components::drive(py, component, mode)
 }
@@ -673,8 +843,9 @@ impl From<rich_interact::fuzzy::Match> for Match {
 /// `None`. Every space-separated term must match; case is ignored unless
 /// the pattern has an upper-case letter.
 #[pyfunction]
-fn fuzzy_match(pattern: &str, candidate: &str) -> Option<Match> {
-    rich_interact::fuzzy::fuzzy(pattern, candidate).map(Match::from)
+fn fuzzy_match(py: Python<'_>, pattern: &str, candidate: &str) -> Option<Match> {
+    // Matching a long candidate takes a while: let other threads run.
+    py.detach(|| rich_interact::fuzzy::fuzzy(pattern, candidate).map(Match::from))
 }
 
 /// `rank(pattern, candidates)`: the matching candidates as `(index, Match)`,
@@ -686,10 +857,16 @@ fn fuzzy_rank<'py>(
     candidates: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyList>> {
     let candidates = crate::ext::common::strings(candidates)?;
-    let ranked = rich_interact::fuzzy::rank(pattern, candidates.iter().map(String::as_str));
+    // Ranking many candidates takes a while: let other threads run.
+    let ranked = py.detach(|| {
+        rich_interact::fuzzy::rank(pattern, candidates.iter().map(String::as_str))
+            .into_iter()
+            .map(|(index, found)| (index, Match::from(found)))
+            .collect::<Vec<_>>()
+    });
     let items = ranked
         .into_iter()
-        .map(|(index, found)| Ok((index, Py::new(py, Match::from(found))?)))
+        .map(|(index, found)| Ok((index, Py::new(py, found)?)))
         .collect::<PyResult<Vec<_>>>()?;
     PyList::new(py, items)
 }
@@ -698,6 +875,9 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
     m.add("InteractError", py.get_type::<InteractError>())?;
     m.add("Cancelled", py.get_type::<Cancelled>())?;
+    // `reason` is set on each raised one; a bare `NotInteractive(...)` has none.
+    py.get_type::<NotInteractive>()
+        .setattr("reason", py.None())?;
     m.add("NotInteractive", py.get_type::<NotInteractive>())?;
     // Short names that other areas already use in the flat native module
     // get an `Interact` prefix there; `rs_rich.interact` has the short ones.

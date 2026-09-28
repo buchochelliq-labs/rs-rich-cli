@@ -7,6 +7,7 @@ use std::sync::Arc;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyString, PyTuple};
+use pyo3::{PyTraverseError, PyVisit};
 
 use rich::Renderable;
 use rich_interact::{
@@ -15,7 +16,7 @@ use rich_interact::{
     Pager as CorePager, Preview, PreviewLayout, Select as CoreSelect, Suggestion, Value, View,
 };
 
-use super::{execute, record, Build, Mode, Record};
+use super::{execute, iterable, record, Build, Mode, Record};
 use crate::renderable::{self, PyRenderable};
 
 type Shared = Arc<dyn Renderable + Send + Sync>;
@@ -114,8 +115,16 @@ pub(crate) struct Item {
 
 #[pymethods]
 impl Item {
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        visit.call(&self.value)?;
+        if let Some(preview) = &self.preview {
+            visit.call(preview)?;
+        }
+        Ok(())
+    }
+
     #[new]
-    #[pyo3(signature = (value, label=None, *, description=None, preview=None, metadata=None, keywords=Vec::new(), actions=Vec::new()))]
+    #[pyo3(signature = (value, label=None, *, description=None, preview=None, metadata=None, keywords=None, actions=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         value: &Bound<'_, PyAny>,
@@ -123,9 +132,20 @@ impl Item {
         description: Option<String>,
         preview: Option<&Bound<'_, PyAny>>,
         metadata: Option<&Bound<'_, PyAny>>,
-        keywords: Vec<String>,
-        actions: Vec<PyRef<'_, Action>>,
+        keywords: Option<&Bound<'_, PyAny>>,
+        actions: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
+        let keywords: Vec<String> = match keywords.filter(|k| !k.is_none()) {
+            Some(keywords) => iterable(keywords, "keywords")?,
+            None => Vec::new(),
+        };
+        let actions: Vec<Action> = match actions.filter(|a| !a.is_none()) {
+            Some(actions) => actions
+                .try_iter()?
+                .map(|action| Ok(action?.cast::<Action>()?.get().clone()))
+                .collect::<PyResult<_>>()?,
+            None => Vec::new(),
+        };
         let label = match label {
             Some(label) => label,
             None => value.str()?.to_cow()?.into_owned(),
@@ -144,7 +164,7 @@ impl Item {
             metadata,
             preview: preview.filter(|p| !p.is_none()).map(|p| p.clone().unbind()),
             keywords,
-            actions: actions.iter().map(|action| (**action).clone()).collect(),
+            actions,
         })
     }
 
@@ -304,6 +324,13 @@ impl Build for SelectBuild {
 
 #[pymethods]
 impl Select {
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        for item in &self.items {
+            visit.call(item)?;
+        }
+        Ok(())
+    }
+
     #[new]
     #[pyo3(signature = (prompt, items, *, default=None, query=String::new(), height=10, preview="auto", preview_height=10))]
     #[allow(clippy::too_many_arguments)]
@@ -431,18 +458,29 @@ impl Build for MultiBuild {
 
 #[pymethods]
 impl MultiSelect {
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        for item in &self.items {
+            visit.call(item)?;
+        }
+        Ok(())
+    }
+
     #[new]
-    #[pyo3(signature = (prompt, items, *, marked=Vec::new(), query=String::new(), height=10, preview="auto"))]
+    #[pyo3(signature = (prompt, items, *, marked=None, query=String::new(), height=10, preview="auto"))]
     fn new(
         py: Python<'_>,
         prompt: String,
         items: &Bound<'_, PyAny>,
-        marked: Vec<usize>,
+        marked: Option<&Bound<'_, PyAny>>,
         query: String,
         height: usize,
         preview: &str,
     ) -> PyResult<Self> {
         let items = self::items(py, items)?;
+        let marked: Vec<usize> = match marked.filter(|m| !m.is_none()) {
+            Some(marked) => iterable(marked, "marked")?,
+            None => Vec::new(),
+        };
         if let Some(index) = marked.iter().find(|&&index| index >= items.len()) {
             return Err(PyValueError::new_err(format!(
                 "marked index {index} is out of range for {} items",
@@ -642,10 +680,17 @@ fn suggestions(value: &Bound<'_, PyAny>) -> PyResult<Vec<(String, Option<String>
 
 #[pymethods]
 impl Input {
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        if let Some(validator) = &self.validator {
+            visit.call(validator)?;
+        }
+        Ok(())
+    }
+
     #[new]
     #[pyo3(signature = (
         prompt, *, value=String::new(), placeholder=None, default=None, help=None, password=false,
-        mask=None, validate=None, history=Vec::new(), suggestions=None, limit=5
+        mask=None, validate=None, history=None, suggestions=None, limit=5
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -657,10 +702,14 @@ impl Input {
         password: bool,
         mask: Option<&str>,
         validate: Option<&Bound<'_, PyAny>>,
-        history: Vec<String>,
+        history: Option<&Bound<'_, PyAny>>,
         suggestions: Option<&Bound<'_, PyAny>>,
         limit: usize,
     ) -> PyResult<Self> {
+        let history: Vec<String> = match history.filter(|h| !h.is_none()) {
+            Some(history) => iterable(history, "history")?,
+            None => Vec::new(),
+        };
         let mask = match mask {
             Some(mask) => Some(one_char(mask, "mask")?),
             None if password => Some('•'),
@@ -856,16 +905,27 @@ impl Build for ConfirmBuild {
 
 #[pymethods]
 impl Confirm {
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        for part in &self.body {
+            visit.call(part)?;
+        }
+        Ok(())
+    }
+
     #[new]
-    #[pyo3(signature = (title=String::from("Are you sure?"), *, body=None, warnings=Vec::new(), choices=None, default=None, body_height=None))]
+    #[pyo3(signature = (title=String::from("Are you sure?"), *, body=None, warnings=None, choices=None, default=None, body_height=None))]
     fn new(
         title: String,
         body: Option<&Bound<'_, PyAny>>,
-        warnings: Vec<String>,
+        warnings: Option<&Bound<'_, PyAny>>,
         choices: Option<&Bound<'_, PyAny>>,
         default: Option<String>,
         body_height: Option<usize>,
     ) -> PyResult<Self> {
+        let warnings: Vec<String> = match warnings.filter(|w| !w.is_none()) {
+            Some(warnings) => iterable(warnings, "warnings")?,
+            None => Vec::new(),
+        };
         let body = match body.filter(|b| !b.is_none()) {
             None => Vec::new(),
             Some(body) if body.is_instance_of::<PyList>() || body.is_instance_of::<PyTuple>() => {
@@ -1059,6 +1119,18 @@ impl Form {
 
 #[pymethods]
 impl Form {
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        // Never block in the collector: a form being changed is alive.
+        if let Ok(fields) = self.fields.try_lock() {
+            for (_, field) in fields.iter() {
+                if let Field::Input(input) = field {
+                    visit.call(input)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     #[new]
     fn new(title: String) -> Self {
         Form {
@@ -1089,7 +1161,7 @@ impl Form {
             false,
             None,
             validate,
-            Vec::new(),
+            None,
             None,
             5,
         )?;
@@ -1114,7 +1186,7 @@ impl Form {
             true,
             None,
             validate,
-            Vec::new(),
+            None,
             None,
             5,
         )?;
@@ -1221,6 +1293,11 @@ impl Build for PagerBuild {
 
 #[pymethods]
 impl Pager {
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        visit.call(&self.renderable)?;
+        Ok(())
+    }
+
     #[new]
     #[pyo3(signature = (renderable, *, search=None))]
     fn new(renderable: &Bound<'_, PyAny>, search: Option<String>) -> Self {
@@ -1329,6 +1406,11 @@ pub(crate) struct Done {
 
 #[pymethods]
 impl Done {
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        visit.call(&self.value)?;
+        Ok(())
+    }
+
     #[new]
     #[pyo3(signature = (value=None))]
     fn new(py: Python<'_>, value: Option<Py<PyAny>>) -> Self {

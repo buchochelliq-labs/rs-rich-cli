@@ -233,6 +233,20 @@ The `rs-rich` package on PyPI stays level with the Rust crates.
   frames in the terminals guide, and tests that compare with the Rust
   crate's frames. Not yet from Python: component themes, `Input`'s
   background suggestion provider, and the multi-component event loop.
+- **Exceptions end the run.** An exception from a validator (bar its
+  `ValueError` message, and including `KeyboardInterrupt`/`SystemExit`), a
+  preview or confirmation body, or a Python component now ends the run at
+  once and is raised from it; before, it showed as a message and the run
+  went on until the user cancelled.
+- **Nested runs raise `RecursionError`** instead of crashing: a validator
+  or component that starts another run nests on the native stack, and a
+  run is refused while too little of the thread's stack is left (or 200
+  deep).
+- `Iterable` arguments take any iterable (generators, sets): `degrade`'s
+  answers, `MultiSelect(marked=)`, `Input(history=)`, `Item(keywords=,
+  actions=)` and `Confirm(warnings=)`. `NotInteractive(...).reason` is
+  `None` when raised by hand. `run(height=0)` raises `ValueError`.
+  `fuzzy` and `rank` release the GIL while they match.
 
 ### Hardening carried over from 0.0.12 (0.0.13 workstream 6)
 
