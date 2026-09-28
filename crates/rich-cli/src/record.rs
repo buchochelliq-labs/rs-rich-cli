@@ -34,32 +34,37 @@ struct Args {
     check: bool,
     formats: Formats,
     font: Option<PathBuf>,
+    /// `--window-frame`, `--caption` and `--key-overlay`: over the tape's.
+    window_frame: Option<bool>,
+    caption: Option<String>,
+    key_overlay: Option<bool>,
 }
 
 fn parse_formats(value: &str) -> Result<Formats, String> {
-    let mut formats = Formats {
-        png: false,
-        svg: false,
-        cast: false,
-        gif: false,
-        mp4: false,
-    };
+    let mut formats = Formats::NONE;
     for name in value.split(',').map(str::trim).filter(|n| !n.is_empty()) {
         match name {
-            "png" => formats.png = true,
-            "svg" => formats.svg = true,
-            "cast" => formats.cast = true,
-            "gif" => formats.gif = true,
-            "mp4" => formats.mp4 = true,
             "all" => formats = Formats::ALL,
-            other => {
-                return Err(format!(
-                    "unknown --format {other:?} (choose from png, svg, cast, gif, mp4, all)"
-                ))
-            }
+            other => match tape::Format::parse(other) {
+                Some(format) => formats.set(format, true),
+                None => {
+                    return Err(format!(
+                        "unknown --format {other:?} (choose from png, svg, cast, gif, mp4, \
+                         html, all)"
+                    ))
+                }
+            },
         }
     }
     Ok(formats)
+}
+
+fn parse_switch(name: &str, value: &str) -> Result<bool, String> {
+    match value {
+        "on" | "true" => Ok(true),
+        "off" | "false" => Ok(false),
+        other => Err(format!("{name} takes on or off, not {other:?}")),
+    }
 }
 
 fn parse_args(args: &[String]) -> Result<Args, String> {
@@ -72,6 +77,9 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
         check: false,
         formats: Formats::ALL,
         font: None,
+        window_frame: None,
+        caption: None,
+        key_overlay: None,
     };
     let mut seen_command = false;
     let mut iter = args.iter();
@@ -109,6 +117,9 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
             "--bin-dir" => parsed.bin_dir = Some(fs_path(&value()?)),
             "--format" => parsed.formats = parse_formats(&value()?)?,
             "--font" => parsed.font = Some(fs_path(&value()?)),
+            "--window-frame" => parsed.window_frame = Some(parse_switch(name, &value()?)?),
+            "--key-overlay" => parsed.key_overlay = Some(parse_switch(name, &value()?)?),
+            "--caption" => parsed.caption = Some(value()?),
             "--no-color" | "--no-config" => {}
             other => return Err(format!("unknown option {other} for `rich record`")),
         }
@@ -212,7 +223,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                 eprintln!("  warning: {warning}");
             }
         }
-        let recording = match recorder::record(&parsed, &stem, &options) {
+        let mut recording = match recorder::record(&parsed, &stem, &options) {
             Ok(recording) => recording,
             Err(error) => {
                 eprintln!("  FAILED: {error}");
@@ -240,11 +251,22 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
             failures += problems.len();
             continue;
         }
+        let presentation = &mut recording.presentation;
+        if let Some(window) = args.window_frame {
+            presentation.window = window;
+        }
+        if let Some(caption) = &args.caption {
+            presentation.caption = Some(caption.clone()).filter(|c| !c.is_empty());
+        }
+        if let Some(keys) = args.key_overlay {
+            presentation.key_overlay = keys;
+        }
+        let formats = recording.formats(args.formats);
         match recorder::write(
             &recording,
             &dir,
             &stem,
-            args.formats,
+            formats,
             &fonts,
             &options.theme,
             Some((path, &source)),
@@ -253,7 +275,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                 for file in written {
                     eprintln!("  {}", file.display());
                 }
-                if args.formats.mp4 && !rich_record::render::video::ffmpeg_available() {
+                if formats.mp4 && !rich_record::render::video::ffmpeg_available() {
                     eprintln!("  ffmpeg not found: skipped {stem}.mp4");
                 }
             }
@@ -304,6 +326,24 @@ mod tests {
         assert_eq!(args.tapes, [PathBuf::from("a.tape")]);
         assert!(parse_args(&strings(&["record"])).is_err());
         assert!(parse_args(&strings(&["record", "--format", "webm", "a"])).is_err());
+        let args = parse_args(&strings(&[
+            "record",
+            "--format=html,gif",
+            "--window-frame",
+            "off",
+            "--caption=Saved",
+            "--key-overlay=off",
+            "a.tape",
+        ]))
+        .unwrap_or_else(|e| panic!("{e}"));
+        assert!(args.formats.html && args.formats.gif && !args.formats.png);
+        assert_eq!(args.window_frame, Some(false));
+        assert_eq!(args.key_overlay, Some(false));
+        assert_eq!(args.caption.as_deref(), Some("Saved"));
+        let Err(error) = parse_args(&strings(&["record", "--window-frame=maybe", "a"])) else {
+            panic!("--window-frame=maybe was accepted");
+        };
+        assert!(error.contains("on or off"), "{error}");
     }
 
     #[test]
