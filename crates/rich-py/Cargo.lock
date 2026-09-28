@@ -1485,6 +1485,7 @@ dependencies = [
  "cap-std",
  "ctrlc",
  "fastrand",
+ "libc",
  "notify",
  "rs-rich",
  "rs-rich-art",
@@ -1513,6 +1514,7 @@ dependencies = [
  "serde",
  "serde_json",
  "toml",
+ "unicode-width",
 ]
 
 [[package]]
@@ -1522,6 +1524,7 @@ dependencies = [
  "crossterm",
  "rs-rich",
  "rs-rich-ext",
+ "signal-hook",
 ]
 
 [[package]]
@@ -1551,13 +1554,14 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-py"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "pyo3",
  "rs-rich",
  "rs-rich-art",
  "rs-rich-cli",
  "rs-rich-ext",
+ "rs-rich-interact",
  "rs-rich-lumis",
  "rs-rich-mermaid",
  "rs-rich-plugin-api",
@@ -2624,6 +2628,12 @@ name = "unicode-ident"
 version = "1.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d245f478577f809a851594d02313b640fb437e0bb33866753cff937863096954"
+
+[[package]]
+name = "unicode-width"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 
 [[package]]
 name = "untrusted"

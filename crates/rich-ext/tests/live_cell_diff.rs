@@ -155,3 +155,54 @@ fn one_cell_change_in_a_table_writes_fewer_bytes_than_its_row() {
         "cell diff wrote {written} bytes, the row diff {row_diff}"
     );
 }
+
+/// A row holding characters terminals draw at different widths (emoji
+/// sequences, flags, keycaps, ambiguous-width text) is repainted whole: a
+/// column move computed from rich's widths could land in the wrong cell.
+#[test]
+fn rows_of_uncertain_width_are_repainted_whole() {
+    #[derive(Clone, Default)]
+    struct Bytes(Rc<RefCell<Vec<u8>>>);
+    impl Write for Bytes {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.borrow_mut().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let wide_tail = "0123456789012345";
+    let uncertain = [
+        "\u{2764}\u{fe0f}",
+        "\u{1f468}\u{200d}\u{1f469}",
+        "\u{1f1eb}\u{1f1f7}",
+        "\u{1f44d}\u{1f3fd}",
+        "1\u{fe0f}\u{20e3}",
+        "\u{1f3f4}\u{e0067}\u{e0062}\u{e007f}",
+        "\u{b1}",
+    ];
+    for text in uncertain.iter().copied().chain(["plain"]) {
+        let out = Bytes::default();
+        let mut live = LiveCoordinator::new(out.clone(), target());
+        let id = live
+            .add(vec![Segment::new(format!("{text} a {wide_tail}"), None)])
+            .unwrap();
+        live.refresh().unwrap();
+        let before = out.0.borrow().len();
+        live.update(
+            id,
+            vec![Segment::new(format!("{text} b {wide_tail}"), None)],
+        )
+        .unwrap();
+        live.refresh().unwrap();
+        let written = String::from_utf8(out.0.borrow()[before..].to_vec()).unwrap();
+        let whole = written.contains("\x1b[2K");
+        if text == "plain" {
+            assert!(!whole, "a plain row is repainted by cells: {written:?}");
+        } else {
+            assert!(whole, "{text:?} was repainted by cells: {written:?}");
+            assert!(written.contains(text), "{written:?}");
+        }
+    }
+}

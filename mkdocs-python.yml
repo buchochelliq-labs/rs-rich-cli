@@ -104,6 +104,7 @@ nav:
       - Live, status, screen and pager: live.md
       - Progress: progress.md
       - Prompts: prompt.md
+      - Interactive components: interact.md
       - Logging: logging.md
   - Extensions (rs_rich.ext):
       - ext/index.md

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 959.6 572.2" font-family="Fira Code, DejaVu Sans Mono, Menlo, monospace" font-size="16">
+<rect width="100%" height="100%" rx="9" fill="#292929" stroke="#464646"/>
+<path d="M0 9a9 9 0 0 1 9-9h941.6a9 9 0 0 1 9 9v26h-959.6z" fill="#1e1e1e"/>
+<circle cx="19" cy="17.5" r="6" fill="#ff5f56"/>
+<circle cx="41" cy="17.5" r="6" fill="#ffbd2e"/>
+<circle cx="63" cy="17.5" r="6" fill="#27c93f"/>
+<text x="479.8" y="22.5" fill="#969696" font-family="DejaVu Sans, sans-serif" font-size="13" text-anchor="middle">rich 0.0.13 · ask, choose and browse</text>
+<text x="19.0" y="69.6" fill="#ff2c7a" font-weight="bold" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">❯</text>
+<text x="28.6" y="69.6" fill="#c5c8c6" textLength="912.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> rich confirm 'Deploy 0.0.13?' &amp;&amp; echo deploying                                               </text>
+<text x="19.0" y="90.4" fill="#00823d" font-weight="bold" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">?</text>
+<text x="38.2" y="90.4" fill="#c5c8c6" font-weight="bold" textLength="134.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Deploy 0.0.13?</text>
+<rect x="38.2" y="95.6" width="48.0" height="20.8" fill="#c5c8c6"/>
+<text x="38.2" y="111.2" fill="#292929" font-weight="bold" textLength="48.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> Yes </text>
+<text x="86.2" y="111.2" fill="#c5c8c6" textLength="854.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  No                                                                                     </text>
+<text x="19.0" y="132.0" fill="#777877" textLength="412.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  y/n · ←→ move · enter choose · esc cancel</text>
+</svg>

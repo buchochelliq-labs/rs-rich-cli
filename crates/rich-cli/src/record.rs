@@ -119,6 +119,12 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
     Ok(parsed)
 }
 
+/// A tape's name: its file name without the extension.
+fn stem(path: &Path) -> String {
+    path.file_stem()
+        .map_or_else(|| "tape".into(), |s| s.to_string_lossy().into_owned())
+}
+
 pub(super) fn dispatch(args: &[String]) -> ExitCode {
     let json = wants_json_report(args);
     if args
@@ -163,13 +169,28 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
         repo: std::env::current_dir().ok(),
         ..Options::default()
     };
+    // A tape's name picks its output directory (`--output/<stem>`), which
+    // `write` fills and prunes: `...tape` would name `..`, the directory
+    // above. Refused, for every tape, before anything runs.
+    for path in &args.tapes {
+        let stem = stem(path);
+        if !recorder::stem_allowed(&stem) {
+            return emit_error(
+                json,
+                ExitClass::Input,
+                &format!(
+                    "{}: the tape's name {stem:?} cannot name a recording directory; \
+                     rename the tape",
+                    path.display()
+                ),
+            );
+        }
+    }
     let mut failures = 0;
     // Each warning about the machine once, not once per tape.
     let mut warned = std::collections::BTreeSet::new();
     for path in &args.tapes {
-        let stem = path
-            .file_stem()
-            .map_or_else(|| "tape".into(), |s| s.to_string_lossy().into_owned());
+        let stem = stem(path);
         let shown = path.display();
         let source = match std::fs::read(path) {
             Ok(source) => source,
@@ -283,5 +304,14 @@ mod tests {
         assert_eq!(args.tapes, [PathBuf::from("a.tape")]);
         assert!(parse_args(&strings(&["record"])).is_err());
         assert!(parse_args(&strings(&["record", "--format", "webm", "a"])).is_err());
+    }
+
+    #[test]
+    fn stems_come_from_the_file_name() {
+        assert_eq!(stem(Path::new("docs/tapes/hero.tape")), "hero");
+        assert_eq!(stem(Path::new("...tape")), "..");
+        assert_eq!(stem(Path::new("..tape")), ".");
+        assert!(!recorder::stem_allowed(&stem(Path::new("x/...tape"))));
+        assert!(recorder::stem_allowed(&stem(Path::new("x/a.b.tape"))));
     }
 }

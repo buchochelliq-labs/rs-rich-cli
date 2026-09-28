@@ -73,7 +73,8 @@ Your own classes render as they do with Rich, through `__rich__`,
 
 | Crate | rs_rich | Reference |
 |---|---|---|
-| `rs-rich-ext` (38 modules: diagnostics, data, diffs, workflows, tables, terminals, testing and QA, ...) | `rs_rich.ext`, `rs_rich.ext.<module>` | [Extensions](ext/index.md) |
+| `rs-rich-ext` (39 modules: diagnostics, data, diffs, workflows, tables, terminals, frames, testing and QA, ...) | `rs_rich.ext`, `rs_rich.ext.<module>` | [Extensions](ext/index.md) |
+| `rs-rich-interact` (pickers, input, confirmations, forms, a pager; headless runs; fuzzy matching) | `rs_rich.interact` | [Interactive components](interact.md) |
 | `rs-rich-art` (images, FIGlet, GIFs, image diffs) | `rs_rich.art` | [Art](art.md) |
 | `rs-rich-mermaid` | `rs_rich.mermaid` | [Mermaid](mermaid.md) |
 | `rs-rich-plugin-api` and the extension registry | `rs_rich.plugins` | [Plugins](plugins.md) |

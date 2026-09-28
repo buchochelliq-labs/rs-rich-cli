@@ -38,6 +38,29 @@ fn bonus(chars: &[char], index: usize) -> i64 {
     }
 }
 
+/// The most cells (pattern length times candidate length) the dynamic
+/// programme may take, about 16 MiB of tables. A bigger problem (a long
+/// query against a very long line) is matched greedily instead.
+const BUDGET: usize = 1 << 20;
+
+/// The score of matching at `positions`, by the same rules as the dynamic
+/// programme.
+fn score_of(candidate: &[char], positions: &[usize]) -> i64 {
+    let mut score = 0;
+    for (i, &j) in positions.iter().enumerate() {
+        score += MATCH + bonus(candidate, j);
+        if i > 0 {
+            let previous = positions[i - 1];
+            if j == previous + 1 {
+                score += CONSECUTIVE;
+            } else {
+                score -= GAP_START + (j - previous - 2) as i64;
+            }
+        }
+    }
+    score
+}
+
 /// Score one term against the candidate.
 fn term(pattern: &[char], candidate: &[char], fold: bool) -> Option<Match> {
     let (m, n) = (pattern.len(), candidate.len());
@@ -57,6 +80,30 @@ fn term(pattern: &[char], candidate: &[char], fold: bool) -> Option<Match> {
             p == c
         }
     };
+    // The pattern must be a subsequence at all: find out in one pass,
+    // before allocating anything, and keep the leftmost positions.
+    let mut greedy = Vec::with_capacity(m);
+    let mut next = pattern.iter();
+    let mut wanted = next.next();
+    for (j, &c) in candidate.iter().enumerate() {
+        match wanted {
+            Some(&p) if same(p, c) => {
+                greedy.push(j);
+                wanted = next.next();
+            }
+            Some(_) => {}
+            None => break,
+        }
+    }
+    if greedy.len() < m {
+        return None;
+    }
+    if m.saturating_mul(n) > BUDGET {
+        return Some(Match {
+            score: score_of(candidate, &greedy),
+            positions: greedy,
+        });
+    }
     const NONE: i64 = i64::MIN / 4;
     // score[i][j]: best score with pattern[i] matched at candidate[j];
     // from[i][j]: where pattern[i - 1] was matched for that score.
@@ -201,6 +248,32 @@ mod tests {
         let found = fuzzy("main rs", "src/main.rs").unwrap();
         assert_eq!(found.positions, [4, 5, 6, 7, 9, 10]);
         assert!(fuzzy("main py", "src/main.rs").is_none());
+    }
+
+    #[test]
+    fn huge_problems_are_bounded() {
+        // A 2000-character query against a 300,000-character line: the
+        // full table would be 600 million cells.
+        let line = "ab".repeat(150_000);
+        let query = "b".repeat(2000);
+        let found = fuzzy(&query, &line).unwrap();
+        assert_eq!(found.positions.len(), 2000);
+        assert_eq!(found.positions[..2], [1, 3]);
+        // No match is found out without the table either.
+        assert!(fuzzy(&"c".repeat(2000), &line).is_none());
+        let mut almost = "b".repeat(2000);
+        almost.push('c');
+        assert!(fuzzy(&almost, &line).is_none());
+    }
+
+    #[test]
+    fn the_greedy_score_follows_the_same_rules() {
+        let candidate: Vec<char> = "foo_bar".chars().collect();
+        let found = fuzzy("fb", "foo_bar").unwrap();
+        assert_eq!(score_of(&candidate, &found.positions), found.score);
+        let candidate: Vec<char> = "b_a_r bar".chars().collect();
+        let found = fuzzy("bar", "b_a_r bar").unwrap();
+        assert_eq!(score_of(&candidate, &found.positions), found.score);
     }
 
     #[test]

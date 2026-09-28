@@ -1,17 +1,17 @@
-fn retry(job: &Job, attempts: u32) -> Result<(), Error> {
-    for n in 0..attempts {
-        if job.run().is_ok() {
-            return Ok(());
-        }
-    }
-    Err(Error::GaveUp(attempts))
-}
-
-───────────────────────────────── Filter and highlight ─────────────────────────────────
-$ rich service.log --filter ERROR --highlight 'timeout|refused'
-ERROR upstream timeout after 30s
-ERROR connection refused by db:5432
-
+╰──────────────────────────────────────────────────────────────────────────────────────╯
+─────────────────────────────────── Ask in a script ────────────────────────────────────
+$ fruit=$(rich choose apple banana cherry)   # ↓ then Enter
+╭──────────────────── drawn headless: the keys a user would press ─────────────────────╮
+│ ? Pick a fruit ›                                                                     │
+│   apple                                                                              │
+│ ❯ banana                                                                             │
+│   cherry                                                                             │
+│   3/3 · ↑↓ move · enter pick · esc cancel                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────╯
+$ echo "$fruit"
+banana
+$ ls | rich filter --value toml    # without a terminal: a fuzzy grep
+$ rich confirm 'Deploy?' && deploy  # exit 0 for yes, 1 for no
 ───────────────────────── Pager, input and confidence controls ─────────────────────────
 --auto-pager opens a pager for tall TTY output; --no-pager opts out.
 URL fetch, encoding, sanitization and JSON reports support scripts and CI.

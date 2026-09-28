@@ -61,7 +61,7 @@ def name(page: Path) -> str:
 
 def test_the_pages_exist():
     names = {name(page) for page in PAGES}
-    assert {"index.md", "console.md", "text.md", "style.md", "table.md", "panel.md", "protocol.md"} <= names
+    assert {"index.md", "console.md", "text.md", "style.md", "table.md", "panel.md", "protocol.md", "interact.md"} <= names
     assert {"ext/index.md", "ext/diagnostics.md", "ext/data.md", "ext/diffs.md", "ext/layout.md"} <= names
 
 

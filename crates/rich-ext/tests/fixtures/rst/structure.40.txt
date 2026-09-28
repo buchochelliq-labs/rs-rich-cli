@@ -1,0 +1,36 @@
+╔══════════════════════════════════════╗
+║         Title emph code link         ║
+╚══════════════════════════════════════╝
+╔══════════════════════════════════════╗
+║        Overlined strong title        ║
+╚══════════════════════════════════════╝
+Para.
+
+▌ Quote.
+  - Person
+    Deeper.
+
+Another quote follows.
+▌ First part.
+  - Someone Else
+and moreHeader row, column 1Header 
+2Header 3Header 4body row 1, column 
+1column 2column 3column 4body row 2Cells
+may span columns.body row 3Cells may 
+span rows.
+ • Table cells
+ • contain
+ • body elements.
+
+body row 4
+
+A malformed simple table renders 
+nothing:
+
+Nor does a grid table with a ragged 
+edge:
+
+A role before a literal is text: :code:x
+and :sub:y.
+
+The end.

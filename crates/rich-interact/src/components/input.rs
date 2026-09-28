@@ -13,7 +13,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::time::Duration;
 
-use rich::cells::cell_len;
+use rich::cells::{cell_len, split_graphemes};
 use rich::Segment;
 
 use crate::component::{Component, Context, Flow, View};
@@ -63,7 +63,7 @@ type Validator = Box<dyn Fn(&str) -> Result<(), String>>;
 pub struct Input {
     prompt: String,
     value: String,
-    /// The caret, in characters.
+    /// The caret, in characters; it moves by grapheme cluster.
     caret: usize,
     placeholder: Option<String>,
     default: Option<String>,
@@ -213,6 +213,66 @@ impl Input {
             .char_indices()
             .nth(caret)
             .map_or(self.value.len(), |(index, _)| index)
+    }
+
+    /// The character indices where graphemes start, and the end: where
+    /// the caret may stop, so an accent is never split from its letter.
+    fn stops(&self) -> Vec<usize> {
+        let (spans, _) = split_graphemes(&self.value);
+        let mut stops = Vec::with_capacity(spans.len() + 1);
+        let (mut chars, mut byte) = (0, 0);
+        for (start, _, _) in spans {
+            chars += self.value[byte..start].chars().count();
+            byte = start;
+            stops.push(chars);
+        }
+        stops.push(self.value.chars().count());
+        stops
+    }
+
+    /// The caret one grapheme back.
+    fn previous_stop(&self) -> usize {
+        let stops = self.stops();
+        stops
+            .iter()
+            .rev()
+            .copied()
+            .find(|&stop| stop < self.caret)
+            .unwrap_or(0)
+    }
+
+    /// The caret one grapheme on.
+    fn next_stop(&self) -> usize {
+        let stops = self.stops();
+        stops
+            .iter()
+            .copied()
+            .find(|&stop| stop > self.caret)
+            .unwrap_or(self.caret)
+    }
+
+    /// The value as shown (masked or not), cut to `available` cells so the
+    /// caret stays in view: a line longer than the space scrolls, and the
+    /// caret's column in what is returned.
+    fn window(&self, available: usize) -> (String, usize) {
+        let shown = self.shown_value(&self.value);
+        let before = cell_len(&self.shown_value(&self.value[..self.byte(self.caret)]));
+        // One cell for the caret after the last character.
+        let skip = (before + 1).saturating_sub(available.max(1));
+        if skip == 0 {
+            return (shown, before);
+        }
+        let (spans, _) = split_graphemes(&shown);
+        let mut dropped = 0;
+        let mut from = shown.len();
+        for (start, _, cells) in spans {
+            if dropped >= skip {
+                from = start;
+                break;
+            }
+            dropped += cells;
+        }
+        (shown[from..].to_string(), before - dropped)
     }
 
     fn insert(&mut self, text: &str) {
@@ -367,20 +427,20 @@ impl Input {
         Ok(answer)
     }
 
-    /// The line's text as shown (masked, or the placeholder), and the
+    /// The line's text as shown (masked, or the placeholder) in
+    /// `available` cells, scrolled to keep the caret in view, and the
     /// caret's column in it.
-    pub(crate) fn field(&self) -> (Vec<Segment>, usize) {
-        let before: String = self.value.chars().take(self.caret).collect();
-        let column = cell_len(&self.shown_value(&before));
+    pub(crate) fn field(&self, available: usize) -> (Vec<Segment>, usize) {
         if self.value.is_empty() {
             let hint = self.placeholder.clone().or_else(|| self.default_hint());
             return (
                 hint.map(|hint| vec![text(hint, &self.theme.hint)])
                     .unwrap_or_default(),
-                column,
+                0,
             );
         }
-        (vec![plain(self.shown_value(&self.value))], column)
+        let (shown, column) = self.window(available);
+        (vec![plain(shown)], column)
     }
 
     /// How the default is shown when nothing is typed: `(value)`, or for
@@ -467,7 +527,7 @@ impl Component for Input {
             return Flow::Continue;
         }
         if let Event::Paste(text) = event {
-            self.insert(&text.replace(['\n', '\r'], " "));
+            self.insert(&crate::components::pasted(text, " "));
             return Flow::Continue;
         }
         let Some(key) = event.key() else {
@@ -497,8 +557,8 @@ impl Component for Input {
             }
             KeyCode::Up => self.recall(true),
             KeyCode::Down => self.recall(false),
-            KeyCode::Left => self.caret = self.caret.saturating_sub(1),
-            KeyCode::Right => self.caret = (self.caret + 1).min(length),
+            KeyCode::Left => self.caret = self.previous_stop(),
+            KeyCode::Right => self.caret = self.next_stop().min(length),
             KeyCode::Home => self.caret = 0,
             KeyCode::End => self.caret = length,
             KeyCode::Char('a') if ctrl => self.caret = 0,
@@ -524,13 +584,14 @@ impl Component for Input {
                 self.changed();
             }
             KeyCode::Backspace if self.caret > 0 => {
-                let (from, to) = (self.byte(self.caret - 1), self.byte(self.caret));
+                let previous = self.previous_stop();
+                let (from, to) = (self.byte(previous), self.byte(self.caret));
                 self.value.replace_range(from..to, "");
-                self.caret -= 1;
+                self.caret = previous;
                 self.changed();
             }
             KeyCode::Delete if self.caret < length => {
-                let (from, to) = (self.byte(self.caret), self.byte(self.caret + 1));
+                let (from, to) = (self.byte(self.caret), self.byte(self.next_stop()));
                 self.value.replace_range(from..to, "");
                 self.changed();
             }
@@ -554,16 +615,10 @@ impl Component for Input {
             });
             return View::new(vec![fit(line, width)]);
         }
-        let before: String = self.value.chars().take(self.caret).collect();
-        let column = crate::components::width(&line) + cell_len(&self.shown_value(&before));
-        if self.value.is_empty() {
-            let hint = self.placeholder.clone().or_else(|| self.default_hint());
-            if let Some(hint) = hint {
-                line.push(text(hint, &theme.hint));
-            }
-        } else {
-            line.push(plain(self.shown_value(&self.value)));
-        }
+        let start = crate::components::width(&line);
+        let (field, caret) = self.field(width.saturating_sub(start));
+        line.extend(field);
+        let column = start + caret;
         let mut lines = vec![fit(line, width)];
         if let Some(error) = &self.error {
             lines.push(fit(vec![text(format!("  ✗ {error}"), &theme.error)], width));
@@ -592,10 +647,17 @@ impl Component for Input {
         let read = if self.mask.is_some() {
             io.read_secret()
         } else {
-            io.read_line()
+            io.read_line().map(Some).ok_or(NotInteractive::Ended)
         };
-        let Some(mut line) = read else {
-            return Ok(None);
+        let mut line = match read {
+            Ok(Some(line)) => line,
+            Ok(None) => return Ok(None),
+            // Input ended: the default is the answer, as for an empty line.
+            Err(NotInteractive::Ended) => match &self.default {
+                Some(default) => default.clone(),
+                None => return Err(NotInteractive::Ended),
+            },
+            Err(error) => return Err(error),
         };
         if line.is_empty() {
             if let Some(default) = &self.default {

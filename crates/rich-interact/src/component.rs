@@ -125,6 +125,13 @@ pub trait Component {
     /// Ask for the value line by line, for when the terminal is not
     /// interactive and the policy asks for a prompt. The default says the
     /// component has no line-based form.
+    ///
+    /// `Ok(None)` means the user backed out ([`Outcome::Cancelled`](crate::Outcome::Cancelled)).
+    /// When input ends before an answer, the built-in components answer
+    /// with their default, and without one return [`NotInteractive::Ended`],
+    /// which [`degrade`](crate::degrade) reports as
+    /// [`NotInteractive::NoDefault`]: end of input is no answer, not a
+    /// refusal.
     fn prompt(&mut self, io: &mut dyn LineIo) -> Result<Option<Self::Output>, NotInteractive> {
         let _ = io;
         Err(NotInteractive::NoPrompt)

@@ -1,0 +1,24 @@
+❯ berry=$(rich filter < fruits.txt)
+? Filter › rry
+❯ cherry
+  blueberry
+  raspberry
+  elderberry
+  strawberry
+
+
+
+
+
+  5/10 · ↑↓ move · enter pick · esc cancel
+
+
+
+
+
+
+
+
+
+
+

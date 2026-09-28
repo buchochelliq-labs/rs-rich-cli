@@ -6,7 +6,7 @@
 # tested by `.github/workflows/python.yml`.
 [package]
 name = "rs-rich-py"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/buchochelliq-labs/rs-rich-cli"
@@ -25,6 +25,9 @@ rich-ext = { package = "rs-rich-ext", path = "../rich-ext", features = ["data", 
 rich-art = { package = "rs-rich-art", path = "../rich-art", features = ["image", "gif", "sixel"] }
 rich-mermaid = { package = "rs-rich-mermaid", path = "../rich-mermaid" }
 rich-plugin-api = { package = "rs-rich-plugin-api", path = "../rich-plugin-api" }
+# `rs_rich.interact`: the interactive components, their headless driver and
+# the fuzzy matcher (0.0.13 workstream 5).
+rich-interact = { package = "rs-rich-interact", path = "../rich-interact" }
 # The `rich` command line, run in-process by `python -m rs_rich`: the default
 # features except `record`, whose PTY recorder runs the `rich` binaries beside
 # the running executable (here, Python) and has no place in a wheel.

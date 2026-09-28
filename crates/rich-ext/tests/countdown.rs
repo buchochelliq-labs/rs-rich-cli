@@ -334,16 +334,12 @@ fn animated_wait_redraws_a_region_and_removes_it() {
         live.finish().unwrap();
     }
     let out = String::from_utf8(out).unwrap();
-    // The first frame is painted whole; later ticks repaint only the digit
-    // that changed (a cell diff), after a move to its column.
+    // Each tick repaints the line whole: it holds an em dash, which East
+    // Asian terminals draw two cells wide, so a move to the digit's column
+    // could land on the wrong cell.
     assert_eq!(out.matches("retrying in 2s").count(), 1, "{out:?}");
-    assert_eq!(out.matches("retrying in").count(), 1, "{out:?}");
-    let column = "⚠ warning attempt 1 failed: busy — retrying in "
-        .chars()
-        .count()
-        + 1;
-    for digit in ["1", "0"] {
-        let repaint = format!("\u{1b}[{column}G{digit}");
+    for left in ["1s", "0s"] {
+        let repaint = format!("\u{1b}[2K⚠ warning attempt 1 failed: busy — retrying in {left}");
         assert_eq!(out.matches(&repaint).count(), 1, "{repaint:?}: {out:?}");
     }
     // Hidden cursor while drawing, restored, and the region erased at the end.

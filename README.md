@@ -28,9 +28,10 @@ real sessions you can pause and copy text from, re-run by CI on every change.
 
 This is the guided tour (`rich --demo`), recorded from a tape by `rich record`
 in a real terminal: inspectors, diffs, Mermaid flowcharts drawn as text, code
-themes, `--filter` and `--highlight`, banners and images.
+themes, `--filter` and `--highlight`, rich-cli's options, reStructuredText, a
+`rich choose` picker, banners and images.
 [Tour and reproduction](docs/demos.md) ·
-[0.0.12 release notes](docs/releases/0.0.12.md).
+[0.0.13 release notes](docs/releases/0.0.13.md).
 
 ## Install and try
 
@@ -88,7 +89,7 @@ in the release notes; the crates.io links show available packages.
 | `rs-rich-macros` | checked markup and derive macros (via `rs-rich-ext`'s `macros` feature) | `use rich_ext::richf` |
 | `rs-rich-cli` | CLI tracking Python rich-cli 1.8.1 | executable `rich` |
 | `rs-rich-art` | FIGlet, image→ASCII, animated GIFs | `use rich_art` |
-| `rs-rich` (PyPI) | Python bindings: Rich's API over the Rust core (first slice) | `import rs_rich` |
+| `rs-rich` (PyPI) | Python bindings: Rich's API over the Rust core, plus the port's crates (`rs_rich.ext`, `rs_rich.interact`, ...) | `import rs_rich` |
 
 The published package names carry an `rs-` prefix because `rich` is already taken
 on crates.io by an unrelated crate. The library targets keep the short names, so
@@ -174,7 +175,12 @@ flat flags.
 `--redact`), `diff` for text and patches, `view`, `hex` (alias `hexdump`),
 `unicode`, `env`, `capture` (with experimental `--redact`), `ansi explain`,
 `doctor`, `bench compare`, `completions`, `docs`, `config explain|reference`,
-and rich-rendered help (`rich COMMAND --help`). See the
+and rich-rendered help (`rich COMMAND --help`). 0.0.13 adds the rest of
+rich-cli 1.8.1's options (`--head`/`--tail`, `-n`, `--guides`, `--lexer`,
+`--emoji`, `--soft`, `--no-wrap`, `--max-width`, the `--text-*` alignments,
+the rule options, `--force-terminal` and `--rst`), interactive commands for
+scripts (`rich choose`, `filter`, `input`, `confirm` and `pager`) and
+`rich record` for scripted terminal recordings. See the
 [CLI guide](docs/guide/cli/walkthrough.md) and
 [CLI reference](docs/cli-reference.md).
 

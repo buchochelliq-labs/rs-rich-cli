@@ -276,7 +276,7 @@ fn in_scope() -> bool {
     AMBIENT.with(|stack| !stack.borrow().is_empty())
 }
 
-fn has_pending() -> bool {
+pub(crate) fn has_pending() -> bool {
     PENDING.with(|pending| pending.borrow().is_some())
 }
 

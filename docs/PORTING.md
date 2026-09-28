@@ -168,6 +168,7 @@ and explicit overrides, not a materialized list of built-in defaults.
 | `--image-dither atkinson`, `--image-color-distance`, Sixel and `--gif` colour modes (#498) | CLI routing; art `image_color.rs`, `sixel.rs`, `gif.rs` | `Dither::Atkinson`, `ColorDistance::{Rgb, Oklab}`, a fixed-palette indexed Sixel encoder, `AnimatedArt::color_mode`/`dither`/`color_distance`; Braille keeps a documented rejection |
 | `--image-background default\|checkerboard` (#126) | CLI routing; art `image_art.rs` and the text backends | `ImageBackground::{Color, TerminalDefault, Checkerboard}`; alpha kept through fitting; unpainted cells for pixels under half opacity |
 | `--theme-file`, `theme_file` (#499) | CLI main + config | Reads upstream theme files with the public `rich::Theme::from_file`; layered under config themes and `--theme-style`; no core theme-stack change |
+| Python `rs_rich.interact` and `rs_rich.ext.frame` (0.0.13 WS5) | `crates/rich-py` (`src/interact.rs`, `src/ext/frame.rs`) | binds the public `rich_interact` components, drivers and `fuzzy` API and `rich_ext::frame::Frame`; values stay Python objects (items chosen by index); tested headless against the Rust crate's frames; no core change |
 
 Art owns palette quantisation (ANSI256, ANSI16, grayscale) and the
 Floyd–Steinberg, Bayer and Atkinson dithers on the final sampled image, with RGB

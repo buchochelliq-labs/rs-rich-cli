@@ -15,10 +15,23 @@ fn hex((r, g, b): Rgb) -> String {
     format!("#{r:02x}{g:02x}{b:02x}")
 }
 
+/// `text` as XML character data. Characters XML 1.0 forbids (control
+/// characters other than tab, newline and carriage return, and U+FFFE and
+/// U+FFFF) become U+FFFD, so a title or a screen holding them still makes a
+/// well-formed SVG.
 fn escape(text: &str) -> String {
-    text.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '\t' | '\n' | '\r' => out.push(c),
+            '\u{0}'..='\u{1f}' | '\u{fffe}' | '\u{ffff}' => out.push('\u{fffd}'),
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 /// Draw `snapshot` in a window frame titled `title`. Each run of text is
@@ -132,5 +145,19 @@ mod tests {
         assert!(svg.contains("T &amp; t"));
         assert!(svg.contains(&format!(r#"fill="{}""#, hex(theme.ansi[1]))));
         assert!(svg.ends_with("</svg>\n"));
+    }
+
+    #[test]
+    fn characters_xml_forbids_are_replaced() {
+        assert_eq!(
+            escape("a\u{1}b\u{1b}c\u{ffff}"),
+            "a\u{fffd}b\u{fffd}c\u{fffd}"
+        );
+        assert_eq!(escape("t\tn\n"), "t\tn\n");
+        let theme = Theme::default();
+        let shot = Snapshot::from_screen(vt100::Parser::new(2, 10, 0).screen(), &theme);
+        let svg = svg(&shot, &theme, "bell\u{7}");
+        assert!(svg.contains("bell\u{fffd}"));
+        assert!(!svg.chars().any(|c| c == '\u{7}'));
     }
 }

@@ -397,3 +397,67 @@ fn rst_lexer_is_the_default_for_unlabelled_code() {
     let out = ok(&["--rst", "-"], source);
     assert!(out.contains(" python "), "{out}");
 }
+
+/// A mode chosen by a short alias overrides a config file's default mode,
+/// as its long form does: `-J` and `-u` used to count as a second mode.
+#[test]
+fn short_mode_aliases_override_a_configured_mode() {
+    let dir = tempdir::Dir::new();
+    let config = dir.path().join("c.toml");
+    std::fs::write(&config, "[defaults]\nmode = \"markdown\"\n").unwrap();
+    let data = dir.path().join("t.json");
+    std::fs::write(&data, "{\"a\": 1}").unwrap();
+    let run = |args: &[&str]| {
+        let output = Command::new(env!("CARGO_BIN_EXE_rich"))
+            .arg("--config")
+            .arg(&config)
+            .args(args)
+            .env_remove("NO_COLOR")
+            .env("COLUMNS", "80")
+            .output()
+            .unwrap();
+        let err = String::from_utf8_lossy(&output.stderr).into_owned();
+        assert!(output.status.success(), "rich {args:?}: {err}");
+        String::from_utf8_lossy(&output.stdout).into_owned()
+    };
+    let data = data.to_str().unwrap();
+    assert_eq!(run(&["-J", data]), run(&["--json", data]));
+    assert_eq!(run(&["-u", "T", "-w", "10"]), "─── T ────\n");
+}
+
+/// The panel fits an emoji title whether or not `--emoji` is given: the
+/// title always draws its emoji, as `Text.from_markup` does upstream.
+#[test]
+fn a_panel_fits_its_emoji_title() {
+    let title = ":smile::smile::smile::smile:";
+    let out = ok(&["-p", "hi", "--title", title, "-a", "square"], "");
+    let top = out.lines().next().unwrap();
+    assert_eq!(top, "┌─ 😄😄😄😄 ─┐", "{out}");
+    assert_eq!(
+        out,
+        ok(
+            &["-p", "hi", "--title", title, "-a", "square", "--emoji"],
+            ""
+        )
+    );
+}
+
+/// `--sanitize` shows the controls in `--rule-char` too, which the line
+/// would otherwise repeat into the terminal once per cell.
+#[test]
+fn sanitize_covers_the_rule_character() {
+    let out = ok(&["-u", "--rule-char", "\x1b", "--sanitize", "-w", "4"], "");
+    assert!(!out.contains('\x1b'), "{out:?}");
+    assert_eq!(out, "␛␛␛␛\n");
+}
+
+/// `--tail` counts lines as upstream's `len(code.splitlines())` does, so a
+/// form feed ends a line there too.
+#[test]
+fn tail_counts_lines_as_python_splitlines() {
+    let (_dir, path) = file("ff.py", "a = 1\x0cb = 2\nc = 3\nd = 4\n");
+    // Five lines by `splitlines`: `--tail 3` is `(4, 6)`, which `Syntax`
+    // (splitting on newlines only) shows as the last line.
+    let out = ok(&[&path, "--tail", "3"], "");
+    assert_eq!(lines(&out), ["d = 4", ""], "{out:?}");
+}

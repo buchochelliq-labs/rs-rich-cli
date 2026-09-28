@@ -23,6 +23,7 @@
 //! | `code` | Markdown, Syntax, JSON, Pretty, inspect, Traceback, highlighters |
 //! | `live` | Live, Progress, Status, Screen, Pager, prompts, logging |
 //! | `ext` | `rich-ext` |
+//! | `interact` | `rich-interact`: components, drivers, fuzzy matching |
 //! | `art` | `rich-art` and Mermaid |
 //! | `plugins` | the plugin API from Python |
 //! | `cli` | the `rich` CLI from Python |
@@ -38,6 +39,7 @@ mod console;
 mod convert;
 mod errors;
 mod ext;
+mod interact;
 mod limits;
 mod live;
 mod panel;
@@ -74,6 +76,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     code::register(m)?;
     live::register(m)?;
     ext::register(m)?;
+    interact::register(m)?;
     art::register(m)?;
     plugins::register(m)?;
     cli::register(m)?;
