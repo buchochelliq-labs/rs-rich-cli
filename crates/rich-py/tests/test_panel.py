@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gc
+import io
 import subprocess
 import sys
 import weakref
@@ -103,10 +104,96 @@ def test_a_hundred_nested_panels_render_as_in_rich():
 def test_deeper_nesting_is_a_recursion_error():
     # rich 15.0.0 raises RecursionError before 150 levels.
     panel = "x"
-    for _ in range(101):
+    for _ in range(150):
         panel = Panel(panel)
-    with pytest.raises(RecursionError, match="at most 100 nested"):
+    with pytest.raises(RecursionError, match="maximum recursion depth exceeded"):
         render(panel)
+
+
+def _deepest(panel_type, console_type, leaf, callers=0):
+    """The most panels around `leaf()` that print, called `callers` frames
+    deeper than here."""
+
+    def fits(levels):
+        def at(depth):
+            if depth:
+                return at(depth - 1)
+            panel = leaf()
+            for _ in range(levels):
+                panel = panel_type(panel)
+            try:
+                console_type(file=io.StringIO(), width=1000).print(panel)
+                return True
+            except RecursionError:
+                return False
+
+        return at(callers)
+
+    low, high = 0, 400
+    while high - low > 1:
+        middle = (low + high) // 2
+        if fits(middle):
+            low = middle
+        else:
+            high = middle
+    return low
+
+
+@pytest.mark.parametrize("callers", [0, 60])
+@pytest.mark.parametrize("leaf", ["str", "text", "pretty"])
+def test_nesting_stops_where_rich_does(leaf, callers):
+    # Rich spends Python frames on each nested panel, so how deep it renders
+    # depends on the recursion limit and on how deep the caller is.
+    rich = pytest.importorskip("rich")
+    from rich.console import Console as RichConsole
+    from rich.panel import Panel as RichPanel
+    from rich.pretty import Pretty as RichPretty
+    from rich.text import Text as RichText
+
+    from rs_rich.console import Console
+    from rs_rich.pretty import Pretty
+
+    leaves = {
+        "str": (lambda: "x", lambda: "x"),
+        "text": (lambda: Text("x"), lambda: RichText("x")),
+        "pretty": (lambda: Pretty({"a": [1]}), lambda: RichPretty({"a": [1]})),
+    }
+    ours, theirs = leaves[leaf]
+    assert rich is not None
+    assert _deepest(Panel, Console, ours, callers) == _deepest(
+        RichPanel, RichConsole, theirs, callers
+    )
+
+
+def test_a_small_thread_stack_raises_instead_of_crashing():
+    # Core renders each level on the calling thread's native stack; a thread
+    # with a small one refuses deep nesting with RecursionError.
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import io, threading\n"
+            "from rs_rich.console import Console\n"
+            "from rs_rich.panel import Panel\n"
+            "threading.stack_size(256 * 1024)\n"
+            "def run():\n"
+            "    p = 'x'\n"
+            "    for _ in range(100):\n"
+            "        p = Panel(p)\n"
+            "    try:\n"
+            "        Console(file=io.StringIO(), width=300).print(p)\n"
+            "        print('rendered')\n"
+            "    except RecursionError:\n"
+            "        print('RecursionError')\n"
+            "t = threading.Thread(target=run)\n"
+            "t.start()\n"
+            "t.join()\n",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert (result.returncode, result.stdout) == (0, "RecursionError\n"), result.stderr
 
 
 def test_very_deep_nesting_does_not_crash_the_interpreter():

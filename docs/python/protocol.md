@@ -208,9 +208,9 @@ ValueError: no data
 NotRenderableError
 ```
 
-Renderables nest at most 100 deep (panels in panels, or your own objects
-yielding each other); deeper raises `RecursionError`, as Rich does at a
-similar depth.
+Renderables nest as deep as Rich's do (panels in panels, or your own objects
+yielding each other): deeper raises `RecursionError` where Rich runs out of
+Python frames, or sooner on a thread whose stack is too small.
 
 ## The protocol's types
 

@@ -44,24 +44,27 @@ A `str` title or subtitle is always markup (Rich's `Text.from_markup`, even
 under `Console(markup=False)`), and bad markup in one raises `MarkupError`
 when the panel prints.
 
-Panels (and other renderables) nest up to 100 deep. Printing a deeper chain
-raises `RecursionError`, as Rich does a little past that depth:
+Panels (and other renderables) nest as deep as Rich's do: Rich spends Python
+frames on each level, so how deep depends on the recursion limit and on how
+deep the caller is (about 120 levels by default). Printing a deeper chain
+raises `RecursionError` where Rich would. A thread with a small stack
+(`threading.stack_size`) raises it sooner rather than crash:
 
 ```python
 from rs_rich.console import Console
 from rs_rich.panel import Panel
 
 nested = "x"
-for _ in range(101):
+for _ in range(200):
     nested = Panel(nested)
 try:
-    Console(width=40).print(nested)
+    Console(width=1000).print(nested)
 except RecursionError as error:
-    print(error)
+    print(type(error).__name__)
 ```
 
 ```text
-maximum recursion depth exceeded: rs_rich renders at most 100 nested renderables
+RecursionError
 ```
 
 ```python

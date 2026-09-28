@@ -22,12 +22,34 @@ pub(crate) const MAX_COLUMN_RATIO: usize = u32::MAX as usize;
 /// builds every padding line, so a huge padding never finishes.
 pub(crate) const MAX_PADDING: usize = MAX_CONSOLE_WIDTH;
 
-/// How many renderables deep a render may nest. Core renders recursively,
-/// so without a limit a deep enough chain overflows the native stack and
-/// kills the interpreter; upstream raises `RecursionError` a little past this
-/// depth (it renders 100 nested panels and fails before 150). Enforced by
-/// [`crate::renderable::Nesting`].
-pub(crate) const MAX_NESTING: usize = 100;
+/// The most renderables a render may nest, whatever the recursion limit.
+/// Below it, [`crate::renderable::Nesting`] stops where Rich runs out of
+/// Python frames (about 123 levels at the default limit) or where this
+/// thread's native stack would run out, whichever comes first.
+pub(crate) const MAX_NESTING: usize = 5000;
+
+/// How many prints may run inside each other (a print reached again from
+/// what it prints: `__str__`, a highlighter, a hook).
+pub(crate) const MAX_PRINT_NESTING: usize = 100;
+
+/// Python frames Rich's render takes per nested renderable (a `Panel` in a
+/// `Panel`: `render`, `__rich_console__`, `render_lines` and the rest):
+/// measured on rich 15.0.0, where each 1000 more frames of recursion limit
+/// buys 125 more levels.
+pub(crate) const FRAMES_PER_LEVEL: usize = 8;
+
+/// Frames Rich's print takes around the outermost renderable, counted from
+/// what is left of the recursion limit where the caller prints: fitted to
+/// rich 15.0.0 frame by frame, so the port stops at the same depth as Rich
+/// from every call depth (`tests/test_panel.py`).
+pub(crate) const RENDER_BASE_FRAMES: usize = 11;
+
+/// Native stack each nested level may take when core renders it, and what
+/// the render needs besides: a level is refused, with `RecursionError`,
+/// while less than that is left on this thread for the levels so far.
+/// Measured: a release build renders a nested `Panel` in about 10 KiB.
+pub(crate) const NATIVE_STACK_PER_LEVEL: usize = 8 << 10;
+pub(crate) const NATIVE_STACK_RESERVE: usize = 64 << 10;
 
 /// The tallest console, or options `height`, accepted: core pads renders to
 /// their height, so an absurd height aborts the process on allocation.

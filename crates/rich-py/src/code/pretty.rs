@@ -729,7 +729,7 @@ impl<'py> Walker<'_, 'py> {
         if let Some(depth) = self.repr_error_depth {
             return Ok(depth);
         }
-        let left = python_frames_left(self.py)?;
+        let left = crate::renderable::python_frames_left(self.py)?;
         // `probe` and `down(0)` take two frames, and the failing call one;
         // `frames` are upstream's.
         let depth = (left + 3).saturating_sub(self.frames).min(MAX_PRETTY_DEPTH);
@@ -1202,6 +1202,50 @@ pub(crate) fn traverse_with(
     limits: Limits,
     frames: usize,
 ) -> PyResult<Node> {
+    let _nesting = renderable::Nesting::enter()?;
+    walk_object(object, limits, frames)
+}
+
+/// Python frames Rich's `Pretty` takes inside the level that holds it, for
+/// an object with nothing to walk into: measured on rich 15.0.0 against a
+/// `str` in the same `Panel`s.
+const PRETTY_FRAMES: usize = 5;
+
+/// How many containers deep `object` goes (`[[1]]` is 2), as far as it
+/// matters to [`check_frames`](renderable::check_frames): eight.
+fn container_depth(object: &Bound<'_, PyAny>) -> PyResult<usize> {
+    let mut deepest = 0;
+    let mut pending = vec![(object.clone(), 0usize)];
+    while let Some((item, depth)) = pending.pop() {
+        if depth >= 8 {
+            deepest = deepest.max(depth);
+            continue;
+        }
+        let children: Vec<Bound<'_, PyAny>> = if let Ok(dict) = item.cast::<PyDict>() {
+            dict.values().iter().collect()
+        } else if item.is_instance_of::<pyo3::types::PyList>()
+            || item.is_instance_of::<pyo3::types::PyTuple>()
+            || item.is_instance_of::<pyo3::types::PySet>()
+            || item.is_instance_of::<pyo3::types::PyFrozenSet>()
+        {
+            item.try_iter()?.collect::<PyResult<_>>()?
+        } else {
+            continue;
+        };
+        deepest = deepest.max(depth + 1);
+        pending.extend(children.into_iter().map(|child| (child, depth + 1)));
+    }
+    Ok(deepest)
+}
+
+/// [`traverse`] for `Pretty`'s own conversion, which already counts as one
+/// level of nesting: Rich's `Pretty` takes one level more than a `str` in a
+/// `Panel`, not two.
+fn traverse_in_render(object: &Bound<'_, PyAny>, limits: Limits) -> PyResult<Node> {
+    walk_object(object, limits, RENDER_FRAMES)
+}
+
+fn walk_object(object: &Bound<'_, PyAny>, limits: Limits, frames: usize) -> PyResult<Node> {
     let py = object.py();
     let helpers = helpers(py)?;
     let mut walker = Walker {
@@ -1215,7 +1259,6 @@ pub(crate) fn traverse_with(
         stack_base: stack_position(),
         worker: None,
     };
-    let _nesting = renderable::Nesting::enter()?;
     walker.walk(object, true, 0)
 }
 
@@ -1228,23 +1271,6 @@ fn is_atom(object: &Bound<'_, PyAny>) -> bool {
         || object.is_exact_instance_of::<pyo3::types::PyFloat>()
         || object.is_exact_instance_of::<pyo3::types::PyBool>()
         || object.is_exact_instance_of::<PyBytes>()
-}
-
-/// How many more nested Python calls fit on this thread before
-/// `RecursionError`: what is left of the recursion limit here, counted as
-/// Python counts it (C calls on the stack can count too).
-fn python_frames_left(py: Python<'_>) -> PyResult<usize> {
-    static PROBE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-    let probe = PROBE.get_or_try_init(py, || {
-        let module = PyModule::from_code(
-            py,
-            c"def probe():\n    def down(n):\n        try:\n            return down(n + 1)\n        except RecursionError:\n            return n\n    return down(0)\n",
-            c"rs_rich_pretty_probe.py",
-            c"rs_rich_pretty_probe",
-        )?;
-        Ok::<_, PyErr>(module.getattr("probe")?.unbind())
-    })?;
-    probe.bind(py).call0()?.extract()
 }
 
 // ---------------------------------------------------------------------------
@@ -1499,7 +1525,14 @@ pub(crate) fn type_repr(object: &Bound<'_, PyAny>) -> PyResult<String> {
 impl AsRenderable for Pretty {
     fn to_renderable(&self, py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
         let object = self.object.bind(py);
-        let node = traverse(object, self.limits())?;
+        // Rich's `Pretty` takes a few frames to render, and one more for
+        // each container its walk goes into, up to a level's worth: past
+        // that its walk runs out first, and prints a `<repr-error ...>`.
+        renderable::check_frames(
+            renderable::nesting_depth(),
+            (PRETTY_FRAMES + container_depth(object)?).min(renderable::FRAMES_PER_LEVEL),
+        )?;
+        let node = traverse_in_render(object, self.limits())?;
         node.check_indent(self.indent_size)?;
         let layout = Layout {
             node,
