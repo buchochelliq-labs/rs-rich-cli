@@ -4412,7 +4412,7 @@ class FuzzyMatch:
     def positions(self) -> List[int]: ...
 
 def interact_run(component: Any, *, fallback: FallbackName = "prompt", interactive: Optional[bool] = None, output: Literal["stdout", "stderr"] = "stdout", no_color: Optional[bool] = None, height: Optional[int] = None, transient: bool = False, tty_keys: bool = False, alternate_screen: bool = False, mouse: bool = False) -> InteractOutcome:
-    """``run``: run on the terminal (or follow ``fallback`` without one) and return the ``Outcome``."""
+    """``run``: run on the terminal (or follow ``fallback`` without one) and return the ``Outcome``; ``height`` must be at least 1."""
     ...
 def interact_ask(component: Any, **options: Any) -> Any:
     """``ask``: ``run``, then the value; ``Cancelled`` on Escape, ``KeyboardInterrupt`` on Ctrl+C."""

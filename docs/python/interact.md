@@ -47,7 +47,7 @@ on every way out. What comes back:
 | The component | `ask` |
 |---|---|
 | finished | returns the answer |
-| was cancelled (Escape, `q`) | raises `Cancelled` |
+| was cancelled (Escape) | raises `Cancelled` |
 | was interrupted (Ctrl+C) | raises `KeyboardInterrupt`, as `input()` does |
 | had no terminal and no answer (see below) | raises `NotInteractive` |
 
@@ -59,7 +59,21 @@ item action that picked it, and `unwrap()` is what `ask` returns.
 `output="stderr"` paints on standard error, so standard output keeps only
 what the program prints; `tty_keys=True` reads keys from the terminal even
 when standard input is a pipe. The GIL is released while `ask` waits for
-keys, so other Python threads keep running.
+keys, so other Python threads keep running. `height` is how many rows to
+paint, at most the terminal's (`None`: all of them); it must be at least 1.
+
+### Exceptions from your code
+
+Python code a component calls during a run (a validator, a preview or
+confirmation body that renders, a component of your own) may raise. Any
+exception but a validator's `ValueError` ends the run at once, and `ask`,
+`run`, `headless` or `degrade` raises it, `KeyboardInterrupt` and
+`SystemExit` included. A render that raises (a preview, a body) is noticed
+when it is painted, so on the terminal the run ends at the next key.
+
+A validator or component may start another run (asking a follow-up
+question, say). Runs nest on the thread's native stack: past what it holds,
+or 200 deep, the inner run raises `RecursionError` rather than crashing.
 
 ### Without a terminal
 
@@ -80,7 +94,7 @@ With standard input or the output not a terminal, under CI, with
 runs this path with scripted answers:
 
 ```python
-from rs_rich.interact import Confirm, Input, NotInteractive, degrade
+from rs_rich.interact import Confirm, Input, NotInteractive, Select, degrade
 
 record = degrade(Select("Pick", ["red", "green"]), ["2"])
 print(repr(record.value))
@@ -192,7 +206,8 @@ picks another). Up and Down walk `history`; `suggestions` (`str`s or
 `(value, description)` pairs) are filtered as you type and Tab accepts one.
 `validate(text)` returns `None` or `True` to accept, and a message, `False`,
 or a raised `ValueError` to refuse: the message shows under the line and
-Enter waits. Any other exception from it is raised from `ask`.
+Enter waits. Any other exception from it ends the run at once and is raised
+from `ask`.
 
 ```python
 from rs_rich.interact import Input, Script
@@ -279,8 +294,9 @@ print(record.last_frame)
 
 `Pager(renderable, *, search=None)` pages any renderable at the terminal's
 width: the arrows, Space and PageUp/PageDown scroll, `/` searches, `n` and
-`N` move between matches, and `q` or Escape closes. Without a terminal it
-writes the content out.
+`N` move between matches, and `q` or Escape closes (the answer is `None`
+either way: closing a pager is not a cancel). Without a terminal it writes
+the content out.
 
 ```python
 from rs_rich.interact import Pager
