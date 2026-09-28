@@ -1,0 +1,8 @@
+❯ name=$(rich input --prompt 'Project name' --placeholder rs-rich-demo --required)
+? Project name › rs-rich-demo
+
+
+
+
+
+

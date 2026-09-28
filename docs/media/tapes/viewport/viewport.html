@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rich_interact::Viewport · the example pager</title>
+<style>
+:root { color-scheme: light dark; --screen-bg: #292929; --screen-fg: #c5c8c6; }
+body { margin: 0 auto; max-width: 72rem; padding: 1.5rem 1rem 3rem; font: 16px/1.5 system-ui, sans-serif; }
+h1 { font-size: 1.5rem; }
+h2 { font-size: 1.15rem; margin-top: 2.5rem; }
+figure { margin: 1.5rem 0; }
+figcaption { margin-top: .5rem; text-align: center; opacity: .85; }
+.screen { position: relative; overflow-x: auto; border-radius: 8px; background: var(--screen-bg); box-shadow: 0 4px 18px rgba(0, 0, 0, .3); }
+.screen pre { margin: 0; padding: 12px 14px; color: var(--screen-fg); background: var(--screen-bg); font: 14px/1.25 "Fira Code", "DejaVu Sans Mono", Menlo, Consolas, monospace; }
+.key { position: absolute; right: 12px; bottom: 12px; padding: 2px 10px; border-radius: 6px; background: #141414; color: #f0f0f0; border: 1px solid #787878; font: bold 14px/1.6 system-ui, sans-serif; }
+.key[hidden] { display: none; }
+.controls { display: flex; gap: .75rem; align-items: center; margin-top: .5rem; }
+.controls input { flex: 1; }
+.controls output { min-width: 4.5rem; font-variant-numeric: tabular-nums; text-align: right; }
+button { font: inherit; padding: .25rem .9rem; }
+</style>
+</head>
+<body>
+<main>
+<h1>rich_interact::Viewport · the example pager</h1>
+<figure class="player" aria-label="Recording">
+<div class="screen"><pre id="tape-screen"></pre><div class="key" id="tape-key" hidden></div></div>
+<div class="controls">
+<button type="button" id="tape-play" aria-pressed="false">Play</button>
+<input type="range" id="tape-position" min="0" max="0" value="0" aria-label="Position in the recording">
+<output id="tape-time" for="tape-position">0.0 s</output>
+</div>
+</figure>
+<h2>Screenshots</h2>
+<figure id="shot-top">
+<div class="screen"><pre>                                   <span style="font-weight: bold; text-decoration: underline">orbit</span>                                    
+                                                                            
+A tiny service, here so the documentation&#x27;s recordings have something to    
+page through, pick from and search. Nothing in it runs.                     
+                                                                            
+<span style="color: #98729f; text-decoration-color: #98729f; text-decoration: underline">What it does</span>                                                                
+                                                                            
+orbit watches a queue, hands each job to a worker and reports progress in   
+the terminal. Workers are plain functions; the scheduler decides how many   
+run at once, retries a job that fails, and gives up after three tries.      
+                                                                            
+<span style="color: #98729f; text-decoration-color: #98729f; text-decoration: underline">Configuration</span>                                                               
+                                                                            
+<span style="color: #68a0b3; text-decoration-color: #68a0b3">                                                 </span>                           
+<span style="color: #68a0b3; text-decoration-color: #68a0b3"> Setting</span><span style="font-weight: bold"> </span><span style="color: #68a0b3; text-decoration-color: #68a0b3"> Default</span><span style="font-weight: bold"> </span><span style="color: #68a0b3; text-decoration-color: #68a0b3"> Meaning</span><span style="font-weight: bold">                      </span><span style="color: #68a0b3; text-decoration-color: #68a0b3"> </span>                           
+<span style="color: #68a0b3; text-decoration-color: #68a0b3"> ─────────────────────────────────────────────── </span>                           
+<span style="color: #68a0b3; text-decoration-color: #68a0b3"> </span><span style="color: #398280; text-decoration-color: #398280; background-color: #4b4e55; font-weight: bold">workers</span> <span style="color: #68a0b3; text-decoration-color: #68a0b3"> </span>4       <span style="color: #68a0b3; text-decoration-color: #68a0b3"> </span>Jobs that run at once        <span style="color: #68a0b3; text-decoration-color: #68a0b3"> </span>                           
+<span style="color: #777877; text-decoration-color: #777877">lines 1–17 of 52 · ↑↓ PgUp PgDn · q quits</span>                                   </pre></div>
+<figcaption>top</figcaption>
+</figure>
+<figure id="shot-paged">
+<div class="screen"><pre><span style="color: #68a0b3; text-decoration-color: #68a0b3"> </span><span style="color: #398280; text-decoration-color: #398280; background-color: #4b4e55; font-weight: bold">retries</span> <span style="color: #68a0b3; text-decoration-color: #68a0b3"> </span>3       <span style="color: #68a0b3; text-decoration-color: #68a0b3"> </span>Tries before a job fails     <span style="color: #68a0b3; text-decoration-color: #68a0b3"> </span>                           
+<span style="color: #68a0b3; text-decoration-color: #68a0b3"> </span><span style="color: #398280; text-decoration-color: #398280; background-color: #4b4e55; font-weight: bold">port</span>    <span style="color: #68a0b3; text-decoration-color: #68a0b3"> </span>8080    <span style="color: #68a0b3; text-decoration-color: #68a0b3"> </span>Where the status page listens<span style="color: #68a0b3; text-decoration-color: #68a0b3"> </span>                           
+<span style="color: #68a0b3; text-decoration-color: #68a0b3">                                                 </span>                           
+                                                                            
+<span style="color: #98729f; text-decoration-color: #98729f; text-decoration: underline">Running it</span>                                                                  
+                                                                            
+<span style="background-color: #2b303b">                                                                            </span>
+<span style="background-color: #2b303b"> </span><span style="color: #8fa1b3; text-decoration-color: #8fa1b3; background-color: #2b303b">orbit</span><span style="color: #bf616a; text-decoration-color: #bf616a; background-color: #2b303b"> --workers</span><span style="color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b"> 8 queue.toml</span><span style="background-color: #2b303b">                                               </span>
+<span style="background-color: #2b303b">                                                                            </span>
+                                                                            
+The status page shows each worker, its job and how long it has run. A worker
+that has run a job for more than a minute is marked slow; a job that failed 
+three times is listed with its last error.                                  
+                                                                            
+<span style="color: #98729f; text-decoration-color: #98729f; text-decoration: underline">Components</span>                                                                  
+                                                                            
+The terminal side is built from rs-rich-interact components: a picker for   
+<span style="color: #777877; text-decoration-color: #777877">lines 18–34 of 52 · ↑↓ PgUp PgDn · q quits</span>                                  </pre></div>
+<figcaption>paged</figcaption>
+</figure>
+<figure id="shot-returned">
+<div class="screen"><pre><span style="color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold">❯</span> viewport README.md                                                        
+left at line 36                                                             
+<span style="color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold">❯</span>                                                                           
+                                                                            
+                                                                            
+                                                                            
+                                                                            
+                                                                            
+                                                                            
+                                                                            
+                                                                            
+                                                                            
+                                                                            
+                                                                            
+                                                                            
+                                                                            
+                                                                            
+                                                                            </pre></div>
+<figcaption>returned</figcaption>
+</figure>
+</main>
+<script type="application/json" id="tape-data">{"rows":["\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span>                                                                           ","                                                                            ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> v                                                                         ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> vi                                                                        ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> vie                                                                       ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> view                                                                      ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> viewp                                                                     ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> viewpo                                                                    ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> viewpor                                                                   ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> viewport                                                                  ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> viewport R                                                                ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> viewport RE                                                               ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> viewport REA                                                              ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> viewport READ                                                             ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> viewport READM                                                            ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> viewport README                                                           ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> viewport README.                                                          ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> viewport README.m                                                         ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> viewport README.md                                                        ","                                   \u003cspan style=\"font-weight: bold; text-decoration: underline\">orbit\u003c/span>                                    ","A tiny service, here so the documentation&#x27;s recordings have something to    ","page through, pick from and search. Nothing in it runs.                     ","\u003cspan style=\"color: #98729f; text-decoration-color: #98729f; text-decoration: underline\">What it does\u003c/span>                                                                ","orbit watches a queue, hands each job to a worker and reports progress in   ","the terminal. Workers are plain functions; the scheduler decides how many   ","run at once, retries a job that fails, and gives up after three tries.      ","\u003cspan style=\"color: #98729f; text-decoration-color: #98729f; text-decoration: underline\">Configuration\u003c/span>                                                               ","\u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\">                                                 \u003c/span>                           ","\u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> Setting\u003c/span>\u003cspan style=\"font-weight: bold\"> \u003c/span>\u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> Default\u003c/span>\u003cspan style=\"font-weight: bold\"> \u003c/span>\u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> Meaning\u003c/span>\u003cspan style=\"font-weight: bold\">                      \u003c/span>\u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> \u003c/span>                           ","\u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> ─────────────────────────────────────────────── \u003c/span>                           ","\u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> \u003c/span>\u003cspan style=\"color: #398280; text-decoration-color: #398280; background-color: #4b4e55; font-weight: bold\">workers\u003c/span> \u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> \u003c/span>4       \u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> \u003c/span>Jobs that run at once        \u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> \u003c/span>                           ","\u003cspan style=\"color: #777877; text-decoration-color: #777877\">lines 1–17 of 52 · ↑↓ PgUp PgDn · q quits\u003c/span>                                   ","\u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> \u003c/span>\u003cspan style=\"color: #398280; text-decoration-color: #398280; background-color: #4b4e55; font-weight: bold\">retries\u003c/span> \u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> \u003c/span>3       \u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> \u003c/span>Tries before a job fails     \u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> \u003c/span>                           ","\u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> \u003c/span>\u003cspan style=\"color: #398280; text-decoration-color: #398280; background-color: #4b4e55; font-weight: bold\">port\u003c/span>    \u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> \u003c/span>8080    \u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> \u003c/span>Where the status page listens\u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> \u003c/span>                           ","\u003cspan style=\"color: #98729f; text-decoration-color: #98729f; text-decoration: underline\">Running it\u003c/span>                                                                  ","\u003cspan style=\"background-color: #2b303b\">                                                                            \u003c/span>","\u003cspan style=\"background-color: #2b303b\"> \u003c/span>\u003cspan style=\"color: #8fa1b3; text-decoration-color: #8fa1b3; background-color: #2b303b\">orbit\u003c/span>\u003cspan style=\"color: #bf616a; text-decoration-color: #bf616a; background-color: #2b303b\"> --workers\u003c/span>\u003cspan style=\"color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b\"> 8 queue.toml\u003c/span>\u003cspan style=\"background-color: #2b303b\">                                               \u003c/span>","The status page shows each worker, its job and how long it has run. A worker","that has run a job for more than a minute is marked slow; a job that failed ","three times is listed with its last error.                                  ","\u003cspan style=\"color: #98729f; text-decoration-color: #98729f; text-decoration: underline\">Components\u003c/span>                                                                  ","The terminal side is built from rs-rich-interact components: a picker for   ","\u003cspan style=\"color: #777877; text-decoration-color: #777877\">lines 18–34 of 52 · ↑↓ PgUp PgDn · q quits\u003c/span>                                  ","choosing a queue, a form for new jobs, a confirmation sheet before anything ","\u003cspan style=\"color: #777877; text-decoration-color: #777877\">lines 19–35 of 52 · ↑↓ PgUp PgDn · q quits\u003c/span>                                  ","is cancelled, and a pager for logs. Each component degrades to plain prompts","\u003cspan style=\"color: #777877; text-decoration-color: #777877\">lines 20–36 of 52 · ↑↓ PgUp PgDn · q quits\u003c/span>                                  ","when the output is piped, so orbit works the same in CI.                    ","\u003cspan style=\"color: #777877; text-decoration-color: #777877\">lines 21–37 of 52 · ↑↓ PgUp PgDn · q quits\u003c/span>                                  ","\u003cspan style=\"color: #98729f; text-decoration-color: #98729f; text-decoration: underline\">Scheduling\u003c/span>                                                                  ","Jobs are taken oldest first. A job can ask to run after another; the        ","scheduler holds it until the other has finished. Two jobs that ask for the  ","same resource never run at once.                                            ","\u003cspan style=\"color: #98729f; text-decoration-color: #98729f; text-decoration: underline\">Logs\u003c/span>                                                                        ","Every job writes to its own log. The pager opens it at the end, follows it  ","while the job runs, and searches it with \u003cspan style=\"color: #398280; text-decoration-color: #398280; background-color: #4b4e55; font-weight: bold\">/\u003c/span>.                                 ","\u003cspan style=\"color: #98729f; text-decoration-color: #98729f; text-decoration: underline\">Licence\u003c/span>                                                                     ","MIT.                                                                        ","\u003cspan style=\"color: #777877; text-decoration-color: #777877\">lines 36–52 of 52 · ↑↓ PgUp PgDn · q quits\u003c/span>                                  ","left at line 36                                                             "],"frames":[[0.0,[0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.004,[2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.045,[3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.086,[4,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.126,[5,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.168,[6,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.209,[7,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.251,[8,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.292,[9,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.335,[9,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.373,[10,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.414,[11,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.454,[12,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.494,[13,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.535,[14,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.575,[15,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.616,[16,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.656,[17,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.697,[18,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[1.307,[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[1.309,[19,1,20,21,1,22,1,23,24,25,1,26,1,27,28,29,30,31]],[1.477,[32,33,27,1,34,1,35,36,35,1,37,38,39,1,40,1,41,42]],[1.748,[33,27,1,34,1,35,36,35,1,37,38,39,1,40,1,41,43,44]],[1.868,[27,1,34,1,35,36,35,1,37,38,39,1,40,1,41,43,45,46]],[1.989,[1,34,1,35,36,35,1,37,38,39,1,40,1,41,43,45,47,48]],[2.11,[45,47,1,49,1,50,51,52,1,53,1,54,55,1,56,1,57,58]],[2.528,[47,1,49,1,50,51,52,1,53,1,54,55,1,56,1,57,58,1]],[2.536,[18,59,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]]],"keys":[[0.737,"⏎"],[1.475,"PgDn"],[1.746,"↓"],[1.866,"↓"],[1.986,"↓"],[2.106,"End"],[2.527,"⏎"]],"keyShown":0.8,"idle":2.0}</script>
+<script>(() => {
+  const data = JSON.parse(document.getElementById("tape-data").textContent);
+  const screen = document.getElementById("tape-screen");
+  const key = document.getElementById("tape-key");
+  const play = document.getElementById("tape-play");
+  const position = document.getElementById("tape-position");
+  const time = document.getElementById("tape-time");
+  const last = data.frames.length - 1;
+  let index = 0, timer = null;
+  position.max = String(last);
+  function show(i) {
+    index = i;
+    const [t, rows] = data.frames[i];
+    screen.innerHTML = rows.map((r) => data.rows[r]).join("\n");
+    position.value = String(i);
+    time.value = t.toFixed(1) + " s";
+    const pressed = data.keys.filter(([k]) => k <= t && t - k <= data.keyShown).pop();
+    key.hidden = !pressed;
+    key.textContent = pressed ? pressed[1] : "";
+  }
+  function stop() {
+    clearTimeout(timer);
+    timer = null;
+    play.textContent = "Play";
+    play.setAttribute("aria-pressed", "false");
+  }
+  function step() {
+    if (index >= last) { stop(); return; }
+    const wait = Math.min(data.frames[index + 1][0] - data.frames[index][0], data.idle);
+    timer = setTimeout(() => { show(index + 1); step(); }, Math.max(wait, 0) * 1000);
+  }
+  play.addEventListener("click", () => {
+    if (timer) { stop(); return; }
+    if (index >= last) show(0);
+    play.textContent = "Pause";
+    play.setAttribute("aria-pressed", "true");
+    step();
+  });
+  position.addEventListener("input", () => { stop(); show(Number(position.value)); });
+  show(last);
+})();</script>
+</body>
+</html>
