@@ -90,13 +90,26 @@ fn plain(text: &str) -> String {
 /// A fake `mmdc`: a shell script with `body`.
 #[cfg(unix)]
 fn script(name: &str, body: &str) -> PathBuf {
-    use std::os::unix::fs::PermissionsExt;
     let dir = std::env::temp_dir().join(format!("rich-mermaid-test-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join(name);
-    std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    write_executable(&path, &format!("#!/bin/sh\n{body}\n"));
     path
+}
+
+/// Write an executable script from a short-lived `sh`, never from this
+/// process: a test thread forking meanwhile would otherwise inherit the
+/// open write handle, and running the script then fails with "Text file
+/// busy" (ETXTBSY).
+#[cfg(unix)]
+fn write_executable(path: &std::path::Path, text: &str) {
+    let status = std::process::Command::new("sh")
+        .args(["-c", r#"printf '%s' "$2" > "$1" && chmod 755 "$1""#, "sh"])
+        .arg(path)
+        .arg(text)
+        .status()
+        .unwrap();
+    assert!(status.success(), "could not write {}", path.display());
 }
 
 #[test]
@@ -380,18 +393,13 @@ mod interrupt {
         };
         let dir = PathBuf::from(dir);
         let script = dir.join("mmdc");
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::write(
-                &script,
-                format!(
-                    "#!/bin/sh\nwhile [ $# -gt 0 ]; do case $1 in --input) echo \"$2\" > '{d}/input';; esac; shift; done\necho $$ > '{d}/pid'\nsleep 3\n",
-                    d = dir.display()
-                ),
-            )
-            .unwrap();
-            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
+        super::write_executable(
+            &script,
+            &format!(
+                "#!/bin/sh\nwhile [ $# -gt 0 ]; do case $1 in --input) echo \"$2\" > '{d}/input';; esac; shift; done\necho $$ > '{d}/pid'\nsleep 3\n",
+                d = dir.display()
+            ),
+        );
         let options = MmdcOptions {
             program: script,
             ..MmdcOptions::default()
