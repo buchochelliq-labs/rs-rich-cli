@@ -106,6 +106,38 @@ impl<T: TextTransform + ?Sized> TextTransform for Arc<T> {
     }
 }
 
+/// A custom action on interactive views (#491): list items, table rows, tree
+/// nodes and file entries. A host shows it in a view's action menu, and on
+/// its key if it has one; when the user picks it, the view reports the
+/// action's name and target, and the host may call [`run`](Self::run).
+pub trait CustomAction: Send + Sync {
+    /// The label a menu shows.
+    fn label(&self) -> String;
+
+    /// A key that picks it directly, as a key name (`ctrl+o`, `f5`), or
+    /// `None` (the default): from the menu only.
+    fn key(&self) -> Option<String> {
+        None
+    }
+
+    /// Whether it applies to a target: its kind (`item`, `row`, `node` or
+    /// `file`) and its value (an item's text, a row's cells joined by tabs,
+    /// a node's path of labels joined by `/`, a file's path). All, by
+    /// default.
+    fn applies(&self, kind: &str, value: &str) -> bool {
+        let _ = (kind, value);
+        true
+    }
+
+    /// Do it to a target. `Ok(Some(text))` is output for the host to show;
+    /// the default does nothing, leaving the host to act on the name. The
+    /// value comes from what the user browsed, so treat it as untrusted.
+    fn run(&self, kind: &str, value: &str) -> Result<Option<String>, PluginError> {
+        let _ = (kind, value);
+        Ok(None)
+    }
+}
+
 /// What a plugin can add. [`Plugin::register`] receives one of these.
 ///
 /// Names are checked by the host when `register` returns: they must be
@@ -133,6 +165,12 @@ pub trait PluginRegistrar {
 
     /// A named text transform.
     fn transform(&mut self, name: &str, transform: Arc<dyn TextTransform>);
+
+    /// A named custom action for interactive views. A host without them
+    /// ignores it, which is the default.
+    fn action(&mut self, name: &str, action: Arc<dyn CustomAction>) {
+        let _ = (name, action);
+    }
 }
 
 /// Something that extends `rich`.
@@ -157,6 +195,7 @@ pub enum Capability {
     Renderer(String),
     FenceRenderer(String),
     Transform(String),
+    Action(String),
 }
 
 impl fmt::Display for Capability {
@@ -169,6 +208,7 @@ impl fmt::Display for Capability {
             Capability::Renderer(name) => write!(f, "renderer {name:?}"),
             Capability::FenceRenderer(language) => write!(f, "fence renderer {language:?}"),
             Capability::Transform(name) => write!(f, "transform {name:?}"),
+            Capability::Action(name) => write!(f, "action {name:?}"),
         }
     }
 }

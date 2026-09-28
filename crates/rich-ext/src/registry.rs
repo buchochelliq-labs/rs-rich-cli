@@ -18,8 +18,8 @@ use rich::{
     Highlighter, SyntectHighlighter, Text, Theme,
 };
 use rich_plugin_api::{
-    is_valid_name, Capability, HighlighterFactory, Plugin, PluginError, PluginMetadata,
-    PluginRegistrar, SourceRenderer, TextTransform, PLUGIN_API_VERSION,
+    is_valid_name, Capability, CustomAction, HighlighterFactory, Plugin, PluginError,
+    PluginMetadata, PluginRegistrar, SourceRenderer, TextTransform, PLUGIN_API_VERSION,
 };
 
 use crate::transform::Pipeline;
@@ -50,6 +50,7 @@ pub struct ExtensionRegistry {
     renderers: BTreeMap<String, (String, Arc<dyn SourceRenderer>)>,
     fence_renderers: BTreeMap<String, (String, Arc<dyn FenceRenderer>)>,
     transforms: BTreeMap<String, (String, Arc<dyn TextTransform>)>,
+    actions: BTreeMap<String, (String, Arc<dyn CustomAction>)>,
     plugins: Vec<RegisteredPlugin>,
     /// The code highlighter chosen as every console's default, and its theme.
     default_code_highlighter: Option<(String, Option<String>)>,
@@ -232,6 +233,9 @@ impl ExtensionRegistry {
         for (name, value) in staged.transforms {
             self.transforms.insert(name, (id.clone(), value));
         }
+        for (name, value) in staged.actions {
+            self.actions.insert(name, (id.clone(), value));
+        }
         self.plugins.push(RegisteredPlugin {
             metadata,
             capabilities: staged.capabilities,
@@ -248,6 +252,7 @@ impl ExtensionRegistry {
             Capability::Renderer(name) => self.renderers.get(name).map(|e| &e.0),
             Capability::FenceRenderer(language) => self.fence_renderers.get(language).map(|e| &e.0),
             Capability::Transform(name) => self.transforms.get(name).map(|e| &e.0),
+            Capability::Action(name) => self.actions.get(name).map(|e| &e.0),
             _ => None,
         }
         .map(String::as_str)
@@ -338,6 +343,15 @@ impl ExtensionRegistry {
     /// A text transform by name.
     pub fn transform(&self, name: &str) -> Option<Arc<dyn TextTransform>> {
         self.transforms.get(name).map(|e| e.1.clone())
+    }
+
+    /// Every custom action for interactive views, by name (sorted), with
+    /// the plugin that registered it.
+    pub fn actions(&self) -> Vec<(&str, &str, Arc<dyn CustomAction>)> {
+        self.actions
+            .iter()
+            .map(|(name, (plugin, action))| (name.as_str(), plugin.as_str(), action.clone()))
+            .collect()
     }
 
     /// Every text transform name, sorted.
@@ -434,6 +448,7 @@ struct Staged {
     renderers: Vec<(String, Arc<dyn SourceRenderer>)>,
     fence_renderers: Vec<(String, Arc<dyn FenceRenderer>)>,
     transforms: Vec<(String, Arc<dyn TextTransform>)>,
+    actions: Vec<(String, Arc<dyn CustomAction>)>,
 }
 
 /// Routes fences by language; see [`ExtensionRegistry::fences`].
@@ -506,6 +521,12 @@ impl PluginRegistrar for Staged {
         self.capabilities
             .push(Capability::Transform(name.to_string()));
         self.transforms.push((name.to_string(), transform));
+    }
+
+    fn action(&mut self, name: &str, action: Arc<dyn CustomAction>) {
+        self.check(name);
+        self.capabilities.push(Capability::Action(name.to_string()));
+        self.actions.push((name.to_string(), action));
     }
 }
 
@@ -902,5 +923,58 @@ mod tests {
             }
         );
         assert!(registry.theme("kept-not").is_none() && registry.plugins().is_empty());
+    }
+
+    #[test]
+    fn plugins_register_actions_for_interactive_views() {
+        struct Reveal;
+        impl CustomAction for Reveal {
+            fn label(&self) -> String {
+                "Reveal in file manager".into()
+            }
+            fn key(&self) -> Option<String> {
+                Some("ctrl+r".into())
+            }
+            fn applies(&self, kind: &str, _: &str) -> bool {
+                kind == "file"
+            }
+        }
+        struct Actions;
+        impl Plugin for Actions {
+            fn metadata(&self) -> PluginMetadata {
+                PluginMetadata::new("actions", "Actions", "0.0.0")
+            }
+            fn register(&self, registrar: &mut dyn PluginRegistrar) -> Result<(), PluginError> {
+                registrar.action("reveal", Arc::new(Reveal));
+                Ok(())
+            }
+        }
+        let mut registry = ExtensionRegistry::new();
+        registry.add_plugin(&Actions).unwrap();
+        let actions = registry.actions();
+        assert_eq!(actions.len(), 1);
+        let (name, plugin, action) = &actions[0];
+        assert_eq!((*name, *plugin), ("reveal", "actions"));
+        assert!(action.applies("file", "a.txt") && !action.applies("row", "x"));
+        assert_eq!(action.run("file", "a.txt"), Ok(None));
+        assert_eq!(
+            registry.plugins()[0].capabilities,
+            [Capability::Action("reveal".into())]
+        );
+        // A second plugin may not take the name.
+        struct Again;
+        impl Plugin for Again {
+            fn metadata(&self) -> PluginMetadata {
+                PluginMetadata::new("again", "Again", "0.0.0")
+            }
+            fn register(&self, registrar: &mut dyn PluginRegistrar) -> Result<(), PluginError> {
+                registrar.action("reveal", Arc::new(Reveal));
+                Ok(())
+            }
+        }
+        assert!(matches!(
+            registry.add_plugin(&Again),
+            Err(PluginError::Conflict { .. })
+        ));
     }
 }
