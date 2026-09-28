@@ -23,10 +23,17 @@ Ctrl+C
 The recorder runs it in `bash` on a real PTY with a pinned environment, follows
 the screen with a VT emulator, and writes:
 
-- per `Screenshot`: a PNG in a window frame, an SVG with selectable text, and a
-  text grid;
+- per `Screenshot`: a PNG in a window frame, an SVG with selectable text (drawn
+  by rs-rich-ext's frame exporter, like rich's other SVG output), and a text
+  grid;
 - an asciinema v2 cast, with input events and the palette in its header;
-- a GIF with a key overlay, and an MP4 when FFmpeg is installed.
+- a GIF with a key overlay, and an MP4 when FFmpeg is installed;
+- a self-contained HTML page: a small player (no CDN, no terminal emulator)
+  and the screenshots as selectable text.
+
+`Set WindowFrame off`, `Set Caption "…"` and `Set KeyOverlay off` change how
+stills and video are presented, and `Output gif png` (or `Output demo.html`)
+chooses what a tape writes.
 
 `check` compares a new run's text grids with committed ones, so documentation
 media cannot drift from the program it shows.

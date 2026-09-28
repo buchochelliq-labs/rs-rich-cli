@@ -198,3 +198,73 @@ fn schema_2_round_trips_through_json() {
     assert_eq!(back, a);
     assert!(a.ansi.contains("\x1b[31m"));
 }
+#[test]
+fn schema_3_records_regions_and_reads_older_schemas() {
+    use rich::panel::Panel;
+    use rich::Table;
+    let t = target();
+    let table = || {
+        let mut table = Table::new();
+        table.add_column("A");
+        table.add_row(&["x"]);
+        table
+    };
+    let a = RenderSnapshot::capture_regions(&t, &Panel::new(Box::new(table())).title("P"));
+    assert_eq!(a.schema_version, 3);
+    let regions = a.regions.as_ref().unwrap();
+    let roles: Vec<&str> = regions.iter().map(|r| r.role.as_str()).collect();
+    assert_eq!(roles, ["panel", "table", "table-header", "table-cell"]);
+    assert_eq!(regions[0].label.as_deref(), Some("P"));
+    assert_eq!(regions[1].parent, Some(0));
+    assert_eq!((regions[3].row, regions[3].column), (Some(0), Some(0)));
+    // The rows and text are schema 2's: regions add, they change nothing.
+    let b = RenderSnapshot::capture_frame(&t, &Panel::new(Box::new(table())).title("P"));
+    assert_eq!((&a.plain, &a.rows, &a.ansi), (&b.plain, &b.rows, &b.ansi));
+    assert_eq!(a.diff(&b), None, "regions compare only when both have them");
+    let json = a.to_json().unwrap();
+    let back: RenderSnapshot = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, a);
+    // A schema 2 document has no regions key and still loads.
+    let old: RenderSnapshot = serde_json::from_str(&b.to_json().unwrap()).unwrap();
+    assert!(old.regions.is_none());
+    // A region that moved shows as a difference.
+    let mut moved = a.clone();
+    moved.regions.as_mut().unwrap()[3].spans[0][1] += 1;
+    let diff = a.diff(&moved).unwrap();
+    assert!(diff.contains("regions[3].spans"), "{diff}");
+}
+/// Draws one more `-` before its tagged `x` on each render, and counts them.
+struct ShiftsEachRender(std::sync::atomic::AtomicUsize);
+impl rich::Renderable for ShiftsEachRender {
+    fn rich_render(
+        &self,
+        console: &rich::Console,
+        _options: &rich::ConsoleOptions,
+    ) -> Vec<rich::Segment> {
+        use rich::protocol::{report_region, RegionInfo, RegionRole};
+        let n = self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let mut segments = vec![rich::Segment::new("-".repeat(n), None)];
+        segments.extend(report_region(
+            console,
+            || RegionInfo::new(RegionRole::Other("mark".into())),
+            || vec![rich::Segment::new("x", None)],
+        ));
+        segments
+    }
+}
+#[test]
+fn capture_regions_renders_once_and_its_regions_match_its_rows() {
+    let t = target();
+    let counter = ShiftsEachRender(std::sync::atomic::AtomicUsize::new(0));
+    let snapshot = RenderSnapshot::capture_regions(&t, &counter);
+    assert_eq!(counter.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(snapshot.plain, "x");
+    let rows = snapshot.rows.as_ref().unwrap();
+    let row: String = rows[0].iter().map(|run| run.text.as_str()).collect();
+    assert_eq!(row, "x");
+    let regions = snapshot.regions.as_ref().unwrap();
+    assert_eq!(regions.len(), 1);
+    assert_eq!(regions[0].role, "mark");
+    // The span covers the `x` in the stored rows, not one from another render.
+    assert_eq!(regions[0].spans, [[0, 0, 1]]);
+}

@@ -11,6 +11,25 @@ every tape and fails when any screenshot's text no longer matches, so this page
 cannot drift from what the CLI does. [How it works](#how-it-works) is at the
 end.
 
+## Gallery
+
+Point at a card, or move to it with Tab, to play its recording. With reduced
+motion turned on in your system settings the cards stay still.
+
+<div class="tape-gallery" markdown>
+
+[![A CSV file rendered as a table](media/tapes/hero/table.png){ data-gif="hero.gif" loading=lazy }<span class="tape-card-title">One binary, every format</span>](#one-binary-every-format){ .tape-card }
+[![rich --watch after an edit](media/tapes/watch/after.png){ data-gif="watch.gif" loading=lazy }<span class="tape-card-title">Watch a file</span>](#watch-a-file){ .tape-card }
+[![Search matches highlighted in less](media/tapes/pager/search.png){ data-gif="pager.gif" loading=lazy }<span class="tape-card-title">Page and search</span>](#page-and-search){ .tape-card }
+[![rich input refusing an empty answer](media/tapes/input/required.png){ data-gif="input.gif" loading=lazy }<span class="tape-card-title">Ask for a line</span>](#ask-for-a-line){ .tape-card }
+[![A fuzzy file picker with a preview](media/tapes/components/select.png){ data-gif="components.gif" loading=lazy }<span class="tape-card-title">Components</span>](#components){ .tape-card }
+[![rich file previewing a file before picking it](media/tapes/file/preview.png){ data-gif="file.gif" loading=lazy }<span class="tape-card-title">Ask for more in a script</span>](#ask-for-more-in-a-script){ .tape-card }
+[![A Markdown file paged in a viewport](media/tapes/viewport/paged.png){ data-gif="viewport.gif" loading=lazy }<span class="tape-card-title">An interactive component</span>](#an-interactive-component){ .tape-card }
+[![The guided tour, inspecting structured data](media/tapes/tour/inspect.png){ data-gif="tour.gif" loading=lazy }<span class="tape-card-title">The guided tour</span>](demos.md#run-the-suite-in-your-terminal){ .tape-card }
+[![rich choose in the 0.0.13 release recording](media/tapes/release-0.0.13/choose.png){ data-gif="release-0.0.13.gif" loading=lazy }<span class="tape-card-title">The 0.0.13 release</span>](releases/0.0.13.md){ .tape-card }
+
+</div>
+
 ## One binary, every format
 
 Markdown, CSV and source code, each rendered from a plain `rich FILE`.
@@ -23,7 +42,7 @@ Markdown, CSV and source code, each rendered from a plain `rich FILE`.
 |---|---|---|
 | ![Markdown rendered by rich](media/tapes/hero/markdown.png) | ![A CSV file as a table](media/tapes/hero/table.png) | ![Python highlighted by rich](media/tapes/hero/code.png) |
 
-[Tape](tapes/hero.tape) · [Cast](media/tapes/hero/hero.cast) · [GIF](media/tapes/hero/hero.gif)
+[Tape](tapes/hero.tape) · [Cast](media/tapes/hero/hero.cast) · [GIF](media/tapes/hero/hero.gif) · [Page](media/tapes/hero/hero.html)
 
 ## Watch a file
 
@@ -38,7 +57,7 @@ tape edits `service.json` from outside the terminal while `rich` watches it.
 |---|---|
 | ![replicas is 2](media/tapes/watch/before.png) | ![replicas is 5](media/tapes/watch/after.png) |
 
-[Tape](tapes/watch.tape) · [Cast](media/tapes/watch/watch.cast) · [GIF](media/tapes/watch/watch.gif)
+[Tape](tapes/watch.tape) · [Cast](media/tapes/watch/watch.cast) · [GIF](media/tapes/watch/watch.gif) · [Page](media/tapes/watch/watch.html)
 
 ## Page and search
 
@@ -53,7 +72,23 @@ page down, then `/characters` to search.
 |---|---|---|
 | ![The top of rule.rs](media/tapes/pager/top.png) | ![One page further](media/tapes/pager/scrolled.png) | ![Matches of characters highlighted](media/tapes/pager/search.png) |
 
-[Tape](tapes/pager.tape) · [Cast](media/tapes/pager/pager.cast) · [GIF](media/tapes/pager/pager.gif)
+[Tape](tapes/pager.tape) · [Cast](media/tapes/pager/pager.cast) · [GIF](media/tapes/pager/pager.gif) · [Page](media/tapes/pager/pager.html)
+
+## Ask for a line
+
+`rich input` reads one line for a script. `--placeholder` shows a hint while
+the line is empty, and `--required` refuses an empty answer with an error under
+the line. The answer is captured with `$(…)`.
+
+<div class="tape-player" data-cast="../media/tapes/input/input.cast" data-poster="npt:0:4">
+  <img src="../media/tapes/input/input.gif" alt="rich input showing a placeholder, refusing an empty answer, then taking one">
+</div>
+
+| Placeholder | Required | Answered |
+|---|---|---|
+| ![The prompt with its placeholder](media/tapes/input/placeholder.png) | ![An answer is required](media/tapes/input/required.png) | ![The answer echoed by the script](media/tapes/input/answer.png) |
+
+[Tape](tapes/input.tape) · [Cast](media/tapes/input/input.cast) · [GIF](media/tapes/input/input.gif) · [Page](media/tapes/input/input.html)
 
 ## Components
 
@@ -79,7 +114,7 @@ See [Interactive components](guide/interact/index.md#ready-made-components).
 | **Form** | **MultiSelect** | **Pager** |
 | ![A form with an error](media/tapes/components/form-error.png) | ![Marking several](media/tapes/components/multi.png) | ![Searching](media/tapes/components/pager.png) |
 
-[Tape](tapes/components.tape) · [Cast](media/tapes/components/components.cast) · [GIF](media/tapes/components/components.gif)
+[Tape](tapes/components.tape) · [Cast](media/tapes/components/components.cast) · [GIF](media/tapes/components/components.gif) · [Page](media/tapes/components/components.html)
 
 ## Ask for more in a script
 
@@ -119,7 +154,7 @@ Enter gives the terminal back, as it was, with the line it was left at. See
 |---|---|---|
 | ![The top of the README](media/tapes/viewport/top.png) | ![One page further](media/tapes/viewport/paged.png) | ![The shell again, with the line it was left at](media/tapes/viewport/returned.png) |
 
-[Tape](tapes/viewport.tape) · [Cast](media/tapes/viewport/viewport.cast) · [GIF](media/tapes/viewport/viewport.gif)
+[Tape](tapes/viewport.tape) · [Cast](media/tapes/viewport/viewport.cast) · [GIF](media/tapes/viewport/viewport.gif) · [Page](media/tapes/viewport/viewport.html)
 
 ## How it works
 
@@ -141,10 +176,15 @@ fixed delay.
 From one run it writes, under `docs/media/tapes/<tape>/`:
 
 - for each `Screenshot`: a PNG, an SVG with selectable text, and a plain-text
-  grid of the screen;
+  grid of the screen. The SVG and the text grid come from the same
+  [frame](guide/ext/live-and-layout.md#frames) as the rest of rich's export, so a screenshot
+  looks like any other rich SVG;
 - the whole session as an asciinema cast, with the keys pressed;
 - a GIF with the keys shown as they are pressed, and an MP4 when FFmpeg is
   installed;
+- an HTML page (`<tape>.html`, the **Page** links above): a small player and
+  the screenshots, all inline, with text you can select. It fetches nothing
+  and plays only when asked;
 - `provenance.json`: the tape's fingerprint, the recorder and `rich`
   versions, the commit, and the screenshots written, so the next run removes
   only the ones the tape no longer takes.
@@ -160,6 +200,8 @@ wide as rich measures it, so the columns after it line up.
 | Step | Meaning |
 |---|---|
 | `Set Size 100x28`, `Set Title "…"`, `Set TypingDelay 40ms`, `Set Timeout 15s`, `Set Env NAME value` | Configure the session |
+| `Set WindowFrame off`, `Set Caption "…"`, `Set KeyOverlay off` | Presentation: leave out the window frame (title bar and buttons) around PNGs, SVGs and video; add a line of text under them and under the page's player; leave out the keys shown in video and the player. The frame and the overlay are on by default |
+| `Output gif png`, `Output demo.html` | Write only these formats (`png`, `svg`, `cast`, `gif`, `mp4`, `html`; text grids always), or name the file a per-tape format goes to, as in VHS. Several words or lines add up; `--format` can still narrow them |
 | `Set Shell zsh` | Run in `bash` (the default), `zsh`, `fish` or `sh`, each without your profile or rc files and with the same `❯` prompt. CI records in all four |
 | `Write FILE "text"`, `Exec "command"` | Prepare or change files, outside the terminal |
 | `Type "text"` | Type into the terminal, one character at a time |
@@ -206,6 +248,8 @@ tape, then:
 ```bash
 rich record demo.tape                       # writes recordings/demo/
 rich record --format gif,png demo.tape      # only the GIF and the PNGs
+rich record --format html demo.tape         # the page: a player and the screenshots
+rich record --window-frame off --caption 'Save to redraw' demo.tape
 rich record --check demo.tape               # fail if a screenshot changed
 ```
 
@@ -213,7 +257,8 @@ rich record --check demo.tape               # fail if a screenshot changed
 |---|---|
 | `--output DIR` | Write to `DIR/<tape>/` (default `recordings`) |
 | `--check` | Compare each screenshot's text with `DIR/<tape>/<name>.txt` instead of writing, and report screenshots the last write listed that the tape no longer takes; exits non-zero on any difference |
-| `--format LIST` | Any of `png`, `svg`, `cast`, `gif`, `mp4`, or `all` (the default). Text grids are always written |
+| `--format LIST` | Any of `png`, `svg`, `cast`, `gif`, `mp4`, `html`, or `all` (the default). Text grids are always written. A tape's `Output` narrows it further |
+| `--window-frame on\|off`, `--caption TEXT`, `--key-overlay on\|off` | Override the tape's `Set WindowFrame`, `Set Caption` and `Set KeyOverlay` |
 | `--no-video` | Skip the GIF and MP4 |
 | `--bin-dir DIR` | Put `DIR` first on the session's `PATH` (default: the directory of the running `rich`) |
 | `--font FILE` | Draw PNG and GIF text in another font |

@@ -204,6 +204,36 @@ impl Rule {
 
 impl Renderable for Rule {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        // Not upstream: a semantic region, only when a sink is installed.
+        crate::protocol::report_region(
+            console,
+            || {
+                crate::protocol::RegionInfo::new(crate::protocol::RegionRole::Rule)
+                    .label(self.title_plain(console))
+            },
+            || self.render_rule(console, options),
+        )
+    }
+
+    /// Port of `Rule.__rich_measure__`: a rule fits any width, so it asks for
+    /// a single cell and never widens a fitted container.
+    fn measure(&self, _console: &Console, _options: &ConsoleOptions) -> Measurement {
+        Measurement::new(1, 1)
+    }
+}
+
+impl Rule {
+    /// The title as plain text, for a region's label. Not upstream.
+    fn title_plain(&self, console: &Console) -> String {
+        match (&self.title_text, &self.title) {
+            (Some(text), _) => text.plain().to_string(),
+            (None, Some(title)) => console.build_text(title).plain().to_string(),
+            (None, None) => String::new(),
+        }
+    }
+
+    /// Port of `Rule.__rich_console__`.
+    fn render_rule(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let (text, titled) = self.build_text(console, options);
         let mut segments = text.render(console.theme(), console.base_style());
         if titled {
@@ -213,12 +243,6 @@ impl Renderable for Rule {
             }
         }
         segments
-    }
-
-    /// Port of `Rule.__rich_measure__`: a rule fits any width, so it asks for
-    /// a single cell and never widens a fitted container.
-    fn measure(&self, _console: &Console, _options: &ConsoleOptions) -> Measurement {
-        Measurement::new(1, 1)
     }
 }
 

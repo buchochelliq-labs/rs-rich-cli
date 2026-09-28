@@ -8,10 +8,10 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::json;
 
-use crate::render::{cast, raster, svg, video};
+use crate::render::{cast, html, raster, svg, video, Look};
 use crate::screen::{Snapshot, Theme};
 use crate::session::{Session, Timeline, FRAME_RATE, MAX_VIDEO};
-use crate::tape::{Pattern, Shell, Step, Tape, TapeError};
+use crate::tape::{Format, Output, Pattern, Shell, Step, Tape, TapeError};
 
 /// The prompt the recorded shell shows; `run` waits for it.
 const PROMPT: &str = "❯";
@@ -50,10 +50,35 @@ pub struct Options {
     pub theme: Theme,
 }
 
+/// How a recording is presented: `Set WindowFrame`, `Set Caption` and
+/// `Set KeyOverlay`, which `rich record`'s flags can override.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Presentation {
+    /// Draw the window frame (title bar and buttons) around stills and video.
+    pub window: bool,
+    /// A line of text under stills, video and the page's player.
+    pub caption: Option<String>,
+    /// Show each key as it is pressed, in video and the page's player.
+    pub key_overlay: bool,
+}
+
+impl Default for Presentation {
+    fn default() -> Self {
+        Presentation {
+            window: true,
+            caption: None,
+            key_overlay: true,
+        }
+    }
+}
+
 /// What a tape produced.
 #[derive(Clone, Debug)]
 pub struct Recording {
     pub title: String,
+    pub presentation: Presentation,
+    /// The tape's `Output` words; empty for every format.
+    pub outputs: Vec<Output>,
     pub columns: u16,
     pub rows: u16,
     /// Screenshots in the order they were taken.
@@ -397,6 +422,12 @@ pub fn record(tape: &Tape, stem: &str, options: &Options) -> Result<Recording, T
     }
     Ok(Recording {
         title: tape.title.clone().unwrap_or_else(|| stem.to_string()),
+        presentation: Presentation {
+            window: tape.window_frame.unwrap_or(true),
+            caption: tape.caption.clone(),
+            key_overlay: tape.key_overlay.unwrap_or(true),
+        },
+        outputs: tape.outputs.clone(),
         columns: tape.columns,
         rows: tape.rows,
         shots,
@@ -410,6 +441,30 @@ impl Recording {
     pub fn text_grid(&self, snapshot: &Snapshot) -> String {
         crate::tape::apply_masks(&self.masks, &snapshot.text_grid())
     }
+
+    /// The formats to write: the tape's `Output` formats (every format when
+    /// it has none) that `requested` also allows.
+    pub fn formats(&self, requested: Formats) -> Formats {
+        if self.outputs.is_empty() {
+            return requested;
+        }
+        let mut tape = Formats::NONE;
+        for output in &self.outputs {
+            tape.set(output.format, true);
+        }
+        tape.intersect(requested)
+    }
+
+    /// The file a per-tape `format` is written to, relative to the output
+    /// directory: the path the tape's `Output` gave, else `<stem>.<ext>`.
+    pub fn output_path(&self, format: Format, stem: &str) -> String {
+        self.outputs
+            .iter()
+            .rev()
+            .filter(|output| output.format == format)
+            .find_map(|output| output.path.clone())
+            .unwrap_or_else(|| format!("{stem}.{}", format.extension()))
+    }
 }
 
 /// Which files [`write`] produces. Text grids are always written: `--check`
@@ -422,6 +477,8 @@ pub struct Formats {
     pub gif: bool,
     /// Only when FFmpeg is installed.
     pub mp4: bool,
+    /// The page with a player and the screenshots.
+    pub html: bool,
 }
 
 impl Formats {
@@ -431,15 +488,54 @@ impl Formats {
         cast: true,
         gif: true,
         mp4: true,
+        html: true,
     };
-    /// Stills, text and the cast: no video encoding.
+    /// Everything but video encoding.
     pub const NO_VIDEO: Formats = Formats {
-        png: true,
-        svg: true,
-        cast: true,
         gif: false,
         mp4: false,
+        ..Formats::ALL
     };
+    /// Text grids only.
+    pub const NONE: Formats = Formats {
+        png: false,
+        svg: false,
+        cast: false,
+        gif: false,
+        mp4: false,
+        html: false,
+    };
+
+    pub fn contains(self, format: Format) -> bool {
+        match format {
+            Format::Png => self.png,
+            Format::Svg => self.svg,
+            Format::Cast => self.cast,
+            Format::Gif => self.gif,
+            Format::Mp4 => self.mp4,
+            Format::Html => self.html,
+        }
+    }
+
+    pub fn set(&mut self, format: Format, on: bool) {
+        match format {
+            Format::Png => self.png = on,
+            Format::Svg => self.svg = on,
+            Format::Cast => self.cast = on,
+            Format::Gif => self.gif = on,
+            Format::Mp4 => self.mp4 = on,
+            Format::Html => self.html = on,
+        }
+    }
+
+    /// The formats in both.
+    pub fn intersect(self, other: Formats) -> Formats {
+        let mut out = Formats::NONE;
+        for format in Format::ALL {
+            out.set(format, self.contains(format) && other.contains(format));
+        }
+        out
+    }
 }
 
 /// The screenshots [`write`] last wrote into `dir`, from the `screenshots`
@@ -584,11 +680,18 @@ pub fn write(
             MAX_VIDEO.as_secs()
         )));
     }
+    let presentation = &recording.presentation;
+    let look = Look {
+        title: &recording.title,
+        window: presentation.window,
+        caption: presentation.caption.as_deref(),
+    };
     let still = raster::Frame {
         title: &recording.title,
         key: None,
         size: 28.0,
-        window: true,
+        window: look.window,
+        caption: look.caption,
     };
     if formats.png {
         for (_, snapshot) in &recording.shots {
@@ -596,11 +699,11 @@ pub fn write(
         }
     }
     let samples = if video {
-        video::sample(&recording.timeline, FRAME_RATE)
+        video::sample_with(&recording.timeline, FRAME_RATE, presentation.key_overlay)
     } else {
         Vec::new()
     };
-    let (video_width, video_height) = video::size(&recording.timeline, &samples, fonts);
+    let (video_width, video_height) = video::size(&recording.timeline, &samples, fonts, &look);
     if video_width.saturating_mul(video_height) > raster::MAX_PIXELS {
         return Err(invalid(format!(
             "video frames would be {video_width}x{video_height} pixels, more than {} million; \
@@ -617,6 +720,9 @@ pub fn write(
     let mut written = Vec::new();
     let save = |written: &mut Vec<PathBuf>, name: String, bytes: &[u8]| -> std::io::Result<()> {
         let path = dir.join(name);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         std::fs::write(&path, bytes)?;
         written.push(path);
         Ok(())
@@ -631,7 +737,7 @@ pub fn write(
             save(
                 &mut written,
                 format!("{name}.svg"),
-                svg::svg(snapshot, theme, &recording.title).as_bytes(),
+                svg::svg(snapshot, theme, &look).as_bytes(),
             )?;
         }
         if formats.png {
@@ -650,18 +756,43 @@ pub fn write(
             &recording.title,
             theme,
         );
-        save(&mut written, format!("{stem}.cast"), cast.as_bytes())?;
+        save(
+            &mut written,
+            recording.output_path(Format::Cast, stem),
+            cast.as_bytes(),
+        )?;
     }
-    let mp4_path = dir.join(format!("{stem}.mp4"));
+    if formats.html {
+        let page = html::page(
+            &look,
+            &recording.shots,
+            &recording.timeline,
+            theme,
+            presentation.key_overlay,
+        );
+        save(
+            &mut written,
+            recording.output_path(Format::Html, stem),
+            page.as_bytes(),
+        )?;
+    }
+    let mp4_path = dir.join(recording.output_path(Format::Mp4, stem));
+    if formats.mp4 {
+        if let Some(parent) = mp4_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
     let mut mp4 = if formats.mp4 && video::ffmpeg_available() {
         Some(video::Mp4::start(&mp4_path, video_width, video_height)?)
     } else {
         None
     };
     let timeline = &recording.timeline;
-    let title = recording.title.as_str();
     if formats.gif {
-        let gif_path = dir.join(format!("{stem}.gif"));
+        let gif_path = dir.join(recording.output_path(Format::Gif, stem));
+        if let Some(parent) = gif_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         let mut file = std::io::BufWriter::new(std::fs::File::create(&gif_path)?);
         // The GIF draws every frame twice; the MP4 takes them on the first.
         let mut pass = 0;
@@ -670,7 +801,7 @@ pub fn write(
             video_height,
             |sink| {
                 pass += 1;
-                video::render_each(timeline, &samples, theme, fonts, title, &mut |canvas, s| {
+                video::render_each(timeline, &samples, theme, fonts, &look, &mut |canvas, s| {
                     if pass == 1 {
                         if let Some(mp4) = mp4.as_mut() {
                             mp4.write(&canvas, s)?;
@@ -684,7 +815,7 @@ pub fn write(
         std::io::Write::flush(&mut file)?;
         written.push(gif_path);
     } else if let Some(mp4) = mp4.as_mut() {
-        video::render_each(timeline, &samples, theme, fonts, title, &mut |canvas, s| {
+        video::render_each(timeline, &samples, theme, fonts, &look, &mut |canvas, s| {
             mp4.write(&canvas, s)
         })?;
     }
@@ -737,6 +868,8 @@ mod tests {
         let snapshot = Snapshot::from_screen(parser.screen(), &Theme::default());
         Recording {
             title: "t".into(),
+            presentation: Presentation::default(),
+            outputs: Vec::new(),
             columns: 10,
             rows: 3,
             shots: vec![("shot".into(), snapshot.clone())],
@@ -755,13 +888,7 @@ mod tests {
         dir
     }
 
-    const TEXT_ONLY: Formats = Formats {
-        png: false,
-        svg: false,
-        cast: false,
-        gif: false,
-        mp4: false,
-    };
+    const TEXT_ONLY: Formats = Formats::NONE;
 
     #[test]
     fn stems_cannot_leave_the_output_directory() {
@@ -849,6 +976,91 @@ mod tests {
         assert!(written.iter().any(|p| p.ends_with("g.gif")), "{written:?}");
         let bytes = std::fs::read(dir.join("g.gif")).unwrap();
         assert!(bytes.starts_with(b"GIF89a"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn outputs_choose_formats_and_files() {
+        let mut recording = recording();
+        assert_eq!(recording.formats(Formats::ALL), Formats::ALL);
+        recording.outputs = crate::tape::parse("Output gif html\nOutput pages/t.html\n")
+            .unwrap()
+            .outputs;
+        let chosen = recording.formats(Formats::ALL);
+        assert!(chosen.gif && chosen.html && !chosen.png && !chosen.cast);
+        // A run that skips video still skips it.
+        let chosen = recording.formats(Formats::NO_VIDEO);
+        assert!(!chosen.gif && chosen.html);
+        assert_eq!(recording.output_path(Format::Html, "s"), "pages/t.html");
+        assert_eq!(recording.output_path(Format::Gif, "s"), "s.gif");
+        let dir = scratch("outputs");
+        let fonts = raster::Fonts::embedded();
+        let html = Formats {
+            html: true,
+            ..TEXT_ONLY
+        };
+        let written = write(
+            &recording,
+            &dir,
+            "s",
+            recording.formats(html),
+            &fonts,
+            &Theme::default(),
+            None,
+        )
+        .unwrap();
+        assert!(dir.join("pages/t.html").exists(), "{written:?}");
+        assert!(dir.join("shot.txt").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn presentation_reaches_the_stills() {
+        let mut recording = recording();
+        let dir = scratch("look");
+        let fonts = raster::Fonts::embedded();
+        let stills = Formats {
+            png: true,
+            svg: true,
+            ..TEXT_ONLY
+        };
+        write(
+            &recording,
+            &dir,
+            "l",
+            stills,
+            &fonts,
+            &Theme::default(),
+            None,
+        )
+        .unwrap();
+        let framed = std::fs::read(dir.join("shot.png")).unwrap();
+        let svg = std::fs::read_to_string(dir.join("shot.svg")).unwrap();
+        assert!(svg.contains("#ff5f57"));
+        recording.presentation = Presentation {
+            window: false,
+            caption: Some("A caption".into()),
+            key_overlay: false,
+        };
+        write(
+            &recording,
+            &dir,
+            "l",
+            stills,
+            &fonts,
+            &Theme::default(),
+            None,
+        )
+        .unwrap();
+        let bare = std::fs::read(dir.join("shot.png")).unwrap();
+        let svg = std::fs::read_to_string(dir.join("shot.svg")).unwrap();
+        assert!(!svg.contains("#ff5f57") && svg.contains("A&#160;caption"));
+        assert_ne!(framed, bare);
+        // The text grid does not change with the presentation.
+        assert_eq!(
+            std::fs::read_to_string(dir.join("shot.txt")).unwrap(),
+            "hi\n\n\n"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

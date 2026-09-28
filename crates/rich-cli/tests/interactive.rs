@@ -77,6 +77,10 @@ fn without_a_terminal_the_end_of_input_takes_the_default() {
         ("b\n", 0),
         "an empty line takes it too"
     );
+    // A required input refuses the empty line it is given.
+    let (out, err, code) = piped(&["input", "--required"], "\n");
+    assert_eq!((out.as_str(), code), ("", 3), "{err}");
+    assert!(err.contains("an answer is required"), "{err}");
     // Without a default, no answer (3), not "no" or "cancelled" (1).
     for args in [&["confirm"][..], &["input"], &["choose", "a", "b"]] {
         let (out, err, code) = piped(args, "");
@@ -545,6 +549,21 @@ mod pty {
         pty.send("\r");
         let out = pty.finish();
         assert!(out.contains("code=0 got=Ada"), "{out}");
+    }
+
+    #[test]
+    fn a_required_input_refuses_an_empty_line() {
+        let mut pty = Pty::start(
+            r#"x=$(rich input --prompt Project --placeholder rs-rich --required); echo "code=$? got=$x""#,
+        );
+        pty.wait_for("rs-rich");
+        pty.send("\r");
+        pty.wait_for("an answer is required");
+        pty.send("demo");
+        pty.wait_for("demo");
+        pty.send("\r");
+        let out = pty.finish();
+        assert!(out.contains("code=0 got=demo"), "{out}");
     }
 
     #[test]

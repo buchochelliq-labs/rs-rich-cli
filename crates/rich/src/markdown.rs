@@ -74,7 +74,8 @@ enum Frame {
 /// A parsed Markdown block.
 enum Block {
     /// A paragraph or heading (its `Text` carries justify + any heading span).
-    Text(Text),
+    /// The level is set for a heading; only semantic regions read it.
+    Text(Text, Option<u8>),
     /// A bullet or ordered list. Each item holds its own blocks, so a nested
     /// list, code block or quote inside an item is simply part of that item.
     List { items: Vec<ListEntry> },
@@ -498,7 +499,7 @@ fn flush_pending(
         return;
     }
     text.set_justify(justify);
-    sink(blocks, stack).push(Block::Text(text));
+    sink(blocks, stack).push(Block::Text(text, None));
 }
 
 /// Emit a literal `~` for a single-tilde span, into whichever buffer the
@@ -1073,6 +1074,8 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
     let mut blocks: Vec<Block> = Vec::new();
     let mut current: Option<Text> = None;
     let mut heading_style: Option<Style> = None;
+    // The open heading's level, for its block (semantic regions only).
+    let mut heading_open: Option<u8> = None;
     let mut justify = Justify::Left;
     let mut strong = 0usize;
     let mut emphasis = 0usize;
@@ -1408,6 +1411,7 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                 // in. A loose item simply resets this at its Start(Paragraph).
                 current = Some(Text::new(""));
                 heading_style = None;
+                heading_open = None;
                 justify = paragraph_justify;
             }
             Event::End(TagEnd::Item) => {
@@ -1417,7 +1421,7 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                 // a paragraph.
                 if let Some(mut text) = current.take() {
                     text.set_justify(paragraph_justify);
-                    sink(&mut blocks, &mut stack).push(Block::Text(text));
+                    sink(&mut blocks, &mut stack).push(Block::Text(text, None));
                 }
                 if item_suppressed > 0 {
                     item_suppressed -= 1;
@@ -1443,6 +1447,7 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                 flush_pending(&mut current, &mut blocks, &mut stack, paragraph_justify);
                 current = Some(Text::new(""));
                 heading_style = None;
+                heading_open = None;
                 // `Paragraph.create`: `markdown.justify or "left"`.
                 justify = paragraph_justify;
             }
@@ -1451,6 +1456,7 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                 let (style, heading_justify) = heading_format(heading_level(level));
                 current = Some(Text::new(""));
                 heading_style = Some(style);
+                heading_open = Some(heading_level(level) as u8);
                 justify = heading_justify;
             }
             Event::End(TagEnd::Paragraph) | Event::End(TagEnd::Heading(_)) => {
@@ -1474,9 +1480,10 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                     // to apply here; treating a quoted heading as body text
                     // flattened h1 to plain magenta and left-aligned it.
                     text.set_justify(justify);
-                    sink(&mut blocks, &mut stack).push(Block::Text(text));
+                    sink(&mut blocks, &mut stack).push(Block::Text(text, heading_open));
                 }
                 heading_style = None;
+                heading_open = None;
                 justify = Justify::Left;
                 strong = 0;
                 emphasis = 0;
@@ -1784,7 +1791,24 @@ fn render_blocks(
         }
         let start = lines.len();
         match block {
-            Block::Text(text) => lines.extend(render_text(text, console, options, width)),
+            Block::Text(text, None) => lines.extend(render_text(text, console, options, width)),
+            Block::Text(text, Some(level)) => {
+                // Not upstream: a heading's semantic region, only when a sink
+                // is installed.
+                let region = crate::protocol::enter_region(console, || {
+                    crate::protocol::RegionInfo::new(crate::protocol::RegionRole::Heading {
+                        level: *level,
+                    })
+                    .label(text.plain())
+                });
+                let mut rendered = render_text(text, console, options, width);
+                if let Some(region) = region {
+                    for line in rendered.iter_mut() {
+                        region.tag(line);
+                    }
+                }
+                lines.extend(rendered);
+            }
             Block::Image {
                 text, joins_next, ..
             } => {
@@ -1893,6 +1917,12 @@ fn render_blocks(
                 let inner = options.update_width(width);
                 // An indented block has no language, so it never reaches a
                 // fence renderer.
+                // Not upstream: the code block's semantic region, only when a
+                // sink is installed.
+                let region = crate::protocol::enter_region(console, || {
+                    crate::protocol::RegionInfo::new(crate::protocol::RegionRole::Code)
+                        .label(language)
+                });
                 let drawn = if language.is_empty() {
                     None
                 } else {
@@ -1922,6 +1952,10 @@ fn render_blocks(
                         syntax.rich_render(console, &inner)
                     }
                 };
+                let mut segments = segments;
+                if let Some(region) = region {
+                    region.tag(&mut segments);
+                }
                 lines.extend(Segment::split_lines(&segments));
             }
             Block::Rule => {

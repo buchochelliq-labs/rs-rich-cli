@@ -8,6 +8,7 @@ use std::io::Write;
 use std::process::{Child, Command, Stdio};
 
 use crate::render::raster::{self, Canvas, Fonts};
+use crate::render::Look;
 use crate::screen::{Snapshot, Theme};
 use crate::session::{Timeline, FRAME_RATE};
 
@@ -45,6 +46,11 @@ impl VideoFrame {
 
 /// Sample `timeline` at `fps`, merging equal neighbours.
 pub fn sample(timeline: &Timeline, fps: f64) -> Vec<VideoFrame> {
+    sample_with(timeline, fps, true)
+}
+
+/// [`sample`], with the key overlay (`keys`) or without it.
+pub fn sample_with(timeline: &Timeline, fps: f64, keys: bool) -> Vec<VideoFrame> {
     let frames = &timeline.frames;
     let (Some(first), Some(last)) = (frames.first(), frames.last()) else {
         return Vec::new();
@@ -61,6 +67,7 @@ pub fn sample(timeline: &Timeline, fps: f64) -> Vec<VideoFrame> {
         let key = timeline
             .keys
             .iter()
+            .filter(|_| keys)
             .rev()
             .find(|(when, _)| *when <= t && t - *when <= KEY_SHOWN)
             .map(|(_, label)| label.clone());
@@ -89,17 +96,23 @@ pub fn sample(timeline: &Timeline, fps: f64) -> Vec<VideoFrame> {
 }
 
 /// How video frames are drawn.
-fn options<'a>(title: &'a str, key: Option<&'a str>) -> raster::Frame<'a> {
+fn options<'a>(look: &Look<'a>, key: Option<&'a str>) -> raster::Frame<'a> {
     raster::Frame {
-        title,
+        title: look.title,
         key,
         size: TEXT_SIZE,
-        window: true,
+        window: look.window,
+        caption: look.caption,
     }
 }
 
 /// The width and height, in pixels, that holds every sampled frame.
-pub fn size(timeline: &Timeline, frames: &[VideoFrame], fonts: &Fonts) -> (usize, usize) {
+pub fn size(
+    timeline: &Timeline,
+    frames: &[VideoFrame],
+    fonts: &Fonts,
+    look: &Look<'_>,
+) -> (usize, usize) {
     frames
         .iter()
         .map(|frame| {
@@ -108,7 +121,7 @@ pub fn size(timeline: &Timeline, frames: &[VideoFrame], fonts: &Fonts) -> (usize
                 snapshot.columns(),
                 snapshot.rows.len(),
                 fonts,
-                &options("", None),
+                &options(look, None),
             )
         })
         .fold((0, 0), |(w, h), (fw, fh)| (w.max(fw), h.max(fh)))
@@ -122,7 +135,7 @@ pub fn render_each(
     frames: &[VideoFrame],
     theme: &Theme,
     fonts: &Fonts,
-    title: &str,
+    look: &Look<'_>,
     sink: &mut raster::Sink<'_>,
 ) -> std::io::Result<()> {
     let draw = |frame: &VideoFrame| {
@@ -130,11 +143,11 @@ pub fn render_each(
             &frame.snapshot(timeline),
             theme,
             fonts,
-            &options(title, frame.key.as_deref()),
+            &options(look, frame.key.as_deref()),
         )
     };
     let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
-    let (width, height) = size(timeline, frames, fonts);
+    let (width, height) = size(timeline, frames, fonts, look);
     let batch = (BATCH_BYTES / (width * height * 3).max(1)).clamp(1, threads);
     for part in frames.chunks(batch) {
         let drawn: Vec<Canvas> = if part.len() == 1 {
@@ -164,7 +177,7 @@ pub fn render(
     frames: &[VideoFrame],
     theme: &Theme,
     fonts: &Fonts,
-    title: &str,
+    look: &Look<'_>,
 ) -> Vec<(Canvas, f64)> {
     let mut out = Vec::with_capacity(frames.len());
     render_each(
@@ -172,7 +185,7 @@ pub fn render(
         frames,
         theme,
         fonts,
-        title,
+        look,
         &mut |canvas, seconds| {
             out.push((canvas, seconds));
             Ok(())
@@ -325,6 +338,10 @@ mod tests {
         let total: f64 = frames.iter().map(|f| f.seconds).sum();
         assert!((total - 3.6).abs() < 0.11, "{total}");
         assert!(frames.iter().any(|f| f.key.as_deref() == Some("⏎")));
+        // Without the overlay no frame shows a key, and fewer frames differ.
+        let quiet = sample_with(&timeline, 10.0, false);
+        assert!(quiet.iter().all(|f| f.key.is_none()));
+        assert!(quiet.len() < frames.len());
         let shown = |f: &VideoFrame| f.snapshot(&timeline).cursor;
         assert!(frames.iter().any(|f| shown(f).is_none()));
         assert!(frames.iter().any(|f| shown(f).is_some()));
@@ -358,14 +375,15 @@ mod tests {
         let sampled = sample(&timeline, 2.0);
         let fonts = Fonts::embedded();
         let theme = Theme::default();
-        let all = render(&timeline, &sampled, &theme, &fonts, "t");
+        let look = Look::window("t");
+        let all = render(&timeline, &sampled, &theme, &fonts, &look);
         let mut streamed = Vec::new();
         render_each(
             &timeline,
             &sampled,
             &theme,
             &fonts,
-            "t",
+            &look,
             &mut |canvas, seconds| {
                 streamed.push((canvas, seconds));
                 Ok(())
@@ -373,7 +391,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(all, streamed);
-        let (width, height) = size(&timeline, &sampled, &fonts);
+        let (width, height) = size(&timeline, &sampled, &fonts, &look);
         assert!(all
             .iter()
             .all(|(c, _)| (c.width, c.height) == (width, height)));
@@ -392,7 +410,7 @@ mod tests {
             &sampled,
             &Theme::default(),
             &Fonts::embedded(),
-            "",
+            &Look::window(""),
             &mut |_, _| {
                 calls += 1;
                 Err(std::io::Error::other("full"))

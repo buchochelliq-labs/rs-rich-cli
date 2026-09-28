@@ -34,6 +34,16 @@ impl Default for Theme {
 }
 
 impl Theme {
+    /// The theme as rich's exporters take it.
+    pub fn terminal_theme(&self) -> rich::terminal_theme::TerminalTheme {
+        let triplet = |(r, g, b): Rgb| rich::ColorTriplet::new(r, g, b);
+        rich::terminal_theme::TerminalTheme {
+            background: triplet(self.background),
+            foreground: triplet(self.foreground),
+            ansi: self.ansi.map(triplet),
+        }
+    }
+
     /// A colour from the xterm 256-colour palette: the theme's 16, the
     /// 6×6×6 cube, then the grey ramp.
     pub fn indexed(&self, index: u8) -> Rgb {
@@ -214,6 +224,36 @@ impl Snapshot {
         Frame::from_segments(&self.to_segments())
     }
 
+    /// The screen as a [`Frame`] for rich-ext's exporters: the theme's own
+    /// foreground and background are left unset, so an export draws them as
+    /// its theme's defaults (no background rectangle behind every cell).
+    pub fn export_frame(&self, theme: &Theme) -> Frame {
+        Frame::from_segments(&self.export_segments(theme))
+    }
+
+    fn export_segments(&self, theme: &Theme) -> Vec<Segment> {
+        let mut segments = Vec::new();
+        for (y, row) in self.rows.iter().enumerate() {
+            if y > 0 {
+                segments.push(Segment::line());
+            }
+            let mut run = String::new();
+            let mut style: Option<&Cell> = None;
+            for cell in row.iter().filter(|cell| !cell.is_continuation()) {
+                if style.is_some_and(|s| !s.same_style(cell)) {
+                    let done = style.map(|cell| export_style(cell, theme));
+                    segments.push(Segment::new(std::mem::take(&mut run), done));
+                }
+                style = Some(cell);
+                run.push_str(&cell.text);
+            }
+            if let Some(style) = style {
+                segments.push(Segment::new(run, Some(export_style(style, theme))));
+            }
+        }
+        segments
+    }
+
     /// The text of every row, trailing spaces removed: what `--check`
     /// compares.
     pub fn text_grid(&self) -> String {
@@ -227,7 +267,21 @@ impl Snapshot {
     }
 }
 
-fn rich_style(cell: &Cell) -> Style {
+/// [`rich_style`], without the theme's default colours.
+fn export_style(cell: &Cell, theme: &Theme) -> Style {
+    let mut style = attributes(cell);
+    if cell.fg != theme.foreground {
+        let (r, g, b) = cell.fg;
+        style = style.with_color(Color::from_rgb(r, g, b));
+    }
+    if cell.bg != theme.background {
+        let (r, g, b) = cell.bg;
+        style = style.with_bgcolor(Color::from_rgb(r, g, b));
+    }
+    style
+}
+
+fn attributes(cell: &Cell) -> Style {
     let mut attrs = Vec::new();
     if cell.bold {
         attrs.push("bold");
@@ -238,11 +292,15 @@ fn rich_style(cell: &Cell) -> Style {
     if cell.underline {
         attrs.push("underline");
     }
-    let base = if attrs.is_empty() {
+    if attrs.is_empty() {
         Style::new()
     } else {
         Style::parse(&attrs.join(" ")).expect("known attributes")
-    };
+    }
+}
+
+fn rich_style(cell: &Cell) -> Style {
+    let base = attributes(cell);
     let (r, g, b) = cell.fg;
     let (br, bg, bb) = cell.bg;
     base.with_color(Color::from_rgb(r, g, b))

@@ -1,161 +1,149 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 998.0 530.6" font-family="Fira Code, DejaVu Sans Mono, Menlo, monospace" font-size="16">
-<rect width="100%" height="100%" rx="9" fill="#292929" stroke="#464646"/>
-<path d="M0 9a9 9 0 0 1 9-9h980.0a9 9 0 0 1 9 9v26h-998.0z" fill="#1e1e1e"/>
-<circle cx="19" cy="17.5" r="6" fill="#ff5f56"/>
-<circle cx="41" cy="17.5" r="6" fill="#ffbd2e"/>
-<circle cx="63" cy="17.5" r="6" fill="#27c93f"/>
-<text x="499.0" y="22.5" fill="#969696" font-family="DejaVu Sans, sans-serif" font-size="13" text-anchor="middle">rs-rich-interact · components</text>
-<rect x="19.0" y="54.0" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="54.0" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="69.6" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 1 </text>
-<rect x="67.0" y="54.0" width="9.6" height="20.8" fill="#2b303b"/>
-<text x="67.0" y="69.6" fill="#8fa1b3" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">#</text>
-<rect x="76.6" y="54.0" width="9.6" height="20.8" fill="#2b303b"/>
-<rect x="86.2" y="54.0" width="48.0" height="20.8" fill="#2b303b"/>
-<text x="86.2" y="69.6" fill="#8fa1b3" textLength="48.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">orbit</text>
-<rect x="134.2" y="54.0" width="844.8" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="74.8" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="74.8" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="90.4" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 2 </text>
-<rect x="67.0" y="74.8" width="912.0" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="95.6" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="95.6" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="111.2" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 3 </text>
-<rect x="67.0" y="95.6" width="691.2" height="20.8" fill="#2b303b"/>
-<text x="67.0" y="111.2" fill="#c0c5ce" textLength="691.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">A tiny service, here so the documentation's recordings have something to</text>
-<rect x="758.2" y="95.6" width="220.8" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="116.4" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="116.4" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="132.0" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 4 </text>
-<rect x="67.0" y="116.4" width="528.0" height="20.8" fill="#2b303b"/>
-<text x="67.0" y="132.0" fill="#c0c5ce" textLength="528.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">page through, pick from and search. Nothing in it runs.</text>
-<rect x="595.0" y="116.4" width="384.0" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="137.2" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="137.2" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="152.8" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 5 </text>
-<rect x="67.0" y="137.2" width="912.0" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="158.0" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="158.0" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="173.6" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 6 </text>
-<rect x="67.0" y="158.0" width="19.2" height="20.8" fill="#2b303b"/>
-<text x="67.0" y="173.6" fill="#8fa1b3" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">##</text>
-<rect x="86.2" y="158.0" width="9.6" height="20.8" fill="#2b303b"/>
-<rect x="95.8" y="158.0" width="115.2" height="20.8" fill="#2b303b"/>
-<text x="95.8" y="173.6" fill="#8fa1b3" textLength="115.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">What it does</text>
-<rect x="211.0" y="158.0" width="768.0" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="178.8" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="178.8" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="194.4" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 7 </text>
-<rect x="67.0" y="178.8" width="912.0" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="199.6" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="199.6" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="215.2" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 8 </text>
-<rect x="67.0" y="199.6" width="326.4" height="20.8" fill="#2b303b"/>
-<text x="67.0" y="215.2" fill="#c0c5ce" textLength="326.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">orbit watches a queue, hands each </text>
-<rect x="393.4" y="199.6" width="28.8" height="20.8" fill="#c0c5ce"/>
-<text x="393.4" y="215.2" fill="#2b303b" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">job</text>
-<rect x="422.2" y="199.6" width="384.0" height="20.8" fill="#2b303b"/>
-<text x="422.2" y="215.2" fill="#c0c5ce" textLength="384.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> to a worker and reports progress in the</text>
-<rect x="806.2" y="199.6" width="172.8" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="220.4" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="220.4" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="236.0" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 9 </text>
-<rect x="67.0" y="220.4" width="729.6" height="20.8" fill="#2b303b"/>
-<text x="67.0" y="236.0" fill="#c0c5ce" textLength="729.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">terminal. Workers are plain functions; the scheduler decides how many run at</text>
-<rect x="796.6" y="220.4" width="182.4" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="241.2" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="241.2" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="256.8" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">10 </text>
-<rect x="67.0" y="241.2" width="153.6" height="20.8" fill="#2b303b"/>
-<text x="67.0" y="256.8" fill="#c0c5ce" textLength="153.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">once, retries a </text>
-<rect x="220.6" y="241.2" width="28.8" height="20.8" fill="#d0b344"/>
-<text x="220.6" y="256.8" fill="#4b4e55" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">job</text>
-<rect x="249.4" y="241.2" width="422.4" height="20.8" fill="#2b303b"/>
-<text x="249.4" y="256.8" fill="#c0c5ce" textLength="422.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> that fails, and gives up after three tries.</text>
-<rect x="671.8" y="241.2" width="307.2" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="262.0" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="262.0" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="277.6" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">11 </text>
-<rect x="67.0" y="262.0" width="912.0" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="282.8" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="282.8" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="298.4" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">12 </text>
-<rect x="67.0" y="282.8" width="19.2" height="20.8" fill="#2b303b"/>
-<text x="67.0" y="298.4" fill="#8fa1b3" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">##</text>
-<rect x="86.2" y="282.8" width="9.6" height="20.8" fill="#2b303b"/>
-<rect x="95.8" y="282.8" width="124.8" height="20.8" fill="#2b303b"/>
-<text x="95.8" y="298.4" fill="#8fa1b3" textLength="124.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Configuration</text>
-<rect x="220.6" y="282.8" width="758.4" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="303.6" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="303.6" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="319.2" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">13 </text>
-<rect x="67.0" y="303.6" width="912.0" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="324.4" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="324.4" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="340.0" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">14 </text>
-<rect x="67.0" y="324.4" width="297.6" height="20.8" fill="#2b303b"/>
-<text x="67.0" y="340.0" fill="#c0c5ce" textLength="297.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">| Setting | Default | Meaning |</text>
-<rect x="364.6" y="324.4" width="614.4" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="345.2" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="345.2" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="360.8" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">15 </text>
-<rect x="67.0" y="345.2" width="124.8" height="20.8" fill="#2b303b"/>
-<text x="67.0" y="360.8" fill="#c0c5ce" textLength="124.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">|---|---|---|</text>
-<rect x="191.8" y="345.2" width="787.2" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="366.0" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="366.0" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="381.6" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">16 </text>
-<rect x="67.0" y="366.0" width="19.2" height="20.8" fill="#2b303b"/>
-<text x="67.0" y="381.6" fill="#c0c5ce" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">| </text>
-<rect x="86.2" y="366.0" width="86.4" height="20.8" fill="#2b303b"/>
-<text x="86.2" y="381.6" fill="#a3be8c" textLength="86.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">`workers`</text>
-<rect x="172.6" y="366.0" width="67.2" height="20.8" fill="#2b303b"/>
-<text x="172.6" y="381.6" fill="#c0c5ce" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> | 4 | </text>
-<rect x="239.8" y="366.0" width="28.8" height="20.8" fill="#c0c5ce"/>
-<text x="239.8" y="381.6" fill="#2b303b" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Job</text>
-<rect x="268.6" y="366.0" width="192.0" height="20.8" fill="#2b303b"/>
-<text x="268.6" y="381.6" fill="#c0c5ce" textLength="192.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">s that run at once |</text>
-<rect x="460.6" y="366.0" width="518.4" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="386.8" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="386.8" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="402.4" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">17 </text>
-<rect x="67.0" y="386.8" width="19.2" height="20.8" fill="#2b303b"/>
-<text x="67.0" y="402.4" fill="#c0c5ce" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">| </text>
-<rect x="86.2" y="386.8" width="86.4" height="20.8" fill="#2b303b"/>
-<text x="86.2" y="402.4" fill="#a3be8c" textLength="86.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">`retries`</text>
-<rect x="172.6" y="386.8" width="211.2" height="20.8" fill="#2b303b"/>
-<text x="172.6" y="402.4" fill="#c0c5ce" textLength="211.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> | 3 | Tries before a </text>
-<rect x="383.8" y="386.8" width="28.8" height="20.8" fill="#c0c5ce"/>
-<text x="383.8" y="402.4" fill="#2b303b" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">job</text>
-<rect x="412.6" y="386.8" width="76.8" height="20.8" fill="#2b303b"/>
-<text x="412.6" y="402.4" fill="#c0c5ce" textLength="76.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> fails |</text>
-<rect x="489.4" y="386.8" width="489.6" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="407.6" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="407.6" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="423.2" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">18 </text>
-<rect x="67.0" y="407.6" width="19.2" height="20.8" fill="#2b303b"/>
-<text x="67.0" y="423.2" fill="#c0c5ce" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">| </text>
-<rect x="86.2" y="407.6" width="57.6" height="20.8" fill="#2b303b"/>
-<text x="86.2" y="423.2" fill="#a3be8c" textLength="57.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">`port`</text>
-<rect x="143.8" y="407.6" width="393.6" height="20.8" fill="#2b303b"/>
-<text x="143.8" y="423.2" fill="#c0c5ce" textLength="393.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> | 8080 | Where the status page listens |</text>
-<rect x="537.4" y="407.6" width="441.6" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="428.4" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="428.4" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="444.0" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">19 </text>
-<rect x="67.0" y="428.4" width="912.0" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="449.2" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="449.2" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="464.8" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">20 </text>
-<rect x="67.0" y="449.2" width="19.2" height="20.8" fill="#2b303b"/>
-<text x="67.0" y="464.8" fill="#8fa1b3" textLength="19.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">##</text>
-<rect x="86.2" y="449.2" width="9.6" height="20.8" fill="#2b303b"/>
-<rect x="95.8" y="449.2" width="96.0" height="20.8" fill="#2b303b"/>
-<text x="95.8" y="464.8" fill="#8fa1b3" textLength="96.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Running it</text>
-<rect x="191.8" y="449.2" width="787.2" height="20.8" fill="#2b303b"/>
-<rect x="19.0" y="470.0" width="19.2" height="20.8" fill="#2b303b"/>
-<rect x="38.2" y="470.0" width="28.8" height="20.8" fill="#2b303b"/>
-<text x="38.2" y="485.6" fill="#575c67" textLength="28.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">21 </text>
-<rect x="67.0" y="470.0" width="912.0" height="20.8" fill="#2b303b"/>
-<text x="19.0" y="506.4" fill="#777877" textLength="528.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">lines 1–21 of 50 · match 2/13 · n/N · / search · q quit</text>
+<svg class="rich-terminal" viewBox="0 0 1238 586.8" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .rich-record-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .rich-record-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .rich-record-r1 { fill: #b1b6bf;font-weight: bold }
+.rich-record-r2 { fill: #575c67 }
+.rich-record-r3 { fill: #8fa1b3 }
+.rich-record-r4 { fill: #c0c5ce }
+.rich-record-r5 { fill: #c5c8c6 }
+.rich-record-r6 { fill: #2b303b }
+.rich-record-r7 { fill: #4b4e55 }
+.rich-record-r8 { fill: #a3be8c }
+.rich-record-r9 { fill: #777877 }
+    </style>
+
+    <defs>
+    <clipPath id="rich-record-clip-terminal">
+      <rect x="0" y="0" width="1219.0" height="535.8" />
+    </clipPath>
+    <clipPath id="rich-record-line-0">
+    <rect x="0" y="1.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-1">
+    <rect x="0" y="25.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-2">
+    <rect x="0" y="50.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-3">
+    <rect x="0" y="74.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-4">
+    <rect x="0" y="99.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-5">
+    <rect x="0" y="123.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-6">
+    <rect x="0" y="147.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-7">
+    <rect x="0" y="172.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-8">
+    <rect x="0" y="196.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-9">
+    <rect x="0" y="221.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-10">
+    <rect x="0" y="245.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-11">
+    <rect x="0" y="269.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-12">
+    <rect x="0" y="294.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-13">
+    <rect x="0" y="318.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-14">
+    <rect x="0" y="343.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-15">
+    <rect x="0" y="367.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-16">
+    <rect x="0" y="391.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-17">
+    <rect x="0" y="416.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-18">
+    <rect x="0" y="440.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-19">
+    <rect x="0" y="465.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="rich-record-line-20">
+    <rect x="0" y="489.5" width="1220" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="1236" height="584.8" rx="8"/><text class="rich-record-title" fill="#c5c8c6" text-anchor="middle" x="618" y="27">rs-rich-interact&#160;·&#160;components</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#rich-record-clip-terminal)">
+    <rect fill="#2b303b" x="0" y="1.5" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="1.5" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="1.5" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="73.2" y="1.5" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="85.4" y="1.5" width="61" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="146.4" y="1.5" width="1073.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="25.9" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="25.9" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="25.9" width="1159" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="50.3" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="50.3" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="50.3" width="878.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="939.4" y="50.3" width="280.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="74.7" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="74.7" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="74.7" width="671" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="732" y="74.7" width="488" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="99.1" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="99.1" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="99.1" width="1159" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="123.5" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="123.5" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="123.5" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="85.4" y="123.5" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="97.6" y="123.5" width="146.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="244" y="123.5" width="976" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="147.9" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="147.9" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="147.9" width="1159" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="172.3" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="172.3" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="172.3" width="414.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#c0c5ce" x="475.8" y="172.3" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="512.4" y="172.3" width="488" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="1000.4" y="172.3" width="219.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="196.7" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="196.7" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="196.7" width="927.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="988.2" y="196.7" width="231.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="221.1" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="221.1" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="221.1" width="195.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#d0b344" x="256.2" y="221.1" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="292.8" y="221.1" width="536.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="829.6" y="221.1" width="390.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="245.5" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="245.5" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="245.5" width="1159" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="269.9" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="269.9" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="269.9" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="85.4" y="269.9" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="97.6" y="269.9" width="158.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="256.2" y="269.9" width="963.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="294.3" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="294.3" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="294.3" width="1159" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="318.7" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="318.7" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="318.7" width="378.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="439.2" y="318.7" width="780.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="343.1" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="343.1" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="343.1" width="158.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="219.6" y="343.1" width="1000.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="367.5" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="367.5" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="367.5" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="85.4" y="367.5" width="109.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="195.2" y="367.5" width="85.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#c0c5ce" x="280.6" y="367.5" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="317.2" y="367.5" width="244" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="561.2" y="367.5" width="658.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="391.9" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="391.9" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="391.9" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="85.4" y="391.9" width="109.8" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="195.2" y="391.9" width="268.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#c0c5ce" x="463.6" y="391.9" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="500.2" y="391.9" width="97.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="597.8" y="391.9" width="622.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="416.3" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="416.3" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="416.3" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="85.4" y="416.3" width="73.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="158.6" y="416.3" width="500.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="658.8" y="416.3" width="561.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="440.7" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="440.7" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="440.7" width="1159" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="465.1" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="465.1" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="465.1" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="85.4" y="465.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="97.6" y="465.1" width="122" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="219.6" y="465.1" width="1000.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="0" y="489.5" width="24.4" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="24.4" y="489.5" width="36.6" height="24.65" shape-rendering="crispEdges"/><rect fill="#2b303b" x="61" y="489.5" width="1159" height="24.65" shape-rendering="crispEdges"/>
+    <g class="rich-record-matrix">
+    <text class="rich-record-r2" x="24.4" y="20" textLength="36.6" clip-path="url(#rich-record-line-0)">&#160;1&#160;</text><text class="rich-record-r3" x="61" y="20" textLength="12.2" clip-path="url(#rich-record-line-0)">#</text><text class="rich-record-r3" x="85.4" y="20" textLength="61" clip-path="url(#rich-record-line-0)">orbit</text><text class="rich-record-r5" x="1220" y="20" textLength="12.2" clip-path="url(#rich-record-line-0)">
+</text><text class="rich-record-r2" x="24.4" y="44.4" textLength="36.6" clip-path="url(#rich-record-line-1)">&#160;2&#160;</text><text class="rich-record-r5" x="1220" y="44.4" textLength="12.2" clip-path="url(#rich-record-line-1)">
+</text><text class="rich-record-r2" x="24.4" y="68.8" textLength="36.6" clip-path="url(#rich-record-line-2)">&#160;3&#160;</text><text class="rich-record-r4" x="61" y="68.8" textLength="878.4" clip-path="url(#rich-record-line-2)">A&#160;tiny&#160;service,&#160;here&#160;so&#160;the&#160;documentation&#x27;s&#160;recordings&#160;have&#160;something&#160;to</text><text class="rich-record-r5" x="1220" y="68.8" textLength="12.2" clip-path="url(#rich-record-line-2)">
+</text><text class="rich-record-r2" x="24.4" y="93.2" textLength="36.6" clip-path="url(#rich-record-line-3)">&#160;4&#160;</text><text class="rich-record-r4" x="61" y="93.2" textLength="671" clip-path="url(#rich-record-line-3)">page&#160;through,&#160;pick&#160;from&#160;and&#160;search.&#160;Nothing&#160;in&#160;it&#160;runs.</text><text class="rich-record-r5" x="1220" y="93.2" textLength="12.2" clip-path="url(#rich-record-line-3)">
+</text><text class="rich-record-r2" x="24.4" y="117.6" textLength="36.6" clip-path="url(#rich-record-line-4)">&#160;5&#160;</text><text class="rich-record-r5" x="1220" y="117.6" textLength="12.2" clip-path="url(#rich-record-line-4)">
+</text><text class="rich-record-r2" x="24.4" y="142" textLength="36.6" clip-path="url(#rich-record-line-5)">&#160;6&#160;</text><text class="rich-record-r3" x="61" y="142" textLength="24.4" clip-path="url(#rich-record-line-5)">##</text><text class="rich-record-r3" x="97.6" y="142" textLength="146.4" clip-path="url(#rich-record-line-5)">What&#160;it&#160;does</text><text class="rich-record-r5" x="1220" y="142" textLength="12.2" clip-path="url(#rich-record-line-5)">
+</text><text class="rich-record-r2" x="24.4" y="166.4" textLength="36.6" clip-path="url(#rich-record-line-6)">&#160;7&#160;</text><text class="rich-record-r5" x="1220" y="166.4" textLength="12.2" clip-path="url(#rich-record-line-6)">
+</text><text class="rich-record-r2" x="24.4" y="190.8" textLength="36.6" clip-path="url(#rich-record-line-7)">&#160;8&#160;</text><text class="rich-record-r4" x="61" y="190.8" textLength="414.8" clip-path="url(#rich-record-line-7)">orbit&#160;watches&#160;a&#160;queue,&#160;hands&#160;each&#160;</text><text class="rich-record-r6" x="475.8" y="190.8" textLength="36.6" clip-path="url(#rich-record-line-7)">job</text><text class="rich-record-r4" x="512.4" y="190.8" textLength="488" clip-path="url(#rich-record-line-7)">&#160;to&#160;a&#160;worker&#160;and&#160;reports&#160;progress&#160;in&#160;the</text><text class="rich-record-r5" x="1220" y="190.8" textLength="12.2" clip-path="url(#rich-record-line-7)">
+</text><text class="rich-record-r2" x="24.4" y="215.2" textLength="36.6" clip-path="url(#rich-record-line-8)">&#160;9&#160;</text><text class="rich-record-r4" x="61" y="215.2" textLength="927.2" clip-path="url(#rich-record-line-8)">terminal.&#160;Workers&#160;are&#160;plain&#160;functions;&#160;the&#160;scheduler&#160;decides&#160;how&#160;many&#160;run&#160;at</text><text class="rich-record-r5" x="1220" y="215.2" textLength="12.2" clip-path="url(#rich-record-line-8)">
+</text><text class="rich-record-r2" x="24.4" y="239.6" textLength="36.6" clip-path="url(#rich-record-line-9)">10&#160;</text><text class="rich-record-r4" x="61" y="239.6" textLength="195.2" clip-path="url(#rich-record-line-9)">once,&#160;retries&#160;a&#160;</text><text class="rich-record-r7" x="256.2" y="239.6" textLength="36.6" clip-path="url(#rich-record-line-9)">job</text><text class="rich-record-r4" x="292.8" y="239.6" textLength="536.8" clip-path="url(#rich-record-line-9)">&#160;that&#160;fails,&#160;and&#160;gives&#160;up&#160;after&#160;three&#160;tries.</text><text class="rich-record-r5" x="1220" y="239.6" textLength="12.2" clip-path="url(#rich-record-line-9)">
+</text><text class="rich-record-r2" x="24.4" y="264" textLength="36.6" clip-path="url(#rich-record-line-10)">11&#160;</text><text class="rich-record-r5" x="1220" y="264" textLength="12.2" clip-path="url(#rich-record-line-10)">
+</text><text class="rich-record-r2" x="24.4" y="288.4" textLength="36.6" clip-path="url(#rich-record-line-11)">12&#160;</text><text class="rich-record-r3" x="61" y="288.4" textLength="24.4" clip-path="url(#rich-record-line-11)">##</text><text class="rich-record-r3" x="97.6" y="288.4" textLength="158.6" clip-path="url(#rich-record-line-11)">Configuration</text><text class="rich-record-r5" x="1220" y="288.4" textLength="12.2" clip-path="url(#rich-record-line-11)">
+</text><text class="rich-record-r2" x="24.4" y="312.8" textLength="36.6" clip-path="url(#rich-record-line-12)">13&#160;</text><text class="rich-record-r5" x="1220" y="312.8" textLength="12.2" clip-path="url(#rich-record-line-12)">
+</text><text class="rich-record-r2" x="24.4" y="337.2" textLength="36.6" clip-path="url(#rich-record-line-13)">14&#160;</text><text class="rich-record-r4" x="61" y="337.2" textLength="378.2" clip-path="url(#rich-record-line-13)">|&#160;Setting&#160;|&#160;Default&#160;|&#160;Meaning&#160;|</text><text class="rich-record-r5" x="1220" y="337.2" textLength="12.2" clip-path="url(#rich-record-line-13)">
+</text><text class="rich-record-r2" x="24.4" y="361.6" textLength="36.6" clip-path="url(#rich-record-line-14)">15&#160;</text><text class="rich-record-r4" x="61" y="361.6" textLength="158.6" clip-path="url(#rich-record-line-14)">|---|---|---|</text><text class="rich-record-r5" x="1220" y="361.6" textLength="12.2" clip-path="url(#rich-record-line-14)">
+</text><text class="rich-record-r2" x="24.4" y="386" textLength="36.6" clip-path="url(#rich-record-line-15)">16&#160;</text><text class="rich-record-r4" x="61" y="386" textLength="24.4" clip-path="url(#rich-record-line-15)">|&#160;</text><text class="rich-record-r8" x="85.4" y="386" textLength="109.8" clip-path="url(#rich-record-line-15)">`workers`</text><text class="rich-record-r4" x="195.2" y="386" textLength="85.4" clip-path="url(#rich-record-line-15)">&#160;|&#160;4&#160;|&#160;</text><text class="rich-record-r6" x="280.6" y="386" textLength="36.6" clip-path="url(#rich-record-line-15)">Job</text><text class="rich-record-r4" x="317.2" y="386" textLength="244" clip-path="url(#rich-record-line-15)">s&#160;that&#160;run&#160;at&#160;once&#160;|</text><text class="rich-record-r5" x="1220" y="386" textLength="12.2" clip-path="url(#rich-record-line-15)">
+</text><text class="rich-record-r2" x="24.4" y="410.4" textLength="36.6" clip-path="url(#rich-record-line-16)">17&#160;</text><text class="rich-record-r4" x="61" y="410.4" textLength="24.4" clip-path="url(#rich-record-line-16)">|&#160;</text><text class="rich-record-r8" x="85.4" y="410.4" textLength="109.8" clip-path="url(#rich-record-line-16)">`retries`</text><text class="rich-record-r4" x="195.2" y="410.4" textLength="268.4" clip-path="url(#rich-record-line-16)">&#160;|&#160;3&#160;|&#160;Tries&#160;before&#160;a&#160;</text><text class="rich-record-r6" x="463.6" y="410.4" textLength="36.6" clip-path="url(#rich-record-line-16)">job</text><text class="rich-record-r4" x="500.2" y="410.4" textLength="97.6" clip-path="url(#rich-record-line-16)">&#160;fails&#160;|</text><text class="rich-record-r5" x="1220" y="410.4" textLength="12.2" clip-path="url(#rich-record-line-16)">
+</text><text class="rich-record-r2" x="24.4" y="434.8" textLength="36.6" clip-path="url(#rich-record-line-17)">18&#160;</text><text class="rich-record-r4" x="61" y="434.8" textLength="24.4" clip-path="url(#rich-record-line-17)">|&#160;</text><text class="rich-record-r8" x="85.4" y="434.8" textLength="73.2" clip-path="url(#rich-record-line-17)">`port`</text><text class="rich-record-r4" x="158.6" y="434.8" textLength="500.2" clip-path="url(#rich-record-line-17)">&#160;|&#160;8080&#160;|&#160;Where&#160;the&#160;status&#160;page&#160;listens&#160;|</text><text class="rich-record-r5" x="1220" y="434.8" textLength="12.2" clip-path="url(#rich-record-line-17)">
+</text><text class="rich-record-r2" x="24.4" y="459.2" textLength="36.6" clip-path="url(#rich-record-line-18)">19&#160;</text><text class="rich-record-r5" x="1220" y="459.2" textLength="12.2" clip-path="url(#rich-record-line-18)">
+</text><text class="rich-record-r2" x="24.4" y="483.6" textLength="36.6" clip-path="url(#rich-record-line-19)">20&#160;</text><text class="rich-record-r3" x="61" y="483.6" textLength="24.4" clip-path="url(#rich-record-line-19)">##</text><text class="rich-record-r3" x="97.6" y="483.6" textLength="122" clip-path="url(#rich-record-line-19)">Running&#160;it</text><text class="rich-record-r5" x="1220" y="483.6" textLength="12.2" clip-path="url(#rich-record-line-19)">
+</text><text class="rich-record-r2" x="24.4" y="508" textLength="36.6" clip-path="url(#rich-record-line-20)">21&#160;</text><text class="rich-record-r5" x="1220" y="508" textLength="12.2" clip-path="url(#rich-record-line-20)">
+</text><text class="rich-record-r9" x="0" y="532.4" textLength="671" clip-path="url(#rich-record-line-21)">lines&#160;1–21&#160;of&#160;50&#160;·&#160;match&#160;2/13&#160;·&#160;n/N&#160;·&#160;/&#160;search&#160;·&#160;q&#160;quit</text>
+    </g>
+    </g>
 </svg>

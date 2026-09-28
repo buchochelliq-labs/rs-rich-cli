@@ -515,6 +515,8 @@ pub struct Frame<'a> {
     pub size: f32,
     /// Draw the window frame (title bar and buttons).
     pub window: bool,
+    /// A line of text under the terminal.
+    pub caption: Option<&'a str>,
 }
 
 /// The most pixels [`render`] is asked to draw for one image: 300 MB of RGB.
@@ -533,6 +535,15 @@ fn layout(options: &Frame<'_>) -> (f64, f64, f64) {
     ((size * 1.3).round(), (size * 1.2).round(), bar)
 }
 
+/// The height of the caption bar, in pixels: none without a caption.
+fn caption_height(options: &Frame<'_>) -> f64 {
+    if options.caption.is_some() {
+        (options.size as f64 * 2.2).round()
+    } else {
+        0.0
+    }
+}
+
 /// The width and height, in pixels, of [`render`]'s image of a terminal of
 /// `columns` x `rows`.
 pub fn size(columns: usize, rows: usize, fonts: &Fonts, options: &Frame<'_>) -> (usize, usize) {
@@ -540,7 +551,7 @@ pub fn size(columns: usize, rows: usize, fonts: &Fonts, options: &Frame<'_>) -> 
     let (line, pad, bar) = layout(options);
     (
         (columns as f64 * cell + 2.0 * pad).round() as usize,
-        (rows as f64 * line + 2.0 * pad + bar).round() as usize,
+        (rows as f64 * line + 2.0 * pad + bar + caption_height(options)).round() as usize,
     )
 }
 
@@ -597,6 +608,40 @@ pub fn render(snapshot: &Snapshot, theme: &Theme, fonts: &Fonts, options: &Frame
                 );
                 x += fonts.bold.metrics(c, title_size).advance_width as f64;
             }
+        }
+    }
+    let caption = caption_height(options);
+    if let Some(text) = options.caption {
+        let (w, h) = (width as f64, height as f64);
+        let top = h - caption - if options.window { 1.0 } else { 0.0 };
+        let colour = if options.window {
+            let radius = pad / 2.0;
+            canvas.fill_rounded(1.0, top, w - 2.0, caption, radius, CHROME);
+            canvas.fill_rect(
+                1,
+                top as i64,
+                width as i64 - 2,
+                (caption / 2.0) as i64,
+                CHROME,
+            );
+            (200, 200, 200)
+        } else {
+            canvas.fill_rect(
+                0,
+                top as i64,
+                width as i64,
+                caption as i64,
+                theme.background,
+            );
+            theme.foreground
+        };
+        let text_size = size * 0.8;
+        let tw = fonts.text_width(text, text_size);
+        let mut x = ((w - tw) / 2.0).max(pad);
+        let baseline = top + caption / 2.0 + text_size as f64 * 0.35;
+        for c in text.chars() {
+            fonts.draw(&mut canvas, c, false, text_size, x, baseline, 1.0, colour);
+            x += fonts.bold.metrics(c, text_size).advance_width as f64;
         }
     }
     let top = bar + pad;
@@ -691,7 +736,7 @@ pub fn render(snapshot: &Snapshot, theme: &Theme, fonts: &Fonts, options: &Frame
         let label: String = format!(" {key} ");
         let w = fonts.text_width(&label, label_size) + size as f64;
         let h = size as f64 * 2.0;
-        let (x1, y1) = (width as f64 - pad, height as f64 - pad);
+        let (x1, y1) = (width as f64 - pad, height as f64 - pad - caption);
         canvas.fill_rounded(
             x1 - w - 1.0,
             y1 - h - 1.0,
@@ -971,6 +1016,7 @@ mod tests {
             key: Some("⏎"),
             size: 16.0,
             window: true,
+            caption: None,
         };
         let canvas = render(&shot(b"\x1b[31mhello\x1b[0m"), &theme, &fonts, &frame);
         assert!(canvas.width > 100 && canvas.height > 50);
@@ -1104,8 +1150,43 @@ mod tests {
             key: None,
             size: 16.0,
             window: true,
+            caption: None,
         };
         let canvas = render(&shot(b"hi"), &Theme::default(), &fonts, &options);
         assert_eq!(size(12, 3, &fonts, &options), (canvas.width, canvas.height));
+    }
+
+    #[test]
+    fn a_caption_adds_a_bar_under_the_terminal() {
+        let fonts = Fonts::embedded();
+        let theme = Theme::default();
+        for window in [true, false] {
+            let plain = Frame {
+                title: "t",
+                key: None,
+                size: 16.0,
+                window,
+                caption: None,
+            };
+            let captioned = Frame {
+                caption: Some("Saved"),
+                ..plain.clone()
+            };
+            let (_, h) = size(12, 3, &fonts, &plain);
+            let canvas = render(&shot(b"hi"), &theme, &fonts, &captioned);
+            assert_eq!(
+                size(12, 3, &fonts, &captioned),
+                (canvas.width, canvas.height)
+            );
+            assert!(canvas.height > h, "window={window}");
+            // Caption text is drawn in the new bar.
+            let bar = &canvas.pixels[h * canvas.width * 3..];
+            let background = if window { CHROME } else { theme.background };
+            assert!(
+                bar.chunks(3)
+                    .any(|p| (p[0], p[1], p[2]) != background && (p[0], p[1], p[2]) != OUTLINE),
+                "window={window}"
+            );
+        }
     }
 }

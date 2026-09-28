@@ -70,12 +70,12 @@ in the release notes; the crates.io links show available packages.
 <!-- BEGIN MANIFEST VERSIONS -->
 | Package | Manifest version |
 |---|---|
-| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.8` |
+| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.9` |
 | [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.0.2` |
-| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.2` |
+| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.3` |
 | [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.11` |
 | [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.13` |
-| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.10` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.11` |
 | [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.2` |
 | [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.0.2` |
 | [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.1` |

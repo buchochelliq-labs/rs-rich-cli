@@ -1,8 +1,13 @@
 # Render tree spike (#226)
 
-**Status:** design note (0.0.12 workstream 5). Phase 1's frame type, live
-cell diff and snapshot schema 2 are implemented in ext 0.0.11
-(`rich_ext::frame`); the rest of this note is still a proposal. The prototype lives in
+**Status:** design note (0.0.12 workstream 5). Implemented in 0.0.13:
+phase 1's frame type, live cell diff and snapshot schema 2 (ext 0.0.11,
+`rich_ext::frame`); phase 2's semantic regions, through a new core seam
+(`rich::protocol::RegionSink`, core 0.0.9) and `Frame::with_regions`, with
+snapshot schema 3; and the frame-based HTML and SVG export with links
+(`Frame::to_html`, `Frame::to_svg`), which `rich record` uses for its SVG
+screenshots and HTML page. See [What was built](#what-was-built-in-0013).
+Phase 3 and the open questions below are still proposals. The prototype lives in
 [`docs/design/render-tree/prototype`](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/docs/design/render-tree/prototype),
 a standalone crate that is not a workspace member, not published and not built
 by CI.
@@ -230,10 +235,65 @@ twin method on every core renderable.
 | `RenderTarget::frame` | ext | Same filtering as `segments()`, tested per target kind |
 | `LiveCoordinator` cell diff | ext | Bytes written drop on the live tests, and the terminal-emulator tests pass unchanged |
 | Snapshot schema 2 | ext | Resegmented but identical output compares equal; schema 1 fixtures still load |
-| Frame-based HTML/SVG export with links | ext | Links survive as `<a>`; the existing export tests stay green |
-| Semantic regions trait and ext implementations | core seam + ext | Default output unchanged; the a11y output for `TableData` no longer depends on glyphs |
+| Frame-based HTML/SVG export with links | ext | Done in 0.0.13: links survive as `<a>`; without regions the output is core's, byte for byte |
+| Semantic regions trait and ext implementations | core seam + ext | Seam and core renderables done in 0.0.13 (default output unchanged); ext renderables and the a11y module do not report or read regions yet |
 
 Each item is its own PR, and none changes default output.
+
+## What was built in 0.0.13
+
+**The seam.** Phase 2 proposed a `regions()` method on renderables. What was
+built observes rendering instead, so no renderable's signature changes and
+nesting comes from the call order:
+
+```rust
+// crates/rich/src/protocol.rs
+pub trait RegionSink: Send + Sync {
+    fn enter(&self, region: RegionInfo) -> RegionId;
+    fn exit(&self, id: RegionId);
+}
+pub trait ConsoleRegions {
+    fn set_region_sink(&mut self, value: Option<Arc<dyn RegionSink>>);
+    fn region_sink(&self) -> Option<&dyn RegionSink>;
+}
+pub fn enter_region<'a>(console: &'a Console, info: impl FnOnce() -> RegionInfo)
+    -> Option<RegionGuard<'a>>;   // None, without building the info, when no sink
+pub fn report_region(console: &Console, info: impl FnOnce() -> RegionInfo,
+    render: impl FnOnce() -> Vec<Segment>) -> Vec<Segment>;
+pub fn tag_region(segments: &mut [Segment], id: RegionId);
+pub fn region_of(style: &Style) -> Option<RegionId>;
+pub const REGION_META_KEY: &str = "rich.region";
+```
+
+`RegionInfo` is a `RegionRole` (`Panel`, `Table`, `TableHeader { column }`,
+`TableCell { row, column }`, `TableFooter { column }`, `Rule`,
+`Heading { level }`, `Code`, `Link`, `Other(String)`) with an optional label
+and link. `Panel`, `Table` (and every cell it lays out), `Rule` and Markdown
+headings and code blocks call `enter_region` before rendering their children
+and tag every segment they drew that no child tagged, by setting
+`REGION_META_KEY` in the style's metadata. Metadata never renders, so the
+bytes are the same with a sink installed; without one (the default) nothing is
+called, allocated or tagged. The goldens pin the default, and
+`crates/rich/tests/regions.rs` pins the bytes with a sink. Recorded as
+DIVERGENCES §36.
+
+Why tags in the style metadata rather than coordinates: a renderable does not
+know where its output will land (a table inside a panel inside a layout), but
+styles travel with the text through every container, so the frame recovers
+each region's cells after the fact. Links need no report at all: they are
+already in `Style::link`.
+
+**In ext.** `RegionRecorder` is the sink. `Frame::from_segments` strips the
+tag from each style (so tagged and untagged text of one style still intern as
+one) and keeps it beside the run; `Frame::with_regions(&recorder)` turns the
+tags into `Region`s (cell spans per row, parent, depth, `bounds()`), and
+`Frame::regions()` adds link regions. `RenderSnapshot::capture_regions` is
+snapshot schema 3.
+
+**Export.** `Frame::to_html` and `Frame::to_svg` follow core's templates: a
+frame without regions exports byte for byte as core does, links survive, and
+regions become nested `<span>` wrappers with ARIA roles that close at the end
+of every row (DIVERGENCES §37). The a11y module does not read regions yet.
 
 ## Open questions
 

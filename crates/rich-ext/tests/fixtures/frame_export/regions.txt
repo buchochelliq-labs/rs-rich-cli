@@ -1,0 +1,9 @@
+panel Panel label=Some("Export") link=None rows 0..15 columns 0..48 rectangle
+  heading Heading { level: 1 } label=Some("Frames") link=None rows 1..2 columns 2..46 rectangle
+  table Table label=None link=None rows 5..10 columns 2..20 rectangle
+    table-header TableHeader { column: 0 } label=None link=None rows 6..7 columns 3..11 rectangle
+    table-header TableHeader { column: 1 } label=None link=None rows 6..7 columns 12..19 rectangle
+    table-cell TableCell { row: 0, column: 0 } label=None link=None rows 8..9 columns 3..11 rectangle
+    table-cell TableCell { row: 0, column: 1 } label=None link=None rows 8..9 columns 12..19 rectangle
+  code Code label=Some("rust") link=None rows 11..14 columns 2..46 rectangle
+  link Link label=None link=Some("https://github.com/buchochelliq-labs/rs-rich-cli") rows 3..4 columns 4..8 rectangle
