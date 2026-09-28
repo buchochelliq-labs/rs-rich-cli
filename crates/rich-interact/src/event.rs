@@ -177,13 +177,31 @@ pub enum MouseKind {
     ScrollDown,
 }
 
-/// A mouse event, at a column and row of the terminal (0-based).
+/// A mouse event, at a column and row (0-based). The event loop reports
+/// them to a component relative to the top left of its own view (#476), so
+/// row 0 is the view's first line wherever the view is on screen.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Mouse {
     pub kind: MouseKind,
     pub column: u16,
     pub row: u16,
     pub modifiers: Modifiers,
+}
+
+impl Mouse {
+    pub const fn new(kind: MouseKind, column: u16, row: u16) -> Mouse {
+        Mouse {
+            kind,
+            column,
+            row,
+            modifiers: Modifiers::NONE,
+        }
+    }
+
+    /// A press of the left button: the start of a click.
+    pub fn is_click(&self) -> bool {
+        self.kind == MouseKind::Down(Button::Left)
+    }
 }
 
 /// One input event.
@@ -205,6 +223,12 @@ pub enum Event {
     /// [`Flow::Handoff`](crate::Flow::Handoff)) exited with this code
     /// (`None`: killed by a signal).
     Returned(Option<i32>),
+    /// The left button went down on a hyperlink (an OSC 8 region: a
+    /// [`Style`](rich::Style) with a link) in the component's view (#476).
+    /// Delivered instead of the [`Event::Mouse`]; what to do with the URL
+    /// (open it, print it, ignore it) is the component's or its caller's
+    /// choice, never the event loop's.
+    Link(String),
 }
 
 impl Event {
@@ -212,6 +236,16 @@ impl Event {
     pub fn key(&self) -> Option<Key> {
         match self {
             Event::Key(key) => Some(*key),
+            _ => None,
+        }
+    }
+}
+
+impl Event {
+    /// The mouse event, when this is one.
+    pub fn mouse(&self) -> Option<Mouse> {
+        match self {
+            Event::Mouse(mouse) => Some(*mouse),
             _ => None,
         }
     }

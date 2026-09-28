@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 998.0 489.0" font-family="Fira Code, DejaVu Sans Mono, Menlo, monospace" font-size="16">
+<rect width="100%" height="100%" rx="9" fill="#292929" stroke="#464646"/>
+<path d="M0 9a9 9 0 0 1 9-9h980.0a9 9 0 0 1 9 9v26h-998.0z" fill="#1e1e1e"/>
+<circle cx="19" cy="17.5" r="6" fill="#ff5f56"/>
+<circle cx="41" cy="17.5" r="6" fill="#ffbd2e"/>
+<circle cx="63" cy="17.5" r="6" fill="#27c93f"/>
+<text x="499.0" y="22.5" fill="#969696" font-family="DejaVu Sans, sans-serif" font-size="13" text-anchor="middle">rich asset · emoji, boxes and spinners</text>
+<text x="19.0" y="69.6" fill="#ff2c7a" font-weight="bold" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">❯</text>
+<text x="28.6" y="69.6" fill="#c5c8c6" textLength="950.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> style=$(rich asset --kind box)                                                                    </text>
+<text x="19.0" y="90.4" fill="#00823d" font-weight="bold" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">?</text>
+<text x="38.2" y="90.4" fill="#c5c8c6" font-weight="bold" textLength="86.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Box style</text>
+<text x="134.2" y="90.4" fill="#777877" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">›</text>
+<text x="153.4" y="90.4" fill="#68a0b3" textLength="48.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">heavy</text>
+<text x="19.0" y="111.2" fill="#ff2c7a" font-weight="bold" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">❯</text>
+<text x="28.6" y="111.2" fill="#c5c8c6" textLength="950.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> rich --print "$icon Launch day" --panel "$style"                                                  </text>
+<text x="19.0" y="132.0" fill="#c5c8c6" textLength="960.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">┏━━━━━━━━━━━━━━━┓                                                                                   </text>
+<text x="19.0" y="152.8" fill="#c5c8c6" textLength="960.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">┃ 🚀 Launch day ┃                                                                                   </text>
+<text x="19.0" y="173.6" fill="#c5c8c6" textLength="960.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">┗━━━━━━━━━━━━━━━┛                                                                                   </text>
+<text x="19.0" y="194.4" fill="#ff2c7a" font-weight="bold" textLength="9.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">❯</text>
+<rect x="38.2" y="178.8" width="9.6" height="20.8" fill="#c5c8c6" opacity="0.7"/>
+</svg>

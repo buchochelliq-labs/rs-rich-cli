@@ -1,0 +1,26 @@
+❯ accent=$(rich color --format name)
+? Colour ›    red1
+❯ rich --print "[bold $accent]Hello from $accent[/]"
+Hello from red1
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

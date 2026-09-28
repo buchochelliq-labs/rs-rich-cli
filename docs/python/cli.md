@@ -87,7 +87,8 @@ exit status 2
 
 ## Interactive commands
 
-`choose`, `filter`, `input`, `confirm` and `pager` run the
+`choose`, `filter`, `input`, `confirm`, `pager`, `write`, `file`, `color` and
+`asset` run the
 [interactive components](interact.md) from a shell script. The answer goes
 to standard output and the component paints on standard error, so
 `choice=$(python -m rs_rich choose a b c)` works. Exit statuses: 0 answered
@@ -96,8 +97,9 @@ error, 3 no answer without a terminal.
 
 Without a terminal they degrade: `filter` prints the lines matching
 `--value`, best first (a fuzzy `grep`), `choose` from standard input answers
-with `--selected`, and `input`, `confirm` and `choose` from arguments ask
-line by line on standard error.
+with `--selected`, as does `file`, `write` prints what standard input held,
+and `input`, `confirm`, `color`, `asset` and `choose` from arguments ask line
+by line on standard error.
 
 ```python
 lines = "src/lib.rs\nsrc/main.rs\ndocs/maintenance.md\nCargo.toml\n"
@@ -115,6 +117,21 @@ filter 0 ['src/main.rs', 'docs/maintenance.md']
 choose 0 ['Cargo.toml']
 choose 3 []
 confirm 1 'Deploy? [y=Yes, n=No]: '
+```
+
+```python
+for args, answer in ((["write"], "line one\nline two\n"), (["color", "--format", "rgb"], "#ff8800\n"),
+                     (["asset", "--kind", "box"], "rounded\n"), (["file", "--selected", "notes.md"], "")):
+    result = subprocess.run([sys.executable, "-m", "rs_rich", *args], input=answer,
+                            capture_output=True, text=True)
+    print(args[0], result.returncode, result.stdout.splitlines())
+```
+
+```text
+write 0 ['line one', 'line two']
+color 0 ['rgb(255,136,0)']
+asset 0 ['rounded']
+file 0 ['notes.md']
 ```
 
 ## `rs_rich.cli.main`

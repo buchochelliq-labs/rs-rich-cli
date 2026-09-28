@@ -1,0 +1,16 @@
+❯ msg=$(rich write --header 'Commit message' --show-line-numbers --char-limit 200)
+? Commit message › Add rich write … (+3 lines)
+❯ printf '%s\n' "$msg"
+Add rich write
+
+A multi-line editor for shell scripts,
+in the manner of gum.
+❯
+
+
+
+
+
+
+
+

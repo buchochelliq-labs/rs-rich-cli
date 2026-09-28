@@ -22,8 +22,18 @@
 //!   component asks line by line, returns its default, or fails, as the
 //!   caller chooses, and never blocks on a pipe (#492);
 //! - [`headless`]: scripted events in, frames out, for tests;
-//! - [`components`]: [`Select`], [`MultiSelect`], [`Input`], [`Confirm`],
-//!   [`Form`] and [`Pager`], built on the above with a [`fuzzy`] matcher.
+//! - [`components`]: [`Select`], [`MultiSelect`], [`TableSelect`],
+//!   [`TreeSelect`], [`Input`], [`TextArea`], [`Confirm`], [`Form`],
+//!   [`Pager`], [`FilePicker`], [`ColorPicker`] and [`AssetPicker`], built on
+//!   the above with a [`fuzzy`] matcher.
+//!
+//! Mouse support (#476) is opt-in per component ([`Component::mouse`]):
+//! clicks, drags and the wheel arrive in the component's own coordinates, a
+//! click on a hyperlink arrives as [`Event::Link`], and the border beside a
+//! preview drags. Actions (#491) attach to list items, table rows, tree
+//! nodes and file entries through [`Actions`] and an [`ActionTarget`], and
+//! open in a menu (Ctrl+K); plugins register them through
+//! `rs-rich-plugin-api`.
 //!
 //! ```
 //! use rich_interact::{headless, Component, Context, Event, Flow, KeyCode, Outcome, View};
@@ -59,6 +69,7 @@ pub mod event_loop;
 pub mod fuzzy;
 pub mod headless;
 pub mod item;
+mod names;
 pub mod paint;
 pub mod policy;
 pub mod session;
@@ -66,12 +77,13 @@ pub mod viewport;
 
 pub use component::{Component, Context, Flow, View};
 pub use components::{
-    Answers, Choice, Confirm, Form, Input, MultiSelect, Pager, PreviewLayout, Select, Suggestion,
-    Theme, Value,
+    Answers, AssetKind, AssetPicker, Choice, ColorFormat, ColorPicker, Confirm, FileMode,
+    FilePicker, Form, Input, MultiSelect, Pager, PreviewLayout, Select, Suggestion, TableSelect,
+    TextArea, Theme, TreeSelect, Value,
 };
 pub use event::{Button, Event, Key, KeyCode, Modifiers, Mouse, MouseKind};
 pub use event_loop::{degrade, run, Error, EventLoop, Handle, LoopOptions, Outcome, RunOptions};
-pub use item::{Action, Item, Preview};
+pub use item::{Action, ActionFilter, ActionTarget, Actions, Item, Preview, TargetKind};
 pub use policy::{Fallback, LineIo, NotInteractive, Policy, Reason};
 pub use session::{Backend, Output, Session, SessionOptions};
 pub use viewport::Viewport;
@@ -95,6 +107,10 @@ impl<C: Component + ?Sized> Component for &mut C {
 
     fn tick(&self) -> Option<std::time::Duration> {
         (**self).tick()
+    }
+
+    fn mouse(&self) -> bool {
+        (**self).mouse()
     }
 
     fn default_value(&self) -> Option<C::Output> {

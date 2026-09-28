@@ -1,0 +1,20 @@
+❯ icon=$(rich asset)
+? Emoji › rocket
+❯ 🚀 rocket                                   │ 🚀
+  🔄 counterclockwise_arrows_button           │
+                                              │ :rocket:
+                                              │
+                                              │
+                                              │
+                                              │
+                                              │
+                                              │
+                                              │
+  2/2868 · ↑↓ move · enter pick · esc cancel
+
+
+
+
+
+
+

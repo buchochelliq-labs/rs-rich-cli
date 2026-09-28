@@ -234,6 +234,69 @@ Entries below record subsequent releases and development.
     process group of its own and the whole group is killed; on Windows its
     process tree is (`taskkill /T /F`).
 
+### CLI 0.0.13: `rich write`, `file`, `color` and `asset`, and `--mouse` (#493, #476, #491)
+
+- **`rich write`** reads several lines (Enter starts a line, Ctrl+D
+  submits) with `--header`, `--placeholder`, `--value`, `--height`,
+  `--char-limit` and `--show-line-numbers`. Piped stdin is the text to
+  start from; without a terminal it is the answer (at most 64 MiB).
+- **`rich file [DIR]`** browses from DIR with a fuzzy filter and a preview,
+  and prints the path picked: `--all`, `--directory`, `--file`,
+  `--extension`, `--selected` (the answer without a terminal; without it,
+  exit 3), `--value`, `--height`. A path that is not UTF-8 is printed byte
+  for byte. An action a plugin registered prints what its `run` returns.
+- **`rich color`** picks a named colour, a palette colour or one typed as
+  hex or RGB, with a live swatch, and prints it with `--format hex|name|rgb`.
+- **`rich asset`** picks an emoji, a box style or a spinner
+  (`--kind emoji|box|spinner`) with a preview.
+- **`--mouse`** for `choose`, `filter`, `confirm`, `file`, `color` and
+  `asset`: click to focus and pick, click buttons, drag the border beside a
+  preview. Off by default; with it the command paints on the alternate
+  screen.
+- `color` and `asset` ask line by line without a terminal, like `input`.
+  The exit codes are those of the other interactive commands. PTY tests
+  cover each command and a mouse click; the CLI reference is regenerated,
+  and tapes record each command.
+
+### Interact 0.0.1: text area, file, colour and asset pickers, mouse and actions (#493, #476, #491)
+
+- **New components:** `TextArea` (multi-line; wraps and scrolls; a
+  character limit, a placeholder, a configurable submit key), `FilePicker`
+  (fuzzy browsing with previews, `..`, hidden files, `FileMode`, extensions,
+  a root jail that never follows a link out of the root, names that are not
+  UTF-8 shown as `\xNN`, FIFOs never opened for a preview), `ColorPicker`
+  (`ColorFormat` hex, name or RGB; the 256 palette as a grid) and
+  `AssetPicker` (emoji through core's public `emoji::replace`, box styles,
+  spinners). `TableSelect` and `TreeSelect` pick rows and nodes.
+- **Mouse (#476), opt-in:** `Component::mouse` (each component's
+  `with_mouse`). The event loop gives mouse events in the component's own
+  coordinates and turns a click on an OSC 8 hyperlink into `Event::Link`;
+  `run` enables mouse reporting for a component that asks. `Select` rows
+  click, the border beside a preview drags (at least 12 columns a pane),
+  `Confirm` choices and `Form` Submit/Cancel are buttons, and `Pager`
+  records clicked links. `headless::Script` gains `click`, `drag`, `scroll`
+  and `mouse`.
+- **Actions (#491):** `Action::key` is optional (`Action::menu`); `Actions`
+  offers actions on every target of a view, filtered by an `ActionTarget`
+  (`TargetKind::Item`, `Row`, `Node` or `File`); Ctrl+K opens an action
+  menu; `Actions::from_registry` brings in plugins' actions.
+- Migration: `Action::key` is now `Option<Key>` (the crate is unpublished).
+
+### Plugin API (unreleased) and Ext 0.0.11: actions for interactive views (#491)
+
+- Additive: `CustomAction` and `PluginRegistrar::action(name, action)`,
+  which has a default body, so existing hosts and plugins build unchanged;
+  `Capability::Action`. `ExtensionRegistry` hosts actions like the other
+  named capabilities and lists them with `actions()`.
+
+### Python 0.0.2: `TextArea`, `FilePicker`, `ColorPicker` and `AssetPicker`
+
+- `rs_rich.interact` exposes the four new components (stubs and docs
+  included); `FilePicker` answers with a `pathlib.Path`. `Script` gains
+  `click`, `drag` and `scroll`, and a Python component's `Event` has the
+  mouse's `column` and `row` and a `"link"` kind. `python -m rs_rich` runs
+  `write`, `file`, `color` and `asset`.
+
 ### Interact 0.0.1: painting on standard error
 
 - `SessionOptions::output` (`Output::Stdout` or `Output::Stderr`) chooses

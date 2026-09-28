@@ -23,6 +23,7 @@ motion turned on in your system settings the cards stay still.
 [![Search matches highlighted in less](media/tapes/pager/search.png){ data-gif="pager.gif" loading=lazy }<span class="tape-card-title">Page and search</span>](#page-and-search){ .tape-card }
 [![rich input refusing an empty answer](media/tapes/input/required.png){ data-gif="input.gif" loading=lazy }<span class="tape-card-title">Ask for a line</span>](#ask-for-a-line){ .tape-card }
 [![A fuzzy file picker with a preview](media/tapes/components/select.png){ data-gif="components.gif" loading=lazy }<span class="tape-card-title">Components</span>](#components){ .tape-card }
+[![rich file previewing a file before picking it](media/tapes/file/preview.png){ data-gif="file.gif" loading=lazy }<span class="tape-card-title">Ask for more in a script</span>](#ask-for-more-in-a-script){ .tape-card }
 [![A Markdown file paged in a viewport](media/tapes/viewport/paged.png){ data-gif="viewport.gif" loading=lazy }<span class="tape-card-title">An interactive component</span>](#an-interactive-component){ .tape-card }
 [![The guided tour, inspecting structured data](media/tapes/tour/inspect.png){ data-gif="tour.gif" loading=lazy }<span class="tape-card-title">The guided tour</span>](demos.md#run-the-suite-in-your-terminal){ .tape-card }
 [![rich choose in the 0.0.13 release recording](media/tapes/release-0.0.13/choose.png){ data-gif="release-0.0.13.gif" loading=lazy }<span class="tape-card-title">The 0.0.13 release</span>](releases/0.0.13.md){ .tape-card }
@@ -114,6 +115,29 @@ See [Interactive components](guide/interact/index.md#ready-made-components).
 | ![A form with an error](media/tapes/components/form-error.png) | ![Marking several](media/tapes/components/multi.png) | ![Searching](media/tapes/components/pager.png) |
 
 [Tape](tapes/components.tape) · [Cast](media/tapes/components/components.cast) · [GIF](media/tapes/components/components.gif) · [Page](media/tapes/components/components.html)
+
+## Ask for more in a script
+
+`rich write`, `rich file`, `rich color` and `rich asset`, each captured into
+a shell variable with `$(…)`: several lines of a commit message, a path
+picked from the fixture project with its preview, a colour from the
+names and the palette, and an emoji and a box style used together. See
+[Ask in a script](cli.md#ask-in-a-script).
+
+<div class="tape-player" data-cast="../media/tapes/file/file.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/file/file.gif" alt="rich file browsing a project and picking a file">
+</div>
+
+| rich write | rich file | rich file |
+|---|---|---|
+| ![Several lines typed](media/tapes/write/editing.png) | ![A directory listed](media/tapes/file/browse.png) | ![A file previewed](media/tapes/file/preview.png) |
+| **rich color** | **rich color** | **rich asset** |
+| ![Named colours with a swatch](media/tapes/color/names.png) | ![The 256 palette](media/tapes/color/palette.png) | ![Box styles previewed](media/tapes/asset/box.png) |
+
+[write tape](tapes/write.tape) · [cast](media/tapes/write/write.cast) ·
+[file tape](tapes/file.tape) · [cast](media/tapes/file/file.cast) ·
+[color tape](tapes/color.tape) · [cast](media/tapes/color/color.cast) ·
+[asset tape](tapes/asset.tape) · [cast](media/tapes/asset/asset.cast)
 
 ## An interactive component
 

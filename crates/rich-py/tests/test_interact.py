@@ -821,3 +821,91 @@ def test_fuzzy_matching_releases_the_gil():
     assert len(ranked[0]) == len(candidates)
     assert longest < took / 2, (longest, took)
     assert fuzzy("abc", candidates[0]) is not None
+
+
+# ---------------------------------------------------------------------------
+# TextArea, FilePicker, ColorPicker and AssetPicker (#493)
+
+
+def test_text_area_takes_several_lines():
+    from rs_rich.interact import TextArea
+
+    record = TextArea("Notes").headless(Script().text("one").keys("enter").text("two").keys("ctrl+d"))
+    assert record.value == "one\ntwo"
+    assert "│ one\n│ two" in record.frames[-2]
+    area = TextArea("Bio", placeholder="Say something", char_limit=4, submit="ctrl+s")
+    assert area.submit == "ctrl+s" and area.char_limit == 4
+    assert TextArea("Bio", char_limit=4).headless(Script().text("abcdef").keys("ctrl+d")).value == "abcd"
+    assert degrade(TextArea("Notes"), ["a", "b"]).value == "a\nb"
+    with pytest.raises(ValueError):
+        TextArea(submit="hyper+x")
+    with pytest.raises(ValueError):
+        TextArea(char_limit=0)
+
+
+def test_file_picker_returns_a_path(tmp_path):
+    import pathlib
+
+    from rs_rich.interact import FilePicker
+
+    (tmp_path / "notes.md").write_text("# notes\n")
+    (tmp_path / "sub").mkdir()
+    (tmp_path / ".hidden").write_text("x")
+    picked = FilePicker(tmp_path).headless(Script().text("notes").keys("enter")).value
+    assert picked == pathlib.Path(tmp_path) / "notes.md"
+    assert FilePicker(tmp_path, mode="directory").headless("enter").value == tmp_path / "sub"
+    shown = FilePicker(tmp_path, hidden=True).headless("esc").frames[0]
+    assert ".hidden" in shown
+    assert degrade(FilePicker(tmp_path, default="x.txt"), fallback="default").value == pathlib.Path("x.txt")
+    with pytest.raises(NotInteractive):
+        degrade(FilePicker(tmp_path))
+    with pytest.raises(ValueError):
+        FilePicker(tmp_path, mode="socket")
+
+
+def test_color_picker_formats_the_colour():
+    from rs_rich.interact import ColorPicker
+
+    assert ColorPicker(format="name").headless(Script().text("dark_orange").keys("enter")).value == "dark_orange"
+    assert ColorPicker(format="rgb").headless(Script().text("#ff8800").keys("enter")).value == "rgb(255,136,0)"
+    # Tab to the palette: right twice and down once is color(18).
+    assert ColorPicker(format="name").headless("tab right right down enter").value == "dark_blue"
+    assert degrade(ColorPicker(), ["rgb(1,2,3)"]).value == "#010203"
+    with pytest.raises(ValueError):
+        ColorPicker(format="hsl")
+    with pytest.raises(ValueError, match="definitely-not-a-color"):
+        ColorPicker(default="definitely-not-a-color")
+    assert degrade(ColorPicker(default="red"), [""]).value == "#800000"
+
+
+def test_asset_picker_picks_emoji_boxes_and_spinners():
+    from rs_rich.interact import AssetPicker
+
+    assert AssetPicker().headless(Script().text("thumbs_up").keys("enter")).value == "👍"
+    assert AssetPicker("box").headless(Script().text("double_edge").keys("enter")).value == "double_edge"
+    assert AssetPicker("spinner", default="dots").headless("enter").value == "dots"
+    assert degrade(AssetPicker(), [":rocket:"]).value == "🚀"
+    with pytest.raises(ValueError):
+        AssetPicker("icon")
+
+
+def test_scripts_click_and_python_components_see_mouse_events():
+    events = []
+
+    class Clicks:
+        def handle(self, event):
+            if event.kind == "key":
+                return Done(list(events))
+            events.append((event.kind, event.mouse, event.column, event.row))
+            return None
+
+        def render(self, width, height):
+            return "click me"
+
+    record = headless(Clicks(), Script().click(3, 0).scroll(1, 0).keys("q"))
+    assert record.value == [
+        ("mouse", "down", 3, 0),
+        ("mouse", "up", 3, 0),
+        ("mouse", "scroll_down", 1, 0),
+    ]
+    assert len(Script().drag((0, 0), (3, 0))) == 5

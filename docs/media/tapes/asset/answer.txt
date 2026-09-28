@@ -1,0 +1,20 @@
+❯ style=$(rich asset --kind box)
+? Box style › heavy
+❯ rich --print "$icon Launch day" --panel "$style"
+┏━━━━━━━━━━━━━━━┓
+┃ 🚀 Launch day ┃
+┗━━━━━━━━━━━━━━━┛
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+

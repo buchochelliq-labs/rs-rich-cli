@@ -239,6 +239,11 @@ pub trait Backend {
     fn handoff(&mut self, command: &mut Command) -> io::Result<Option<i32>>;
     /// Whether the region is the alternate screen (painted from the top).
     fn alternate_screen(&self) -> bool;
+    /// The terminal row an inline region started on, for placing mouse
+    /// events; 0 when unknown. The alternate screen always starts at 0.
+    fn origin(&self) -> u16 {
+        0
+    }
     /// The plain text of a view just painted: the headless driver records
     /// it.
     fn painted(&mut self, text: &str) {
@@ -252,6 +257,9 @@ pub struct Session {
     options: SessionOptions,
     start: Instant,
     active: bool,
+    /// The row the cursor was on when the session started (inline, with
+    /// the mouse on).
+    origin: u16,
 }
 
 impl Session {
@@ -275,6 +283,7 @@ impl Session {
             options,
             start: Instant::now(),
             active: false,
+            origin: 0,
         };
         session.enter()?;
         Ok(session)
@@ -301,7 +310,17 @@ impl Session {
             ACTIVE.fetch_or(PASTE, Ordering::SeqCst);
         }
         out.push_str("\x1b[?25l");
-        self.options.output.write(&out)
+        self.options.output.write(&out)?;
+        // Where an inline region starts, so clicks land on the right rows.
+        // Asking writes a query to standard output, so only when that is
+        // the terminal being painted.
+        if self.options.mouse
+            && !self.options.alternate_screen
+            && self.options.output == Output::Stdout
+        {
+            self.origin = crossterm::cursor::position().map_or(0, |(_, row)| row);
+        }
+        Ok(())
     }
 
     /// Restore the terminal. Also done on drop and on panic.
@@ -367,5 +386,9 @@ impl Backend for Session {
 
     fn alternate_screen(&self) -> bool {
         self.options.alternate_screen
+    }
+
+    fn origin(&self) -> u16 {
+        self.origin
     }
 }

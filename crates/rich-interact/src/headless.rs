@@ -14,7 +14,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use crate::component::Component;
-use crate::event::{Event, Key};
+use crate::event::{Button, Event, Key, Mouse, MouseKind};
 use crate::event_loop::{EventLoop, LoopOptions, Outcome};
 use crate::session::Backend;
 
@@ -68,6 +68,46 @@ impl Script {
 
     pub fn resize(self, columns: u16, rows: u16) -> Script {
         self.event(Event::Resize { columns, rows })
+    }
+
+    /// A mouse event at `column`, `row` of the terminal (#476). Headless,
+    /// the region starts at the top, so these are the view's rows too.
+    pub fn mouse(self, kind: MouseKind, column: u16, row: u16) -> Script {
+        self.event(Event::Mouse(Mouse::new(kind, column, row)))
+    }
+
+    /// A left click: the button down, then up, at one cell.
+    pub fn click(self, column: u16, row: u16) -> Script {
+        self.mouse(MouseKind::Down(Button::Left), column, row)
+            .mouse(MouseKind::Up(Button::Left), column, row)
+    }
+
+    /// A drag with the left button from one cell to another, through the
+    /// columns between them on the starting row, as a terminal reports it.
+    pub fn drag(self, from: (u16, u16), to: (u16, u16)) -> Script {
+        let mut script = self.mouse(MouseKind::Down(Button::Left), from.0, from.1);
+        let step: i32 = if to.0 >= from.0 { 1 } else { -1 };
+        let mut column = i32::from(from.0);
+        while column != i32::from(to.0) {
+            column += step;
+            let row = if column == i32::from(to.0) {
+                to.1
+            } else {
+                from.1
+            };
+            script = script.mouse(MouseKind::Drag(Button::Left), column as u16, row);
+        }
+        script.mouse(MouseKind::Up(Button::Left), to.0, to.1)
+    }
+
+    /// The wheel, one notch down (`down`) or up, over a cell.
+    pub fn scroll(self, down: bool, column: u16, row: u16) -> Script {
+        let kind = if down {
+            MouseKind::ScrollDown
+        } else {
+            MouseKind::ScrollUp
+        };
+        self.mouse(kind, column, row)
     }
 }
 

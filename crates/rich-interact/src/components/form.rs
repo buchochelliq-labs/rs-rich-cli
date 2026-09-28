@@ -94,7 +94,19 @@ pub struct Form {
     focus: usize,
     theme: Theme,
     answer: Option<bool>,
+    mouse: bool,
 }
+
+/// What a row of the form is, for a click.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Spot {
+    Field(usize),
+    Submit,
+    Cancel,
+}
+
+const SUBMIT: &str = " Submit ";
+const CANCEL: &str = " Cancel ";
 
 impl Form {
     pub fn new(title: impl Into<String>) -> Form {
@@ -104,7 +116,75 @@ impl Form {
             focus: 0,
             theme: Theme::default(),
             answer: None,
+            mouse: false,
         }
+    }
+
+    /// Report the mouse (#476): a click focuses a field (and flips a
+    /// toggle or moves a choice on), and Submit and Cancel buttons show
+    /// under the fields.
+    pub fn with_mouse(mut self, on: bool) -> Self {
+        self.mouse = on;
+        self
+    }
+
+    /// What is at `row` and `column` of the view at `width`, as `render`
+    /// lays it out.
+    fn spot(&self, width: usize, row: usize, column: usize) -> Option<Spot> {
+        let label_width = self
+            .fields
+            .iter()
+            .map(|field| rich::cells::cell_len(&field.label))
+            .max()
+            .unwrap_or(0);
+        let mut at = 1;
+        for (index, field) in self.fields.iter().enumerate() {
+            if row == at {
+                return Some(Spot::Field(index));
+            }
+            at += 1;
+            if let (true, Kind::Text(input)) = (index == self.focus, &field.kind) {
+                at += input
+                    .suggestion_rows(width, &" ".repeat(label_width + 2))
+                    .len();
+            }
+            at += usize::from(field.error.is_some());
+        }
+        if !self.mouse || row != at {
+            return None;
+        }
+        let submit = 2..2 + SUBMIT.len();
+        let cancel = submit.end + 2..submit.end + 2 + CANCEL.len();
+        if submit.contains(&column) {
+            Some(Spot::Submit)
+        } else if cancel.contains(&column) {
+            Some(Spot::Cancel)
+        } else {
+            None
+        }
+    }
+
+    fn click(&mut self, width: usize, row: usize, column: usize) -> Flow<Answers> {
+        match self.spot(width, row, column) {
+            Some(Spot::Submit) => return self.submit(),
+            Some(Spot::Cancel) => {
+                self.answer = Some(false);
+                return Flow::Cancel;
+            }
+            Some(Spot::Field(index)) => {
+                let again = index == self.focus;
+                self.focus = index;
+                match &mut self.fields[index].kind {
+                    Kind::Toggle(on) => *on = !*on,
+                    Kind::Choice { options, index } if again => {
+                        *index = (*index + 1) % options.len().max(1)
+                    }
+                    _ => {}
+                }
+            }
+            None => {}
+        }
+        Flow::Continue
     }
 
     fn push(mut self, name: impl Into<String>, label: String, kind: Kind) -> Self {
@@ -205,6 +285,12 @@ impl Component for Form {
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<Answers> {
         if self.fields.is_empty() {
             return Flow::Done(Answers::default());
+        }
+        if let Some(mouse) = event.mouse() {
+            if mouse.is_click() {
+                return self.click(context.width, mouse.row as usize, mouse.column as usize);
+            }
+            return Flow::Continue;
         }
         if let Event::Tick = event {
             // Provider results for every text field, not only the focused.
@@ -364,6 +450,20 @@ impl Component for Form {
                 ));
             }
         }
+        if self.mouse {
+            let button = theme
+                .focused
+                .combine(&rich::Style::parse("reverse").expect("style"));
+            lines.push(fit(
+                vec![
+                    plain("  "),
+                    text(SUBMIT, &button),
+                    plain("  "),
+                    text(CANCEL, &button),
+                ],
+                width,
+            ));
+        }
         let last = self.focus + 1 == self.fields.len();
         let enter = if last { "enter submit" } else { "enter next" };
         lines.push(fit(
@@ -378,6 +478,10 @@ impl Component for Form {
             Some((row, column)) => view.with_cursor(row, column),
             None => view,
         }
+    }
+
+    fn mouse(&self) -> bool {
+        self.mouse
     }
 
     /// Ticks for text fields with a suggestion provider, so its results

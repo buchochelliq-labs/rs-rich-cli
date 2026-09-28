@@ -1,0 +1,16 @@
+❯ msg=$(rich write --header 'Commit message' --show-line-numbers --char-limit 200)
+? Commit message ›
+1 │ Add rich write
+2 │
+3 │ A multi-line editor for shell scripts,
+4 │ in the manner of gum.
+  ~
+  76/200 · enter new line · ctrl+d submit · esc cancel
+
+
+
+
+
+
+
+

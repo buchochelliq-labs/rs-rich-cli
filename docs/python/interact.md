@@ -5,8 +5,8 @@ from rs_rich.interact import Select, MultiSelect, Input, Confirm, Choice, Form, 
 ```
 
 `rs_rich.interact` is the port's `rs-rich-interact` crate from Python: fuzzy
-pickers, text input, confirmations, forms and a pager, between printing and a
-full TUI. Rich has none of these, so the reference is the Rust crate: the same
+pickers, text input and multi-line text, confirmations, forms, a pager, and
+file, colour and asset pickers, between printing and a full TUI. Rich has none of these, so the reference is the Rust crate: the same
 component, keys and terminal paint the same frames.
 
 Each component is a configuration. `ask()` runs it on the terminal and
@@ -317,13 +317,124 @@ step 7 failed
 lines 5–8 of 20 · match 1/1 · 
 ```
 
+## TextArea
+
+`TextArea(prompt="Write", *, value="", placeholder=None, char_limit=None,
+height=5, line_numbers=False, submit="ctrl+d")` reads several lines: Enter
+starts a line, `submit` (a key name) finishes, Escape cancels. Long lines
+wrap and the text scrolls to keep the caret in view; `char_limit` counts
+line breaks too. The answer is the text, lines joined with `"\n"`. Without
+a terminal, every line of input up to its end is the text.
+
+```python
+from rs_rich.interact import Script, TextArea
+
+record = TextArea("Notes", line_numbers=True).headless(
+    Script().text("first").keys("enter").text("second").keys("ctrl+d"), width=48, height=8
+)
+print(record.frames[-2])
+print(repr(record.value))
+```
+
+```text
+? Notes › 
+1 │ first
+2 │ second
+  ~
+  ~
+  ~
+  enter new line · ctrl+d submit · esc cancel
+'first\nsecond'
+```
+
+## FilePicker
+
+`FilePicker(root=".", *, prompt="File", mode="file", extensions=(),
+hidden=False, jail=False, default=None, query="", height=10, mouse=False)`
+browses from `root`: typing filters, Enter opens a directory or picks a
+file, Right opens, Left (or Backspace with nothing typed) goes up, and
+Ctrl+T shows hidden files. `mode` is what may be picked: `"file"`,
+`"directory"` (files are not listed) or `"both"`. `extensions` keeps only
+files with those extensions. With `jail=True` nothing outside `root` is
+listed, opened or previewed, symbolic links out of it included. The focused
+text file is previewed beside the list. The answer is a `pathlib.Path`;
+without a terminal, `default`.
+
+```python
+import pathlib
+import tempfile
+
+from rs_rich.interact import FilePicker, Script
+
+root = pathlib.Path(tempfile.mkdtemp())
+(root / "src").mkdir()
+(root / "src" / "main.py").write_text("print('hi')\n")
+(root / "README.md").write_text("# Demo\n")
+picked = FilePicker(root).headless(Script().keys("enter").text("main").keys("enter")).value
+print(picked.relative_to(root).as_posix())
+print([p.name for p in [FilePicker(root, mode="directory").headless("enter").value]])
+```
+
+```text
+src/main.py
+['src']
+```
+
+## ColorPicker
+
+`ColorPicker(prompt="Colour", *, format="hex", value="", default=None,
+height=10, palette=False, mouse=False)` picks a colour: typing filters
+rich's named colours, text that is a colour (`#ff8800`, `rgb(255,136,0)`,
+`color(208)`) is offered first, and Tab switches to the 256-colour palette,
+moved with the arrows. A swatch shows the focused colour. The answer is a
+colour string rich parses: `#rrggbb` for `format="hex"`, a name for
+`"name"` (or `color(N)`, or hex, for a colour without one), `rgb(r,g,b)`
+for `"rgb"`.
+
+```python
+from rs_rich.interact import ColorPicker, Script
+
+print(ColorPicker(format="name").headless(Script().text("dark_orange").keys("enter")).value)
+print(ColorPicker(format="rgb").headless(Script().text("#ff8800").keys("enter")).value)
+print(ColorPicker(format="name").headless("tab right right down enter").value)
+```
+
+```text
+dark_orange
+rgb(255,136,0)
+dark_blue
+```
+
+## AssetPicker
+
+`AssetPicker(kind="emoji", *, prompt=None, query="", default=None,
+height=10, mouse=False)` picks an emoji by its shortcode name, a box style
+(`kind="box"`) or a spinner (`kind="spinner"`), each with a preview. The
+answer is the emoji itself, or the style's or spinner's name as rich takes
+it.
+
+```python
+from rs_rich.interact import AssetPicker, Script
+
+print(AssetPicker().headless(Script().text("thumbs_up").keys("enter")).value)
+print(AssetPicker("box").headless(Script().text("double").keys("enter")).value)
+```
+
+```text
+👍
+double
+```
+
 ## Headless runs
 
 `headless(component, script=None, *, width=80, height=24)` (or
 `component.headless(...)`) runs a component against a scripted keyboard at
 a fixed size, with virtual time. The script is a string of key names, or a
 `Script` built by chaining: `keys("down tab")`, `text("typed")`,
-`paste("pasted")`, `resize(columns, rows)`, `wait(seconds)`. Key names are
+`paste("pasted")`, `resize(columns, rows)`, `wait(seconds)`, and the mouse:
+`click(column, row)`, `drag((column, row), (column, row))` and
+`scroll(column, row, down=True)`, at cells of the component's own view
+(the mouse reaches the components that take `mouse=True`). Key names are
 `enter`, `tab`, `shift+tab`, `backspace`, `delete`, `escape` (`esc`),
 `space`, the arrows, `home`, `end`, `pageup`, `pagedown`, `f1`–`f12`, one
 character, and `ctrl+`/`alt+`/`shift+` combinations.
@@ -339,7 +450,10 @@ Any object with `render(width, height)` and `handle(event)` is a component:
 `render` returns a renderable, and `handle` returns `None` to go on,
 `Done(value)` to finish or `Cancel()` to cancel. `event.kind` is `"key"`
 (with `event.key` the key's name), `"paste"` (`event.text`), `"resize"`
-(`event.columns`, `event.rows`), `"mouse"` or `"tick"`. An optional
+(`event.columns`, `event.rows`), `"mouse"` (`event.mouse` is `"down"`,
+`"up"`, `"drag"`, `"moved"`, `"scroll_up"` or `"scroll_down"`, at
+`event.column` and `event.row` of the component's view), `"link"` (a click
+on a hyperlink, its URL in `event.text`) or `"tick"`. An optional
 `default_value()` is the answer without a terminal.
 
 ```python
@@ -388,12 +502,14 @@ Match(score=43, positions=[0, 4])
 ## The command line
 
 The wheel's `python -m rs_rich` has the `rich` binary's interactive
-commands: `choose`, `filter`, `input`, `confirm` and `pager` (see
-[The command line](cli.md)).
+commands: `choose`, `filter`, `input`, `confirm`, `pager`, `write`, `file`,
+`color` and `asset` (see [The command line](cli.md)).
 
 ## Not yet from Python
 
 - `Theme` (the components' styles and symbols): the default theme only.
+- `TableSelect`, `TreeSelect`, view-wide `Actions` and the action menu, and
+  mouse support in `Select`, `Confirm`, `Form` and `Pager`.
 - `Input`'s background suggestion `provider`: fixed `suggestions` only.
 - The multi-component `EventLoop` with timers, and hand-offs to another
   program (`Flow::Handoff`) from Python components.

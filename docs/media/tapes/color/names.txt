@@ -1,0 +1,26 @@
+❯ accent=$(rich color --format name)
+? Colour › orange
+            #875f00  rgb(135,95,0)  orange4  color(94)
+❯      orange4  #875f00
+       orange3  #d78700
+       orange1  #ffaf00
+       orange_red1  #ff5f00
+       dark_orange  #ff8700
+       dark_orange3  #d75f00
+
+
+
+
+  6/235 · type a name, #hex or rgb(r,g,b) · ↑↓ move · tab palette · enter pick · esc cancel
+
+
+
+
+
+
+
+
+
+
+
+

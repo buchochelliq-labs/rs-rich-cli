@@ -116,6 +116,15 @@ pub trait Component {
         None
     }
 
+    /// Whether the component wants mouse events (#476): clicks, drags and
+    /// the wheel. Off by default, since reporting the mouse takes text
+    /// selection away from the terminal; a component turns it on when its
+    /// caller opts in, and [`run`](crate::run) then enables mouse reporting
+    /// for the session.
+    fn mouse(&self) -> bool {
+        false
+    }
+
     /// The value to return when the terminal is not interactive and the
     /// policy asks for defaults. `None`: there is none.
     fn default_value(&self) -> Option<Self::Output> {

@@ -74,6 +74,7 @@ adds capabilities through a `PluginRegistrar`:
 | `renderer(name, renderer)` | a `SourceRenderer` that turns source text into a renderable |
 | `fence_renderer(language, renderer)` | a `FenceRenderer` for Markdown fences in that language |
 | `transform(name, transform)` | a `TextTransform`, chained by name into a text pipeline (0.0.12; see [Transforms](guide/ext/transforms.md)) |
+| `action(name, action)` | a `CustomAction` on interactive views: list items, table rows, tree nodes and file entries (0.0.13, #491; see [Actions](guide/interact/index.md#actions)). It has a default body, so a host without interactive views ignores it |
 
 ```rust
 use rich_ext::plugin::{Plugin, PluginError, PluginMetadata, PluginRegistrar};
@@ -115,7 +116,8 @@ was.
 provides the number highlighter and the `syntect` code highlighter. Query what
 is registered with `plugins()`, `code_highlighter(name)`, `theme(name)`,
 `box_style(name)`, `renderer(name)`, `fence_renderer(language)`,
-`transform(name)`, `transform_names()` and `provided_by(capability)`.
+`transform(name)`, `transform_names()`, `actions()` and
+`provided_by(capability)`.
 `text_pipeline(names)` chains registered text transforms, in the order given,
 into a `rich_ext::transform::Pipeline`. `fences()` combines every registered fence renderer
 into one for `Markdown::fence_renderer`, routed by language.

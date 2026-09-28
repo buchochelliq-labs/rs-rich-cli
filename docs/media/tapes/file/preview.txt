@@ -1,0 +1,20 @@
+❯ path=$(rich file --header Open)
+? Open › loop
+  src
+❯ event_loop.rs                               │ //! The event loop: take jobs, hand them to workers,
+                                              │
+                                              │ use std::time::Duration;
+                                              │
+                                              │ /// One job from the queue.
+                                              │ pub struct Job {
+                                              │     pub name: String,
+                                              │     pub tries: u32,
+                                              │ }
+                                              │
+  1/5 · ↑↓ move · enter pick · → open · ← up · ctrl+t hidden · esc cancel
+
+
+
+
+
+
