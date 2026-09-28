@@ -95,6 +95,65 @@ segments any renderable already returns (`Frame::from_segments`, or
   row, and `frame.encode_span(row, columns, …)` encodes one such range.
   Styles compare by value, so the two frames need not share a style table.
 
+### Semantic regions
+
+A frame can say what its cells are: which ones a panel, a table, a table
+cell, a rule, a Markdown heading or a code block drew. Render with
+`frame::render_frame(&console, &options, &renderable)`, or
+`target.frame_with_regions(&renderable)`, and read `frame.regions()`:
+
+```rust
+use rich_ext::frame::{render_frame, role_name};
+
+let frame = render_frame(&console, &console.options(), &panel);
+for region in frame.regions() {
+    let bounds = region.bounds().unwrap();
+    println!("{}{} at row {}, column {}", "  ".repeat(region.depth),
+             role_name(&region.role), bounds.row, bounds.column);
+}
+```
+
+Each `Region` has a `role` (`RegionRole::Panel`, `Table`, `TableHeader`,
+`TableCell { row, column }`, `TableFooter`, `Rule`, `Heading { level }`,
+`Code` or `Link`), an optional `label` (a panel's or table's title, a
+heading's text, a code block's language) and `link`, its `parent` and
+`depth`, and `spans`: the cells it covers, one column range per row. A
+region covers its children's cells too, and `bounds()` is the smallest
+rectangle around them. Links need nothing reported: every stretch of text
+with an OSC 8 link becomes a `Link` region.
+
+The regions come from core's renderables, through an opt-in seam
+(`rich::protocol::RegionSink`, recorded here by `RegionRecorder`). Without a
+recorder, which is the default, nothing is reported and output is exactly as
+before; with one, the terminal bytes are still the same.
+
+`RenderSnapshot::capture_regions` stores the regions in a snapshot (schema 3);
+schema 1 and 2 snapshots still load and compare.
+
+### HTML and SVG from a frame
+
+`frame.to_html(&HtmlOptions::default())` and
+`frame.to_svg(&SvgOptions::default())` export a frame with core's templates
+and themes, so a frame without regions exports as `Console::export_html` and
+`export_svg` do. On top of that:
+
+- links survive: `<a href>` in HTML, and an `<a>` around the text in SVG;
+- in HTML, each region's cells are wrapped in a
+  `<span class="rich-region rich-ROLE">`, nested as the regions are and
+  closed at the end of every row, so the grid is not disturbed. The first
+  wrapper of a region carries its ARIA role (`heading` with `aria-level`,
+  `separator`, `code`, or `group` with `aria-roledescription` for panels,
+  tables and cells) and its label. `HtmlOptions { regions: false, .. }`
+  leaves them out;
+- `to_html_with(&options, "{code}")` returns only the markup, to embed in a
+  page of your own;
+- in SVG, `SvgOptions` can leave out the window (`window: false`), draw a
+  cursor and add a caption under the terminal.
+
+`rich record` draws its SVG screenshots and its HTML page this way. The
+differences from core's exporters are listed in
+[Divergences](../../DIVERGENCES.md).
+
 ## Bounded layouts
 
 A `LayoutNode` is either a leaf holding a renderable or a split of child nodes

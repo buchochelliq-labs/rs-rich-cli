@@ -66,3 +66,69 @@
   display: block;
   width: 100%;
 }
+
+/* The gallery (recordings.md): a still per tape that plays its GIF while the
+   card is hovered or focused (tapes.js), unless reduced motion is asked for. */
+.tape-gallery > p {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 1rem;
+}
+.md-typeset a.tape-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #292929;
+  color: #e6e6e6;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.md-typeset a.tape-card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  object-position: top left;
+}
+.tape-card-title {
+  padding: 0.4rem 0.7rem 0.5rem;
+  font-weight: 600;
+}
+/* A play mark on the still, gone while the GIF plays. */
+.md-typeset a.tape-card::after {
+  content: "▶";
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 0.7rem;
+}
+.md-typeset a.tape-card[data-playing]::after {
+  content: "❚❚";
+}
+.md-typeset a.tape-card:hover,
+.md-typeset a.tape-card:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.md-typeset a.tape-card:focus-visible {
+  outline: 3px solid var(--md-accent-fg-color);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .md-typeset a.tape-card {
+    transition: none;
+  }
+  .md-typeset a.tape-card:hover,
+  .md-typeset a.tape-card:focus-visible {
+    transform: none;
+  }
+  .md-typeset a.tape-card::after {
+    content: none;
+  }
+}

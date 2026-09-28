@@ -554,6 +554,47 @@ Format: what differs · why · how to remove it (if temporary).
   docstrings use.
 - **Remove:** as more of docutils' directives are ported.
 
+### 36. Semantic regions: an opt-in seam, no default change (#226)
+- **Differs:** nothing by default. `rich::protocol` adds `RegionSink`, set on
+  a `Console` through `ConsoleRegions`. Only when one is installed do `Panel`,
+  `Table` (and its header, body and footer cells), `Rule`, and Markdown
+  headings and code blocks call it, and tag the segments they drew with a
+  `rich.region` key in the style's metadata. Metadata never renders, so the
+  terminal bytes are unchanged even then; the tagged styles do compare
+  unequal to untagged ones, so core's own HTML export of a tagged stream
+  splits spans more often (`rich_ext::frame` strips the tags first).
+- **Same:** without a sink, which is the default, no renderable calls
+  anything or tags anything: every golden is unchanged, and
+  `crates/rich/tests/regions.rs` checks the bytes with a sink too.
+- **Why:** which cells are a heading or a table cell is known only inside
+  the renderables; the render tree (`docs/design/render-tree.md`) needs them
+  for semantic HTML and accessibility. Upstream has no equivalent.
+- **Remove:** not planned; the seam is additive.
+
+### 37. Frame export (`rich_ext::frame`) differs from `export_html` and `export_svg` in small ways
+- **Differs:** `Frame::to_html` and `Frame::to_svg` use core's templates and
+  write the same bytes as `Console::export_html` and `export_svg` for a
+  stream without regions, with these exceptions:
+  - links are kept: `<a href>` in HTML as core writes it, and an `<a>`
+    around the text in SVG, where core (and upstream) drop the link. The URL
+    is escaped for the attribute (`&` as `&amp;`, `"` as `&quot;`); core
+    writes it as it is;
+  - an empty segment is not part of a frame, so it takes no class number and
+    draws no zero-width background;
+  - SVG text is stretched over the cells it covers, where upstream counts
+    characters; the two differ only for wide characters, which upstream
+    squeezes into half their width;
+  - characters XML forbids (control characters) become U+FFFD in SVG text,
+    so the file stays well-formed;
+  - with regions, HTML gains nested `<span class="rich-region …">`
+    wrappers with ARIA roles, and a line break is written outside every span.
+- **Same:** the parity is tested on tables, panels, trees, rules, Markdown
+  and upstream's SVG fixture (`crates/rich-ext/tests/frame_export.rs`,
+  `frame::export` unit tests).
+- **Why:** these are our exporters (the render tree's), not upstream's; they
+  keep what core's lose.
+- **Remove:** not planned.
+
 ## Feature-flagged divergences
 
 ### 22. Escape-safe JSON presentation (`json-escape-safe`)
