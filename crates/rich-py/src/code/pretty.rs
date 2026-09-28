@@ -9,7 +9,7 @@
 //! binding's reflection of Python values, the layout is a line-for-line port
 //! of upstream's `Node.render` and `_Line`.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
@@ -729,7 +729,7 @@ impl<'py> Walker<'_, 'py> {
         if let Some(depth) = self.repr_error_depth {
             return Ok(depth);
         }
-        let left = python_frames_left(self.py)?;
+        let left = crate::renderable::python_frames_left(self.py)?;
         // `probe` and `down(0)` take two frames, and the failing call one;
         // `frames` are upstream's.
         let depth = (left + 3).saturating_sub(self.frames).min(MAX_PRETTY_DEPTH);
@@ -1202,6 +1202,129 @@ pub(crate) fn traverse_with(
     limits: Limits,
     frames: usize,
 ) -> PyResult<Node> {
+    let _nesting = renderable::Nesting::enter()?;
+    walk_object(object, limits, frames)
+}
+
+/// Python frames Rich's `Pretty` of `object` takes inside the level that
+/// holds it, beyond what a `str` there takes. Measured on rich 15.0.0 per
+/// CPython version, for an object `d` containers deep (`tests/test_panel.py`):
+/// `5 + d` on 3.9 and 3.10, `4 + d` on 3.11, and `max(4, 1 + d)` on 3.12 and
+/// later, which inline more of the walk.
+fn pretty_frames(object: &Bound<'_, PyAny>, limits: Limits) -> PyResult<usize> {
+    let depth = container_depth(object, limits)?;
+    let version = object.py().version_info();
+    Ok(if version >= (3, 12) {
+        (1 + depth).max(4)
+    } else if version >= (3, 11) {
+        4 + depth
+    } else {
+        5 + depth
+    })
+}
+
+/// The children of `item` Rich's walk looks at (the first `max_length`),
+/// or `None` when it does not go into `item`.
+fn walked_children<'py>(
+    item: &Bound<'py, PyAny>,
+    max_length: Option<usize>,
+) -> PyResult<Option<Vec<Bound<'py, PyAny>>>> {
+    let take = max_length.unwrap_or(usize::MAX);
+    Ok(if let Ok(dict) = item.cast::<PyDict>() {
+        Some(dict.values().iter().take(take).collect())
+    } else if item.is_instance_of::<pyo3::types::PyList>()
+        || item.is_instance_of::<pyo3::types::PyTuple>()
+        || item.is_instance_of::<pyo3::types::PySet>()
+        || item.is_instance_of::<pyo3::types::PyFrozenSet>()
+    {
+        Some(item.try_iter()?.take(take).collect::<PyResult<_>>()?)
+    } else {
+        None
+    })
+}
+
+/// How many containers deep `object` goes (`[[1]]` is 2), as Rich's walk
+/// goes: it looks at the first `max_length` children of each container, it
+/// goes at most `max_depth` containers deep (the next shows as `...`), and a
+/// container met again inside itself is shown as `...`, not entered. Each container is walked once, by identity, and without
+/// native recursion, so shared and cyclic values (a list holding itself a
+/// hundred times) cost one pass over their edges; only a subtree cut short
+/// by `max_depth` is walked again where it recurs higher up.
+fn container_depth(object: &Bound<'_, PyAny>, limits: Limits) -> PyResult<usize> {
+    struct Open<'py> {
+        key: usize,
+        children: Vec<Bound<'py, PyAny>>,
+        next: usize,
+        deepest: usize,
+        cut: bool,
+    }
+    let deepest_walked = limits.max_depth.unwrap_or(usize::MAX);
+    if deepest_walked == 0 {
+        return Ok(0);
+    }
+    let Some(children) = walked_children(object, limits.max_length)? else {
+        return Ok(0);
+    };
+    let mut done: HashMap<usize, usize> = HashMap::new();
+    let mut open: HashSet<usize> = HashSet::from([object.as_ptr() as usize]);
+    let mut stack = vec![Open {
+        key: object.as_ptr() as usize,
+        children,
+        next: 0,
+        deepest: 0,
+        cut: false,
+    }];
+    loop {
+        let depth = stack.len();
+        let Some(top) = stack.last_mut() else { break };
+        if let Some(child) = top.children.get(top.next).cloned() {
+            top.next += 1;
+            let key = child.as_ptr() as usize;
+            if let Some(&height) = done.get(&key) {
+                top.deepest = top.deepest.max(height);
+            } else if !open.contains(&key) {
+                if let Some(children) = walked_children(&child, limits.max_length)? {
+                    if depth >= deepest_walked {
+                        top.cut = true;
+                    } else {
+                        open.insert(key);
+                        stack.push(Open {
+                            key,
+                            children,
+                            next: 0,
+                            deepest: 0,
+                            cut: false,
+                        });
+                    }
+                }
+            }
+            continue;
+        }
+        let finished = stack.pop().expect("a container is open");
+        let height = finished.deepest + 1;
+        open.remove(&finished.key);
+        if !finished.cut {
+            done.insert(finished.key, height);
+        }
+        match stack.last_mut() {
+            Some(parent) => {
+                parent.deepest = parent.deepest.max(height);
+                parent.cut |= finished.cut;
+            }
+            None => return Ok(height),
+        }
+    }
+    Ok(0)
+}
+
+/// [`traverse`] for `Pretty`'s own conversion, which already counts as one
+/// level of nesting: Rich's `Pretty` takes one level more than a `str` in a
+/// `Panel`, not two.
+fn traverse_in_render(object: &Bound<'_, PyAny>, limits: Limits) -> PyResult<Node> {
+    walk_object(object, limits, RENDER_FRAMES)
+}
+
+fn walk_object(object: &Bound<'_, PyAny>, limits: Limits, frames: usize) -> PyResult<Node> {
     let py = object.py();
     let helpers = helpers(py)?;
     let mut walker = Walker {
@@ -1215,7 +1338,6 @@ pub(crate) fn traverse_with(
         stack_base: stack_position(),
         worker: None,
     };
-    let _nesting = renderable::Nesting::enter()?;
     walker.walk(object, true, 0)
 }
 
@@ -1228,23 +1350,6 @@ fn is_atom(object: &Bound<'_, PyAny>) -> bool {
         || object.is_exact_instance_of::<pyo3::types::PyFloat>()
         || object.is_exact_instance_of::<pyo3::types::PyBool>()
         || object.is_exact_instance_of::<PyBytes>()
-}
-
-/// How many more nested Python calls fit on this thread before
-/// `RecursionError`: what is left of the recursion limit here, counted as
-/// Python counts it (C calls on the stack can count too).
-fn python_frames_left(py: Python<'_>) -> PyResult<usize> {
-    static PROBE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-    let probe = PROBE.get_or_try_init(py, || {
-        let module = PyModule::from_code(
-            py,
-            c"def probe():\n    def down(n):\n        try:\n            return down(n + 1)\n        except RecursionError:\n            return n\n    return down(0)\n",
-            c"rs_rich_pretty_probe.py",
-            c"rs_rich_pretty_probe",
-        )?;
-        Ok::<_, PyErr>(module.getattr("probe")?.unbind())
-    })?;
-    probe.bind(py).call0()?.extract()
 }
 
 // ---------------------------------------------------------------------------
@@ -1499,7 +1604,13 @@ pub(crate) fn type_repr(object: &Bound<'_, PyAny>) -> PyResult<String> {
 impl AsRenderable for Pretty {
     fn to_renderable(&self, py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
         let object = self.object.bind(py);
-        let node = traverse(object, self.limits())?;
+        // Rich's `Pretty` takes a few frames to render, and one more for
+        // each container its walk goes into.
+        let depth = renderable::nesting_depth();
+        if depth >= renderable::CHECK_FROM {
+            renderable::check_frames(depth, pretty_frames(object, self.limits())?)?;
+        }
+        let node = traverse_in_render(object, self.limits())?;
         node.check_indent(self.indent_size)?;
         let layout = Layout {
             node,

@@ -62,6 +62,13 @@ for that, so a square image stays square.
 - `.max_width(columns)` and `.max_height(rows)` are upper bounds that never
   enlarge anything. They are useful when the width comes from the terminal.
 
+The terminal's height does not cap an image: an image taller than the screen
+scrolls, like any long output. Rows are capped only by `.height`,
+`.max_height`, or a fixed `options.height` from the container rendering it (a
+`Layout` region, for one). This is deliberate: shrinking every tall image to
+the screen would change output for everyone who scrolls it or pipes it. To fit
+the screen, pass its height yourself, as `.max_height(rows)`.
+
 ## Fit and crop
 
 `.fit(…)` makes the image fill an exact `width` × `height` box of cells. It

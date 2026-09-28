@@ -119,6 +119,39 @@ Entries below record subsequent releases and development.
   input is a pipe, and `Policy::detect_for(output)` decides for a given
   output; `run` uses it. New `Reason`s: `StderrNotTerminal`, `NoTerminal`.
 
+### Hardening carried over from 0.0.12 (0.0.13 workstream 6)
+
+- **CLI: non-UTF-8 file names.** A batch glob or directory walk found such a
+  file under its lossy spelling, which named no file, so the batch failed,
+  and an output named after it was refused. They now keep their bytes
+  through globbing, walks, planned outputs (spelled with `\xNN` in messages),
+  existence and collision checks, export writes and the workers' command
+  lines; `bench compare` reads its runs the same way. Unix tests cover a
+  glob with `--jobs 1` and `--jobs 3` and a walk. The escaped spelling
+  starts with a NUL, which no path or argument can hold, so it never names
+  another file (a valid name spelled `na\xFFme.txt` stays its own), and a
+  glob in a non-UTF-8 directory and a `--dry-run` into one work too.
+- **Python: nesting depth as Rich's.** Renderables nested past 100 raised
+  `RecursionError`, and a `Pretty` in panels stopped 24 levels before Rich.
+  The limit now follows Rich's Python frames: 8 per nested renderable, from
+  what is left of the recursion limit where the caller prints, with a
+  `Pretty` charging what Rich's takes for its data's depth, per CPython
+  version (3.12 inlines more of Rich's walk). Panels around a `str`, `Text`
+  or `Pretty` stop at exactly Rich's depth on Python 3.9 to 3.13, from any
+  call depth (tests compare with rich 15.0.0). The depth estimate walks
+  each container once, so a list holding itself costs one pass.
+- **Python: no crash on a small thread stack.** Core renders each level on
+  the calling thread's native stack, so 100 nested panels crashed the
+  interpreter on a 1 MiB thread. Nesting now raises `RecursionError` where the
+  stack left (read with `stacker`, which never switches stacks) would not
+  hold the render.
+- **Art: tall images** keep following `options.height` only; the image guide
+  now says so and why.
+- **Audit:** `.cargo/audit.toml` records the two informational advisories:
+  `bincode` 1 (unmaintained; syntect 5.3.0, the latest, still uses it) and
+  `ttf-parser` (unmaintained; used by rs-rich-record through fontdue).
+  `cargo audit` reports nothing else.
+
 ### Docs and tooling
 
 - **Tapes (#598).** A first, Python runner (`scripts/tape.py`, since

@@ -110,7 +110,7 @@ Other errors are Python's own:
 | `TypeError` | An argument has the wrong type, such as a `style` that is not a string or `Style`, or a `box` that is not a box constant. |
 | `NotImplementedError` | Something Rich supports that this version does not yet. It is raised instead of rendering differently from Rich. |
 | `RuntimeError` | An export on a console created without `record=True`. |
-| `RecursionError` | Renderables nested more than 100 deep. |
+| `RecursionError` | Renderables nested deeper than Rich renders them with this recursion limit, or than this thread's stack holds. |
 
 ```python
 from rs_rich.console import Console

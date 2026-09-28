@@ -280,7 +280,7 @@ def test_deep_protocol_recursion_is_a_recursion_error():
             yield Deep(self.depth - 1) if self.depth else "bottom"
 
     console = Console(file=io.StringIO())
-    with pytest.raises(RecursionError, match="at most 100 nested"):
+    with pytest.raises(RecursionError, match="maximum recursion depth exceeded"):
         console.print(Deep(1000))
     console.print(Deep(50))
     assert console.file.getvalue() == "bottom\n"

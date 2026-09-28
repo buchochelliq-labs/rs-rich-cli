@@ -34,8 +34,8 @@
 //! whose children are Python objects converts each child with
 //! [`to_renderable`] (or wraps it in a [`PyRenderable`] when core needs a
 //! `Send + Sync` child, as `Table` cells do). Conversion checks the nesting
-//! depth ([`MAX_NESTING`]), so deep chains raise `RecursionError` instead of
-//! overflowing the native stack.
+//! depth ([`Nesting`]), so deep chains raise `RecursionError` where Rich
+//! does, and before they overflow the native stack.
 //!
 //! # Python code during a render
 //!
@@ -77,7 +77,11 @@ use rich::segment::Segment as CoreSegment;
 use rich::Text as CoreText;
 
 use crate::errors::NotRenderableError;
-use crate::limits::MAX_NESTING;
+pub(crate) use crate::limits::FRAMES_PER_LEVEL;
+use crate::limits::{
+    MAX_NESTING, MAX_PRINT_NESTING, NATIVE_STACK_PER_LEVEL, NATIVE_STACK_RESERVE,
+    RENDER_BASE_FRAMES, RENDER_BASE_FRAMES_312,
+};
 use crate::protocol::{ConsoleOptions, Measurement, OptionsBase};
 use crate::segment::Segment;
 
@@ -220,6 +224,10 @@ thread_local! {
     static AMBIENT: RefCell<Vec<Rc<Ambient>>> = const { RefCell::new(Vec::new()) };
     static PENDING: RefCell<Option<PyErr>> = const { RefCell::new(None) };
     static DEPTH: Cell<usize> = const { Cell::new(0) };
+    /// The Python frames Rich's render would have for the renderables of the
+    /// render running on this thread, found when it first nests
+    /// [`CHECK_FROM`] deep; `None` between renders.
+    static BUDGET: Cell<Option<usize>> = const { Cell::new(None) };
     static PRINT_DEPTH: Cell<usize> = const { Cell::new(0) };
 }
 
@@ -304,20 +312,86 @@ pub(crate) fn check_pending() -> PyResult<()> {
 /// One level of render nesting; dropping it leaves the level.
 pub(crate) struct Nesting(());
 
+/// How deep a render goes before [`Nesting`] looks at what Rich would allow:
+/// no render this shallow reaches Rich's limit from an ordinary call site,
+/// and looking costs a probe of the Python stack.
+pub(crate) const CHECK_FROM: usize = 32;
+
 impl Nesting {
-    /// Enter a level, or raise `RecursionError` past [`MAX_NESTING`].
+    /// Enter a level, or raise `RecursionError` where Rich would run out of
+    /// Python frames, or where this thread's native stack would run out.
     pub(crate) fn enter() -> PyResult<Nesting> {
-        DEPTH.with(|depth| {
-            if depth.get() >= MAX_NESTING {
-                return Err(PyRecursionError::new_err(format!(
-                    "maximum recursion depth exceeded: rs_rich renders at most {MAX_NESTING} \
-                     nested renderables"
-                )));
-            }
-            depth.set(depth.get() + 1);
-            Ok(Nesting(()))
-        })
+        let depth = DEPTH.with(Cell::get);
+        check_frames(depth, FRAMES_PER_LEVEL)?;
+        // Core renders each level on this thread's native stack.
+        let needed = NATIVE_STACK_RESERVE + (depth + 1) * NATIVE_STACK_PER_LEVEL;
+        if stacker::remaining_stack().is_some_and(|left| left < needed) {
+            return Err(PyRecursionError::new_err(format!(
+                "maximum recursion depth exceeded while rendering: {depth} nested renderables \
+                 fill this thread's stack"
+            )));
+        }
+        DEPTH.with(|slot| slot.set(depth + 1));
+        Ok(Nesting(()))
     }
+}
+
+/// How many more nested Python calls fit on this thread before
+/// `RecursionError`: what is left of the recursion limit here, counted as
+/// Python counts it (C calls on the stack can count too).
+pub(crate) fn python_frames_left(py: Python<'_>) -> PyResult<usize> {
+    static PROBE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+    let probe = PROBE.get_or_try_init(py, || {
+        let module = PyModule::from_code(
+            py,
+            c"def probe():\n    def down(n):\n        try:\n            return down(n + 1)\n        except RecursionError:\n            return n\n    return down(0)\n",
+            c"rs_rich_pretty_probe.py",
+            c"rs_rich_pretty_probe",
+        )?;
+        Ok::<_, PyErr>(module.getattr("probe")?.unbind())
+    })?;
+    probe.bind(py).call0()?.extract()
+}
+
+/// The Python frames Rich's print, called from here, has for its
+/// renderables: what is left of the recursion limit, less the frames the
+/// print itself takes; at most [`MAX_NESTING`] levels' worth.
+fn rich_frame_budget(py: Python<'_>) -> PyResult<usize> {
+    // The probe's own frames (`probe`, `down(0)` and the failing call) are
+    // the caller's to spend.
+    let left = python_frames_left(py)? + 3;
+    Ok(left
+        .saturating_sub(if py.version_info() >= (3, 12) {
+            RENDER_BASE_FRAMES_312
+        } else {
+            RENDER_BASE_FRAMES
+        })
+        .min(MAX_NESTING * FRAMES_PER_LEVEL))
+}
+
+/// Raise `RecursionError` where Rich would: when `frames` more, after
+/// `depth` nested renderables at [`FRAMES_PER_LEVEL`] each, do not fit the
+/// frames its render has here. A leaf that renders within its level (a
+/// `Pretty`) charges what Rich's takes of the next.
+pub(crate) fn check_frames(depth: usize, frames: usize) -> PyResult<()> {
+    if depth < CHECK_FROM {
+        return Ok(());
+    }
+    let budget = match BUDGET.with(Cell::get) {
+        Some(budget) => budget,
+        None => {
+            let budget = Python::attach(rich_frame_budget)?;
+            BUDGET.with(|slot| slot.set(Some(budget)));
+            budget
+        }
+    };
+    if depth * FRAMES_PER_LEVEL + frames > budget {
+        return Err(PyRecursionError::new_err(format!(
+            "maximum recursion depth exceeded while rendering: {depth} nested renderables \
+             are as many as Rich renders with this recursion limit"
+        )));
+    }
+    Ok(())
 }
 
 /// How many levels of [`Nesting`] this thread is inside now.
@@ -327,7 +401,14 @@ pub(crate) fn nesting_depth() -> usize {
 
 impl Drop for Nesting {
     fn drop(&mut self) {
-        DEPTH.with(|depth| depth.set(depth.get().saturating_sub(1)));
+        let depth = DEPTH.with(|depth| {
+            depth.set(depth.get().saturating_sub(1));
+            depth.get()
+        });
+        // The next render finds its own limit, from its own call site.
+        if depth == 0 {
+            BUDGET.with(|slot| slot.set(None));
+        }
     }
 }
 
@@ -340,9 +421,9 @@ pub(crate) struct PrintNesting(());
 impl PrintNesting {
     pub(crate) fn enter() -> PyResult<PrintNesting> {
         PRINT_DEPTH.with(|depth| {
-            if depth.get() >= MAX_NESTING {
+            if depth.get() >= MAX_PRINT_NESTING {
                 return Err(PyRecursionError::new_err(format!(
-                    "maximum recursion depth exceeded: rs_rich runs at most {MAX_NESTING} \
+                    "maximum recursion depth exceeded: rs_rich runs at most {MAX_PRINT_NESTING} \
                      nested prints"
                 )));
             }
@@ -632,7 +713,16 @@ pub(crate) fn to_renderable(
     }
     let cast = rich_cast(value)?;
     if let Some(convert) = lookup(&cast) {
-        let _nesting = Nesting::enter()?;
+        // A `Text` holds nothing to render in turn: like a `str`, it renders
+        // within the level that holds it, as Rich's does. A `Pretty` charges
+        // its own frames once it knows its object (`check_frames`).
+        let _nesting = if cast.is_instance_of::<crate::text::Text>()
+            || cast.is_instance_of::<crate::code::Pretty>()
+        {
+            None
+        } else {
+            Some(Nesting::enter()?)
+        };
         return convert(&cast);
     }
     // An object whose `__rich__` returns a `str` stays lazy: Rich measures

@@ -30,6 +30,7 @@ mod json;
 mod layout;
 mod markdown;
 mod pretty;
+pub(crate) use pretty::Pretty;
 mod syntax;
 mod traceback;
 

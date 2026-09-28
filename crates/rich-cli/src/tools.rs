@@ -354,10 +354,11 @@ pub(crate) fn bench_dispatch(args: &[String]) -> Result<bool, String> {
         return Err(format!("unknown bench command {command:?}; use compare"));
     }
     let load = |path: &str| {
-        let result = if std::path::Path::new(path).is_dir() {
-            BenchRun::from_criterion_dir(path)
+        let file = super::fs_path(path);
+        let result = if file.is_dir() {
+            BenchRun::from_criterion_dir(&file)
         } else {
-            BenchRun::load(path)
+            BenchRun::load(&file)
         };
         result.map_err(|err| format!("cannot read benchmark run {path}: {err}"))
     };
