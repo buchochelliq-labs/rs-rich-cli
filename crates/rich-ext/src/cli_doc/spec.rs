@@ -76,6 +76,8 @@ pub struct ArgSpec {
     /// The long name, without dashes.
     pub long: Option<String>,
     pub short: Option<char>,
+    /// Extra short names, without the dash (`-J` beside `-j`).
+    pub short_aliases: Vec<char>,
     /// Extra long names, without dashes.
     pub aliases: Vec<String>,
     /// The metavar shown as `<VALUE>`. `None` makes the argument a flag.
@@ -157,6 +159,11 @@ impl ArgSpec {
     }
     pub fn alias(mut self, alias: impl Into<String>) -> Self {
         self.aliases.push(alias.into());
+        self
+    }
+    /// Another short name, listed after [`short`](Self::short).
+    pub fn short_alias(mut self, short: char) -> Self {
+        self.short_aliases.push(short);
         self
     }
     /// Set the metavar; this also makes a flag take a value.
@@ -271,12 +278,14 @@ impl ArgSpec {
         Some(out)
     }
 
-    /// Every command-line spelling: `-s`, `--long`, then `--alias`es.
+    /// Every command-line spelling: `-s` and its short aliases, `--long`,
+    /// then `--alias`es.
     pub fn switches(&self) -> Vec<String> {
         let mut out = Vec::new();
         if let Some(short) = self.short {
             out.push(format!("-{short}"));
         }
+        out.extend(self.short_aliases.iter().map(|short| format!("-{short}")));
         if let Some(long) = &self.long {
             out.push(format!("--{long}"));
         }

@@ -18,6 +18,7 @@ const RENDER_MODE: &str = "Render mode";
 const INPUT: &str = "Input";
 const LAYOUT: &str = "Layout";
 const MODE_OPTIONS: &str = "Mode options";
+const SOURCE: &str = "Source";
 const IMAGE: &str = "Image";
 const INSPECT: &str = "Inspect";
 const DIFF: &str = "Diff & ANSI";
@@ -149,7 +150,7 @@ fn render_modes() -> Vec<ArgSpec> {
             "Treat RESOURCE as literal markup TEXT, not a file path",
         ),
         mode("markdown", Some('m'), "Render RESOURCE as Markdown"),
-        mode("json", Some('j'), "Pretty-print RESOURCE as JSON"),
+        mode("json", Some('j'), "Pretty-print RESOURCE as JSON").short_alias('J'),
         mode(
             "syntax",
             Some('x'),
@@ -166,7 +167,7 @@ fn render_modes() -> Vec<ArgSpec> {
         ),
         mode(
             "rule",
-            None,
+            Some('u'),
             "Draw a horizontal rule (RESOURCE is its title)",
         ),
         mode(
@@ -322,9 +323,50 @@ fn layout_options() -> Vec<ArgSpec> {
         )
         .short('w')
         .config_key("width"),
-        flag("left", LAYOUT, "Left-justify output"),
-        flag("center", LAYOUT, "Center output"),
-        flag("right", LAYOUT, "Right-justify output"),
+        option(
+            "max-width",
+            "SIZE",
+            LAYOUT,
+            "Print at most SIZE columns wide (upstream's `console.print(width=…)`)",
+        )
+        .short('W'),
+        flag("left", LAYOUT, "Left-justify output").short('l'),
+        flag("center", LAYOUT, "Center output").short('c'),
+        flag("right", LAYOUT, "Right-justify output").short('r'),
+        flag(
+            "text-left",
+            LAYOUT,
+            "Justify --print and --rule text to the left",
+        )
+        .short('L'),
+        flag(
+            "text-center",
+            LAYOUT,
+            "Justify --print and --rule text to the center",
+        )
+        .short('C'),
+        flag(
+            "text-right",
+            LAYOUT,
+            "Justify --print and --rule text to the right",
+        )
+        .short('R'),
+        flag(
+            "text-full",
+            LAYOUT,
+            "Justify --print text to both edges (a rule centres its title)",
+        )
+        .short('F'),
+        flag(
+            "soft",
+            LAYOUT,
+            "Soft wrap: no line is wrapped or cut, so the terminal wraps it",
+        ),
+        flag(
+            "emoji",
+            LAYOUT,
+            "Replace :emoji: codes, e.g. :sparkles: (off by default, as upstream)",
+        ),
         option(
             "panel",
             "BOX",
@@ -334,6 +376,7 @@ fn layout_options() -> Vec<ArgSpec> {
         .choices([
             "ascii", "ascii2", "square", "rounded", "heavy", "double", "none",
         ])
+        .short('a')
         .config_key("panel"),
         option(
             "padding",
@@ -341,6 +384,7 @@ fn layout_options() -> Vec<ArgSpec> {
             LAYOUT,
             "Wrap output in padding (1, 2, or 4 comma-separated ints)",
         )
+        .short('d')
         .config_key("padding"),
         flag(
             "expand",
@@ -384,8 +428,58 @@ fn layout_options() -> Vec<ArgSpec> {
     ]
 }
 
+/// Upstream's options for source: `--syntax`, automatic mode, and the code
+/// cells of `--ipynb`; `--head`/`--tail` also cut `--csv` rows.
+fn source_options() -> Vec<ArgSpec> {
+    vec![
+        option(
+            "head",
+            "LINES",
+            SOURCE,
+            "Show the first LINES of a source file or CSV (as upstream, `-h` is --head, \
+             not help)",
+        )
+        .short('h'),
+        option(
+            "tail",
+            "LINES",
+            SOURCE,
+            "Show the end of a source file or CSV (as upstream, --tail N shows the last N-1 \
+             source lines)",
+        )
+        .short('t'),
+        flag("line-numbers", SOURCE, "Number the lines of source").short('n'),
+        flag("guides", SOURCE, "Draw indentation guides in source").short('g'),
+        option(
+            "lexer",
+            "LEXER",
+            SOURCE,
+            "Highlight source as LEXER instead of guessing from the file name",
+        ),
+        flag(
+            "no-wrap",
+            SOURCE,
+            "Crop long lines of source instead of wrapping them; with --print, don't wrap text",
+        ),
+    ]
+}
+
 fn mode_options() -> Vec<ArgSpec> {
     let mut args = vec![
+        option(
+            "rule-style",
+            "STYLE",
+            MODE_OPTIONS,
+            "With --rule, the line's style",
+        )
+        .default_value("bright_green"),
+        option(
+            "rule-char",
+            "CHARACTER",
+            MODE_OPTIONS,
+            "With --rule, the character(s) the line is drawn with",
+        )
+        .default_value("─"),
         option(
             "log-presentation",
             "MODE",
@@ -914,8 +1008,15 @@ fn demo_options() -> Vec<ArgSpec> {
 
 fn general_options() -> Vec<ArgSpec> {
     vec![
-        flag("help", GENERAL, "Show this help").short('h'),
-        flag("version", GENERAL, "Show the rs-rich-cli package version").short('V'),
+        flag("help", GENERAL, "Show this help"),
+        flag("version", GENERAL, "Show the rs-rich-cli package version")
+            .short('V')
+            .short_alias('v'),
+        flag(
+            "force-terminal",
+            GENERAL,
+            "Write colour and styles even when output is not a terminal",
+        ),
     ]
 }
 
@@ -944,6 +1045,7 @@ fn root_args() -> Vec<ArgSpec> {
         render_modes(),
         input_options(),
         layout_options(),
+        source_options(),
         mode_options(),
         image_options(),
         inspect_options(),

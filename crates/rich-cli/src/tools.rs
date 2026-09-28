@@ -296,7 +296,7 @@ pub(crate) fn bench_dispatch(args: &[String]) -> Result<bool, String> {
     if args
         .iter()
         .take_while(|arg| *arg != "--")
-        .any(|arg| arg == "--help" || arg == "-h")
+        .any(|arg| arg == "--help")
     {
         let mut path = vec!["bench"];
         let mut words = args.iter().filter(|arg| !arg.starts_with('-'));

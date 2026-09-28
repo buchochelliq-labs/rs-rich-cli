@@ -81,7 +81,7 @@ pub(crate) fn parse(args: &[String]) -> Result<Option<Command>, String> {
                 positionals.extend(iter.by_ref().map(String::as_str));
                 break;
             }
-            "-h" | "--help" => help = true,
+            "--help" => help = true,
             "--report" => {
                 match iter.next().map(String::as_str) {
                     Some("human" | "json") => {}
@@ -242,7 +242,7 @@ mod tests {
             Ok(Some(Command::Help(vec!["docs", "man"])))
         );
         assert_eq!(
-            parsed(&["completions", "-h"]),
+            parsed(&["completions", "--help"]),
             Ok(Some(Command::Help(vec!["completions"])))
         );
     }

@@ -768,7 +768,7 @@ fn fish(root: &CommandSpec, nodes: &[Node<'_>]) -> String {
                 continue;
             }
             let mut names = String::new();
-            if let Some(short) = arg.short {
+            for short in arg.short.iter().chain(&arg.short_aliases) {
                 let _ = write!(names, " -s {}", fish_quote(&short.to_string()));
             }
             for long in arg.long.iter().chain(&arg.aliases) {

@@ -359,6 +359,62 @@ impl std::str::FromStr for ImageMode {
     }
 }
 
+/// Upstream's options for source files: `Syntax` for `--syntax` (and
+/// automatic mode, which upstream renders as syntax), and the code cells of
+/// `--ipynb`; `--head`/`--tail` also cut `--csv` rows.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct SourceOptions {
+    /// `--head/-h LINES`, `--tail/-t LINES` (at least 1).
+    head: Option<usize>,
+    tail: Option<usize>,
+    /// `-n/--line-numbers`.
+    line_numbers: bool,
+    /// `-g/--guides`: indentation guides.
+    guides: bool,
+    /// `--lexer LEXER`: the language to highlight as.
+    lexer: Option<String>,
+    /// `--no-wrap`: crop long source lines, and don't wrap `--print` text.
+    no_wrap: bool,
+}
+
+impl SourceOptions {
+    /// Whether any option asks for a `Syntax` view.
+    fn wants_syntax(&self) -> bool {
+        self.head.is_some()
+            || self.tail.is_some()
+            || self.line_numbers
+            || self.guides
+            || self.lexer.is_some()
+            || self.no_wrap
+    }
+
+    /// Upstream's `_line_range(head, tail, num_lines)`, for `Syntax`'s
+    /// `line_range`. `--tail N` keeps upstream's arithmetic,
+    /// `(num_lines - tail + 2, num_lines + 1)`, which shows the last `N - 1`
+    /// lines: `rich-cli --tail 3` prints two.
+    fn line_range(&self, code: &str) -> Result<Option<(i64, i64)>, String> {
+        let lines = code.lines().count() as i64;
+        match (self.head, self.tail) {
+            (Some(_), Some(_)) => Err("cannot specify both head and tail".into()),
+            (Some(head), None) => Ok(Some((1, head as i64))),
+            (None, Some(tail)) => Ok(Some((lines - tail as i64 + 2, lines + 1))),
+            (None, None) => Ok(None),
+        }
+    }
+
+    /// `Syntax` as upstream's CLI builds it.
+    fn syntax(&self, code: &str, language: &str) -> Result<Syntax, String> {
+        let mut syntax = Syntax::new(code, self.lexer.as_deref().unwrap_or(language))
+            .line_numbers(self.line_numbers)
+            .indent_guides(self.guides)
+            .word_wrap(!self.no_wrap);
+        if let Some((start, end)) = self.line_range(code)? {
+            syntax = syntax.line_range(Some(start), Some(end));
+        }
+        Ok(syntax)
+    }
+}
+
 /// Parsed command line.
 #[derive(Clone)]
 struct Cli {
@@ -429,6 +485,24 @@ struct Cli {
     extensions: CliExtensions,
     width: Option<usize>,
     justify: Option<Justify>,
+    /// `-L`/`-R`/`-C`/`-F` (`--text-left`, …): the justify of `--print` and
+    /// `--rule` text, as distinct from `--left`/`--right`/`--center`, which
+    /// align the whole output.
+    text_justify: Option<Justify>,
+    /// `--emoji`/`-j`… upstream's `-j`: replace `:emoji:` codes. Upstream's
+    /// console has `emoji=False` unless given.
+    emoji: bool,
+    /// `--soft`: print with `soft_wrap=True`.
+    soft: bool,
+    /// `-W/--max-width`: `console.print(width=…)`.
+    max_width: Option<usize>,
+    /// `--rule-style`, `--rule-char`: the `--rule` line.
+    rule_style: Option<Style>,
+    rule_char: Option<String>,
+    /// `--force-terminal`: `Console(force_terminal=True)`.
+    force_terminal: bool,
+    /// `--head`/`--tail`, `-n`, `-g`, `--lexer`, `--no-wrap`.
+    source: SourceOptions,
     no_color: bool,
     /// `--export-html PATH` (`-o PATH`): also write a self-contained HTML
     /// document to PATH. The resource is still rendered to the terminal.
@@ -772,8 +846,19 @@ const VALUE_OPTIONS: &[&str] = &[
     "-o",
     "--export-html",
     "--export-svg",
+    "-a",
     "--panel",
+    "-d",
     "--padding",
+    "-h",
+    "--head",
+    "-t",
+    "--tail",
+    "--lexer",
+    "-W",
+    "--max-width",
+    "--rule-style",
+    "--rule-char",
     "--title",
     "--caption",
     "-s",
@@ -1327,6 +1412,20 @@ fn command_mode(command: &str) -> Option<Mode> {
         .find_map(|spec| spec.aliases.contains(&command).then_some(spec.mode))
 }
 
+/// `--head`/`--tail`'s LINES: upstream's `click.IntRange(min=1)`.
+fn parse_lines(flag: &str, value: Option<&String>) -> Result<usize, String> {
+    let flag = match flag {
+        "-h" | "--head" => "--head",
+        _ => "--tail",
+    };
+    let value = value.ok_or_else(|| format!("{flag} requires a number of LINES"))?;
+    match value.parse::<i64>() {
+        Ok(lines) if lines >= 1 => Ok(lines as usize),
+        Ok(lines) => Err(format!("{flag}: {lines} is not in the range x>=1")),
+        Err(_) => Err(format!("{flag}: {value:?} is not a valid integer")),
+    }
+}
+
 fn set_mode(current: &mut Mode, mode: Mode) -> Result<(), String> {
     if *current != Mode::Auto && *current != mode {
         return Err(format!(
@@ -1405,6 +1504,16 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut pager = false;
     let mut auto_pager = false;
     let mut hyperlinks = false;
+    let mut source = SourceOptions::default();
+    // Upstream's `if text_left … elif text_right … elif text_center … elif
+    // text_full`: the first of these in that order wins, wherever it was given.
+    let mut text_flags = [false; 4];
+    let mut emoji = false;
+    let mut soft = false;
+    let mut max_width = None;
+    let mut rule_style = None;
+    let mut rule_char = None;
+    let mut force_terminal = false;
     // Unset means each command's default: off for the upstream modes, on
     // for `view` and text `diff` (see `run_once_with_fetch`).
     let mut sanitize = None;
@@ -1455,7 +1564,8 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         }
         match arg.as_str() {
             "--" => end_of_options = true,
-            "-h" | "--help" => {
+            // `-h` is upstream's `--head`: help is `--help` only.
+            "--help" => {
                 let no_color = no_color || cli_spec::no_color_requested(args);
                 // `rich hex --help` shows the command, not the whole CLI.
                 let help = command_word(args)
@@ -1466,13 +1576,15 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                 }
                 return Ok(None);
             }
-            "-V" | "--version" => {
+            "-V" | "-v" | "--version" => {
                 println!("rich (rs-rich-cli) {VERSION}");
                 return Ok(None);
             }
             "-p" | "--print" => set_mode(&mut mode, Mode::Print)?,
             "-m" | "--markdown" => set_mode(&mut mode, Mode::Markdown)?,
-            "-j" | "--json" => set_mode(&mut mode, Mode::Json)?,
+            // Upstream's JSON is `-J`; this port's `-j` (upstream's `--emoji`)
+            // predates the rest of the short aliases. See DIVERGENCES.
+            "-j" | "-J" | "--json" => set_mode(&mut mode, Mode::Json)?,
             "-x" | "--syntax" => set_mode(&mut mode, Mode::Syntax)?,
             "--csv" => set_mode(&mut mode, Mode::Csv)?,
             "--ipynb" => set_mode(&mut mode, Mode::Ipynb)?,
@@ -1686,12 +1798,48 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
                         .map_err(|_| format!("invalid loop count {value:?}"))?,
                 );
             }
-            "--rule" => set_mode(&mut mode, Mode::Rule)?,
-            "--left" => justify = Some(Justify::Left),
-            "--right" if justify != Some(Justify::Left) => justify = Some(Justify::Right),
-            "--right" => {}
-            "--center" if justify.is_none() => justify = Some(Justify::Center),
-            "--center" => {}
+            "-u" | "--rule" => set_mode(&mut mode, Mode::Rule)?,
+            "-l" | "--left" => justify = Some(Justify::Left),
+            "-r" | "--right" if justify != Some(Justify::Left) => justify = Some(Justify::Right),
+            "-r" | "--right" => {}
+            "-c" | "--center" if justify.is_none() => justify = Some(Justify::Center),
+            "-c" | "--center" => {}
+            "-L" | "--text-left" => text_flags[0] = true,
+            "-R" | "--text-right" => text_flags[1] = true,
+            "-C" | "--text-center" => text_flags[2] = true,
+            "-F" | "--text-full" => text_flags[3] = true,
+            "-h" | "--head" => source.head = Some(parse_lines(arg, iter.next())?),
+            "-t" | "--tail" => source.tail = Some(parse_lines(arg, iter.next())?),
+            "-n" | "--line-numbers" => source.line_numbers = true,
+            "-g" | "--guides" => source.guides = true,
+            "--lexer" => {
+                source.lexer = Some(iter.next().ok_or("--lexer requires a LEXER")?.clone());
+            }
+            "--no-wrap" => source.no_wrap = true,
+            "--emoji" => emoji = true,
+            "--soft" => soft = true,
+            "-W" | "--max-width" => {
+                let value = iter.next().ok_or("--max-width requires a SIZE")?;
+                // Upstream's default is -1, and a size of 0 or less means none.
+                let size: i64 = value
+                    .parse()
+                    .map_err(|_| format!("invalid --max-width '{value}'"))?;
+                max_width = usize::try_from(size).ok().filter(|size| *size > 0);
+            }
+            "--rule-style" => {
+                let value = iter.next().ok_or("--rule-style requires a STYLE")?;
+                rule_style = Some(
+                    Style::parse(value).map_err(|e| format!("unable to parse rule style: {e}"))?,
+                );
+            }
+            "--rule-char" => {
+                rule_char = Some(
+                    iter.next()
+                        .ok_or("--rule-char requires a CHARACTER")?
+                        .clone(),
+                );
+            }
+            "--force-terminal" => force_terminal = true,
             "--no-color" => no_color = true,
             "--pager" => {
                 pager = true;
@@ -1805,11 +1953,11 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             "--export-svg" => {
                 export_svg = Some(iter.next().ok_or("--export-svg requires a PATH")?.clone());
             }
-            "--panel" => {
+            "-a" | "--panel" => {
                 let value = iter.next().ok_or("--panel requires a box name")?;
                 panel = parse_box(value)?;
             }
-            "--padding" => {
+            "-d" | "--padding" => {
                 let value = iter.next().ok_or("--padding requires a value")?;
                 padding = Some(parse_padding(value)?);
             }
@@ -2047,7 +2195,82 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     // and exit 0, so a CI job that lost its `--diff` — a typo, a refactor, an
     // argument reordered — became a permanently green gate. That is the same
     // failure the NaN check closed, reached from the other side.
+    let text_justify = [
+        Justify::Left,
+        Justify::Right,
+        Justify::Center,
+        Justify::Full,
+    ]
+    .into_iter()
+    .zip(text_flags)
+    .find_map(|(justify, given)| given.then_some(justify));
+    // Automatic mode renders source as syntax, as upstream's does, so the
+    // source options apply to it.
+    let source_mode = matches!(effective_mode, Mode::Syntax | Mode::Ipynb | Mode::Auto);
+    let print_mode = matches!(effective_mode, Mode::Print | Mode::Rule);
     let orphans = [
+        (
+            "--head/--tail",
+            source.head.is_some() || source.tail.is_some(),
+            "--syntax, --csv or --ipynb",
+            source_mode || effective_mode == Mode::Csv,
+        ),
+        (
+            "--line-numbers",
+            source.line_numbers,
+            "--syntax or --ipynb",
+            source_mode,
+        ),
+        (
+            "--guides",
+            source.guides,
+            "--syntax or --ipynb",
+            source_mode,
+        ),
+        (
+            "--lexer",
+            source.lexer.is_some(),
+            "--syntax or --ipynb",
+            source_mode,
+        ),
+        (
+            "--no-wrap",
+            source.no_wrap,
+            "--syntax, --ipynb, --print or --rule",
+            source_mode || print_mode,
+        ),
+        (
+            "--text-left/--text-right/--text-center/--text-full",
+            text_justify.is_some(),
+            "--print or --rule",
+            print_mode,
+        ),
+        (
+            "--rule-style",
+            rule_style.is_some(),
+            "--rule",
+            effective_mode == Mode::Rule,
+        ),
+        (
+            "--rule-char",
+            rule_char.is_some(),
+            "--rule",
+            effective_mode == Mode::Rule,
+        ),
+        // The streaming modes write each record as it arrives, not through
+        // the final print these shape.
+        (
+            "--soft",
+            soft,
+            "a mode other than --jsonl or --log",
+            !matches!(effective_mode, Mode::JsonLines | Mode::Log),
+        ),
+        (
+            "--max-width",
+            max_width.is_some(),
+            "a mode other than --jsonl or --log",
+            !matches!(effective_mode, Mode::JsonLines | Mode::Log),
+        ),
         (
             "--threshold",
             diff_threshold.is_some(),
@@ -2284,6 +2507,14 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         extensions,
         width,
         justify,
+        text_justify,
+        emoji,
+        soft,
+        max_width,
+        rule_style,
+        rule_char,
+        force_terminal,
+        source,
         no_color,
         export_html,
         export_svg,
@@ -2947,7 +3178,12 @@ fn decorate_and_emit_with(
             .title
             .as_deref()
             .map(|title| {
-                let mut title = Text::from_markup(&rich::emoji::replace(title).replace('\n', " "))
+                let title = if cli.emoji {
+                    rich::emoji::replace(title)
+                } else {
+                    title.to_string()
+                };
+                let mut title = Text::from_markup(&title.replace('\n', " "))
                     .expect("title markup validated before rendering");
                 title.expand_tabs(8);
                 cell_len(title.plain()) + 2
@@ -2985,7 +3221,51 @@ fn decorate_and_emit_with(
         });
     }
 
-    finish(cli, emit(console, export, |c| c.print(renderable.as_ref())))
+    // Upstream's final `console.print(renderable, width=max_width or None,
+    // soft_wrap=soft)`.
+    let mut options = console.options();
+    if let Some(max_width) = cli.max_width {
+        options.max_width = max_width.min(options.max_width);
+    }
+    let shown = if cli.soft {
+        let mut segments = soft_wrap_segments(console, renderable.as_ref(), &options);
+        if !segments.is_empty() {
+            segments.push(Segment::line());
+        }
+        emit_segments(console, export, segments)
+    } else {
+        emit(console, export, |c| {
+            c.print_with(renderable.as_ref(), &options)
+        })
+    };
+    finish(cli, shown)
+}
+
+/// What `console.print(renderable, soft_wrap=True)` writes: nothing wraps
+/// (`no_wrap`, `overflow="ignore"`) and, with `crop=False`, no line is cut at
+/// the console width, so the terminal wraps it. Core's print always crops,
+/// so this follows its print path (a printed text is joined, a renderable
+/// that asks is fitted to its measurement) and stops short of the crop.
+fn soft_wrap_segments(
+    console: &Console,
+    renderable: &dyn Renderable,
+    options: &ConsoleOptions,
+) -> Vec<Segment> {
+    let mut options = options.clone();
+    options.no_wrap.get_or_insert(true);
+    options
+        .overflow
+        .get_or_insert(rich::console::Overflow::Ignore);
+    let joined = renderable.printed_text();
+    let renderable: &dyn Renderable = match &joined {
+        Some(text) => text,
+        None => renderable,
+    };
+    if renderable.fit_to_measurement() {
+        let measurement = renderable.measure(console, &options);
+        options.max_width = measurement.maximum.min(options.max_width).max(1);
+    }
+    console.render(renderable, Some(&options))
 }
 
 fn run_cli(cli: Cli) -> ExitCode {
@@ -3366,7 +3646,9 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
 
     // Modes that render incrementally write directly to the console instead of
     // composing one renderable, so no `ForceWidth` wrapper can reach them.
-    let mut builder = Console::builder().no_color(cli.no_color);
+    // Upstream's `Console(emoji=emoji, force_terminal=…)`: emoji codes stay
+    // as typed unless `--emoji` is given.
+    let mut builder = Console::builder().no_color(cli.no_color).emoji(cli.emoji);
     if cli.themed() {
         builder = builder.theme(cli_theme(&cli));
     }
@@ -3374,6 +3656,9 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     // Pager policy still checks the real stdout handle before starting a pager.
     if let Ok(terminal) = std::env::var("RS_RICH_BATCH_TERMINAL") {
         builder = builder.force_terminal(terminal == "1");
+    }
+    if cli.force_terminal {
+        builder = builder.force_terminal(true);
     }
     if let Some(width) = cli.width.filter(|_| mode.draws_directly()) {
         builder = builder.width(width);
@@ -3473,13 +3758,30 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     // fetch/read) — but it still goes through the decorators, because upstream
     // wraps it like anything else, so `--rule --panel` really does draw a panel.
     if mode == Mode::Rule {
-        let rule = match cli.resource.as_deref() {
+        let mut rule = match cli.resource.as_deref() {
             Some(title) if title != "-" && cli.sanitize => {
                 Rule::new(sanitize_terminal_controls(title))
             }
             Some(title) if title != "-" => Rule::new(title),
             _ => Rule::line(),
         };
+        // `Rule(resource, style=rule_style, characters=rule_char or "─",
+        // align="center" if justify in ("full", "default") else justify)`.
+        // Upstream's default is an explicit `bright_green`, not the theme's
+        // `rule.line`, so a theme cannot restyle a plain `--rule`.
+        let style = cli
+            .rule_style
+            .clone()
+            .unwrap_or_else(|| Style::parse("bright_green").expect("a valid style"));
+        rule = rule.style(style);
+        if let Some(characters) = cli.rule_char.as_deref().filter(|c| !c.is_empty()) {
+            rule = rule.characters(characters);
+        }
+        match cli.text_justify {
+            Some(Justify::Left) => rule = rule.align(rich::align::HorizontalAlign::Left),
+            Some(Justify::Right) => rule = rule.align(rich::align::HorizontalAlign::Right),
+            _ => {}
+        }
         // `Rule.__rich_measure__` is `Measurement(1, 1)`: a rule claims no width
         // of its own, so a fitted panel around one is 5 cells wide.
         return decorate_and_emit(&cli, &console, &export, Box::new(rule), Some(1));
@@ -3661,6 +3963,12 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             .unwrap_or(Mode::Syntax);
     }
 
+    // Upstream renders anything it does not recognise as syntax. This port
+    // prints plain text instead, until a source option asks for more.
+    if mode == Mode::Auto && cli.source.wants_syntax() {
+        mode = Mode::Syntax;
+    }
+
     // Pre-parse JSON so a parse error surfaces before any (HTML) rendering.
     let json_content = if mode == Mode::Json && cli.sanitize {
         match sanitize_json_source(content.trim()) {
@@ -3708,7 +4016,10 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 );
             }
         };
-        let renderable = build_ipynb(&notebook, cli.hyperlinks, cli.justify);
+        let renderable = match build_ipynb(&notebook, cli.hyperlinks, cli.justify, &cli.source) {
+            Ok(renderable) => renderable,
+            Err(err) => return fail(&cli, ExitClass::Usage, err),
+        };
         let fit = renderable.measure(&console, &console.options()).maximum;
         return decorate_and_emit(&cli, &console, &export, Box::new(renderable), Some(fit));
     }
@@ -3820,6 +4131,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 fallback,
                 cli.title.as_deref(),
                 cli.caption.as_deref(),
+                (cli.source.head, cli.source.tail),
             ) {
                 Some(table) => table,
                 // Upstream's `on_error(str(error))`. The message is CPython's,
@@ -3835,6 +4147,8 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 && cli.padding.is_none()
                 && cli.style.is_none()
                 && cli.justify.is_none()
+                && cli.max_width.is_none()
+                && !cli.soft
                 && !cli.pager
                 && !cli.auto_pager
                 && cli.export_html.is_none()
@@ -3876,7 +4190,23 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         }
         // `--filter` and `--highlight` work on the highlighted text.
         Mode::Syntax if cli.data.transform_option().is_some() => {
-            let text = Syntax::new(content.as_str(), language.as_str()).highlight_for(&console);
+            let language = cli.source.lexer.as_deref().unwrap_or(&language);
+            // `--head`/`--tail` pick the lines first, as `Syntax`'s
+            // `line_range` does on the other path.
+            let code = match cli.source.line_range(&content) {
+                Ok(Some((start, end))) => {
+                    let start = start.max(1) as usize - 1;
+                    let end = end.max(0) as usize;
+                    let lines: Vec<&str> = content.lines().collect();
+                    lines
+                        .get(start.min(lines.len())..end.min(lines.len()))
+                        .unwrap_or_default()
+                        .join("\n")
+                }
+                Ok(None) => content.clone(),
+                Err(err) => return fail(&cli, ExitClass::Usage, err),
+            };
+            let text = Syntax::new(code.as_str(), language).highlight_for(&console);
             let text = match cli
                 .data
                 .text_pipeline()
@@ -3899,13 +4229,14 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
             (Box::new(padded), Some(fit))
         }
         Mode::Syntax => {
-            // `Syntax.__rich_measure__`: the widest source line, plus padding and
-            // a line-number column — neither of which this CLI turns on.
-            let fit = content.lines().map(cell_len).max().unwrap_or(0);
-            (
-                Box::new(Syntax::new(content.as_str(), language.as_str()).word_wrap(true)),
-                Some(fit),
-            )
+            let syntax = match cli.source.syntax(&content, &language) {
+                Ok(syntax) => syntax,
+                Err(err) => return fail(&cli, ExitClass::Usage, err),
+            };
+            // `Syntax.__rich_measure__`: the widest source line, plus the
+            // line-number column when there is one.
+            let fit = syntax.measure(&console, &console.options()).maximum;
+            (Box::new(syntax), Some(fit))
         }
         Mode::View => {
             let view: Box<dyn Renderable> = match view_as {
@@ -3954,11 +4285,20 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         // Print + auto: parse markup (Print) or take plain text (auto), then
         // `--filter` and `--highlight`.
         _ => {
-            let text = if mode == Mode::Print {
+            let mut text = if mode == Mode::Print {
                 console.build_text(&content)
             } else {
                 Text::new(content.as_str())
             };
+            // `Text.from_markup(…, justify=justify)` and `renderable.no_wrap =
+            // no_wrap`. A bare text loses both to `print`'s `Text.join`, as
+            // upstream's does; `--width`, `--panel` and the rest keep them.
+            if let Some(justify) = cli.text_justify {
+                text.set_justify(justify);
+            }
+            if cli.source.no_wrap {
+                text.set_no_wrap(Some(true));
+            }
             let text = match cli
                 .data
                 .text_pipeline()
@@ -4909,6 +5249,7 @@ fn build_csv_table(
     fallback_delimiter: Option<char>,
     title: Option<&str>,
     caption: Option<&str>,
+    window: (Option<usize>, Option<usize>),
 ) -> Option<Table> {
     // The sniffer sees only the first 1024 *characters* — upstream's
     // `csv_data[:1024]` — however long the file is.
@@ -4918,12 +5259,26 @@ fn build_csv_table(
         Some(sniffed) => sniffed,
         None => (Dialect::excel(fallback_delimiter?), true),
     };
-    Some(render_csv(
-        read_csv_rows(content, &dialect),
-        header,
-        title,
-        caption,
-    ))
+    let mut rows = read_csv_rows(content, &dialect);
+    // `table_rows[:head]` or `table_rows[-tail:]` (head wins), counted over
+    // the non-blank data rows, before the numeric columns are chosen.
+    if window.0.is_some() || window.1.is_some() {
+        let header_row = if header && !rows.is_empty() {
+            Some(rows.remove(0))
+        } else {
+            None
+        };
+        let mut data: Vec<Vec<String>> = rows.into_iter().filter(|row| !row.is_empty()).collect();
+        match window {
+            (Some(head), _) => data.truncate(head),
+            (None, Some(tail)) => {
+                data.drain(..data.len().saturating_sub(tail));
+            }
+            (None, None) => {}
+        }
+        rows = header_row.into_iter().chain(data).collect();
+    }
+    Some(render_csv(rows, header, title, caption))
 }
 
 /// The dialect upstream falls back to when `csv.Sniffer` cannot read
@@ -5116,7 +5471,8 @@ fn build_ipynb(
     notebook: &serde_json::Value,
     hyperlinks: bool,
     justify: Option<Justify>,
-) -> Notebook {
+    source_options: &SourceOptions,
+) -> Result<Notebook, String> {
     let language = notebook["metadata"]["kernelspec"]["language"]
         .as_str()
         .or_else(|| notebook["metadata"]["language_info"]["name"].as_str())
@@ -5139,8 +5495,10 @@ fn build_ipynb(
         let source = join_source(&cell["source"]);
         items.push(match cell["cell_type"].as_str().unwrap_or("") {
             "markdown" => Box::new(build_markdown(&source, hyperlinks)),
+            // Upstream's `Syntax(source, lexer, line_numbers=…, indent_guides=…,
+            // word_wrap=not no_wrap, line_range=…)`, per cell.
             "code" => Box::new(
-                Panel::new(Box::new(Syntax::new(&source, language)))
+                Panel::new(Box::new(source_options.syntax(&source, language)?))
                     .border_style(Style::parse("dim").expect("valid style")),
             ),
             _ => text(&source),
@@ -5172,7 +5530,7 @@ fn build_ipynb(
             items.push(Box::new(rendered));
         }
     }
-    Notebook { items, justify }
+    Ok(Notebook { items, justify })
 }
 
 fn diff_threshold_exceeded(changed: f32, limit: f32) -> bool {
@@ -5844,12 +6202,8 @@ fn should_page(
 }
 
 fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) -> Result<(), String> {
-    if watch::capturing() {
-        // A live watch region repaints these segments itself.
-        watch::capture_segments(console.record_output(render));
-        return Ok(());
-    }
-    if export.html_path.is_none()
+    if !watch::capturing()
+        && export.html_path.is_none()
         && export.svg_path.is_none()
         && !export.pager
         && !export.auto_pager
@@ -5857,8 +6211,17 @@ fn emit(console: &Console, export: &Export, render: impl FnOnce(&Console)) -> Re
         render(console);
         return Ok(());
     }
+    emit_segments(console, export, console.record_output(render))
+}
 
-    let segments = console.record_output(render);
+/// [`emit`] for output already rendered, as `print` would have written it
+/// (with its final newline).
+fn emit_segments(console: &Console, export: &Export, segments: Vec<Segment>) -> Result<(), String> {
+    if watch::capturing() {
+        // A live watch region repaints these segments itself.
+        watch::capture_segments(segments);
+        return Ok(());
+    }
     let mut first_error = None;
 
     // The terminal still gets the output, exports or not.
@@ -6356,7 +6719,7 @@ fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
     // CSV rendered as a table (blue border, numeric columns bold-green + right).
     demo::section(&console, delay, "csv");
     let csv = "Product,Qty,Price\nWidget,3,9.99\nGadget,12,19.50\nGizmo,1,4.25";
-    if let Some(table) = build_csv_table(csv, Some(','), None, None) {
+    if let Some(table) = build_csv_table(csv, Some(','), None, None, (None, None)) {
         console.print(&table);
     }
 
@@ -7000,6 +7363,7 @@ mod tests {
             Some(','),
             None,
             None,
+            (None, None),
         )
         .expect("the sniffer reads this one");
         let out = Console::builder()

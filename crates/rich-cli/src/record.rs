@@ -124,7 +124,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
     if args
         .iter()
         .take_while(|arg| *arg != "--")
-        .any(|arg| arg == "--help" || arg == "-h")
+        .any(|arg| arg == "--help")
     {
         let no_color = cli_spec::no_color_requested(args);
         if let Some(help) = cli_spec::subcommand_help(&["record"], no_color) {

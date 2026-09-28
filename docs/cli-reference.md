@@ -41,14 +41,14 @@ Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by exten
 | --- | --- |
 | `-p`, `--print` | Treat RESOURCE as literal markup TEXT, not a file path. |
 | `-m`, `--markdown` | Render RESOURCE as Markdown. |
-| `-j`, `--json` | Pretty-print RESOURCE as JSON. |
+| `-j`, `-J`, `--json` | Pretty-print RESOURCE as JSON. |
 | `-x`, `--syntax` | Syntax-highlight RESOURCE (language from its extension) |
 | `--csv` | Render RESOURCE as a CSV/TSV table. |
 | `--ipynb` | Render RESOURCE as a Jupyter notebook. |
 | `--jsonl`, `--ndjson` | Stream JSON Lines / NDJSON records. |
 | `--log` | Stream common structured-log JSONL records. |
 | `--gif` | Animate GIFs side by side; pipes receive the first frame. |
-| `--rule` | Draw a horizontal rule (RESOURCE is its title) |
+| `-u`, `--rule` | Draw a horizontal rule (RESOURCE is its title) |
 | `--diff` | Compare two images perceptually, two text files as a diff (syntax-aware; ANSI captures by visible text and style), or render one patch such as `git diff` output. |
 | `--image` | Render RESOURCE as a still image (ASCII/Braille/blocks/quadrants/Sixel) |
 | `--inspect` | Explore structured data (JSON, YAML, TOML, XML, INI, dotenv) as a tree. |
@@ -66,11 +66,18 @@ Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by exten
 | Option | Description |
 | --- | --- |
 | `-w`, `--width <N>` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) Config: `width`. |
-| `--left` | Left-justify output. |
-| `--center` | Center output. |
-| `--right` | Right-justify output. |
-| `--panel <BOX>` | Wrap output in a panel, shrunk to fit its content (none = no panel) Config: `panel`. Possible values: `ascii`, `ascii2`, `square`, `rounded`, `heavy`, `double`, `none`. |
-| `--padding <P>` | Wrap output in padding (1, 2, or 4 comma-separated ints) Config: `padding`. |
+| `-W`, `--max-width <SIZE>` | Print at most SIZE columns wide (upstream's `console.print(width=…)`) |
+| `-l`, `--left` | Left-justify output. |
+| `-c`, `--center` | Center output. |
+| `-r`, `--right` | Right-justify output. |
+| `-L`, `--text-left` | Justify --print and --rule text to the left. |
+| `-C`, `--text-center` | Justify --print and --rule text to the center. |
+| `-R`, `--text-right` | Justify --print and --rule text to the right. |
+| `-F`, `--text-full` | Justify --print text to both edges (a rule centres its title) |
+| `--soft` | Soft wrap: no line is wrapped or cut, so the terminal wraps it. |
+| `--emoji` | Replace :emoji: codes, e.g. :sparkles: (off by default, as upstream) |
+| `-a`, `--panel <BOX>` | Wrap output in a panel, shrunk to fit its content (none = no panel) Config: `panel`. Possible values: `ascii`, `ascii2`, `square`, `rounded`, `heavy`, `double`, `none`. |
+| `-d`, `--padding <P>` | Wrap output in padding (1, 2, or 4 comma-separated ints) Config: `padding`. |
 | `-e`, `--expand` | Make --panel/--padding fill the width instead of fitting (implied by --width) |
 | `--title <T>` | Panel title; also the CSV table's title. |
 | `--caption <T>` | Panel subtitle; also the CSV table's caption. |
@@ -78,10 +85,23 @@ Choose at most one; the default auto-detects .md/.json/.csv/.tsv/.ipynb by exten
 | `-S`, `--panel-style <S>` | Panel border style, e.g. "dim" (with --panel) |
 | `-y`, `--hyperlinks` | Render a Markdown link as a clickable OSC 8 hyperlink. Off by default, which shows the URL as `text (url)`. |
 
+### Source
+
+| Option | Description |
+| --- | --- |
+| `-h`, `--head <LINES>` | Show the first LINES of a source file or CSV (as upstream, `-h` is --head, not help) |
+| `-t`, `--tail <LINES>` | Show the end of a source file or CSV (as upstream, --tail N shows the last N-1 source lines) |
+| `-n`, `--line-numbers` | Number the lines of source. |
+| `-g`, `--guides` | Draw indentation guides in source. |
+| `--lexer <LEXER>` | Highlight source as LEXER instead of guessing from the file name. |
+| `--no-wrap` | Crop long lines of source instead of wrapping them; with --print, don't wrap text. |
+
 ### Mode options
 
 | Option | Description |
 | --- | --- |
+| `--rule-style <STYLE>` | With --rule, the line's style. Default: `bright_green`. |
+| `--rule-char <CHARACTER>` | With --rule, the character(s) the line is drawn with. Default: `─`. |
 | `--log-presentation <MODE>` | With --log, select log presentation. Default: `plain`. Config: `log_presentation`. Possible values: `plain`, `rich`. |
 | `--mermaid-backend <BACKEND>` | How Mermaid diagrams (`rich mermaid`, ```mermaid fences in Markdown) are drawn: text draws flowcharts as text, mmdc uses Mermaid's own CLI (a build with the mmdc feature; `rich mermaid` tries it first there), off leaves fences as code. Config: `mermaid_backend`. Possible values: `text`, `mmdc`, `off`. |
 | `--highlighter <NAME>` | The code highlighter for source, Markdown code, view and diff: syntect (the default), or lumis in a build with the lumis feature. Config: `highlighter`. |
@@ -231,8 +251,9 @@ Self-contained examples; ignores config; accepts --no-color.
 
 | Option | Description |
 | --- | --- |
-| `-h`, `--help` | Show this help. |
-| `-V`, `--version` | Show the rs-rich-cli package version. |
+| `--help` | Show this help. |
+| `-V`, `-v`, `--version` | Show the rs-rich-cli package version. |
+| `--force-terminal` | Write colour and styles even when output is not a terminal. |
 
 ### Commands
 

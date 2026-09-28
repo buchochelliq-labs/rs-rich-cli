@@ -36,7 +36,10 @@ fn help_is_plain_when_piped_and_fits_the_console_width() {
     ] {
         assert!(help.lines().any(|line| line == heading), "{heading}");
     }
-    assert_eq!(stdout(&run(&["-h"])), help);
+    // `-h` is upstream's `--head`: help is `--help` only.
+    let head = run(&["-h"]);
+    assert_eq!(head.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&head.stderr).contains("-h requires a value"));
     let version = stdout(&run(&["-V"]));
     assert!(version.starts_with("rich (rs-rich-cli) "), "{version}");
 }
@@ -48,7 +51,7 @@ fn subcommand_help_shows_the_command_path() {
             &["completions", "--help"][..],
             "Usage: rich completions <SHELL>",
         ),
-        (&["docs", "man", "-h"], "Usage: rich docs man [OPTIONS]"),
+        (&["docs", "man", "--help"], "Usage: rich docs man [OPTIONS]"),
         (
             &["config", "explain", "--help"],
             "Usage: rich config explain",
