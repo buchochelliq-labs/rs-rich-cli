@@ -226,6 +226,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb by 
 | `--theme <NAME>` | Select a named theme from config. Config: `theme`. |
 | `--theme-style <NAME=STYLE>...` | Override a theme binding; repeatable and worker-safe. |
 | `--theme-file <PATH>` | Load styles from an upstream rich theme file ([styles] section); --theme and --theme-style override it. Config: `theme_file`. |
+| `--plugin <PATH>...` | Load a runtime plugin: a WASM module (.wasm, sandboxed) or a native library (.so, .dylib, .dll, which runs its own code), in a build with the wasm-plugins or dylib-plugins feature; repeatable. `rich plugins list` shows what is loaded. Config: `plugins`. |
 
 ### Output & reports
 
@@ -291,6 +292,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `docs` | Print reference documentation generated from this help |
 | `bench` | Compare benchmark runs |
 | `record` | Run tapes (scripted terminal sessions: type, press keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF and an MP4 (with FFmpeg); --check compares screenshots with committed ones instead |
+| `plugins` | List the plugins this build has — built in, linked, and any --plugin PATH loads — with their source, version, ABI and capabilities |
 | `doctor` | Read-only build, terminal, config and pager diagnostics; --report json writes diagnostic data to stdout |
 
 ### Environment
@@ -863,7 +865,7 @@ rich config explain [OPTIONS] [KEY]
 
 | Argument | Description |
 | --- | --- |
-| `[KEY]` | Explain one setting instead of all of them. Possible values: `mode`, `format`, `width`, `panel`, `padding`, `log_presentation`, `mermaid_backend`, `highlighter`, `code_theme`, `height`, `image_fit`, `image_anchor`, `image_max_width`, `image_max_height`, `image_background`, `image_color`, `image_dither`, `image_color_distance`, `image_brightness`, `image_contrast`, `image_gamma`, `image_rotate`, `image_flip_horizontal`, `image_flip_vertical`, `image_grayscale`, `export_html`, `export_svg`, `pager`, `auto_pager`, `watch`, `watch_interval`, `watch_debounce`, `watch_poll`, `watch_exit_on_error`, `watch_cache`, `batch`, `batch_input_root`, `batch_preserve_dirs`, `batch_name_template`, `jobs`, `progress`, `continue_on_error`, `overwrite`, `collision`, `theme`, `theme_file`, `no_color`, `sanitize`. |
+| `[KEY]` | Explain one setting instead of all of them. Possible values: `mode`, `format`, `width`, `panel`, `padding`, `log_presentation`, `mermaid_backend`, `highlighter`, `code_theme`, `height`, `image_fit`, `image_anchor`, `image_max_width`, `image_max_height`, `image_background`, `image_color`, `image_dither`, `image_color_distance`, `image_brightness`, `image_contrast`, `image_gamma`, `image_rotate`, `image_flip_horizontal`, `image_flip_vertical`, `image_grayscale`, `export_html`, `export_svg`, `pager`, `auto_pager`, `watch`, `watch_interval`, `watch_debounce`, `watch_poll`, `watch_exit_on_error`, `watch_cache`, `batch`, `batch_input_root`, `batch_preserve_dirs`, `batch_name_template`, `jobs`, `progress`, `continue_on_error`, `overwrite`, `collision`, `theme`, `theme_file`, `plugins`, `no_color`, `sanitize`. |
 
 #### rich config reference
 
@@ -1199,6 +1201,49 @@ Run tapes (scripted terminal sessions: type, press keys, wait for screen text, t
 rich record [--check] [--output DIR] [--bin-dir DIR] [--format png,svg,cast,gif,mp4] [--no-video] [--font FILE] TAPE...
 ```
 
+### rich plugins
+
+List the plugins this build has — built in, linked, and any --plugin PATH loads — with their source, version, ABI and capabilities
+
+#### Usage
+
+```text
+rich plugins [list | info NAME] [--plugin PATH]... [--report json] [--config PATH] [--profile NAME] [--no-config] [--no-color]
+```
+
+#### Commands
+
+| Command | Description |
+| --- | --- |
+| `list` | A table of every plugin (the default) |
+| `info` | One plugin: its path, ABI, capabilities and description |
+
+#### rich plugins list
+
+A table of every plugin (the default)
+
+##### Usage
+
+```text
+rich plugins list [--plugin PATH]... [--report json]
+```
+
+#### rich plugins info
+
+One plugin: its path, ABI, capabilities and description
+
+##### Usage
+
+```text
+rich plugins info NAME [--plugin PATH]... [--report json]
+```
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[NAME]` | The plugin's id, as `list` shows it. |
+
 ### rich doctor
 
 Read-only build, terminal, config and pager diagnostics; --report json writes diagnostic data to stdout
@@ -1273,6 +1318,7 @@ Settings are read from these sources, lowest precedence first; a later source ov
 | `collision` | enum: `error`, `overwrite`, `suffix` | `error` | | `--collision` | Batch policy for existing destinations |
 | `theme` | string | | | `--theme` | Select a named theme from config |
 | `theme_file` | string | | | `--theme-file` | Load styles from an upstream rich theme file ([styles] section); --theme and --theme-style override it |
+| `plugins` | list of paths | | | `--plugin` | Load a runtime plugin: a WASM module (.wasm, sandboxed) or a native library (.so, .dylib, .dll, which runs its own code), in a build with the wasm-plugins or dylib-plugins feature; repeatable. `rich plugins list` shows what is loaded |
 | `no_color` | bool | | `NO_COLOR` | `--no-color` | Disable colored output (as does a non-empty NO_COLOR) |
 | `sanitize` | bool | | | `--sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view` and text `rich diff`; --no-sanitize turns it off there |
 
