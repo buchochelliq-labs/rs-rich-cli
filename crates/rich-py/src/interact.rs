@@ -26,6 +26,7 @@ use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyKeyboardInterrupt, PyOSError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyString};
+use pyo3::{PyTraverseError, PyVisit};
 
 use rich_interact::headless::{self, Script as CoreScript};
 use rich_interact::policy::ScriptedLineIo;
@@ -222,6 +223,13 @@ pub(crate) struct Outcome {
 
 #[pymethods]
 impl Outcome {
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        if let Some(value) = &self.value {
+            visit.call(value)?;
+        }
+        Ok(())
+    }
+
     #[getter]
     fn kind(&self) -> &'static str {
         self.kind
@@ -289,6 +297,13 @@ pub(crate) struct Record {
 
 #[pymethods]
 impl Record {
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        if let Some(outcome) = &self.outcome {
+            visit.call(outcome)?;
+        }
+        Ok(())
+    }
+
     #[getter]
     fn outcome(&self, py: Python<'_>) -> Option<Py<Outcome>> {
         self.outcome.as_ref().map(|outcome| outcome.clone_ref(py))
@@ -422,7 +437,12 @@ where
     <B::C as Component>::Output: Send,
 {
     let (width, height) = mode.size();
-    let interactive = matches!(mode, Mode::Terminal(_));
+    // Renderables see a terminal only when the run gets one: a run that
+    // takes its fallback (a pipe, `interactive=False`) renders as for a file.
+    let interactive = match &mode {
+        Mode::Terminal(options) => options.policy.detect_for(options.session.output).is_ok(),
+        _ => false,
+    };
     scoped(py, width, height, interactive, || {
         Ok(py.detach(move || {
             let mut component = build.build();

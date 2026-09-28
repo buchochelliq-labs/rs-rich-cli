@@ -556,6 +556,53 @@ def test_ask_prompts_on_stdin_without_a_terminal():
     assert b"Number or name: " in result.stderr and b"Sure? [y=Yes, n=No]: " in result.stderr
 
 
+def test_a_fallback_render_is_not_a_terminal():
+    # Without a terminal the pager writes its content out: renderables that
+    # branch on the terminal must see a file, as they would printing to one.
+    program = (
+        "from rs_rich.interact import Pager, run\n"
+        "class Probe:\n"
+        "    def __rich_console__(self, console, options):\n"
+        "        yield 'terminal' if options.is_terminal else 'file'\n"
+        "run(Pager(Probe()), interactive=False)\n"
+        "run(Pager(Probe()))\n"
+    )
+    env = {k: v for k, v in os.environ.items() if k != "CI"}
+    result = subprocess.run(
+        [sys.executable, "-c", program], capture_output=True, env=env, timeout=60
+    )
+    assert result.returncode == 0, result.stderr
+    # The line fallback writes to stderr.
+    assert (result.stdout + result.stderr).split() == [b"file", b"file"]
+
+
+def test_reference_cycles_through_python_values_are_collected():
+    import gc
+    import weakref
+
+    class Box:
+        pass
+
+    def cycle(make):
+        box = Box()
+        box.owner = make(box)
+        return weakref.ref(box)
+
+    made = [
+        lambda box: Item(box),
+        lambda box: Item("x", preview=box),
+        lambda box: Select("Pick", [Item(box)]),
+        lambda box: MultiSelect("Pick", [Item(box)]),
+        lambda box: Input("x", validate=lambda text, box=box: None),
+        lambda box: Pager(box),
+        lambda box: Done(box),
+        lambda box: Form("f").input("name", Input("x", validate=lambda text, box=box: None)),
+    ]
+    refs = [cycle(make) for make in made]
+    gc.collect()
+    assert [ref() for ref in refs] == [None] * len(made)
+
+
 # ---------------------------------------------------------------------------
 # Fuzzy matching
 
