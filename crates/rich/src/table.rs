@@ -1207,7 +1207,10 @@ impl Table {
                     },
                 })
             });
-            cell_regions.push(region.as_ref().map(|guard| guard.id()));
+            // Nothing is allocated without a sink.
+            if let Some(guard) = &region {
+                cell_regions.push((index, guard.id()));
+            }
             let style = self.cell_style(console, index, kind);
             let column = self.columns.get(index);
             let mut text = match cells.get(index) {
@@ -1350,7 +1353,7 @@ impl Table {
             while lines.len() < height {
                 lines.push(vec![Segment::new(blank.clone(), None)]);
             }
-            if let Some(Some(id)) = cell_regions.get(index) {
+            if let Some((_, id)) = cell_regions.iter().find(|(cell, _)| *cell == index) {
                 for line in lines.iter_mut() {
                     crate::protocol::tag_region(line, *id);
                 }
