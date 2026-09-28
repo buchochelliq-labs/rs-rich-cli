@@ -96,28 +96,15 @@ pub(crate) fn install_highlighters(console: &mut Console) {
 // `rich plugins list` and `rich plugins info NAME`.
 // ---------------------------------------------------------------------------
 
+/// Whether the command line is `rich plugins …` (not `rich -p plugins`).
 pub(super) fn requested(args: &[String]) -> bool {
-    let mut iter = args.iter();
-    while let Some(arg) = iter.next() {
-        if arg == "--" {
-            return false;
-        }
-        if VALUE_OPTIONS.contains(&arg.as_str()) {
-            iter.next();
-            continue;
-        }
-        if !arg.starts_with('-') || arg == "-" {
-            return arg == "plugins";
-        }
-    }
-    false
+    subcommand_word(args) == Some("plugins")
 }
 
 /// What the command line asked `rich plugins` for.
 struct Request {
     info: Option<String>,
     json: bool,
-    no_color: bool,
 }
 
 const USAGE: &str = "plugins [list | info NAME] [--plugin PATH]... [--report json] \
@@ -159,11 +146,7 @@ fn request(args: &[String]) -> Result<Request, String> {
         ["plugins", "info"] => return Err("plugins info requires a plugin NAME".into()),
         _ => return Err(format!("expected {USAGE}")),
     };
-    Ok(Request {
-        info,
-        json,
-        no_color: cli_spec::no_color_requested(args),
-    })
+    Ok(Request { info, json })
 }
 
 /// The `--plugin` paths the merged command line (config first) names.
@@ -190,7 +173,12 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
         .take_while(|arg| *arg != "--")
         .any(|arg| arg == "--help")
     {
-        let no_color = cli_spec::no_color_requested(args);
+        // Config's `no_color` counts here too; a config error is reported
+        // by the command, not by its help.
+        let no_color = match config_args(args, &ConfigRoots::default()) {
+            Ok(merged) => cli_spec::no_color_requested(&merged),
+            Err(_) => cli_spec::no_color_requested(args),
+        };
         let sub = args
             .iter()
             .find(|arg| matches!(arg.as_str(), "list" | "info"))
@@ -212,6 +200,10 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
         Ok(merged) => merged,
         Err(message) => return emit_error(json, ExitClass::Usage, &message),
     };
+    // Colour as the rest of the binary decides it: from the merged command
+    // line, so config's `no_color` counts, and a trusted config's
+    // `no_color = false` beats NO_COLOR.
+    let no_color = cli_spec::no_color_requested(&merged);
     if let Err(message) = check_linked() {
         return emit_error(json, ExitClass::Usage, &message);
     }
@@ -255,9 +247,9 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
         };
         serde_json::to_string_pretty(&value).expect("plugin JSON") + "\n"
     } else if request.info.is_some() {
-        shown[0].info(request.no_color)
+        shown[0].info(no_color)
     } else {
-        list(&shown, request.no_color)
+        list(&shown, no_color)
     };
     authoring::out(&text);
     ExitCode::SUCCESS

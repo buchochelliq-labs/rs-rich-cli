@@ -901,6 +901,9 @@ pub fn run_embedded(program: Vec<std::ffi::OsString>, args: Vec<std::ffi::OsStri
 static SELF_PROGRAM: std::sync::Mutex<Vec<std::ffi::OsString>> = std::sync::Mutex::new(Vec::new());
 
 fn dispatch(args: Vec<String>) -> ExitCode {
+    // An in-process host (`run_embedded`, the Python wheel) runs many
+    // command lines: a run's plugins are only the ones it names.
+    plugins::install(Vec::new());
     if demo::requested(&args) {
         return demo::dispatch(&args);
     }
@@ -1107,6 +1110,26 @@ fn command_word(args: &[String]) -> Option<&str> {
             iter.next();
         } else if !arg.starts_with('-') || arg == "-" {
             return command_mode(arg).map(|_| arg.as_str());
+        }
+    }
+    None
+}
+
+/// The first positional word, when it can name a subcommand (`plugins`,
+/// `doctor`, `record`, `choose`, `bench`, …): never after `--`, and never
+/// once a render-mode flag came before it, which makes the word a resource
+/// (`rich -p plugins` prints "plugins"). Every subcommand scanner uses this,
+/// so they agree with each other and with [`parse`].
+pub(crate) fn subcommand_word(args: &[String]) -> Option<&str> {
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        if arg == "--" || mode_flag_alias(arg).is_some() {
+            return None;
+        }
+        if VALUE_OPTIONS.contains(&arg.as_str()) {
+            iter.next();
+        } else if !arg.starts_with('-') || arg == "-" {
+            return Some(arg);
         }
     }
     None
@@ -6994,6 +7017,85 @@ fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
 mod tests {
     use super::*;
     use rich::ColorSystem;
+
+    /// Every render-mode spelling [`mode_flag_alias`] knows, long and short.
+    const MODE_FLAGS: &[&str] = &[
+        "--print",
+        "-p",
+        "--markdown",
+        "-m",
+        "--json",
+        "-j",
+        "-J",
+        "--syntax",
+        "-x",
+        "--csv",
+        "--ipynb",
+        "--rst",
+        "--jsonl",
+        "--ndjson",
+        "--log",
+        "--rule",
+        "-u",
+        "--image",
+        "--gif",
+        "--diff",
+        "--inspect",
+        "--ansi-explain",
+    ];
+
+    /// A render-mode flag before a subcommand's word makes the word a
+    /// resource, for every subcommand scanner: `rich -p plugins` prints it.
+    #[test]
+    fn a_mode_flag_before_a_subcommand_word_makes_it_a_resource() {
+        for flag in MODE_FLAGS {
+            assert!(mode_flag_alias(flag).is_some(), "{flag}");
+        }
+        let claimed = |args: &[String]| {
+            let mut words = Vec::new();
+            if plugins::requested(args) {
+                words.push("plugins");
+            }
+            if doctor::requested(args) {
+                words.push("doctor");
+            }
+            #[cfg(feature = "record")]
+            if record::requested(args) {
+                words.push("record");
+            }
+            #[cfg(feature = "interact")]
+            words.extend(interactive::requested(args));
+            if tools::bench_dispatch(args).unwrap_or(true) {
+                words.push("bench");
+            }
+            let roots = ConfigRoots {
+                home: None,
+                cwd: std::env::temp_dir(),
+                no_color_env: false,
+            };
+            if !matches!(config::inspect(args, &roots), Ok(None)) {
+                words.push("config");
+            }
+            words
+        };
+        let words = [
+            "plugins", "doctor", "record", "choose", "filter", "input", "confirm", "pager",
+            "bench", "config",
+        ];
+        for word in words {
+            // Without a mode flag the word is the subcommand (where built).
+            let plain = claimed(&[word.to_string(), "--no-color".into()]);
+            assert!(plain.is_empty() || plain == [word], "{word}: {plain:?}");
+            for flag in MODE_FLAGS {
+                let args = [flag.to_string(), word.to_string()];
+                assert_eq!(claimed(&args), Vec::<&str>::new(), "{flag} {word}");
+                let args = ["--no-color".to_string(), flag.to_string(), word.to_string()];
+                assert_eq!(claimed(&args), Vec::<&str>::new(), "{args:?}");
+            }
+        }
+        assert!(plugins::requested(&["--no-color".into(), "plugins".into()]));
+        assert!(doctor::requested(&["doctor".into()]));
+    }
 
     #[cfg(feature = "art")]
     #[test]

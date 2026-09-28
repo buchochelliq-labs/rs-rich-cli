@@ -4,21 +4,9 @@ use rich_ext::capabilities::{
     Capabilities, CapabilityReport, ColorDepth, Overrides, Report, SystemEnvironment,
 };
 
+/// Whether the command line is `rich doctor …` (not `rich -p doctor`).
 pub(super) fn requested(args: &[String]) -> bool {
-    let mut iter = args.iter();
-    while let Some(arg) = iter.next() {
-        if arg == "--" {
-            return false;
-        }
-        if VALUE_OPTIONS.contains(&arg.as_str()) {
-            iter.next();
-            continue;
-        }
-        if !arg.starts_with('-') || arg == "-" {
-            return arg == "doctor";
-        }
-    }
-    false
+    subcommand_word(args) == Some("doctor")
 }
 
 pub(super) fn dispatch(args: &[String]) -> ExitCode {

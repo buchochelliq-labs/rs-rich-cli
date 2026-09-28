@@ -850,6 +850,10 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
         }
         if takes_value(arg) {
             iter.next();
+        } else if positions.is_empty() && super::mode_flag_alias(arg).is_some() {
+            // `rich -p config` prints the word, as for every subcommand
+            // (`super::subcommand_word`).
+            return Ok(None);
         } else if !arg.starts_with('-') {
             positions.push(index);
         }

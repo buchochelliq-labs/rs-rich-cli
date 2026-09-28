@@ -9,22 +9,10 @@ use rich_record::record::{self as recorder, Formats, Options};
 use rich_record::render::raster::Fonts;
 use rich_record::tape;
 
-/// Whether the first word that is not an option is `record`.
+/// Whether the first word that is not an option is `record`, with no render
+/// mode flag before it (`rich -p record` prints the word).
 pub(super) fn requested(args: &[String]) -> bool {
-    let mut iter = args.iter();
-    while let Some(arg) = iter.next() {
-        if arg == "--" {
-            return false;
-        }
-        if VALUE_OPTIONS.contains(&arg.as_str()) {
-            iter.next();
-            continue;
-        }
-        if !arg.starts_with('-') || arg == "-" {
-            return arg == "record";
-        }
-    }
-    false
+    subcommand_word(args) == Some("record")
 }
 
 struct Args {

@@ -91,6 +91,147 @@ fn plugins_info_shows_one_plugin_and_refuses_an_unknown_one() {
     assert!(rich(&work, &home, &["plugins", "--help"]).status.success());
 }
 
+/// Every render-mode flag, long and short (`mode_flag_alias` in lib.rs).
+const MODE_FLAGS: &[&str] = &[
+    "--print",
+    "-p",
+    "--markdown",
+    "-m",
+    "--json",
+    "-j",
+    "-J",
+    "--syntax",
+    "-x",
+    "--csv",
+    "--ipynb",
+    "--rst",
+    "--jsonl",
+    "--ndjson",
+    "--log",
+    "--rule",
+    "-u",
+    "--image",
+    "--gif",
+    "--diff",
+    "--inspect",
+    "--ansi-explain",
+];
+
+/// After a render-mode flag, `plugins` is the resource, not the subcommand:
+/// `rich -p plugins` prints the word.
+#[test]
+fn a_mode_flag_makes_plugins_a_resource() {
+    let (_root, work, home) = dirs();
+    for flag in MODE_FLAGS {
+        let out = rich(&work, &home, &[flag, "plugins"]);
+        let stdout = text(&out.stdout);
+        assert!(
+            !stdout.contains("Capabilities") && !stdout.contains("plugin API"),
+            "{flag}: {stdout}"
+        );
+    }
+    for flag in ["-p", "--print"] {
+        let out = rich(&work, &home, &[flag, "plugins"]);
+        assert!(out.status.success(), "{flag}: {}", text(&out.stderr));
+        assert_eq!(text(&out.stdout).trim_end(), "plugins", "{flag}");
+    }
+}
+
+/// Whether `output` sets a foreground or background colour (bold alone is
+/// not colour: `no_color` keeps it).
+fn has_colour(output: &str) -> bool {
+    output.split("\u{1b}[").skip(1).any(|sequence| {
+        let Some(end) = sequence.find('m') else {
+            return false;
+        };
+        sequence[..end].split(';').any(|param| {
+            matches!(
+                param.parse::<u8>(),
+                Ok(30..=38 | 40..=48 | 90..=97 | 100..=107)
+            )
+        })
+    })
+}
+
+/// `rich plugins` takes its colour from the merged command line, config
+/// first, as the rest of the binary does: a config's `no_color = true` turns
+/// colour off on a terminal, and a trusted config's `no_color = false` beats
+/// NO_COLOR. Its console colours only a terminal (FORCE_COLOR is not
+/// supported), so it runs on a pseudo-terminal. The list and info tables are
+/// bold only, which `no_color` keeps, so the colour shows in its help, which
+/// resolves colour the same way.
+#[cfg(unix)]
+#[test]
+fn plugins_colour_follows_config() {
+    use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+    use std::io::Read;
+
+    let (_root, work, home) = dirs();
+    let run = |no_color_env: bool, config: &str, args: &[&str]| {
+        let path = home.join("rich-test.toml");
+        std::fs::write(&path, format!("[defaults]\n{config}")).unwrap();
+        let pty = native_pty_system()
+            .openpty(PtySize {
+                rows: 40,
+                cols: 100,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .unwrap();
+        let mut command = CommandBuilder::new(env!("CARGO_BIN_EXE_rich"));
+        command.args(args);
+        command.arg("--config");
+        command.arg(&path);
+        command.cwd(&work);
+        command.env("HOME", &home);
+        command.env("XDG_CONFIG_HOME", home.join(".config"));
+        command.env("TERM", "xterm-256color");
+        command.env_remove("NO_COLOR");
+        if no_color_env {
+            command.env("NO_COLOR", "1");
+        }
+        let mut child = pty.slave.spawn_command(command).unwrap();
+        drop(pty.slave);
+        let mut reader = pty.master.try_clone_reader().unwrap();
+        let output = std::thread::spawn(move || {
+            let mut output = Vec::new();
+            let mut buffer = [0u8; 4096];
+            while let Ok(read) = reader.read(&mut buffer) {
+                if read == 0 {
+                    break;
+                }
+                output.extend_from_slice(&buffer[..read]);
+            }
+            output
+        });
+        let status = child.wait().unwrap();
+        drop(pty.master);
+        let output = text(&output.join().unwrap());
+        assert!(status.success(), "{output}");
+        output
+    };
+    for args in [&["plugins", "--help"][..], &["plugins", "list", "--help"]] {
+        let coloured = |no_color_env: bool, config: &str| {
+            let output = run(no_color_env, config, args);
+            assert!(output.contains("Usage"), "{output}");
+            has_colour(&output)
+        };
+        // A terminal colours; NO_COLOR does not.
+        assert!(coloured(false, ""), "{args:?}");
+        assert!(!coloured(true, ""), "{args:?}");
+        // The config asks for no colour.
+        assert!(!coloured(false, "no_color = true\n"), "{args:?}");
+        // A trusted config's `no_color = false` beats NO_COLOR.
+        assert!(coloured(true, "no_color = false\n"), "{args:?}");
+    }
+    // The list itself runs with either config (its tables are bold only).
+    for (no_color_env, config) in [(false, "no_color = true\n"), (true, "no_color = false\n")] {
+        let output = run(no_color_env, config, &["plugins", "list"]);
+        assert!(output.contains("rich-ext"), "{output}");
+        assert!(!has_colour(&output), "{output}");
+    }
+}
+
 #[test]
 fn a_plugin_that_cannot_load_is_a_clear_error() {
     let (_root, work, home) = dirs();
@@ -156,6 +297,31 @@ fn a_project_config_cannot_list_plugins() {
 #[cfg(feature = "wasm-plugins")]
 mod wasm {
     use super::*;
+
+    /// In-process runs share the runtime-plugin slot: a later run without
+    /// `--plugin` must not keep the previous run's plugins.
+    #[test]
+    fn a_later_in_process_run_does_not_keep_the_previous_plugins() {
+        use std::process::ExitCode;
+        let (_root, work, _home) = dirs();
+        let plugin = shout(&work);
+        let plugin = plugin.to_str().unwrap();
+        let out = work.join("out.html");
+        let run = |args: &[&str]| {
+            let mut all: Vec<std::ffi::OsString> = vec!["--no-config".into()];
+            all.extend(args.iter().map(Into::into));
+            all.extend(["-o".into(), out.clone().into_os_string()]);
+            rich_cli::run_embedded(Vec::new(), all)
+        };
+        let first = run(&["--plugin", plugin, "--transform", "upper", "-p", "hi"]);
+        assert_eq!(first, ExitCode::SUCCESS);
+        assert!(std::fs::read_to_string(&out).unwrap().contains("HI"));
+        // No plugin now: `upper` is unknown, a usage error.
+        assert_eq!(
+            run(&["--transform", "upper", "-p", "hi"]),
+            ExitCode::from(2)
+        );
+    }
 
     const SHOUT: &str = include_str!("../../rich-plugin-api/examples/wasm/shout.wat");
 

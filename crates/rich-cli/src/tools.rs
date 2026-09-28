@@ -264,23 +264,7 @@ pub(crate) fn ansi_explain(options: &ToolOptions, content: &str) -> Box<dyn Rend
 /// Whether `bench` is the first positional, with no render mode selected (as
 /// for `rich docs`: `rich -p bench` still prints the word).
 fn is_bench(args: &[String]) -> bool {
-    let mut iter = args.iter();
-    while let Some(arg) = iter.next() {
-        if arg == "--" {
-            return false;
-        }
-        if super::VALUE_OPTIONS.contains(&arg.as_str()) {
-            iter.next();
-            continue;
-        }
-        if super::mode_flag_alias(arg).is_some() {
-            return false;
-        }
-        if !arg.starts_with('-') || arg == "-" {
-            return arg == "bench";
-        }
-    }
-    false
+    super::subcommand_word(args) == Some("bench")
 }
 
 /// `rich bench compare BASELINE CANDIDATE [--threshold PCT]`: compare two
