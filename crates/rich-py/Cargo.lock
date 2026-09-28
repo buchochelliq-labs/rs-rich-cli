@@ -1551,13 +1551,14 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-py"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "pyo3",
  "rs-rich",
  "rs-rich-art",
  "rs-rich-cli",
  "rs-rich-ext",
+ "rs-rich-interact",
  "rs-rich-lumis",
  "rs-rich-mermaid",
  "rs-rich-plugin-api",

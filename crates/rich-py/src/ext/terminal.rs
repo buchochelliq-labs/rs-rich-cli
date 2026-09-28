@@ -78,7 +78,7 @@ names!(support, support_name, Support, "support", {
 });
 
 /// `"truecolor"`, `"256"`, `"standard"`, `"windows"` or `None`.
-fn color_system(value: Option<&str>) -> PyResult<Option<ColorSystem>> {
+pub(crate) fn color_system(value: Option<&str>) -> PyResult<Option<ColorSystem>> {
     Ok(match value {
         None | Some("none") => None,
         Some("truecolor") => Some(ColorSystem::Truecolor),
@@ -774,7 +774,7 @@ impl Degrade {
     }
 }
 
-fn segments_arg(value: &Bound<'_, PyAny>) -> PyResult<Vec<CoreSegment>> {
+pub(crate) fn segments_arg(value: &Bound<'_, PyAny>) -> PyResult<Vec<CoreSegment>> {
     value
         .try_iter()?
         .map(|s| Ok(s?.extract::<PyRef<'_, Segment>>()?.to_core()))
@@ -1164,6 +1164,22 @@ impl RenderTarget {
         common::scoped(py, c.width, c.height, c.interactive, || {
             let value = renderable::to_renderable(renderable, None)?;
             Ok(self.inner.text(value.as_ref()))
+        })
+    }
+
+    /// Render any renderable to a `Frame` for this target (control
+    /// segments dropped).
+    fn frame(
+        &self,
+        py: Python<'_>,
+        renderable: &Bound<'_, PyAny>,
+    ) -> PyResult<super::frame::Frame> {
+        let c = rich::protocol::RenderEnvironment::capabilities(&self.inner);
+        common::scoped(py, c.width, c.height, c.interactive, || {
+            let value = renderable::to_renderable(renderable, None)?;
+            Ok(super::frame::Frame::from_core(
+                self.inner.frame(value.as_ref()),
+            ))
         })
     }
 

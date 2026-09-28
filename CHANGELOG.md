@@ -119,6 +119,37 @@ Entries below record subsequent releases and development.
   input is a pipe, and `Policy::detect_for(output)` decides for a given
   output; `run` uses it. New `Reason`s: `StderrNotTerminal`, `NoTerminal`.
 
+### Python 0.0.2: interactive components and frames (0.0.13 workstream 5)
+
+The `rs-rich` package on PyPI stays level with the Rust crates.
+
+- **`rs_rich.interact`** binds rs-rich-interact: `Select` and
+  `MultiSelect` over `Item`s (value, label, description, metadata,
+  keywords, a markup or renderable preview, key `Action`s), `Input` (with
+  `password=True`, validation, history and suggestions), `Confirm` with
+  `Choice`s, `Form` (text, masked, choice and toggle fields) and `Pager`.
+  An item's value is any Python object, returned as it is. Any object with
+  `handle(event)` and `render(width, height)` is a component too.
+- **Drivers.** `component.ask()` runs on the terminal (GIL released) and
+  returns the answer; Escape raises `Cancelled` and Ctrl+C
+  `KeyboardInterrupt`. `run` returns an `Outcome` (`done`, `cancelled`,
+  `interrupted`) instead. Without a terminal `fallback` asks line by line,
+  returns the default, or raises `NotInteractive` (with its `reason`).
+  `headless(component, keys)` returns a `Record` of the painted frames and
+  bytes; `degrade(component, answers)` runs the line-prompt fallback. `fuzzy`
+  and `rank` are the pickers' matcher.
+- **Frames.** `rs_rich.ext.frame.Frame` (`rich_ext::frame`): from segments,
+  from a `Console`'s render, or `RenderTarget.frame`; rows, cells, plain
+  text, `to_ansi` (the console's bytes), merged encoding, `encode_span` and
+  a cell-level `diff`.
+- **The new CLI commands** run through the wheel: `python -m rs_rich
+  choose|filter|input|confirm|pager`, with tests for their piped
+  degradation and exit codes.
+- Type stubs, an [interactive components page](docs/python/interact.md),
+  frames in the terminals guide, and tests that compare with the Rust
+  crate's frames. Not yet from Python: component themes, `Input`'s
+  background suggestion provider, and the multi-component event loop.
+
 ### Hardening carried over from 0.0.12 (0.0.13 workstream 6)
 
 - **CLI: non-UTF-8 file names.** A batch glob or directory walk found such a

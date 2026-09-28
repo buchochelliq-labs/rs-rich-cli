@@ -37,9 +37,10 @@ The port's own crates:
 
 | Crate | rs_rich |
 |---|---|
-| `rs_rich.ext.*` (38 modules) | No Rich counterpart; output compared byte for byte with `rs-rich-ext` ([Extensions](ext/index.md)) |
+| `rs_rich.ext.*` (39 modules) | No Rich counterpart; output compared byte for byte with `rs-rich-ext` ([Extensions](ext/index.md)) |
 | `rs_rich.art` (images, FIGlet, GIFs, image diff) | No Rich counterpart; matches `rs-rich-art` byte for byte. Printing `ImageArt` is strict: it raises `ImageArtError` rather than falling back to ASCII ([Art](art.md)) |
 | `rs_rich.mermaid` | No Rich counterpart; matches `rs-rich-mermaid`. The `mmdc` backend only in wheels built with `mmdc` ([Mermaid](mermaid.md)) |
+| `rs_rich.interact` | No Rich counterpart; the `rs-rich-interact` components paint the same frames for the same keys, checked headless ([Interactive components](interact.md)) |
 | `rs_rich.plugins` | No Rich counterpart: the `rs-rich-plugin-api` contract and rich-ext's `ExtensionRegistry`. Python plugins go through the Rust host and match the Rust plugins' output ([Plugins](plugins.md)) |
 
 ## Known differences

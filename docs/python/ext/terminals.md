@@ -1,7 +1,7 @@
 # Terminals and accessibility
 
 Modules: `rs_rich.ext.capabilities`, `fidelity`, `a11y`, `ansi_explain`,
-`sanitize`, `encoding`, `target`, `theme` (Rust: `rich_ext::capabilities` and
+`sanitize`, `encoding`, `target`, `frame`, `theme` (Rust: `rich_ext::capabilities` and
 friends).
 
 ## What the terminal can do
@@ -131,7 +131,8 @@ an encoding it does not know.
 ## Render targets
 
 `target.RenderTarget` is where output goes (`"terminal"`, `"plain_stream"`,
-`"capture"`) and what it supports; `text(renderable)` renders for it. The
+`"capture"`) and what it supports; `text(renderable)` renders for it, and
+`frame(renderable)` renders it to a [frame](#frames). The
 live coordinator ([Layout and live output](layout.md)) writes to one.
 
 ```python
@@ -146,6 +147,47 @@ print(stream.capabilities["color_system"], stream.capabilities["interactive"])
 'docs'
 None False
 ```
+
+## Frames
+
+`frame.Frame` holds a render as rows of styled runs (`rich_ext::frame`): its
+plain text, one cell per terminal column, the bytes the console writes for
+it, and a cell-level `diff` against a previous frame, which is what a live
+repaint rewrites. Build one from a console's render
+(`Frame.from_console(console, renderable)`), from segments
+(`Frame.from_segments`), or with `RenderTarget.frame(renderable)`. Control
+segments are dropped: a frame is content.
+
+```python
+import io
+from rs_rich.console import Console
+from rs_rich.ext.frame import Frame
+
+console = Console(file=io.StringIO(), width=30, force_terminal=True, color_system="truecolor")
+before = Frame.from_console(console, "[bold]build[/] 3 crates\nwaiting")
+after = Frame.from_console(console, "[bold]build[/] 4 crates\ndone")
+print(after.plain(), end="")
+print(after.height, after.width)
+print(after.diff(before))
+print(repr(after.encode_span(0, 6, 7)))
+print(repr(before.to_ansi(console)))
+print(after.cells(0)[:2])
+```
+
+```text
+build 4 crates
+done
+2 14
+[(0, range(6, 7)), (1, range(0, 7))]
+'\x1b[1;36m4\x1b[0m'
+'\x1b[1mbuild\x1b[0m \x1b[1;36m3\x1b[0m crates\nwaiting\n'
+[('b', 1, Style(bold=True)), ('u', 1, Style(bold=True))]
+```
+
+`to_ansi(console)` writes exactly what `console.print` writes for the same
+render; `to_ansi_merged` merges adjacent runs of one style first (fewer
+bytes, not Rich's), and `encode(color_system, no_color)` picks the colour
+system directly.
 
 `theme.extended_theme()` is the default theme with the styles the extension
 renderables use (`theme.EXTRA_STYLES`).

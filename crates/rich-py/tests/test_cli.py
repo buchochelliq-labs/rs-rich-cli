@@ -135,6 +135,16 @@ CASES = {
     "bad json": (["--json", "-"], b"{not json", {}),
     "bad width": (["-p", "x", "--width", "zero"], b"", {}),
     "no color env": (["-p", "[red]plain[/]"], b"", {"NO_COLOR": "1", "FORCE_COLOR": "1"}),
+    # The interactive commands, piped: no terminal, so they degrade.
+    "filter piped": (["filter", "--value", "rs"], b"src/lib.rs\nREADME.md\ndocs/guide.md\nCargo.toml\n", {}),
+    "choose selected": (["choose", "--selected", "beta"], b"alpha\nbeta\ngamma\n", {}),
+    "choose no answer": (["choose"], b"alpha\nbeta\n", {}),
+    "choose prompt": (["choose", "alpha", "beta"], b"2\n", {}),
+    "input": (["input", "--prompt", "Name"], b"Ada\n", {}),
+    "confirm yes": (["confirm", "Deploy?"], b"y\n", {}),
+    "confirm no": (["confirm", "Deploy?"], b"n\n", {}),
+    "pager piped": (["pager"], b"one\ntwo\n", {}),
+    "interactive json report": (["choose", "--report", "json"], b"alpha\n", {}),
 }
 
 
@@ -310,3 +320,40 @@ def test_main_rejects_a_single_string():
 def test_native_entry_point_is_exposed():
     assert rs_rich.cli.__all__ == ["main"]
     assert callable(_native.cli_main)
+
+
+def run_python(workdir: Path, args, stdin: bytes = b""):
+    return subprocess.run(
+        [sys.executable, "-m", "rs_rich", *args], cwd=workdir, input=stdin, capture_output=True,
+        env=environment(workdir), timeout=120,
+    )
+
+
+def test_interactive_commands_degrade_through_the_wheel(workdir):
+    # No binary needed: what the commands do without a terminal, as the
+    # rs-rich-interact policy and `rich-cli`'s exit codes say.
+    lines = b"src/lib.rs\nsrc/main.rs\ndocs/maintenance.md\nCargo.toml\n"
+    # `filter` without a terminal is a fuzzy grep, best match first.
+    result = run_python(workdir, ["filter", "--value", "main"], lines)
+    assert (result.returncode, result.stdout) == (0, b"src/main.rs\ndocs/maintenance.md\n")
+    # `choose` from stdin answers with --selected...
+    result = run_python(workdir, ["choose", "--selected", "Cargo.toml"], lines)
+    assert (result.returncode, result.stdout) == (0, b"Cargo.toml\n")
+    # ...and without one there is no answer: exit 3.
+    result = run_python(workdir, ["choose"], lines)
+    assert (result.returncode, result.stdout) == (3, b"")
+    assert b"not interactive" in result.stderr
+    # From arguments it asks line by line on stderr.
+    result = run_python(workdir, ["choose", "red", "green"], b"green\n")
+    assert (result.returncode, result.stdout) == (0, b"green\n")
+    assert b"Number or name: " in result.stderr
+    # `confirm`: 0 for yes, 1 for no.
+    assert run_python(workdir, ["confirm", "Sure?"], b"y\n").returncode == 0
+    assert run_python(workdir, ["confirm", "Sure?"], b"n\n").returncode == 1
+    assert run_python(workdir, ["confirm", "--default", "yes"]).returncode == 1  # stdin ended: no answer
+    result = run_python(workdir, ["input", "--prompt", "Name"], b"Ada\n")
+    assert (result.returncode, result.stdout) == (0, b"Ada\n")
+    result = run_python(workdir, ["pager"], b"one\ntwo\n")
+    assert (result.returncode, result.stdout) == (0, b"one\ntwo\n")
+    # A usage error is 2.
+    assert run_python(workdir, ["choose", "--height", "x"], b"a\n").returncode == 2

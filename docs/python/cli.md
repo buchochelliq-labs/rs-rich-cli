@@ -85,6 +85,38 @@ rich: unknown option "--no-such-option" (try --help)
 exit status 2
 ```
 
+## Interactive commands
+
+`choose`, `filter`, `input`, `confirm` and `pager` run the
+[interactive components](interact.md) from a shell script. The answer goes
+to standard output and the component paints on standard error, so
+`choice=$(python -m rs_rich choose a b c)` works. Exit statuses: 0 answered
+(for `confirm`, yes), 1 cancelled (for `confirm`, no), 130 Ctrl+C, 2 a usage
+error, 3 no answer without a terminal.
+
+Without a terminal they degrade: `filter` prints the lines matching
+`--value`, best first (a fuzzy `grep`), `choose` from standard input answers
+with `--selected`, and `input`, `confirm` and `choose` from arguments ask
+line by line on standard error.
+
+```python
+lines = "src/lib.rs\nsrc/main.rs\ndocs/maintenance.md\nCargo.toml\n"
+for args in (["filter", "--value", "main"], ["choose", "--selected", "Cargo.toml"], ["choose"]):
+    result = subprocess.run([sys.executable, "-m", "rs_rich", *args], input=lines,
+                            capture_output=True, text=True)
+    print(args[0], result.returncode, result.stdout.split())
+result = subprocess.run([sys.executable, "-m", "rs_rich", "confirm", "Deploy?"], input="n\n",
+                        capture_output=True, text=True)
+print("confirm", result.returncode, repr(result.stderr))
+```
+
+```text
+filter 0 ['src/main.rs', 'docs/maintenance.md']
+choose 0 ['Cargo.toml']
+choose 3 []
+confirm 1 'Deploy? [y=Yes, n=No]: '
+```
+
 ## `rs_rich.cli.main`
 
 ```text

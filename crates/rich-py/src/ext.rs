@@ -11,10 +11,11 @@
 use pyo3::prelude::*;
 
 mod cli_doc;
-mod common;
+pub(crate) mod common;
 mod data;
 mod diagnostic;
 mod diff;
+mod frame;
 mod inspect;
 mod layout;
 mod qa;
@@ -32,6 +33,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     data::register(m)?;
     transform::register(m)?;
     diff::register(m)?;
+    frame::register(m)?;
     terminal::register(m)?;
     workflow::register(m)?;
     status::register(m)?;

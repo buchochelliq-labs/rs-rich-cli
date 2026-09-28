@@ -3,7 +3,7 @@
 Everything the port adds on top of Rich: diagnostics and stack traces,
 structured data, diffs and test reports, transforms, workflow renderables,
 terminal capabilities, inspectors and the extension registry. Each Rust
-module is a submodule here (``diagnostic``, ``stacktrace``, ``dashboard``, ``hyperlink``, ``highlighter``, ``event``, ``log_handler``, ``data``, ``transform``, ``diff``, ``workflow``, ``cancel``, ``transfer``, ``countdown``, ``notify``, ``table``, ``badge``, ``size_bar``, ``format``, ``redact``, ``capabilities``, ``fidelity``, ``a11y``, ``ansi_explain``, ``sanitize``, ``encoding``, ``target``, ``source_view``, ``hex``, ``unicode_inspect``, ``env_inspect``, ``derive``, ``layout``, ``live``, ``theme``, ``cli_doc``, ``testing``, ``qa``);
+module is a submodule here (``diagnostic``, ``stacktrace``, ``dashboard``, ``hyperlink``, ``highlighter``, ``event``, ``log_handler``, ``data``, ``transform``, ``diff``, ``workflow``, ``cancel``, ``transfer``, ``countdown``, ``notify``, ``table``, ``badge``, ``size_bar``, ``format``, ``redact``, ``capabilities``, ``fidelity``, ``a11y``, ``ansi_explain``, ``sanitize``, ``encoding``, ``target``, ``frame``, ``source_view``, ``hex``, ``unicode_inspect``, ``env_inspect``, ``derive``, ``layout``, ``live``, ``theme``, ``cli_doc``, ``testing``, ``qa``);
 this package re-exports all of them.
 """
 
@@ -180,6 +180,7 @@ from .._native import (
     EncodingError,
     RenderTarget,
     resolve_target_capabilities,
+    RenderFrame,
     SourceView,
     HexView,
     find_all,
@@ -417,6 +418,7 @@ __all__ = [
     "EncodingError",
     "RenderTarget",
     "resolve_target_capabilities",
+    "RenderFrame",
     "SourceView",
     "HexView",
     "find_all",

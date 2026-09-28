@@ -38,10 +38,11 @@ What the port cannot do (Jupyter output, a handful of `Table` options) raises
 | | Modules |
 |---|---|
 | All of Rich's API | `rs_rich` (`print`, `print_json`, `inspect`, ...), `console`, `text`, `style`, `color`, `theme`, `markup`, `emoji`, `segment`, `measure`, `box`, `errors`, `terminal_theme`, `table`, `panel`, `rule`, `padding`, `align`, `constrain`, `styled`, `bar`, `spinner`, `columns`, `containers`, `layout`, `tree`, `markdown`, `syntax`, `pretty`, `json`, `highlighter`, `traceback`, `live`, `live_render`, `status`, `screen`, `pager`, `progress`, `progress_bar`, `prompt`, `logging` |
-| rs-rich's extensions | `rs_rich.ext` and its 38 submodules: diagnostics, structured data, diffs and test reports, transforms, workflows, tables and badges, terminal capabilities, inspectors, live layouts, CLI docs, testing and QA |
+| rs-rich's extensions | `rs_rich.ext` and its 39 submodules: diagnostics, structured data, diffs and test reports, transforms, workflows, tables and badges, terminal capabilities, frames, inspectors, live layouts, CLI docs, testing and QA |
+| Interactive components | `rs_rich.interact`: fuzzy `Select` and `MultiSelect`, `Input`, `Confirm`, `Form` and `Pager`, run on the terminal or headless (scripted keys in, frames out), with a fuzzy matcher |
 | Images and diagrams | `rs_rich.art` (images, Sixel, FIGlet, GIFs, image diffs; Pillow images when Pillow is installed), `rs_rich.mermaid` |
 | Plugins | `rs_rich.plugins`: write highlighters, code highlighters, themes, boxes, renderers, fence renderers and transforms in Python, checked by the Rust plugin host |
-| The command line | `python -m rs_rich` and the `rich-rs` script: rs-rich's `rich` command |
+| The command line | `python -m rs_rich` and the `rich-rs` script: rs-rich's `rich` command, with `choose`, `filter`, `input`, `confirm` and `pager` |
 
 Your own classes render through `__rich__`, `__rich_console__` and
 `__rich_measure__`, anywhere a renderable goes.
@@ -52,5 +53,5 @@ The `lumis` (tree-sitter) code highlighter is a separate build
 
 ## Versions
 
-The package has its own version (0.0.1) and is released from `python-v…`
+The package has its own version (0.0.2) and is released from `python-v…`
 tags. It bundles the rs-rich Rust crate from the same commit.

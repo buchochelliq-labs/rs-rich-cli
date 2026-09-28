@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "rs-rich"
-version = "0.0.1"
+version = "0.0.2"
 description = "Rich-compatible terminal rendering, backed by the rs-rich Rust port"
 readme = "README.md"
 license = { text = "MIT" }
