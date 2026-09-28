@@ -320,6 +320,32 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
             _ => parsed.search = Some(value()?),
         }
     }
+    // Arguments that were not valid Unicode are text here (items, prompts),
+    // shown lossily; only the pager's FILE is a path, read through fs_path.
+    if command != "pager" {
+        for positional in &mut parsed.positionals {
+            *positional = text_arg(positional);
+        }
+    }
+    for text in [
+        &mut parsed.header,
+        &mut parsed.preview,
+        &mut parsed.value,
+        &mut parsed.prompt,
+        &mut parsed.placeholder,
+        &mut parsed.default,
+        &mut parsed.affirmative,
+        &mut parsed.negative,
+        &mut parsed.search,
+    ]
+    .into_iter()
+    .flatten()
+    {
+        *text = text_arg(text);
+    }
+    for selected in &mut parsed.selected {
+        *selected = text_arg(selected);
+    }
     match command {
         "input" if !parsed.positionals.is_empty() => {
             return Err("`rich input` takes no arguments; the prompt is --prompt".into())

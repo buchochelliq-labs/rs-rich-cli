@@ -512,7 +512,12 @@ Format: what differs · why · how to remove it (if temporary).
 - **Also:** where rich-cli exits 255 on a usage error it reports itself
   (`cannot specify both head and tail`), this CLI exits 2, its usage class.
   A source option given in a mode where it does nothing (`--head` with
-  `--markdown`) is an error here; rich-cli ignores it.
+  `--markdown`) is an error here; rich-cli ignores it. So are the `--text-*`
+  justifies, `--rule-style` and `--rule-char` without `--rule` (or, for the
+  justifies, `--print`). `--head`/`--tail` values beyond a 64-bit integer
+  are refused, where Python takes any integer. Options take their value as
+  the next argument only: click's `--opt=value` and clustered short flags
+  (`-nL`) are refused as unknown options.
 - **Why:** changing `-j` and `-x` would break scripts written for this CLI
   to fix scripts written for rich-cli, and both uses are common.
 - **Remove:** a major CLI release could move them to upstream's meanings.
@@ -529,7 +534,17 @@ Format: what differs · why · how to remove it (if temporary).
   `include`, `unicode`, `header`, …) render nothing, and a figure's caption
   is dropped. Two documents that make `rich-rst` raise render here: one that
   starts with a field list, and a sidebar with more than a subtitle and one
-  paragraph.
+  paragraph. Also not ported: docutils' quoted literal blocks (unindented
+  lines after `::` that start with punctuation) and the `date` substitution
+  (`.. |d| date::`, today's date upstream), which render nothing; and a
+  byte-order mark at the start of the file, which the CLI's decoding strips
+  and docutils keeps as text.
+- **Deeper than docutils:** body elements nest at most 200 deep here (lists
+  in lists, quotes in quotes), and very deep documents stop nesting sooner
+  once re-reading their indented lines passes a budget linear in their size;
+  past that the rest is one plain paragraph. docutils itself stops with a
+  `RecursionError` at about 170 levels, so nothing upstream renders is
+  affected.
 - **Same:** everything the subset covers prints byte for byte what
   `rich-rst` prints on rich 15.0.0, quirks included
   (`crates/rich-ext/tests/rst.rs`, fixtures from

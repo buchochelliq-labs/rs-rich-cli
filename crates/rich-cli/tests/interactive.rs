@@ -229,6 +229,28 @@ fn usage_errors_exit_2() {
     assert!(err.contains("no items"), "{err}");
 }
 
+#[cfg(unix)]
+#[test]
+fn items_that_are_not_utf8_are_shown_as_text() {
+    use std::os::unix::ffi::OsStrExt;
+    let output = Command::new(env!("CARGO_BIN_EXE_rich"))
+        .args(["--no-config", "choose", "--selected"])
+        .arg(std::ffi::OsStr::from_bytes(b"caf\xe9"))
+        .arg("tea")
+        .arg(std::ffi::OsStr::from_bytes(b"caf\xe9"))
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let out = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(
+        out,
+        "caf\u{fffd}\n",
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!out.contains('\0'));
+}
+
 #[test]
 fn every_command_has_help() {
     for command in ["choose", "filter", "input", "confirm", "pager"] {

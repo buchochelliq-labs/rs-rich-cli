@@ -184,3 +184,124 @@ fn a_dry_run_checks_a_non_utf8_output_directory() {
     );
     assert!(exported(&out).is_empty(), "a dry run writes nothing");
 }
+
+fn rich_in(dir: &Path, args: &[&OsStr]) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_rich"))
+        .current_dir(dir)
+        .args(["--no-config", "--no-color"])
+        .args(args)
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn an_export_never_overwrites_an_input_of_the_same_lossy_spelling() {
+    let dir = tempfile::tempdir().unwrap();
+    let invalid = OsStr::from_bytes(b"\xff.txt");
+    // U+FFFD, the lossy spelling of the byte `\xff`, as valid UTF-8.
+    let valid = OsStr::from_bytes(b"\xef\xbf\xbd.txt");
+    if std::fs::write(dir.path().join(invalid), "the input").is_err() {
+        return;
+    }
+    std::fs::write(dir.path().join(valid), "the old export").unwrap();
+    let result = rich_in(dir.path(), &[invalid, OsStr::new("--export-html"), valid]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join(invalid)).unwrap(),
+        "the input",
+        "the input was overwritten"
+    );
+    let export = std::fs::read_to_string(dir.path().join(valid)).unwrap();
+    assert!(
+        export.contains("<html") && export.contains("the input"),
+        "{export}"
+    );
+}
+
+#[test]
+fn text_arguments_that_are_not_utf8_show_lossily() {
+    let dir = tempfile::tempdir().unwrap();
+    let result = rich_in(
+        dir.path(),
+        &[
+            OsStr::new("-p"),
+            OsStr::from_bytes(b"a\xffb"),
+            OsStr::new("--title"),
+            OsStr::from_bytes(b"t\xfe"),
+            OsStr::new("-a"),
+            OsStr::new("square"),
+        ],
+    );
+    assert!(result.status.success());
+    let out = String::from_utf8(result.stdout).unwrap();
+    assert!(out.contains("a\u{fffd}b"), "{out:?}");
+    assert!(out.contains("t\u{fffd}"), "{out:?}");
+    assert!(!out.contains('\0'), "{out:?}");
+}
+
+#[test]
+fn a_non_utf8_glob_matches_bytes_and_a_dry_run_shows_names_safely() {
+    let dir = tempfile::tempdir().unwrap();
+    for name in [&b"a\xfe.txt"[..], b"a\xff.txt", b"e\x1b[31m.txt"] {
+        if std::fs::write(dir.path().join(OsStr::from_bytes(name)), "x").is_err() {
+            return;
+        }
+    }
+    let result = rich_in(
+        dir.path(),
+        &[
+            OsStr::new("--batch"),
+            OsStr::new("--dry-run"),
+            OsStr::from_bytes(b"a\xff*"),
+        ],
+    );
+    let out = String::from_utf8_lossy(&result.stdout).into_owned();
+    assert!(result.status.success(), "{out}");
+    assert!(out.contains("a\\xFF.txt"), "{out:?}");
+    assert!(
+        !out.contains("a\\xFE"),
+        "the lossy spelling matched: {out:?}"
+    );
+    assert!(!out.contains('\0'), "the escape marker printed: {out:?}");
+    let result = rich_in(
+        dir.path(),
+        &[
+            OsStr::new("--batch"),
+            OsStr::new("--dry-run"),
+            OsStr::new("e*"),
+        ],
+    );
+    let out = String::from_utf8_lossy(&result.stdout).into_owned();
+    assert!(result.status.success(), "{out}");
+    assert!(
+        !out.contains('\x1b') && out.contains("e␛[31m.txt"),
+        "{out:?}"
+    );
+}
+
+#[test]
+fn a_non_utf8_theme_file_is_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let theme = OsStr::from_bytes(b"th\xff.ini");
+    if std::fs::write(dir.path().join(theme), "[styles]\nwarning = red\n").is_err() {
+        return;
+    }
+    let result = rich_in(
+        dir.path(),
+        &[
+            OsStr::new("-p"),
+            OsStr::new("[warning]w[/]"),
+            OsStr::new("--theme-file"),
+            theme,
+        ],
+    );
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+}

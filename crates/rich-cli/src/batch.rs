@@ -330,22 +330,29 @@ pub(super) fn run_batch(cli: &Cli) -> ExitCode {
             }
             eprintln!("{report}");
         } else {
+            // Paths and messages quote input, which may carry terminal
+            // controls: show them, as errors are shown, never execute them.
+            let shown = crate::controls::shown;
             for (input, out) in resources.iter().zip(&plans) {
-                println!("{input}");
+                println!("{}", shown(input));
                 if let Some(path) = &out.html {
-                    println!("  HTML: {path}");
+                    println!("  HTML: {}", shown(path));
                 }
                 if let Some(path) = &out.svg {
-                    println!("  SVG: {path}");
+                    println!("  SVG: {}", shown(path));
                 }
             }
             for directory in &planned_directories {
-                println!("  Create directory: {}", directory.display());
+                println!(
+                    "  Create directory: {}",
+                    shown(&directory.to_string_lossy())
+                );
             }
             for (input, _, message) in &errors {
                 println!(
-                    "  Error ({input}): {}",
-                    message.as_deref().unwrap_or("failed")
+                    "  Error ({}): {}",
+                    shown(input),
+                    shown(message.as_deref().unwrap_or("failed"))
                 );
             }
             println!(

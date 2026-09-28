@@ -1,0 +1,30 @@
+[1m╔══════════════════════════════════════════════════════════════════════════════╗[0m
+[1m║[0m[1m [0m[1m                            [0m[1mTitle emph code link[0m[1m                            [0m[1m [0m[1m║[0m
+[1m╚══════════════════════════════════════════════════════════════════════════════╝[0m
+[1m╔══════════════════════════════════════════════════════════════════════════════╗[0m
+[1m║[0m[1m [0m[1m                           [0m[1mOverlined strong title[0m[1m                           [0m[1m [0m[1m║[0m
+[1m╚══════════════════════════════════════════════════════════════════════════════╝[0m
+[39;49mPara.[0m
+
+[95m▌ [0m[37mQuote.[0m
+[38;5;254m  - Person[0m
+    [37mDeeper.[0m
+
+[39;49mAnother quote follows.[0m
+[95m▌ [0m[37mFirst part.[0m
+[38;5;254m  - Someone Else[0m
+[38;5;254mand more[0m[39;49mHeader row, column 1[0m[39;49mHeader 2[0m[39;49mHeader 3[0m[39;49mHeader 4[0m[39;49mbody row 1, column 1[0m[39;49mcolumn [0m
+[39;49m2[0m[39;49mcolumn 3[0m[39;49mcolumn 4[0m[39;49mbody row 2[0m[39;49mCells may span columns.[0m[39;49mbody row 3[0m[39;49mCells may span rows.[0m
+[1;33m • [0mTable cells
+[1;33m • [0mcontain
+[1;33m • [0mbody elements.
+
+[39;49mbody row 4[0m
+
+[39;49mA malformed simple table renders nothing:[0m
+
+[39;49mNor does a grid table with a ragged edge:[0m
+
+[39;49mA role before a literal is text: :code:[0m[38;5;251;48;5;233mx[0m[39;49m and :sub:[0m[38;5;251;48;5;233my[0m[39;49m.[0m
+
+[39;49mThe end.[0m

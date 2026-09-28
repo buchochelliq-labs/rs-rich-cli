@@ -88,6 +88,38 @@ Entries below record subsequent releases and development.
 - **Ext:** `rich_ext::rst`, a port of `rich-rst`: `RestructuredText` parses
   the document and renders it byte for byte as `rich-rst` does on rich
   15.0.0, checked against fixtures from `scripts/capture_rst_golden.py`.
+- **`--rst` fixes (release audit):**
+  - Nested lists (`- - - … x`, any marker) overflowed the stack and aborted
+    the process. Nesting now stops at 200 levels, past docutils' own limit,
+    and deep indentation is bounded by a budget linear in the document's
+    size (500 nested quotes took 6.7 s in a debug build, now about 1 s).
+  - Unclosed inline runs (`a-a-a-…`, `:a:a…`, `[1 [1 …`) rescanned the
+    rest of the paragraph at each word, 19 to 61 s for 64 KB; each is now
+    scanned once (under 0.2 s).
+  - Grid tables trace their cells as docutils' `GridTableParser` does, so a
+    cell spanning columns or rows keeps its text, and a table docutils cannot
+    trace renders nothing, as upstream. A simple table with text in a column
+    margin renders nothing too.
+  - Section titles parse their inline markup (`Title *emph*` shows
+    `Title emph`), a block quote keeps what follows its attribution as a new
+    quote, and `:role:` before an inline literal is text.
+- **Hardening (release audit):**
+  - An argument that is not valid UTF-8 was known by its lossy spelling,
+    which a real `\u{fffd}` name shares, so `rich $'\xff.txt'
+    --export-html \u{fffd}.txt` wrote the export over its input. Such an
+    argument is now spelled as batch paths are (`\xNN` after a NUL no
+    argument can hold); `--print` text, `--title`, `--caption` and
+    `--rule-char` still show it lossily. `--theme-file` reads such a path by
+    its bytes, and a batch glob matches file names by their bytes, so
+    `a\xff*` no longer matches `a\xfe.txt`.
+  - `--dry-run` shows planned paths as errors show them: terminal controls
+    visible, and an escaped name as its `\xNN` spelling without the marker.
+  - `--sanitize` also covers `--rule-char`.
+- **Fixes (release audit):** `-J` and `-u` override a config file's default
+  mode as `--json` and `--rule` do, where they reported "only one render
+  mode". A panel fits an emoji `--title` without `--emoji`, as upstream
+  draws its emoji anyway. `--head`/`--tail` count lines as Python's
+  `splitlines` does (a form feed or `\r` ends one).
 
 ### CLI 0.0.13: interactive commands (#493, #494)
 

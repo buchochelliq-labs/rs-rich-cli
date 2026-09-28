@@ -218,6 +218,7 @@ pub fn parse(source: &str) -> Vec<Block> {
         .lines()
         .map(|line| expand_tabs(line.trim_end()))
         .collect();
+    Nesting::reset(source.len());
     parse_blocks(&lines)
 }
 
@@ -352,8 +353,73 @@ fn captures(regex: &Regex, line: &str) -> Option<Vec<String>> {
     )
 }
 
+/// How deep body elements may nest: lists in lists, quotes in quotes. docutils
+/// itself fails with a `RecursionError` well before this (about 170 nested
+/// lists), so the cap changes nothing upstream renders; past it the rest of
+/// the text is one plain paragraph, so no document can exhaust the stack.
+const MAX_DEPTH: usize = 200;
+
+/// Each level of nesting re-reads the indented lines it holds, so a deeply
+/// nested document costs its depth times its size. Past [`CHARGED_DEPTH`]
+/// the bytes re-read are counted, and once they pass a budget of
+/// [`DEEP_BUDGET`] plus [`DEEP_PER_BYTE`] per byte of the document, deeper
+/// levels are plain text too. That keeps the parse linear in the document's
+/// size, and no document nests this deep and wide in practice.
+const CHARGED_DEPTH: usize = 8;
+const DEEP_BUDGET: usize = 4 << 20;
+const DEEP_PER_BYTE: usize = 8;
+
+thread_local! {
+    /// The current nesting depth, the bytes re-read past [`CHARGED_DEPTH`]
+    /// in this parse, and the parse's budget for them.
+    static NESTING: std::cell::Cell<(usize, usize, usize)> =
+        const { std::cell::Cell::new((0, 0, 0)) };
+}
+
+/// One level of [`parse_blocks`] nesting, released on drop.
+struct Nesting;
+
+impl Nesting {
+    fn enter(lines: &[String]) -> Option<Nesting> {
+        NESTING.with(|nesting| {
+            let (depth, mut work, budget) = nesting.get();
+            if depth >= CHARGED_DEPTH {
+                work += lines.iter().map(String::len).sum::<usize>();
+            }
+            (depth < MAX_DEPTH && work <= budget).then(|| {
+                nesting.set((depth + 1, work, budget));
+                Nesting
+            })
+        })
+    }
+
+    /// Start the parse of a document of `size` bytes, with nothing charged.
+    fn reset(size: usize) {
+        let budget = DEEP_BUDGET.saturating_add(size.saturating_mul(DEEP_PER_BYTE));
+        NESTING.with(|nesting| nesting.set((0, 0, budget)));
+    }
+}
+
+impl Drop for Nesting {
+    fn drop(&mut self) {
+        NESTING.with(|nesting| {
+            let (depth, work, budget) = nesting.get();
+            nesting.set((depth - 1, work, budget));
+        });
+    }
+}
+
 /// The body elements of `lines`, which start at column 0.
 fn parse_blocks(lines: &[String]) -> Vec<Block> {
+    let Some(_nesting) = Nesting::enter(lines) else {
+        let text = lines
+            .iter()
+            .map(|line| line.trim())
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        return vec![Block::Paragraph(vec![Inline::Text(text)])];
+    };
     let mut blocks = Vec::new();
     let mut i = 0;
     while i < lines.len() {
@@ -364,14 +430,16 @@ fn parse_blocks(lines: &[String]) -> Vec<Block> {
         }
         if indent(line) > 0 {
             let (block, next) = indented_block(lines, i);
-            blocks.push(block_quote(parse_blocks(&block)));
+            blocks.extend(block_quotes(block));
             i = next;
             continue;
         }
         // Overline and underline.
         if let Some(c) = adornment(line) {
             if i + 2 < lines.len() && !blank(&lines[i + 1]) && adornment(&lines[i + 2]) == Some(c) {
-                blocks.push(Block::Title(lines[i + 1].trim().to_string()));
+                blocks.push(Block::Title(inline_text(&parse_inline(
+                    lines[i + 1].trim(),
+                ))));
                 i += 3;
                 continue;
             }
@@ -438,7 +506,7 @@ fn parse_blocks(lines: &[String]) -> Vec<Block> {
             i = next;
             continue;
         }
-        if line.starts_with("+-") && line.ends_with('+') {
+        if is_grid_border(line) {
             let (block, next) = grid_table(lines, i);
             blocks.push(block);
             i = next;
@@ -453,7 +521,7 @@ fn parse_blocks(lines: &[String]) -> Vec<Block> {
         }
         // Text: a title, a definition list or a paragraph.
         if i + 1 < lines.len() && underlines(line, &lines[i + 1]) {
-            blocks.push(Block::Title(line.trim().to_string()));
+            blocks.push(Block::Title(inline_text(&parse_inline(line.trim()))));
             i += 2;
             continue;
         }
@@ -534,20 +602,88 @@ fn literal_marker(text: &str) -> (String, bool) {
     }
 }
 
-/// A block quote, with its attribution (`-- Author`) split off the end.
-fn block_quote(mut children: Vec<Block>) -> Block {
-    if let Some(Block::Paragraph(inlines)) = children.last() {
-        let text = inline_text(inlines);
-        for dash in ["-- ", "--- ", "\u{2014} "] {
-            if let Some(rest) = text.strip_prefix(dash) {
-                let attribution = parse_inline(rest.trim());
-                children.pop();
-                children.push(Block::Attribution(attribution));
-                break;
+/// An indented block as docutils' `block_quote` splits it: a quote, its
+/// attribution (`-- Author` after a blank line), and a new quote for
+/// whatever follows the attribution, parsed as it stands.
+fn block_quotes(mut lines: Vec<String>) -> Vec<Block> {
+    let mut quotes = Vec::new();
+    while !lines.is_empty() {
+        let (quote, attribution, rest) = split_attribution(&lines);
+        let mut children = parse_blocks(quote);
+        if let Some(attribution) = attribution {
+            children.push(Block::Attribution(parse_inline(&attribution)));
+        }
+        quotes.push(Block::BlockQuote(children));
+        let mut rest = rest.to_vec();
+        let leading = rest.iter().take_while(|line| blank(line)).count();
+        rest.drain(..leading);
+        lines = rest;
+    }
+    quotes
+}
+
+/// docutils' `split_attribution`: the quote's lines, the attribution's text
+/// and the lines after it.
+fn split_attribution(lines: &[String]) -> (&[String], Option<String>, &[String]) {
+    let mut blank_at = None;
+    let mut nonblank_seen = false;
+    for (i, line) in lines.iter().enumerate() {
+        if blank(line) {
+            blank_at = Some(i);
+            continue;
+        }
+        if nonblank_seen && blank_at.is_some_and(|at| at + 1 == i) {
+            if let Some(marker) = attribution_marker(line) {
+                if let Some((end, indent)) = attribution_shape(lines, i) {
+                    let text =
+                        std::iter::once(&line[marker..])
+                            .chain(lines[i + 1..end].iter().map(|line| {
+                                line.get(indent.min(self::indent(line))..).unwrap_or("")
+                            }))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                    return (
+                        &lines[..i],
+                        Some(text.trim_end().to_string()),
+                        &lines[end..],
+                    );
+                }
             }
         }
+        nonblank_seen = true;
     }
-    Block::BlockQuote(children)
+    (lines, None, &[])
+}
+
+/// docutils' `attribution_pattern`, `(---?(?!-)|\u2014) *(?=[^ \n])`: where
+/// the attribution's text starts.
+fn attribution_marker(line: &str) -> Option<usize> {
+    let dashes = if let Some(rest) = line.strip_prefix("---") {
+        (!rest.starts_with('-')).then_some(3)?
+    } else if let Some(rest) = line.strip_prefix("--") {
+        (!rest.starts_with('-')).then_some(2)?
+    } else if line.starts_with('\u{2014}') {
+        '\u{2014}'.len_utf8()
+    } else {
+        return None;
+    };
+    let text = dashes + (line.len() - dashes - line[dashes..].trim_start_matches(' ').len());
+    (text < line.len()).then_some(text)
+}
+
+/// docutils' `check_attribution`: the attribution's continuation lines must
+/// share one indent. Returns the index past its end, and that indent.
+fn attribution_shape(lines: &[String], start: usize) -> Option<(usize, usize)> {
+    let mut indent = None;
+    let mut end = start + 1;
+    while end < lines.len() && !blank(&lines[end]) {
+        let this = self::indent(&lines[end]);
+        if *indent.get_or_insert(this) != this {
+            return None;
+        }
+        end += 1;
+    }
+    Some((end, indent.unwrap_or(0)))
 }
 
 /// The kind of a list marker: the same kind continues the list.
@@ -956,6 +1092,7 @@ fn simple_table(lines: &[String], start: usize) -> Option<(Block, usize)> {
     let mut borders = 0;
     let mut i = start;
     let mut cells = Vec::new();
+    let mut malformed = false;
     while i < lines.len() {
         let line = &lines[i];
         if is_simple_table_border(line) {
@@ -963,6 +1100,9 @@ fn simple_table(lines: &[String], start: usize) -> Option<(Block, usize)> {
             i += 1;
             let closes = borders >= 2 && (i >= lines.len() || blank(&lines[i]));
             if closes {
+                // Text in a column margin is docutils' "Malformed table"
+                // error, which renders nothing.
+                let cells = if malformed { Vec::new() } else { cells };
                 return Some((Block::Container(cells), i));
             }
             continue;
@@ -972,6 +1112,10 @@ fn simple_table(lines: &[String], start: usize) -> Option<(Block, usize)> {
             continue;
         }
         let chars = display_columns(line);
+        malformed |= columns.windows(2).any(|pair| {
+            let margin = &chars[pair[0].1.min(chars.len())..pair[1].0.min(chars.len())];
+            margin.iter().flatten().any(|c| !c.is_whitespace())
+        });
         for (column, &(from, to)) in columns.iter().enumerate() {
             let end = if column + 1 == columns.len() {
                 chars.len()
@@ -989,42 +1133,208 @@ fn simple_table(lines: &[String], start: usize) -> Option<(Block, usize)> {
     None
 }
 
-/// A grid table: its cells, each parsed as body elements, in row order.
+/// docutils' `grid_table_top_pat`, `\+-[-+]+-\+ *$`.
+fn is_grid_border(line: &str) -> bool {
+    line.len() >= 5
+        && line.starts_with("+-")
+        && line.ends_with("-+")
+        && line.chars().all(|c| c == '-' || c == '+')
+}
+
+/// A grid table row by display cell, as docutils' `pad_double_width` and
+/// `strip_combining_chars` leave it for tracing borders: a wide character
+/// takes its cell and an empty one after it, and a zero-width character
+/// joins the cell before it.
+fn grid_cells(line: &str) -> Vec<String> {
+    let mut cells: Vec<String> = Vec::new();
+    for c in line.chars() {
+        let cell_width = width(c.encode_utf8(&mut [0; 4]));
+        match cells.last_mut() {
+            Some(last) if cell_width == 0 => last.push(c),
+            _ => cells.push(c.to_string()),
+        }
+        for _ in 1..cell_width {
+            cells.push(String::new());
+        }
+    }
+    cells
+}
+
+/// A grid table: its cells, each parsed as body elements, in row order. A
+/// table docutils cannot trace is an error, which renders nothing.
 fn grid_table(lines: &[String], start: usize) -> (Block, usize) {
+    // `isolate_grid_table`: the lines that start with `+` or `|`, up to the
+    // last border.
     let mut end = start;
     while end < lines.len() && (lines[end].starts_with('+') || lines[end].starts_with('|')) {
         end += 1;
     }
-    let table = &lines[start..end];
-    // Columns are display cells, as docutils' `pad_double_width` makes them.
-    let columns: Vec<usize> = table[0]
-        .chars()
-        .enumerate()
-        .filter(|(_, c)| *c == '+')
-        .map(|(index, _)| index)
-        .collect();
-    let mut cells = Vec::new();
-    let mut row: Vec<Vec<String>> = vec![Vec::new(); columns.len().saturating_sub(1)];
-    for line in &table[1..] {
-        if line.starts_with('+') {
-            for cell in row.iter_mut() {
-                let block = dedent(cell, min_indent(cell));
-                if block.iter().any(|line| !blank(line)) {
-                    cells.extend(parse_blocks(&block));
-                }
-                cell.clear();
-            }
-            continue;
-        }
-        let chars = display_columns(line);
-        for (column, pair) in columns.windows(2).enumerate() {
-            let end = pair[1].min(chars.len());
-            let text: String = chars[(pair[0] + 1).min(end)..end]
-                .iter()
-                .flatten()
-                .collect();
-            row[column].push(text.trim_end().to_string());
-        }
+    let malformed = |next: usize| (Block::Container(Vec::new()), next);
+    let mut rows = end - start;
+    let mut next = end;
+    if !is_grid_border(&lines[end - 1]) {
+        let Some(bottom) = (2..rows.saturating_sub(1))
+            .rev()
+            .find(|&i| is_grid_border(&lines[start + i]))
+        else {
+            return malformed(end);
+        };
+        rows = bottom + 1;
+        // docutils steps back one line too many here, so the row before the
+        // bottom border is read again after the table.
+        next = start + bottom - 1;
     }
-    (Block::Container(cells), end)
+    let grid: Vec<Vec<String>> = lines[start..start + rows]
+        .iter()
+        .map(|line| grid_cells(line))
+        .collect();
+    let right_edge = grid[0].len();
+    if grid
+        .iter()
+        .any(|row| row.len() != right_edge || !row.last().is_some_and(|c| c == "+" || c == "|"))
+    {
+        return malformed(next);
+    }
+    match GridTable::parse(grid) {
+        Some(cells) => (Block::Container(cells), next),
+        None => malformed(next),
+    }
+}
+
+/// docutils' `GridTableParser`: trace each cell from its top-left corner
+/// along its borders, so cells may span rows and columns.
+struct GridTable {
+    grid: Vec<Vec<String>>,
+    bottom: usize,
+    right: usize,
+    /// For each text column, the last row seen.
+    done: Vec<Option<usize>>,
+}
+
+impl GridTable {
+    fn parse(mut grid: Vec<Vec<String>>) -> Option<Vec<Block>> {
+        // The head/body separator reads as a row border; there may be one,
+        // neither first nor last.
+        let separators: Vec<usize> = grid
+            .iter()
+            .enumerate()
+            .filter(|(_, row)| {
+                let line: String = row.concat();
+                line.len() >= 5
+                    && line.starts_with("+=")
+                    && line.ends_with("=+")
+                    && line.chars().all(|c| c == '=' || c == '+')
+            })
+            .map(|(i, _)| i)
+            .collect();
+        match separators.as_slice() {
+            [] => {}
+            [i] if *i != 0 && *i != grid.len() - 1 => {
+                for cell in grid[*i].iter_mut() {
+                    if cell == "=" {
+                        *cell = "-".into();
+                    }
+                }
+            }
+            _ => return None,
+        }
+        let bottom = grid.len() - 1;
+        let right = grid[0].len() - 1;
+        if bottom == 0 {
+            // A lone border: a table of no rows.
+            return Some(Vec::new());
+        }
+        let mut table = GridTable {
+            grid,
+            bottom,
+            right,
+            done: vec![None; right + 1],
+        };
+        let mut found = Vec::new();
+        let mut corners = vec![(0, 0)];
+        while !corners.is_empty() {
+            let (top, left) = corners.remove(0);
+            if top == table.bottom
+                || left == table.right
+                || table.done[left].is_some_and(|done| top <= done)
+            {
+                continue;
+            }
+            let Some((bottom, right)) = table.scan_right(top, left) else {
+                continue;
+            };
+            for col in left..right {
+                table.done[col] = Some(bottom - 1);
+            }
+            found.push((top, left, bottom, right));
+            corners.push((top, right));
+            corners.push((bottom, left));
+            corners.sort_unstable();
+        }
+        // Each text column must be seen to the bottom.
+        if table.done[..table.right]
+            .iter()
+            .any(|&done| done != Some(table.bottom - 1))
+        {
+            return None;
+        }
+        found.sort_unstable();
+        let mut cells = Vec::new();
+        for (top, left, bottom, right) in found {
+            // `get_2D_block`: the cell's text, each line stripped on the
+            // right, then dedented by the smallest indent.
+            let block: Vec<String> = table.grid[top + 1..bottom]
+                .iter()
+                .map(|row| row[left + 1..right].concat().trim_end().to_string())
+                .collect();
+            let block = dedent(&block, min_indent(&block));
+            if block.iter().any(|line| !blank(line)) {
+                cells.extend(parse_blocks(&block));
+            }
+        }
+        Some(cells)
+    }
+
+    fn at(&self, row: usize, col: usize) -> &str {
+        self.grid[row][col].as_str()
+    }
+
+    fn scan_right(&self, top: usize, left: usize) -> Option<(usize, usize)> {
+        if self.at(top, left) != "+" {
+            return None;
+        }
+        for i in left + 1..=self.right {
+            match self.at(top, i) {
+                "+" => {
+                    if let Some(bottom) = self.scan_down(top, left, i) {
+                        return Some((bottom, i));
+                    }
+                }
+                "-" => {}
+                _ => return None,
+            }
+        }
+        None
+    }
+
+    fn scan_down(&self, top: usize, left: usize, right: usize) -> Option<usize> {
+        for i in top + 1..=self.bottom {
+            match self.at(i, right) {
+                "+" => {
+                    if self.scan_left(top, left, i, right) {
+                        return Some(i);
+                    }
+                }
+                "|" => {}
+                _ => return None,
+            }
+        }
+        None
+    }
+
+    fn scan_left(&self, top: usize, left: usize, bottom: usize, right: usize) -> bool {
+        (left + 1..right).all(|i| matches!(self.at(bottom, i), "+" | "-"))
+            && self.at(bottom, left) == "+"
+            && (top + 1..bottom).all(|i| matches!(self.at(i, left), "+" | "|"))
+    }
 }
