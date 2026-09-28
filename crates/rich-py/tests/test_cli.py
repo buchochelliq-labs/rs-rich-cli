@@ -350,7 +350,10 @@ def test_interactive_commands_degrade_through_the_wheel(workdir):
     # `confirm`: 0 for yes, 1 for no.
     assert run_python(workdir, ["confirm", "Sure?"], b"y\n").returncode == 0
     assert run_python(workdir, ["confirm", "Sure?"], b"n\n").returncode == 1
-    assert run_python(workdir, ["confirm", "--default", "yes"]).returncode == 1  # stdin ended: no answer
+    # At the end of input the default answers; without one there is no answer.
+    assert run_python(workdir, ["confirm", "--default", "yes"]).returncode == 0
+    assert run_python(workdir, ["confirm", "--default", "no"]).returncode == 1
+    assert run_python(workdir, ["confirm"]).returncode == 3
     result = run_python(workdir, ["input", "--prompt", "Name"], b"Ada\n")
     assert (result.returncode, result.stdout) == (0, b"Ada\n")
     result = run_python(workdir, ["pager"], b"one\ntwo\n")
