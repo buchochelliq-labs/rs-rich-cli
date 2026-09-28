@@ -748,6 +748,8 @@ struct CommandPreview {
     state: Arc<Mutex<PreviewState>>,
     /// The running command, killed when the picker is dropped.
     child: Arc<Mutex<Option<std::process::Child>>>,
+    /// How long the command may run: [`PREVIEW_TIMEOUT`], shorter in tests.
+    timeout: Duration,
 }
 
 impl CommandPreview {
@@ -757,6 +759,7 @@ impl CommandPreview {
             item,
             state: Arc::new(Mutex::new(PreviewState::Idle)),
             child: Arc::new(Mutex::new(None)),
+            timeout: PREVIEW_TIMEOUT,
         }
     }
 
@@ -781,8 +784,11 @@ impl CommandPreview {
         };
         #[cfg(not(windows))]
         let mut process = {
+            use std::os::unix::process::CommandExt;
             let mut process = std::process::Command::new("sh");
-            process.arg("-c").arg(&command);
+            // A process group of its own, so a timeout or the picker's end
+            // kills what the command started (`a | b`, `x & wait`) too.
+            process.arg("-c").arg(&command).process_group(0);
             process
         };
         let mut child = process
@@ -806,6 +812,7 @@ impl CommandPreview {
         ];
         *self.child.lock().unwrap_or_else(|e| e.into_inner()) = Some(child);
         let (state, child) = (Arc::clone(&self.state), Arc::clone(&self.child));
+        let timeout = self.timeout;
         std::thread::spawn(move || {
             let started = Instant::now();
             let mut timed_out = false;
@@ -818,10 +825,10 @@ impl CommandPreview {
                 };
                 match running.try_wait() {
                     Ok(Some(status)) => break Some(status),
-                    Ok(None) if started.elapsed() < PREVIEW_TIMEOUT => {}
+                    Ok(None) if started.elapsed() < timeout => {}
                     Ok(None) | Err(_) => {
                         timed_out = true;
-                        let _ = running.kill();
+                        kill_tree(running);
                         break running.wait().ok();
                     }
                 }
@@ -853,7 +860,7 @@ impl CommandPreview {
             if timed_out {
                 shown.push_str(&format!(
                     "\n(preview timed out after {} s)",
-                    PREVIEW_TIMEOUT.as_secs()
+                    timeout.as_secs()
                 ));
             } else if cut {
                 shown.push_str("\n(preview cut at 1 MiB)");
@@ -897,10 +904,37 @@ impl Drop for CommandPreview {
     fn drop(&mut self) {
         let running = self.child.lock().unwrap_or_else(|e| e.into_inner()).take();
         if let Some(mut child) = running {
-            let _ = child.kill();
+            kill_tree(&mut child);
             let _ = child.wait();
         }
     }
+}
+
+/// Kill a preview command and everything it started: on Unix its process
+/// group (the command leads one of its own), on Windows its process tree.
+#[allow(unsafe_code)]
+fn kill_tree(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    {
+        if let Ok(pgid) = libc::pid_t::try_from(child.id()) {
+            // SAFETY: `kill` takes plain integers; a negative pid names the
+            // process group the child leads, and it has not been reaped
+            // yet, so the id cannot have been reused.
+            unsafe {
+                libc::kill(-pgid, libc::SIGKILL);
+            }
+        }
+    }
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/T", "/F", "/PID", &child.id().to_string()])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+    let _ = child.kill();
 }
 
 impl Renderable for CommandPreview {
@@ -1009,5 +1043,95 @@ mod tests {
         ] {
             assert!(quote_item(item, true).is_err(), "{item:?}");
         }
+    }
+
+    /// A preview command that leaves a grandchild (`sleep 30 &`), and the
+    /// file the grandchild's pid is written to.
+    #[cfg(target_os = "linux")]
+    fn preview_with_grandchild(dir: &std::path::Path) -> (CommandPreview, std::path::PathBuf) {
+        let pidfile = dir.join("pid");
+        let path = quote_item(pidfile.to_str().unwrap(), false).unwrap();
+        let command = format!("sleep 30 & echo $! > {path}; wait");
+        (CommandPreview::new(command, String::new()), pidfile)
+    }
+
+    /// The pid in `pidfile`, once the command has written it.
+    #[cfg(target_os = "linux")]
+    fn grandchild_pid(pidfile: &std::path::Path) -> u32 {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            if let Some(pid) = std::fs::read_to_string(pidfile)
+                .ok()
+                .and_then(|text| text.trim().parse().ok())
+            {
+                return pid;
+            }
+            assert!(Instant::now() < deadline, "no pid written");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    /// Whether `pid` is still running: present and not a zombie waiting
+    /// for a parent (a container's init may never reap it).
+    #[cfg(target_os = "linux")]
+    fn running(pid: u32) -> bool {
+        std::fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|stat| {
+            stat.rsplit_once(')')
+                .is_some_and(|(_, rest)| !rest.trim_start().starts_with('Z'))
+        })
+    }
+
+    #[cfg(target_os = "linux")]
+    fn wait_until_gone(pid: u32) -> bool {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while running(pid) {
+            if Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        true
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn preview_timeout_kills_the_commands_background_processes() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut preview, pidfile) = preview_with_grandchild(dir.path());
+        preview.timeout = Duration::from_millis(300);
+        preview.start(80).unwrap();
+        let pid = grandchild_pid(&pidfile);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !matches!(
+            *preview.state.lock().unwrap(),
+            PreviewState::Done(ref text) if text.plain().contains("timed out")
+        ) {
+            assert!(Instant::now() < deadline, "the preview never timed out");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let gone = wait_until_gone(pid);
+        if !gone {
+            let _ = std::process::Command::new("kill")
+                .arg(pid.to_string())
+                .status();
+        }
+        assert!(gone, "the preview's `sleep 30` outlived its timeout");
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn dropping_a_preview_kills_the_commands_background_processes() {
+        let dir = tempfile::tempdir().unwrap();
+        let (preview, pidfile) = preview_with_grandchild(dir.path());
+        preview.start(80).unwrap();
+        let pid = grandchild_pid(&pidfile);
+        drop(preview);
+        let gone = wait_until_gone(pid);
+        if !gone {
+            let _ = std::process::Command::new("kill")
+                .arg(pid.to_string())
+                .status();
+        }
+        assert!(gone, "the preview's `sleep 30` outlived the picker");
     }
 }

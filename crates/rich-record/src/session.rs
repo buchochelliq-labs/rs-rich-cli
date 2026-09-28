@@ -76,6 +76,49 @@ struct State {
 }
 
 impl State {
+    /// A hidden session's state, on a `columns` x `rows` screen.
+    fn new(rows: u16, columns: u16, theme: Theme) -> State {
+        let now = Instant::now();
+        State {
+            terminal: Terminal::new(rows, columns),
+            theme,
+            hidden: true,
+            hidden_since: now,
+            hidden_total: Duration::ZERO,
+            start: now,
+            utf8: Vec::new(),
+            seen: VecDeque::new(),
+            seen_bytes: 0,
+            batch: String::new(),
+            overflow: false,
+            pending: None,
+            last_frame: None,
+            timeline: Timeline::default(),
+            alive: true,
+            error: None,
+        }
+    }
+
+    /// Resize the screen, and record it. Output still queued was drawn at
+    /// the old size, so it is recorded, with its frame, first.
+    fn resize(&mut self, columns: u16, rows: u16) -> std::io::Result<()> {
+        if !self.hidden {
+            self.flush();
+        }
+        if let Err(error) = self.terminal.set_size(rows, columns) {
+            self.error = Some(error.to_string());
+            return Err(error);
+        }
+        if !self.hidden {
+            let t = self.now();
+            self.timeline
+                .events
+                .push((t, Event::Resize { columns, rows }));
+            self.frame(t);
+        }
+        Ok(())
+    }
+
     fn now(&self) -> f64 {
         (self.start.elapsed() - self.hidden_total).as_secs_f64()
     }
@@ -236,25 +279,7 @@ impl Session {
             .try_clone_reader()
             .map_err(std::io::Error::other)?;
         let writer = pty.master.take_writer().map_err(std::io::Error::other)?;
-        let now = Instant::now();
-        let state = Arc::new(Mutex::new(State {
-            terminal: Terminal::new(rows, columns),
-            theme,
-            hidden: true,
-            hidden_since: now,
-            hidden_total: Duration::ZERO,
-            start: now,
-            utf8: Vec::new(),
-            seen: VecDeque::new(),
-            seen_bytes: 0,
-            batch: String::new(),
-            overflow: false,
-            pending: None,
-            last_frame: None,
-            timeline: Timeline::default(),
-            alive: true,
-            error: None,
-        }));
+        let state = Arc::new(Mutex::new(State::new(rows, columns, theme)));
         let shared = Arc::clone(&state);
         thread::spawn(move || {
             let mut buffer = [0u8; 65536];
@@ -325,21 +350,7 @@ impl Session {
                 pixel_height: 0,
             })
             .map_err(std::io::Error::other)?;
-        let mut state = self.lock();
-        if let Err(error) = state.terminal.set_size(rows, columns) {
-            state.error = Some(error.to_string());
-            return Err(error);
-        }
-        if !state.hidden {
-            state.flush();
-            let t = state.now();
-            state
-                .timeline
-                .events
-                .push((t, Event::Resize { columns, rows }));
-            state.frame(t);
-        }
-        Ok(())
+        self.lock().resize(columns, rows)
     }
 
     /// Forget the screens seen so far: the next [`Session::seen`] starts
@@ -421,5 +432,51 @@ impl Drop for Session {
     /// A session dropped on an error path still stops and reaps its shell.
     fn drop(&mut self) {
         self.stop();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row_text(snapshot: &Snapshot, row: usize) -> String {
+        snapshot.rows[row]
+            .iter()
+            .map(|cell| cell.text.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn output_queued_before_a_resize_is_recorded_at_the_old_size() {
+        let mut state = State::new(4, 20, Theme::default());
+        state.hidden = false;
+        let t = state.now();
+        state.frame(t);
+        // Within a frame interval of the last frame: queued, not recorded.
+        state.terminal.process(b"hello").unwrap();
+        let t = state.now();
+        state.output(t, b"hello");
+        assert!(state.pending.is_some());
+        state.resize(30, 6).unwrap();
+
+        let events = &state.timeline.events;
+        let output = events
+            .iter()
+            .position(|(_, event)| *event == Event::Output("hello".into()))
+            .expect("the output is recorded");
+        let resize = events
+            .iter()
+            .position(|(_, event)| matches!(event, Event::Resize { .. }))
+            .expect("the resize is recorded");
+        assert!(output < resize, "{events:?}");
+        assert!(events[output].0 <= events[resize].0, "{events:?}");
+
+        // The output's frame is the old 20x4 screen; the resize's, 30x6.
+        let frames = &state.timeline.frames;
+        let (_, before) = &frames[frames.len() - 2];
+        assert_eq!((before.rows.len(), before.rows[0].len()), (4, 20));
+        assert!(row_text(before, 0).starts_with("hello"));
+        let (_, after) = frames.last().unwrap();
+        assert_eq!((after.rows.len(), after.rows[0].len()), (6, 30));
     }
 }

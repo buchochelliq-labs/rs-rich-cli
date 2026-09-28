@@ -1553,6 +1553,7 @@ dependencies = [
  "cap-std",
  "ctrlc",
  "fastrand",
+ "libc",
  "notify",
  "portable-pty",
  "rs-rich",

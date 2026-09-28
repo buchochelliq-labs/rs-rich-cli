@@ -45,6 +45,33 @@ pub fn sanitize_line(line: &mut [Segment]) {
     }
 }
 
+/// Where `column`, a cell of `line` as rendered, lands once
+/// [`sanitize_line`] has run: a control measures no cells (a tab and ESC
+/// among them) until it is shown as a one-cell character, which moves every
+/// cell after it. A zero-width control at `column` itself counts as before
+/// it, so a caret after a prompt ending in ESC lands after its `␛`.
+pub fn sanitized_column(line: &[Segment], column: usize) -> usize {
+    let mut shift = 0isize;
+    let mut base = 0;
+    for segment in line.iter().filter(|segment| !segment.control) {
+        for (index, c) in segment.text.char_indices() {
+            let Some(shown) = visible(c) else { continue };
+            let at = base + rich::cells::cell_len(&segment.text[..index]);
+            let before = cell_len_of(c);
+            if at < column || (at == column && before == 0) {
+                shift += cell_len_of(shown) as isize - before as isize;
+            }
+        }
+        base += segment.cell_length();
+    }
+    column.saturating_add_signed(shift)
+}
+
+fn cell_len_of(c: char) -> usize {
+    let mut buffer = [0; 4];
+    rich::cells::cell_len(c.encode_utf8(&mut buffer))
+}
+
 /// Paints successive views into one region.
 #[derive(Debug)]
 pub struct Painter {
@@ -332,6 +359,16 @@ mod tests {
         let mut line = vec![Segment::new("x\x1by", None)];
         sanitize_line(&mut line);
         assert_eq!(line[0].text.chars().count(), 3);
+    }
+
+    #[test]
+    fn sanitized_column_counts_the_shown_controls_before_it() {
+        let line = vec![Segment::new("x\x1b", None), Segment::new("\ty z", None)];
+        // Rendered, ESC and the tab take no cells: "x" then "y z".
+        assert_eq!(sanitized_column(&line, 0), 0);
+        assert_eq!(sanitized_column(&line, 1), 3);
+        assert_eq!(sanitized_column(&line, 2), 4);
+        assert_eq!(sanitized_column(&[Segment::new("ab", None)], 2), 2);
     }
 
     #[test]

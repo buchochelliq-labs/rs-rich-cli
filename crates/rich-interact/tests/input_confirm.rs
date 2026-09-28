@@ -31,6 +31,21 @@ fn types_edits_and_submits() {
 }
 
 #[test]
+fn caret_counts_the_prompts_shown_controls() {
+    // ESC and the tab measure no cells as text, but are painted as `␛` and
+    // a space: the caret has to move past them.
+    let script = Script::new().text("ab").keys("enter");
+    let (outcome, record) = headless::run(Input::new("x\x1b\tz"), script, 40, 6);
+    assert_eq!(outcome.unwrap(), Outcome::Done("ab".into()));
+    assert_eq!(before_answer(&record), "? x␛ z › ab");
+    // "? x␛ z › " is 9 cells: the caret starts at column 9 and, after
+    // "ab" is written, is moved back to column 11.
+    let output = record.output();
+    assert!(output.contains("\r\x1b[9C\x1b[?25h"), "{output:?}");
+    assert!(output.contains("b\r\x1b[11C"), "{output:?}");
+}
+
+#[test]
 fn line_editing_keys() {
     let script = Script::new()
         .text("one two three")

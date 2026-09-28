@@ -161,6 +161,11 @@ Entries below record subsequent releases and development.
     1,000,000 lines, `pager` pages at most 64 MiB, and more is an input
     error (exit 3) instead of `yes | rich choose` exhausting memory;
   - Ctrl+C at `input --password` read without echo exits 130, not 1.
+  - a `--preview` command that starts a pipeline or a background process
+    (`yes | head`, `sleep 30 & wait`) no longer leaves it running when the
+    preview times out or the picker ends: on Unix the command runs in a
+    process group of its own and the whole group is killed; on Windows its
+    process tree is (`taskkill /T /F`).
 
 ### Interact 0.0.1: painting on standard error
 
@@ -202,6 +207,11 @@ Entries below record subsequent releases and development.
   letter) and scrolls a line longer than the terminal to keep the caret in
   view. `Select::repaint_every` (and `MultiSelect`'s) repaints on a timer,
   for previews that fill in by themselves.
+- **The caret follows shown controls.** A view's cursor column is moved by
+  the cells `paint::sanitize_line` gives the controls before it, so an `Input`
+  whose prompt holds ESC or a tab (`rich input --prompt $'x\e'`) puts the
+  caret after the field, not inside the prompt. New
+  `paint::sanitized_column`.
 
 ### Python 0.0.2: interactive components and frames (0.0.13 workstream 5)
 
@@ -448,6 +458,9 @@ The `rs-rich` package on PyPI stays level with the Rust crates.
   - `Exec` reads its error output as it runs (a command that wrote more than a
     pipe holds hung until the timeout), keeps the first 64 KiB for the report,
     and is reaped after a timeout.
+  - Output still queued when a `Resize` runs is recorded, with its frame, at
+    the old size before the resize event, instead of being drawn on the
+    resized screen after it.
   - SVG text replaces characters XML forbids (control characters in a title
     or on screen) with U+FFFD, so the file stays well-formed.
   - Migration: `Timeline` has a new `truncated` field; `Terminal::process` and
