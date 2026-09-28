@@ -102,8 +102,9 @@ Entries below record subsequent releases and development.
   output beside the list, with `{}` the focused item: `rich {}` renders it.
 - Without a terminal they degrade: line prompts on stderr, `--selected` or
   `--default` answers, and `filter` prints the lines matching `--value`.
-- Behind the new default `interact` feature. PTY tests cover the captured
-  answer, keys with a piped list, cancel, Ctrl+C, the pager and previews.
+- Behind the new default `interact` feature, which the `rs_rich` wheel's
+  `python -m rs_rich` also builds. PTY tests cover the captured answer, keys
+  with a piped list, cancel, Ctrl+C, the pager and previews.
 
 ### Interact 0.0.1: painting on standard error
 
