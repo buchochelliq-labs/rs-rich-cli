@@ -1604,7 +1604,9 @@ dependencies = [
  "portable-pty",
  "rs-rich",
  "rs-rich-ext",
+ "rs-rich-plugin-api",
  "signal-hook",
+ "tempfile",
  "vt100",
 ]
 

@@ -18,7 +18,7 @@ use std::time::Duration;
 use rich::{ColorSystem, Console, Segment};
 
 use crate::component::{Component, Context, Flow, View};
-use crate::event::Event;
+use crate::event::{Button, Event, Mouse, MouseKind};
 use crate::paint::Painter;
 use crate::policy::{Fallback, LineIo, NotInteractive, Policy, StdLineIo};
 use crate::session::{Backend, Session, SessionOptions};
@@ -184,6 +184,11 @@ pub struct EventLoop<'a> {
     mounted: Vec<(Box<dyn Mounted + 'a>, Option<Duration>)>,
     timers: Vec<Timer<'a>>,
     size: (u16, u16),
+    /// The first row of each mounted component's view in the last paint,
+    /// and the painted lines, so a mouse event can be put in a component's
+    /// own coordinates and a click matched to a link.
+    rows: Vec<usize>,
+    shown: Vec<Vec<Segment>>,
 }
 
 impl<'a> EventLoop<'a> {
@@ -201,6 +206,8 @@ impl<'a> EventLoop<'a> {
             mounted: Vec::new(),
             timers: Vec::new(),
             size,
+            rows: Vec::new(),
+            shown: Vec::new(),
         }
     }
 
@@ -283,7 +290,9 @@ impl<'a> EventLoop<'a> {
         let context = self.context();
         let max_rows = context.height;
         let mut view = View::default();
+        let mut rows = Vec::with_capacity(self.mounted.len());
         for (component, _) in &self.mounted {
+            rows.push(view.lines.len());
             view.push(component.render(&context));
         }
         // The cursor was placed on the rendered cells; shown controls take
@@ -305,18 +314,55 @@ impl<'a> EventLoop<'a> {
             }
         }
         let out = self.painter.paint(&view, max_rows);
+        view.lines.truncate(max_rows);
         if !out.is_empty() {
             let plain = view
                 .lines
                 .iter()
-                .take(max_rows)
                 .map(|line| line.iter().map(|s| s.text.as_str()).collect::<String>())
                 .collect::<Vec<_>>()
                 .join("\n");
             self.backend.painted(&plain);
             self.backend.write(&out)?;
         }
+        self.rows = rows;
+        self.shown = view.lines;
         Ok(())
+    }
+
+    /// `mouse`, from terminal cells, in the coordinates of mounted
+    /// component `index`'s view: `None` for a press outside it. A press of
+    /// the left button on a hyperlink is [`Event::Link`] instead.
+    fn locate(&self, index: usize, mouse: Mouse) -> Option<Event> {
+        let top = if self.backend.alternate_screen() {
+            0
+        } else {
+            // An inline region that grew past the bottom of the screen
+            // scrolled up with it.
+            let rows = self.space().1;
+            (self.backend.origin() as usize).min(rows.saturating_sub(self.painter.extent()))
+        };
+        let region_row = (mouse.row as usize).checked_sub(top);
+        let start = self.rows.get(index).copied().unwrap_or(0);
+        let end = self
+            .rows
+            .get(index + 1)
+            .copied()
+            .unwrap_or(self.shown.len());
+        let inside = region_row.filter(|row| (start..end).contains(row));
+        if let (MouseKind::Down(_), None) = (mouse.kind, inside) {
+            return None;
+        }
+        if let (MouseKind::Down(Button::Left), Some(row)) = (mouse.kind, inside) {
+            if let Some(url) = link_at(&self.shown[row], mouse.column as usize) {
+                return Some(Event::Link(url));
+            }
+        }
+        let row = region_row.map_or(0, |row| row.saturating_sub(start));
+        Some(Event::Mouse(Mouse {
+            row: u16::try_from(row).unwrap_or(u16::MAX),
+            ..mouse
+        }))
     }
 
     fn running(&self) -> bool {
@@ -445,6 +491,17 @@ impl<'a> EventLoop<'a> {
                         }
                     }
                 }
+                Some(Event::Mouse(mouse)) => {
+                    if let Some(index) = self
+                        .mounted
+                        .iter()
+                        .position(|(component, _)| !component.finished())
+                    {
+                        if let Some(event) = self.locate(index, mouse) {
+                            self.deliver(index, &event)?;
+                        }
+                    }
+                }
                 Some(event) => {
                     if let Some(index) = self
                         .mounted
@@ -505,7 +562,17 @@ pub fn run<C: Component>(component: C, options: &RunOptions) -> Result<Outcome<C
             &mut StdLineIo,
         );
     }
-    let mut event_loop = EventLoop::terminal(options.session, options.paint.clone())?;
+    let mut session = options.session;
+    if component.mouse() {
+        session.mouse = true;
+        // Clicks are placed from the top of the region, which is known on
+        // the alternate screen and, inline, only by asking the terminal on
+        // standard output: painting on standard error, take the screen.
+        if session.output == crate::session::Output::Stderr {
+            session.alternate_screen = true;
+        }
+    }
+    let mut event_loop = EventLoop::terminal(session, options.paint.clone())?;
     let handle = event_loop.mount(component);
     event_loop.run()?;
     drop(event_loop);
@@ -543,4 +610,22 @@ pub fn degrade<C: Component>(
             Err(error) => Err(Error::NotInteractive(error)),
         },
     }
+}
+
+/// The URL of the hyperlink at `column` of `line`, if one is there.
+fn link_at(line: &[Segment], column: usize) -> Option<String> {
+    let mut at = 0;
+    for segment in line.iter().filter(|segment| !segment.control) {
+        let width = segment.cell_length();
+        if column < at + width {
+            return segment
+                .style
+                .as_ref()
+                .and_then(|style| style.link())
+                .filter(|url| !url.is_empty())
+                .map(str::to_string);
+        }
+        at += width;
+    }
+    None
 }

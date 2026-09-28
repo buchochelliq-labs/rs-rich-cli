@@ -3,17 +3,27 @@
 //! [fuzzy](crate::fuzzy) matcher. Each works under both drivers, degrades to
 //! a line-based prompt without a terminal, and is styled by one [`Theme`].
 
+mod asset;
+mod color;
 mod confirm;
+mod file;
 mod form;
 mod input;
 mod pager;
 mod select;
+mod textarea;
+mod views;
 
+pub use asset::{emoji, AssetKind, AssetPicker, BOX_STYLES};
+pub use color::{ColorFormat, ColorPicker};
 pub use confirm::{Choice, Confirm};
+pub use file::{display_name, display_path, FileMode, FilePicker};
 pub use form::{Answers, Form, Value};
 pub use input::{Input, Provider, Suggestion};
 pub use pager::Pager;
 pub use select::{MultiSelect, PreviewLayout, Select};
+pub use textarea::TextArea;
+pub use views::{TableSelect, TreeSelect};
 
 use rich::{Segment, Style};
 
@@ -146,6 +156,14 @@ pub(crate) fn pasted(text: &str, newline: &str) -> String {
         }
     }
     out
+}
+
+/// `text` with its terminal controls as the characters a view paints them
+/// as, one for one, so cells line up (a table's columns) before painting.
+pub(crate) fn shown(text: &str) -> String {
+    text.chars()
+        .map(|c| crate::paint::visible(c).unwrap_or(c))
+        .collect()
 }
 
 /// The question line every component starts with: `? prompt › `.

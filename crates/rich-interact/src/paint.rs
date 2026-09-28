@@ -16,7 +16,7 @@ use crate::component::View;
 /// [`rich_ext::sanitize_terminal_controls`]: C0 controls as their control
 /// pictures (`␛`, `␇`), DEL as `␡`, a tab as a space (it would move the
 /// cursor), and C1 controls (8-bit CSI and OSC among them) as `�`.
-fn visible(c: char) -> Option<char> {
+pub(crate) fn visible(c: char) -> Option<char> {
     match c {
         '\t' => Some(' '),
         '\u{1b}' => Some('␛'),
@@ -108,6 +108,11 @@ impl Painter {
     /// program had the terminal.
     pub fn invalidate(&mut self) {
         self.previous = None;
+    }
+
+    /// Rows the region has taken on screen so far.
+    pub fn extent(&self) -> usize {
+        self.extent
     }
 
     /// Forget the region entirely, as after the alternate screen was left

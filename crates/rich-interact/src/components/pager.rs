@@ -38,6 +38,9 @@ pub struct Pager {
     hits: Vec<Hit>,
     current: usize,
     theme: Theme,
+    mouse: bool,
+    /// Links clicked (#476), in order.
+    clicked: Vec<String>,
 }
 
 impl Pager {
@@ -60,6 +63,8 @@ impl Pager {
             hits: Vec::new(),
             current: 0,
             theme: Theme::default(),
+            mouse: false,
+            clicked: Vec::new(),
         };
         pager.set(lines);
         pager
@@ -68,6 +73,20 @@ impl Pager {
     pub fn theme(mut self, theme: Theme) -> Self {
         self.theme = theme;
         self
+    }
+
+    /// Report the mouse (#476): the wheel scrolls, and a click on a link
+    /// (an OSC 8 hyperlink in the content) records it: see
+    /// [`Pager::links`]. The pager never opens a link itself.
+    pub fn with_mouse(mut self, on: bool) -> Self {
+        self.mouse = on;
+        self
+    }
+
+    /// The links clicked while paging, in order: for the caller to open,
+    /// print or ignore.
+    pub fn links(&self) -> &[String] {
+        &self.clicked
     }
 
     /// Start with this search.
@@ -223,6 +242,10 @@ impl Component for Pager {
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<()> {
         self.render_at(context);
         let page = Self::page(context);
+        if let Event::Link(url) = event {
+            self.clicked.push(url.clone());
+            return Flow::Continue;
+        }
         if let Some(typing) = &mut self.typing {
             match event.key().map(|key| key.code) {
                 Some(KeyCode::Enter) => {
@@ -312,10 +335,18 @@ impl Component for Pager {
                 (Some(_), count) => format!(" · match {}/{count} · n/N", self.current + 1),
                 (None, _) => String::new(),
             };
-            format!("{viewport_status}{search} · / search · q quit")
+            let link = match self.clicked.last() {
+                Some(url) => format!(" · link {url}"),
+                None => String::new(),
+            };
+            format!("{viewport_status}{search}{link} · / search · q quit")
         };
         out.push(fit(vec![text(status, &theme.hint)], width));
         View::new(out)
+    }
+
+    fn mouse(&self) -> bool {
+        self.mouse
     }
 
     fn default_value(&self) -> Option<()> {

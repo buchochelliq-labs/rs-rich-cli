@@ -44,13 +44,21 @@ assert_eq!(record.last_frame(), "count: 2");
 Ready-made components:
 
 - `Select` and `MultiSelect`: fuzzy pickers with highlighted matches and a
-  preview pane;
+  preview pane whose border drags with the mouse;
+- `TableSelect` and `TreeSelect`: pick a table's row or a tree's node, with
+  folding;
 - `Input`: one line with validation, history, and suggestions, from a list or
   a background provider;
 - `Confirm`: a confirmation sheet with a body, warnings and several choices;
 - `Form`: text, masked (password), choice and toggle fields, with each error under its
   field;
-- `Pager`: page any renderable, with search.
+- `Pager`: page any renderable, with search;
+- `TextArea`: multi-line text, wrapped and scrolled, with a character limit;
+- `FilePicker`: browse from a root, with a fuzzy filter, previews, hidden
+  files, a file/directory mode, extensions and an optional root jail;
+- `ColorPicker`: rich's named colours, the 256 palette, or hex and RGB, with
+  a live swatch;
+- `AssetPicker`: emoji, box styles and spinners, with a preview.
 
 What else is in the box:
 
@@ -65,6 +73,12 @@ What else is in the box:
   on its own.
 - **One item model** (`Item<T>`: label, description, metadata, preview,
   actions, keywords) behind every picker.
+- **Actions** on items, table rows, tree nodes and files: on their keys and
+  in a menu (Ctrl+K), from the caller or from plugins
+  (`rs-rich-plugin-api`'s `CustomAction`).
+- **The mouse, when a component asks for it**: clicks and drags in the
+  component's own coordinates, hyperlinks as `Event::Link`, buttons in
+  `Confirm` and `Form`, and scripted mouse events in the headless driver.
 - **A degradation policy.** With no terminal on stdin or stdout, under `CI`,
   or with `TERM=dumb`, `run` starts no session. Instead it asks line by line,
   returns the component's default, or fails, as the caller chooses. Nothing

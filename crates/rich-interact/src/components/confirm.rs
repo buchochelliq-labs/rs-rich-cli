@@ -46,6 +46,7 @@ pub struct Confirm {
     /// Rows the body may take; the rest of the terminal otherwise.
     body_height: Option<usize>,
     theme: Theme,
+    mouse: bool,
     answer: Option<Option<String>>,
 }
 
@@ -62,6 +63,7 @@ impl Confirm {
             viewport: Viewport::default(),
             body_height: None,
             theme: Theme::default(),
+            mouse: false,
             answer: None,
         }
     }
@@ -107,6 +109,36 @@ impl Confirm {
         self
     }
 
+    /// Report the mouse (#476): the choices are buttons, a click picks
+    /// one, and the wheel scrolls the body.
+    pub fn with_mouse(mut self, on: bool) -> Self {
+        self.mouse = on;
+        self
+    }
+
+    /// The choice whose button covers `column` of the choices row.
+    fn button_at(&self, column: usize) -> Option<usize> {
+        let mut at = 2;
+        for (index, choice) in self.choices.iter().enumerate() {
+            let width = rich::cells::cell_len(&choice.label) + 2;
+            if (at..at + width).contains(&column) {
+                return Some(index);
+            }
+            at += width + 1;
+        }
+        None
+    }
+
+    /// The row the choices are on.
+    fn buttons_row(&self, context: &Context<'_>) -> usize {
+        let body = if self.viewport.is_empty() {
+            self.lines(context).len()
+        } else {
+            self.viewport.len().saturating_sub(self.viewport.offset())
+        };
+        1 + body.min(self.page(context)) + self.warnings.len()
+    }
+
     fn page(&self, context: &Context<'_>) -> usize {
         // The question, warnings, the choices and the hint line stay.
         let fixed = 3 + self.warnings.len();
@@ -140,6 +172,14 @@ impl Component for Confirm {
             self.viewport.set_lines(self.lines(context));
         }
         let page = self.page(context);
+        if let Some(mouse) = event.mouse().filter(|mouse| mouse.is_click()) {
+            if mouse.row as usize == self.buttons_row(context) {
+                if let Some(index) = self.button_at(mouse.column as usize) {
+                    return self.pick(index);
+                }
+            }
+            return Flow::Continue;
+        }
         let Some(key) = event.key() else {
             self.viewport.handle_scroll(event, page);
             return Flow::Continue;
@@ -240,6 +280,10 @@ impl Component for Confirm {
         }
         lines.push(fit(vec![text(hint, &theme.hint)], width));
         View::new(lines)
+    }
+
+    fn mouse(&self) -> bool {
+        self.mouse
     }
 
     fn default_value(&self) -> Option<String> {
