@@ -1,3 +1,16 @@
+─────────────────────────────────── reStructuredText ───────────────────────────────────
+$ rich --rst release.rst
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║                                    Release 0.0.13                                    ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+Ask, choose and browse from a script:
+
+ • rich choose picks one item
+ • rich filter narrows a list as you type
+ • rich confirm answers with its exit code
+
+╭─────────────────────────────────────── Note:  ───────────────────────────────────────╮
+│ Keys come from the terminal even when stdin is the list.                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────╯
 ─────────────────────────────────── Ask in a script ────────────────────────────────────
 $ fruit=$(rich choose apple banana cherry)   # ↓ then Enter
@@ -12,17 +25,4 @@ $ echo "$fruit"
 banana
 $ ls | rich filter --value toml    # without a terminal: a fuzzy grep
 $ rich confirm 'Deploy?' && deploy  # exit 0 for yes, 1 for no
-───────────────────────── Pager, input and confidence controls ─────────────────────────
---auto-pager opens a pager for tall TTY output; --no-pager opts out.
-URL fetch, encoding, sanitization and JSON reports support scripts and CI.
-The tour stays offline and does not open an external pager.
-$ rich --print --sanitize '<ESC>[31m visible controls'
-␛[31m visible controls
-──────────────────────────────────── FIGlet banners ────────────────────────────────────
- ____  ___ ____ _   _
-|  _ \|_ _/ ___| | | |
-| |_) || | |   | |_| |
-|  _ < | | |___|  _  |
-|_| \_\___\____|_| |_|
-
 
