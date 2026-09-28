@@ -2,7 +2,9 @@
 
 Components: ``Select`` and ``MultiSelect`` (fuzzy pickers over ``Item``s whose
 values are any Python objects), ``Input`` (one line, masked with
-``password=True``), ``Confirm`` (with ``Choice``s), ``Form`` and ``Pager``.
+``password=True``), ``TextArea`` (several lines), ``Confirm`` (with
+``Choice``s), ``Form``, ``Pager``, ``FilePicker`` (a path), ``ColorPicker`` (a
+colour string) and ``AssetPicker`` (an emoji, box style or spinner).
 Any object with ``handle(event)`` and ``render(width, height)`` is a component
 too (``Event``, ``Done``, ``Cancel``).
 
@@ -25,12 +27,15 @@ from ._native import (
     Cancelled,
     FuzzyMatch,
     InteractAction,
+    InteractAssetPicker,
     InteractCancel,
     InteractChoice,
+    InteractColorPicker,
     InteractConfirm,
     InteractDone,
     InteractError,
     InteractEvent,
+    InteractFilePicker,
     InteractForm,
     InteractInput,
     InteractItem,
@@ -40,6 +45,7 @@ from ._native import (
     InteractRecord,
     InteractScript,
     InteractSelect,
+    InteractTextArea,
     NotInteractive,
     fuzzy_match,
     fuzzy_rank,
@@ -59,6 +65,10 @@ Choice = InteractChoice
 Confirm = InteractConfirm
 Form = InteractForm
 Pager = InteractPager
+TextArea = InteractTextArea
+FilePicker = InteractFilePicker
+ColorPicker = InteractColorPicker
+AssetPicker = InteractAssetPicker
 Event = InteractEvent
 Done = InteractDone
 Cancel = InteractCancel
@@ -83,6 +93,10 @@ __all__ = [
     "Confirm",
     "Form",
     "Pager",
+    "TextArea",
+    "FilePicker",
+    "ColorPicker",
+    "AssetPicker",
     "Event",
     "Done",
     "Cancel",

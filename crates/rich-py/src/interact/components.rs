@@ -1365,7 +1365,8 @@ impl Pager {
 // Components written in Python
 
 /// An event given to a Python component's `handle`: `kind` is `"key"`,
-/// `"paste"`, `"resize"`, `"mouse"`, `"tick"` or `"returned"`.
+/// `"paste"`, `"resize"`, `"mouse"`, `"link"` (a click on a hyperlink; the
+/// URL is `text`), `"tick"` or `"returned"`.
 #[pyclass(name = "Event", module = "rs_rich.interact", frozen)]
 pub(crate) struct Event {
     #[pyo3(get)]
@@ -1385,6 +1386,15 @@ pub(crate) struct Event {
     /// A hand-off's exit code, for `returned`.
     #[pyo3(get)]
     code: Option<i32>,
+    /// What the mouse did: `"down"`, `"up"`, `"drag"`, `"moved"`,
+    /// `"scroll_up"` or `"scroll_down"`.
+    #[pyo3(get)]
+    mouse: Option<&'static str>,
+    /// Where, in the component's own view (0-based).
+    #[pyo3(get)]
+    column: Option<u16>,
+    #[pyo3(get)]
+    row: Option<u16>,
 }
 
 #[pymethods]
@@ -1406,13 +1416,33 @@ fn event(value: &CoreEvent) -> Event {
         columns: None,
         rows: None,
         code: None,
+        mouse: None,
+        column: None,
+        row: None,
     };
     match value {
         CoreEvent::Key(key) => {
             event.kind = "key";
             event.key = Some(key.to_string());
         }
-        CoreEvent::Mouse(_) => event.kind = "mouse",
+        CoreEvent::Mouse(mouse) => {
+            use rich_interact::MouseKind;
+            event.kind = "mouse";
+            event.mouse = Some(match mouse.kind {
+                MouseKind::Down(_) => "down",
+                MouseKind::Up(_) => "up",
+                MouseKind::Drag(_) => "drag",
+                MouseKind::Moved => "moved",
+                MouseKind::ScrollUp => "scroll_up",
+                MouseKind::ScrollDown => "scroll_down",
+            });
+            event.column = Some(mouse.column);
+            event.row = Some(mouse.row);
+        }
+        CoreEvent::Link(url) => {
+            event.kind = "link";
+            event.text = Some(url.clone());
+        }
         CoreEvent::Paste(text) => {
             event.kind = "paste";
             event.text = Some(text.clone());
@@ -1604,6 +1634,10 @@ pub(crate) fn drive(py: Python<'_>, component: &Bound<'_, PyAny>, mode: Mode) ->
         let ran = execute(py, build, mode)?;
         return record(py, ran, |()| Ok(py.None()));
     }
+    let mode = match super::pickers::drive(py, component, mode)? {
+        Ok(record) => return Ok(record),
+        Err(mode) => mode,
+    };
     if component.hasattr("handle")? && component.hasattr("render")? {
         let build = PyComponent {
             object: component.clone().unbind(),
@@ -1614,7 +1648,8 @@ pub(crate) fn drive(py: Python<'_>, component: &Bound<'_, PyAny>, mode: Mode) ->
     }
     Err(PyTypeError::new_err(format!(
         "expected an interactive component (Select, MultiSelect, Input, Confirm, Form, Pager, \
-         or an object with handle() and render()), got {}",
+         TextArea, FilePicker, ColorPicker, AssetPicker, or an object with handle() and \
+         render()), got {}",
         component.get_type().name()?
     )))
 }

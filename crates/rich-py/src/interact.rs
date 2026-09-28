@@ -39,6 +39,7 @@ use rich_interact::{
 };
 
 mod components;
+mod pickers;
 
 use crate::ext::common::scoped;
 use crate::limits::{INTERACT_STACK_PER_RUN, INTERACT_STACK_RESERVE, MAX_INTERACT_NESTING};
@@ -195,6 +196,35 @@ impl Script {
         {
             let mut this = slf.borrow_mut();
             this.inner = std::mem::take(&mut this.inner).resize(columns, rows);
+        }
+        slf
+    }
+
+    /// A left click at `column`, `row` (0-based): the button down, then up.
+    fn click<'py>(slf: Bound<'py, Self>, column: u16, row: u16) -> Bound<'py, Self> {
+        {
+            let mut this = slf.borrow_mut();
+            this.inner = std::mem::take(&mut this.inner).click(column, row);
+        }
+        slf
+    }
+
+    /// A drag with the left button from `start` to `end`, each a
+    /// `(column, row)`.
+    fn drag<'py>(slf: Bound<'py, Self>, start: (u16, u16), end: (u16, u16)) -> Bound<'py, Self> {
+        {
+            let mut this = slf.borrow_mut();
+            this.inner = std::mem::take(&mut this.inner).drag(start, end);
+        }
+        slf
+    }
+
+    /// One notch of the wheel over `column`, `row`: down, or up.
+    #[pyo3(signature = (column=0, row=0, *, down=true))]
+    fn scroll<'py>(slf: Bound<'py, Self>, column: u16, row: u16, down: bool) -> Bound<'py, Self> {
+        {
+            let mut this = slf.borrow_mut();
+            this.inner = std::mem::take(&mut this.inner).scroll(down, column, row);
         }
         slf
     }
@@ -532,6 +562,10 @@ impl<C: Component> Component for Guarded<C> {
 
     fn tick(&self) -> Option<Duration> {
         self.0.tick()
+    }
+
+    fn mouse(&self) -> bool {
+        self.0.mouse()
     }
 
     fn default_value(&self) -> Option<C::Output> {
@@ -891,5 +925,6 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(interact_degrade, m)?)?;
     m.add_function(wrap_pyfunction!(fuzzy_match, m)?)?;
     m.add_function(wrap_pyfunction!(fuzzy_rank, m)?)?;
+    pickers::register(m)?;
     components::register(m)
 }

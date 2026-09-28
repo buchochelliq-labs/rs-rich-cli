@@ -145,6 +145,11 @@ CASES = {
     "confirm no": (["confirm", "Deploy?"], b"n\n", {}),
     "pager piped": (["pager"], b"one\ntwo\n", {}),
     "interactive json report": (["choose", "--report", "json"], b"alpha\n", {}),
+    "write piped": (["write", "--char-limit", "8"], b"first\nsecond\n", {}),
+    "file selected": (["file", "--selected", "README.md"], b"", {}),
+    "file no answer": (["file"], b"", {}),
+    "color prompt": (["color", "--format", "rgb"], b"#ff8800\n", {}),
+    "asset prompt": (["asset", "--kind", "spinner"], b"dots\n", {}),
 }
 
 
