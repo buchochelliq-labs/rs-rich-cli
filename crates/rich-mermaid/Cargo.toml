@@ -35,7 +35,7 @@ default = []
 mmdc = ["dep:rich-art", "rich-art/sixel"]
 
 [dependencies]
-rich.workspace = true
+rich = { workspace = true, features = ["syntax"] }
 rich-plugin-api.workspace = true
 rich-art = { workspace = true, optional = true }
 

@@ -16,9 +16,11 @@ use std::sync::Arc;
 use rich::console::ConsoleOptions;
 use rich::r#box::Box as BoxStyle;
 use rich::segment::Segment;
+#[cfg(feature = "syntax")]
+use rich::SyntectHighlighter;
 use rich::{
     CodeHighlighter, CodeHighlighting, Console, ConsoleCodeHighlighting, FenceRenderer,
-    Highlighter, SyntectHighlighter, Text, Theme,
+    Highlighter, Text, Theme,
 };
 use rich_plugin_api::{
     is_valid_name, Capability, CustomAction, HighlighterFactory, Plugin, PluginError,
@@ -596,13 +598,18 @@ pub struct BuiltinPlugin;
 impl Plugin for BuiltinPlugin {
     fn metadata(&self) -> PluginMetadata {
         PluginMetadata::new("rich-ext", "rich-ext built-ins", env!("CARGO_PKG_VERSION"))
-            .description("number highlighting and the syntect code highlighter")
+            .description(if cfg!(feature = "syntax") {
+                "number highlighting and the syntect code highlighter"
+            } else {
+                "number highlighting"
+            })
     }
 
     fn register(&self, registrar: &mut dyn PluginRegistrar) -> Result<(), PluginError> {
         registrar.highlighter(Box::new(|| {
             Box::new(crate::highlighter::NumberHighlighter::new())
         }));
+        #[cfg(feature = "syntax")]
         registrar.code_highlighter("syntect", SyntectHighlighter::shared());
         Ok(())
     }
@@ -646,11 +653,17 @@ mod tests {
         let registry = ExtensionRegistry::with_defaults();
         assert_eq!(registry.plugins().len(), 1);
         assert_eq!(registry.plugins()[0].metadata.id, "rich-ext");
-        assert_eq!(registry.code_highlighter_names(), ["syntect"]);
-        assert_eq!(
-            registry.provided_by(&Capability::CodeHighlighter("syntect".into())),
-            Some("rich-ext")
-        );
+        #[cfg(feature = "syntax")]
+        {
+            assert_eq!(registry.code_highlighter_names(), ["syntect"]);
+            assert_eq!(
+                registry.provided_by(&Capability::CodeHighlighter("syntect".into())),
+                Some("rich-ext")
+            );
+        }
+        // Without `syntax` there is no syntect to register.
+        #[cfg(not(feature = "syntax"))]
+        assert!(registry.code_highlighter_names().is_empty());
     }
 
     /// A plugin that registers whatever it is given.
@@ -794,18 +807,22 @@ mod tests {
             Some("diagrams")
         );
 
-        let md = rich::markdown::Markdown::new(
-            "```mermaid\nx\n```\n\n```vega\ny\n```\n\n```rust\nz\n```",
-        )
-        .fence_renderer(registry.fences().unwrap());
-        let console = Console::builder().width(30).color_system(None).build();
-        let out = console.render_to_string(&md);
-        assert!(out.contains("mermaid") && out.contains("vega"), "{out}");
-        assert!(out.contains('z'), "the rust fence is still code: {out}");
+        #[cfg(feature = "markdown")]
+        {
+            let md = rich::markdown::Markdown::new(
+                "```mermaid\nx\n```\n\n```vega\ny\n```\n\n```rust\nz\n```",
+            )
+            .fence_renderer(registry.fences().unwrap());
+            let console = Console::builder().width(30).color_system(None).build();
+            let out = console.render_to_string(&md);
+            assert!(out.contains("mermaid") && out.contains("vega"), "{out}");
+            assert!(out.contains('z'), "the rust fence is still code: {out}");
+        }
     }
 
     /// A chosen default reaches consoles on install; unknown names and themes
     /// are refused with what is available.
+    #[cfg(feature = "syntax")]
     #[test]
     fn a_default_code_highlighter_is_chosen_by_name_and_installed() {
         let mut registry = ExtensionRegistry::with_defaults();
@@ -842,6 +859,7 @@ mod tests {
         assert!(!out.contains("38;2;"), "{out:?}");
     }
 
+    #[cfg(feature = "syntax")]
     #[test]
     fn code_highlighters_register_directly() {
         let mut registry = ExtensionRegistry::with_defaults();

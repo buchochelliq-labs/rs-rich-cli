@@ -72,7 +72,12 @@ thiserror = "2"
 trybuild = "1"
 
 [features]
-default = []
+# `Syntax` and `Markdown` from core (syntect and pulldown-cmark). Without them
+# `source_view`, `diff::SourceDiff`, `rst`, `cli_doc::markdown_view`, the
+# `syntect` registry entry and the highlighter conformance kit are left out.
+default = ["syntax", "markdown"]
+syntax = ["rich/syntax"]
+markdown = ["rich/markdown", "syntax"]
 anyhow = ["dep:anyhow"]
 # richf!, style!, theme_key!, markup!, #[derive(Rich)] and the print macros.
 macros = ["dep:rich-macros"]
@@ -103,6 +108,14 @@ clap = ["dep:clap"]
 dylib-plugins = ["dep:libloading"]
 # Load sandboxed WASM plugins: no imports, a fuel limit and a memory cap.
 wasm-plugins = ["dep:wasmi"]
+
+[[example]]
+name = "guide_live_layout"
+required-features = ["syntax"]
+
+[[example]]
+name = "guide_cli"
+required-features = ["markdown"]
 
 [[example]]
 name = "snapshot"
@@ -165,7 +178,7 @@ test = true
 
 [[example]]
 name = "guide_highlighters"
-required-features = ["testing"]
+required-features = ["testing", "syntax"]
 # Its adapter's conformance test runs with `cargo test`.
 test = true
 

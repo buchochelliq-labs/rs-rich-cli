@@ -57,6 +57,28 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### Core 0.0.9 / ext 0.0.11: `syntax` and `markdown` are optional
+
+- `rs-rich` has two new default features: `syntax` (`Syntax` and
+  `SyntectHighlighter`, through syntect) and `markdown` (`Markdown`, through
+  pulldown-cmark; implies `syntax`). A default build is unchanged. With
+  `default-features = false` the dependency tree loses syntect, its
+  unmaintained bincode 1.x (RUSTSEC-2025-0141), the second `fancy-regex` and
+  pulldown-cmark. `onig` and `syntax-cache` now imply `syntax`.
+- `rs-rich-ext` forwards the same two default features. Without them it leaves
+  out `source_view`, `rst`, `cli_doc::markdown_view`, the `syntect` registry
+  entry and `testing::conformance`; `SourceDiff` and `PatchView` still render,
+  unhighlighted. The workspace depends on core with `default-features = false`,
+  so each crate asks only for what it uses: `rs-rich-plugin-api`,
+  `rs-rich-macros` and `rs-rich-art` no longer pull syntect in.
+- CI builds and tests core without default features, and fails if a lean
+  `rs-rich` or `rs-rich-ext` depends on syntect, bincode or pulldown-cmark.
+
+### CI: macOS
+
+- A macOS job runs the whole workspace's tests, plus core without default
+  features, and is part of `ci-ok`.
+
 ### Core 0.0.9: literal table cells (`Cell::plain`, `Cell::markup`, `add_row_plain`)
 
 - A string cell is console markup, as upstream's is, and the compiler cannot

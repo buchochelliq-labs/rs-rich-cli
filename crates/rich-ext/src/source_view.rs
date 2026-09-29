@@ -22,14 +22,15 @@
 
 use rich::cells::cell_len;
 use rich::measure::Measurement;
-use rich::{
-    Console, ConsoleOptions, Justify, Overflow, Renderable, Segment, Style, Syntax, Text, Theme,
-};
+#[cfg(feature = "syntax")]
+use rich::Syntax;
+use rich::{Console, ConsoleOptions, Justify, Overflow, Renderable, Segment, Style, Text, Theme};
 
 /// Source text with line numbers and optional search highlighting.
 #[derive(Clone, Debug)]
 pub struct SourceView {
     code: String,
+    #[cfg_attr(not(feature = "syntax"), allow(dead_code))]
     language: String,
     theme: Option<String>,
     line_numbers: bool,
@@ -136,14 +137,29 @@ impl SourceView {
         last.to_string().len() + 3
     }
 
-    fn highlighted_lines(&self, console: &Console) -> Vec<Text> {
-        let lines = self.source_lines();
+    /// The whole source through core `Syntax`.
+    #[cfg(feature = "syntax")]
+    fn highlighted(&self, console: &Console) -> Text {
         let mut syntax =
             Syntax::new(self.code.clone(), self.language.clone()).tab_size(self.tab_size);
         if let Some(theme) = &self.theme {
             syntax = syntax.theme(theme.clone());
         }
-        let highlighted = syntax.highlight_for(console);
+        syntax.highlight_for(console)
+    }
+
+    /// Without the `syntax` feature the source is shown unstyled, tabs expanded
+    /// as `Syntax` would.
+    #[cfg(not(feature = "syntax"))]
+    fn highlighted(&self, _console: &Console) -> Text {
+        let mut text = Text::new(self.code.clone());
+        text.expand_tabs(self.tab_size);
+        text
+    }
+
+    fn highlighted_lines(&self, console: &Console) -> Vec<Text> {
+        let lines = self.source_lines();
+        let highlighted = self.highlighted(console);
         let mut texts = highlighted.split("\n", false, true);
         texts.truncate(lines.len());
         // Carriage returns of CRLF files are not content.
@@ -507,6 +523,7 @@ mod tests {
             }
         }
         // Highlighted source, as the view renders it.
+        #[cfg(feature = "syntax")]
         for (code, language) in [
             (
                 r#"fn main() { let x = "hi there"; println!("{x}"); } // done"#,

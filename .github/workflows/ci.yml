@@ -94,6 +94,21 @@ jobs:
           cargo build -p rs-rich-cli --locked
           python3 scripts/gen_cli_reference.py --binary target/debug/rich --check
 
+      # `default-features = false` must actually drop syntect (and with it
+      # bincode 1.x and a second fancy-regex) and pulldown-cmark, for core and
+      # for ext, or the features are decoration.
+      - name: Lean builds carry no syntect, bincode or pulldown-cmark
+        run: |
+          for crate in rs-rich rs-rich-ext; do
+            found="$(cargo tree -p "$crate" --no-default-features -e normal --prefix none \
+              | grep -E '^(syntect|bincode|pulldown-cmark|onig) ' || true)"
+            if [ -n "$found" ]; then
+              echo "::error::$crate without default features still depends on:"
+              echo "$found"
+              exit 1
+            fi
+          done
+
       - name: Verify interactive stdin and NO_COLOR in a terminal
         run: python3 scripts/test_cli_terminal.py --binary target/debug/rich
 
@@ -121,6 +136,9 @@ jobs:
         include:
           - crate: rs-rich
             args: "--all-features"
+          # Without syntect and pulldown-cmark: no `Syntax`, no `Markdown`.
+          - crate: rs-rich
+            args: "--no-default-features"
           # rich-art is zero-dependency by default; its image/GIF support is
           # opt-in, and each config compiles different code. `--all-features`
           # rather than naming them, so new features are covered automatically.
@@ -198,6 +216,29 @@ jobs:
           cargo test -p rs-rich-cli --locked --bin rich batch::tests
           cargo test -p rs-rich-cli --locked --bin rich batch_races
           cargo test -p rs-rich-cli --locked --test batch_v8 --test batch_paths --test pager_v8 --test demo
+
+  # The whole workspace's tests on macOS: PTYs, terminal modes, signals and
+  # paths differ enough from Linux to break on their own.
+  macos:
+    name: macOS
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Test
+        run: cargo test --all --locked
+
+      - name: Test core without syntect and pulldown-cmark
+        run: cargo test -p rs-rich --no-default-features --locked
 
   msrv:
     name: minimum supported Rust version
@@ -374,7 +415,7 @@ jobs:
 
   ci-ok:
     name: ci-ok
-    needs: [check, features, msrv, parity, release-tests, windows-pager, packages, mermaid-cli, tapes]
+    needs: [check, features, macos, msrv, parity, release-tests, windows-pager, packages, mermaid-cli, tapes]
     # `always()` so this reports failure rather than being skipped when a
     # dependency fails — a skipped required check blocks the PR forever.
     if: always()

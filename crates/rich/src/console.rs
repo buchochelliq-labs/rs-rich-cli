@@ -1946,6 +1946,7 @@ mod tests {
     fn empty_text_and_empty_renderables_have_distinct_endings() {
         let console = Console::builder().force_terminal(false).build();
         assert_eq!(console.render_export(&Text::new("")), "\n");
+        #[cfg(feature = "markdown")]
         assert_eq!(
             console.render_export(&crate::markdown::Markdown::new("")),
             ""

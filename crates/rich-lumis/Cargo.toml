@@ -40,7 +40,7 @@ bundle-system = ["lumis/lang-bundle-system"]
 bundle-backend = ["lumis/lang-bundle-backend"]
 
 [dependencies]
-rich.workspace = true
+rich = { workspace = true, features = ["syntax"] }
 rich-plugin-api.workspace = true
 lumis = { version = "0.15", default-features = false }
 

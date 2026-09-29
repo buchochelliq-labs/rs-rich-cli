@@ -675,6 +675,7 @@ fn py_int_plus(value: f64, add: i64) -> String {
 mod tests {
     use super::*;
     use crate::frame::render_frame;
+    #[cfg(feature = "markdown")]
     use rich::markdown::Markdown;
     use rich::{ColorSystem, Console, Panel, Renderable, Table, Text};
 
@@ -861,6 +862,7 @@ mod tests {
         assert!(stripped.starts_with(text.trim_end()), "{stripped}");
     }
 
+    #[cfg(feature = "markdown")]
     #[test]
     fn headings_and_code_get_roles() {
         let console = console(40);

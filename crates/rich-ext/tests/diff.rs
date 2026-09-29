@@ -529,48 +529,52 @@ fn source_diffs_highlight_both_sides() {
 3   - fn a() -> u8 { 1 }
   3 + fn a() -> u8 { 2 }"
     );
-    let segments = colour_segments(&diff, 60);
-    let colour_of = |t: &str| {
-        segments
+    // Without `syntax` the same diff renders, unhighlighted.
+    #[cfg(feature = "syntax")]
+    {
+        let segments = colour_segments(&diff, 60);
+        let colour_of = |t: &str| {
+            segments
+                .iter()
+                .find(|s| s.text == t)
+                .and_then(|s| s.style.as_ref())
+                .and_then(|s| s.color().cloned())
+        };
+        // Keywords and multi-line comments are coloured, and differently.
+        let keyword = colour_of("fn").expect("`fn` has a colour");
+        let comment = colour_of("   comment */").expect("the comment's second line is highlighted");
+        assert_ne!(keyword, comment);
+        // No syntax background bleeds through the diff styles.
+        assert!(segments.iter().filter(|s| s.text == "fn").all(|s| s
+            .style
+            .as_ref()
+            .unwrap()
+            .bgcolor()
+            .is_none()));
+        // Emphasis layers on top of highlighting.
+        assert!(segments
             .iter()
-            .find(|s| s.text == t)
-            .and_then(|s| s.style.as_ref())
-            .and_then(|s| s.color().cloned())
-    };
-    // Keywords and multi-line comments are coloured, and differently.
-    let keyword = colour_of("fn").expect("`fn` has a colour");
-    let comment = colour_of("   comment */").expect("the comment's second line is highlighted");
-    assert_ne!(keyword, comment);
-    // No syntax background bleeds through the diff styles.
-    assert!(segments.iter().filter(|s| s.text == "fn").all(|s| s
-        .style
-        .as_ref()
-        .unwrap()
-        .bgcolor()
-        .is_none()));
-    // Emphasis layers on top of highlighting.
-    assert!(segments
-        .iter()
-        .any(|s| s.text == "2" && s.style.as_ref().and_then(|st| st.attr(3)) == Some(true)));
-    // Line numbers link through the template.
-    let linked = SourceDiff::new(old, new)
-        .path("src/lib.rs")
-        .link_template("vscode://file/{path}:{line}");
-    let links: Vec<_> = colour_segments(&linked, 60)
-        .into_iter()
-        .filter_map(|s| s.style.and_then(|st| st.link().map(str::to_owned)))
-        .collect();
-    assert!(
-        links.contains(&"vscode://file/src/lib.rs:3".to_string()),
-        "{links:?}"
-    );
-    // Side by side keeps the width.
-    let sbs = plain(&diff.clone().layout(Layout::SideBySide), 50);
-    assert_clean(&sbs, 50);
-    assert!(
-        sbs.contains("3 - fn a() -> u8 { 1 }  │ 3 + fn a() -> u8 { 2 }"),
-        "{sbs}"
-    );
+            .any(|s| s.text == "2" && s.style.as_ref().and_then(|st| st.attr(3)) == Some(true)));
+        // Line numbers link through the template.
+        let linked = SourceDiff::new(old, new)
+            .path("src/lib.rs")
+            .link_template("vscode://file/{path}:{line}");
+        let links: Vec<_> = colour_segments(&linked, 60)
+            .into_iter()
+            .filter_map(|s| s.style.and_then(|st| st.link().map(str::to_owned)))
+            .collect();
+        assert!(
+            links.contains(&"vscode://file/src/lib.rs:3".to_string()),
+            "{links:?}"
+        );
+        // Side by side keeps the width.
+        let sbs = plain(&diff.clone().layout(Layout::SideBySide), 50);
+        assert_clean(&sbs, 50);
+        assert!(
+            sbs.contains("3 - fn a() -> u8 { 1 }  │ 3 + fn a() -> u8 { 2 }"),
+            "{sbs}"
+        );
+    }
 }
 
 // ------------------------------------------------------------------- git

@@ -651,11 +651,14 @@ tool init
 "
     );
     // And through rich's Markdown renderer.
-    let out = Console::builder()
-        .width(80)
-        .build()
-        .render_to_string(&markdown_view(&spec));
-    assert!(out.contains("Does things."), "{out}");
+    #[cfg(feature = "markdown")]
+    {
+        let out = Console::builder()
+            .width(80)
+            .build()
+            .render_to_string(&markdown_view(&spec));
+        assert!(out.contains("Does things."), "{out}");
+    }
 }
 
 #[test]

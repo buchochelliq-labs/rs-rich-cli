@@ -4,9 +4,12 @@
 
 use std::sync::{Arc, Mutex};
 
+#[cfg(feature = "markdown")]
 use rich::markdown::Markdown;
 use rich::protocol::{region_of, ConsoleRegions, RegionId, RegionInfo, RegionRole, RegionSink};
-use rich::{ColorSystem, Console, Panel, Renderable, Rule, Segment, Table};
+#[cfg(feature = "markdown")]
+use rich::Rule;
+use rich::{ColorSystem, Console, Panel, Renderable, Segment, Table};
 
 #[derive(Default)]
 struct Log {
@@ -114,6 +117,7 @@ fn a_sink_leaves_the_bytes_alone_and_sees_nesting() {
 }
 
 #[test]
+#[cfg(feature = "markdown")]
 fn rules_headings_and_code_report_regions() {
     let rule = Rule::new("[bold]Part[/] 2");
     let (_, log, expected, got) = with_sink(&rule);

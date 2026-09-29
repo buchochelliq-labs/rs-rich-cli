@@ -153,6 +153,15 @@ cargo add rs-rich                      # the library — then `use rich::…`
 cargo install rs-rich-cli              # the `rich` command
 ```
 
+`Syntax` (syntect) and `Markdown` (pulldown-cmark) are default features of
+`rs-rich` and `rs-rich-ext`. If you use neither, turn them off and drop
+syntect, its bincode 1.x and a second `fancy-regex` from your build:
+
+```toml
+rs-rich = { version = "0.0.9", default-features = false }
+rs-rich-ext = { version = "0.0.11", default-features = false }  # if you use it
+```
+
 ## Try it
 
 ```bash

@@ -1,6 +1,6 @@
 //! The highlighter conformance kit (#526): the shipped syntect adapter passes,
 //! and adapters broken in each way it checks are rejected with that check.
-#![cfg(feature = "testing")]
+#![cfg(all(feature = "testing", feature = "syntax"))]
 
 use std::sync::Arc;
 use std::time::Duration;
