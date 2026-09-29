@@ -134,10 +134,10 @@ names and the palette, and an emoji and a box style used together. See
 | **rich color** | **rich color** | **rich asset** |
 | ![Named colours with a swatch](media/tapes/color/names.png) | ![The 256 palette](media/tapes/color/palette.png) | ![Box styles previewed](media/tapes/asset/box.png) |
 
-[write tape](tapes/write.tape) · [cast](media/tapes/write/write.cast) ·
-[file tape](tapes/file.tape) · [cast](media/tapes/file/file.cast) ·
-[color tape](tapes/color.tape) · [cast](media/tapes/color/color.cast) ·
-[asset tape](tapes/asset.tape) · [cast](media/tapes/asset/asset.cast)
+[write tape](tapes/write.tape) · [cast](media/tapes/write/write.cast) · [page](media/tapes/write/write.html) ·
+[file tape](tapes/file.tape) · [cast](media/tapes/file/file.cast) · [page](media/tapes/file/file.html) ·
+[color tape](tapes/color.tape) · [cast](media/tapes/color/color.cast) · [page](media/tapes/color/color.html) ·
+[asset tape](tapes/asset.tape) · [cast](media/tapes/asset/asset.cast) · [page](media/tapes/asset/asset.html)
 
 ## An interactive component
 
