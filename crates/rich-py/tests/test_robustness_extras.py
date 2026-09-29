@@ -261,14 +261,21 @@ def test_tokenize_is_linear():
     ext.tokenize("a " * 1000)
     small = "a " * 20000
     big = "a " * 80000
-    t0 = time.perf_counter()
-    ext.tokenize(small)
-    t1 = time.perf_counter()
-    ext.tokenize(big)
-    t2 = time.perf_counter()
-    # 4x the input: ~4x the time for a linear conversion, ~16x today
-    # (common::char_index recounts the prefix for every offset).
-    assert (t2 - t1) < 8 * max(t1 - t0, 1e-3), ((t1 - t0), (t2 - t1))
+
+    def best(text):
+        # The fastest of a few runs: one call of a few milliseconds is at the
+        # mercy of a shared runner's scheduler.
+        times = []
+        for _ in range(5):
+            start = time.perf_counter()
+            ext.tokenize(text)
+            times.append(time.perf_counter() - start)
+        return min(times)
+
+    small_time, big_time = best(small), best(big)
+    # 4x the input: ~4x the time for a linear conversion, ~16x for the old
+    # quadratic one (common::char_index recounted the prefix per offset).
+    assert big_time < 8 * max(small_time, 1e-3), (small_time, big_time)
 
 
 # ---------------------------------------------------------------------------
