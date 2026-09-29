@@ -57,6 +57,19 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### Core 0.0.9: literal table cells (`Cell::plain`, `Cell::markup`, `add_row_plain`)
+
+- A string cell is console markup, as upstream's is, and the compiler cannot
+  tell data from markup: `add_row(&[name])` or `Cell::from(name)` with a model
+  or column name containing `[` restyled or hid the rest of the cell.
+  `Table::add_row_plain(&[&str])` and `Cell::plain(text)` show text exactly
+  as given, and `Cell::markup(text)` says at the call site that markup is
+  meant. Rendering is unchanged: these are Rust-only constructors over the
+  existing `Cell::Text` and `Cell::Markup`, and the `From` conversions and
+  `add_row` keep upstream's behaviour, with doc warnings pointing at the
+  plain forms. The tables guide and the 0.0.13 migration notes carry a
+  security note.
+
 ### Interact 0.0.1, CLI 0.0.13 and Python 0.0.2: suspend, in-process runs, `--panel`
 
 - **Ctrl+Z suspends an interactive command.** Raw mode turns off the
