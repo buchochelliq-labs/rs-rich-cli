@@ -900,9 +900,9 @@ rich choose [OPTIONS] [ITEM...]
 | `--header <TEXT>` | The prompt above the list. |
 | `--multi` | Pick several: Tab marks, Enter returns the marked items, one per line. |
 | `--selected <ITEM>...` | Focus ITEM (with --multi, mark it); the answer without a terminal. |
-| `--height <ROWS>` | Show at most ROWS items at once (default 10) |
+| `--height <ROWS>` | Show at most ROWS items at once (default 10), fewer when the terminal is shorter. |
 | `--preview <COMMAND>` | Show COMMAND's output for the focused item beside the list; `{}` is the item, shell-quoted, and $COLUMNS the pane's width (e.g. `rich {} --force-terminal`) |
-| `--mouse` | Report the mouse: click to focus and pick, drag the border beside a preview (off by default: it takes text selection from the terminal) |
+| `--mouse` | Report the mouse: click a row to focus it and again to pick it, drag the border beside a preview (off by default: it takes text selection from the terminal) |
 
 #### Arguments
 
@@ -941,9 +941,9 @@ rich filter [OPTIONS] [ITEM...]
 | `--header <TEXT>` | The prompt above the list. |
 | `--multi` | Pick several: Tab marks, Enter returns the marked items, one per line. |
 | `--selected <ITEM>...` | Focus ITEM (with --multi, mark it); the answer without a terminal. |
-| `--height <ROWS>` | Show at most ROWS items at once (default 10) |
+| `--height <ROWS>` | Show at most ROWS items at once (default 10), fewer when the terminal is shorter. |
 | `--preview <COMMAND>` | Show COMMAND's output for the focused item beside the list; `{}` is the item, shell-quoted, and $COLUMNS the pane's width (e.g. `rich {} --force-terminal`) |
-| `--mouse` | Report the mouse: click to focus and pick, drag the border beside a preview (off by default: it takes text selection from the terminal) |
+| `--mouse` | Report the mouse: click a row to focus it and again to pick it, drag the border beside a preview (off by default: it takes text selection from the terminal) |
 | `--value <QUERY>` | Start with QUERY typed. |
 
 #### Arguments
@@ -1081,8 +1081,8 @@ rich write [OPTIONS]
 | `--header <TEXT>` | The prompt above the text (default "Write") |
 | `--placeholder <TEXT>` | Shown while the text is empty. |
 | `--value <TEXT>` | Start with TEXT (standard input, when it is piped, otherwise) |
-| `--height <ROWS>` | Rows of text shown (default 5) |
-| `--char-limit <N>` | At most N characters, line breaks included. |
+| `--height <ROWS>` | Rows of text shown (default 5), fewer when the terminal is shorter. |
+| `--char-limit <N>` | At most N characters (grapheme clusters: an emoji sequence or an accented letter is one), line breaks included. |
 | `--show-line-numbers` | Number the lines. |
 
 #### Examples
@@ -1108,14 +1108,14 @@ rich file [OPTIONS] [DIR]
 | Option | Description |
 | --- | --- |
 | `--header <TEXT>` | The prompt above the list. |
-| `--height <ROWS>` | Show at most ROWS at once (default 10) |
+| `--height <ROWS>` | Show at most ROWS at once (default 10), fewer when the terminal is shorter. |
 | `--value <QUERY>` | Start with QUERY typed. |
 | `--selected <PATH>` | The answer without a terminal. |
 | `--all` | Show hidden files to begin with. |
 | `--directory` | Pick directories (files are not listed, unless --file is given too: then either) |
 | `--file` | Pick files (the default) |
 | `--extension <EXT>...` | List only files ending in .EXT (repeatable, or comma-separated) |
-| `--mouse` | Report the mouse: click to focus and pick, drag the border beside a preview (off by default: it takes text selection from the terminal) |
+| `--mouse` | Report the mouse: click a row to focus it and again to pick it, drag the border beside a preview (off by default: it takes text selection from the terminal) |
 
 #### Arguments
 
@@ -1155,8 +1155,8 @@ rich color [OPTIONS]
 | `--value <TEXT>` | Start with TEXT typed: a name to filter by, or a colour. |
 | `--default <COLOR>` | The answer without a terminal, and to an empty line. |
 | `--format <FORMAT>` | How to print it: #rrggbb (default), a rich name, or rgb(r,g,b) Possible values: `hex`, `name`, `rgb`. |
-| `--height <ROWS>` | Show at most ROWS at once (default 10) |
-| `--mouse` | Report the mouse: click to focus and pick, drag the border beside a preview (off by default: it takes text selection from the terminal) |
+| `--height <ROWS>` | Show at most ROWS at once (default 10), fewer when the terminal is shorter. |
+| `--mouse` | Report the mouse: click a row to focus it and again to pick it, drag the border beside a preview (off by default: it takes text selection from the terminal) |
 
 #### Examples
 
@@ -1182,14 +1182,14 @@ rich asset [OPTIONS]
 | --- | --- |
 | `--kind <KIND>` | What to pick (default emoji): an emoji prints as itself, a box style or spinner by name. Possible values: `emoji`, `box`, `spinner`. |
 | `--header <TEXT>` | The prompt above the list. |
-| `--height <ROWS>` | Show at most ROWS at once (default 10) |
+| `--height <ROWS>` | Show at most ROWS at once (default 10), fewer when the terminal is shorter. |
 | `--value <QUERY>` | Start with QUERY typed. |
 | `--selected <NAME>` | Focus NAME; the answer without a terminal and to an empty line. |
-| `--mouse` | Report the mouse: click to focus and pick, drag the border beside a preview (off by default: it takes text selection from the terminal) |
+| `--mouse` | Report the mouse: click a row to focus it and again to pick it, drag the border beside a preview (off by default: it takes text selection from the terminal) |
 
 #### Examples
 
-Pick a box style for --box
+Pick one of rich's box styles by name (--panel takes ascii, ascii2, square, rounded, heavy or double)
 
 ```sh
 rich asset --kind box

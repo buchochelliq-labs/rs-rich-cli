@@ -268,6 +268,79 @@ fn write_without_a_terminal_prints_standard_input() {
 }
 
 #[test]
+fn write_without_a_terminal_answers_value_and_counts_graphemes() {
+    // No input at all: --value is the answer, as a default is elsewhere.
+    let (out, err, code) = piped(&["write", "--value", "draft"], "");
+    assert_eq!((out.as_str(), code), ("draft\n", 0), "{err}");
+    // An empty line is an answer: the empty text.
+    let (out, _, code) = piped(&["write", "--value", "draft"], "\n");
+    assert_eq!((out.as_str(), code), ("\n", 0));
+    // The limit counts grapheme clusters and never cuts one.
+    let (out, _, code) = piped(&["write", "--char-limit", "1"], "e\u{301}x\n");
+    assert_eq!((out.as_str(), code), ("e\u{301}\n", 0));
+    let family = "👨\u{200d}👩\u{200d}👧";
+    let (out, _, code) = piped(&["write", "--char-limit", "3"], &family.repeat(4));
+    assert_eq!((out, code), (format!("{}\n", family.repeat(3)), 0));
+    // A `\r\n` line ending ends the text too.
+    let (out, _, code) = piped(&["write"], "a\tb\r\n");
+    assert_eq!((out.as_str(), code), ("a\tb\n", 0));
+}
+
+#[test]
+fn line_prompts_show_controls_in_the_header_as_text() {
+    let header = "H\x1b]0;PWNED\x07\x1b[2J";
+    for (args, stdin) in [
+        (&["color", "--header", header][..], "red\n"),
+        (&["write", "--header", header], ""),
+        (&["input", "--prompt", header], "x\n"),
+        (&["confirm", header], "y\n"),
+        (&["choose", "--header", header, "a", "b"], "1\n"),
+    ] {
+        let (_, err, code) = piped(args, stdin);
+        assert_eq!(code, 0, "{args:?}: {err}");
+        assert!(
+            !err.contains('\x1b') && !err.contains('\x07'),
+            "{args:?}: {err:?}"
+        );
+    }
+    let (_, err, _) = piped(&["color", "--header", header], "red\n");
+    assert!(err.contains("H␛]0;PWNED␇␛[2J"), "{err:?}");
+}
+
+#[test]
+fn asset_refuses_a_selected_name_it_does_not_offer() {
+    for stdin in ["", "rocket\n"] {
+        let (out, err, code) = piped(&["asset", "--selected", "nosuch"], stdin);
+        assert_eq!((out.as_str(), code), ("", 2), "{err}");
+        assert!(
+            err.contains("--selected: \"nosuch\" is not an emoji name"),
+            "{err}"
+        );
+    }
+    let (_, err, code) = piped(&["asset", "--kind", "box", "--selected", "dots"], "");
+    assert_eq!(code, 2, "{err}");
+    let (out, _, code) = piped(&["asset", "--selected", ":rocket:"], "");
+    assert_eq!((out.as_str(), code), ("🚀\n", 0));
+}
+
+#[test]
+fn asset_help_names_what_takes_a_box_style() {
+    let output = Command::new(env!("CARGO_BIN_EXE_rich"))
+        .args(["--no-config", "asset", "--help"])
+        .env("NO_COLOR", "1")
+        .output()
+        .unwrap();
+    let help = String::from_utf8_lossy(&output.stdout);
+    assert!(!help.contains("--box"), "rich has no --box: {help}");
+    // The names the help says --panel takes, it takes.
+    for name in ["ascii", "ascii2", "square", "rounded", "heavy", "double"] {
+        assert!(help.contains(name), "{help}");
+        let (out, err, code) = piped(&["--panel", name, "--print", "x"], "");
+        assert!(code == 0 && !out.is_empty(), "--panel {name}: {err}");
+    }
+}
+
+#[test]
 fn file_without_a_terminal_prints_selected_or_has_no_answer() {
     let (out, _, code) = piped(&["file", "--selected", "notes.md"], "");
     assert_eq!((out.as_str(), code), ("notes.md\n", 0));
@@ -851,6 +924,54 @@ mod pty {
         pty.send("\r");
         let out = pty.finish();
         assert!(out.contains("code=0 got=🚀"), "{out}");
+    }
+
+    #[test]
+    fn write_keeps_tabs_and_takes_a_crlf_as_one_line_ending() {
+        let mut pty = Pty::start(r#"printf 'a\tb\r\n' | rich write | od -An -tx1"#);
+        pty.wait_for("submit");
+        std::thread::sleep(Duration::from_millis(200));
+        pty.send("\x04");
+        let out = pty.finish();
+        assert!(out.contains(" 61 09 62 0a\r\n"), "{out:?}");
+    }
+
+    #[test]
+    fn a_mouse_report_at_zero_does_not_panic() {
+        let mut pty = Pty::start(r#"x=$(rich choose --mouse a b c); echo "code=$? got=[$x]""#);
+        pty.wait_for("3/3");
+        std::thread::sleep(Duration::from_millis(200));
+        pty.send("\x1b[<0;0;0M");
+        std::thread::sleep(Duration::from_millis(200));
+        pty.send("\x1b");
+        let out = pty.finish();
+        assert!(out.contains("code=1 got=[]"), "{out:?}");
+    }
+
+    #[test]
+    fn one_click_on_the_focused_row_does_not_pick_it() {
+        let mut pty = Pty::start(r#"x=$(rich choose --mouse a b c); echo "code=$? got=[$x]""#);
+        pty.wait_for("3/3");
+        std::thread::sleep(Duration::from_millis(200));
+        // `a`, focused from the start, on row 2 of the alternate screen.
+        pty.send("\x1b[<0;5;2M\x1b[<0;5;2m");
+        std::thread::sleep(Duration::from_millis(200));
+        pty.send("\x1b");
+        let out = pty.finish();
+        assert!(out.contains("code=1 got=[]"), "{out:?}");
+    }
+
+    /// `/proc/kmsg` reads block until the kernel logs something; its
+    /// preview must not freeze the picker (only root may open it).
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_preview_whose_read_blocks_leaves_the_keys_working() {
+        let mut pty = Pty::start(r#"x=$(rich file /proc --value kmsg); echo "code=$? got=[$x]""#);
+        pty.wait_for("kmsg");
+        std::thread::sleep(Duration::from_millis(500));
+        pty.send("\x1b");
+        let out = pty.finish();
+        assert!(out.contains("code=1 got=[]"), "{out:?}");
     }
 
     #[test]

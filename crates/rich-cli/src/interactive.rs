@@ -69,12 +69,12 @@ pub(super) fn commands() -> Vec<CommandSpec> {
          shell-quoted, and $COLUMNS the pane's width (e.g. `rich {} --force-terminal`)",
     );
     let mouse = ArgSpec::flag("mouse").help(
-        "Report the mouse: click to focus and pick, drag the border beside a preview (off by \
-         default: it takes text selection from the terminal)",
+        "Report the mouse: click a row to focus it and again to pick it, drag the border beside \
+         a preview (off by default: it takes text selection from the terminal)",
     );
     let height = ArgSpec::option("height")
         .value_name("ROWS")
-        .help("Show at most ROWS at once (default 10)");
+        .help("Show at most ROWS at once (default 10), fewer when the terminal is shorter");
     let pick = |name: &str, about: &str| {
         CommandSpec::new(name)
             .about(about)
@@ -99,11 +99,10 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                     .multiple(true)
                     .help("Focus ITEM (with --multi, mark it); the answer without a terminal"),
             )
-            .arg(
-                ArgSpec::option("height")
-                    .value_name("ROWS")
-                    .help("Show at most ROWS items at once (default 10)"),
-            )
+            .arg(ArgSpec::option("height").value_name("ROWS").help(
+                "Show at most ROWS items at once (default 10), fewer when the terminal is \
+                         shorter",
+            ))
             .arg(preview.clone())
             .arg(mouse.clone())
     };
@@ -237,12 +236,15 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             .arg(
                 ArgSpec::option("height")
                     .value_name("ROWS")
-                    .help("Rows of text shown (default 5)"),
+                    .help("Rows of text shown (default 5), fewer when the terminal is shorter"),
             )
             .arg(
                 ArgSpec::option("char-limit")
                     .value_name("N")
-                    .help("At most N characters, line breaks included"),
+                    .help(
+                        "At most N characters (grapheme clusters: an emoji sequence or an accented \
+                         letter is one), line breaks included",
+                    ),
             )
             .arg(ArgSpec::flag("show-line-numbers").help("Number the lines"))
             .example(
@@ -348,7 +350,11 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                     .help("Focus NAME; the answer without a terminal and to an empty line"),
             )
             .arg(mouse)
-            .example("rich asset --kind box", "Pick a box style for --box"),
+            .example(
+                "rich asset --kind box",
+                "Pick one of rich's box styles by name (--panel takes ascii, ascii2, square, \
+                 rounded, heavy or double)",
+            ),
     ]
 }
 
@@ -1015,15 +1021,25 @@ fn write(args: &Args) -> Answer {
     let mut value = args.value.clone();
     if !std::io::stdin().is_terminal() {
         let piped = read_stdin()?;
-        let piped = piped.strip_suffix('\n').unwrap_or(&piped).to_string();
+        // The last line ending, `\r\n` as well as `\n`, ends the text.
+        let text = match piped.strip_suffix('\n') {
+            Some(text) => text.strip_suffix('\r').unwrap_or(text),
+            None => &piped,
+        };
         if options.policy.detect_for(options.session.output).is_err() {
-            let text: String = match args.char_limit {
-                Some(limit) => piped.chars().take(limit).collect(),
-                None => piped,
+            // No input at all answers with --value, as without a terminal
+            // the other commands answer with their default.
+            let text = match (&args.value, piped.is_empty()) {
+                (Some(value), true) => value.as_str(),
+                _ => text,
+            };
+            let text = match args.char_limit {
+                Some(limit) => TextArea::truncate(text, limit),
+                None => text,
             };
             return write_stdout(&format!("{text}\n"));
         }
-        value.get_or_insert(piped);
+        value.get_or_insert(text.to_string());
     }
     let mut area = TextArea::new(args.header.clone().unwrap_or_else(|| "Write".into()))
         .line_numbers(args.line_numbers);
@@ -1176,6 +1192,17 @@ fn asset(args: &Args) -> Answer {
     });
     let mut picker = AssetPicker::new(prompt, kind).with_mouse(args.mouse);
     if let Some(selected) = args.selected.first() {
+        let name = selected.trim_matches(':');
+        if !picker.items().iter().any(|item| item.label == name) {
+            let kind = args.kind.as_deref().unwrap_or("emoji");
+            return Err((
+                ExitClass::Usage,
+                format!(
+                    "--selected: {selected:?} is not a{} {kind} name",
+                    if kind == "emoji" { "n" } else { "" }
+                ),
+            ));
+        }
         picker = picker.default(selected);
     }
     if let Some(rows) = args.height {
