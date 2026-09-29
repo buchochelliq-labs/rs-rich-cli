@@ -69,7 +69,7 @@ jobs:
       - name: Install and import on Python 3.13
         shell: bash
         run: python crates/rich-py/tests/smoke.py dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheel-${{ matrix.name }}
           path: dist/*.whl
@@ -85,7 +85,7 @@ jobs:
         with:
           command: sdist
           args: --out dist --manifest-path crates/rich-py/Cargo.toml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sdist
           path: dist/*.tar.gz
@@ -103,7 +103,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: wheel-linux-x86_64
           path: dist
@@ -121,7 +121,7 @@ jobs:
     permissions:
       id-token: write          # Trusted Publishing: exchange the OIDC token for an upload token
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
