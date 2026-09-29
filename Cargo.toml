@@ -24,7 +24,9 @@ rust-version = "1.90"
 # `rich` is taken by an unrelated crate; the `package = …` key maps them back to
 # the short names, so every `use rich::…` in this workspace is unaffected.
 # External users get the same short names via each crate's `[lib] name`.
-rich = { package = "rs-rich", path = "crates/rich", version = "0.0.9" }
+# `default-features = false`: each member asks for `syntax` / `markdown` only
+# if it uses them, so `rs-rich-ext` without its defaults stays syntect-free.
+rich = { package = "rs-rich", path = "crates/rich", version = "0.0.9", default-features = false }
 rich-plugin-api = { package = "rs-rich-plugin-api", path = "crates/rich-plugin-api", version = "0.0.2" }
 rich-macros = { package = "rs-rich-macros", path = "crates/rich-macros", version = "0.0.3" }
 rich-ext = { package = "rs-rich-ext", path = "crates/rich-ext", version = "0.0.11" }

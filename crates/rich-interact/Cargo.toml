@@ -29,10 +29,14 @@ name = "rich_interact"
 workspace = true
 
 [dependencies]
-rich.workspace = true
+rich = { workspace = true, features = ["syntax"] }
 rich-ext.workspace = true
 # Raw mode, the alternate screen, and key and mouse events on every platform.
-crossterm = { version = "0.29", default-features = false, features = ["events", "bracketed-paste", "windows"] }
+# `use-dev-tty` reads events through poll/select instead of mio: macOS's
+# kqueue cannot watch `/dev/tty` (keys when stdin is a pipe, as in
+# `seq 1 99 | rich pager`), and its edge-triggered read filter misses keys
+# typed while the session was suspended. One event source on every Unix.
+crossterm = { version = "0.29", default-features = false, features = ["events", "bracketed-paste", "windows", "use-dev-tty"] }
 
 [target.'cfg(unix)'.dependencies]
 # Restore the terminal on SIGTERM, SIGHUP and SIGQUIT (crossterm already

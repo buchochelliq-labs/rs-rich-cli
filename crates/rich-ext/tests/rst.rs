@@ -2,6 +2,8 @@
 //! `fixtures/rst/` must print exactly what upstream printed, captured by
 //! `scripts/capture_rst_golden.py`.
 
+#![cfg(feature = "syntax")]
+
 use std::fs;
 use std::path::{Path, PathBuf};
 

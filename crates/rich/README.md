@@ -56,6 +56,21 @@ Export
   and `export_svg` — an SVG of a terminal window that loads its font from a
   CDN, as upstream's does.
 
+## Cargo features
+
+`syntax` (syntect) and `markdown` (pulldown-cmark, implies `syntax`) are on
+by default, so a default build is the whole port. An application that never
+renders `Syntax` or `Markdown` can build without them:
+
+```toml
+rs-rich = { version = "0.0.9", default-features = false }
+```
+
+That removes `rich::syntax`, `rich::markdown` and the `Syntax` /
+`SyntectHighlighter` re-exports, along with syntect, bincode 1.x, a second
+copy of `fancy-regex` and pulldown-cmark. Everything else renders exactly
+as before.
+
 ## Extending it
 
 The core ships only upstream's own behaviour. Local features and the plugin

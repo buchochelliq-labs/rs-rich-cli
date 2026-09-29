@@ -48,7 +48,9 @@ pub mod layout;
 pub mod live;
 pub mod live_render;
 pub mod log_render;
+#[cfg(feature = "markdown")]
 pub mod markdown;
+#[cfg(feature = "markdown")]
 mod markdown_url;
 pub mod markup;
 pub mod measure;
@@ -73,6 +75,7 @@ pub mod status;
 pub mod style;
 pub mod styled;
 pub mod svg;
+#[cfg(feature = "syntax")]
 pub mod syntax;
 pub mod table;
 pub mod terminal_theme;
@@ -124,6 +127,7 @@ pub use crate::spinner::Spinner;
 pub use crate::status::Status;
 pub use crate::style::{Meta, MetaValue, Style, StyleType};
 pub use crate::styled::Styled;
+#[cfg(feature = "syntax")]
 pub use crate::syntax::{Syntax, SyntectHighlighter};
 pub use crate::table::{Cell, ColumnOptions, Table};
 pub use crate::terminal_theme::{

@@ -70,6 +70,7 @@ impl std::fmt::Debug for DiffView {
 }
 
 /// Lines of `text` without terminators; a trailing newline adds no line.
+#[cfg_attr(not(feature = "syntax"), allow(dead_code))]
 pub(crate) fn text_lines(text: &Text) -> Vec<Text> {
     let plain = text.plain();
     let offsets: Vec<usize> = plain

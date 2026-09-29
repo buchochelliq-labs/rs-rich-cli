@@ -57,6 +57,45 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### Core 0.0.9 / ext 0.0.11: `syntax` and `markdown` are optional
+
+- `rs-rich` has two new default features: `syntax` (`Syntax` and
+  `SyntectHighlighter`, through syntect) and `markdown` (`Markdown`, through
+  pulldown-cmark; implies `syntax`). A default build is unchanged. With
+  `default-features = false` the dependency tree loses syntect, its
+  unmaintained bincode 1.x (RUSTSEC-2025-0141), the second `fancy-regex` and
+  pulldown-cmark. `onig` and `syntax-cache` now imply `syntax`.
+- `rs-rich-ext` forwards the same two default features. Without them it leaves
+  out `rst`, `cli_doc::markdown_view`, the `syntect` registry entry and
+  `testing::conformance`; `source_view`, `SourceDiff` and `PatchView` still
+  render, unhighlighted. The workspace depends on core with `default-features = false`,
+  so each crate asks only for what it uses: `rs-rich-plugin-api`,
+  `rs-rich-macros` and `rs-rich-art` no longer pull syntect in.
+- CI builds and tests core without default features, and fails if a lean
+  `rs-rich` or `rs-rich-ext` depends on syntect, bincode or pulldown-cmark.
+
+### CI: macOS, and interactive commands on macOS
+
+- A macOS job runs the whole workspace's tests, plus core without default
+  features, and is part of `ci-ok`.
+- `rs-rich-interact` reads terminal events with crossterm's `use-dev-tty`
+  source (poll/select) instead of mio on every Unix. On macOS, kqueue cannot
+  watch `/dev/tty`, so the interactive commands exited as soon as stdin was a
+  pipe (`seq 1 99 | rich pager`, `ls | rich filter`, `echo draft | rich
+  write`) or the command ran in the background, and keys typed while a
+  session was suspended were lost after `fg`. Linux behaves as before.
+
+### Core 0.0.9: string table cells are markup (docs)
+
+- A string cell is console markup, as upstream's is, and the compiler cannot
+  tell data from markup: `add_row(&[name])` or `Cell::from(name)` with a model
+  or column name containing `[` restyles or hides the rest of the cell. The
+  `From` conversions and `add_row` now carry doc warnings pointing at the
+  literal form core already has, a `Text` cell, as upstream's
+  `add_row(Text(name))`: `add_row_text(vec![Text::new(name)])` or
+  `Cell::from(Text::new(name))`. No API or rendering change. The tables guide
+  and the 0.0.13 migration notes carry a security note.
+
 ### Dependencies
 
 - `rs-rich-macros` builds on `syn` 3, and `rs-rich-record` on `color_quant`

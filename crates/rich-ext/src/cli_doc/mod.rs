@@ -39,7 +39,9 @@ pub mod clap;
 
 pub use completion::{generate, CompletionCatalog, CompletionItem, CompletionKind, Shell};
 pub use config::{ConfigEntry, ConfigReference, ConfigSource};
-pub use docs::{markdown_view, to_man, to_man_pages, to_markdown};
+#[cfg(feature = "markdown")]
+pub use docs::markdown_view;
+pub use docs::{to_man, to_man_pages, to_markdown};
 pub use error::{suggest, CliError, CliErrorKind};
 pub use help::{HelpView, STACK_BELOW};
 pub use precedence::{Explanation, Layer, Precedence, PrecedenceView, Resolved};

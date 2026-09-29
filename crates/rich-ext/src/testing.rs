@@ -1,4 +1,5 @@
 //! Deterministic snapshots for downstream render regression tests.
+#[cfg(feature = "syntax")]
 pub mod conformance;
 
 use crate::target::RenderTarget;

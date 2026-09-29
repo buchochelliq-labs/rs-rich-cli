@@ -58,6 +58,7 @@ pub mod highlighter;
 pub mod plugin_loading;
 pub mod redact;
 pub mod registry;
+#[cfg(feature = "syntax")]
 pub mod rst;
 pub mod sanitize;
 pub mod size_bar;

@@ -1,6 +1,8 @@
 //! Frame encoding parity: `Frame::to_ansi` writes the same bytes as
 //! `Console::segments_to_string` for any control-free stream (#226).
 
+#![cfg(feature = "markdown")]
+
 use rich::markdown::Markdown;
 use rich::panel::Panel;
 use rich::{

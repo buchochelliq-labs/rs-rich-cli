@@ -138,19 +138,26 @@ impl From<Text> for Cell {
     }
 }
 
-/// A string cell is console markup, as upstream's `str` renderables are.
+/// A string cell is console markup, as upstream's `str` renderables are:
+/// `"[b]x"` renders a bold `x`, and a stray `[` in data can restyle, link or
+/// hide what follows. For data you do not control (file names, model or
+/// column names, user input) pass a [`Text`] instead, as upstream's
+/// `add_row(Text(name))` does: `Cell::from(Text::new(name))`, which is never
+/// parsed.
 impl From<&str> for Cell {
     fn from(text: &str) -> Self {
         Cell::Markup(text.to_string())
     }
 }
 
+/// Console markup, as for `&str`; see there, and use a [`Text`] for data.
 impl From<String> for Cell {
     fn from(text: String) -> Self {
         Cell::Markup(text)
     }
 }
 
+/// Console markup, as for `&str`; see there, and use a [`Text`] for data.
 impl From<&String> for Cell {
     fn from(text: &String) -> Self {
         Cell::Markup(text.clone())
@@ -761,7 +768,9 @@ impl Table {
 
     /// Add a row of string cells (extra cells are ignored; missing cells render
     /// empty). Each string is console markup, as upstream's `add_row("[b]x")`
-    /// is; use [`add_row_text`](Self::add_row_text) for literal data.
+    /// is, so a `[` in data can restyle or hide the rest of the cell: for
+    /// data you do not control use [`add_row_text`](Self::add_row_text) with
+    /// `Text::new(..)` cells, which are never parsed.
     pub fn add_row(&mut self, cells: &[&str]) -> &mut Self {
         self.push_row(
             cells
@@ -1867,6 +1876,31 @@ mod tests {
     use super::*;
     use crate::color::ColorSystem;
     use crate::r#box::SQUARE;
+
+    #[test]
+    fn text_cells_are_never_markup() {
+        let console = Console::builder().width(80).color_system(None).build();
+        // A column named like markup, a closing tag and an emoji code.
+        let data = ["[bold]model[/]", "col[/b]", ":sparkles:"];
+        let mut plain = Table::new();
+        plain.add_column("a").add_column("b").add_column("c");
+        plain.add_row_text(data.iter().map(|s| Text::new(*s)).collect());
+        let rendered = console.render_to_string(&plain);
+        for cell in data {
+            assert!(rendered.contains(cell), "{cell}: {rendered}");
+        }
+        // A Text cell is the same; Cell::Markup and a &str parse.
+        let mut cells = Table::new();
+        cells.add_column("a").add_column("b").add_column("c");
+        cells.add_row_cells(vec![
+            Cell::from(Text::new("[bold]model[/]")),
+            Cell::Markup("[bold]model[/]".into()),
+            Cell::from("[bold]model[/]"),
+        ]);
+        let rendered = console.render_to_string(&cells);
+        assert_eq!(rendered.matches("[bold]model[/]").count(), 1, "{rendered}");
+        assert_eq!(rendered.matches("model").count(), 3, "{rendered}");
+    }
 
     fn console() -> Console {
         Console::builder()

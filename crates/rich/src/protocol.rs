@@ -165,8 +165,7 @@ impl std::error::Error for HighlightError {}
 ///
 /// ```
 /// use rich::protocol::{CodeHighlighter, HighlightError, HighlightSpan, HighlightedCode, HighlightedLine};
-/// use rich::{Console, Style, Syntax};
-/// use std::sync::Arc;
+/// use rich::Style;
 ///
 /// /// Makes every line bold.
 /// struct Bold;
@@ -193,9 +192,14 @@ impl std::error::Error for HighlightError {}
 ///     fn languages(&self) -> Vec<String> { Vec::new() }
 /// }
 ///
+/// # #[cfg(feature = "syntax")] {
+/// use rich::{Console, Syntax};
+/// use std::sync::Arc;
+///
 /// let console = Console::builder().width(20).force_terminal(true).build();
 /// let out = console.render_to_string(&Syntax::new("x = 1", "python").highlighter(Arc::new(Bold)));
 /// assert!(out.contains("\x1b[1mx = 1"));
+/// # }
 /// ```
 pub trait CodeHighlighter: Send + Sync {
     /// Highlight `code`. `language` is a name or file extension (`"rust"`,

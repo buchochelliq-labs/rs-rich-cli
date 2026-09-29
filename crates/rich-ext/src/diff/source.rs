@@ -3,10 +3,14 @@
 use std::sync::Arc;
 
 use rich::measure::Measurement;
-use rich::{Console, ConsoleOptions, Renderable, Segment, Style, StyleType, Syntax, Text};
+use rich::{Console, ConsoleOptions, Renderable, Segment, Text};
+#[cfg(feature = "syntax")]
+use rich::{Style, StyleType, Syntax};
 
 use super::engine::split_lines_inclusive;
-use super::view::{text_lines, DiffView, LineLinks, Side};
+#[cfg(feature = "syntax")]
+use super::view::text_lines;
+use super::view::{DiffView, LineLinks, Side};
 use super::Layout;
 use crate::hyperlink::Hyperlinker;
 
@@ -21,6 +25,7 @@ pub(crate) fn language_for_path(path: &str) -> String {
 }
 
 /// A style without its background, so diff line styles show through.
+#[cfg(feature = "syntax")]
 fn foreground_only(style: &Style) -> Style {
     let definition = style.definition();
     let kept = match definition.split_once(" on ") {
@@ -31,10 +36,19 @@ fn foreground_only(style: &Style) -> Style {
     Style::parse(&kept).unwrap_or_default()
 }
 
+/// `code` split into unstyled lines, one per `split_lines_inclusive` line.
+fn plain_lines(code: &str) -> Vec<Text> {
+    split_lines_inclusive(code)
+        .into_iter()
+        .map(|l| Text::new(super::engine::strip_eol(l)))
+        .collect()
+}
+
 /// Highlight `code` as `language` and split it into lines, one per
 /// `split_lines_inclusive` line. The whole side is highlighted at once so
 /// multi-line constructs (block comments, strings) colour correctly. With a
 /// `console`, its default code highlighter applies.
+#[cfg(feature = "syntax")]
 pub(crate) fn highlight_lines(
     code: &str,
     language: Option<&str>,
@@ -42,10 +56,7 @@ pub(crate) fn highlight_lines(
 ) -> Vec<Text> {
     let count = split_lines_inclusive(code).len();
     let Some(language) = language else {
-        return split_lines_inclusive(code)
-            .into_iter()
-            .map(|l| Text::new(super::engine::strip_eol(l)))
-            .collect();
+        return plain_lines(code);
     };
     let syntax = Syntax::new(code, language);
     let highlighted = match console {
@@ -64,6 +75,16 @@ pub(crate) fn highlight_lines(
     let mut lines = text_lines(&plain);
     lines.resize_with(count, || Text::new(""));
     lines
+}
+
+/// Without the `syntax` feature there is no highlighter: every side is plain.
+#[cfg(not(feature = "syntax"))]
+pub(crate) fn highlight_lines(
+    code: &str,
+    _language: Option<&str>,
+    _console: Option<&Console>,
+) -> Vec<Text> {
+    plain_lines(code)
 }
 
 /// A syntax-highlighted diff of two versions of a source file.

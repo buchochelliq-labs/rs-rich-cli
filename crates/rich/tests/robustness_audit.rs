@@ -42,6 +42,7 @@ fn printing_many_spans_is_not_quadratic() {
 /// text event per bracket, and the strikethrough pass rescanned the merged
 /// literal for each one.
 #[test]
+#[cfg(feature = "markdown")]
 fn markdown_with_many_brackets_is_not_quadratic() {
     let source = format!("{}x{}", "[".repeat(20000), "]".repeat(20000));
     let start = Instant::now();

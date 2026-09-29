@@ -4,6 +4,7 @@
 
 use super::paragraphs;
 use super::spec::{ArgSpec, CommandSpec};
+#[cfg(feature = "markdown")]
 use rich::markdown::Markdown;
 
 /// Markdown reference for `spec` and, under deeper headings, every visible
@@ -32,6 +33,7 @@ pub fn to_markdown(spec: &CommandSpec) -> String {
 }
 
 /// [`to_markdown`] as a core [`Markdown`] renderable, to print through rich.
+#[cfg(feature = "markdown")]
 pub fn markdown_view(spec: &CommandSpec) -> Markdown {
     Markdown::new(&to_markdown(spec))
 }

@@ -1,4 +1,7 @@
 //! #149: one explicit overflow policy shared by Syntax, JSON and Text.
+
+#![cfg(feature = "syntax")]
+
 use rich::cells::cell_len;
 use rich::{Console, Json, Renderable, Segment, Syntax, Text};
 use rich_ext::layout::{Axis, LayoutNode, OverflowPolicy, Overflowing};

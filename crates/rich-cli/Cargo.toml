@@ -72,7 +72,7 @@ dylib-plugins = ["rich-ext/dylib-plugins"]
 wasm-plugins = ["rich-ext/wasm-plugins"]
 
 [dependencies]
-rich.workspace = true
+rich = { workspace = true, features = ["syntax", "markdown"] }
 rich-ext = { workspace = true, features = ["data", "yaml", "toml", "xml", "jsonpath", "serde", "testing"] }
 terminal_size.workspace = true
 serde_json.workspace = true

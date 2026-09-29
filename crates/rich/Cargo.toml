@@ -33,12 +33,20 @@ name = "rich"
 workspace = true
 
 [features]
+# `Syntax` and the syntect highlighter (with syntect's bundled grammars and
+# themes). On by default; turn it off (`default-features = false`) when an
+# application never highlights code, to drop syntect and what it pulls in.
+syntax = ["dep:syntect"]
+# `Markdown`, parsed with pulldown-cmark. Code blocks are highlighted by
+# `Syntax`, so this turns `syntax` on too. On by default.
+markdown = ["dep:pulldown-cmark", "syntax"]
 # Optional parser reuse; disabled in the default mirror (DIVERGENCES #23).
-syntax-cache = []
+syntax-cache = ["syntax"]
 # Oniguruma (C) as syntect's regex engine instead of pure-Rust fancy-regex:
 # faster highlighting, same grammars and themes (DIVERGENCES #26).
-onig = ["syntect/regex-onig"]
-default = []
+onig = ["syntax", "syntect/regex-onig"]
+# The default build is the whole mirror: everything upstream `rich` has.
+default = ["syntax", "markdown"]
 # Explicit opt-in to JSON escape-aware display boundaries (DIVERGENCES #22).
 json-escape-safe = []
 
@@ -46,6 +54,45 @@ json-escape-safe = []
 terminal_size.workspace = true
 serde_json.workspace = true
 fancy-regex.workspace = true
-pulldown-cmark.workspace = true
-syntect.workspace = true
+pulldown-cmark = { workspace = true, optional = true }
+syntect = { workspace = true, optional = true }
 anstyle-query = "1.1.5"
+
+# Targets that exercise `Syntax` or `Markdown` need them; the rest also run
+# in the lean build (`--no-default-features`), which CI checks.
+
+[[test]]
+name = "golden"
+required-features = ["syntax", "markdown"]
+
+[[test]]
+name = "golden_api_gaps"
+required-features = ["syntax", "markdown"]
+
+[[test]]
+name = "golden_audit2"
+required-features = ["syntax", "markdown"]
+
+[[test]]
+name = "golden_audit_edges"
+required-features = ["syntax", "markdown"]
+
+[[test]]
+name = "golden_upstream_features"
+required-features = ["syntax", "markdown"]
+
+[[test]]
+name = "code_seams"
+required-features = ["syntax", "markdown"]
+
+[[test]]
+name = "edge_values"
+required-features = ["syntax", "markdown"]
+
+[[example]]
+name = "guide_code"
+required-features = ["syntax", "markdown"]
+
+[[example]]
+name = "screenshot"
+required-features = ["syntax", "markdown"]

@@ -253,10 +253,23 @@ fn scratch_dir(name: &str) -> PathBuf {
     dir
 }
 
+/// GNU diff: `gdiff` (Homebrew's diffutils), else `diff` when it is GNU's.
+/// macOS's own `diff` is BSD's, which numbers an insertion at the top of a
+/// file `-1,0` where GNU writes `-0,0`, so it is not the reference.
+fn gnu_diff_program() -> Option<&'static str> {
+    ["gdiff", "diff"].into_iter().find(|program| {
+        Command::new(program)
+            .arg("--version")
+            .output()
+            .is_ok_and(|out| String::from_utf8_lossy(&out.stdout).contains("GNU diffutils"))
+    })
+}
+
 fn gnu_diff(dir: &Path, old: &str, new: &str, context: usize) -> Option<String> {
+    let program = gnu_diff_program()?;
     std::fs::write(dir.join("old"), old).unwrap();
     std::fs::write(dir.join("new"), new).unwrap();
-    let out = Command::new("diff")
+    let out = Command::new(program)
         .arg(format!("-U{context}"))
         .arg("old")
         .arg("new")
@@ -307,7 +320,7 @@ fn unified_output_matches_gnu_diff() {
                 assert!(ours.starts_with("--- old\n+++ new\n"), "{name}: {ours}");
             }
             let Some(theirs) = gnu_diff(&dir, old, new, context) else {
-                eprintln!("note: `diff` is not on PATH; skipping GNU parity for {name}");
+                eprintln!("note: GNU diff is not on PATH; skipping GNU parity for {name}");
                 continue;
             };
             assert_eq!(body(&ours), body(&theirs), "{name} at -U{context}");
@@ -529,48 +542,52 @@ fn source_diffs_highlight_both_sides() {
 3   - fn a() -> u8 { 1 }
   3 + fn a() -> u8 { 2 }"
     );
-    let segments = colour_segments(&diff, 60);
-    let colour_of = |t: &str| {
-        segments
+    // Without `syntax` the same diff renders, unhighlighted.
+    #[cfg(feature = "syntax")]
+    {
+        let segments = colour_segments(&diff, 60);
+        let colour_of = |t: &str| {
+            segments
+                .iter()
+                .find(|s| s.text == t)
+                .and_then(|s| s.style.as_ref())
+                .and_then(|s| s.color().cloned())
+        };
+        // Keywords and multi-line comments are coloured, and differently.
+        let keyword = colour_of("fn").expect("`fn` has a colour");
+        let comment = colour_of("   comment */").expect("the comment's second line is highlighted");
+        assert_ne!(keyword, comment);
+        // No syntax background bleeds through the diff styles.
+        assert!(segments.iter().filter(|s| s.text == "fn").all(|s| s
+            .style
+            .as_ref()
+            .unwrap()
+            .bgcolor()
+            .is_none()));
+        // Emphasis layers on top of highlighting.
+        assert!(segments
             .iter()
-            .find(|s| s.text == t)
-            .and_then(|s| s.style.as_ref())
-            .and_then(|s| s.color().cloned())
-    };
-    // Keywords and multi-line comments are coloured, and differently.
-    let keyword = colour_of("fn").expect("`fn` has a colour");
-    let comment = colour_of("   comment */").expect("the comment's second line is highlighted");
-    assert_ne!(keyword, comment);
-    // No syntax background bleeds through the diff styles.
-    assert!(segments.iter().filter(|s| s.text == "fn").all(|s| s
-        .style
-        .as_ref()
-        .unwrap()
-        .bgcolor()
-        .is_none()));
-    // Emphasis layers on top of highlighting.
-    assert!(segments
-        .iter()
-        .any(|s| s.text == "2" && s.style.as_ref().and_then(|st| st.attr(3)) == Some(true)));
-    // Line numbers link through the template.
-    let linked = SourceDiff::new(old, new)
-        .path("src/lib.rs")
-        .link_template("vscode://file/{path}:{line}");
-    let links: Vec<_> = colour_segments(&linked, 60)
-        .into_iter()
-        .filter_map(|s| s.style.and_then(|st| st.link().map(str::to_owned)))
-        .collect();
-    assert!(
-        links.contains(&"vscode://file/src/lib.rs:3".to_string()),
-        "{links:?}"
-    );
-    // Side by side keeps the width.
-    let sbs = plain(&diff.clone().layout(Layout::SideBySide), 50);
-    assert_clean(&sbs, 50);
-    assert!(
-        sbs.contains("3 - fn a() -> u8 { 1 }  │ 3 + fn a() -> u8 { 2 }"),
-        "{sbs}"
-    );
+            .any(|s| s.text == "2" && s.style.as_ref().and_then(|st| st.attr(3)) == Some(true)));
+        // Line numbers link through the template.
+        let linked = SourceDiff::new(old, new)
+            .path("src/lib.rs")
+            .link_template("vscode://file/{path}:{line}");
+        let links: Vec<_> = colour_segments(&linked, 60)
+            .into_iter()
+            .filter_map(|s| s.style.and_then(|st| st.link().map(str::to_owned)))
+            .collect();
+        assert!(
+            links.contains(&"vscode://file/src/lib.rs:3".to_string()),
+            "{links:?}"
+        );
+        // Side by side keeps the width.
+        let sbs = plain(&diff.clone().layout(Layout::SideBySide), 50);
+        assert_clean(&sbs, 50);
+        assert!(
+            sbs.contains("3 - fn a() -> u8 { 1 }  │ 3 + fn a() -> u8 { 2 }"),
+            "{sbs}"
+        );
+    }
 }
 
 // ------------------------------------------------------------------- git

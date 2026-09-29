@@ -4,6 +4,8 @@
 //! Regenerate the fixtures with
 //! `UPDATE_SNAPSHOTS=1 cargo test -p rs-rich-ext --test frame_export`.
 
+#![cfg(feature = "markdown")]
+
 use rich::markdown::Markdown;
 use rich::panel::Panel;
 use rich::terminal_theme::{DEFAULT_TERMINAL_THEME, SVG_EXPORT_THEME};
