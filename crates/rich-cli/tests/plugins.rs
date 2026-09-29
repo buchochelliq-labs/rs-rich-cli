@@ -390,6 +390,22 @@ mod wasm {
         ] {
             assert!(stdout.contains(expected), "{expected}: {stdout}");
         }
+
+        // The path is absolute, as a native plugin's is, and a long one is
+        // folded rather than cut off with "…".
+        let deep = work.join("a-rather-long-directory-name".repeat(3));
+        std::fs::create_dir_all(&deep).unwrap();
+        std::fs::copy(work.join("shout.wasm"), deep.join("shout.wasm")).unwrap();
+        let relative = format!("{}/shout.wasm", deep.file_name().unwrap().to_str().unwrap());
+        let args = ["plugins", "info", "shout", "--plugin", relative.as_str()];
+        let out = rich(&work, &home, &args);
+        let stdout = text(&out.stdout);
+        assert!(out.status.success(), "{}", text(&out.stderr));
+        assert!(!stdout.contains('…'), "{stdout}");
+        let out = rich(&work, &home, &[&args[..], &["--report", "json"]].concat());
+        let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        let path = std::fs::canonicalize(deep.join("shout.wasm")).unwrap();
+        assert_eq!(report["path"], path.to_str().unwrap(), "{report}");
     }
 
     #[test]

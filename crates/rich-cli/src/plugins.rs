@@ -63,11 +63,21 @@ pub(crate) fn install(plugins: Vec<RuntimePlugin>) {
     }
 }
 
-/// Linked plugins with a duplicate id (a build problem, not the user's) are
-/// reported once, up front, instead of silently missing.
+/// Linked plugins that clash with each other or with a built-in (a build
+/// problem, not the user's) are reported once, up front, instead of silently
+/// missing.
 pub(crate) fn check_linked() -> Result<(), String> {
-    ExtensionRegistry::new()
-        .add_linked_plugins()
+    check_plugin_set(
+        rich_ext::plugin::linked_plugins()
+            .map(|linked| linked.plugin())
+            .collect(),
+    )
+}
+
+/// Whether `plugins` add cleanly after the built-ins, as `add_to` adds them.
+fn check_plugin_set(plugins: Vec<Box<dyn rich_ext::plugin::Plugin>>) -> Result<(), String> {
+    base_registry(MermaidBackend::Text)
+        .add_plugin_set(plugins)
         .map(drop)
         .map_err(|error| format!("linked plugins: {error}"))
 }
@@ -286,7 +296,14 @@ impl Entry {
     fn info(&self, no_color: bool) -> String {
         let mut table = rich::Table::grid().padding(0, 2, 0, 0);
         table.add_column("");
-        table.add_column("");
+        // A path is one long word: fold it rather than cut it with "…".
+        table.add_column_with(
+            Text::default(),
+            rich::ColumnOptions {
+                overflow: rich::Overflow::Fold,
+                ..rich::ColumnOptions::default()
+            },
+        );
         let mut rows = vec![
             ("Name", self.name.clone()),
             ("Version", self.version.clone()),
@@ -418,4 +435,31 @@ fn entries() -> Vec<Entry> {
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rich_ext::plugin::{Plugin, PluginError, PluginMetadata, PluginRegistrar};
+
+    struct Named(&'static str);
+
+    impl Plugin for Named {
+        fn metadata(&self) -> PluginMetadata {
+            PluginMetadata::new(self.0, self.0, "1")
+        }
+        fn register(&self, _: &mut dyn PluginRegistrar) -> Result<(), PluginError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_linked_plugin_that_clashes_with_a_built_in_is_reported() {
+        assert_eq!(check_plugin_set(vec![Box::new(Named("zz-good"))]), Ok(()));
+        // Checked against the built-ins, not an empty registry: `mermaid` is
+        // taken, and the plugins sorted after it would silently go missing.
+        let error = check_plugin_set(vec![Box::new(Named("zz-good")), Box::new(Named("mermaid"))])
+            .unwrap_err();
+        assert!(error.contains("mermaid"), "{error}");
+    }
 }

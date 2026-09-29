@@ -166,6 +166,12 @@ impl AbiBackend for WasmBackend {
 /// manifest cannot be read within the limits or is not a valid
 /// [`PluginAbi`].
 pub fn load_wasm(path: &Path, limits: &WasmLimits) -> Result<RuntimePlugin, LoadError> {
+    // Absolute, as a native plugin's path is, so `rich plugins info` shows
+    // which file it is whatever directory it was named from.
+    let path = &std::fs::canonicalize(path).map_err(|error| LoadError::Io {
+        path: path.to_path_buf(),
+        message: error.to_string(),
+    })?;
     let io = |message: String| LoadError::Io {
         path: path.to_path_buf(),
         message,

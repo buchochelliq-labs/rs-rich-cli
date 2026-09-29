@@ -442,10 +442,19 @@ pub type AbiCallFn = unsafe extern "C" fn(
 /// Free an output a call returned.
 pub type AbiFreeFn = unsafe extern "C" fn(output: AbiOutput);
 
-/// The functions a native plugin provides.
+/// The functions a native plugin provides. Each is nullable here, because a
+/// non-nullable Rust function pointer holding null is undefined behaviour
+/// before it is ever called; [`read_descriptor`] refuses a null one.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct PluginVTable {
+    pub call: Option<AbiCallFn>,
+    pub free: Option<AbiFreeFn>,
+}
+
+/// A [`PluginVTable`] that [`read_descriptor`] checked: neither is null.
+#[derive(Clone, Copy, Debug)]
+pub struct PluginFunctions {
     pub call: AbiCallFn,
     pub free: AbiFreeFn,
 }
@@ -478,7 +487,7 @@ pub struct PluginDescriptor {
 /// array stay valid while the plugin is loaded.
 pub unsafe fn read_descriptor(
     descriptor: *const PluginDescriptor,
-) -> Result<(PluginAbi, PluginVTable), AbiError> {
+) -> Result<(PluginAbi, PluginFunctions), AbiError> {
     if descriptor.is_null() {
         return Err(AbiError::Invalid(format!(
             "{DYLIB_ENTRY_SYMBOL} returned no descriptor (it failed to initialise)"
@@ -538,7 +547,12 @@ pub unsafe fn read_descriptor(
         capabilities,
     };
     abi.validate()?;
-    Ok((abi, descriptor.vtable))
+    let (Some(call), Some(free)) = (descriptor.vtable.call, descriptor.vtable.free) else {
+        return Err(AbiError::Invalid(
+            "a null function in the vtable (`call` and `free` are required)".into(),
+        ));
+    };
+    Ok((abi, PluginFunctions { call, free }))
 }
 
 // ---------------------------------------------------------------------------
@@ -643,8 +657,8 @@ impl Exported {
             capabilities: entries.as_ptr(),
             capability_count: entries.len(),
             vtable: PluginVTable {
-                call,
-                free: free_output,
+                call: Some(call),
+                free: Some(free_output),
             },
         };
         Exported {
@@ -807,7 +821,7 @@ mod tests {
 
     crate::export_dylib_plugin!(exports);
 
-    unsafe fn call(descriptor: &PluginVTable, capability: usize, input: &str) -> (u32, String) {
+    unsafe fn call(descriptor: &PluginFunctions, capability: usize, input: &str) -> (u32, String) {
         let mut output = AbiOutput::empty();
         let status = unsafe { (descriptor.call)(capability, AbiStr::new(input), 80, &mut output) };
         let text = unsafe { std::slice::from_raw_parts(output.ptr, output.len) };
@@ -852,6 +866,23 @@ mod tests {
         );
         assert!(error.to_string().contains("rebuild"));
         assert!(unsafe { read_descriptor(std::ptr::null()) }.is_err());
+    }
+
+    #[test]
+    fn a_null_function_in_the_vtable_is_refused() {
+        // Accepting it would crash (or worse) on the first call.
+        for (call, free) in [(false, true), (true, false), (false, false)] {
+            let mut exported = Exported::new(exports(), __rich_plugin_call);
+            let vtable = &mut exported.descriptor.vtable;
+            if !call {
+                vtable.call = None;
+            }
+            if !free {
+                vtable.free = None;
+            }
+            let error = unsafe { read_descriptor(&exported.descriptor) }.unwrap_err();
+            assert!(error.to_string().contains("null function"), "{error}");
+        }
     }
 
     #[test]

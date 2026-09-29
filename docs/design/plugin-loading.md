@@ -95,9 +95,9 @@ The library exports `rich_plugin_entry`, an `extern "C" fn() -> *const
 PluginDescriptor`. The descriptor is `repr(C)`: the ABI version (two `u32`s
 that stay first in every version, so a host reads them before trusting the
 rest), the name, version and description as pointer and length pairs, the
-capability array, and a vtable of two functions: `call` and `free`. Output is
-allocated by the plugin and given back to it through `free`, so the two sides
-never share an allocator.
+capability array, and a vtable of two functions, `call` and `free`, neither
+of which may be null. Output is allocated by the plugin and given back to it
+through `free`, so the two sides never share an allocator.
 
 A plugin author writes no unsafe code: `export_dylib_plugin!(|| Exports::new(…)
 .transform("reverse", reverse))` generates the entry point and the `call`
