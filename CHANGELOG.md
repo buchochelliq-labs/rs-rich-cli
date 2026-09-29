@@ -57,6 +57,52 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### 0.0.13 release test, round 2: plugins, recordings and the new commands
+
+Three independent audits covered the scope added before release (#618, #619,
+#620). Each finding was reproduced, then fixed with a regression test that
+failed before the fix.
+
+- **Plugin API 0.0.2, ext 0.0.11, CLI 0.0.13 (plugins):**
+  - A WASM plugin's table was unbounded, so `(table 400000000 funcref)` cost
+    about 1.6 GB outside the 64 MiB memory cap. Tables are now capped at
+    10,000 elements (`WasmLimits::table_elements`).
+  - `[link=…]` markup in `fence-markup` output, and `link` in a highlighter
+    span, printed a hyperlink, so a plugin could show one URL and link to
+    another. Links and click meta are now removed from all plugin output.
+  - A linked plugin whose id clashed with a built-in (`mermaid`) was dropped
+    silently, with every linked plugin sorted after it. The clash is now
+    reported before anything runs.
+  - A native plugin whose vtable held a null `call` or `free` was accepted,
+    then crashed rich on first use. `PluginVTable`'s fields are now
+    `Option`s (the same layout), and `read_descriptor` refuses a null one,
+    returning the checked `PluginFunctions`.
+  - A library that failed to open said only "dlopen failed", as an input
+    error (exit 3). The system loader's reason is now included, and it is
+    "not a rich plugin" (exit 2), as a bad WASM module is.
+  - `rich plugins info` cut a long path with "…", and showed a WASM
+    plugin's path as typed. Paths now fold, and WASM paths are canonical.
+- **Record 0.0.1 and ext 0.0.11 (recordings and frame export):**
+  - SVG screenshots put text and backgrounds in the wrong columns after a
+    character rich and the terminal emulator measure differently (a
+    skin-tone modifier, a Devanagari vowel sign). They now follow the grid,
+    as the PNG and text screenshots already did.
+  - Frame SVG and HTML export was quadratic in the number of distinct
+    styles: 45 s for a 500x200 screenshot with a colour per cell in a debug
+    build. It is now linear.
+  - A link URL holding control characters made the SVG malformed XML; they
+    are now percent-encoded.
+  - Link schemes are not filtered, as in upstream's `export_html`: the docs
+    now say so, and how to drop untrusted links before exporting.
+  - The `write`, `file`, `color` and `asset` tapes are re-recorded with the
+    current renderer, and gain their HTML pages.
+  - The HTML page's player stopped silently at five minutes, where GIF and
+    MP4 refuse a longer recording. It is refused the same way now, and
+    `--no-video` skips it too.
+  - A tape whose `Output` shares no format with `--format` wrote only its
+    text screenshots without a word; it now warns. "ffmpeg not found:
+    skipped …" names the MP4 file the tape's `Output` chose.
+
 ### Render tree and recordings (0.0.13 stream 11: #226, #598, #600)
 
 - **Core 0.0.9: semantic regions, an opt-in seam (#226).**
