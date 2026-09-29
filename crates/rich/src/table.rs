@@ -141,22 +141,23 @@ impl From<Text> for Cell {
 /// A string cell is console markup, as upstream's `str` renderables are:
 /// `"[b]x"` renders a bold `x`, and a stray `[` in data can restyle, link or
 /// hide what follows. For data you do not control (file names, model or
-/// column names, user input) use [`Cell::plain`], which is never parsed, or
-/// say which you mean with [`Cell::markup`].
+/// column names, user input) pass a [`Text`] instead, as upstream's
+/// `add_row(Text(name))` does: `Cell::from(Text::new(name))`, which is never
+/// parsed.
 impl From<&str> for Cell {
     fn from(text: &str) -> Self {
         Cell::Markup(text.to_string())
     }
 }
 
-/// Console markup, as for `&str`; see there, and [`Cell::plain`] for data.
+/// Console markup, as for `&str`; see there, and use a [`Text`] for data.
 impl From<String> for Cell {
     fn from(text: String) -> Self {
         Cell::Markup(text)
     }
 }
 
-/// Console markup, as for `&str`; see there, and [`Cell::plain`] for data.
+/// Console markup, as for `&str`; see there, and use a [`Text`] for data.
 impl From<&String> for Cell {
     fn from(text: &String) -> Self {
         Cell::Markup(text.clone())
@@ -164,18 +165,6 @@ impl From<&String> for Cell {
 }
 
 impl Cell {
-    /// A literal cell: `text` is shown exactly as given, never parsed as
-    /// markup or emoji codes. Use it for data you do not control.
-    pub fn plain(text: impl Into<String>) -> Cell {
-        Cell::Text(Text::new(text))
-    }
-
-    /// A console-markup cell, as a string converts to: `"[b]x"` renders a
-    /// bold `x`. Spelled out, so a call site says it means markup.
-    pub fn markup(markup: impl Into<String>) -> Cell {
-        Cell::Markup(markup.into())
-    }
-
     /// The cell as `Text`, or `None` for a renderable. A markup string goes
     /// through [`Console::render_str`] with `highlight`.
     pub(crate) fn to_text(&self, console: &Console, highlight: Option<bool>) -> Option<Text> {
@@ -779,8 +768,9 @@ impl Table {
 
     /// Add a row of string cells (extra cells are ignored; missing cells render
     /// empty). Each string is console markup, as upstream's `add_row("[b]x")`
-    /// is, so a `[` in data can restyle or hide the rest of the cell: use
-    /// [`add_row_plain`](Self::add_row_plain) for data you do not control.
+    /// is, so a `[` in data can restyle or hide the rest of the cell: for
+    /// data you do not control use [`add_row_text`](Self::add_row_text) with
+    /// `Text::new(..)` cells, which are never parsed.
     pub fn add_row(&mut self, cells: &[&str]) -> &mut Self {
         self.push_row(
             cells
@@ -790,13 +780,6 @@ impl Table {
             None,
             false,
         )
-    }
-
-    /// Add a row of string cells shown exactly as given: never parsed as
-    /// markup or emoji codes. The literal twin of [`add_row`](Self::add_row),
-    /// for file names, model or column names and user input.
-    pub fn add_row_plain(&mut self, cells: &[&str]) -> &mut Self {
-        self.push_row(cells.iter().map(|s| Cell::plain(*s)).collect(), None, false)
     }
 
     /// Add a row with upstream's keyword options: a `style` for the whole
@@ -1895,23 +1878,23 @@ mod tests {
     use crate::r#box::SQUARE;
 
     #[test]
-    fn plain_cells_are_never_markup() {
+    fn text_cells_are_never_markup() {
         let console = Console::builder().width(80).color_system(None).build();
         // A column named like markup, a closing tag and an emoji code.
         let data = ["[bold]model[/]", "col[/b]", ":sparkles:"];
         let mut plain = Table::new();
         plain.add_column("a").add_column("b").add_column("c");
-        plain.add_row_plain(&data);
+        plain.add_row_text(data.iter().map(|s| Text::new(*s)).collect());
         let rendered = console.render_to_string(&plain);
         for cell in data {
             assert!(rendered.contains(cell), "{cell}: {rendered}");
         }
-        // Cell::plain is the same; Cell::markup and a &str parse.
+        // A Text cell is the same; Cell::Markup and a &str parse.
         let mut cells = Table::new();
         cells.add_column("a").add_column("b").add_column("c");
         cells.add_row_cells(vec![
-            Cell::plain("[bold]model[/]"),
-            Cell::markup("[bold]model[/]"),
+            Cell::from(Text::new("[bold]model[/]")),
+            Cell::Markup("[bold]model[/]".into()),
             Cell::from("[bold]model[/]"),
         ]);
         let rendered = console.render_to_string(&cells);

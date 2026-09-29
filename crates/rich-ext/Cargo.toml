@@ -73,8 +73,9 @@ trybuild = "1"
 
 [features]
 # `Syntax` and `Markdown` from core (syntect and pulldown-cmark). Without them
-# `source_view`, `diff::SourceDiff`, `rst`, `cli_doc::markdown_view`, the
-# `syntect` registry entry and the highlighter conformance kit are left out.
+# `rst`, `cli_doc::markdown_view`, the `syntect` registry entry and the
+# highlighter conformance kit are left out; `source_view`, `diff::SourceDiff`
+# and `diff::PatchView` stay, unhighlighted.
 default = ["syntax", "markdown"]
 syntax = ["rich/syntax"]
 markdown = ["rich/markdown", "syntax"]

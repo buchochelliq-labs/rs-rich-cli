@@ -66,9 +66,9 @@ Entries below record subsequent releases and development.
   unmaintained bincode 1.x (RUSTSEC-2025-0141), the second `fancy-regex` and
   pulldown-cmark. `onig` and `syntax-cache` now imply `syntax`.
 - `rs-rich-ext` forwards the same two default features. Without them it leaves
-  out `source_view`, `rst`, `cli_doc::markdown_view`, the `syntect` registry
-  entry and `testing::conformance`; `SourceDiff` and `PatchView` still render,
-  unhighlighted. The workspace depends on core with `default-features = false`,
+  out `rst`, `cli_doc::markdown_view`, the `syntect` registry entry and
+  `testing::conformance`; `source_view`, `SourceDiff` and `PatchView` still
+  render, unhighlighted. The workspace depends on core with `default-features = false`,
   so each crate asks only for what it uses: `rs-rich-plugin-api`,
   `rs-rich-macros` and `rs-rich-art` no longer pull syntect in.
 - CI builds and tests core without default features, and fails if a lean
@@ -79,18 +79,16 @@ Entries below record subsequent releases and development.
 - A macOS job runs the whole workspace's tests, plus core without default
   features, and is part of `ci-ok`.
 
-### Core 0.0.9: literal table cells (`Cell::plain`, `Cell::markup`, `add_row_plain`)
+### Core 0.0.9: string table cells are markup (docs)
 
 - A string cell is console markup, as upstream's is, and the compiler cannot
   tell data from markup: `add_row(&[name])` or `Cell::from(name)` with a model
-  or column name containing `[` restyled or hid the rest of the cell.
-  `Table::add_row_plain(&[&str])` and `Cell::plain(text)` show text exactly
-  as given, and `Cell::markup(text)` says at the call site that markup is
-  meant. Rendering is unchanged: these are Rust-only constructors over the
-  existing `Cell::Text` and `Cell::Markup`, and the `From` conversions and
-  `add_row` keep upstream's behaviour, with doc warnings pointing at the
-  plain forms. The tables guide and the 0.0.13 migration notes carry a
-  security note.
+  or column name containing `[` restyles or hides the rest of the cell. The
+  `From` conversions and `add_row` now carry doc warnings pointing at the
+  literal form core already has, a `Text` cell, as upstream's
+  `add_row(Text(name))`: `add_row_text(vec![Text::new(name)])` or
+  `Cell::from(Text::new(name))`. No API or rendering change. The tables guide
+  and the 0.0.13 migration notes carry a security note.
 
 ### Interact 0.0.1, CLI 0.0.13 and Python 0.0.2: suspend, in-process runs, `--panel`
 

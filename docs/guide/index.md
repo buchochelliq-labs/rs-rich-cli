@@ -75,7 +75,7 @@ images all rely on that.
 | `rs-rich` | *(default)* `syntax`, `markdown` | `Syntax` (syntect) and `Markdown` (pulldown-cmark; implies `syntax`). With `default-features = false` everything else in the faithful core remains, without syntect, its bincode 1.x or pulldown-cmark. |
 | | `syntax-cache`, `json-escape-safe` | Opt-in divergences from upstream, documented in [Divergences](../DIVERGENCES.md). |
 | | `onig` | Oniguruma instead of pure-Rust `fancy-regex` for syntax highlighting: 2–4× faster, same output, needs a C compiler ([Divergences #26](../DIVERGENCES.md)). |
-| `rs-rich-ext` | *(default)* `syntax`, `markdown` | Core's two features, plus what needs them: `source_view`, `rst`, `cli_doc::markdown_view`, the `syntect` registry entry and `testing::conformance`. Without `syntax`, `SourceDiff` and `PatchView` render unhighlighted. |
+| `rs-rich-ext` | *(default)* `syntax`, `markdown` | Core's two features, plus what needs them: `rst`, `cli_doc::markdown_view`, the `syntect` registry entry and `testing::conformance`. Without `syntax`, `source_view`, `SourceDiff` and `PatchView` render unhighlighted. |
 | | *(always)* | Registry, highlighters, hyperlinks, diagnostics, stack traces, dashboard, live coordinator, `RichHandler` and `SpanView`, layouts, targets, capabilities, fidelity, accessibility, ANSI explain, diffs, CLI authoring model, and the workflow modules: `workflow`, `transfer`, `countdown`, `notify`, `cancel`, `table`, `badge`, `size_bar`, `format`, `redact`, plus the inspector views `source_view`, `hex`, `unicode_inspect` and `env_inspect`. |
 | | `macros` | `richf!`, `#[derive(Rich)]` and the print macros. |
 | | `anyhow` | `Diagnostic::from_anyhow`. |

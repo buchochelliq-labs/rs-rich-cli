@@ -28,7 +28,7 @@ Add columns, then rows. A row is a slice of strings, one per column.
 - The default box is `HEAVY_HEAD`, the header is bold, and cells have one
   space of padding left and right — upstream's defaults.
 
-!!! warning "Strings are markup: use `add_row_plain` or `Cell::plain` for data"
+!!! warning "Strings are markup: use `Text` cells for data"
 
     As upstream does, `add_row(&["[b]x[/b]"])` renders `x` in bold, and so do
     headers passed to `add_column` and any `Cell::from("…")` (or `.into()`)
@@ -38,17 +38,17 @@ Add columns, then rows. A row is a slice of strings, one per column.
     file name or user input that contains `[` can restyle, hide or link the
     rest of the cell, or fail to render.
 
-    For data you do not control, say it is literal:
+    For data you do not control, pass a `Text`, as upstream's
+    `add_row(Text(name))` does. A `Text` is never parsed:
 
-    - `add_row_plain(&[name, value])`: a row shown exactly as given;
-    - `Cell::plain(name)`: one literal cell, for `add_row_cells` and
-      `add_row_with`;
-    - `add_row_text` and `add_column_text` with `Text` values, which are
-      never re-parsed.
+    - `add_row_text(vec![Text::new(name), Text::new(value)])`: a row shown
+      exactly as given;
+    - `Cell::from(Text::new(name))`: one literal cell, for `add_row_cells`
+      and `add_row_with`;
+    - `add_column_text` for a literal header.
 
-    When a cell is meant to be markup, `Cell::markup("[b]x")` says so at the
-    call site. `rich::markup::escape` also works, but it is easy to forget on
-    one of many cells.
+    `rich::markup::escape` also works, but it is easy to forget on one of
+    many cells.
 
 ## Columns
 
