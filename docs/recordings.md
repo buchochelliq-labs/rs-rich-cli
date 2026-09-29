@@ -259,7 +259,7 @@ rich record --check demo.tape               # fail if a screenshot changed
 | `--check` | Compare each screenshot's text with `DIR/<tape>/<name>.txt` instead of writing, and report screenshots the last write listed that the tape no longer takes; exits non-zero on any difference |
 | `--format LIST` | Any of `png`, `svg`, `cast`, `gif`, `mp4`, `html`, or `all` (the default). Text grids are always written. A tape's `Output` narrows it further |
 | `--window-frame on\|off`, `--caption TEXT`, `--key-overlay on\|off` | Override the tape's `Set WindowFrame`, `Set Caption` and `Set KeyOverlay` |
-| `--no-video` | Skip the GIF and MP4 |
+| `--no-video` | Skip the GIF, the MP4 and the HTML page's player |
 | `--bin-dir DIR` | Put `DIR` first on the session's `PATH` (default: the directory of the running `rich`) |
 | `--font FILE` | Draw PNG and GIF text in another font |
 
@@ -289,5 +289,5 @@ the disk or memory:
 | Tape names | A tape's name is its output directory: `...tape` (named `..`) is refused |
 | Stale screenshots | Removed only when `provenance.json` lists them from an earlier run; other files in the output directory are never touched |
 | Frames | At most 12 a second; a burst over 32 KiB is kept as a repaint of the screen |
-| Video | The first 5 minutes; a GIF or MP4 of a longer recording is an error (use `--no-video`) |
+| Video | The first 5 minutes; a GIF, MP4 or HTML page of a longer recording is an error (use `--no-video`) |
 | Images | At most 100 million pixels; a GIF at most 65535 pixels a side |
