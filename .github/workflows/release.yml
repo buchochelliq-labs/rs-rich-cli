@@ -88,7 +88,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: crates-io          # trusted publisher is bound to this environment
     # crates.io Trusted Publishing: GitHub's OIDC token is exchanged for a
-    # short-lived crates.io token, so no long-lived registry secret exists.
+    # short-lived crates.io token. A brand-new crate cannot use it (crates.io
+    # offers Trusted Publishing only on an existing crate), so its first
+    # version alone uploads with this environment's CARGO_REGISTRY_TOKEN.
     permissions:
       contents: read
       id-token: write
@@ -106,6 +108,7 @@ jobs:
           python-version: "3.12"
 
       - name: Refuse an already-published selected crate
+        id: preflight
         if: ${{ inputs.verify_only != true }}
         run: python3 scripts/release.py preflight
 
@@ -117,14 +120,28 @@ jobs:
       # stops the job before anything is uploaded.
       - name: Authenticate with crates.io Trusted Publishing
         id: crates-io-auth
-        if: ${{ inputs.verify_only != true }}
+        if: ${{ inputs.verify_only != true && steps.preflight.outputs.new_crate != 'true' }}
         uses: rust-lang/crates-io-auth-action@v1
 
       - name: Publish selected packages
-        if: ${{ inputs.verify_only != true }}
+        if: ${{ inputs.verify_only != true && steps.preflight.outputs.new_crate != 'true' }}
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
         run: python3 scripts/release.py publish
+
+      # A brand-new crate's first version: the environment's token, since
+      # Trusted Publishing needs the crate to exist. Add the crate's Trusted
+      # Publishing entry once this succeeds.
+      - name: Publish a new crate's first version
+        if: ${{ inputs.verify_only != true && steps.preflight.outputs.new_crate == 'true' }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "::error::A new crate needs CARGO_REGISTRY_TOKEN in the crates-io environment for its first upload"
+            exit 1
+          fi
+          python3 scripts/release.py publish
 
       # Reuse the protected, validated checkout. Registry consumers still build
       # in fresh temporary directories, without the upload step's credential.

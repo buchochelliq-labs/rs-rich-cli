@@ -160,10 +160,12 @@ SHA to the complete CI gate, and uses the protected `crates-io` environment.
 Do not bypass that workflow by publishing separately from a local checkout.
 The one exception is a crate's **first** version: crates.io offers Trusted
 Publishing only on a crate that already exists, so the workflow's token exchange
-cannot publish a brand-new crate. That upload needs a maintainer's API token,
-either by hand from the tagged commit (`cargo publish -p <crate> --locked`), or
-through the workflow with a token secret added for that one run. Ask the
-maintainer which. Then add the crate's Trusted Publishing entry. See
+cannot publish a brand-new crate. That upload needs a maintainer's API token.
+The workflow handles it: the preflight reports that the crate is new, and that
+run uploads with the `crates-io` environment's `CARGO_REGISTRY_TOKEN` secret
+instead of the exchange (it fails if the secret is missing). Uploading by hand
+from the tagged commit (`cargo publish -p <crate> --locked`) also works. Then
+add the crate's Trusted Publishing entry. See
 `docs/BRANCHING.md`, "Registry authentication". `rs-rich-macros` 0.0.1 was the
 first case; `rs-rich-plugin-api`, `rs-rich-mermaid` and `rs-rich-lumis` 0.0.1 are next.
 
