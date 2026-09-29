@@ -102,6 +102,39 @@ failed before the fix.
   - A tape whose `Output` shares no format with `--format` wrote only its
     text screenshots without a word; it now warns. "ffmpeg not found:
     skipped …" names the MP4 file the tape's `Output` chose.
+- **Interact 0.0.1 and CLI 0.0.13 (`write`, `file`, `color`, `asset`,
+  mouse):**
+  - `--height` had no upper bound: `rich write --height 100000000` (and
+    `color`, `file`) hung and used gigabytes. Every component now draws at
+    most the rows that fit on screen.
+  - `rich file` read its preview on the UI thread, so a file whose read
+    blocks (`/proc/kmsg`, a stalled network mount) froze the picker, Esc and
+    Ctrl+C included. Previews now open without blocking, read only regular
+    files (checked once open), and read on a thread of their own: after
+    250 ms the preview says the read has not finished, and fills in when it
+    does.
+  - The line-prompt fallback (`CI=1`, `TERM=dumb`, no full terminal) wrote
+    the header and prompt raw, so escape sequences in `--header` reached the
+    terminal. Every component's line prompt now shows controls as text, as
+    the full-screen view already did.
+  - `rich write` kept a piped `\r\n`'s `\r` as an extra line and turned tabs
+    into spaces. It now takes `\r\n` as one line ending and keeps tabs.
+  - `--char-limit` counted code points and could cut inside an emoji or
+    before a combining accent; it counts grapheme clusters
+    (`TextArea::truncate`).
+  - `rich write --value TEXT` without a terminal answered with nothing; it
+    answers `TEXT`.
+  - `rich file --extension tar.gz` never matched: the whole suffix is now
+    compared.
+  - `rich asset --selected NAME` with a name it does not offer is a usage
+    error (exit 2), not a misleading "no default value".
+  - With `--mouse`, one click on the row that already had focus picked it
+    at once; it now focuses, and a second click picks, in `choose`, `file`
+    and `color` alike.
+  - The help and docs said `rich asset --kind box` names were "for `--box`",
+    an option rich does not have; they now say which names `--panel` takes.
+  - Debug builds: crossterm's parser panicked on a mouse report at column or
+    row 0; the workspace's dev profile turns off its overflow checks.
 
 ### Render tree and recordings (0.0.13 stream 11: #226, #598, #600)
 
