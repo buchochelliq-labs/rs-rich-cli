@@ -55,7 +55,7 @@ use rich::cells::cell_len;
 use rich::markdown::Markdown;
 use rich::measure::Measurement;
 use rich::protocol::{LineRenderable, OwnedTableRows};
-use rich::r#box::{Box as BoxSet, ASCII, ASCII2, DOUBLE, HEAVY, HEAVY_HEAD, ROUNDED, SQUARE};
+use rich::r#box::{Box as BoxSet, DOUBLE, HEAVY_HEAD, SQUARE};
 use rich::text::Text;
 use rich::{
     filesize, Align, AnsiDecoder, Bar, ColorSystem, Columns, Console, ConsoleOptions, Constrain,
@@ -890,12 +890,22 @@ fn escaped_path(path: &std::ffi::OsStr) -> String {
 /// `[sys.executable, "-m", "rs_rich"]`), used for `--batch` workers and the
 /// demo's child `--watch`, where the binary runs its own executable. An empty
 /// `program` means the current executable, as in [`run`].
+///
+/// A host may call this from several threads at once (the wheel releases the
+/// GIL), but a run's plugins, program and colour settings are process-wide:
+/// runs take turns, each whole, so one never clears another's plugins.
 pub fn run_embedded(program: Vec<std::ffi::OsString>, args: Vec<std::ffi::OsString>) -> ExitCode {
+    // A run that panicked left nothing half-set that the next run does not
+    // reset first, so a poisoned lock is still usable.
+    let _turn = EMBEDDED_RUN.lock().unwrap_or_else(|e| e.into_inner());
     if let Ok(mut slot) = SELF_PROGRAM.lock() {
         *slot = program;
     }
     run(args)
 }
+
+/// Held for the whole of one [`run_embedded`] call.
+static EMBEDDED_RUN: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// The command [`run_embedded`] was given; empty for the binary.
 static SELF_PROGRAM: std::sync::Mutex<Vec<std::ffi::OsString>> = std::sync::Mutex::new(Vec::new());
@@ -1591,22 +1601,52 @@ fn wants_json_report(args: &[String]) -> bool {
 /// drawn with `box.NONE`". Drawing box.NONE put an invisible one-cell frame and
 /// a blank line around the output, which reads as the tool having mangled the
 /// file for no reason.
+///
+/// rich-cli offers six names; this binary takes every box in rich's `box`
+/// module (the names `rich asset --kind box` offers), the six first.
 fn parse_box(name: &str) -> Result<Option<BoxSet>, String> {
-    Ok(Some(match name.to_ascii_lowercase().as_str() {
-        "none" => return Ok(None),
-        "ascii" => ASCII,
-        "ascii2" => ASCII2,
-        "square" => SQUARE,
-        "rounded" => ROUNDED,
-        "heavy" => HEAVY,
-        "double" => DOUBLE,
-        other => {
-            return Err(format!(
-                "unknown panel box {other:?} (use none/ascii/ascii2/square/rounded/heavy/double)"
-            ))
-        }
-    }))
+    let name = name.to_ascii_lowercase();
+    if name == "none" {
+        return Ok(None);
+    }
+    PANEL_BOXES
+        .iter()
+        .find(|(known, _)| *known == name)
+        .map(|(_, set)| Some(*set))
+        .ok_or_else(|| {
+            let names: Vec<&str> = PANEL_BOXES.iter().map(|(known, _)| *known).collect();
+            format!(
+                "unknown panel box {name:?} (use none or {})",
+                names.join(", ")
+            )
+        })
 }
+
+/// `--panel` names: rich-cli's six, then the rest of rich's `box` module.
+pub(crate) const PANEL_BOXES: &[(&str, BoxSet)] = {
+    use rich::r#box as b;
+    &[
+        ("ascii", b::ASCII),
+        ("ascii2", b::ASCII2),
+        ("square", b::SQUARE),
+        ("rounded", b::ROUNDED),
+        ("heavy", b::HEAVY),
+        ("double", b::DOUBLE),
+        ("ascii_double_head", b::ASCII_DOUBLE_HEAD),
+        ("square_double_head", b::SQUARE_DOUBLE_HEAD),
+        ("minimal", b::MINIMAL),
+        ("minimal_heavy_head", b::MINIMAL_HEAVY_HEAD),
+        ("minimal_double_head", b::MINIMAL_DOUBLE_HEAD),
+        ("simple", b::SIMPLE),
+        ("simple_head", b::SIMPLE_HEAD),
+        ("simple_heavy", b::SIMPLE_HEAVY),
+        ("horizontals", b::HORIZONTALS),
+        ("heavy_edge", b::HEAVY_EDGE),
+        ("heavy_head", b::HEAVY_HEAD),
+        ("double_edge", b::DOUBLE_EDGE),
+        ("markdown", b::MARKDOWN),
+    ]
+};
 
 /// Parse a `--padding` value: 1, 2, or 4 comma-separated integers, unpacked into
 /// `(top, right, bottom, left)`. Port of rich-cli's padding parsing + upstream's

@@ -121,6 +121,9 @@ pub struct Record {
     pub frames: Vec<String>,
     /// Commands handed the terminal, by program name.
     pub handoffs: Vec<String>,
+    /// How many times Ctrl+Z suspended the run
+    /// ([`Headless::suspendable`]).
+    pub suspends: usize,
 }
 
 impl Record {
@@ -143,6 +146,9 @@ pub struct Headless {
     record: Rc<RefCell<Record>>,
     /// Exit code each hand-off reports.
     pub handoff_code: Option<i32>,
+    /// Whether Ctrl+Z suspends, as on a real terminal on Unix, instead of
+    /// reaching the component. Off by default.
+    pub suspendable: bool,
 }
 
 impl Headless {
@@ -153,6 +159,7 @@ impl Headless {
             size: (columns, rows),
             record: Rc::new(RefCell::new(Record::default())),
             handoff_code: Some(0),
+            suspendable: false,
         }
     }
 
@@ -224,6 +231,15 @@ impl Backend for Headless {
 
     fn painted(&mut self, text: &str) {
         self.record.borrow_mut().frames.push(text.to_string());
+    }
+
+    fn can_suspend(&self) -> bool {
+        self.suspendable
+    }
+
+    fn suspend(&mut self) -> io::Result<()> {
+        self.record.borrow_mut().suspends += 1;
+        Ok(())
     }
 }
 

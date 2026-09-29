@@ -332,12 +332,18 @@ fn asset_help_names_what_takes_a_box_style() {
         .unwrap();
     let help = String::from_utf8_lossy(&output.stdout);
     assert!(!help.contains("--box"), "rich has no --box: {help}");
-    // The names the help says --panel takes, it takes.
-    for name in ["ascii", "ascii2", "square", "rounded", "heavy", "double"] {
-        assert!(help.contains(name), "{help}");
+    assert!(help.contains("--panel"), "{help}");
+    // Every box name `rich asset --kind box` offers, --panel takes.
+    let names = rich_interact::components::BOX_STYLES
+        .iter()
+        .map(|(name, _)| *name);
+    for name in names {
         let (out, err, code) = piped(&["--panel", name, "--print", "x"], "");
         assert!(code == 0 && !out.is_empty(), "--panel {name}: {err}");
     }
+    let (_, err, code) = piped(&["--panel", "nope", "--print", "x"], "");
+    assert_eq!(code, 2, "{err}");
+    assert!(err.contains("heavy_head"), "{err}");
 }
 
 #[test]

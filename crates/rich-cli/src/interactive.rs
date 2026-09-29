@@ -352,8 +352,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             .arg(mouse)
             .example(
                 "rich asset --kind box",
-                "Pick one of rich's box styles by name (--panel takes ascii, ascii2, square, \
-                 rounded, heavy or double)",
+                "Pick one of rich's box styles by name, for --panel",
             ),
     ]
 }

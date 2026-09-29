@@ -309,12 +309,7 @@ pub(crate) fn validate_value(key: &str, value: &Value) -> Result<(), String> {
             "image_background" => value
                 .as_str()
                 .is_some_and(|v| super::ImageBackdrop::parse(v).is_some()),
-            "panel" => value.as_str().is_some_and(|v| {
-                matches!(
-                    v.to_ascii_lowercase().as_str(),
-                    "none" | "ascii" | "ascii2" | "square" | "rounded" | "heavy" | "double"
-                )
-            }),
+            "panel" => value.as_str().is_some_and(|v| super::parse_box(v).is_ok()),
             "padding" => value.as_str().is_some_and(|v| {
                 let parts: Vec<_> = v.split(',').collect();
                 matches!(parts.len(), 1 | 2 | 4)

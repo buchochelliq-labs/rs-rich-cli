@@ -323,6 +323,43 @@ mod wasm {
         );
     }
 
+    /// The Python wheel runs command lines on several threads at once (the
+    /// GIL is released). Each run starts by clearing the plugin slot, so a
+    /// run on another thread must not clear this run's plugins mid-render.
+    #[test]
+    fn concurrent_in_process_runs_keep_their_own_plugins() {
+        use std::process::ExitCode;
+        let (_root, work, _home) = dirs();
+        let plugin = shout(&work);
+        let run = |name: &str, args: &[&str]| {
+            let mut all: Vec<std::ffi::OsString> = vec!["--no-config".into()];
+            all.extend(args.iter().map(Into::into));
+            all.extend(["-o".into(), work.join(name).into_os_string()]);
+            rich_cli::run_embedded(Vec::new(), all)
+        };
+        let plugin = plugin.to_str().unwrap();
+        std::thread::scope(|scope| {
+            let with = scope.spawn(|| {
+                (0..100)
+                    .map(|i| {
+                        run(
+                            &format!("with-{i}.html"),
+                            &["--plugin", plugin, "--transform", "upper", "-p", "hi"],
+                        )
+                    })
+                    .filter(|code| *code != ExitCode::SUCCESS)
+                    .count()
+            });
+            let without = scope.spawn(|| {
+                for i in 0..100 {
+                    run(&format!("without-{i}.html"), &["-p", "hi"]);
+                }
+            });
+            without.join().unwrap();
+            assert_eq!(with.join().unwrap(), 0, "a run lost its plugin");
+        });
+    }
+
     const SHOUT: &str = include_str!("../../rich-plugin-api/examples/wasm/shout.wat");
 
     fn shout(dir: &Path) -> PathBuf {

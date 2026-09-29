@@ -7,7 +7,10 @@
 //! on first use that restores the terminal before the panic message prints.
 //! Ctrl+C arrives as a key in raw mode, so it ends the event loop the
 //! ordinary way. On Unix, SIGTERM, SIGHUP and SIGQUIT restore the terminal
-//! too, from a thread that then takes the signal's default action. [`Session::handoff`] gives the terminal to another program
+//! too, from a thread that then takes the signal's default action. Ctrl+Z
+//! (a key in raw mode) and SIGTSTP suspend: the terminal is given back, the
+//! process stops as the shell expects, and on `fg` the modes come back and
+//! the view repaints. [`Session::handoff`] gives the terminal to another program
 //! (`$EDITOR`, a pager) and takes it back.
 //!
 //! The terminal's modes are process-wide, so only one session exists at a
@@ -155,8 +158,9 @@ pub(crate) fn raw_line(on: bool) {
 fn watch_signals() {
     #[cfg(unix)]
     SIGNALS.call_once(|| {
-        use signal_hook::consts::{SIGHUP, SIGQUIT, SIGTERM};
-        let Ok(mut signals) = signal_hook::iterator::Signals::new([SIGTERM, SIGHUP, SIGQUIT])
+        use signal_hook::consts::{SIGHUP, SIGQUIT, SIGTERM, SIGTSTP};
+        let Ok(mut signals) =
+            signal_hook::iterator::Signals::new([SIGTERM, SIGHUP, SIGQUIT, SIGTSTP])
         else {
             return;
         };
@@ -164,8 +168,13 @@ fn watch_signals() {
             .name("rich-interact-signals".into())
             .spawn(move || {
                 for signal in signals.forever() {
-                    restore_for_signal();
-                    let _ = signal_hook::low_level::emulate_default_handler(signal);
+                    if signal == SIGTSTP {
+                        suspend();
+                        RESUMED.store(true, Ordering::SeqCst);
+                    } else {
+                        restore_for_signal();
+                        let _ = signal_hook::low_level::emulate_default_handler(signal);
+                    }
                 }
             });
     });
@@ -178,23 +187,75 @@ fn watch_signals() {
 fn restore_for_signal() {
     let active = ACTIVE.swap(0, Ordering::SeqCst);
     if active != 0 {
-        let out = undo(active);
-        let direct = std::fs::OpenOptions::new()
-            .write(true)
-            .open("/dev/tty")
-            .and_then(|mut tty| tty.write_all(out.as_bytes()));
-        if direct.is_err() {
-            let output = if ON_STDERR.load(Ordering::SeqCst) {
-                Output::Stderr
-            } else {
-                Output::Stdout
-            };
-            let _ = output.write(&out);
-        }
+        write_direct(&undo(active));
     }
     let raw_line = RAW_LINE.swap(false, Ordering::SeqCst);
     if active & RAW != 0 || raw_line {
         let _ = crossterm::terminal::disable_raw_mode();
+    }
+}
+
+/// Set when the process came back from a suspend it did not start itself
+/// (SIGTSTP from outside): [`Session::read`] then asks for a repaint.
+static RESUMED: AtomicBool = AtomicBool::new(false);
+
+/// Give the terminal back, stop the process as a shell's job control
+/// expects (Ctrl+Z, `kill -TSTP`), and when it continues (`fg`, SIGCONT)
+/// turn back on what was on. SIGSTOP cannot be caught, so it still stops
+/// with the modes on.
+/// Held for the whole of a suspend, from giving the terminal back until its
+/// modes are on again, and by [`Session::leave`]. A resume from an outside
+/// SIGTSTP runs on the signal thread while the event loop runs on, so
+/// without it a session that ended during the stop (a key queued, a timer
+/// due) would have its modes turned back on after it restored them.
+static SUSPENDING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(unix)]
+fn suspend() {
+    let _suspending = SUSPENDING.lock().unwrap_or_else(|e| e.into_inner());
+    let active = ACTIVE.load(Ordering::SeqCst);
+    let raw_line = RAW_LINE.load(Ordering::SeqCst);
+    restore_for_signal();
+    // Stops here until SIGCONT.
+    let _ = signal_hook::low_level::emulate_default_handler(signal_hook::consts::SIGTSTP);
+    if active & RAW != 0 || raw_line {
+        let _ = crossterm::terminal::enable_raw_mode();
+    }
+    RAW_LINE.store(raw_line, Ordering::SeqCst);
+    let mut out = String::new();
+    if active & ALTERNATE != 0 {
+        out.push_str("\x1b[?1049h\x1b[H");
+    }
+    if active & MOUSE != 0 {
+        out.push_str("\x1b[?1000h\x1b[?1002h\x1b[?1015h\x1b[?1006h");
+    }
+    if active & PASTE != 0 {
+        out.push_str("\x1b[?2004h");
+    }
+    if active != 0 {
+        out.push_str("\x1b[?25l");
+    }
+    ACTIVE.fetch_or(active, Ordering::SeqCst);
+    write_direct(&out);
+}
+
+/// `text` straight to the terminal, else to the session's stream.
+#[cfg(unix)]
+fn write_direct(text: &str) {
+    if text.is_empty() {
+        return;
+    }
+    let direct = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/tty")
+        .and_then(|mut tty| tty.write_all(text.as_bytes()));
+    if direct.is_err() {
+        let output = if ON_STDERR.load(Ordering::SeqCst) {
+            Output::Stderr
+        } else {
+            Output::Stdout
+        };
+        let _ = output.write(text);
     }
 }
 
@@ -248,6 +309,22 @@ pub trait Backend {
     /// it.
     fn painted(&mut self, text: &str) {
         let _ = text;
+    }
+    /// Whether Ctrl+Z suspends (a real terminal on Unix), rather than
+    /// reaching the component as a key.
+    fn can_suspend(&self) -> bool {
+        false
+    }
+    /// Give the terminal back, stop until the shell continues the process,
+    /// then take the terminal back. Only called when
+    /// [`can_suspend`](Backend::can_suspend).
+    fn suspend(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+    /// Whether the process was suspended from outside (SIGTSTP) and has
+    /// continued since the last call: the screen is then the shell's.
+    fn take_resumed(&mut self) -> bool {
+        false
     }
 }
 
@@ -328,11 +405,27 @@ impl Session {
         if !std::mem::take(&mut self.active) {
             return Ok(());
         }
+        // After any suspend under way has turned the modes back on, so
+        // this restores them rather than being undone by it.
+        let _suspending = SUSPENDING.lock().unwrap_or_else(|e| e.into_inner());
         restore()
     }
 
     pub fn options(&self) -> SessionOptions {
         self.options
+    }
+
+    /// A resize to the current size, which repaints the whole view: after a
+    /// suspend, what is on the screen is the shell's.
+    fn repaint(&mut self) -> Event {
+        if self.options.mouse
+            && !self.options.alternate_screen
+            && self.options.output == Output::Stdout
+        {
+            self.origin = crossterm::cursor::position().map_or(0, |(_, row)| row);
+        }
+        let (columns, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+        Event::Resize { columns, rows }
     }
 }
 
@@ -351,12 +444,19 @@ impl Backend for Session {
     fn read(&mut self, timeout: Option<Duration>) -> io::Result<Option<Event>> {
         let end = timeout.map(|timeout| Instant::now() + timeout);
         loop {
+            // Back from a SIGTSTP sent from outside: the screen is the
+            // shell's, so repaint all of it.
+            if RESUMED.load(Ordering::SeqCst) {
+                return Ok(Some(self.repaint()));
+            }
+            // Short waits, so a resume is noticed without a key.
             let wait = match end {
                 Some(end) => end.saturating_duration_since(Instant::now()),
                 None => Duration::from_secs(3600),
-            };
+            }
+            .min(Duration::from_millis(250));
             if !crossterm::event::poll(wait)? {
-                if end.is_some() {
+                if end.is_some_and(|end| Instant::now() >= end) {
                     return Ok(None);
                 }
                 continue;
@@ -390,5 +490,22 @@ impl Backend for Session {
 
     fn origin(&self) -> u16 {
         self.origin
+    }
+
+    fn can_suspend(&self) -> bool {
+        cfg!(unix)
+    }
+
+    fn suspend(&mut self) -> io::Result<()> {
+        #[cfg(unix)]
+        {
+            suspend();
+            self.repaint();
+        }
+        Ok(())
+    }
+
+    fn take_resumed(&mut self) -> bool {
+        RESUMED.swap(false, Ordering::SeqCst)
     }
 }

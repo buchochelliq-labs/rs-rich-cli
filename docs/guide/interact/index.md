@@ -343,7 +343,14 @@ reporting and bracketed paste. It undoes all of them on every way out:
 - on Unix, on SIGTERM, SIGHUP and SIGQUIT, through a thread that restores
   the terminal and then takes the signal's default action, so the process
   still ends as the signal asks. The handlers are installed with the first
-  session and stay, because removing them would leave the signals ignored.
+  session and stay, because removing them would leave the signals ignored;
+- on Unix, for a suspend: Ctrl+Z (a key in raw mode) or a SIGTSTP from
+  outside gives the terminal back, stops the process as the shell expects,
+  and on `fg` turns the modes back on and repaints the whole view. An
+  inline region starts again below the shell's "Stopped" line. `SIGSTOP`
+  cannot be caught, so it stops with the modes still on. A `Backend` that
+  cannot suspend (the headless driver, by default) passes Ctrl+Z to the
+  component as a key.
 
 Whatever a view holds, terminal controls in its text (an escape from a
 file, a pasted `ESC c`, an 8-bit CSI) are painted as visible characters

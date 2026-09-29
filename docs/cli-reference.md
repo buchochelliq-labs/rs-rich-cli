@@ -77,7 +77,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb by 
 | `-F`, `--text-full` | Justify --print text to both edges (a rule centres its title) |
 | `--soft` | Soft wrap: no line is wrapped or cut, so the terminal wraps it. |
 | `--emoji` | Replace :emoji: codes, e.g. :sparkles: (off by default, as upstream) |
-| `-a`, `--panel <BOX>` | Wrap output in a panel, shrunk to fit its content (none = no panel) Config: `panel`. Possible values: `ascii`, `ascii2`, `square`, `rounded`, `heavy`, `double`, `none`. |
+| `-a`, `--panel <BOX>` | Wrap output in a panel, shrunk to fit its content (none = no panel) Config: `panel`. Possible values: `ascii`, `ascii2`, `square`, `rounded`, `heavy`, `double`, `ascii_double_head`, `square_double_head`, `minimal`, `minimal_heavy_head`, `minimal_double_head`, `simple`, `simple_head`, `simple_heavy`, `horizontals`, `heavy_edge`, `heavy_head`, `double_edge`, `markdown`, `none`. |
 | `-d`, `--padding <P>` | Wrap output in padding (1, 2, or 4 comma-separated ints) Config: `padding`. |
 | `-e`, `--expand` | Make --panel/--padding fill the width instead of fitting (implied by --width) |
 | `--title <T>` | Panel title; also the CSV table's title. |
@@ -1189,7 +1189,7 @@ rich asset [OPTIONS]
 
 #### Examples
 
-Pick one of rich's box styles by name (--panel takes ascii, ascii2, square, rounded, heavy or double)
+Pick one of rich's box styles by name, for --panel
 
 ```sh
 rich asset --kind box
@@ -1422,7 +1422,7 @@ Settings are read from these sources, lowest precedence first; a later source ov
 | `mode` | enum: `print`, `markdown`, `rst`, `json`, `syntax`, `csv`, `ipynb`, `jsonl`, `log`, `rule`, `image`, `gif`, `diff`, `inspect`, `ansi` | `auto` | | `--print, --markdown, ... or a command word` | Render mode, as the flag or command of the same name |
 | `format` | enum: `auto`, `json`, `yaml`, `toml`, `xml`, `ini`, `env` | `auto` | | `--format` | Input format. With --inspect, the parser (default auto-detect); otherwise `auto` detects piped or extensionless input and routes it (JSON to --json, other formats to highlighting, anything else to plain text), and a named format overrides the extension |
 | `width` | positive integer | | | `--width` | Render the output N columns wide (the console keeps its own width, so --left/--center/--right still use it) |
-| `panel` | enum: `ascii`, `ascii2`, `square`, `rounded`, `heavy`, `double`, `none` | | | `--panel` | Wrap output in a panel, shrunk to fit its content (none = no panel) |
+| `panel` | enum: `ascii`, `ascii2`, `square`, `rounded`, `heavy`, `double`, `ascii_double_head`, `square_double_head`, `minimal`, `minimal_heavy_head`, `minimal_double_head`, `simple`, `simple_head`, `simple_heavy`, `horizontals`, `heavy_edge`, `heavy_head`, `double_edge`, `markdown`, `none` | | | `--panel` | Wrap output in a panel, shrunk to fit its content (none = no panel) |
 | `padding` | string | | | `--padding` | Wrap output in padding (1, 2, or 4 comma-separated ints) |
 | `log_presentation` | enum: `plain`, `rich` | `plain` | | `--log-presentation` | With --log, select log presentation |
 | `mermaid_backend` | enum: `text`, `mmdc`, `off` | | | `--mermaid-backend` | How Mermaid diagrams (`rich mermaid`, ```mermaid fences in Markdown) are drawn: text draws flowcharts as text, mmdc uses Mermaid's own CLI (a build with the mmdc feature; `rich mermaid` tries it first there), off leaves fences as code |

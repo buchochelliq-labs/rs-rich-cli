@@ -375,9 +375,12 @@ fn layout_options() -> Vec<ArgSpec> {
             LAYOUT,
             "Wrap output in a panel, shrunk to fit its content (none = no panel)",
         )
-        .choices([
-            "ascii", "ascii2", "square", "rounded", "heavy", "double", "none",
-        ])
+        .choices(
+            super::PANEL_BOXES
+                .iter()
+                .map(|(name, _)| *name)
+                .chain(["none"]),
+        )
         .short('a')
         .config_key("panel"),
         option(
