@@ -756,7 +756,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c917a041c4c1e8438172eb0dc7a4cb0eba2f22975fbf6681c51e78e4f507e996"
 dependencies = [
  "quantette",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -963,7 +963,7 @@ dependencies = [
  "streaming-iterator",
  "syn 3.0.3",
  "termcolor",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "toml",
  "tree-sitter",
  "tree-sitter-arduino",
@@ -1073,7 +1073,7 @@ dependencies = [
  "sha2",
  "streaming-iterator",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "toml",
  "tree-sitter",
  "wasmparser 0.259.0",
@@ -1621,7 +1621,7 @@ dependencies = [
  "saphyr-parser",
  "serde",
  "serde_json",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "toml",
  "tracing",
  "tracing-subscriber",
@@ -1791,7 +1791,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7429158804c36e705d9423b7848018e535b3e92d439a763e364ee12670ef473b"
 dependencies = [
  "arraydeque",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -2036,7 +2036,7 @@ dependencies = [
  "regex-syntax",
  "serde",
  "serde_derive",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "walkdir",
 ]
 
@@ -2095,11 +2095,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.20"
+version = "2.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec86235f5fcc2a73650310756d2ac5b138a5780bbbdfae3eeccec992c435ba4f"
+checksum = "09e52cb86a36cede5cb101bf8908837b3e4c6e5e59fe7fd85c23fb56200d189e"
 dependencies = [
- "thiserror-impl 2.0.20",
+ "thiserror-impl 2.0.21",
 ]
 
 [[package]]
@@ -2115,9 +2115,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.20"
+version = "2.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc04cd3e1236dd4a98afca4569f2deb3f120e5422a4023be2cb683f8486292af"
+checksum = "fe5197923287db20a58125f0bc85c062f7f2c892de97b18c356f9efb14b28524"
 dependencies = [
  "proc-macro2",
  "quote",
