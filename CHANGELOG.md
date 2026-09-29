@@ -96,6 +96,13 @@ Entries below record subsequent releases and development.
   `Cell::from(Text::new(name))`. No API or rendering change. The tables guide
   and the 0.0.13 migration notes carry a security note.
 
+### Dependencies
+
+- `rs-rich-macros` builds on `syn` 3, and `rs-rich-record` on `color_quant`
+  2, with no code change. `log` 0.4.34 and `thiserror` 2.0.21 in the lock
+  file. The PyPI release workflow uses `actions/upload-artifact` v7 and
+  `actions/download-artifact` v8.
+
 ### Interact 0.0.1, CLI 0.0.13 and Python 0.0.2: suspend, in-process runs, `--panel`
 
 - **Ctrl+Z suspends an interactive command.** Raw mode turns off the
