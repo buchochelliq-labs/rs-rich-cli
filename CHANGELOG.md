@@ -57,7 +57,7 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
-### Interact 0.0.1, CLI 0.0.13 and Python 0.0.2: suspend, and in-process runs
+### Interact 0.0.1, CLI 0.0.13 and Python 0.0.2: suspend, in-process runs, `--panel`
 
 - **Ctrl+Z suspends an interactive command.** Raw mode turns off the
   terminal's own Ctrl+Z, so it reached components as a key and did nothing;
@@ -73,6 +73,10 @@ Entries below record subsequent releases and development.
   by clearing the process-wide plugin slot, so a run on one thread cleared
   another's plugins mid-render (23 runs in 100 lost theirs in the test).
   `rich_cli::run_embedded` now runs one command line at a time.
+- **`--panel` takes every box style in rich's `box` module** (`heavy_head`,
+  `minimal`, `simple`, `markdown`, …), not only rich-cli's six, so every name
+  `rich asset --kind box` offers works with it. The same names are valid
+  for `panel` in config; an unknown name lists them all.
 
 ### 0.0.13 release test, round 2: plugins, recordings and the new commands
 

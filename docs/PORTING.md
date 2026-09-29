@@ -124,6 +124,7 @@ core mirror is untouched and a sync does not have to reconcile them.
 
 | convenience | rust `crates/rich-cli/src/…` | rationale |
 |-------------|------------------------------|-----------|
+| `--panel` takes every box in rich's `box` module (`heavy_head`, `minimal`, `markdown`, …), not only rich-cli's six | `lib.rs` (`PANEL_BOXES`) | 0.0.13 round 2: `rich asset --kind box` offers all of them, so what it picks must be usable; rich-cli's six keep their meaning, and `none` is still no panel |
 | `--demo` and `--demo-delay` | `demo.rs` + `lib.rs` | bounded, offline tour composes existing public renderers and CLI workflows; uses temporary examples and restores terminal state on interruption |
 | batch planning and `--dry-run`, with `--jobs` concurrency for file exports | `batch.rs` + `lib.rs` | subprocess workers reuse the single-resource renderer; disk-spooled output is replayed in input order; terminal-only batches remain serial |
 | strict TOML profiles, inverse booleans, `config show` / `config validate` | `config.rs` + `lib.rs` | validated defaults/profile/CLI precedence and JSON inspection compose existing options without changing core; a working-directory `rich.toml` cannot turn colour back on against `NO_COLOR` (the user's config, `--config` and `--color` can) |

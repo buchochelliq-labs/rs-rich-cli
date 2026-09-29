@@ -455,6 +455,11 @@ rich --panel rounded --panel-style dim --print "Ready"
 
 A panel **shrinks to its content**. Use `-e/--expand` to fill the width instead.
 
+`--panel` takes rich-cli's `ascii`, `ascii2`, `square`, `rounded`, `heavy`
+and `double`, and every other box in rich's `box` module by its name in lower
+case (`heavy_head`, `minimal`, `simple`, `markdown`, …): the names
+`rich asset --kind box` offers. `none` means no panel.
+
 - `--style` styles the content; `--panel-style` styles the border. They are
   different flags because they do different things.
 - `--width N` bounds the *rendered block*, not the console, so `--center` still
@@ -836,9 +841,8 @@ icon=$(rich asset --value rocket)
   prints it as `--format hex` (the default), `name` or `rgb`.
 - `asset` picks an emoji (printed as itself), a box style or a spinner
   (printed by name: the names of rich's `box` constants and spinners, in
-  lower case) with `--kind emoji|box|spinner`. Of the box styles, `--panel`
-  takes `ascii`, `ascii2`, `square`, `rounded`, `heavy` and `double`, as
-  upstream rich-cli's does. `--selected NAME` must be one it offers (exit 2
+  lower case) with `--kind emoji|box|spinner`. `--panel` takes every box
+  style it offers. `--selected NAME` must be one it offers (exit 2
   otherwise).
 - `--height` (choose, filter, write, file, color, asset) is cut to the
   terminal's height.
