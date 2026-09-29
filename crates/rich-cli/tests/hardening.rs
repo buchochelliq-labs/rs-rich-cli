@@ -861,6 +861,16 @@ fn sixel_on_an_unrecognised_terminal_says_how_to_force_it() {
     );
 }
 
+/// `EILSEQ`, which a filesystem that only stores UTF-8 names returns.
+#[cfg(unix)]
+fn libc_eilseq() -> i32 {
+    if cfg!(target_os = "linux") {
+        84
+    } else {
+        92
+    }
+}
+
 /// A file named by an argument that is not valid Unicode is opened by its
 /// bytes, as upstream's click does, instead of panicking (`args()`) or
 /// looking for the lossy `\u{fffd}.txt`.
@@ -870,14 +880,31 @@ fn a_non_utf8_path_argument_opens_the_file() {
     use std::os::unix::ffi::OsStrExt;
     let dir = tempfile::tempdir().unwrap();
     let name = std::ffi::OsStr::from_bytes(b"\xff.txt");
-    std::fs::write(dir.path().join(name), "hello-from-latin1-name\n").unwrap();
-    let out = Command::new(env!("CARGO_BIN_EXE_rich"))
-        .arg("--no-config")
-        .arg(name)
-        .current_dir(dir.path())
-        .env_remove("NO_COLOR")
-        .output()
-        .unwrap();
+    let written = std::fs::write(dir.path().join(name), "hello-from-latin1-name\n");
+    let run = || {
+        Command::new(env!("CARGO_BIN_EXE_rich"))
+            .arg("--no-config")
+            .arg(name)
+            .current_dir(dir.path())
+            .env_remove("NO_COLOR")
+            .output()
+            .unwrap()
+    };
+    // APFS (macOS) only stores UTF-8 names and refuses this one with EILSEQ.
+    // The argument can still arrive, so it must be a clean "not found", not
+    // a panic.
+    if let Err(err) = &written {
+        assert_eq!(err.raw_os_error(), Some(libc_eilseq()), "{err}");
+        let out = run();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(!stderr.contains("panicked"), "{stderr}");
+        assert!(
+            !matches!(out.status.code(), Some(0) | Some(101) | None),
+            "{stderr}"
+        );
+        return;
+    }
+    let out = run();
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(!stderr.contains("panicked"), "{stderr}");
     assert_eq!(out.status.code(), Some(0), "{stderr}");

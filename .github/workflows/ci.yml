@@ -235,7 +235,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Test
-        run: cargo test --all --locked
+        run: cargo test --all --locked --no-fail-fast
 
       - name: Test core without syntect and pulldown-cmark
         run: cargo test -p rs-rich --no-default-features --locked
