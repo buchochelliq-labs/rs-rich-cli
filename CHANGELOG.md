@@ -57,7 +57,6 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
-<<<<<<< HEAD
 ### Dependencies
 
 - `rs-rich-macros` builds on `syn` 3, and `rs-rich-record` on `color_quant`
@@ -65,8 +64,6 @@ Entries below record subsequent releases and development.
   file. The PyPI release workflow uses `actions/upload-artifact` v7 and
   `actions/download-artifact` v8.
 
-=======
->>>>>>> origin/main
 ### Interact 0.0.1, CLI 0.0.13 and Python 0.0.2: suspend, in-process runs, `--panel`
 
 - **Ctrl+Z suspends an interactive command.** Raw mode turns off the
