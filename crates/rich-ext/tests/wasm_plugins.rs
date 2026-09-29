@@ -144,6 +144,80 @@ fn a_module_that_asks_for_too_much_memory_is_refused() {
 }
 
 #[test]
+fn a_module_with_a_huge_table_is_refused() {
+    // Table elements live in host memory, outside the linear memory cap: a
+    // 400-million-element table cost about 1.6 GB before it was limited.
+    let declared = plugin(LOOPS, "(i64.const 0)", "(table 400000000 funcref)");
+    let path = module("huge-table.wasm", &declared);
+    let started = Instant::now();
+    assert!(load_wasm(&path, &WasmLimits::default()).is_err());
+    assert!(started.elapsed() < Duration::from_secs(10));
+
+    // Grown at run time: the grow traps and the call fails.
+    let grows = plugin(
+        LOOPS,
+        "(drop (table.grow (ref.null func) (i32.const 400000000))) (i64.const 0)",
+        "(table 1 funcref)",
+    );
+    let path = module("grows-table.wasm", &grows);
+    let plugin = load_wasm(&path, &WasmLimits::default()).unwrap();
+    let error = plugin.call(0, "x", 0).unwrap_err();
+    assert!(error.contains("table elements"), "{error}");
+}
+
+#[test]
+fn plugin_output_cannot_carry_a_hyperlink() {
+    // Both capabilities answer with the text at 1024, whatever they are asked.
+    const LINKS: &str = "rich-plugin-abi 1.0\nname links\nversion 1\n\
+                         capability fence-markup lnk\ncapability highlighter hl\n";
+    let answer = |text: &str| {
+        let wat = plugin(
+            LINKS,
+            &format!("(i64.const {})", (1024u64 << 32) | text.len() as u64),
+            &format!(r#"(data (i32.const 1024) "{text}")"#),
+        );
+        let path = module(&format!("links-{}.wasm", text.len()), &wat);
+        let mut registry = ExtensionRegistry::new();
+        registry
+            .add_plugin(&load_wasm(&path, &WasmLimits::default()).unwrap())
+            .unwrap();
+        registry
+    };
+    let mut console = Console::builder()
+        .width(40)
+        .color_system(Some(rich::ColorSystem::Truecolor))
+        .force_terminal(true)
+        .build();
+
+    // Markup shows one URL and links to another: the link is dropped, the
+    // styling kept.
+    let registry = answer("[bold link=https://evil.example/x]https://safe.example[/]");
+    let segments = registry
+        .fences()
+        .unwrap()
+        .render_fence("lnk", "x", &console, &console.options())
+        .unwrap();
+    let styled = segments
+        .iter()
+        .find(|s| s.text == "https://safe.example")
+        .unwrap();
+    let style = styled.style.clone().unwrap();
+    assert_eq!(style.link(), None, "{style:?}");
+    assert_eq!(style, rich::Style::parse("bold").unwrap());
+
+    // A highlighter span links nothing either.
+    let registry = answer("0 5 bold link https://evil.example/y");
+    registry.install(&mut console);
+    let text = console.render_str("hello world", Some(true));
+    let span = text.spans().iter().find(|s| s.start == 0).unwrap();
+    let rich::StyleType::Style(style) = span.style.clone() else {
+        panic!("{:?}", span.style)
+    };
+    assert_eq!(style.link(), None, "{style:?}");
+    assert_eq!(style, rich::Style::parse("bold").unwrap());
+}
+
+#[test]
 fn a_module_that_imports_anything_is_refused() {
     let wasi = plugin(
         LOOPS,

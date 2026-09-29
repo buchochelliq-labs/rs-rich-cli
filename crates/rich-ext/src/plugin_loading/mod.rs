@@ -25,7 +25,7 @@ use std::sync::Arc;
 
 use rich::console::ConsoleOptions;
 use rich::segment::Segment;
-use rich::{Console, FenceRenderer, Highlighter, Renderable, Style, Text};
+use rich::{Console, FenceRenderer, Highlighter, Renderable, Style, StyleType, Text};
 use rich_plugin_api::abi::{AbiError, CapabilityKind, PluginAbi};
 use rich_plugin_api::{Plugin, PluginError, PluginMetadata, PluginRegistrar, TextTransform};
 
@@ -104,6 +104,9 @@ pub struct WasmLimits {
     pub fuel: u64,
     /// The most linear memory an instance may have, in bytes.
     pub memory_bytes: usize,
+    /// The most elements its table may hold. Each element takes host memory
+    /// outside the linear memory, so this bounds it too.
+    pub table_elements: usize,
     /// The largest module file accepted, in bytes.
     pub module_bytes: u64,
 }
@@ -113,6 +116,7 @@ impl Default for WasmLimits {
         WasmLimits {
             fuel: 50_000_000,
             memory_bytes: 64 * 1024 * 1024,
+            table_elements: 10_000,
             module_bytes: 16 * 1024 * 1024,
         }
     }
@@ -350,13 +354,31 @@ impl Capability {
     /// The output as a [`Text`], sanitized for this capability's kind; `None`
     /// when markup does not parse.
     fn text(&self, output: &str) -> Option<Text> {
-        if self.kind().produces_ansi() {
-            Some(Text::from_ansi(&sanitize_ansi_for_decoder(output), ""))
+        let mut text = if self.kind().produces_ansi() {
+            Text::from_ansi(&sanitize_ansi_for_decoder(output), "")
         } else if self.kind() == CapabilityKind::FenceMarkup {
-            Text::from_markup(&sanitize_terminal_controls(output)).ok()
+            Text::from_markup(&sanitize_terminal_controls(output)).ok()?
         } else {
-            Some(Text::new(sanitize_terminal_controls(output)))
+            Text::new(sanitize_terminal_controls(output))
+        };
+        // `[link=…]` markup would print a hyperlink whose target the reader
+        // cannot see, so plugin output carries no links (or click meta).
+        for span in text.spans_mut() {
+            without_links(&mut span.style);
         }
+        Some(text)
+    }
+}
+
+/// Drop any link or meta from `style`. A definition (`"link https://…"`) is
+/// resolved first; a theme key is the host's own and stays.
+fn without_links(style: &mut StyleType) {
+    let resolved = match style {
+        StyleType::Style(style) => Some(style.clear_meta_and_links()),
+        StyleType::Name(name) => Style::parse(name).ok().map(|s| s.clear_meta_and_links()),
+    };
+    if let Some(resolved) = resolved {
+        *style = StyleType::Style(resolved);
     }
 }
 
@@ -392,7 +414,11 @@ fn parse_spans<'a>(
         let mut parts = line.trim().splitn(3, ' ');
         let start: usize = parts.next()?.parse().ok()?;
         let end: usize = parts.next()?.parse().ok()?;
-        let style = Style::parse(parts.next()?.trim()).ok()?;
+        // Without links: a highlighter only colours, it may not add a
+        // hyperlink the reader cannot see.
+        let style = Style::parse(parts.next()?.trim())
+            .ok()?
+            .clear_meta_and_links();
         (start < end
             && end <= plain.len()
             && plain.is_char_boundary(start)

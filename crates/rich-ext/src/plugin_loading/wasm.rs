@@ -52,7 +52,8 @@ fn classify(error: wasmi::Error) -> CallError {
     match error.as_trap_code() {
         Some(TrapCode::OutOfFuel) => CallError::OutOfFuel,
         Some(TrapCode::GrowthOperationLimited) => CallError::Memory(
-            "the plugin tried to use more memory than the limit allows".to_string(),
+            "the plugin tried to use more memory (or table elements) than the limit allows"
+                .to_string(),
         ),
         _ => CallError::Other(format!("the plugin failed: {error}")),
     }
@@ -65,6 +66,7 @@ impl WasmBackend {
             .memory_size(self.limits.memory_bytes)
             .memories(1)
             .tables(1)
+            .table_elements(self.limits.table_elements)
             .instances(1)
             .trap_on_grow_failure(true)
             .build();

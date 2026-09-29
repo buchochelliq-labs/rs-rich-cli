@@ -240,16 +240,18 @@ its way:
 - **WASM plugins are sandboxed.** A module that imports anything is refused,
   so it has no WASI, file system, network, clock or randomness. Each call runs
   in a fresh instance with a fuel limit (a loop that never ends is stopped)
-  and a memory cap (a module that starts or grows past it is refused or
-  trapped). A WASM plugin can waste at most one call's fuel and cannot see
+  and a cap on its memory and table (a module that starts or grows past
+  either is refused or trapped). A WASM plugin can waste at most one call's fuel and cannot see
   anything but its input.
 - **Output is sanitized, whatever the kind.** Output over 4 MiB or not UTF-8
   is an error. Every control character in transform, highlighter and markup
   output, ESC included, is made visible. Only `fence-ansi` may carry ANSI, and
   it goes through the same sanitizer `rich view` uses: SGR styling survives,
   OSC strings (titles, clipboard, hyperlinks) are removed, and every other
-  control is made visible. A highlighter span that does not fit its text is
-  skipped. A failed fence renders as a code block.
+  control is made visible. No style in plugin output keeps a link: `[link=…]`
+  markup and `link` in a highlighter span are dropped, so a plugin cannot
+  show one URL and link to another. A highlighter span that does not fit its
+  text is skipped. A failed fence renders as a code block.
 - **Names cannot collide or spoof.** Every plugin, compiled in or loaded, goes
   through `add_plugin`: its id and capability names are restricted to
   lowercase letters, digits, `-`, `_` and `.`, and a name another plugin
