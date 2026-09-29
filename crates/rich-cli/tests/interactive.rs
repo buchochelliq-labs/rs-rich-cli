@@ -939,7 +939,20 @@ mod pty {
         std::thread::sleep(Duration::from_millis(200));
         pty.send("\x04");
         let out = pty.finish();
-        assert!(out.contains(" 61 09 62 0a\r\n"), "{out:?}");
+        // `od` pads its columns differently on GNU and BSD (macOS), so
+        // compare the bytes: exactly a, tab, b, newline.
+        let dumped = out.lines().any(|line| {
+            let words: Vec<&str> = line.split_whitespace().collect();
+            let is_byte = |w: &str| w.len() == 2 && w.chars().all(|c| c.is_ascii_hexdigit());
+            let bytes: Vec<&str> = words
+                .iter()
+                .rev()
+                .take_while(|w| is_byte(w))
+                .copied()
+                .collect();
+            bytes == ["0a", "62", "09", "61"]
+        });
+        assert!(dumped, "{out:?}");
     }
 
     #[test]
