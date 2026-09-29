@@ -100,6 +100,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
             "--no-video" => {
                 parsed.formats.gif = false;
                 parsed.formats.mp4 = false;
+                parsed.formats.html = false;
             }
             "--output" | "-o" => parsed.output = fs_path(&value()?),
             "--bin-dir" => parsed.bin_dir = Some(fs_path(&value()?)),
@@ -211,6 +212,9 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                 eprintln!("  warning: {warning}");
             }
         }
+        if let Some(warning) = no_shared_format(&parsed.outputs, args.formats) {
+            eprintln!("  warning: {warning}");
+        }
         let mut recording = match recorder::record(&parsed, &stem, &options) {
             Ok(recording) => recording,
             Err(error) => {
@@ -264,7 +268,8 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                     eprintln!("  {}", file.display());
                 }
                 if formats.mp4 && !rich_record::render::video::ffmpeg_available() {
-                    eprintln!("  ffmpeg not found: skipped {stem}.mp4");
+                    let mp4 = recording.output_path(tape::Format::Mp4, &stem);
+                    eprintln!("  ffmpeg not found: skipped {mp4}");
                 }
             }
             Err(error) => {
@@ -286,12 +291,45 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// A tape whose `Output` shares no format with `--format` (or
+/// `--no-video`) writes only its text screenshots: say so, rather than
+/// write nothing else in silence.
+fn no_shared_format(outputs: &[tape::Output], requested: Formats) -> Option<String> {
+    if outputs.is_empty() {
+        return None;
+    }
+    let mut chosen = Formats::NONE;
+    for output in outputs {
+        chosen.set(output.format, true);
+    }
+    (chosen.intersect(requested) == Formats::NONE).then(|| {
+        let names: Vec<&str> = outputs.iter().map(|o| o.format.extension()).collect();
+        format!(
+            "its Output ({}) and --format share no format, so only text screenshots are \
+             written",
+            names.join(", ")
+        )
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn strings(args: &[&str]) -> Vec<String> {
         args.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn an_output_that_shares_no_format_is_reported() {
+        let outputs = tape::parse("Output gif html\nScreenshot x\n")
+            .unwrap()
+            .outputs;
+        let svg_only = parse_formats("svg").unwrap();
+        let warning = no_shared_format(&outputs, svg_only).unwrap();
+        assert!(warning.contains("gif, html"), "{warning}");
+        assert_eq!(no_shared_format(&outputs, Formats::ALL), None);
+        assert_eq!(no_shared_format(&[], svg_only), None);
     }
 
     #[test]

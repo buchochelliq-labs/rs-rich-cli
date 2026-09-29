@@ -38,6 +38,9 @@ crossterm = { version = "0.29", default-features = false, features = ["events", 
 # Restore the terminal on SIGTERM, SIGHUP and SIGQUIT (crossterm already
 # depends on it).
 signal-hook = "0.3"
+# O_NONBLOCK, to open a file for its preview without blocking (crossterm
+# already depends on it).
+libc = "0.2"
 
 [dev-dependencies]
 # Plugin-registered actions (#491), in tests.

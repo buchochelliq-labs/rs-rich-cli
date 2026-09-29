@@ -1636,6 +1636,7 @@ name = "rs-rich-interact"
 version = "0.0.1"
 dependencies = [
  "crossterm",
+ "libc",
  "portable-pty",
  "rs-rich",
  "rs-rich-ext",

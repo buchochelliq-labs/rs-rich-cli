@@ -14,7 +14,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use rich_plugin_api::abi::{
-    read_descriptor, AbiOutput, AbiStr, PluginDescriptor, PluginVTable, DYLIB_ENTRY_SYMBOL,
+    read_descriptor, AbiOutput, AbiStr, PluginDescriptor, PluginFunctions, DYLIB_ENTRY_SYMBOL,
     STATUS_OK,
 };
 
@@ -23,7 +23,7 @@ use super::{AbiBackend, LoadError, RuntimeKind, RuntimePlugin, MAX_OUTPUT_BYTES}
 /// A loaded library and its functions. The vtable's pointers are only valid
 /// while `_library` is loaded, which is why they live together.
 struct NativeBackend {
-    vtable: PluginVTable,
+    vtable: PluginFunctions,
     _library: libloading::Library,
 }
 
@@ -70,10 +70,13 @@ pub fn load_native(path: &Path) -> Result<RuntimePlugin, LoadError> {
     })?;
     // SAFETY: loading runs the library's initialisers. The caller chose this
     // file; that is the trust decision (see docs/PLUGINS.md).
-    let library = unsafe { libloading::Library::new(&path) }.map_err(|error| LoadError::Io {
-        path: path.clone(),
-        message: error.to_string(),
-    })?;
+    // The file exists (it canonicalized), so a failure here means it is not
+    // a library this system can load: say why, with the loader's own reason.
+    let library =
+        unsafe { libloading::Library::new(&path) }.map_err(|error| LoadError::NotAPlugin {
+            path: path.clone(),
+            message: error_chain(&error),
+        })?;
     let descriptor = {
         // SAFETY: the symbol's type is the ABI's entry point type.
         let entry: libloading::Symbol<unsafe extern "C" fn() -> *const PluginDescriptor> = unsafe {
@@ -96,4 +99,20 @@ pub fn load_native(path: &Path) -> Result<RuntimePlugin, LoadError> {
         _library: library,
     };
     RuntimePlugin::new(abi, RuntimeKind::Native, path, Arc::new(backend))
+}
+
+/// `error` and every `source()` under it: libloading keeps the system
+/// loader's reason (a missing dependency, the wrong architecture) there.
+fn error_chain(error: &dyn std::error::Error) -> String {
+    let mut message = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        let text = cause.to_string();
+        if !message.contains(&text) {
+            message.push_str(": ");
+            message.push_str(&text);
+        }
+        source = cause.source();
+    }
+    message
 }

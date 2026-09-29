@@ -620,7 +620,8 @@ pub fn run<C: Component>(component: C, options: &RunOptions) -> Result<Outcome<C
 }
 
 /// What [`run`] does without a terminal: follow `fallback`, asking through
-/// `io` when it says to prompt. A prompt that ends with
+/// `io` when it says to prompt, with terminal controls in what is written
+/// shown as text. A prompt that ends with
 /// [`NotInteractive::Ended`] (input ran out, no default) fails with
 /// [`NotInteractive::NoDefault`] and the reason; one that ends with
 /// [`NotInteractive::Interrupted`] is [`Outcome::Interrupted`].
@@ -639,7 +640,7 @@ pub fn degrade<C: Component>(
     match fallback {
         Fallback::Error => Err(Error::NotInteractive(NotInteractive::Terminal(reason))),
         Fallback::Default => default(component),
-        Fallback::Prompt => match component.prompt(io) {
+        Fallback::Prompt => match component.prompt(&mut crate::policy::Shown(io)) {
             Ok(Some(value)) => Ok(Outcome::Done(value)),
             Ok(None) => Ok(Outcome::Cancelled),
             Err(NotInteractive::NoPrompt) => default(component),

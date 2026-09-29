@@ -658,7 +658,7 @@ fn check_pixels(
 /// Returns the paths written.
 ///
 /// Refused before anything is written: a `stem` that [`stem_allowed`]
-/// refuses, a GIF or MP4 of a recording longer than
+/// refuses, a GIF, MP4 or HTML page of a recording longer than
 /// [`crate::session::MAX_VIDEO`], and images too large to draw.
 pub fn write(
     recording: &Recording,
@@ -672,11 +672,13 @@ pub fn write(
     if !stem_allowed(stem) {
         return Err(invalid(stem_error(stem)));
     }
-    let video = formats.gif || formats.mp4;
+    // The HTML page's player plays the same timeline, so it would stop at the
+    // cut as silently as a video would.
+    let video = formats.gif || formats.mp4 || formats.html;
     if video && recording.timeline.truncated {
         return Err(invalid(format!(
             "the recording is longer than {}s, too long for video; record it without \
-             GIF or MP4 (--no-video), or shorten the tape",
+             GIF, MP4 or the HTML player (--no-video), or shorten the tape",
             MAX_VIDEO.as_secs()
         )));
     }
@@ -933,6 +935,23 @@ mod tests {
             &dir,
             "long",
             gif,
+            &fonts,
+            &Theme::default(),
+            None,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("too long for video"), "{error}");
+        assert!(!dir.exists());
+        // The HTML player plays the same cut timeline: refused too.
+        let html = Formats {
+            html: true,
+            ..TEXT_ONLY
+        };
+        let error = write(
+            &recording,
+            &dir,
+            "long",
+            html,
             &fonts,
             &Theme::default(),
             None,

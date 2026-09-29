@@ -95,9 +95,9 @@ The library exports `rich_plugin_entry`, an `extern "C" fn() -> *const
 PluginDescriptor`. The descriptor is `repr(C)`: the ABI version (two `u32`s
 that stay first in every version, so a host reads them before trusting the
 rest), the name, version and description as pointer and length pairs, the
-capability array, and a vtable of two functions: `call` and `free`. Output is
-allocated by the plugin and given back to it through `free`, so the two sides
-never share an allocator.
+capability array, and a vtable of two functions, `call` and `free`, neither
+of which may be null. Output is allocated by the plugin and given back to it
+through `free`, so the two sides never share an allocator.
 
 A plugin author writes no unsafe code: `export_dylib_plugin!(|| Exports::new(…)
 .transform("reverse", reverse))` generates the entry point and the `call`
@@ -128,6 +128,8 @@ interpreter's speed is enough. The sandbox:
   units by default; a module that runs out is stopped with an error.
 - **Memory.** An instance may use 64 MiB by default. A module whose memory
   starts above the cap is refused at load time; one that grows past it traps.
+  Its table is capped at 10,000 elements the same way, because each element
+  takes host memory outside the linear memory.
   `wasmi`'s strict limits bound the module's own size and structure, and the
   file may be 16 MiB.
 - **A fresh instance per call,** so no state or leaked memory carries over,
@@ -146,6 +148,9 @@ Runtime plugin output reaches a terminal, so the host never trusts it:
   styling, OSC strings are removed, and other controls are made visible.
 - A highlighter span that is out of range, not on a character boundary, or
   has a style that does not parse is skipped.
+- Links and click meta are removed from every style in plugin output, from
+  `[link=…]` markup and from highlighter spans alike: a plugin cannot show one
+  URL and link to another.
 - A failed fence call leaves the fence to render as code, as upstream does.
 
 ## The CLI

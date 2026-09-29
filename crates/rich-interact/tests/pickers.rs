@@ -5,8 +5,9 @@ use std::path::{Path, PathBuf};
 use rich_interact::headless::{self, Script};
 use rich_interact::policy::{Fallback, Reason, ScriptedLineIo};
 use rich_interact::{
-    degrade, AssetKind, AssetPicker, ColorFormat, ColorPicker, Component, Error, Event, FileMode,
-    FilePicker, Key, NotInteractive, Outcome, TextArea,
+    degrade, AssetKind, AssetPicker, ColorFormat, ColorPicker, Component, Confirm, Context, Error,
+    Event, FileMode, FilePicker, Input, Key, NotInteractive, Outcome, PreviewLayout, Select,
+    TextArea,
 };
 
 /// The last view before the component collapsed to its answer.
@@ -111,7 +112,7 @@ fn text_area_submit_key_escape_and_paste() {
         .event(Event::Paste("a\r\nb\x1b[2J\tc".into()))
         .keys("ctrl+s");
     let (outcome, _) = headless::run(area, script, 40, 12);
-    assert_eq!(outcome.unwrap(), Outcome::Done("a\nb[2J    c".into()));
+    assert_eq!(outcome.unwrap(), Outcome::Done("a\nb[2J\tc".into()));
     let (outcome, record) =
         headless::run(TextArea::new("Msg"), Script::new().keys("x esc"), 40, 12);
     assert_eq!(outcome.unwrap(), Outcome::Cancelled);
@@ -485,4 +486,171 @@ fn asset_picker_degrades_to_a_name() {
         &mut io,
     );
     assert_eq!(outcome.unwrap(), Outcome::Done("heavy".into()));
+}
+
+// ---- Bounds, graphemes and line prompts ----
+
+/// The rows `component` renders in a terminal 40 by `rows`.
+fn rendered_rows<C: Component>(component: &C, rows: usize) -> usize {
+    let console = rich::Console::new();
+    let context = Context {
+        console: &console,
+        width: 40,
+        height: rows,
+    };
+    component.render(&context).lines.len()
+}
+
+#[test]
+fn a_height_beyond_the_terminal_is_cut_to_it() {
+    let tall = 1_000;
+    assert!(rendered_rows(&TextArea::new("Notes").height(tall), 12) <= 12);
+    assert!(rendered_rows(&ColorPicker::new("Colour").height(tall), 12) <= 12);
+    let dir = tree();
+    let files = FilePicker::new("File", dir.path())
+        .preview(PreviewLayout::Hidden)
+        .height(tall);
+    assert!(rendered_rows(&files, 12) <= 12);
+    // Huge heights cost nothing: nothing is drawn beyond the screen.
+    let huge = 100_000_000;
+    let (outcome, record) = headless::run(
+        TextArea::new("Notes").height(huge),
+        Script::new().text("a").keys("pagedown enter ctrl+d"),
+        40,
+        12,
+    );
+    assert_eq!(outcome.unwrap(), Outcome::Done("a\n".into()));
+    assert!(before_answer(&record).contains("ctrl+d submit"));
+    let (outcome, _) = headless::run(
+        ColorPicker::new("Colour").height(huge),
+        Script::new().keys("pagedown esc"),
+        40,
+        12,
+    );
+    assert_eq!(outcome.unwrap(), Outcome::Cancelled);
+    let (_, record) = headless::run(
+        FilePicker::new("File", dir.path()).height(huge),
+        Script::new().keys("pagedown esc"),
+        40,
+        12,
+    );
+    assert!(before_answer(&record).contains("↑↓ move"));
+}
+
+#[test]
+fn the_character_limit_counts_grapheme_clusters() {
+    let family = "👨\u{200d}👩\u{200d}👧";
+    let area = TextArea::new("N").char_limit(3).value(family.repeat(4));
+    assert_eq!(area.text(), family.repeat(3));
+    let accent = "e\u{301}";
+    let area = TextArea::new("N").char_limit(1).value(format!("{accent}x"));
+    assert_eq!(area.text(), accent);
+    // Typed: an accent joins the character before it, even at the limit.
+    let script = Script::new().text("ab\u{301}c").keys("ctrl+d");
+    let (outcome, _) = headless::run(TextArea::new("N").char_limit(2), script, 40, 12);
+    assert_eq!(outcome.unwrap(), Outcome::Done("ab\u{301}".into()));
+    // A line break is one.
+    assert_eq!(
+        TextArea::truncate(&format!("{family}\n{family}"), 2),
+        format!("{family}\n")
+    );
+    assert_eq!(TextArea::truncate("ab\ncd", 4), "ab\nc");
+    // Without a terminal, likewise.
+    let mut io = ScriptedLineIo::new([format!("{family}{family}")]);
+    let mut area = TextArea::new("N").char_limit(1);
+    let outcome = degrade(
+        &mut area,
+        Fallback::Prompt,
+        Reason::StdinNotTerminal,
+        &mut io,
+    );
+    assert_eq!(outcome.unwrap(), Outcome::Done(family.to_string()));
+}
+
+#[test]
+fn text_area_keeps_tabs_and_shows_them_as_spaces() {
+    let area = TextArea::new("N").value("a\tb");
+    assert_eq!(area.text(), "a\tb");
+    let (outcome, record) = headless::run(area, Script::new().keys("left x ctrl+d"), 40, 12);
+    assert_eq!(outcome.unwrap(), Outcome::Done("a\txb".into()));
+    assert!(
+        record.frames[0].contains("│ a    b"),
+        "{}",
+        record.frames[0]
+    );
+}
+
+#[test]
+fn an_extension_matches_the_end_of_the_name() {
+    let dir = tempfile::tempdir().unwrap();
+    for name in ["a.tar.gz", "b.gz", "c.tar", ".tar.gz"] {
+        std::fs::write(dir.path().join(name), "").unwrap();
+    }
+    let picker = FilePicker::new("File", dir.path())
+        .show_hidden(true)
+        .extensions(["tar.gz"]);
+    assert_eq!(picker.labels(), ["..", "a.tar.gz"]);
+    let picker = FilePicker::new("File", dir.path()).extensions(["GZ"]);
+    assert_eq!(picker.labels(), ["..", "a.tar.gz", "b.gz"]);
+}
+
+#[test]
+fn a_second_click_on_a_colour_picks_it_not_the_first() {
+    // Row 2 is the first colour, focused from the start.
+    let picker = ColorPicker::new("Colour").with_mouse(true);
+    let (outcome, _) = headless::run(picker, Script::new().click(4, 2).keys("esc"), 80, 16);
+    assert_eq!(outcome.unwrap(), Outcome::Cancelled);
+    let picker = ColorPicker::new("Colour")
+        .format(ColorFormat::Name)
+        .with_mouse(true);
+    let (outcome, _) = headless::run(picker, Script::new().click(4, 3).click(4, 3), 80, 16);
+    assert!(matches!(outcome.unwrap(), Outcome::Done(_)));
+}
+
+#[test]
+fn line_prompts_show_terminal_controls_as_text() {
+    let header = "H\x1b]0;PWNED\x07\x1b[2J\u{9b}";
+    let reason = Reason::StdinNotTerminal;
+    let mut written = Vec::new();
+    let mut io = ScriptedLineIo::new(["red"]);
+    degrade(
+        &mut ColorPicker::new(header),
+        Fallback::Prompt,
+        reason,
+        &mut io,
+    )
+    .unwrap();
+    written.push(io.written);
+    let mut io = ScriptedLineIo::new(["x"]);
+    degrade(
+        &mut TextArea::new(header),
+        Fallback::Prompt,
+        reason,
+        &mut io,
+    )
+    .unwrap();
+    written.push(io.written);
+    let mut io = ScriptedLineIo::new(["x"]);
+    degrade(&mut Input::new(header), Fallback::Prompt, reason, &mut io).unwrap();
+    written.push(io.written);
+    let mut io = ScriptedLineIo::new(["y"]);
+    degrade(&mut Confirm::new(header), Fallback::Prompt, reason, &mut io).unwrap();
+    written.push(io.written);
+    let mut io = ScriptedLineIo::new(["1"]);
+    let items = [header.to_string(), "b".to_string()];
+    degrade(
+        &mut Select::new(header, items),
+        Fallback::Prompt,
+        reason,
+        &mut io,
+    )
+    .unwrap();
+    written.push(io.written);
+    for written in written {
+        assert!(written.contains("H␛]0;PWNED␇␛[2J"), "{written:?}");
+        assert!(
+            !written.chars().any(|c| c.is_control() && c != '\n'),
+            "{written:?}"
+        );
+    }
 }

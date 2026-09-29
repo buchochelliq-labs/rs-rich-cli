@@ -137,7 +137,10 @@ schema 1 and 2 snapshots still load and compare.
 and themes, so a frame without regions exports as `Console::export_html` and
 `export_svg` do. On top of that:
 
-- links survive: `<a href>` in HTML, and an `<a>` around the text in SVG;
+- links survive: `<a href>` in HTML, and an `<a>` around the text in SVG.
+  Their targets are kept as they are, `javascript:` included, as upstream's
+  `export_html` keeps them, so drop the links of untrusted text before
+  exporting it (`Style::clear_meta_and_links` on each span);
 - in HTML, each region's cells are wrapped in a
   `<span class="rich-region rich-ROLE">`, nested as the regions are and
   closed at the end of every row, so the grid is not disturbed. The first

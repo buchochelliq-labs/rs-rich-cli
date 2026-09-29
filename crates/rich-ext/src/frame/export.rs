@@ -7,13 +7,16 @@
 //!
 //! - links are kept: `<a href>` in HTML, as core writes them, and `<a>`
 //!   around the text in SVG, which core drops; the URL is escaped for the
-//!   attribute, where core writes it as it is;
+//!   attribute, where core writes it as it is. As in core, a link's scheme
+//!   is not filtered (`javascript:` stays), so drop the links of untrusted
+//!   text before exporting it;
 //! - an empty segment is not part of a frame, so it neither takes a class
 //!   number nor draws a zero-width background;
 //! - SVG text is stretched over the cells it covers, where core counts
 //!   characters (the two agree unless a character is wide);
 //! - SVG can leave out the window frame, and add a cursor and a caption.
 
+use std::collections::HashMap;
 use std::fmt::Write as _;
 
 use rich::export::{format_template, ExportFormatError, CONSOLE_HTML_FORMAT};
@@ -102,20 +105,23 @@ struct Piece {
 }
 
 /// Class numbers for style rules, in first-seen order (core's
-/// `styles.setdefault`).
+/// `styles.setdefault`). The index keeps a lookup constant-time: a screen
+/// with a colour per cell has tens of thousands of rules.
 #[derive(Default)]
-struct Classes(Vec<(String, usize)>);
+struct Classes {
+    order: Vec<(String, usize)>,
+    index: HashMap<String, usize>,
+}
 
 impl Classes {
     fn number(&mut self, rule: &str) -> usize {
-        match self.0.iter().find(|(existing, _)| existing == rule) {
-            Some((_, n)) => *n,
-            None => {
-                let n = self.0.len() + 1;
-                self.0.push((rule.to_string(), n));
-                n
-            }
+        if let Some(n) = self.index.get(rule) {
+            return *n;
         }
+        let n = self.order.len() + 1;
+        self.order.push((rule.to_string(), n));
+        self.index.insert(rule.to_string(), n);
+        n
     }
 }
 
@@ -158,7 +164,7 @@ impl Frame {
             self.region_html(&regions, options, &mut classes, &mut code);
         }
         let stylesheet = classes
-            .0
+            .order
             .iter()
             .filter(|(rule, _)| !rule.is_empty())
             .map(|(rule, number)| format!(".r{number} {{{rule}}}"))
@@ -380,7 +386,7 @@ impl Frame {
                     );
                     match style.link() {
                         Some(link) => {
-                            let _ = write!(matrix, r#"<a href="{}">{text}</a>"#, escape(link));
+                            let _ = write!(matrix, r#"<a href="{}">{text}</a>"#, escape_href(link));
                         }
                         None => matrix.push_str(&text),
                     }
@@ -412,7 +418,7 @@ impl Frame {
             .collect::<Vec<_>>()
             .join("\n");
         let styles = classes
-            .0
+            .order
             .iter()
             .map(|(css, n)| format!(".{unique_id}-r{n} {{ {css} }}"))
             .collect::<Vec<_>>()
@@ -560,6 +566,24 @@ const CAPTION: i64 = 32;
 /// core, characters XML 1.0 forbids (controls other than tab, newline and
 /// carriage return, U+FFFE and U+FFFF) become U+FFFD, so the SVG stays
 /// well-formed whatever the text holds.
+/// A link target as an attribute value: characters XML forbids (controls,
+/// U+FFFE, U+FFFF) are percent-encoded, so the document stays well-formed.
+fn escape_href(link: &str) -> String {
+    let mut href = String::with_capacity(link.len());
+    for c in link.chars() {
+        match c {
+            '\u{0}'..='\u{1f}' | '\u{7f}' | '\u{fffe}' | '\u{ffff}' => {
+                let mut bytes = [0; 4];
+                for byte in c.encode_utf8(&mut bytes).bytes() {
+                    let _ = write!(href, "%{byte:02X}");
+                }
+            }
+            c => href.push(c),
+        }
+    }
+    escape(&href)
+}
+
 fn escape_text(text: &str) -> String {
     let text: String = text
         .chars()
@@ -756,6 +780,48 @@ mod tests {
         assert_eq!(regions.len(), 1);
         assert_eq!(regions[0].role, RegionRole::Link);
         assert_eq!(regions[0].spans[0].columns, 4..8);
+    }
+
+    #[test]
+    fn a_link_with_control_characters_keeps_the_svg_well_formed() {
+        let style = rich::Style::new().with_link("http://a/\u{1}b\u{1b}]8;;x\u{7f}");
+        let frame = Frame::from_segments(&[Segment::new("go", Some(style))]);
+        let svg = frame.to_svg(&SvgOptions::default());
+        assert!(
+            svg.contains(r#"<a href="http://a/%01b%1B]8;;x%7F">"#),
+            "{svg}"
+        );
+        assert!(!svg.chars().any(|c| c < ' ' && !"\t\n\r".contains(c)));
+    }
+
+    #[test]
+    fn many_distinct_styles_export_in_linear_time() {
+        // A colour per cell, as an image rendered in half blocks gives: the
+        // class lookup used to scan every earlier rule.
+        let mut segments = Vec::new();
+        for i in 0..40_000u32 {
+            let colour = format!("#{:06x}", i * 97);
+            segments.push(Segment::new(
+                "▀",
+                Some(rich::Style::parse(&colour).unwrap()),
+            ));
+            if i % 200 == 199 {
+                segments.push(Segment::line());
+            }
+        }
+        let frame = Frame::from_segments(&segments);
+        let started = std::time::Instant::now();
+        let svg = frame.to_svg(&SvgOptions {
+            width: Some(200),
+            ..SvgOptions::default()
+        });
+        assert!(svg.contains("-r40000 {"), "every style has its class");
+        assert!(
+            // About 0.5 s in a debug build; the old linear scan took 8 s.
+            started.elapsed() < std::time::Duration::from_secs(4),
+            "{:?}",
+            started.elapsed()
+        );
     }
 
     #[test]

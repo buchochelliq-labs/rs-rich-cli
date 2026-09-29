@@ -819,20 +819,33 @@ icon=$(rich asset --value rocket)
   quits.
 - `write` reads several lines: Enter starts a line, Ctrl+D submits. It takes
   `--header`, `--placeholder`, `--value`, `--height`, `--char-limit` and
-  `--show-line-numbers`; piped stdin is the text to start from.
+  `--show-line-numbers`; piped stdin is the text to start from, its last
+  line ending (`\n` or `\r\n`) dropped and tabs kept (shown as spaces).
+  `--char-limit` counts grapheme clusters, so an emoji sequence or a letter
+  with a combining accent is one character and is never cut.
 - `file [DIR]` browses from DIR and prints the path picked: typing filters,
   → opens, ← goes up, Ctrl+T shows hidden files, and a preview shows the
   focused file. `--all` shows hidden files from the start, `--directory`
   picks directories (with `--file` too, either), `--extension EXT` keeps
-  only some files. A path that is not UTF-8 is printed byte for byte.
+  only files whose name ends in `.EXT` (any case; `tar.gz` works). A path
+  that is not UTF-8 is printed byte for byte. A file is read for its preview
+  in the background: one whose read does not finish at once (a stalled
+  network mount) shows as unavailable, and the keys keep working.
 - `color` picks one of rich's named colours, a colour from the 256 palette
   (Tab) or one typed as `#rrggbb` or `rgb(r,g,b)`, with a live swatch, and
   prints it as `--format hex` (the default), `name` or `rgb`.
 - `asset` picks an emoji (printed as itself), a box style or a spinner
-  (printed by name, for `--box` and the like) with `--kind emoji|box|spinner`.
+  (printed by name: the names of rich's `box` constants and spinners, in
+  lower case) with `--kind emoji|box|spinner`. Of the box styles, `--panel`
+  takes `ascii`, `ascii2`, `square`, `rounded`, `heavy` and `double`, as
+  upstream rich-cli's does. `--selected NAME` must be one it offers (exit 2
+  otherwise).
+- `--height` (choose, filter, write, file, color, asset) is cut to the
+  terminal's height.
 - `--mouse` (choose, filter, confirm, file, color, asset) turns mouse
-  reporting on: click a row to focus it and again to pick it, click a
-  button, drag the border beside a preview. It is off by default because it
+  reporting on: click a row to focus it and again to pick it (a row focused
+  from the keyboard, or from the start, too), click a button, drag the
+  border beside a preview. It is off by default because it
   takes text selection from the terminal, and it paints on the alternate
   screen.
 
@@ -855,7 +868,9 @@ answer); `write` prints what stdin held; `filter` prints the lines that match `-
 included, so it works as a fuzzy `grep`; `pager` writes the content out,
 byte for byte. When the line prompt's input ends (`</dev/null`), `--default`
 or `--selected` is the answer, as for an empty line; without one the command
-exits 3, since there was no answer, rather than 1.
+exits 3, since there was no answer, rather than 1. `write` with no input at
+all answers with `--value`. The prompt shows terminal controls in
+`--header` and `--prompt` as text, as the full-screen form does.
 
 Standard input is read as UTF-8, with invalid bytes shown as `�`. `choose`
 and `filter` read at most 64 MiB and 1,000,000 lines of it, `write` at most

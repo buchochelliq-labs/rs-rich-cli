@@ -57,6 +57,86 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### 0.0.13 release test, round 2: plugins, recordings and the new commands
+
+Three independent audits covered the scope added before release (#618, #619,
+#620). Each finding was reproduced, then fixed with a regression test that
+failed before the fix.
+
+- **Plugin API 0.0.2, ext 0.0.11, CLI 0.0.13 (plugins):**
+  - A WASM plugin's table was unbounded, so `(table 400000000 funcref)` cost
+    about 1.6 GB outside the 64 MiB memory cap. Tables are now capped at
+    10,000 elements (`WasmLimits::table_elements`).
+  - `[link=…]` markup in `fence-markup` output, and `link` in a highlighter
+    span, printed a hyperlink, so a plugin could show one URL and link to
+    another. Links and click meta are now removed from all plugin output.
+  - A linked plugin whose id clashed with a built-in (`mermaid`) was dropped
+    silently, with every linked plugin sorted after it. The clash is now
+    reported before anything runs.
+  - A native plugin whose vtable held a null `call` or `free` was accepted,
+    then crashed rich on first use. `PluginVTable`'s fields are now
+    `Option`s (the same layout), and `read_descriptor` refuses a null one,
+    returning the checked `PluginFunctions`.
+  - A library that failed to open said only "dlopen failed", as an input
+    error (exit 3). The system loader's reason is now included, and it is
+    "not a rich plugin" (exit 2), as a bad WASM module is.
+  - `rich plugins info` cut a long path with "…", and showed a WASM
+    plugin's path as typed. Paths now fold, and WASM paths are canonical.
+- **Record 0.0.1 and ext 0.0.11 (recordings and frame export):**
+  - SVG screenshots put text and backgrounds in the wrong columns after a
+    character rich and the terminal emulator measure differently (a
+    skin-tone modifier, a Devanagari vowel sign). They now follow the grid,
+    as the PNG and text screenshots already did.
+  - Frame SVG and HTML export was quadratic in the number of distinct
+    styles: 45 s for a 500x200 screenshot with a colour per cell in a debug
+    build. It is now linear.
+  - A link URL holding control characters made the SVG malformed XML; they
+    are now percent-encoded.
+  - Link schemes are not filtered, as in upstream's `export_html`: the docs
+    now say so, and how to drop untrusted links before exporting.
+  - The `write`, `file`, `color` and `asset` tapes are re-recorded with the
+    current renderer, and gain their HTML pages.
+  - The HTML page's player stopped silently at five minutes, where GIF and
+    MP4 refuse a longer recording. It is refused the same way now, and
+    `--no-video` skips it too.
+  - A tape whose `Output` shares no format with `--format` wrote only its
+    text screenshots without a word; it now warns. "ffmpeg not found:
+    skipped …" names the MP4 file the tape's `Output` chose.
+- **Interact 0.0.1 and CLI 0.0.13 (`write`, `file`, `color`, `asset`,
+  mouse):**
+  - `--height` had no upper bound: `rich write --height 100000000` (and
+    `color`, `file`) hung and used gigabytes. Every component now draws at
+    most the rows that fit on screen.
+  - `rich file` read its preview on the UI thread, so a file whose read
+    blocks (`/proc/kmsg`, a stalled network mount) froze the picker, Esc and
+    Ctrl+C included. Previews now open without blocking, read only regular
+    files (checked once open), and read on a thread of their own: after
+    250 ms the preview says the read has not finished, and fills in when it
+    does, without a key press: the picker ticks until the result is drawn.
+  - The line-prompt fallback (`CI=1`, `TERM=dumb`, no full terminal) wrote
+    the header and prompt raw, so escape sequences in `--header` reached the
+    terminal. Every component's line prompt now shows controls as text, as
+    the full-screen view already did.
+  - `rich write` kept a piped `\r\n`'s `\r` as an extra line and turned tabs
+    into spaces. It now takes `\r\n` as one line ending and keeps tabs.
+  - `--char-limit` counted code points and could cut inside an emoji or
+    before a combining accent; it counts grapheme clusters
+    (`TextArea::truncate`).
+  - `rich write --value TEXT` without a terminal answered with nothing; it
+    answers `TEXT`.
+  - `rich file --extension tar.gz` never matched: the whole suffix is now
+    compared.
+  - `rich asset --selected NAME` with a name it does not offer is a usage
+    error (exit 2), not a misleading "no default value".
+  - With `--mouse`, one click on the row that already had focus picked it
+    at once; it now focuses, and a second click picks, in `choose`, `file`
+    and `color` alike. A click before a directory opened does not count as
+    the first of a pair inside it.
+  - The help and docs said `rich asset --kind box` names were "for `--box`",
+    an option rich does not have; they now say which names `--panel` takes.
+  - Debug builds: crossterm's parser panicked on a mouse report at column or
+    row 0; the workspace's dev profile turns off its overflow checks.
+
 ### Render tree and recordings (0.0.13 stream 11: #226, #598, #600)
 
 - **Core 0.0.9: semantic regions, an opt-in seam (#226).**

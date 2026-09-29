@@ -52,7 +52,8 @@ fn classify(error: wasmi::Error) -> CallError {
     match error.as_trap_code() {
         Some(TrapCode::OutOfFuel) => CallError::OutOfFuel,
         Some(TrapCode::GrowthOperationLimited) => CallError::Memory(
-            "the plugin tried to use more memory than the limit allows".to_string(),
+            "the plugin tried to use more memory (or table elements) than the limit allows"
+                .to_string(),
         ),
         _ => CallError::Other(format!("the plugin failed: {error}")),
     }
@@ -65,6 +66,7 @@ impl WasmBackend {
             .memory_size(self.limits.memory_bytes)
             .memories(1)
             .tables(1)
+            .table_elements(self.limits.table_elements)
             .instances(1)
             .trap_on_grow_failure(true)
             .build();
@@ -164,6 +166,12 @@ impl AbiBackend for WasmBackend {
 /// manifest cannot be read within the limits or is not a valid
 /// [`PluginAbi`].
 pub fn load_wasm(path: &Path, limits: &WasmLimits) -> Result<RuntimePlugin, LoadError> {
+    // Absolute, as a native plugin's path is, so `rich plugins info` shows
+    // which file it is whatever directory it was named from.
+    let path = &std::fs::canonicalize(path).map_err(|error| LoadError::Io {
+        path: path.to_path_buf(),
+        message: error.to_string(),
+    })?;
     let io = |message: String| LoadError::Io {
         path: path.to_path_buf(),
         message,

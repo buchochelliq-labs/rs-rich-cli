@@ -120,5 +120,11 @@ fn a_missing_library_is_an_error_not_a_panic() {
     std::fs::create_dir_all(tmp()).unwrap();
     let fake = tmp().join("fake.so");
     std::fs::write(&fake, b"not a library").unwrap();
-    assert!(load_native(&fake).is_err());
+    // It exists, so it is not an I/O error but not a plugin, with the system
+    // loader's reason rather than a bare "dlopen failed".
+    let error = load_native(&fake).unwrap_err();
+    assert!(matches!(error, LoadError::NotAPlugin { .. }), "{error}");
+    if cfg!(target_os = "linux") {
+        assert!(error.to_string().contains("file too short"), "{error}");
+    }
 }

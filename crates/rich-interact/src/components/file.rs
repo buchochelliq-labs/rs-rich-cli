@@ -17,7 +17,9 @@
 use std::ffi::{OsStr, OsString};
 use std::io::Read;
 use std::path::{Component as PathPart, Path, PathBuf};
-use std::sync::{Arc, OnceLock};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use rich::{Console, ConsoleOptions, Renderable, Segment, Text};
@@ -34,6 +36,10 @@ const MAX_ENTRIES: usize = 50_000;
 const PREVIEW_BYTES: u64 = 64 * 1024;
 /// The most lines of a preview.
 const PREVIEW_LINES: usize = 200;
+/// How long drawing a preview waits for its read, on a thread of its own:
+/// a read that blocks (a stalled network mount, `/proc/kmsg`) must not
+/// hold up the keys.
+const PREVIEW_WAIT: Duration = Duration::from_millis(250);
 
 /// What may be picked.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -106,6 +112,23 @@ pub struct FilePicker {
     /// Why the directory could not be read, or that it was cut short.
     note: Option<String>,
     theme: Theme,
+    /// Preview reads still going, or finished and not yet drawn.
+    wake: Arc<PreviewWake>,
+}
+
+/// Shared by a picker and its previews: a read that outlasts
+/// [`PREVIEW_WAIT`] finishes on its own thread, and the picker ticks until
+/// its result has been drawn, so it shows without a key press.
+#[derive(Default)]
+struct PreviewWake {
+    running: AtomicUsize,
+    ready: AtomicBool,
+}
+
+impl PreviewWake {
+    fn wants_tick(&self) -> bool {
+        self.running.load(Ordering::SeqCst) > 0 || self.ready.load(Ordering::SeqCst)
+    }
 }
 
 impl FilePicker {
@@ -131,6 +154,7 @@ impl FilePicker {
             default: None,
             note: None,
             theme: Theme::default(),
+            wake: Arc::default(),
         };
         picker.load();
         picker
@@ -357,13 +381,12 @@ impl FilePicker {
                 .root
                 .join(&self.rel)
                 .join(entry.name.as_deref().unwrap_or_default());
-            let jail = self.jail.clone();
+            let preview = FilePreview::new(full, self.jail.clone(), Arc::clone(&self.wake));
+            let preview = Preview::Renderable(Arc::new(preview));
             let item = if entry.dir {
-                Item::new(entry, format!("{label}/"))
-                    .preview(Preview::Renderable(Arc::new(FilePreview::new(full, jail))))
+                Item::new(entry, format!("{label}/")).preview(preview)
             } else {
-                Item::new(entry, label)
-                    .preview(Preview::Renderable(Arc::new(FilePreview::new(full, jail))))
+                Item::new(entry, label).preview(preview)
             };
             items.push(item);
         }
@@ -392,10 +415,12 @@ impl FilePicker {
         if self.extensions.is_empty() {
             return true;
         }
-        Path::new(name)
-            .extension()
-            .and_then(OsStr::to_str)
-            .is_some_and(|ext| self.extensions.contains(&ext.to_lowercase()))
+        // The name's end rather than its last extension, so `tar.gz`
+        // matches `a.tar.gz`; a name that is only the suffix does not.
+        let name = name.to_string_lossy().to_lowercase();
+        self.extensions
+            .iter()
+            .any(|ext| name.len() > ext.len() + 1 && name.ends_with(&format!(".{ext}")))
     }
 
     fn open(&mut self, name: &OsStr) {
@@ -511,7 +536,7 @@ impl Component for FilePicker {
                 return Flow::Continue;
             }
         }
-        match self.select.event(event, context.width) {
+        match self.select.event(event, context) {
             Some(Flow::Done(indices)) => {
                 let index = indices[0];
                 if self.select.action().is_some() {
@@ -530,6 +555,8 @@ impl Component for FilePicker {
     }
 
     fn render(&self, context: &Context<'_>) -> View {
+        // Drawing takes any preview that has finished since.
+        self.wake.ready.store(false, Ordering::SeqCst);
         self.select.render(context)
     }
 
@@ -538,7 +565,7 @@ impl Component for FilePicker {
     }
 
     fn tick(&self) -> Option<Duration> {
-        None
+        self.wake.wants_tick().then_some(PREVIEW_WAIT)
     }
 
     fn default_value(&self) -> Option<PathBuf> {
@@ -559,91 +586,164 @@ enum Shown {
 
 /// The preview of an entry: a text file's first lines, highlighted by its
 /// extension; a directory's entries; or why there is nothing to show. Read
-/// the first time it is drawn, and only a regular file (a FIFO would
-/// block), within the jail.
+/// on a thread the first time it is drawn, waiting at most
+/// [`PREVIEW_WAIT`]; a read still going shows as unavailable until it
+/// finishes. Only a regular file is read (a FIFO would block), opened
+/// without blocking and checked once open, within the jail.
 struct FilePreview {
     path: PathBuf,
     jail: Option<PathBuf>,
     shown: OnceLock<Shown>,
+    /// The read under way, once started.
+    pending: Mutex<Option<Receiver<Shown>>>,
+    /// [`read`], or a stand-in in tests.
+    reader: fn(&Path, Option<&Path>) -> Shown,
+    wake: Arc<PreviewWake>,
 }
 
 impl FilePreview {
-    fn new(path: PathBuf, jail: Option<PathBuf>) -> FilePreview {
+    fn new(path: PathBuf, jail: Option<PathBuf>, wake: Arc<PreviewWake>) -> FilePreview {
         FilePreview {
             path,
             jail,
             shown: OnceLock::new(),
+            pending: Mutex::new(None),
+            reader: read,
+            wake,
         }
     }
 
-    fn read(&self) -> Shown {
-        if let Some(jail) = &self.jail {
-            if !self
-                .path
-                .canonicalize()
-                .is_ok_and(|real| real.starts_with(jail))
-            {
-                return Shown::Note("outside the root".into());
-            }
+    /// What to show: the read, or `None` while it is still going.
+    fn shown(&self) -> Option<&Shown> {
+        if let Some(shown) = self.shown.get() {
+            return Some(shown);
         }
-        let metadata = match std::fs::metadata(&self.path) {
-            Ok(metadata) => metadata,
-            Err(error) => return Shown::Note(format!("cannot read: {error}")),
+        let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+        let wait = if pending.is_some() {
+            Duration::ZERO
+        } else {
+            let (sender, receiver) = mpsc::channel();
+            let (path, jail, reader) = (self.path.clone(), self.jail.clone(), self.reader);
+            let wake = Arc::clone(&self.wake);
+            wake.running.fetch_add(1, Ordering::SeqCst);
+            let spawned = std::thread::Builder::new()
+                .name("rich-file-preview".into())
+                .spawn(move || {
+                    let _ = sender.send(reader(&path, jail.as_deref()));
+                    // Ready before no longer running, so the picker never
+                    // sees neither while the result waits to be drawn.
+                    wake.ready.store(true, Ordering::SeqCst);
+                    wake.running.fetch_sub(1, Ordering::SeqCst);
+                });
+            if let Err(error) = spawned {
+                self.wake.running.fetch_sub(1, Ordering::SeqCst);
+                return Some(
+                    self.shown
+                        .get_or_init(|| Shown::Note(format!("preview unavailable: {error}"))),
+                );
+            }
+            *pending = Some(receiver);
+            PREVIEW_WAIT
         };
-        if metadata.is_dir() {
-            let Ok(listing) = std::fs::read_dir(&self.path) else {
-                return Shown::Note("cannot read the directory".into());
-            };
-            let mut names: Vec<String> = listing
-                .flatten()
-                .take(MAX_ENTRIES)
-                .map(|entry| {
-                    let dir = entry.file_type().is_ok_and(|kind| kind.is_dir());
-                    let name = display_name(&entry.file_name());
-                    if dir {
-                        format!("{name}/")
-                    } else {
-                        name
-                    }
-                })
-                .collect();
-            names.sort_by_key(|name| name.to_lowercase());
-            names.truncate(PREVIEW_LINES);
-            if names.is_empty() {
-                return Shown::Note("empty directory".into());
-            }
-            return Shown::Lines(names);
-        }
-        if !metadata.is_file() {
-            return Shown::Note("not a regular file".into());
-        }
-        let mut bytes = Vec::new();
-        let read = std::fs::File::open(&self.path)
-            .and_then(|file| file.take(PREVIEW_BYTES).read_to_end(&mut bytes));
-        if let Err(error) = read {
-            return Shown::Note(format!("cannot read: {error}"));
-        }
-        if bytes.contains(&0) {
-            return Shown::Note(format!(
-                "binary file, {}",
-                rich::filesize::decimal(metadata.len())
-            ));
-        }
-        let text = String::from_utf8_lossy(&bytes);
-        let head: Vec<&str> = text.lines().take(PREVIEW_LINES).collect();
-        let language = self
-            .path
-            .extension()
-            .and_then(OsStr::to_str)
-            .unwrap_or("text")
-            .to_lowercase();
-        Shown::Code(head.join("\n"), language)
+        let receiver = pending.as_ref()?;
+        let shown = match receiver.recv_timeout(wait) {
+            Ok(shown) => shown,
+            Err(RecvTimeoutError::Timeout) => return None,
+            Err(RecvTimeoutError::Disconnected) => Shown::Note("cannot read".into()),
+        };
+        *pending = None;
+        Some(self.shown.get_or_init(|| shown))
     }
+}
+
+/// `path` opened for reading without blocking: a FIFO swapped in after
+/// the listing opens at once instead of waiting for a writer, and a
+/// device such as `/proc/kmsg` reads nothing rather than waiting.
+fn open_nonblocking(path: &Path) -> std::io::Result<std::fs::File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NONBLOCK);
+    }
+    options.open(path)
+}
+
+/// Read what [`FilePreview`] shows for `path`.
+fn read(path: &Path, jail: Option<&Path>) -> Shown {
+    if let Some(jail) = jail {
+        if !path.canonicalize().is_ok_and(|real| real.starts_with(jail)) {
+            return Shown::Note("outside the root".into());
+        }
+    }
+    let metadata = match std::fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) => return Shown::Note(format!("cannot read: {error}")),
+    };
+    if metadata.is_dir() {
+        let Ok(listing) = std::fs::read_dir(path) else {
+            return Shown::Note("cannot read the directory".into());
+        };
+        let mut names: Vec<String> = listing
+            .flatten()
+            .take(MAX_ENTRIES)
+            .map(|entry| {
+                let dir = entry.file_type().is_ok_and(|kind| kind.is_dir());
+                let name = display_name(&entry.file_name());
+                if dir {
+                    format!("{name}/")
+                } else {
+                    name
+                }
+            })
+            .collect();
+        names.sort_by_key(|name| name.to_lowercase());
+        names.truncate(PREVIEW_LINES);
+        if names.is_empty() {
+            return Shown::Note("empty directory".into());
+        }
+        return Shown::Lines(names);
+    }
+    if !metadata.is_file() {
+        return Shown::Note("not a regular file".into());
+    }
+    // What was opened is checked, not what the path named a moment ago.
+    let file = open_nonblocking(path).and_then(|file| {
+        let metadata = file.metadata()?;
+        Ok((file, metadata))
+    });
+    let (file, metadata) = match file {
+        Ok(opened) => opened,
+        Err(error) => return Shown::Note(format!("cannot read: {error}")),
+    };
+    if !metadata.is_file() {
+        return Shown::Note("not a regular file".into());
+    }
+    let mut bytes = Vec::new();
+    if let Err(error) = file.take(PREVIEW_BYTES).read_to_end(&mut bytes) {
+        return Shown::Note(format!("cannot read: {error}"));
+    }
+    if bytes.contains(&0) {
+        return Shown::Note(format!(
+            "binary file, {}",
+            rich::filesize::decimal(metadata.len())
+        ));
+    }
+    let text = String::from_utf8_lossy(&bytes);
+    let head: Vec<&str> = text.lines().take(PREVIEW_LINES).collect();
+    let language = path
+        .extension()
+        .and_then(OsStr::to_str)
+        .unwrap_or("text")
+        .to_lowercase();
+    Shown::Code(head.join("\n"), language)
 }
 
 impl Renderable for FilePreview {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        match self.shown.get_or_init(|| self.read()) {
+        let waiting = Shown::Note("preview unavailable: the read has not finished".into());
+        match self.shown().unwrap_or(&waiting) {
             Shown::Code(code, language) => {
                 rich::syntax::Syntax::new(code.clone(), language.clone())
                     .rich_render(console, options)
@@ -654,5 +754,79 @@ impl Renderable for FilePreview {
                 Text::styled(note.clone(), style).rich_render(console, options)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn note(preview: &FilePreview) -> Option<String> {
+        match preview.shown()? {
+            Shown::Note(note) => Some(note.clone()),
+            Shown::Code(..) | Shown::Lines(_) => Some(String::new()),
+        }
+    }
+
+    /// Drawing a preview whose read never ends comes back, with nothing to
+    /// show yet; once the read ends, the next drawing shows it.
+    #[test]
+    fn a_read_that_blocks_does_not_hold_up_drawing() {
+        let wake = Arc::new(PreviewWake::default());
+        let mut preview = FilePreview::new(PathBuf::from("slow"), None, Arc::clone(&wake));
+        preview.reader = |_, _| {
+            std::thread::sleep(Duration::from_millis(600));
+            Shown::Note("done".into())
+        };
+        assert!(!wake.wants_tick());
+        let started = std::time::Instant::now();
+        assert_eq!(note(&preview), None);
+        assert!(started.elapsed() < Duration::from_millis(500));
+        // The picker ticks while the read runs, and after it finishes until
+        // a drawing has shown it: no key press is needed.
+        assert!(wake.wants_tick());
+        std::thread::sleep(Duration::from_millis(800));
+        assert!(wake.wants_tick());
+        assert_eq!(note(&preview).as_deref(), Some("done"));
+    }
+
+    /// A picker whose preview read outlasts the wait asks for ticks, and
+    /// stops once a drawing has taken the result.
+    #[test]
+    fn a_picker_ticks_until_a_slow_preview_is_drawn() {
+        let dir = std::env::temp_dir().join(format!("rich-file-wake-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let picker = FilePicker::new("Open", &dir);
+        assert_eq!(picker.tick(), None);
+        picker.wake.running.fetch_add(1, Ordering::SeqCst);
+        assert_eq!(picker.tick(), Some(PREVIEW_WAIT));
+        picker.wake.ready.store(true, Ordering::SeqCst);
+        picker.wake.running.fetch_sub(1, Ordering::SeqCst);
+        assert_eq!(picker.tick(), Some(PREVIEW_WAIT));
+        let console = rich::Console::builder().width(40).build();
+        let context = Context {
+            console: &console,
+            width: 40,
+            height: 10,
+        };
+        let _ = picker.render(&context);
+        assert_eq!(picker.tick(), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// `/proc/kmsg` is a regular file whose read waits for the kernel's
+    /// next message: opened without blocking, it reads nothing at once.
+    #[test]
+    fn a_file_whose_read_waits_is_not_waited_for() {
+        let path = Path::new("/proc/kmsg");
+        if !path.exists() {
+            return;
+        }
+        let (sender, receiver) = mpsc::channel();
+        std::thread::spawn(move || {
+            read(path, None);
+            let _ = sender.send(());
+        });
+        assert_eq!(receiver.recv_timeout(Duration::from_secs(5)), Ok(()));
     }
 }

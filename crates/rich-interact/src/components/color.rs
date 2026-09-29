@@ -8,6 +8,8 @@
 //! rgb (`rgb(255,136,0)`) or a name (`dark_orange`, or `color(N)` or hex
 //! for a colour without one): see [`ColorFormat`].
 
+use std::cell::Cell;
+
 use rich::color::ColorType;
 use rich::{Color, ColorTriplet, Segment, Style};
 
@@ -135,6 +137,11 @@ pub struct ColorPicker {
     default: Option<String>,
     theme: Theme,
     mouse: bool,
+    /// The row (a grid cell, or a list position) the last click focused,
+    /// until a key: a click on it again picks it.
+    clicked: Option<(bool, usize)>,
+    /// Rows on screen, from the last context: the list is cut to fit.
+    space: Cell<usize>,
     answer: Option<Option<String>>,
 }
 
@@ -157,6 +164,8 @@ impl ColorPicker {
             default: None,
             theme: Theme::default(),
             mouse: false,
+            clicked: None,
+            space: Cell::new(usize::MAX),
             answer: None,
         };
         picker.refilter();
@@ -239,6 +248,14 @@ impl ColorPicker {
         self.matches.len() + usize::from(self.custom.is_some())
     }
 
+    /// Rows the list takes: the height asked for, cut to what fits on
+    /// screen beside the question, the swatch and the hint.
+    fn rows(&self) -> usize {
+        self.height
+            .min(self.space.get().saturating_sub(TOP + 1))
+            .max(1)
+    }
+
     /// The colour on list row `position`.
     fn at(&self, position: usize) -> Option<Picked> {
         match (&self.custom, position) {
@@ -264,8 +281,8 @@ impl ColorPicker {
         self.focus = self.focus.saturating_add_signed(delta).min(count - 1);
         if self.focus < self.offset {
             self.offset = self.focus;
-        } else if self.focus >= self.offset + self.height {
-            self.offset = self.focus + 1 - self.height;
+        } else if self.focus >= self.offset + self.rows() {
+            self.offset = self.focus + 1 - self.rows();
         }
     }
 
@@ -294,18 +311,20 @@ impl ColorPicker {
             let column = column.saturating_sub(2) / 2;
             if row < 16 && column < 16 {
                 let cell = (row * 16 + column) as u8;
-                if cell == self.cell {
+                if self.clicked == Some((true, cell.into())) && cell == self.cell {
                     return self.pick();
                 }
                 self.cell = cell;
+                self.clicked = Some((true, cell.into()));
             }
-        } else if row < self.height {
+        } else if row < self.rows() {
             let position = self.offset + row;
             if position < self.count() {
-                if position == self.focus {
+                if self.clicked == Some((false, position)) && position == self.focus {
                     return self.pick();
                 }
                 self.focus = position;
+                self.clicked = Some((false, position));
             }
         }
         Flow::Continue
@@ -341,7 +360,7 @@ impl ColorPicker {
     fn list(&self, width: usize) -> Vec<Vec<Segment>> {
         let theme = &self.theme;
         let mut lines = Vec::new();
-        for position in (self.offset..self.count()).take(self.height) {
+        for position in (self.offset..self.count()).take(self.rows()) {
             let Some(picked) = self.at(position) else {
                 break;
             };
@@ -368,7 +387,7 @@ impl ColorPicker {
         if self.count() == 0 {
             lines.push(vec![text("  no matches", &theme.hint)]);
         }
-        lines.resize_with(self.height, Vec::new);
+        lines.resize_with(self.rows(), Vec::new);
         lines
     }
 
@@ -404,7 +423,8 @@ impl ColorPicker {
 impl Component for ColorPicker {
     type Output = String;
 
-    fn handle(&mut self, event: &Event, _: &Context<'_>) -> Flow<String> {
+    fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<String> {
+        self.space.set(context.height);
         if let Event::Mouse(mouse) = event {
             match mouse.kind {
                 MouseKind::Down(Button::Left) => {
@@ -419,6 +439,7 @@ impl Component for ColorPicker {
             return Flow::Continue;
         }
         if let Event::Paste(pasted) = event {
+            self.clicked = None;
             self.grid = false;
             self.query.push_str(&crate::components::pasted(pasted, " "));
             self.refilter();
@@ -428,6 +449,8 @@ impl Component for ColorPicker {
             return Flow::Continue;
         };
         let ctrl = key.modifiers.ctrl;
+        // A click after a key is a first click again.
+        self.clicked = None;
         match key.code {
             KeyCode::Enter => return self.pick(),
             KeyCode::Escape => {
@@ -443,8 +466,8 @@ impl Component for ColorPicker {
             KeyCode::End if self.grid => self.cell = 255,
             KeyCode::Up => self.step(-1),
             KeyCode::Down => self.step(1),
-            KeyCode::PageUp => self.step(-(self.height as isize)),
-            KeyCode::PageDown => self.step(self.height as isize),
+            KeyCode::PageUp => self.step(-(self.rows() as isize)),
+            KeyCode::PageDown => self.step(self.rows() as isize),
             KeyCode::Char('u') if ctrl => {
                 self.query.clear();
                 self.refilter();
@@ -466,6 +489,7 @@ impl Component for ColorPicker {
     }
 
     fn render(&self, context: &Context<'_>) -> View {
+        self.space.set(context.height);
         let width = context.width;
         let theme = &self.theme;
         let mut header = question(theme, &self.prompt);
