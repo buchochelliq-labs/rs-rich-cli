@@ -130,8 +130,9 @@ jobs:
         run: python3 scripts/release.py publish
 
       # A brand-new crate's first version: the environment's token, since
-      # Trusted Publishing needs the crate to exist. Add the crate's Trusted
-      # Publishing entry once this succeeds.
+      # Trusted Publishing needs the crate to exist. The preflight refuses a
+      # selection mixing new and existing crates, so this never uploads an
+      # existing one. Add the crate's Trusted Publishing entry once it succeeds.
       - name: Publish a new crate's first version
         if: ${{ inputs.verify_only != true && steps.preflight.outputs.new_crate == 'true' }}
         env:

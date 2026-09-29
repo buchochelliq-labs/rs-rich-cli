@@ -359,7 +359,9 @@ itself: its preflight reports a selected crate that does not exist yet, and
 then the token exchange is skipped and the upload uses the `crates-io`
 environment's `CARGO_REGISTRY_TOKEN` secret (the step fails if the secret is
 missing). Every existing crate still uses Trusted Publishing only; nothing else
-can read the secret. Uploading by hand, as below, also works. After the first
+can read the secret. A selection that mixes new and existing crates (a
+coordinated `vX.Y.Z` tag) is refused before anything uploads: give each new
+crate its own tag first. Uploading by hand, as below, also works. After the first
 version is up, add the crate's Trusted Publishing entry, and publish later
 versions from the workflow as usual.
 `rs-rich-macros` was in this position for 0.0.11: a `rs-rich-macros-v0.0.1`

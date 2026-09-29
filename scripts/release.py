@@ -116,6 +116,14 @@ def preflight(selection):
         elif crate != 200:
             raise RuntimeError(f"Could not check whether {name} exists (HTTP {crate})")
         print(f"{name}@{version} is available{' (new crate)' if crate == 404 else ''}", flush=True)
+    # One upload uses one credential: the token for new crates, the exchange
+    # for existing ones, which may be set to Trusted Publishing only and then
+    # reject the token after `--workspace` has uploaded earlier packages.
+    if new and len(new) != len(selection):
+        raise RuntimeError(
+            f"Refusing a release that mixes new crates ({', '.join(new)}) with existing "
+            "ones; publish each new crate with its own tag first"
+        )
     return new
 
 

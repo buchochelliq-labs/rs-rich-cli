@@ -104,8 +104,10 @@ Entries below record subsequent releases and development.
   brand-new crate, `release.yml` skips the OIDC exchange and uploads with the
   `crates-io` environment's `CARGO_REGISTRY_TOKEN`, failing if it is missing.
   Existing crates publish through Trusted Publishing only, as before, and a
-  test pins that only the new-crate step can read the secret. This is how
-  `rs-rich-interact` and `rs-rich-record` 0.0.1 go out.
+  test pins that only the new-crate step can read the secret. A selection
+  that mixes new and existing crates (a coordinated `vX.Y.Z` tag) is refused
+  before anything uploads. This is how `rs-rich-interact` and `rs-rich-record`
+  0.0.1 go out.
 
 ### Dependencies
 

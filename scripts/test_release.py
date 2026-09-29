@@ -147,6 +147,16 @@ class PublicationTests(unittest.TestCase):
             self.assertEqual(["rs-rich-record"], release.preflight({"rs-rich-record": "0.0.1"}))
 
     @patch("release.registry_status", return_value=404)
+    def test_preflight_refuses_new_and_existing_crates_together(self, status):
+        # A coordinated release would push the existing crates through the
+        # new-crate token, which trusted-publishing-only crates reject after
+        # earlier packages have uploaded.
+        exists = {"rs-rich": 200, "rs-rich-record": 404}
+        with patch("release.crate_status", side_effect=lambda name: exists[name]):
+            with self.assertRaisesRegex(RuntimeError, "mixes new crates"):
+                release.preflight({"rs-rich": "0.0.9", "rs-rich-record": "0.0.1"})
+
+    @patch("release.registry_status", return_value=404)
     def test_preflight_fails_closed_when_crate_existence_is_unknown(self, status):
         for code in (403, 429, 500):
             with self.subTest(code=code), patch("release.crate_status", return_value=code):
