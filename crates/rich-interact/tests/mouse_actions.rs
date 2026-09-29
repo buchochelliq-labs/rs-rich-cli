@@ -52,6 +52,48 @@ fn a_click_focuses_a_row_and_a_second_click_picks_it() {
 }
 
 #[test]
+fn one_click_on_the_row_already_focused_only_focuses_it() {
+    // `apple` has the focus from the start: one click on it picks nothing.
+    let script = Script::new().click(4, 1).keys("esc");
+    let (outcome, _) = headless::run(
+        Select::new("Fruit", fruit()).with_mouse(true),
+        script,
+        40,
+        10,
+    );
+    assert_eq!(outcome.unwrap(), Outcome::Cancelled);
+    // Nor after a key moved the focus there: a click, a key, a click.
+    let script = Script::new()
+        .click(4, 2)
+        .keys("up down")
+        .click(4, 2)
+        .keys("esc");
+    let (outcome, _) = headless::run(
+        Select::new("Fruit", fruit()).with_mouse(true),
+        script,
+        40,
+        10,
+    );
+    assert_eq!(outcome.unwrap(), Outcome::Cancelled);
+    // The file picker's first entry, focused from the start, likewise.
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("a.txt"), "").unwrap();
+    std::fs::write(dir.path().join("b.txt"), "").unwrap();
+    let picker = FilePicker::new("File", dir.path())
+        .jail(true)
+        .with_mouse(true);
+    // Row 0 the question, row 1 the directory, row 2 `a.txt`.
+    let script = Script::new().click(4, 2).keys("esc");
+    let (outcome, _) = headless::run(picker, script, 40, 10);
+    assert_eq!(outcome.unwrap(), Outcome::Cancelled);
+    let picker = FilePicker::new("File", dir.path())
+        .jail(true)
+        .with_mouse(true);
+    let (outcome, _) = headless::run(picker, Script::new().click(4, 2).click(4, 2), 40, 10);
+    assert_eq!(outcome.unwrap(), Outcome::Done(dir.path().join("a.txt")));
+}
+
+#[test]
 fn mouse_reporting_is_opt_in() {
     assert!(!Component::mouse(&Select::new("Fruit", fruit())));
     assert!(Component::mouse(

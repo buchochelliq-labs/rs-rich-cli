@@ -14,6 +14,7 @@
 //! picks it, the wheel moves, and the border between the list and a preview
 //! beside it can be dragged to resize the panes.
 
+use std::cell::Cell;
 use std::time::Duration;
 
 use rich::Segment;
@@ -92,6 +93,11 @@ pub struct Select<T> {
     /// that change under the user, such as a directory's entries.
     pub(crate) steady: bool,
     mouse: bool,
+    /// The list position the last click focused, until a key: a click on
+    /// it again picks it.
+    clicked: Option<usize>,
+    /// Rows on screen, from the last context: the list is cut to fit.
+    space: Cell<usize>,
     /// The list's width beside the preview, once the border is dragged.
     split: Option<usize>,
     dragging: bool,
@@ -133,6 +139,8 @@ impl<T> Select<T> {
             hints: None,
             steady: false,
             mouse: false,
+            clicked: None,
+            space: Cell::new(usize::MAX),
             split: None,
             dragging: false,
         };
@@ -331,8 +339,8 @@ impl<T> Select<T> {
     fn scroll(&mut self) {
         if self.focus < self.offset {
             self.offset = self.focus;
-        } else if self.focus >= self.offset + self.height {
-            self.offset = self.focus + 1 - self.height;
+        } else if self.focus >= self.offset + self.shown() {
+            self.offset = self.focus + 1 - self.shown();
         }
     }
 
@@ -347,8 +355,13 @@ impl<T> Select<T> {
 
     /// Handle an event; `Some` finishes with item indices, and the view
     /// collapses to the answer.
-    pub(crate) fn event(&mut self, event: &Event, width: usize) -> Option<Flow<Vec<usize>>> {
-        let flow = self.event_inner(event, width);
+    pub(crate) fn event(
+        &mut self,
+        event: &Event,
+        context: &Context<'_>,
+    ) -> Option<Flow<Vec<usize>>> {
+        self.space.set(context.height);
+        let flow = self.event_inner(event, context.width);
         match &flow {
             Some(Flow::Done(indices)) => {
                 let labels: Vec<&str> = indices
@@ -429,11 +442,14 @@ impl<T> Select<T> {
             return self.mouse_event(*mouse, width);
         }
         if let Event::Paste(text) = event {
+            self.clicked = None;
             self.query.push_str(&crate::components::pasted(text, " "));
             self.refilter();
             return None;
         }
         let key = event.key()?;
+        // A click after a key is a first click again.
+        self.clicked = None;
         if let Some(index) = self.focused() {
             let actions = self.actions_for(index);
             if key == self.menu_key && !actions.is_empty() {
@@ -453,8 +469,8 @@ impl<T> Select<T> {
             KeyCode::Down => self.step(1),
             KeyCode::Char('p') if ctrl => self.step(-1),
             KeyCode::Char('n') if ctrl => self.step(1),
-            KeyCode::PageUp => self.step(-(self.height as isize)),
-            KeyCode::PageDown => self.step(self.height as isize),
+            KeyCode::PageUp => self.step(-(self.shown() as isize)),
+            KeyCode::PageDown => self.step(self.shown() as isize),
             KeyCode::Home => self.step(isize::MIN / 2),
             KeyCode::End => self.step(isize::MAX / 2),
             KeyCode::Tab | KeyCode::BackTab if self.multi => {
@@ -492,12 +508,20 @@ impl<T> Select<T> {
         1 + usize::from(self.heading.is_some())
     }
 
+    /// The most rows the list takes: the height asked for, cut to what
+    /// fits on screen beside the question, the heading and the footer.
+    fn shown(&self) -> usize {
+        self.height
+            .min(self.space.get().saturating_sub(self.top() + 1))
+            .max(1)
+    }
+
     /// Rows the list takes.
     fn rows(&self) -> usize {
         if self.steady {
-            return self.height;
+            return self.shown();
         }
-        self.height.min(self.items.len()).max(1)
+        self.shown().min(self.items.len()).max(1)
     }
 
     /// The first row of the action menu: under the list, where the footer
@@ -543,10 +567,11 @@ impl<T> Select<T> {
                 } else if in_list && (layout != PreviewLayout::Right || column < left) {
                     let position = self.offset + row - top;
                     if position < self.matches.len() {
-                        if position == self.focus {
+                        if self.clicked == Some(position) && position == self.focus {
                             return self.pick_focused();
                         }
                         self.focus = position;
+                        self.clicked = Some(position);
                     }
                 }
             }
@@ -664,6 +689,7 @@ impl<T> Select<T> {
     }
 
     fn render_view(&self, context: &Context<'_>) -> View {
+        self.space.set(context.height);
         let width = context.width;
         let theme = &self.theme;
         let mut header = question(theme, &self.prompt);
@@ -798,7 +824,7 @@ impl<T: Clone> Component for Select<T> {
     type Output = T;
 
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<T> {
-        match self.event(event, context.width) {
+        match self.event(event, context) {
             Some(Flow::Done(indices)) => Flow::Done(self.items[indices[0]].value.clone()),
             Some(Flow::Cancel) => Flow::Cancel,
             _ => Flow::Continue,
@@ -899,7 +925,7 @@ impl<T: Clone> Component for MultiSelect<T> {
     type Output = Vec<T>;
 
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<Vec<T>> {
-        match self.0.event(event, context.width) {
+        match self.0.event(event, context) {
             Some(Flow::Done(indices)) => Flow::Done(
                 indices
                     .into_iter()

@@ -191,6 +191,33 @@ pub trait LineIo {
     }
 }
 
+/// A [`LineIo`] whose writes show terminal controls as text, as a view
+/// paints them, line breaks kept: a prompt or header from the command line
+/// cannot drive the terminal (a title, a cleared screen) without a full
+/// session either. [`degrade`](crate::degrade) asks through it.
+pub(crate) struct Shown<'a>(pub(crate) &'a mut dyn LineIo);
+
+impl LineIo for Shown<'_> {
+    fn write(&mut self, text: &str) {
+        let shown: String = text
+            .chars()
+            .map(|c| match c {
+                '\n' => c,
+                _ => crate::paint::visible(c).unwrap_or(c),
+            })
+            .collect();
+        self.0.write(&shown);
+    }
+
+    fn read_line(&mut self) -> Option<String> {
+        self.0.read_line()
+    }
+
+    fn read_secret(&mut self) -> Result<Option<String>, NotInteractive> {
+        self.0.read_secret()
+    }
+}
+
 /// [`LineIo`] on the process: prompts to stderr (stdout may be the data a
 /// script is capturing), answers from stdin.
 pub struct StdLineIo;
