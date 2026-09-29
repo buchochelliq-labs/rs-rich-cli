@@ -890,12 +890,22 @@ fn escaped_path(path: &std::ffi::OsStr) -> String {
 /// `[sys.executable, "-m", "rs_rich"]`), used for `--batch` workers and the
 /// demo's child `--watch`, where the binary runs its own executable. An empty
 /// `program` means the current executable, as in [`run`].
+///
+/// A host may call this from several threads at once (the wheel releases the
+/// GIL), but a run's plugins, program and colour settings are process-wide:
+/// runs take turns, each whole, so one never clears another's plugins.
 pub fn run_embedded(program: Vec<std::ffi::OsString>, args: Vec<std::ffi::OsString>) -> ExitCode {
+    // A run that panicked left nothing half-set that the next run does not
+    // reset first, so a poisoned lock is still usable.
+    let _turn = EMBEDDED_RUN.lock().unwrap_or_else(|e| e.into_inner());
     if let Ok(mut slot) = SELF_PROGRAM.lock() {
         *slot = program;
     }
     run(args)
 }
+
+/// Held for the whole of one [`run_embedded`] call.
+static EMBEDDED_RUN: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// The command [`run_embedded`] was given; empty for the binary.
 static SELF_PROGRAM: std::sync::Mutex<Vec<std::ffi::OsString>> = std::sync::Mutex::new(Vec::new());

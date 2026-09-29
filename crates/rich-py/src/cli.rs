@@ -18,6 +18,7 @@ use pyo3::prelude::*;
 /// name), with the GIL released, and return its exit status. `program` is the
 /// command that starts the command line again (`[sys.executable, "-m",
 /// "rs_rich"]`), for `--batch` workers and the demo's child `--watch`.
+/// Calls from several threads take turns: each runs whole, one at a time.
 #[pyfunction]
 fn cli_main(py: Python<'_>, program: Vec<OsString>, argv: Vec<OsString>) -> i32 {
     py.detach(|| {
