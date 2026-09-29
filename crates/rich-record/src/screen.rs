@@ -246,6 +246,14 @@ impl Snapshot {
                 }
                 style = Some(cell);
                 run.push_str(&cell.text);
+                // The exporters place text by rich's cell widths, the grid by
+                // the emulator's; they disagree on some characters (skin-tone
+                // modifiers, Indic marks). Pad a cell rich measures narrower,
+                // so every column after it lands where the grid has it.
+                let measured = rich::cells::cell_len(&cell.text);
+                for _ in measured..usize::from(cell.width) {
+                    run.push(' ');
+                }
             }
             if let Some(style) = style {
                 segments.push(Segment::new(run, Some(export_style(style, theme))));
@@ -340,6 +348,31 @@ mod tests {
         assert_eq!(shot.text_grid(), "hello\n  world\n\n");
         assert_eq!(shot.to_frame().height(), 3);
         assert_eq!(shot.cursor, Some((9, 1)));
+    }
+
+    #[test]
+    fn exports_keep_the_grid_columns_where_rich_measures_differently() {
+        // rich gives a skin-tone modifier and a Devanagari vowel sign no
+        // width; the emulator gives them cells. The export must still put
+        // `XY` in the grid's column, or the SVG draws it (and its red
+        // background) cells too far left.
+        let theme = Theme::default();
+        for line in ["👍🏽ab \x1b[41mXY\x1b[0m|", "नाम ABCDEFGH \x1b[41mXY\x1b[0m|"] {
+            let shot = snapshot(line.as_bytes(), 2, 40);
+            let grid = shot.rows[0].iter().position(|c| c.text == "X").unwrap();
+            let frame = shot.export_frame(&theme);
+            let mut column = 0;
+            let mut exported = None;
+            for run in frame.row(0) {
+                let text = frame.run_text(run);
+                if let Some(offset) = text.find("XY") {
+                    exported = Some(column + rich::cells::cell_len(&text[..offset]));
+                    break;
+                }
+                column += run.cells();
+            }
+            assert_eq!(exported, Some(grid), "{line:?}");
+        }
     }
 
     #[test]

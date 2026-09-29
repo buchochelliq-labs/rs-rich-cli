@@ -585,9 +585,12 @@ Format: what differs · why · how to remove it (if temporary).
     characters; the two differ only for wide characters, which upstream
     squeezes into half their width;
   - characters XML forbids (control characters) become U+FFFD in SVG text,
-    so the file stays well-formed;
+    and are percent-encoded in an SVG link, so the file stays well-formed;
   - with regions, HTML gains nested `<span class="rich-region …">`
     wrappers with ARIA roles, and a line break is written outside every span.
+- **Same:** a link's scheme is not filtered, as upstream's `export_html`
+  does not filter it: a `javascript:` link stays clickable. Exporting text
+  you do not trust? Drop its links first (`Style::clear_meta_and_links`).
 - **Same:** the parity is tested on tables, panels, trees, rules, Markdown
   and upstream's SVG fixture (`crates/rich-ext/tests/frame_export.rs`,
   `frame::export` unit tests).
