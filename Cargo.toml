@@ -100,6 +100,10 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.crc32fast]
 opt-level = 3
+# crossterm 0.29 subtracts one from mouse coordinates unchecked, so a report
+# of 0 (`\e[<0;0;0M`) panicked debug builds; release builds wrap it as well.
+[profile.dev.package.crossterm]
+overflow-checks = false
 
 [profile.release]
 lto = "thin"
