@@ -201,11 +201,20 @@ fn suspends_and_resumes(pty: &mut Pty, suspend: impl FnOnce(&mut Pty, &str)) {
         assert!(std::time::Instant::now() < end, "not restored:\n{after:?}");
         std::thread::sleep(std::time::Duration::from_millis(20));
     };
-    let state = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok();
-    if let Some(state) = state {
-        // Stopped: `T` in the third field.
+    // Stopped: `T` in the third field. The session gives the terminal back
+    // before it stops itself, so the state can still read `R` for a moment
+    // after the restore sequences arrive; wait for the stop.
+    let stop_by = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while let Ok(state) = std::fs::read_to_string(format!("/proc/{pid}/stat")) {
         let field = state.rsplit(')').next().unwrap().split_whitespace().next();
-        assert_eq!(field, Some("T"), "{state}");
+        if field == Some("T") {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < stop_by,
+            "never stopped: {state}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
     Command::new("kill").args(["-CONT", &pid]).status().unwrap();
     let end = std::time::Instant::now() + std::time::Duration::from_secs(30);
