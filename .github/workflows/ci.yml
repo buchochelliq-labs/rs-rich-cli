@@ -234,6 +234,11 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
+      # The unified-diff tests compare against GNU diff; macOS's `diff` is
+      # BSD's. Homebrew's diffutils installs it as `gdiff`.
+      - name: Install GNU diffutils
+        run: brew install diffutils
+
       - name: Test
         run: cargo test --all --locked --no-fail-fast
 

@@ -74,10 +74,16 @@ Entries below record subsequent releases and development.
 - CI builds and tests core without default features, and fails if a lean
   `rs-rich` or `rs-rich-ext` depends on syntect, bincode or pulldown-cmark.
 
-### CI: macOS
+### CI: macOS, and interactive commands on macOS
 
 - A macOS job runs the whole workspace's tests, plus core without default
   features, and is part of `ci-ok`.
+- `rs-rich-interact` reads terminal events with crossterm's `use-dev-tty`
+  source (poll/select) instead of mio on every Unix. On macOS, kqueue cannot
+  watch `/dev/tty`, so the interactive commands exited as soon as stdin was a
+  pipe (`seq 1 99 | rich pager`, `ls | rich filter`, `echo draft | rich
+  write`) or the command ran in the background, and keys typed while a
+  session was suspended were lost after `fg`. Linux behaves as before.
 
 ### Core 0.0.9: string table cells are markup (docs)
 

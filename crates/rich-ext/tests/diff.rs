@@ -253,10 +253,23 @@ fn scratch_dir(name: &str) -> PathBuf {
     dir
 }
 
+/// GNU diff: `gdiff` (Homebrew's diffutils), else `diff` when it is GNU's.
+/// macOS's own `diff` is BSD's, which numbers an insertion at the top of a
+/// file `-1,0` where GNU writes `-0,0`, so it is not the reference.
+fn gnu_diff_program() -> Option<&'static str> {
+    ["gdiff", "diff"].into_iter().find(|program| {
+        Command::new(program)
+            .arg("--version")
+            .output()
+            .is_ok_and(|out| String::from_utf8_lossy(&out.stdout).contains("GNU diffutils"))
+    })
+}
+
 fn gnu_diff(dir: &Path, old: &str, new: &str, context: usize) -> Option<String> {
+    let program = gnu_diff_program()?;
     std::fs::write(dir.join("old"), old).unwrap();
     std::fs::write(dir.join("new"), new).unwrap();
-    let out = Command::new("diff")
+    let out = Command::new(program)
         .arg(format!("-U{context}"))
         .arg("old")
         .arg("new")
@@ -307,7 +320,7 @@ fn unified_output_matches_gnu_diff() {
                 assert!(ours.starts_with("--- old\n+++ new\n"), "{name}: {ours}");
             }
             let Some(theirs) = gnu_diff(&dir, old, new, context) else {
-                eprintln!("note: `diff` is not on PATH; skipping GNU parity for {name}");
+                eprintln!("note: GNU diff is not on PATH; skipping GNU parity for {name}");
                 continue;
             };
             assert_eq!(body(&ours), body(&theirs), "{name} at -U{context}");
