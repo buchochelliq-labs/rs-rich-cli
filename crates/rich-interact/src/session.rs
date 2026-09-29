@@ -203,8 +203,16 @@ static RESUMED: AtomicBool = AtomicBool::new(false);
 /// expects (Ctrl+Z, `kill -TSTP`), and when it continues (`fg`, SIGCONT)
 /// turn back on what was on. SIGSTOP cannot be caught, so it still stops
 /// with the modes on.
+/// Held for the whole of a suspend, from giving the terminal back until its
+/// modes are on again, and by [`Session::leave`]. A resume from an outside
+/// SIGTSTP runs on the signal thread while the event loop runs on, so
+/// without it a session that ended during the stop (a key queued, a timer
+/// due) would have its modes turned back on after it restored them.
+static SUSPENDING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg(unix)]
 fn suspend() {
+    let _suspending = SUSPENDING.lock().unwrap_or_else(|e| e.into_inner());
     let active = ACTIVE.load(Ordering::SeqCst);
     let raw_line = RAW_LINE.load(Ordering::SeqCst);
     restore_for_signal();
@@ -397,6 +405,9 @@ impl Session {
         if !std::mem::take(&mut self.active) {
             return Ok(());
         }
+        // After any suspend under way has turned the modes back on, so
+        // this restores them rather than being undone by it.
+        let _suspending = SUSPENDING.lock().unwrap_or_else(|e| e.into_inner());
         restore()
     }
 

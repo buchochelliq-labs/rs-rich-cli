@@ -20,7 +20,7 @@ use rich_interact::{
 };
 use support::{assert_restored, Pty};
 
-/// The child's component: `enter` finishes, `p` panics, `e` hands the
+/// The child's component: `enter` (or `d`) finishes, `p` panics, `e` hands the
 /// terminal to `sh -c 'echo handed-off'`, `n` runs another component from
 /// inside this one.
 struct Child {
@@ -51,7 +51,9 @@ impl Component for Child {
         match event {
             Event::Returned(code) => self.returned = Some(*code),
             Event::Key(key) => match key.code {
-                KeyCode::Enter => return Flow::Done("finished".into()),
+                // `d` too: typed while the process is stopped, in cooked
+                // mode, Enter arrives as `\n` (Ctrl+J in raw mode).
+                KeyCode::Enter | KeyCode::Char('d') => return Flow::Done("finished".into()),
                 KeyCode::Char('p') => panic!("child panics on purpose"),
                 KeyCode::Char('n') => {
                     let inner = Child {
@@ -244,4 +246,27 @@ fn sigtstp_from_outside_gives_the_terminal_back_too() {
         "{output}"
     );
     assert_restored(&output, &parser);
+}
+
+/// Enter typed while the process is stopped finishes the component the
+/// moment it continues, racing the signal thread's resume: the session
+/// must still end restored, not with its modes turned back on after.
+#[test]
+fn a_session_that_ends_as_it_resumes_stays_restored() {
+    for _ in 0..5 {
+        let mut pty = Pty::start("resume-race");
+        pty.wait_for("child ready");
+        let pid = child_pid(&pty);
+        Command::new("kill").args(["-TSTP", &pid]).status().unwrap();
+        pty.wait_for("\x1b[?1049l");
+        pty.send("d");
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        Command::new("kill").args(["-CONT", &pid]).status().unwrap();
+        let (output, parser) = pty.finish();
+        assert!(
+            output.contains("OUTCOME Ok(Done(\"finished\"))"),
+            "{output}"
+        );
+        assert_restored(&output, &parser);
+    }
 }
