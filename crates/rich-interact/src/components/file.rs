@@ -17,6 +17,7 @@
 use std::ffi::{OsStr, OsString};
 use std::io::Read;
 use std::path::{Component as PathPart, Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
@@ -111,6 +112,23 @@ pub struct FilePicker {
     /// Why the directory could not be read, or that it was cut short.
     note: Option<String>,
     theme: Theme,
+    /// Preview reads still going, or finished and not yet drawn.
+    wake: Arc<PreviewWake>,
+}
+
+/// Shared by a picker and its previews: a read that outlasts
+/// [`PREVIEW_WAIT`] finishes on its own thread, and the picker ticks until
+/// its result has been drawn, so it shows without a key press.
+#[derive(Default)]
+struct PreviewWake {
+    running: AtomicUsize,
+    ready: AtomicBool,
+}
+
+impl PreviewWake {
+    fn wants_tick(&self) -> bool {
+        self.running.load(Ordering::SeqCst) > 0 || self.ready.load(Ordering::SeqCst)
+    }
 }
 
 impl FilePicker {
@@ -136,6 +154,7 @@ impl FilePicker {
             default: None,
             note: None,
             theme: Theme::default(),
+            wake: Arc::default(),
         };
         picker.load();
         picker
@@ -362,13 +381,12 @@ impl FilePicker {
                 .root
                 .join(&self.rel)
                 .join(entry.name.as_deref().unwrap_or_default());
-            let jail = self.jail.clone();
+            let preview = FilePreview::new(full, self.jail.clone(), Arc::clone(&self.wake));
+            let preview = Preview::Renderable(Arc::new(preview));
             let item = if entry.dir {
-                Item::new(entry, format!("{label}/"))
-                    .preview(Preview::Renderable(Arc::new(FilePreview::new(full, jail))))
+                Item::new(entry, format!("{label}/")).preview(preview)
             } else {
-                Item::new(entry, label)
-                    .preview(Preview::Renderable(Arc::new(FilePreview::new(full, jail))))
+                Item::new(entry, label).preview(preview)
             };
             items.push(item);
         }
@@ -537,6 +555,8 @@ impl Component for FilePicker {
     }
 
     fn render(&self, context: &Context<'_>) -> View {
+        // Drawing takes any preview that has finished since.
+        self.wake.ready.store(false, Ordering::SeqCst);
         self.select.render(context)
     }
 
@@ -545,7 +565,7 @@ impl Component for FilePicker {
     }
 
     fn tick(&self) -> Option<Duration> {
-        None
+        self.wake.wants_tick().then_some(PREVIEW_WAIT)
     }
 
     fn default_value(&self) -> Option<PathBuf> {
@@ -578,16 +598,18 @@ struct FilePreview {
     pending: Mutex<Option<Receiver<Shown>>>,
     /// [`read`], or a stand-in in tests.
     reader: fn(&Path, Option<&Path>) -> Shown,
+    wake: Arc<PreviewWake>,
 }
 
 impl FilePreview {
-    fn new(path: PathBuf, jail: Option<PathBuf>) -> FilePreview {
+    fn new(path: PathBuf, jail: Option<PathBuf>, wake: Arc<PreviewWake>) -> FilePreview {
         FilePreview {
             path,
             jail,
             shown: OnceLock::new(),
             pending: Mutex::new(None),
             reader: read,
+            wake,
         }
     }
 
@@ -602,12 +624,19 @@ impl FilePreview {
         } else {
             let (sender, receiver) = mpsc::channel();
             let (path, jail, reader) = (self.path.clone(), self.jail.clone(), self.reader);
+            let wake = Arc::clone(&self.wake);
+            wake.running.fetch_add(1, Ordering::SeqCst);
             let spawned = std::thread::Builder::new()
                 .name("rich-file-preview".into())
                 .spawn(move || {
                     let _ = sender.send(reader(&path, jail.as_deref()));
+                    // Ready before no longer running, so the picker never
+                    // sees neither while the result waits to be drawn.
+                    wake.ready.store(true, Ordering::SeqCst);
+                    wake.running.fetch_sub(1, Ordering::SeqCst);
                 });
             if let Err(error) = spawned {
+                self.wake.running.fetch_sub(1, Ordering::SeqCst);
                 return Some(
                     self.shown
                         .get_or_init(|| Shown::Note(format!("preview unavailable: {error}"))),
@@ -743,16 +772,46 @@ mod tests {
     /// show yet; once the read ends, the next drawing shows it.
     #[test]
     fn a_read_that_blocks_does_not_hold_up_drawing() {
-        let mut preview = FilePreview::new(PathBuf::from("slow"), None);
+        let wake = Arc::new(PreviewWake::default());
+        let mut preview = FilePreview::new(PathBuf::from("slow"), None, Arc::clone(&wake));
         preview.reader = |_, _| {
             std::thread::sleep(Duration::from_millis(600));
             Shown::Note("done".into())
         };
+        assert!(!wake.wants_tick());
         let started = std::time::Instant::now();
         assert_eq!(note(&preview), None);
         assert!(started.elapsed() < Duration::from_millis(500));
+        // The picker ticks while the read runs, and after it finishes until
+        // a drawing has shown it: no key press is needed.
+        assert!(wake.wants_tick());
         std::thread::sleep(Duration::from_millis(800));
+        assert!(wake.wants_tick());
         assert_eq!(note(&preview).as_deref(), Some("done"));
+    }
+
+    /// A picker whose preview read outlasts the wait asks for ticks, and
+    /// stops once a drawing has taken the result.
+    #[test]
+    fn a_picker_ticks_until_a_slow_preview_is_drawn() {
+        let dir = std::env::temp_dir().join(format!("rich-file-wake-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let picker = FilePicker::new("Open", &dir);
+        assert_eq!(picker.tick(), None);
+        picker.wake.running.fetch_add(1, Ordering::SeqCst);
+        assert_eq!(picker.tick(), Some(PREVIEW_WAIT));
+        picker.wake.ready.store(true, Ordering::SeqCst);
+        picker.wake.running.fetch_sub(1, Ordering::SeqCst);
+        assert_eq!(picker.tick(), Some(PREVIEW_WAIT));
+        let console = rich::Console::builder().width(40).build();
+        let context = Context {
+            console: &console,
+            width: 40,
+            height: 10,
+        };
+        let _ = picker.render(&context);
+        assert_eq!(picker.tick(), None);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// `/proc/kmsg` is a regular file whose read waits for the kernel's

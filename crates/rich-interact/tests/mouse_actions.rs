@@ -94,6 +94,33 @@ fn one_click_on_the_row_already_focused_only_focuses_it() {
 }
 
 #[test]
+fn a_click_before_opening_a_directory_does_not_count_inside_it() {
+    // `a/` and `b/`; `b/` is opened by clicking it twice (row 3). Inside,
+    // `..` is row 2 and `x.txt`, focused, is row 3 again: one click there
+    // must only focus it, not pick it as the second click of the pair.
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir(dir.path().join("a")).unwrap();
+    std::fs::create_dir(dir.path().join("b")).unwrap();
+    std::fs::write(dir.path().join("b").join("x.txt"), "").unwrap();
+    let picker = FilePicker::new("File", dir.path())
+        .jail(true)
+        .with_mouse(true);
+    let script = Script::new()
+        .click(4, 3)
+        .click(4, 3)
+        .click(4, 3)
+        .keys("esc");
+    let (outcome, record) = headless::run(picker, script, 40, 10);
+    assert_eq!(outcome.unwrap(), Outcome::Cancelled);
+    // It was inside `b/`, with `x.txt` shown, when the click came.
+    assert!(
+        record.frames.iter().any(|frame| frame.contains("x.txt")),
+        "{:?}",
+        record.frames
+    );
+}
+
+#[test]
 fn mouse_reporting_is_opt_in() {
     assert!(!Component::mouse(&Select::new("Fruit", fruit())));
     assert!(Component::mouse(

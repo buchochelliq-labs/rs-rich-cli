@@ -263,6 +263,9 @@ impl<T> Select<T> {
         self.default = None;
         self.menu = None;
         self.focus = 0;
+        // A click on the old items is not the first of a pair on the new
+        // ones, which may have another item at the same position.
+        self.clicked = None;
         self.refilter();
     }
 

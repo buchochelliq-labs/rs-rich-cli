@@ -112,7 +112,7 @@ failed before the fix.
     Ctrl+C included. Previews now open without blocking, read only regular
     files (checked once open), and read on a thread of their own: after
     250 ms the preview says the read has not finished, and fills in when it
-    does.
+    does, without a key press: the picker ticks until the result is drawn.
   - The line-prompt fallback (`CI=1`, `TERM=dumb`, no full terminal) wrote
     the header and prompt raw, so escape sequences in `--header` reached the
     terminal. Every component's line prompt now shows controls as text, as
@@ -130,7 +130,8 @@ failed before the fix.
     error (exit 2), not a misleading "no default value".
   - With `--mouse`, one click on the row that already had focus picked it
     at once; it now focuses, and a second click picks, in `choose`, `file`
-    and `color` alike.
+    and `color` alike. A click before a directory opened does not count as
+    the first of a pair inside it.
   - The help and docs said `rich asset --kind box` names were "for `--box`",
     an option rich does not have; they now say which names `--panel` takes.
   - Debug builds: crossterm's parser panicked on a mouse report at column or
