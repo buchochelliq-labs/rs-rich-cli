@@ -1531,6 +1531,7 @@ name = "rs-rich-interact"
 version = "0.0.1"
 dependencies = [
  "crossterm",
+ "libc",
  "rs-rich",
  "rs-rich-ext",
  "signal-hook",
