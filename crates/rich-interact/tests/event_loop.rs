@@ -205,6 +205,38 @@ fn a_resize_repaints_at_the_new_width() {
 }
 
 #[test]
+fn ctrl_z_suspends_and_repaints_the_whole_view_after() {
+    let mut backend = Headless::new(Script::new().keys("up ctrl+z up enter"), 40, 5);
+    backend.suspendable = true;
+    let record = backend.record();
+    let mut event_loop = EventLoop::new(backend, LoopOptions::default());
+    let handle = event_loop.mount(Counter::default());
+    event_loop.run().unwrap();
+    drop(event_loop);
+    assert_eq!(handle.take().unwrap(), Outcome::Done(2));
+    let record = record.borrow();
+    assert_eq!(record.suspends, 1);
+    // After the suspend the region starts again from the cursor: the whole
+    // view is written anew, not only what changed.
+    let at = record
+        .writes
+        .iter()
+        .rposition(|w| w.contains("count 1"))
+        .unwrap();
+    assert!(record.writes[at].contains("ticks 0"), "{:?}", record.writes);
+
+    // Without a terminal that can suspend, Ctrl+Z is the component's key.
+    let (outcome, record) = headless::run(
+        Counter::default(),
+        Script::new().keys("up ctrl+z enter"),
+        40,
+        5,
+    );
+    assert_eq!(outcome.unwrap(), Outcome::Done(1));
+    assert_eq!(record.suspends, 0);
+}
+
+#[test]
 fn hands_the_terminal_off_and_takes_it_back() {
     let (outcome, record) = headless::run(Counter::default(), Script::new().keys("e enter"), 40, 5);
     assert_eq!(outcome.unwrap(), Outcome::Done(0));

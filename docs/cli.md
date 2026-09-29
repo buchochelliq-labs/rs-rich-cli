@@ -878,7 +878,9 @@ and `filter` read at most 64 MiB and 1,000,000 lines of it, `write` at most
 pages at most 64 MiB (without a terminal it streams any amount through), so
 `yes | rich choose` ends with an input error (exit 3) instead of exhausting
 memory. SIGTERM, SIGHUP and SIGQUIT give the
-terminal back before the command ends.
+terminal back before the command ends. Ctrl+Z suspends a command as it would
+any other program: the terminal is given back to the shell, and `fg` takes it
+again and repaints.
 
 ## Use it in a script or CI
 

@@ -81,7 +81,7 @@ impl Component for Child {
         let text = match (&self.nested, self.returned) {
             (Some(nested), _) => nested.clone(),
             (None, Some(code)) => format!("back from handoff {code:?}"),
-            (None, None) => "child ready".to_string(),
+            (None, None) => format!("child ready pid {}.", std::process::id()),
         };
         View::new(context.markup(&text))
     }
@@ -162,6 +162,81 @@ fn a_session_inside_a_session_is_refused() {
     pty.send("n");
     // The inner run fails and the outer terminal is still raw.
     pty.wait_for("nested Err(\"ResourceBusy\") raw true");
+    pty.send("\r");
+    let (output, parser) = pty.finish();
+    assert!(
+        output.contains("OUTCOME Ok(Done(\"finished\"))"),
+        "{output}"
+    );
+    assert_restored(&output, &parser);
+}
+
+/// The child's process id, from its view.
+fn child_pid(pty: &Pty) -> String {
+    let text = pty.text();
+    let start = text.rfind("pid ").expect("the child shows its pid") + 4;
+    let end = start + text[start..].find('.').expect("pid ends with a dot");
+    text[start..end].to_string()
+}
+
+/// After the suspend: every mode left (so the shell has a normal terminal);
+/// after `SIGCONT`: every mode on again and the view painted anew.
+fn suspends_and_resumes(pty: &mut Pty, suspend: impl FnOnce(&mut Pty, &str)) {
+    pty.wait_for("child ready");
+    let pid = child_pid(pty);
+    let before = pty.text().len();
+    suspend(pty, &pid);
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let stopped = loop {
+        let text = pty.text();
+        let after = &text[before..];
+        if ["\x1b[?1049l", "\x1b[?1000l", "\x1b[?2004l", "\x1b[?25h"]
+            .iter()
+            .all(|mode| after.contains(mode))
+        {
+            break after.len();
+        }
+        assert!(std::time::Instant::now() < end, "not restored:\n{after:?}");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    let state = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok();
+    if let Some(state) = state {
+        // Stopped: `T` in the third field.
+        let field = state.rsplit(')').next().unwrap().split_whitespace().next();
+        assert_eq!(field, Some("T"), "{state}");
+    }
+    Command::new("kill").args(["-CONT", &pid]).status().unwrap();
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        let text = pty.text();
+        let resumed = &text[before + stopped..];
+        if resumed.contains("\x1b[?1049h") && resumed.contains("child ready") {
+            break;
+        }
+        assert!(std::time::Instant::now() < end, "not resumed:\n{resumed:?}");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+#[test]
+fn ctrl_z_gives_the_terminal_back_and_fg_takes_it_again() {
+    let mut pty = Pty::start("ctrl-z");
+    suspends_and_resumes(&mut pty, |pty, _| pty.send("\x1a"));
+    pty.send("\r");
+    let (output, parser) = pty.finish();
+    assert!(
+        output.contains("OUTCOME Ok(Done(\"finished\"))"),
+        "{output}"
+    );
+    assert_restored(&output, &parser);
+}
+
+#[test]
+fn sigtstp_from_outside_gives_the_terminal_back_too() {
+    let mut pty = Pty::start("sigtstp");
+    suspends_and_resumes(&mut pty, |_, pid| {
+        Command::new("kill").args(["-TSTP", pid]).status().unwrap();
+    });
     pty.send("\r");
     let (output, parser) = pty.finish();
     assert!(

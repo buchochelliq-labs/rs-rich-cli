@@ -19,7 +19,7 @@ use std::time::Duration;
 use rich::{ColorSystem, Console, Segment};
 
 use crate::component::{Component, Context, Flow, View};
-use crate::event::{Button, Event, Mouse, MouseKind};
+use crate::event::{Button, Event, Key, Mouse, MouseKind};
 use crate::paint::Painter;
 use crate::policy::{Fallback, LineIo, NotInteractive, Policy, StdLineIo};
 use crate::session::{Backend, Session, SessionOptions};
@@ -494,6 +494,25 @@ impl<'a> EventLoop<'a> {
         Ok(())
     }
 
+    /// The terminal is `columns` x `rows` (again): repaint every row, and
+    /// tell the components.
+    fn resized(&mut self, columns: u16, rows: u16) -> io::Result<()> {
+        self.size = (columns, rows);
+        self.console = Self::console(
+            self.size,
+            self.console.color_system(),
+            self.options.no_color,
+        );
+        self.painter.invalidate();
+        let event = Event::Resize { columns, rows };
+        for index in 0..self.mounted.len() {
+            if !self.mounted[index].0.finished() {
+                self.deliver(index, &event)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Run until every mounted component has finished. Ctrl+C finishes all
     /// of them as interrupted.
     pub fn run(&mut self) -> io::Result<()> {
@@ -520,20 +539,25 @@ impl<'a> EventLoop<'a> {
                         component.interrupt();
                     }
                 }
+                // Raw mode turns off the terminal's own Ctrl+Z, so it
+                // arrives as a key: suspend as the terminal would have. The
+                // region is finished first, as for a hand-off, so the
+                // shell's "Stopped" goes below it.
+                Some(Event::Key(key)) if key == Key::ctrl('z') && self.backend.can_suspend() => {
+                    let finish = self.painter.finish(false);
+                    self.backend.write(&finish)?;
+                    self.backend.suspend()?;
+                    self.painter.reset();
+                    let (columns, rows) = self.backend.size();
+                    self.resized(columns, rows)?;
+                }
                 Some(Event::Resize { columns, rows }) => {
-                    self.size = (columns, rows);
-                    self.console = Self::console(
-                        self.size,
-                        self.console.color_system(),
-                        self.options.no_color,
-                    );
-                    self.painter.invalidate();
-                    let event = Event::Resize { columns, rows };
-                    for index in 0..self.mounted.len() {
-                        if !self.mounted[index].0.finished() {
-                            self.deliver(index, &event)?;
-                        }
+                    // Back from a suspend started outside: what is on the
+                    // screen is the shell's, not the region.
+                    if self.backend.take_resumed() {
+                        self.painter.reset();
                     }
+                    self.resized(columns, rows)?;
                 }
                 Some(Event::Mouse(mouse)) => {
                     if let Some(index) = self.mouse_target(mouse) {
