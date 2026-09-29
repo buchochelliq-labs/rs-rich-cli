@@ -456,10 +456,14 @@ mod tests {
     #[test]
     fn a_linked_plugin_that_clashes_with_a_built_in_is_reported() {
         assert_eq!(check_plugin_set(vec![Box::new(Named("zz-good"))]), Ok(()));
-        // Checked against the built-ins, not an empty registry: `mermaid` is
-        // taken, and the plugins sorted after it would silently go missing.
-        let error = check_plugin_set(vec![Box::new(Named("zz-good")), Box::new(Named("mermaid"))])
-            .unwrap_err();
-        assert!(error.contains("mermaid"), "{error}");
+        // Checked against the built-ins, not an empty registry: `rich-ext` is
+        // taken in every build, and the plugins sorted after it would
+        // silently go missing.
+        let error = check_plugin_set(vec![
+            Box::new(Named("zz-good")),
+            Box::new(Named("rich-ext")),
+        ])
+        .unwrap_err();
+        assert!(error.contains("rich-ext"), "{error}");
     }
 }
