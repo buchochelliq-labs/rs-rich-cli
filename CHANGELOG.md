@@ -96,6 +96,19 @@ Entries below record subsequent releases and development.
   `Cell::from(Text::new(name))`. No API or rendering change. The tables guide
   and the 0.0.13 migration notes carry a security note.
 
+### Release workflow: a new crate's first version
+
+- crates.io offers Trusted Publishing only on a crate that already exists, so
+  a new crate's first version used to need a hand upload. `release.py
+  preflight` now also reports whether a selected crate exists at all. For a
+  brand-new crate, `release.yml` skips the OIDC exchange and uploads with the
+  `crates-io` environment's `CARGO_REGISTRY_TOKEN`, failing if it is missing.
+  Existing crates publish through Trusted Publishing only, as before, and a
+  test pins that only the new-crate step can read the secret. A selection
+  that mixes new and existing crates (a coordinated `vX.Y.Z` tag) is refused
+  before anything uploads. This is how `rs-rich-interact` and `rs-rich-record`
+  0.0.1 go out.
+
 ### Dependencies
 
 - `rs-rich-macros` builds on `syn` 3, and `rs-rich-record` on `color_quant`

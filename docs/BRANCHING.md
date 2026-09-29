@@ -338,8 +338,8 @@ lightweight tags are rejected before CI or publication.
 
 ### Registry authentication (Trusted Publishing)
 
-Since 0.0.10 the workflow holds no long-lived crates.io secret. After the
-preflight and dry run pass, `rust-lang/crates-io-auth-action` exchanges the job's
+Since 0.0.10 the workflow publishes existing crates with no long-lived
+crates.io secret. After the preflight and dry run pass, `rust-lang/crates-io-auth-action` exchanges the job's
 GitHub OIDC token (`id-token: write` on the `publish` job only) for a short-lived
 crates.io token, which only the upload step receives. A failed exchange stops
 the job before any crate is uploaded; `verify_only` runs never request a token.
@@ -354,10 +354,16 @@ repository secret.
 
 **A brand-new crate cannot start with Trusted Publishing.** crates.io only
 offers the setting on a crate that already exists, so a new crate's first
-version must be uploaded with a maintainer's API token, either by hand as below
-or through the workflow with a token secret added for that one run; the
-maintainer chooses. After that, add the Trusted Publishing entry and publish
-later versions from the workflow.
+version must be uploaded with a maintainer's API token. The workflow does this
+itself: its preflight reports a selected crate that does not exist yet, and
+then the token exchange is skipped and the upload uses the `crates-io`
+environment's `CARGO_REGISTRY_TOKEN` secret (the step fails if the secret is
+missing). Every existing crate still uses Trusted Publishing only; nothing else
+can read the secret. A selection that mixes new and existing crates (a
+coordinated `vX.Y.Z` tag) is refused before anything uploads: give each new
+crate its own tag first. Uploading by hand, as below, also works. After the first
+version is up, add the crate's Trusted Publishing entry, and publish later
+versions from the workflow as usual.
 `rs-rich-macros` was in this position for 0.0.11: a `rs-rich-macros-v0.0.1`
 tag run would have failed the token exchange, so 0.0.1 was published by hand on
 2026-09-24, after `rs-rich` 0.0.7 was on crates.io (it depends on the core) and
@@ -370,12 +376,13 @@ and before tagging `rs-rich-ext` 0.0.10 (which depends on it unconditionally);
 the `rs-rich-cli` 0.0.12 tag, which depends on each of them. The rule for any
 new crate: upload it only once every dependency it names, optional ones
 included, is on crates.io, and before anything that depends on it. 0.0.13
-adds `rs-rich-record` 0.0.1 the same way: by hand after `rs-rich-ext` 0.0.11,
-and before the `rs-rich-cli` 0.0.13 tag, whose default `record` feature
-depends on it; and `rs-rich-interact` 0.0.1 by hand after `rs-rich-ext`
-0.0.11, also before the `rs-rich-cli` 0.0.13 tag, whose default `interact`
-feature depends on it. From the tagged commit on
-`main`:
+adds `rs-rich-record` 0.0.1 after `rs-rich-ext` 0.0.11 and before the
+`rs-rich-cli` 0.0.13 tag, whose default `record` feature depends on it; and
+`rs-rich-interact` 0.0.1 after `rs-rich-ext` 0.0.11, also before the
+`rs-rich-cli` 0.0.13 tag, whose default `interact` feature depends on it. Both
+go through the workflow with their own tags (`rs-rich-interact-v0.0.1`,
+`rs-rich-record-v0.0.1`) and the environment's token. By hand, from the tagged
+commit on `main`:
 
 ```bash
 cargo publish -p rs-rich-macros --locked   # with a maintainer's API token

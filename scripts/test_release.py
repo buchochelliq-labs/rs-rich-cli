@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import json
+import os
 import subprocess
 import tempfile
 import tomllib
@@ -125,16 +126,52 @@ class PublicationTests(unittest.TestCase):
                 release.main()
         run.assert_not_called()
 
+    @patch("release.crate_status", return_value=200)
     @patch("release.registry_status", return_value=404)
-    def test_preflight_queries_only_selected_versions(self, status):
-        release.preflight({"rs-rich-art": "0.0.3"})
+    def test_preflight_queries_only_selected_versions(self, status, crate):
+        self.assertEqual([], release.preflight({"rs-rich-art": "0.0.3"}))
         status.assert_called_once_with("rs-rich-art", "0.0.3")
+        crate.assert_called_once_with("rs-rich-art")
 
     def test_preflight_fails_closed(self):
         for code in (200, 403, 429, 500):
-            with self.subTest(code=code), patch("release.registry_status", return_value=code):
+            with self.subTest(code=code), patch("release.registry_status", return_value=code), \
+                    patch("release.crate_status", return_value=200):
                 with self.assertRaises(RuntimeError):
                     release.preflight({"rs-rich-cli": "0.0.3"})
+
+    @patch("release.registry_status", return_value=404)
+    def test_preflight_names_a_brand_new_crate(self, status):
+        # Its first version cannot use Trusted Publishing (docs/BRANCHING.md).
+        with patch("release.crate_status", return_value=404):
+            self.assertEqual(["rs-rich-record"], release.preflight({"rs-rich-record": "0.0.1"}))
+
+    @patch("release.registry_status", return_value=404)
+    def test_preflight_refuses_new_and_existing_crates_together(self, status):
+        # A coordinated release would push the existing crates through the
+        # new-crate token, which trusted-publishing-only crates reject after
+        # earlier packages have uploaded.
+        exists = {"rs-rich": 200, "rs-rich-record": 404}
+        with patch("release.crate_status", side_effect=lambda name: exists[name]):
+            with self.assertRaisesRegex(RuntimeError, "mixes new crates"):
+                release.preflight({"rs-rich": "0.0.9", "rs-rich-record": "0.0.1"})
+
+    @patch("release.registry_status", return_value=404)
+    def test_preflight_fails_closed_when_crate_existence_is_unknown(self, status):
+        for code in (403, 429, 500):
+            with self.subTest(code=code), patch("release.crate_status", return_value=code):
+                with self.assertRaises(RuntimeError):
+                    release.preflight({"rs-rich-record": "0.0.1"})
+
+    @patch("release.crate_status", return_value=404)
+    @patch("release.registry_status", return_value=404)
+    def test_preflight_exports_whether_a_crate_is_new(self, status, crate):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output"
+            env = {"RELEASE_SELECTION": '{"rs-rich-interact":"0.0.1"}', "GITHUB_OUTPUT": str(output)}
+            with patch.dict(os.environ, env), patch("sys.argv", ["release.py", "preflight"]):
+                release.main()
+            self.assertEqual("new_crate=true\n", output.read_text(encoding="utf-8"))
 
     @patch("release.subprocess.run")
     def test_publish_and_dry_run_use_same_selection(self, run):

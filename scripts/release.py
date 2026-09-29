@@ -86,14 +86,45 @@ def registry_status(name, version):
         return error.code
 
 
+def crate_status(name):
+    request = Request(f"https://crates.io/api/v1/crates/{name}",
+                      headers={"User-Agent": "rs-rich-release"})
+    try:
+        with urlopen(request, timeout=30) as response:
+            return response.status
+    except HTTPError as error:
+        return error.code
+
+
 def preflight(selection):
+    """Refuse versions that exist; return the selected crates not yet on crates.io.
+
+    Trusted Publishing works only for a crate that already exists, so the
+    workflow uploads a brand-new crate's first version with the `crates-io`
+    environment's token instead (docs/BRANCHING.md, Registry authentication).
+    """
+    new = []
     for name, version in selection.items():
         code = registry_status(name, version)
         if code == 200:
             raise RuntimeError(f"{name}@{version} already exists; refusing release")
         if code != 404:
             raise RuntimeError(f"Could not verify availability of {name}@{version} (HTTP {code})")
-        print(f"{name}@{version} is available", flush=True)
+        crate = crate_status(name)
+        if crate == 404:
+            new.append(name)
+        elif crate != 200:
+            raise RuntimeError(f"Could not check whether {name} exists (HTTP {crate})")
+        print(f"{name}@{version} is available{' (new crate)' if crate == 404 else ''}", flush=True)
+    # One upload uses one credential: the token for new crates, the exchange
+    # for existing ones, which may be set to Trusted Publishing only and then
+    # reject the token after `--workspace` has uploaded earlier packages.
+    if new and len(new) != len(selection):
+        raise RuntimeError(
+            f"Refusing a release that mixes new crates ({', '.join(new)}) with existing "
+            "ones; publish each new crate with its own tag first"
+        )
+    return new
 
 
 def publish(selection, dry_run=False):
@@ -175,7 +206,10 @@ def main():
             if not isinstance(version, str) or not re.fullmatch(VERSION, version):
                 raise ValueError("Invalid release version")
         if args.command == "preflight":
-            preflight(selection)
+            new = preflight(selection)
+            if output := os.environ.get("GITHUB_OUTPUT"):
+                with open(output, "a", encoding="utf-8") as stream:
+                    stream.write(f"new_crate={'true' if new else 'false'}\n")
         elif args.command == "publish":
             publish(selection, args.dry_run)
         else:

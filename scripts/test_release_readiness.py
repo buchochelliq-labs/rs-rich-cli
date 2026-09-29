@@ -247,9 +247,16 @@ class ReadinessTests(unittest.TestCase):
 
     def test_release_publishes_with_trusted_publishing_only(self):
         workflow = (ROOT / ".github/workflows/release.yml").read_text()
-        # No long-lived registry secret: the upload token comes from the OIDC
-        # exchange, which is requested only by the publish job.
-        self.assertNotIn("secrets.CARGO_REGISTRY_TOKEN", workflow)
+        # The upload token comes from the OIDC exchange, which is requested
+        # only by the publish job. The one exception is a brand-new crate's
+        # first version: only the step gated on the preflight's `new_crate`
+        # may read the environment's token.
+        self.assertEqual(1, workflow.count("secrets.CARGO_REGISTRY_TOKEN"))
+        new_crate = workflow[workflow.index("Publish a new crate's first version"):]
+        self.assertIn("steps.preflight.outputs.new_crate == 'true'", new_crate.split("env:")[0])
+        self.assertIn("secrets.CARGO_REGISTRY_TOKEN", new_crate)
+        exchange = workflow[workflow.index("Authenticate with crates.io Trusted Publishing"):]
+        self.assertIn("steps.preflight.outputs.new_crate != 'true'", exchange.split("uses:")[0])
         self.assertIn("uses: rust-lang/crates-io-auth-action@v1", workflow)
         self.assertIn("CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}", workflow)
         self.assertEqual(1, workflow.count("id-token: write"))
