@@ -19,6 +19,11 @@
 //! Every run is inside a render scope (`ext::common::scoped`), so Python
 //! renderables in previews, confirmation bodies and pagers render, and an
 //! exception raised by Python code during the run comes out of the call.
+//!
+//! Components compose (0.0.14): `compose` has `Component` to subclass and
+//! the containers, which build a Rust tree of the same components for each
+//! run, and `keymap` the `Keymap` and `Binding` a component declares its
+//! keys with.
 
 use std::time::Duration;
 
@@ -33,12 +38,14 @@ use pyo3::{PyTraverseError, PyVisit};
 use rich_interact::headless::{self, Script as CoreScript};
 use rich_interact::policy::{LineIo, ScriptedLineIo};
 use rich_interact::{
-    Component, Context, Error as RunError, Event, Fallback, Flow, Key, LoopOptions,
-    NotInteractive as CoreNot, Outcome as CoreOutcome, Output, Policy, Reason, RunOptions,
-    SessionOptions, View,
+    Component, Context, Error as RunError, Event, Fallback, Flow, Key, Keymap as CoreKeymap,
+    LoopOptions, NotInteractive as CoreNot, Outcome as CoreOutcome, Output, Policy, Reason,
+    RunOptions, SessionOptions, View,
 };
 
 mod components;
+mod compose;
+mod keymap;
 mod pickers;
 
 use crate::ext::common::scoped;
@@ -568,6 +575,22 @@ impl<C: Component> Component for Guarded<C> {
         self.0.mouse()
     }
 
+    fn keymap(&self) -> CoreKeymap {
+        self.0.keymap()
+    }
+
+    fn focusable(&self) -> bool {
+        self.0.focusable()
+    }
+
+    fn focus_step(&mut self, forward: bool) -> bool {
+        self.0.focus_step(forward)
+    }
+
+    fn focus_enter(&mut self, forward: bool) -> bool {
+        self.0.focus_enter(forward)
+    }
+
     fn default_value(&self) -> Option<C::Output> {
         self.0.default_value()
     }
@@ -836,6 +859,14 @@ fn interact_degrade(
     components::drive(py, component, mode)
 }
 
+/// `keymap(component)`: the bindings `component` (a composition or any
+/// component) has before its first event, its focused child's first: what
+/// a help overlay lists.
+#[pyfunction]
+fn interact_keymap(py: Python<'_>, component: &Bound<'_, PyAny>) -> PyResult<keymap::Keymap> {
+    compose::keymap_of(py, component)
+}
+
 // ---------------------------------------------------------------------------
 // Fuzzy matching
 
@@ -923,8 +954,11 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(interact_ask, m)?)?;
     m.add_function(wrap_pyfunction!(interact_headless, m)?)?;
     m.add_function(wrap_pyfunction!(interact_degrade, m)?)?;
+    m.add_function(wrap_pyfunction!(interact_keymap, m)?)?;
     m.add_function(wrap_pyfunction!(fuzzy_match, m)?)?;
     m.add_function(wrap_pyfunction!(fuzzy_rank, m)?)?;
     pickers::register(m)?;
+    keymap::register(m)?;
+    compose::register(m)?;
     components::register(m)
 }
