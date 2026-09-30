@@ -78,6 +78,7 @@ The guides in the other sections explain how to use them.
 - [`rs_rich.markup`](rs_rich/markup.md)
 - [`rs_rich.measure`](rs_rich/measure.md)
 - [`rs_rich.mermaid`](rs_rich/mermaid.md)
+- [`rs_rich.micro`](rs_rich/micro.md)
 - [`rs_rich.padding`](rs_rich/padding.md)
 - [`rs_rich.pager`](rs_rich/pager.md)
 - [`rs_rich.panel`](rs_rich/panel.md)

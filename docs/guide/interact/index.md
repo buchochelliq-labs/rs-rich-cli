@@ -238,7 +238,10 @@ parses, as `ColorFormat::Hex`, `Name` or `Rgb` says.
 An emoji, a box style or a spinner, for `rich asset`, with a preview (the
 emoji, a small table drawn in the style, the spinner's frames). The lists
 come from core's public API: the emoji names are those of core's table,
-each resolved through `rich::emoji::replace`.
+each resolved through `rich::emoji::replace`. With the `micro` feature,
+`AssetKind::Micro` (or `AssetPicker::micro(prompt, &registry)`) lists micro
+assets, each drawn in its row and magnified in the preview, and answers
+with the asset's name.
 
 ### TableSelect and TreeSelect
 

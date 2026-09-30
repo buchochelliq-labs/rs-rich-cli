@@ -7,10 +7,17 @@ port, and core is unchanged: `:micro:name:` is not an emoji code, so it
 passes through core as plain text.
 
 Version 0.0.1 holds the model, the `.richmicro` package format, the layered
-registry, the markup, and the drawing: Kitty, iTerm2 or Sixel images where
-the terminal supports them, half-block cells or the emoji or text fallback
-everywhere else, with animation. A built-in library and a `rich micro`
-command follow in a later release.
+registry, the markup, the drawing (Kitty, iTerm2 or Sixel images where the
+terminal supports them, half-block cells or the emoji or text fallback
+everywhere else, with animation), the image pipeline that makes packages,
+and a built-in library (`status/`, `dev/` and `fun/` sets).
+
+- [Authoring micro assets](authoring.md): the pipeline, `rich micro
+  create`, the manifest, packs and the built-in library.
+- [Micro assets in the `rich` CLI](cli.md): `rich micro`, `:micro:` in
+  `--print --emoji`, `rich asset --kind micro`, `rich explore --icons`.
+- [Terminal compatibility](terminals.md): what each terminal draws.
+- From Python: [`rs_rich.micro`](https://buchochelliq-labs.github.io/rs-rich-cli/python/micro/).
 
 The asset and markup samples below are the crate's doc tests, which CI runs.
 
@@ -172,18 +179,8 @@ later run reads a tiny PNG instead of decoding the source.
 
 ### Terminal compatibility
 
-| Terminal | Drawn with | Animation |
-|---|---|---|
-| kitty | Kitty placeholders | native |
-| Ghostty, WezTerm (`RICH_MICRO=kitty`) | Kitty placeholders | native |
-| iTerm2, WezTerm | iTerm2 inline images | native (GIF) |
-| foot, mlterm, Windows Terminal ≥ 1.22, mintty | Sixel (when the cell size is known) | frame by frame |
-| other colour terminals | half-blocks or the emoji | frame by frame (blocks) |
-| pipes, logs, exports, `TERM=dumb` | the text fallback | none |
-
-Inside tmux or screen, graphics pass through only when they are configured to
-allow it; set `RICH_MICRO=blocks` or `text` there. WebP animations and
-frame-sequence animations draw their still image in this release.
+What each terminal draws, the overrides, and how to check yours are on
+[their own page](terminals.md).
 
 ## Packages
 
@@ -223,7 +220,8 @@ out of it) are refused. Unknown manifest fields and any `schema_version` but
 
 Layers resolve in this order, a later one winning:
 
-1. built-in (empty in 0.0.1);
+1. built-in: the library's own set, compiled in (`MicroRegistry::builtin()`,
+   or `MicroRoots::from_env`, which turns it on);
 2. the user's, `~/.config/rich/micro/`;
 3. a trusted project's, `.rich/micro/`;
 4. inline, added in code.

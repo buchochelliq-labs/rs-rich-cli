@@ -113,6 +113,69 @@ Nothing in `rs-rich` changes.
   [Interactive components](docs/python/interact.md) the `Component` class
   and the containers.
 
+### Micro assets: pipeline, built-in library, `rich micro` and the showcase
+
+Versions: `rs-rich` (PyPI, `crates/rich-py`) 0.0.2 → 0.0.3. `rs-rich-art`
+0.0.12, `rs-rich-micro` 0.0.1, `rs-rich-interact` 0.0.2 and `rs-rich-cli`
+0.0.14 change but are unpublished and keep their versions. Nothing in
+`rs-rich` changes.
+
+0.0.14 workstream 7 ([plan](docs/plans/0.0.14.md), #568, #571, #572, #581,
+#582, #587): the tools to make and use micro assets, and the interactive
+views that show them.
+
+- **Pipeline (#571, #572).** `rich_micro::pipeline::Pipeline` fits any PNG,
+  APNG, GIF or JPEG to exactly an asset's cells, frame by frame: brightness,
+  contrast, gamma and grayscale; contain, cover (with an anchor) or stretch;
+  an optional unsharp mask; transparency cut at a threshold, kept, flattened
+  or keyed from a colour; an optional palette with dithering; then
+  animations are deduplicated and rate-limited. `Processed::preview`
+  magnifies the result. `rich_micro::create::write_package` writes a package
+  directory or `.richmicro` zip and reads it back, so what it returns is
+  what the registry accepts. Built on new `rs-rich-art` graphics helpers:
+  `fill_pixels`, `adjust`, `sharpen`, `threshold_alpha`, `reduce_colors`.
+- **Built-in library (#581).** `status/success`, `status/warning`,
+  `status/error`, `status/info`, `status/loading` (animated), `dev/bug`,
+  `dev/branch`, `dev/terminal`, `dev/package`, `fun/heart` (animated),
+  `fun/star`, `fun/cat` and `fun/coffee` (animated), drawn for this project
+  by `examples/gen_builtin.rs` and embedded (`rich_micro::builtin`). Each has
+  alt text, an emoji and a text fallback and the MIT licence; no
+  third-party logos; every name is namespaced, so none is an emoji code.
+  Tests enforce all of that and that the committed files match the
+  generator. `MicroRegistry::builtin()` loads it;
+  `MicroRoots::builtin_set` (on in `from_env`) puts it under
+  `MicroRegistry::load`. A `PackageLocation::BuiltIn` locates its files.
+- **CLI (#568, #582).** `rich micro list | show | preview | add | remove |
+  create | install | uninstall | packs`, with `--report json` (or `--json`).
+  `add`, `remove`, `install`, `uninstall` and `create --add` use the user
+  layer unless `--project`. The project's `.rich/micro/` loads only when
+  trusted: `--micro-project`, or the new `micro_project` key in the user's
+  own config; a working-directory `rich.toml` cannot set it (ignored with a
+  warning, as for `plugins`). `:micro:name:` expands in `--print` markup
+  with `--emoji`, drawn as the terminal can. `rich asset --kind micro` and
+  `rich explore --icons` (status assets for `true`, `false` and `null`).
+- **Interact.** `Select::set_icons` (and `TreeSelect`/`TableSelect`),
+  `StatusItem::Icon` / `StatusItem::icon`, `Breadcrumbs::icons`,
+  `Palette::category_icon` / `Overlays::category_icon`,
+  `DataExplorer::icons` and `kit::icon` keep an icon's style metadata, so
+  the painter's graphics draw micro assets in rows, badges, crumbs and
+  palette categories. A new `micro` feature adds `AssetKind::Micro`,
+  `AssetPicker::micro` and `StatusItem::micro`; the `micro_showcase`
+  example shows them all. Migration: an exhaustive `match` on `AssetKind`
+  or `StatusItem` needs the new variants (or a wildcard when another crate
+  may turn on `micro`).
+- **Python.** `rs_rich.micro`: `MicroRegistry`, `MicroAsset` and
+  `MicroMarkup` (renderables drawn as the console can), `micro_markup`,
+  `micro_load_package`, `micro_create_package` and `micro_mode`, with stubs
+  and tests; `AssetPicker("micro")`.
+- **Docs (#587).** [Authoring micro assets](docs/guide/micro/authoring.md),
+  [micro assets in the CLI](docs/guide/micro/cli.md), a
+  [terminal compatibility matrix](docs/guide/micro/terminals.md), a Python
+  page, and tapes of `rich micro`, micro assets in the chrome and palette,
+  and `rich explore --icons`, run in CI by `rich record --check`. They are
+  recorded in a PTY with no image protocol, so they show the emoji and
+  half-block fallbacks.
+
 ### Micro 0.0.1 (new crate): model, packages, registry, markup
 
 - New crate `rs-rich-micro` (`rich_micro`, #565), the foundation for micro

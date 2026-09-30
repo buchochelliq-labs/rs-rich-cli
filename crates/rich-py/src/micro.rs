@@ -59,7 +59,13 @@ fn layer(name: &str) -> PyResult<Layer> {
         "user" => Layer::User,
         "project" => Layer::Project,
         "inline" => Layer::Inline,
-        other => return Err(bad_choice("layer", other, "built-in, user, project or inline")),
+        other => {
+            return Err(bad_choice(
+                "layer",
+                other,
+                "built-in, user, project or inline",
+            ))
+        }
     })
 }
 
@@ -257,9 +263,11 @@ impl MicroRegistry {
             .iter()
             .map(|r| format!("{}: {}", r.path.display(), r.error))
             .collect();
-        rejected.extend(report.untrusted_project.map(|dir| {
-            format!("{}: not loaded, the project is not trusted", dir.display())
-        }));
+        rejected.extend(
+            report
+                .untrusted_project
+                .map(|dir| format!("{}: not loaded, the project is not trusted", dir.display())),
+        );
         Ok(MicroRegistry {
             inner: std::sync::RwLock::new(Arc::new(registry)),
             rejected,
@@ -381,7 +389,8 @@ struct Drawn {
 
 impl Drawn {
     fn text(&self, console: &CoreConsole) -> rich::Text {
-        let prepared = rich_micro::PreparedMarkup::new(&self.markup, &self.registry, self.preference);
+        let prepared =
+            rich_micro::PreparedMarkup::new(&self.markup, &self.registry, self.preference);
         prepared.finish(&console.build_text(prepared.markup()))
     }
 }
