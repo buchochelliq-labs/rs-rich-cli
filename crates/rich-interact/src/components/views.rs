@@ -92,7 +92,11 @@ pub fn table_keymap() -> Keymap {
         .bind("copy-row", keys("ctrl+y"), "copy the row")
         .bind("copy-cell", keys("alt+y"), "copy the focused cell")
         .bind("next-column", keys("ctrl+right"), "focus the next column")
-        .bind("previous-column", keys("ctrl+left"), "focus the previous column")
+        .bind(
+            "previous-column",
+            keys("ctrl+left"),
+            "focus the previous column",
+        )
         .bind("copy-format", keys("alt+f"), "copy as text, CSV or JSON")
 }
 
@@ -258,7 +262,8 @@ impl<T> TableSelect<T> {
         };
         let result = clipboard::copy(copied);
         let what = format!("{what} as {}", self.format.name());
-        self.select.set_status(Some(clipboard::report(&what, &result)));
+        self.select
+            .set_status(Some(clipboard::report(&what, &result)));
     }
 
     /// Carry out a table key; `false` when `key` is not one.
@@ -684,7 +689,13 @@ fn breadcrumb_line(path: &[&str], width: usize) -> Vec<Segment> {
     let total = |from: usize| -> usize {
         let names: usize = path[from..].iter().map(|name| cell_len(name)).sum();
         let gaps = path.len().saturating_sub(from + 1) * cell_len(separator);
-        names + gaps + if from > 0 { cell_len("…") + cell_len(separator) } else { 0 }
+        names
+            + gaps
+            + if from > 0 {
+                cell_len("…") + cell_len(separator)
+            } else {
+                0
+            }
     };
     while first + 1 < path.len() && total(first) > room {
         first += 1;

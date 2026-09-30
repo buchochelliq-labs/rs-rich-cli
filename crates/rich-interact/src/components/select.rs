@@ -1145,6 +1145,26 @@ impl<T> MultiSelect<T> {
         MultiSelect(self.0.with_mouse(on))
     }
 
+    /// See [`Select::reload_on`]: marks stay with their items.
+    pub fn reload_on(
+        self,
+        key: Key,
+        source: impl FnMut() -> Vec<Item<T>> + Send + 'static,
+    ) -> Self {
+        MultiSelect(self.0.reload_on(key, source))
+    }
+
+    /// See [`Select::reload_from`].
+    pub fn reload_from(self, feed: Receiver<Vec<Item<T>>>) -> Self {
+        MultiSelect(self.0.reload_from(feed))
+    }
+
+    /// Replace the items, keeping the query, the focus and the marks: see
+    /// [`Select::reload`].
+    pub fn reload(&mut self, items: Vec<Item<T>>) {
+        self.0.reload(items);
+    }
+
     /// Mark these items to begin with; they are also the default without a
     /// terminal.
     pub fn marked(mut self, indices: impl IntoIterator<Item = usize>) -> Self {

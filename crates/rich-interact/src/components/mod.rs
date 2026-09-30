@@ -6,23 +6,29 @@
 mod asset;
 mod color;
 mod confirm;
+#[cfg(feature = "data")]
+mod explore;
 mod file;
 mod form;
 mod input;
 mod pager;
 mod select;
 mod textarea;
+mod theme;
 mod views;
 
 pub use asset::{emoji, AssetKind, AssetPicker, BOX_STYLES};
 pub use color::{ColorFormat, ColorPicker};
 pub use confirm::{Choice, Confirm};
+#[cfg(feature = "data")]
+pub use explore::{explore_keymap, json_path, DataExplorer};
 pub use file::{display_name, display_path, FileMode, FilePicker};
 pub use form::{Answers, Form, Value};
 pub use input::{input_keymap, Input, Provider, Suggestion};
 pub use pager::Pager;
 pub use select::{select_keymap, MultiSelect, PreviewLayout, Select};
 pub use textarea::TextArea;
+pub use theme::{ThemePicker, THEME_SAMPLE};
 pub use views::{table_keymap, tree_keymap, TableSelect, TreeSelect};
 
 use rich::Style;

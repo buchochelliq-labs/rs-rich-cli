@@ -90,7 +90,9 @@ pub fn report(what: &str, result: &Result<(), ClipboardError>) -> String {
     match result {
         Ok(()) => format!("copied {what}"),
         Err(ClipboardError::Unsupported(_)) => {
-            format!("cannot copy {what}: no terminal clipboard (set {CLIPBOARD_VAR}=1 to force OSC 52)")
+            format!(
+                "cannot copy {what}: no terminal clipboard (set {CLIPBOARD_VAR}=1 to force OSC 52)"
+            )
         }
         Err(error) => format!("cannot copy {what}: {error}"),
     }

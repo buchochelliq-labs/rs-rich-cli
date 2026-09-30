@@ -24,8 +24,12 @@
 //! - [`headless`]: scripted events in, frames out, for tests;
 //! - [`components`]: [`Select`], [`MultiSelect`], [`TableSelect`],
 //!   [`TreeSelect`], [`Input`], [`TextArea`], [`Confirm`], [`Form`],
-//!   [`Pager`], [`FilePicker`], [`ColorPicker`] and [`AssetPicker`], built on
-//!   the above with a [`fuzzy`] matcher.
+//!   [`Pager`], [`FilePicker`], [`ColorPicker`], [`AssetPicker`] and
+//!   [`ThemePicker`], built on the above with a [`fuzzy`] matcher, and with
+//!   the `data` feature `DataExplorer`, for JSON, YAML, TOML and the other
+//!   formats `rich_ext::data` reads;
+//! - [`clipboard`]: copy to the terminal's clipboard with OSC 52, when it
+//!   takes it.
 //!
 //! Components compose (0.0.14): [`compose`] has containers that are
 //! components themselves ([`Column`], [`Row`], [`Stack`], [`Split`],
@@ -94,10 +98,12 @@ pub mod viewport;
 
 pub use chrome::{Breadcrumbs, StatusBar, StatusItem};
 pub use component::{Component, Context, Flow, View};
+#[cfg(feature = "data")]
+pub use components::DataExplorer;
 pub use components::{
     Answers, AssetKind, AssetPicker, Choice, ColorFormat, ColorPicker, Confirm, FileMode,
     FilePicker, Form, Input, MultiSelect, Pager, PreviewLayout, Select, Suggestion, TableSelect,
-    TextArea, Theme, TreeSelect, Value,
+    TextArea, Theme, ThemePicker, TreeSelect, Value,
 };
 pub use compose::{
     Axis, Column, ComponentExt, Label, Layer, LayerHandle, Layers, Rect, Row, Size, Split, Stack,

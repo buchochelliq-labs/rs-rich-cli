@@ -51,7 +51,14 @@ pub const CLIPBOARD_VAR: &str = "RICH_CLIPBOARD";
 pub const MAX_BYTES: usize = 74_994;
 
 /// Terminals that take OSC 52 by default, by `TERM_PROGRAM`.
-const PROGRAMS: &[&str] = &["iTerm.app", "WezTerm", "ghostty", "vscode", "rio", "contour"];
+const PROGRAMS: &[&str] = &[
+    "iTerm.app",
+    "WezTerm",
+    "ghostty",
+    "vscode",
+    "rio",
+    "contour",
+];
 
 /// Terminals that take OSC 52 by default, by the start of `TERM`.
 const TERMS: &[&str] = &[
@@ -100,11 +107,7 @@ pub fn detect(env: &dyn Environment) -> Field<bool> {
     }
     if let Some(program) = get("TERM_PROGRAM") {
         if PROGRAMS.iter().any(|p| program.eq_ignore_ascii_case(p)) {
-            return field(
-                true,
-                var("TERM_PROGRAM"),
-                format!("TERM_PROGRAM={program}"),
-            );
+            return field(true, var("TERM_PROGRAM"), format!("TERM_PROGRAM={program}"));
         }
     }
     if TERMS.iter().any(|t| lower.starts_with(t)) {
@@ -135,7 +138,10 @@ impl fmt::Display for ClipboardError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ClipboardError::Unsupported(reason) => {
-                write!(f, "the terminal clipboard is off ({reason}; set {CLIPBOARD_VAR}=1 to force it)")
+                write!(
+                    f,
+                    "the terminal clipboard is off ({reason}; set {CLIPBOARD_VAR}=1 to force it)"
+                )
             }
             ClipboardError::TooLarge { bytes } => write!(
                 f,
@@ -212,8 +218,7 @@ pub fn osc52(text: &str) -> Result<String, ClipboardError> {
 
 /// Standard base64, padded.
 fn base64(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
         let n = (u32::from(chunk[0]) << 16)
