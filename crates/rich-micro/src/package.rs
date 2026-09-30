@@ -206,9 +206,8 @@ impl Source {
         for index in 0..archive.len() {
             let entry = archive.by_index_raw(index).map_err(|e| io_error(path, e))?;
             let name = entry.name().to_string();
-            let normal = safe_relative(&name).map_err(|e| {
-                MicroError::UnsafePath(format!("{}: {e}", path.display()))
-            })?;
+            let normal = safe_relative(&name)
+                .map_err(|e| MicroError::UnsafePath(format!("{}: {e}", path.display())))?;
             if entry.is_symlink() {
                 return Err(MicroError::UnsafePath(format!(
                     "{}: {name:?} is a symbolic link",
@@ -405,8 +404,7 @@ fn string<'a>(
 }
 
 fn required<'a>(map: &'a Map<String, Value>, key: &str, what: &str) -> Result<&'a str, MicroError> {
-    string(map, key, what)?
-        .ok_or_else(|| MicroError::Manifest(format!("{what}: missing {key:?}")))
+    string(map, key, what)?.ok_or_else(|| MicroError::Manifest(format!("{what}: missing {key:?}")))
 }
 
 fn strings(map: &Map<String, Value>, key: &str, what: &str) -> Result<Vec<String>, MicroError> {
@@ -580,14 +578,21 @@ fn read_package(
         animation,
         frames,
     };
-    let total_frames: u64 = variants.iter().map(|image| image.info.frames as u64).sum::<u64>() - 1;
+    let total_frames: u64 = variants
+        .iter()
+        .map(|image| image.info.frames as u64)
+        .sum::<u64>()
+        - 1;
     if total_frames > limits.max_frames as u64 {
         return Err(MicroError::Limit(format!(
             "{what}: more than {} frames in all",
             limits.max_frames
         )));
     }
-    let decoded: u64 = variants.iter().map(|image| image.info.decoded_bytes()).sum();
+    let decoded: u64 = variants
+        .iter()
+        .map(|image| image.info.decoded_bytes())
+        .sum();
     if decoded > limits.max_decoded_bytes {
         return Err(MicroError::Limit(format!(
             "{what}: its images take {decoded} bytes decoded; the limit is {}",
@@ -597,9 +602,7 @@ fn read_package(
 
     let kind = match string(&map, "kind", &what)? {
         Some(kind) => kind.parse().map_err(in_manifest)?,
-        None if variants.animation.is_some() || !variants.frames.is_empty() => {
-            AssetKind::Animated
-        }
+        None if variants.animation.is_some() || !variants.frames.is_empty() => AssetKind::Animated,
         None => AssetKind::Static,
     };
     let asset = asset
@@ -718,7 +721,9 @@ pub fn load_pack(path: &Path, layer: Layer, limits: &Limits) -> Result<Pack, Mic
 pub fn load(path: &Path, layer: Layer, limits: &Limits) -> Result<Loaded, MicroError> {
     let metadata = std::fs::symlink_metadata(path).map_err(|e| io_error(path, e))?;
     let is_dir = if metadata.file_type().is_symlink() {
-        std::fs::metadata(path).map_err(|e| io_error(path, e))?.is_dir()
+        std::fs::metadata(path)
+            .map_err(|e| io_error(path, e))?
+            .is_dir()
     } else {
         metadata.is_dir()
     };
@@ -753,7 +758,15 @@ mod tests {
         assert_eq!(safe_relative("a/b.png").unwrap(), "a/b.png");
         assert_eq!(safe_relative("frames/").unwrap(), "frames");
         for bad in [
-            "", "/etc/passwd", "../x", "a/../../x", "a/./b", "a//b", "C:/x", "a\\b", "a\0",
+            "",
+            "/etc/passwd",
+            "../x",
+            "a/../../x",
+            "a/./b",
+            "a//b",
+            "C:/x",
+            "a\\b",
+            "a\0",
         ] {
             assert!(
                 matches!(safe_relative(bad), Err(MicroError::UnsafePath(_))),

@@ -34,7 +34,11 @@ fn tree() -> Tree {
     with_alt(&user.join("ok.richmicro"), "ok", "user ok");
     with_alt(&user.join("user-only"), "user-only", "user only");
     with_alt(&project_dir.join("ok"), "ok", "project ok");
-    with_alt(&project_dir.join("project-only"), "project-only", "project only");
+    with_alt(
+        &project_dir.join("project-only"),
+        "project-only",
+        "project only",
+    );
     Tree {
         roots: MicroRoots {
             builtin: Some(builtin),
@@ -63,8 +67,14 @@ fn layers_resolve_in_order() {
     let (mut registry, report) = MicroRegistry::load(&trusted, &limits);
     assert!(report.untrusted_project.is_none());
     let ok = registry.resolve("ok").unwrap();
-    assert_eq!((ok.alt(), ok.origin().layer), ("project ok", Layer::Project));
-    assert_eq!(registry.resolve("project-only").unwrap().alt(), "project only");
+    assert_eq!(
+        (ok.alt(), ok.origin().layer),
+        ("project ok", Layer::Project)
+    );
+    assert_eq!(
+        registry.resolve("project-only").unwrap().alt(),
+        "project only"
+    );
     let shadowed: Vec<&str> = registry.shadowed("ok").iter().map(|a| a.alt()).collect();
     assert_eq!(shadowed, ["user ok", "built-in ok"]);
 
@@ -73,7 +83,10 @@ fn layers_resolve_in_order() {
         .add(Layer::Inline, MicroAsset::new("ok", "inline ok").unwrap())
         .unwrap();
     assert_eq!(registry.resolve("ok").unwrap().alt(), "inline ok");
-    assert_eq!(registry.get(Layer::BuiltIn, "ok").unwrap().alt(), "built-in ok");
+    assert_eq!(
+        registry.get(Layer::BuiltIn, "ok").unwrap().alt(),
+        "built-in ok"
+    );
     assert_eq!(registry.names(), ["ok", "project-only", "user-only"]);
 
     // Removing the inline one uncovers the project's.
@@ -127,7 +140,11 @@ fn collisions_are_deterministic_and_reported() {
     // A broken package is rejected; the rest load.
     let mut bad = manifest("broken");
     bad["schema_version"] = json!(0);
-    package_dir(&dir.path().join("c-broken"), &bad, &[("static.png", png(1, 1))]);
+    package_dir(
+        &dir.path().join("c-broken"),
+        &bad,
+        &[("static.png", png(1, 1))],
+    );
     // Hidden entries and stray files are skipped.
     with_alt(&dir.path().join(".hidden"), "hidden", "hidden");
     std::fs::write(dir.path().join("README.txt"), "notes").unwrap();
@@ -140,7 +157,10 @@ fn collisions_are_deterministic_and_reported() {
         assert!(registry.resolve("hidden").is_none());
         assert_eq!(report.collisions.len(), 1);
         let collision = &report.collisions[0];
-        assert_eq!((collision.layer, collision.name.as_str()), (Layer::User, "ok"));
+        assert_eq!(
+            (collision.layer, collision.name.as_str()),
+            (Layer::User, "ok")
+        );
         assert!(collision.kept.contains("a-first"), "{collision:?}");
         assert!(collision.dropped.contains("b-second"), "{collision:?}");
         assert_eq!(report.rejected.len(), 1);
@@ -160,12 +180,18 @@ fn aliases_resolve_within_their_layer() {
 
     // A higher layer's asset named like the alias wins over it.
     registry
-        .add(Layer::Project, MicroAsset::new("check", "project check").unwrap())
+        .add(
+            Layer::Project,
+            MicroAsset::new("check", "project check").unwrap(),
+        )
         .unwrap();
     assert_eq!(registry.resolve("check").unwrap().alt(), "project check");
     // The project's own `status/check` does not exist, so that still comes
     // from the user layer.
-    assert_eq!(registry.resolve("status/check").unwrap().alt(), "check mark");
+    assert_eq!(
+        registry.resolve("status/check").unwrap().alt(),
+        "check mark"
+    );
 
     // An alias that clashes with a name in the same layer loses, and says so.
     let clash = MicroAsset::new("other", "other")
@@ -175,7 +201,10 @@ fn aliases_resolve_within_their_layer() {
     let collisions = registry.add(Layer::User, clash).unwrap();
     assert_eq!(collisions.len(), 1);
     assert_eq!(collisions[0].name, "status/check");
-    assert_eq!(registry.resolve("status/check").unwrap().alt(), "check mark");
+    assert_eq!(
+        registry.resolve("status/check").unwrap().alt(),
+        "check mark"
+    );
     assert_eq!(registry.resolve("other").unwrap().alt(), "other");
 
     // Removing an asset removes its aliases.
@@ -186,7 +215,8 @@ fn aliases_resolve_within_their_layer() {
 #[test]
 fn explain_shows_the_chain() {
     let tree = tree();
-    let (registry, _) = MicroRegistry::load(&tree.roots.clone().trust_project(true), &Limits::default());
+    let (registry, _) =
+        MicroRegistry::load(&tree.roots.clone().trust_project(true), &Limits::default());
     let explanation = registry.explain("ok").unwrap();
     let resolved = explanation.resolved();
     assert_eq!(resolved.winner, Layer::Project as usize);
@@ -204,5 +234,8 @@ fn explain_shows_the_chain() {
             MicroAsset::new("x", "x").unwrap().with_alias("y").unwrap(),
         )
         .unwrap();
-    assert_eq!(registry.explain("y").unwrap().resolved().value, "alias of x");
+    assert_eq!(
+        registry.explain("y").unwrap().resolved().value,
+        "alias of x"
+    );
 }

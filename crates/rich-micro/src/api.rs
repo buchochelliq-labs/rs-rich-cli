@@ -30,7 +30,11 @@ use crate::render::{placeholder, FallbackPreference};
 /// ```
 pub trait MicroExt {
     /// Append the asset `name` resolves to, as its placeholder cells.
-    fn append_micro(&mut self, registry: &MicroRegistry, name: &str) -> Result<&mut Self, MicroError>;
+    fn append_micro(
+        &mut self,
+        registry: &MicroRegistry,
+        name: &str,
+    ) -> Result<&mut Self, MicroError>;
 
     /// Append `asset`'s placeholder cells.
     fn append_micro_asset(&mut self, asset: &MicroAsset) -> &mut Self;
@@ -41,13 +45,18 @@ pub trait MicroExt {
 }
 
 impl MicroExt for Text {
-    fn append_micro(&mut self, registry: &MicroRegistry, name: &str) -> Result<&mut Self, MicroError> {
+    fn append_micro(
+        &mut self,
+        registry: &MicroRegistry,
+        name: &str,
+    ) -> Result<&mut Self, MicroError> {
         let asset = registry.require(name)?;
         Ok(self.append_micro_asset(asset))
     }
 
     fn append_micro_asset(&mut self, asset: &MicroAsset) -> &mut Self {
-        let appended = std::mem::take(self).append_text(&placeholder(asset, FallbackPreference::Emoji));
+        let appended =
+            std::mem::take(self).append_text(&placeholder(asset, FallbackPreference::Emoji));
         *self = appended;
         self
     }
@@ -141,7 +150,10 @@ impl Plugin for MicroPlugin {
     }
 
     fn register(&self, registrar: &mut dyn PluginRegistrar) -> Result<(), PluginError> {
-        registrar.transform("micro", Arc::new(MicroTransform::new(Arc::clone(&self.registry))));
+        registrar.transform(
+            "micro",
+            Arc::new(MicroTransform::new(Arc::clone(&self.registry))),
+        );
         Ok(())
     }
 }

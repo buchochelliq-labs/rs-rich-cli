@@ -58,8 +58,11 @@ pub fn manifest(name: &str) -> serde_json::Value {
 /// Write a package directory: `manifest.json` and `files`.
 pub fn package_dir(dir: &Path, manifest: &serde_json::Value, files: &[(&str, Vec<u8>)]) {
     std::fs::create_dir_all(dir).unwrap();
-    std::fs::write(dir.join("manifest.json"), serde_json::to_vec_pretty(manifest).unwrap())
-        .unwrap();
+    std::fs::write(
+        dir.join("manifest.json"),
+        serde_json::to_vec_pretty(manifest).unwrap(),
+    )
+    .unwrap();
     for (name, bytes) in files {
         let path = dir.join(name);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();

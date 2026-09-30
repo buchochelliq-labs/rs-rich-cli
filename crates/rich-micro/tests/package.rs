@@ -33,7 +33,10 @@ fn fixtures_load() {
     let spark = load_package(&root.join("spark.richmicro"), Layer::BuiltIn, &limits()).unwrap();
     assert_eq!(spark.kind(), AssetKind::Animated);
     let animation = spark.variants().animation.as_ref().unwrap();
-    assert_eq!((animation.info.format, animation.info.frames), (ImageFormat::Gif, 3));
+    assert_eq!(
+        (animation.info.format, animation.info.frames),
+        (ImageFormat::Gif, 3)
+    );
 
     let dot = load_package(&root.join("dot.richmicro"), Layer::BuiltIn, &limits()).unwrap();
     assert_eq!(dot.cols(), 1);
@@ -79,25 +82,46 @@ fn malformed_manifests() {
         m
     };
     let cases: Vec<(serde_json::Value, &str)> = vec![
-        (with("schema_version", json!(2)), "unsupported schema_version 2"),
-        (with("schema_version", json!("1")), "unsupported schema_version"),
+        (
+            with("schema_version", json!(2)),
+            "unsupported schema_version 2",
+        ),
+        (
+            with("schema_version", json!("1")),
+            "unsupported schema_version",
+        ),
         (without("schema_version"), "missing schema_version"),
         (without("alt"), "missing \"alt\""),
         (with("alt", json!("   ")), "alt text is required"),
         (with("name", json!("Bad Name")), "invalid micro asset name"),
         (with("size", json!("2x2")), "rows must be 1"),
-        (with("size", json!({"cols": 2, "rows": 3})), "rows must be 1"),
+        (
+            with("size", json!({"cols": 2, "rows": 3})),
+            "rows must be 1",
+        ),
         (with("size", json!("9x1")), "at most 4 columns"),
         (with("size", json!(2)), "size must be"),
-        (with("fallback", json!({"text": "TOOLONG"})), "must fit 2 columns"),
+        (
+            with("fallback", json!({"text": "TOOLONG"})),
+            "must fit 2 columns",
+        ),
         (with("fallback", json!({"text": "a b"})), "whitespace"),
-        (with("fallback", json!({"glyph": "x"})), "unknown field \"glyph\""),
+        (
+            with("fallback", json!({"glyph": "x"})),
+            "unknown field \"glyph\"",
+        ),
         (with("kind", json!("moving")), "unknown kind"),
-        (with("kind", json!("animated")), "animated but has no animation"),
+        (
+            with("kind", json!("animated")),
+            "animated but has no animation",
+        ),
         (with("colour", json!("red")), "unknown field \"colour\""),
         (with("aliases", json!("ok")), "list of strings"),
         (without("static"), "missing \"static\""),
-        (with("static", json!("../static.png")), "leads out of the package"),
+        (
+            with("static", json!("../static.png")),
+            "leads out of the package",
+        ),
         (with("static", json!("/etc/passwd")), "absolute"),
         (with("static", json!("missing.png")), "missing.png"),
     ];
@@ -136,18 +160,30 @@ fn hostile_dimensions_frames_and_decoded_size() {
 
     let mut m = manifest("ok");
     m["animation"] = json!("a.gif");
-    let error = rejects(m.clone(), &[("static.png", png(16, 16)), ("a.gif", gif(16, 16, 500))]);
-    assert!(error.to_string().contains("more than 240 frames"), "{error}");
+    let error = rejects(
+        m.clone(),
+        &[("static.png", png(16, 16)), ("a.gif", gif(16, 16, 500))],
+    );
+    assert!(
+        error.to_string().contains("more than 240 frames"),
+        "{error}"
+    );
 
     // Frames in a sequence count too.
     let mut m2 = manifest("ok");
     let frames: Vec<String> = (0..241).map(|i| format!("f/{i}.png")).collect();
     m2["frames"] = json!(frames);
     let error = rejects(m2, &[("static.png", png(16, 16))]);
-    assert!(error.to_string().contains("more than 240 frames"), "{error}");
+    assert!(
+        error.to_string().contains("more than 240 frames"),
+        "{error}"
+    );
 
     // Decoded bytes: 200 frames of 256x256 RGBA is 52 MB.
-    let error = rejects(m, &[("static.png", png(16, 16)), ("a.gif", gif(256, 256, 200))]);
+    let error = rejects(
+        m,
+        &[("static.png", png(16, 16)), ("a.gif", gif(256, 256, 200))],
+    );
     assert!(error.to_string().contains("bytes decoded"), "{error}");
 }
 
@@ -169,7 +205,10 @@ fn oversized_files_and_manifests() {
     m["author"] = json!("x".repeat(200));
     package_dir(dir.path(), &m, &[("static.png", png(16, 16))]);
     let error = load_package(dir.path(), Layer::User, &tight).unwrap_err();
-    assert!(error.to_string().contains("larger than 100 bytes"), "{error}");
+    assert!(
+        error.to_string().contains("larger than 100 bytes"),
+        "{error}"
+    );
 }
 
 fn zip_rejects(entries: &[Entry<'_>], limits: &Limits) -> MicroError {
@@ -191,13 +230,22 @@ fn zip_slip_absolute_and_links_are_refused() {
         ("a\\b.png", "backslashes"),
     ] {
         let error = zip_rejects(&[m(), image(), Entry::File(name, vec![1])], &limits());
-        assert!(matches!(error, MicroError::UnsafePath(_)), "{name}: {error}");
+        assert!(
+            matches!(error, MicroError::UnsafePath(_)),
+            "{name}: {error}"
+        );
         assert!(error.to_string().contains(why), "{name}: {error}");
     }
-    let error = zip_rejects(&[m(), image(), Entry::Symlink("link.png", "/etc/passwd")], &limits());
+    let error = zip_rejects(
+        &[m(), image(), Entry::Symlink("link.png", "/etc/passwd")],
+        &limits(),
+    );
     assert!(error.to_string().contains("symbolic link"), "{error}");
     // One name twice, once as a folder.
-    let error = zip_rejects(&[m(), image(), Entry::File("x", vec![1]), Entry::Dir("x/")], &limits());
+    let error = zip_rejects(
+        &[m(), image(), Entry::File("x", vec![1]), Entry::Dir("x/")],
+        &limits(),
+    );
     assert!(error.to_string().contains("appears twice"), "{error}");
 }
 
@@ -206,7 +254,11 @@ fn zip_bombs_and_entry_counts() {
     let m = || Entry::File("manifest.json", manifest_bytes(&manifest("ok")));
     // 4 MiB of zeros deflates to a few KiB: refused by its declared size.
     let error = zip_rejects(
-        &[m(), Entry::File("static.png", png(16, 16)), Entry::Deflated("pad.bin", vec![0; 4 << 20])],
+        &[
+            m(),
+            Entry::File("static.png", png(16, 16)),
+            Entry::Deflated("pad.bin", vec![0; 4 << 20]),
+        ],
         &limits(),
     );
     assert!(matches!(error, MicroError::Limit(_)), "{error}");
@@ -220,7 +272,10 @@ fn zip_bombs_and_entry_counts() {
         ..Limits::default()
     };
     let error = zip_rejects(&entries, &few);
-    assert!(error.to_string().contains("more than 10 entries"), "{error}");
+    assert!(
+        error.to_string().contains("more than 10 entries"),
+        "{error}"
+    );
 
     // The archive itself.
     let small = Limits {
@@ -228,7 +283,10 @@ fn zip_bombs_and_entry_counts() {
         ..Limits::default()
     };
     let error = zip_rejects(&[m(), Entry::File("static.png", png(16, 16))], &small);
-    assert!(error.to_string().contains("larger than 100 bytes"), "{error}");
+    assert!(
+        error.to_string().contains("larger than 100 bytes"),
+        "{error}"
+    );
 
     // Total uncompressed bytes read from one archive.
     let total = Limits {
@@ -294,7 +352,10 @@ fn packs_from_directories_and_archives() {
     assert_eq!(loaded.name, "status");
     let names: Vec<&str> = loaded.assets.iter().map(|a| a.name()).collect();
     assert_eq!(names, ["status/ok", "status/warn"]);
-    assert!(loaded.assets.iter().all(|a| a.origin().pack.as_deref() == Some("status")));
+    assert!(loaded
+        .assets
+        .iter()
+        .all(|a| a.origin().pack.as_deref() == Some("status")));
     let rejected: Vec<&str> = loaded.rejected.iter().map(|(p, _)| p.as_str()).collect();
     assert_eq!(rejected, ["bad", "../escape", "missing"]);
     assert!(matches!(loaded.rejected[1].1, MicroError::UnsafePath(_)));
@@ -326,7 +387,11 @@ fn packs_from_directories_and_archives() {
     }
 
     // A bad pack index.
-    std::fs::write(pack.join("pack.json"), r#"{"schema_version": 1, "name": "Bad"}"#).unwrap();
+    std::fs::write(
+        pack.join("pack.json"),
+        r#"{"schema_version": 1, "name": "Bad"}"#,
+    )
+    .unwrap();
     assert!(load_pack(&pack, Layer::User, &limits()).is_err());
 }
 
@@ -334,5 +399,8 @@ fn packs_from_directories_and_archives() {
 fn neither_package_nor_pack() {
     let dir = tempfile::tempdir().unwrap();
     let error = load(dir.path(), Layer::User, &limits()).unwrap_err();
-    assert!(error.to_string().contains("no manifest.json or pack.json"), "{error}");
+    assert!(
+        error.to_string().contains("no manifest.json or pack.json"),
+        "{error}"
+    );
 }

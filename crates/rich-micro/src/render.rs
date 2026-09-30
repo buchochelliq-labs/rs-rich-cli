@@ -340,9 +340,9 @@ pub fn rewrite(
                     fallback: run.iter().map(|s| s.text.as_str()).collect(),
                 };
                 renderers.iter().find_map(|renderer| {
-                    renderer
-                        .render(&placement, console)
-                        .filter(|drawn| drawn.iter().map(Segment::cell_length).sum::<usize>() == meta.cols)
+                    renderer.render(&placement, console).filter(|drawn| {
+                        drawn.iter().map(Segment::cell_length).sum::<usize>() == meta.cols
+                    })
                 })
             }
             _ => None,

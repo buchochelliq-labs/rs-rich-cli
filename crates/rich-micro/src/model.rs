@@ -339,7 +339,10 @@ impl MicroAsset {
 
     /// Change the size; the fallbacks set so far must still fit.
     pub fn with_size(mut self, size: CellSize) -> Result<Self, MicroError> {
-        for value in [&self.fallback.emoji, &self.fallback.text].into_iter().flatten() {
+        for value in [&self.fallback.emoji, &self.fallback.text]
+            .into_iter()
+            .flatten()
+        {
             check_fallback(value, size)?;
         }
         self.size = size;
@@ -471,9 +474,10 @@ impl MicroAsset {
         image: &ImageRef,
         limits: &crate::Limits,
     ) -> Result<Vec<u8>, MicroError> {
-        let location = self.origin.location.as_ref().ok_or_else(|| {
-            MicroError::Io(format!("micro asset {:?} has no package", self.name))
-        })?;
+        let location =
+            self.origin.location.as_ref().ok_or_else(|| {
+                MicroError::Io(format!("micro asset {:?} has no package", self.name))
+            })?;
         crate::package::read_file(location, &image.path, limits)
     }
 }

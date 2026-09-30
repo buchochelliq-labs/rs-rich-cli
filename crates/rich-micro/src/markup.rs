@@ -99,7 +99,11 @@ fn scan(s: &str, skip_tags: bool) -> Vec<Token> {
     let mut at = 0;
     while at < bytes.len() {
         if skip_tags && bytes[at] == b'[' {
-            let backslashes = bytes[..at].iter().rev().take_while(|b| **b == b'\\').count();
+            let backslashes = bytes[..at]
+                .iter()
+                .rev()
+                .take_while(|b| **b == b'\\')
+                .count();
             let opens_tag = bytes
                 .get(at + 1)
                 .is_some_and(|b| b.is_ascii_lowercase() || matches!(b, b'#' | b'/' | b'@'));
@@ -299,9 +303,8 @@ impl PreparedMarkup {
                             && prepared.tokens.len()
                                 <= (SENTINEL_LAST - SENTINEL_BASE) as usize =>
                     {
-                        let sentinel =
-                            char::from_u32(SENTINEL_BASE + prepared.tokens.len() as u32)
-                                .expect("private-use code point");
+                        let sentinel = char::from_u32(SENTINEL_BASE + prepared.tokens.len() as u32)
+                            .expect("private-use code point");
                         prepared.markup.push_str(&markup[cursor..range.start]);
                         prepared.markup.push(sentinel);
                         prepared.tokens.push((sentinel, Arc::clone(asset)));
@@ -351,7 +354,11 @@ impl PreparedMarkup {
             if let Some((_, asset)) = self.tokens.iter().find(|(s, _)| *s == c) {
                 edits.push(Edit {
                     range: at..at + c.len_utf8(),
-                    insert: Some(placeholder_with(asset, self.preference, MicroMeta::new(asset))),
+                    insert: Some(placeholder_with(
+                        asset,
+                        self.preference,
+                        MicroMeta::new(asset),
+                    )),
                 });
             }
         }
@@ -431,7 +438,10 @@ mod tests {
 
     #[test]
     fn scanning() {
-        let tokens = scan(r"a :micro:x/y: \:micro:z: :micro:Bad: [link=:micro:q:]t[/]", true);
+        let tokens = scan(
+            r"a :micro:x/y: \:micro:z: :micro:Bad: [link=:micro:q:]t[/]",
+            true,
+        );
         let kinds: Vec<String> = tokens
             .iter()
             .map(|t| match t {

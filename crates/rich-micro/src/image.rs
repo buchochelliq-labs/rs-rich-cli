@@ -275,7 +275,10 @@ pub(crate) mod tests {
     #[test]
     fn png_and_apng() {
         let info = sniff(&png_header(16, 8, None), 10).unwrap();
-        assert_eq!((info.format, info.width, info.height, info.frames), (ImageFormat::Png, 16, 8, 1));
+        assert_eq!(
+            (info.format, info.width, info.height, info.frames),
+            (ImageFormat::Png, 16, 8, 1)
+        );
         let info = sniff(&png_header(16, 8, Some(4)), 10).unwrap();
         assert_eq!((info.format, info.frames), (ImageFormat::Apng, 4));
         assert!(sniff(&png_header(0, 8, None), 10).is_err());
@@ -286,7 +289,10 @@ pub(crate) mod tests {
     fn gif_frames_and_truncation() {
         let bytes = gif_bytes(8, 4, 3);
         let info = sniff(&bytes, 10).unwrap();
-        assert_eq!((info.format, info.width, info.height, info.frames), (ImageFormat::Gif, 8, 4, 3));
+        assert_eq!(
+            (info.format, info.width, info.height, info.frames),
+            (ImageFormat::Gif, 8, 4, 3)
+        );
         assert_eq!(sniff(&gif_bytes(8, 4, 50), 5).unwrap().frames, 6);
         assert!(sniff(&bytes[..bytes.len() - 5], 10).is_err());
     }
