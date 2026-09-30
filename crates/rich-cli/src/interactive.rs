@@ -1291,13 +1291,15 @@ fn asset(args: &Args) -> Answer {
             AssetKind::Emoji => "Emoji",
             AssetKind::Box => "Box style",
             AssetKind::Spinner => "Spinner",
-            #[cfg(feature = "art")]
-            AssetKind::Micro => "Micro asset",
+            // `Micro`, which exists whenever anything in the build turns on
+            // rs-rich-interact's `micro` feature.
+            #[allow(unreachable_patterns)]
+            _ => "Micro asset",
         }
         .to_string()
     });
     #[cfg(feature = "art")]
-    let picker = if kind == AssetKind::Micro {
+    let picker = if args.kind.as_deref() == Some("micro") {
         AssetPicker::micro(prompt, &crate::micro::registry(args.micro_project))
     } else {
         AssetPicker::new(prompt, kind)

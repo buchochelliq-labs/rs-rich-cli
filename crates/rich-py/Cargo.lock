@@ -1548,6 +1548,7 @@ dependencies = [
  "libc",
  "rs-rich",
  "rs-rich-ext",
+ "rs-rich-micro",
  "signal-hook",
 ]
 
@@ -1602,6 +1603,7 @@ dependencies = [
  "rs-rich-interact",
  "rs-rich-lumis",
  "rs-rich-mermaid",
+ "rs-rich-micro",
  "rs-rich-plugin-api",
  "serde",
  "serde_json",

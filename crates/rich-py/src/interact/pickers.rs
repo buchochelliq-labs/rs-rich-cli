@@ -495,7 +495,7 @@ impl AssetPicker {
     ) -> PyResult<Self> {
         let parsed = AssetKind::parse(&kind).ok_or_else(|| {
             PyValueError::new_err(format!(
-                "invalid kind {kind:?}; expected emoji, box or spinner"
+                "invalid kind {kind:?}; expected emoji, box, spinner or micro"
             ))
         })?;
         Ok(AssetPicker {
@@ -532,6 +532,7 @@ impl AssetPicker {
                 AssetKind::Emoji => "Emoji",
                 AssetKind::Box => "Box style",
                 AssetKind::Spinner => "Spinner",
+                AssetKind::Micro => "Micro asset",
             }
             .to_string()
         });

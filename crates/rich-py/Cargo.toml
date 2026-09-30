@@ -24,10 +24,13 @@ rich = { package = "rs-rich", path = "../rich" }
 rich-ext = { package = "rs-rich-ext", path = "../rich-ext", features = ["data", "yaml", "toml", "xml", "jsonpath", "test-report", "serde", "testing"] }
 rich-art = { package = "rs-rich-art", path = "../rich-art", features = ["image", "gif", "sixel"] }
 rich-mermaid = { package = "rs-rich-mermaid", path = "../rich-mermaid" }
+# `rs_rich.micro`: micro assets, their registry, markup and pipeline
+# (0.0.14 workstream 7).
+rich-micro = { package = "rs-rich-micro", path = "../rich-micro" }
 rich-plugin-api = { package = "rs-rich-plugin-api", path = "../rich-plugin-api" }
 # `rs_rich.interact`: the interactive components, their headless driver and
 # the fuzzy matcher (0.0.13 workstream 5).
-rich-interact = { package = "rs-rich-interact", path = "../rich-interact" }
+rich-interact = { package = "rs-rich-interact", path = "../rich-interact", features = ["micro"] }
 # The `rich` command line, run in-process by `python -m rs_rich`: the default
 # features except `record`, whose PTY recorder runs the `rich` binaries beside
 # the running executable (here, Python) and has no place in a wheel.

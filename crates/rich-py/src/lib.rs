@@ -24,6 +24,7 @@
 //! | `live` | Live, Progress, Status, Screen, Pager, prompts, logging |
 //! | `ext` | `rich-ext` |
 //! | `interact` | `rich-interact`: components, drivers, fuzzy matching |
+//! | `micro` | `rich-micro`: micro assets, registry, markup, pipeline |
 //! | `art` | `rich-art` and Mermaid |
 //! | `plugins` | the plugin API from Python |
 //! | `cli` | the `rich` CLI from Python |
@@ -40,6 +41,7 @@ mod convert;
 mod errors;
 mod ext;
 mod interact;
+mod micro;
 mod limits;
 mod live;
 mod panel;
@@ -78,6 +80,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     ext::register(m)?;
     interact::register(m)?;
     art::register(m)?;
+    micro::register(m)?;
     plugins::register(m)?;
     cli::register(m)?;
     Ok(())
