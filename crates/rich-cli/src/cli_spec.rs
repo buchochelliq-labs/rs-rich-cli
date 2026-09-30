@@ -966,6 +966,13 @@ fn config_options() -> Vec<ArgSpec> {
         .value(ValueHint::File)
         .multiple(true)
         .config_key("plugins"),
+        switch(
+            "micro-project",
+            "micro_project",
+            CONFIG,
+            "Load micro assets from the project's .rich/micro/ (off by default: a project's \
+             assets load only when you trust it; ./rich.toml cannot turn this on)",
+        ),
     ]
 }
 
@@ -1339,6 +1346,10 @@ pub(crate) fn spec() -> CommandSpec {
     for command in authoring_commands() {
         spec = spec.subcommand(command);
     }
+    #[cfg(feature = "art")]
+    {
+        spec = spec.subcommand(super::micro::command());
+    }
     spec.subcommand(
         CommandSpec::new("record")
             .about(
@@ -1555,6 +1566,8 @@ mod tests {
     const VIEWERS: &str = include_str!("viewers.rs");
     #[cfg(feature = "interact")]
     const INTERACTIVE: &str = include_str!("interactive.rs");
+    #[cfg(feature = "art")]
+    const MICRO: &str = include_str!("micro.rs");
 
     /// The source of the item that starts with `start`, up to the next
     /// top-level item.
@@ -1611,6 +1624,10 @@ mod tests {
         }
         #[cfg(feature = "interact")]
         out.extend(option_literals(item(INTERACTIVE, "fn parse_args(")));
+        #[cfg(feature = "art")]
+        for start in ["const CREATE_VALUES", "const CREATE_FLAGS", "fn request("] {
+            out.extend(option_literals(item(MICRO, start)));
+        }
         for arg in rich_ext::cli::arg_specs() {
             out.extend(arg.switches());
         }

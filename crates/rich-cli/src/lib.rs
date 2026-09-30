@@ -40,6 +40,8 @@ mod doctor;
 mod inspect;
 #[cfg(feature = "interact")]
 mod interactive;
+#[cfg(feature = "art")]
+mod micro;
 mod plugins;
 #[cfg(feature = "record")]
 mod record;
@@ -514,6 +516,9 @@ struct Cli {
     /// `--plugin PATH` (and a trusted config's `plugins`): runtime plugins to
     /// load, in order.
     plugins: Vec<String>,
+    /// `--micro-project` (and a trusted config's `micro_project`): load the
+    /// project's `.rich/micro/` micro assets.
+    micro_project: bool,
     theme_styles: std::collections::BTreeMap<String, Style>,
     /// `--theme-file PATH`: styles from an upstream `[styles]` theme file,
     /// layered under config themes and `--theme-style`.
@@ -922,6 +927,10 @@ fn dispatch(args: Vec<String>) -> ExitCode {
     }
     if plugins::requested(&args) {
         return plugins::dispatch(&args);
+    }
+    #[cfg(feature = "art")]
+    if micro::requested(&args) {
+        return micro::dispatch(&args);
     }
     #[cfg(feature = "interact")]
     if let Some(command) = interactive::requested(&args) {
@@ -1795,6 +1804,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     let mut watch_exit_on_error = false;
     let mut batch = false;
     let mut progress = true;
+    let mut micro_project = false;
     let mut continue_on_error = false;
     let mut jobs = 1usize;
     let mut dry_run = false;
@@ -1903,6 +1913,8 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
             }
             "--progress" => progress = true,
             "--no-progress" => progress = false,
+            "--micro-project" => micro_project = true,
+            "--no-micro-project" => micro_project = false,
             "--theme-style" => {
                 let binding = iter.next().ok_or("--theme-style requires NAME=STYLE")?;
                 let (name, value) = binding
@@ -2787,6 +2799,7 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
         highlighter,
         code_theme,
         plugins,
+        micro_project,
         theme_styles,
         theme_file_styles,
         height,
@@ -4606,6 +4619,19 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         // Print + auto: parse markup (Print) or take plain text (auto), then
         // `--filter` and `--highlight`.
         _ => {
+            // `:micro:name:` goes where `:emoji:` codes go: in --print
+            // markup with --emoji.
+            #[cfg(feature = "art")]
+            let micro = (mode == Mode::Print && cli.emoji)
+                .then(|| micro::print_markup(&console, &content, cli.micro_project))
+                .flatten();
+            #[cfg(feature = "art")]
+            let (mut text, micro) = match micro {
+                Some((text, registry)) => (text, Some(registry)),
+                None if mode == Mode::Print => (console.build_text(&content), None),
+                None => (Text::new(content.as_str()), None),
+            };
+            #[cfg(not(feature = "art"))]
             let mut text = if mode == Mode::Print {
                 console.build_text(&content)
             } else {
@@ -4629,6 +4655,16 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 Err(err) => return fail(&cli, ExitClass::Data, err),
             };
             let fit = text.measurement().1;
+            #[cfg(feature = "art")]
+            if let Some(registry) = micro {
+                return decorate_and_emit(
+                    &cli,
+                    &console,
+                    &export,
+                    micro::drawn(&console, registry, text),
+                    Some(fit),
+                );
+            }
             (Box::new(text), Some(fit))
         }
     };
@@ -7098,6 +7134,10 @@ mod tests {
             }
             if doctor::requested(args) {
                 words.push("doctor");
+            }
+            #[cfg(feature = "art")]
+            if micro::requested(args) {
+                words.push("micro");
             }
             #[cfg(feature = "record")]
             if record::requested(args) {

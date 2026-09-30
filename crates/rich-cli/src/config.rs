@@ -30,6 +30,9 @@ struct Configuration {
     /// Set when a working-directory `rich.toml` listed `plugins`, which were
     /// ignored (see `load`).
     ignored_plugins: bool,
+    /// Set when a working-directory `rich.toml` asked for
+    /// `micro_project = true`, which was ignored (see `load`).
+    ignored_micro_project: bool,
     /// The `export_*` keys a working-directory `rich.toml` set, which were
     /// ignored (see `load`).
     ignored_export: Vec<&'static str>,
@@ -161,6 +164,7 @@ fn boolean_flags(key: &str) -> Option<(&'static str, &'static str)> {
         "watch_exit_on_error" => ("--watch-exit-on-error", "--no-watch-exit-on-error"),
         "sanitize" => ("--sanitize", "--no-sanitize"),
         "progress" => ("--progress", "--no-progress"),
+        "micro_project" => ("--micro-project", "--no-micro-project"),
         _ => return None,
     })
 }
@@ -182,6 +186,7 @@ const BOOLEAN_KEYS: &[&str] = &[
     "watch_exit_on_error",
     "sanitize",
     "progress",
+    "micro_project",
 ];
 const VALUE_KEYS: &[&str] = &[
     "image_rotate",
@@ -433,6 +438,7 @@ fn decode_configuration(text: &str, selected: Option<&str>) -> Result<Configurat
         ignored_sanitize: false,
         ignored_mmdc: false,
         ignored_plugins: false,
+        ignored_micro_project: false,
         ignored_export: Vec::new(),
     })
 }
@@ -505,6 +511,7 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
     // runs its code (`plugins`).
     if untrusted {
         let (mut theme_file, mut sanitize, mut mmdc, mut plugins) = (false, false, false, false);
+        let mut micro_project = false;
         let mut export = Vec::new();
         for table in std::iter::once(&mut settings.settings)
             .chain(std::iter::once(&mut settings.base))
@@ -520,6 +527,10 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
                 mmdc = true;
             }
             plugins |= table.remove("plugins").is_some();
+            if table.get("micro_project") == Some(&Value::Boolean(true)) {
+                table.remove("micro_project");
+                micro_project = true;
+            }
             for key in EXPORT_KEYS {
                 if table.remove(*key).is_some() && !export.contains(key) {
                     export.push(*key);
@@ -531,6 +542,7 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
         settings.ignored_sanitize = sanitize;
         settings.ignored_mmdc = mmdc;
         settings.ignored_plugins = plugins;
+        settings.ignored_micro_project = micro_project;
         settings.ignored_export = export;
     }
     // A theme file named in a config file is relative to that file, so the
@@ -767,6 +779,9 @@ pub(crate) fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<St
     if configuration.ignored_plugins && !json_report {
         eprintln!("rich: warning: {UNTRUSTED_PLUGINS}");
     }
+    if configuration.ignored_micro_project && !json_report && !explicit.contains("micro_project") {
+        eprintln!("rich: warning: {UNTRUSTED_MICRO_PROJECT}");
+    }
     let mut result = Vec::new();
     for (name, style) in theme_styles {
         result.extend(["--theme-style".into(), format!("{name}={style}")]);
@@ -945,6 +960,7 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
             ignored_sanitize: configuration.ignored_sanitize,
             ignored_mmdc: configuration.ignored_mmdc,
             ignored_plugins: configuration.ignored_plugins,
+            ignored_micro_project: configuration.ignored_micro_project,
             ignored_export: &configuration.ignored_export,
         };
         return Ok(Some(explain(&layers, key)));
@@ -992,6 +1008,8 @@ struct Layers<'a> {
     ignored_mmdc: bool,
     /// The working-directory config's `plugins` were ignored.
     ignored_plugins: bool,
+    /// The working-directory config's `micro_project = true` was ignored.
+    ignored_micro_project: bool,
     /// The working-directory config's `export_*` keys that were ignored.
     ignored_export: &'a [&'static str],
 }
@@ -1082,6 +1100,11 @@ fn explain(layers: &Layers, key: Option<&str>) -> String {
         (layers.ignored_sanitize, "sanitize", UNTRUSTED_SANITIZE),
         (layers.ignored_mmdc, "mermaid_backend", UNTRUSTED_MMDC),
         (layers.ignored_plugins, "plugins", UNTRUSTED_PLUGINS),
+        (
+            layers.ignored_micro_project,
+            "micro_project",
+            UNTRUSTED_MICRO_PROJECT,
+        ),
     ] {
         if ignored && key.is_none_or(|key| key == name) {
             if !output.ends_with('\n') {
@@ -1137,6 +1160,13 @@ pub(crate) const UNTRUSTED_PLUGINS: &str =
     "plugins in ./rich.toml are ignored: a project's config may not load plugins, which run \
      their own code; pass --plugin PATH, or list them in ~/.config/rich/config.toml or a file \
      given with --config";
+
+/// Why a working-directory `rich.toml`'s `micro_project = true` has no
+/// effect.
+pub(crate) const UNTRUSTED_MICRO_PROJECT: &str =
+    "micro_project = true in ./rich.toml is ignored: a project may not trust its own micro \
+     assets (they could restyle status/success or draw images); pass --micro-project, or set \
+     it in ~/.config/rich/config.toml or a file given with --config";
 
 /// Every key `validate_value` accepts.
 #[cfg(test)]
