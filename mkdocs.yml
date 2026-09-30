@@ -141,6 +141,7 @@ nav:
   - Troubleshooting: troubleshooting.md
   - Known issues: known-issues.md
   - Development plans:
+      - "Composable views and micro assets": plans/0.0.14.md
       - "Interactive CLI, first slice": plans/0.0.13.md
       - Plugin platform and extensibility: plans/0.0.12.md
       - Developer ergonomics and core usability: plans/0.0.11.md

@@ -215,7 +215,31 @@ and #499). Delivered:
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
 
-## 0.0.13 — interactive CLI, first slice (planned)
+## 0.0.14 — composable interactive views and micro assets (planned)
+
+The [0.0.14 plan](plans/0.0.14.md) covers the second slice of
+[milestone 4](https://github.com/buchochelliq-labs/rs-rich-cli/milestone/4)
+and the micro-assets epic (#565):
+
+- building blocks you compose: containers, splits, tabs and modal layers as
+  components, focus routing, a keymap registry, a public kit, and the
+  built-in components rebuilt from it; your own components in Rust, Python
+  and plugins (#478, #479, #480);
+- overlays and chrome on top: an action menu in a modal, a command palette,
+  help and shortcut overlays, a status bar and breadcrumbs (#453, #473–#475,
+  #481, #482);
+- explorers and utilities: `rich explore` for JSON, YAML and TOML, tree
+  filtering, OSC 52 copy, dynamic reload and a theme picker (#428, #434,
+  #460, #464, #465, #485, #488);
+- micro assets in a new `rs-rich-micro` crate: `:micro:name:` inline images
+  and animations through Kitty, iTerm2 and Sixel, with emoji, half-block and
+  text fallback, a layered registry with trusted project packs, a
+  `.richmicro` package format, a built-in library and `rich micro`
+  (#566–#587).
+
+Core does not change, and stays at 0.0.9.
+
+## 0.0.13 — interactive CLI, first slice (published 2026-09-29)
 
 The [0.0.13 plan](plans/0.0.13.md) covers the first slice of
 [milestone 4](https://github.com/buchochelliq-labs/rs-rich-cli/milestone/4):
@@ -237,7 +261,10 @@ The [0.0.13 plan](plans/0.0.13.md) covers the first slice of
   `rich record` with the new `rs-rich-record` crate, to record any terminal
   program into screenshots, casts, GIF and MP4 (#599, #600).
 
-Core does not change, and stays at 0.0.8.
+Core gained one opt-in extension point, the semantic-regions trait, and moved
+to 0.0.9. Published as `rs-rich` 0.0.9, `rs-rich-ext` 0.0.11,
+`rs-rich-interact` 0.0.1, `rs-rich-record` 0.0.1, `rs-rich-cli` 0.0.13 and
+`rs-rich` 0.0.2 on PyPI.
 
 ## 0.0.12 — plugin platform and extensibility (published 2026-09-26)
 
