@@ -245,6 +245,16 @@ each resolved through `rich::emoji::replace`.
 Pick a table's row (columns aligned under their headings, filtered by any
 cell) or a tree's node (guides drawn, Left and Right fold and unfold,
 searching finds nodes inside folded ones). Both are a `Select` underneath.
+A table copies its row or a cell as text, CSV or JSON, and a tree keeps each
+match's ancestors, shows breadcrumbs and copies a node's path: see
+[Explorers, copying and live lists](explorers.md).
+
+### DataExplorer and ThemePicker
+
+`DataExplorer` (the `data` feature) explores a JSON, YAML, TOML, XML, INI
+or dotenv document as a tree, with breadcrumbs, search and copy, and is what
+`rich explore` runs. `ThemePicker` previews a sample in each theme as you
+move. Both are in [Explorers, copying and live lists](explorers.md).
 
 ## Mouse
 

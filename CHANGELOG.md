@@ -98,6 +98,59 @@ Entries below record subsequent releases and development.
   pattern (which now also matches `rs-rich-record` and `rs-rich-interact`
   tags).
 
+### Explorers and utilities: `rich explore`, OSC 52, tree filtering, reload, a theme picker
+
+Versions: `rs-rich-ext` 0.0.11 → 0.0.12 (its source changed and 0.0.11 is
+published), and `rs-rich-record` 0.0.1 → 0.0.2 for its new requirement on
+it (manifest only). `rs-rich-interact` 0.0.2 and `rs-rich-cli` 0.0.14 were
+already bumped for this release. Nothing in `rs-rich` changes.
+
+0.0.14 workstream 3 ([plan](docs/plans/0.0.14.md), #465, #464, #428, #488,
+#434, #485, #460), built on workstream 1's kit:
+
+- **`rich explore [FILE]`** (#465): explore a JSON, YAML, TOML, XML, INI or
+  .env document, from a file or stdin (`--format` as for `--inspect`), as a
+  tree. Left and Right fold, typing searches keys and values, the line
+  under the prompt shows the focused node's path (`$ › server › port`), a
+  preview draws its subtree, Ctrl+Y copies its JSONPath and Alt+Y its
+  value, and Enter prints the JSONPath `--select` takes (`--print value`
+  prints the value). It paints on stderr, so `$(rich explore f)` works;
+  without a terminal it prints the tree. PTY tests run it on every format
+  `--inspect` reads; a tape records it.
+- **`rich_interact::DataExplorer`** (new `data` feature) is that explorer
+  as a component, with `components::json_path`.
+- **OSC 52 clipboard** (#488): `rich_ext::clipboard` detects, with
+  provenance, whether the terminal takes OSC 52: never when the output is
+  not a terminal, on `TERM=dumb` or inside tmux or screen; yes for kitty,
+  iTerm2, WezTerm, Windows Terminal, ghostty, Alacritty, foot, contour, rio
+  and VS Code; `RICH_CLIPBOARD=0|1` overrides. Copies over 74,994 bytes are
+  refused. Components call `rich_interact::clipboard::copy`; the event loop
+  writes the sequence through a new `Backend::clipboard`/`Backend::copy`
+  pair (the headless driver records copies in `Record::copies`).
+- **Copy from a table** (#434): `TableSelect` copies the focused row
+  (Ctrl+Y) or cell (Alt+Y) as text, CSV or JSON (`CopyFormat`, cycled with
+  Alt+F); Ctrl+Left/Right move the focused column. Keys in context `table`.
+- **Trees** (#464, #428): `TreeSelect` filters as a tree. Each match keeps
+  its ancestors, dimmed, the guides join what is listed, and the cursor goes
+  to the best match. `breadcrumbs(true)` shows the path line (drawn by a
+  private helper until workstream 2's breadcrumbs component lands),
+  Ctrl+Y copies the node's path, and `crumbs`, `paths`, `fold_below` and
+  `set_collapsed` are new. The rule is public: `FilterState::set_tree`,
+  `is_context`, `best`, and `kit::keep_ancestors` and `kit::ancestors`.
+- **Reload** (#485): `Select::reload` (and `MultiSelect`'s) replaces the
+  items while keeping the query, the focused item and the marks;
+  `reload_on(key, source)` reloads on a key (action `select.reload`) and
+  `reload_from(receiver)` takes lists sent from another thread.
+  `Select::set_status` shows a line in place of the footer until the next
+  key.
+- **`ThemePicker`** (#460): pick a theme while a sample renders in it;
+  `from_registry` offers plugins' theme packs
+  (`ExtensionRegistry::theme_names`, new).
+- Also in ext: `data::display_value` and `data::copy_text`.
+
+Existing behaviour that changes: typing in a `TreeSelect` now lists the
+matches' ancestors too, in tree order, instead of a flat ranking.
+
 ### Interact 0.0.2: composition, a public kit and a keymap registry
 
 Versions: `rs-rich-interact` 0.0.1 → 0.0.2 (its source changed and 0.0.1 is

@@ -45,8 +45,13 @@ Ready-made components:
 
 - `Select` and `MultiSelect`: fuzzy pickers with highlighted matches and a
   preview pane whose border drags with the mouse;
-- `TableSelect` and `TreeSelect`: pick a table's row or a tree's node, with
-  folding;
+- `TableSelect` and `TreeSelect`: pick a table's row (and copy it, or a
+  cell, as text, CSV or JSON) or a tree's node, with folding, breadcrumbs
+  and a filter that keeps each match's ancestors;
+- `DataExplorer` (the `data` feature): explore a JSON, YAML, TOML, XML, INI
+  or dotenv document, copying a node's path or value;
+- `ThemePicker`: themes, including plugins' theme packs, with a live
+  preview;
 - `Input`: one line with validation, history, and suggestions, from a list or
   a background provider;
 - `Confirm`: a confirmation sheet with a body, warnings and several choices;
@@ -59,6 +64,11 @@ Ready-made components:
 - `ColorPicker`: rich's named colours, the 256 palette, or hex and RGB, with
   a live swatch;
 - `AssetPicker`: emoji, box styles and spinners, with a preview.
+
+Every list reloads its items while keeping the query, the focus and the
+marks (`Select::reload`, on a key or from a channel), and components copy
+to the terminal's clipboard with `clipboard::copy`, through OSC 52 where the
+terminal takes it.
 
 Build your own from the same pieces:
 

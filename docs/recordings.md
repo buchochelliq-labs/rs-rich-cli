@@ -24,6 +24,7 @@ motion turned on in your system settings the cards stay still.
 [![rich input refusing an empty answer](media/tapes/input/required.png){ data-gif="input.gif" loading=lazy }<span class="tape-card-title">Ask for a line</span>](#ask-for-a-line){ .tape-card }
 [![A fuzzy file picker with a preview](media/tapes/components/select.png){ data-gif="components.gif" loading=lazy }<span class="tape-card-title">Components</span>](#components){ .tape-card }
 [![rich file previewing a file before picking it](media/tapes/file/preview.png){ data-gif="file.gif" loading=lazy }<span class="tape-card-title">Ask for more in a script</span>](#ask-for-more-in-a-script){ .tape-card }
+[![rich explore searching a YAML document](media/tapes/explore/search.png){ data-gif="explore.gif" loading=lazy }<span class="tape-card-title">Explore a document</span>](#explore-a-document){ .tape-card }
 [![A Markdown file paged in a viewport](media/tapes/viewport/paged.png){ data-gif="viewport.gif" loading=lazy }<span class="tape-card-title">An interactive component</span>](#an-interactive-component){ .tape-card }
 [![The command palette over a file list](media/tapes/palette/palette.png){ data-gif="palette.gif" loading=lazy }<span class="tape-card-title">Overlays and chrome</span>](#overlays-and-chrome){ .tape-card }
 [![The guided tour, inspecting structured data](media/tapes/tour/inspect.png){ data-gif="tour.gif" loading=lazy }<span class="tape-card-title">The guided tour</span>](demos.md#run-the-suite-in-your-terminal){ .tape-card }
@@ -139,6 +140,23 @@ names and the palette, and an emoji and a box style used together. See
 [file tape](tapes/file.tape) · [cast](media/tapes/file/file.cast) · [page](media/tapes/file/file.html) ·
 [color tape](tapes/color.tape) · [cast](media/tapes/color/color.cast) · [page](media/tapes/color/color.html) ·
 [asset tape](tapes/asset.tape) · [cast](media/tapes/asset/asset.cast) · [page](media/tapes/asset/asset.html)
+
+## Explore a document
+
+`rich explore` on a YAML file: a container opened, the breadcrumbs following
+the cursor, the path copied, a search that keeps the match's ancestors, and
+the JSONPath captured by the script. See
+[Explore it interactively](cli.md#explore-it-interactively).
+
+<div class="tape-player" data-cast="../media/tapes/explore/explore.cast" data-poster="npt:0:4">
+  <img src="../media/tapes/explore/explore.gif" alt="rich explore folding, searching and picking a node of a YAML file">
+</div>
+
+| Folded | Opened | Searched |
+|---|---|---|
+| ![The document folded below the root](media/tapes/explore/tree.png) | ![A container opened, its node previewed](media/tapes/explore/expanded.png) | ![A search keeping its ancestors](media/tapes/explore/search.png) |
+
+[Tape](tapes/explore.tape) · [Cast](media/tapes/explore/explore.cast) · [GIF](media/tapes/explore/explore.gif) · [Page](media/tapes/explore/explore.html)
 
 ## An interactive component
 
