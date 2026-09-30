@@ -34,7 +34,9 @@
 //! ```
 
 pub mod api;
+pub mod cache;
 pub mod error;
+pub mod graphics;
 pub mod image;
 pub mod markup;
 pub mod model;
@@ -44,7 +46,9 @@ pub mod registry;
 pub mod render;
 
 pub use api::{MicroAssetRef, MicroExt, MicroPlugin};
+pub use cache::{ImageCache, Prepared};
 pub use error::MicroError;
+pub use graphics::{select, MicroGraphics, MicroMode, Selection};
 pub use markup::{
     expand, markup_text, render_markup, Diagnostic, DiagnosticKind, MicroTransform, PreparedMarkup,
 };
