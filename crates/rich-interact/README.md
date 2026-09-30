@@ -77,6 +77,18 @@ Build your own from the same pieces:
   `FilterState`, `TextBuffer`, `Divider` and `ActionMenu`, which the
   built-ins are made of. See `examples/custom_component.rs`.
 
+Overlays and chrome, read from the keymap:
+
+- **`Overlays`** wraps any component with a command palette (Ctrl+O), a
+  searchable help overlay (F1) and a shortcut sheet (`?`, F2), and runs
+  what the palette picks. Each overlay (`Palette`, `Help`, `Shortcuts`,
+  `Menu`) is also a component of its own.
+- **Actions in a modal**: Ctrl+K opens an item's actions in a modal, and a
+  region's actions through `Overlays::actions`.
+- **A status bar and breadcrumbs**: `StatusBar` shows text, key hints,
+  spinners and badges; `Breadcrumbs` shows a path. See
+  `examples/overlays.rs`.
+
 What else is in the box:
 
 - **Painting cell by cell.** Views are painted through

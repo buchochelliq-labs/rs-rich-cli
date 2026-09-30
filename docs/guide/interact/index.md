@@ -274,8 +274,10 @@ and the view's `Actions` (offered on every target, or on those a filter
 accepts), apply to list items, table rows, tree nodes and file entries
 alike: the filter sees an `ActionTarget` with its `TargetKind` (`item`,
 `row`, `node` or `file`), label and value. An action's key picks the item
-directly; Ctrl+K opens a menu of every action for the focused item. The
-component finishes with the item, and `action()` says which action.
+directly; Ctrl+K opens a modal menu of every action for the focused item.
+The component finishes with the item, and `action()` says which action.
+Actions can also target a whole region (`TargetKind::Region`), through
+`Overlays`: see [Overlays and chrome](overlays.md#actions-on-a-region).
 
 ```rust
 use rich_interact::{Action, Actions, FilePicker, Key, TargetKind};

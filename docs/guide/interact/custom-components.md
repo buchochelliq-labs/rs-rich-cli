@@ -37,6 +37,8 @@ cargo run -p rs-rich-interact --example custom_component
 | `slice(&line, from, to)` | the cells `from..to` of a line |
 | `overlay(&base, x, &top)` | draw `top` over `base` from cell `x` |
 | `restyle(&line, &style)` | put a style over a line (a backdrop) |
+| `frame(lines, inner, title, &style)` | box lines with a rounded border and a title |
+| `place(&mut lines, x, y, &boxed, backdrop)` | draw a box over a view, dimming it first if asked |
 | `highlight(label, positions, base, matched)` | style the characters a filter matched |
 | `question(&theme, prompt)` | the `? prompt › ` line every built-in starts with |
 | `pasted(s, newline)`, `shown(s)` | make untrusted text safe to show |
@@ -51,7 +53,7 @@ movement and editing rules, and none of them renders anything:
 | `FilterState` | a query, and the candidates that match it, ranked by the fuzzy matcher, with the positions to highlight | `Select` and the pickers |
 | `TextBuffer` | one line and a caret that moves by grapheme cluster: insert, Backspace, Delete, Ctrl+U, Ctrl+W, and an undo point | `Input`, `Form` |
 | `Divider` | a border between two panes that the mouse drags and the keyboard nudges, with minimum sizes | `Split`, `Select`'s preview |
-| `ActionMenu` | the Ctrl+K menu of actions for one target | `Select` |
+| `ActionMenu` | the Ctrl+K menu of actions for one target | `Select`, `overlay::Menu` |
 
 A checklist that filters as you type needs only three of these. The list
 below is abridged from the example:
@@ -249,8 +251,9 @@ the keys that trigger it, a description and a context (`select`, `input`,
 `keymap.action(key)`, instead of matching the key itself.
 
 `Component::keymap()` returns the bindings that apply now. A container's
-keymap lists its focused child's bindings first, then its own. A help
-overlay, a shortcut list or a status bar reads that list, and the
+keymap lists its focused child's bindings first, then its own. The help
+overlay, the shortcut sheet, the command palette and the status bar's
+hints read that list (see [Overlays and chrome](overlays.md)), and the
 example's F1 dialog lists keymaps the same way:
 
 ```rust

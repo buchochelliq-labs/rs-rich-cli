@@ -370,7 +370,10 @@ impl Component for Form {
         match &mut field.kind {
             Kind::Text(input) => {
                 let before = input.text().to_string();
-                input.handle(event, context);
+                // A key the field does not use is left to the container.
+                if let Flow::Ignored = input.handle(event, context) {
+                    return Flow::Ignored;
+                }
                 if input.text() != before {
                     field.error = None;
                 }
@@ -380,14 +383,14 @@ impl Component for Form {
                 match event.key().map(|key| key.code) {
                     Some(KeyCode::Right | KeyCode::Char(' ')) => *index = (*index + 1) % count,
                     Some(KeyCode::Left) => *index = (*index + count - 1) % count,
-                    _ => {}
+                    _ => return Flow::Ignored,
                 }
             }
             Kind::Toggle(on) => match event.key().map(|key| key.code) {
                 Some(KeyCode::Char(' ') | KeyCode::Left | KeyCode::Right) => *on = !*on,
                 Some(KeyCode::Char('y')) => *on = true,
                 Some(KeyCode::Char('n')) => *on = false,
-                _ => {}
+                _ => return Flow::Ignored,
             },
         }
         Flow::Continue

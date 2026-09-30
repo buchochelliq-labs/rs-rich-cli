@@ -128,6 +128,7 @@ nav:
       - Interactive (rs-rich-interact):
           - guide/interact/index.md
           - Building your own components: guide/interact/custom-components.md
+          - Overlays and chrome: guide/interact/overlays.md
       - Micro assets (rs-rich-micro): guide/micro/index.md
       - The rich CLI:
           - guide/cli/index.md

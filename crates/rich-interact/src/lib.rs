@@ -32,14 +32,18 @@
 //! [`Tabs`], [`Layers`]), with focus, routing and bubbling
 //! ([`Flow::Ignored`]); [`kit`] has the line helpers and state types the
 //! built-ins are made of; and [`keymap`] declares, rebinds and lists every
-//! component's keys.
+//! component's keys. On top of those, [`overlay`] has a command palette, a
+//! help overlay, a shortcut sheet and an action menu read from the keymap,
+//! and [`chrome`] a status bar and breadcrumbs; [`Overlays`] wires them all
+//! into any component.
 //!
 //! Mouse support (#476) is opt-in per component ([`Component::mouse`]):
 //! clicks, drags and the wheel arrive in the component's own coordinates, a
 //! click on a hyperlink arrives as [`Event::Link`], and the border beside a
 //! preview drags. Actions (#491) attach to list items, table rows, tree
 //! nodes and file entries through [`Actions`] and an [`ActionTarget`], and
-//! open in a menu (Ctrl+K); plugins register them through
+//! open in a modal menu (Ctrl+K); a region takes actions too, through
+//! [`Overlays::actions`]; plugins register them through
 //! `rs-rich-plugin-api`.
 //!
 //! ```
@@ -69,6 +73,7 @@
 //! assert_eq!(record.last_frame(), "count: 2");
 //! ```
 
+pub mod chrome;
 pub mod component;
 pub mod components;
 pub mod compose;
@@ -80,11 +85,13 @@ pub mod item;
 pub mod keymap;
 pub mod kit;
 mod names;
+pub mod overlay;
 pub mod paint;
 pub mod policy;
 pub mod session;
 pub mod viewport;
 
+pub use chrome::{Breadcrumbs, StatusBar, StatusItem};
 pub use component::{Component, Context, Flow, View};
 pub use components::{
     Answers, AssetKind, AssetPicker, Choice, ColorFormat, ColorPicker, Confirm, FileMode,
@@ -99,6 +106,7 @@ pub use event::{Button, Event, Key, KeyCode, Modifiers, Mouse, MouseKind};
 pub use event_loop::{degrade, run, Error, EventLoop, Handle, LoopOptions, Outcome, RunOptions};
 pub use item::{Action, ActionFilter, ActionTarget, Actions, Item, Preview, TargetKind};
 pub use keymap::{Binding, Keymap};
+pub use overlay::{Command, Help, Menu, Overlays, Palette, Shortcuts};
 pub use policy::{Fallback, LineIo, NotInteractive, Policy, Reason};
 pub use session::{Backend, Output, Session, SessionOptions};
 pub use viewport::Viewport;

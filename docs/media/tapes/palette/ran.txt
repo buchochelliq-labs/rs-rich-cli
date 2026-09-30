@@ -1,0 +1,26 @@
+❯ overlays
+rs-rich-cli › crates › rich-interact
+? Open ›
+  src/lib.rs
+❯ src/overlay.rs
+  src/chrome.rs
+  src/compose.rs
+  README.md
+  Cargo.toml
+  6/6 · ↑↓ move · enter pick · esc cancel
+ FILES  │ * indexing │ 6 files                   enter pick · esc cancel │ ctrl+o commands · f1 help
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

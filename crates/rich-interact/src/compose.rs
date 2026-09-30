@@ -299,6 +299,17 @@ pub trait ComponentExt: Component + Sized {
         }
     }
 
+    /// Wrap this component in [`Overlays`](crate::overlay::Overlays): a
+    /// command palette, help and a shortcut sheet read from its keymap,
+    /// and room for a status bar and breadcrumbs.
+    fn with_overlays<'a>(self) -> crate::overlay::Overlays<'a, Self::Output>
+    where
+        Self: 'a,
+        Self::Output: 'a,
+    {
+        crate::overlay::Overlays::new(self)
+    }
+
     /// Box this component as a [`Child`].
     fn boxed<'a>(self) -> Child<'a, Self::Output>
     where
@@ -2190,40 +2201,14 @@ impl<'a, M> Layers<'a, M> {
         outer: Rect,
         inner: Rect,
     ) -> Vec<Vec<Segment>> {
-        let mut lines = rows_of(view, inner, true)
+        let lines = rows_of(view, inner, true)
             .into_iter()
             .map(|line| kit::pad(line, inner.width))
             .collect::<Vec<_>>();
         if !(layer.border && inner != outer) {
             return lines;
         }
-        let style = &self.border;
-        let span = inner.width;
-        let mut top = vec![kit::text("╭", style)];
-        match &layer.title {
-            Some(title) if span >= 4 => {
-                let title = kit::fit(vec![kit::text(format!(" {title} "), style)], span - 1);
-                let used = kit::width(&title) + 1;
-                top.push(kit::text("─", style));
-                top.extend(title);
-                top.push(kit::text("─".repeat(span.saturating_sub(used)), style));
-            }
-            _ => top.push(kit::text("─".repeat(span), style)),
-        }
-        top.push(kit::text("╮", style));
-        for line in &mut lines {
-            let mut boxed = vec![kit::text("│", style)];
-            boxed.append(line);
-            boxed.push(kit::text("│", style));
-            *line = boxed;
-        }
-        lines.insert(0, top);
-        lines.push(vec![
-            kit::text("╰", style),
-            kit::text("─".repeat(span), style),
-            kit::text("╯", style),
-        ]);
-        lines
+        kit::frame(lines, inner.width, layer.title.as_deref(), &self.border)
     }
 }
 
@@ -2287,20 +2272,10 @@ impl<M> Component for Layers<'_, M> {
         let mut cursor = None;
         for (index, layer) in self.layers.iter().enumerate() {
             let (outer, inner) = places[index];
-            if layer.backdrop {
-                for line in &mut lines {
-                    *line = kit::restyle(line, &self.backdrop);
-                }
-            }
             let view = layer.child.render(&inner.context(context));
             let boxed = self.boxed(layer, &view, outer, inner);
-            if lines.len() < outer.y + boxed.len() {
-                lines.resize_with(outer.y + boxed.len(), Vec::new);
-            }
-            for (row, top) in boxed.iter().enumerate() {
-                let line = &mut lines[outer.y + row];
-                *line = kit::overlay(line, outer.x, top);
-            }
+            let backdrop = layer.backdrop.then_some(&self.backdrop);
+            kit::place(&mut lines, outer.x, outer.y, &boxed, backdrop);
             cursor = view
                 .cursor
                 .filter(|(row, column)| *row < inner.height && *column < inner.width.max(1))
