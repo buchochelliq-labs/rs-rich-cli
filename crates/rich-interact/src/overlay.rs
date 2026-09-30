@@ -1235,8 +1235,7 @@ impl<'a, M: 'a> Component for Overlays<'a, M> {
         let flow = match event {
             Event::Mouse(mouse) => {
                 let row = mouse.row as usize;
-                if self.crumbs.is_some() && row == 0 {
-                    let crumbs = self.crumbs.as_mut().expect("checked");
+                if let Some(crumbs) = self.crumbs.as_mut().filter(|_| row == 0) {
                     if !crumbs.mouse() {
                         return Flow::Ignored;
                     }
