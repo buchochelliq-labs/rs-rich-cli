@@ -17,7 +17,7 @@
 //!   (`clap` feature for `clap::Command`).
 //! - Diffs and testing: [`diff`], `testing` and `qa` (`testing` feature).
 //! - Terminals: [`capabilities`], [`fidelity`], [`a11y`], [`target`],
-//!   [`ansi_explain`], [`sanitize`], [`encoding`].
+//!   [`ansi_explain`], [`sanitize`], [`encoding`], [`clipboard`] (OSC 52).
 //! - Workflows: [`workflow`], [`transfer`], [`countdown`], [`notify`],
 //!   [`cancel`], [`table`], [`badge`], [`size_bar`], [`format`](mod@format), [`redact`]
 //!   (experimental).
@@ -48,6 +48,7 @@ pub mod badge;
 pub mod cancel;
 pub mod capabilities;
 pub mod cli;
+pub mod clipboard;
 pub mod encoding;
 pub mod env_inspect;
 pub mod fidelity;

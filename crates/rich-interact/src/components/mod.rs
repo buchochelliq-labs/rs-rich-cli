@@ -23,7 +23,7 @@ pub use input::{input_keymap, Input, Provider, Suggestion};
 pub use pager::Pager;
 pub use select::{select_keymap, MultiSelect, PreviewLayout, Select};
 pub use textarea::TextArea;
-pub use views::{TableSelect, TreeSelect};
+pub use views::{table_keymap, tree_keymap, TableSelect, TreeSelect};
 
 use rich::Style;
 

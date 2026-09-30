@@ -74,6 +74,7 @@
 //! ```
 
 pub mod chrome;
+pub mod clipboard;
 pub mod component;
 pub mod components;
 pub mod compose;

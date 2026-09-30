@@ -486,7 +486,13 @@ impl<'a> EventLoop<'a> {
             width,
             height,
         };
+        // Copies made while handling go out once the handler returns
+        // (#488): the component cannot write to the terminal itself.
+        crate::clipboard::open(self.backend.clipboard().err());
         let step = self.mounted[index].0.handle(event, &context);
+        for text in crate::clipboard::close() {
+            self.backend.copy(&text)?;
+        }
         self.apply(index, step)
     }
 

@@ -2,13 +2,20 @@
 //! table's rows or a tree's nodes, so they filter, preview and take
 //! [`Actions`] the same way, with each action told what it is done to (a
 //! [`TargetKind::Row`] or a [`TargetKind::Node`]).
+//!
+//! Since 0.0.14 a table copies its focused row or cell as text, CSV or
+//! JSON (#434), and a tree filters as a tree, keeping each match's
+//! ancestors (#428), shows the focused node's breadcrumbs and copies its
+//! path (#464), all through the terminal [clipboard](crate::clipboard).
 
 use std::time::Duration;
 
 use rich::cells::cell_len;
+use rich::{Segment, Style};
 
+use crate::clipboard::{self, CopyFormat};
 use crate::component::{Component, Context, Flow, View};
-use crate::components::{shown, text, PreviewLayout, Select, Theme};
+use crate::components::{fit, plain, shown, text, PreviewLayout, Select, Theme};
 use crate::event::{Event, Key, KeyCode};
 use crate::item::{Actions, Item, TargetKind};
 use crate::keymap::{keys, Keymap};
@@ -79,10 +86,34 @@ macro_rules! select_builders {
     };
 }
 
+/// The keys a [`TableSelect`] adds to its list's, in context `table`.
+pub fn table_keymap() -> Keymap {
+    Keymap::new("table")
+        .bind("copy-row", keys("ctrl+y"), "copy the row")
+        .bind("copy-cell", keys("alt+y"), "copy the focused cell")
+        .bind("next-column", keys("ctrl+right"), "focus the next column")
+        .bind("previous-column", keys("ctrl+left"), "focus the previous column")
+        .bind("copy-format", keys("alt+f"), "copy as text, CSV or JSON")
+}
+
 /// Pick a row of a table: columns aligned under their headings, rows
 /// filtered by any cell. Returns the row's value.
+///
+/// Ctrl+Y copies the focused row, and Alt+Y its focused cell, to the
+/// terminal's [clipboard](crate::clipboard) (#434): as text (cells
+/// separated by tabs), CSV or JSON (an object keyed by the headings),
+/// cycled with Alt+F or set with [`copy_format`](Self::copy_format).
+/// Ctrl+Right and Ctrl+Left move the focused column, which the headings
+/// underline.
 pub struct TableSelect<T> {
     select: Select<T>,
+    headers: Vec<String>,
+    cells: Vec<Vec<String>>,
+    widths: Vec<usize>,
+    /// The focused column, once moved to.
+    column: Option<usize>,
+    format: CopyFormat,
+    keymap: Keymap,
 }
 
 impl<T> TableSelect<T> {
@@ -124,34 +155,157 @@ impl<T> TableSelect<T> {
             out.trim_end().to_string()
         };
         let mut values = Vec::with_capacity(rows.len());
+        let mut table = Vec::with_capacity(rows.len());
         let items: Vec<Item<T>> = rows
             .into_iter()
             .map(|(mut item, cells)| {
                 item.label = line(&cells);
                 values.push(cells.join("\t"));
+                table.push(cells);
                 item
             })
             .collect();
         let mut select = Select::new(prompt, items);
-        let heading = line(&headers);
-        let style = Theme::default().prompt;
-        select.heading = Some(vec![text(heading, &style)]);
         select.set_kind(TargetKind::Row);
         select.set_values(values);
-        TableSelect { select }
+        let mut view = TableSelect {
+            select,
+            headers,
+            cells: table,
+            widths,
+            column: None,
+            format: CopyFormat::Text,
+            keymap: table_keymap(),
+        };
+        view.heading();
+        view
     }
 
     select_builders!();
+
+    /// How Ctrl+Y and Alt+Y copy (default: text).
+    pub fn copy_format(mut self, format: CopyFormat) -> Self {
+        self.format = format;
+        self
+    }
+
+    /// The focused column, once one has been moved to.
+    pub fn column(&self) -> Option<usize> {
+        self.column
+    }
+
+    /// Make `keys` do `action` (see [`table_keymap`]) on this table only.
+    pub fn rebind(mut self, action: &str, keys: impl IntoIterator<Item = Key>) -> Self {
+        self.keymap.rebind(action, keys);
+        self
+    }
+
+    /// The row of headings, the focused column underlined.
+    fn heading(&mut self) {
+        let style = Theme::default().prompt;
+        let Some(focused_column) = self.column else {
+            // One segment, as before columns could be focused.
+            let mut heading = String::new();
+            for (column, width) in self.widths.iter().enumerate() {
+                let cell = self.headers.get(column).map_or("", String::as_str);
+                heading.push_str(cell);
+                if column + 1 < self.widths.len() {
+                    heading.push_str(&" ".repeat(width - cell_len(cell) + 2));
+                }
+            }
+            self.select.heading = Some(vec![text(heading.trim_end(), &style)]);
+            return;
+        };
+        let focused = style.combine(&Style::parse("underline").expect("a style"));
+        let mut line: Vec<Segment> = Vec::new();
+        let last = self.widths.len().saturating_sub(1);
+        for (column, width) in self.widths.iter().enumerate() {
+            let cell = self.headers.get(column).map_or("", String::as_str);
+            let style = if column == focused_column {
+                &focused
+            } else {
+                &style
+            };
+            if !cell.is_empty() {
+                line.push(text(cell, style));
+            }
+            if column < last {
+                line.push(plain(" ".repeat(width - cell_len(cell) + 2)));
+            }
+        }
+        // As before a column was focused: no padding after the last heading.
+        while line
+            .last()
+            .is_some_and(|segment| segment.style.is_none() && segment.text.trim().is_empty())
+        {
+            line.pop();
+        }
+        self.select.heading = Some(line);
+    }
+
+    /// Copy the focused row, or its focused cell.
+    fn copy(&mut self, cell: bool) {
+        let Some(index) = self.select.focused() else {
+            return;
+        };
+        let row = &self.cells[index];
+        let (what, copied) = if cell {
+            let column = self.column.unwrap_or(0);
+            let value = row.get(column).map_or("", String::as_str);
+            ("cell", self.format.cell(value))
+        } else {
+            ("row", self.format.row(&self.headers, row))
+        };
+        let result = clipboard::copy(copied);
+        let what = format!("{what} as {}", self.format.name());
+        self.select.set_status(Some(clipboard::report(&what, &result)));
+    }
+
+    /// Carry out a table key; `false` when `key` is not one.
+    fn table_key(&mut self, key: Key) -> bool {
+        match self.keymap.action(key) {
+            Some("copy-row") => self.copy(false),
+            Some("copy-cell") => self.copy(true),
+            Some(step @ ("next-column" | "previous-column")) => {
+                let columns = self.widths.len().max(1);
+                let at = self.column.unwrap_or(0);
+                self.column = Some(if step == "next-column" {
+                    (at + 1).min(columns - 1)
+                } else {
+                    at.saturating_sub(1)
+                });
+                self.heading();
+            }
+            Some("copy-format") => {
+                self.format = self.format.next();
+                self.select
+                    .set_status(Some(format!("copy as {}", self.format.name())));
+            }
+            _ => return false,
+        }
+        true
+    }
 }
 
 impl<T: Clone> Component for TableSelect<T> {
     type Output = T;
 
     fn keymap(&self) -> Keymap {
-        self.select.visible_keymap()
+        let mut keymap = if self.select.menu_open() {
+            Keymap::default()
+        } else {
+            self.keymap.clone()
+        };
+        keymap.extend(self.select.visible_keymap());
+        keymap
     }
 
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<T> {
+        if let Some(key) = event.key() {
+            if !self.select.menu_open() && self.table_key(key) {
+                return Flow::Continue;
+            }
+        }
         self.select.handle(event, context)
     }
 
@@ -176,9 +330,25 @@ impl<T: Clone> Component for TableSelect<T> {
     }
 }
 
+/// The keys a [`TreeSelect`] adds to its list's, in context `tree`.
+pub fn tree_keymap() -> Keymap {
+    Keymap::new("tree")
+        .bind("expand", keys("right"), "expand")
+        .bind("collapse", keys("left"), "collapse, or go to the parent")
+        .bind("copy-path", keys("ctrl+y"), "copy the path")
+}
+
 /// Pick a node of a tree. Nodes are given in order, each with its depth
 /// (0 for a root); Right expands the focused node and Left collapses it,
-/// or moves to its parent. Typing searches every node, collapsed or not.
+/// or moves to its parent.
+///
+/// Typing searches every node, collapsed or not, and filters as a tree
+/// (#428): each match keeps its ancestors, dimmed, so you see where it is,
+/// and the cursor goes to the best match. With
+/// [`breadcrumbs`](Self::breadcrumbs) on, a line under the question shows
+/// the path to the focused node (#464). Ctrl+Y copies that path (the
+/// node's [`ActionTarget::value`](crate::ActionTarget::value)) to the
+/// terminal's [clipboard](crate::clipboard).
 pub struct TreeSelect<T> {
     select: Select<T>,
     parents: Vec<Option<usize>>,
@@ -186,6 +356,12 @@ pub struct TreeSelect<T> {
     last: Vec<bool>,
     parent_of_any: Vec<bool>,
     collapsed: Vec<bool>,
+    /// Each node's name in the breadcrumbs (its label by default).
+    crumbs: Vec<String>,
+    breadcrumbs: bool,
+    /// The width the breadcrumbs were last laid out at.
+    width: usize,
+    keymap: Keymap,
 }
 
 impl<T> TreeSelect<T> {
@@ -228,19 +404,120 @@ impl<T> TreeSelect<T> {
                 path.join("/")
             })
             .collect();
+        let crumbs = items.iter().map(|item| item.label.clone()).collect();
         let mut select = Select::new(prompt, items);
         select.set_kind(TargetKind::Node);
         select.set_values(values);
         select.hints = Some("←→ fold".into());
+        select.set_tree(Some(parents.clone()));
         let mut tree = TreeSelect {
             select,
             parents,
             last,
             parent_of_any,
             collapsed: vec![false; count],
+            crumbs,
+            breadcrumbs: false,
+            width: usize::MAX,
+            keymap: tree_keymap(),
         };
         tree.update();
         tree
+    }
+
+    /// Show the path to the focused node on a line under the question
+    /// (#464): `root › parent › node`, cut from the left when it is too
+    /// wide.
+    pub fn breadcrumbs(mut self, on: bool) -> Self {
+        self.breadcrumbs = on;
+        self.crumb_line();
+        self
+    }
+
+    /// Each node's name in the breadcrumbs, by index, in place of its
+    /// label: a key rather than `key: value`, say.
+    pub fn crumbs(mut self, crumbs: Vec<String>) -> Self {
+        for (index, crumb) in crumbs.into_iter().enumerate().take(self.crumbs.len()) {
+            self.crumbs[index] = shown(&crumb);
+        }
+        self.crumb_line();
+        self
+    }
+
+    /// What Ctrl+Y copies and actions see as each node's value, by index,
+    /// in place of the labels joined by `/`: a JSON path, say.
+    pub fn paths(mut self, paths: Vec<String>) -> Self {
+        let mut values: Vec<String> = (0..self.parents.len())
+            .map(|index| self.select.target(index).value)
+            .collect();
+        for (index, path) in paths.into_iter().enumerate().take(values.len()) {
+            values[index] = path;
+        }
+        self.select.set_values(values);
+        self
+    }
+
+    /// Collapse every node at `depth` or deeper that has children, and
+    /// expand the rest: `fold_below(1)` shows the roots' children only.
+    pub fn fold_below(mut self, depth: usize) -> Self {
+        for index in 0..self.parents.len() {
+            let deep = crate::kit::ancestors(&self.parents, index).count() >= depth;
+            self.collapsed[index] = deep && self.parent_of_any[index];
+        }
+        self.update();
+        self
+    }
+
+    /// Make `keys` do `action` (see [`tree_keymap`]) on this tree only.
+    pub fn rebind(mut self, action: &str, keys: impl IntoIterator<Item = Key>) -> Self {
+        self.keymap.rebind(action, keys);
+        self
+    }
+
+    /// Each node's parent, by index.
+    pub fn parents(&self) -> &[Option<usize>] {
+        &self.parents
+    }
+
+    /// The focused node's index.
+    pub fn focused(&self) -> Option<usize> {
+        self.select.focused()
+    }
+
+    /// The names on the path to node `index`, from the root.
+    pub fn path_to(&self, index: usize) -> Vec<&str> {
+        let mut path: Vec<&str> = crate::kit::ancestors(&self.parents, index)
+            .map(|ancestor| self.crumbs[ancestor].as_str())
+            .collect();
+        path.reverse();
+        path.push(self.crumbs[index].as_str());
+        path
+    }
+
+    /// Show `status` in place of the footer until the next key.
+    pub fn set_status(&mut self, status: Option<String>) {
+        self.select.set_status(status);
+    }
+
+    /// The breadcrumbs of the focused node, at the last width seen.
+    fn crumb_line(&mut self) {
+        if !self.breadcrumbs {
+            return;
+        }
+        let path = self.select.focused().map(|index| self.path_to(index));
+        let line = breadcrumb_line(path.as_deref().unwrap_or(&[]), self.width);
+        self.select.heading = Some(line);
+    }
+
+    /// Ctrl+Y: copy the focused node's path.
+    fn copy_path(&mut self) {
+        let Some(index) = self.select.focused() else {
+            return;
+        };
+        let path = self.select.target(index).value;
+        let result = clipboard::copy(path);
+        self.select
+            .set_status(Some(clipboard::report("path", &result)));
     }
 
     /// Start with every node that has children collapsed (`true`) or
@@ -258,6 +535,14 @@ impl<T> TreeSelect<T> {
     /// Whether node `index` is collapsed.
     pub fn is_collapsed(&self, index: usize) -> bool {
         self.collapsed.get(index).copied().unwrap_or(false)
+    }
+
+    /// Collapse (`true`) or expand node `index`.
+    pub fn set_collapsed(&mut self, index: usize, collapsed: bool) {
+        if self.parent_of_any.get(index).copied().unwrap_or(false) {
+            self.collapsed[index] = collapsed;
+            self.update();
+        }
     }
 
     /// The guides and fold markers, and which nodes a collapse hides.
@@ -300,6 +585,7 @@ impl<T> TreeSelect<T> {
         self.select.prefixes = prefixes;
         self.select.hidden = hidden;
         self.select.refilter();
+        self.crumb_line();
     }
 
     /// Right and Left: fold the focused node, or go to its parent.
@@ -335,20 +621,32 @@ impl<T: Clone> Component for TreeSelect<T> {
     type Output = T;
 
     fn keymap(&self) -> Keymap {
-        let mut keymap = Keymap::new("tree")
-            .bind("expand", keys("right"), "expand")
-            .bind("collapse", keys("left"), "collapse, or go to the parent");
+        let mut keymap = if self.select.menu_open() {
+            Keymap::default()
+        } else {
+            self.keymap.clone()
+        };
         keymap.extend(self.select.visible_keymap());
         keymap
     }
 
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<T> {
-        if let Some(key) = event.key() {
-            if !self.select.menu_open() && self.fold(key) {
-                return Flow::Continue;
+        self.width = context.width;
+        let flow = match event.key() {
+            Some(key) if !self.select.menu_open() && self.keymap.is(key, "copy-path") => {
+                // A key clears the status first, as the list does.
+                self.select.set_status(None);
+                self.copy_path();
+                Flow::Continue
             }
-        }
-        self.select.handle(event, context)
+            Some(key) if !self.select.menu_open() && self.fold(key) => {
+                self.select.set_status(None);
+                Flow::Continue
+            }
+            _ => self.select.handle(event, context),
+        };
+        self.crumb_line();
+        flow
     }
 
     fn render(&self, context: &Context<'_>) -> View {
@@ -370,4 +668,42 @@ impl<T: Clone> Component for TreeSelect<T> {
     fn prompt(&mut self, io: &mut dyn LineIo) -> Result<Option<T>, NotInteractive> {
         self.select.prompt(io)
     }
+}
+
+/// The path to a node as one line, `root › parent › node`, cut from the
+/// left (`… › parent › node`) to fit `width`.
+///
+/// A private stand-in: once the shared breadcrumbs component lands
+/// (0.0.14 workstream 2, #482), the tree and the explorers draw theirs
+/// with it instead.
+fn breadcrumb_line(path: &[&str], width: usize) -> Vec<Segment> {
+    let theme = Theme::default();
+    let separator = " › ";
+    let room = width.saturating_sub(2);
+    let mut first = 0;
+    let total = |from: usize| -> usize {
+        let names: usize = path[from..].iter().map(|name| cell_len(name)).sum();
+        let gaps = path.len().saturating_sub(from + 1) * cell_len(separator);
+        names + gaps + if from > 0 { cell_len("…") + cell_len(separator) } else { 0 }
+    };
+    while first + 1 < path.len() && total(first) > room {
+        first += 1;
+    }
+    let mut line = Vec::new();
+    if first > 0 {
+        line.push(text("…", &theme.hint));
+        line.push(text(separator, &theme.hint));
+    }
+    for (offset, name) in path[first..].iter().enumerate() {
+        if offset > 0 {
+            line.push(text(separator, &theme.hint));
+        }
+        let last = first + offset + 1 == path.len();
+        line.push(if last {
+            text(*name, &theme.focused)
+        } else {
+            text(*name, &theme.hint)
+        });
+    }
+    fit(line, room)
 }

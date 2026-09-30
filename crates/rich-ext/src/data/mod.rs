@@ -454,6 +454,45 @@ pub(crate) fn scalar_text(value: &Value, quote: bool) -> (String, &'static str) 
     }
 }
 
+/// A node's value on one line, as the explorer shows it: a scalar as JSON
+/// text (strings quoted, controls escaped), a container as its summary
+/// (`{…} 3 keys`, `[]`).
+///
+/// ```
+/// use rich_ext::data::{display_value, parse, Format};
+///
+/// let node = parse(Format::Json, r#"{"a": "x\ny", "b": [1, 2]}"#).unwrap();
+/// assert_eq!(display_value(node.get("a").unwrap()), r#""x\ny""#);
+/// assert_eq!(display_value(node.get("b").unwrap()), "[…] 2 items");
+/// ```
+pub fn display_value(node: &Node) -> String {
+    if node.is_container() {
+        summary(node)
+    } else {
+        scalar_text(&node.value, true).0
+    }
+}
+
+/// A node's value as text to copy: a string as it is (unquoted), another
+/// scalar as JSON text, a container as indented JSON.
+///
+/// ```
+/// use rich_ext::data::{copy_text, parse, Format};
+///
+/// let node = parse(Format::Json, r#"{"a": "hi", "b": {"c": 1}}"#).unwrap();
+/// assert_eq!(copy_text(node.get("a").unwrap()), "hi");
+/// assert_eq!(copy_text(node.get("b").unwrap()), "{\n  \"c\": 1\n}");
+/// ```
+pub fn copy_text(node: &Node) -> String {
+    match &node.value {
+        Value::String(s) | Value::DateTime(s) => s.clone(),
+        _ if node.is_container() => {
+            serde_json::to_string_pretty(&node.to_json()).unwrap_or_default()
+        }
+        value => scalar_text(value, true).0,
+    }
+}
+
 /// `s` as a JSON string literal. serde_json escapes only U+0000–U+001F, so
 /// DEL and the C1 controls (U+0080–U+009F, among them the one-character
 /// CSI U+009B) are escaped here too: no control character reaches the
