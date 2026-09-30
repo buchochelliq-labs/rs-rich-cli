@@ -339,6 +339,11 @@ impl ExtensionRegistry {
         self.themes.get(name).map(|e| &e.1)
     }
 
+    /// Every theme name, sorted: what a theme picker offers.
+    pub fn theme_names(&self) -> Vec<&str> {
+        self.themes.keys().map(String::as_str).collect()
+    }
+
     /// A box style by name.
     pub fn box_style(&self, name: &str) -> Option<BoxStyle> {
         self.box_styles.get(name).map(|e| e.1)
@@ -762,6 +767,7 @@ mod tests {
             .collect();
         assert_eq!(ids, ["a", "b"]);
         assert!(registry.theme("dark").is_some() && registry.theme("light").is_some());
+        assert_eq!(registry.theme_names(), ["dark", "light"]);
     }
 
     /// Fences reach Markdown through `fences()`, routed by language, and two

@@ -302,3 +302,23 @@ fn the_theme_picker_previews_each_theme() {
         record.output()
     );
 }
+
+#[test]
+fn the_theme_picker_lists_plugin_themes() {
+    use rich_ext::plugin::{Plugin, PluginError, PluginMetadata, PluginRegistrar};
+    struct Pack;
+    impl Plugin for Pack {
+        fn metadata(&self) -> PluginMetadata {
+            PluginMetadata::new("pack", "Theme pack", "0.0.1")
+        }
+        fn register(&self, registrar: &mut dyn PluginRegistrar) -> Result<(), PluginError> {
+            registrar.theme("solar", Theme::new());
+            registrar.theme("dusk", Theme::new());
+            Ok(())
+        }
+    }
+    let mut registry = rich_ext::ExtensionRegistry::new();
+    registry.add_plugin(&Pack).unwrap();
+    let picker = ThemePicker::from_registry("Theme", &registry);
+    assert_eq!(picker.names(), ["default", "dusk", "solar"]);
+}

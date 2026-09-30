@@ -123,6 +123,21 @@ impl ThemePicker {
         }
     }
 
+    /// Pick one of the themes plugins registered in `registry` (theme
+    /// packs), after rich's own default theme, listed as `default`.
+    pub fn from_registry(
+        prompt: impl Into<String>,
+        registry: &rich_ext::registry::ExtensionRegistry,
+    ) -> ThemePicker {
+        let themes = std::iter::once(("default".to_string(), rich::Theme::new())).chain(
+            registry.theme_names().into_iter().filter_map(|name| {
+                let theme = registry.theme(name)?.clone();
+                Some((name.to_string(), theme))
+            }),
+        );
+        ThemePicker::new(prompt, themes)
+    }
+
     /// Show at most `rows` themes at once (default 10).
     pub fn height(mut self, rows: usize) -> Self {
         self.select = self.select.height(rows);
