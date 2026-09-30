@@ -449,11 +449,7 @@ impl<T> Select<T> {
     /// collapses to the answer), `Some(Flow::Cancel)` cancels,
     /// `Some(Flow::Ignored)` means the event was not the select's, and
     /// `None` carries on.
-    pub fn event(
-        &mut self,
-        event: &Event,
-        context: &Context<'_>,
-    ) -> Option<Flow<Vec<usize>>> {
+    pub fn event(&mut self, event: &Event, context: &Context<'_>) -> Option<Flow<Vec<usize>>> {
         self.space.set(context.height);
         let flow = self.event_inner(event, context.width);
         match &flow {
@@ -559,8 +555,7 @@ impl<T> Select<T> {
                 }
             }
             Some("mark-all") => {
-                let matches: Vec<usize> =
-                    self.filter.matches().iter().map(|(i, _)| *i).collect();
+                let matches: Vec<usize> = self.filter.matches().iter().map(|(i, _)| *i).collect();
                 let all = matches.iter().all(|&index| self.list.is_selected(index));
                 for index in matches {
                     self.list.set_selected(index, !all);

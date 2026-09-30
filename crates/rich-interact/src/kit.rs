@@ -438,6 +438,19 @@ impl ScrollState {
         self.offset.min(end)..end
     }
 
+    /// The keys [`handle`](Self::handle) scrolls with, in `context`, for a
+    /// component's [`keymap`](crate::Component::keymap).
+    pub fn keymap(context: &str) -> crate::keymap::Keymap {
+        use crate::keymap::keys;
+        crate::keymap::Keymap::new(context)
+            .bind("scroll-up", keys("up k"), "scroll up")
+            .bind("scroll-down", keys("down j"), "scroll down")
+            .bind("page-up", keys("pageup b"), "page up")
+            .bind("page-down", keys("pagedown space"), "page down")
+            .bind("top", keys("home g"), "to the top")
+            .bind("bottom", keys("end G"), "to the bottom")
+    }
+
     /// Move with the usual keys and the mouse wheel: arrows and `j`/`k` by a
     /// line, PageUp/PageDown, `b` and Space by a page, Home/End and `g`/`G`
     /// to the ends, and the wheel by three lines. Returns whether the event

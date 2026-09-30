@@ -327,7 +327,10 @@ impl Overrides {
                 continue;
             }
             let Some((id, names)) = line.split_once('=') else {
-                return Err(format!("line {}: expected context.action = keys", number + 1));
+                return Err(format!(
+                    "line {}: expected context.action = keys",
+                    number + 1
+                ));
             };
             pairs.push((id.trim().to_string(), names.trim().to_string()));
         }

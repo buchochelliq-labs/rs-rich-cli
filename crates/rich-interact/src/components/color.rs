@@ -17,6 +17,7 @@ use crate::component::{Component, Context, Flow, View};
 use crate::components::{fit, highlight, plain, question, text, Theme};
 use crate::event::{Button, Event, KeyCode, MouseKind};
 use crate::fuzzy::rank;
+use crate::keymap::{keys, Keymap};
 use crate::names::COLORS;
 use crate::policy::{LineIo, NotInteractive};
 
@@ -483,9 +484,30 @@ impl Component for ColorPicker {
                 self.query.push(c);
                 self.refilter();
             }
-            _ => {}
+            _ => return Flow::Ignored,
         }
         Flow::Continue
+    }
+
+    fn keymap(&self) -> Keymap {
+        Keymap::new("color")
+            .bind("pick", keys("enter"), "pick")
+            .bind("cancel", keys("escape"), "cancel")
+            .bind(
+                "grid",
+                keys("tab shift+tab"),
+                "switch between the list and the grid",
+            )
+            .bind("up", keys("up"), "move up")
+            .bind("down", keys("down"), "move down")
+            .bind("left", keys("left"), "move left (grid)")
+            .bind("right", keys("right"), "move right (grid)")
+            .bind("page-up", keys("pageup"), "page up")
+            .bind("page-down", keys("pagedown"), "page down")
+            .bind("first", keys("home"), "first cell (grid)")
+            .bind("last", keys("end"), "last cell (grid)")
+            .bind("clear", keys("ctrl+u"), "clear the filter")
+            .bind("delete", keys("backspace"), "delete a character")
     }
 
     fn render(&self, context: &Context<'_>) -> View {

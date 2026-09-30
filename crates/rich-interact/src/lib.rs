@@ -63,8 +63,8 @@
 //! ```
 
 pub mod component;
-pub mod compose;
 pub mod components;
+pub mod compose;
 pub mod event;
 pub mod event_loop;
 pub mod fuzzy;
@@ -79,18 +79,19 @@ pub mod session;
 pub mod viewport;
 
 pub use component::{Component, Context, Flow, View};
-pub use compose::{
-    Axis, Column, ComponentExt, Label, Layer, LayerHandle, Layers, Rect, Row, Size, Split, Stack, Tabs,
-};
-pub use keymap::{Binding, Keymap};
 pub use components::{
     Answers, AssetKind, AssetPicker, Choice, ColorFormat, ColorPicker, Confirm, FileMode,
     FilePicker, Form, Input, MultiSelect, Pager, PreviewLayout, Select, Suggestion, TableSelect,
     TextArea, Theme, TreeSelect, Value,
 };
+pub use compose::{
+    Axis, Column, ComponentExt, Label, Layer, LayerHandle, Layers, Rect, Row, Size, Split, Stack,
+    Tabs,
+};
 pub use event::{Button, Event, Key, KeyCode, Modifiers, Mouse, MouseKind};
 pub use event_loop::{degrade, run, Error, EventLoop, Handle, LoopOptions, Outcome, RunOptions};
 pub use item::{Action, ActionFilter, ActionTarget, Actions, Item, Preview, TargetKind};
+pub use keymap::{Binding, Keymap};
 pub use policy::{Fallback, LineIo, NotInteractive, Policy, Reason};
 pub use session::{Backend, Output, Session, SessionOptions};
 pub use viewport::Viewport;

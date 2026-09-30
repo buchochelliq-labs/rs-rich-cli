@@ -519,7 +519,12 @@ impl<'a, M> Group<'a, M> {
         }
     }
 
-    fn route_mouse(&mut self, mouse: Mouse, context: &Context<'_>, rects: &[(usize, Rect)]) -> Flow<M> {
+    fn route_mouse(
+        &mut self,
+        mouse: Mouse,
+        context: &Context<'_>,
+        rects: &[(usize, Rect)],
+    ) -> Flow<M> {
         let (column, row) = (mouse.column as usize, mouse.row as usize);
         let under = rects
             .iter()
@@ -552,7 +557,11 @@ impl<'a, M> Group<'a, M> {
                 Flow::Ignored
             };
         }
-        let flow = self.deliver(index, &Event::Mouse(rect.local(mouse)), &rect.context(context));
+        let flow = self.deliver(
+            index,
+            &Event::Mouse(rect.local(mouse)),
+            &rect.context(context),
+        );
         match flow {
             Flow::Ignored if focused => Flow::Continue,
             flow => flow,
@@ -942,15 +951,19 @@ impl<M> Component for Stack<'_, M> {
         let views: Vec<(View, Rect)> = rects
             .iter()
             .enumerate()
-            .map(|(index, rect)| (self.group.children[index].render(&rect.context(context)), *rect))
+            .map(|(index, rect)| {
+                (
+                    self.group.children[index].render(&rect.context(context)),
+                    *rect,
+                )
+            })
             .collect();
         match self.axis {
             Axis::Vertical => {
                 let mut out = View::default();
                 for (index, (view, rect)) in views.iter().enumerate() {
                     if index > 0 {
-                        out.lines
-                            .extend(std::iter::repeat_n(Vec::new(), self.gap));
+                        out.lines.extend(std::iter::repeat_n(Vec::new(), self.gap));
                     }
                     let fill = self.sizes[index] != Size::Auto;
                     let top = out.lines.len();
@@ -988,7 +1001,10 @@ impl<M> Component for Stack<'_, M> {
     }
 
     fn keymap(&self) -> Keymap {
-        let focused = self.group.focused().map(|index| &self.group.children[index]);
+        let focused = self
+            .group
+            .focused()
+            .map(|index| &self.group.children[index]);
         keymap_with(focused, &self.bindings.keymap)
     }
 
@@ -1282,7 +1298,9 @@ impl<'a, M> Split<'a, M> {
             Axis::Horizontal => context.width,
             Axis::Vertical => context.height,
         };
-        let default = self.divider.clamp(total * usize::from(self.ratio) / 100, total);
+        let default = self
+            .divider
+            .clamp(total * usize::from(self.ratio) / 100, total);
         (total, self.divider.resolve(total, default))
     }
 
@@ -1406,7 +1424,10 @@ impl<M> Component for Split<'_, M> {
     }
 
     fn keymap(&self) -> Keymap {
-        let focused = self.group.focused().map(|index| &self.group.children[index]);
+        let focused = self
+            .group
+            .focused()
+            .map(|index| &self.group.children[index]);
         keymap_with(focused, &self.bindings.keymap)
     }
 
@@ -1605,7 +1626,8 @@ impl<M> Component for Tabs<'_, M> {
                 if mouse.is_click() {
                     let (_, spans) = self.bar(context.width);
                     let column = mouse.column as usize;
-                    if let Some(index) = spans.iter().position(|(a, b)| (*a..*b).contains(&column)) {
+                    if let Some(index) = spans.iter().position(|(a, b)| (*a..*b).contains(&column))
+                    {
                         self.select(index);
                         return Flow::Continue;
                     }
@@ -1615,7 +1637,9 @@ impl<M> Component for Tabs<'_, M> {
         }
         let rect = self.content(context);
         self.group.focus = Some(self.active);
-        let flow = self.group.route(event, context, &[(self.active, rect)], rect);
+        let flow = self
+            .group
+            .route(event, context, &[(self.active, rect)], rect);
         if !matches!(flow, Flow::Ignored) {
             return flow;
         }
@@ -2043,7 +2067,9 @@ impl<'a, M> Layers<'a, M> {
                     Some(None) => self.base.handle(event, context),
                     Some(Some(index)) if index < self.layers.len() => {
                         let inner = places[index].1;
-                        let flow = self.layers[index].child.handle(event, &inner.context(context));
+                        let flow = self.layers[index]
+                            .child
+                            .handle(event, &inner.context(context));
                         self.after_layer(index, flow).unwrap_or(Flow::Continue)
                     }
                     _ => Flow::Continue,
@@ -2070,12 +2096,16 @@ impl<'a, M> Layers<'a, M> {
                     return Flow::Continue;
                 }
                 let event = Event::Mouse(inner.local(*mouse));
-                let flow = self.layers[top].child.handle(&event, &inner.context(context));
+                let flow = self.layers[top]
+                    .child
+                    .handle(&event, &inner.context(context));
                 return self.after_layer(top, flow).unwrap_or(Flow::Continue);
             }
             _ => {}
         }
-        let flow = self.layers[top].child.handle(event, &inner.context(context));
+        let flow = self.layers[top]
+            .child
+            .handle(event, &inner.context(context));
         let ignored = matches!(flow, Flow::Ignored);
         if let Some(flow) = self.after_layer(top, flow) {
             return flow;
@@ -2103,7 +2133,12 @@ impl<'a, M> Layers<'a, M> {
         Flow::Continue
     }
 
-    fn broadcast(&mut self, event: &Event, context: &Context<'_>, places: &[(Rect, Rect)]) -> Flow<M> {
+    fn broadcast(
+        &mut self,
+        event: &Event,
+        context: &Context<'_>,
+        places: &[(Rect, Rect)],
+    ) -> Flow<M> {
         if !matches!(event, Event::Tick) || self.base.tick().is_some() {
             let flow = self.base.handle(event, context);
             if decisive(&flow) {
@@ -2116,8 +2151,12 @@ impl<'a, M> Layers<'a, M> {
                 index += 1;
                 continue;
             }
-            let inner = places.get(index).map_or(Rect::default(), |(_, inner)| *inner);
-            let flow = self.layers[index].child.handle(event, &inner.context(context));
+            let inner = places
+                .get(index)
+                .map_or(Rect::default(), |(_, inner)| *inner);
+            let flow = self.layers[index]
+                .child
+                .handle(event, &inner.context(context));
             let count = self.layers.len();
             if let Some(flow) = self.after_layer(index, flow) {
                 if decisive(&flow) {
@@ -2132,7 +2171,13 @@ impl<'a, M> Layers<'a, M> {
     }
 
     /// The layer's box: its border and title round its view.
-    fn boxed(&self, layer: &Layer<'a, M>, view: &View, outer: Rect, inner: Rect) -> Vec<Vec<Segment>> {
+    fn boxed(
+        &self,
+        layer: &Layer<'a, M>,
+        view: &View,
+        outer: Rect,
+        inner: Rect,
+    ) -> Vec<Vec<Segment>> {
         let mut lines = rows_of(view, inner, true)
             .into_iter()
             .map(|line| kit::pad(line, inner.width))

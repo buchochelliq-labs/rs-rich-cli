@@ -17,6 +17,7 @@ use rich::Segment;
 use crate::component::{Component, Context, Flow, View};
 use crate::components::{fit, plain, question, text, Theme};
 use crate::event::{Event, Key, KeyCode};
+use crate::keymap::{keys, Keymap};
 use crate::policy::{LineIo, NotInteractive};
 
 /// The cells a tab takes on screen.
@@ -498,10 +499,37 @@ impl Component for TextArea {
                 let mut buffer = [0; 4];
                 self.insert(c.encode_utf8(&mut buffer));
             }
-            _ => {}
+            _ => return Flow::Ignored,
         }
         self.follow(context.width, height);
         Flow::Continue
+    }
+
+    fn keymap(&self) -> Keymap {
+        Keymap::new("textarea")
+            .bind("submit", [self.submit], "submit")
+            .bind("cancel", keys("escape"), "cancel")
+            .bind("newline", keys("enter"), "new line")
+            .bind("indent", keys("tab"), "indent")
+            .bind("up", keys("up"), "line up")
+            .bind("down", keys("down"), "line down")
+            .bind("left", keys("left"), "move left")
+            .bind("right", keys("right"), "move right")
+            .bind("page-up", keys("pageup"), "page up")
+            .bind("page-down", keys("pagedown"), "page down")
+            .bind("home", keys("home ctrl+a"), "start of the line")
+            .bind("end", keys("end ctrl+e"), "end of the line")
+            .bind("top", keys("ctrl+home"), "start of the text")
+            .bind("bottom", keys("ctrl+end"), "end of the text")
+            .bind(
+                "delete-to-start",
+                keys("ctrl+u"),
+                "delete to the line's start",
+            )
+            .bind("delete-to-end", keys("ctrl+k"), "delete to the line's end")
+            .bind("delete-word", keys("ctrl+w"), "delete a word")
+            .bind("backspace", keys("backspace"), "delete back")
+            .bind("delete", keys("delete"), "delete forward")
     }
 
     fn render(&self, context: &Context<'_>) -> View {
