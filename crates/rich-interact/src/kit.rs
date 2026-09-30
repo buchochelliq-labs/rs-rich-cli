@@ -537,6 +537,12 @@ impl FilterState {
         &self.query
     }
 
+    /// The query, to edit in place; call [`refilter`](Self::refilter)
+    /// after.
+    pub fn query_mut(&mut self) -> &mut String {
+        &mut self.query
+    }
+
     pub fn is_filtering(&self) -> bool {
         !self.query.is_empty()
     }

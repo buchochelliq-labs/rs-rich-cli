@@ -13,6 +13,12 @@
 //! With the mouse on (#476), a click focuses a row and a second click on it
 //! picks it, the wheel moves, and the border between the list and a preview
 //! beside it can be dragged to resize the panes.
+//!
+//! Since 0.0.14 a select is made of the public [kit](crate::kit): a
+//! [`FilterState`] ranks the items against the query, a [`ListState`] holds
+//! the cursor, the scroll and the marks, a [`Divider`] is the preview's
+//! border and an [`ActionMenu`] is the Ctrl+K menu. Its keys are declared in
+//! a [`Keymap`] (context `select`), so they can be rebound and listed.
 
 use std::cell::Cell;
 use std::time::Duration;
@@ -21,9 +27,11 @@ use rich::Segment;
 
 use crate::component::{Component, Context, Flow, View};
 use crate::components::{fit, highlight, pad, plain, question, text, Theme};
-use crate::event::{Button, Event, Key, KeyCode, Mouse, MouseKind};
+use crate::event::{Button, Event, Key, KeyCode, Modifiers, Mouse, MouseKind};
 use crate::fuzzy::rank;
 use crate::item::{Action, ActionTarget, Actions, Item, TargetKind};
+use crate::keymap::{keys, Keymap};
+use crate::kit::{ActionMenu, Divider, FilterState, ListState, MenuReply};
 use crate::policy::{LineIo, NotInteractive};
 
 /// Where the preview pane goes.
@@ -40,26 +48,42 @@ pub enum PreviewLayout {
 /// The narrowest a pane gets when the border between them is dragged.
 const MIN_PANE: usize = 12;
 
-/// The action menu, while it is open.
-struct Menu {
-    actions: Vec<Action>,
-    focus: usize,
+/// The keys of a [`Select`] (and of the views built on one), in context
+/// `select`. The `mark` actions apply to a [`MultiSelect`].
+pub fn select_keymap() -> Keymap {
+    Keymap::new("select")
+        .bind("pick", keys("enter"), "pick")
+        .bind("cancel", keys("escape"), "cancel")
+        .bind("up", keys("up ctrl+p"), "move up")
+        .bind("down", keys("down ctrl+n"), "move down")
+        .bind("page-up", keys("pageup"), "page up")
+        .bind("page-down", keys("pagedown"), "page down")
+        .bind("first", keys("home"), "first")
+        .bind("last", keys("end"), "last")
+        .bind("mark", keys("tab"), "mark and move down")
+        .bind("mark-up", keys("shift+tab"), "mark and move up")
+        .bind("mark-all", keys("ctrl+a"), "mark every match")
+        .bind("clear", keys("ctrl+u"), "clear the filter")
+        .bind("delete", keys("backspace"), "delete a character")
+        .bind("actions", keys("ctrl+k"), "actions")
 }
+
+/// Actions only a multi-select has.
+const MARKING: [&str; 3] = ["mark", "mark-up", "mark-all"];
 
 /// A fuzzy single choice among items. Enter returns the focused item's
 /// value; Escape cancels.
 pub struct Select<T> {
     prompt: String,
     items: Vec<Item<T>>,
-    query: String,
-    /// Item indices that match the query, best first, with the label
-    /// characters to highlight.
-    matches: Vec<(usize, Vec<usize>)>,
-    focus: usize,
-    offset: usize,
+    /// The query, and the item indices that match it, best first, with the
+    /// label characters to highlight.
+    filter: FilterState,
+    /// The cursor over the matches, the first shown, and the marked items
+    /// (by item index).
+    list: ListState,
     height: usize,
     multi: bool,
-    marked: Vec<bool>,
     preview: PreviewLayout,
     preview_height: usize,
     theme: Theme,
@@ -75,7 +99,8 @@ pub struct Select<T> {
     kind: TargetKind,
     actions: Actions,
     menu_key: Key,
-    menu: Option<Menu>,
+    menu: Option<ActionMenu>,
+    keymap: Keymap,
     /// Each item's identity for an action ([`ActionTarget::value`]); the
     /// label when empty.
     values: Vec<String>,
@@ -98,9 +123,8 @@ pub struct Select<T> {
     clicked: Option<usize>,
     /// Rows on screen, from the last context: the list is cut to fit.
     space: Cell<usize>,
-    /// The list's width beside the preview, once the border is dragged.
-    split: Option<usize>,
-    dragging: bool,
+    /// The border between the list and a preview beside it.
+    divider: Divider,
 }
 
 impl<T> Select<T> {
@@ -110,14 +134,13 @@ impl<T> Select<T> {
         V: Into<Item<T>>,
     {
         let items: Vec<Item<T>> = items.into_iter().map(Into::into).collect();
+        let mut list = ListState::new();
+        list.clear_selection(items.len());
         let mut select = Select {
             prompt: prompt.into(),
-            marked: vec![false; items.len()],
             items,
-            query: String::new(),
-            matches: Vec::new(),
-            focus: 0,
-            offset: 0,
+            filter: FilterState::default(),
+            list,
             height: 10,
             multi: false,
             preview: PreviewLayout::Auto,
@@ -131,6 +154,7 @@ impl<T> Select<T> {
             actions: Actions::new(),
             menu_key: Key::ctrl('k'),
             menu: None,
+            keymap: select_keymap(),
             values: Vec::new(),
             heading: None,
             prefixes: Vec::new(),
@@ -141,8 +165,7 @@ impl<T> Select<T> {
             mouse: false,
             clicked: None,
             space: Cell::new(usize::MAX),
-            split: None,
-            dragging: false,
+            divider: Divider::new(3).min(MIN_PANE),
         };
         select.refilter();
         select
@@ -172,7 +195,7 @@ impl<T> Select<T> {
 
     /// Start with this filter text.
     pub fn query(mut self, query: impl Into<String>) -> Self {
-        self.query = query.into();
+        *self.filter.query_mut() = query.into();
         self.refilter();
         self
     }
@@ -190,8 +213,8 @@ impl<T> Select<T> {
     pub fn default(mut self, index: usize) -> Self {
         if index < self.items.len() {
             self.default = Some(index);
-            if let Some(position) = self.matches.iter().position(|(i, _)| *i == index) {
-                self.focus = position;
+            if let Some(position) = self.filter.position_of(index) {
+                self.list.set_cursor(position);
             }
         }
         self
@@ -207,6 +230,14 @@ impl<T> Select<T> {
     /// The key that opens the action menu (default Ctrl+K).
     pub fn menu_key(mut self, key: Key) -> Self {
         self.menu_key = key;
+        self.keymap.rebind("actions", [key]);
+        self
+    }
+
+    /// Make `keys` do `action` (see [`select_keymap`]) on this select only;
+    /// no keys unbinds it.
+    pub fn rebind(mut self, action: &str, keys: impl IntoIterator<Item = Key>) -> Self {
+        self.keymap.rebind(action, keys);
         self
     }
 
@@ -220,7 +251,7 @@ impl<T> Select<T> {
     /// The list's width beside a preview, in columns: where the border is
     /// until it is dragged.
     pub fn split(mut self, columns: usize) -> Self {
-        self.split = Some(columns);
+        self.divider.set_position(Some(columns));
         self
     }
 
@@ -236,61 +267,128 @@ impl<T> Select<T> {
 
     /// The focused item's index, if any item matches.
     pub fn focused(&self) -> Option<usize> {
-        self.matches.get(self.focus).map(|(index, _)| *index)
+        self.filter.index(self.list.cursor())
     }
 
     /// The list's width beside a preview, once dragged.
     pub fn split_width(&self) -> Option<usize> {
-        self.split
+        self.divider.position()
     }
 
-    pub(crate) fn set_kind(&mut self, kind: TargetKind) {
+    /// The query and what matches it.
+    pub fn filter(&self) -> &FilterState {
+        &self.filter
+    }
+
+    /// The cursor, the scroll and the marks.
+    pub fn list(&self) -> &ListState {
+        &self.list
+    }
+
+    /// The border beside the preview.
+    pub fn divider(&self) -> &Divider {
+        &self.divider
+    }
+
+    /// The action menu, while it is open.
+    pub fn menu(&self) -> Option<&ActionMenu> {
+        self.menu.as_ref()
+    }
+
+    /// The keys, with any rebinding.
+    pub fn select_keymap(&self) -> &Keymap {
+        &self.keymap
+    }
+
+    /// Whether this is the list of a [`MultiSelect`].
+    pub fn is_multi(&self) -> bool {
+        self.multi
+    }
+
+    /// What an action is done to: an item, a row, a node, a file.
+    pub fn set_kind(&mut self, kind: TargetKind) {
         self.kind = kind;
     }
 
-    pub(crate) fn set_values(&mut self, values: Vec<String>) {
+    /// Each item's identity for an action ([`ActionTarget::value`]), by
+    /// index; the label where missing.
+    pub fn set_values(&mut self, values: Vec<String>) {
         self.values = values;
     }
 
+    /// A line above the list, under the question: a table's headings.
+    pub fn set_heading(&mut self, heading: Option<Vec<Segment>>) {
+        self.heading = heading;
+    }
+
+    /// Text before each label, by index, not searched: a tree's guides, an
+    /// emoji. Dimmed, unless `plain`. Call [`refilter`](Self::refilter)
+    /// after.
+    pub fn set_prefixes(&mut self, prefixes: Vec<String>, plain: bool) {
+        self.prefixes = prefixes;
+        self.prefix_plain = plain;
+    }
+
+    /// Items left out while nothing is typed, by index: a collapsed node's
+    /// children. Call [`refilter`](Self::refilter) after.
+    pub fn set_hidden(&mut self, hidden: Vec<bool>) {
+        self.hidden = hidden;
+    }
+
+    /// A line of extra key hints for the footer.
+    pub fn set_hints(&mut self, hints: Option<String>) {
+        self.hints = hints;
+    }
+
+    /// Always take the full height, however few items there are: for lists
+    /// that change under the user, such as a directory's entries.
+    pub fn set_steady(&mut self, steady: bool) {
+        self.steady = steady;
+    }
+
     /// Replace the items, keeping the settings; the query is cleared.
-    pub(crate) fn replace_items(&mut self, items: Vec<Item<T>>) {
-        self.marked = vec![false; items.len()];
+    pub fn replace_items(&mut self, items: Vec<Item<T>>) {
+        self.list.clear_selection(items.len());
         self.items = items;
         self.values.clear();
         self.prefixes.clear();
         self.hidden.clear();
-        self.query.clear();
+        self.filter.query_mut().clear();
         self.default = None;
         self.menu = None;
-        self.focus = 0;
+        self.list.set_cursor(0);
         // A click on the old items is not the first of a pair on the new
         // ones, which may have another item at the same position.
         self.clicked = None;
         self.refilter();
     }
 
-    pub(crate) fn menu_open(&self) -> bool {
+    /// Whether the action menu is open.
+    pub fn menu_open(&self) -> bool {
         self.menu.is_some()
     }
 
-    pub(crate) fn query_text(&self) -> &str {
-        &self.query
+    /// What is typed.
+    pub fn query_text(&self) -> &str {
+        self.filter.query()
     }
 
-    pub(crate) fn set_answer(&mut self, answer: Option<String>) {
+    /// Show `answer` in place of the list (`None`: cancelled), as a
+    /// finished select does.
+    pub fn set_answer(&mut self, answer: Option<String>) {
         self.answer = Some(answer);
     }
 
     /// Carry on after an Enter that did not finish (a directory opened).
-    pub(crate) fn reopen(&mut self) {
+    pub fn reopen(&mut self) {
         self.answer = None;
         self.action = None;
     }
 
     /// Focus item `index` if it is listed.
-    pub(crate) fn focus_item(&mut self, index: usize) {
-        if let Some(position) = self.matches.iter().position(|(i, _)| *i == index) {
-            self.focus = position;
+    pub fn focus_item(&mut self, index: usize) {
+        if let Some(position) = self.filter.position_of(index) {
+            self.list.set_cursor(position);
             self.scroll();
         }
     }
@@ -316,49 +414,42 @@ impl<T> Select<T> {
             .for_target(&self.target(index), &self.items[index].actions)
     }
 
-    pub(crate) fn refilter(&mut self) {
+    /// Match the items against the query again, after the items, their
+    /// prefixes or what is hidden changed.
+    pub fn refilter(&mut self) {
         let focused = self.focused();
-        let texts: Vec<String> = self.items.iter().map(Item::search_text).collect();
-        let filtering = !self.query.is_empty();
-        self.matches = rank(&self.query, texts.iter().map(String::as_str))
-            .into_iter()
-            .filter(|(index, _)| filtering || !self.hidden.get(*index).copied().unwrap_or(false))
-            .map(|(index, found)| {
-                let label = self.items[index].label.chars().count();
-                let mut positions = found.positions;
-                positions.retain(|position| *position < label);
-                (index, positions)
-            })
-            .collect();
+        self.filter.set_hidden(self.hidden.clone());
+        self.filter.set_highlight_limits(
+            self.items
+                .iter()
+                .map(|item| item.label.chars().count())
+                .collect(),
+        );
+        self.filter
+            .set_candidates(self.items.iter().map(Item::search_text));
         // Keep the focused item when it still matches, else the best match.
-        self.focus = focused
-            .and_then(|index| self.matches.iter().position(|(i, _)| *i == index))
-            .filter(|_| self.query.is_empty())
+        let cursor = focused
+            .and_then(|index| self.filter.position_of(index))
+            .filter(|_| !self.filter.is_filtering())
             .unwrap_or(0);
-        self.offset = 0;
-        self.scroll();
+        self.list.set_len(self.filter.len());
+        self.list.reset(cursor, self.shown());
     }
 
     fn scroll(&mut self) {
-        if self.focus < self.offset {
-            self.offset = self.focus;
-        } else if self.focus >= self.offset + self.shown() {
-            self.offset = self.focus + 1 - self.shown();
-        }
+        self.list.follow(self.shown());
     }
 
     fn step(&mut self, delta: isize) {
-        if self.matches.is_empty() {
-            return;
-        }
-        let last = self.matches.len() - 1;
-        self.focus = self.focus.saturating_add_signed(delta).min(last);
-        self.scroll();
+        self.list.step(delta, self.shown());
     }
 
-    /// Handle an event; `Some` finishes with item indices, and the view
-    /// collapses to the answer.
-    pub(crate) fn event(
+    /// Handle an event as the select does, for a component built round
+    /// one: `Some(Flow::Done)` finishes with item indices (the view then
+    /// collapses to the answer), `Some(Flow::Cancel)` cancels,
+    /// `Some(Flow::Ignored)` means the event was not the select's, and
+    /// `None` carries on.
+    pub fn event(
         &mut self,
         event: &Event,
         context: &Context<'_>,
@@ -388,7 +479,7 @@ impl<T> Select<T> {
 
     fn pick_focused(&mut self) -> Option<Flow<Vec<usize>>> {
         let index = self.focused()?;
-        let marked: Vec<usize> = (0..self.items.len()).filter(|&i| self.marked[i]).collect();
+        let marked = self.list.selected();
         Some(Flow::Done(if self.multi && !marked.is_empty() {
             marked
         } else {
@@ -398,43 +489,28 @@ impl<T> Select<T> {
 
     fn menu_event(&mut self, event: &Event) -> Option<Flow<Vec<usize>>> {
         let index = self.focused()?;
-        // The menu's rows follow the list's: see `render_menu`.
+        // The menu's rows follow the list's: see `render_view`.
         let first = self.menu_top();
-        let menu = self.menu.as_mut()?;
-        let count = menu.actions.len();
-        if let Some(mouse) = event.mouse() {
-            if mouse.is_click() {
-                let row = mouse.row as usize;
-                if row >= first && row < first + count {
-                    let action = menu.actions[row - first].clone();
-                    return self.run_action(index, &action);
-                }
+        match self.menu.as_mut()?.handle(event, first) {
+            MenuReply::Stay => None,
+            MenuReply::Close => {
                 self.menu = None;
+                None
             }
-            return None;
+            MenuReply::Run(action) => self.run_action(index, &action),
         }
-        let key = event.key()?;
-        match key.code {
-            KeyCode::Escape => self.menu = None,
-            _ if key == self.menu_key => self.menu = None,
-            KeyCode::Up => menu.focus = (menu.focus + count - 1) % count.max(1),
-            KeyCode::Down | KeyCode::Tab => menu.focus = (menu.focus + 1) % count.max(1),
-            KeyCode::Enter => {
-                let action = menu.actions[menu.focus].clone();
-                return self.run_action(index, &action);
-            }
-            _ => {
-                let found = menu
-                    .actions
-                    .iter()
-                    .find(|action| action.key == Some(key))
-                    .cloned();
-                if let Some(action) = found {
-                    return self.run_action(index, &action);
-                }
-            }
-        }
-        None
+    }
+
+    /// The action `key` triggers here. A key with modifiers that is not
+    /// bound as it is does what it does without them, unless it types.
+    fn key_action(&self, key: Key) -> Option<&str> {
+        let action = self.keymap.action(key).or_else(|| {
+            let typing = matches!(key.code, KeyCode::Char(_));
+            (!typing && key.modifiers != Modifiers::NONE)
+                .then(|| self.keymap.action(Key::new(key.code)))
+                .flatten()
+        })?;
+        (self.multi || !MARKING.contains(&action)).then_some(action)
     }
 
     fn event_inner(&mut self, event: &Event, width: usize) -> Option<Flow<Vec<usize>>> {
@@ -446,7 +522,9 @@ impl<T> Select<T> {
         }
         if let Event::Paste(text) = event {
             self.clicked = None;
-            self.query.push_str(&crate::components::pasted(text, " "));
+            self.filter
+                .query_mut()
+                .push_str(&crate::components::pasted(text, " "));
             self.refilter();
             return None;
         }
@@ -455,8 +533,8 @@ impl<T> Select<T> {
         self.clicked = None;
         if let Some(index) = self.focused() {
             let actions = self.actions_for(index);
-            if key == self.menu_key && !actions.is_empty() {
-                self.menu = Some(Menu { actions, focus: 0 });
+            if self.keymap.is(key, "actions") && !actions.is_empty() {
+                self.menu = Some(ActionMenu::new(actions, key));
                 return None;
             }
             if let Some(action) = actions.iter().find(|action| action.key == Some(key)) {
@@ -464,44 +542,46 @@ impl<T> Select<T> {
                 return self.run_action(index, &action);
             }
         }
-        let ctrl = key.modifiers.ctrl;
-        match key.code {
-            KeyCode::Enter => return self.pick_focused(),
-            KeyCode::Escape => return Some(Flow::Cancel),
-            KeyCode::Up => self.step(-1),
-            KeyCode::Down => self.step(1),
-            KeyCode::Char('p') if ctrl => self.step(-1),
-            KeyCode::Char('n') if ctrl => self.step(1),
-            KeyCode::PageUp => self.step(-(self.shown() as isize)),
-            KeyCode::PageDown => self.step(self.shown() as isize),
-            KeyCode::Home => self.step(isize::MIN / 2),
-            KeyCode::End => self.step(isize::MAX / 2),
-            KeyCode::Tab | KeyCode::BackTab if self.multi => {
+        match self.key_action(key) {
+            Some("pick") => return self.pick_focused(),
+            Some("cancel") => return Some(Flow::Cancel),
+            Some("up") => self.step(-1),
+            Some("down") => self.step(1),
+            Some("page-up") => self.step(-(self.shown() as isize)),
+            Some("page-down") => self.step(self.shown() as isize),
+            Some("first") => self.step(isize::MIN / 2),
+            Some("last") => self.step(isize::MAX / 2),
+            Some(mark @ ("mark" | "mark-up")) => {
+                let down = mark == "mark";
                 if let Some(index) = self.focused() {
-                    self.marked[index] = !self.marked[index];
-                    self.step(if key.code == KeyCode::Tab { 1 } else { -1 });
+                    self.list.toggle(index);
+                    self.step(if down { 1 } else { -1 });
                 }
             }
-            KeyCode::Char('a') if ctrl && self.multi => {
-                let all = self.matches.iter().all(|(i, _)| self.marked[*i]);
-                for (index, _) in &self.matches {
-                    self.marked[*index] = !all;
+            Some("mark-all") => {
+                let matches: Vec<usize> =
+                    self.filter.matches().iter().map(|(i, _)| *i).collect();
+                let all = matches.iter().all(|&index| self.list.is_selected(index));
+                for index in matches {
+                    self.list.set_selected(index, !all);
                 }
             }
-            KeyCode::Char('u') if ctrl => {
-                self.query.clear();
+            Some("clear") => {
+                self.filter.query_mut().clear();
                 self.refilter();
             }
-            KeyCode::Backspace => {
-                if self.query.pop().is_some() {
+            Some("delete") => {
+                if self.filter.query_mut().pop().is_some() {
                     self.refilter();
                 }
             }
-            KeyCode::Char(c) if !ctrl && !key.modifiers.alt => {
-                self.query.push(c);
-                self.refilter();
-            }
-            _ => {}
+            _ => match key.code {
+                KeyCode::Char(c) if !key.modifiers.ctrl && !key.modifiers.alt => {
+                    self.filter.query_mut().push(c);
+                    self.refilter();
+                }
+                _ => return Some(Flow::Ignored),
+            },
         }
         None
     }
@@ -548,10 +628,9 @@ impl<T> Select<T> {
             PreviewLayout::Auto => PreviewLayout::Below,
             layout => layout,
         };
-        let left = match self.split {
-            Some(split) => clamp_split(split, width),
-            None => (width * 45 / 100).max(20).min(width),
-        };
+        let left = self
+            .divider
+            .resolve(width, (width * 45 / 100).max(20).min(width));
         (layout, left)
     }
 
@@ -564,41 +643,41 @@ impl<T> Select<T> {
             MouseKind::ScrollUp => self.step(-1),
             MouseKind::ScrollDown => self.step(1),
             MouseKind::Down(Button::Left) => {
-                let border = layout == PreviewLayout::Right && (left..left + 3).contains(&column);
+                let border = layout == PreviewLayout::Right && self.divider.hit(column, left);
                 if border && in_list {
-                    self.dragging = true;
+                    self.divider.press(column, left);
                 } else if in_list && (layout != PreviewLayout::Right || column < left) {
-                    let position = self.offset + row - top;
-                    if position < self.matches.len() {
-                        if self.clicked == Some(position) && position == self.focus {
+                    let position = self.list.offset() + row - top;
+                    if position < self.filter.len() {
+                        if self.clicked == Some(position) && position == self.list.cursor() {
                             return self.pick_focused();
                         }
-                        self.focus = position;
+                        self.list.set_cursor(position);
                         self.clicked = Some(position);
                     }
                 }
             }
-            MouseKind::Drag(Button::Left) if self.dragging => {
-                self.split = Some(clamp_split(column, width));
+            MouseKind::Drag(Button::Left) if self.divider.dragging() => {
+                self.divider.drag(column, width);
             }
-            MouseKind::Up(_) => self.dragging = false,
+            MouseKind::Up(_) => self.divider.release(),
             _ => {}
         }
         None
     }
 
     fn row(&self, position: usize, width: usize) -> Vec<Segment> {
-        let (index, positions) = &self.matches[position];
+        let (index, positions) = &self.filter.matches()[position];
         let item = &self.items[*index];
         let theme = &self.theme;
-        let focused = position == self.focus;
+        let focused = position == self.list.cursor();
         let mut line = if focused {
             vec![text(format!("{} ", theme.pointer), &theme.pointer_style)]
         } else {
             vec![plain("  ")]
         };
         if self.multi {
-            line.push(if self.marked[*index] {
+            line.push(if self.list.is_selected(*index) {
                 text(format!("{} ", theme.checked), &theme.checked_style)
             } else {
                 text(format!("{} ", theme.unchecked), &theme.hint)
@@ -619,13 +698,15 @@ impl<T> Select<T> {
         fit(line, width)
     }
 
-    fn list(&self, width: usize) -> Vec<Vec<Segment>> {
+    /// The list's rows at `width`: the matches shown, or "no matches", kept
+    /// at a steady height.
+    pub fn list_lines(&self, width: usize) -> Vec<Vec<Segment>> {
         let rows = self.rows();
-        let mut lines: Vec<Vec<Segment>> = (self.offset..self.matches.len())
+        let mut lines: Vec<Vec<Segment>> = (self.list.offset()..self.filter.len())
             .take(rows)
             .map(|position| self.row(position, width))
             .collect();
-        if self.matches.is_empty() {
+        if self.filter.is_empty() {
             lines.push(vec![text("  no matches", &self.theme.hint)]);
         }
         // A steady height, so the footer does not jump as the list filters.
@@ -633,10 +714,11 @@ impl<T> Select<T> {
         lines
     }
 
-    fn footer(&self, width: usize) -> Vec<Segment> {
-        let mut hint = format!("{}/{}", self.matches.len(), self.items.len());
+    /// The footer: counts and key hints.
+    pub fn footer(&self, width: usize) -> Vec<Segment> {
+        let mut hint = format!("{}/{}", self.filter.len(), self.items.len());
         if self.multi {
-            let marked = self.marked.iter().filter(|m| **m).count();
+            let marked = self.list.selected_count();
             hint.push_str(&format!(" · {marked} marked · tab mark"));
         }
         hint.push_str(" · ↑↓ move · enter pick");
@@ -653,44 +735,6 @@ impl<T> Select<T> {
         fit(vec![text(format!("  {hint}"), &self.theme.hint)], width)
     }
 
-    /// The action menu, in place of the footer.
-    fn render_menu(&self, menu: &Menu, width: usize) -> Vec<Vec<Segment>> {
-        let theme = &self.theme;
-        let label_width = menu
-            .actions
-            .iter()
-            .map(|action| rich::cells::cell_len(&action.label))
-            .max()
-            .unwrap_or(0);
-        let mut lines = Vec::new();
-        for (index, action) in menu.actions.iter().enumerate() {
-            let focused = index == menu.focus;
-            let mut line = if focused {
-                vec![text(format!("  {} ", theme.pointer), &theme.pointer_style)]
-            } else {
-                vec![plain("    ")]
-            };
-            let padding = label_width - rich::cells::cell_len(&action.label);
-            line.push(if focused {
-                text(action.label.clone(), &theme.focused)
-            } else {
-                plain(action.label.clone())
-            });
-            if let Some(key) = action.key {
-                line.push(text(format!("{}  {key}", " ".repeat(padding)), &theme.hint));
-            }
-            lines.push(fit(line, width));
-        }
-        lines.push(fit(
-            vec![text(
-                "  ↑↓ move · enter run · esc close".to_string(),
-                &theme.hint,
-            )],
-            width,
-        ));
-        lines
-    }
-
     fn render_view(&self, context: &Context<'_>) -> View {
         self.space.set(context.height);
         let width = context.width;
@@ -703,8 +747,9 @@ impl<T> Select<T> {
             });
             return View::new(vec![fit(header, width)]);
         }
-        let column = crate::components::width(&header) + rich::cells::cell_len(&self.query);
-        header.push(plain(self.query.clone()));
+        let query = self.filter.query();
+        let column = crate::components::width(&header) + rich::cells::cell_len(query);
+        header.push(plain(query.to_string()));
         let mut lines = vec![fit(header, width)];
         if let Some(heading) = &self.heading {
             let mut line = vec![plain(if self.multi { "    " } else { "  " })];
@@ -712,7 +757,7 @@ impl<T> Select<T> {
             lines.push(fit(line, width));
         }
         let footer = |this: &Self| match &this.menu {
-            Some(menu) => this.render_menu(menu, width),
+            Some(menu) => menu.render(&this.theme, width),
             None => vec![this.footer(width)],
         };
         let preview = self
@@ -721,7 +766,7 @@ impl<T> Select<T> {
         match (preview, self.layout(width)) {
             (Some(preview), (PreviewLayout::Right, left)) => {
                 let right = width.saturating_sub(left + 3).max(1);
-                let list = self.list(left);
+                let list = self.list_lines(left);
                 let shown = context.lines_at(&*preview.renderable(), right);
                 for (row, line) in list.into_iter().enumerate() {
                     let mut line = pad(line, left);
@@ -734,7 +779,7 @@ impl<T> Select<T> {
                 lines.extend(footer(self));
             }
             (Some(preview), (PreviewLayout::Below, _)) => {
-                lines.extend(self.list(width));
+                lines.extend(self.list_lines(width));
                 lines.extend(footer(self));
                 lines.push(vec![text("─".repeat(width), &theme.border)]);
                 let shown = context.lines_at(&*preview.renderable(), width);
@@ -746,11 +791,30 @@ impl<T> Select<T> {
                 );
             }
             _ => {
-                lines.extend(self.list(width));
+                lines.extend(self.list_lines(width));
                 lines.extend(footer(self));
             }
         }
         View::new(lines).with_cursor(0, column.min(width.saturating_sub(1)))
+    }
+
+    /// The keys that apply now: no marking for a single choice, and the
+    /// action menu's while it is open.
+    pub fn visible_keymap(&self) -> Keymap {
+        if self.menu.is_some() {
+            return Keymap::new("menu")
+                .bind("up", keys("up"), "move up")
+                .bind("down", keys("down tab"), "move down")
+                .bind("run", keys("enter"), "run")
+                .bind("close", keys("escape"), "close");
+        }
+        let mut keymap = Keymap::new("select");
+        for binding in self.keymap.bindings() {
+            if self.multi || !MARKING.contains(&binding.action.as_str()) {
+                keymap.add(binding);
+            }
+        }
+        keymap
     }
 
     /// Ask without a terminal: list the items, read a number or text.
@@ -771,7 +835,7 @@ impl<T> Select<T> {
         // At the end of input, or on an empty line, the default answers:
         // the default item, or with `multi` the marked ones.
         let default: Vec<usize> = if self.multi {
-            (0..self.items.len()).filter(|&i| self.marked[i]).collect()
+            self.list.selected()
         } else {
             self.default.into_iter().collect()
         };
@@ -818,9 +882,9 @@ impl<T> Select<T> {
 
 /// The list's width beside a preview when the border is at `column`: both
 /// panes at least [`MIN_PANE`] wide when there is room for that.
+#[cfg(test)]
 fn clamp_split(column: usize, width: usize) -> usize {
-    let most = width.saturating_sub(MIN_PANE + 3).max(MIN_PANE.min(width));
-    column.clamp(MIN_PANE.min(most), most)
+    Divider::new(3).min(MIN_PANE).clamp(column, width)
 }
 
 impl<T: Clone> Component for Select<T> {
@@ -830,6 +894,7 @@ impl<T: Clone> Component for Select<T> {
         match self.event(event, context) {
             Some(Flow::Done(indices)) => Flow::Done(self.items[indices[0]].value.clone()),
             Some(Flow::Cancel) => Flow::Cancel,
+            Some(Flow::Ignored) => Flow::Ignored,
             _ => Flow::Continue,
         }
     }
@@ -844,6 +909,10 @@ impl<T: Clone> Component for Select<T> {
 
     fn mouse(&self) -> bool {
         self.mouse
+    }
+
+    fn keymap(&self) -> Keymap {
+        self.visible_keymap()
     }
 
     fn default_value(&self) -> Option<T> {
@@ -908,8 +977,8 @@ impl<T> MultiSelect<T> {
     /// terminal.
     pub fn marked(mut self, indices: impl IntoIterator<Item = usize>) -> Self {
         for index in indices {
-            if let Some(mark) = self.0.marked.get_mut(index) {
-                *mark = true;
+            if index < self.0.items.len() {
+                self.0.list.set_selected(index, true);
             }
         }
         self
@@ -936,12 +1005,17 @@ impl<T: Clone> Component for MultiSelect<T> {
                     .collect(),
             ),
             Some(Flow::Cancel) => Flow::Cancel,
+            Some(Flow::Ignored) => Flow::Ignored,
             _ => Flow::Continue,
         }
     }
 
     fn render(&self, context: &Context<'_>) -> View {
         self.0.render_view(context)
+    }
+
+    fn keymap(&self) -> Keymap {
+        self.0.visible_keymap()
     }
 
     fn tick(&self) -> Option<Duration> {
@@ -954,8 +1028,10 @@ impl<T: Clone> Component for MultiSelect<T> {
 
     fn default_value(&self) -> Option<Vec<T>> {
         Some(
-            (0..self.0.items.len())
-                .filter(|&index| self.0.marked[index])
+            self.0
+                .list
+                .selected()
+                .into_iter()
                 .map(|index| self.0.items[index].value.clone())
                 .collect(),
         )

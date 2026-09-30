@@ -550,6 +550,7 @@ impl Component for FilePicker {
                 self.activate(index)
             }
             Some(Flow::Cancel) => Flow::Cancel,
+            Some(Flow::Ignored) => Flow::Ignored,
             _ => Flow::Continue,
         }
     }
