@@ -2235,6 +2235,24 @@ impl<M> Component for Layers<'_, M> {
         if decisive(&flow) {
             return flow;
         }
+        // Layers opened before the host started start with it.
+        let places = self.placements(context);
+        let mut index = 0;
+        while index < self.layers.len() {
+            let inner = places
+                .get(index)
+                .map_or(Rect::default(), |(_, inner)| *inner);
+            let flow = self.layers[index].child.start(&inner.context(context));
+            let count = self.layers.len();
+            if let Some(flow) = self.after_layer(index, flow) {
+                if decisive(&flow) {
+                    return flow;
+                }
+            }
+            if self.layers.len() == count {
+                index += 1;
+            }
+        }
         self.apply(context)
     }
 

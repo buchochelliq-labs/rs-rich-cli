@@ -17,7 +17,7 @@ use rich_interact::compose::{
 use rich_interact::headless::{self, Script};
 use rich_interact::keymap::{self, keys, Keymap, Overrides};
 use rich_interact::{
-    Component, Context, Event, Flow, Input, Key, Mouse, MouseKind, Outcome, Select, View,
+    Component, Context, Event, Flow, Input, Key, MouseKind, Outcome, Select, View,
 };
 
 fn frame(record: &headless::Record) -> String {
@@ -414,5 +414,31 @@ fn a_mouse_press_holds_its_child_until_the_release() {
         *seen.borrow(),
         ["a mouse 2,0", "a mouse 25,0", "a mouse 25,0"]
     );
-    let _ = Mouse::new(MouseKind::Moved, 0, 0);
+}
+
+/// Finishes as soon as it starts.
+struct Instant;
+
+impl Component for Instant {
+    type Output = String;
+
+    fn start(&mut self, _: &Context<'_>) -> Flow<String> {
+        Flow::Done("started".into())
+    }
+
+    fn handle(&mut self, _: &Event, _: &Context<'_>) -> Flow<String> {
+        Flow::Ignored
+    }
+
+    fn render(&self, _: &Context<'_>) -> View {
+        View::default()
+    }
+}
+
+#[test]
+fn a_layer_opened_before_the_run_starts_with_the_host() {
+    let mut layers = Layers::new(Label::new("base"));
+    layers.open(Layer::modal(Instant));
+    let (outcome, _) = headless::run(layers, Script::new(), 40, 8);
+    assert_eq!(outcome.unwrap(), Outcome::Done("started".to_string()));
 }
