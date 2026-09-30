@@ -16,8 +16,13 @@
 //! - [`markup`]: `:micro:name:` in markup and text; [`MicroExt`] and
 //!   [`MicroAssetRef`] in code.
 //! - [`render`]: the placeholder representation, and the [`MicroRenderer`]
-//!   seam that terminal graphics plug into. This release draws fallbacks
-//!   only.
+//!   seam that terminal graphics plug into.
+//! - [`graphics`]: drawing on a terminal: [`select`] picks Kitty, iTerm2,
+//!   Sixel, half-blocks or the text fallback, and [`MicroGraphics`] draws
+//!   with it, in printed output and through the graphics side channel of
+//!   `rich-ext`'s live regions and the interactive painter.
+//! - [`cache`]: decoded images fitted to their cells, cached in memory and
+//!   on disk.
 //!
 //! ```
 //! use rich::Console;
@@ -34,7 +39,9 @@
 //! ```
 
 pub mod api;
+pub mod cache;
 pub mod error;
+pub mod graphics;
 pub mod image;
 pub mod markup;
 pub mod model;
@@ -44,7 +51,9 @@ pub mod registry;
 pub mod render;
 
 pub use api::{MicroAssetRef, MicroExt, MicroPlugin};
+pub use cache::{ImageCache, Prepared};
 pub use error::MicroError;
+pub use graphics::{select, MicroGraphics, MicroMode, Selection};
 pub use markup::{
     expand, markup_text, render_markup, Diagnostic, DiagnosticKind, MicroTransform, PreparedMarkup,
 };

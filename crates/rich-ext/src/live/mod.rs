@@ -1,7 +1,13 @@
 //! Synchronous single-writer coordination for inline terminal regions.
+//!
+//! Content carries no terminal controls. Graphics (micro assets drawn with
+//! Kitty, iTerm2 or Sixel) come through a [`PlacementSource`] given with
+//! [`LiveCoordinator::with_graphics`]: each row's placements are drawn after
+//! its cells, redrawn when the cells under them are repainted, and released
+//! when the coordinator finishes. Without a terminal no graphics are drawn.
 mod region;
 use crate::{
-    frame::Frame,
+    frame::{plan_graphics, Change, Frame, Placement, PlacementSource},
     layout::{fit_segments, OverflowPolicy},
     target::RenderTarget,
 };
@@ -44,12 +50,19 @@ impl From<std::io::Error> for LiveError {
     }
 }
 /// A painted row: its encoded text, the frame the next paint diffs
-/// against, and whether terminals may disagree about where its cells fall.
+/// against (with the graphics placed on it), and whether terminals may
+/// disagree about where its cells fall.
 #[derive(Debug)]
 struct Row {
     text: String,
     frame: Frame,
     uncertain: bool,
+}
+
+impl Row {
+    fn placements(&self) -> &[Placement] {
+        self.frame.placements()
+    }
 }
 
 /// Whether terminals disagree about the width of something in `text`, so a
@@ -78,6 +91,12 @@ fn uncertain(text: &str) -> bool {
 impl PartialEq for Row {
     fn eq(&self, other: &Row) -> bool {
         self.text == other.text
+            && self.placements().len() == other.placements().len()
+            && self
+                .placements()
+                .iter()
+                .zip(other.placements())
+                .all(|(a, b)| a.same(b))
     }
 }
 pub struct LiveCoordinator<W: Write> {
@@ -91,6 +110,9 @@ pub struct LiveCoordinator<W: Write> {
     painted: Vec<Row>,
     hidden: bool,
     closed: bool,
+    graphics: Option<Arc<dyn PlacementSource>>,
+    /// Graphics drawn in printed output, which stays on screen.
+    retained: Vec<Placement>,
 }
 impl<W: Write> LiveCoordinator<W> {
     pub fn new(writer: W, target: RenderTarget) -> Self {
@@ -106,7 +128,21 @@ impl<W: Write> LiveCoordinator<W> {
             painted: Vec::new(),
             hidden: false,
             closed: false,
+            graphics: None,
+            retained: Vec::new(),
         }
+    }
+    /// Draw the graphics `source` places on the content's cells (on an
+    /// interactive terminal only).
+    pub fn with_graphics(mut self, source: Arc<dyn PlacementSource>) -> Self {
+        self.graphics = Some(source);
+        self
+    }
+    /// The graphics source, when interactive.
+    fn source(&self) -> Option<&Arc<dyn PlacementSource>> {
+        self.graphics
+            .as_ref()
+            .filter(|_| self.target.capabilities().interactive)
     }
     fn check(&self) -> Result<(), LiveError> {
         if self.closed {
@@ -163,17 +199,77 @@ impl<W: Write> LiveCoordinator<W> {
             .write_all(Control::new(codes).as_str().as_bytes())
     }
     fn row(&self, console: &Console, mut row: Vec<Segment>) -> Row {
+        if let Some(source) = self.source() {
+            row = source.prepare(row);
+            // Whatever the source swapped in is content too.
+            if validate(&row).is_err() {
+                row.retain(|segment| !segment.control);
+            }
+        }
         if !self.target.capabilities().hyperlinks {
             for segment in &mut row {
                 segment.style = segment.style.as_ref().map(|style| style.update_link(None));
             }
         }
         let text = console.segments_to_string(&row);
+        let mut frame = Frame::from_segments(&row);
+        if let Some(source) = self.source() {
+            // A row is one line: only one-row placements on it fit.
+            let placements = source
+                .placements(&frame)
+                .into_iter()
+                .filter(|p| p.row == 0 && p.rows == 1)
+                .collect();
+            frame.set_placements(placements);
+        }
         Row {
             uncertain: row.iter().any(|segment| uncertain(&segment.text)),
             text,
-            frame: Frame::from_segments(&row),
+            frame,
         }
+    }
+    /// The bytes that draw `new`'s graphics on the current line after its
+    /// cells were painted: `changes` (or the whole row, when `whole`) went
+    /// to the terminal, against `old`'s graphics.
+    fn graphics(&self, new: &Row, old: Option<&Row>, whole: bool) -> Vec<u8> {
+        if self.source().is_none() {
+            return Vec::new();
+        }
+        let width = new
+            .frame
+            .row_width(0)
+            .max(old.map_or(0, |o| o.frame.row_width(0)));
+        let changes = match old {
+            Some(old) if !whole => new.frame.diff(&old.frame),
+            _ => vec![Change {
+                row: 0,
+                columns: 0..width.max(1),
+            }],
+        };
+        let previous = old.map_or(&[][..], Row::placements);
+        let plan = plan_graphics(previous, new.placements(), &changes);
+        let console = self.target.console();
+        let (system, no_color) = (console.color_system(), console.no_color());
+        let mut out = String::new();
+        for (_, columns) in &plan.repaint {
+            let end = columns.end.min(new.frame.row_width(0));
+            out.push_str(
+                Control::new(&[ControlType::CursorMoveToColumn(columns.start as u32)]).as_str(),
+            );
+            if columns.start < end && new.frame.height() > 0 {
+                out.push_str(
+                    &new.frame
+                        .encode_span(0, columns.start..end, system, no_color),
+                );
+            }
+        }
+        for placement in &plan.draw {
+            out.push_str(
+                Control::new(&[ControlType::CursorMoveToColumn(placement.column as u32)]).as_str(),
+            );
+            out.push_str(&placement.graphic.draw(placement.frame));
+        }
+        out.into_bytes()
     }
     fn rows(&self, width: usize, height: usize) -> Vec<Row> {
         let console = self.target.console();
@@ -191,7 +287,7 @@ impl<W: Write> LiveCoordinator<W> {
     /// The bytes that bring `old` up to `new` on the current line: only the
     /// changed cells, each after a column move, or the whole row when that is
     /// shorter or either row holds characters of [`uncertain`] width.
-    fn repaint(&self, new: &Row, old: &Row) -> Vec<u8> {
+    fn repaint(&self, new: &Row, old: &Row) -> (Vec<u8>, bool) {
         let console = self.target.console();
         let (system, no_color) = (console.color_system(), console.no_color());
         let width = if new.frame.height() == 0 {
@@ -221,10 +317,13 @@ impl<W: Write> LiveCoordinator<W> {
             .as_str()
             .to_string();
         whole.push_str(&new.text);
-        if !cells.is_empty() && cells.len() < whole.len() {
-            cells.into_bytes()
+        if new.text == old.text {
+            // Only the graphics differ.
+            (Vec::new(), false)
+        } else if !cells.is_empty() && cells.len() < whole.len() {
+            (cells.into_bytes(), false)
         } else {
-            whole.into_bytes()
+            (whole.into_bytes(), true)
         }
     }
     fn clear(&mut self) -> std::io::Result<()> {
@@ -267,9 +366,11 @@ impl<W: Write> LiveCoordinator<W> {
                     continue;
                 }
                 let distance = (rows.len() - i) as u32;
-                let bytes = self.repaint(row, &self.painted[i]);
+                let (bytes, whole) = self.repaint(row, &self.painted[i]);
+                let graphics = self.graphics(row, Some(&self.painted[i]), whole);
                 self.control(&[ControlType::CarriageReturn, ControlType::CursorUp(distance)])?;
                 self.writer.write_all(&bytes)?;
+                self.writer.write_all(&graphics)?;
                 self.control(&[
                     ControlType::CarriageReturn,
                     ControlType::CursorDown(distance),
@@ -280,6 +381,8 @@ impl<W: Write> LiveCoordinator<W> {
             for row in &rows {
                 self.control(&[ControlType::CarriageReturn, ControlType::EraseInLine(2)])?;
                 self.writer.write_all(row.text.as_bytes())?;
+                let graphics = self.graphics(row, None, true);
+                self.writer.write_all(&graphics)?;
                 self.writer.write_all(b"\n\r")?;
             }
         }
@@ -334,6 +437,9 @@ impl<W: Write> LiveCoordinator<W> {
             for row in fit_segments(content, width, OverflowPolicy::Fold) {
                 let row = self.row(&console, row);
                 self.writer.write_all(row.text.as_bytes())?;
+                let graphics = self.graphics(&row, None, true);
+                self.writer.write_all(&graphics)?;
+                self.retained.extend(row.placements().iter().cloned());
                 self.writer
                     .write_all(if interactive { b"\n\r" } else { b"\n" })?;
             }
@@ -358,6 +464,11 @@ impl<W: Write> LiveCoordinator<W> {
             }
         } else if let Err(e) = self.clear() {
             error = Some(e);
+        } else if let Some(source) = self.source() {
+            let release = source.release(&self.retained);
+            if let Err(e) = self.writer.write_all(release.as_bytes()) {
+                error = Some(e);
+            }
         }
         if self.hidden {
             self.hidden = false;

@@ -15,16 +15,19 @@
 //! - [`Frame::diff`] lists the cells that changed against a previous frame.
 //!
 //! Control segments are dropped: a frame holds content, and whatever paints
-//! it owns cursor movement. See `docs/design/render-tree.md`.
+//! it owns cursor movement. See `docs/design/render-tree.md`. Terminal
+//! graphics travel beside the cells as [`Placement`]s (see [`graphics`]).
 //!
 //! A frame can also carry semantic [`Region`]s (see [`regions`]) and export
 //! itself as HTML or SVG with links kept ([`Frame::to_html`],
 //! [`Frame::to_svg`]).
 
 mod export;
+pub mod graphics;
 pub mod regions;
 
 pub use export::{HtmlOptions, SvgOptions};
+pub use graphics::{plan as plan_graphics, Graphic, GraphicsPlan, Placement, PlacementSource};
 pub use regions::{render_frame, role_name, Rect, Region, RegionRecorder, Span};
 
 use std::collections::HashMap;
@@ -201,6 +204,8 @@ pub struct Frame {
     /// Regions from [`Frame::with_regions`], and each tag's place in them.
     regions: Vec<Region>,
     region_ids: HashMap<RegionId, usize>,
+    /// Graphics placed on the cells: the side channel (see [`graphics`]).
+    placements: Vec<Placement>,
 }
 
 impl Frame {
@@ -296,6 +301,7 @@ impl Frame {
             tag_index: self.tag_index.clone(),
             regions: self.regions.clone(),
             region_ids: self.region_ids.clone(),
+            placements: self.placements.clone(),
             ..Frame::default()
         };
         for row in 0..self.height() {

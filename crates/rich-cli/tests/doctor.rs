@@ -215,3 +215,34 @@ fn doctor_color_overrides_match_rendering_precedence() {
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(report["terminal"]["no_color"], true);
 }
+
+/// Doctor reports how micro assets would be drawn (#573), and a pipe gets the
+/// text fallback whatever `RICH_MICRO` asks for.
+#[test]
+fn doctor_reports_the_micro_asset_renderer() {
+    let output = Command::new(env!("CARGO_BIN_EXE_rich"))
+        .args(["doctor", "--no-config", "--report", "json"])
+        .env("TERM", "xterm-kitty")
+        .env("RICH_MICRO", "kitty")
+        .env("RICH_CELL_PIXELS", "9x18")
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let micro = &report["micro"];
+    if cfg!(feature = "art") {
+        assert_eq!(micro["mode"], "text", "{micro}");
+        assert_eq!(micro["reason"], "stdout is not a terminal");
+        assert_eq!(micro["override"], "kitty");
+        assert_eq!(micro["cell_pixels"], "9x18");
+        assert_eq!(micro["animate"], false);
+    } else {
+        assert_eq!(micro["mode"], "unavailable");
+    }
+    let text = Command::new(env!("CARGO_BIN_EXE_rich"))
+        .args(["doctor", "--no-config"])
+        .output()
+        .unwrap();
+    let text = String::from_utf8(text.stdout).unwrap();
+    assert!(text.contains("Micro assets: "), "{text}");
+}

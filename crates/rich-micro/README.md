@@ -6,10 +6,12 @@ written `Deploying :micro:rocket:`. This crate is an rs-rich addition, not a
 port: `rich` has no micro assets. Core is untouched; `:micro:name:` is not an
 emoji code, so it passes through core as plain text.
 
-**0.0.1 is the foundation:** the model, the package format, the layered
-registry and the markup. Every asset renders as its emoji or text fallback;
-Kitty, iTerm2 and Sixel drawing plug into the `MicroRenderer` seam in a later
-release.
+**0.0.1** holds the model, the package format, the layered registry, the
+markup and the drawing: `MicroGraphics` picks Kitty, iTerm2, Sixel,
+half-blocks or the emoji or text fallback for the terminal (`RICH_MICRO`
+overrides it; a pipe always gets the text), animates where it can, and
+carries images through `rich-ext`'s live regions and the interactive
+painter.
 
 ```rust
 use rich::Console;

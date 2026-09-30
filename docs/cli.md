@@ -1314,8 +1314,13 @@ recognise, `--image-mode sixel` stops with an error that says so.
 accepts `1`/`true`/`yes`/`on` and `0`/`false`/`no`/`off`.
 
 Doctor also reports package/build features, stdout terminal status, dimensions and
-colour policy, inferred Sixel support and selected image mode, selected
-config/profile and pager choice. It distinguishes detection from inference;
+colour policy, inferred Sixel support and selected image mode, how micro assets
+would be drawn (`micro`: Kitty, iTerm2, Sixel, blocks or text, the reason, the
+cell size in pixels and whether they animate), selected config/profile and pager
+choice. `RICH_MICRO=kitty|iterm|sixel|blocks|text` picks the micro-asset
+renderer on a terminal (redirected output always gets the text fallback), and
+`RICH_CELL_PIXELS=WxH` gives the cell size when the terminal does not report
+it; see [micro assets](guide/micro/index.md#drawing-on-a-terminal). It distinguishes detection from inference;
 Sixel inference does not prove terminal support. It performs no terminal probes,
 URL fetches or pager launches and does not dump the environment. It validates
 configuration, so malformed config produces an actionable usage error.

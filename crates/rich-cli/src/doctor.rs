@@ -109,6 +109,20 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                         report["image"]["sixel_inferred"]
                     ),
                     format!(
+                        "Micro assets: {} ({}); cell size {}; animation {}",
+                        report["micro"]["mode"].as_str().unwrap_or_default(),
+                        report["micro"]["reason"].as_str().unwrap_or_default(),
+                        report["micro"]["cell_pixels"]
+                            .as_str()
+                            .map(|cell| format!("{cell} px"))
+                            .unwrap_or_else(|| "unknown (8x16 assumed)".into()),
+                        if report["micro"]["animate"].as_bool() == Some(true) {
+                            "on"
+                        } else {
+                            "off"
+                        }
+                    ),
+                    format!(
                         "Configuration: source={}, profile={}, disabled={}",
                         report["config"]["source"],
                         report["config"]["profile"],
@@ -259,6 +273,7 @@ fn report(args: &[String]) -> Result<(serde_json::Value, Report, bool), String> 
             std::env::var("TERM").unwrap_or_default().as_str(),
             "dumb" | "emacs"
         );
+    let micro = micro_report(&capabilities);
     let capabilities_json = serde_json::to_value(&capabilities).map_err(|e| e.to_string())?;
     let registry = super::plugin_registry(super::MermaidBackend::Text);
     let plugins: Vec<serde_json::Value> = registry
@@ -314,6 +329,7 @@ fn report(args: &[String]) -> Result<(serde_json::Value, Report, bool), String> 
         "features": {"art": cfg!(feature="art"), "fetch": cfg!(feature="fetch"), "syntax-cache": cfg!(feature="syntax-cache"), "onig": cfg!(feature="onig"), "json-escape-safe": cfg!(feature="json-escape-safe"), "mermaid": cfg!(feature="mermaid"), "mmdc": cfg!(feature="mmdc"), "lumis": cfg!(feature="lumis")},
         "terminal": {"stdout_tty": console.is_terminal(), "width": console.width(), "height": console.height(), "color": color, "no_color": no_color, "detection": "local terminal and environment; no probe", "provenance": provenance},
         "image": {"requested_mode": requested_mode, "selected_mode": selected_mode, "sixel_inferred": sixel, "detection": "inferred from environment; no probe"},
+        "micro": micro,
         "config": {"source": config["source"], "profile": config["profile"], "disabled": config["disabled"]},
         "pager": {"source": pager_source, "program": pager_program, "availability": "not checked", "terminal_eligible": pager_eligible, "explicit": settings["pager"].as_bool().unwrap_or(false), "automatic": settings["auto_pager"].as_bool().unwrap_or(false)},
         "plugins": {"api_version": rich_ext::plugin::PLUGIN_API_VERSION, "registered": plugins},
@@ -321,6 +337,41 @@ fn report(args: &[String]) -> Result<(serde_json::Value, Report, bool), String> 
         "capabilities": capabilities_json
     });
     Ok((json, capabilities, no_color))
+}
+
+/// How micro assets would be drawn here (rich-micro's selection: Kitty,
+/// iTerm2, Sixel, blocks, then text), from the same capability report. The
+/// cell size comes from the environment and the window size only: doctor
+/// never sends the `CSI 16 t` query.
+#[cfg(feature = "art")]
+fn micro_report(capabilities: &Report) -> serde_json::Value {
+    let environment =
+        rich_ext::graphics::GraphicsEnvironment::from_report(capabilities, &SystemEnvironment);
+    let selection = rich_micro::select(&environment, &SystemEnvironment);
+    serde_json::json!({
+        "mode": selection.mode.name(),
+        "reason": selection.reason,
+        "override": std::env::var("RICH_MICRO").ok().filter(|v| !v.is_empty()),
+        "warning": selection.warning,
+        "cell_pixels": environment.cell_pixels.value.map(|cell| cell.to_string()),
+        "cell_pixels_reason": environment.cell_pixels.reason,
+        "animate": selection.animate,
+        "detection": "environment and window size; no probe",
+    })
+}
+
+#[cfg(not(feature = "art"))]
+fn micro_report(_capabilities: &Report) -> serde_json::Value {
+    serde_json::json!({
+        "mode": "unavailable",
+        "reason": "built without the art feature",
+        "override": null,
+        "warning": null,
+        "cell_pixels": null,
+        "cell_pixels_reason": "",
+        "animate": false,
+        "detection": "environment and window size; no probe",
+    })
 }
 
 #[cfg(test)]

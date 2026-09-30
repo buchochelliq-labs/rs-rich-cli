@@ -10,7 +10,7 @@
 # own repository unchanged.
 [package]
 name = "rs-rich-art"
-version = "0.0.11"
+version = "0.0.12"
 description = "Art renderables for `rich`: FIGlet banners, images as ASCII/Braille/blocks/quadrants/Sixel, GIFs and image diffs"
 edition.workspace = true
 license.workspace = true
@@ -45,6 +45,10 @@ image = ["dep:image"]
 gif = ["image"]
 # `sixel` renders real pixels via the Sixel graphics protocol.
 sixel = ["image", "dep:icy_sixel"]
+# `kitty` encodes the Kitty graphics protocol with Unicode placeholders.
+kitty = ["image"]
+# `iterm` encodes iTerm2's inline images (also WezTerm's).
+iterm = ["image"]
 
 # The image/GIF examples only build when their feature is on.
 [[example]]

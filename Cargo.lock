@@ -1576,7 +1576,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-art"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "icy_sixel",
  "image",
@@ -1600,6 +1600,7 @@ dependencies = [
  "rs-rich-interact",
  "rs-rich-lumis",
  "rs-rich-mermaid",
+ "rs-rich-micro",
  "rs-rich-record",
  "same-file",
  "serde_json",
@@ -1625,6 +1626,7 @@ dependencies = [
  "rs-rich",
  "rs-rich-macros",
  "rs-rich-plugin-api",
+ "rustix",
  "saphyr-parser",
  "serde",
  "serde_json",
@@ -1675,7 +1677,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-mermaid"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "rs-rich",
  "rs-rich-art",
@@ -1688,11 +1690,14 @@ name = "rs-rich-micro"
 version = "0.0.1"
 dependencies = [
  "flate2",
+ "portable-pty",
  "rs-rich",
+ "rs-rich-art",
  "rs-rich-ext",
  "rs-rich-plugin-api",
  "serde_json",
  "tempfile",
+ "vt100",
  "zip",
 ]
 

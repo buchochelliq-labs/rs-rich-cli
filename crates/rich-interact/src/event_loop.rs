@@ -272,6 +272,14 @@ impl<'a> EventLoop<'a> {
         Handle(result)
     }
 
+    /// Draw the graphics `source` places on the views' cells (micro assets
+    /// through Kitty, iTerm2 or Sixel). The loop wakes when an animation
+    /// among them shows its next frame. Give it only on a terminal that
+    /// showed it can draw them.
+    pub fn graphics(&mut self, source: std::sync::Arc<dyn rich_ext::frame::PlacementSource>) {
+        self.painter.set_graphics(Some(source));
+    }
+
     /// Call `callback` every `interval` while the loop runs, until it
     /// returns false.
     pub fn every(&mut self, interval: Duration, callback: impl FnMut() -> bool + 'a) {
@@ -432,7 +440,12 @@ impl<'a> EventLoop<'a> {
             .filter(|(component, _)| !component.finished())
             .filter_map(|(_, next)| *next);
         let timers = self.timers.iter().map(|timer| timer.next);
-        ticks.chain(timers).min()
+        let animation = self
+            .painter
+            .graphics()
+            .and_then(|source| source.next_change())
+            .map(|wait| self.backend.elapsed() + wait);
+        ticks.chain(timers).chain(animation).min()
     }
 
     fn fire_due(&mut self) -> io::Result<()> {

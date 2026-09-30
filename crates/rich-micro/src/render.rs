@@ -25,9 +25,9 @@
 //! placement in its rendered segments, and offers it to its renderers in
 //! order; the first answer of the right width wins, and without one the
 //! fallback cells stay. A placement that was cut (cropped, or split across
-//! lines) is never offered: its fallback stays. Terminal protocols (Kitty,
-//! iTerm2, Sixel) plug in here in a later release; this release ships
-//! [`FallbackRenderer`] only.
+//! lines) is never offered: its fallback stays. [`FallbackRenderer`] redraws
+//! the fallback; the terminal protocols (Kitty, iTerm2, Sixel) and block
+//! cells plug in here through [`crate::graphics::MicroGraphics::renderer`].
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;

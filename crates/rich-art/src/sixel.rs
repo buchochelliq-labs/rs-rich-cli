@@ -196,6 +196,26 @@ impl SixelArt {
         };
         icy_sixel::sixel_encode(scaled.as_raw(), w as usize, h as usize, &opts).ok()
     }
+
+    /// The Sixel escape for this image fitted to exactly `cols × rows` cells
+    /// of the [`cell_px`](Self::cell_px) size (its aspect ratio kept, the
+    /// margins transparent), with no line break: to sit inside a line, wrap
+    /// it with [`crate::graphics::overlay`], which saves the cursor before the
+    /// cells it covers and restores it after drawing. `None` when encoding
+    /// fails.
+    pub fn encode_cells(&self, cols: usize, rows: usize) -> Option<String> {
+        let cell = crate::graphics::CellPixels::new(self.cell_px.0, self.cell_px.1);
+        let fitted = crate::graphics::fit_to_cells(&self.image, cols, rows, cell);
+        let (w, h) = fitted.dimensions();
+        if u64::from(w) * u64::from(h) > MAX_PIXELS {
+            return None;
+        }
+        let opts = icy_sixel::EncodeOptions {
+            max_colors: self.max_colors,
+            ..Default::default()
+        };
+        icy_sixel::sixel_encode(fitted.as_raw(), w as usize, h as usize, &opts).ok()
+    }
 }
 
 /// Encode a raster of fixed-palette indices (`None` = transparent) as Sixel,
@@ -655,6 +675,16 @@ mod tests {
         let art = SixelArt::new(solid(100, 50)).width(40).cell_px(8, 16);
         // 40 columns * 8 px, and the height follows the 2:1 aspect ratio.
         assert_eq!(art.checked_pixel_size(80), Some((320, 160)));
+    }
+
+    #[test]
+    fn cell_encoding_is_exactly_the_cells_and_has_no_line_break() {
+        let art = SixelArt::new(solid(100, 50)).cell_px(10, 20);
+        let sixel = art.encode_cells(2, 1).expect("encodes");
+        assert!(sixel.starts_with("\x1bP") && sixel.ends_with("\x1b\\"));
+        assert!(!sixel.contains('\n'));
+        let image = decode(&sixel);
+        assert_eq!((image.width, image.height), (20, 20));
     }
 
     #[test]

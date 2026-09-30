@@ -54,6 +54,7 @@ pub mod env_inspect;
 pub mod fidelity;
 pub mod format;
 pub mod frame;
+pub mod graphics;
 pub mod hex;
 pub mod highlighter;
 pub mod plugin_loading;

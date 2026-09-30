@@ -262,7 +262,10 @@ For build, deploy and release tools, all in the default build:
 explicitly; `handle().print` coordinates ordinary messages with the display.
 Do not share that writer with another Live loop or bypass it with Console.print.
 The inline viewport reserves one row for insertion and one guard column to avoid
-terminal auto-wrap. Control/raster content is rejected. Noninteractive output
+terminal auto-wrap. Control/raster content is rejected; images come through
+`with_graphics(source)`, a `frame::PlacementSource` whose placements are drawn
+after the cells and redrawn when their cells are repainted (micro assets use
+it). Noninteractive output
 emits a finite final snapshot. Call `finish` to observe cleanup errors; Drop is
 best effort and cannot restore state after process abort or SIGKILL.
 

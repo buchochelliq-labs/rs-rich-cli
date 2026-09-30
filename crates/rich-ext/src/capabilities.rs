@@ -72,6 +72,12 @@ pub trait Environment {
     fn is_windows(&self) -> bool {
         false
     }
+    /// The size of one cell in pixels `(width, height)`, when the terminal
+    /// reports its window size in pixels. Used by
+    /// [`GraphicsEnvironment`](crate::graphics::GraphicsEnvironment).
+    fn cell_pixels(&self) -> Option<(u16, u16)> {
+        None
+    }
 }
 
 /// The real process environment: `std::env`, stdout's tty status and the
@@ -98,6 +104,13 @@ impl Environment for SystemEnvironment {
     fn is_windows(&self) -> bool {
         cfg!(windows)
     }
+    fn cell_pixels(&self) -> Option<(u16, u16)> {
+        if !self.is_terminal() {
+            return None;
+        }
+        let (cells, pixels) = crate::graphics::stdout_window()?;
+        crate::graphics::CellPixels::from_window(pixels, cells).map(|c| (c.width, c.height))
+    }
 }
 
 /// A deterministic environment for tests and CI.
@@ -107,6 +120,8 @@ pub struct MapEnvironment {
     pub terminal: bool,
     pub size: Option<(usize, usize)>,
     pub windows: bool,
+    /// The cell size in pixels the terminal reports, if any.
+    pub cell_pixels: Option<(u16, u16)>,
 }
 
 impl MapEnvironment {
@@ -141,6 +156,11 @@ impl MapEnvironment {
         self.windows = windows;
         self
     }
+    /// Set the cell size in pixels the terminal reports.
+    pub fn cell_pixels(mut self, width: u16, height: u16) -> Self {
+        self.cell_pixels = Some((width, height));
+        self
+    }
 }
 
 impl Environment for MapEnvironment {
@@ -155,6 +175,9 @@ impl Environment for MapEnvironment {
     }
     fn is_windows(&self) -> bool {
         self.windows
+    }
+    fn cell_pixels(&self) -> Option<(u16, u16)> {
+        self.cell_pixels
     }
 }
 
@@ -194,7 +217,8 @@ pub struct Field<T> {
 }
 
 impl<T> Field<T> {
-    fn new(value: T, origin: Origin, reason: impl Into<String>) -> Self {
+    /// A value, where it came from, and why.
+    pub fn new(value: T, origin: Origin, reason: impl Into<String>) -> Self {
         Self {
             value,
             origin,

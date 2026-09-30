@@ -37,6 +37,8 @@ rich-ext.workspace = true
 # `TextTransform` and `Plugin`, so the substitution registers like any other
 # transform.
 rich-plugin-api.workspace = true
+# Decoding, fitting to cells, and the Kitty, iTerm2 and Sixel encoders.
+rich-art = { workspace = true, features = ["image", "gif", "sixel", "kitty", "iterm"] }
 serde_json.workspace = true
 # `.richmicro` archives: reading only, stored and deflated entries (flate2's
 # pure-Rust backend). No encryption, no other codecs.
@@ -46,3 +48,6 @@ flate2 = { version = "1.1", default-features = false, features = ["rust_backend"
 
 [dev-dependencies]
 tempfile = "3"
+# The per-protocol PTY tests: a real pseudo-terminal and an emulator.
+portable-pty = "0.9"
+vt100 = "0.16"

@@ -83,6 +83,18 @@ Each field takes the first rule that matches: an `Overrides` value, then a
 The [module docs](https://docs.rs/rs-rich-ext/latest/rich_ext/capabilities/index.html)
 list every rule.
 
+### Graphics and the cell size
+
+`rich_ext::graphics::GraphicsEnvironment` carries what core's
+`TargetCapabilities` does not: the graphics protocol and the size of one cell
+in pixels, each with its origin. `GraphicsEnvironment::from_report(&report,
+&env)` reads the cell size from `RICH_CELL_PIXELS=WxH`, then from the
+terminal's window size in pixels (`TIOCGWINSZ`); it never writes to the
+terminal. `GraphicsEnvironment::system()` also asks the terminal with a
+`CSI 16 t` query, waiting at most 100 ms, but only when stdin and stdout are
+both a terminal and a graphics protocol was found. Micro assets choose their
+renderer from it.
+
 ### RICH_* overrides
 
 Users and CI scripts can override any answer:

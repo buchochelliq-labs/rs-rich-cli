@@ -11,6 +11,16 @@ playback** and **perceptual image diffs** in the terminal.
 | `image` — images as ASCII, Braille, half blocks or quadrants | off | `image` (png + jpeg decoders) |
 | `gif` — animated GIF playback | off | `image` + its gif decoder |
 | `sixel` — real pixels through the Sixel graphics protocol | off | `image` + `icy_sixel` |
+| `kitty` — the Kitty graphics protocol with Unicode placeholders | off | `image` |
+| `iterm` — iTerm2 inline images (also WezTerm) | off | `image` |
+
+With `image`, the `graphics` module fits an image to an exact number of cells,
+decodes and resamples animations under a memory budget, and draws an image
+over cells a line already reserved (`graphics::overlay`). `kitty` transmits
+images once under an id and prints placeholder cells that show them;
+`iterm` writes inline images at an exact size in cells;
+`SixelArt::encode_cells` is the Sixel encoder without a trailing line break,
+to sit inside a line. Micro assets (`rs-rich-micro`) draw with all three.
 
 The default build has **one direct dependency**, `rs-rich` (imported as `rich`).
 Its transitive dependency graph is determined by `rs-rich`; banners add no
