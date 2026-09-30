@@ -1,0 +1,30 @@
+❯ rich -p --emoji "Deploying :micro:status/loading: then :micro:status/success: :sparkles:"
+Deploying ⏳ then ✅ ✨
+❯ RICH_MICRO=blocks rich -p --emoji "Blocks: :micro:dev/bug: :micro:fun/cat: :micro:status/warning:"
+Blocks: ▄▄ ▀▀ ▄▄
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

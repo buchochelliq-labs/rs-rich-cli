@@ -1,0 +1,22 @@
+❯ rich explore --icons config.yaml
+? config.yaml ›
+  $ › features
+  ▾ $ {…} 6 keys                              │ features
+  ├── name: "storefront"                      │ ├── search: true
+  ├── version: "2.4.1"                        │ └── recommendations: false
+  ├── ▸ server: {…} 3 keys                    │
+  ├── ▸ database: {…} 2 keys                  │
+  ├── ▸ users: […] 2 items                    │
+❯ └── ▾ features: {…} 2 keys                  │
+      ├── ✅ search: true                     │
+      └── ❌ recommendations: false           │
+                                              │
+  9/25 · ↑↓ move · enter pick · ←→ fold · ctrl+y path · alt+y value · esc cancel
+
+
+
+
+
+
+
+

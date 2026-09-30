@@ -1,0 +1,24 @@
+❯ micro_showcase
+📦 rs-rich-cli › release › 0.0.14
+? Next step › ╭─ Commands ───────────────────────────────────────────────────────────╮
+❯ ✅ Run the t│? Command › deploy                                                    │
+  🐛 Fix the f│❯ ⏳ deploy Mark the deploy done                                      │
+  🔀 Merge the│                                                                      │
+  📦 Build the│                                                                      │
+  💖 Ship it  │                                                                      │
+  5/5 · ↑↓ mov│                                                                      │
+              │                                                                      │
+              │                                                                      │
+              │                                                                      │
+              │                                                                      │
+              │                                                                      │
+              │                                                                      │
+              │                                                                      │
+              │                                                                      │
+              │                                                                      │
+              │  1/15 · ↑↓ move · enter run · esc close                              │
+              ╰──────────────────────────────────────────────────────────────────────╯
+⏳ deploying │ ✅ 3 checks passed                          ↑ move up · ↓ move down │ ctrl+o commands
+
+
+
