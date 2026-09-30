@@ -100,6 +100,9 @@ Entries below record subsequent releases and development.
 
 ### Interact 0.0.2: composition, a public kit and a keymap registry
 
+Versions: `rs-rich-interact` 0.0.1 → 0.0.2 (its source changed and 0.0.1 is
+published), and `rs-rich-cli` 0.0.13 → 0.0.14 for its new requirement on it.
+
 0.0.14 workstream 1 ([plan](docs/plans/0.0.14.md), #478, #479, #480): you can build your own components
 from the built-ins' pieces and compose them with the built-ins. Nothing in
 `rs-rich` changes.
