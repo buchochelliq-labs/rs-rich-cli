@@ -50,6 +50,15 @@ pub mod imagediff;
 #[cfg(feature = "sixel")]
 pub mod sixel;
 
+#[cfg(feature = "image")]
+pub mod graphics;
+
+#[cfg(feature = "kitty")]
+pub mod kitty;
+
+#[cfg(feature = "iterm")]
+pub mod iterm;
+
 /// The `image` crate, re-exported so callers can decode files without taking
 /// their own dependency on it (and without a version skew against ours).
 #[cfg(feature = "image")]
