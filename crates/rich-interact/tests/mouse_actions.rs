@@ -381,11 +381,13 @@ fn the_action_menu_lists_item_and_view_actions() {
     let (outcome, record) = headless::run(&mut select, script, 60, 12);
     assert_eq!(outcome.unwrap(), Outcome::Done("banana"));
     assert_eq!(select.action(), Some("peel"));
+    // The menu is a modal over the list (#474), titled with its target.
     let menu = &record.frames[2];
-    assert!(
-        menu.contains("❯ Eat    ctrl+e\n    Share\n    Peel"),
-        "{menu}"
-    );
+    let rows: Vec<&str> = menu.lines().collect();
+    assert!(rows[1].contains("╭─ Actions · banana "), "{menu}");
+    assert!(rows[2].contains("│  ❯ Eat    ctrl+e "), "{menu}");
+    assert!(rows[3].contains("│    Share "), "{menu}");
+    assert!(rows[4].contains("│    Peel "), "{menu}");
     assert!(
         record.frames[1].contains("ctrl+k actions"),
         "{}",

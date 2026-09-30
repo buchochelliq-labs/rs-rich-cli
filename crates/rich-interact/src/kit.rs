@@ -9,7 +9,9 @@
 //! [`highlight`] styles the characters a filter matched, and [`question`]
 //! is the `? prompt › ` line every built-in starts with. [`slice`](fn@slice) cuts
 //! cells out of a line, [`overlay`] draws one line over another and
-//! [`restyle`] puts a style over a line (a backdrop). [`pasted`] and
+//! [`restyle`] puts a style over a line (a backdrop); [`frame`] boxes
+//! lines and [`place`] draws a box over a view, as a modal is drawn.
+//! [`pasted`] and
 //! [`shown`] make untrusted text safe for a one-line field or a table cell.
 //!
 //! **State types** hold what a component remembers between events, with the
@@ -186,6 +188,66 @@ pub fn restyle(line: &[Segment], style: &Style) -> Vec<Segment> {
             Segment::new(segment.text.clone(), Some(styled))
         })
         .collect()
+}
+
+/// `lines` in a rounded box `inner` cells wide inside, each padded to that
+/// width, with `title` in the top border: how a modal or a popover is
+/// drawn, by [`Layers`](crate::compose::Layers) and the action menu alike.
+pub fn frame(
+    lines: Vec<Vec<Segment>>,
+    inner: usize,
+    title: Option<&str>,
+    style: &Style,
+) -> Vec<Vec<Segment>> {
+    let mut top = vec![text("╭", style)];
+    match title {
+        Some(title) if inner >= 4 => {
+            let title = fit(vec![text(format!(" {title} "), style)], inner - 1);
+            let used = width(&title) + 1;
+            top.push(text("─", style));
+            top.extend(title);
+            top.push(text("─".repeat(inner.saturating_sub(used)), style));
+        }
+        _ => top.push(text("─".repeat(inner), style)),
+    }
+    top.push(text("╮", style));
+    let mut boxed = vec![top];
+    for line in lines {
+        let mut row = vec![text("│", style)];
+        row.extend(pad(line, inner));
+        row.push(text("│", style));
+        boxed.push(row);
+    }
+    boxed.push(vec![
+        text("╰", style),
+        text("─".repeat(inner), style),
+        text("╯", style),
+    ]);
+    boxed
+}
+
+/// Draw `top`'s lines over `base` from cell `x` of row `y`, adding rows
+/// to `base` where `top` reaches below it; with a `backdrop`, first put
+/// that style over every line of `base` (a modal's dimming).
+pub fn place(
+    base: &mut Vec<Vec<Segment>>,
+    x: usize,
+    y: usize,
+    top: &[Vec<Segment>],
+    backdrop: Option<&Style>,
+) {
+    if let Some(style) = backdrop {
+        for line in base.iter_mut() {
+            *line = restyle(line, style);
+        }
+    }
+    if base.len() < y + top.len() {
+        base.resize_with(y + top.len(), Vec::new);
+    }
+    for (row, line) in top.iter().enumerate() {
+        let under = &mut base[y + row];
+        *under = overlay(under, x, line);
+    }
 }
 
 /// Pasted text for a one-line field: line breaks become `newline`, a tab a
@@ -1002,6 +1064,9 @@ impl Divider {
 // ---------------------------------------------------------------------------
 // ActionMenu.
 
+/// The hints under an [`ActionMenu`]'s rows.
+const MENU_HINTS: &str = "  ↑↓ move · enter run · esc close";
+
 /// What an [`ActionMenu`] did with an event.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MenuReply {
@@ -1066,6 +1131,25 @@ impl ActionMenu {
         MenuReply::Stay
     }
 
+    /// The width and rows [`render`](Self::render) needs: the widest row,
+    /// and a row per action and one for the hints.
+    pub fn size(&self) -> (usize, usize) {
+        let label_width = self
+            .actions
+            .iter()
+            .map(|action| cell_len(&action.label))
+            .max()
+            .unwrap_or(0);
+        let key_width = self
+            .actions
+            .iter()
+            .filter_map(|action| action.key.map(|key| cell_len(&key.to_string()) + 2))
+            .max()
+            .unwrap_or(0);
+        let hints = cell_len(MENU_HINTS);
+        ((4 + label_width + key_width).max(hints) + 2, self.actions.len() + 1)
+    }
+
     /// The menu's rows at `width`, and a line of hints under them.
     pub fn render(&self, theme: &Theme, width: usize) -> Vec<Vec<Segment>> {
         let label_width = self
@@ -1094,10 +1178,7 @@ impl ActionMenu {
             lines.push(fit(line, width));
         }
         lines.push(fit(
-            vec![text(
-                "  ↑↓ move · enter run · esc close".to_string(),
-                &theme.hint,
-            )],
+            vec![text(MENU_HINTS.to_string(), &theme.hint)],
             width,
         ));
         lines

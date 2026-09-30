@@ -483,11 +483,20 @@ impl<T> Select<T> {
         }))
     }
 
-    fn menu_event(&mut self, event: &Event) -> Option<Flow<Vec<usize>>> {
+    fn menu_event(&mut self, event: &Event, width: usize) -> Option<Flow<Vec<usize>>> {
         let index = self.focused()?;
-        // The menu's rows follow the list's: see `render_view`.
-        let first = self.menu_top();
-        match self.menu.as_mut()?.handle(event, first) {
+        // The menu is a modal over the list: see `menu_box`.
+        let (x, y, outer_width, outer_height) = self.menu_box(width)?;
+        if let Some(mouse) = event.mouse() {
+            let (column, row) = (mouse.column as usize, mouse.row as usize);
+            let inside = (x..x + outer_width).contains(&column)
+                && (y + 1..y + outer_height - 1).contains(&row);
+            if mouse.is_click() && !inside {
+                self.menu = None;
+                return None;
+            }
+        }
+        match self.menu.as_mut()?.handle(event, y + 1) {
             MenuReply::Stay => None,
             MenuReply::Close => {
                 self.menu = None;
@@ -511,7 +520,7 @@ impl<T> Select<T> {
 
     fn event_inner(&mut self, event: &Event, width: usize) -> Option<Flow<Vec<usize>>> {
         if self.menu.is_some() {
-            return self.menu_event(event);
+            return self.menu_event(event, width);
         }
         if let Event::Mouse(mouse) = event {
             return self.mouse_event(*mouse, width);
@@ -602,10 +611,13 @@ impl<T> Select<T> {
         self.shown().min(self.items.len()).max(1)
     }
 
-    /// The first row of the action menu: under the list, where the footer
-    /// was.
-    fn menu_top(&self) -> usize {
-        self.top() + self.rows()
+    /// Where the action menu's modal goes at `width`, border included:
+    /// `(x, y, width, height)`, centred over the list, from its first row.
+    fn menu_box(&self, width: usize) -> Option<(usize, usize, usize, usize)> {
+        let menu = self.menu.as_ref()?;
+        let (inner, rows) = menu.size();
+        let outer = (inner + 2).min(width.max(2));
+        Some(((width - outer) / 2, self.top(), outer, rows + 2))
     }
 
     /// The preview's layout at `width` for the focused item, and the
@@ -751,10 +763,7 @@ impl<T> Select<T> {
             line.extend(heading.iter().cloned());
             lines.push(fit(line, width));
         }
-        let footer = |this: &Self| match &this.menu {
-            Some(menu) => menu.render(&this.theme, width),
-            None => vec![this.footer(width)],
-        };
+        let footer = |this: &Self| vec![this.footer(width)];
         let preview = self
             .focused()
             .and_then(|index| self.items[index].preview.as_ref());
@@ -789,6 +798,23 @@ impl<T> Select<T> {
                 lines.extend(self.list_lines(width));
                 lines.extend(footer(self));
             }
+        }
+        // The action menu (#474): a modal over the view, titled with its
+        // target, dimming what is under it.
+        if let (Some(menu), Some((x, y, outer, _))) = (&self.menu, self.menu_box(width)) {
+            let inner = outer.saturating_sub(2);
+            let title = self
+                .focused()
+                .map(|index| format!("Actions · {}", self.items[index].label));
+            let boxed = crate::kit::frame(
+                menu.render(theme, inner),
+                inner,
+                title.as_deref(),
+                &theme.border,
+            );
+            let dim = rich::Style::parse("dim").expect("a built-in style");
+            crate::kit::place(&mut lines, x, y, &boxed, Some(&dim));
+            return View::new(lines);
         }
         View::new(lines).with_cursor(0, column.min(width.saturating_sub(1)))
     }

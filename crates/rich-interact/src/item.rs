@@ -96,16 +96,21 @@ pub enum TargetKind {
     Node,
     /// A file or directory ([`FilePicker`](crate::FilePicker)).
     File,
+    /// A region of the screen rather than an item in it: a pane, a tab, or
+    /// any component wrapped in [`Overlays`](crate::overlay::Overlays)
+    /// with a region of its own (#474).
+    Region,
 }
 
 impl TargetKind {
-    /// `item`, `row`, `node` or `file`: the name plugins see.
+    /// `item`, `row`, `node`, `file` or `region`: the name plugins see.
     pub fn as_str(self) -> &'static str {
         match self {
             TargetKind::Item => "item",
             TargetKind::Row => "row",
             TargetKind::Node => "node",
             TargetKind::File => "file",
+            TargetKind::Region => "region",
         }
     }
 
@@ -115,6 +120,7 @@ impl TargetKind {
             "row" => TargetKind::Row,
             "node" => TargetKind::Node,
             "file" => TargetKind::File,
+            "region" => TargetKind::Region,
             _ => return None,
         })
     }
