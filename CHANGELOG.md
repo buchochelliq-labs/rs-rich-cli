@@ -57,6 +57,62 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### Components from Python and plugins: plugin API 0.0.3, Python 0.0.3
+
+Versions: `rs-rich-plugin-api` 0.0.2 → 0.0.3 (its source changed and 0.0.2
+is published), `rs-rich-lumis` 0.0.2 → 0.0.3 for its requirement on it
+(`rs-rich-mermaid` 0.0.3 was already unpublished), and PyPI `rs-rich`
+0.0.2 → 0.0.3. `rs-rich-ext` 0.0.12 and `rs-rich-interact` 0.0.2 were
+already bumped. `PLUGIN_API_VERSION` stays 1 and the runtime ABI stays 1.0:
+everything here is added, with default bodies.
+
+0.0.14 workstream 4 ([plan](docs/plans/0.0.14.md)): components written in
+Python, and components that plugins ship, compose with the built-ins.
+Nothing in `rs-rich` changes.
+
+- **Python components** (`rs_rich.interact`). Subclass `Component`:
+  `render(context)`, `handle(event)` and `keymap()`, with defaults for
+  `focusable()`, `mouse()`, `tick()`, `start(context)` and
+  `default_value()`. `handle` returns `None`, `Done(value)`, `Cancel()` or
+  the new `Ignored()`, which lets a key bubble to the container. The
+  component is bridged to a Rust `Component`, so it runs through the same
+  drivers as the built-ins, headless included.
+- **Containers from Python.** `Column`, `Row`, `Stack`, `Split`, `Tabs` and
+  `Layers` (with `Layer.modal` and `Layer.popover`), plus `Label` and `Map`,
+  hold built-ins, Python components and each other. Each run builds a fresh
+  Rust tree. A built-in's answer finishes the composition as its Python
+  value unless a `Map` says otherwise. Containers take `on`, `shortcut`,
+  `rebind` and `with_mouse`, and children are checked when added.
+  `Keymap` and `Binding` declare keys, and `keymap(component)` lists a
+  composition's bindings.
+- **Errors come out of the run.** The GIL is released between events and
+  taken for each call into Python. An exception from `handle`, `render`, a
+  `Map` or binding callback, or a layer factory ends the run, and `ask`,
+  `run`, `headless` or `degrade` raises it. So does a callback that returns
+  something other than a flow. A container that contains itself raises
+  `RecursionError`. `rs_rich.plugins.Capability` knows the `component` kind.
+- **Plugin components** (`rs-rich-plugin-api`).
+  `PluginRegistrar::component(name, factory)` registers a named
+  `PluginComponent`, from the new `rich_plugin_api::component` module:
+  keys by name, a `ComponentView` of core segments, and a text answer, so a
+  plugin still depends on core only. `Capability::Component` reports it.
+  `ExtensionRegistry` hosts it with `component(name)`, `component_names()`
+  and `create_component(name)`, which catches a panicking factory.
+  `rich_interact::plugin::PluginView::mount(&registry, name)` mounts it
+  beside the built-ins. Its keys are listed under the registered name and
+  can be rebound there. A plugin component that panics shows the panic in
+  its pane and stops taking focus, without taking the app down.
+- **Linked and in-process plugins only.** A component keeps state, and the
+  runtime ABI is stateless text (a WASM call runs in a fresh instance), so
+  a native or WASM plugin cannot register one in this release.
+  `rich plugins list` shows linked components as `component "name"`.
+  There is no CLI command to mount one yet.
+- Docs: [Building your own components](docs/guide/interact/custom-components.md)
+  has Python and plugin sections, [Plugins](docs/PLUGINS.md) the new
+  registrar method, and the Python guide's
+  [Interactive components](docs/python/interact.md) the `Component` class
+  and the containers.
+
 ### Micro 0.0.1 (new crate): model, packages, registry, markup
 
 - New crate `rs-rich-micro` (`rich_micro`, #565), the foundation for micro
