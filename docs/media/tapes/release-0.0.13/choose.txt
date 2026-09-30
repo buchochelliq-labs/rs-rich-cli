@@ -1,11 +1,11 @@
-❯ rich --version
-rich (rs-rich-cli) 0.0.13
 ❯ fruit=$(rich choose apple banana cherry --header 'Pick a fruit')
 ? Pick a fruit ›
   apple
 ❯ banana
   cherry
   3/3 · ↑↓ move · enter pick · esc cancel
+
+
 
 
 
