@@ -1317,7 +1317,7 @@ fn explore(args: &Args) -> Answer {
     let format = args.data_format.unwrap_or(InputFormat::Auto);
     let document = crate::inspect::parse_node(format, &source, path)
         .map_err(|message| (ExitClass::Input, message))?;
-    let name = path.map_or_else(|| "stdin".to_string(), |path| controls::shown(path));
+    let name = path.map_or_else(|| "stdin".to_string(), controls::shown);
     let options = run_options(Fallback::Default, args.no_color);
     if options.policy.detect_for(options.session.output).is_err() {
         // No terminal to explore on: the whole tree, as --inspect draws it.

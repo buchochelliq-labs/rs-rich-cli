@@ -603,7 +603,11 @@ impl<T> TreeSelect<T> {
                     guides.push_str(if last[ancestor] { "    " } else { "│   " });
                 }
                 if self.parents[index].is_some() {
-                    guides.push_str(if last[index] { "└── " } else { "├── " });
+                    guides.push_str(if last[index] {
+                        "└── "
+                    } else {
+                        "├── "
+                    });
                 }
                 let collapsed = match &open {
                     Some(open) => !open[index],
