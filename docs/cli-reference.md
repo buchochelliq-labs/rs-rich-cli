@@ -309,6 +309,8 @@ Self-contained examples; ignores config; accepts --no-color.
 - FORCE_COLOR: not supported; redirected stdout stays plain
 - RICH_GRAPHICS: sixel forces Sixel on; none (or kitty, iterm) rules it out
 - RICH_SIXEL: 0/1 overrides Sixel detection when RICH_GRAPHICS is unset
+- RICH_MICRO: kitty, iterm, sixel, blocks or text: how micro assets are drawn on a terminal (never off one)
+- RICH_CELL_PIXELS: WxH, the cell size in pixels micro assets are fitted to
 
 With no RESOURCE and no mode flag, a capability demo is shown. Layout, style, paging, hyperlinks and export options require a resource or render mode.
 
