@@ -1,0 +1,48 @@
+# crates/rich-micro — micro assets: emoji-sized inline images and animations
+# (#565).
+#
+# Not a port of anything upstream: an rs-rich addition. A micro asset is a
+# tiny image or animation that sits inline in text (`Deploying :micro:rocket:`)
+# and always takes exactly its cells. This crate holds the model, the
+# `.richmicro` package reader, the layered registry and the `:micro:name:`
+# markup; terminal graphics protocols plug in through `MicroRenderer`. It is a
+# separate crate so ext users who only print never compile packaging.
+# Independent SemVer from 0.0.1.
+[package]
+name = "rs-rich-micro"
+version = "0.0.1"
+description = "Micro assets for rs-rich: emoji-sized inline images, packages, a layered registry and :micro: markup"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rs-rich-micro"
+keywords = ["terminal", "emoji", "icons", "images", "rich"]
+categories = ["command-line-interface"]
+include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
+
+[lib]
+name = "rich_micro"
+
+[lints]
+workspace = true
+
+[dependencies]
+rich.workspace = true
+# `cli_doc::precedence` for `explain`, and the text-transform plumbing.
+rich-ext.workspace = true
+# `TextTransform` and `Plugin`, so the substitution registers like any other
+# transform.
+rich-plugin-api.workspace = true
+serde_json.workspace = true
+# `.richmicro` archives: reading only, stored and deflated entries (flate2's
+# pure-Rust backend). No encryption, no other codecs.
+zip = { version = "8", default-features = false, features = ["deflate-flate2"] }
+# zip's deflate needs a flate2 backend: the pure-Rust miniz_oxide one.
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+
+[dev-dependencies]
+tempfile = "3"
