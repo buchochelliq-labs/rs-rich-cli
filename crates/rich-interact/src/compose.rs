@@ -1756,6 +1756,10 @@ pub struct Layer<'a, M> {
     border: bool,
     backdrop: bool,
     dismissable: bool,
+    /// Whether the child took focus when opened: a layer whose child stops
+    /// taking focus (it answered) closes; one that never took it (a label)
+    /// stays until dismissed.
+    took_focus: bool,
 }
 
 impl<'a, M> Layer<'a, M> {
@@ -1768,6 +1772,7 @@ impl<'a, M> Layer<'a, M> {
             border: true,
             backdrop: kind == LayerKind::Modal,
             dismissable: true,
+            took_focus: false,
         }
     }
 
@@ -1905,7 +1910,8 @@ impl<'a, M> Layers<'a, M> {
     }
 
     /// Open `layer` now.
-    pub fn open(&mut self, layer: Layer<'a, M>) {
+    pub fn open(&mut self, mut layer: Layer<'a, M>) {
+        layer.took_focus = layer.child.focusable();
         self.layers.push(layer);
         self.open.set(self.layers.len());
     }
@@ -1972,7 +1978,8 @@ impl<'a, M> Layers<'a, M> {
         let mut result = Flow::Continue;
         for request in requests {
             match request {
-                Request::Open(layer) => {
+                Request::Open(mut layer) => {
+                    layer.took_focus = layer.child.focusable();
                     self.layers.push(layer);
                     let index = self.layers.len() - 1;
                     let inner = self.placements(context)[index].1;
@@ -2028,7 +2035,8 @@ impl<'a, M> Layers<'a, M> {
 
     /// Close layer `index` if its flow ends it; the flow the host returns.
     fn after_layer(&mut self, index: usize, flow: Flow<M>) -> Option<Flow<M>> {
-        let finished = !self.layers[index].child.focusable();
+        let layer = &self.layers[index];
+        let finished = layer.took_focus && !layer.child.focusable();
         match flow {
             Flow::Cancel => {
                 self.layers.remove(index);
@@ -2080,12 +2088,16 @@ impl<'a, M> Layers<'a, M> {
                 let inside = outer.contains(column, row);
                 let held = matches!(mouse.kind, MouseKind::Drag(_) | MouseKind::Up(_))
                     && self.grab == Some(Some(top));
-                if mouse.is_click() {
-                    self.grab = inside.then_some(Some(top));
+                if let MouseKind::Down(_) = mouse.kind {
+                    // Outside: held by nobody, so its release goes nowhere.
+                    self.grab = Some(Some(if inside { top } else { usize::MAX }));
                 }
                 if !inside && !held {
                     if mouse.is_click() && self.layers[top].kind == LayerKind::Popover {
                         self.layers.pop();
+                    }
+                    if let MouseKind::Up(_) = mouse.kind {
+                        self.grab = None;
                     }
                     return Flow::Continue;
                 }
@@ -2350,8 +2362,18 @@ impl<M> Layers<'_, M> {
             if !self.base.mouse() {
                 return Flow::Ignored;
             }
-            if mouse.is_click() {
-                self.grab = Some(None);
+            match mouse.kind {
+                MouseKind::Down(_) => self.grab = Some(None),
+                // A press that started on a layer (one since closed) is
+                // not the base's to finish.
+                MouseKind::Drag(_) | MouseKind::Up(_) if matches!(self.grab, Some(Some(_))) => {
+                    if matches!(mouse.kind, MouseKind::Up(_)) {
+                        self.grab = None;
+                    }
+                    return Flow::Continue;
+                }
+                MouseKind::Up(_) => self.grab = None,
+                _ => {}
             }
         }
         if let Event::Returned(_) = event {
