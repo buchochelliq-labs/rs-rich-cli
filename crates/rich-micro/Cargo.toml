@@ -48,3 +48,6 @@ flate2 = { version = "1.1", default-features = false, features = ["rust_backend"
 
 [dev-dependencies]
 tempfile = "3"
+# The per-protocol PTY tests: a real pseudo-terminal and an emulator.
+portable-pty = "0.9"
+vt100 = "0.16"
