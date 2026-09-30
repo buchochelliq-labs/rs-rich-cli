@@ -69,6 +69,8 @@ pub mod event_loop;
 pub mod fuzzy;
 pub mod headless;
 pub mod item;
+pub mod keymap;
+pub mod kit;
 mod names;
 pub mod paint;
 pub mod policy;
