@@ -64,6 +64,9 @@ fn searching_keeps_the_ancestors_of_what_matches() {
     }
     assert!(!found.contains("ada"), "{found}");
     assert!(!found.contains("debug"), "{found}");
+    // The guides join what is listed, and a listed ancestor is open.
+    assert!(found.contains("└── ▾ users"), "{found}");
+    assert!(found.contains("        └── name"), "{found}");
 }
 
 #[test]

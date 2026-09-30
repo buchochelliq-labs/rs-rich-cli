@@ -1,0 +1,22 @@
+❯ path=$(rich explore config.yaml)
+? config.yaml ›
+  $
+❯ ▾ $ {…} 6 keys                              │ $
+  ├── name: "storefront"                      │ ├── name: "storefront"
+  ├── version: "2.4.1"                        │ ├── version: "2.4.1"
+  ├── ▸ server: {…} 3 keys                    │ ├── server
+  ├── ▸ database: {…} 2 keys                  │ │   ├── host: "0.0.0.0"
+  ├── ▸ users: […] 2 items                    │ │   ├── port: 8080
+  └── ▸ features: {…} 2 keys                  │ │   └── tls
+                                              │ │       ├── enabled: true
+                                              │ │       └── certificate: "/etc/storefront/cert.pem"
+                                              │ ├── database
+  7/25 · ↑↓ move · enter pick · ←→ fold · ctrl+y path · alt+y value · esc cancel
+
+
+
+
+
+
+
+

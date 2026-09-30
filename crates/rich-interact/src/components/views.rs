@@ -366,6 +366,8 @@ pub struct TreeSelect<T> {
     breadcrumbs: bool,
     /// The width the breadcrumbs were last laid out at.
     width: usize,
+    /// Whether the guides are drawn for a filtered list.
+    filtered: bool,
     keymap: Keymap,
 }
 
@@ -424,6 +426,7 @@ impl<T> TreeSelect<T> {
             crumbs,
             breadcrumbs: false,
             width: usize::MAX,
+            filtered: false,
             keymap: tree_keymap(),
         };
         tree.update();
@@ -504,6 +507,11 @@ impl<T> TreeSelect<T> {
         self.select.set_status(status);
     }
 
+    /// The footer's extra key hints (default `←→ fold`).
+    pub fn set_hints(&mut self, hints: Option<String>) {
+        self.select.set_hints(hints);
+    }
+
     /// The breadcrumbs of the focused node, at the last width seen.
     fn crumb_line(&mut self) {
         if !self.breadcrumbs {
@@ -552,45 +560,82 @@ impl<T> TreeSelect<T> {
 
     /// The guides and fold markers, and which nodes a collapse hides.
     fn update(&mut self) {
-        let count = self.parents.len();
-        let mut prefixes = Vec::with_capacity(count);
-        let mut hidden = Vec::with_capacity(count);
-        for index in 0..count {
-            let mut guides = String::new();
-            let mut at = self.parents[index];
-            let mut up = Vec::new();
-            while let Some(parent) = at {
-                up.push(parent);
-                at = self.parents[parent];
-            }
-            hidden.push(up.iter().any(|&ancestor| self.collapsed[ancestor]));
-            // Each ancestor below the root draws a bar if more of its
-            // siblings follow.
-            for &ancestor in up.iter().rev().skip(1) {
-                guides.push_str(if self.last[ancestor] {
-                    "    "
-                } else {
-                    "│   "
-                });
-            }
-            if self.parents[index].is_some() {
-                guides.push_str(if self.last[index] {
-                    "└── "
-                } else {
-                    "├── "
-                });
-            }
-            guides.push_str(match (self.parent_of_any[index], self.collapsed[index]) {
-                (true, true) => "▸ ",
-                (true, false) => "▾ ",
-                _ => "",
-            });
-            prefixes.push(guides);
-        }
-        self.select.prefixes = prefixes;
+        let hidden = (0..self.parents.len())
+            .map(|index| {
+                crate::kit::ancestors(&self.parents, index).any(|ancestor| self.collapsed[ancestor])
+            })
+            .collect();
+        self.select.prefixes = self.guides(None);
         self.select.hidden = hidden;
         self.select.refilter();
+        self.filtered = false;
+        self.refresh_guides();
         self.crumb_line();
+    }
+
+    /// Each node's guides and fold marker. With `shown`, only the nodes
+    /// listed count: a filtered tree draws the branches between what it
+    /// lists, and a node whose children are listed is open.
+    fn guides(&self, shown: Option<&[bool]>) -> Vec<String> {
+        let count = self.parents.len();
+        let (last, open) = match shown {
+            None => (self.last.clone(), None),
+            Some(shown) => {
+                let mut last = vec![true; count];
+                let mut open = vec![false; count];
+                let mut seen = std::collections::HashSet::new();
+                for index in (0..count).rev().filter(|&i| shown[i]) {
+                    last[index] = seen.insert(self.parents[index]);
+                    if let Some(parent) = self.parents[index] {
+                        open[parent] = true;
+                    }
+                }
+                (last, Some(open))
+            }
+        };
+        (0..count)
+            .map(|index| {
+                let up: Vec<usize> = crate::kit::ancestors(&self.parents, index).collect();
+                let mut guides = String::new();
+                // Each ancestor below the root draws a bar if more of its
+                // siblings follow.
+                for &ancestor in up.iter().rev().skip(1) {
+                    guides.push_str(if last[ancestor] { "    " } else { "│   " });
+                }
+                if self.parents[index].is_some() {
+                    guides.push_str(if last[index] { "└── " } else { "├── " });
+                }
+                let collapsed = match &open {
+                    Some(open) => !open[index],
+                    None => self.collapsed[index],
+                };
+                guides.push_str(match (self.parent_of_any[index], collapsed) {
+                    (true, true) => "▸ ",
+                    (true, false) => "▾ ",
+                    _ => "",
+                });
+                guides
+            })
+            .collect()
+    }
+
+    /// Redraw the guides for what the filter lists, once a query is typed,
+    /// and back when it is cleared.
+    fn refresh_guides(&mut self) {
+        let filtering = !self.select.query_text().is_empty();
+        if !filtering && !self.filtered {
+            return;
+        }
+        self.select.prefixes = if filtering {
+            let mut shown = vec![false; self.parents.len()];
+            for (index, _) in self.select.filter().matches() {
+                shown[*index] = true;
+            }
+            self.guides(Some(&shown))
+        } else {
+            self.guides(None)
+        };
+        self.filtered = filtering;
     }
 
     /// Right and Left: fold the focused node, or go to its parent.
@@ -650,6 +695,7 @@ impl<T: Clone> Component for TreeSelect<T> {
             }
             _ => self.select.handle(event, context),
         };
+        self.refresh_guides();
         self.crumb_line();
         flow
     }

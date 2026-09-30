@@ -165,11 +165,12 @@ impl DataExplorer {
             paths.push(path);
         }
         let jsonpaths = paths.iter().map(json_path).collect();
-        let tree = TreeSelect::new(prompt, nodes)
+        let mut tree = TreeSelect::new(prompt, nodes)
             .crumbs(crumbs)
             .paths(jsonpaths)
             .breadcrumbs(true)
             .fold_below(1);
+        tree.set_hints(Some("←→ fold · ctrl+y path · alt+y value".into()));
         DataExplorer {
             tree,
             root,

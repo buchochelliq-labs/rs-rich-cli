@@ -1,0 +1,22 @@
+❯ path=$(rich explore config.yaml)
+? config.yaml › name: "grace"
+❯ echo "$path"
+$.users[1].name
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
