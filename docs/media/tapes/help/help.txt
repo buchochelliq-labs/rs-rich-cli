@@ -1,0 +1,26 @@
+❯ overlays
+rs-rich-cli › crates › rich-interact
+? Open ›      ╭─ Keys ───────────────────────────────────────────────────────────────╮
+❯ src/lib.rs  │? Search keys ›                                                       │
+  src/overlay.│select                                                                │
+  src/chrome.r│  enter      pick                                                     │
+  src/compose.│  esc        cancel                                                   │
+  README.md   │  ↑/ctrl+p   move up                                                  │
+  Cargo.toml  │  ↓/ctrl+n   move down                                                │
+  6/6 · ↑↓ mov│  pgup       page up                                                  │
+              │  pgdn       page down                                                │
+              │  home       first                                                    │
+              │  end        last                                                     │
+              │  ctrl+u     clear the filter                                         │
+              │  backspace  delete a character                                       │
+              │  ctrl+k     actions                                                  │
+              │overlays                                                              │
+              │  ctrl+o     commands                                                 │
+              │  f1         help                                                     │
+              │  ?/f2       shortcuts                                                │
+              │  15 keys · more below · type to search · ↑↓ scroll · esc close       │
+              ╰──────────────────────────────────────────────────────────────────────╯
+ FILES  │ * indexing │ 6 files               ↑ scroll up · ↓ scroll down │ ctrl+o commands · f1 help
+
+
+

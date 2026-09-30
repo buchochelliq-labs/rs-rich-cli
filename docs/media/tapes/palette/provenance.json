@@ -1,0 +1,13 @@
+{
+  "tape": "docs/tapes/palette.tape",
+  "tape_fnv1a64": "7788be93925c9e9e",
+  "recorder": "rs-rich-record 0.0.1",
+  "rich": null,
+  "commit": "8a8de8848cdee7e8b31f34696d97a3893954a7bb",
+  "screenshots": [
+    "palette",
+    "search",
+    "ran"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}

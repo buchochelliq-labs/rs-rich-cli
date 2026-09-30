@@ -25,6 +25,7 @@ motion turned on in your system settings the cards stay still.
 [![A fuzzy file picker with a preview](media/tapes/components/select.png){ data-gif="components.gif" loading=lazy }<span class="tape-card-title">Components</span>](#components){ .tape-card }
 [![rich file previewing a file before picking it](media/tapes/file/preview.png){ data-gif="file.gif" loading=lazy }<span class="tape-card-title">Ask for more in a script</span>](#ask-for-more-in-a-script){ .tape-card }
 [![A Markdown file paged in a viewport](media/tapes/viewport/paged.png){ data-gif="viewport.gif" loading=lazy }<span class="tape-card-title">An interactive component</span>](#an-interactive-component){ .tape-card }
+[![The command palette over a file list](media/tapes/palette/palette.png){ data-gif="palette.gif" loading=lazy }<span class="tape-card-title">Overlays and chrome</span>](#overlays-and-chrome){ .tape-card }
 [![The guided tour, inspecting structured data](media/tapes/tour/inspect.png){ data-gif="tour.gif" loading=lazy }<span class="tape-card-title">The guided tour</span>](demos.md#run-the-suite-in-your-terminal){ .tape-card }
 [![rich choose in the 0.0.13 release recording](media/tapes/release-0.0.13/choose.png){ data-gif="release-0.0.13.gif" loading=lazy }<span class="tape-card-title">The 0.0.13 release</span>](releases/0.0.13.md){ .tape-card }
 
@@ -155,6 +156,39 @@ Enter gives the terminal back, as it was, with the line it was left at. See
 | ![The top of the README](media/tapes/viewport/top.png) | ![One page further](media/tapes/viewport/paged.png) | ![The shell again, with the line it was left at](media/tapes/viewport/returned.png) |
 
 [Tape](tapes/viewport.tape) · [Cast](media/tapes/viewport/viewport.cast) · [GIF](media/tapes/viewport/viewport.gif) · [Page](media/tapes/viewport/viewport.html)
+
+## Overlays and chrome
+
+`rs-rich-interact`'s overlays and chrome, run as its `overlays` example: a
+file list wrapped in `Overlays`. Ctrl+O opens the command palette, which
+lists every key the list has, by category, with its shortcut, and runs the
+one picked. The help overlay groups the keys and searches them as you type.
+Under the list, a status bar shows a badge, a spinner, a note and key hints
+from the keymap. Breadcrumbs sit over the list, and Ctrl+K opens the
+region's actions in a modal. See
+[Overlays and chrome](guide/interact/overlays.md).
+
+<div class="tape-player" data-cast="../media/tapes/palette/palette.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/palette/palette.gif" alt="The command palette over a file list, searched and run">
+</div>
+
+| The palette | Searched | Run |
+|---|---|---|
+| ![Every key of the list, by category](media/tapes/palette/palette.png) | !["move down" found](media/tapes/palette/search.png) | ![The list moved down](media/tapes/palette/ran.png) |
+
+[Tape](tapes/palette.tape) · [Cast](media/tapes/palette/palette.cast) · [GIF](media/tapes/palette/palette.gif) · [Page](media/tapes/palette/palette.html)
+
+| Help | Searched |
+|---|---|
+| ![Every key, grouped by context](media/tapes/help/help.png) | ![The keys for "page"](media/tapes/help/search.png) |
+
+[Tape](tapes/help.tape) · [Cast](media/tapes/help/help.cast) · [GIF](media/tapes/help/help.gif) · [Page](media/tapes/help/help.html)
+
+| The status bar | Region actions | A command ran |
+|---|---|---|
+| ![A badge, a spinner and key hints under the list](media/tapes/statusbar/status.png) | ![The region's actions in a modal](media/tapes/statusbar/actions.png) | ![The note changed by the command](media/tapes/statusbar/refreshed.png) |
+
+[Tape](tapes/statusbar.tape) · [Cast](media/tapes/statusbar/statusbar.cast) · [GIF](media/tapes/statusbar/statusbar.gif) · [Page](media/tapes/statusbar/statusbar.html)
 
 ## How it works
 

@@ -164,6 +164,62 @@ from the built-ins' pieces and compose them with the built-ins. Nothing in
   declare their keymaps but still match keys inline, so rebinding does not
   reach them yet.
 
+### Interact 0.0.2: overlays and chrome
+
+0.0.14 workstream 2 ([plan](docs/plans/0.0.14.md), #453, #473, #474, #475,
+#481, #482): overlays that read the keymap, and chrome round a view, built
+on workstream 1's layers, keymap and kit. Each is a component of its own
+and works alone, in a layer or container of yours, or through `Overlays`.
+Nothing in `rs-rich` changes. `rs-rich-interact` is already at 0.0.2 and
+unpublished, so no version moves.
+
+- **`Overlays`** (`rich_interact::overlay`, or `ComponentExt::with_overlays`)
+  wraps any component. Ctrl+O opens the command palette, F1 the help
+  overlay, and `?` or F2 the shortcut sheet. Each opens only when the
+  component does not use the key, and each reads the component's keymap
+  when it opens. The keys rebind with `rebind` or under context
+  `overlays`. The overlays are modal layers of a `Layers` host.
+- **Command palette (#453).** `Palette` lists `Command`s by category, each
+  with its shortcut, and finds them by fuzzy search (`FilterState`). It
+  builds from a keymap (`from_keymap`, `Command::from_binding`). `hints`
+  reads each command's current keys from the keymap, and `contexts` lists
+  only the active contexts. Under `Overlays`, a command of yours runs its
+  handler, and a binding runs by sending the component its key.
+- **Help overlay (#473) and shortcut sheet (#475).** `Help` groups every
+  binding by context and searches keys, descriptions and contexts as you
+  type. `Shortcuts` shows every binding's first key in columns, and any key
+  closes it.
+- **The action menu is a modal (#474).** Ctrl+K in `Select` (and in
+  `TableSelect`, `TreeSelect`, `FilePicker` and `AssetPicker`) opens the
+  menu in a box over the list, titled with its target, over a dimmed
+  backdrop. Its keys and mouse behaviour are unchanged. One test asserted
+  the menu's old inline rows and now asserts the boxed ones. Actions can
+  also target a region: `TargetKind::Region` (`region` for plugins), which
+  `Overlays::region`, `actions` and `on_action` open in a `Menu` when the
+  component leaves Ctrl+K unused.
+- **Status bar (#481)** (`rich_interact::chrome`). `StatusBar` holds
+  `StatusItem`s on the left and right: text (markup), key hints read from
+  the keymap, spinners (core's frames, picked by time, with a replaceable
+  clock), and badges. A `StatusHandle` changes items while the bar shows.
+  Under `Overlays::status_bar`, the hints follow whatever has the keys.
+- **Breadcrumbs (#482).** `Breadcrumbs` shows a path, drops crumbs off the
+  left behind `…` when it does not fit, and goes back to a clicked crumb.
+  A `Crumbs` handle changes the path.
+- **Kit.** `kit::frame` boxes lines with a titled border, and `kit::place`
+  draws a box over a view with an optional backdrop. `Layers` and the
+  action menu both draw with them. `ActionMenu::size` gives the menu's
+  size. `chrome::key_hint` and `keys_hint` write keys short (`↑`, `esc`,
+  `pgdn`) for hints.
+- **Fix.** `Form` now returns `Flow::Ignored` for keys its field does not
+  use, like the other built-ins, so containers and overlays get them.
+- **Tests, example, guide and tapes.** `tests/overlays.rs` opens every
+  overlay over all twelve built-ins and over workstream 1's custom
+  component, and runs palette commands on them. `tests/pty_overlays.rs`
+  runs `examples/overlays.rs` in a real PTY. The guide page is
+  [Overlays and chrome](docs/guide/interact/overlays.md), and three new
+  tapes record the palette, the help overlay and the status bar
+  (`docs/tapes/palette.tape`, `help.tape` and `statusbar.tape`).
+
 ### Core 0.0.9 / ext 0.0.11: `syntax` and `markdown` are optional
 
 - `rs-rich` has two new default features: `syntax` (`Syntax` and

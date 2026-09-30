@@ -1,0 +1,26 @@
+❯ overlays
+rs-rich-cli › crates › rich-interact
+? Open ›      ╭─ Commands ───────────────────────────────────────────────────────────╮
+❯ src/lib.rs  │? Command ›                                                           │
+  src/overlay.│❯ files    Refresh the list                                           │
+  src/chrome.r│  files    Quit without opening                                       │
+  src/compose.│  select   pick                                                 enter │
+  README.md   │  select   cancel                                                 esc │
+  Cargo.toml  │  select   move up                                           ↑/ctrl+p │
+  6/6 · ↑↓ mov│  select   move down                                         ↓/ctrl+n │
+              │  select   page up                                               pgup │
+              │  select   page down                                             pgdn │
+              │  select   first                                                 home │
+              │  select   last                                                   end │
+              │  select   clear the filter                                    ctrl+u │
+              │  select   delete a character                               backspace │
+              │  select   actions                                             ctrl+k │
+              │  overlays help                                                    f1 │
+              │  16/16 · ↑↓ move · enter run · esc close                             │
+              ╰──────────────────────────────────────────────────────────────────────╯
+ FILES  │ * indexing │ 6 files                   ↑ move up · ↓ move down │ ctrl+o commands · f1 help
+
+
+
+
+

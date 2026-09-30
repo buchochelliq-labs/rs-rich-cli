@@ -91,6 +91,7 @@ pub mod policy;
 pub mod session;
 pub mod viewport;
 
+pub use chrome::{Breadcrumbs, StatusBar, StatusItem};
 pub use component::{Component, Context, Flow, View};
 pub use components::{
     Answers, AssetKind, AssetPicker, Choice, ColorFormat, ColorPicker, Confirm, FileMode,
@@ -103,7 +104,6 @@ pub use compose::{
 };
 pub use event::{Button, Event, Key, KeyCode, Modifiers, Mouse, MouseKind};
 pub use event_loop::{degrade, run, Error, EventLoop, Handle, LoopOptions, Outcome, RunOptions};
-pub use chrome::{Breadcrumbs, StatusBar, StatusItem};
 pub use item::{Action, ActionFilter, ActionTarget, Actions, Item, Preview, TargetKind};
 pub use keymap::{Binding, Keymap};
 pub use overlay::{Command, Help, Menu, Overlays, Palette, Shortcuts};

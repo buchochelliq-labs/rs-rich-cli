@@ -319,7 +319,10 @@ impl Palette {
         let command = &self.commands[self.listed[*index]];
         let focused = position == self.list.cursor();
         let mut line = if focused {
-            vec![kit::text(format!("{} ", theme.pointer), &theme.pointer_style)]
+            vec![kit::text(
+                format!("{} ", theme.pointer),
+                &theme.pointer_style,
+            )]
         } else {
             vec![kit::plain("  ")]
         };
@@ -328,12 +331,21 @@ impl Palette {
         let (in_category, in_label): (Vec<usize>, Vec<usize>) =
             positions.iter().partition(|&&p| p < split);
         let in_label: Vec<usize> = in_label.iter().map(|p| p - split).collect();
-        let mut category =
-            kit::highlight(&command.category, &in_category, Some(&theme.hint), &theme.matched);
+        let mut category = kit::highlight(
+            &command.category,
+            &in_category,
+            Some(&theme.hint),
+            &theme.matched,
+        );
         category.push(kit::plain(" "));
         line.extend(kit::pad(category, category_width + 1));
         let base = focused.then_some(&theme.focused);
-        line.extend(kit::highlight(&command.label, &in_label, base, &theme.matched));
+        line.extend(kit::highlight(
+            &command.label,
+            &in_label,
+            base,
+            &theme.matched,
+        ));
         let shortcut = command.keys_label();
         if !shortcut.is_empty() {
             let used = kit::width(&line);
@@ -654,9 +666,10 @@ impl Component for Help {
             lines.push(vec![kit::text("  no matching keys", &theme.hint)]);
         }
         lines.resize_with(page + 1, Vec::new);
+        let count = self.matches().len();
         let hint = format!(
-            "  {} keys{} · type to search · ↑↓ scroll · esc close",
-            self.matches().len(),
+            "  {count} {}{} · type to search · ↑↓ scroll · esc close",
+            if count == 1 { "key" } else { "keys" },
             if more { " · more below" } else { "" }
         );
         lines.push(kit::fit(vec![kit::text(hint, &theme.hint)], width));
@@ -728,9 +741,7 @@ impl Shortcuts {
     /// How many columns fit in `width`, and the rows they take.
     fn grid(&self, width: usize) -> (usize, usize) {
         let (_, entry) = self.widths();
-        let columns = ((width + 3) / (entry + 3))
-            .min(self.bindings.len())
-            .max(1);
+        let columns = ((width + 3) / (entry + 3)).min(self.bindings.len()).max(1);
         (columns, self.bindings.len().div_ceil(columns))
     }
 
@@ -1162,7 +1173,8 @@ impl<'a, M: 'a> Overlays<'a, M> {
     fn run(&mut self, picked: Picked, context: &Context<'_>) -> Flow<M> {
         match picked {
             Picked::Command(command) => {
-                if let Some((_, handler)) = self.handlers.iter_mut().find(|(id, _)| *id == command.id)
+                if let Some((_, handler)) =
+                    self.handlers.iter_mut().find(|(id, _)| *id == command.id)
                 {
                     return handler();
                 }
@@ -1278,7 +1290,13 @@ impl<'a, M: 'a> Component for Overlays<'a, M> {
         let mut lines = Vec::new();
         if let Some(crumbs) = &self.crumbs {
             let line = Rect::new(0, 0, context.width, 1);
-            lines.extend(crumbs.render(&line.context(context)).lines.into_iter().take(1));
+            lines.extend(
+                crumbs
+                    .render(&line.context(context))
+                    .lines
+                    .into_iter()
+                    .take(1),
+            );
             lines.resize_with(1, Vec::new);
         }
         let view = self.layers.render(&body.context(context));

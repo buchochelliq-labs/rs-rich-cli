@@ -45,11 +45,7 @@ where
         .into_iter()
         .find(|binding| !binding.keys.is_empty())
         .map(|binding| binding.description);
-    for (keys, title) in [
-        ("ctrl+o", "Commands"),
-        ("f1", "Keys"),
-        ("f2", "Shortcuts"),
-    ] {
+    for (keys, title) in [("ctrl+o", "Commands"), ("f1", "Keys"), ("f2", "Shortcuts")] {
         let script = Script::new().keys(keys).keys("escape");
         let (_, record) = headless::run(Overlays::new(make()), script, 100, 30);
         assert!(
@@ -59,7 +55,10 @@ where
         );
         if let (Some(first), "Keys") = (&first, title) {
             assert!(
-                record.frames.iter().any(|frame| frame.contains(first.as_str())),
+                record
+                    .frames
+                    .iter()
+                    .any(|frame| frame.contains(first.as_str())),
                 "help over {name} lacks {first:?}:\n{}",
                 record.frames.join("\n----\n")
             );
@@ -97,7 +96,10 @@ fn every_overlay_opens_over_every_built_in() {
     every_overlay_over("tree", || {
         TreeSelect::new(
             "Files",
-            vec![(0, Item::new("src", "src")), (1, Item::new("lib", "lib.rs"))],
+            vec![
+                (0, Item::new("src", "src")),
+                (1, Item::new("lib", "lib.rs")),
+            ],
         )
     });
     every_overlay_over("input", || Input::new("Name"));
@@ -239,14 +241,24 @@ fn shortcuts_follow_rebinding() {
 #[test]
 fn the_help_overlay_searches() {
     let script = Script::new().keys("f1").text("mark");
-    let (_, record) = headless::run(Overlays::new(MultiSelect::new("Files", files())), script, 90, 24);
+    let (_, record) = headless::run(
+        Overlays::new(MultiSelect::new("Files", files())),
+        script,
+        90,
+        24,
+    );
     let last = record.last_frame();
     assert!(last.contains("Search keys › mark"), "{last}");
     assert!(last.contains("mark and move down"), "{last}");
     assert!(!last.contains("cancel"), "{last}");
     // Escape clears the search first, then closes.
     let script = Script::new().keys("f1").text("mark").keys("escape");
-    let (_, record) = headless::run(Overlays::new(MultiSelect::new("Files", files())), script, 90, 24);
+    let (_, record) = headless::run(
+        Overlays::new(MultiSelect::new("Files", files())),
+        script,
+        90,
+        24,
+    );
     assert!(record.last_frame().contains("cancel"));
     assert!(record.last_frame().contains("╭─ Keys "));
 }
@@ -381,9 +393,18 @@ fn chrome_sits_in_containers_and_the_status_bar_ticks() {
         .child(Breadcrumbs::new(["a", "b"]))
         .child(Label::new("body"))
         .child(bar);
-    let (_, record) = headless::run(column, Script::new().wait(Duration::from_millis(300)), 40, 6);
+    let (_, record) = headless::run(
+        column,
+        Script::new().wait(Duration::from_millis(300)),
+        40,
+        6,
+    );
     assert!(record.frames.len() >= 2, "{:?}", record.frames);
-    assert!(record.frames[0].starts_with("a › b\nbody\n"), "{}", record.frames[0]);
+    assert!(
+        record.frames[0].starts_with("a › b\nbody\n"),
+        "{}",
+        record.frames[0]
+    );
     // Each tick painted the spinner's next frame.
     let spinners: Vec<&str> = record
         .frames

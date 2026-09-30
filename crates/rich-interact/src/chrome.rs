@@ -308,10 +308,7 @@ impl<M> StatusBar<M> {
                 StatusItem::Text(markup) => inline(context, markup),
                 StatusItem::Hints(max) => self.hints(keymap, *max),
                 StatusItem::Spinner { name, text } => {
-                    let mut line = vec![kit::text(
-                        spinner_frame(name, now),
-                        &style("green"),
-                    )];
+                    let mut line = vec![kit::text(spinner_frame(name, now), &style("green"))];
                     if !text.is_empty() {
                         line.push(kit::plain(" "));
                         line.extend(inline(context, text));
@@ -600,7 +597,10 @@ impl<M> Component for Breadcrumbs<'_, M> {
     type Output = M;
 
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<M> {
-        let Some(mouse) = event.mouse().filter(|mouse| mouse.is_click() && mouse.row == 0) else {
+        let Some(mouse) = event
+            .mouse()
+            .filter(|mouse| mouse.is_click() && mouse.row == 0)
+        else {
             return Flow::Ignored;
         };
         let (_, spans) = self.layout(context.width);

@@ -1147,7 +1147,10 @@ impl ActionMenu {
             .max()
             .unwrap_or(0);
         let hints = cell_len(MENU_HINTS);
-        ((4 + label_width + key_width).max(hints) + 2, self.actions.len() + 1)
+        (
+            (4 + label_width + key_width).max(hints) + 2,
+            self.actions.len() + 1,
+        )
     }
 
     /// The menu's rows at `width`, and a line of hints under them.
@@ -1177,10 +1180,7 @@ impl ActionMenu {
             }
             lines.push(fit(line, width));
         }
-        lines.push(fit(
-            vec![text(MENU_HINTS.to_string(), &theme.hint)],
-            width,
-        ));
+        lines.push(fit(vec![text(MENU_HINTS.to_string(), &theme.hint)], width));
         lines
     }
 }
