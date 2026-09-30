@@ -11,6 +11,7 @@ use crate::component::{Component, Context, Flow, View};
 use crate::components::{shown, text, PreviewLayout, Select, Theme};
 use crate::event::{Event, Key, KeyCode};
 use crate::item::{Actions, Item, TargetKind};
+use crate::keymap::{keys, Keymap};
 use crate::policy::{LineIo, NotInteractive};
 
 /// The builder methods both views pass on to their [`Select`].
@@ -145,6 +146,10 @@ impl<T> TableSelect<T> {
 
 impl<T: Clone> Component for TableSelect<T> {
     type Output = T;
+
+    fn keymap(&self) -> Keymap {
+        self.select.visible_keymap()
+    }
 
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<T> {
         self.select.handle(event, context)
@@ -328,6 +333,14 @@ impl<T> TreeSelect<T> {
 
 impl<T: Clone> Component for TreeSelect<T> {
     type Output = T;
+
+    fn keymap(&self) -> Keymap {
+        let mut keymap = Keymap::new("tree")
+            .bind("expand", keys("right"), "expand")
+            .bind("collapse", keys("left"), "collapse, or go to the parent");
+        keymap.extend(self.select.visible_keymap());
+        keymap
+    }
 
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<T> {
         if let Some(key) = event.key() {

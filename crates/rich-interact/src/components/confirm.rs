@@ -12,7 +12,8 @@ use rich::{Renderable, Segment, Style};
 
 use crate::component::{Component, Context, Flow, View};
 use crate::components::{fit, plain, question, text, Theme};
-use crate::event::{Event, KeyCode};
+use crate::event::{Event, Key, KeyCode};
+use crate::keymap::{keys, Binding, Keymap};
 use crate::policy::{LineIo, NotInteractive};
 use crate::viewport::Viewport;
 
@@ -208,10 +209,32 @@ impl Component for Confirm {
             }
             KeyCode::Right | KeyCode::Tab => self.focus = (self.focus + 1) % count.max(1),
             _ => {
-                self.viewport.handle_scroll(event, page);
+                if !self.viewport.handle_scroll(event, page) {
+                    return Flow::Ignored;
+                }
             }
         }
         Flow::Continue
+    }
+
+    fn keymap(&self) -> Keymap {
+        let mut keymap = Keymap::new("confirm")
+            .bind("pick", keys("enter"), "pick the focused choice")
+            .bind("cancel", keys("escape"), "cancel")
+            .bind("previous", keys("left shift+tab"), "previous choice")
+            .bind("next", keys("right tab"), "next choice");
+        for choice in &self.choices {
+            keymap.add(Binding::new(
+                "confirm",
+                format!("choose-{}", choice.id),
+                [Key::char(choice.key)],
+                choice.label.clone(),
+            ));
+        }
+        if !self.body.is_empty() {
+            keymap.extend(crate::kit::ScrollState::keymap("confirm"));
+        }
+        keymap
     }
 
     fn render(&self, context: &Context<'_>) -> View {

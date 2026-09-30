@@ -14,6 +14,7 @@ use rich::Segment;
 use crate::component::{Component, Context, Flow, View};
 use crate::components::{fit, plain, question, text, Input, Theme};
 use crate::event::{Event, KeyCode};
+use crate::keymap::{keys, Keymap};
 use crate::policy::{LineIo, NotInteractive};
 
 /// A field's answer.
@@ -280,6 +281,30 @@ impl Component for Form {
             return Flow::Done(Answers::default());
         }
         Flow::Continue
+    }
+
+    fn keymap(&self) -> Keymap {
+        let mut keymap = Keymap::new("form")
+            .bind("submit", keys("ctrl+s"), "submit (Enter on the last field)")
+            .bind("cancel", keys("escape"), "cancel")
+            .bind("next", keys("enter tab down"), "next field")
+            .bind("previous", keys("shift+tab up"), "previous field");
+        match self.fields.get(self.focus).map(|field| &field.kind) {
+            Some(Kind::Text(input)) => keymap.extend(input.keymap()),
+            Some(Kind::Choice { .. }) => keymap.extend(
+                Keymap::new("form-choice")
+                    .bind("next-option", keys("right space"), "next option")
+                    .bind("previous-option", keys("left"), "previous option"),
+            ),
+            Some(Kind::Toggle(_)) => keymap.extend(
+                Keymap::new("form-toggle")
+                    .bind("toggle", keys("space left right"), "switch")
+                    .bind("yes", keys("y"), "on")
+                    .bind("no", keys("n"), "off"),
+            ),
+            None => {}
+        }
+        keymap
     }
 
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<Answers> {

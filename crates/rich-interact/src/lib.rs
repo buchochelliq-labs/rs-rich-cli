@@ -27,6 +27,13 @@
 //!   [`Pager`], [`FilePicker`], [`ColorPicker`] and [`AssetPicker`], built on
 //!   the above with a [`fuzzy`] matcher.
 //!
+//! Components compose (0.0.14): [`compose`] has containers that are
+//! components themselves ([`Column`], [`Row`], [`Stack`], [`Split`],
+//! [`Tabs`], [`Layers`]), with focus, routing and bubbling
+//! ([`Flow::Ignored`]); [`kit`] has the line helpers and state types the
+//! built-ins are made of; and [`keymap`] declares, rebinds and lists every
+//! component's keys.
+//!
 //! Mouse support (#476) is opt-in per component ([`Component::mouse`]):
 //! clicks, drags and the wheel arrive in the component's own coordinates, a
 //! click on a hyperlink arrives as [`Event::Link`], and the border beside a
@@ -64,11 +71,14 @@
 
 pub mod component;
 pub mod components;
+pub mod compose;
 pub mod event;
 pub mod event_loop;
 pub mod fuzzy;
 pub mod headless;
 pub mod item;
+pub mod keymap;
+pub mod kit;
 mod names;
 pub mod paint;
 pub mod policy;
@@ -81,43 +91,77 @@ pub use components::{
     FilePicker, Form, Input, MultiSelect, Pager, PreviewLayout, Select, Suggestion, TableSelect,
     TextArea, Theme, TreeSelect, Value,
 };
+pub use compose::{
+    Axis, Column, ComponentExt, Label, Layer, LayerHandle, Layers, Rect, Row, Size, Split, Stack,
+    Tabs,
+};
 pub use event::{Button, Event, Key, KeyCode, Modifiers, Mouse, MouseKind};
 pub use event_loop::{degrade, run, Error, EventLoop, Handle, LoopOptions, Outcome, RunOptions};
 pub use item::{Action, ActionFilter, ActionTarget, Actions, Item, Preview, TargetKind};
+pub use keymap::{Binding, Keymap};
 pub use policy::{Fallback, LineIo, NotInteractive, Policy, Reason};
 pub use session::{Backend, Output, Session, SessionOptions};
 pub use viewport::Viewport;
 
+/// Forward every [`Component`] method to `(**self)`.
+macro_rules! forward_component {
+    () => {
+        type Output = C::Output;
+
+        fn start(&mut self, context: &Context<'_>) -> Flow<C::Output> {
+            (**self).start(context)
+        }
+
+        fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<C::Output> {
+            (**self).handle(event, context)
+        }
+
+        fn render(&self, context: &Context<'_>) -> View {
+            (**self).render(context)
+        }
+
+        fn tick(&self) -> Option<std::time::Duration> {
+            (**self).tick()
+        }
+
+        fn mouse(&self) -> bool {
+            (**self).mouse()
+        }
+
+        fn keymap(&self) -> keymap::Keymap {
+            (**self).keymap()
+        }
+
+        fn focusable(&self) -> bool {
+            (**self).focusable()
+        }
+
+        fn focus_step(&mut self, forward: bool) -> bool {
+            (**self).focus_step(forward)
+        }
+
+        fn focus_enter(&mut self, forward: bool) -> bool {
+            (**self).focus_enter(forward)
+        }
+
+        fn default_value(&self) -> Option<C::Output> {
+            (**self).default_value()
+        }
+
+        fn prompt(&mut self, io: &mut dyn LineIo) -> Result<Option<C::Output>, NotInteractive> {
+            (**self).prompt(io)
+        }
+    };
+}
+
 /// A component borrowed mutably is a component, so a caller can mount one
 /// and still read its state after the loop.
 impl<C: Component + ?Sized> Component for &mut C {
-    type Output = C::Output;
+    forward_component!();
+}
 
-    fn start(&mut self, context: &Context<'_>) -> Flow<C::Output> {
-        (**self).start(context)
-    }
-
-    fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<C::Output> {
-        (**self).handle(event, context)
-    }
-
-    fn render(&self, context: &Context<'_>) -> View {
-        (**self).render(context)
-    }
-
-    fn tick(&self) -> Option<std::time::Duration> {
-        (**self).tick()
-    }
-
-    fn mouse(&self) -> bool {
-        (**self).mouse()
-    }
-
-    fn default_value(&self) -> Option<C::Output> {
-        (**self).default_value()
-    }
-
-    fn prompt(&mut self, io: &mut dyn LineIo) -> Result<Option<C::Output>, NotInteractive> {
-        (**self).prompt(io)
-    }
+/// A boxed component is a component: how containers hold children of
+/// different types with one output ([`compose::Child`]).
+impl<C: Component + ?Sized> Component for Box<C> {
+    forward_component!();
 }

@@ -14,6 +14,7 @@ use rich::{Renderable, Segment, Style};
 use crate::component::{Component, Context, Flow, View};
 use crate::components::{fit, plain, text, Theme};
 use crate::event::{Event, KeyCode};
+use crate::keymap::{keys, Keymap};
 use crate::policy::{LineIo, NotInteractive};
 use crate::viewport::Viewport;
 
@@ -289,8 +290,25 @@ impl Component for Pager {
                 self.jump(-1, page);
                 Flow::Continue
             }
-            _ => Flow::Continue,
+            Some(_) => Flow::Ignored,
+            None => Flow::Continue,
         }
+    }
+
+    fn keymap(&self) -> Keymap {
+        if self.typing.is_some() {
+            return Keymap::new("pager-search")
+                .bind("find", keys("enter"), "find")
+                .bind("cancel", keys("escape"), "stop searching")
+                .bind("delete", keys("backspace"), "delete a character");
+        }
+        let mut keymap = Keymap::new("pager")
+            .bind("quit", keys("q escape"), "quit")
+            .bind("search", keys("/"), "search")
+            .bind("next-match", keys("n"), "next match")
+            .bind("previous-match", keys("N"), "previous match");
+        keymap.extend(crate::kit::ScrollState::keymap("pager"));
+        keymap
     }
 
     fn render(&self, context: &Context<'_>) -> View {

@@ -128,7 +128,7 @@ struct Slot<C: Component> {
 impl<C: Component> Slot<C> {
     fn step(&mut self, flow: Flow<C::Output>) -> Step {
         let outcome = match flow {
-            Flow::Continue => return Step::Continue,
+            Flow::Continue | Flow::Ignored => return Step::Continue,
             Flow::Handoff(command) => return Step::Handoff(command),
             Flow::Done(value) => Outcome::Done(value),
             Flow::Cancel => Outcome::Cancelled,
@@ -149,6 +149,15 @@ impl<C: Component> Mounted for Slot<C> {
 
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Step {
         let flow = self.component.handle(event, context);
+        // A focus key nothing inside used ran off the end of the focus
+        // order: at the top, focus wraps round to the other end.
+        if let (Flow::Ignored, Some(key)) = (&flow, event.key()) {
+            let keymap = self.component.keymap();
+            let forward = keymap.is(key, crate::compose::FOCUS_NEXT);
+            if forward || keymap.is(key, crate::compose::FOCUS_PREVIOUS) {
+                self.component.focus_enter(forward);
+            }
+        }
         self.step(flow)
     }
 

@@ -9,13 +9,14 @@
 use rich::{Segment, Style};
 
 use crate::component::{Component, Context, Flow, View};
-use crate::event::{Event, KeyCode, MouseKind};
+use crate::event::{Event, KeyCode};
+use crate::kit::ScrollState;
 
-/// Lines, and the first one shown.
+/// Lines, and the first one shown: a [`ScrollState`] over them.
 #[derive(Clone, Debug, Default)]
 pub struct Viewport {
     lines: Vec<Vec<Segment>>,
-    offset: usize,
+    scroll: ScrollState,
     /// Rows shown; `None` fills the context's height (less the status line
     /// when the viewport runs as a component).
     height: Option<usize>,
@@ -24,8 +25,8 @@ pub struct Viewport {
 impl Viewport {
     pub fn new(lines: Vec<Vec<Segment>>) -> Viewport {
         Viewport {
+            scroll: ScrollState::new(lines.len()),
             lines,
-            offset: 0,
             height: None,
         }
     }
@@ -38,8 +39,8 @@ impl Viewport {
 
     /// Replace the lines, keeping the offset where it still fits.
     pub fn set_lines(&mut self, lines: Vec<Vec<Segment>>) {
+        self.scroll.set_len(lines.len());
         self.lines = lines;
-        self.offset = self.offset.min(self.lines.len().saturating_sub(1));
     }
 
     pub fn lines(&self) -> &[Vec<Segment>] {
@@ -56,7 +57,12 @@ impl Viewport {
 
     /// The first line shown.
     pub fn offset(&self) -> usize {
-        self.offset
+        self.scroll.offset()
+    }
+
+    /// The scroll position.
+    pub fn scroll_state(&self) -> &ScrollState {
+        &self.scroll
     }
 
     /// Rows shown, given `available` rows of space.
@@ -64,76 +70,30 @@ impl Viewport {
         self.height.unwrap_or(available).max(1)
     }
 
-    fn last_offset(&self, page: usize) -> usize {
-        self.lines.len().saturating_sub(page)
-    }
-
     /// Scroll by `delta` lines (negative: up), within the lines.
     pub fn scroll(&mut self, delta: isize, page: usize) -> bool {
-        let target = self
-            .offset
-            .saturating_add_signed(delta)
-            .min(self.last_offset(page));
-        let changed = target != self.offset;
-        self.offset = target;
-        changed
+        self.scroll.scroll(delta, page)
     }
 
     pub fn scroll_to(&mut self, line: usize, page: usize) -> bool {
-        let target = line.min(self.last_offset(page));
-        let changed = target != self.offset;
-        self.offset = target;
-        changed
+        self.scroll.scroll_to(line, page)
     }
 
     /// Scroll just enough that `line` is shown.
     pub fn show(&mut self, line: usize, page: usize) -> bool {
-        if line < self.offset {
-            self.scroll_to(line, page)
-        } else if line >= self.offset + page {
-            self.scroll_to(line + 1 - page, page)
-        } else {
-            false
-        }
+        self.scroll.show(line, page)
     }
 
     /// Move with the usual keys and the mouse wheel: arrows and `j`/`k` by a
     /// line, PageUp/PageDown and Space by a page, Home/End and `g`/`G` to
     /// the ends. Returns whether the event was a scroll key (moved or not).
     pub fn handle_scroll(&mut self, event: &Event, page: usize) -> bool {
-        let page_step = page.max(1) as isize;
-        match event {
-            Event::Key(key) if !key.modifiers.ctrl && !key.modifiers.alt => {
-                match key.code {
-                    KeyCode::Up | KeyCode::Char('k') => self.scroll(-1, page),
-                    KeyCode::Down | KeyCode::Char('j') => self.scroll(1, page),
-                    KeyCode::PageUp | KeyCode::Char('b') => self.scroll(-page_step, page),
-                    KeyCode::PageDown | KeyCode::Char(' ') => self.scroll(page_step, page),
-                    KeyCode::Home | KeyCode::Char('g') => self.scroll_to(0, page),
-                    KeyCode::End | KeyCode::Char('G') => self.scroll_to(usize::MAX, page),
-                    _ => return false,
-                };
-                true
-            }
-            Event::Mouse(mouse) => match mouse.kind {
-                MouseKind::ScrollUp => {
-                    self.scroll(-3, page);
-                    true
-                }
-                MouseKind::ScrollDown => {
-                    self.scroll(3, page);
-                    true
-                }
-                _ => false,
-            },
-            _ => false,
-        }
+        self.scroll.handle(event, page)
     }
 
     /// The lines shown for a page of `page` rows.
     pub fn visible(&self, page: usize) -> &[Vec<Segment>] {
-        let end = (self.offset + page).min(self.lines.len());
-        &self.lines[self.offset.min(end)..end]
+        &self.lines[self.scroll.visible(page)]
     }
 
     /// "lines 1–20 of 240", or "all 12 lines" when everything fits.
@@ -142,8 +102,9 @@ impl Viewport {
         if total <= page {
             return format!("all {total} lines");
         }
-        let last = (self.offset + page).min(total);
-        format!("lines {}–{last} of {total}", self.offset + 1)
+        let offset = self.scroll.offset();
+        let last = (offset + page).min(total);
+        format!("lines {}–{last} of {total}", offset + 1)
     }
 }
 
@@ -158,9 +119,9 @@ impl Component for Viewport {
             return Flow::Continue;
         }
         match event.key().map(|key| key.code) {
-            Some(KeyCode::Enter) => Flow::Done(self.offset),
+            Some(KeyCode::Enter) => Flow::Done(self.offset()),
             Some(KeyCode::Escape | KeyCode::Char('q')) => Flow::Cancel,
-            _ => Flow::Continue,
+            _ => Flow::Ignored,
         }
     }
 
@@ -175,15 +136,24 @@ impl Component for Viewport {
         View::new(lines)
     }
 
+    fn keymap(&self) -> crate::keymap::Keymap {
+        use crate::keymap::keys;
+        let mut keymap = crate::keymap::Keymap::new("viewport")
+            .bind("done", keys("enter"), "finish here")
+            .bind("quit", keys("q escape"), "quit");
+        keymap.extend(ScrollState::keymap("viewport"));
+        keymap
+    }
+
     fn default_value(&self) -> Option<usize> {
-        Some(self.offset)
+        Some(self.offset())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::event::Key;
+    use crate::event::{Key, MouseKind};
 
     fn lines(n: usize) -> Vec<Vec<Segment>> {
         (1..=n)

@@ -60,6 +60,23 @@ Ready-made components:
   a live swatch;
 - `AssetPicker`: emoji, box styles and spinners, with a preview.
 
+Build your own from the same pieces:
+
+- **Containers are components**: `Column`, `Row` and `Stack` lay children
+  out; `Split` puts two side by side or stacked with a draggable border;
+  `Tabs` keeps each tab's state; `Layers` opens modal and popover layers
+  with a backdrop, a focus trap and Escape to dismiss.
+- **Focus, routing and bubbling**: keys go to the focused child and bubble
+  up (`Flow::Ignored`) when it does not use them; mouse events arrive in each
+  child's coordinates; Tab and Shift+Tab move focus through nested
+  containers.
+- **A keymap registry**: every component declares its keys (action,
+  description, context), rebindable per component or process-wide from
+  `context.action = keys` overrides, and listed for help and hints.
+- **A public kit**: the line helpers and `ListState`, `ScrollState`,
+  `FilterState`, `TextBuffer`, `Divider` and `ActionMenu`, which the
+  built-ins are made of. See `examples/custom_component.rs`.
+
 What else is in the box:
 
 - **Painting cell by cell.** Views are painted through

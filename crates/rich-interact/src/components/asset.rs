@@ -16,6 +16,7 @@ use crate::component::{Component, Context, Flow, View};
 use crate::components::{PreviewLayout, Select, Theme};
 use crate::event::{Event, Key};
 use crate::item::{Actions, Item, Preview};
+use crate::keymap::Keymap;
 use crate::names::EMOJI;
 use crate::policy::{LineIo, NotInteractive};
 
@@ -209,6 +210,10 @@ impl Component for AssetPicker {
 
     fn mouse(&self) -> bool {
         Component::mouse(&self.select)
+    }
+
+    fn keymap(&self) -> Keymap {
+        self.select.visible_keymap()
     }
 
     fn default_value(&self) -> Option<String> {

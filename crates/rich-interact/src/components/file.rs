@@ -28,6 +28,7 @@ use crate::component::{Component, Context, Flow, View};
 use crate::components::{text, PreviewLayout, Select, Theme};
 use crate::event::{Event, Key, KeyCode};
 use crate::item::{Actions, Item, Preview, TargetKind};
+use crate::keymap::{keys, Keymap};
 use crate::policy::{LineIo, NotInteractive};
 
 /// The most entries listed from one directory.
@@ -550,8 +551,18 @@ impl Component for FilePicker {
                 self.activate(index)
             }
             Some(Flow::Cancel) => Flow::Cancel,
+            Some(Flow::Ignored) => Flow::Ignored,
             _ => Flow::Continue,
         }
+    }
+
+    fn keymap(&self) -> Keymap {
+        let mut keymap = Keymap::new("file")
+            .bind("open", keys("right"), "open the directory")
+            .bind("up", keys("left"), "go up (Backspace with no filter)")
+            .bind("hidden", keys("ctrl+t"), "show or hide hidden files");
+        keymap.extend(self.select.visible_keymap());
+        keymap
     }
 
     fn render(&self, context: &Context<'_>) -> View {

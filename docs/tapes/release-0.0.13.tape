@@ -14,9 +14,6 @@ Type "clear"
 Enter
 Wait /❯\s*$/
 Show
-Type "rich --version"
-Enter
-Wait /0\.0\.13/
 Type "fruit=$(rich choose apple banana cherry --header 'Pick a fruit')"
 Enter
 Wait /enter pick/

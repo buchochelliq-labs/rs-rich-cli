@@ -8,18 +8,22 @@
 //! background thread, so a slow lookup never stalls typing. The input has
 //! one such thread; it runs one lookup at a time and, when it is free,
 //! takes only the latest text, so typing never piles up lookups.
+//!
+//! The line is a [`TextBuffer`] from the [kit](crate::kit), and the keys are
+//! a [`Keymap`] (context `input`) that can be rebound and listed.
 
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::time::Duration;
 
-use rich::cells::{cell_len, split_graphemes};
 use rich::Segment;
 
 use crate::component::{Component, Context, Flow, View};
 use crate::components::{fit, highlight, plain, question, text, Theme};
-use crate::event::{Event, KeyCode};
+use crate::event::{Event, Key, KeyCode, Modifiers};
 use crate::fuzzy::rank;
+use crate::keymap::{keys, Keymap};
+use crate::kit::TextBuffer;
 use crate::policy::{LineIo, NotInteractive};
 
 /// A completion: the text it inserts, and an optional note beside it.
@@ -59,12 +63,30 @@ impl From<String> for Suggestion {
 pub type Provider = Arc<dyn Fn(&str) -> Vec<Suggestion> + Send + Sync>;
 type Validator = Box<dyn Fn(&str) -> Result<(), String>>;
 
+/// The keys of an [`Input`], in context `input`.
+pub fn input_keymap() -> Keymap {
+    Keymap::new("input")
+        .bind("submit", keys("enter"), "submit")
+        .bind("cancel", keys("escape"), "cancel")
+        .bind("complete", keys("tab"), "accept a suggestion")
+        .bind("up", keys("up"), "previous suggestion or answer")
+        .bind("down", keys("down"), "next suggestion or answer")
+        .bind("left", keys("left"), "move left")
+        .bind("right", keys("right"), "move right")
+        .bind("home", keys("home ctrl+a"), "go to the start")
+        .bind("end", keys("end ctrl+e"), "go to the end")
+        .bind("delete-to-start", keys("ctrl+u"), "delete to the start")
+        .bind("delete-word", keys("ctrl+w"), "delete a word")
+        .bind("backspace", keys("backspace"), "delete back")
+        .bind("delete", keys("delete"), "delete forward")
+}
+
 /// One line of text.
 pub struct Input {
     prompt: String,
-    value: String,
-    /// The caret, in characters; it moves by grapheme cluster.
-    caret: usize,
+    /// The text and the caret, which moves by grapheme cluster.
+    buffer: TextBuffer,
+    keymap: Keymap,
     placeholder: Option<String>,
     default: Option<String>,
     help: Option<String>,
@@ -96,8 +118,8 @@ impl Input {
         let (sender, receiver) = channel();
         Input {
             prompt: prompt.into(),
-            value: String::new(),
-            caret: 0,
+            buffer: TextBuffer::new(),
+            keymap: input_keymap(),
             placeholder: None,
             default: None,
             help: None,
@@ -134,9 +156,15 @@ impl Input {
 
     /// Start with this text.
     pub fn value(mut self, value: impl Into<String>) -> Self {
-        self.value = value.into();
-        self.caret = self.value.chars().count();
+        self.buffer.set_text(value);
         self.refresh();
+        self
+    }
+
+    /// Make `keys` do `action` (see [`input_keymap`]) on this input only;
+    /// no keys unbinds it.
+    pub fn rebind(mut self, action: &str, keys: impl IntoIterator<Item = Key>) -> Self {
+        self.keymap.rebind(action, keys);
         self
     }
 
@@ -205,80 +233,16 @@ impl Input {
 
     /// The text typed so far.
     pub fn text(&self) -> &str {
-        &self.value
+        self.buffer.text()
     }
 
-    fn byte(&self, caret: usize) -> usize {
-        self.value
-            .char_indices()
-            .nth(caret)
-            .map_or(self.value.len(), |(index, _)| index)
-    }
-
-    /// The character indices where graphemes start, and the end: where
-    /// the caret may stop, so an accent is never split from its letter.
-    fn stops(&self) -> Vec<usize> {
-        let (spans, _) = split_graphemes(&self.value);
-        let mut stops = Vec::with_capacity(spans.len() + 1);
-        let (mut chars, mut byte) = (0, 0);
-        for (start, _, _) in spans {
-            chars += self.value[byte..start].chars().count();
-            byte = start;
-            stops.push(chars);
-        }
-        stops.push(self.value.chars().count());
-        stops
-    }
-
-    /// The caret one grapheme back.
-    fn previous_stop(&self) -> usize {
-        let stops = self.stops();
-        stops
-            .iter()
-            .rev()
-            .copied()
-            .find(|&stop| stop < self.caret)
-            .unwrap_or(0)
-    }
-
-    /// The caret one grapheme on.
-    fn next_stop(&self) -> usize {
-        let stops = self.stops();
-        stops
-            .iter()
-            .copied()
-            .find(|&stop| stop > self.caret)
-            .unwrap_or(self.caret)
-    }
-
-    /// The value as shown (masked or not), cut to `available` cells so the
-    /// caret stays in view: a line longer than the space scrolls, and the
-    /// caret's column in what is returned.
-    fn window(&self, available: usize) -> (String, usize) {
-        let shown = self.shown_value(&self.value);
-        let before = cell_len(&self.shown_value(&self.value[..self.byte(self.caret)]));
-        // One cell for the caret after the last character.
-        let skip = (before + 1).saturating_sub(available.max(1));
-        if skip == 0 {
-            return (shown, before);
-        }
-        let (spans, _) = split_graphemes(&shown);
-        let mut dropped = 0;
-        let mut from = shown.len();
-        for (start, _, cells) in spans {
-            if dropped >= skip {
-                from = start;
-                break;
-            }
-            dropped += cells;
-        }
-        (shown[from..].to_string(), before - dropped)
+    /// The line being edited.
+    pub fn buffer(&self) -> &TextBuffer {
+        &self.buffer
     }
 
     fn insert(&mut self, text: &str) {
-        let at = self.byte(self.caret);
-        self.value.insert_str(at, text);
-        self.caret += text.chars().count();
+        self.buffer.insert(text);
         self.changed();
     }
 
@@ -312,7 +276,7 @@ impl Input {
                 });
                 requests
             });
-            let _ = requests.send((self.generation, self.value.clone()));
+            let _ = requests.send((self.generation, self.buffer.text().to_string()));
             // Until the new results come, keep only what still fits.
             let current: Vec<Suggestion> = self.shown.iter().map(|(s, _)| s.clone()).collect();
             self.show(current);
@@ -323,13 +287,14 @@ impl Input {
 
     fn show(&mut self, suggestions: Vec<Suggestion>) {
         let texts: Vec<&str> = suggestions.iter().map(|s| s.value.as_str()).collect();
-        self.shown = if self.value.is_empty() {
+        let value = self.buffer.text();
+        self.shown = if value.is_empty() {
             Vec::new()
         } else {
-            rank(&self.value, texts)
+            rank(value, texts)
                 .into_iter()
                 .map(|(index, found)| (suggestions[index].clone(), found.positions))
-                .filter(|(suggestion, _)| suggestion.value != self.value)
+                .filter(|(suggestion, _)| suggestion.value != value)
                 .take(self.limit)
                 .collect()
         };
@@ -361,8 +326,7 @@ impl Input {
 
     fn accept(&mut self, index: usize) {
         if let Some((suggestion, _)) = self.shown.get(index) {
-            self.value = suggestion.value.clone();
-            self.caret = self.value.chars().count();
+            self.buffer.set_text(suggestion.value.clone());
             self.changed();
         }
     }
@@ -381,13 +345,12 @@ impl Input {
         };
         let typed = match self.recall.take() {
             Some((_, typed)) => typed,
-            None => self.value.clone(),
+            None => self.buffer.text().to_string(),
         };
-        self.value = match next {
+        self.buffer.set_text(match next {
             Some(index) => self.history[index].clone(),
             None => typed.clone(),
-        };
-        self.caret = self.value.chars().count();
+        });
         self.error = None;
         self.recall = next.map(|index| (index, typed));
     }
@@ -396,7 +359,7 @@ impl Input {
         if let Some(index) = self.selected {
             self.accept(index);
         }
-        let mut answer = self.value.clone();
+        let mut answer = self.buffer.text().to_string();
         if answer.is_empty() {
             if let Some(default) = &self.default {
                 answer = default.clone();
@@ -414,8 +377,8 @@ impl Input {
 
     /// The answer Enter would give: the text, or the default when empty,
     /// checked by the validator.
-    pub(crate) fn resolve(&self) -> Result<String, String> {
-        let mut answer = self.value.clone();
+    pub fn resolve(&self) -> Result<String, String> {
+        let mut answer = self.buffer.text().to_string();
         if answer.is_empty() {
             if let Some(default) = &self.default {
                 answer = default.clone();
@@ -430,8 +393,8 @@ impl Input {
     /// The line's text as shown (masked, or the placeholder) in
     /// `available` cells, scrolled to keep the caret in view, and the
     /// caret's column in it.
-    pub(crate) fn field(&self, available: usize) -> (Vec<Segment>, usize) {
-        if self.value.is_empty() {
+    pub fn field(&self, available: usize) -> (Vec<Segment>, usize) {
+        if self.buffer.is_empty() {
             let hint = self.placeholder.clone().or_else(|| self.default_hint());
             return (
                 hint.map(|hint| vec![text(hint, &self.theme.hint)])
@@ -439,7 +402,7 @@ impl Input {
                 0,
             );
         }
-        let (shown, column) = self.window(available);
+        let (shown, column) = self.buffer.window(available, self.mask);
         (vec![plain(shown)], column)
     }
 
@@ -454,30 +417,31 @@ impl Input {
         })
     }
 
-    pub(crate) fn label(&self) -> &str {
+    /// The prompt.
+    pub fn label(&self) -> &str {
         &self.prompt
     }
 
     /// Whether suggestions are showing: Tab, Up, Down and Enter (with one
     /// selected) are theirs.
-    pub(crate) fn suggesting(&self) -> bool {
+    pub fn suggesting(&self) -> bool {
         !self.shown.is_empty()
     }
 
     /// Whether Enter would accept a selected suggestion rather than submit.
-    pub(crate) fn has_selection(&self) -> bool {
+    pub fn has_selection(&self) -> bool {
         self.selected.is_some()
     }
 
     /// Accept the selected suggestion, as Enter does before submitting.
-    pub(crate) fn accept_selected(&mut self) {
+    pub fn accept_selected(&mut self) {
         if let Some(index) = self.selected {
             self.accept(index);
         }
     }
 
     /// The suggestion rows (or a pending marker), each after `indent`.
-    pub(crate) fn suggestion_rows(&self, width: usize, indent: &str) -> Vec<Vec<Segment>> {
+    pub fn suggestion_rows(&self, width: usize, indent: &str) -> Vec<Vec<Segment>> {
         let theme = &self.theme;
         let mut lines = Vec::new();
         for (index, (suggestion, positions)) in self.shown.iter().enumerate() {
@@ -500,21 +464,30 @@ impl Input {
             }
             lines.push(fit(row, width));
         }
-        if self.pending && self.shown.is_empty() && !self.value.is_empty() {
+        if self.pending && self.shown.is_empty() && !self.buffer.is_empty() {
             lines.push(vec![text(format!("{indent}    …"), &theme.hint)]);
         }
         lines
     }
 
-    pub(crate) fn display_value(&self, value: &str) -> String {
+    /// `value` as this input shows it: masked, for a masked input.
+    pub fn display_value(&self, value: &str) -> String {
         self.shown_value(value)
     }
 
     fn shown_value(&self, value: &str) -> String {
-        match self.mask {
-            Some(mask) => std::iter::repeat_n(mask, value.chars().count()).collect(),
-            None => value.to_string(),
-        }
+        TextBuffer::masked(value, self.mask)
+    }
+
+    /// The action `key` triggers here. A key with modifiers that is not
+    /// bound as it is does what it does without them, unless it types.
+    fn key_action(&self, key: Key) -> Option<&str> {
+        self.keymap.action(key).or_else(|| {
+            let typing = matches!(key.code, KeyCode::Char(_));
+            (!typing && key.modifiers != Modifiers::NONE)
+                .then(|| self.keymap.action(Key::new(key.code)))
+                .flatten()
+        })
     }
 }
 
@@ -531,23 +504,24 @@ impl Component for Input {
             return Flow::Continue;
         }
         let Some(key) = event.key() else {
-            return Flow::Continue;
+            return Flow::Ignored;
         };
-        let ctrl = key.modifiers.ctrl;
-        let length = self.value.chars().count();
-        match key.code {
-            KeyCode::Enter => return self.submit(),
-            KeyCode::Escape => {
+        match self.key_action(key) {
+            Some("submit") => return self.submit(),
+            Some("cancel") => {
                 self.answer = Some(None);
                 return Flow::Cancel;
             }
-            KeyCode::Tab => {
+            // With nothing to complete, Tab is left to the container: the
+            // next field.
+            Some("complete") if self.shown.is_empty() => return Flow::Ignored,
+            Some("complete") => {
                 let index = self.selected.unwrap_or(0);
                 self.accept(index);
             }
-            KeyCode::Up | KeyCode::Down if !self.shown.is_empty() => {
+            Some(direction @ ("up" | "down")) if !self.shown.is_empty() => {
                 let last = self.shown.len() - 1;
-                self.selected = Some(match (self.selected, key.code == KeyCode::Up) {
+                self.selected = Some(match (self.selected, direction == "up") {
                     (None, true) => last,
                     (None, false) => 0,
                     (Some(0), true) => last,
@@ -555,51 +529,37 @@ impl Component for Input {
                     (Some(index), false) => (index + 1) % (last + 1),
                 });
             }
-            KeyCode::Up => self.recall(true),
-            KeyCode::Down => self.recall(false),
-            KeyCode::Left => self.caret = self.previous_stop(),
-            KeyCode::Right => self.caret = self.next_stop().min(length),
-            KeyCode::Home => self.caret = 0,
-            KeyCode::End => self.caret = length,
-            KeyCode::Char('a') if ctrl => self.caret = 0,
-            KeyCode::Char('e') if ctrl => self.caret = length,
-            KeyCode::Char('u') if ctrl => {
-                let at = self.byte(self.caret);
-                self.value.replace_range(..at, "");
-                self.caret = 0;
+            Some("up") => self.recall(true),
+            Some("down") => self.recall(false),
+            Some("left") => self.buffer.left(),
+            Some("right") => self.buffer.right(),
+            Some("home") => self.buffer.home(),
+            Some("end") => self.buffer.end(),
+            Some("delete-to-start") => {
+                self.buffer.delete_to_start();
                 self.changed();
             }
-            KeyCode::Char('w') if ctrl => {
-                let chars: Vec<char> = self.value.chars().collect();
-                let mut start = self.caret;
-                while start > 0 && chars[start - 1] == ' ' {
-                    start -= 1;
+            Some("delete-word") => {
+                self.buffer.delete_word();
+                self.changed();
+            }
+            Some("backspace") => {
+                if self.buffer.backspace() {
+                    self.changed();
                 }
-                while start > 0 && chars[start - 1] != ' ' {
-                    start -= 1;
+            }
+            Some("delete") => {
+                if self.buffer.delete() {
+                    self.changed();
                 }
-                let (from, to) = (self.byte(start), self.byte(self.caret));
-                self.value.replace_range(from..to, "");
-                self.caret = start;
-                self.changed();
             }
-            KeyCode::Backspace if self.caret > 0 => {
-                let previous = self.previous_stop();
-                let (from, to) = (self.byte(previous), self.byte(self.caret));
-                self.value.replace_range(from..to, "");
-                self.caret = previous;
-                self.changed();
-            }
-            KeyCode::Delete if self.caret < length => {
-                let (from, to) = (self.byte(self.caret), self.byte(self.next_stop()));
-                self.value.replace_range(from..to, "");
-                self.changed();
-            }
-            KeyCode::Char(c) if !ctrl && !key.modifiers.alt => {
-                let mut buffer = [0; 4];
-                self.insert(c.encode_utf8(&mut buffer));
-            }
-            _ => {}
+            _ => match key.code {
+                KeyCode::Char(c) if !key.modifiers.ctrl && !key.modifiers.alt => {
+                    let mut buffer = [0; 4];
+                    self.insert(c.encode_utf8(&mut buffer));
+                }
+                _ => return Flow::Ignored,
+            },
         }
         Flow::Continue
     }
@@ -631,6 +591,10 @@ impl Component for Input {
 
     fn tick(&self) -> Option<Duration> {
         self.provider.as_ref().map(|_| Duration::from_millis(30))
+    }
+
+    fn keymap(&self) -> Keymap {
+        self.keymap.clone()
     }
 
     fn default_value(&self) -> Option<String> {

@@ -98,6 +98,72 @@ Entries below record subsequent releases and development.
   pattern (which now also matches `rs-rich-record` and `rs-rich-interact`
   tags).
 
+### Interact 0.0.2: composition, a public kit and a keymap registry
+
+Versions: `rs-rich-interact` 0.0.1 → 0.0.2 (its source changed and 0.0.1 is
+published), and `rs-rich-cli` 0.0.13 → 0.0.14 for its new requirement on it.
+
+0.0.14 workstream 1 ([plan](docs/plans/0.0.14.md), #478, #479, #480): you can build your own components
+from the built-ins' pieces and compose them with the built-ins. Nothing in
+`rs-rich` changes.
+
+- **Containers are components** (`rich_interact::compose`). `Column`, `Row`
+  and `Stack` lay children out with `Size::Fixed`, `Size::Flex` and
+  `Size::Auto`. `Split` puts two panes side by side or stacked. Its border
+  drags with the mouse, the #476 preview border generalised as
+  `kit::Divider`, and moves with Alt+H/L or Alt+K/J, within minimum sizes.
+  `Tabs` keeps every tab's state and switches with Alt+Left/Right,
+  Ctrl+PageUp/PageDown, Alt+1–9 or a click. `Layers` hosts
+  `Layer::modal` and `Layer::popover`, with a backdrop, a focus trap,
+  Escape to dismiss, and a `LayerHandle` to open layers from anywhere.
+  `ComponentExt::map` adapts a child's answer to the container's output,
+  and `Label` and `Painted` show without taking focus.
+- **Focus, routing and bubbling.** Each child gets a `Rect`. Keys go to
+  the focused child, and bubble to its containers when unused. Mouse events
+  arrive in the child's coordinates, and a press holds its child until the
+  release. Tab and Shift+Tab move focus through nested containers and wrap
+  at the top. Containers take their own bindings with `on` (after the
+  child) and `shortcut` (before it), and `rebind` them.
+- **A keymap registry** (`rich_interact::keymap`). A component declares
+  `Binding`s (keys, action, description, context) in a `Keymap`, and
+  `Component::keymap` lists the bindings active now, the focused child's
+  first. Keys rebind per component (`Select::rebind`, `Input::rebind`, and
+  `rebind` on each container) or process-wide with `keymap::install` of
+  `Overrides`, parsed from `context.action = keys` lines or a
+  configuration table. Every built-in declares its keys. `Select` (and the
+  views built on it), `Input` and the containers dispatch through their
+  keymaps.
+- **A public kit** (`rich_interact::kit`). It holds the line helpers
+  (`text`, `plain`, `width`, `fit`, `pad`, `highlight`, `question`,
+  `pasted`, `shown`, plus `slice`, `overlay` and `restyle`) and the state
+  types `ListState`, `ScrollState`, `FilterState`, `TextBuffer`, `Divider`
+  and `ActionMenu`.
+- **Built-ins rebuilt on the kit.** `Select` is a `FilterState`, a
+  `ListState`, a `Divider` and an `ActionMenu`. Its composing hooks
+  (`event`, `replace_items`, `focus_item`, `set_values`, `set_kind`,
+  `set_heading`, `set_prefixes`, `set_hidden`, `refilter`, and more) are
+  public. `Input` edits a `TextBuffer`, and its form hooks (`field`,
+  `resolve`, `suggestion_rows`, and more) are public. `Viewport` scrolls a
+  `ScrollState`. Every 0.0.13 component test and tape passes unchanged.
+- **A guide and an example.**
+  [Building your own components](docs/guide/interact/custom-components.md)
+  and `examples/custom_component.rs` build a checklist from kit pieces and
+  compose it with `Select`, `Input` and `Confirm` in a split, tabs and
+  modals. `tests/compose.rs` tests it headless, and `tests/pty_compose.rs`
+  in a real PTY.
+- **Migration (breaking, minimal).** `Flow` has a new variant,
+  `Flow::Ignored` ("not mine, let it bubble"), so an exhaustive `match` on
+  `Flow` needs an arm for it. The event loop treats it as `Continue`.
+  `Component` gains `keymap`, `focusable`, `focus_step` and `focus_enter`,
+  all with defaults, and `Box<C>` is now a `Component`. Built-ins now return
+  `Ignored`, not `Continue`, for keys they do not use. This makes no
+  difference at the top of an event loop. `Input` leaves Tab to its
+  container when no suggestion is showing.
+- **Deferred.** `TextArea` still edits its own lines, not a `TextBuffer`.
+  `Confirm`, `Pager`, `TextArea`, `ColorPicker`, `Form` and `FilePicker`
+  declare their keymaps but still match keys inline, so rebinding does not
+  reach them yet.
+
 ### Core 0.0.9 / ext 0.0.11: `syntax` and `markdown` are optional
 
 - `rs-rich` has two new default features: `syntax` (`Syntax` and
