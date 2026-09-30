@@ -293,3 +293,22 @@ fn micro_markup_in_print_with_emoji() {
     let out = rich(&work, &home, &["-p", "ok :micro:status/success:"]);
     assert_eq!(text(&out.stdout), "ok :micro:status/success:\n");
 }
+
+#[cfg(feature = "interact")]
+#[test]
+fn asset_picks_micro_assets_by_name() {
+    let (_root, work, home) = dirs();
+    let out = rich(
+        &work,
+        &home,
+        &["asset", "--kind", "micro", "--selected", "status/success"],
+    );
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert_eq!(text(&out.stdout), "status/success\n");
+    let out = rich(
+        &work,
+        &home,
+        &["asset", "--kind", "micro", "--selected", "nope"],
+    );
+    assert_eq!(out.status.code(), Some(2));
+}

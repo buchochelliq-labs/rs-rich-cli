@@ -238,7 +238,7 @@ fn status() -> Vec<Drawing> {
                     0 => rgb(0x54aeff),
                     1 => rgb(0x218bff),
                     2 => rgb(0x0969da),
-                    _ => rgb(0x8c959f),
+                    _ => rgb(0xafb8c1),
                 };
                 let r = if age == 0 { 1.8 } else { 1.4 };
                 layers.push((

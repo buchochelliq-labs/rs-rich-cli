@@ -886,10 +886,17 @@ fn is_package(path: &Path) -> bool {
         .is_some_and(|e| e == "richmicro" || e == "zip")
 }
 
-/// Frames of `processed` magnified side by side, at most eight.
-fn filmstrip(frames: &[rich_art::graphics::AnimationFrame]) -> rich::Table {
+/// Frames magnified side by side: at most eight, and as many as fit
+/// `width`.
+fn filmstrip(frames: &[rich_art::graphics::AnimationFrame], width: usize) -> rich::Table {
     let mut table = rich::Table::grid().padding(0, 2, 0, 0);
-    let shown = &frames[..frames.len().min(8)];
+    // As many as fit whole, one column per pixel and two between.
+    let each = frames
+        .first()
+        .map_or(1, |frame| frame.image.width() as usize)
+        + 2;
+    let fit = ((width + 2) / each).clamp(1, 8);
+    let shown = &frames[..frames.len().min(fit)];
     for _ in shown {
         table.add_column("");
     }
@@ -941,7 +948,7 @@ fn preview(context: &Context, request: &Request) -> Result<(), Failure> {
             ))
             .unwrap_or_default(),
         );
-        console.print(&filmstrip(&processed.frames));
+        console.print(&filmstrip(&processed.frames, console.width()));
         return Ok(());
     }
     let asset = if path.exists() {
@@ -1007,7 +1014,7 @@ fn preview(context: &Context, request: &Request) -> Result<(), Failure> {
                 &Text::from_markup("[bold]Magnified[/] (one pixel per half cell):")
                     .unwrap_or_default(),
             );
-            console.print(&filmstrip(&prepared.frames));
+            console.print(&filmstrip(&prepared.frames, console.width()));
         }
         None => console.print(&Text::new("(no image: only the fallback shows)")),
     }
@@ -1217,7 +1224,8 @@ fn create(context: &Context, request: &Request) -> Result<(), Failure> {
             .unwrap_or_default(),
         dest.display()
     );
-    context.console().print(&filmstrip(&processed.frames));
+    let console = context.console();
+    console.print(&filmstrip(&processed.frames, console.width()));
     Ok(())
 }
 
@@ -1311,8 +1319,11 @@ fn uninstall(context: &Context, request: &Request) -> Result<(), Failure> {
     Ok(())
 }
 
+/// A pack as `packs` lists it: layer, name, version, where, asset names.
+type PackRow = (Layer, String, Option<String>, String, Vec<String>);
+
 fn packs(context: &Context) -> Result<(), Failure> {
-    let mut rows: Vec<(Layer, String, Option<String>, String, Vec<String>)> = Vec::new();
+    let mut rows: Vec<PackRow> = Vec::new();
     for pack in rich_micro::builtin::packs(Layer::BuiltIn)
         .into_iter()
         .flatten()
@@ -1378,6 +1389,36 @@ fn packs(context: &Context) -> Result<(), Failure> {
         );
     }
     Ok(())
+}
+
+/// The registry the CLI's commands use: the built-in set, the user's
+/// layer, and the project's when `trusted`. Loading problems are warnings.
+#[cfg(feature = "interact")]
+pub(crate) fn registry(trusted: bool) -> MicroRegistry {
+    let roots = ConfigRoots::default();
+    let context = Context {
+        trusted,
+        home: roots.home,
+        cwd: roots.cwd,
+        no_color: false,
+        json: false,
+    };
+    context.registry().0
+}
+
+/// `rich explore --icons`: the built-in status assets for true, false and
+/// null.
+#[cfg(feature = "interact")]
+pub(crate) fn value_icon(registry: &MicroRegistry, node: &rich_ext::data::Node) -> Option<Text> {
+    use rich_ext::data::Value;
+    let name = match node.value {
+        Value::Bool(true) => "status/success",
+        Value::Bool(false) => "status/error",
+        Value::Null => "status/info",
+        _ => return None,
+    };
+    let asset = registry.resolve(name)?;
+    Some(rich_micro::placeholder(asset, FallbackPreference::Emoji))
 }
 
 /// `:micro:name:` in `--print --emoji` markup: parse `content` with its

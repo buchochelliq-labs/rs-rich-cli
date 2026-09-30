@@ -32,10 +32,17 @@ workspace = true
 # `DataExplorer`: explore a JSON, YAML, TOML, XML, INI or dotenv document
 # (#465), parsed by rich-ext's data layer.
 data = ["rich-ext/data"]
+# Micro assets (rs-rich-micro): `AssetKind::Micro` in `AssetPicker`, and
+# `StatusItem::micro`. Pulls in image decoding.
+micro = ["dep:rich-micro"]
 
 [[example]]
 name = "explore"
 required-features = ["data"]
+
+[[example]]
+name = "micro_showcase"
+required-features = ["micro"]
 
 [[test]]
 name = "explore"
@@ -44,6 +51,7 @@ required-features = ["data"]
 [dependencies]
 rich = { workspace = true, features = ["syntax"] }
 rich-ext.workspace = true
+rich-micro = { workspace = true, optional = true }
 # Raw mode, the alternate screen, and key and mouse events on every platform.
 # `use-dev-tty` reads events through poll/select instead of mio: macOS's
 # kqueue cannot watch `/dev/tty` (keys when stdin is a pipe, as in

@@ -45,9 +45,10 @@ json-escape-safe = ["rich/json-escape-safe"]
 fetch = ["dep:ureq"]
 # `art` enables `--gif` (animated GIF playback), `--diff` (perceptual image
 # diffing) and the image renderers behind `--image-mode`, including Sixel,
-# and the micro-asset renderers (`rich doctor` reports which one is chosen).
+# and the micro assets: `rich micro`, `:micro:` in `--print --emoji`, and
+# (with `interact`) `rich asset --kind micro` and `rich explore --icons`.
 # Pulls in image decoders, so it can be dropped for a smaller binary.
-art = ["dep:rich-art", "dep:rich-micro"]
+art = ["dep:rich-art", "dep:rich-micro", "rich-interact?/micro"]
 # `rich mermaid FILE` and ```mermaid fences in `rich --markdown`, drawn as text.
 mermaid = ["dep:rich-mermaid"]
 # The `mmdc` Mermaid backend (Mermaid's CLI: Node and headless Chromium,

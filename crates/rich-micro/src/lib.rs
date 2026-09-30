@@ -76,3 +76,5 @@ pub use render::{
     fallback_cells, placeholder, FallbackPreference, FallbackRenderer, MicroMeta, MicroRenderer,
     MicroView, Placement, MICRO_META_KEY, PAD_CELL,
 };
+/// The size of a terminal cell in pixels, as the cache and pipeline take it.
+pub use rich_art::graphics::CellPixels;

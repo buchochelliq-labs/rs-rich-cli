@@ -269,14 +269,18 @@ fn key_out(image: &RgbaImage, key: [u8; 3]) -> RgbaImage {
 /// Composite onto `background`: every pixel opaque.
 fn flatten(image: &mut RgbaImage, background: [u8; 3]) {
     for pixel in image.pixels_mut() {
-        let alpha = u32::from(pixel.0[3]);
-        for c in 0..3 {
-            pixel.0[c] =
-                ((u32::from(pixel.0[c]) * alpha + u32::from(background[c]) * (255 - alpha) + 127)
-                    / 255) as u8;
-        }
-        pixel.0[3] = 255;
+        composite(&mut pixel.0, background);
     }
+}
+
+/// One RGBA pixel over an opaque `under`: opaque.
+fn composite(pixel: &mut [u8; 4], under: [u8; 3]) {
+    let alpha = u32::from(pixel[3]);
+    for (channel, under) in pixel.iter_mut().zip(under) {
+        *channel =
+            ((u32::from(*channel) * alpha + u32::from(under) * (255 - alpha) + 127) / 255) as u8;
+    }
+    pixel[3] = 255;
 }
 
 /// What the pipeline made: frames of exactly the asset's canvas.
@@ -340,17 +344,11 @@ impl Renderable for Magnified {
         let mut board = self.0.clone();
         for (x, y, pixel) in board.enumerate_pixels_mut() {
             let under: [u8; 3] = if (x / 2 + y / 2) % 2 == 0 {
-                [96, 96, 96]
+                [52, 52, 52]
             } else {
-                [64, 64, 64]
+                [36, 36, 36]
             };
-            let alpha = u32::from(pixel.0[3]);
-            for c in 0..3 {
-                pixel.0[c] =
-                    ((u32::from(pixel.0[c]) * alpha + u32::from(under[c]) * (255 - alpha) + 127)
-                        / 255) as u8;
-            }
-            pixel.0[3] = 255;
+            composite(&mut pixel.0, under);
         }
         BlockArt::new(DynamicImage::ImageRgba8(board))
             .width(self.cols().min(options.max_width))

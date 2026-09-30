@@ -518,6 +518,7 @@ struct Cli {
     plugins: Vec<String>,
     /// `--micro-project` (and a trusted config's `micro_project`): load the
     /// project's `.rich/micro/` micro assets.
+    #[cfg_attr(not(feature = "art"), allow(dead_code))]
     micro_project: bool,
     theme_styles: std::collections::BTreeMap<String, Style>,
     /// `--theme-file PATH`: styles from an upstream `[styles]` theme file,
