@@ -7,7 +7,9 @@
 //! [`text`] and [`plain`] make segments, [`width`] measures a line,
 //! [`fit`] crops one and [`pad`] crops or pads it to an exact width,
 //! [`highlight`] styles the characters a filter matched, and [`question`]
-//! is the `? prompt › ` line every built-in starts with. [`pasted`] and
+//! is the `? prompt › ` line every built-in starts with. [`slice`] cuts
+//! cells out of a line, [`overlay`] draws one line over another and
+//! [`restyle`] puts a style over a line (a backdrop). [`pasted`] and
 //! [`shown`] make untrusted text safe for a one-line field or a table cell.
 //!
 //! **State types** hold what a component remembers between events, with the
@@ -37,7 +39,8 @@
 //! let mut list = ListState::new();
 //! list.set_len(filter.len());
 //! list.step(1, 10);
-//! assert_eq!(filter.index(list.cursor()), Some(1));
+//! let second = filter.index(list.cursor()).unwrap();
+//! assert!(filter.candidates()[second].ends_with(".rs"));
 //! ```
 
 use std::ops::Range;
@@ -119,6 +122,70 @@ pub fn highlight(
         segments.push(Segment::new(run, style));
     }
     segments
+}
+
+/// The cells `from..to` of a line. A wide character cut by either end
+/// becomes spaces in its style, so the result is exactly the cells asked
+/// for (fewer when the line is shorter). Control segments are dropped.
+pub fn slice(line: &[Segment], from: usize, to: usize) -> Vec<Segment> {
+    let mut out: Vec<Segment> = Vec::new();
+    let mut at = 0;
+    for segment in line.iter().filter(|segment| !segment.control) {
+        if at >= to {
+            break;
+        }
+        let length = segment.cell_length();
+        if at >= from && at + length <= to {
+            out.push(segment.clone());
+            at += length;
+            continue;
+        }
+        let (spans, _) = split_graphemes(&segment.text);
+        let mut piece = String::new();
+        for (start, end, cells) in spans {
+            let (left, right) = (at, at + cells);
+            if left >= from && right <= to {
+                piece.push_str(&segment.text[start..end]);
+            } else if right > from && left < to {
+                let covered = right.min(to) - left.max(from);
+                piece.push_str(&" ".repeat(covered));
+            }
+            at = right;
+        }
+        if !piece.is_empty() {
+            out.push(Segment::new(piece, segment.style.clone()));
+        }
+    }
+    out
+}
+
+/// `top` drawn over `base` from cell `x`: `base`'s cells before `x` (padded
+/// out to `x`), then `top`, then what of `base` is right of it.
+pub fn overlay(base: &[Segment], x: usize, top: &[Segment]) -> Vec<Segment> {
+    let end = x + width(top);
+    let mut line = pad(slice(base, 0, x), x);
+    line.extend(top.iter().cloned());
+    let base_width = width(base);
+    if base_width > end {
+        line.extend(slice(base, end, base_width));
+    }
+    line
+}
+
+/// `line` with `style` over each segment's own: a backdrop's dimming.
+pub fn restyle(line: &[Segment], style: &Style) -> Vec<Segment> {
+    line.iter()
+        .map(|segment| {
+            if segment.control {
+                return segment.clone();
+            }
+            let styled = match &segment.style {
+                Some(own) => own.combine(style),
+                None => style.clone(),
+            };
+            Segment::new(segment.text.clone(), Some(styled))
+        })
+        .collect()
 }
 
 /// Pasted text for a one-line field: line breaks become `newline`, a tab a
@@ -1051,6 +1118,18 @@ mod tests {
         assert_eq!(width(&fit(line.clone(), 7)), 7);
         assert_eq!(width(&fit(line.clone(), 20)), 11);
         assert_eq!(width(&pad(line, 20)), 20);
+    }
+
+    #[test]
+    fn slices_and_overlays_by_cell() {
+        let base = vec![plain("ab"), plain("日本"), plain("cd")];
+        let cut: String = slice(&base, 3, 7).iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(cut, " 本c", "half a wide character is a space");
+        let over = overlay(&base, 1, &[plain("XY")]);
+        let text: String = over.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(text, "aXY 本cd");
+        let past = overlay(&[plain("ab")], 4, &[plain("Z")]);
+        assert_eq!(width(&past), 5);
     }
 
     #[test]

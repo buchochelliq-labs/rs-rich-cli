@@ -63,6 +63,7 @@
 //! ```
 
 pub mod component;
+pub mod compose;
 pub mod components;
 pub mod event;
 pub mod event_loop;
@@ -78,6 +79,10 @@ pub mod session;
 pub mod viewport;
 
 pub use component::{Component, Context, Flow, View};
+pub use compose::{
+    Axis, Column, ComponentExt, Label, Layer, LayerHandle, Layers, Rect, Row, Size, Split, Stack, Tabs,
+};
+pub use keymap::{Binding, Keymap};
 pub use components::{
     Answers, AssetKind, AssetPicker, Choice, ColorFormat, ColorPicker, Confirm, FileMode,
     FilePicker, Form, Input, MultiSelect, Pager, PreviewLayout, Select, Suggestion, TableSelect,
@@ -90,36 +95,65 @@ pub use policy::{Fallback, LineIo, NotInteractive, Policy, Reason};
 pub use session::{Backend, Output, Session, SessionOptions};
 pub use viewport::Viewport;
 
+/// Forward every [`Component`] method to `(**self)`.
+macro_rules! forward_component {
+    () => {
+        type Output = C::Output;
+
+        fn start(&mut self, context: &Context<'_>) -> Flow<C::Output> {
+            (**self).start(context)
+        }
+
+        fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<C::Output> {
+            (**self).handle(event, context)
+        }
+
+        fn render(&self, context: &Context<'_>) -> View {
+            (**self).render(context)
+        }
+
+        fn tick(&self) -> Option<std::time::Duration> {
+            (**self).tick()
+        }
+
+        fn mouse(&self) -> bool {
+            (**self).mouse()
+        }
+
+        fn keymap(&self) -> keymap::Keymap {
+            (**self).keymap()
+        }
+
+        fn focusable(&self) -> bool {
+            (**self).focusable()
+        }
+
+        fn focus_step(&mut self, forward: bool) -> bool {
+            (**self).focus_step(forward)
+        }
+
+        fn focus_enter(&mut self, forward: bool) -> bool {
+            (**self).focus_enter(forward)
+        }
+
+        fn default_value(&self) -> Option<C::Output> {
+            (**self).default_value()
+        }
+
+        fn prompt(&mut self, io: &mut dyn LineIo) -> Result<Option<C::Output>, NotInteractive> {
+            (**self).prompt(io)
+        }
+    };
+}
+
 /// A component borrowed mutably is a component, so a caller can mount one
 /// and still read its state after the loop.
 impl<C: Component + ?Sized> Component for &mut C {
-    type Output = C::Output;
+    forward_component!();
+}
 
-    fn start(&mut self, context: &Context<'_>) -> Flow<C::Output> {
-        (**self).start(context)
-    }
-
-    fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<C::Output> {
-        (**self).handle(event, context)
-    }
-
-    fn render(&self, context: &Context<'_>) -> View {
-        (**self).render(context)
-    }
-
-    fn tick(&self) -> Option<std::time::Duration> {
-        (**self).tick()
-    }
-
-    fn mouse(&self) -> bool {
-        (**self).mouse()
-    }
-
-    fn default_value(&self) -> Option<C::Output> {
-        (**self).default_value()
-    }
-
-    fn prompt(&mut self, io: &mut dyn LineIo) -> Result<Option<C::Output>, NotInteractive> {
-        (**self).prompt(io)
-    }
+/// A boxed component is a component: how containers hold children of
+/// different types with one output ([`compose::Child`]).
+impl<C: Component + ?Sized> Component for Box<C> {
+    forward_component!();
 }

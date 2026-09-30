@@ -5,6 +5,7 @@ use std::time::Duration;
 use rich::{Console, Renderable, Segment};
 
 use crate::event::Event;
+use crate::keymap::Keymap;
 use crate::policy::{LineIo, NotInteractive};
 
 /// What a component wants after handling an event.
@@ -17,6 +18,11 @@ pub enum Flow<T> {
     Done(T),
     /// The user backed out (Escape, `q`): no value.
     Cancel,
+    /// The event was not for this component: it is left to the container
+    /// the component is in, which may use it itself (a focus key, a
+    /// binding of its own) or pass it on to its own container (0.0.14).
+    /// The event loop, at the top, treats it as [`Continue`](Flow::Continue).
+    Ignored,
     /// Give the terminal to `command` (`$EDITOR file`, a pager) until it
     /// exits, then take it back and repaint; the component then gets
     /// [`Event::Returned`] with the exit code (#489).
@@ -123,6 +129,38 @@ pub trait Component {
     /// for the session.
     fn mouse(&self) -> bool {
         false
+    }
+
+    /// The bindings this component has right now, for a help overlay, a
+    /// shortcut list or status-bar hints to read (see
+    /// [`keymap`](crate::keymap)). A container's include its focused
+    /// child's, before its own. The default declares none.
+    fn keymap(&self) -> Keymap {
+        Keymap::default()
+    }
+
+    /// Whether the component takes focus in a container: Tab stops on it
+    /// and keys go to it. The default: yes. A label, or a component that
+    /// has finished, says no.
+    fn focusable(&self) -> bool {
+        true
+    }
+
+    /// Move focus to the next (`forward`) or previous focus stop *inside*
+    /// this component, for Tab and Shift+Tab. `false` when there is none
+    /// after the current one, so the container moves on to its next
+    /// child. The default, for a component that is one stop: `false`.
+    fn focus_step(&mut self, forward: bool) -> bool {
+        let _ = forward;
+        false
+    }
+
+    /// Take focus from outside: at the first stop inside when `forward`,
+    /// at the last otherwise. `false` when nothing in it can take focus.
+    /// The default: whether the component is [`focusable`](Self::focusable).
+    fn focus_enter(&mut self, forward: bool) -> bool {
+        let _ = forward;
+        self.focusable()
     }
 
     /// The value to return when the terminal is not interactive and the
