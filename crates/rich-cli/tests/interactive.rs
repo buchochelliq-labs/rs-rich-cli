@@ -434,9 +434,34 @@ fn file_prints_a_path_that_is_not_utf8_byte_for_byte() {
 }
 
 #[test]
+fn explore_without_a_terminal_prints_the_tree() {
+    let (out, err, code) = piped(&["explore", "--format", "yaml"], "a: 1\nb: [x]\n");
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(out, "stdin\n├── a: 1\n└── b\n    └── [0]: \"x\"\n");
+    let (out, err, code) = piped(&["explore", "-"], r#"{"k": true}"#);
+    assert_eq!((out.as_str(), code), ("stdin\n└── k: true\n", 0), "{err}");
+}
+
+#[test]
+fn explore_reports_bad_documents_and_options() {
+    let (_, err, code) = piped(&["explore", "--format", "toml"], "{");
+    assert_eq!(code, 3, "{err}");
+    assert!(err.contains("<stdin>:1:1: invalid toml"), "{err}");
+    let (_, err, code) = piped(&["explore", "--print", "both"], "{}");
+    assert_eq!(code, 2, "{err}");
+    assert!(err.contains("--print"), "{err}");
+    let (_, err, code) = piped(&["explore", "a.json", "b.json"], "");
+    assert_eq!(code, 2, "{err}");
+    let (_, err, code) = piped(&["explore", "/no/such/file.json"], "");
+    assert_eq!(code, 3, "{err}");
+    assert!(err.contains("could not read"), "{err}");
+}
+
+#[test]
 fn every_command_has_help() {
     for command in [
         "choose", "filter", "input", "confirm", "pager", "write", "file", "color", "asset",
+        "explore",
     ] {
         let (out, _, code) = piped(&[command, "--help"], "");
         assert_eq!(code, 0);
@@ -1018,5 +1043,81 @@ mod pty {
         pty.send("\r");
         let out = pty.finish();
         assert!(!out.contains("\x1b[?1000h"), "{out:?}");
+    }
+
+    /// `rich explore` in a real terminal, on every format `--inspect`
+    /// reads: open the first container, pick its first child, and print
+    /// its path.
+    #[test]
+    fn explore_picks_a_path_in_every_format() {
+        let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("explore-pty");
+        std::fs::create_dir_all(&dir).unwrap();
+        let documents = [
+            ("doc.json", r#"{"server": {"port": 8080}}"#, "$.server.port"),
+            ("doc.yaml", "server:\n  port: 8080\n", "$.server.port"),
+            ("doc.toml", "[server]\nport = 8080\n", "$.server.port"),
+            (
+                "doc.xml",
+                "<server><port>8080</port></server>",
+                "$.server.port",
+            ),
+            ("doc.ini", "[server]\nport = 8080\n", "$.server.port"),
+            (".env", "PORT=8080\n", "$.PORT"),
+        ];
+        for (name, text, expected) in documents {
+            let file = dir.join(name);
+            std::fs::write(&file, text).unwrap();
+            let mut pty = Pty::start(&format!(
+                r#"x=$(rich explore '{}'); echo "code=$? got=$x""#,
+                file.display()
+            ));
+            pty.wait_for("$ {…} 1 key");
+            if expected == "$.PORT" {
+                pty.send("\x1b[B");
+            } else {
+                pty.send("\x1b[B\x1b[C\x1b[B");
+            }
+            pty.wait_for(expected.rsplit('.').next().unwrap());
+            std::thread::sleep(Duration::from_millis(200));
+            pty.send("\r");
+            let out = pty.finish();
+            assert!(
+                out.contains(&format!("code=0 got={expected}")),
+                "{name}: {out}"
+            );
+        }
+    }
+
+    /// Ctrl+Y writes OSC 52 only where the clipboard is on: forced here,
+    /// since the test terminal (xterm-256color) is not known to take it.
+    #[test]
+    fn explore_copies_through_osc_52_only_when_the_clipboard_is_on() {
+        let file = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("explore-copy.json");
+        std::fs::write(&file, r#"{"name": "demo"}"#).unwrap();
+        let script = |env: &str| {
+            format!(
+                r#"{env} rich explore '{}' >/dev/null; echo "code=$?""#,
+                file.display()
+            )
+        };
+        for (env, copies) in [("RICH_CLIPBOARD=1", true), ("RICH_CLIPBOARD=0", false)] {
+            let mut pty = Pty::start(&script(env));
+            pty.wait_for("name");
+            pty.send("\x1b[B");
+            pty.send("\x19"); // Ctrl+Y
+            pty.wait_for(if copies {
+                "copied path"
+            } else {
+                "cannot copy path"
+            });
+            pty.send("\x1b");
+            let out = pty.finish();
+            // `$.name`, base64.
+            assert_eq!(
+                out.contains("\x1b]52;c;JC5uYW1l\x07"),
+                copies,
+                "{env}: {out:?}"
+            );
+        }
     }
 }
