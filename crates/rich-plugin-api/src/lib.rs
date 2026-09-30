@@ -33,7 +33,9 @@
 //! collection with [`export_plugin!`], so that depending on it is enough
 //! ([`linked_plugins`]). And a plugin can be built as a native library or a
 //! WASM module and loaded at run time, through the text-only ABI in [`abi`].
-//! See docs/design/plugin-loading.md.
+//! See docs/design/plugin-loading.md. Interactive [`component`]s are
+//! stateful Rust values, so only the first two ways carry them: the runtime
+//! ABI has no component kind.
 //!
 //! **Stability:** at 0.0.x this contract still changes. Every breaking change
 //! bumps [`PLUGIN_API_VERSION`], and hosts refuse a plugin built for another
@@ -43,8 +45,10 @@ use std::fmt;
 use std::sync::Arc;
 
 pub mod abi;
+pub mod component;
 mod linked;
 
+pub use component::{ComponentFactory, PluginComponent};
 #[doc(hidden)]
 pub use linked::__private;
 pub use linked::{linked_plugins, LinkedPlugin};
@@ -185,6 +189,14 @@ pub trait PluginRegistrar {
     fn action(&mut self, name: &str, action: Arc<dyn CustomAction>) {
         let _ = (name, action);
     }
+
+    /// A named interactive component (see [`component`]): a view an app
+    /// or the CLI mounts by name, beside the built-in components. `factory`
+    /// makes a fresh one for every mount. A host without interactive views
+    /// ignores it, which is the default.
+    fn component(&mut self, name: &str, factory: ComponentFactory) {
+        let _ = (name, factory);
+    }
 }
 
 /// Something that extends `rich`.
@@ -210,6 +222,7 @@ pub enum Capability {
     FenceRenderer(String),
     Transform(String),
     Action(String),
+    Component(String),
 }
 
 impl fmt::Display for Capability {
@@ -223,6 +236,7 @@ impl fmt::Display for Capability {
             Capability::FenceRenderer(language) => write!(f, "fence renderer {language:?}"),
             Capability::Transform(name) => write!(f, "transform {name:?}"),
             Capability::Action(name) => write!(f, "action {name:?}"),
+            Capability::Component(name) => write!(f, "component {name:?}"),
         }
     }
 }

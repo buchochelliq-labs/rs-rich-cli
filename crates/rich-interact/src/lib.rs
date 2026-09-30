@@ -48,7 +48,8 @@
 //! nodes and file entries through [`Actions`] and an [`ActionTarget`], and
 //! open in a modal menu (Ctrl+K); a region takes actions too, through
 //! [`Overlays::actions`]; plugins register them through
-//! `rs-rich-plugin-api`.
+//! `rs-rich-plugin-api`. Plugins register whole components too, and
+//! [`PluginView`] mounts one by name beside the built-ins ([`plugin`]).
 //!
 //! ```
 //! use rich_interact::{headless, Component, Context, Event, Flow, KeyCode, Outcome, View};
@@ -92,6 +93,7 @@ pub mod kit;
 mod names;
 pub mod overlay;
 pub mod paint;
+pub mod plugin;
 pub mod policy;
 pub mod session;
 pub mod viewport;
@@ -114,6 +116,7 @@ pub use event_loop::{degrade, run, Error, EventLoop, Handle, LoopOptions, Outcom
 pub use item::{Action, ActionFilter, ActionTarget, Actions, Item, Preview, TargetKind};
 pub use keymap::{Binding, Keymap};
 pub use overlay::{Command, Help, Menu, Overlays, Palette, Shortcuts};
+pub use plugin::PluginView;
 pub use policy::{Fallback, LineIo, NotInteractive, Policy, Reason};
 pub use session::{Backend, Output, Session, SessionOptions};
 pub use viewport::Viewport;

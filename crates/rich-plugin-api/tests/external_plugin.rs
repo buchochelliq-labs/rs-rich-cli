@@ -9,10 +9,33 @@ use rich::protocol::{HighlightError, HighlightedCode};
 use rich::r#box::ROUNDED;
 use rich::segment::Segment;
 use rich::{CodeHighlighter, Console, FenceRenderer, Highlighter, Renderable, Text, Theme};
-use rich_plugin_api::{
-    Capability, Plugin, PluginError, PluginMetadata, PluginRegistrar, SourceRenderer,
-    TextTransform, PLUGIN_API_VERSION,
+use rich_plugin_api::component::{
+    ComponentBinding, ComponentContext, ComponentEvent, ComponentFlow, ComponentView,
 };
+use rich_plugin_api::{
+    Capability, ComponentFactory, Plugin, PluginComponent, PluginError, PluginMetadata,
+    PluginRegistrar, SourceRenderer, TextTransform, PLUGIN_API_VERSION,
+};
+
+/// A component: Up counts, Enter answers with the count.
+#[derive(Default)]
+struct Counter(u32);
+impl PluginComponent for Counter {
+    fn handle(&mut self, event: &ComponentEvent, _: &ComponentContext<'_>) -> ComponentFlow {
+        match event.key() {
+            Some("up") => self.0 += 1,
+            Some("enter") => return ComponentFlow::Done(self.0.to_string()),
+            _ => return ComponentFlow::Ignored,
+        }
+        ComponentFlow::Continue
+    }
+    fn render(&self, context: &ComponentContext<'_>) -> ComponentView {
+        ComponentView::new(context.markup(&format!("count {}", self.0)))
+    }
+    fn bindings(&self) -> Vec<ComponentBinding> {
+        vec![ComponentBinding::new("up", ["up"], "count up")]
+    }
+}
 
 struct Shout;
 impl Highlighter for Shout {
@@ -102,6 +125,7 @@ impl Plugin for Everything {
         registrar.renderer("upper", Arc::new(Upper));
         registrar.fence_renderer("stars", Arc::new(Stars));
         registrar.transform("keep", Arc::new(KeepLines));
+        registrar.component("counter", Arc::new(|| Box::new(Counter::default())));
         Ok(())
     }
 }
@@ -112,6 +136,7 @@ struct Recorder {
     capabilities: Vec<Capability>,
     renderers: Vec<Arc<dyn SourceRenderer>>,
     transforms: Vec<Arc<dyn TextTransform>>,
+    components: Vec<ComponentFactory>,
 }
 
 impl PluginRegistrar for Recorder {
@@ -141,6 +166,10 @@ impl PluginRegistrar for Recorder {
         self.capabilities.push(Capability::Transform(name.into()));
         self.transforms.push(transform);
     }
+    fn component(&mut self, name: &str, factory: ComponentFactory) {
+        self.capabilities.push(Capability::Component(name.into()));
+        self.components.push(factory);
+    }
 }
 
 #[test]
@@ -161,6 +190,7 @@ fn a_plugin_registers_every_capability_through_public_items() {
             Capability::Renderer("upper".into()),
             Capability::FenceRenderer("stars".into()),
             Capability::Transform("keep".into()),
+            Capability::Component("counter".into()),
         ]
     );
     let console = Console::builder().width(20).color_system(None).build();
@@ -172,4 +202,26 @@ fn a_plugin_registers_every_capability_through_public_items() {
         .unwrap();
     assert_eq!(kept.plain(), "keep a\nkeep c");
     assert!(recorder.transforms[0].transform(Text::new("x")).is_err());
+    // Every mount is a fresh component.
+    let context = ComponentContext::new(&console, 20, 1);
+    let mut first = (recorder.components[0])();
+    assert_eq!(
+        first.handle(&ComponentEvent::Key("up".into()), &context),
+        ComponentFlow::Continue
+    );
+    assert_eq!(
+        first.handle(&ComponentEvent::Key("tab".into()), &context),
+        ComponentFlow::Ignored
+    );
+    let second = (recorder.components[0])();
+    let text = |view: ComponentView| -> String {
+        view.lines[0]
+            .iter()
+            .map(|segment| segment.text.as_str())
+            .collect()
+    };
+    assert_eq!(text(first.render(&context)).trim_end(), "count 1");
+    assert_eq!(text(second.render(&context)).trim_end(), "count 0");
+    assert_eq!(first.bindings()[0].keys, ["up"]);
+    assert!(first.focusable() && !first.mouse() && first.tick().is_none());
 }

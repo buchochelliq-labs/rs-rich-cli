@@ -4586,7 +4586,8 @@ class Capability:
     def __init__(
         self,
         kind: Literal[
-            "highlighter", "code_highlighter", "theme", "box_style", "renderer", "fence_renderer", "transform"
+            "highlighter", "code_highlighter", "theme", "box_style", "renderer", "fence_renderer", "transform",
+            "component",
         ],
         name: Optional[str] = None,
     ) -> None: ...
