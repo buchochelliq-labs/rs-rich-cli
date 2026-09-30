@@ -171,6 +171,10 @@ enum Source {
         archive: Box<zip::ZipArchive<File>>,
         read_total: Cell<u64>,
     },
+    /// The compiled-in built-in set ([`crate::builtin`]), under `root`.
+    Embedded {
+        root: String,
+    },
 }
 
 impl Source {
@@ -245,6 +249,7 @@ impl Source {
         match self {
             Source::Directory { root, .. } => root.join(relative).display().to_string(),
             Source::Archive { path, .. } => format!("{}!{relative}", path.display()),
+            Source::Embedded { root } => format!("builtin:{}", join(root, relative)),
         }
     }
 
@@ -252,6 +257,7 @@ impl Source {
         match self {
             Source::Directory { root, .. } => root.join(relative).is_file(),
             Source::Archive { archive, .. } => archive.index_for_name(relative).is_some(),
+            Source::Embedded { root } => crate::builtin::file(&join(root, relative)).is_some(),
         }
     }
 
@@ -262,6 +268,7 @@ impl Source {
                 let prefix = format!("{relative}/");
                 archive.file_names().any(|name| name.starts_with(&prefix))
             }
+            Source::Embedded { root } => crate::builtin::is_dir(&join(root, relative)),
         }
     }
 
@@ -314,6 +321,16 @@ impl Source {
                 read_total.set(read_total.get() + bytes.len() as u64);
                 Ok(bytes)
             }
+            Source::Embedded { root } => {
+                let bytes = crate::builtin::file(&join(root, relative))
+                    .ok_or_else(|| MicroError::Io(format!("{shown}: no such file")))?;
+                if bytes.len() as u64 > limit {
+                    return Err(MicroError::Limit(format!(
+                        "{shown} is larger than {limit} bytes"
+                    )));
+                }
+                Ok(bytes.to_vec())
+            }
         }
     }
 
@@ -328,6 +345,7 @@ impl Source {
                 path: path.clone(),
                 prefix: prefix.to_string(),
             },
+            Source::Embedded { root } => PackageLocation::BuiltIn(join(root, prefix)),
         }
     }
 }
@@ -357,7 +375,23 @@ pub(crate) fn read_file(
             limits.max_file_bytes,
             limits,
         ),
+        PackageLocation::BuiltIn(prefix) => Source::Embedded {
+            root: prefix.clone(),
+        }
+        .read(&relative, limits.max_file_bytes, limits),
     }
+}
+
+/// Load the compiled-in pack at `root` (`status`) into `layer`.
+pub(crate) fn load_embedded_pack(
+    root: &str,
+    layer: Layer,
+    limits: &Limits,
+) -> Result<Pack, MicroError> {
+    let mut source = Source::Embedded {
+        root: root.to_string(),
+    };
+    read_pack(&mut source, None, layer, limits)
 }
 
 fn parse_json(bytes: &[u8], what: &str) -> Result<Map<String, Value>, MicroError> {

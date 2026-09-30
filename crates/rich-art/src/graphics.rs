@@ -18,6 +18,8 @@ use image::codecs::png::PngDecoder;
 use image::imageops::FilterType;
 use image::{AnimationDecoder, DynamicImage, Frame, ImageDecoder, ImageError, RgbaImage};
 
+use crate::image_art::{ImageAnchor, ImageFit};
+
 /// The size of one terminal cell in pixels.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CellPixels {
@@ -81,6 +83,114 @@ pub fn fit_to_pixels(image: &DynamicImage, width: u32, height: u32) -> RgbaImage
     let (x, y) = ((width - fw) / 2, (height - fh) / 2);
     image::imageops::overlay(&mut canvas, &scaled, x as i64, y as i64);
     canvas
+}
+
+/// `image` filling exactly `width × height` pixels the way `fit` says:
+/// [`Contain`](ImageFit::Contain) (and [`Native`](ImageFit::Native)) as
+/// [`fit_to_pixels`]; [`Cover`](ImageFit::Cover) scaled to cover the canvas
+/// and cropped to it, keeping the part `anchor` names;
+/// [`Stretch`](ImageFit::Stretch) scaled to it, ignoring the aspect ratio.
+/// Alpha is kept. Downscaling uses Lanczos3, upscaling nearest-neighbour, so
+/// a tiny source stays crisp.
+pub fn fill_pixels(
+    image: &DynamicImage,
+    width: u32,
+    height: u32,
+    fit: ImageFit,
+    anchor: ImageAnchor,
+) -> RgbaImage {
+    let (width, height) = (width.max(1), height.max(1));
+    let (iw, ih) = (image.width().max(1), image.height().max(1));
+    let filter = |scale: f64| {
+        if scale < 1.0 {
+            FilterType::Lanczos3
+        } else {
+            FilterType::Nearest
+        }
+    };
+    match fit {
+        ImageFit::Contain | ImageFit::Native => fit_to_pixels(image, width, height),
+        ImageFit::Stretch => {
+            let scale = f64::min(width as f64 / iw as f64, height as f64 / ih as f64);
+            image.resize_exact(width, height, filter(scale)).to_rgba8()
+        }
+        ImageFit::Cover => {
+            // The smallest size of the same shape that covers the canvas.
+            let scale = f64::max(width as f64 / iw as f64, height as f64 / ih as f64);
+            let rw = ((iw as f64 * scale).ceil() as u32).max(width);
+            let rh = ((ih as f64 * scale).ceil() as u32).max(height);
+            let x = match anchor {
+                ImageAnchor::Left | ImageAnchor::TopLeft | ImageAnchor::BottomLeft => 0,
+                ImageAnchor::Right | ImageAnchor::TopRight | ImageAnchor::BottomRight => rw - width,
+                _ => (rw - width) / 2,
+            };
+            let y = match anchor {
+                ImageAnchor::Top | ImageAnchor::TopLeft | ImageAnchor::TopRight => 0,
+                ImageAnchor::Bottom | ImageAnchor::BottomLeft | ImageAnchor::BottomRight => {
+                    rh - height
+                }
+                _ => (rh - height) / 2,
+            };
+            image
+                .resize_exact(rw, rh, filter(scale))
+                .crop_imm(x, y, width, height)
+                .to_rgba8()
+        }
+    }
+}
+
+/// `image` with `transforms` applied (rotation, flips, brightness,
+/// contrast, gamma, grayscale), keeping its alpha: the adjustments
+/// [`ImageArt`](crate::ImageArt) makes before fitting, for callers that fit
+/// themselves.
+pub fn adjust(image: &DynamicImage, transforms: crate::ImageTransforms) -> DynamicImage {
+    crate::transform::prepare(image, transforms, None).0
+}
+
+/// `image` sharpened with an unsharp mask of radius `sigma` pixels, leaving
+/// differences below `threshold` (0–255) alone. Alpha is not touched.
+pub fn sharpen(image: &RgbaImage, sigma: f32, threshold: i32) -> RgbaImage {
+    let mut sharpened = image::imageops::unsharpen(image, sigma.max(0.1), threshold);
+    for (out, source) in sharpened.pixels_mut().zip(image.pixels()) {
+        out.0[3] = source.0[3];
+    }
+    sharpened
+}
+
+/// Make every pixel fully opaque or fully transparent: alpha below `cutoff`
+/// becomes a transparent black pixel, the rest opaque. GIF and most
+/// protocols draw transparency this way, so deciding it once, here, keeps
+/// every frame's edges the same.
+pub fn threshold_alpha(image: &mut RgbaImage, cutoff: u8) {
+    for pixel in image.pixels_mut() {
+        if pixel.0[3] < cutoff {
+            pixel.0 = [0, 0, 0, 0];
+        } else {
+            pixel.0[3] = 255;
+        }
+    }
+}
+
+/// Reduce `image` to `mode`'s palette with `dither`, as
+/// [`ImageArt`](crate::ImageArt) does its final raster. Transparent pixels
+/// (alpha under half) stay transparent and take no diffused error; the rest
+/// become opaque palette colours. [`ImageColorMode::TrueColor`] leaves the
+/// image as it is.
+pub fn reduce_colors(
+    image: &mut RgbaImage,
+    mode: crate::ImageColorMode,
+    dither: crate::Dither,
+    distance: crate::ColorDistance,
+) {
+    let clear: Vec<bool> = image.pixels().map(|pixel| pixel.0[3] < 128).collect();
+    if crate::image_color::preprocess(image, mode, dither, distance, Some(&clear)).is_none() {
+        return;
+    }
+    for (pixel, clear) in image.pixels_mut().zip(clear) {
+        if clear {
+            pixel.0 = [0, 0, 0, 0];
+        }
+    }
 }
 
 /// One frame of an animation, as a full canvas, and how long it shows.
@@ -323,6 +433,62 @@ mod tests {
         // A square in a 2:1 box: transparent margins left and right.
         assert_eq!(wide.get_pixel(0, 8).0[3], 0);
         assert_eq!(wide.get_pixel(16, 8).0, [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn cover_crops_to_the_anchor_and_stretch_fills() {
+        // A 4x2 image: left half red, right half blue.
+        let image = DynamicImage::ImageRgba8(RgbaImage::from_fn(4, 2, |x, _| {
+            if x < 2 {
+                Rgba([255, 0, 0, 255])
+            } else {
+                Rgba([0, 0, 255, 255])
+            }
+        }));
+        let left = fill_pixels(&image, 2, 2, ImageFit::Cover, ImageAnchor::Left);
+        assert_eq!(left.dimensions(), (2, 2));
+        assert!(left.pixels().all(|p| p.0 == [255, 0, 0, 255]));
+        let right = fill_pixels(&image, 2, 2, ImageFit::Cover, ImageAnchor::Right);
+        assert!(right.pixels().all(|p| p.0 == [0, 0, 255, 255]));
+        let stretched = fill_pixels(&image, 8, 8, ImageFit::Stretch, ImageAnchor::Center);
+        assert_eq!(stretched.dimensions(), (8, 8));
+        assert!(stretched.pixels().all(|p| p.0[3] == 255));
+        // Contain leaves transparent margins.
+        let contained = fill_pixels(&image, 4, 4, ImageFit::Contain, ImageAnchor::Center);
+        assert_eq!(contained.get_pixel(0, 0).0[3], 0);
+    }
+
+    #[test]
+    fn adjustments_sharpening_and_alpha_keep_transparency() {
+        let mut image = RgbaImage::from_pixel(3, 3, Rgba([100, 100, 100, 255]));
+        image.put_pixel(1, 1, Rgba([200, 200, 200, 255]));
+        image.put_pixel(0, 0, Rgba([50, 50, 50, 10]));
+        let contrasted = adjust(
+            &DynamicImage::ImageRgba8(image.clone()),
+            crate::ImageTransforms {
+                contrast: 2.0,
+                ..Default::default()
+            },
+        )
+        .to_rgba8();
+        assert!(contrasted.get_pixel(1, 1).0[0] > 200);
+        assert_eq!(contrasted.get_pixel(0, 0).0[3], 10);
+        let sharp = sharpen(&image, 1.0, 0);
+        assert!(sharp.get_pixel(1, 1).0[0] >= 200);
+        assert_eq!(sharp.get_pixel(0, 0).0[3], 10);
+        let mut binary = image.clone();
+        threshold_alpha(&mut binary, 128);
+        assert_eq!(binary.get_pixel(0, 0).0, [0, 0, 0, 0]);
+        assert_eq!(binary.get_pixel(1, 1).0[3], 255);
+        let mut reduced = binary.clone();
+        reduce_colors(
+            &mut reduced,
+            crate::ImageColorMode::Ansi16,
+            crate::Dither::None,
+            crate::ColorDistance::Rgb,
+        );
+        assert_eq!(reduced.get_pixel(0, 0).0, [0, 0, 0, 0]);
+        assert_eq!(reduced.get_pixel(1, 1).0[3], 255);
     }
 
     #[test]

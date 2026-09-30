@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "name": "status",
+  "version": "1.0.0",
+  "description": "Status badges: success, warning, error, info, loading",
+  "license": "MIT",
+  "author": "rs-rich-cli contributors",
+  "packages": [
+    "success",
+    "warning",
+    "error",
+    "info",
+    "loading"
+  ]
+}

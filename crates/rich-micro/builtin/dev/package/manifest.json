@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "name": "dev/package",
+  "alt": "closed cardboard box",
+  "size": "2x1",
+  "kind": "static",
+  "fallback": {
+    "emoji": "📦",
+    "text": "[]"
+  },
+  "static": "static.png",
+  "version": "1.0.0",
+  "license": "MIT",
+  "author": "rs-rich-cli contributors"
+}

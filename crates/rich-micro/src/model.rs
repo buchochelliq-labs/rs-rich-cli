@@ -248,6 +248,9 @@ pub enum PackageLocation {
     Directory(PathBuf),
     /// A zip archive, and the package's folder inside it (`""` at its root).
     Archive { path: PathBuf, prefix: String },
+    /// The library's own built-in set, compiled in: the package's folder in
+    /// it (`status/success`).
+    BuiltIn(String),
 }
 
 /// Where an asset came from.
@@ -284,6 +287,7 @@ impl fmt::Display for Origin {
             Some(PackageLocation::Archive { path, prefix }) => {
                 write!(f, " ({}!{prefix})", path.display())
             }
+            Some(PackageLocation::BuiltIn(prefix)) => write!(f, " (builtin:{prefix})"),
             None => Ok(()),
         }
     }

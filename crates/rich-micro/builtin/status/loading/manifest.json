@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "name": "status/loading",
+  "alt": "ring of dots turning, for work in progress",
+  "size": "2x1",
+  "kind": "animated",
+  "fallback": {
+    "emoji": "⏳",
+    "text": ".."
+  },
+  "static": "static.png",
+  "animation": "animation.gif",
+  "version": "1.0.0",
+  "license": "MIT",
+  "author": "rs-rich-cli contributors"
+}

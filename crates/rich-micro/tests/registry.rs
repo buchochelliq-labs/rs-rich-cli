@@ -41,6 +41,7 @@ fn tree() -> Tree {
     );
     Tree {
         roots: MicroRoots {
+            builtin_set: false,
             builtin: Some(builtin),
             user: Some(user),
             project: Some(project_dir),
