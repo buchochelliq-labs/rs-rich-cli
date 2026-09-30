@@ -53,6 +53,16 @@ size, such as rendering content at the width. It can also finish the
 component straight away, without waiting for a key. The `Pager` renders its
 content there, and a `Form` with no fields returns from it.
 
+## Composing components
+
+Containers are components too: `Column`, `Row` and `Stack` lay children
+out, `Split` puts two side by side with a draggable border, `Tabs` keeps
+each tab's state, and `Layers` opens modal and popover layers over a base.
+Keys go to the focused child and bubble up when it does not use them; Tab
+moves focus. The pieces the built-ins are made of are public in `kit`, and
+every key is declared in a rebindable `keymap`. See
+[Building your own components](custom-components.md).
+
 ## Ready-made components
 
 Each of these is a `Component`, so it runs under `run`, in an event loop and

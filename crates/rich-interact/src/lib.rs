@@ -27,6 +27,13 @@
 //!   [`Pager`], [`FilePicker`], [`ColorPicker`] and [`AssetPicker`], built on
 //!   the above with a [`fuzzy`] matcher.
 //!
+//! Components compose (0.0.14): [`compose`] has containers that are
+//! components themselves ([`Column`], [`Row`], [`Stack`], [`Split`],
+//! [`Tabs`], [`Layers`]), with focus, routing and bubbling
+//! ([`Flow::Ignored`]); [`kit`] has the line helpers and state types the
+//! built-ins are made of; and [`keymap`] declares, rebinds and lists every
+//! component's keys.
+//!
 //! Mouse support (#476) is opt-in per component ([`Component::mouse`]):
 //! clicks, drags and the wheel arrive in the component's own coordinates, a
 //! click on a hyperlink arrives as [`Event::Link`], and the border beside a

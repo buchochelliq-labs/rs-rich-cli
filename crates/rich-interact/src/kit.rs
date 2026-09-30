@@ -7,7 +7,7 @@
 //! [`text`] and [`plain`] make segments, [`width`] measures a line,
 //! [`fit`] crops one and [`pad`] crops or pads it to an exact width,
 //! [`highlight`] styles the characters a filter matched, and [`question`]
-//! is the `? prompt › ` line every built-in starts with. [`slice`] cuts
+//! is the `? prompt › ` line every built-in starts with. [`slice`](fn@slice) cuts
 //! cells out of a line, [`overlay`] draws one line over another and
 //! [`restyle`] puts a style over a line (a backdrop). [`pasted`] and
 //! [`shown`] make untrusted text safe for a one-line field or a table cell.

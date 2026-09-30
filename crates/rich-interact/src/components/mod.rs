@@ -19,9 +19,9 @@ pub use color::{ColorFormat, ColorPicker};
 pub use confirm::{Choice, Confirm};
 pub use file::{display_name, display_path, FileMode, FilePicker};
 pub use form::{Answers, Form, Value};
-pub use input::{Input, Provider, Suggestion};
+pub use input::{input_keymap, Input, Provider, Suggestion};
 pub use pager::Pager;
-pub use select::{MultiSelect, PreviewLayout, Select};
+pub use select::{select_keymap, MultiSelect, PreviewLayout, Select};
 pub use textarea::TextArea;
 pub use views::{TableSelect, TreeSelect};
 

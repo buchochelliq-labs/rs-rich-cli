@@ -38,7 +38,7 @@
 //! the keys with its `rebind`.
 //!
 //! **Bindings.** Every container declares its keys in a
-//! [`Keymap`](crate::keymap::Keymap), and [`Component::keymap`] lists the
+//! [`Keymap`], and [`Component::keymap`] lists the
 //! focused child's then the container's own. `on` adds a binding of yours
 //! that runs when a key bubbles up unused; `shortcut` one that runs before
 //! the focused child sees the key.
