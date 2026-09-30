@@ -57,6 +57,47 @@ Entries below record subsequent releases and development.
 
 ## [Unreleased]
 
+### Micro 0.0.1 (new crate): model, packages, registry, markup
+
+- New crate `rs-rich-micro` (`rich_micro`, #565), the foundation for micro
+  assets: emoji-sized inline images written `:micro:name:`. Core is
+  unchanged (`:micro:` is not an emoji code); the crate depends on
+  `rs-rich`, `rs-rich-ext` and `rs-rich-plugin-api`, plus `zip` (read-only,
+  deflate through flate2's pure-Rust backend) and `serde_json`.
+- Model (#566, #579, #585): `MicroAsset` with a validated name
+  (`[a-z0-9_-]` segments, `/` namespaces), kind, size in cells (2×1 default,
+  1×1 allowed, at most 4 columns; more than one row is refused), images,
+  mandatory alt text, an emoji or text fallback that must fit, aliases and
+  origin, version, licence and author.
+- Packages (#580): `.richmicro` zips or directories with a `manifest.json`
+  (`schema_version: 1`), a static image and an optional GIF, APNG or WebP
+  animation or frame list; packs with a `pack.json`. Read-only. Hard
+  `Limits` on archive, file and manifest size, entries, bytes read, pixel
+  dimensions, frames and decoded bytes, checked from image headers without
+  decoding; zip-slip, absolute paths, backslashes and symbolic links out of a
+  package are refused.
+- Registry (#567, #583): built-in < user (`~/.config/rich/micro/`) < trusted
+  project (`.rich/micro/`, loaded only when the caller trusts the project) <
+  inline; aliases within a layer; collisions and rejected packages reported
+  in file-name order; `explain(name)` through `rich_ext::cli_doc::Precedence`.
+  The built-in layer is present and empty until the built-in library lands.
+- Markup and API (#569, #570): `:micro:name:`, `\:micro:` to escape, unknown
+  names left literal with a diagnostic. `render_markup` / `markup_text` /
+  `PreparedMarkup` expand tokens before core's markup and emoji passes (so
+  `:micro:x::fire:` gets both); `expand`, `MicroTransform`, `MicroPlugin`
+  and `MicroExt` (`append_micro`, `expand_micro`) work on parsed text;
+  `MicroAssetRef` is a renderable.
+- Width (#578): an asset is exactly its columns of fallback text (padded with
+  U+2800, which is not whitespace) under style metadata
+  `rich.micro = [name, cols, rows, id]`, so measure, wrapping, cropping,
+  tables and panels size it exactly and pipes and exports get plain text.
+  `MicroView` offers each complete placement to `MicroRenderer`s, the seam
+  terminal graphics plug into; this release ships `FallbackRenderer` only.
+- Release tooling knows the crate: `release.py`, the package checks, the
+  release workflow's tags, the CI test matrix and the readiness version
+  pattern (which now also matches `rs-rich-record` and `rs-rich-interact`
+  tags).
+
 ### Core 0.0.9 / ext 0.0.11: `syntax` and `markdown` are optional
 
 - `rs-rich` has two new default features: `syntax` (`Syntax` and
