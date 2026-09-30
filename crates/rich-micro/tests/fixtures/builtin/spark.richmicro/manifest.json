@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "name": "fun/spark",
+  "alt": "twinkling spark",
+  "kind": "animated",
+  "size": {
+    "cols": 2,
+    "rows": 1
+  },
+  "fallback": {
+    "emoji": "✨",
+    "text": "**"
+  },
+  "static": "static.png",
+  "animation": "animation.gif",
+  "version": "0.0.1",
+  "license": "CC0-1.0",
+  "author": "rs-rich contributors"
+}

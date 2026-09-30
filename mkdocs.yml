@@ -126,6 +126,7 @@ nav:
           - GIFs: guide/art/gifs.md
           - Image diff: guide/art/image-diff.md
       - Interactive (rs-rich-interact): guide/interact/index.md
+      - Micro assets (rs-rich-micro): guide/micro/index.md
       - The rich CLI:
           - guide/cli/index.md
           - Walkthrough: guide/cli/walkthrough.md

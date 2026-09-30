@@ -23,6 +23,7 @@ real output, exported to SVG by the library itself.
 | `rs-rich-mermaid` (new in 0.0.12) | `rich_mermaid` | Mermaid diagrams: flowcharts drawn as text in every direction, every diagram type through `mmdc` (optional), and ```` ```mermaid ```` fences in Markdown. | [Plugins](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/PLUGINS.md) |
 | [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | through `rich_ext` | Compile-time checked markup (`richf!`), `#[derive(Rich)]` and print macros. Enabled by ext's `macros` feature. | [Macros](ext/macros.md) |
 | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `rich_art` | FIGlet banners, images as ASCII, Braille, blocks, quadrants or Sixel, animated GIFs, perceptual image diffs. | [Art](art/index.md) |
+| `rs-rich-micro` (new in 0.0.14) | `rich_micro` | Micro assets: emoji-sized inline images written `:micro:name:`, `.richmicro` packages, a layered registry (built-in, user, trusted project, inline), and placeholder cells that keep layouts exact. Fallback rendering in 0.0.1. | [Micro assets](micro/index.md) |
 | [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | the `rich` binary | Upstream rich-cli's commands, plus image, gif, inspect, diff, view, hex, unicode, env, capture, ANSI explain, bench compare, batch, watch, config, completions, docs and doctor. | [CLI](cli/index.md) |
 
 Each crate versions independently; see [the home page](../index.md) for the

@@ -138,7 +138,7 @@ There are two separate decisions here:
    crate does not, by policy alone, require an unrelated crate's version to
    change.
 2. **The tag explicitly selects what ships.** A `vX.Y.Z` tag retains the
-   coordinated workspace meaning: all ten manifests and their internal
+   coordinated workspace meaning: all eleven manifests and their internal
    requirements must agree at `X.Y.Z`. A `<crate>-vX.Y.Z` tag selects only that
    crate, whose manifest must match the tag. Unselected crates keep their own
    versions and are neither published nor verified as if they had changed.
@@ -156,6 +156,7 @@ There are two separate decisions here:
 | `rs-rich-lumis-v0.0.1` | Only `rs-rich-lumis` at `0.0.1` |
 | `rs-rich-record-v0.0.1` | Only `rs-rich-record` at `0.0.1` |
 | `rs-rich-interact-v0.0.1` | Only `rs-rich-interact` at `0.0.1` |
+| `rs-rich-micro-v0.0.1` | Only `rs-rich-micro` at `0.0.1` |
 
 The same forms accept SemVer prereleases, for example
 `rs-rich-cli-v0.0.3-rc.1`. Manual dispatch accepts an **existing tag** in one of

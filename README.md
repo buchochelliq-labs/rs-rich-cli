@@ -80,6 +80,7 @@ in the release notes; the crates.io links show available packages.
 | [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.0.2` |
 | [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.1` |
 | [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.1` |
+| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.1` |
 <!-- END MANIFEST VERSIONS -->
 
 | Package | Role | Import / installed name |

@@ -1684,6 +1684,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rs-rich-micro"
+version = "0.0.1"
+dependencies = [
+ "flate2",
+ "rs-rich",
+ "rs-rich-ext",
+ "rs-rich-plugin-api",
+ "serde_json",
+ "tempfile",
+ "zip",
+]
+
+[[package]]
 name = "rs-rich-plugin-api"
 version = "0.0.2"
 dependencies = [
@@ -3357,6 +3370,19 @@ name = "zeroize"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13c156562582aa81c60cb29407084cdb54c4164760106ab78e6c5b0858cf64e"
+
+[[package]]
+name = "zip"
+version = "8.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d04a6b5381502aa6087c94c669499eb1602eb9c5e8198e534de571f7154809b"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "indexmap",
+ "memchr",
+ "typed-path",
+]
 
 [[package]]
 name = "zmij"

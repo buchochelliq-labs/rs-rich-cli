@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "name": "dot",
+  "alt": "blue dot",
+  "size": "1x1",
+  "fallback": {
+    "text": "*"
+  },
+  "static": "static.png",
+  "version": "0.0.1",
+  "license": "CC0-1.0",
+  "author": "rs-rich contributors"
+}
