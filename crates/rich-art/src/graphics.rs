@@ -153,7 +153,7 @@ pub fn decode_animation(
     for frame in frames.take(budget.max_frames.max(1)) {
         let frame = frame?;
         let (numer, denom) = frame.delay().numer_denom_ms();
-        let millis = if denom == 0 { 0 } else { numer / denom };
+        let millis = numer.checked_div(denom).unwrap_or(0);
         let buffer = frame.into_buffer();
         let size = (buffer.width() as usize)
             .checked_mul(buffer.height() as usize)
