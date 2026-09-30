@@ -41,7 +41,7 @@ use rich::cells::cell_len;
 use rich::{Segment, Style};
 
 use crate::component::{Component, Context, Flow, View};
-use crate::event::Event;
+use crate::event::{Event, Key, KeyCode};
 use crate::keymap::Keymap;
 use crate::kit::{self, Theme};
 
@@ -59,6 +59,42 @@ fn inline(context: &Context<'_>, markup: &str) -> Vec<Segment> {
 
 fn style(definition: &str) -> Style {
     Style::parse(definition).unwrap_or_default()
+}
+
+/// A key as a hint shows it, shorter than its name: arrows as arrows,
+/// `esc`, `pgup`, `pgdn`, `shift+tab`; anything else by its name.
+pub fn key_hint(key: Key) -> String {
+    let short = match key.code {
+        KeyCode::Up => "↑",
+        KeyCode::Down => "↓",
+        KeyCode::Left => "←",
+        KeyCode::Right => "→",
+        KeyCode::Escape => "esc",
+        KeyCode::PageUp => "pgup",
+        KeyCode::PageDown => "pgdn",
+        KeyCode::BackTab => "shift+tab",
+        _ => return key.to_string(),
+    };
+    let mut hint = String::new();
+    if key.modifiers.ctrl {
+        hint.push_str("ctrl+");
+    }
+    if key.modifiers.alt {
+        hint.push_str("alt+");
+    }
+    if key.modifiers.shift && key.code != KeyCode::BackTab {
+        hint.push_str("shift+");
+    }
+    hint.push_str(short);
+    hint
+}
+
+/// Keys as hints, joined by `/`: `↑/ctrl+p`.
+pub fn keys_hint(keys: &[Key]) -> String {
+    keys.iter()
+        .map(|key| key_hint(*key))
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 // ---------------------------------------------------------------------------
@@ -348,7 +384,7 @@ impl<M> StatusBar<M> {
             if !line.is_empty() {
                 line.push(kit::text(" · ", &self.theme.hint));
             }
-            line.push(kit::text(binding.keys[0].to_string(), &style("bold")));
+            line.push(kit::text(key_hint(binding.keys[0]), &style("bold")));
             line.push(kit::text(
                 format!(" {}", binding.description),
                 &self.theme.hint,
@@ -600,6 +636,12 @@ mod tests {
 
     fn text(line: &[Segment]) -> String {
         line.iter().map(|segment| segment.text.as_str()).collect()
+    }
+
+    #[test]
+    fn hints_shorten_keys() {
+        let keys = crate::keymap::keys("up ctrl+p escape pagedown shift+tab alt+left f1");
+        assert_eq!(keys_hint(&keys), "↑/ctrl+p/esc/pgdn/shift+tab/alt+←/f1");
     }
 
     #[test]

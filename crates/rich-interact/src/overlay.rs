@@ -44,7 +44,7 @@ use std::time::Duration;
 use rich::cells::cell_len;
 use rich::{Segment, Style};
 
-use crate::chrome::{Breadcrumbs, StatusBar};
+use crate::chrome::{key_hint, keys_hint, Breadcrumbs, StatusBar};
 use crate::component::{Component, Context, Flow, View};
 use crate::compose::{ComponentExt, Layer, LayerHandle, Layers, Rect};
 use crate::event::{Event, Key, KeyCode, Modifiers, MouseKind};
@@ -136,13 +136,9 @@ impl Command {
         }
     }
 
-    /// The keys as people read them: `up/ctrl+p`.
+    /// The keys as a hint shows them: `↑/ctrl+p`.
     pub fn keys_label(&self) -> String {
-        self.keys
-            .iter()
-            .map(Key::to_string)
-            .collect::<Vec<_>>()
-            .join("/")
+        keys_hint(&self.keys)
     }
 
     /// What fuzzy search looks in: the category, then the label.
@@ -492,7 +488,10 @@ impl Help {
             .collect();
         let candidates: Vec<String> = bindings
             .iter()
-            .map(|b| format!("{} {} {}", b.keys_label(), b.description, b.context))
+            .map(|b| {
+                let hint = keys_hint(&b.keys);
+                format!("{hint} {} {} {}", b.keys_label(), b.description, b.context)
+            })
             .collect();
         let mut help = Help {
             bindings,
@@ -540,7 +539,7 @@ impl Help {
         let matches = self.matches();
         let key_width = matches
             .iter()
-            .map(|b| cell_len(&b.keys_label()))
+            .map(|b| cell_len(&keys_hint(&b.keys)))
             .max()
             .unwrap_or(0)
             .min(24);
@@ -559,7 +558,7 @@ impl Help {
                     continue;
                 }
                 let keys = kit::pad(
-                    vec![kit::text(binding.keys_label(), &theme.prompt)],
+                    vec![kit::text(keys_hint(&binding.keys), &theme.prompt)],
                     key_width,
                 );
                 let mut line = vec![kit::plain("  ")];
@@ -714,7 +713,7 @@ impl Shortcuts {
         let key = self
             .bindings
             .iter()
-            .map(|b| cell_len(&b.keys[0].to_string()))
+            .map(|b| cell_len(&key_hint(b.keys[0])))
             .max()
             .unwrap_or(0);
         let entry = self
@@ -773,7 +772,7 @@ impl Component for Shortcuts {
                     line.push(kit::plain("   "));
                 }
                 let mut cell = kit::pad(
-                    vec![kit::text(binding.keys[0].to_string(), &theme.prompt)],
+                    vec![kit::text(key_hint(binding.keys[0]), &theme.prompt)],
                     key_width,
                 );
                 cell.push(kit::plain("  "));
@@ -1087,8 +1086,9 @@ impl<'a, M: 'a> Overlays<'a, M> {
             .bindings()
             .into_iter()
             .filter(|b| !b.keys.is_empty() && b.id() != format!("overlays.{PALETTE}"));
-        Palette::new(bindings.map(|b| Command::from_binding(&b)))
-            .commands(self.commands.iter().cloned())
+        // Your commands first: they are what the host is for.
+        Palette::new(self.commands.iter().cloned())
+            .commands(bindings.map(|b| Command::from_binding(&b)))
             .contexts(active)
             .hints(&keymap)
             .theme(self.theme.clone())
